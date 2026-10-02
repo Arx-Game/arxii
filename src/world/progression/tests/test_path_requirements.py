@@ -11,9 +11,14 @@ from world.classes.factories import (
 from world.classes.models import PathStage
 from world.codex.constants import CodexKnowledgeStatus
 from world.codex.factories import CharacterCodexKnowledgeFactory, CodexEntryFactory
+from world.magic.factories import CharacterGiftFactory, GiftFactory
 from world.progression.exceptions import PathRequirementsNotMet
 from world.progression.factories import CharacterPathHistoryFactory
-from world.progression.models import CodexKnowledgeRequirement, TraitRequirement
+from world.progression.models import (
+    CodexKnowledgeRequirement,
+    GiftHeldRequirement,
+    TraitRequirement,
+)
 from world.progression.selectors import eligible_advanced_paths_for
 from world.progression.services.advancement import cross_into_path
 from world.progression.services.spends import check_requirements_for_path
@@ -63,6 +68,37 @@ class CheckRequirementsForPathTests(TestCase):
         TraitRequirement.objects.create(path=path, trait=trait, minimum_value=100, is_active=False)
         met, _failed = check_requirements_for_path(sheet.character, path)
         self.assertTrue(met)
+
+
+class GiftHeldPathRequirementTests(TestCase):
+    """An elite Path gated on holding a named gift (#4097), proven through discovery.
+
+    GiftHeldRequirement is evaluated for a Path target only because
+    concrete_requirement_types() discovers it from AbstractUnlockRequirement's
+    subclasses rather than a hand-maintained list in _check_requirements.
+    """
+
+    def test_unmet_without_gift(self):
+        """A Path requiring a named gift is unmet when the character lacks it."""
+        path = PathFactory()
+        gift = GiftFactory()
+        sheet = CharacterSheetFactory()
+        GiftHeldRequirement.objects.create(path=path, gift=gift, is_active=True)
+        met, failed = check_requirements_for_path(sheet.character, path)
+        self.assertFalse(met)
+        self.assertEqual(len(failed), 1)
+        self.assertIn(gift.name, failed[0])
+
+    def test_met_when_character_holds_gift(self):
+        """A Path requiring a named gift is met once the character holds it."""
+        path = PathFactory()
+        gift = GiftFactory()
+        sheet = CharacterSheetFactory()
+        CharacterGiftFactory(character=sheet, gift=gift)
+        GiftHeldRequirement.objects.create(path=path, gift=gift, is_active=True)
+        met, failed = check_requirements_for_path(sheet.character, path)
+        self.assertTrue(met)
+        self.assertEqual(failed, [])
 
 
 class PathRequirementsNotMetTests(TestCase):

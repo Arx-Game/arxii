@@ -395,6 +395,24 @@ Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Sc
     teaching structure; `Tradition.society` (no live consumer) was dropped. The `Cantrip`
     model + its full API/admin/frontend stack were removed. See `docs/systems/magic.md`
     and `docs/systems/character_creation.md` for the CG stage/endpoint detail.
+  - **Technique personalization at creation (#4099, ADR-4099) [BUILT & WIRED]:** CG's
+    Gift stage offers, per chosen technique, a free name/description plus a priced
+    flourish (`SignatureMotifBonus`), early form (`TechniqueVariant`), and price
+    (`Restriction`, `kind=PRICE`) whenever staff set that row's `creation_point_cost`.
+    A price may consume carried items (`PriceComponentRequirement`) and inflict a
+    condition (`Restriction.inflicted_condition`) on each cast that pays it;
+    `price_paid_for_cast` (`world/magic/services/technique_personalization.py`), called
+    once in `use_technique`, is the one decision, and a caster lacking a component casts
+    without the price. Picks live on `CharacterTechnique` (the hold), never the catalog, and are written at
+    finalize by `apply_creation_personalizations`
+    (`world/magic/services/creation_personalization.py`); the flourish pick also weaves a
+    TECHNIQUE thread up to `CREATION_PERSONALIZATION_MAX_LEVEL` (2) via
+    `weave_creation_technique_thread`, so creation never skips a crossing. The old hard
+    level-3 floor on signing is gone; `SignatureMotifBonus.min_crossing_level` is the only
+    gate, so flourishes keep unlocking in play as the thread is imbued. Endpoint: `GET
+    drafts/{id}/personalization-options/`. Supersedes part of ADR-0136 ("personalization
+    starts at level 3"). See `docs/systems/magic.md`'s "Technique personalization"
+    section and `docs/systems/character_creation.md`'s Magic API section.
   - **Guided Glimpse Story (#2427):** `GlimpseTag` (`models/glimpse.py`, content model —
     `CONTENT_MODELS` `magic.glimpsetag` — `axis` (`GlimpseTagAxis`), `name`, `slug`
     natural key, `description`, `example`, `sort_order`, `is_active`),
@@ -563,8 +581,57 @@ Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Sc
   `NoActiveTechniqueDraft` (no draft to work with),
   `TechniqueDraftIncomplete` (required fields missing at `draft_to_design` time),
   `UnknownTechniqueVocab` / `UnknownGift` (unknown vocab/gift name in telnet parser),
-  `GiftNotOwned` (character doesn't own the design's gift — `validate_design_for_character`) —
+  `GiftNotOwned` (character doesn't own the design's gift; `validate_design_for_character`),
+  `TechniqueRequirementsNotMet` (#4097; `charge_and_learn` raises this when an active
+  requirement targeting the technique is unmet; `.failed` carries the per-requirement
+  messages),
   all with `user_message` properties for safe API responses.
+- **Technique prerequisites + thread carry (#4097):** a `Technique` can carry its own
+  authored requirements (`AbstractUnlockRequirement.technique` target, in
+  `world.progression`) gating whether a character may *learn* it.
+  `check_requirements_for_technique` gates both `charge_and_learn` front doors
+  (`accept_technique_offer`, Academy TRAIN); `get_technique_options(...,
+  exclude_gated=True)` excludes gated techniques from CG pick lists outright (a draft
+  has no character to evaluate the gate against). `TechniqueKnownRequirement` rows
+  double as the prerequisite graph: `world.magic.services.technique_prerequisites
+  .prerequisite_technique_ids` walks it to build `PullActionContext
+  .involved_technique_closure`, which `_anchor_in_action`'s TECHNIQUE branch reads so a
+  thread woven into a prerequisite technique empowers, at full level, everything that
+  technique transitively unlocks. Full detail: `docs/systems/magic.md`'s "Technique
+  Prerequisites" and "Thread Carry Through Technique Prerequisites" sections;
+  `docs/systems/progression.md`'s "Path and Technique Requirements" section;
+  `docs/adr/adr-4097-threads-carry-through-technique-prerequisites.md`.
+- **Ultimates (#4098):** `Technique.is_ultimate` flags a technique as a Path x
+  major-Gift / patron / companion ultimate, discovered through `KnownUltimate`
+  (`character`, `technique`, nullable `crossing`, `readied` - constrained to one row
+  per `(character, technique)` and at most one `readied=True` row per character),
+  never a `CharacterTechnique`. Attachment M2Ms: `PathGiftGrant.ultimate_techniques`,
+  `WorshippedBeing.ultimate_techniques` (`world.worship`), `CompanionArchetype
+  .ultimate_techniques` (`world.companions`). Services
+  (`world.magic.services.ultimates`): `ultimate_reveal_for(sheet)` (derives
+  the reveal on read - owned/owned-known/bond pools, grouped by category, filtered by
+  #4097's prerequisite gate), `has_reveal_cards`, `choose_ultimate` (readies a pick
+  under `select_for_update`), `readied_ultimate`, `clear_readied_ultimate`,
+  `castable_technique_named`, `audere_ultimate_state`. Types
+  (`world.magic.types.ultimates`): `UltimateRevealCard`/`Group`, `UltimateReveal`,
+  `AudereUltimateState`. Exceptions: `UltimateNotLearnable`, `UltimateChoiceError`
+  (`UltimateRevealClosed`/`UltimateChoiceUnavailable`). Every ordinary acquisition
+  surface (CG catalog, covenant role grants, Sphinx shopping list, ORGANIZATION thread
+  weave, alternate-self grants, item `TechniqueGrant`, GM award, ritual SERVICE
+  dispatch) excludes `is_ultimate=True` via the shared `enforce_not_ultimate` guard.
+  Castable only in combat (an active DECLARING round), through the ordinary
+  `use_technique` pipeline, never via clash or a scene cast. REST: `GET
+  /api/magic/audere/ultimates/`, `POST /api/magic/audere/ultimates/choose/`
+  (`world/magic/views.py`); `PendingAudereOfferSerializer.reveal_framing_text`.
+  Telnet: `UltimateRevealHandler` (keyword `"ultimate"`, `world/magic/offer_handlers
+  .py`), appended to the surge/crossing accept messages; snapshotted against
+  `caller.ndb.ultimate_reveal_choice_keys` so a stale listing is refused, not resolved
+  blind. Frontend: `UltimateRevealDialog`/`UltimateRevealGate`
+  (`frontend/src/magic/components/`), `ActionDeclarationCard`, `SpellbookTab`.
+  Required-content probes (`web/admin/tuning/required_content.py`) flag a Path x
+  major-Gift grant with no ultimates and an `AudereThreshold` copy field still
+  carrying PLACEHOLDER text. Full detail: `docs/systems/magic.md`'s "Ultimates"
+  section; `docs/adr/adr-4098-ultimates-are-flagged-techniques-revealed-at-audere.md`.
 - **Integrates with:** traits (thread anchor kind TRAIT), progression (XP
   spend for ThreadWeaving and XP-lock crossings), relationships (soul tether,
   magical_flavor; thread anchors RELATIONSHIP_TRACK / RELATIONSHIP_CAPSTONE),
@@ -2296,8 +2363,13 @@ XP, kudos, development points, and unlock system. Contains the most explicit pre
     is "N ties", never "N labels" (#2116, retargeted #3957)
   - `ItemRequirement` — possession-only check of a physical touchstone/trophy item, template or touchstone mode (#1859)
   - `CodexKnowledgeRequirement` — checks `CharacterCodexKnowledge` at `KNOWN` status for a specific `CodexEntry`; gates Path selection behind codex knowledge (#2603)
+  - `GiftHeldRequirement` (#4097): holds a gift; named is lineage-aware, blank means any held gift
+  - `TechniqueKnownRequirement` (#4097): already knows a specific technique; the row `world.magic.services.technique_prerequisites.prerequisite_technique_ids` walks to build the thread-carry closure (see `docs/systems/magic.md`'s "Thread Carry" section)
+  - **Technique learning gate (#4097):** `AbstractUnlockRequirement` grew a fourth polymorphic target, `technique`, so any requirement type can gate learning a `Technique` directly (not just a class-level/thread-crossing/path unlock); `LegendRequirement`/`ItemRequirement` reject it. `concrete_requirement_types()` (below) replaced a hand-maintained requirement-type list with discovery over `apps.get_models()`, so a new type is picked up the moment its model is defined
 - **Key Functions:**
   - `check_requirements_for_unlock(character, unlock) -> tuple[bool, list[str]]`
+  - `check_requirements_for_technique(character, technique) -> tuple[bool, list[str]]` (#4097): the technique-learning-gate checker; called by `world.magic.services.gift_acquisition.charge_and_learn`, which raises `TechniqueRequirementsNotMet` on failure
+  - `concrete_requirement_types() -> list[type[AbstractUnlockRequirement]]` (#4097): every concrete requirement subclass, discovered rather than hand-listed; shared by every `_check_requirements` caller
   - `get_available_unlocks_for_character(character) -> AvailableUnlocks`
   - `ExperiencePointsData.can_spend(amount) -> bool`
   - `CharacterXP.can_spend(amount) -> bool` — a locked (CG) pool only; a `transferable=True` row is an attribution ledger, not a pool (#3748)
@@ -2472,6 +2544,13 @@ Multi-stage character creation flow with draft system.
   otherwise calls `world.missions.services.run.staff_assign_mission()` verbatim (no new
   missions-app surface). Deliberately NOT best-effort — a misconfigured template raises and rolls
   back the whole finalization transaction (a content-authoring bug, not contention).
+- **Technique personalization (#4099, ADR-4099):** the Gift stage's "make it yours"
+  panel (`GET drafts/{id}/personalization-options/`, `draft_data["technique_personalizations"]`,
+  priced via the `"magic"` breakdown category) lets a player name, describe, price and
+  early-form a chosen technique at creation. Full detail lives in `docs/systems/magic.md`'s
+  "Technique personalization" section (service functions, models, visibility); the draft-side
+  shapes are in `docs/systems/character_creation.md`'s "Magic (Gift/Technique Selection,
+  #2426)" API section.
 - **Seeded CG-world content (#1333):** `seed_character_creation_dev()` (`src/world/seeds/character_creation.py`) — the `"character_creation"` cluster; seeds the 12 stat Traits unconditionally, plus every `RosterType` shelf via `world.roster.seeds.ensure_rosters()` (#2728 — replaced two name-keyed `Roster.objects.get_or_create` calls that created duplicates of Active/Available while never creating Inactive, Frozen or Restricted at all), so `finalize_character` runs on a fresh DB. Species/Gender/HeightBand/Build/FormTrait family/Distinction family/CGExplanation are all `CONTENT_MODELS` (#2698, ADR-0168) — looked up via `authored_or_sample()` and invented only under `SEED_SAMPLE_CONTENT`; Realm/StartingArea/Beginnings/TarotCard/Path are open-ended world content gated behind the same flag. Part of `seed_dev_database()` (the admin "Load sane defaults" Big Button); surfaced in the superuser-only **Game Setup** hub.
 - **Email notifications (#2162):** `world.character_creation.email_service.CGEmailService` —
   submission/approved/revisions-requested/denied notices, called (best-effort) from
@@ -6753,6 +6832,16 @@ holder is never notified a claim exists.
     (no `on_use_pool`) or `NoChargesRemaining` (consumable at 0 charges)
   - `hard_delete_item_instance(item_instance) -> None` (`world/items/services/usage.py`) —
     deletes the whole footprint: ledger rows then game_object/instance; no dangling FKs
+  - `destroy_consumed_item_instance(item_instance, *, preserve=None, note, event_type=CONSUMED) -> None`
+    (`world/items/services/usage.py`, #4099) — THE rule for an item consumption uses up:
+    soft-delete when `differs_from_template` (destroyed_at, game object out of play,
+    CONSUMED event, or `event_type`), else `hard_delete_item_instance`; unequips first
+    and invalidates the holder's `carried_items`. Called by `consume_item_charges`,
+    `consume_materials`, building completion, shattered gems, `sell_to_fence` and
+    `forfeit_item_instance`. A soft-deleted item is held by nobody: holder and
+    `contained_in` are cleared (last holder: `provenance.last_holder`, from the exit
+    event), a container's contents spill to where it was; holder-keyed readers also
+    use `in_play()`
   - `purge_expired_soft_deleted_items(*, grace=None) -> int` (`world/items/services/cleanup.py`)
     — hard-deletes soft-deleted, non-lore-critical items past the grace period; called
     by the `items.soft_delete_cleanup` daily cron task (#1025)
@@ -6780,7 +6869,9 @@ holder is never notified a claim exists.
       ritual path. Matches a requirement by its `material_category_id` (any member template)
       when set, else by `item_template_id` (Build 0a; ritual requirements have no category
       and their caller pre-filters to `item_template_id`, so that path is unchanged)
-    - `consume_materials(allocations) -> None`
+    - `consume_materials(allocations) -> None`: decrements each stack; a stack that
+      reaches 0 goes through `destroy_consumed_item_instance` (`usage.py`, #4099), soft-
+      or hard-delete, never a bare `delete()` that would leave a ghost game object
     - `meets_quality_tier(inst, requirement) -> bool`
   - **Narrative acquisition** (`world.items.services.narrative_grants`, #707 — no shop/
     merchant system exists anywhere in this codebase):
@@ -8890,6 +8981,36 @@ combat, poison, spells, exhaustion, and any damage source.
     every peril source is an `ObjectDB` character.
   - `resolve_abandonment(sheet) -> bool` — resolves an abandoned victim through the source-
     appropriate pool; no-op when rescued (no acute-peril instance); seeding gap holds, never kills.
+  - `defer_or_apply_certain_death(character_sheet) -> bool` (#4098) - Soulfray's
+    `character_loss` consequence calls this instead of killing synchronously. Under an
+    active `death_deferred` condition (Audere/Audere Majora), sets
+    `CharacterVitals.death_certain_pending` and returns `False` (deferred); otherwise
+    kills now via the normal death path. Honors `is_death_prevented_by_story` first
+    (no death, no flag set, when a story dependency protects the character).
+  - `apply_pending_certain_death(character_sheet) -> bool` (#4098) - resolves a
+    pending flag: no-ops (`False`) if already dead, clears the flag with no death if
+    story-protected, otherwise kills and clears the flag (`True`). Called from
+    `world.conditions.services._resolve_deferred_death_on_expiry` when the LAST
+    `death_deferred` condition on the character ends (ordinarily Audere's own end at
+    the encounter's close - a dispel mid-fight resolves it right there instead, an
+    accepted consequence of tying deferral to the condition's lifetime), and
+    backstopped by `world.combat.services.cleanup_completed_encounter` for every
+    participant at encounter close, in case the condition never expired cleanly. See
+    `docs/architecture/runtime-modifiers-audere.md`'s "Certain Death Deferral"
+    section and `docs/adr/adr-4098-ultimates-are-flagged-techniques-revealed-at-audere.md`.
+  - `clear_pending_certain_death(character_sheet) -> bool` (#4098 owner ruling,
+    2026-10-01) - cancels a pending death outright, never applying it (unlike
+    `apply_pending_certain_death`). Called by
+    `world.combat.services._cancel_pending_certain_death_if_abandoned` when an
+    encounter's `outcome == EncounterOutcome.ABANDONED`, BEFORE
+    `cleanup_completed_encounter` ends Audere/Audere Majora for that encounter's
+    participants - a GM closing a broken fight shouldn't kill anyone, and ending
+    Audere there would otherwise reach the same `_resolve_deferred_death_on_expiry`
+    seam described below and kill through it.
+  - `CharacterVitals.death_certain_pending` (#4098, bool, default False) - the pending
+    flag the three functions above read and write; sibling to the pre-existing
+    `death_deferred_pending` (CHARACTER_KILLED-suppression flag), resolved
+    independently of it.
 - **Key Services (`world/vitals/peril_resolution.py`, #1479):**
   - `is_pc_source(source_character) -> bool` — PC-detection via `db_account` presence.
   - `death_is_permitted(*, victim_sheet, source_character) -> bool` — False for PC sources

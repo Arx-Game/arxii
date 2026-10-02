@@ -25,6 +25,7 @@ if TYPE_CHECKING:
         Technique,
         Thread,
     )
+    from world.magic.types.personalization import PricePayment
 
 
 @dataclass(frozen=True)
@@ -74,6 +75,11 @@ class PowerTermContext:
     applicable_threads: Sequence[ApplicableThread]
     situation_ctx: object | None = None
     target_sheet: object | None = None
+    #: The cast's one price decision (#4099), made by ``price_paid_for_cast`` inside
+    #: ``use_technique``. ``None`` = this cast pays no price, so the price term adds
+    #: nothing. Never re-derived here: the power, narration, consumption and condition
+    #: must all follow the same decision.
+    price_payment: PricePayment | None = None
 
 
 PowerTermProvider = Callable[[PowerTermContext], int]
@@ -217,6 +223,19 @@ def thread_power_term(ctx: PowerTermContext) -> int:
             if r.kind == EffectKind.INTENSITY_BUMP and r.scaled_value
         )
     return total
+
+
+def price_power_term(ctx: PowerTermContext) -> int:
+    """The caster's chosen price for this technique buys power (#4099, ruling 6).
+
+    A PRICE ``Restriction`` adds its ``power_bonus`` to every cast that PAYS it, read
+    raw (cast-power units), never through the builder's refund multiplier. Whether this
+    cast pays is the context's ``price_payment`` (decided once in ``use_technique``);
+    an unpaid price, e.g. a missing component, adds nothing.
+    """
+    if ctx.price_payment is None:
+        return 0
+    return ctx.price_payment.price.power_bonus
 
 
 def touchstone_power_term(ctx: PowerTermContext) -> int:
@@ -637,6 +656,7 @@ _PROVIDERS: list[PowerTermProvider] = [
     covenant_role_blend_power_term,
     covenant_role_specialty_power_term,
     vow_situational_power_term,
+    price_power_term,
 ]
 
 

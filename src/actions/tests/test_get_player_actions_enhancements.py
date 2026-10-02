@@ -154,9 +154,13 @@ class GetPlayerActionsQueryCountTests(TestCase):
         # concluding no quick action applies — +1 over the prior baseline of 15. Necessary:
         # the surfacing gate must match the Action's own prerequisite, or a trust-tier GM
         # could execute set_the_stage but never see the quick action.
+        # #4098: the out-of-combat control bonus is now an authored SoulfrayConfig
+        # field read through cached_singleton(), one fixed-cost singleton SELECT.
+        # With a row present the identity map serves later reads for free; this
+        # fixture has no row, so the read costs a query every call. +1 over 16.
         self.assertLessEqual(
             len(ctx.captured_queries),
-            16,
+            17,
             f"get_player_actions issued {len(ctx.captured_queries)} queries: "
             f"{[q['sql'] for q in ctx.captured_queries]}",
         )

@@ -565,6 +565,13 @@ class RefinementAwaitsMaster(ItemError):
     )
 
 
+class ItemNotInPlay(ItemError):
+    """The item was destroyed (soft-deleted) and is held by nobody (#4099)."""
+
+    user_message = "That item is no longer in play."
+    SAFE_MESSAGES: ClassVar[frozenset[str]] = frozenset({"That item is no longer in play."})
+
+
 class NotItemOwner(ItemError):
     """The actor does not hold the item (#2886 owner-only lifecycle acts)."""
 

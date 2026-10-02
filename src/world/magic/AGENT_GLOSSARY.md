@@ -53,18 +53,34 @@ _Avoid_: conflating this with the `Unbound` Tradition row itself (see "Tradition
 The Thread woven into a Gift: its level sets the Gift's strength (more and stronger techniques) and its resonance sets the Gift's affinity. The costliest thread kind, because it gates magical power. (ADR-0051, ADR-0052.)
 
 **Signature**:
-A Thread woven into a single Technique, deepening just that technique above its Gift baseline. The character applies their Motif to the signed technique via a `SignatureMotifBonus` — an ADDITIVE flourish (intensity delta, conditions, cosmetic prose) that fires alongside the technique at cast time. The bonus is NOT a `TechniqueVariant` and does NOT change the technique's identity. (ADR-0072, supersedes ADR-0056.)
+A Thread woven into a single Technique, deepening just that technique above its Gift baseline. The character applies their Motif to the signed technique via a `SignatureMotifBonus` — an ADDITIVE flourish (intensity delta, conditions, cosmetic prose) that fires alongside the technique at cast time. The bonus is NOT a `TechniqueVariant` and does NOT change the technique's identity. No longer a level-3+ mechanic: `SignatureMotifBonus.min_crossing_level` (default 3, authorable lower or higher) is the only gate on when a given bonus unlocks, and creation can weave a starting thread up to `CREATION_PERSONALIZATION_MAX_LEVEL` so an early flourish is reachable at CG (#4099, ADR-4099). (ADR-0072, supersedes ADR-0056.)
 _Avoid_: technique thread (use "signature"); discordant signature (the resonance-divergence model was closed by ADR-0072).
 
 **Signature Motif Bonus**:
 The staff-authored catalog row (`SignatureMotifBonus`) that a player attaches to a TECHNIQUE-kind Thread to sign that technique. Gated on the character's Motif (facet and/or resonance). Carries `flat_intensity_delta`, `narrative_snippet`, and payload child rows (capability grants, damage profiles, applied conditions) sharing the `Abstract*` bases from `models/techniques.py`. (ADR-0072, #1582.)
 _Avoid_: signature variant, signature specialization (it is additive, not a variant form).
 
+**Hold**:
+`CharacterTechnique`, a character's hold of a Technique. Distinct from the shared catalog `Technique` it points at: a character's own name, description, price and early form all live on the hold, never on the catalog row, so two characters holding the same Technique can personalize it differently. (#4099, ADR-4099.)
+_Avoid_: grant, possession (use "hold").
+
+**Price**:
+A `Restriction` of `kind=PRICE` that a caster chooses for their own hold of a Technique, offered in creation when staff set its `creation_point_cost`. The stronger the power bonus, the more it costs to take. A price costs something real: it may consume carried items on every cast that pays it (`PriceComponentRequirement`) and may inflict an authored condition on the caster (`inflicted_condition`). A cast **pays** its price when the caster carries every component (always, for a price with none); only a paid cast gets the `power_bonus` power-ledger term and the `cast_narration` clause, and only a paid cast spends the components and takes the condition. An unpaid cast still happens, just without the price. `price_paid_for_cast` is the one place that decides. Distinct from a DESIGN-kind `Restriction`, which refunds a technique's design budget in the builder and is never attached to a hold. (#4099, ADR-4099.)
+_Avoid_: cost, drawback, toll.
+
+**Early form**:
+A `TechniqueVariant` bought on a character's hold during creation, before the gift thread has reached the level that would naturally resolve it. Applies only for its buyer, at the hold's own resonance, and never for a role-granted hold. A naturally-reached higher-level form still beats an early pick once the thread catches up. (#4099, ADR-4099.)
+_Avoid_: unlocked form, bonus form.
+
+**Personalized name**:
+A character's own `custom_name`/`custom_description` on their hold of a Technique. Free, unreviewed, and display only: every lookup, cast resolution and prerequisite check keeps reading the catalog `Technique.name`, never the personalized one. (#4099, ADR-4099.)
+_Avoid_: using a personalized name as a lookup key anywhere in code.
+
 **Specialization engine**:
 The one shared `(entity × resonance) → customized capability` resolution (a generalization of covenant sub-role resolution): the same Gift down different Paths, or with a different resonance, yields different specialized techniques, derived on read. (ADR-0055.)
 
 **Technique**:
-A specific magical ability that lives within a Gift, carrying base intensity, control, and anima cost plus a style and effect type. It is the primary unit of magical action. At character creation, players pick 1 + `Tradition Training` bonus Techniques from a staff-authored catalog (their Path × Gift's availability pool, plus their Tradition's signature extras) rather than authoring one; personalization (custom flavor, signature variants) is a level-3+ thread mechanic, not CG. (#2426, ADR-0136.) The rest of a Gift's pool is filled in **play**, not at CG: `charge_and_learn` (`services/gift_acquisition.py`) is the one shared charge+acquire seam behind both player-to-player `TechniqueTeachingOffer` accepts and the Academy's `TRAIN` offers (`world.npc_services`) — the latter additionally spend one Golden Hare per technique (see `currency` glossary), gated on the learner's Academy entrance obligation being settled. Reaching character level 2 requires knowing ≥3 techniques of the character's major Gift (`progression.MajorGiftTechniqueRequirement`, #2440 ruling 4). (#2428, #2440, ADR-0137.)
+A specific magical ability that lives within a Gift, carrying base intensity, control, and anima cost plus a style and effect type. It is the primary unit of magical action. At character creation, players pick 1 + `Tradition Training` bonus Techniques from a staff-authored catalog (their Path × Gift's availability pool, plus their Tradition's signature extras) rather than authoring one. Mechanical personalization (a Price, an Early form, a flourish, a custom name and description) is now offered at CG itself, on the character's own hold, not only once a thread is deep enough (#4099, ADR-4099, supersedes in part ADR-0136). (#2426, ADR-0136.) The rest of a Gift's pool is filled in **play**, not at CG: `charge_and_learn` (`services/gift_acquisition.py`) is the one shared charge+acquire seam behind both player-to-player `TechniqueTeachingOffer` accepts and the Academy's `TRAIN` offers (`world.npc_services`) — the latter additionally spend one Golden Hare per technique (see `currency` glossary), gated on the learner's Academy entrance obligation being settled. Reaching character level 2 requires knowing ≥3 techniques of the character's major Gift (`progression.MajorGiftTechniqueRequirement`, #2440 ruling 4). (#2428, #2440, ADR-0137.)
 _Avoid_: power, spell, ability; **cantrip** (retired #2426 — see ADR-0136; CG used to mint a personal Technique from a staff-curated `Cantrip` template, now it links to catalog `Technique` rows directly, no per-character row created).
 
 **Effect Summary**:
@@ -359,4 +375,73 @@ caller. Feeds `CharacterThreadHandler.contextual_thread_power`, one of the two t
 curve" section for the full nine-arm breakdown and the deferred ORGANIZATION arm.
 _Avoid_: "passive anchor check", "auto-pull".
 
+**Thread carry** (#4097):
+A thread woven into a technique also empowers, at the thread's full level, every
+technique that technique is a transitive prerequisite for (a `TechniqueKnownRequirement`
+chain, possibly several hops deep, possibly including a hidden ultimate). Read on
+demand, never moved or stored: `prerequisite_technique_ids`
+(`services/technique_prerequisites.py`) walks the requirement graph;
+`PullActionContext.involved_technique_closure` unions it with the pull's own involved
+techniques; `_anchor_in_action`'s TECHNIQUE branch tests the closure instead of the
+bare involved-technique set. Applies to both casts and paid pulls (both resolve
+through `_anchor_in_action`); deliberately does NOT widen the passive **Ambient
+Activation** sweep (above): a prerequisite's thread isn't itself demonstrably in use
+just because something it unlocked is being cast. See
+`docs/adr/adr-4097-threads-carry-through-technique-prerequisites.md`. The
+prerequisite gate itself (whether a character may *learn* a technique at all) is
+**Technique prerequisite**; see `progression/AGENT_GLOSSARY.md`.
+_Avoid_: thread inheritance, prerequisite thread (the thread itself doesn't move or
+copy; only its empowering effect reaches further).
+
 _Avoid_: invisible (use "intangible" when referring to the game-mechanical untargetable state)
+
+**Ultimate** (#4098):
+A `Technique` flagged `is_ultimate=True`: a power otherwise out of reach, reachable
+only through Audere or Audere Majora. Reuses the catalog, payload tables, and cast
+path of an ordinary technique; the flag is what keeps it off every everyday cast
+surface, not a separate model. Two kinds: **owned** (the character's Path x major
+Gift pushed to its limit, attached via `PathGiftGrant.ultimate_techniques`) and
+**bond** (a patron being or a companion archetype makes it available while the bond
+holds; past-life bond ultimates are deferred, see `docs/roadmap/magic.md`). A Court
+pact enhances qualifying ultimates the same way it enhances qualifying techniques; it
+never grants ultimates of its own.
+_Avoid_: super move, limit break, unlocked technique.
+
+**Known ultimate** (#4098):
+A character's discovery of an ultimate: a `KnownUltimate` row (`character`,
+`technique`, nullable `crossing`, `readied`), never a `CharacterTechnique`. Once
+known, it joins the character's known ultimates for every later Audere; an **owned**
+known ultimate stays listed regardless of which Path is current, as long as the
+granting Gift is still held as MAJOR; a **bond** known ultimate is listed only while
+that bond is active. It cannot be cast outside Audere or Audere Majora.
+_Avoid_: unlocked ultimate, learned ultimate (learning is the ordinary-technique
+vocabulary; an ultimate is discovered, not learned).
+
+**Readied ultimate** (#4098):
+The character's single active pick for the current Audere: the one `KnownUltimate`
+row with `readied=True` (a DB constraint enforces at most one per character).
+Choosing an ultimate at the reveal readies it; it does NOT cast it. The readied pick
+is castable only through the ordinary combat declaration while an active DECLARING
+round holds, and is cleared on the next Audere accept, a Crossing, or Audere's end.
+_Avoid_: active ultimate, equipped ultimate.
+
+**Reveal** (#4098):
+The set of ultimates an Audere or Audere Majora offers a character to choose from,
+grouped by category. Computed fresh on every read (`ultimate_reveal_for`) from the
+character's current owned/owned-known/bond pools, never an offer table written at
+accept time. A known ultimate's card shows its name and description; an undiscovered
+one shows only its authored category label (Sword/Shield/Crown's evocative display
+name), never its name, description, or identity.
+_Avoid_: offer, ultimate list (the reveal is derived state, not a stored offer).
+
+**Owned ultimate** / **Bond ultimate** (#4098):
+The two kinds of ultimate (spec decision 1). An **owned** ultimate comes from the
+character's own Path x major Gift; a **bond** ultimate comes from a patron being or a
+companion archetype and is available only while that bond holds, since bonds make
+ultimates available but never spend or refuse on the character's behalf (spec
+decision 5, "the character pays").
+_Avoid_: patron ultimate / companion ultimate as the category name (those are the two
+bond *sources*, not a third kind alongside owned and bond).
+
+**Certain death (deferred)** (#4098):
+See `vitals/AGENT_GLOSSARY.md`.

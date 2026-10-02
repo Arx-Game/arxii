@@ -128,8 +128,10 @@ values. The technique use flow doesn't care where a bonus originated.
 
 **Social safety bonus** is applied directly when the character has no
 CharacterEngagement, rather than as a modifier record. The absence of
-engagement IS the social state. The bonus value is authored data (a game
-setting, not hardcoded).
+engagement IS the social state. The bonus value is authored data —
+`SoulfrayConfig.social_safety_bonus` (default 10, staff-tunable in admin,
+#4098 owner ruling) — not hardcoded; see `docs/systems/magic.md`'s
+"Social safety bonus" note for the formula it feeds.
 
 **IntensityTier.control_modifier** is looked up based on the final runtime
 intensity (after all modifiers). The IntensityTier model already exists with
@@ -272,18 +274,28 @@ resonance bonuses are implemented, they write CharacterModifier records
 (identity-derived, persists with source) through whatever system evaluates
 contextual resonance. The technique use flow doesn't need to change.
 
-### Technique Revelation During Audere
+### Ultimate Reveal During Audere (#4098) [BUILT & WIRED]
 
-When a character enters Audere, they should see techniques from their next
-tier — specifically from the advanced Path they're ascending toward. These
-are techniques they don't know and have never seen. The revelation is a
-preview of their future self and serves as a progression carrot.
+This section previously said the hook was a no-op and that Audere reveals techniques
+from the character's *next* tier (a preview of their future self). Neither is true as
+built: a plain Audere reveals the character's **current** Path's ultimates for their
+major Gift; Audere Majora is itself an Audere for the new Path, revealing *that* Path's
+ultimates once the Crossing resolves (spec decision 12 corrected the original framing
+above before #4098 shipped).
 
-**Depends on:** Path progression infrastructure (querying "what is this
-character's next-tier Path and its Gifts/Techniques").
-
-**Hook point:** `offer_audere()` has a post-acceptance step where technique
-revelation would fire. Currently a no-op.
+An ultimate is a flagged `Technique` (`is_ultimate=True`), never a separate catalog or
+a `CharacterTechnique`. `ultimate_reveal_for(sheet)`
+(`world/magic/services/ultimates.py`) derives the reveal on every read - no offer
+table - from the character's owned (current/new Path x major Gift), owned-known (any
+Path, still held as MAJOR), and bond (active patron/companion) pools, filtered by
+#4097's prerequisite gate, grouped by category (Sword/Shield/Crown, shown under
+authored display labels). A technique the character already knows (`KnownUltimate`)
+lists by name; an undiscovered one lists only its category card - its identity never
+reaches the wire. The player's choice (`choose_ultimate`) stores the `KnownUltimate`
+row and marks it the character's single `readied` pick; it does not cast anything -
+the pick still goes through the ordinary combat declaration, castable only while an
+active DECLARING round holds. Full detail: `docs/systems/magic.md`'s "Ultimates"
+section; `docs/adr/adr-4098-ultimates-are-flagged-techniques-revealed-at-audere.md`.
 
 ### Audere Majora
 
@@ -338,20 +350,58 @@ stats. Document as a cross-cutting design need. The modifier system already
 supports this data (CharacterModifier records exist, ModifierTargets exist) —
 what's missing is the conditional activation layer.
 
-### Character Loss Deferral (Scope #3)
+### Certain Death Deferral (#4098) [BUILT & WIRED]
 
-Character death from Audere sacrifice should be deferred to a narratively
-appropriate moment — not mid-action. A character in Audere Majora who pushes
-past lethal Soulfray stages is choosing sacrifice so others can win. The death
-plays out after the decisive moment (winning the boss fight, holding the line,
-etc.), not as an interruption to the action.
+This section used to describe Scope #3's Soulfray-sacrifice deferral as future design.
+It is now built, for the narrower case the spec actually asked for: Soulfray's
+`character_loss` consequence, under a `death_deferred` condition (Audere or Audere
+Majora), defers rather than killing synchronously, so the character stays ALIVE and
+keeps acting through the decisive moment instead of dying mid-action.
 
-Character loss from sacrifice is always the result of a deliberate choice
-chain (entered Audere → kept pushing → kept confirming overburn). The system
-makes space for players to choose sacrifice deliberately, with full
-understanding of what they're giving up and what they're achieving for others.
+`defer_or_apply_certain_death(character_sheet) -> bool` (`world/vitals/services.py`)
+is what Soulfray's stage-consequence resolution calls in place of an unconditional
+kill: under an active `death_deferred` condition it sets
+`CharacterVitals.death_certain_pending` and the character keeps acting; otherwise it
+kills now. The pending death resolves through `apply_pending_certain_death`, called
+from the existing condition-expiry seam
+(`_resolve_deferred_death_on_expiry`, `world/conditions/services.py`) when the LAST
+deferring condition on the character ends - ordinarily Audere's own end at the
+encounter's close - and backstopped by `cleanup_completed_encounter`
+(`world/combat/services.py`) for every participant at encounter completion, in case
+the condition never expired cleanly through the normal path. Both the defer and the
+resolution check `is_death_prevented_by_story` first, so an active story-protected
+dependency still blocks the death and clears the pending flag with no death.
 
-This is part of Scope #3's Soulfray progression design, not Scope #2.
+**Accepted consequence:** a dispel that removes the deferring condition mid-fight (not
+at the encounter's natural end) resolves the pending death right there, through the
+same expiry seam - deferral is tied to the condition's own lifetime, not to the
+encounter's, so an early dispel is an early death rather than a held one.
+
+**An ABANDONED encounter cancels the pending death instead of resolving it**
+(#4098 owner ruling, 2026-10-01): a GM closing a broken fight shouldn't kill anyone.
+`cleanup_completed_encounter` (`world/combat/services.py`) checks
+`encounter.outcome == EncounterOutcome.ABANDONED` and, when true, calls the new
+`clear_pending_certain_death(character_sheet) -> bool` (`world/vitals/services.py` -
+clears `death_certain_pending` without ever applying the death, unlike
+`apply_pending_certain_death`) for every participant, via the
+`_cancel_pending_certain_death_if_abandoned` helper - and does this **before** the
+Audere/Audere Majora teardown loop just below it. Ordering matters: ending Audere there
+calls `remove_condition`, which reaches the same `_resolve_deferred_death_on_expiry`
+expiry seam described above, and that seam applies a pending certain death the instant
+the last deferring condition is gone - if the flag were still armed when that loop ran,
+an abandoned encounter would kill through the ordinary expiry seam before the function's
+own backstop loop (further down, unconditional for every outcome) ever got a chance to
+matter. Every other outcome (VICTORY/DEFEAT/FLED) is unaffected - the death still applies
+through the expiry seam or the backstop exactly as before.
+
+**Soulfray can kill only inside a combat encounter** (#4098 owner ruling, 2026-10-01):
+a scene cast, a technique-enhanced social action, a battle, and a reactive protection
+fired with no active COMBAT engagement all pass `lethal=False` into `accumulate_soulfray`,
+which bounds accumulated severity below the first death-risk stage instead of ever
+rolling a `character_loss` consequence outside combat. Full detail:
+`docs/systems/magic.md`'s "Ultimates" section (the "Soulfray" note),
+`docs/systems/INDEX.md`'s Vitals section, and
+`docs/adr/adr-4098-ultimates-are-flagged-techniques-revealed-at-audere.md`.
 
 ## Integration Test Expansion
 

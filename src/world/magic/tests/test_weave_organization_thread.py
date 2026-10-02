@@ -97,3 +97,26 @@ class WeaveOrganizationThreadTests(TestCase):
         self.assertTrue(
             CharacterTechnique.objects.filter(character=self.sheet, technique=technique).exists()
         )
+
+    def test_weave_never_mints_an_ultimate(self):
+        """An ultimate in a matching-resonance gift is never minted (#4098).
+
+        Mirrors ``test_weave_mints_techniques_for_matching_resonance``, but the
+        gift's technique is flagged ``is_ultimate`` — it must be excluded from
+        ``Gift.inherited_techniques`` (the pool this mint loop reads) the same
+        way any other ultimate is excluded from an ordinary acquisition surface.
+        """
+        from world.magic.factories import UltimateTechniqueFactory
+
+        ultimate = UltimateTechniqueFactory(gift=self.gift, level=6)
+        persona = self.sheet.primary_persona
+        OrganizationMembership.objects.create(organization=self.org, persona=persona)
+        weave_thread(
+            character_sheet=self.sheet,
+            target_kind=TargetKind.ORGANIZATION,
+            target=self.org,
+            resonance=self.resonance,
+        )
+        self.assertFalse(
+            CharacterTechnique.objects.filter(character=self.sheet, technique=ultimate).exists()
+        )

@@ -2,12 +2,13 @@
 name: code-reviewer
 description: Adversarially review a code change (the working-tree diff, or a range the caller names) for correctness bugs, security issues, missing tests, contract violations, and quality problems. Read-only; returns severity-classified findings.
 polytoken:
-  # Cross-model review: the worker runs on the default full model (umans-glm-5.2);
-  # this reviewer runs on a DIFFERENT model (Kimi K2.7) so the critique is adversarial
-  # rather than the author grading its own work. Falls back to the default full model
-  # for anyone whose global config doesn't define umans-kimi-k2.7.
-  model: umans-kimi-k2.7
-  fallback_models: [default_model:full]
+  # Cross-model review: this reviewer runs on the `reviewer` model group
+  # (.polytoken/config.yaml), which prefers a DIFFERENT model than the default
+  # worker so the critique is adversarial rather than the author grading its own
+  # work. The group falls back to the default full model when its first choice is
+  # not configured. A group model cannot also set fallback_models, and a bare
+  # unknown model name stops the daemon from starting, so always pin the group.
+  model: "@mg:reviewer"
   tools: [file_read, grep, glob, shell, web_search, web_fetch, tag!ALL_MCP]
   undeferred_tools: [file_read, grep, glob, shell]
   allow_subagent_spawn: false

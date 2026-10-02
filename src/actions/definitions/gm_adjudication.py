@@ -475,7 +475,11 @@ class GMAwardAction(Action):
     ) -> ActionResult:
         from world.achievements.constants import AccessChangeSource  # noqa: PLC0415
         from world.magic.constants import AcquisitionOrigin  # noqa: PLC0415
-        from world.magic.exceptions import GiftNotOwned, TechniqueCapExceeded  # noqa: PLC0415
+        from world.magic.exceptions import (  # noqa: PLC0415
+            GiftNotOwned,
+            TechniqueCapExceeded,
+            UltimateNotLearnable,
+        )
         from world.magic.models import Technique  # noqa: PLC0415
         from world.magic.services.technique_acquisition import learn_technique  # noqa: PLC0415
 
@@ -510,6 +514,12 @@ class GMAwardAction(Action):
                 message=f"{target.key} does not hold the {technique.gift.name} gift.",
             )
         except TechniqueCapExceeded as exc:
+            return ActionResult(success=False, message=exc.user_message)
+        except UltimateNotLearnable as exc:
+            # #4098 fix round 1: an ultimate is reachable only through Audere, not
+            # even a GM award (AcquisitionOrigin.GM_GRANT above does not bypass
+            # this) -- without this clause the raise crashed the action instead
+            # of a clean refusal.
             return ActionResult(success=False, message=exc.user_message)
         except ValueError as exc:
             return ActionResult(success=False, message=str(exc))

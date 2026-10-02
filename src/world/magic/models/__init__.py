@@ -220,6 +220,7 @@ from world.magic.models.techniques import (
     EffectType,
     EffectTypeManager,
     IntensityTier,
+    PriceComponentRequirement,
     Restriction,
     RestrictionManager,
     StyleCapabilityRequirement,
@@ -246,6 +247,7 @@ from world.magic.models.threads import (
 )
 from world.magic.models.touchstone_config import TouchstoneCastConfig
 from world.magic.models.training_outcome import TrainingOutcomeAward
+from world.magic.models.ultimates import KnownUltimate
 from world.magic.models.weaving import (
     CharacterThreadWeavingUnlock,
     ThreadWeavingTeachingOffer,
@@ -347,6 +349,8 @@ __all__ = [
     # rituals
     "ImbuingProseTemplate",
     "IntensityTier",
+    # known ultimates (#4098)
+    "KnownUltimate",
     # power config (#637)
     "LevelPowerConfig",
     # progression dashboard (#536)
@@ -383,6 +387,7 @@ __all__ = [
     # endorsement (Outfits Phase C §2.2 — #514)
     "PresentationEndorsement",
     # reincarnation
+    "PriceComponentRequirement",
     "Reincarnation",
     # relationship bond pull modulation (#1849)
     "RelationshipBondPullTuning",

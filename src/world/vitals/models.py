@@ -111,6 +111,15 @@ class CharacterVitals(SharedMemoryModel):
             "Cleared and CHARACTER_KILLED is emitted when that condition expires."
         ),
     )
+    death_certain_pending = models.BooleanField(
+        default=False,
+        help_text=(
+            "#4098: Soulfray made this character's death certain while a death_deferred "
+            "condition (Audere, Audere Majora) held. The death applies when the last such "
+            "condition ends at encounter cleanup. Distinct from death_deferred_pending, "
+            "which only defers a CHARACTER_KILLED event."
+        ),
+    )
 
     def __str__(self) -> str:
         return f"{self.character_sheet} ({self.get_life_state_display()})"

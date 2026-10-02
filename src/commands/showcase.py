@@ -105,11 +105,11 @@ class CmdShowcase(ArxCommand):
         if token.lstrip("#").isdigit():
             return int(token.lstrip("#"))
         matches = list(
-            ItemInstance.objects.filter(holder_character_sheet=sheet, custom_name__icontains=token)[
-                :2
-            ]
+            ItemInstance.objects.in_play().filter(
+                holder_character_sheet=sheet, custom_name__icontains=token
+            )[:2]
         ) or list(
-            ItemInstance.objects.filter(
+            ItemInstance.objects.in_play().filter(
                 holder_character_sheet=sheet, template__name__icontains=token
             )[:2]
         )

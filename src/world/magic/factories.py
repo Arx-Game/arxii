@@ -33,6 +33,7 @@ from world.magic.constants import (
     ParticipationRule,
     PendingAlterationStatus,
     ResonanceValence,
+    RestrictionKind,
     RitualExecutionKind,
     TargetKind,
     TechniqueFunction,
@@ -59,6 +60,7 @@ from world.magic.models import (
     GlimpseTag,
     ImbuingProseTemplate,
     IntensityTier,
+    KnownUltimate,
     MagicalAlterationEvent,
     MagicalAlterationTemplate,
     MagicProgressionMilestone,
@@ -201,6 +203,16 @@ class RestrictionFactory(factory.django.DjangoModelFactory):
         if extracted:
             for effect_type in extracted:
                 self.allowed_effect_types.add(effect_type)
+
+
+class PriceFactory(RestrictionFactory):
+    """A PRICE restriction a caster can take for their own hold (#4099)."""
+
+    kind = RestrictionKind.PRICE
+    name = factory.Sequence(lambda n: f"Price {n}")
+    power_bonus = 4
+    creation_point_cost = 1
+    cast_narration = factory.LazyAttribute(lambda o: f"narration for {o.name}")
 
 
 class AffinityFactory(factory.django.DjangoModelFactory):
@@ -379,6 +391,13 @@ class TechniqueFactory(factory.django.DjangoModelFactory):
             )
 
 
+class UltimateTechniqueFactory(TechniqueFactory):
+    """A Technique flagged as an ultimate (#4098)."""
+
+    is_ultimate = True
+    level = 6
+
+
 class GiftUnlockFactory(factory.django.DjangoModelFactory):
     """Factory for GiftUnlock — authored XP-purchasable Minor Gift catalog (#1587, #2116).
 
@@ -520,6 +539,19 @@ class TechniqueVariantFactory(factory.django.DjangoModelFactory):
     control_delta = 0
     discovery_achievement = None
     codex_entry = None
+
+
+class SignatureMotifBonusFactory(factory.django.DjangoModelFactory):
+    class Meta:
+        model = "arxii.SignatureMotifBonus"
+
+    name = factory.Sequence(lambda n: f"Flourish {n}")
+    narrative_snippet = ""
+    required_resonance = factory.SubFactory(ResonanceFactory)
+    required_facet = None
+    flat_intensity_delta = 1
+    min_crossing_level = 1
+    creation_point_cost = None
 
 
 # ---------------------------------------------------------------------------
@@ -835,6 +867,17 @@ class CharacterTechniqueFactory(factory.django.DjangoModelFactory):
     technique = factory.SubFactory(TechniqueFactory)
 
 
+class KnownUltimateFactory(factory.django.DjangoModelFactory):
+    """Factory for KnownUltimate — a discovered ultimate receipt (#4098)."""
+
+    class Meta:
+        model = KnownUltimate
+
+    character = factory.SubFactory(_CHARACTER_SHEET_FACTORY)
+    technique = factory.SubFactory(UltimateTechniqueFactory)
+    readied = False
+
+
 # =============================================================================
 # Phase 3: Anima Factories
 # =============================================================================
@@ -983,6 +1026,7 @@ class SoulfrayConfigFactory(factory.django.DjangoModelFactory):
     resilience_check_type = factory.SubFactory("world.checks.factories.CheckTypeFactory")
     base_check_difficulty = 15
     ritual_severity_cost_per_point = 1
+    social_safety_bonus = 10
 
 
 class MishapPoolTierFactory(factory.django.DjangoModelFactory):

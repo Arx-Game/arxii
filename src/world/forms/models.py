@@ -576,7 +576,15 @@ class AlternateSelf(SharedMemoryModel):
         related_name="grants",
     )
     techniques = models.ManyToManyField(
-        "arxii.Technique", blank=True, related_name="alternate_self_grants"
+        "arxii.Technique",
+        blank=True,
+        related_name="alternate_self_grants",
+        limit_choices_to={"is_ultimate": False},
+        help_text=(
+            "Techniques granted on assuming this alternate self. Never an ultimate "
+            "(#4098) — past-life bond ultimates are out of scope; an ultimate is "
+            "reachable only by discovering it at Audere/Audere Majora."
+        ),
     )
     tuning_value = models.IntegerField(null=True, blank=True)
     display_name = models.CharField(max_length=100, blank=True)

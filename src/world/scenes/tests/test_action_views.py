@@ -1288,6 +1288,26 @@ class CastableTechniquesEndpointTestCase(APITestCase):
         response = self.client.get(self._url(), {"initiator_persona": self.persona.pk})
         assert response.status_code == status.HTTP_403_FORBIDDEN
 
+    def test_shows_owners_custom_description_falling_back_to_catalog(self) -> None:
+        """#4099 fix round 1: the web list used to always show the catalog
+        description, while telnet's bare ``cast`` already showed the owner's own
+        one — this closed that gap."""
+        technique = make_castable_technique()
+        CharacterTechniqueFactory(
+            character=self.identity,
+            technique=technique,
+            custom_description="Frost blooms where the strike lands.",
+        )
+        plain = make_castable_technique()
+        CharacterTechniqueFactory(character=self.identity, technique=plain)
+
+        response = self.client.get(self._url(), {"initiator_persona": self.persona.pk})
+        assert response.status_code == status.HTTP_200_OK
+        personalized = next(t for t in response.data if t["id"] == technique.pk)
+        assert personalized["description"] == "Frost blooms where the strike lands."
+        catalog_only = next(t for t in response.data if t["id"] == plain.pk)
+        assert catalog_only["description"] == plain.description
+
     def test_response_contains_expected_fields(self) -> None:
         """Each entry has id, name, anima_cost, tier, intensity, control, hostile."""
         technique = make_castable_technique()

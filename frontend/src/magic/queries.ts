@@ -12,6 +12,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import * as api from './api';
 import { useAppSelector } from '@/store/hooks';
 import { combatKeys } from '@/combat/queries';
+import { availableActionsKeys } from '@/scenes/actionQueries';
 import type {
   AcceptTeachingOfferRequest,
   AlterationResolvePayload,
@@ -19,6 +20,7 @@ import type {
   AudereRespondRequest,
   AudereMajoraRespondRequest,
   BindMotifStyleRequest,
+  ChooseUltimateRequest,
   CrossXPLockRequest,
   DissolveRequest,
   EntryFlourishRespondRequest,
@@ -83,6 +85,8 @@ export const magicKeys = {
     [...magicKeys.pendingAlterations(), 'library', pendingId] as const,
 
   auderePending: () => [...magicKeys.all, 'audere', 'pending'] as const,
+  audereUltimates: (characterSheetId: number) =>
+    [...magicKeys.all, 'audere', 'ultimates', characterSheetId] as const,
 
   audereMajoraPending: () => [...magicKeys.all, 'audere-majora', 'pending'] as const,
 
@@ -637,6 +641,48 @@ export function useRespondToAudere(characterId: number, encounterId: number) {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: magicKeys.auderePending() }).catch(() => {});
       qc.invalidateQueries({ queryKey: magicKeys.characterAnima(characterId) }).catch(() => {});
+      qc.invalidateQueries({ queryKey: combatKeys.encounter(encounterId) }).catch(() => {});
+    },
+  });
+}
+
+/**
+ * The in-progress Audere ultimate reveal/readied state + deferred-death banner
+ * for the given character (#4098). Owner-only; polled only while a ceremony
+ * runs (`enabled` is gated by the caller, e.g. `isAudereActive || isMajoraActive`).
+ * throwOnError deliberately NOT set: backs an overlay, same rationale as
+ * usePendingAudereOffers.
+ */
+export function useAudereUltimates(characterSheetId: number, enabled: boolean) {
+  return useQuery({
+    queryKey: magicKeys.audereUltimates(characterSheetId),
+    queryFn: () => api.getAudereUltimates(characterSheetId),
+    refetchInterval: 5_000,
+    enabled: enabled && characterSheetId > 0,
+  });
+}
+
+/**
+ * Choose (reveal or re-cast) an ultimate by its choice_key. On success the
+ * readied ultimate now appears among the combat actions, so invalidate both
+ * the Audere ultimates state and the player's available actions, plus the
+ * encounter itself (mirrors useRespondToAudere's post-respond refresh).
+ */
+export function useChooseUltimate(
+  characterSheetId: number,
+  characterId: number,
+  encounterId: number
+) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: ChooseUltimateRequest) => api.chooseUltimate(body),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: magicKeys.audereUltimates(characterSheetId) }).catch(
+        () => {}
+      );
+      qc.invalidateQueries({ queryKey: availableActionsKeys.forCharacter(characterId) }).catch(
+        () => {}
+      );
       qc.invalidateQueries({ queryKey: combatKeys.encounter(encounterId) }).catch(() => {});
     },
   });

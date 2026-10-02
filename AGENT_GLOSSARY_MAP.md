@@ -9,13 +9,15 @@ term is chosen and the rest are listed under `_Avoid_`.
 ## Per-app glossaries
 
 - [character_sheets](src/world/character_sheets/AGENT_GLOSSARY.md)
-- [magic](src/world/magic/AGENT_GLOSSARY.md)
+- [magic](src/world/magic/AGENT_GLOSSARY.md) - also holds the Ultimates terms (#4098):
+  Ultimate, Known ultimate, Readied ultimate, Reveal, Owned ultimate, Bond ultimate; and
+  the creation-personalization terms (#4099): Hold, Price, Early form, Personalized name
 - [covenants](src/world/covenants/AGENT_GLOSSARY.md)
 - [scenes](src/world/scenes/AGENT_GLOSSARY.md)
 - [combat](src/world/combat/AGENT_GLOSSARY.md)
 - [battles](src/world/battles/AGENT_GLOSSARY.md)
 - [conditions](src/world/conditions/AGENT_GLOSSARY.md)
-- [vitals](src/world/vitals/AGENT_GLOSSARY.md)
+- [vitals](src/world/vitals/AGENT_GLOSSARY.md) - also holds Certain death (deferred) (#4098)
 - [worship](src/world/worship/AGENT_GLOSSARY.md)
 - [ceremonies](src/world/ceremonies/AGENT_GLOSSARY.md)
 - [estates](src/world/estates/AGENT_GLOSSARY.md)
@@ -407,6 +409,16 @@ check", "auto-pull". Full entry: [magic AGENT_GLOSSARY](src/world/magic/AGENT_GL
 ("Ambient Activation"); capability-oracle framing (the `action_ctx` param it feeds) in
 [conditions AGENT_GLOSSARY](src/world/conditions/AGENT_GLOSSARY.md) ("Agency oracle").
 
+**Thread carry** (#4097):
+A thread woven into a technique also empowers, at the thread's full level, every
+technique that technique is a transitive prerequisite for, read on demand via the
+prerequisite closure (`prerequisite_technique_ids`), never moved or stored. Applies to
+the in-action pull/cast predicate (`_anchor_in_action`) only; the passive Ambient
+Activation sweep above is deliberately left unwidened. Full entry: [magic
+AGENT_GLOSSARY](src/world/magic/AGENT_GLOSSARY.md) ("Thread carry"). Decision record:
+`docs/adr/adr-4097-threads-carry-through-technique-prerequisites.md`.
+_Avoid_: thread inheritance, prerequisite thread.
+
 **Effect Summary** (#2898):
 What a Technique actually does, derived on read from its four payload tables and cached on
 the row — never a stored field. One serialized block (`effect_summary`) shared by every
@@ -432,6 +444,16 @@ bonus's `required_facet` / `required_resonance` (AND semantics). (ADR-0065, #158
 _Avoid_: signature variant, signature specialization.
 
 ## Progression & legend
+
+**Technique prerequisite** (#4097):
+A requirement row authored against `AbstractUnlockRequirement.technique`, gating
+whether a character may *learn* that technique (distinct from the
+Path/ClassLevelUnlock/ThreadCrossing targets the same base class also supports).
+Checked by `check_requirements_for_technique`, enforced by `charge_and_learn`. Also
+the prerequisite graph thread carry (below) walks. Full entry:
+[progression AGENT_GLOSSARY](src/world/progression/AGENT_GLOSSARY.md) ("Technique
+prerequisite", "MajorGiftTechniqueRequirement").
+_Avoid_: unlock requirement (reserve for the other three targets).
 
 **Durance**:
 "The Durance" is a character's whole life-journey through the world; it is the narrative

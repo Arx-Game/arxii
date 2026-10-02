@@ -318,9 +318,11 @@ class BlockIfParticipantMidCrossingQueryScalingTests(TestCase):
                 status=BattleParticipantStatus.ACTIVE,
             )
 
-        # 1 query for the select_related participant+sheet join, 2 for the
-        # batched crossing check (PendingAudereMajoraOffer + ConditionInstance)
-        # — bounded regardless of participant count. A regression that drops
-        # select_related would instead cost 1 + 12 (one per participant) + 2.
-        with self.assertNumQueries(3):
+        # 1 query for the select_related participant+sheet join, 1 for the
+        # batched crossing check (PendingAudereMajoraOffer only — the block
+        # covers the undecided-offer window, not the Majora condition; #4098
+        # Task 5) — bounded regardless of participant count. A regression
+        # that drops select_related would instead cost 1 + 12 (one per
+        # participant) + 1.
+        with self.assertNumQueries(2):
             _block_if_participant_mid_audere_majora_crossing(battle)

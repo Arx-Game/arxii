@@ -28,6 +28,7 @@ import type {
   Stage,
   StartingArea,
   Technique,
+  TechniquePersonalizationOptions,
   TechniqueStyle,
   Tradition,
   Vacancy,
@@ -934,6 +935,59 @@ export const mockTechniqueStyles: TechniqueStyle[] = [
   { id: 3, name: 'Prayer', description: 'Magic channeled through devotion' },
 ];
 
+/**
+ * One chosen technique's "make it yours" options (#4099): one flourish, one
+ * form, one price, matching the worked example from the approved demo
+ * (Frost on the skin, +4 power, 1 pt).
+ */
+export const mockPersonalizationOptions: TechniquePersonalizationOptions = {
+  technique_id: 501,
+  technique_name: 'Scorch Lash',
+  needs_resonance: false,
+  flourishes: [
+    {
+      id: 601,
+      name: 'A chill rides your voice when you cast',
+      gloss: 'A faint cold in the air, nothing more, for now.',
+      intensity_delta: 1,
+      control_delta: 0,
+      power_bonus: 0,
+      level: 1,
+      cost: 3,
+      consumes: [],
+      inflicts: null,
+    },
+  ],
+  forms: [
+    {
+      id: 602,
+      name: 'Scorch Lash, frost-formed',
+      gloss: 'Leans the strike toward a cold resonance instead of heat.',
+      intensity_delta: 1,
+      control_delta: -1,
+      power_bonus: 0,
+      level: 1,
+      cost: 4,
+      consumes: [],
+      inflicts: null,
+    },
+  ],
+  prices: [
+    {
+      id: 603,
+      name: 'Frost on the skin',
+      gloss: 'Your hand numbs white each time you cast.',
+      intensity_delta: 0,
+      control_delta: 0,
+      power_bonus: 4,
+      level: 0,
+      cost: 1,
+      consumes: [{ name: 'Shard of rime', quantity: 2 }],
+      inflicts: 'Frostbitten fingers',
+    },
+  ],
+};
+
 export const mockEffectTypes: EffectType[] = [
   {
     id: 1,
@@ -1283,6 +1337,22 @@ export const mockCGExplanations: Record<string, string> = {
     'have caught their first Glimpse of who one day they might become.',
   arrival_door: 'Begin',
   arrival_quiet: 'Return to the Hall',
+  // "Make it yours" panel copy (#4099)
+  personalize_heading: 'Make it yours (test)',
+  personalize_name_title: 'Name & description (test)',
+  personalize_name_gloss: 'Call it something your own (test)',
+  personalize_flourish_title: 'Signature flourish (test)',
+  personalize_flourish_gloss: 'A small, early mark on how you cast (test)',
+  personalize_form_title: 'Specialized form (test)',
+  personalize_form_gloss: 'An early lean toward a resonance (test)',
+  personalize_price_title: 'A price (test)',
+  personalize_price_gloss: 'Something visible this costs you to cast (test)',
+  personalize_name_label: 'What you call it (test)',
+  personalize_description_label: 'How it looks and feels (test)',
+  personalize_free_note: 'Free. No staff review (test)',
+  personalize_mechanics_note: 'Mechanically unchanged (test)',
+  personalize_needs_resonance: 'Choose your gift resonance first (test)',
+  personalize_summary_none: 'Not yet chosen (test)',
 };
 
 /**

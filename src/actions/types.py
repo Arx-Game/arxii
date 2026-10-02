@@ -342,6 +342,9 @@ class PlayerAction:
     available_fury_tiers: tuple[FuryTierOption, ...] = ()
     eligible_fury_anchors: tuple[AnchorOption, ...] = ()
 
+    # #4098: a readied Audere ultimate (only ever a COMBAT action)
+    is_ultimate: bool = False
+
 
 class ActionInterrupted(Exception):
     """Raised when a trigger stops an action's intent event."""

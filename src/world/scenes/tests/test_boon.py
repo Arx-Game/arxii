@@ -625,6 +625,38 @@ class BoonResolverE2ETests(TestCase):
         boon.refresh_from_db()
         self.assertIsNone(boon.fulfilled_at)
 
+    def test_a_fenced_item_cannot_be_granted_as_a_boon(self) -> None:
+        """#4099: an item fenced (soft-deleted) between ask and accept is held by nobody,
+        so the held-item boon cannot hand it over."""
+        from world.items.constants import OwnershipEventType
+        from world.items.factories import ItemInstanceFactory
+        from world.items.models import OwnershipEvent
+        from world.items.services.usage import destroy_consumed_item_instance
+        from world.scenes.boon_services import fulfill_boon
+
+        item = ItemInstanceFactory(holder_character_sheet=self.npc_target.character_sheet)
+        OwnershipEvent.objects.create(
+            item_instance=item,
+            event_type=OwnershipEventType.GIVEN,
+            to_character_sheet=self.npc_target.character_sheet,
+        )
+        request = SceneActionRequestFactory(
+            scene=self.scene,
+            initiator_persona=self.asker,
+            target_persona=self.npc_target,
+            action_key="boon",
+        )
+        boon = Boon.objects.create(
+            action_request=request, kind=BoonKind.HELD_ITEM, item_instance=item
+        )
+        destroy_consumed_item_instance(
+            item, note="Sold to a fence.", event_type=OwnershipEventType.TRANSFERRED
+        )
+        with self.assertRaises(ValidationError):
+            fulfill_boon(boon)
+        item.refresh_from_db()
+        self.assertIsNone(item.holder_character_sheet_id)
+
 
 @override_settings(SEED_SAMPLE_CONTENT=True)  # seed_social_check_content gates on #2698
 class BoonSeedTests(TestCase):

@@ -51,6 +51,12 @@ export function AudereOfferDialog({
             Battered down. Break through. Your soul strains at intensity{' '}
             <span className="font-semibold text-fuchsia-400">{offer.fired_intensity}</span>: power
             beyond your limits waits on the other side.
+            {offer.reveal_framing_text ? (
+              <span data-testid="audere-reveal-framing" className="text-fuchsia-300">
+                {' '}
+                {offer.reveal_framing_text}
+              </span>
+            ) : null}
           </AlertDialogDescription>
         </AlertDialogHeader>
 

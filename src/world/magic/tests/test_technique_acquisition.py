@@ -9,14 +9,17 @@ from world.magic.constants import AcquisitionOrigin, GiftKind, TargetKind
 from world.magic.exceptions import (
     GiftNotOwned,
     TechniqueCapExceeded,
+    TechniqueRequirementsNotMet,
 )
 from world.magic.factories import (
+    CharacterTechniqueFactory,
     GiftFactory,
     ResonanceFactory,
     TechniqueFactory,
 )
 from world.magic.models import CharacterGift, Thread
 from world.magic.services.technique_acquisition import learn_technique
+from world.progression.models import TechniqueKnownRequirement
 
 
 class LearnTechniqueTest(TestCase):
@@ -217,3 +220,87 @@ class TrainingRoomDiscountTests(TestCase):
         )
         # 2 - 3 = -1, floored to 0
         self.assertEqual(result.total_required, 0)
+
+
+class LearnTechniquePrerequisiteGateTest(TestCase):
+    """``learn_technique`` enforces authored prerequisites (#4097 fix round 2).
+
+    ``charge_and_learn`` already ran this check; this third front door (item
+    scrolls, rituals, GM award) did not. Mirrors
+    ``ChargeAndLearnPrerequisitesTest`` (test_technique_prerequisites_learning.py).
+    """
+
+    def setUp(self):
+        self.sheet = CharacterSheetFactory()
+        self.gift = GiftFactory(kind=GiftKind.MINOR)
+        self.resonance = ResonanceFactory()
+        self.gift.resonances.add(self.resonance)
+        CharacterGift.objects.create(character=self.sheet, gift=self.gift)
+        Thread.objects.create(
+            owner=self.sheet,
+            resonance=self.resonance,
+            target_kind=TargetKind.GIFT,
+            target_gift=self.gift,
+            level=10,
+        )
+        self.technique = TechniqueFactory(gift=self.gift)
+        self.prerequisite = TechniqueFactory()
+        TechniqueKnownRequirement.objects.create(
+            technique=self.technique,
+            required_technique=self.prerequisite,
+            is_active=True,
+        )
+        self.ap_pool = ActionPointPool.get_or_create_for_character(self.sheet.character)
+        self.ap_pool.current = 200
+        self.ap_pool.save()
+
+    def test_immediate_mint_blocked_without_prerequisite(self):
+        with self.assertRaises(TechniqueRequirementsNotMet):
+            learn_technique(
+                self.sheet,
+                self.technique,
+                source=AccessChangeSource.TECHNIQUE_GRANT,
+            )
+
+    def test_meter_creation_blocked_without_prerequisite(self):
+        """The ap_cost > 0 branch (meter creation) is gated too, not just the mint."""
+        with self.assertRaises(TechniqueRequirementsNotMet):
+            learn_technique(
+                self.sheet,
+                self.technique,
+                source=AccessChangeSource.TECHNIQUE_GRANT,
+                ap_cost=10,
+            )
+
+    def test_succeeds_once_prerequisite_known(self):
+        CharacterTechniqueFactory(character=self.sheet, technique=self.prerequisite)
+
+        ct = learn_technique(
+            self.sheet,
+            self.technique,
+            source=AccessChangeSource.TECHNIQUE_GRANT,
+        )
+
+        self.assertEqual(ct.technique, self.technique)
+
+    def test_gm_grant_origin_skips_the_check(self):
+        """A GM award is deliberate fiat — it bypasses the prerequisite gate."""
+        ct = learn_technique(
+            self.sheet,
+            self.technique,
+            source=AccessChangeSource.GM_AWARD,
+            origin=AcquisitionOrigin.GM_GRANT,
+        )
+
+        self.assertEqual(ct.technique, self.technique)
+
+    def test_completing_progress_skips_the_check(self):
+        """A meter-completion mint doesn't re-run the gate (already checked at creation)."""
+        ct = learn_technique(
+            self.sheet,
+            self.technique,
+            source=AccessChangeSource.TECHNIQUE_GRANT,
+            completing_progress=True,
+        )
+
+        self.assertEqual(ct.technique, self.technique)

@@ -4,9 +4,7 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-    dependencies = [
-        ("arxii", "0170_relevel_retired_rungs"),
-    ]
+    dependencies = [("arxii", "0180_price_cost_constraints")]
 
     operations = [
         migrations.RemoveField(

@@ -27,8 +27,32 @@ if TYPE_CHECKING:
     from world.species.models import Species
 
 
+def _gated_technique_ids() -> set[int]:
+    """Technique pks carrying at least one active requirement row (#4097).
+
+    One query per concrete ``AbstractUnlockRequirement`` subclass (a small, fixed
+    set via ``concrete_requirement_types()``) — never one per technique. The
+    resulting id set is applied with a single ``exclude(pk__in=...)`` by the caller.
+    """
+    from world.progression.services.spends import concrete_requirement_types  # noqa: PLC0415
+
+    gated: set[int] = set()
+    for req_type in concrete_requirement_types():
+        gated.update(
+            req_type.objects.filter(technique__isnull=False, is_active=True).values_list(
+                "technique_id", flat=True
+            )
+        )
+    return gated
+
+
 def get_technique_options(
-    path: Path, gift: Gift, tradition: Tradition, *, include_unready: bool = False
+    path: Path,
+    gift: Gift,
+    tradition: Tradition,
+    *,
+    include_unready: bool = False,
+    exclude_gated: bool = False,
 ) -> TechniqueOptions:
     """Return the ready technique pool for one CG pick.
 
@@ -41,8 +65,26 @@ def get_technique_options(
     a CG pick. ``include_unready`` is reserved for validation, which needs to
     distinguish an unavailable technique from an unfinished one when reporting
     a stale or tampered selection.
+
+    ``exclude_gated=True`` (#4097) additionally excludes any technique carrying an
+    active requirement row (``TechniqueKnownRequirement``, ``GiftHeldRequirement``,
+    ...) — a draft has no character yet to evaluate
+    ``check_requirements_for_technique`` against, so CG picks skip gated
+    techniques outright rather than offering a pick nobody can finalize.
+    Pass ``exclude_gated=True`` only from character-creation call sites that
+    model what a new character can pick — ``character_creation.validators``/
+    ``views`` and the starting-kit analytics report
+    (``web/admin/tuning/technique_analytics.py``, which explicitly models "the
+    picks a new character gets"). Any **in-play** caller — Academy TRAIN's
+    eligibility check (``npc_services.effects._technique_available_to_learner``)
+    is the one that exists today — keeps the default ``exclude_gated=False``:
+    an in-play learner may already meet the prerequisite, and
+    ``charge_and_learn``'s own per-character ``check_requirements_for_technique``
+    call is the correct gate for them, not a blanket catalog-level exclusion.
     """
-    technique_qs = Technique.objects.select_related("effect_type")
+    technique_qs = Technique.objects.select_related("effect_type").filter(is_ultimate=False)
+    if exclude_gated:
+        technique_qs = technique_qs.exclude(pk__in=_gated_technique_ids())
     if not include_unready:
         technique_qs = technique_qs.filter(action_template__isnull=False)
 
@@ -92,7 +134,7 @@ def get_species_technique_options(
         species_id__in=[ancestor.id for ancestor in ancestor_species], inheritable=True
     )
     gift_ids = SpeciesGiftGrant.objects.filter(grant_filter).values_list("gift_id", flat=True)
-    technique_qs = Technique.objects.filter(gift_id__in=gift_ids)
+    technique_qs = Technique.objects.filter(gift_id__in=gift_ids, is_ultimate=False)
     if not include_unready:
         technique_qs = technique_qs.filter(action_template__isnull=False)
     return list(technique_qs.select_related("effect_type").order_by("name", "id"))

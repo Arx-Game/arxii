@@ -39,6 +39,7 @@ from world.character_creation.constants import (
     STARTING_TECHNIQUE_PICKS_TARGET,
     STAT_DEFAULT_VALUE,
     STAT_DISPLAY_DIVISOR,
+    TECHNIQUE_PERSONALIZATIONS_KEY,
     ActorSheetPrompt,
     AnchorSource,
     ApplicationStatus,
@@ -529,7 +530,7 @@ class AppearanceSection(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
 
     The opener for ``OfferChapter.APPEARANCE``: an offer line names the section it sits
     in, and the leaf renders one block per section in ``sort_order``. Three or four rows
-    for the whole game (Frame; Face and voice; What the Gift left), authored in admin.
+    for the whole game (Frame; Face and voice; Traces of the Gift), authored in admin.
     """
 
     name = models.CharField(max_length=80, unique=True)
@@ -1804,6 +1805,30 @@ class CharacterDraft(SharedMemoryModel):
             }
         )
 
+    def _append_personalization_costs(self, breakdown: list[CGPointBreakdownEntry]) -> None:
+        """One line per creation personalization pick, at the option's own cost (#4099)."""
+        from world.magic.models import Technique  # noqa: PLC0415
+        from world.magic.services.creation_personalization import (  # noqa: PLC0415
+            parse_personalization_picks,
+            priced_personalization_lines,
+        )
+
+        picks = parse_personalization_picks(
+            self.draft_data.get(TECHNIQUE_PERSONALIZATIONS_KEY),
+            technique_ids=self.draft_data.get("selected_technique_ids") or [],
+        )
+        if not picks:
+            return
+        techniques_by_id = Technique.objects.in_bulk([p.technique_id for p in picks])
+        breakdown.extend(
+            CGPointBreakdownEntry(
+                category="magic",
+                item=f"{line.technique_name}: {line.option_name}",
+                cost=line.cost,
+            )
+            for line in priced_personalization_lines(picks, techniques_by_id=techniques_by_id)
+        )
+
     def calculate_cg_points_breakdown(self) -> list[CGPointBreakdownEntry]:
         """
         Build itemized breakdown of CG point costs from actual data sources.
@@ -1818,6 +1843,7 @@ class CharacterDraft(SharedMemoryModel):
         self._append_enemy_cost(breakdown)
         self._append_age_cost(breakdown)
         self._append_species_cost(breakdown)
+        self._append_personalization_costs(breakdown)
         return breakdown
 
     def calculate_cg_points_spent(self) -> int:

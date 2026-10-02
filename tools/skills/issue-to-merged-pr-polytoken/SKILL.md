@@ -129,7 +129,7 @@ table above.
   JSON. `pickup-issue.sh` derives the model from the `complexity:*` label, with
   tier names overridable via `ISSUE_MODEL_HIGH` / `ISSUE_MODEL_MEDIUM` /
   `ISSUE_MODEL_LOW` env vars (defaults are Claude Code tiers; set them to
-  umans-* models for Polytoken). If `model` is non-empty and the harness supports
+  `codex/*` model selectors for Polytoken). If `model` is non-empty and the harness supports
   a model switch, switch now — before any design, planning, or implementation.
 
 ### 2. Discovery and design

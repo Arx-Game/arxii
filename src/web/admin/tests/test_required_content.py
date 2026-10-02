@@ -10,6 +10,7 @@ from django.test import TestCase
 from web.admin.tuning import required_content as rc
 from world.conditions.factories import ConditionTemplateFactory
 from world.game_clock.factories import GameClockFactory
+from world.magic.constants import GiftKind
 
 
 def _dep(key: str, probe: rc.ContentProbe, tier: rc.DependencyTier) -> rc.ContentDependency:
@@ -1009,3 +1010,299 @@ class TestRiskCalibrationsProbe(TestCase):
         result = rc._probe_risk_calibrations()
         self.assertFalse(result.present)
         self.assertEqual(result.missing, (RenownRisk.EXTREME,))
+
+
+class TestPathMajorGiftUltimatesProbe(TestCase):
+    def test_major_gift_grant_without_ultimate_is_missing(self) -> None:
+        from web.admin.tuning.required_content import _probe_path_major_gift_ultimates
+        from world.magic.factories import GiftFactory, PathGiftGrantFactory
+
+        grant = PathGiftGrantFactory(gift=GiftFactory(kind=GiftKind.MAJOR))
+        result = _probe_path_major_gift_ultimates()
+        self.assertFalse(result.present)
+        self.assertIn(f"{grant.path.name} / {grant.gift.name}", result.missing)
+
+    def test_minor_gift_grant_never_flagged(self) -> None:
+        from web.admin.tuning.required_content import _probe_path_major_gift_ultimates
+        from world.magic.factories import GiftFactory, PathGiftGrantFactory
+
+        PathGiftGrantFactory(gift=GiftFactory(kind=GiftKind.MINOR))
+        self.assertTrue(_probe_path_major_gift_ultimates().present)
+
+    def test_stocked_grant_present(self) -> None:
+        from web.admin.tuning.required_content import _probe_path_major_gift_ultimates
+        from world.magic.factories import PathGiftGrantFactory, UltimateTechniqueFactory
+
+        grant = PathGiftGrantFactory()
+        grant.ultimate_techniques.add(UltimateTechniqueFactory(gift=grant.gift))
+        self.assertTrue(_probe_path_major_gift_ultimates().present)
+
+
+class TestAudereConditionShapeProbe(TestCase):
+    """#4098 final review item 2: duration-shape + death_deferred, not just presence."""
+
+    def _well_formed_template(self, name: str) -> rc.ContentProbe:
+        from world.conditions.constants import DurationType
+        from world.mechanics.factories import DeathDeferredPropertyFactory
+
+        template = ConditionTemplateFactory(
+            name=name, default_duration_type=DurationType.UNTIL_END_OF_COMBAT
+        )
+        template.properties.add(DeathDeferredPropertyFactory())
+        return template
+
+    def test_missing_both_templates_is_reported(self) -> None:
+        from web.admin.tuning.required_content import _probe_audere_condition_shape
+        from world.magic.audere import AUDERE_CONDITION_NAME, AUDERE_MAJORA_CONDITION_NAME
+
+        result = _probe_audere_condition_shape()
+        self.assertFalse(result.present)
+        self.assertTrue(any(AUDERE_CONDITION_NAME in m for m in result.missing))
+        self.assertTrue(any(AUDERE_MAJORA_CONDITION_NAME in m for m in result.missing))
+
+    def test_round_limited_duration_is_reported(self) -> None:
+        from web.admin.tuning.required_content import _probe_audere_condition_shape
+        from world.conditions.constants import DurationType
+        from world.magic.audere import AUDERE_CONDITION_NAME, AUDERE_MAJORA_CONDITION_NAME
+        from world.mechanics.factories import DeathDeferredPropertyFactory
+
+        for name in (AUDERE_CONDITION_NAME, AUDERE_MAJORA_CONDITION_NAME):
+            template = ConditionTemplateFactory(
+                name=name, default_duration_type=DurationType.ROUNDS
+            )
+            template.properties.add(DeathDeferredPropertyFactory())
+        result = _probe_audere_condition_shape()
+        self.assertFalse(result.present)
+        self.assertTrue(any("round-limited" in m for m in result.missing))
+
+    def test_missing_death_deferred_property_is_reported(self) -> None:
+        from web.admin.tuning.required_content import _probe_audere_condition_shape
+        from world.conditions.constants import DurationType
+        from world.magic.audere import AUDERE_CONDITION_NAME, AUDERE_MAJORA_CONDITION_NAME
+
+        for name in (AUDERE_CONDITION_NAME, AUDERE_MAJORA_CONDITION_NAME):
+            ConditionTemplateFactory(name=name, default_duration_type=DurationType.PERMANENT)
+        result = _probe_audere_condition_shape()
+        self.assertFalse(result.present)
+        self.assertTrue(any("death_deferred" in m for m in result.missing))
+
+    def test_well_formed_templates_are_present(self) -> None:
+        from web.admin.tuning.required_content import _probe_audere_condition_shape
+        from world.magic.audere import AUDERE_CONDITION_NAME, AUDERE_MAJORA_CONDITION_NAME
+
+        self._well_formed_template(AUDERE_CONDITION_NAME)
+        self._well_formed_template(AUDERE_MAJORA_CONDITION_NAME)
+        result = _probe_audere_condition_shape()
+        self.assertTrue(result.present)
+        self.assertEqual(result.missing, ())
+
+
+class TestUltimatesHaveActionTemplateProbe(TestCase):
+    """#4098 final review item 4: an ultimate with no action_template is pickable
+    through Audere and never castable - a sentinel, not a runtime guard."""
+
+    def test_ultimate_with_no_action_template_is_missing(self) -> None:
+        from web.admin.tuning.required_content import _probe_ultimates_have_action_template
+        from world.magic.factories import UltimateTechniqueFactory
+
+        ultimate = UltimateTechniqueFactory(name="Test Castless Ultimate")
+        result = _probe_ultimates_have_action_template()
+        self.assertFalse(result.present)
+        self.assertIn(ultimate.name, result.missing)
+
+    def test_ordinary_technique_with_no_action_template_never_flagged(self) -> None:
+        from web.admin.tuning.required_content import _probe_ultimates_have_action_template
+        from world.magic.factories import TechniqueFactory
+
+        TechniqueFactory(name="Test Ordinary No Template")
+        result = _probe_ultimates_have_action_template()
+        self.assertTrue(result.present)
+
+    def test_ultimate_with_an_action_template_is_present(self) -> None:
+        from actions.factories import ActionTemplateFactory
+        from web.admin.tuning.required_content import _probe_ultimates_have_action_template
+        from world.magic.factories import UltimateTechniqueFactory
+
+        UltimateTechniqueFactory(
+            name="Test Castable Ultimate", action_template=ActionTemplateFactory()
+        )
+        result = _probe_ultimates_have_action_template()
+        self.assertTrue(result.present)
+        self.assertEqual(result.missing, ())
+
+
+class TestAudereUltimateCopyProbe(TestCase):
+    def test_placeholder_copy_reported(self) -> None:
+        from web.admin.tuning.required_content import _probe_audere_ultimate_copy
+        from world.magic.factories import AudereThresholdFactory
+
+        AudereThresholdFactory()
+        result = _probe_audere_ultimate_copy()
+        self.assertFalse(result.present)
+        self.assertIn("sword_reveal_label", result.missing)
+
+    def test_fully_authored_copy_is_present(self) -> None:
+        from web.admin.tuning.required_content import _probe_audere_ultimate_copy
+        from world.magic.factories import AudereThresholdFactory
+
+        AudereThresholdFactory(
+            reveal_framing_text="The threads of fate pull taut.",
+            deferred_death_text="Death waits at the edge of the circle.",
+            sword_reveal_label="The Sword",
+            shield_reveal_label="The Shield",
+            crown_reveal_label="The Crown",
+        )
+        result = _probe_audere_ultimate_copy()
+        self.assertTrue(result.present)
+        self.assertEqual(result.missing, ())
+
+    def test_missing_singleton_is_present_not_crashed(self) -> None:
+        """A missing `AudereThreshold` is the REQUIRED `audere-threshold` row's failure
+        state (fix round 1) - this probe must not double-report it, and must not crash
+        reading fields off a `None` singleton."""
+        from web.admin.tuning.required_content import _probe_audere_ultimate_copy
+
+        result = _probe_audere_ultimate_copy()
+        self.assertTrue(result.present)
+
+
+class TestPersonalizationRows(TestCase):
+    """The three TUNING rows gating the Gift stage's personalization catalogs (#4099)."""
+
+    def test_no_price_offered_in_creation_is_reported(self) -> None:
+        from world.magic.factories import RestrictionFactory
+
+        RestrictionFactory()  # a DESIGN restriction never counts
+        self.assertFalse(_probe_for("creation-prices").resolve(None).present)
+
+    def test_an_offered_price_is_present(self) -> None:
+        from world.magic.factories import PriceFactory
+
+        PriceFactory(creation_point_cost=1)
+        self.assertTrue(_probe_for("creation-prices").resolve(None).present)
+
+    def test_offered_flourish_and_form_are_present(self) -> None:
+        from world.magic.factories import SignatureMotifBonusFactory, TechniqueVariantFactory
+
+        SignatureMotifBonusFactory(creation_point_cost=2)
+        TechniqueVariantFactory(unlock_thread_level=1, creation_point_cost=3)
+        self.assertTrue(_probe_for("creation-flourishes").resolve(None).present)
+        self.assertTrue(_probe_for("creation-forms").resolve(None).present)
+
+
+class TestPriceComponentsActiveProbe(TestCase):
+    """The TUNING row for prices whose consumed item can no longer be made (#4099)."""
+
+    def test_no_component_is_present(self) -> None:
+        self.assertTrue(_probe_for("price-components-active").resolve(None).present)
+
+    def test_a_component_from_an_inactive_template_is_reported(self) -> None:
+        from world.items.factories import ItemTemplateFactory
+        from world.magic.factories import PriceFactory
+        from world.magic.models import PriceComponentRequirement
+
+        price = PriceFactory(name="Ash and bone")
+        PriceComponentRequirement.objects.create(
+            restriction=price, item_template=ItemTemplateFactory(name="Old bone", is_active=False)
+        )
+        PriceComponentRequirement.objects.create(
+            restriction=price, item_template=ItemTemplateFactory(name="Fresh ash")
+        )
+        result = _probe_for("price-components-active").resolve(None)
+        self.assertFalse(result.present)
+        self.assertEqual(result.missing, ("Ash and bone: Old bone",))
+
+
+class TestPersonalizationCopyProbe(TestCase):
+    """The TUNING row for the Gift stage's make-it-yours panel copy (#4099)."""
+
+    def test_seeded_placeholder_copy_is_reported(self) -> None:
+        from web.admin.tuning.required_content import _probe_personalization_copy
+
+        result = _probe_personalization_copy()
+        self.assertFalse(result.present)
+        self.assertIn("personalize_heading", result.missing)
+
+    def test_authored_copy_is_present(self) -> None:
+        from web.admin.tuning.required_content import _probe_personalization_copy
+        from world.character_creation.constants import PERSONALIZATION_COPY_KEYS
+        from world.character_creation.models import CGExplanation
+
+        for key in PERSONALIZATION_COPY_KEYS:
+            CGExplanation.objects.update_or_create(key=key, defaults={"text": f"Authored {key}"})
+        self.assertTrue(_probe_personalization_copy().present)
+
+
+class TestCharacterCreationGapProbes(TestCase):
+    """The six probes the first roster PC stock-take asked for (#4104): each names the
+    rows a realm still lacks so a staff member filling it never has to walk a draft
+    into the gap to find it."""
+
+    def test_beginnings_without_species_and_traditions_are_named(self) -> None:
+        from world.character_creation.factories import (
+            BeginningsFactory,
+            BeginningTraditionFactory,
+        )
+        from world.species.factories import SpeciesFactory
+
+        bare = BeginningsFactory(name="Nobility")
+        full = BeginningsFactory(name="Caretaker")
+        full.allowed_species.add(SpeciesFactory(name="Human"))
+        BeginningTraditionFactory(beginning=full)
+        BeginningsFactory(name="Retired", is_active=False)
+
+        species = rc._beginnings_without_species()
+        self.assertFalse(species.present)
+        self.assertEqual(species.missing, ("Nobility",))
+        traditions = rc._beginnings_without_traditions()
+        self.assertFalse(traditions.present)
+        self.assertEqual(traditions.missing, ("Nobility",))
+
+        bare.allowed_species.add(SpeciesFactory(name="Elf"))
+        BeginningTraditionFactory(beginning=bare)
+        self.assertTrue(rc._beginnings_without_species().present)
+        self.assertTrue(rc._beginnings_without_traditions().present)
+
+    def test_realm_with_nobility_but_no_particles_is_named(self) -> None:
+        from world.character_creation.factories import RealmFactory
+        from world.roster.constants import NOBLE_KIND_NAME
+        from world.roster.factories import FamilyKindFactory
+        from world.societies.houses.models import NobiliaryParticle
+
+        umbros = RealmFactory(name="Umbros", theme="umbros")
+        # Arx has no nobility by ruling and is not in the canon table, so it never lists.
+        RealmFactory(name="Arx", theme="arx")
+
+        result = rc._realms_without_nobiliary_particles()
+        self.assertFalse(result.present)
+        self.assertEqual(result.missing, ("Umbros",))
+
+        noble = FamilyKindFactory(name=NOBLE_KIND_NAME)
+        NobiliaryParticle.objects.create(realm=umbros, kind=noble, particle="arn")
+        self.assertTrue(rc._realms_without_nobiliary_particles().present)
+
+    def test_feature_rows_must_all_exist_and_be_active(self) -> None:
+        from world.distinctions.factories import DistinctionFactory
+        from world.seeds.distinctive_features import FEATURE_ROW_NAMES
+
+        self.assertEqual(set(rc._probe_feature_distinctions().missing), set(FEATURE_ROW_NAMES))
+        for name in FEATURE_ROW_NAMES[:-1]:
+            DistinctionFactory(name=name)
+        DistinctionFactory(name=FEATURE_ROW_NAMES[-1], is_active=False)
+        result = rc._probe_feature_distinctions()
+        self.assertFalse(result.present)
+        self.assertEqual(result.missing, (FEATURE_ROW_NAMES[-1],))
+
+    def test_the_six_are_registered_with_admin_links(self) -> None:
+        keys = {dep.key: dep for dep in rc.build_registry(rc._declarations())}
+        for key in (
+            "character_creation.beginnings_allow_species",
+            "character_creation.beginnings_have_traditions",
+            "societies.realm_nobiliary_particles",
+            "character_creation.appearance_sections",
+            "distinctions.feature_rows",
+            "character_sheets.enemy_reasons",
+        ):
+            self.assertIn(key, keys)
+            self.assertEqual(keys[key].tier, rc.DependencyTier.REQUIRED)
+            self.assertTrue(keys[key].admin_model)

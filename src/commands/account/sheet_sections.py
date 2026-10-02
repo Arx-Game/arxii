@@ -24,6 +24,7 @@ if TYPE_CHECKING:
     from world.character_sheets.types import TechniqueEntry
     from world.magic.types.technique_effects import (
         TechniqueFormPayload,
+        TechniquePricePayload,
         TechniqueSignaturePayload,
     )
     from world.relationships.models import RelationshipLabel
@@ -403,14 +404,33 @@ def _render_technique_forms(technique: TechniqueEntry) -> list[str]:
         lines.append("      Forms you can work:")
         for form in unlocked:
             lines.extend(_render_unlocked_form(form))
-    if locked:
+    next_signature = technique["next_signature"]
+    if locked or next_signature:
         lines.append("      Not yet yours:")
         lines.extend(
             f"        {_form_label(form)}, at thread level {form['unlock_thread_level']}"
             for form in locked
         )
+        if next_signature:
+            lines.append(
+                f"        {next_signature['name']}, at thread level {next_signature['min_level']}"
+            )
     if signature:
         lines.extend(_render_signature(signature))
+    price = technique["price"]
+    if price:
+        lines.extend(_render_price(price))
+    return lines
+
+
+def _render_price(price: TechniquePricePayload) -> list[str]:
+    """The caster's price and its real cost (#4099): what each paid cast spends."""
+    lines = [f"      Price: {price['name']}"]
+    if price["consumes"]:
+        consumed = ", ".join(f"{c['quantity']}x {c['name']}" for c in price["consumes"])
+        lines.append(f"        Consumes: {consumed}")
+    if price["inflicts"]:
+        lines.append(f"        Inflicts: {price['inflicts']}")
     return lines
 
 
@@ -459,7 +479,15 @@ def _render_magic_section(command: Command) -> list[str]:
         for technique in gift["techniques"]:
             # #2898: the list used to stop at name + level, so a player could read
             # their own spellbook without learning what a single technique did.
-            lines.append(f"    {technique['name']} (level {technique['level']})")
+            # #4099: when the owner's own name differs from the catalog's, show
+            # both so the player can tell them apart.
+            if technique["name"] == technique["catalog_name"]:
+                lines.append(f"    {technique['name']} (level {technique['level']})")
+            else:
+                lines.append(
+                    f"    {technique['name']} ({technique['catalog_name']}, "
+                    f"level {technique['level']})"
+                )
             lines.append(f"      {technique['effect_summary']['summary']}")
             lines.extend(_render_technique_forms(technique))
         if gift["resonances"]:

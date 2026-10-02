@@ -38,6 +38,12 @@ class PathCapExceeded(MagicError):
     user_message = "Your Path stage limits this thread's growth."
 
 
+class CreationThreadLevelTooHigh(MagicError):
+    """A creation pick tried to start a thread at or past the first crossing (#4099)."""
+
+    user_message = "Character creation cannot start a thread that deep."
+
+
 class XPInsufficient(MagicError):
     user_message = "You do not have enough XP for this."
 
@@ -50,6 +56,49 @@ class TechniqueCapExceeded(MagicError):
     user_message = (
         "You have reached the maximum techniques for this gift at your current thread level."
     )
+
+
+class TechniqueRequirementsNotMet(MagicError):
+    """Raised when a technique-acquisition route finds an unmet active requirement
+    (``charge_and_learn``, ``learn_technique`` — #4097).
+
+    ``failed`` carries the per-requirement messages (e.g. "Need to know
+    Thornweave"); ``user_message`` lists them, mirroring
+    ``PathRequirementsNotMet`` (``world.progression.exceptions``).
+    """
+
+    user_message = "You have not yet met what this technique requires."
+
+    def __init__(self, failed: list[str]) -> None:
+        super().__init__("; ".join(failed))
+        self.failed = failed
+        self.user_message = "You have not yet met what this technique requires: " + "; ".join(
+            failed
+        )
+
+
+class UltimateNotLearnable(MagicError):
+    """An ultimate is only reachable at Audere, never learned (#4098)."""
+
+    user_message = "That technique can only be used in Audere."
+
+
+class UltimateChoiceError(MagicError):
+    """Base for ultimate reveal choices (#4098)."""
+
+    user_message = "That choice is not available."
+
+
+class UltimateRevealClosed(UltimateChoiceError):
+    """Raised when there is no open Audere/Audere Majora reveal to choose from (#4098)."""
+
+    user_message = "There is no ultimate to choose right now."
+
+
+class UltimateChoiceUnavailable(UltimateChoiceError):
+    """Raised when a choice_key does not resolve against the current reveal (#4098)."""
+
+    user_message = "That choice is not among your ultimates."
 
 
 class GiftAlreadyOwnedError(MagicError):
@@ -568,12 +617,6 @@ class SignatureBonusNotAvailable(MagicError):
     user_message = "This bonus is not available for your motif."
 
 
-class SignatureBelowCrossing(MagicError):
-    """Raised when set_signature_bonus is called on a thread below the first crossing (level 3)."""
-
-    user_message = "A signature can only be set on a technique thread that has crossed level 3."
-
-
 class SignatureBonusLocked(MagicError):
     """Raised when the bonus requires a higher crossing level than the thread has reached."""
 
@@ -734,3 +777,16 @@ class TechniqueTrainingNotConfigured(MagicError):
     """
 
     user_message = "Technique training is not configured on this server yet."
+
+
+class InvalidPersonalText(MagicError):
+    """A player's own technique name or description breaks a hygiene rule (#4099).
+
+    Carries the specific rule as ``user_message`` (authored at the raise site).
+    """
+
+    user_message = "That text cannot be used."
+
+    def __init__(self, user_message: str) -> None:
+        super().__init__(user_message)
+        self.user_message = user_message

@@ -105,6 +105,14 @@ class _CombatCommandMixin(PullParsingMixin):
     (``_extract_pull_keywords``, ``_resolve_cast_pull``, and related statics),
     so that ``CmdDeclareTechnique`` and ``CmdClashCommit`` can reuse the same
     logic without duplicating it.
+
+    ``_find_technique_id`` is CharacterTechnique-only (never an ultimate) — used
+    by ``CmdClashCommit`` directly, and by ``CmdDeclareTechnique`` only outside an
+    active combat declaration. ``CmdDeclareTechnique._resolve_technique`` additionally
+    matches a readied Audere ultimate by name, but only while
+    ``_combat_participant_or_none()`` is not None (#4098: "castable only in combat
+    encounters" — clash, scene casts, and every other combat maneuver keep the
+    CharacterTechnique-only gate).
     """
 
     def _combat_participant_or_none(self) -> CombatParticipant | None:
@@ -629,26 +637,43 @@ class CmdDeclareTechnique(_CombatCommandMixin, DispatchCommand):
     def _resolve_technique_id(self) -> int:
         """Return the pk of the technique named by ``self._technique_name``.
 
-        Delegates to the shared mixin helper.  Keeps the zero-argument call
+        Delegates to ``_resolve_technique``. Keeps the zero-argument call
         signature used by the rest of this class.
 
         Raises:
             CommandError: If no matching known technique is found.
         """
-        return self._find_technique_id(self._technique_name or "")
+        return self._resolve_technique().pk
 
     def _resolve_technique(self) -> Technique:  # type: ignore[name-defined]  # noqa: F821
         """Return the ``Technique`` object named by ``self._technique_name``.
 
-        Uses the same CharacterTechnique lookup as ``_resolve_technique_id`` but
-        returns the full object so callers can read ``action_category`` etc.
+        A known technique (via ``CharacterTechnique``) by name, same as
+        ``_find_technique_id``. Additionally, while an active DECLARING combat
+        round admits this cast as a round declaration, also matches this
+        Audere's readied ultimate by name (#4098) — ``castable_technique_named``
+        (``world.magic.services.ultimates``) checks known techniques first, so
+        this never shadows an ordinarily-known technique. Gated on the combat
+        declaration path specifically: a non-combat (scene) cast or a clash
+        contribution (``CmdClashCommit``, which calls ``_find_technique_id``
+        directly, never this method) must never resolve an ultimate by name.
 
         Raises:
-            CommandError: If no matching known technique is found.
+            CommandError: If no matching known technique (or, in combat, readied
+                ultimate) is found.
         """
+        name = self._technique_name or ""
+        if self._combat_participant_or_none() is not None:
+            from world.magic.services.ultimates import castable_technique_named  # noqa: PLC0415
+
+            technique = castable_technique_named(self.caller.sheet_data, name)
+            if technique is None:
+                msg = f"You don't know a technique called '{name}'."
+                raise CommandError(msg)
+            return technique
+
         from world.magic.models import CharacterTechnique  # noqa: PLC0415
 
-        name = self._technique_name or ""
         ct = (
             CharacterTechnique.objects.filter(
                 character=self.caller.sheet_data,
@@ -794,6 +819,9 @@ class CmdDeclareTechnique(_CombatCommandMixin, DispatchCommand):
         from world.magic.services.technique_forms import (  # noqa: PLC0415
             available_technique_forms,
         )
+        from world.magic.services.technique_personalization import (  # noqa: PLC0415
+            hold_display_name,
+        )
         from world.scenes.cast_services import (  # noqa: PLC0415
             castable_technique_links_for_sheet,
         )
@@ -807,9 +835,16 @@ class CmdDeclareTechnique(_CombatCommandMixin, DispatchCommand):
         lines = ["|wYou can cast:|n"]
         for link in links.values():
             technique = link.technique
-            lines.append(f"  |w{technique.name}|n")
+            # #4099: the player's own name, with the catalog name alongside it so
+            # the player always sees what to type — the catalog name stays the
+            # only lookup key.
+            shown = hold_display_name(link, fallback=technique.name)
+            label = shown if shown == technique.name else f"{shown} ({technique.name})"
+            lines.append(f"  |w{label}|n")
             lines.append(f"    {technique.cached_effect_summary['summary']}")
-            if technique.description:
+            if link.custom_description:
+                lines.append(f"    {link.custom_description}")
+            elif technique.description:
                 lines.append(f"    {technique.description}")
             forms_line = self._forms_line(
                 available_technique_forms(

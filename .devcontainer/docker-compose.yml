@@ -150,6 +150,24 @@ services:
     depends_on:
       - db
 
+  # Forward proxy for coding-agent web tools (polytoken's web_fetch and
+  # web_search via daemon.web.https_proxy). It runs OUTSIDE the app
+  # container's egress firewall, which already allows the compose network
+  # (172.16.0.0/12), so no firewall entry is needed. Nothing in app uses it
+  # unless configured to: no HTTP(S)_PROXY env var is set there. Trade-off:
+  # any process in app that knows the address can reach any HTTPS host. Start
+  # it alone with `docker compose up -d --no-deps webproxy`; app is untouched.
+  # See .devcontainer/polytoken.md, "Web fetch and search".
+  webproxy:
+    image: ubuntu/squid:latest
+    volumes:
+      - ./webproxy/squid.conf:/etc/squid/squid.conf:ro
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
   db:
     image: postgres:17
     environment:

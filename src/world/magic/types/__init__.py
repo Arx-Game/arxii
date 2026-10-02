@@ -10,6 +10,7 @@ Submodules:
 - ``techniques``  — runtime stats, anima cost, soulfray, mishap, use-technique results
 - ``alterations`` — Mage Scar exception classes and pending/resolution results
 - ``pull``        — resonance-pull action context and resolved / preview results
+- ``ultimates``   — Audere ultimate reveal cards/groups and owner-facing state (#4098)
 """
 
 from world.magic.types.alterations import (
@@ -52,6 +53,12 @@ from world.magic.types.threads import (
     ThreadSurvivabilitySaves,
     ThreadXPLockProspect,
 )
+from world.magic.types.ultimates import (
+    AudereUltimateState,
+    UltimateReveal,
+    UltimateRevealCard,
+    UltimateRevealGroup,
+)
 
 __all__ = [
     "AffinityType",
@@ -61,6 +68,7 @@ __all__ = [
     "AnimaCostResult",
     "AnimaRegenTickSummary",
     "AnimaRitualCategory",
+    "AudereUltimateState",
     "AuraDrift",
     "AuraPercentages",
     "MishapResult",
@@ -84,4 +92,7 @@ __all__ = [
     "ThreadImbueResult",
     "ThreadSurvivabilitySaves",
     "ThreadXPLockProspect",
+    "UltimateReveal",
+    "UltimateRevealCard",
+    "UltimateRevealGroup",
 ]

@@ -8511,20 +8511,33 @@ def _record_and_broadcast_pc_action(  # noqa: PLR0913
             persist_power_ledger(interaction=interaction, ledger=combat_result.power_ledger)
 
     from world.magic.services.signature_effects import resolve_signature_snippet  # noqa: PLC0415
+    from world.magic.services.technique_personalization import (  # noqa: PLC0415
+        paid_price_snippet,
+        technique_display_name,
+    )
 
     target_label = target.name if target is not None else None
-    signature_snippet = resolve_signature_snippet(participant.character_sheet.character, technique)
+    caster_character = participant.character_sheet.character
+    signature_snippet = resolve_signature_snippet(caster_character, technique)
+    # #4099: the price THIS resolved cast paid (use_technique's one decision, made at
+    # resolution, not declaration), never the hold's price.
+    price_snippet = paid_price_snippet(
+        combat_result.technique_use_result.price_paid
+        if isinstance(combat_result, CombatTechniqueResult)
+        else None
+    )
     interaction_result = next(
         (dr.damage_interaction for dr in outcome.damage_results if dr.damage_interaction),
         None,
     )
     narration = render_action_outcome_narration(
         actor_label=str(participant),
-        technique_name=technique.name,
+        technique_name=technique_display_name(caster_character, technique),
         target_label=target_label,
         outcome=outcome,
         power_ledger=combat_result.power_ledger if combat_result is not None else None,
         signature_snippet=signature_snippet,
+        price_snippet=price_snippet,
         interaction_result=interaction_result,
         hit_text=technique.hit_narration,
         miss_text=technique.miss_narration,
@@ -9281,6 +9294,30 @@ def _break_pending_sustained_actions(encounter: CombatEncounter) -> None:
         sustained.delete()
 
 
+def _cancel_pending_certain_death_if_abandoned(
+    encounter: CombatEncounter, participants: list[CombatParticipant]
+) -> None:
+    """Abandoned encounters cancel any pending certain death (#4098 owner ruling).
+
+    A GM closing a broken fight shouldn't kill anyone. The caller
+    (``cleanup_completed_encounter``) MUST run this before ending Audere/Audere
+    Majora: removing that condition there (via ``end_audere``/``end_audere_majora``
+    -> ``remove_condition``) reaches ``_resolve_deferred_death_on_expiry``
+    (``world/conditions/services.py``), which applies a pending certain death the
+    instant the last deferring condition is gone — before this function's own
+    caller's backstop loop (further down in ``cleanup_completed_encounter``) ever
+    runs. A no-op for every other outcome (VICTORY/DEFEAT/FLED), which still apply
+    the death through the ordinary seam or that backstop.
+    """
+    if encounter.outcome != EncounterOutcome.ABANDONED:
+        return
+
+    from world.vitals.services import clear_pending_certain_death  # noqa: PLC0415
+
+    for participant in participants:
+        clear_pending_certain_death(participant.character_sheet)
+
+
 def cleanup_completed_encounter(encounter: CombatEncounter) -> None:
     """Delete encounter-ephemeral CombatNPC ObjectDBs. Persistent NPCs and PCs
     are never touched. Layer 5 of the multi-layer guard: defensive re-check
@@ -9309,16 +9346,24 @@ def cleanup_completed_encounter(encounter: CombatEncounter) -> None:
     # sweep observes those targets too.
     from world.conditions.services import expire_end_of_combat_conditions  # noqa: PLC0415
 
-    participant_targets = [
-        p.character_sheet.character
-        for p in CombatParticipant.objects.filter(encounter=encounter).select_related(
+    # No status filter: includes REMOVED participants too, matching the backstop
+    # loop below (#4098 fix round 1) — a certain death must resolve even for a
+    # participant who left the encounter early.
+    participants = list(
+        CombatParticipant.objects.filter(encounter=encounter).select_related(
             "character_sheet__character"
         )
-    ]
+    )
+    participant_targets = [p.character_sheet.character for p in participants]
     opponent_targets = [
         opp.objectdb
         for opp in CombatOpponent.objects.filter(encounter=encounter).select_related("objectdb")
     ]
+
+    # Abandoned encounters cancel any pending certain death instead of applying it
+    # (#4098 owner ruling). This MUST run before the Audere-ending loop just below —
+    # see _cancel_pending_certain_death_if_abandoned's docstring for why.
+    _cancel_pending_certain_death_if_abandoned(encounter, participants)
 
     # End Audere and Audere Majora BEFORE the generic condition sweep (#873, #543):
     # the sweep would strip the condition without reverting the engagement intensity
@@ -9358,6 +9403,23 @@ def cleanup_completed_encounter(encounter: CombatEncounter) -> None:
         ).delete()
 
     expire_end_of_combat_conditions(participant_targets + opponent_targets)
+
+    # Certain-death backstop (#4098 fix round 1): a deferred certain death
+    # normally resolves in conditions.services._resolve_deferred_death_on_expiry
+    # when the LAST death_deferred condition (Audere/Audere Majora) is removed
+    # through the ordinary removal seam. But that seam doesn't always run before
+    # the encounter ends — the round-duration countdown, an interaction removal,
+    # or a damage interaction can all strip the condition without going through
+    # it — which would leave death_certain_pending set forever. Call the same
+    # resolution function directly for every participant sheet so the encounter's
+    # own end is always a backstop. apply_pending_certain_death is idempotent and
+    # no-ops when nothing is pending or the character is already dead, so this is
+    # safe to call unconditionally. Reuses the sheets already loaded above —
+    # never re-selects them.
+    from world.vitals.services import apply_pending_certain_death  # noqa: PLC0415
+
+    for participant in participants:
+        apply_pending_certain_death(participant.character_sheet)
 
     # Combat-owned engagement teardown (#872): deleting the engagement discards
     # the transient escalation process modifiers. Must run AFTER end_audere
@@ -10357,11 +10419,15 @@ def _narrate_technique_interpose_fizzle(
     Private line carries the why (anima); the room line never carries a number.
     The mechanical no-op shape is unchanged: no roll, no charge, damage proceeds.
     """
+    from world.magic.services.technique_personalization import (  # noqa: PLC0415
+        technique_display_name,
+    )
     from world.scenes.interaction_services import narrate_privately  # noqa: PLC0415
 
+    display_name = technique_display_name(interposer, technique)
     narrate_privately(
         interposer,
-        f"Your {technique.name} gutters for want of anima; {protected} takes the blow unguarded.",
+        f"Your {display_name} gutters for want of anima; {protected} takes the blow unguarded.",
     )
     _broadcast_commitment_line(
         action.participant.encounter,

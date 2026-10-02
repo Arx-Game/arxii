@@ -205,31 +205,56 @@ def render_action_declaration_label(action: CombatRoundAction) -> str:
     ``<TechniqueName>`` alone when no target. Falls back to ``"passives only"``
     when ``focused_action`` is null (which the resolver normally skips, but
     surfacing a non-empty string is safer than empty content).
+
+    ``<TechniqueName>`` is the declaring caster's own display name (#4099 fix
+    round 1) — the same ``technique_display_name`` resolution the outcome
+    narration uses, so the declaration and the outcome agree on what to call it
+    within the same round.
     """
     technique = action.focused_action
     if technique is None:
         return "passives only"
 
+    from world.magic.services.technique_personalization import (  # noqa: PLC0415
+        technique_display_name,
+    )
+
+    caster_character = action.participant.character_sheet.character
+    display_name = technique_display_name(caster_character, technique)
+
     if action.focused_opponent_target_id is not None:
         target_name = action.focused_opponent_target.name
-        return f"{technique.name} at {target_name}"
+        return f"{display_name} at {target_name}"
     if action.focused_ally_target_id is not None:
         ally = action.focused_ally_target
         target_name = ally.character_sheet.character.db_key
-        return f"{technique.name} at {target_name}"
-    return technique.name
+        return f"{display_name} at {target_name}"
+    return display_name
 
 
 def render_clash_contribution_label(contribution: ClashContribution) -> str:
     """Render a one-line declaration label for a clash contribution.
 
-    Format: ``<TechniqueName> → <ClashFlavor> vs <OpponentName>``.
+    Format: ``<DisplayName> → <ClashFlavor> vs <OpponentName>``.
+
+    ``<DisplayName>`` is the caster's own display name (#4099 fix round), the same
+    resolution ``render_action_declaration_label`` uses. Like that label it carries
+    no price clause: whether a cast pays its price is decided only when the cast
+    resolves (``use_technique``, #4099), and a ``ClashContribution`` row does not
+    record that decision. The resolved contribution's own ACTION interaction
+    (``commit_to_clash``) carries the clause of the price it actually paid.
     """
+    from world.magic.services.technique_personalization import (  # noqa: PLC0415
+        technique_display_name,
+    )
+
     technique = contribution.technique
     clash = contribution.clash_round.clash
     flavor = clash.get_flavor_display()
     opponent_name = clash.npc_opponent.name if clash.npc_opponent_id else "?"
-    return f"{technique.name} → {flavor} vs {opponent_name}"
+    caster_character = contribution.character.character
+    display_name = technique_display_name(caster_character, technique)
+    return f"{display_name} → {flavor} vs {opponent_name}"
 
 
 def _build_tail_clauses(
@@ -311,6 +336,7 @@ def render_action_outcome_narration(  # noqa: PLR0913 - all params describe one 
     outcome: ActionOutcome,
     power_ledger: PowerLedger | None = None,
     signature_snippet: str | None = None,
+    price_snippet: str | None = None,
     interaction_result: DamageInteractionResult | None = None,
     hit_text: str = "",
     miss_text: str = "",
@@ -333,6 +359,10 @@ def render_action_outcome_narration(  # noqa: PLR0913 - all params describe one 
     a ``SignatureMotifBonus``, #1728), its cosmetic "— <snippet>" clause is
     appended alongside the power clause — the combat-narration sibling of
     ``render_cast_outcome_narration``'s signature handling.
+
+    When ``price_snippet`` is supplied (the caster's hold carries a chosen PRICE,
+    #4099), its cosmetic "— <snippet>" clause is appended alongside the others —
+    the combat-narration sibling of ``render_cast_outcome_narration``'s price handling.
 
     When ``hit_text`` / ``miss_text`` are supplied (the technique's or threat entry's
     authored lines, #3554), the authored line replaces the HEAD sentence only:
@@ -365,8 +395,9 @@ def render_action_outcome_narration(  # noqa: PLR0913 - all params describe one 
 
     power_clause = power_outcome_clause(power_ledger)
     sig_clause = signature_clause(signature_snippet)
+    price_clause_text = signature_clause(price_snippet)
     synergy = synergy_clause(interaction_result)
-    suffix_parts = [c for c in (power_clause, sig_clause, synergy) if c]
+    suffix_parts = [c for c in (power_clause, sig_clause, price_clause_text, synergy) if c]
     suffix = " ".join(suffix_parts)
 
     # Targeted action with no damage and no wounds → miss (or warded bounce).

@@ -29,6 +29,7 @@ from world.character_sheets.models import CharacterSheet
 from world.items.exceptions import (
     CraftingNotConfigured,
     ItemError,
+    ItemNotInPlay,
     NotAGem,
 )
 from world.items.filters import (
@@ -121,6 +122,23 @@ def _user_holds_item(user: AccountDB, item: ItemInstance) -> bool:
     if item.holder_character_sheet_id is None:
         return False
     return _user_plays_pk(user, item.holder_character_sheet_id)
+
+
+def _live_holder_sheet(item_instance: ItemInstance) -> CharacterSheet:
+    """The live holder an item-acting view acts for; a clean 400 for anything else (#4099).
+
+    A destroyed item is held by nobody, and so is an unheld one (e.g. in a vault). A
+    staff caller passes the ownership gate for either, so dereferencing
+    ``holder_character_sheet.character`` would otherwise 500.
+    """
+    sheet = item_instance.holder_character_sheet
+    if item_instance.destroyed_at is not None:
+        raise serializers.ValidationError({"non_field_errors": [ItemNotInPlay.user_message]})
+    if sheet is None:
+        raise serializers.ValidationError(
+            {"non_field_errors": ["That item isn't held by anyone to act for."]}
+        )
+    return sheet
 
 
 def _get_owned_item_instance(request: Request, instance_pk: int) -> ItemInstance:
@@ -397,7 +415,7 @@ class ItemFacetViewSet(viewsets.ViewSet):
         serializer.is_valid(raise_exception=True)
         item_instance = serializer.validated_data["item_instance"]
         facet = serializer.validated_data["facet"]
-        actor = item_instance.holder_character_sheet.character
+        actor = _live_holder_sheet(item_instance).character
         action_result = AttachFacetAction().run(
             actor=actor, item_instance=item_instance, facet=facet
         )
@@ -444,7 +462,7 @@ class ItemFacetViewSet(viewsets.ViewSet):
             facet = Facet.objects.get(pk=facet_pk)
         except Facet.DoesNotExist as exc:
             raise NotFound from exc
-        crafter_character = item_instance.holder_character_sheet.character
+        crafter_character = _live_holder_sheet(item_instance).character
         crafter_character_sheet = item_instance.holder_character_sheet
         try:
             quote = build_crafting_quote(
@@ -471,7 +489,7 @@ class ItemFacetViewSet(viewsets.ViewSet):
         self.check_object_permissions(request, row)
         from actions.definitions.crafting import DetachFacetAction  # noqa: PLC0415
 
-        actor = row.item_instance.holder_character_sheet.character
+        actor = _live_holder_sheet(row.item_instance).character
         action_result = DetachFacetAction().run(actor=actor, item_facet=row)
         if not action_result.success:
             raise serializers.ValidationError({"non_field_errors": [action_result.message]})
@@ -666,7 +684,7 @@ class ItemInstanceViewSet(viewsets.ViewSet):
         target = ModifierTarget.objects.filter(pk=target_pk).first() if target_pk else None
         if target is None:
             raise serializers.ValidationError({"accent_target": "This field is required."})
-        actor = item.holder_character_sheet.character
+        actor = _live_holder_sheet(item).character
         action_result = RemoveAccentAction().run(
             actor=actor, item_instance=item, accent_target=target
         )
@@ -686,7 +704,7 @@ class ItemInstanceViewSet(viewsets.ViewSet):
         from actions.definitions.crafting import RecycleItemAction  # noqa: PLC0415
 
         item = self._owned_item_or_404(request, pk)
-        actor = item.holder_character_sheet.character
+        actor = _live_holder_sheet(item).character
         action_result = RecycleItemAction().run(actor=actor, item_instance=item)
         if not action_result.success:
             raise serializers.ValidationError({"non_field_errors": [action_result.message]})
@@ -1571,7 +1589,7 @@ class ItemStyleCraftViewSet(viewsets.ViewSet):
         serializer.is_valid(raise_exception=True)
         item_instance = serializer.validated_data["item_instance"]
         style = serializer.validated_data["style"]
-        actor = item_instance.holder_character_sheet.character
+        actor = _live_holder_sheet(item_instance).character
         action_result = AttachStyleAction().run(
             actor=actor, item_instance=item_instance, style=style
         )
@@ -1618,7 +1636,7 @@ class ItemStyleCraftViewSet(viewsets.ViewSet):
             style = Style.objects.get(pk=style_pk)
         except Style.DoesNotExist as exc:
             raise NotFound from exc
-        crafter_character = item_instance.holder_character_sheet.character
+        crafter_character = _live_holder_sheet(item_instance).character
         crafter_character_sheet = item_instance.holder_character_sheet
         try:
             quote = build_crafting_quote(
@@ -1655,7 +1673,7 @@ class GemCutViewSet(viewsets.ViewSet):
         serializer = GemCutWriteSerializer(data=request.data, context={"request": request})
         serializer.is_valid(raise_exception=True)
         item_instance = serializer.validated_data["item_instance"]
-        actor = item_instance.holder_character_sheet.character
+        actor = _live_holder_sheet(item_instance).character
         action_result = CutGemAction().run(actor=actor, item_instance=item_instance)
         if not action_result.success:
             raise serializers.ValidationError({"non_field_errors": [action_result.message]})
@@ -1685,7 +1703,7 @@ class GemCutViewSet(viewsets.ViewSet):
         item_instance = _get_owned_item_instance(request, instance_pk)
         if item_instance.gem_or_none is None:
             raise serializers.ValidationError({"non_field_errors": [NotAGem.user_message]})
-        crafter_character = item_instance.holder_character_sheet.character
+        crafter_character = _live_holder_sheet(item_instance).character
         try:
             quote = build_gem_cut_quote(crafter_character=crafter_character)
         except CraftingNotConfigured as exc:

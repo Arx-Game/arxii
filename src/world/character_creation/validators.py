@@ -15,6 +15,7 @@ from world.character_creation.constants import (
     REQUIRED_STATS,
     STAT_MAX_VALUE,
     STAT_MIN_VALUE,
+    TECHNIQUE_PERSONALIZATIONS_KEY,
     AnchorSource,
     FamilyPath,
     Parentage,
@@ -487,7 +488,32 @@ def get_identity_errors(draft: CharacterDraft) -> list[str]:
 # ---------------------------------------------------------------------------
 
 
-def compute_magic_errors(draft: CharacterDraft) -> list[str]:
+def _technique_personalization_errors(
+    draft: CharacterDraft,
+    *,
+    technique_ids: list[int],
+    available_techniques: list,
+    selected_ids: set[int],
+    resonance_id: int,
+) -> list[str]:
+    """Any creation-time personalization pick that's no longer on offer (#4099)."""
+    from world.magic.services.creation_personalization import (  # noqa: PLC0415
+        parse_personalization_picks,
+        personalization_pick_errors,
+    )
+
+    personalization_picks = parse_personalization_picks(
+        draft.draft_data.get(TECHNIQUE_PERSONALIZATIONS_KEY), technique_ids=technique_ids
+    )
+    if not personalization_picks:
+        return []
+    selected = [t for t in available_techniques if t.id in selected_ids]
+    return personalization_pick_errors(
+        personalization_picks, techniques=selected, resonance_id=resonance_id
+    )
+
+
+def compute_magic_errors(draft: CharacterDraft) -> list[str]:  # noqa: C901
     """Compute validation errors for the Magic stage (Gift/technique picks, #2426).
 
     Gift-stage validation, in order (return-first style):
@@ -532,6 +558,7 @@ def compute_magic_errors(draft: CharacterDraft) -> list[str]:
         gift,
         draft.selected_tradition,
         include_unready=True,
+        exclude_gated=True,
     )
     available_techniques = [
         *technique_options.pool,
@@ -568,6 +595,16 @@ def compute_magic_errors(draft: CharacterDraft) -> list[str]:
     skill_valid = bool(skill_id) and Skill.objects.filter(pk=skill_id, is_active=True).exists()
     if not (stat_valid and skill_valid):
         return ["Choose the stat and skill your magic rolls (your Anima Check)"]
+
+    errors = _technique_personalization_errors(
+        draft,
+        technique_ids=technique_ids,
+        available_techniques=available_techniques,
+        selected_ids=selected_ids,
+        resonance_id=resonance_id,
+    )
+    if errors:
+        return errors[:1]
 
     return []
 

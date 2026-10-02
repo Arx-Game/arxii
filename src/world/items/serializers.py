@@ -245,7 +245,7 @@ class GemCutWriteSerializer(serializers.Serializer):
     creates a new attachment row the way ``ItemFacet``/``ItemStyle`` do.
     """
 
-    item_instance = serializers.PrimaryKeyRelatedField(queryset=ItemInstance.objects.all())
+    item_instance = serializers.PrimaryKeyRelatedField(queryset=ItemInstance.objects.in_play())
 
 
 class GemCutResultSerializer(serializers.Serializer):

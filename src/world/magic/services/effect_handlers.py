@@ -138,10 +138,20 @@ def _try_spend_reactive(instance: ConditionInstance) -> bool:
     strains its caster, never its bearer. Self-cast wards are unchanged
     (source == bearer). Unaffordable and unconsented -> False (a fizzle,
     narrated by ``_narrate_reactive_fizzle``, #3574). A consented instance
-    (#3573, ``soulfray_consented``) pays into deficit through
-    ``deduct_anima`` and accrues Soulfray on every fire; lethality comes
-    from the payer's live combat engagement, defaulting to lethal out of
-    combat.
+    (#3573, ``soulfray_consented``) always accrues Soulfray on fire and always
+    spends through ``deduct_anima``; whether that spend can run into an
+    overburn deficit (life-force draw) depends on ``lethal``, which comes
+    from the payer's live combat engagement — ``lethal=True`` in a LETHAL
+    encounter pays into deficit, but outside combat (or inside a non-lethal
+    encounter) ``deduct_anima`` clamps the spend to available anima instead
+    (#4098 fix round 2, controller ruling: Soulfray kills only in combat
+    encounters) — the old default fell through to ``lethal=True`` for any
+    reactive fire with no active combat engagement, which is exactly
+    backwards. A payer engaged in something other than COMBAT (challenge/
+    mission stakes), or an NPC opponent payer with no reachable
+    ``CharacterEngagement`` at all, also falls through to ``lethal=False``
+    here — a deliberate safe-side default, since neither case can be proven
+    to be inside a lethal combat encounter.
 
     Returns True immediately when cost is 0 (free-to-fire condition).
     Does NOT use select_for_update — single-threaded game tick is the expected
@@ -164,7 +174,7 @@ def _try_spend_reactive(instance: ConditionInstance) -> bool:
     from world.magic.services.anima import deduct_anima  # noqa: PLC0415
 
     engagement = active_combat_engagement_for(payer)
-    lethal = engagement.source.is_lethal if engagement is not None else True
+    lethal = engagement.source.is_lethal if engagement is not None else False
     deficit = deduct_anima(payer, cost, lethal=lethal)
     if instance.soulfray_consented:
         accumulate_soulfray(

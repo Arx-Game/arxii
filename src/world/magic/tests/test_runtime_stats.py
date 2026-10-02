@@ -3,8 +3,8 @@
 from django.test import TestCase
 
 from world.character_sheets.factories import CharacterSheetFactory
-from world.magic.factories import IntensityTierFactory, TechniqueFactory
-from world.magic.services import get_runtime_technique_stats
+from world.magic.factories import IntensityTierFactory, SoulfrayConfigFactory, TechniqueFactory
+from world.magic.services import calculate_effective_anima_cost, get_runtime_technique_stats
 from world.mechanics.constants import (
     TECHNIQUE_STAT_CATEGORY_NAME,
     TECHNIQUE_STAT_CONTROL,
@@ -281,3 +281,55 @@ class RuntimeStatsIntensityTierTests(TestCase):
         assert result.intensity == 22  # 12 + 10
         # Major tier (threshold 20), control_modifier=-5
         assert result.control == 0  # 5 + (-5)
+
+
+class RuntimeStatsSocialSafetyConfigTests(TestCase):
+    """SoulfrayConfig.social_safety_bonus drives the unengaged control bonus (#4099)."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.technique = TechniqueFactory(intensity=5, control=3)
+
+    def test_default_bonus_applies_when_no_config_singleton_exists(self) -> None:
+        """With no SoulfrayConfig row at all, the bonus falls back to 10."""
+        sheet = CharacterSheetFactory()
+
+        result = get_runtime_technique_stats(self.technique, character=sheet.character)
+
+        assert result.control == 13  # 3 base + 10 fallback
+
+    def test_bonus_reads_the_configured_field(self) -> None:
+        """A staff-authored SoulfrayConfig.social_safety_bonus drives the control bonus."""
+        SoulfrayConfigFactory(social_safety_bonus=25)
+        sheet = CharacterSheetFactory()
+
+        result = get_runtime_technique_stats(self.technique, character=sheet.character)
+
+        assert result.control == 28  # 3 base + 25 configured bonus
+
+    def test_raising_bonus_lowers_effective_anima_cost_outside_combat(self) -> None:
+        """Raising the bonus lowers the effective anima cost for an unengaged caster."""
+        config = SoulfrayConfigFactory(social_safety_bonus=10)
+        sheet = CharacterSheetFactory()
+
+        low_bonus_stats = get_runtime_technique_stats(self.technique, character=sheet.character)
+        low_bonus_cost = calculate_effective_anima_cost(
+            base_cost=10,
+            runtime_intensity=low_bonus_stats.intensity,
+            runtime_control=low_bonus_stats.control,
+            current_anima=50,
+        )
+
+        config.social_safety_bonus = 30
+        config.save()
+
+        high_bonus_stats = get_runtime_technique_stats(self.technique, character=sheet.character)
+        high_bonus_cost = calculate_effective_anima_cost(
+            base_cost=10,
+            runtime_intensity=high_bonus_stats.intensity,
+            runtime_control=high_bonus_stats.control,
+            current_anima=50,
+        )
+
+        assert high_bonus_stats.control > low_bonus_stats.control
+        assert high_bonus_cost.effective_cost < low_bonus_cost.effective_cost

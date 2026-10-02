@@ -146,6 +146,10 @@ class TechniqueFormPayload(TypedDict):
     unlock_thread_level: int
     #: The caster's current level on the thread this form resolves through.
     thread_level: int
+    #: True when this form applies because it was bought early, #4099 — the
+    #: caster's ``CharacterTechnique.early_form`` reached it before their thread
+    #: did. False for the base form and for any naturally-unlocked form.
+    is_early: bool
     effect_summary: TechniqueEffectPayload
 
 
@@ -159,6 +163,34 @@ class TechniqueSignaturePayload(TypedDict):
     name: str
     narrative_snippet: str
     intensity_delta: int
+
+
+class PriceComponentPayload(TypedDict):
+    """One item a price consumes on every cast that pays it (#4099)."""
+
+    #: The authored ``ItemTemplate.name``.
+    name: str
+    quantity: int
+
+
+class TechniquePricePayload(TypedDict):
+    """The price a caster pays for a technique (#4099). Authored text only."""
+
+    name: str
+    description: str
+    power_bonus: int
+    #: Items consumed on each cast that pays the price; empty when none.
+    consumes: list[PriceComponentPayload]
+    #: The authored name of the condition each paid cast inflicts, or ``None``.
+    inflicts: str | None
+
+
+class TechniqueNextSignaturePayload(TypedDict):
+    """The next flourish weaving this technique's thread will unlock (#4099)."""
+
+    name: str
+    min_level: int
+    thread_level: int
 
 
 @dataclass(frozen=True)

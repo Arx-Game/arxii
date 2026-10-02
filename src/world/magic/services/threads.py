@@ -58,6 +58,7 @@ if TYPE_CHECKING:
         ThreadWeavingUnlock,
     )
     from world.magic.models.gifts import Gift
+    from world.magic.models.techniques import Technique
     from world.relationships.models import CharacterRelationship, RelationshipCapstone
 
 logger = logging.getLogger(__name__)
@@ -741,6 +742,46 @@ def weave_thread(  # noqa: PLR0913
 
     _satisfy_thread_woven(character_sheet)
 
+    return thread
+
+
+@transaction.atomic
+def weave_creation_technique_thread(
+    character_sheet: CharacterSheet,
+    technique: Technique,
+    resonance: ResonanceModel,
+    *,
+    level: int,
+) -> Thread:
+    """Character creation weaves a TECHNIQUE thread at a starting level (#4099).
+
+    Creation pays for this in CG points (the flourish's own cost), so it bypasses the
+    ThreadWeavingUnlock gate ``weave_thread`` enforces in play. It never starts a thread
+    at or past the first crossing (``CREATION_PERSONALIZATION_MAX_LEVEL``), so no
+    crossing ceremony or threshold is skipped, and never past the anchor cap.
+
+    Call only from character-creation finalize.
+    """
+    from world.magic.constants import CREATION_PERSONALIZATION_MAX_LEVEL  # noqa: PLC0415
+    from world.magic.exceptions import CreationThreadLevelTooHigh  # noqa: PLC0415
+
+    if level > CREATION_PERSONALIZATION_MAX_LEVEL:
+        raise CreationThreadLevelTooHigh
+    _validate_technique_ownership(character_sheet, technique)
+    thread = Thread(
+        owner=character_sheet,
+        resonance=resonance,
+        target_kind=TargetKind.TECHNIQUE,
+        target_technique=technique,
+        level=level,
+    )
+    if level > compute_effective_cap(thread):
+        msg = "Starting level exceeds the technique's anchor cap."
+        raise AnchorCapExceeded(msg)
+    thread.full_clean()
+    thread.save()
+    character_sheet.character.threads.invalidate()
+    recompute_max_health_with_threads(character_sheet)
     return thread
 
 

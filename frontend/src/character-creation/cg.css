@@ -1137,6 +1137,12 @@
 .interview .stance:disabled {
   cursor: not-allowed;
 }
+/* A collapsed "make it yours" summary row (#4099 demo-fidelity fix, approved
+   demo Screen 1): no pressed-dot concept, so two columns (content, price)
+   rather than the three-column pick-stance grid. */
+.interview .stance.summary {
+  grid-template-columns: 1fr auto;
+}
 .interview .stances > li:last-child .stance {
   border-bottom: 1px solid var(--cg-hairline);
 }
@@ -1211,6 +1217,25 @@
   letter-spacing: 0.03em;
   color: var(--cg-muted);
   margin-top: 0.15rem;
+}
+/* A sub-section heading inside an entry body (#4099), e.g. "Make it yours"'s
+   own "Signature flourish" / "Specialized form" / "A price" groupings. */
+.interview .panel-label {
+  display: block;
+  margin: 1.2rem 0 0.5rem;
+  font-family: 'Cinzel', serif;
+  font-weight: 600;
+  font-size: 0.78rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--cg-label);
+}
+/* A short mechanics aside under a field, e.g. "make it yours"'s name/description
+   note that the mechanics stay the catalog's (#4099). */
+.interview .mech-note {
+  color: var(--cg-text-soft);
+  font-size: 0.92rem;
+  margin: 0.6rem 0 0;
 }
 /* The fold (#3709): the first look shows at rest, the rest behind one line. */
 .interview details.more {

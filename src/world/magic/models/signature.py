@@ -17,6 +17,7 @@ from django.utils.functional import cached_property
 
 from core.models import ArxSharedMemoryModel as SharedMemoryModel
 from world.achievements.models import DiscoverableContent
+from world.magic.constants import CREATION_PERSONALIZATION_MAX_LEVEL
 from world.magic.models.motifs import Facet, Motif, MotifResonanceAssociation
 from world.magic.models.techniques import (
     AbstractAppliedCondition,
@@ -38,7 +39,7 @@ class SignatureMotifBonus(DiscoverableContent, SharedMemoryModel):
 
     name = models.CharField(
         max_length=200,
-        help_text="Descriptive name for this bonus (staff-facing label).",
+        help_text="Name shown to the player for this flourish.",
     )
     narrative_snippet = models.TextField(
         blank=True,
@@ -75,16 +76,28 @@ class SignatureMotifBonus(DiscoverableContent, SharedMemoryModel):
     min_crossing_level = models.PositiveSmallIntegerField(
         default=3,
         help_text=(
-            "Minimum thread display level (3, 6, 11, 16, 21) at which this bonus "
-            "becomes selectable. Default 3 = first crossing. Uses the display-level "
-            "scale (same as ThreadPullEffect.min_thread_level)."
+            "Thread level at which this bonus becomes selectable. Any level from 0 up; "
+            "low levels are the early flourishes (#4099). Default 3."
         ),
+    )
+    creation_point_cost = models.PositiveSmallIntegerField(
+        null=True,
+        blank=True,
+        help_text="Character-creation points to take this flourish (#4099). Blank = not "
+        "offered in creation. Only resonance-gated rows at level 2 or below can be offered.",
     )
 
     class Meta:
         verbose_name = "Signature Motif Bonus"
         verbose_name_plural = "Signature Motif Bonuses"
         ordering = ["name"]
+        constraints = [
+            models.CheckConstraint(
+                check=models.Q(creation_point_cost__isnull=True)
+                | models.Q(min_crossing_level__lte=CREATION_PERSONALIZATION_MAX_LEVEL),
+                name="signature_bonus_creation_cost_below_crossing",
+            ),
+        ]
 
     def __str__(self) -> str:
         return self.name

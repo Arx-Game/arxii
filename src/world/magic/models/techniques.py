@@ -25,7 +25,10 @@ from world.achievements.models import DiscoverableContent
 from world.contributors.models import CreditedContent
 from world.covenants.constants import RoleArchetype
 from world.magic.constants import (
+    CREATION_PERSONALIZATION_MAX_LEVEL,
+    CUSTOM_TECHNIQUE_NAME_MAX_LENGTH,
     AcquisitionOrigin,
+    RestrictionKind,
     TechniqueCategory,
     TechniqueFunction,
     TechniqueReach,
@@ -204,7 +207,32 @@ class Restriction(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
     )
     power_bonus = models.PositiveIntegerField(
         default=10,
-        help_text="Power bonus granted when this restriction is applied.",
+        help_text=(
+            "DESIGN: refunded against a design's power cost in the technique builder. "
+            "PRICE: added to the caster's power on every cast, as a power-ledger term."
+        ),
+    )
+    kind = models.CharField(
+        max_length=10,
+        choices=RestrictionKind.choices,
+        default=RestrictionKind.DESIGN,
+        help_text=(
+            "DESIGN: limits a technique design and refunds its builder budget. "
+            "PRICE: a visible cost a caster attaches to their own hold of a technique; "
+            "its power bonus is added to every cast (#4099)."
+        ),
+    )
+    creation_point_cost = models.PositiveSmallIntegerField(
+        null=True,
+        blank=True,
+        help_text="PRICE only: character-creation points to take this price. Blank = "
+        "not offered in creation.",
+    )
+    cast_narration = models.CharField(
+        max_length=200,
+        blank=True,
+        help_text="PRICE only: the clause cast narration adds when the caster pays this "
+        "price. Blank = the price's name.",
     )
     allowed_effect_types = models.ManyToManyField(
         EffectType,
@@ -212,12 +240,35 @@ class Restriction(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
         related_name="available_restrictions",
         help_text="Effect types this restriction can be applied to.",
     )
+    inflicted_condition = models.ForeignKey(
+        _CONDITION_TEMPLATE_MODEL,
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="inflicting_prices",
+        help_text=(
+            "PRICE only: a condition applied to the caster on every cast that pays this "
+            "price. Its own authored rules decide stacking and refreshing. Blank = none."
+        ),
+    )
 
     objects = RestrictionManager()
 
     class Meta:
         verbose_name = "Restriction"
         verbose_name_plural = "Restrictions"
+        constraints = [
+            models.CheckConstraint(
+                check=models.Q(creation_point_cost__isnull=True)
+                | models.Q(kind=RestrictionKind.PRICE),
+                name="restriction_creation_cost_price_only",
+            ),
+            models.CheckConstraint(
+                check=models.Q(inflicted_condition__isnull=True)
+                | models.Q(kind=RestrictionKind.PRICE),
+                name="restriction_inflicted_condition_price_only",
+            ),
+        ]
 
     class NaturalKeyConfig:
         fields = ["name"]
@@ -225,10 +276,86 @@ class Restriction(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
     def __str__(self) -> str:
         return f"{self.name} (+{self.power_bonus})"
 
+    def clean(self) -> None:
+        """A consumed component or an inflicted condition belongs to a PRICE only (#4099).
+
+        The condition half is also a DB constraint; the component half spans tables,
+        so it is checked here (for an existing row) and on each requirement row.
+        """
+        super().clean()
+        if self.kind == RestrictionKind.PRICE:
+            return
+        errors: dict[str, str] = {}
+        if self.inflicted_condition_id is not None:
+            errors["inflicted_condition"] = "Only a PRICE restriction can inflict a condition."
+        if self.pk is not None and self.component_requirements.exists():
+            errors["kind"] = "Remove this restriction's consumed components before changing kind."
+        if errors:
+            raise ValidationError(errors)
+
     @cached_property
     def cached_allowed_effect_types(self) -> list:
         """Effect types this restriction can apply to. Supports Prefetch(to_attr=)."""
         return list(self.allowed_effect_types.all())
+
+
+class PriceComponentRequirement(SharedMemoryModel):
+    """An item a PRICE consumes on every cast that pays it (#4099, ADR-4099).
+
+    The price-side sibling of ``RitualComponentRequirement``: the same template /
+    quantity / minimum-quality columns, matched and consumed by the same shared
+    ``gather_consumable_pks`` / ``consume_materials`` helpers. Touchstone mode is
+    deliberately absent: a touchstone is attuned and kept, never spent per cast.
+    """
+
+    restriction = models.ForeignKey(
+        Restriction,
+        on_delete=models.CASCADE,
+        related_name="component_requirements",
+    )
+    item_template = models.ForeignKey(
+        "arxii.ItemTemplate",
+        on_delete=models.PROTECT,
+        related_name="price_requirements",
+    )
+    quantity = models.PositiveSmallIntegerField(default=1)
+    min_quality_tier = models.ForeignKey(
+        "arxii.QualityTier",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="+",
+    )
+
+    class Meta:
+        verbose_name = "Price component"
+        verbose_name_plural = "Price components"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["restriction", "item_template"],
+                name="pricecomponentrequirement_unique_template",
+            ),
+            models.CheckConstraint(
+                check=models.Q(quantity__gte=1),
+                name="pricecomponentrequirement_quantity_positive",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.restriction.name} consumes {self.quantity}x {self.item_template.name}"
+
+    def clean(self) -> None:
+        super().clean()
+        # Read the attached object, not ``restriction_id``: on the admin add form the
+        # parent restriction is still unsaved, so its id is None while its kind is set.
+        try:
+            restriction = self.restriction
+        except Restriction.DoesNotExist:
+            return
+        if restriction.kind != RestrictionKind.PRICE:
+            raise ValidationError(
+                {"restriction": "Only a PRICE restriction can consume components."}
+            )
 
 
 class IntensityTierManager(NaturalKeyManager):
@@ -334,6 +461,7 @@ class Technique(NaturalKeyMixin, DiscoverableContent, CreditedContent, SharedMem
         Restriction,
         blank=True,
         related_name="techniques",
+        limit_choices_to={"kind": RestrictionKind.DESIGN},
         help_text="Restrictions applied to this technique for power bonuses.",
     )
     level = models.PositiveIntegerField(
@@ -368,6 +496,17 @@ class Technique(NaturalKeyMixin, DiscoverableContent, CreditedContent, SharedMem
             "#2529: which SWORD/SHIELD/CROWN blend axis boosts this technique "
             "(designer-authored; seeded from effect_type.category, override for "
             "edge cases like a self-damage-buff→SWORD)."
+        ),
+    )
+    is_ultimate = models.BooleanField(
+        default=False,
+        db_index=True,
+        help_text=(
+            "#4098: an ultimate, a tide-turning power reachable only at Audere. Never "
+            "learned as an ordinary technique (no CharacterTechnique row) and castable "
+            "only while Audere or Audere Majora holds and it is the pick readied there. "
+            "Attach it to its source: a Path Gift Grant, a Worshipped Being or a "
+            "Companion Archetype. Its archetype_alignment is its reveal category."
         ),
     )
     reach = models.CharField(
@@ -578,6 +717,20 @@ class Technique(NaturalKeyMixin, DiscoverableContent, CreditedContent, SharedMem
             raise ValidationError({"reach_hops": msg})
         validate_outcome_narration(self.hit_narration, "hit_narration")
         validate_outcome_narration(self.miss_narration, "miss_narration")
+        if self.is_ultimate and self.pk:
+            in_pool = (
+                self.granted_by_path_gifts.exists()
+                or self.granted_by_tradition_gifts.exists()
+                or self.grants.exists()
+                or self.alternate_self_grants.exists()
+            )
+            if in_pool or self.character_grants.exists():
+                msg = (
+                    "An ultimate cannot sit in a starter pool, tradition pool, item/ritual "
+                    "TechniqueGrant, alternate-self grant, or be known as an ordinary "
+                    "technique. Remove it from those first."
+                )
+                raise ValidationError({"is_ultimate": msg})
 
     @cached_property
     def cached_restrictions(self) -> list:
@@ -1211,14 +1364,95 @@ class CharacterTechnique(SharedMemoryModel):
             "vow-dim path). Null = permanently learned or granted by another source."
         ),
     )
+    custom_name = models.CharField(
+        max_length=CUSTOM_TECHNIQUE_NAME_MAX_LENGTH,
+        blank=True,
+        help_text="The player's own name for this technique (#4099). Display only, never "
+        "a lookup key; blank = the catalog name.",
+    )
+    custom_description = models.TextField(
+        blank=True,
+        help_text="The player's own look and feel for this technique (#4099). Blank = the "
+        "catalog description.",
+    )
+    price = models.ForeignKey(
+        "arxii.Restriction",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="paying_holds",
+        limit_choices_to={"kind": RestrictionKind.PRICE},
+        help_text="The price this character pays to cast it (#4099); its power bonus "
+        "enters every cast.",
+    )
+    early_form = models.ForeignKey(
+        "arxii.TechniqueVariant",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="early_holds",
+        help_text="A specialized form bought in creation before the gift thread reaches "
+        "its level (#4099). Applies at its own resonance only.",
+    )
 
     class Meta:
         unique_together = ["character", "technique"]
         verbose_name = "Character Technique"
         verbose_name_plural = "Character Techniques"
+        constraints = [
+            # Computed (not literal) dash characters: the identifier-dashes linter flags
+            # a literal em/en-dash in a `*name*` kwarg as a likely typo, but this
+            # constraint's whole job is detecting that exact character, not naming
+            # anything (#4099).
+            models.CheckConstraint(
+                check=~models.Q(custom_name__contains=chr(0x2014))
+                & ~models.Q(custom_name__contains=chr(0x2013)),
+                name="character_technique_custom_name_no_dash",
+            ),
+        ]
 
     def __str__(self) -> str:
         return f"{self.technique} on {self.character}"
+
+    def clean(self) -> None:
+        # `technique` is a required FK; without `technique_id` set, nothing below
+        # can be checked against it. An admin partial-clean pass can reach here
+        # with `technique` already excluded from `clean_fields()` (it was flagged
+        # required-but-blank there), so returning early avoids crashing on
+        # `self.technique`'s `RelatedObjectDoesNotExist` instead of just leaving
+        # that one clean field-required error to surface (#4099 final fix).
+        if self.technique_id is None:
+            return
+        errors: dict[str, str] = {}
+        if self.price_id is not None:
+            if self.price.kind != RestrictionKind.PRICE:
+                errors["price"] = "Only a PRICE restriction can be a price."
+            else:
+                # Queries freshly rather than `cached_allowed_effect_types` (#4099 Task 2
+                # review): that accessor is a plain `cached_property` on the
+                # idmapper-shared `Restriction`, so once read it stays stale for the life
+                # of the process even after staff edit the allowed effect types.
+                allowed = self.price.allowed_effect_types
+                if (
+                    allowed.exists()
+                    and not allowed.filter(pk=self.technique.effect_type_id).exists()
+                ):
+                    errors["price"] = "This price doesn't allow this technique's effect type."
+        if self.early_form_id is not None:
+            if self.early_form.parent_technique_id != self.technique_id:
+                errors["early_form"] = "The early form must be a form of this technique."
+            elif self.early_form.unlock_thread_level > CREATION_PERSONALIZATION_MAX_LEVEL:
+                errors["early_form"] = (
+                    "An early form can't be granted above creation's level "
+                    f"{CREATION_PERSONALIZATION_MAX_LEVEL} ceiling."
+                )
+        if errors:
+            raise ValidationError(errors)
+
+    @property
+    def display_name(self) -> str:
+        """What the owner calls this technique: their own name, else the catalog's."""
+        return self.custom_name or self.technique.name
 
 
 class TechniqueOutcomeModifier(NaturalKeyMixin, SharedMemoryModel):

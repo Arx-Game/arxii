@@ -187,6 +187,9 @@ class SignatureListActionTests(TestCase):
         fake_actor = MagicMock()
         fake_actor.sheet_data = fake_sheet
         fake_actor.threads.all.return_value = [thread]
+        # #4099: no personalized hold for this technique, so the display name
+        # falls back to the catalog's.
+        fake_actor.techniques.hold_for.return_value = None
 
         with patch(_AVAIL_SVC, return_value=[bonus]):
             result = action.execute(fake_actor)
@@ -207,7 +210,7 @@ class SignatureListActionTests(TestCase):
 
 class BuildListMessageTests(TestCase):
     def test_empty_lists_show_none_placeholders(self):
-        msg = sig_actions._build_list_message([], [])
+        msg = sig_actions._build_list_message(MagicMock(), [], [])
         self.assertIn("none", msg)
         self.assertIn("no active technique threads", msg)
 
@@ -221,7 +224,11 @@ class BuildListMessageTests(TestCase):
                 "target_technique": type("Tech", (), {"name": "Smite"})(),
             },
         )()
-        msg = sig_actions._build_list_message([bonus], [thread])
+        # #4099: no personalized hold, so the display name falls back to the
+        # catalog's.
+        actor = MagicMock()
+        actor.techniques.hold_for.return_value = None
+        msg = sig_actions._build_list_message(actor, [bonus], [thread])
         self.assertIn("Searing Touch", msg)
         self.assertIn("Smite", msg)
 

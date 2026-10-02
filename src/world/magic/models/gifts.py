@@ -170,11 +170,16 @@ class Gift(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
 
     @property
     def inherited_techniques(self) -> list:
-        """Every technique a holder of this gift reaches (#2891).
+        """Every ordinary technique a holder of this gift reaches (#2891).
 
         This gift's own techniques first, then each ancestor's, nearest ancestor
         first. De-duplicated by pk so a diamond (should a gift ever be reachable
-        twice) yields each technique once.
+        twice) yields each technique once. Excludes ``is_ultimate`` techniques
+        (#4098 fix round 1): both callers (the organization gift-grant handler's
+        ``acquired_techniques_for``, and the GIFT-thread crossing handler's
+        variant-discovery parent list) mean "techniques holding this gift grants
+        or lets you specialize" — an ultimate is reached only by discovering it
+        at Audere/Audere Majora, never by holding a gift.
 
         This is the pool read; ``cached_techniques`` stays the own-techniques
         accessor the gift API prefetches into.
@@ -183,7 +188,7 @@ class Gift(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
         seen: set[int] = set()
         for gift in self.lineage:
             for technique in gift.cached_techniques:
-                if technique.pk in seen:
+                if technique.pk in seen or technique.is_ultimate:
                     continue
                 seen.add(technique.pk)
                 techniques.append(technique)

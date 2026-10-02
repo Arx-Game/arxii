@@ -318,6 +318,36 @@ staff-authored catalog content instead:
   `docs/roadmap/character-creation.md`, `docs/systems/character_creation.md`,
   `docs/systems/magic.md`.
 
+## Personalizing magic from the start (#4099, ADR-4099, BUILT)
+
+A character now personalizes a chosen technique while building it in CG, not only after
+reaching thread level 3 in play. Built:
+
+- **Hold fields.** `CharacterTechnique` (the hold) gained `custom_name`,
+  `custom_description`, `price` (FK `Restriction`, `kind=PRICE`), and `early_form` (FK
+  `TechniqueVariant`). All four live on the hold, never on the shared catalog `Technique`.
+- **Three priced catalogs.** A signature flourish (`SignatureMotifBonus`), an early
+  specialized form (`TechniqueVariant`), and a price (`Restriction`, `kind=PRICE`) are each
+  offered in creation only when staff set that row's `creation_point_cost`; a blank cost
+  means the option is not offered.
+- **The creation panel.** The Gift stage's "make it yours" panel (`PersonalizationPanel`)
+  lets a player name and describe a chosen technique for free, and spend CG points on a
+  flourish, form and/or price, backed by `GET drafts/{id}/personalization-options/`.
+- **Price at cast.** A chosen price's `power_bonus` is added straight to every cast's power
+  (`price_power_term`), and its `cast_narration` joins the cast line.
+- **Gradual flourishes.** The old hard level-3 floor on signing is gone;
+  `SignatureMotifBonus.min_crossing_level` is the only gate, and creation can weave a
+  TECHNIQUE thread up to `CREATION_PERSONALIZATION_MAX_LEVEL` (2) so an early flourish is
+  reachable without skipping a crossing.
+- **Early forms.** An `early_form` bought in creation applies before the gift thread
+  reaches it, for its buyer only, when the cast's resolved resonance matches the form's
+  own authored resonance (checked after ordinary variant matching, not before falling
+  back — a hold carries no resonance of its own), never for a role-granted hold.
+- Rationale + rejected alternatives: ADR-4099 (supersedes in part ADR-0136's "mechanical
+  personalization starts at level 3" clause). Full model/service/endpoint detail:
+  `docs/systems/magic.md`'s "Technique personalization" section,
+  `docs/systems/character_creation.md`'s Magic API section.
+
 ## Tradition sponsorship, Academy training, and the in-play loop (#2428/#2440/#2441/#2442 — BUILT)
 
 The in-play training loop #2426's roadmap entries deferred as a follow-up is now real —
@@ -654,6 +684,104 @@ they happened to walk.
   when the gift sets none. Capability gating (`technique_performable` /
   `StyleCapabilityRequirement`) is unaffected — it still reads the caster's own Path style.
 - Full record: ADR-0199.
+
+---
+
+## Technique prerequisites + thread carry (#4097, BUILT 2026-10-01)
+
+GM rulings needed two things the engine didn't have: a way to say "you must already
+know/hold X before you can learn Y," and a way for early investment in a foundational
+technique to keep paying off once a character learns what it unlocks.
+
+**Built:**
+- `AbstractUnlockRequirement.technique`: a fourth polymorphic target (alongside
+  `class_level_unlock` / `thread_crossing_threshold` / `path`), gating whether a
+  character may *learn* a technique. `LegendRequirement`/`ItemRequirement` reject it
+  (narrowed to their own `Meta.constraints`).
+- `GiftHeldRequirement` (holds a gift, named and lineage-aware or blank for any) and
+  `TechniqueKnownRequirement` (already knows a named technique) are the two new
+  requirement types authored against a technique. `MajorGiftTechniqueRequirement.gift`
+  became optional (named counts that gift's count; blank counts the best of any single
+  held major gift, never summed).
+- `concrete_requirement_types()` (`world.progression.services.spends`) discovers
+  requirement types via `apps.get_models()` instead of a hand-maintained list that
+  silently skipped an unregistered type.
+- `charge_and_learn` calls `check_requirements_for_technique` and raises
+  `TechniqueRequirementsNotMet` when unmet; both front doors (teaching offers, Academy
+  TRAIN) route through it. CG pick lists exclude gated techniques outright
+  (`get_technique_options(..., exclude_gated=True)`), since a draft has no character to
+  evaluate the gate against.
+- **Thread carry:** a thread woven into a prerequisite technique empowers, at full
+  level, everything that technique transitively unlocks (including a hidden
+  ultimate several `TechniqueKnownRequirement` hops downstream).
+  `prerequisite_technique_ids` walks the requirement graph;
+  `PullActionContext.involved_technique_closure` unions it with the pull's own
+  involved techniques; `_anchor_in_action`'s TECHNIQUE branch reads the closure.
+  Applies to both casts and paid pulls; the passive Ambient Activation sweep is
+  deliberately left unwidened.
+- Full record: `docs/systems/magic.md`'s "Technique Prerequisites" and "Thread Carry
+  Through Technique Prerequisites" sections; `docs/systems/progression.md`'s "Path and
+  Technique Requirements" section; ADR-4097.
+
+---
+
+## Audere unlocks ultimates (#4098, BUILT 2026-10-01)
+
+Audere and Audere Majora used to raise a character's intensity and anima pool without
+giving them anything they couldn't already do. The #4073 owner's GM rulings turned
+Audere into the moment a character's magic reaches powers otherwise out of reach.
+
+**Built:**
+- `Technique.is_ultimate` flags a technique as an ultimate; `KnownUltimate` is a
+  character's per-technique discovery record (never a `CharacterTechnique`), with the
+  character's single `readied` pick enforced by a DB constraint. Attaches via
+  `PathGiftGrant.ultimate_techniques` (owned: Path x major Gift),
+  `WorshippedBeing.ultimate_techniques` (bond: patron), and
+  `CompanionArchetype.ultimate_techniques` (bond: companion).
+- Every ordinary acquisition surface (CG catalog, covenant role grants, the Sphinx's
+  shopping list, the ORGANIZATION thread weave, alternate-self grants, item
+  `TechniqueGrant`, GM award, ritual SERVICE dispatch) excludes `is_ultimate=True`
+  through one shared guard, `enforce_not_ultimate`.
+- **The reveal** (`world/magic/services/ultimates.py`) is derived on read, not an
+  offer table: plain Audere reveals the current Path's ultimates for the character's
+  major Gift; Audere Majora reveals the new Path's. An owned known ultimate persists
+  across a Crossing (still listed as long as the granting Gift stays held as MAJOR); a
+  bond ultimate is listed only while that bond is active. Undiscovered candidates
+  surface only their category (Sword/Shield/Crown, under authored display labels) -
+  never a name, a description, or the technique's identity.
+- **Choosing readies; it does not cast.** The pick is castable only through the
+  ordinary combat declaration while an active DECLARING round holds - never via clash,
+  never via a scene cast.
+- **Upgrades (#4097 integration):** a later Path's ultimate can list an earlier one as
+  its prerequisite, carrying its threads forward.
+- **Deferred certain death:** Soulfray's `character_loss` consequence, under Audere,
+  defers rather than kills - `CharacterVitals.death_certain_pending`, resolved when the
+  last deferring condition ends (backstopped at encounter cleanup), honoring story
+  protection. **Soulfray can kill only inside a combat encounter** (owner ruling,
+  2026-10-01): a scene cast, a technique-enhanced social action, a battle, and an
+  out-of-combat reactive spend are all non-lethal, capped below the first death-risk
+  Soulfray stage.
+- **Audere Majora's round-resolution block narrowed** to the undecided-offer window
+  only, so a round can resolve - and a crosser can act on the new Path - after a
+  Crossing instead of every later round freezing.
+- **Required-content sentinels:** a Path x major Gift grant with no ultimates is
+  flagged as an unfinished Path; the runtime fallback is minimal (Audere's surge with
+  no reveal). A second sentinel flags any unauthored `AudereThreshold` reveal-copy
+  field (framing line, deferred-death line, the three category labels).
+- **Web, telnet, and the magic sheet** all carry the reveal, the choice, and known
+  ultimates - `UltimateRevealDialog`/`UltimateRevealGate`, the telnet `ultimate`
+  reveal handler (snapshot-guarded against a stale listing), and `SpellbookTab`.
+- Full record: `docs/systems/magic.md`'s "Ultimates" section;
+  `docs/systems/INDEX.md`'s Magic and Vitals sections;
+  `docs/architecture/runtime-modifiers-audere.md`'s "Ultimate Reveal During Audere"
+  and "Certain Death Deferral" sections; ADR-4098.
+
+**Deferred (spec scope, not a gap in this build):**
+- Past-life bond ultimates - the natural home is the past life's alternate self,
+  whose ability suite already grants techniques; not wired to ultimates yet.
+- Authoring the ultimates themselves, and the category display labels, is staff work
+  tracked under #4089 - production has 76 Path x Gift grants and 0 authored ultimates
+  today, which is exactly what the Required-content sentinel above is for.
 
 ---
 

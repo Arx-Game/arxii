@@ -67,7 +67,7 @@ and the 5-axis Thread model no longer exist.
 | `TechniqueStyle` | How a **practitioner** works magic (Manifestation, Subtle, Prayer). A property of the caster's Path, not of the technique (#2700, ADR-0167) — the same catalog `Technique` is an Incantation cast by a Path of Tomes character and a Manifestation cast by a Path of Steel one. Reverse of `classes.Path.style` via `related_name="paths"`. `cast_concealment` (#2710, ADR-0170) is the style's difficulty floor for being noticed while casting — 0 (default) is overt and skips detection entirely; see "Cast observation" below. A Gift may set its own style (`Gift.style`), which wins over the caster's Path style for `cast_concealment` on that gift's techniques (capability gating still reads the caster's Path) (#2905, ADR-0199). | `name`, `description`, `cast_concealment` |
 | `StyleCapabilityRequirement` | A capability the **caster** needs to work magic in this style (#2700) — e.g. Incantation requires `speech >= 1`. Caster-scoped sibling of `TechniqueCapabilityRequirement`; both are evaluated by `technique_performable` against `get_effective_capability_value`. | `style` FK, `capability` FK (`conditions.CapabilityType`), `minimum_value`. Natural key `(style, capability)` |
 | `IntensityTier` | Power effect thresholds | `name`, `threshold`, `control_modifier`, `description` |
-| `Restriction` | Limitations that grant power bonuses | `name`, `description`, `power_bonus` |
+| `Restriction` | Limitations that grant power bonuses (DESIGN kind) or a price a caster attaches to their own hold of a technique (PRICE kind, #4099, ADR-4099) | `name`, `description`, `power_bonus`, `kind` (`RestrictionKind`: DESIGN/PRICE), `creation_point_cost` (PRICE only, nullable; blank = not offered in creation), `cast_narration` (PRICE only; joins the cast narration) |
 | `Facet` | Flat imagery/symbolism vocabulary — every facet is a peer (Wolf, Silk, Scythe, Red). The Category > Subcategory > Specific hierarchy and its `parent` self-FK were removed by #3776 (ADR-0289): depth made a node's mechanical reach uneven, so a facet's reach is now the same whichever one you pick. Owner-agnostic — characters bind facets via `Motif`, a `WorshippedBeing` via `worship.BeingFacet`, an `ItemTemplate` via `inherent_facets`, all from this one shared pool. | `name` (unique), `description` |
 | `Gift` | Thematic collections of techniques | `name`, `description`, `resonances` (M2M to `Resonance` — the **supported set**: a weave constraint, not the cast-time value; the cast reads the character's GIFT-thread resonance via `gift_resonances_for`, ADR-0052), `creator` (FK to CharacterSheet), `kind` (`GiftKind`: `MAJOR` = the one CG-chosen gift, `MINOR` = shared/acquirable; ADR-0050), `parent` (self-FK, PROTECT, `related_name="children"` — the umbrella gift this one hangs beneath; see "Gift lineage" below, #2891, ADR-0192) |
 | `Affinity` | CELESTIAL / PRIMAL / ABYSSAL | `name`, optional OneToOne `modifier_target` |
@@ -87,7 +87,7 @@ part of the Resonance Pivot — relationship flavor is now carried by
 | `CharacterAura` | Affinity percentages (must sum to 100) | `celestial`, `primal`, `abyssal` | OneToOne via `character.aura` |
 | `CharacterResonance` | Per-character per-resonance identity + currency (Spec A §2.2) | `character_sheet` FK, `resonance` FK, `balance`, `lifetime_earned`, `claimed_at`, `flavor_text` | FK via `character_sheet.resonances` (unique_together: (character_sheet, resonance)) |
 | `CharacterGift` | Acquired gifts | `gift`, `acquired_at` | FK via `character.character_gifts` |
-| `CharacterTechnique` | Known techniques | `technique`, `acquired_at`, `source` (FK mechanics.ModifierSource, nullable — set for granted techniques) | FK via `character.character_techniques` |
+| `CharacterTechnique` | Known techniques; the character's hold carries their own personalization of it (#4099, ADR-4099) | `technique`, `acquired_at`, `source` (FK mechanics.ModifierSource, nullable — set for granted techniques), `custom_name` (display only, never a lookup key; blank = the catalog name), `custom_description` (blank = the catalog description), `price` (FK `Restriction`, PRICE kind only, nullable), `early_form` (FK `TechniqueVariant`, nullable; bought in creation before the gift thread reaches its level) | FK via `character.character_techniques` |
 | `CharacterAnima` | Magical energy pool | `current`, `maximum`, `last_recovery` | OneToOne via `character.anima` |
 | `CharacterAnimaRitual` | Personalized recovery rituals | `stat`, `skill`, `resonance`, `personal_description`, `is_primary` | FK via `character.anima_rituals` |
 
@@ -840,9 +840,15 @@ through `world.magic.services.soulfray.accumulate_soulfray`, the SAME function
 the way a caster does: `_try_technique_interpose` (declared interpose fire),
 `_try_spend_reactive` (a Barrier/other reactive-condition fire, `effect_handlers.py`), and
 `drain_reactive_upkeep` (per-round upkeep drain, via `_debit_ally_paid_upkeep`/
-`_pay_upkeep`). Lethality for the clamp comes from `active_combat_engagement_for`
-(`None` when the bearer has no live COMBAT engagement - treated as lethal, since a
-ward held outside combat has no encounter to read `is_lethal` from). A consented deficit
+`_pay_upkeep`). `_try_technique_interpose` and `drain_reactive_upkeep` always run
+inside a known `CombatEncounter`, so their lethal clamp is just `encounter.is_lethal`.
+`_try_spend_reactive` can fire with no encounter in scope at all (a standing ward held
+outside combat), so it derives lethal from the bearer's own live COMBAT engagement via
+`active_combat_engagement_for` instead - `None` (no live COMBAT engagement) now falls
+through to `lethal=False` (#4098 fix round 2, owner ruling: Soulfray can kill only in a
+combat encounter). Before #4098 the no-engagement case fell through to `lethal=True`,
+exactly backwards: it let a reactive fire with no combat at all draw a life-force
+deficit. A consented deficit
 fire narrates distinctly (`_broadcast_commitment_line`): "tears at their own soul to hold
 the line over {ally}" for an interpose, "bleeds soul to keep the ward on {bearer}" for
 upkeep. See ADR-0255 (amends ADR-0118).
@@ -1040,9 +1046,16 @@ never changes the technique's identity.
 
 | Model | Purpose | Key Fields |
 |-------|---------|------------|
-| `SignatureMotifBonus` | Staff-authored bonus gated on the character's Motif | `name`, `narrative_snippet`, `required_facet` FK (Facet, nullable), `required_resonance` FK (Resonance, nullable), `flat_intensity_delta` (SmallInt, additive to effective intensity). At least one gate must be set (`clean()` enforces). AND semantics when both gates set. |
+| `SignatureMotifBonus` | Staff-authored bonus gated on the character's Motif | `name`, `narrative_snippet`, `required_facet` FK (Facet, nullable), `required_resonance` FK (Resonance, nullable), `flat_intensity_delta` (SmallInt, additive to effective intensity), `min_crossing_level` (default 3; the only gate on which thread depth unlocks this bonus, #4099), `creation_point_cost` (nullable; character-creation points to weave this flourish at creation, blank = not offered in creation, #4099). At least one of `required_facet`/`required_resonance` must be set (`clean()` enforces). AND semantics when both gates set. |
 | `SignatureMotifBonusDamageProfile` | Damage profile for a bonus (inherits `AbstractDamageProfile`) | `signature_bonus` FK |
 | `SignatureMotifBonusAppliedCondition` | Applied condition for a bonus (inherits `AbstractAppliedCondition`) | `signature_bonus` FK |
+
+**Gradual unlock (#4099, ADR-4099):** `min_crossing_level` is the only gate on which
+thread depth unlocks a flourish, now that the old hard `thread.level >= 3` floor on
+`set_signature_bonus` is gone. Staff may author a bonus below level 3 for an earlier
+flourish, or above 3 for a deeper one; `next_signature_bonus(thread, catalog)`
+(`services/signature.py`) returns the nearest not-yet-reached flourish for a "keep
+imbuing" progress display.
 
 **Gate predicate** — `SignatureMotifBonus.qualifies_for(character_sheet) -> bool`: checks
 the character's `Motif` against `required_resonance` (via `MotifResonance`) and
@@ -1118,6 +1131,127 @@ formerly-inert `SignatureMotifBonusCapabilityGrant` family was stripped.
 
 **Shipped in #1728** (see `docs/adr/0072-...` addendum): the `damage_profiles` combat
 cast seam, combat cosmetic narration, and the web `SignatureViewSet`.
+
+### Technique personalization (#4099, ADR-4099) [BUILT & WIRED]
+
+A character personalizes a technique on their own hold of it (`CharacterTechnique`),
+never on the shared catalog `Technique`. Personalization is creation-only (owner ruling,
+2026-10-01): a player sets it while building the character, and nothing in play lets them
+rename or re-price a technique they already hold. Three pieces, each optional and each
+costed separately in CG points:
+
+- a free **name and description** (`custom_name`/`custom_description`, display only, never
+  a lookup key);
+- a **price** (`CharacterTechnique.price`, a `Restriction` of `kind=PRICE`, offered in
+  creation when its `creation_point_cost` is set). A price costs something real: it may
+  consume carried items on each cast that pays it (`PriceComponentRequirement` rows:
+  `item_template`, `quantity`, optional `min_quality_tier`; the sibling of
+  `RitualComponentRequirement`) and may inflict an authored condition on the caster
+  (`Restriction.inflicted_condition`). Both are PRICE-only (`clean()` on both models, DB
+  constraint `restriction_inflicted_condition_price_only`). A cast that **pays** the price
+  gets its `power_bonus` as a power-ledger term and its `cast_narration` in the cast line,
+  spends the components and takes the condition. A caster who lacks a component still
+  casts, without the price: no bonus, no clause, no condition, nothing spent;
+- an **early form** (`CharacterTechnique.early_form`, a `TechniqueVariant` bought before
+  the gift thread reaches its level). Honored by the variant resolver only for its buyer,
+  only when the cast's resolved resonance matches the form's own authored resonance (a hold
+  carries no resonance of its own), and never for a role-granted hold.
+
+**Services** (`src/world/magic/services/technique_personalization.py`, the hold-reading
+seam used everywhere a technique's own name/price appears):
+
+| Function | Purpose |
+|----------|---------|
+| `clean_custom_technique_name(value) -> str` | Hygiene for a player-typed name: collapses whitespace, then REJECTS (raises, does not strip) an em/en-dash, `\|` markup, or a control character, and enforces the length cap. Raises `InvalidPersonalText`. The web client strips those characters client-side before submit (`sanitizeCustomName`, `PersonalizationPanel.tsx`), so this server check is normally unreachable from the UI, but it is what actually rejects a request that skips the client (API/telnet). |
+| `clean_custom_technique_description(value) -> str` | Same hygiene for the description (newlines allowed). |
+| `hold_display_name(hold, *, fallback) -> str` | `hold.custom_name` if set, else `fallback`. |
+| `technique_display_name(character, technique, *, fallback=None) -> str` | Reads the caster's own hold (via the cached handler) and returns its display name, else the catalog name. |
+| `technique_price_for(character, technique) -> Restriction \| None` | The hold's price for this technique, or `None` (also `None` once staff re-kind the row away from PRICE). Read by `price_paid_for_cast`; says nothing about whether a cast pays. |
+| `price_paid_for_cast(character, technique) -> PricePayment \| None` | **The one decision** whether this cast pays the price. A price with no components always pays; otherwise it pays only when `gather_consumable_pks` finds every component in `character.carried_items`, and the allocation rides the returned `PricePayment` (`types/personalization.py`). Called once, inside `use_technique`. |
+| `settle_price_payment(*, character, technique, payment) -> None` | Spends a paid price after the cast resolves: `consume_materials` on the decision's allocation, then `apply_condition` for the inflicted condition. No-op for `None`. |
+| `paid_price_snippet(price) -> str \| None` | The narration clause (`cast_narration`, else name) of the price a cast PAID (`TechniqueUseResult.price_paid`), never the hold's. |
+| `price_components_by_price(price_ids) -> dict[int, list[PriceComponentRequirement]]` | One bulk read of each price's components (none for no ids), used by the CG options payload and the sheet. |
+| `price_consumes_payload(components)` / `price_inflicts_name(price)` | Display shapes for a price's cost: `[{name, quantity}]` from authored template names, and the authored condition name or `None`. |
+| `seed_motif_from_gift_resonance(sheet, resonance) -> MotifResonance` | Seeds a `Motif`/`MotifResonance` for a brand-new character at finalize, so a flourish (resonance-gated via `required_resonance`; a price carries no resonance of its own) can qualify once the gift resonance resolves. |
+
+**Creation services** (`src/world/magic/services/creation_personalization.py`, the
+draft-time half):
+
+| Function | Purpose |
+|----------|---------|
+| `parse_personalization_picks(raw, *, technique_ids) -> list[TechniquePersonalizationPick]` | Reads `draft_data["technique_personalizations"]` (keyed by technique id, a string); drops entries for a deselected technique. |
+| `creation_personalization_options(techniques, *, resonance_id) -> list[PersonalizationOptionSet]` | What creation offers (flourishes/forms/prices with a `creation_point_cost`) for each chosen technique at the draft's gift resonance. Backs `GET /drafts/{id}/personalization-options/`. |
+| `personalization_pick_errors(...) -> list[str]` | Validation: an unoffered option, a flourish/form at the wrong resonance, a malformed pick. |
+| `priced_personalization_lines(picks, *, techniques_by_id) -> list[PricedPersonalizationLine]` | One CG-points breakdown line per priced pick, read by `CharacterDraft.calculate_cg_points_breakdown`. |
+| `apply_creation_personalizations(...)` | Finalize-time write: sets the hold's name/description/price/early_form and, for a flourish pick, calls `weave_creation_technique_thread`. |
+
+**Gradual flourish** (`src/world/magic/services/threads.py`,
+`src/world/magic/services/signature.py`):
+
+- `weave_creation_technique_thread(character_sheet, technique, resonance, *, level) ->
+  Thread` weaves a TECHNIQUE thread at a starting level during creation, paid for in CG
+  points. Raises `CreationThreadLevelTooHigh` above `CREATION_PERSONALIZATION_MAX_LEVEL`
+  (2), so creation never starts a thread at or past the first crossing (level 3) and no
+  crossing ceremony is skipped.
+- `next_signature_bonus(thread, catalog) -> SignatureMotifBonus | None` returns the
+  nearest flourish the thread has not yet reached, for a "keep imbuing" display. See
+  "Gradual unlock" above: `min_crossing_level` is the only gate on when a flourish
+  unlocks, not a hard level-3 floor.
+
+**Price at cast** (`src/world/magic/services/techniques.py` `use_technique`, the seam
+every cast path shares: scene cast, social enhanced action, combat round, clash, battle).
+After the Soulfray gate, `use_technique` calls `price_paid_for_cast` exactly once. The
+resulting `PricePayment` (or `None`) threads to: `_derive_power(price_payment=...)` →
+`PowerTermContext.price_payment` → `price_power_term` (`services/power_terms.py`), which
+adds the paid price's `power_bonus` in raw cast-power units, never through the builder's
+refund multiplier, and never re-reads the hold; `settle_price_payment`, called right after
+`resolve_fn` inside `transaction.atomic()` (opened only for a paid cast), so a cast
+refused by the Soulfray gate or cancelled at `TECHNIQUE_PRE_CAST` consumes nothing and a
+cast that fails while resolving rolls its consumption back; and
+`TechniqueUseResult.price_paid`, which the scene cast pose
+(`create_cast_outcome_pose`), the combat outcome narration
+(`_record_and_broadcast_pc_action`) and the clash contribution's ACTION interaction
+(`commit_to_clash`) read through `paid_price_snippet`. Combat calls `use_technique` when the
+round resolves, so the component is checked at resolution, not at declaration. Neither
+declaration label (`render_action_declaration_label`, `render_clash_contribution_label`)
+carries a price clause, since nothing is decided yet when they render.
+
+**Showing the cost.** The CG option payload (`CGPersonalizationOptionSerializer`) carries
+`consumes` (`[{name, quantity}]`) and `inflicts` (condition name or null) on every option
+(always empty/null for a flourish or form), and `PersonalizationPanel.tsx` shows them on
+the price rows and the collapsed price summary. The sheet's `TechniquePricePayload` carries
+the same two fields, rendered by `SpellbookTab.tsx` and the telnet `sheet/magic` price
+line (`Consumes:` / `Inflicts:`). Staff author both on the Restriction admin
+(`PriceComponentRequirementInline`, `inflicted_condition` autocomplete). The TUNING
+Required-content row `price-components-active` lists any price component whose item
+template is inactive (no new ones can be made, so the price eventually stops being paid).
+
+**Early form resolution** (`world/magic/specialization/services.py`,
+`_resolve_technique_variant`): after the ordinary thread-derived variant match, checks the
+caster's own hold for an `early_form` whose OWN authored resonance equals the cast's
+resolved resonance (a hold carries no resonance of its own — only the `TechniqueVariant`
+row does). Applies only when the hold is not role-granted (`role_source_id is None`); a
+role-granted hold's `early_form` never leaks to the role-holder. A naturally-reached
+higher-level form still beats an early pick once the thread catches up (compared by
+`unlock_thread_level`); `TechniqueFormSerializer.is_early` marks a payload row bought this
+way.
+
+**Exceptions** (`exceptions.py`): `CreationThreadLevelTooHigh` (raised by
+`weave_creation_technique_thread`). `InvalidPersonalText` (raised by the name/description
+hygiene functions). The old `SignatureBelowCrossing` exception and its hard `thread.level <
+3` guard are removed; `min_crossing_level` is the only remaining gate.
+
+**Endpoint:** `GET /api/character-creation/drafts/{id}/personalization-options/` (see
+`docs/systems/character_creation.md`'s "Magic" API section).
+
+**Visibility (leak table):**
+
+| Surface | Who sees it | What it shows | Contained by |
+|---|---|---|---|
+| Sheet magic section (web and `sheet/magic` telnet) | owner; others per `magic_visibility` tier (#1271) | custom name, custom description, price, next flourish | the existing section gate; the description shows only where the technique itself is visible |
+| Castable list (web), bare `cast` (telnet), combat technique picker | owner only | custom name plus the catalog name, as `Name (Catalog name)` | these endpoints serve only the caster |
+| Cast narration (scene and combat) | room/encounter audience | custom name plus the price's narration clause, never the description — **except when a specialized form applies: the form's own name wins over the custom name, since it describes what actually happened in THIS cast** (ruled 2026-10-02, fixing #4110 CI; `_resolve_and_pose_cast` in `world/scenes/cast_services.py`) | the technique's name was already in this line; a concealed tier names neither |
+| Combo planning panel | party | catalog name only | a shared coordination vocabulary other players read |
 
 ### Threads as Currency Consumers (Resonance Pivot Spec A §2.1)
 
@@ -1840,6 +1974,107 @@ underlying `CharacterModifier` row cascade-deletes with the `CharacterDistinctio
 (`ModifierSource.character_distinction` is `on_delete=CASCADE`), so the surcharge disappears
 the moment the drawback is shed, no separate cleanup needed.
 
+### Technique Prerequisites, the learning gate (#4097) [BUILT & WIRED]
+
+A `Technique` can carry authored requirements of its own, gating whether a character
+is allowed to *learn* it at all. This is distinct from the Path/thread-crossing/
+path-entry gates documented in `docs/systems/progression.md`. `AbstractUnlockRequirement`
+(that doc's "Requirements" section) grew a fourth polymorphic target, `technique`, so
+any existing requirement type (`TraitRequirement`, `RelationshipRequirement`, and so
+on) can be authored against a `Technique` as well as a `ClassLevelUnlock`,
+`ThreadCrossingThreshold`, or `Path`. Two new requirement types exist specifically for
+gating technique acquisition:
+
+- `GiftHeldRequirement`: the character must hold a gift. Named means that gift
+  (lineage-aware via `resolve_owned_gift`); blank means any held gift.
+- `TechniqueKnownRequirement`: the character must already know a named technique.
+  This is also the row `world.magic.services.technique_prerequisites
+  .prerequisite_technique_ids` walks to build the transitive prerequisite closure
+  consumed by thread carry (see "Thread Carry Through Technique Prerequisites" below).
+
+`LegendRequirement` and `ItemRequirement` deliberately reject the `technique` (and
+`path`) target; they only ever gate `class_level_unlock`/`thread_crossing_threshold`.
+
+**Gate wiring:** `check_requirements_for_technique(character, technique)`
+(`world.progression.services.spends`) mirrors the Path/thread-crossing/unlock
+checkers, failing open (`(True, [])`) when the technique carries no active
+requirement. `enforce_technique_prerequisites(sheet, technique)`
+(`world.magic.services.gift_acquisition`) wraps it, raising
+`TechniqueRequirementsNotMet` (`world.magic.exceptions`) on failure. Every
+technique-acquisition route calls it: `charge_and_learn`
+(`world.magic.services.gift_acquisition`) — the shared charge+acquire core behind
+both teaching front doors, `accept_technique_offer` (player-to-player teaching) and
+the Academy TRAIN offer handler (`world.npc_services.effects.run_train_offer`) —
+calls it immediately after the duplicate-knowledge check and before gift-ownership/
+cap logic; and `learn_technique` (`world.magic.services.technique_acquisition`) — the
+third route, the shared commit seam behind item-scroll `TechniqueGrant` delivery
+(`actions/definitions/items.py`), ritual `TechniqueGrant` delivery
+(`learn_technique_from_ritual`), and `GMAwardAction`'s story-grant action
+(`actions/definitions/gm_adjudication.py`) — calls the same helper right after its
+own duplicate-knowledge check, in both its immediate-mint (`ap_cost == 0`) and
+meter-creation (`ap_cost > 0`) branches. `learn_technique` skips the check in two
+cases: `origin=AcquisitionOrigin.GM_GRANT` (a GM award is deliberate fiat) and
+`completing_progress=True` (the meter-fill call `contribute_to_technique_progress`
+makes — the check already ran when that meter was created, whichever route created
+it). The item-scroll route additionally runs `check_requirements_for_technique`
+as a pre-flight check *before* `use_item()` consumes the item's charge, since
+`use_item()` is its own committed transaction a post-use refusal can't roll back —
+a gated scroll is refused without being spent.
+
+**CG pick list exclusion:** a character-creation draft has no `CharacterSheet` yet,
+so `check_requirements_for_technique` cannot be evaluated against it. Instead,
+`world.magic.services.cg_catalog.get_technique_options(..., exclude_gated=True)`
+excludes every technique carrying at least one active requirement row outright, one
+query per concrete requirement type (via `concrete_requirement_types()`), never one
+per technique. Only call sites that model "what a brand-new character can pick" pass
+`exclude_gated=True`: `world.character_creation.validators` and `.views`, and the
+starting-kit analytics report (`web/admin/tuning/technique_analytics.py`). Every
+in-play caller, today just Academy TRAIN's own eligibility check, keeps the default
+`exclude_gated=False`, because an in-play learner may already satisfy the
+prerequisite and `charge_and_learn`'s own per-character check is the correct gate
+for them, not a blanket catalog exclusion.
+
+**Discovery, not a hardcoded list:** `concrete_requirement_types()`
+(`world.progression.services.spends`) replaces the former hand-maintained list of
+requirement types that every `_check_requirements` caller consulted, where a type
+omitted from that list silently never evaluated. It now returns every concrete
+`AbstractUnlockRequirement` subclass Django has registered (`apps.get_models()`),
+so a new requirement type is live the moment its model is defined.
+
+### Thread Carry Through Technique Prerequisites (#4097) [BUILT & WIRED]
+
+A thread woven into a technique also empowers every technique that technique is a
+prerequisite for, at the thread's full level, transitively, including a hidden
+ultimate several `TechniqueKnownRequirement` hops downstream. Early investment in a
+foundational technique is never wasted once a character learns what it unlocks.
+
+- `prerequisite_technique_ids(technique_ids)`
+  (`world.magic.services.technique_prerequisites`): a breadth-first walk over active
+  `TechniqueKnownRequirement` rows (`technique=X, required_technique=Y` means "X
+  requires Y"), one batched query per depth level, cycle-safe. Returns only the
+  *discovered* prerequisites, excluding the input ids themselves (even one
+  rediscovered through a cycle).
+- `PullActionContext.involved_technique_closure` (`world.magic.types.pull`): a
+  `cached_property` unioning `involved_techniques` with
+  `prerequisite_technique_ids(involved_techniques)`. Memoizing is safe here because
+  `PullActionContext` is a per-call frozen dataclass value object, not a
+  `SharedMemoryModel`, so the cache lives exactly as long as one pull resolution.
+- `_anchor_in_action` (`world.magic.services.resonance`): the TECHNIQUE branch
+  tests thread membership against `involved_technique_closure` instead of the bare
+  `involved_techniques` tuple. This is the one caller that needed widening: both
+  casts and paid combat/non-combat pulls resolve through it, so the carry applies
+  identically to both.
+
+**Deliberately unchanged:** the ambient capability sweep
+(`_anchor_ambiently_active`, "Capability magnitude curve" below) still tests the
+bare involved technique, not the closure. Ambient/passive contribution demands
+demonstrable real state, and a prerequisite's thread is not itself in active use
+just because something it unlocked is being cast.
+
+See `docs/adr/adr-4097-threads-carry-through-technique-prerequisites.md` for the
+decision record and rejected alternatives (moving/copying thread investment, a
+stored carried total).
+
 ### Acquisition provenance — `CharacterTechnique.origin` / `CharacterGift.origin` (#3055) [BUILT & WIRED]
 
 Both link models carry an `origin` field (`AcquisitionOrigin` TextChoices,
@@ -2096,6 +2331,169 @@ of the Durance uses (`TraitRequirement`, `ItemRequirement`, etc.). No authored
 unlock for that level means no gate (fail-open). Because the check is live and
 non-cached, satisfying the last requirement mid-scene (e.g. acquiring a touchstone)
 makes the very next eligibility poll pass — no separate re-sync step.
+
+**Social safety bonus is staff-tunable (#4098 owner ruling).** `_get_social_safety_bonus()`
+(`world/magic/services/techniques.py`) reads `SoulfrayConfig.social_safety_bonus`
+(`PositiveIntegerField`, default 10) — the control bonus `get_runtime_technique_stats`
+adds for a caster with no active `CharacterEngagement` row (i.e. not currently in
+combat). Via `calculate_effective_anima_cost`'s control-delta formula (`effective_cost
+= max(base_cost − (control − intensity), 0)`), raising this knob lowers the anima cost
+of social/out-of-combat casting — high enough, it's nearly free. Falls back to the
+field's own default (10) when no `SoulfrayConfig` row exists yet, matching
+`apply_anima_ritual_outcome`'s handling of the same singleton in `anima.py`; the
+"soulfray-config" TUNING row on the required-content dashboard already reports that
+gap, so `_get_social_safety_bonus()` adds no separate guard of its own.
+
+### Ultimates (#4098) [BUILT & WIRED]
+
+Audere and Audere Majora are where a character's magic reaches powers no other path
+reaches. See `docs/adr/adr-4098-ultimates-are-flagged-techniques-revealed-at-audere.md`
+for the full design and rejected alternatives.
+
+**An ultimate is a flagged `Technique`, never a separate catalog.**
+`Technique.is_ultimate` (bool, indexed) marks it; `Technique.clean()` refuses to flip
+the flag on a technique already sitting in a starter/tradition/item/alt-self pool or
+known by a character. Keeping an *already*-ultimate technique out of those ordinary
+pools in the first place is a separate, admin-side guard: every pool M2M
+(`PathGiftGrant.starter_techniques`, `TraditionGiftGrant.starter_techniques`,
+`TechniqueGrant.technique`, `AlternateSelfGrant.techniques`) carries
+`limit_choices_to={"is_ultimate": False}`, which narrows the admin picker's options but
+is not itself a `clean()`-time validation a programmatic `.add()` would hit. A
+character's discovery of one is a `KnownUltimate` row
+(`world/magic/models/ultimates.py`) - FKs `character` (CASCADE), `technique`
+(PROTECT), nullable `crossing` (SET_NULL - which Crossing discovered it, null for a
+plain Audere), `discovered_at`, `readied` (bool). Two constraints: one row per
+`(character, technique)`, and at most one `readied=True` row per character - the
+single pick of the character's current Audere. Deliberately not a
+`CharacterTechnique`: that row means "castable now" and every ordinary cast surface
+reads it, so keeping ultimates off it excludes them from everyday casting by
+construction rather than by a filter someone could forget.
+
+**Where an ultimate attaches:**
+
+| Source | Field | Scope |
+|--------|-------|-------|
+| Owned (Path x major Gift) | `PathGiftGrant.ultimate_techniques` (M2M, mirrors `starter_techniques`) | major gifts only |
+| Bond: patron | `WorshippedBeing.ultimate_techniques` (M2M) | devotees of that being |
+| Bond: companion | `CompanionArchetype.ultimate_techniques` (M2M) | that archetype's bonded companions |
+
+Court pacts give enhancements only (decision 8), never ultimates of their own. Past-life
+bond ultimates are deferred (spec scope) - the natural home is the past life's alternate
+self, whose ability suite already grants techniques.
+
+**Every ordinary acquisition surface excludes `is_ultimate=True`.** CG catalog pick
+lists, covenant role auto-grants, the Sphinx's shopping list, the ORGANIZATION thread
+weave (`Gift.inherited_techniques`), alternate-self ability suites, item
+`TechniqueGrant`s, GM award, and ritual SERVICE dispatch all filter or refuse it; the
+shared guard is `enforce_not_ultimate(technique)`
+(`world/magic/services/gift_acquisition.py`), raising `UltimateNotLearnable`
+(`exceptions.py`), called from both `learn_technique` and `charge_and_learn` ahead of
+GM-fiat too.
+
+**The reveal is computed state, not an offer table.** `ultimate_reveal_for(sheet)
+-> UltimateReveal | None` (`world/magic/services/ultimates.py`) derives the
+reveal fresh on every read: owned pools (current Path x major Gift, for a plain Audere;
+the new Path x major Gift, for Audere Majora), owned-known pools (any technique the
+character already knows via `KnownUltimate` whose grant is for a Gift still held as
+MAJOR, regardless of which Path is current - so an owned known ultimate survives a
+Crossing), and bond pools (active patron devotion, active companion bond only - a
+released bond's ultimates simply fall out of the pool, no extra check needed).
+Candidates are filtered through #4097's `exclude_unmet_technique_requirements`
+(promoted from the Sphinx's own prerequisite filter, now shared). Each pool is grouped
+by category (`Technique.archetype_alignment` - Sword, Shield, Crown; display labels
+come from `AudereThreshold.label_for_category`, never the raw enum word) into one of
+three card kinds:
+
+| Card kind | Shown | Never shown |
+|-----------|-------|-------------|
+| KNOWN | name, description | - |
+| CATEGORY (undiscovered) | the category's authored label only | name, description, the technique's pk |
+| UPGRADE | name, `upgrade_of_name` (the earlier ultimate it supersedes, #4097 prerequisite) | - |
+
+An undiscovered candidate's identity never reaches the wire - the leak-analysis row in
+the spec is enforced structurally by the card shape, not by a serializer omission that
+could regress.
+
+**Choosing readies; it does not cast.** `choose_ultimate(sheet, choice_key)`
+(`@transaction.atomic`, `select_for_update`) re-resolves the reveal under the lock to
+close a double-submit race (mapping a stale read to `UltimateRevealClosed`), then
+`get_or_create`s the `KnownUltimate` row and sets `readied=True`. There is no explicit
+clear-then-set: `ultimate_reveal_for`'s own `_has_readied` gate already returns `None`
+(raising `UltimateRevealClosed`) whenever a readied row already exists, so this call
+site is never reached with one in place, and the `one_readied_ultimate_per_character`
+DB constraint is the backstop against a race that slips past that gate, not the
+mechanism that clears a prior pick. This is the character's one pick
+for the current Audere; it does not cast anything. `readied_ultimate` /
+`clear_readied_ultimate` / `castable_technique_named` round out the read/clear/resolve
+surface; `has_reveal_cards` answers "would accepting Audere show this character
+anything" for the offer's framing line.
+
+**Lifecycle wiring.** `offer_audere`'s accepted path, `end_audere`, `cross_threshold`,
+and `end_audere_majora` (`world/magic/audere.py`, `audere_majora.py`) each clear any
+readied pick - on accept (a stale pick from an abnormal end must not hide the next
+reveal), on Audere/Majora ending, and on crossing (reopens the reveal for the new
+Path's ultimates).
+
+**Castable only in combat encounters.** `PlayerAction.is_ultimate` (actions/types.py)
+and the corresponding serializer field mark a readied ultimate as a selectable combat
+action; `_combat_actions` (`actions/player_interface.py`) appends it to the character's
+`CharacterTechnique`-derived list only while building combat actions. Telnet's
+`CmdDeclareTechnique._resolve_technique`/`_resolve_technique_id`
+(`commands/combat.py`) resolve a readied ultimate by name only while the caller has an
+active DECLARING round (`_combat_participant_or_none() is not None`) - never through
+`CmdClashCommit`'s shared `_find_technique_id` mixin method, so an ultimate cannot be
+played into a clash contribution or cast outside a combat round through the ordinary
+cast command. An ultimate always resolves through the ordinary `use_technique` cast
+pipeline once declared - no separate resolution path.
+
+**Audere Majora round block narrowed to the undecided offer (#4098).**
+`any_character_mid_audere_majora_crossing` (`world/magic/audere_majora.py`) used to
+treat the whole Audere Majora condition lifetime (lasting until the encounter
+completes) as blocking round resolution; it now checks only
+`PendingAudereMajoraOffer` existence. The original guard protected the narratively
+climactic, undecided moment of the offer from being overtaken by combat resolving
+around the character before they chose to cross; left unscoped it also froze every
+later round for the rest of the encounter, so a crosser could never act on the new
+Path's ultimate. `is_mid_audere_majora_crossing` (single-character, disconnect-pause
+use) is unchanged and still covers both windows.
+
+**Required-content sentinels (`web/admin/tuning/required_content.py`):** a Path x
+major Gift grant with zero rows in `ultimate_techniques` is flagged - an unfinished
+Path (spec decision 15); the runtime fallback is minimal (Audere still gives its
+surge, with no reveal). A second probe flags any `AudereThreshold` copy field
+(`reveal_framing_text`, `deferred_death_text`, the three category labels) still
+carrying its seeded PLACEHOLDER text.
+
+**REST (`world/magic/views.py`, `serializers.py`):** `GET
+/api/magic/audere/ultimates/?character_sheet_id=<id>` and `POST
+/api/magic/audere/ultimates/choose/`, both owner-scoped (staff bypass; a foreign or
+missing sheet both 404 identically - no existence leak).
+`PendingAudereOfferSerializer.reveal_framing_text` surfaces the authored framing line,
+blank unless `has_reveal_cards` is true. The character sheet's magic section gains a
+plain `ultimates: KnownUltimateEntry[]` list (name, description, authored category
+label - same visibility as the rest of the sheet's magic payload).
+
+**Frontend:** `UltimateRevealDialog` / `UltimateRevealGate`
+(`frontend/src/magic/components/`) - the gate mounts whenever a ceremony (Audere or
+Audere Majora) is active, shows the reveal, and renders a persistent "Ultimate ready"
+strip once a pick is readied; `AudereOfferDialog` gained the framing line;
+`ActionDeclarationCard` marks a readied ultimate in the action list;
+`SpellbookTab` lists known ultimates on the magic sheet.
+
+**Telnet (`world/magic/offer_handlers.py`):** `UltimateRevealHandler` (keyword
+`"ultimate"`) plus `format_ultimate_reveal`; the existing surge/crossing accept
+handlers append the reveal listing after their success message. `accept ultimate <n>`
+maps the ordinal onto the same stable card order the web reveal uses. Every reveal
+listing snapshots its shown `choice_key`s onto `caller.ndb.ultimate_reveal_choice_keys`
+- `accept ultimate <n>` is refused and the list reprinted, never resolved blind, if the
+pool has changed since that snapshot (e.g. a stale listing after the character leveled
+mid-read). Undiscovered cards show the authored label only, never the raw
+Sword/Shield/Crown word.
+
+**Deferred certain death.** Soulfray's `character_loss` consequence under Audere no
+longer kills synchronously - see the "Soulfray" note below, `docs/systems/INDEX.md`'s
+Vitals section, `docs/architecture/runtime-modifiers-audere.md`'s "Certain Death
+Deferral" section, and ADR-4098.
 
 ### Dramatic Moment Tagging (#545 / #1139)
 
@@ -3251,7 +3649,7 @@ All endpoints require authentication. Base URL: `/api/magic/`
 |----------|--------|-------------|
 | `/styles/` | GET | List technique styles (the catalog a `Path` points at) |
 | `/effect-types/` | GET | List effect types |
-| `/restrictions/` | GET | List restrictions |
+| `/restrictions/` | GET | List DESIGN-kind restrictions only (the builder catalog); PRICE-kind rows never appear here (#4099 final fix) |
 | `/facets/` | GET | List facets (flat vocabulary, #3776) |
 | `/gifts/` | GET | List all gifts |
 | `/gifts/{id}/` | GET | Gift detail with nested techniques |

@@ -23,7 +23,7 @@ export function WitnessReactionOfferGate({ personaId }: WitnessReactionOfferGate
   const pendingWindow: PendingReactionWindow | null = windows[0] ?? null;
 
   // Auto-open once per window id; dismissing leaves the strip.
-  const { dialogOpen, setDialogOpen } = useAutoOpenOncePerOffer(pendingWindow);
+  const { dialogOpen, setDialogOpen } = useAutoOpenOncePerOffer(pendingWindow?.id ?? null);
 
   if (!pendingWindow || personaId == null) return null;
 

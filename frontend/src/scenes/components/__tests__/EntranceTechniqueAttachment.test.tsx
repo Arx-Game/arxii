@@ -63,6 +63,7 @@ function makeTechnique(overrides: Partial<CastableTechnique> = {}): CastableTech
         is_locked: false,
         unlock_thread_level: 0,
         thread_level: 0,
+        is_early: false,
         effect_summary: mockEffectSummary,
       },
     ],

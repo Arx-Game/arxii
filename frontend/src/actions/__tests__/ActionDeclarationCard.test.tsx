@@ -12,7 +12,7 @@
  * threading complexity.
  */
 
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
@@ -299,6 +299,35 @@ describe('ActionDeclarationCard — Task 5.2 technique picker', () => {
 
     const tidalFuryBtn = screen.getByText('Tidal Fury').closest('button');
     expect(tidalFuryBtn).toHaveClass('border-primary');
+  });
+
+  it('marks a readied ultimate in the picker (#4098)', async () => {
+    mockedFetchActions.mockResolvedValue({
+      count: 1,
+      next: null,
+      previous: null,
+      results: [
+        {
+          ...MOCK_TECHNIQUES[0],
+          display_name: 'Cinder Crown',
+          is_ultimate: true,
+        },
+      ],
+    });
+
+    render(
+      <ActionDeclarationCard
+        characterId={1}
+        characterSheetId={1}
+        actionContext={emptyContext()}
+        onContextChange={() => {}}
+      />,
+      { wrapper: createWrapper() }
+    );
+
+    const button = await screen.findByRole('button', { name: /Cinder Crown/ });
+    expect(button).toHaveClass('border-fuchsia-500/60');
+    expect(within(button).getByTestId('ultimate-chip-mark')).toBeInTheDocument();
   });
 });
 

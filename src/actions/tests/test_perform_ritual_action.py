@@ -9,9 +9,15 @@ attempting a ceremony when one is already in progress.
 from django.test import TestCase
 
 from actions.definitions.ritual import PerformRitualAction
-from world.magic.constants import RitualExecutionKind
-from world.magic.factories import CharacterAuraFactory, CharacterResonanceFactory, RitualFactory
-from world.magic.models import PendingRitualEffect
+from world.magic.constants import RitualExecutionKind, TargetKind
+from world.magic.factories import (
+    CharacterAuraFactory,
+    CharacterGiftFactory,
+    CharacterResonanceFactory,
+    RitualFactory,
+    UltimateTechniqueFactory,
+)
+from world.magic.models import PendingRitualEffect, Thread
 
 
 class PerformRitualActionCeremonyTests(TestCase):
@@ -86,3 +92,45 @@ class PerformRitualActionPoolGateTests(TestCase):
         self.assertFalse(result.success)
         # Subclass raises keep the curated class-level user_message (#2386).
         self.assertIn("contribute", result.message.lower())
+
+
+class PerformRitualActionUltimateTechniqueGrantTests(TestCase):
+    """A SERVICE-dispatch ritual whose TechniqueGrant names an ultimate refuses
+    cleanly (#4098 fix round 1) -- before the fix, UltimateNotLearnable (raised by
+    learn_technique_from_ritual -> learn_technique) propagated uncaught instead
+    of a failure ActionResult."""
+
+    def setUp(self):
+        from world.magic.models import TechniqueGrant
+
+        self.cr = CharacterResonanceFactory()
+        self.sheet = self.cr.character_sheet
+        self.character = self.sheet.character
+        CharacterAuraFactory(character=self.sheet)  # Gifted: hedge gate (#3001)
+        self.ultimate = UltimateTechniqueFactory()
+        CharacterGiftFactory(character=self.sheet, gift=self.ultimate.gift)
+        Thread.objects.create(
+            owner=self.sheet,
+            resonance=self.cr.resonance,
+            target_kind=TargetKind.GIFT,
+            target_gift=self.ultimate.gift,
+            level=0,
+        )
+        self.ritual = RitualFactory(
+            name="Rite of the Forbidden Grant",
+            execution_kind=RitualExecutionKind.SERVICE,
+            service_function_path="world.magic.services.technique_acquisition.learn_technique_from_ritual",
+        )
+        TechniqueGrant.objects.create(technique=self.ultimate, ritual=self.ritual, verb="study")
+
+    def test_ultimate_grant_refuses_cleanly(self):
+        from world.magic.models import CharacterTechnique
+
+        action = PerformRitualAction()
+        result = action.run(self.character, ritual=self.ritual)
+        self.assertFalse(result.success)
+        self.assertFalse(
+            CharacterTechnique.objects.filter(
+                character=self.sheet, technique=self.ultimate
+            ).exists()
+        )

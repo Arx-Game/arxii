@@ -20,8 +20,10 @@ magic *appears* when cast; players describe their own manifestations, and the ne
 **Anima Check** (the CG-chosen stat + skill every cast rolls) shapes casting's fictional
 register without touching mechanics. Mechanical personalization of magic's *effects*
 still exists — it just starts at level 3 (threads, `Signature`/`SignatureMotifBonus`,
-`TechniqueVariant` — ADR-0072, ADR-0055), not at CG.
+`TechniqueVariant` — ADR-0072, ADR-0055), not at CG. (Superseded in part by ADR-4099:
+personalization now starts in creation and grows with the thread.)
 
 > Status: accepted · Source: #2426, Tehom design ruling 2026-07-16 · Confidence: built
 > and wired — `TraditionGiftGrant`/`cg_catalog` services/`GiftStage` funnel; `Cantrip`
-> model and its API/admin/frontend stack fully removed.
+> model and its API/admin/frontend stack fully removed. · Superseded in part by
+> ADR-4099 (mechanical personalization now starts at creation)

@@ -31,6 +31,7 @@ from world.character_creation.constants import (
     FALLBACK_STARTING_ROOM_TYPECLASS,
     PATH_OF_THE_CHOSEN_NAME,
     STAT_DISPLAY_DIVISOR,
+    TECHNIQUE_PERSONALIZATIONS_KEY,
     ApplicationStatus,
     CommentType,
     FamilyPath,
@@ -2588,8 +2589,34 @@ def _finalize_anima_ritual(draft: CharacterDraft, sheet: CharacterSheet) -> None
     )
 
 
+def _finalize_technique_personalizations(draft: CharacterDraft, sheet: CharacterSheet) -> None:
+    """Step 1d (#4099): seed the Motif from the gift resonance, then write the picks.
+
+    The Motif seed is unconditional: any signature flourish (now or in play) needs the
+    character's Motif to carry their gift resonance.
+    """
+    from world.magic.models import Resonance  # noqa: PLC0415
+    from world.magic.services.creation_personalization import (  # noqa: PLC0415
+        apply_creation_personalizations,
+        parse_personalization_picks,
+    )
+    from world.magic.services.technique_personalization import (  # noqa: PLC0415
+        seed_motif_from_gift_resonance,
+    )
+
+    resonance_id = draft.draft_data.get("selected_gift_resonance_id")
+    resonance = Resonance.objects.filter(pk=resonance_id).first() if resonance_id else None
+    if resonance is not None:
+        seed_motif_from_gift_resonance(sheet, resonance)
+    picks = parse_personalization_picks(
+        draft.draft_data.get(TECHNIQUE_PERSONALIZATIONS_KEY),
+        technique_ids=draft.draft_data.get("selected_technique_ids") or [],
+    )
+    apply_creation_personalizations(sheet, picks, resonance=resonance)
+
+
 @transaction.atomic
-def finalize_magic_data(draft: CharacterDraft, sheet: CharacterSheet) -> None:
+def finalize_magic_data(draft: CharacterDraft, sheet: CharacterSheet) -> None:  # noqa: PLR0915
     """Create magic models from the CG-chosen catalog Gift/Techniques during finalization.
 
     Called during finalize_character() after CharacterSheet is created.
@@ -2635,6 +2662,10 @@ def finalize_magic_data(draft: CharacterDraft, sheet: CharacterSheet) -> None:
     from world.species.services import provision_starting_languages  # noqa: PLC0415
 
     provision_starting_languages(sheet, beginnings=draft.selected_beginnings)
+
+    # 1d. Seed the Motif from the CG gift resonance, then write any creation-time
+    #     technique personalization picks (name/description/flourish/form/price, #4099).
+    _finalize_technique_personalizations(draft, sheet)
 
     # 2. Create CharacterTradition — unconditional: compute_magic_errors requires
     #    selected_tradition on any draft that reaches submission (#2426).

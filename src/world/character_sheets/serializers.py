@@ -47,6 +47,7 @@ from world.character_sheets.types import (
     IdNameRef,
     IntroductionEntry,
     KeyringEntry,
+    KnownUltimateEntry,
     LookEntry,
     MagicSection,
     MentorBondEntry,
@@ -94,6 +95,7 @@ from world.magic.models import (
     CharacterGift,
     CharacterGlimpseTag,
     CharacterTechnique,
+    KnownUltimate,
     Motif,
     MotifResonance,
     MotifResonanceAssociation,
@@ -104,7 +106,13 @@ from world.magic.models import (
 from world.magic.services.technique_effects import technique_payload_prefetches
 from world.magic.services.technique_forms import (
     available_technique_forms,
+    next_signatures_by_technique,
+    technique_price_payload,
     technique_signature_payload,
+)
+from world.magic.services.technique_personalization import (
+    hold_display_name,
+    price_components_by_price,
 )
 from world.progression.models import CharacterPathHistory
 from world.roster.models import RosterTenure, TenureMedia
@@ -885,6 +893,12 @@ _MAGIC_PREFETCH_RELATED: tuple[str | Prefetch, ...] = (
         queryset=CharacterTechnique.objects.select_related(
             "technique__gift",
             "technique__effect_type",
+            # #4099: the hold's own name/description/price — ride this prefetch
+            # rather than a second query per technique.
+            "price",
+            "price__inflicted_condition",
+            "early_form",
+            "early_form__resonance",
         ).prefetch_related(
             *technique_payload_prefetches(prefix="technique__"),
             # #2901: the per-caster form list walks the technique's variants.
@@ -944,15 +958,28 @@ def _build_magic_gifts(sheet: CharacterSheet) -> list[GiftEntry]:
 
     # Build a lookup of techniques by gift_id from prefetched character_techniques
     character = sheet.character
+    # #4099: the next flourish each TECHNIQUE thread will unlock. One fixed query
+    # for the whole sheet (none when the character holds no technique at all —
+    # skip the call rather than pay for a Thread fetch nothing below will read) —
+    # never per technique.
+    next_signatures = (
+        next_signatures_by_technique(character) if sheet.cached_character_techniques else {}
+    )
+    # #4099: what each held price consumes per paid cast. One fixed query for the
+    # whole sheet, none when no hold carries a price.
+    price_components = price_components_by_price(
+        ct.price_id for ct in sheet.cached_character_techniques if ct.price_id is not None
+    )
     techniques_by_gift: dict[int, list[TechniqueEntry]] = {}
     for ct in sheet.cached_character_techniques:
         tech = ct.technique
         techniques_by_gift.setdefault(tech.gift_id, []).append(
             TechniqueEntry(
-                name=tech.name,
+                name=hold_display_name(ct, fallback=tech.name),
+                catalog_name=tech.name,
                 level=tech.level,
                 style=style_name,
-                description=tech.description,
+                description=ct.custom_description or tech.description,
                 # Cached on the Technique row, so the whole spellbook costs one
                 # build per distinct technique however many characters read it (#2898).
                 effect_summary=tech.cached_effect_summary,
@@ -964,6 +991,10 @@ def _build_magic_gifts(sheet: CharacterSheet) -> list[GiftEntry]:
                     character, tech, character_technique=ct, sheet=sheet
                 ),
                 signature=technique_signature_payload(character, tech),
+                # #4099: the hold's own price and next flourish — ride the
+                # already-prefetched hold and the one fixed catalog query above.
+                price=technique_price_payload(ct, components=price_components),
+                next_signature=next_signatures.get(tech.pk),
             )
         )
 
@@ -1099,11 +1130,48 @@ def _build_magic_resonances(character: ObjectDB) -> list[ResonanceBalanceEntry]:
     return entries
 
 
+def _build_magic_ultimates(sheet: CharacterSheet) -> list[KnownUltimateEntry]:
+    """Known ultimates, same visibility as the spellbook (#4098 leak table).
+
+    The owner reads the discovered technique's real name/description (never the raw
+    SWORD/SHIELD/CROWN category word) alongside the authored reveal label.
+
+    Deliberately NOT a ``to_attr`` prefetch (#4098 fix round 1): ``choose_ultimate``
+    writes a ``KnownUltimate`` row mid-session with no sheet-queryset refetch in
+    between, so a prefetch on the idmapper-shared ``CharacterSheet`` would go stale
+    across that write (sharedmemory-model skill) — an ultimate picked this Audere
+    would never show up on the sheet. One plain query per read instead, ordered to
+    match the model's own ``Meta.ordering`` explicitly for a stable render.
+    """
+    known = list(
+        KnownUltimate.objects.filter(character=sheet)
+        .select_related("technique")
+        .order_by("discovered_at", "pk")
+    )
+    if not known:
+        return []
+    from world.magic.audere import AudereThreshold  # noqa: PLC0415
+
+    threshold = AudereThreshold.objects.cached_singleton()
+    return [
+        KnownUltimateEntry(
+            name=row.technique.name,
+            description=row.technique.description,
+            label=(
+                threshold.label_for_category(row.technique.archetype_alignment)
+                if threshold is not None
+                else ""
+            ),
+        )
+        for row in known
+    ]
+
+
 def _build_magic(sheet: CharacterSheet, *, privileged: bool = False) -> MagicSection | None:
-    """Build the magic section with gifts, motif, anima ritual, aura, and resonances.
+    """Build the magic section with gifts, motif, anima ritual, aura, resonances, ultimates.
 
     Returns ``None`` when the character has no magic data at all (no gifts,
-    no motif, no anima ritual, no aura, and no claimed resonances).
+    no motif, no anima ritual, no aura, no claimed resonances, and no ultimates).
     """
     character = sheet.character
 
@@ -1112,6 +1180,7 @@ def _build_magic(sheet: CharacterSheet, *, privileged: bool = False) -> MagicSec
     anima_ritual_data = _build_magic_anima_ritual(sheet)
     aura_data = _build_magic_aura(character, privileged=privileged)
     resonances = _build_magic_resonances(character)
+    ultimates = _build_magic_ultimates(sheet)
 
     # Return None if no magic data exists at all
     if (
@@ -1120,6 +1189,7 @@ def _build_magic(sheet: CharacterSheet, *, privileged: bool = False) -> MagicSec
         and anima_ritual_data is None
         and aura_data is None
         and not resonances
+        and not ultimates
     ):
         return None
 
@@ -1129,6 +1199,7 @@ def _build_magic(sheet: CharacterSheet, *, privileged: bool = False) -> MagicSec
         anima_ritual=anima_ritual_data,
         aura=aura_data,
         resonances=resonances,
+        ultimates=ultimates,
     )
 
 

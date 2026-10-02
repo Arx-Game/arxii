@@ -161,7 +161,11 @@ class ShowcaseAction(Action):
             return ActionResult(success=True, message=msg)
         if mode == ShowcaseMode.PIECE:
             item_id = kwargs.get("item_id")
-            item = ItemInstance.objects.filter(pk=item_id, holder_character_sheet=sheet).first()
+            item = (
+                ItemInstance.objects.in_play()
+                .filter(pk=item_id, holder_character_sheet=sheet)
+                .first()
+            )
             if item is None:
                 return ActionResult(success=False, message="You don't hold that piece.")
             set_showcase_piece(sheet, item)

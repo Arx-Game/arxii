@@ -659,9 +659,20 @@ def _combat_actions(
         position_target_shape,
         protective_condition_and_flavor,
     )
+    from world.magic.services.technique_personalization import hold_display_name  # noqa: PLC0415
+    from world.magic.services.ultimates import readied_ultimate  # noqa: PLC0415
 
-    grants = list(grants)
-    if not grants:
+    # The readied Audere ultimate (if any) joins the known-technique list for
+    # this one declaration window -- it never becomes a CharacterTechnique row
+    # (Task 2), so it has to be appended here rather than showing up in `grants`.
+    # #4099: the caster's own name for each hold, built once rather than per
+    # technique. A readied ultimate has no hold and keeps its catalog name.
+    holds = {grant.technique_id: grant for grant in grants}
+    techniques = [grant.technique for grant in grants]
+    readied = readied_ultimate(sheet)
+    if readied is not None and readied.technique.action_template_id is not None:
+        techniques.append(readied.technique)
+    if not techniques:
         return []
 
     fury_tiers = _fury_tier_options()
@@ -669,11 +680,10 @@ def _combat_actions(
     eligible_fury_anchors = _eligible_fury_anchors(character, sheet)
 
     result: list[PlayerAction] = []
-    for grant in grants:
-        technique = grant.technique
+    for technique in techniques:
         if not technique_performable(character, technique):
             continue
-        template = technique.action_template  # guaranteed non-None: queryset filters isnull=False
+        template = technique.action_template  # guaranteed non-None: filtered above
         # #2014: the caster's own provisioned magic check wins over the template's
         # fallback (ADR-0096) — mirrors what the resolver actually rolls at dispatch.
         check_type = resolve_cast_check_type(character, template)
@@ -697,7 +707,7 @@ def _combat_actions(
             PlayerAction(
                 backend=ActionBackend.COMBAT,
                 check_type=check_type,
-                display_name=technique.name,
+                display_name=hold_display_name(holds.get(technique.pk), fallback=technique.name),
                 ref=ref,
                 action_template=template,
                 action_category=technique.action_category,
@@ -710,6 +720,7 @@ def _combat_actions(
                 soulfray_warning=soulfray_warning,
                 available_fury_tiers=fury_tiers,
                 eligible_fury_anchors=eligible_fury_anchors,
+                is_ultimate=technique.is_ultimate,
             )
         )
 

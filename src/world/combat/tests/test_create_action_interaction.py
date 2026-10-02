@@ -18,7 +18,7 @@ from world.combat.interaction_services import (
     render_clash_contribution_label,
 )
 from world.combat.models import ClashContribution
-from world.magic.factories import FuryTierFactory, TechniqueFactory
+from world.magic.factories import CharacterTechniqueFactory, FuryTierFactory, TechniqueFactory
 from world.scenes.constants import InteractionMode
 from world.scenes.factories import SceneFactory
 
@@ -88,6 +88,26 @@ class RenderActionDeclarationLabelTests(TestCase):
         )
         self.assertEqual(render_action_declaration_label(action), "passives only")
 
+    def test_label_uses_the_casters_own_display_name(self) -> None:
+        """#4099 fix round 1: the declaration must agree with the outcome narration,
+        which already shows the caster's own name, not the catalog name."""
+        opponent = CombatOpponentFactory(encounter=self.encounter, name="Pyromancer")
+        technique = TechniqueFactory(name="Frost Bolt")
+        hold = CharacterTechniqueFactory(
+            character=self.participant.character_sheet, technique=technique
+        )
+        hold.custom_name = "Winterbite"
+        hold.save(update_fields=["custom_name"])
+        self.participant.character_sheet.character.techniques.invalidate()
+        action = CombatRoundActionFactory(
+            participant=self.participant,
+            focused_action=technique,
+            focused_opponent_target=opponent,
+        )
+        label = render_action_declaration_label(action)
+        self.assertEqual(label, "Winterbite at Pyromancer")
+        self.assertNotIn("Frost Bolt", label)
+
 
 class RenderClashContributionLabelTests(TestCase):
     def setUp(self) -> None:
@@ -122,6 +142,48 @@ class RenderClashContributionLabelTests(TestCase):
         label = render_clash_contribution_label(contribution)
         self.assertIn("Inferno Bolt", label)
         self.assertIn("Pyromancer", label)
+
+    def test_label_uses_display_name_and_no_unpaid_price_clause(self) -> None:
+        """#4099: the caster's own name, never the catalog name. No price clause:
+        whether a cast pays its price is decided only when it resolves, and a
+        contribution row does not record that (matches
+        render_action_declaration_label)."""
+        from world.magic.factories import PriceFactory
+
+        clash = ClashFactory(
+            encounter=self.encounter,
+            npc_opponent=self.opponent,
+            initiator=self.participant.character_sheet,
+        )
+        clash_round = ClashRoundFactory(clash=clash, round_number=1)
+        technique = TechniqueFactory(name="Inferno Bolt")
+        price = PriceFactory()
+        hold = CharacterTechniqueFactory(
+            character=self.participant.character_sheet,
+            technique=technique,
+            custom_name="Pyreclasp",
+            price=price,
+        )
+        self.participant.character_sheet.character.techniques.invalidate()
+        from world.traits.factories import CheckOutcomeFactory
+
+        contribution = ClashContribution.objects.create(
+            clash_round=clash_round,
+            character=self.participant.character_sheet,
+            action_slot="FOCUSED",
+            anima_committed=2,
+            technique=technique,
+            check_outcome=CheckOutcomeFactory(),
+            progress_delta=3,
+            was_overburn=False,
+            was_audere=False,
+            soulfray_severity_accrued=0,
+        )
+
+        label = render_clash_contribution_label(contribution)
+        self.assertIn(hold.custom_name, label)
+        self.assertNotIn(technique.name, label)
+        self.assertNotIn(price.cast_narration, label)
 
 
 class CreateActionInteractionLegacyTests(TestCase):

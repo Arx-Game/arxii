@@ -200,8 +200,10 @@ class TechniqueCrossingHandler:
     """TECHNIQUE thread crossing handler.
 
     Fires a narrative-only beat at the first crossing (level 3) so the player
-    knows they can now sign their technique. The real ceremony (discovery) fires
-    at selection time, not at the crossing — driven by the bonus's
+    notices the depth milestone. (#4099: ``min_crossing_level`` can authored
+    below 3, so signing may already have happened before this fires — the beat
+    no longer claims otherwise.) The real ceremony (discovery) fires at
+    selection time, not at the crossing — driven by the bonus's
     ``discovery_achievement`` FK via ``execute_ceremony_beat``. Higher crossings
     produce no beat; the player discovers new options by seeing new bonuses appear
     in ``signature list`` as their thread deepens.
@@ -217,7 +219,7 @@ class TechniqueCrossingHandler:
         if new_level <= starting_level:
             return
 
-        # Only fire at the first crossing (level 3) — the "you may now sign" moment.
+        # Only fire at the first crossing (level 3) — the depth-milestone beat.
         # Higher crossings don't need a beat; the discovery fires on selection.
         if not is_crossing_level(new_level) or new_level != 3:  # noqa: PLR2004 — first crossing
             return
@@ -226,10 +228,7 @@ class TechniqueCrossingHandler:
         execute_ceremony_beat(
             sheet=sheet,
             narrative=CeremonyNarrative(
-                personal_body=(
-                    "Your technique thread has crossed the first threshold. "
-                    "You may now sign it with a signature bonus (use 'signature set')."
-                ),
+                personal_body="Your technique thread has crossed the first threshold.",
             ),
         )
 

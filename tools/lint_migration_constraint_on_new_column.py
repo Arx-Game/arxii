@@ -42,10 +42,24 @@ GRANDFATHERED: frozenset[str] = frozenset(
         # Applied to production 2026-09-24 after the deploy it broke; the row it
         # rejected was fixed by hand. The founding case for this linter.
         "world/migrations/0149_partitioned_metadata_integrity.py",
+        # The five entries below are false negatives of the keyword-only parser that
+        # predated positional-Q-tuple support (#4097, 2026-10-01): each pairs a column
+        # added in the same migration with an existing one inside a CheckConstraint
+        # written as positional Q tuples, which the parser could not read until now.
+        # All five are merged to main, which deploys every merged migration on the
+        # next converge; a merged migration is never restructured afterward.
+        "world/migrations/0114_offer_openers_and_enemy_reasons.py",
+        "world/migrations/0136_relic_ritekind_worshiprite_worshipriteperformance_and_more.py",
+        "world/migrations/0140_consequence_outcome_action_interaction.py",
+        "world/migrations/0150_ties_redrawn.py",
+        "world/migrations/0162_turf_territory.py",
     }
 )
 
 Finding = tuple[str, str, str]
+
+# Q's own meta-arguments, never a field lookup, e.g. Q(("a__isnull", True), _connector="OR").
+_Q_META_KWARGS = frozenset({"_connector", "_negated"})
 
 
 def _operations(tree: ast.Module) -> list[ast.Call]:
@@ -89,15 +103,41 @@ def _nullable_without_default(field: ast.expr | None) -> bool:
     return _is_true(kwargs.get("null")) and "default" not in kwargs
 
 
+def _positional_q_fields(call: ast.Call) -> set[str]:
+    """Field names from a ``Q``'s positional tuple arguments: ``Q(("a__isnull", False))``.
+
+    Django's autodetector serializes an OR-combined ``Q`` (one that cannot be written as
+    plain keyword arguments, e.g. nested inside another ``Q`` with ``_connector="OR"``) as
+    positional two-tuples of ``(lookup, value)`` instead of keywords.
+    """
+    fields: set[str] = set()
+    for arg in call.args:
+        if not isinstance(arg, ast.Tuple) or not arg.elts:
+            continue
+        lookup = _string(arg.elts[0])
+        if lookup:
+            fields.add(lookup.split("__", 1)[0])
+    return fields
+
+
 def _referenced_fields(constraint: ast.expr) -> set[str]:
-    """Field names a constraint expression reads: ``Q(a__isnull=...)`` keys and ``F("a")``."""
+    """Field names a constraint expression reads: ``Q(a__isnull=...)`` keys and ``F("a")``.
+
+    Also reads a ``Q``'s positional tuple arguments (see ``_positional_q_fields``); nested
+    ``Q`` calls are already reached by ``ast.walk``.
+    """
     fields: set[str] = set()
     for node in ast.walk(constraint):
         if not isinstance(node, ast.Call):
             continue
         name = _operation_name(node)
         if name == "Q":
-            fields.update(kw.arg.split("__", 1)[0] for kw in node.keywords if kw.arg)
+            fields.update(
+                kw.arg.split("__", 1)[0]
+                for kw in node.keywords
+                if kw.arg and kw.arg not in _Q_META_KWARGS
+            )
+            fields.update(_positional_q_fields(node))
         elif name == "F" and node.args:
             target = _string(node.args[0])
             if target:

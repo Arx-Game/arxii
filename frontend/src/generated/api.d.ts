@@ -3001,6 +3001,23 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/character-creation/drafts/{id}/personalization-options/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description The make-it-yours options for each technique this draft has chosen (#4099). */
+    get: operations['character_creation_drafts_personalization_options_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/character-creation/drafts/{id}/resubmit/': {
     parameters: {
       query?: never;
@@ -11995,6 +12012,44 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/magic/audere/ultimates/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description The owner's Audere state: open reveal, readied pick, deferred-death line (#4098).
+     *
+     *     GET /api/magic/audere/ultimates/?character_sheet_id=<id>
+     */
+    get: operations['magic_audere_ultimates_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/magic/audere/ultimates/choose/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** @description POST /api/magic/audere/ultimates/choose/  {character_sheet_id, choice_key} */
+    post: operations['magic_audere_ultimates_choose_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/magic/character-anima/': {
     parameters: {
       query?: never;
@@ -13202,7 +13257,13 @@ export interface paths {
     /**
      * @description ViewSet for Restriction lookup records.
      *
-     *     Provides read-only access to restrictions that grant power bonuses.
+     *     Provides read-only access to the DESIGN restriction catalog — the
+     *     technique-authoring limitations ("Touch Range", "Undead Only") that refund
+     *     builder budget. A ``kind=PRICE`` row is a different thing wearing the same
+     *     table (a caster's own chosen cost, #4099) and must never appear here; no
+     *     consumer of this endpoint needs PRICE rows today, so there is no ``kind``
+     *     query param — see the ``Restriction`` model row in ``docs/systems/magic.md``'s
+     *     model table.
      */
     get: operations['magic_restrictions_list'];
     put?: never;
@@ -13223,7 +13284,13 @@ export interface paths {
     /**
      * @description ViewSet for Restriction lookup records.
      *
-     *     Provides read-only access to restrictions that grant power bonuses.
+     *     Provides read-only access to the DESIGN restriction catalog — the
+     *     technique-authoring limitations ("Touch Range", "Undead Only") that refund
+     *     builder budget. A ``kind=PRICE`` row is a different thing wearing the same
+     *     table (a caster's own chosen cost, #4099) and must never appear here; no
+     *     consumer of this endpoint needs PRICE rows today, so there is no ``kind``
+     *     query param — see the ``Restriction`` model row in ``docs/systems/magic.md``'s
+     *     model table.
      */
     get: operations['magic_restrictions_retrieve'];
     put?: never;
@@ -25154,6 +25221,11 @@ export interface components {
       offer_id: number;
       accept: boolean;
     };
+    AudereUltimateState: {
+      reveal: components['schemas']['UltimateReveal'] | null;
+      readied: components['schemas']['ReadiedUltimate'] | null;
+      deferred_death_text: string;
+    };
     /**
      * @description * `owner` - Owner
      *     * `other_side` - Other side
@@ -26438,6 +26510,24 @@ export interface components {
       }[];
       readonly slots: components['schemas']['OriginTemplateSlot'][];
     };
+    /**
+     * @description One flourish, form or price a CG pick can take (#4099). All text is authored.
+     *
+     *     ``consumes`` / ``inflicts`` are a price's real cost (always empty / null for a
+     *     flourish or a form), so a player sees what a price spends before choosing it.
+     */
+    CGPersonalizationOption: {
+      id: number;
+      name: string;
+      gloss: string;
+      intensity_delta: number;
+      control_delta: number;
+      power_bonus: number;
+      level: number;
+      cost: number;
+      consumes: components['schemas']['CGPriceComponent'][];
+      inflicts: string | null;
+    };
     /** @description Serializer for CG point budget configuration. */
     CGPointBudget: {
       readonly id: number;
@@ -26449,6 +26539,11 @@ export interface components {
       xp_conversion_rate?: number;
       /** @description Whether this budget is currently active */
       is_active?: boolean;
+    };
+    /** @description One item a price consumes on every cast that pays it (#4099). Authored name. */
+    CGPriceComponent: {
+      name: string;
+      quantity: number;
     };
     /**
      * @description Technique row for the CG technique-options list (#2426).
@@ -26474,6 +26569,15 @@ export interface components {
       /** @description True when this technique belongs to a gift granted by the species. */
       readonly is_species_technique: boolean;
       readonly effect_summary: components['schemas']['TechniqueEffectSummary'];
+    };
+    /** @description Everything the make-it-yours panel can offer for one chosen technique (#4099). */
+    CGTechniquePersonalizationOptions: {
+      technique_id: number;
+      technique_name: string;
+      readonly needs_resonance: boolean;
+      readonly flourishes: components['schemas']['CGPersonalizationOption'][];
+      readonly forms: components['schemas']['CGPersonalizationOption'][];
+      readonly prices: components['schemas']['CGPersonalizationOption'][];
     };
     /** @description An opening reachable from the draft, priced for it (#3648). */
     CGVacancy: {
@@ -26579,8 +26683,11 @@ export interface components {
      */
     CastableTechnique: {
       id: number;
-      name: string;
-      description: string;
+      /** @description The owner's own name for this technique, or the catalog's (#4099). */
+      readonly name: string;
+      catalog_name: string;
+      /** @description The owner's own description for this technique, or the catalog's (#4099). */
+      readonly description: string;
       anima_cost: number;
       tier: number;
       intensity: number;
@@ -27469,6 +27576,10 @@ export interface components {
     CheckTypeMinimal: {
       readonly id: number;
       readonly name: string;
+    };
+    ChooseUltimateRequest: {
+      character_sheet_id: number;
+      choice_key: string;
     };
     /** @description One aspect definition's picked option(s), as the claim body sends them. */
     ClaimAspectPickRequest: {
@@ -41462,6 +41573,8 @@ export interface components {
       readonly anima_pool_bonus: number;
       /** @description Live corruption advisory; empty string when no stage-3+ corruption. */
       readonly advisory_text: string;
+      /** @description The authored reveal promise, only when accepting would reveal something. */
+      readonly reveal_framing_text: string;
       /** Format: date-time */
       readonly created_at: string;
     };
@@ -41867,6 +41980,7 @@ export interface components {
       readonly soulfray_warning: components['schemas']['SoulfrayWarning'] | null;
       readonly available_fury_tiers: components['schemas']['FuryTierOption'][];
       readonly eligible_fury_anchors: components['schemas']['AnchorOption'][];
+      readonly is_ultimate: boolean;
     };
     /**
      * @description Owner-authored ``PlayerBoundary`` CRUD shape.
@@ -42730,6 +42844,13 @@ export interface components {
      * @enum {integer}
      */
     ReactionEmojiValenceEnum: 1 | 0 | -1;
+    /** @description A KnownUltimate the player has chosen (Screen 3). */
+    ReadiedUltimate: {
+      technique_id: number;
+      name: string;
+      description: string;
+      readonly label: string;
+    };
     /** @description The realm's two boards. Rows carry a name and a phrase; no numeric field exists. */
     RealmBoards: {
       renown: components['schemas']['RankingRow'][];
@@ -43210,7 +43331,7 @@ export interface components {
       readonly name: string;
       /** @description Description of this restriction's limitations. */
       readonly description: string;
-      /** @description Power bonus granted when this restriction is applied. */
+      /** @description DESIGN: refunded against a design's power cost in the technique builder. PRICE: added to the caster's power on every cast, as a power-ledger term. */
       readonly power_bonus: number;
       /** @description Get effect type IDs, using cached property if available. */
       readonly allowed_effect_type_ids: number[];
@@ -46586,6 +46707,7 @@ export interface components {
       readonly is_locked: boolean;
       readonly unlock_thread_level: number;
       readonly thread_level: number;
+      readonly is_early: boolean;
       readonly effect_summary: components['schemas']['TechniqueEffectSummary'];
     };
     /**
@@ -47896,6 +48018,29 @@ export interface components {
       description: string;
       /** @description Whether this category is currently in use */
       is_active?: boolean;
+    };
+    UltimateReveal: {
+      ceremony: string;
+      framing_text: string;
+      groups: components['schemas']['UltimateRevealGroup'][];
+    };
+    /** @description A reveal card. Name/description only for cards the player may see by name. */
+    UltimateRevealCard: {
+      choice_key: string;
+      kind: string;
+      category: string;
+      label: string;
+      readonly name: string;
+      readonly description: string;
+      readonly upgrade_of_name: string;
+    };
+    UltimateRevealGroup: {
+      source: string;
+      readonly path_name: string;
+      readonly gift_name: string;
+      readonly being_name: string;
+      readonly companion_name: string;
+      cards: components['schemas']['UltimateRevealCard'][];
     };
     /** @description One visible union in a family tree payload. */
     UnionEdge: {
@@ -52480,6 +52625,27 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['OffersResponse'];
+        };
+      };
+    };
+  };
+  character_creation_drafts_personalization_options_list: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['CGTechniquePersonalizationOptions'][];
         };
       };
     };
@@ -64275,6 +64441,50 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['AudereOfferResult'];
+        };
+      };
+    };
+  };
+  magic_audere_ultimates_retrieve: {
+    parameters: {
+      query: {
+        character_sheet_id: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['AudereUltimateState'];
+        };
+      };
+    };
+  };
+  magic_audere_ultimates_choose_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['ChooseUltimateRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['ReadiedUltimate'];
         };
       };
     };

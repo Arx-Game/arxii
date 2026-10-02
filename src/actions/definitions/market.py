@@ -364,14 +364,18 @@ class SellToFenceAction(_MarketAction):
         instance = None
         if item_name:
             instance = (
-                ItemInstance.objects.filter(
+                ItemInstance.objects.in_play()
+                .filter(
                     holder_character_sheet=sheet,
                     game_object__db_key__iexact=item_name,
-                ).first()
-                or ItemInstance.objects.filter(
+                )
+                .first()
+                or ItemInstance.objects.in_play()
+                .filter(
                     holder_character_sheet=sheet,
                     template__name__iexact=item_name,
-                ).first()
+                )
+                .first()
             )
         if instance is None:
             return ActionResult(success=False, message="Fence what?")

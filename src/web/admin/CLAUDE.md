@@ -786,6 +786,14 @@ forms, `base_site.html`, a page-owned `extrastyle` link to `forms.css`.
   row entirely blank saves nothing for it. The three-plus-three sentinel
   the removed write used to stand in for now lives in `required_content.py`
   (below).
+- **Character creation gap probes (#4104)** - the six rows the first roster PC
+  stock-take found missing, each a REQUIRED dependency on the same panel:
+  Beginnings that allow no species, Beginnings with no tradition on their slate,
+  realms in the canon particle table (`CANON_NOBILIARY_PARTICLES`) with no
+  `NobiliaryParticle` row, no `AppearanceSection` headings, the four per-feature
+  distinctions absent or inactive (`FEATURE_ROW_NAMES`), and no `EnemyReason`.
+  Each names the rows in `missing` so a realm can be filled from the panel rather
+  than by walking a draft into every stage.
 - **Required-content sentinel** (`web/admin/tuning/required_content.py`) -
   `_probe_tradition_state_lines`/`_probe_schooling_lines`, both
   `DependencyTier.REQUIRED`: report a missing `TraditionStateLine`/

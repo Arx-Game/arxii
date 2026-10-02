@@ -14,12 +14,12 @@ from dataclasses import asdict
 from typing import cast
 
 from django.core.exceptions import ValidationError as DjangoValidationError
-from django.db.models import Count, Prefetch
+from django.db.models import Count, Prefetch, Q
 from django.http import Http404
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from django_filters.rest_framework import DjangoFilterBackend
-from drf_spectacular.utils import extend_schema, inline_serializer
+from drf_spectacular.utils import OpenApiParameter, extend_schema, inline_serializer
 from evennia.accounts.models import AccountDB
 from rest_framework import mixins, serializers, status, viewsets
 from rest_framework.decorators import action
@@ -36,6 +36,7 @@ from world.character_sheets.models import CharacterSheet
 from world.distinctions.models import CharacterDistinction
 from world.magic.constants import (
     PendingAlterationStatus,
+    RestrictionKind,
     RitualExecutionKind,
     SuggestionStatus,
     TargetKind,
@@ -98,10 +99,13 @@ from world.magic.serializers import (
     AudereMajoraRespondSerializer,
     AudereOfferResultSerializer,
     AudereRespondSerializer,
+    AudereUltimateQuerySerializer,
+    AudereUltimateStateSerializer,
     CharacterAnimaSerializer,
     CharacterAuraSerializer,
     CharacterGiftSerializer,
     CharacterResonanceSerializer,
+    ChooseUltimateSerializer,
     ConsequencePoolCatalogSerializer,
     ConsequencePoolDetailSerializer,
     CrossingRespondSerializer,
@@ -127,6 +131,7 @@ from world.magic.serializers import (
     PoseEndorsementSerializer,
     ProgressionStageSerializer,
     PurchaseGiftUnlockRequestSerializer,
+    ReadiedUltimateSerializer,
     RescueOutcomeSerializer,
     ResonanceGrantSerializer,
     RestrictionSerializer,
@@ -295,11 +300,17 @@ class RestrictionViewSet(viewsets.ReadOnlyModelViewSet):
     """
     ViewSet for Restriction lookup records.
 
-    Provides read-only access to restrictions that grant power bonuses.
+    Provides read-only access to the DESIGN restriction catalog — the
+    technique-authoring limitations ("Touch Range", "Undead Only") that refund
+    builder budget. A ``kind=PRICE`` row is a different thing wearing the same
+    table (a caster's own chosen cost, #4099) and must never appear here; no
+    consumer of this endpoint needs PRICE rows today, so there is no ``kind``
+    query param — see the ``Restriction`` model row in ``docs/systems/magic.md``'s
+    model table.
     """
 
     # Use Prefetch with to_attr for SharedMemoryModel to avoid cache pollution
-    queryset = Restriction.objects.prefetch_related(
+    queryset = Restriction.objects.filter(kind=RestrictionKind.DESIGN).prefetch_related(
         Prefetch("allowed_effect_types", to_attr="cached_allowed_effect_types")
     )
     serializer_class = RestrictionSerializer
@@ -328,9 +339,22 @@ class GiftViewSet(viewsets.ModelViewSet):
     Note: technique_count is annotated to avoid N+1 queries in serializer.
     """
 
-    # Use Prefetch with to_attr for SharedMemoryModel to avoid cache pollution
-    queryset = (
-        Gift.objects.prefetch_related(
+    # Queryset is built in get_queryset() (it depends on request.user.is_staff —
+    # see #4098 catalog-leak fix). ``queryset.model`` is still needed by DRF's
+    # router/schema introspection in some code paths, so keep a bare model
+    # reference rather than duplicating the Prefetch/annotate chain here.
+    queryset = Gift.objects.none()
+    permission_classes = [IsAuthenticated]
+    pagination_class = StandardResultsSetPagination
+
+    def get_queryset(self):
+        """Non-staff never see ultimates — not name, not description, not count.
+
+        Ultimates are revealed only through the Audere ceremony (#4098); listing
+        them here would leak their existence (and the count would hint at how many
+        a gift holds) to any authenticated user. Staff see the full catalog.
+        """
+        queryset = Gift.objects.prefetch_related(
             Prefetch(
                 "resonances",
                 queryset=Resonance.objects.select_related(
@@ -338,17 +362,15 @@ class GiftViewSet(viewsets.ModelViewSet):
                 ),
                 to_attr="cached_resonances",
             ),
-            Prefetch(
-                "techniques",
-                queryset=Technique.objects.select_related("effect_type"),
-                to_attr="cached_techniques",
-            ),
-        )
-        .annotate(technique_count=Count("techniques"))
-        .order_by("name")
-    )
-    permission_classes = [IsAuthenticated]
-    pagination_class = StandardResultsSetPagination
+        ).order_by("name")
+        technique_qs = Technique.objects.select_related("effect_type")
+        count_filter = Q()
+        if self.request is None or not self.request.user.is_staff:
+            technique_qs = technique_qs.filter(is_ultimate=False)
+            count_filter = Q(techniques__is_ultimate=False)
+        return queryset.prefetch_related(
+            Prefetch("techniques", queryset=technique_qs, to_attr="cached_techniques"),
+        ).annotate(technique_count=Count("techniques", filter=count_filter))
 
     def get_serializer_class(self):
         """Use create serializer for write ops, list/detail serializers for reads."""
@@ -410,23 +432,34 @@ class TechniqueViewSet(viewsets.ModelViewSet):
     author techniques through the budget-enforced ``author`` action.
     """
 
-    queryset = (
-        Technique.objects.select_related("gift", "effect_type")
-        .prefetch_related(
-            Prefetch(
-                "restrictions",
-                queryset=Restriction.objects.all(),
-                to_attr="cached_restrictions",
-            ),
-        )
-        .order_by("name")
-    )
+    # Queryset is built in get_queryset() (it depends on request.user.is_staff —
+    # see #4098 catalog-leak fix). ``queryset.model`` is still needed by DRF's
+    # router/schema introspection in some code paths, so keep a bare model
+    # reference rather than duplicating the Prefetch chain here.
+    queryset = Technique.objects.none()
     serializer_class = TechniqueSerializer
     permission_classes = [IsAuthenticated]
     filter_backends = [DjangoFilterBackend, OrderingFilter]
     filterset_fields = ["gift", "effect_type"]
     ordering_fields = ["name", "level"]
     pagination_class = StandardResultsSetPagination
+
+    def get_queryset(self):
+        """Non-staff never see ultimates — they're revealed only via Audere (#4098)."""
+        queryset = (
+            Technique.objects.select_related("gift", "effect_type")
+            .prefetch_related(
+                Prefetch(
+                    "restrictions",
+                    queryset=Restriction.objects.all(),
+                    to_attr="cached_restrictions",
+                ),
+            )
+            .order_by("name")
+        )
+        if self.request is None or not self.request.user.is_staff:
+            queryset = queryset.filter(is_ultimate=False)
+        return queryset
 
     def get_permissions(self):
         """Base create/update/destroy are staff-only raw admin; authoring goes
@@ -696,8 +729,16 @@ class CharacterGiftViewSet(viewsets.ModelViewSet):
         per-gift visibility hardening (staff-readable species gifts, public gift
         catalog vs. character-held gifts, etc.) is owned by #1587 — do NOT widen
         this queryset without coordinating with that issue.
+
+        Non-staff also never see an ultimate through ``gift_detail.techniques``
+        (#4098 final fix round 2, item 1) — holding the gift is not the same as
+        having discovered the ultimate through Audere, and this prefetch otherwise
+        leaked name + description to any player who holds the gift.
         """
         user = self.request.user
+        technique_qs = Technique.objects.select_related("effect_type")
+        if not user.is_staff:
+            technique_qs = technique_qs.filter(is_ultimate=False)
         queryset = CharacterGift.objects.select_related("gift").prefetch_related(
             Prefetch(
                 "gift__resonances",
@@ -708,7 +749,7 @@ class CharacterGiftViewSet(viewsets.ModelViewSet):
             ),
             Prefetch(
                 "gift__techniques",
-                queryset=Technique.objects.select_related("effect_type"),
+                queryset=technique_qs,
                 to_attr="cached_techniques",
             ),
         )
@@ -1872,6 +1913,39 @@ class AudereRespondView(APIView):
         return _dispatch_respond(request, AudereRespondSerializer, AudereOfferResultSerializer)
 
 
+class AudereUltimatesView(APIView):
+    """The owner's Audere state: open reveal, readied pick, deferred-death line (#4098).
+
+    GET /api/magic/audere/ultimates/?character_sheet_id=<id>
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    @extend_schema(
+        parameters=[OpenApiParameter("character_sheet_id", int, required=True)],
+        responses={200: AudereUltimateStateSerializer},
+    )
+    def get(self, request: Request) -> Response:
+        from world.magic.services.ultimates import audere_ultimate_state  # noqa: PLC0415
+
+        query = AudereUltimateQuerySerializer(
+            data=request.query_params, context={"request": request}
+        )
+        query.is_valid(raise_exception=True)
+        state = audere_ultimate_state(query.validated_data["character_sheet_id"])
+        return Response(AudereUltimateStateSerializer(state).data, status=status.HTTP_200_OK)
+
+
+class ChooseUltimateView(APIView):
+    """POST /api/magic/audere/ultimates/choose/  {character_sheet_id, choice_key}"""
+
+    permission_classes = [IsAuthenticated]
+
+    @extend_schema(request=ChooseUltimateSerializer, responses={200: ReadiedUltimateSerializer})
+    def post(self, request: Request) -> Response:
+        return _dispatch_respond(request, ChooseUltimateSerializer, ReadiedUltimateSerializer)
+
+
 # =============================================================================
 # Audere Majora REST surface (#543)
 # =============================================================================
@@ -2249,6 +2323,10 @@ class ThreadHubSummaryView(APIView):
                 "unlock__unlock_gift",
             )
         )
+        from world.magic.services.technique_personalization import (  # noqa: PLC0415
+            technique_display_name,
+        )
+
         character = sheet.character
         weavable_traits: list[dict] = []
         weavable_techniques: list[dict] = []
@@ -2275,7 +2353,7 @@ class ThreadHubSummaryView(APIView):
                 weavable_techniques.extend(
                     {
                         "technique_id": technique.pk,
-                        "name": technique.name,
+                        "name": technique_display_name(character, technique),
                         "gift_id": gift.pk,
                         "gift_name": gift.name,
                     }

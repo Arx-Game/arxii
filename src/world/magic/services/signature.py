@@ -1,12 +1,14 @@
 """Signature-bonus selection service (#1582).
 
 Player-facing interface for choosing, moving, or clearing a SignatureMotifBonus
-on a TECHNIQUE-kind Thread.  Four public functions:
+on a TECHNIQUE-kind Thread.  Five public functions:
 
 - ``available_signature_bonuses(character_sheet)`` — menu of qualifying bonuses.
 - ``set_signature_bonus(thread, bonus)`` — choose / replace a bonus on a thread.
 - ``clear_signature_bonus(thread)`` — remove the current bonus from a thread.
 - ``signature_bonus_for(character, technique)`` — cast-wiring read (Tasks 5–6).
+- ``next_signature_bonus(thread, catalog)`` — the nearest flourish not yet
+  reached, for a "keep imbuing" progress display (#4099).
 
 All reads go through the cached ``character.threads`` handler (never a fresh
 ``Thread.objects.filter``), mirroring the pattern in
@@ -22,6 +24,8 @@ from django.db import transaction
 from world.magic.constants import TargetKind
 
 if TYPE_CHECKING:
+    from collections.abc import Sequence
+
     from world.magic.models.signature import SignatureMotifBonus
     from world.magic.models.threads import Thread
 
@@ -67,15 +71,35 @@ def available_signature_bonuses(character_sheet, *, thread=None) -> list[Signatu
     ]
 
 
+def next_signature_bonus(
+    thread: Thread, catalog: Sequence[SignatureMotifBonus]
+) -> SignatureMotifBonus | None:
+    """The nearest flourish this thread has not reached, or ``None`` (#4099).
+
+    Pure over ``catalog`` (a caller-fetched list), so a sheet build fetches the catalog
+    once. Considers resonance-gated rows at the thread's resonance only: a facet-gated
+    row depends on Motif facets the sheet does not walk here.
+    """
+    ahead = [
+        bonus
+        for bonus in catalog
+        if bonus.required_resonance_id == thread.resonance_id
+        and bonus.min_crossing_level > thread.level
+    ]
+    return min(ahead, key=lambda b: (b.min_crossing_level, b.name)) if ahead else None
+
+
 def set_signature_bonus(thread: Thread, bonus: SignatureMotifBonus) -> Thread:
     """Attach ``bonus`` to ``thread`` as its active signature bonus.
 
     Guards (in order):
     1. ``thread.target_kind == TECHNIQUE`` — else ``NotATechniqueThread``.
-    2. ``thread.level >= 3`` (first crossing) — else ``SignatureBelowCrossing``.
-    3. ``bonus.min_crossing_level <= thread.level`` — else ``SignatureBonusLocked``.
-    4. ``bonus.qualifies_for(thread.owner)`` — else ``SignatureBonusNotAvailable``.
-    5. The owner knows the technique (``CharacterTechnique`` row exists) — else
+    2. ``bonus.min_crossing_level <= thread.level`` — else ``SignatureBonusLocked``.
+       Authored ``min_crossing_level`` is the only gate on how deep a thread must
+       be (#4099 — the old hard ``thread.level >= 3`` floor is gone, so a staff-set
+       lower minimum now works).
+    3. ``bonus.qualifies_for(thread.owner)`` — else ``SignatureBonusNotAvailable``.
+    4. The owner knows the technique (``CharacterTechnique`` row exists) — else
        ``TechniqueNotOwned``.
 
     After saving, invalidates ``character.threads`` so the change is immediately
@@ -92,14 +116,12 @@ def set_signature_bonus(thread: Thread, bonus: SignatureMotifBonus) -> Thread:
 
     Raises:
         NotATechniqueThread: ``thread.target_kind != TECHNIQUE``.
-        SignatureBelowCrossing: ``thread.level < 3`` (first crossing not reached).
         SignatureBonusLocked: ``bonus.min_crossing_level > thread.level``.
         SignatureBonusNotAvailable: The bonus gate is not satisfied by the owner's Motif.
         TechniqueNotOwned: The owner has no CharacterTechnique for this thread's technique.
     """
     from world.magic.exceptions import (  # noqa: PLC0415
         NotATechniqueThread,
-        SignatureBelowCrossing,
         SignatureBonusLocked,
         SignatureBonusNotAvailable,
         TechniqueNotOwned,
@@ -108,9 +130,6 @@ def set_signature_bonus(thread: Thread, bonus: SignatureMotifBonus) -> Thread:
 
     if thread.target_kind != TargetKind.TECHNIQUE:
         raise NotATechniqueThread
-
-    if thread.level < 3:  # noqa: PLR2004 — first crossing level (3, 6, 11, 16, 21)
-        raise SignatureBelowCrossing
 
     if bonus.min_crossing_level > thread.level:
         raise SignatureBonusLocked

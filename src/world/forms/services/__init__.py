@@ -232,7 +232,10 @@ def _create_assumption_grants(
     # empty and revert (which finds sources via ``granted_techniques``) would
     # never reclaim it — drop it now so no empty source leaks.
     if has_techniques:
-        for technique in alt.techniques.all():
+        # Never grant an ultimate (#4098) — the model's limit_choices_to keeps new
+        # rows from naming one, but this filters any row that slipped in before
+        # the flag (or a direct .add() bypassing the admin form's constraint).
+        for technique in alt.techniques.filter(is_ultimate=False):
             _ct, created = CharacterTechnique.objects.get_or_create(
                 character=sheet,
                 technique=technique,

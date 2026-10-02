@@ -119,6 +119,83 @@ class SheetMagicSectionTests(TestCase):
         self.assertIn("Costs 5 anima.", text)
         self.assertIn("Applies Guarded.", text)
 
+    def test_shows_catalog_name_price_and_next_flourish_without_a_locked_form(self) -> None:
+        """#4099 fix round 1: the next flourish shows even with no locked form.
+
+        The "Not yet yours:" header used to print only when a locked variant form
+        existed, so a technique with no locked form but an eligible next flourish
+        showed nothing — a silent gap against demo Screen 4 and the spec.
+        """
+        from world.magic.constants import TargetKind
+        from world.magic.factories import (
+            CharacterTechniqueFactory,
+            PriceFactory,
+            SignatureMotifBonusFactory,
+            TechniqueFactory,
+        )
+        from world.magic.models import Thread
+
+        gift = GiftFactory(name="Emberweaving")
+        CharacterGiftFactory(character=self.sheet, gift=gift)
+        resonance = ResonanceFactory()
+        technique = TechniqueFactory(gift=gift, name="Scorch Lash", level=1)
+        CharacterTechniqueFactory(
+            character=self.sheet,
+            technique=technique,
+            custom_name="Winterbite",
+            price=PriceFactory(name="Frost on the skin", power_bonus=4),
+        )
+        Thread.objects.create(
+            owner=self.sheet,
+            resonance=resonance,
+            target_kind=TargetKind.TECHNIQUE,
+            target_technique=technique,
+            level=1,
+        )
+        SignatureMotifBonusFactory(
+            name="Rime walks with you", required_resonance=resonance, min_crossing_level=3
+        )
+
+        lines = SHEET_SECTIONS["magic"](_command_for(self.character))
+        text = "\n".join(lines)
+
+        self.assertIn("Winterbite (Scorch Lash, level 1)", text)
+        self.assertIn("Price: Frost on the skin", text)
+        self.assertIn("Not yet yours:", text)
+        self.assertIn("Rime walks with you, at thread level 3", text)
+
+    def test_price_line_shows_what_the_price_costs(self) -> None:
+        """#4099: the telnet price line carries the price's real cost, like the web."""
+        from world.conditions.factories import ConditionTemplateFactory
+        from world.items.factories import ItemTemplateFactory
+        from world.magic.factories import (
+            CharacterTechniqueFactory,
+            PriceFactory,
+            TechniqueFactory,
+        )
+        from world.magic.models import PriceComponentRequirement
+
+        gift = GiftFactory(name="Bloodwork")
+        CharacterGiftFactory(character=self.sheet, gift=gift)
+        price = PriceFactory(
+            name="Blood on the needle",
+            inflicted_condition=ConditionTemplateFactory(name="Lightheaded"),
+        )
+        PriceComponentRequirement.objects.create(
+            restriction=price, item_template=ItemTemplateFactory(name="Silver needle"), quantity=2
+        )
+        CharacterTechniqueFactory(
+            character=self.sheet,
+            technique=TechniqueFactory(gift=gift, name="Red Thread", level=1),
+            price=price,
+        )
+
+        text = "\n".join(SHEET_SECTIONS["magic"](_command_for(self.character)))
+
+        self.assertIn("Price: Blood on the needle", text)
+        self.assertIn("Consumes: 2x Silver needle", text)
+        self.assertIn("Inflicts: Lightheaded", text)
+
     def test_lists_resonance_balances(self) -> None:
         """#2032 — claimed resonances render with balance + lifetime earned."""
         CharacterResonanceFactory(

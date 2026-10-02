@@ -27,8 +27,18 @@ problem.
 finalize writes), `artifact-design` and `artifact-capabilities` (before writing
 the page), and `deslop` for any copy that could read as lore. These are external
 harness/plugin skills, not tracked repository skills. If a required skill or its
-artifact capability is unavailable, stop with a BLOCKED review result; do not
-substitute a source-only review or claim the demo gate ran.
+artifact capability is unavailable, do not substitute a source-only review or
+claim the demo gate ran.
+
+**Harness without an artifact capability** (polytoken, prime-agent): draft the
+page anyway as one self-contained HTML file at
+`/workspaces/arxii/.demos/issue-<N>-<slug>.html` (gitignored), never inside the
+worktree. `.demos/` is on the host bind mount, so the human finds it in the
+host checkout's `.demos/` folder; a worktree under `.claude/worktrees/` is a
+container volume the host cannot see. Deliver the file name and the
+checkout-relative path (`.demos/issue-<N>-<slug>.html`) in chat, say the demo is
+**local, not published**, and ask for it to be published through Claude Code. A local demo does not satisfy steps 5-6: do not
+post the spec for approval with a local path; wait for the published link.
 
 ## The demo page is
 

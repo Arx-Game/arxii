@@ -13,6 +13,7 @@ from world.progression.models import (
     ClassLevelUnlock,
     ClassXPCost,
     CodexKnowledgeRequirement,
+    GiftHeldRequirement,
     ItemRequirement,
     LegendRequirement,
     LevelRequirement,
@@ -20,6 +21,7 @@ from world.progression.models import (
     MultiClassLevel,
     MultiClassRequirement,
     RelationshipRequirement,
+    TechniqueKnownRequirement,
     TierRequirement,
     TraitRatingUnlock,
     TraitRequirement,
@@ -149,6 +151,7 @@ class TraitRequirementAdmin(admin.ModelAdmin):
         "class_level_unlock",
         "thread_crossing_threshold",
         "path",
+        "technique",
         "is_active",
     ]
     list_filter = [
@@ -156,12 +159,14 @@ class TraitRequirementAdmin(admin.ModelAdmin):
         "is_active",
         "class_level_unlock__character_class",
         "path",
+        "technique",
     ]
     search_fields = [
         "trait__name",
         "description",
         "class_level_unlock__character_class__name",
         "path__name",
+        "technique__name",
     ]
 
     def minimum_value_display(self, obj):
@@ -176,7 +181,7 @@ class TraitRequirementAdmin(admin.ModelAdmin):
 class LevelRequirementAdmin(admin.ModelAdmin):
     """Admin interface for LevelRequirement."""
 
-    list_display = ["minimum_level", "class_level_unlock", "is_active"]
+    list_display = ["minimum_level", "class_level_unlock", "technique", "is_active"]
     list_filter = ["minimum_level", "is_active", "class_level_unlock__character_class"]
     search_fields = ["description", "class_level_unlock__character_class__name"]
 
@@ -189,6 +194,7 @@ class ClassLevelRequirementAdmin(admin.ModelAdmin):
         "character_class",
         "minimum_level",
         "class_level_unlock",
+        "technique",
         "is_active",
     ]
     list_filter = [
@@ -215,7 +221,7 @@ class MultiClassLevelInline(admin.TabularInline):
 class MultiClassRequirementAdmin(admin.ModelAdmin):
     """Admin interface for MultiClassRequirement."""
 
-    list_display = ["__str__", "class_level_unlock", "is_active"]
+    list_display = ["__str__", "class_level_unlock", "technique", "is_active"]
     list_filter = ["is_active", "class_level_unlock__character_class"]
     search_fields = [
         "description",
@@ -229,7 +235,7 @@ class MultiClassRequirementAdmin(admin.ModelAdmin):
 class AchievementRequirementAdmin(admin.ModelAdmin):
     """Admin interface for AchievementRequirement."""
 
-    list_display = ["achievement", "class_level_unlock", "is_active"]
+    list_display = ["achievement", "class_level_unlock", "technique", "is_active"]
     list_filter = ["is_active", "class_level_unlock__character_class"]
     search_fields = [
         "achievement__name",
@@ -248,6 +254,7 @@ class RelationshipRequirementAdmin(admin.ModelAdmin):
         "minimum_tier",
         "minimum_count",
         "class_level_unlock",
+        "technique",
         "is_active",
     ]
     list_filter = [
@@ -267,7 +274,7 @@ class RelationshipRequirementAdmin(admin.ModelAdmin):
 class TierRequirementAdmin(admin.ModelAdmin):
     """Admin interface for TierRequirement."""
 
-    list_display = ["minimum_tier", "class_level_unlock", "is_active"]
+    list_display = ["minimum_tier", "class_level_unlock", "technique", "is_active"]
     list_filter = ["minimum_tier", "is_active", "class_level_unlock__character_class"]
     search_fields = ["description", "class_level_unlock__character_class__name"]
 
@@ -276,7 +283,13 @@ class TierRequirementAdmin(admin.ModelAdmin):
 class LegendRequirementAdmin(admin.ModelAdmin):
     """#3831 - the minimum-legend gate for a path-leveling unlock."""
 
-    list_display = ["minimum_legend", "counts_from_level_offset", "class_level_unlock", "is_active"]
+    list_display = [
+        "minimum_legend",
+        "counts_from_level_offset",
+        "class_level_unlock",
+        "technique",
+        "is_active",
+    ]
     list_filter = ["is_active", "class_level_unlock__character_class"]
     search_fields = ["description", "class_level_unlock__character_class__name"]
 
@@ -285,9 +298,45 @@ class LegendRequirementAdmin(admin.ModelAdmin):
 class MajorGiftTechniqueRequirementAdmin(admin.ModelAdmin):
     """Admin interface for MajorGiftTechniqueRequirement (#2440)."""
 
-    list_display = ["minimum_techniques", "class_level_unlock", "is_active"]
-    list_filter = ["is_active", "class_level_unlock__character_class"]
-    search_fields = ["description", "class_level_unlock__character_class__name"]
+    list_display = ["minimum_techniques", "gift", "class_level_unlock", "technique", "is_active"]
+    list_filter = ["is_active", "gift", "class_level_unlock__character_class"]
+    search_fields = ["description", "gift__name", "class_level_unlock__character_class__name"]
+
+
+@admin.register(GiftHeldRequirement)
+class GiftHeldRequirementAdmin(admin.ModelAdmin):
+    """Admin interface for GiftHeldRequirement (#4097)."""
+
+    list_display = ["gift", "class_level_unlock", "path", "technique", "is_active"]
+    list_filter = ["is_active", "gift", "class_level_unlock__character_class", "path"]
+    search_fields = [
+        "gift__name",
+        "description",
+        "class_level_unlock__character_class__name",
+        "path__name",
+        "technique__name",
+    ]
+
+
+@admin.register(TechniqueKnownRequirement)
+class TechniqueKnownRequirementAdmin(admin.ModelAdmin):
+    """Admin interface for TechniqueKnownRequirement (#4097)."""
+
+    list_display = [
+        "required_technique",
+        "class_level_unlock",
+        "path",
+        "technique",
+        "is_active",
+    ]
+    list_filter = ["is_active", "class_level_unlock__character_class", "path"]
+    search_fields = [
+        "required_technique__name",
+        "description",
+        "class_level_unlock__character_class__name",
+        "path__name",
+        "technique__name",
+    ]
 
 
 @admin.register(CodexKnowledgeRequirement)
@@ -299,6 +348,7 @@ class CodexKnowledgeRequirementAdmin(admin.ModelAdmin):
         "path",
         "class_level_unlock",
         "thread_crossing_threshold",
+        "technique",
         "is_active",
     ]
     list_filter = [
@@ -311,6 +361,7 @@ class CodexKnowledgeRequirementAdmin(admin.ModelAdmin):
         "description",
         "path__name",
         "class_level_unlock__character_class__name",
+        "technique__name",
     ]
     autocomplete_fields = ["codex_entry", "path"]
 

@@ -9,10 +9,18 @@
  */
 
 import { useEffect } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { TechniqueEffectSummaryDisplay } from '@/magic/components/TechniqueEffectSummary';
 import { CodexLine, Entry, EntryDoors, EntryList } from '../../folio';
-import { useCGTechniqueOptions, useUpdateDraft } from '../../queries';
-import type { CGTechniqueOption, CharacterDraft } from '../../types';
+import {
+  characterCreationKeys,
+  useCGExplanations,
+  useCGTechniqueOptions,
+  usePersonalizationOptions,
+  useUpdateDraft,
+} from '../../queries';
+import type { CGTechniqueOption, CharacterDraft, DraftData } from '../../types';
+import { PersonalizationPanel } from './PersonalizationPanel';
 
 const CATEGORY_LABELS: Record<CGTechniqueOption['category'], string> = {
   attack: 'Offense',
@@ -52,11 +60,14 @@ function nextSelection(
 
 export function TechniqueSelector({ draft, giftId }: TechniqueSelectorProps) {
   const updateDraft = useUpdateDraft();
+  const queryClient = useQueryClient();
   const { data: options, isLoading } = useCGTechniqueOptions(
     draft.id,
     giftId,
     draft.selected_species?.id
   );
+  const { data: personalizationOptions } = usePersonalizationOptions(draft);
+  const { data: copy } = useCGExplanations();
   const selectedIds = draft.draft_data.selected_technique_ids ?? [];
   const picks = draft.starting_technique_picks;
   const traditionName = draft.selected_tradition?.name ?? 'Tradition';
@@ -97,15 +108,28 @@ export function TechniqueSelector({ draft, giftId }: TechniqueSelectorProps) {
     const isSelected = selectedIds.includes(techniqueId);
     const next = nextSelection(selectedIds, techniqueId, isSelected, atBudget);
     if (next === selectedIds) return;
+    const draftData: Partial<DraftData> = { selected_technique_ids: next };
+    if (isSelected) {
+      // Deselecting: drop this technique's "make it yours" picks in the same
+      // write (plan fork 15) — a deselected technique needs no personalization UI.
+      // Built from the freshest cached draft, not this render's `draft` prop
+      // (#4099 final fix): PersonalizationPanel can write another technique's
+      // pick into the cache after this component's last render, and building
+      // from the stale prop would silently drop it from this write, the same
+      // race PersonalizationPanel's own `write` already guards against.
+      const cached = queryClient.getQueryData<CharacterDraft>(characterCreationKeys.draft());
+      const latestPersonalizations = (cached ?? draft).draft_data.technique_personalizations ?? {};
+      const { [String(techniqueId)]: _dropped, ...rest } = latestPersonalizations;
+      draftData.technique_personalizations = rest;
+    }
     updateDraft.mutate({
       draftId: draft.id,
-      data: {
-        draft_data: {
-          selected_technique_ids: next,
-        },
-      },
+      data: { draft_data: draftData },
     });
   };
+
+  const personalizationFor = (techniqueId: number) =>
+    personalizationOptions?.find((row) => row.technique_id === techniqueId);
 
   const grouped = CATEGORY_ORDER.map((category) => ({
     category,
@@ -151,6 +175,13 @@ export function TechniqueSelector({ draft, giftId }: TechniqueSelectorProps) {
                     variant="full"
                   />
                   <CodexLine entryId={technique.codex_entry_id} name={technique.name} />
+                  {isSelected && personalizationFor(technique.id) && (
+                    <PersonalizationPanel
+                      draft={draft}
+                      options={personalizationFor(technique.id)!}
+                      copy={copy}
+                    />
+                  )}
                   {/* At budget and not chosen: no doors at all, as Heritage
                       does for an unaffordable species. A "Choose" button that
                       silently refuses is worse than no button. */}

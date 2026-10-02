@@ -1,5 +1,6 @@
 from django import forms
 from django.contrib import admin
+from django.core.exceptions import ValidationError
 from django.db.models import Count, Prefetch
 from django.forms.models import BaseInlineFormSet
 from django.utils.html import format_html
@@ -55,6 +56,7 @@ from world.magic.models import (
     GlimpseTag,
     ImbuingProseTemplate,
     IntensityTier,
+    KnownUltimate,
     LevelPowerConfig,
     MagicProgressionMilestone,
     MishapPoolTier,
@@ -65,6 +67,7 @@ from world.magic.models import (
     PathRitualGrant,
     PortalAnchorKind,
     PoseEndorsement,
+    PriceComponentRequirement,
     Reincarnation,
     RelationshipBondPullTuning,
     Resonance,
@@ -245,11 +248,29 @@ class TechniqueStyleAdmin(admin.ModelAdmin):
         return ", ".join(p.name for p in obj.cached_paths[:5])
 
 
+class PriceComponentRequirementInline(admin.TabularInline):
+    """Items a PRICE consumes on every cast that pays it (#4099).
+
+    PRICE rows only: ``PriceComponentRequirement.clean`` refuses a row on a DESIGN
+    restriction. A caster who lacks the items still casts, without the price.
+    """
+
+    model = PriceComponentRequirement
+    extra = 0
+    autocomplete_fields = ["item_template"]
+    raw_id_fields = ["min_quality_tier"]
+    verbose_name = "Consumed component (PRICE only)"
+    verbose_name_plural = "Consumed components (PRICE only)"
+
+
 @admin.register(Restriction)
 class RestrictionAdmin(admin.ModelAdmin):
-    list_display = ["name", "power_bonus", "get_effect_types"]
+    list_display = ["name", "power_bonus", "kind", "creation_point_cost", "get_effect_types"]
+    list_filter = ["kind"]
     search_fields = ["name"]
     filter_horizontal = ["allowed_effect_types"]
+    autocomplete_fields = ["inflicted_condition"]
+    inlines = [PriceComponentRequirementInline]
 
     def get_queryset(self, request):
         return (
@@ -476,6 +497,7 @@ class TechniqueAdmin(admin.ModelAdmin):
         "control",
         "anima_cost",
         "archetype_alignment",
+        "is_ultimate",
         "get_relationship",
         "get_authoring_gap",
     ]
@@ -485,6 +507,7 @@ class TechniqueAdmin(admin.ModelAdmin):
         "effect_type",
         "gift",
         "archetype_alignment",
+        "is_ultimate",
         "has_perceptible_effect",
         TechniqueAuthoringGapFilter,
     ]
@@ -882,6 +905,28 @@ class TraditionGiftGrantAdmin(admin.ModelAdmin):
     filter_horizontal = ["special_techniques"]
 
 
+class PathGiftGrantAdminForm(forms.ModelForm):
+    """Validates ultimates against the grant's gift (#4098): major gifts only, same gift."""
+
+    class Meta:
+        model = PathGiftGrant
+        fields = "__all__"  # noqa: DJ007 - admin form mirrors the model
+
+    def clean(self) -> dict:
+        cleaned = super().clean()
+        gift = cleaned.get("gift")
+        ultimates = list(cleaned.get("ultimate_techniques") or [])
+        if gift is None or not ultimates:
+            return cleaned
+        if gift.kind != GiftKind.MAJOR:
+            raise ValidationError({"ultimate_techniques": "Only a major gift carries ultimates."})
+        if any(technique.gift_id != gift.pk for technique in ultimates):
+            raise ValidationError(
+                {"ultimate_techniques": "Every ultimate must belong to this gift."}
+            )
+        return cleaned
+
+
 @admin.register(PathGiftGrant)
 class PathGiftGrantAdmin(admin.ModelAdmin):
     """The path half of the CG technique menu (#3712).
@@ -893,14 +938,16 @@ class PathGiftGrantAdmin(admin.ModelAdmin):
     halves of one menu are authored the same way.
 
     ``PathGiftGrant.clean()`` already rejects a starter technique that does not
-    belong to the grant's gift, and the admin runs it on save.
+    belong to the grant's gift, and the admin runs it on save. ``form`` (#4098)
+    additionally validates ``ultimate_techniques`` against the grant's gift.
     """
 
+    form = PathGiftGrantAdminForm
     list_display = ["path", "gift", "get_technique_count"]
     list_filter = ["path", "gift"]
     search_fields = ["path__name", "gift__name"]
     autocomplete_fields = ["gift"]
-    filter_horizontal = ["starter_techniques"]
+    filter_horizontal = ["starter_techniques", "ultimate_techniques"]
     list_select_related = ["path", "gift"]
 
     def get_queryset(self, request):
@@ -924,11 +971,26 @@ class CharacterTraditionAdmin(admin.ModelAdmin):
 
 @admin.register(CharacterTechnique)
 class CharacterTechniqueAdmin(admin.ModelAdmin):
-    autocomplete_fields = ["character"]
-    list_display = ["character", "technique", "acquired_at"]
+    autocomplete_fields = ["character", "price", "early_form"]
+    list_display = ["character", "technique", "custom_name", "price", "acquired_at"]
     list_filter = ["technique__gift", "technique__effect_type"]
     search_fields = ["character__character__db_key", "technique__name"]
     date_hierarchy = "acquired_at"
+
+
+@admin.register(KnownUltimate)
+class KnownUltimateAdmin(admin.ModelAdmin):
+    """Receipts of discovered ultimates (#4098). Immutable provenance, not authored."""
+
+    list_display = ["character", "technique", "readied", "discovered_at"]
+    list_filter = ["readied"]
+    # character/technique match the sibling admins (CharacterTechniqueAdmin's
+    # `character`); both targets' own admins carry search_fields to back the
+    # autocomplete. `crossing` (AudereMajoraCrossing) has no registered admin of
+    # its own, so it stays raw_id_fields - autocomplete_fields there would fail
+    # Django's admin system checks (admin.E039).
+    autocomplete_fields = ["character", "technique"]
+    raw_id_fields = ["crossing"]
 
 
 @admin.register(CharacterAnima)
@@ -1021,6 +1083,33 @@ class AudereThresholdAdmin(admin.ModelAdmin):
         "anima_pool_bonus",
         "warp_multiplier",
     )
+    fieldsets = (
+        (
+            None,
+            {
+                "fields": (
+                    "minimum_intensity_tier",
+                    "minimum_warp_stage",
+                    "intensity_bonus",
+                    "anima_pool_bonus",
+                    "warp_multiplier",
+                    "surge_manifestation_text",
+                )
+            },
+        ),
+        (
+            "Ultimates reveal copy (#4098)",
+            {
+                "fields": (
+                    "reveal_framing_text",
+                    "deferred_death_text",
+                    "sword_reveal_label",
+                    "shield_reveal_label",
+                    "crown_reveal_label",
+                )
+            },
+        ),
+    )
 
 
 @admin.register(SoulfrayConfig)
@@ -1031,6 +1120,7 @@ class SoulfrayConfigAdmin(admin.ModelAdmin):
         "deficit_scale",
         "resilience_check_type",
         "base_check_difficulty",
+        "social_safety_bonus",
     ]
 
 
@@ -1689,6 +1779,7 @@ class SignatureMotifBonusAdmin(admin.ModelAdmin):
         "required_resonance",
         "flat_intensity_delta",
         "min_crossing_level",
+        "creation_point_cost",
     ]
     list_filter = ["required_facet", "required_resonance", "min_crossing_level"]
     search_fields = ["name", "narrative_snippet"]
@@ -2265,6 +2356,7 @@ class TechniqueVariantAdmin(admin.ModelAdmin):
         "unlock_thread_level",
         "intensity_delta",
         "control_delta",
+        "creation_point_cost",
     ]
     list_filter = ["resonance", "unlock_thread_level"]
     search_fields = ["name_override", "parent_technique__name"]

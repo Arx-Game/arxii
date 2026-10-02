@@ -88,6 +88,11 @@ class TechniqueCrossingHandlerTests(TestCase):
                 mock_beat.assert_called_once()
                 call_kwargs = mock_beat.call_args.kwargs
                 self.assertIsNone(call_kwargs.get("achievement"))
+                narrative = call_kwargs["narrative"]
+                self.assertEqual(
+                    narrative.personal_body,
+                    "Your technique thread has crossed the first threshold.",
+                )
         finally:
             thread.delete()
 

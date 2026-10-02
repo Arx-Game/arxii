@@ -448,6 +448,26 @@ class AffinityInteractionAggressor(models.TextChoices):
 ENDURE_HALLOWED_GROUND_CHECK_TYPE_NAME: str = "endure_hallowed_ground"
 
 
+class RestrictionKind(models.TextChoices):
+    """What a ``Restriction`` row is for (#4099).
+
+    DESIGN rows limit a technique design and refund its builder budget. PRICE rows are a
+    visible cost a caster chooses for their own hold of a technique, which adds power to
+    every cast (ADR-4099).
+    """
+
+    DESIGN = "design", "Design restriction"
+    PRICE = "price", "Price a caster pays"
+
+
+#: Highest thread level a creation pick may start a thread at, or unlock early: one
+#: below the first crossing (level 3, ``world.classes.services.is_crossing_level``), so a
+#: creation pick never skips a crossing ceremony or its requirements (#4099).
+CREATION_PERSONALIZATION_MAX_LEVEL = 2
+CUSTOM_TECHNIQUE_NAME_MAX_LENGTH = 80
+CUSTOM_TECHNIQUE_DESCRIPTION_MAX_LENGTH = 2000
+
+
 class PowerStage(models.TextChoices):
     BASE = "base", "Channeled intensity"
     FLAT_MODIFIER = "flat_modifier", "Power modifier"
@@ -716,3 +736,26 @@ class AcquisitionOrigin(models.TextChoices):
     ALTERNATE_SELF_GRANT = "alternate_self_grant", "Alternate Self Grant"
     AUTHORED = "authored", "Authored"
     GM_GRANT = "gm_grant", "GM Grant"
+
+
+class UltimateSource(models.TextChoices):
+    """Where an ultimate comes from at the reveal (#4098 decision 1)."""
+
+    OWNED = "owned", "Owned"
+    PATRON = "patron", "Patron"
+    COMPANION = "companion", "Companion"
+
+
+class UltimateCardKind(models.TextChoices):
+    """How a reveal card presents (#4098 decision 2)."""
+
+    KNOWN = "known", "Known"
+    UPGRADE = "upgrade", "Upgrade"
+    CATEGORY = "category", "Undiscovered"
+
+
+class AudereCeremony(models.TextChoices):
+    """Which ceremony a reveal belongs to (#4098 decision 12)."""
+
+    AUDERE = "audere", "Audere"
+    AUDERE_MAJORA = "audere_majora", "Audere Majora"
