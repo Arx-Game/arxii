@@ -55,6 +55,7 @@ const OFFER: PendingAudereMajoraOffer = {
   target_stage_display: 'Ascendant',
   vision_text: '[TEST VISION]',
   offer_title: 'The Threshold Stands Before You',
+  offer_strip_label: 'The threshold stands open: answer it',
   faith_variant_id: null,
   advisory_text: '',
   risk_text: '',
@@ -117,6 +118,15 @@ describe('AudereMajoraOfferDialog (via AudereMajoraOfferGate)', () => {
 
     await screen.findByRole('alertdialog');
     expect(screen.getByText('Authored crossing heading')).toBeInTheDocument();
+  });
+
+  it('renders offer_strip_label on the gate strip (#4101 fold-in)', async () => {
+    renderGate([{ ...OFFER, offer_strip_label: 'Authored crossing strip label' }]);
+
+    await screen.findByRole('alertdialog');
+    expect(screen.getByTestId('audere-majora-gate-strip')).toHaveTextContent(
+      'Authored crossing strip label'
+    );
   });
 
   it('renders advisory_text and risk_text each in a role="alert" block', async () => {

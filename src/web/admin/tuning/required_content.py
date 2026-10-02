@@ -543,9 +543,20 @@ def _probe_audere_ultimate_copy() -> ProbeResult:
 
 _AUDERE_OFFER_COPY_FIELDS = ("offer_title", "offer_strip_label", "offer_body_text")
 
+# Mirrors _AUDERE_OFFER_COPY_FIELDS above, but for the per-row AudereMajoraThreshold
+# fields (#4101 fold-in: the crossing gate strip joined the crossing dialog title).
+_AUDERE_MAJORA_OFFER_COPY_FIELDS = ("offer_title", "offer_strip_label")
+
 
 def _probe_audere_offer_copy() -> ProbeResult:
-    """The Audere and crossing offer dialog copy is authored over PLACEHOLDER (#4101)."""
+    """The Audere and crossing offer dialog copy is authored over PLACEHOLDER (#4101).
+
+    A missing `AudereThreshold` singleton contributes nothing to `missing` here (same
+    rationale as `_probe_audere_ultimate_copy` above): that absence is already the
+    REQUIRED `audere-threshold` row's failure state, and `AudereMajoraThreshold` is a
+    separate per-boundary-level table with no row-existence dependency on it, so its
+    rows are still probed even when the singleton doesn't exist.
+    """
     from world.magic.audere import AudereThreshold  # noqa: PLC0415
     from world.magic.audere_majora import AudereMajoraThreshold  # noqa: PLC0415
 
@@ -556,9 +567,10 @@ def _probe_audere_offer_copy() -> ProbeResult:
             f for f in _AUDERE_OFFER_COPY_FIELDS if _PLACEHOLDER_MARK in getattr(threshold, f)
         )
     missing.extend(
-        f"crossing level {row.boundary_level} offer_title"
+        f"crossing level {row.boundary_level} {field}"
         for row in AudereMajoraThreshold.objects.all()
-        if _PLACEHOLDER_MARK in row.offer_title
+        for field in _AUDERE_MAJORA_OFFER_COPY_FIELDS
+        if _PLACEHOLDER_MARK in getattr(row, field)
     )
     if not missing:
         return ProbeResult(present=True)

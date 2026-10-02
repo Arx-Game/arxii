@@ -2804,6 +2804,7 @@ class PendingAudereMajoraOfferSerializer(_PendingOfferCharacterMixin, serializer
     eligible_paths = serializers.SerializerMethodField()
     intended_path_id = serializers.SerializerMethodField()
     offer_title = serializers.CharField(source="threshold.offer_title", read_only=True)
+    offer_strip_label = serializers.CharField(source="threshold.offer_strip_label", read_only=True)
 
     def get_vision_text(self, obj) -> str:
         """Return faith variant vision text if set, else the threshold's."""
@@ -2830,6 +2831,7 @@ class PendingAudereMajoraOfferSerializer(_PendingOfferCharacterMixin, serializer
             "eligible_paths",
             "intended_path_id",
             "offer_title",
+            "offer_strip_label",
             "created_at",
         ]
         read_only_fields = fields

@@ -72844,6 +72844,9 @@ components:
         offer_title:
           type: string
           readOnly: true
+        offer_strip_label:
+          type: string
+          readOnly: true
         created_at:
           type: string
           format: date-time
@@ -72859,6 +72862,7 @@ components:
       - fired_intensity
       - id
       - intended_path_id
+      - offer_strip_label
       - offer_title
       - risk_text
       - soulfray_stage_order

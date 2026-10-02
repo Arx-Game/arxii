@@ -41704,6 +41704,7 @@ export interface components {
       /** @description Return the PathIntent's intended_path_id if it is among eligible paths, else None. */
       readonly intended_path_id: number | null;
       readonly offer_title: string;
+      readonly offer_strip_label: string;
       /** Format: date-time */
       readonly created_at: string;
     };

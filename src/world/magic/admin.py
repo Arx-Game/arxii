@@ -2168,6 +2168,32 @@ class AudereMajoraThresholdAdmin(admin.ModelAdmin):
     list_select_related = ["minimum_intensity_tier", "minimum_warp_stage"]
     autocomplete_fields = ["minimum_intensity_tier", "minimum_warp_stage"]
     filter_horizontal = ["archetypes"]
+    fieldsets = (
+        (
+            None,
+            {
+                "fields": (
+                    "boundary_level",
+                    "target_stage",
+                    "minimum_intensity_tier",
+                    "minimum_warp_stage",
+                    "requires_active_audere",
+                )
+            },
+        ),
+        (
+            "Ceremony text (spoiler-private)",
+            {"fields": ("vision_text", "manifestation_text", "deed_title")},
+        ),
+        (
+            "Offer dialog copy (#4101)",
+            {"fields": ("offer_title", "offer_strip_label")},
+        ),
+        (
+            "Renown award",
+            {"fields": ("magnitude", "risk", "reach", "archetypes")},
+        ),
+    )
 
 
 @admin.register(AnimaConfig)

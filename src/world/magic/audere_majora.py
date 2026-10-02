@@ -84,6 +84,11 @@ class AudereMajoraThreshold(RenownAwardConfig):
         default="PLACEHOLDER crossing offer title",
         help_text="#4101: heading of this threshold's crossing offer dialog.",
     )
+    offer_strip_label = models.CharField(
+        max_length=120,
+        default="PLACEHOLDER crossing gate strip label",
+        help_text="#4101 fold-in: the pulsing strip that reopens the crossing offer.",
+    )
 
     class Meta:
         ordering = ["boundary_level"]

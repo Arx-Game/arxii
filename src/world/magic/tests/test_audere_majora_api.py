@@ -183,6 +183,14 @@ class PendingAudereMajoraOfferListTests(APITestCase):
         rows = [r for r in response.data["results"] if r["id"] == self.my_offer.pk]
         self.assertEqual(rows[0]["offer_title"], self.threshold.offer_title)
 
+    def test_list_fields_offer_strip_label(self) -> None:
+        """offer_strip_label equals the threshold's own stored copy (#4101 fold-in)."""
+        self.client.force_authenticate(user=self.my_account)
+        response = self.client.get(_PENDING_URL)
+
+        rows = [r for r in response.data["results"] if r["id"] == self.my_offer.pk]
+        self.assertEqual(rows[0]["offer_strip_label"], self.threshold.offer_strip_label)
+
     def test_list_fields_risk_text_verbatim(self) -> None:
         """risk_text matches the approved fixed copy exactly."""
         self.client.force_authenticate(user=self.my_account)
