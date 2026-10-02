@@ -490,6 +490,36 @@ class TestSoulfrayDeathRiskProbe(TestCase):
         self.assertEqual(dependency.label, "Some Soulfray stage can kill")
 
 
+class TestSoulfrayRowsLinkToTheBuilder(TestCase):
+    """Both Soulfray rows link into the Soulfray Stage Builder (#4089)."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        from web.admin.tests.soulfray_ladder import build_ladder
+
+        cls.ladder = build_ladder()
+
+    @staticmethod
+    def _row(key: str) -> rc.DependencyRow:
+        dependency = next(d for d in rc._declarations() if d.key == key)
+        return rc.DependencyRow(dependency=dependency, result=dependency.probe.resolve(None))
+
+    def test_pools_row_opens_the_first_stage_missing_a_pool(self) -> None:
+        from django.urls import reverse
+
+        self.assertEqual(
+            self._row("soulfray-stage-pools").admin_url,
+            reverse("admin_soulfray_builder", args=[self.ladder.stages[0].pk]),
+        )
+
+    def test_death_risk_row_opens_the_builder(self) -> None:
+        from django.urls import reverse
+
+        self.assertEqual(
+            self._row("soulfray-death-risk").admin_url, reverse("admin_soulfray_builder_index")
+        )
+
+
 class TestSurroundedConditionBundleProbe(TestCase):
     """All three rows are required - a name-only check on the template alone
     is the exact false green #3444 final review item 2 flagged."""

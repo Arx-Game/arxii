@@ -1,0 +1,83 @@
+<div class="module" id="consequences-module">
+  <h2>What the roll can draw
+    <span class="sf-chips">
+      {% if stage.consequence_pool %}
+      <span class="sf-chip">pool: {{ stage.consequence_pool.name }}</span>
+      {% if stage.consequence_pool.parent %}<span class="sf-chip">inherits {{ stage.consequence_pool.parent.name }}</span>{% endif %}
+      {% endif %}
+    </span>
+  </h2>
+  {% if forms.pool.non_field_errors %}<p class="errornote">{{ forms.pool.non_field_errors }}</p>{% endif %}
+  <div class="aligned">
+    <div class="form-row">{{ forms.pool.pool.errors }}{{ forms.pool.new_name.errors }}{{ forms.pool.parent.errors }}
+      {{ forms.pool.pool.label_tag }} {{ forms.pool.pool }} {{ forms.pool.new_name }}
+      {{ forms.pool.parent.label_tag }} {{ forms.pool.parent }}
+      <div class="help">Saving creates the pool if it is new. A shared parent pool lets every
+        stage carry the same base rows; a stage can drop or reweight one.</div></div>
+  </div>
+  <div class="description">Spin the wheel: when the roll lands on that result, the player
+    watches the outcome wheel spin to it instead of just seeing the result. A Can kill row
+    always spins it.</div>
+  {{ forms.rows.management_form }}
+  {% if forms.rows.non_form_errors %}<p class="errornote">{{ forms.rows.non_form_errors }}</p>{% endif %}
+  <div class="sf-tblwrap">
+  <table class="tuning-table sf-table">
+    <thead><tr><th>Roll result</th><th>What happens</th><th>Weight</th><th>Can kill</th>
+      <th><abbr class="sf-help-abbr" title="{{ spin_help }}">Spin the wheel</abbr></th>
+      <th>Effects</th><th>From</th><th>Remove</th></tr></thead>
+    <tbody id="consequence-rows">
+      {% for row in rows %}
+      <tr class="{% if row.is_kill %}sf-row--kill{% endif %}">
+        <td>{% for hidden in row.form.hidden_fields %}{{ hidden }}{% endfor %}{{ row.form.outcome_tier }}</td>
+        <td>{{ row.form.label }}</td>
+        <td class="sf-num">{{ row.form.weight }}</td>
+        <td>{{ row.form.character_loss }}</td>
+        <td>{{ row.form.theater }}</td>
+        <td>
+          {% if row.effect_lines %}
+          <ul class="sf-effects">{% for line in row.effect_lines %}<li>{{ line }}</li>{% endfor %}</ul>
+          {% elif row.is_kill %}<span class="sf-quiet">none needed: Can kill routes to the death seam</span>
+          {% elif row.copy_note %}<span class="sf-quiet">{{ row.copy_note }}</span>
+          {% else %}<span class="sf-quiet">no effect</span>{% endif %}
+          {% if row.other_effects_url %}<a href="{{ row.other_effects_url }}">more effects in the Consequence admin</a>{% endif %}
+          {% include "admin/soulfray_builder/_effect_editor.html" with formset=row.effects new_row=row.is_new %}
+        </td>
+        <td>{{ row.source }}</td>
+        <td>{{ row.form.remove }}</td>
+      </tr>
+      {% if row.form.errors %}<tr><td colspan="8">{{ row.form.errors }}</td></tr>{% endif %}
+      {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  {% comment %}
+  "+ Add a consequence" clones this row; "__prefix__" becomes the new row's form
+  index everywhere in it, so its effect editor's formset is "new<index>". The
+  editor's own effect template is the shared `empty-effect-new` below, outside
+  this one, so the row clone does not rewrite the effect form's own index.
+  {% endcomment %}
+  <template id="empty-row-template">
+    <tr>
+      <td>{% for hidden in forms.rows.empty_form.hidden_fields %}{{ hidden }}{% endfor %}{{ forms.rows.empty_form.outcome_tier }}</td>
+      <td>{{ forms.rows.empty_form.label }}</td>
+      <td class="sf-num">{{ forms.rows.empty_form.weight }}</td>
+      <td>{{ forms.rows.empty_form.character_loss }}</td>
+      <td>{{ forms.rows.empty_form.theater }}</td>
+      <td><span class="sf-quiet">no effect</span>
+        {% include "admin/soulfray_builder/_effect_editor.html" with formset=forms.new_effects_template new_row=True %}
+      </td>
+      <td>this stage</td>
+      <td></td>
+    </tr>
+  </template>
+  <template id="empty-effect-new">
+    {% include "admin/soulfray_builder/_effect_row.html" with ef=forms.new_effects_template.empty_form %}
+  </template>
+  <div class="sf-addrow">
+    <button type="button" class="button" id="add-row-btn" data-prefix="{{ forms.rows.prefix }}"
+            data-target="consequence-rows" data-template="empty-row-template">+ Add a consequence</button>
+    {% if prev_stage %}<a class="button" href="?copy_from={{ prev_stage.pk }}">Copy rows from {{ prev_stage.name }}</a>{% endif %}
+  </div>
+  <p class="sf-live {% if not summary.consequence_count %}sf-live--warn{% endif %}">{{ table_line }}</p>
+  {% for line in kill_odds %}<p class="sf-live">{{ line }}</p>{% endfor %}
+</div>

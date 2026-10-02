@@ -1,0 +1,80 @@
+{% comment %}
+The Soulfray Stage Builder's own stylesheet (#4089), mirroring the Distinction
+Builder's `_css.html`. Admin provides `.module`, `.aligned`, `.form-row`, `.help`,
+`.description`, `.errornote`, `.submit-row`, `.button` (via forms.css, linked by
+page.html) and `table.tuning-table` (via `admin/tuning/_panel_css.html`); this sheet
+adds only what admin has no class for. Colours are admin variables or tokens set
+against admin's own light/dark selectors so the page follows the theme toggle.
+{% endcomment %}
+<style>
+  #soulfray-builder-root { --sf-ok: #2f7a3f; --sf-warn: #b4541b; --sf-kill-bg: #fbe9e9; }
+  @media (prefers-color-scheme: dark) {
+    #soulfray-builder-root { --sf-ok: #8fb89a; --sf-warn: #d8a06a; --sf-kill-bg: #3a1616; }
+  }
+  html[data-theme="light"] #soulfray-builder-root { --sf-ok: #2f7a3f; --sf-warn: #b4541b; --sf-kill-bg: #fbe9e9; }
+  html[data-theme="dark"] #soulfray-builder-root { --sf-ok: #8fb89a; --sf-warn: #d8a06a; --sf-kill-bg: #3a1616; }
+
+  #soulfray-builder-root .sf-intro { margin: 0 0 1rem; }
+  #soulfray-builder-root .sf-columns {
+    display: grid; grid-template-columns: minmax(0, 1fr) 17rem; gap: 1.25rem; align-items: start;
+  }
+  @media (max-width: 1000px) {
+    #soulfray-builder-root .sf-columns { grid-template-columns: minmax(0, 1fr); }
+  }
+  #soulfray-builder-root .sf-main { min-width: 0; }
+  #soulfray-builder-root .module > h2 {
+    display: flex; justify-content: space-between; gap: 0.8rem; flex-wrap: wrap; align-items: baseline;
+  }
+  #soulfray-builder-root .sf-chips { display: inline-flex; gap: 0.4rem; flex-wrap: wrap; }
+  #soulfray-builder-root .sf-chip {
+    display: inline-block; padding: 0.05rem 0.45rem; border-radius: 2px;
+    background: rgba(255, 255, 255, 0.18); font-size: 0.6875rem; letter-spacing: 0.03em;
+    white-space: nowrap;
+  }
+  #soulfray-builder-root .sf-chip--kill { background: rgba(186, 33, 33, 0.85); color: #fff; }
+  #soulfray-builder-root .sf-tblwrap { overflow-x: auto; }
+  #soulfray-builder-root .sf-table { width: 100%; }
+  #soulfray-builder-root .sf-table td { vertical-align: top; }
+  #soulfray-builder-root .sf-num { text-align: right; font-variant-numeric: tabular-nums; }
+  #soulfray-builder-root .sf-row--open td { background: var(--selected-row); }
+  #soulfray-builder-root .sf-row--kill td { background: var(--sf-kill-bg); }
+  #soulfray-builder-root .sf-bar {
+    position: relative; height: 8px; min-width: 5rem; border-radius: 2px;
+    background: var(--hairline-color);
+  }
+  #soulfray-builder-root .sf-bar-fill {
+    position: absolute; left: 0; top: 0; bottom: 0; border-radius: 2px; background: var(--primary);
+  }
+  #soulfray-builder-root .sf-bar-fill--kill { background: var(--error-fg); }
+  #soulfray-builder-root .sf-live { margin: 0; padding: 6px 10px; font-size: 0.75rem; color: var(--sf-ok); }
+  #soulfray-builder-root .sf-live--warn { color: var(--sf-warn); }
+  #soulfray-builder-root .sf-onentry {
+    display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; margin-bottom: 0.25rem;
+  }
+  #soulfray-builder-root .sf-more { padding: 8px 10px; }
+  #soulfray-builder-root .sf-more summary { cursor: pointer; font-weight: 600; }
+  #soulfray-builder-root .sf-effects {
+    margin: 0 0 0.25rem; padding: 0; list-style: none; display: grid; gap: 3px; font-size: 0.75rem;
+  }
+  #soulfray-builder-root .sf-quiet { color: var(--body-quiet-color); font-style: italic; font-size: 0.75rem; }
+  #soulfray-builder-root .sf-effect-editor summary { cursor: pointer; color: var(--link-fg); font-size: 0.75rem; }
+  #soulfray-builder-root .sf-effect-table td { padding: 0.2rem 0.3rem; border: none; }
+  #soulfray-builder-root .sf-add-effect { margin-top: 0.25rem; }
+  #soulfray-builder-root .sf-help-abbr { text-decoration: underline dotted; cursor: help; }
+  #soulfray-builder-root .sf-addrow { padding: 8px 10px; display: flex; gap: 8px; flex-wrap: wrap; }
+  #soulfray-builder-root .sf-rail .module { margin-bottom: 1rem; }
+  #soulfray-builder-root .sf-stat {
+    display: flex; justify-content: space-between; gap: 0.6rem; padding: 6px 10px;
+    border-bottom: 1px solid var(--hairline-color); font-size: 0.75rem;
+  }
+  #soulfray-builder-root .sf-stat:last-child { border-bottom: none; }
+  #soulfray-builder-root .sf-stat b { color: var(--link-fg); font-variant-numeric: tabular-nums; text-align: right; }
+  #soulfray-builder-root .sf-stat b.sf-stat-kill { color: var(--error-fg); }
+  #soulfray-builder-root .sf-checks { margin: 0; padding: 8px 10px; list-style: none; display: grid; gap: 6px; }
+  #soulfray-builder-root .sf-check {
+    padding-left: 0.6rem; border-left: 2px solid var(--hairline-color); font-size: 0.75rem; line-height: 1.4;
+  }
+  #soulfray-builder-root .sf-check--ok { border-left-color: var(--sf-ok); }
+  #soulfray-builder-root .sf-check--warn { border-left-color: var(--sf-warn); color: var(--sf-warn); }
+  #soulfray-builder-root .sf-rail .submit-row { margin: 10px; }
+</style>

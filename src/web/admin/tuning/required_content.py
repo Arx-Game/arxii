@@ -36,11 +36,17 @@ class DependencyTier(StrEnum):
 
 @dataclass(frozen=True, slots=True)
 class ProbeResult:
-    """The outcome of resolving one `ContentProbe`."""
+    """The outcome of resolving one `ContentProbe`.
+
+    `admin_url` lets a probe that knows the exact page to author its gap on
+    (the Soulfray Stage Builder at the first empty stage, #4089) name it; the
+    panel prefers it over the model changelist.
+    """
 
     present: bool
     missing: tuple[str, ...] = ()
     detail: str = ""
+    admin_url: str | None = None
 
 
 class ContentProbe:
@@ -219,7 +225,13 @@ class DependencyRow:
 
     @property
     def admin_url(self) -> str | None:
-        """Admin changelist where staff author this dependency's rows (#3831), or None."""
+        """Where staff author this dependency's rows (#3831), or None.
+
+        The probe's own `admin_url` when it named one (#4089), else the model's
+        admin changelist.
+        """
+        if self.result.admin_url:
+            return self.result.admin_url
         from web.admin.authoring.links import admin_changelist_url  # noqa: PLC0415
 
         model_label = self.dependency.admin_model or self.dependency.probe.model_label()
@@ -633,6 +645,15 @@ def _probe_personalization_copy() -> ProbeResult:
     )
 
 
+def _soulfray_builder_link(stage_pk: int | None) -> str:
+    """The Soulfray Stage Builder at one stage, or its index (which opens the first)."""
+    from django.urls import reverse  # noqa: PLC0415
+
+    if stage_pk is None:
+        return reverse("admin_soulfray_builder_index")
+    return reverse("admin_soulfray_builder", args=[stage_pk])
+
+
 def _probe_soulfray_stage_pools() -> ProbeResult:
     """Every Soulfray stage has a pool that draws at least one consequence (#4089).
 
@@ -650,11 +671,13 @@ def _probe_soulfray_stage_pools() -> ProbeResult:
     if not summaries:
         detail = f"No ConditionStage rows exist for the {SOULFRAY_CONDITION_NAME} template."
         return ProbeResult(present=False, detail=detail)
+    target = next((s for s in summaries if not s.consequence_count), summaries[0])
+    link = _soulfray_builder_link(target.stage.pk)
     empty = tuple(summary.stage.name for summary in summaries if not summary.consequence_count)
     if not empty:
-        return ProbeResult(present=True)
+        return ProbeResult(present=True, admin_url=link)
     detail = f"{len(empty)} stage(s) with no pool, or a pool with no consequences in it."
-    return ProbeResult(present=False, missing=empty, detail=detail)
+    return ProbeResult(present=False, missing=empty, detail=detail, admin_url=link)
 
 
 def _probe_soulfray_death_risk() -> ProbeResult:
@@ -667,10 +690,14 @@ def _probe_soulfray_death_risk() -> ProbeResult:
     """
     from world.magic.services.soulfray import soulfray_ladder_summary  # noqa: PLC0415
 
-    if any(summary.can_kill for summary in soulfray_ladder_summary()):
-        return ProbeResult(present=True)
+    summaries = soulfray_ladder_summary()
+    link = _soulfray_builder_link(None) if summaries else None
+    if any(summary.can_kill for summary in summaries):
+        return ProbeResult(present=True, admin_url=link)
     return ProbeResult(
-        present=False, detail="No Soulfray stage's pool holds a consequence marked Can kill."
+        present=False,
+        detail="No Soulfray stage's pool holds a consequence marked Can kill.",
+        admin_url=link,
     )
 
 

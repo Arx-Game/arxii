@@ -109,6 +109,7 @@ from world.character_creation.models import Beginnings, OriginTemplate
 from world.contributors.models import ContentContributor
 from world.distinctions.models import Distinction
 from world.magic.models import GlimpseTag
+from world.magic.services.soulfray import soulfray_stages
 
 _QUEUE_DISPLAY_CAP = 100
 
@@ -174,7 +175,7 @@ def _setup_required(request: HttpRequest) -> bool:
 
 
 def _builders_context() -> dict[str, object]:
-    """The Builders panel's four option lists (#3675 Task 10): one query each.
+    """The Builders panel's five option lists (#3675 Task 10, #4089): one query each.
 
     ``upbringings`` is a list of plain dicts rather than the model rows
     themselves - the panel's option text ("{beginning} - {name}") needs a
@@ -191,6 +192,7 @@ def _builders_context() -> dict[str, object]:
             .select_related("beginning")
             .order_by("beginning__name", "name")
         ],
+        "soulfray_stages": list(soulfray_stages()),
         "glimpse_tag_count": GlimpseTag.objects.filter(is_active=True).count(),
     }
 

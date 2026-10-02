@@ -43,6 +43,11 @@ from web.admin.distinction_builder.views import (
 )
 from web.admin.game_setup_views import game_setup
 from web.admin.seed_views import seed_confirm, seed_run
+from web.admin.soulfray_builder.views import (
+    soulfray_builder,
+    soulfray_builder_index,
+    soulfray_builder_pick,
+)
 from web.admin.sphinx_views import sphinx_audit
 from web.admin.tradition_slate.views import (
     tradition_slate,
@@ -240,6 +245,17 @@ urlpatterns = [
         "_distinction_builder/<int:pk>/review/",
         distinction_builder_review,
         name="admin_distinction_builder_review",
+    ),
+    path("_soulfray_builder/", soulfray_builder_index, name="admin_soulfray_builder_index"),
+    path(
+        "_soulfray_builder/pick/",
+        soulfray_builder_pick,
+        name="admin_soulfray_builder_pick",
+    ),
+    path(
+        "_soulfray_builder/<int:stage_pk>/",
+        soulfray_builder,
+        name="admin_soulfray_builder",
     ),
     path("", arx_admin_site.urls),
 ]
