@@ -98,6 +98,17 @@ class HoldReadTests(TestCase):
         self.sheet.character.techniques.invalidate()
         self.assertEqual(resolve_price_snippet(self.sheet.character, technique), "Blood drawn")
 
+    def test_price_flipped_to_design_kind_is_honored_no_longer(self) -> None:
+        """A row staff later flip from PRICE to DESIGN grants nothing (#4099 final fix) -
+        the hold's FK is stale; checked fresh against the row's current kind."""
+        from world.magic.constants import RestrictionKind
+
+        self.price.kind = RestrictionKind.DESIGN
+        self.price.creation_point_cost = None
+        self.price.save(update_fields=["kind", "creation_point_cost"])
+        self.assertIsNone(technique_price_for(self.sheet.character, self.technique))
+        self.assertIsNone(resolve_price_snippet(self.sheet.character, self.technique))
+
     def test_hold_lookup_is_cached(self) -> None:
         character = self.sheet.character
         character.techniques.hold_for(self.technique)

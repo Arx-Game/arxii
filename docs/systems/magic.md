@@ -3613,7 +3613,7 @@ All endpoints require authentication. Base URL: `/api/magic/`
 |----------|--------|-------------|
 | `/styles/` | GET | List technique styles (the catalog a `Path` points at) |
 | `/effect-types/` | GET | List effect types |
-| `/restrictions/` | GET | List restrictions |
+| `/restrictions/` | GET | List DESIGN-kind restrictions only (the builder catalog); PRICE-kind rows never appear here (#4099 final fix) |
 | `/facets/` | GET | List facets (flat vocabulary, #3776) |
 | `/gifts/` | GET | List all gifts |
 | `/gifts/{id}/` | GET | Gift detail with nested techniques |

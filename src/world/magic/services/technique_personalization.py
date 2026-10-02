@@ -89,9 +89,20 @@ def technique_display_name(character, technique: Technique, *, fallback: str | N
 
 
 def technique_price_for(character, technique: Technique) -> Restriction | None:
-    """The PRICE the character pays to cast ``technique``, or ``None``."""
+    """The PRICE the character pays to cast ``technique``, or ``None``.
+
+    Checks the row's CURRENT ``kind`` fresh, not just that the hold's FK is set:
+    staff may re-author a ``Restriction`` row from PRICE to DESIGN after a
+    character already bought it, and a stale hold must stop granting power the
+    moment that happens (#4099 final fix) — never re-derived from whatever
+    ``kind`` the row carried when the hold was created.
+    """
+    from world.magic.constants import RestrictionKind  # noqa: PLC0415
+
     hold = character.techniques.hold_for(technique)
-    return hold.price if hold is not None and hold.price_id is not None else None
+    if hold is None or hold.price_id is None:
+        return None
+    return hold.price if hold.price.kind == RestrictionKind.PRICE else None
 
 
 def resolve_price_snippet(character, technique: Technique) -> str | None:

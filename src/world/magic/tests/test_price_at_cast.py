@@ -49,6 +49,19 @@ class PricePowerTermTests(TestCase):
         ctx = PowerTermContext(sheet=self.sheet, technique=None, applicable_threads=[])
         self.assertEqual(price_power_term(ctx), 0)
 
+    def test_price_flipped_to_design_kind_adds_nothing(self) -> None:
+        """A row staff later flip from PRICE to DESIGN grants nothing (#4099 final fix) -
+        the hold's FK is stale; the row's current kind is checked fresh at read time."""
+        from world.magic.constants import RestrictionKind
+
+        hold = CharacterTechniqueFactory(character=self.sheet, technique=self.technique)
+        hold.price = self.price
+        hold.save(update_fields=["price"])
+        self.price.kind = RestrictionKind.DESIGN
+        self.price.creation_point_cost = None
+        self.price.save(update_fields=["kind", "creation_point_cost"])
+        self.assertEqual(price_power_term(self._ctx()), 0)
+
 
 class PriceOwnershipScopingTests(TestCase):
     """A price belongs to the hold that bought it - never bleeds to another caster's

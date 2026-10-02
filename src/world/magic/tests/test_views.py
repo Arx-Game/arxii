@@ -123,6 +123,20 @@ class RestrictionViewSetTest(APITestCase):
         names = [r["name"] for r in response.data]
         self.assertIn("Test Touch Range", names)
 
+    def test_price_kind_restrictions_are_never_listed(self):
+        """This endpoint is the DESIGN catalog (#4099 final fix) - a PRICE row is a
+        different thing wearing the same table and must never appear here."""
+        from world.magic.factories import PriceFactory
+
+        price = PriceFactory(name="A Caster's Price")
+        self.client.force_authenticate(user=self.user)
+        url = reverse("magic:restriction-list")
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        names = [r["name"] for r in response.data]
+        self.assertIn("Test Touch Range", names)
+        self.assertNotIn(price.name, names)
+
 
 class GiftViewSetTest(APITestCase):
     """Tests for GiftViewSet CRUD operations."""
