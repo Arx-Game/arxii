@@ -292,7 +292,7 @@ export function SpellbookTab({ characterId, isMyCharacter, slot = 'all' }: Props
               )}
               <Entries>
                 {gift.techniques.map((technique) => (
-                  <div key={technique.name} data-testid="spellbook-technique">
+                  <div key={technique.catalog_name} data-testid="spellbook-technique">
                     <Entry
                       name={technique.name}
                       aside={

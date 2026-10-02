@@ -710,4 +710,25 @@ describe('SpellbookTab personalization (#4099)', () => {
     });
     expect(screen.getByText('early')).toBeInTheDocument();
   });
+
+  it('keys technique rows by a stable id, not the display name (#4099 name collision)', () => {
+    // A custom name can equal another selected technique's catalog name (the
+    // server rejects this at creation time, but a pre-existing hold from
+    // before that validation shipped could still collide) — React's list key
+    // must stay unique even when two rows share the same displayed `name`.
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+    renderSheetWith({
+      techniques: [
+        mockTechnique({ name: 'Winterbite', catalog_name: 'Scorch Lash' }),
+        mockTechnique({ name: 'Winterbite', catalog_name: 'Winterbite' }),
+      ],
+    });
+    const entries = screen.getAllByTestId('spellbook-technique');
+    expect(entries).toHaveLength(2);
+    const duplicateKeyWarning = consoleError.mock.calls.some((call) =>
+      String(call[0]).includes('two children with the same key')
+    );
+    expect(duplicateKeyWarning).toBe(false);
+    consoleError.mockRestore();
+  });
 });

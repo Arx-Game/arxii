@@ -143,6 +143,30 @@ class PickErrorTests(_Catalog, TestCase):
         uncosted = SignatureMotifBonusFactory(required_resonance=self.frost, min_crossing_level=1)
         self.assertTrue(self._errors(self.frost.pk, signature_bonus_id=uncosted.pk))
 
+    def test_custom_name_colliding_with_another_known_techniques_catalog_name(self) -> None:
+        """A custom name must not equal, case-insensitively, the catalog name of
+        another selected technique (#4099 final fix) — telnet/cast and
+        SpellbookTab's React key would otherwise collide."""
+        other = TechniqueFactory(gift=self.gift, name="Winterbite")
+        picks = parse_personalization_picks(
+            self._personalization(custom_name="winterbite"), technique_ids=[self.technique.pk]
+        )
+        errors = personalization_pick_errors(
+            picks, techniques=[self.technique, other], resonance_id=self.frost.pk
+        )
+        self.assertTrue(errors)
+
+    def test_custom_name_matching_its_own_technique_name_is_not_a_collision(self) -> None:
+        """Renaming a technique to its own catalog name is a no-op, not a collision."""
+        picks = parse_personalization_picks(
+            self._personalization(custom_name=self.technique.name),
+            technique_ids=[self.technique.pk],
+        )
+        errors = personalization_pick_errors(
+            picks, techniques=[self.technique], resonance_id=self.frost.pk
+        )
+        self.assertEqual(errors, [])
+
 
 class DraftSerializerTests(_Catalog, TestCase):
     @classmethod
