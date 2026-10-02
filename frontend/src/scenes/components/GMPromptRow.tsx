@@ -9,6 +9,11 @@
  *
  * Row text ruling: a narration row reads "{kind_label}: {subject_name}"
  * followed by "Narrate it?" (pending) or "Narrated." (already sent).
+ *
+ * Ruling R14-2 (demo-fidelity fix round, F3): the ruled text already carries
+ * the kind, so a narration row drops the separate kind-chip badge -- showing
+ * both read as a doubled "Crossing Crossing: Rowan Ashcombe". A dramatic
+ * moment's body never repeats its kind_label, so its chip stays.
  */
 import { Check, X } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
@@ -16,14 +21,15 @@ import { Button } from '@/components/ui/button';
 import { useConfirmGMPrompt, useDismissGMPrompt } from '../gmPromptQueries';
 import type { GMPrompt } from '../types';
 
-function promptBody(prompt: GMPrompt): string {
+/** The row's body text, split so the demo's bold "Narrate it?" / "Confirm?" / "Narrated." can be emphasized (F4) without duplicating the sentence for test matching. */
+function promptBody(prompt: GMPrompt): { lead: string; emphasis: string } {
   if (prompt.kind === 'dramatic_moment') {
-    return `${prompt.subject_name}'s ${prompt.moment_type_label}. Confirm?`;
+    return { lead: `${prompt.subject_name}'s ${prompt.moment_type_label}. `, emphasis: 'Confirm?' };
   }
   if (prompt.status === 'narrated') {
-    return `${prompt.kind_label}: ${prompt.subject_name}. Narrated.`;
+    return { lead: `${prompt.kind_label}: ${prompt.subject_name}. `, emphasis: 'Narrated.' };
   }
-  return `${prompt.kind_label}: ${prompt.subject_name}. Narrate it?`;
+  return { lead: `${prompt.kind_label}: ${prompt.subject_name}. `, emphasis: 'Narrate it?' };
 }
 
 export function GMPromptRow({
@@ -41,18 +47,27 @@ export function GMPromptRow({
   const isMoment = prompt.kind === 'dramatic_moment';
   const isNarrated = !isMoment && prompt.status === 'narrated';
 
+  const body = promptBody(prompt);
+
   return (
-    <div data-testid="gm-prompt-row" className="flex items-center gap-2 py-1 text-sm">
+    <div
+      data-testid="gm-prompt-row"
+      className="flex items-center gap-2 rounded-full border border-border bg-card py-1.5 pl-3 pr-1.5 text-sm"
+    >
       <span aria-hidden>✦</span>
-      <Badge variant="secondary" className="text-xs">
-        {prompt.kind_label}
-      </Badge>
-      <span className="flex-1">{promptBody(prompt)}</span>
+      {isMoment && (
+        <Badge variant="secondary" className="text-xs">
+          {prompt.kind_label}
+        </Badge>
+      )}
+      <span className="flex-1">
+        {body.lead}
+        <strong className="font-semibold">{body.emphasis}</strong>
+      </span>
       {isMoment && (
         <Button
           type="button"
           size="sm"
-          variant="outline"
           aria-label={`Confirm ${prompt.kind_label}`}
           disabled={busy}
           onClick={() => confirm.mutate(prompt.id)}
@@ -64,7 +79,6 @@ export function GMPromptRow({
         <Button
           type="button"
           size="sm"
-          variant="outline"
           aria-label={`Open ${prompt.kind_label}`}
           disabled={busy}
           onClick={() => onOpen(prompt)}
@@ -76,7 +90,7 @@ export function GMPromptRow({
         <Button
           type="button"
           size="sm"
-          variant="ghost"
+          variant="secondary"
           aria-label={`Done ${prompt.kind_label}`}
           disabled={busy}
           onClick={() => dismiss.mutate(prompt.id)}
@@ -87,7 +101,7 @@ export function GMPromptRow({
         <Button
           type="button"
           size="sm"
-          variant="ghost"
+          variant="secondary"
           aria-label={`Dismiss ${prompt.kind_label}`}
           disabled={busy}
           onClick={() => dismiss.mutate(prompt.id)}

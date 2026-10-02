@@ -427,6 +427,49 @@ export function PoseUnit({
   }
 
   // -------------------------------------------------------------------------
+  // NARRATION: a GM's EMIT/PEMIT line tied to a GM prompt (#4101, demo Screen
+  // 3; F1). The GM already delivered this through EmitAction/PemitAction
+  // (ADR-0293), so it is a narration, not a character's pose — no speaker
+  // header, avatar, Kudos or nominate. The room leg (no receivers; mode
+  // 'emit') reads as a speakerless line, mirroring the OUTCOME branch above.
+  // The receiver-scoped leg (mode 'whisper', the private vision) renders as
+  // its own tinted block. Theme tokens only — never the demo's literal amber.
+  // -------------------------------------------------------------------------
+  if (interaction.narrates) {
+    const isPrivate = interaction.receiver_persona_ids.length > 0;
+    if (isPrivate) {
+      return (
+        <div
+          role="note"
+          data-testid="pose-unit-narration-private"
+          className="my-1.5 max-w-[85%] rounded-r-md border-l-2 border-primary bg-primary/10 px-3 py-2"
+        >
+          <p className="text-sm italic text-foreground">
+            &ldquo;
+            <FormattedContent content={interaction.content} />
+            &rdquo;
+          </p>
+          <NarratedEventTag
+            narrates={interaction.narrates}
+            receiverPersonaIds={interaction.receiver_persona_ids}
+          />
+        </div>
+      );
+    }
+    return (
+      <div role="note" data-testid="pose-unit-narration" className="my-1.5 max-w-[85%]">
+        <p className="border-l-2 border-border pl-2 text-sm italic text-muted-foreground">
+          <FormattedContent content={interaction.content} />
+        </p>
+        <NarratedEventTag
+          narrates={interaction.narrates}
+          receiverPersonaIds={interaction.receiver_persona_ids}
+        />
+      </div>
+    );
+  }
+
+  // -------------------------------------------------------------------------
   // State 1 + 2: POSE (with or without linked actions)
   // -------------------------------------------------------------------------
   return (
@@ -476,11 +519,6 @@ export function PoseUnit({
             actorName={interaction.attributed_companion?.name ?? interaction.persona.name}
           />
         </p>
-        {/* "Part of X's Crossing" (#4101, demo Screen 3) */}
-        <NarratedEventTag
-          narrates={interaction.narrates}
-          receiverPersonaIds={interaction.receiver_persona_ids}
-        />
       </div>
 
       {/* Expandable outcome detail panel */}

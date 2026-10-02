@@ -51,7 +51,10 @@ describe('GMPromptQueue', () => {
   it('lists every prompt kind in one queue', () => {
     renderWithProviders(<GMPromptQueue sceneId="1" personas={[]} />);
     expect(screen.getByText('GM prompts')).toBeInTheDocument();
-    expect(screen.getByText('Crossing')).toBeInTheDocument();
+    // A narration row's ruled text already carries the kind, so no separate
+    // chip repeats it (ruling R14-2, F3); a dramatic moment's body never
+    // mentions its kind, so its chip stays.
+    expect(screen.getByText(/Crossing: Rowan Ashcombe/)).toBeInTheDocument();
     expect(screen.getByText('Dramatic Moment')).toBeInTheDocument();
   });
 

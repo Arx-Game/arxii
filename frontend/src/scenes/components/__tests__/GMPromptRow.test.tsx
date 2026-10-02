@@ -76,7 +76,11 @@ describe('GMPromptRow', () => {
     render(<GMPromptRow prompt={makePrompt()} sceneId="5" onOpen={vi.fn()} />, {
       wrapper: createWrapper(),
     });
-    expect(screen.getByText('Crossing: Rowan Ashcombe. Narrate it?')).toBeInTheDocument();
+    // The emphasis word is its own <strong> (F4), so the full sentence is
+    // asserted against the row's combined text content rather than one node.
+    expect(screen.getByTestId('gm-prompt-row')).toHaveTextContent(
+      'Crossing: Rowan Ashcombe. Narrate it?'
+    );
     expect(screen.getByRole('button', { name: /open crossing/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /dismiss crossing/i })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /done crossing/i })).toBeNull();
@@ -87,7 +91,9 @@ describe('GMPromptRow', () => {
       <GMPromptRow prompt={makePrompt({ status: 'narrated' })} sceneId="5" onOpen={vi.fn()} />,
       { wrapper: createWrapper() }
     );
-    expect(screen.getByText('Crossing: Rowan Ashcombe. Narrated.')).toBeInTheDocument();
+    expect(screen.getByTestId('gm-prompt-row')).toHaveTextContent(
+      'Crossing: Rowan Ashcombe. Narrated.'
+    );
     expect(screen.getByRole('button', { name: /open crossing/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /done crossing/i })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /dismiss crossing/i })).toBeNull();
@@ -131,9 +137,9 @@ describe('GMPromptRow', () => {
     render(<GMPromptRow prompt={makeMoment()} sceneId="5" onOpen={vi.fn()} />, {
       wrapper: createWrapper(),
     });
-    expect(
-      screen.getByText("Tamsin Vale's stand against the collapse. Confirm?")
-    ).toBeInTheDocument();
+    expect(screen.getByTestId('gm-prompt-row')).toHaveTextContent(
+      "Tamsin Vale's stand against the collapse. Confirm?"
+    );
     expect(screen.getByRole('button', { name: /confirm dramatic moment/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /dismiss dramatic moment/i })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /open dramatic moment/i })).toBeNull();
@@ -148,6 +154,74 @@ describe('GMPromptRow', () => {
     await waitFor(() =>
       expect(mockApiFetch).toHaveBeenCalledWith('/api/gm/prompts/42/confirm/', { method: 'POST' })
     );
+  });
+
+  // Demo-fidelity fix round: F3 (ruling R14-2) -- a narration row drops the
+  // separate kind-chip badge since the ruled text already carries the kind;
+  // a dramatic-moment row keeps it since its own text never mentions it.
+  it('drops the kind-chip badge on a narration row (F3)', () => {
+    render(<GMPromptRow prompt={makePrompt()} sceneId="5" onOpen={vi.fn()} />, {
+      wrapper: createWrapper(),
+    });
+    // "Crossing" only appears once, folded into the ruled sentence -- no
+    // separate element carries just the kind label.
+    expect(screen.queryByText('Crossing')).toBeNull();
+    expect(screen.getByTestId('gm-prompt-row')).toHaveTextContent(
+      'Crossing: Rowan Ashcombe. Narrate it?'
+    );
+  });
+
+  it('keeps the kind-chip badge on a dramatic-moment row (F3)', () => {
+    render(<GMPromptRow prompt={makeMoment()} sceneId="5" onOpen={vi.fn()} />, {
+      wrapper: createWrapper(),
+    });
+    expect(screen.getByText('Dramatic Moment')).toBeInTheDocument();
+  });
+
+  // F4 -- the "Narrate it?" / "Confirm?" / "Narrated." emphasis word is bold,
+  // and Open/Confirm are the filled primary action, Dismiss/Done secondary.
+  it('bolds the row emphasis word and gives Open the filled primary style (F4)', () => {
+    render(<GMPromptRow prompt={makePrompt()} sceneId="5" onOpen={vi.fn()} />, {
+      wrapper: createWrapper(),
+    });
+    expect(screen.getByText('Narrate it?').tagName).toBe('STRONG');
+    expect(screen.getByRole('button', { name: /open crossing/i }).className).toContain(
+      'bg-primary'
+    );
+    expect(screen.getByRole('button', { name: /dismiss crossing/i }).className).toContain(
+      'bg-secondary'
+    );
+  });
+
+  it('bolds "Confirm?" and gives Confirm the filled primary style, Dismiss secondary (F4)', () => {
+    render(<GMPromptRow prompt={makeMoment()} sceneId="5" onOpen={vi.fn()} />, {
+      wrapper: createWrapper(),
+    });
+    expect(screen.getByText('Confirm?').tagName).toBe('STRONG');
+    expect(screen.getByRole('button', { name: /confirm dramatic moment/i }).className).toContain(
+      'bg-primary'
+    );
+    expect(screen.getByRole('button', { name: /dismiss dramatic moment/i }).className).toContain(
+      'bg-secondary'
+    );
+  });
+
+  it('bolds "Narrated." and gives Done the secondary style (F4)', () => {
+    render(
+      <GMPromptRow prompt={makePrompt({ status: 'narrated' })} sceneId="5" onOpen={vi.fn()} />,
+      { wrapper: createWrapper() }
+    );
+    expect(screen.getByText('Narrated.').tagName).toBe('STRONG');
+    expect(screen.getByRole('button', { name: /done crossing/i }).className).toContain(
+      'bg-secondary'
+    );
+  });
+
+  it('gives the row its rounded pill container (F4)', () => {
+    render(<GMPromptRow prompt={makePrompt()} sceneId="5" onOpen={vi.fn()} />, {
+      wrapper: createWrapper(),
+    });
+    expect(screen.getByTestId('gm-prompt-row').className).toContain('rounded-full');
   });
 
   it('invalidates the gm-prompts and scene-interactions caches on successful dismiss', async () => {

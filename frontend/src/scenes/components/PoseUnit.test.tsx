@@ -840,3 +840,59 @@ describe('parent-reply chip', () => {
     expect(screen.queryByTestId('parent-reveal-999')).toBeNull();
   });
 });
+
+// Demo-fidelity fix round: F1 (Screen 3) -- a row carrying `narrates` renders
+// in the narration form, not as a pose bubble with a speaker and Kudos.
+describe('narration rows (#4101, demo Screen 3, F1)', () => {
+  const narratesCrossing = {
+    prompt_id: 1,
+    kind: 'crossing' as const,
+    kind_label: 'Crossing',
+    subject_name: 'Rowan Ashcombe',
+    subject_persona_id: 30,
+  };
+
+  it('renders a room narration line with no speaker name or Kudos, tagged for the narration block', () => {
+    const interaction = makeInteraction({
+      mode: 'emit',
+      content: "The chapel floor groans and settles under Rowan's feet.",
+      narrates: narratesCrossing,
+      receiver_persona_ids: [],
+    });
+
+    render(
+      <Wrapper>
+        <PoseUnit interaction={interaction} sceneId="1" />
+      </Wrapper>
+    );
+
+    const block = screen.getByTestId('pose-unit-narration');
+    expect(block).toHaveAttribute('role', 'note');
+    expect(screen.queryByText('Alice')).not.toBeInTheDocument();
+    expect(screen.queryByText('Kudos')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('nominate-button')).not.toBeInTheDocument();
+    expect(screen.getByText(/part of Rowan Ashcombe's Crossing/)).toBeInTheDocument();
+  });
+
+  it('renders a receiver-scoped narration as its own private block, not a pose bubble', () => {
+    const interaction = makeInteraction({
+      mode: 'whisper',
+      content: "The stone remembers your mother's hand on this rail, Rowan.",
+      narrates: narratesCrossing,
+      receiver_persona_ids: [30],
+    });
+
+    render(
+      <Wrapper>
+        <PoseUnit interaction={interaction} sceneId="1" />
+      </Wrapper>
+    );
+
+    expect(screen.queryByTestId('pose-unit-narration')).not.toBeInTheDocument();
+    const block = screen.getByTestId('pose-unit-narration-private');
+    expect(block).toHaveAttribute('role', 'note');
+    expect(screen.queryByText('Alice')).not.toBeInTheDocument();
+    expect(screen.queryByText('Kudos')).not.toBeInTheDocument();
+    expect(screen.getByText(/visible only to Rowan Ashcombe/)).toBeInTheDocument();
+  });
+});
