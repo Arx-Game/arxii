@@ -25,10 +25,19 @@ if TYPE_CHECKING:
 # Same role contexts as coercion — charm-acquired assets serve the same roles.
 _CHARMABLE_ROLE_CONTEXTS = frozenset({"informant", "contact", "personal_favor"})
 
+#: A player character can't be "taken into service" like an NPC (#4091 task 12
+#: fix round 1); canonical PC/NPC test per ``_persona_is_npc``/``_victim_is_npc``
+#: (``world/scenes/action_services.py``, ``world/magic/services/feeding.py``):
+#: no controlling account means NPC. Never matched on a name.
+_NOT_AN_NPC_RETAIN_MESSAGE = "They have a will of their own; you cannot take them into service."
+
 
 @dataclass
 class CharmedByActorPrerequisite(Prerequisite):
-    """The target carries a charm (ALLY_OF_CASTER) the actor applied (#4091).
+    """The target carries a charm (ALLY_OF_CASTER) the actor applied and is
+    present (#4091; presence check added task 12 fix round 1 ruling 1 — it was
+    missing here, which is why ``retain`` could reach a target the digest's
+    ``can_send_away`` flag would already call gone).
 
     Mirrors the gate ``charm_into_asset`` itself enforces — this exists so the
     persona menu can show a reason; the service call stays the authority.
@@ -41,7 +50,7 @@ class CharmedByActorPrerequisite(Prerequisite):
         context: dict | None = None,
     ) -> tuple[bool, str]:
         from world.conditions.constants import Allegiance  # noqa: PLC0415
-        from world.npc_services.allegiance import allegiance_sourced_by  # noqa: PLC0415
+        from world.npc_services.allegiance import actor_holds_sway_present  # noqa: PLC0415
         from world.scenes.models import Persona  # noqa: PLC0415
 
         kwargs = (context or {}).get("kwargs", {})
@@ -51,9 +60,16 @@ class CharmedByActorPrerequisite(Prerequisite):
             .first()
         )
         body = persona.character_sheet.character if persona else None
-        if body is None:
-            return False, "No such target."
-        if allegiance_sourced_by(body, actor, kinds=frozenset({Allegiance.ALLY_OF_CASTER})) is None:
+        if (
+            body is None
+            or body.db_location_id is None
+            or body.db_location_id != actor.db_location_id
+        ):
+            return False, "They are not here."
+        if body.db_account is not None:
+            return False, _NOT_AN_NPC_RETAIN_MESSAGE
+        kinds = frozenset({Allegiance.ALLY_OF_CASTER})
+        if not actor_holds_sway_present(actor, body, kinds=kinds):
             return False, "They are not charmed by you."
         return True, ""
 

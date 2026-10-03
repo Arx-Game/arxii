@@ -27,6 +27,8 @@ from evennia_extensions.factories import ObjectDBFactory
 from world.character_sheets.factories import CharacterSheetFactory
 from world.checks.factories import CheckTypeFactory, ConsequenceFactory
 from world.checks.test_helpers import force_check_outcome
+from world.combat.constants import OpponentStatus
+from world.combat.factories import CombatEncounterFactory, CombatOpponentFactory
 from world.conditions.constants import Allegiance
 from world.conditions.factories import ConditionInstanceFactory, ConditionTemplateFactory
 from world.conditions.models import ConditionInstance
@@ -265,3 +267,49 @@ class CmdRetainTests(TestCase):
 
         texts = _msg_texts(cmd.caller.msg)
         self.assertTrue(any("charmed" in text.lower() for text in texts))
+
+
+class CmdSendAwayNamelessTests(TestCase):
+    """``sendaway <mook>`` on a nameless WON_OVER combat opponent (task 12 fix round 1,
+    ruling 5 -- telnet parity was only ever exercised against a named NPC)."""
+
+    def setUp(self) -> None:
+        self.enc = CombatEncounterFactory()
+        self.initiator_char = ObjectDBFactory(
+            db_key="Tamsin",
+            db_typeclass_path="typeclasses.characters.Character",
+            location=self.enc.room,
+        )
+        CharacterSheetFactory(character=self.initiator_char)
+
+        self.opponent = CombatOpponentFactory(
+            encounter=self.enc, name="Lurking Foot", status=OpponentStatus.WON_OVER
+        )
+        self.charm = ConditionTemplateFactory(
+            name="Enthralled Sendaway Nameless Cmd",
+            sets_allegiance=Allegiance.ALLY_OF_CASTER,
+            allegiance_break_check_type=CheckTypeFactory(
+                name="Allegiance Break Sendaway Nameless Cmd"
+            ),
+        )
+        ConditionInstanceFactory(
+            target=self.opponent.objectdb,
+            condition=self.charm,
+            source_character=self.initiator_char,
+            severity=4,
+        )
+
+    def test_sendaway_reaches_the_action_for_a_nameless_npc(self) -> None:
+        cmd = CmdSendAway()
+        cmd.caller = self.initiator_char
+        cmd.args = self.opponent.name
+        cmd.raw_string = f"sendaway {self.opponent.name}"
+        self.initiator_char.msg = MagicMock()
+
+        with patch("world.scenes.narrator.narrate_room_outcome"):
+            cmd.func()
+
+        texts = _msg_texts(cmd.caller.msg)
+        self.assertTrue(any("send" in text.lower() for text in texts))
+        self.opponent.refresh_from_db()
+        self.assertIsNone(self.opponent.objectdb_id)

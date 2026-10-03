@@ -173,9 +173,32 @@ class PersonaMenuServiceTests(django.test.TestCase):
         charm_asset_item = self._item("charm_asset")
 
         assert not send_away_item.available
-        assert send_away_item.reason
+        assert send_away_item.reason == "They are not under your sway."
         assert not charm_asset_item.available
-        assert charm_asset_item.reason
+        assert charm_asset_item.reason == "They are not charmed by you."
+
+    def test_pc_target_cannot_be_sent_away_or_retained(self) -> None:
+        """#4091 task 12 fix round 1 ruling 3: a PC carrying the viewer's own hold
+        is still refused -- an NPC-only guard, never matched by name."""
+        SceneFactory(location=self.room, is_active=True)
+        charm = ConditionTemplateFactory(
+            sets_allegiance=Allegiance.ALLY_OF_CASTER,
+            allegiance_break_check_type=CheckTypeFactory(
+                name="Persona Menu Allegiance Break PC Target"
+            ),
+        )
+        ConditionInstanceFactory(
+            target=self.target, condition=charm, source_character=self.viewer, severity=4
+        )
+        self.target.db_account = AccountFactory()
+
+        send_away_item = self._item("send_away")
+        charm_asset_item = self._item("charm_asset")
+
+        assert not send_away_item.available
+        assert "will of their own" in send_away_item.reason
+        assert not charm_asset_item.available
+        assert "will of their own" in charm_asset_item.reason
 
 
 class PersonaMenuViewTests(django.test.TestCase):

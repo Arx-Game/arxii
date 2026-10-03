@@ -103,9 +103,11 @@ class WonOverDigestTests(TestCase):
 
         self.assertTrue(nameless_row.can_bind)
         self.assertFalse(nameless_row.can_settle)
+        self.assertTrue(nameless_row.can_send_away)
 
         self.assertTrue(named_row.can_take_into_service)
         self.assertTrue(named_row.can_settle)
+        self.assertTrue(named_row.can_send_away)
 
     def test_can_bind_is_false_once_the_charmer_leaves_the_room(self):
         """#4091 fix round 1: can_bind must use the same bind-window predicate
@@ -121,6 +123,24 @@ class WonOverDigestTests(TestCase):
         nameless_row = rows[self.nameless.pk]
 
         self.assertFalse(nameless_row.can_bind)
+
+    def test_can_send_away_is_false_once_the_charmer_leaves_the_room(self):
+        """#4091 task 12 fix round 1 ruling 1: ``can_send_away`` now goes through
+        the same ONE shared presence+hold predicate as the ``send_away`` action
+        prerequisite -- it used to be just ``is_source and present``, which never
+        checked whether the charmer was still co-located with the target."""
+        from evennia import create_object
+
+        other_room = create_object("typeclasses.rooms.Room", key="Elsewhere Sendaway", nohome=True)
+        self.source.location = other_room
+        self.source.save()
+
+        rows = self._rows_by_opponent(self.pc_a.character_sheet)
+        nameless_row = rows[self.nameless.pk]
+        named_row = rows[self.named.pk]
+
+        self.assertFalse(nameless_row.can_send_away)
+        self.assertFalse(named_row.can_send_away)
 
     def test_non_charmer_viewer_can_only_settle_the_named(self):
         rows = self._rows_by_opponent(self.pc_b.character_sheet)

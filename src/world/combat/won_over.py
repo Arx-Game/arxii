@@ -243,6 +243,8 @@ def won_over_rows(encounter: CombatEncounter, viewer: CharacterSheet) -> list[Wo
     instance query, one persona-name query pair.
     """
     from world.npc_services.allegiance import (  # noqa: PLC0415
+        ALLEGIANCE_HOLD_KINDS,
+        actor_holds_sway_present,
         allegiance_instances_for,
         designating_instance,
         won_over_verb,
@@ -309,7 +311,21 @@ def won_over_rows(encounter: CombatEncounter, viewer: CharacterSheet) -> list[Wo
                 can_bind=charmer_is_viewer
                 and _window_open(opponent, by_target.get(opponent.objectdb_id, [])),
                 can_take_into_service=charmer_is_viewer and persona_id is not None,
-                can_send_away=is_source and present,
+                # #4091 task 12 fix round 1: the ONE shared presence+hold predicate
+                # (``actor_holds_sway_present``) also used by the persona menu, telnet,
+                # and the send_away action prerequisite -- this flag used to just be
+                # ``is_source and present``, which (unlike the action) never checked
+                # whether the viewer was still IN THE ROOM with the target. Reuses this
+                # call's own already-fetched `by_target` instances to stay batched.
+                can_send_away=(
+                    opponent.objectdb_id is not None
+                    and actor_holds_sway_present(
+                        viewer.character,
+                        opponent.objectdb,
+                        kinds=ALLEGIANCE_HOLD_KINDS,
+                        instances=by_target.get(opponent.objectdb_id, []),
+                    )
+                ),
                 can_settle=persona_id is not None and present,
             )
         )

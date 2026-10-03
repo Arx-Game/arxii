@@ -34,6 +34,9 @@ ALLEGIANCE_PRECEDENCE: tuple[Allegiance, ...] = (
 )
 _RANK = {value: index for index, value in enumerate(ALLEGIANCE_PRECEDENCE)}
 
+# Every kind of hold that lets the holder send the bearer away (#4091 task 12).
+ALLEGIANCE_HOLD_KINDS: frozenset[Allegiance] = frozenset(ALLEGIANCE_PRECEDENCE)
+
 # PLACEHOLDER system labels for narration and the digest (#4091).
 _WON_OVER_VERBS = {
     Allegiance.ALLY_OF_CASTER: "charmed",
@@ -139,3 +142,36 @@ def allegiance_sourced_by(
         .order_by("pk")
         .first()
     )
+
+
+def actor_holds_sway_present(
+    actor: ObjectDB,  # noqa: OBJECTDB_PARAM - ConditionInstance.source_character is ObjectDB
+    target: ObjectDB,  # noqa: OBJECTDB_PARAM - ephemeral CombatNPCs have no sheet or persona
+    *,
+    kinds: frozenset[str],
+    instances: Iterable[ConditionInstance] | None = None,
+) -> bool:
+    """True when ``actor`` sourced one of ``kinds`` on ``target`` AND the two are
+    co-located right now (#4091 task 12 fix round 1).
+
+    ONE predicate, shared by the won-over row flag (``won_over_rows``), the persona
+    menu, telnet (``sendaway``/``retain``), and the ``send_away``/``charm_asset``
+    action prerequisites — they used to disagree (the digest flag ignored whether
+    the holder was still in the room; the ``charm_asset`` prerequisite didn't check
+    presence at all).
+
+    Pass ``instances`` (e.g. one target's slice of a batched ``allegiance_instances_for``
+    call, already filtered by the caller's own ``applied_since`` where that matters —
+    R1, post-fight rows only) to check without a fresh query; omit it to run
+    ``allegiance_sourced_by``'s own query (the non-combat callers: persona menu,
+    telnet, the bare action prerequisite — outside a fight, any hold the actor
+    sources counts, no ``applied_since`` filter).
+    """
+    if target.db_location_id is None or target.db_location_id != actor.db_location_id:
+        return False
+    if instances is not None:
+        return any(
+            i.source_character_id == actor.pk and i.condition.sets_allegiance in kinds
+            for i in instances
+        )
+    return allegiance_sourced_by(target, actor, kinds=kinds) is not None
