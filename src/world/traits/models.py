@@ -43,6 +43,7 @@ class TraitChangeSource(models.TextChoices):
     LEVEL_STAT_POINT = "level_stat_point", "Level Stat Point"
     GM_GRANT = "gm_grant", "GM Grant"
     NPC_PRESET = "npc_preset", "NPC Statline Preset"
+    XP_BREAKTHROUGH = "xp_breakthrough", "XP Breakthrough"
 
 
 class TraitType(models.TextChoices):
