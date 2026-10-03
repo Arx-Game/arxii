@@ -242,11 +242,18 @@ the unified Persona identity system, and non-combat scene rounds.
   character is never physically placed anywhere.
 
 ### `line_rendering.py` (#3858, ADR-0299)
-- **`render_line(name, mode, content, *, language_name=None)`**: the one formatter that puts
-  the actor into a pose or say line, at display time, for the WebSocket payload
-  (`InteractionPayload.line`), the REST row (`InteractionListSerializer.line`) and telnet
+- **`render_line(name, mode, content, *, language_name=None, place_name=None)`**: the one
+  formatter that puts the actor into a pose or say line, at display time, for the WebSocket
+  payload (`InteractionPayload.line`), the REST row (`InteractionListSerializer.line`) and telnet
   (`PoseAction` with `{caller}`, whisper, mutter, the companion emote). Pure; `content` is
-  never changed. Tests: `tests/test_line_rendering.py`.
+  never changed. Two lead-ins (#4128): a whisper whose content opens with `:` is the emote form
+  and reads `Quietly, Name ...`; a line with a `place_name` (tabletalk, a pose at a place) opens
+  `At <place>, `. Every caller that knows the place passes it (`_line_for` reads the payload's
+  `place_name`, the serializer `get_place_name`, `PoseAction`'s telnet broadcast the resolved
+  place). Tabletalk is a pose at a place on every path (`CmdTabletalk` and the web `tt` mode both
+  dispatch `PoseAction`), so its say form is written as a pose (`tt says, "I fold."`); the
+  formatter already renders `SAY` at a place for a future say-at-place path. Tests:
+  `tests/test_line_rendering.py`.
 
 ### `participation.py` (#3867, ADR-0300)
 - **`has_entered(scene, character_sheet_id)` / `entered_sheet_ids(scene)`**: who is in a

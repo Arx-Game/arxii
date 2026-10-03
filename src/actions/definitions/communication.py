@@ -628,7 +628,12 @@ class PoseAction(Action):
             # line stays untagged there until room delivery is place-aware (#3933).
             message_location(
                 caller_state,
-                render_line("{caller}", InteractionMode.POSE, text),
+                render_line(
+                    "{caller}",
+                    InteractionMode.POSE,
+                    text,
+                    place_name=place.name if place is not None else None,
+                ),
                 echo_of=InteractionMode.POSE if place is None else None,
             )
 

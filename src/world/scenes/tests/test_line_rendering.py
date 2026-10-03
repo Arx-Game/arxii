@@ -3,6 +3,7 @@
 from django.test import SimpleTestCase
 
 from world.scenes.constants import InteractionMode
+from world.scenes.interaction_services import _line_for
 from world.scenes.line_rendering import render_line
 
 
@@ -75,3 +76,62 @@ class RenderLineTests(SimpleTestCase):
     def test_the_telnet_placeholder_is_just_a_name(self) -> None:
         # message_location's mapping resolves ``{caller}`` per looker afterwards.
         assert render_line("{caller}", InteractionMode.POSE, "waves.") == "{caller} waves."
+
+
+class LeadInTests(SimpleTestCase):
+    """Whisper emotes and tabletalk read as sentences with a lead-in (#4128)."""
+
+    def test_a_whisper_emote_reads_quietly(self) -> None:
+        assert (
+            render_line("Tehom", InteractionMode.WHISPER, ':leans in and says, "Which gate."')
+            == 'Quietly, Tehom leans in and says, "Which gate."'
+        )
+
+    def test_a_whisper_emote_glues_a_semipose(self) -> None:
+        assert render_line("Nyx", InteractionMode.WHISPER, ":'s hand finds his.") == (
+            "Quietly, Nyx's hand finds his."
+        )
+
+    def test_a_whisper_in_the_say_form_is_unchanged(self) -> None:
+        assert render_line("Nyx", InteractionMode.WHISPER, "Meet me.") == 'Nyx whispers, "Meet me."'
+
+    def test_a_pose_at_a_place_opens_with_the_place(self) -> None:
+        assert (
+            render_line("Bram", InteractionMode.POSE, "deals the cards.", place_name="the table")
+            == "At the table, Bram deals the cards."
+        )
+
+    def test_a_say_at_a_place_opens_with_the_place(self) -> None:
+        assert (
+            render_line("Aria", InteractionMode.SAY, "I fold.", place_name="the long table")
+            == 'At the long table, Aria says, "I fold."'
+        )
+
+    def test_an_already_named_pose_at_a_place_is_not_renamed(self) -> None:
+        assert (
+            render_line("Bram", InteractionMode.POSE, "Bram deals.", place_name="the long table")
+            == "At the long table, Bram deals."
+        )
+
+    def test_an_empty_pose_at_a_place_stays_empty(self) -> None:
+        assert render_line("Bram", InteractionMode.POSE, "", place_name="the long table") == ""
+
+    def test_an_emit_at_a_place_is_the_text_as_written(self) -> None:
+        assert (
+            render_line("Bram", InteractionMode.EMIT, "The cards fall.", place_name="the table")
+            == "The cards fall."
+        )
+
+
+class PayloadLineTests(SimpleTestCase):
+    """The web builder passes the row's place through to the formatter (#4128)."""
+
+    def test_a_tabletalk_payload_renders_at_its_place(self) -> None:
+        payload = {
+            "attributed_companion_name": None,
+            "persona": {"name": "Bram"},
+            "mode": InteractionMode.POSE,
+            "language_name": None,
+            "place_name": "the long table",
+        }
+        assert _line_for(payload, "deals the cards.") == "At the long table, Bram deals the cards."
