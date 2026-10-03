@@ -18,6 +18,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import type { ReactNode } from 'react';
 import { MemoryRouter } from 'react-router-dom';
+import { Provider } from 'react-redux';
 
 // ---------------------------------------------------------------------------
 // Module mocks — hoisted before imports
@@ -69,6 +70,8 @@ vi.mock('@/magic/queries', () => ({
     isLoading: false,
   }),
   useApplicablePulls: vi.fn().mockReturnValue({ data: [], isLoading: false }),
+  // WonOverRows' bind form (closed in these tests).
+  useCharacterGifts: vi.fn().mockReturnValue({ data: [], isLoading: false }),
   useTechnique: vi.fn().mockReturnValue({ data: undefined, isLoading: false }),
   useThreads: vi.fn().mockReturnValue({ data: [], isLoading: false }),
   // AudereOfferGate hooks — no pending offers in panel smoke tests.
@@ -86,6 +89,15 @@ vi.mock('@/magic/queries', () => ({
     isError: false,
   }),
 }));
+
+vi.mock('@/companions/queries', async () => {
+  const actual =
+    await vi.importActual<typeof import('@/companions/queries')>('@/companions/queries');
+  return {
+    ...actual,
+    useCompanionArchetypes: vi.fn().mockReturnValue({ data: [], isLoading: false }),
+  };
+});
 
 // Stub PersonaAvatar to avoid color computation in section tests
 vi.mock('@/components/PersonaAvatar', () => ({
@@ -116,6 +128,7 @@ vi.mock('../components/ConditionBadge', () => ({
 }));
 
 import * as combatQueries from '@/combat/queries';
+import { store } from '@/store/store';
 import { CombatTurnPanel } from '../CombatTurnPanel';
 import type { EncounterDetail, Participant } from '../types';
 
@@ -605,6 +618,64 @@ describe('CombatTurnPanel, aftermath digest (#3551)', () => {
 
     fireEvent.click(screen.getByTestId('aftermath-dismiss'));
     expect(onDismissOutcome).toHaveBeenCalledTimes(1);
+  });
+
+  it('hides Settle on a won-over row when the encounter has no scene (#4091)', () => {
+    const aftermath = {
+      outcome: 'victory',
+      consequence: null,
+      conditions: [],
+      legend: [],
+      beat: null,
+      peril_round_active: false,
+      won_over: [
+        {
+          opponent_id: 7,
+          name: 'Road Bandit',
+          verb: 'calmed',
+          source_label: 'Wren',
+          nameless: false,
+          persona_id: 99,
+          present: true,
+          condition: null,
+          holds_until_settled: true,
+          strength: 3,
+          can_bind: false,
+          can_take_into_service: false,
+          can_send_away: false,
+          can_settle: true,
+        },
+      ],
+    } as unknown as NonNullable<Participant['aftermath']>;
+    const participants = [
+      makeParticipant({ id: 1, character_sheet_id: 100, character_name: 'Aerande', aftermath }),
+    ];
+
+    mockEncounter({
+      status: 'completed',
+      outcome: 'victory',
+      scene: null as unknown as number,
+      participants,
+    });
+    // A persona-backed row's name opens the persona menu, which reads the store.
+    const { unmount } = render(
+      <Provider store={store}>
+        <CombatTurnPanel encounterId={1} characterId={10} characterSheetId={100} />
+      </Provider>,
+      { wrapper: createWrapper() }
+    );
+    expect(screen.getByText('Road Bandit')).toBeInTheDocument();
+    expect(screen.queryByText('Settle')).not.toBeInTheDocument();
+    unmount();
+
+    mockEncounter({ status: 'completed', outcome: 'victory', scene: 4, participants });
+    render(
+      <Provider store={store}>
+        <CombatTurnPanel encounterId={1} characterId={10} characterSheetId={100} />
+      </Provider>,
+      { wrapper: createWrapper() }
+    );
+    expect(screen.getByText('Settle')).toBeInTheDocument();
   });
 
   it('renders no digest for a participant with a null aftermath', () => {

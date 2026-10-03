@@ -278,6 +278,20 @@ describe('WonOverRows', () => {
     });
   });
 
+  it('hides Settle when there is no scene to post the request to', () => {
+    const namedRow: WonOverRow = {
+      ...baseRow,
+      nameless: false,
+      persona_id: 99,
+      can_bind: false,
+      can_settle: true,
+    };
+
+    renderWithProviders(<WonOverRows rows={[namedRow]} characterId={42} sceneId={null} />);
+
+    expect(screen.queryByText('Settle')).not.toBeInTheDocument();
+  });
+
   it('Bind submit dispatches promote_summon with the chosen archetype, gift and name', async () => {
     const user = userEvent.setup();
     const mutate = vi.fn((_payload, options) => {

@@ -186,7 +186,8 @@ export function CombatTurnPanel({
           digests={digests}
           onDismiss={onDismissOutcome}
           characterId={characterId}
-          sceneId={String(encounter.scene)}
+          // No scene id, no Settle: WonOverRows hides it rather than post to ''.
+          sceneId={encounter.scene ? String(encounter.scene) : null}
         />
       </div>
     );

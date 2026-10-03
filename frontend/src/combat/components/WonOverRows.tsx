@@ -237,8 +237,9 @@ function WonOverRowItem({
 
   // Ruling R2: a nameless row never shows Settle or the Strike-first hint,
   // regardless of its own can_settle flag (computed from the opponent's
-  // state alone, not from namelessness).
-  const showSettle = row.can_settle && !row.nameless;
+  // state alone, not from namelessness). Settle is a scene action request, so
+  // it also needs a scene to post to (#4091 final review).
+  const showSettle = row.can_settle && !row.nameless && sceneId != null;
   const showStrikeFirstHint = !row.nameless;
   // A nameless row someone else charmed: still bindable in principle, just
   // not by this viewer.
