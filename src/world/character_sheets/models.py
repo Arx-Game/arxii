@@ -473,6 +473,19 @@ class CharacterSheet(SharedMemoryModel):
             "maturation milestones; restoration magic may strip it."
         ),
     )
+    #: #4124: the matured years the character arrived with. Milestones at or below
+    #: it never bank: a new character is experienced through the beats of their
+    #: life, not through free stat points; the first milestone they cross at the
+    #: table is the first they earn. 0 for every character made before the rule.
+    maturation_floor = models.PositiveSmallIntegerField(
+        default=0,
+        db_default=0,
+        validators=[MaxValueValidator(10000)],
+        help_text=(
+            "Matured years at creation; milestones at or below it are never earned. "
+            "0 means the character predates the rule and keeps its banked points."
+        ),
+    )
     aging_paused = models.BooleanField(
         default=False,
         help_text=(

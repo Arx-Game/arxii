@@ -81,6 +81,17 @@ class Species(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
             "earned, and old-age decline never begins."
         ),
     )
+    #: #4124: the price of the species itself, beside its gift grants' prices. An
+    #: eternal-youth species pays here for the centuries ahead, the way a mortal is
+    #: paid in beats for the years behind.
+    cg_point_cost = models.IntegerField(
+        default=0,
+        db_default=0,
+        help_text=(
+            "CG point cost of being this species, added to the purse beside its gift "
+            "grants; 0 for most. Prices eternal youth."
+        ),
+    )
     decline_start_age = models.PositiveSmallIntegerField(
         null=True,
         blank=True,

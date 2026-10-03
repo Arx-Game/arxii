@@ -52,8 +52,14 @@ from world.character_creation.models import (
     StartingArea,
     TraditionStateLine,
 )
-from world.character_creation.offers import closed_for, offers_for, reconcile_offer_picks
+from world.character_creation.offers import (
+    beats_for,
+    closed_for,
+    offers_for,
+    reconcile_offer_picks,
+)
 from world.character_creation.serializers import (
+    BeatPoolEntrySerializer,
     BeginningsSerializer,
     CGExplanationsSerializer,
     CGGiftOptionSerializer,
@@ -1119,6 +1125,13 @@ class CharacterDraftViewSet(viewsets.ModelViewSet):
             raise ValidationError({"chapter": "Unknown chapter."}) from exc
         payload = {"offers": offers_for(draft, chapter), "closed": closed_for(draft, chapter)}
         return Response(OffersResponseSerializer(payload).data)
+
+    @extend_schema(responses=BeatPoolEntrySerializer(many=True))
+    @action(detail=True, methods=[HTTPMethod.GET])
+    def beats(self, request: Request, pk: int | None = None) -> Response:
+        """The Backgrounds beat pool as this draft meets it, with its state on each (#4124)."""
+        draft = self.get_object()
+        return Response(BeatPoolEntrySerializer(beats_for(draft), many=True).data)
 
     @extend_schema(request=HouseClaimSubmitSerializer, responses=HouseClaimStatusSerializer)
     @action(detail=True, methods=[HTTPMethod.GET, HTTPMethod.POST], url_path="house-claim")

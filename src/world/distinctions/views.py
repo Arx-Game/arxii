@@ -20,7 +20,12 @@ from rest_framework.response import Response
 
 from world.character_creation.constants import OfferArrival
 from world.character_creation.models import CharacterDraft, DistinctionOffer
-from world.character_creation.offers import opener_label, reconcile_offer_picks, visible_offers
+from world.character_creation.offers import (
+    one_of_beat_conflicts,
+    opener_label,
+    reconcile_offer_picks,
+    visible_offers,
+)
 from world.codex.models import DistinctionCodexGrant
 from world.distinctions.filters import DistinctionCategoryFilter, DistinctionFilter
 from world.distinctions.models import (
@@ -526,12 +531,36 @@ class DraftDistinctionViewSet(viewsets.ViewSet):
         self._check_species_innate_bulk(list(by_id.values()), draft)
 
         new_distinctions = self._build_sync_entries(distinction_entries, by_id, draft)
+        self._validate_one_of_beats(new_distinctions)
 
         draft.draft_data["distinctions"] = new_distinctions
         draft.save(update_fields=["draft_data", "updated_at"])
         reconcile_offer_picks(draft)
 
         return Response({"distinctions": draft.draft_data.get("distinctions", [])})
+
+    def _validate_one_of_beats(self, entries: list[dict]) -> None:
+        """A one-of beat takes one answer (#4124): two of its offers in one payload is refused.
+
+        Called by ``sync`` after the entries resolve. Reads the offers the entries
+        name, so an any-that-apply beat and every other chapter pass untouched.
+        """
+        offer_ids = {
+            offer_id
+            for entry in entries
+            for offer_id in entry.get("offer_ids", [])
+            if isinstance(offer_id, int)
+        }
+        if not offer_ids:
+            return
+        offers = DistinctionOffer.objects.filter(
+            pk__in=offer_ids, beat__isnull=False
+        ).select_related("beat")
+        conflicts = one_of_beat_conflicts(offers)
+        if conflicts:
+            raise ValidationError(
+                {"detail": f"One answer on {', '.join(conflicts)}: pick one, not several."}
+            )
 
     def _parse_sync_payload(self, raw_distinctions: object) -> list[dict]:
         """Validate the sync request shape and normalize each entry.

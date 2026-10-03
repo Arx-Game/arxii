@@ -10,6 +10,7 @@ from rest_framework import serializers
 
 from world.character_creation.constants import (
     AGE_MAX_ETERNAL_YOUTH,
+    BEAT_LINE_MAX_LENGTH,
     PERSONALIZATION_COPY_KEYS,
     STAT_MAX_VALUE,
     STAT_MIN_VALUE,
@@ -1091,6 +1092,20 @@ class VisibleOfferSerializer(serializers.Serializer):
     cg_max_rank = serializers.IntegerField()
 
 
+class BeatPoolEntrySerializer(serializers.Serializer):
+    """A ``world.character_creation.types.BeatPoolEntry`` (#4124)."""
+
+    beat_id = serializers.IntegerField()
+    name = serializers.CharField()
+    prompt = serializers.CharField()
+    life_stage = serializers.CharField()
+    selection = serializers.CharField()
+    taken = serializers.BooleanField()
+    unknown = serializers.BooleanField()
+    line = serializers.CharField(allow_blank=True)
+    answer_offer_ids = serializers.ListField(child=serializers.IntegerField())
+
+
 class ClosedDistinctionSerializer(serializers.Serializer):
     """A ``world.character_creation.types.ClosedDistinction`` (#3675)."""
 
@@ -1689,6 +1704,7 @@ class CharacterDraftSerializer(serializers.ModelSerializer):
 
         self._validate_tarot_card_name(value)
         self._validate_origin_choices(value)
+        self._validate_beats(value)
         self._validate_origin_anchors(value)
         self._validate_origin_figures(value)
         self._validate_new_family_name(value)
@@ -1845,6 +1861,34 @@ class CharacterDraftSerializer(serializers.ModelSerializer):
             if choice_id is not None and not isinstance(choice_id, int):
                 msg = "origin_choices values must be an integer choice id or null"
                 raise serializers.ValidationError({"origin_choices": msg})
+
+    def _validate_beats(self, data: dict) -> None:
+        """``beats`` maps a str beat id to ``{taken, unknown, line}`` (#4124).
+
+        The whole map is replaced on each PATCH (the draft merge is per top-level
+        key), so the client sends every taken beat. A line is one short sentence.
+        """
+        beats = data.get("beats")
+        if beats is None:
+            return
+        if not isinstance(beats, dict):
+            msg = "beats must be a dictionary"
+            raise serializers.ValidationError({"beats": msg})
+        for beat_id, state in beats.items():
+            if not isinstance(beat_id, str) or not beat_id.isdecimal():
+                msg = "beats keys must be beat ids as strings"
+                raise serializers.ValidationError({"beats": msg})
+            if not isinstance(state, dict):
+                msg = "each beat is a dictionary"
+                raise serializers.ValidationError({"beats": msg})
+            for flag in ("taken", "unknown"):
+                if flag in state and not isinstance(state[flag], bool):
+                    msg = f"beats.{flag} must be true or false"
+                    raise serializers.ValidationError({"beats": msg})
+            line = state.get("line", "")
+            if not isinstance(line, str) or len(line) > BEAT_LINE_MAX_LENGTH:
+                msg = f"a beat's line is text of at most {BEAT_LINE_MAX_LENGTH} characters"
+                raise serializers.ValidationError({"beats": msg})
 
     def _validate_origin_anchors(self, data: dict) -> None:
         """``origin_anchors`` maps a str slot id to an organization id, or null (#3660)."""
