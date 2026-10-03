@@ -22,9 +22,9 @@
       <div class="help">Saving creates the pool if it is new. A shared parent pool lets every
         stage carry the same base rows; a stage can drop or reweight one.</div></div>
   </div>
-  <div class="description">Spin the wheel: when the roll lands on that result, the player
-    watches the outcome wheel spin to it instead of just seeing the result. A Can kill row
-    always spins it.</div>
+  <div class="description">Spin the wheel: if any option for a roll result is ticked or
+    can kill, a roll with that result spins the outcome wheel instead of just showing the
+    result.</div>
   {{ forms.rows.management_form }}
   {% if forms.rows.non_form_errors %}<p class="errornote">{{ forms.rows.non_form_errors }}</p>{% endif %}
   <div class="sf-tblwrap">

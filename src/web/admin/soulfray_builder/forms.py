@@ -41,9 +41,9 @@ from world.magic.models import SoulfrayConfig
 from world.traits.models import CheckOutcome
 
 SPIN_THE_WHEEL_HELP = (
-    "When the roll lands on this result, the player watches the outcome wheel spin to it "
-    "instead of just seeing the result. A Can kill row always spins the wheel; tick this to "
-    "make a non-lethal result spin it too."
+    "If any option for a roll result is ticked or can kill, a roll with that result spins "
+    "the outcome wheel instead of just showing the result. The wheel shows every option for "
+    "that result, whichever one it lands on."
 )
 
 #: Prefix of a new row's effects formset; the row's form index follows it ("new3").

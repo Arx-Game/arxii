@@ -108,7 +108,7 @@ class BuilderGetTest(SoulfrayPageTestCase):
         body = self._get(self.fraying).content.decode()
         self.assertIn(f'title="{SPIN_THE_WHEEL_HELP}"', body)
         self.assertIn(">Spin the wheel</abbr>", body)
-        self.assertIn("Spin the wheel: when the roll lands on that result", body)
+        self.assertIn("Spin the wheel: if any option for a roll result is ticked", body)
 
     def test_shared_rows_name_their_pool_and_own_rows_say_this_stage(self) -> None:
         body = self._get(self.fraying).content.decode()
