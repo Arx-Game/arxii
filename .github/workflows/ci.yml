@@ -370,17 +370,13 @@ jobs:
           # `-- --durations 25` passes Django's --durations through the typer
           # wrapper so every shard log ends with its 25 slowest tests - the
           # data the matrix rebalance procedure above needs, without a local run.
-          # Shard 7 currently contains a test teardown path that raises an
-          # unpickleable WeakKeyDictionary callback under Django multiprocessing.
-          # Keep the same labels and assertions, but run this shard serially so
-          # a runner serialization error cannot mask the test result.
-          if [[ "${{ matrix.shard.name }}" == "shard-7" ]]; then
-            # Shard 7 contains a teardown path that is not safe under
-            # multiprocessing. Keep its tests and assertions unchanged.
-            uv run arx test --keepdb $LABELS -- --durations 25
-          else
-            uv run arx test --keepdb --parallel $LABELS -- --durations 25
-          fi
+          # Every shard runs --parallel. Never drop it for one shard to dodge
+          # a broken test: shard-7 ran serially from #3931 to stop an
+          # unpickleable failure from masking its result, and took ~9.5 min
+          # (515s for 3,760 tests) against ~2-4 min for every other shard.
+          # Django's parallel runner only pickles a test's outcome when it
+          # fails, so that error means a real failing test; fix that test.
+          uv run arx test --keepdb --parallel $LABELS -- --durations 25
 
   # Aggregator: succeeds iff every backend-shard matrix entry succeeded.
   # Lets branch protection require a single status check named "backend"
