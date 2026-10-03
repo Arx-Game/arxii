@@ -510,6 +510,22 @@ def _probe_audere_condition_shape() -> ProbeResult:
     return ProbeResult(present=False, missing=tuple(problems), detail=detail)
 
 
+def _probe_allegiance_break_checks() -> ProbeResult:
+    """Every allegiance condition names the check a striker rolls (#4091). One query."""
+    model = apps.get_model("arxii", "ConditionTemplate")
+    missing = tuple(
+        model.objects.exclude(sets_allegiance="")
+        .filter(allegiance_break_check_type__isnull=True)
+        .order_by("name")
+        .values_list("name", flat=True)
+    )
+    if missing:
+        return ProbeResult(
+            present=False, missing=missing, detail="Allegiance conditions with no break check."
+        )
+    return ProbeResult(present=True)
+
+
 def _probe_ultimates_have_action_template() -> ProbeResult:
     """Every `is_ultimate=True` Technique carries an `action_template` (#4098 final
     review item 4).
@@ -1088,7 +1104,6 @@ def _declarations() -> tuple[ContentDependency, ...]:
     )
     from world.conditions.berserk_content import BERSERK_CONDITION_NAME  # noqa: PLC0415
     from world.conditions.constants import (  # noqa: PLC0415
-        CHARM_CONDITION_NAME,
         UNCONSCIOUS_CONDITION_NAME,
         FoundationalCapability,
     )
@@ -1244,16 +1259,58 @@ def _declarations() -> tuple[ContentDependency, ...]:
             ),
         ),
         ContentDependency(
-            key="charm-condition",
-            label="Charm condition template",
+            key="allegiance-charm-condition",
+            label="A condition that charms (sets_allegiance = Fights for the charmer)",
             tier=DependencyTier.REQUIRED,
-            consumer="world/companions/services.py:512 promote_summon_to_companion()",
+            consumer="world/companions/services.py promote_summon_to_companion(); "
+            "world/assets/services.py charm_into_asset()",
             consequence=(
-                "Promoting a charmed enemy to a permanent companion raises "
-                "ConditionTemplate.DoesNotExist and crashes the promotion."
+                "No condition charms anyone: binding a charmed enemy and taking a "
+                "charmed NPC into service can never succeed."
             ),
-            probe=NamedRowsProbe(
-                label="ConditionTemplate", names=(CHARM_CONDITION_NAME,), case_insensitive=True
+            probe=FilteredRowProbe(
+                label="ConditionTemplate",
+                filters=(("sets_allegiance", "ally"),),
+                absent_detail="No ConditionTemplate has sets_allegiance = ally.",
+            ),
+        ),
+        ContentDependency(
+            key="allegiance-calm-condition",
+            label="A condition that calms (sets_allegiance = Will not attack)",
+            tier=DependencyTier.REQUIRED,
+            consumer="world/combat/services.py _resolve_parley()",
+            consequence=(
+                "No condition calms anyone: a decisive parley never talks a foe out of the fight."
+            ),
+            probe=FilteredRowProbe(
+                label="ConditionTemplate",
+                filters=(("sets_allegiance", "neutral"),),
+                absent_detail="No ConditionTemplate has sets_allegiance = neutral.",
+            ),
+        ),
+        ContentDependency(
+            key="allegiance-break-check",
+            label="Break check on every allegiance condition",
+            tier=DependencyTier.REQUIRED,
+            consumer="world/npc_services/allegiance_outcomes.py attempt_allegiance_break()",
+            consequence=(
+                "A player character striking an NPC under this hold has no check to "
+                "roll: the blow never tests the hold, which simply persists (a "
+                "warning is logged naming the condition)."
+            ),
+            probe=CustomProbe(fn=_probe_allegiance_break_checks),
+            admin_model="ConditionTemplate",
+        ),
+        ContentDependency(
+            key="settle-action-template",
+            label="The Settle action template (settles_allegiance)",
+            tier=DependencyTier.REQUIRED,
+            consumer="actions/definitions/social.py SettleAction",
+            consequence="No one can settle a charm: the Settle action never appears.",
+            probe=FilteredRowProbe(
+                label="ActionTemplate",
+                filters=(("settles_allegiance", True),),
+                absent_detail="No ActionTemplate has settles_allegiance set.",
             ),
         ),
         ContentDependency(

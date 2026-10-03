@@ -14,6 +14,7 @@ from typing import TYPE_CHECKING, Any
 
 from actions.base import Action
 from actions.constants import ActionCategory
+from actions.prerequisites import Prerequisite
 from actions.types import TargetType
 
 if TYPE_CHECKING:
@@ -23,6 +24,56 @@ if TYPE_CHECKING:
 
 # Same role contexts as coercion — charm-acquired assets serve the same roles.
 _CHARMABLE_ROLE_CONTEXTS = frozenset({"informant", "contact", "personal_favor"})
+
+#: A player character can't be "taken into service" like an NPC (#4091 task 12).
+#: Canonical PC/NPC test per ``is_player_character``
+#: (``world/roster/services/activity.py``) -- an active ``RosterTenure`` OR a
+#: live puppet; ``db_account`` alone reads None for an OFFLINE PC, since
+#: Evennia's ``unpuppet_object`` clears it. Never matched on a name.
+_NOT_AN_NPC_RETAIN_MESSAGE = "They have a will of their own; you cannot take them into service."
+
+
+@dataclass
+class CharmedByActorPrerequisite(Prerequisite):
+    """The target carries a charm (ALLY_OF_CASTER) the actor applied and is
+    present (#4091; presence check added task 12 fix round 1 ruling 1 — it was
+    missing here, which is why ``retain`` could reach a target the digest's
+    ``can_send_away`` flag would already call gone).
+
+    Mirrors the gate ``charm_into_asset`` itself enforces — this exists so the
+    persona menu can show a reason; the service call stays the authority.
+    """
+
+    def is_met(
+        self,
+        actor: ObjectDB,
+        target: ObjectDB | None = None,
+        context: dict | None = None,
+    ) -> tuple[bool, str]:
+        from world.conditions.constants import Allegiance  # noqa: PLC0415
+        from world.npc_services.allegiance import actor_holds_sway_present  # noqa: PLC0415
+        from world.roster.services.activity import is_player_character  # noqa: PLC0415
+        from world.scenes.models import Persona  # noqa: PLC0415
+
+        kwargs = (context or {}).get("kwargs", {})
+        persona = (
+            Persona.objects.filter(pk=kwargs.get("target_persona_id"))
+            .select_related("character_sheet__character")
+            .first()
+        )
+        body = persona.character_sheet.character if persona else None
+        if (
+            body is None
+            or body.db_location_id is None
+            or body.db_location_id != actor.db_location_id
+        ):
+            return False, "They are not here."
+        if is_player_character(persona.character_sheet):
+            return False, _NOT_AN_NPC_RETAIN_MESSAGE
+        kinds = frozenset({Allegiance.ALLY_OF_CASTER})
+        if not actor_holds_sway_present(actor, body, kinds=kinds):
+            return False, "They are not charmed by you."
+        return True, ""
 
 
 @dataclass
@@ -35,6 +86,9 @@ class CharmAssetAction(Action):
     category: str = "social"
     action_category: ActionCategory = ActionCategory.SOCIAL
     target_type: TargetType = TargetType.SINGLE
+
+    def get_prerequisites(self) -> list[Prerequisite]:
+        return [CharmedByActorPrerequisite()]
 
     def execute(
         self,

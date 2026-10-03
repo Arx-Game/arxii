@@ -483,8 +483,18 @@ outcome** (a closed issue or a "SHIPPED" line is not proof). See the ledger's go
   three position-consuming effects (telekinesis/teleport/obstacle → Force Grip/Phase Jump/Barricade)
   have real runtime destination selection for combat (#2206) — the non-combat web cast path still
   lacks a position picker. Remaining per-effect follow-ups live in the capability ledger, not here.
-- **Charm / switch-sides** an enemy NPC; **negotiate / parley** an NPC down (built in this PR,
-  #1590/#1591, ADR-0058); **dispel** a condition.
+- **Charm / switch-sides an enemy NPC** - SHIPPED (#4091, ADR-4091, 2026-10-03): the disposition
+  layer (#1590/#1591, ADR-0058) that made an enemy sit a fight out is now a real NPC-versus-NPC
+  fighter. A charmed enemy attacks the party's other enemies; a turned enemy attacks its own
+  former side; allegiance is derived on read from `ConditionTemplate.sets_allegiance`, never a
+  stored flip and never a name match. Winning every remaining enemy over (charmed, turned, or
+  calmed, or negotiated/parleyed down) ends the encounter as an ordinary `VICTORY`, priced on the
+  same (outcome, risk) axes as a fought one. After the fight a charm can be settled, broken by a
+  blow, bound or taken into service, sent away, or left to lapse quietly. See
+  `docs/systems/INDEX.md`'s Combat and Conditions sections and
+  `src/world/combat/AGENT_GLOSSARY.md`'s Allegiance entries.
+- **Negotiate / parley** an NPC down (built pre-#4091, #1590/#1591, ADR-0058); **dispel** a
+  condition remains open.
 - **Companions / pets / summons** with breath weapons & ordered abilities.
 - **Roles grant techniques** — SHIPPED (#2022 via #2106/#2109, 2026-07-09): `CovenantRoleGiftGrant`
   + `_grant_role_gifts_and_techniques` on engage, revoked on disengage (`role_source`-stamped rows

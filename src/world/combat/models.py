@@ -710,7 +710,8 @@ class CombatOpponent(SharedMemoryModel):
         help_text=(
             "Which side this combatant fights on. ENEMY (default) is hostile to "
             "PCs; ALLY fights for them (summons, charmed/switched-sides foes). "
-            "Mutable — a charm flips it."
+            "Set for summons and companions. A charm never flips it; charm is derived "
+            "from the bearer's allegiance conditions (#4091, D4)."
         ),
     )
     summoned_by = models.ForeignKey(

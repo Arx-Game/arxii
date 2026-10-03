@@ -71,9 +71,14 @@ class CoerceAssetAction(Action):
         target_character = target_persona.character_sheet.character
         if target_character is None:
             return _ActionResult(success=False, message="There's no one there to coerce.")
-        # A played character (has an account) or an actively-piloted NPC (live session) is
-        # never auto-coerced — they get player-style agency via Blackmail's resist register.
-        if target_character.db_account is not None or target_character.sessions.count() > 0:
+        from world.roster.services.activity import is_player_character  # noqa: PLC0415
+
+        # A player character (active RosterTenure -- not just "has an account": that
+        # reads None for an OFFLINE PC too, #4091 task 12 fix round 3) or an
+        # actively-piloted NPC (live session) is never auto-coerced — they get
+        # player-style agency via Blackmail's resist register.
+        target_is_pc = is_player_character(target_persona.character_sheet)
+        if target_is_pc or target_character.sessions.count() > 0:
             return _ActionResult(
                 success=False,
                 message="They're being played; press them with blackmail, where they answer.",

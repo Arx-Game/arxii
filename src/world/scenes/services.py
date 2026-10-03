@@ -3,12 +3,15 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any, cast
 
 from django.core.exceptions import ObjectDoesNotExist
+from django.db.models import Q
 
 from world.scenes.constants import SceneAction
 from world.scenes.interaction_services import invalidate_active_scene_cache
 from world.scenes.models import Persona, Scene
 
 if TYPE_CHECKING:
+    from collections.abc import Iterable
+
     from typeclasses.characters import Character
     from world.character_sheets.models import CharacterSheet, Profile
     from world.forms.models import CharacterForm
@@ -85,6 +88,45 @@ def active_persona_for_sheet(sheet: CharacterSheet) -> Persona:
     if active is not None:
         return active
     return sheet.primary_persona
+
+
+def persona_names_for_sheets(sheet_ids: Iterable[int]) -> dict[int, str]:
+    """Batched ``active_persona_for_sheet`` name lookup, ONE round trip (two queries).
+
+    The same answer as ``active_persona_for_sheet`` (the durable ``active_persona``
+    when set, else PRIMARY) — but for many ``CharacterSheet`` ids at once, with no
+    per-sheet query, for a caller building a label list over several participants
+    (e.g. a room-wide outcome line). Sheets with neither an active nor a PRIMARY
+    persona (a broken invariant, or a nonexistent id) are simply absent from the
+    returned map rather than raising.
+    """
+    from world.character_sheets.models import CharacterSheet  # noqa: PLC0415
+    from world.scenes.constants import PersonaType  # noqa: PLC0415
+
+    ids = [pk for pk in sheet_ids if pk is not None]
+    if not ids:
+        return {}
+
+    active_persona_id_by_sheet: dict[int, int] = dict(
+        CharacterSheet.objects.filter(pk__in=ids, active_persona_id__isnull=False).values_list(
+            "pk", "active_persona_id"
+        )
+    )
+    primary_needed = {pk for pk in ids if pk not in active_persona_id_by_sheet}
+
+    personas = Persona.objects.filter(
+        Q(pk__in=active_persona_id_by_sheet.values())
+        | Q(character_sheet_id__in=primary_needed, persona_type=PersonaType.PRIMARY)
+    )
+    name_by_persona_id = {p.pk: p.name for p in personas}
+    names: dict[int, str] = {
+        p.character_sheet_id: p.name for p in personas if p.character_sheet_id in primary_needed
+    }
+    for sheet_id, persona_id in active_persona_id_by_sheet.items():
+        name = name_by_persona_id.get(persona_id)
+        if name is not None:
+            names[sheet_id] = name
+    return names
 
 
 def set_active_persona(sheet: CharacterSheet, persona: Persona) -> None:

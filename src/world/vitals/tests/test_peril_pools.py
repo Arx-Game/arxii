@@ -18,6 +18,8 @@ model is used in setUpTestData (DbHolder trap — see MEMORY.md).
 from django.test import TestCase, override_settings
 
 from evennia_extensions.factories import AccountFactory, CharacterFactory
+from world.character_sheets.factories import CharacterSheetFactory
+from world.roster.factories import RosterEntryFactory, RosterTenureFactory
 from world.vitals.factories import (
     create_abandonment_pools,
     create_bleed_out_terminal_pool,
@@ -34,17 +36,36 @@ class SelectAbandonmentPoolTests(TestCase):
     def test_npc_source_returns_enemy_pool(self) -> None:
         from world.vitals.peril_resolution import select_abandonment_pool
 
-        npc = CharacterFactory()  # no db_account → NPC
+        npc = CharacterFactory()  # no CharacterSheet/roster tenure → NPC
         pool = select_abandonment_pool(npc)
         self.assertEqual(pool.name, "abandonment_enemy")
 
     def test_pc_source_returns_pvp_pool(self) -> None:
+        """An active RosterTenure is the canonical PC test (#4091 task 12 fix
+        round 3), not db_account -- both are wired here for an "online" PC."""
         from world.vitals.peril_resolution import select_abandonment_pool
 
         account = AccountFactory()
         pc = CharacterFactory()
         pc.db_account = account
         pc.save(update_fields=["db_account"])
+        sheet = CharacterSheetFactory(character=pc)
+        entry = RosterEntryFactory(character_sheet=sheet)
+        RosterTenureFactory(roster_entry=entry, end_date=None)
+        pool = select_abandonment_pool(pc)
+        self.assertEqual(pool.name, "abandonment_pvp")
+
+    def test_offline_pc_source_returns_pvp_pool(self) -> None:
+        """#4091 task 12 fix round 3: an OFFLINE PC source (active tenure, no
+        db_account) must still route to the death-forbidden pvp pool -- the
+        "AFK never kills" regression this fix round closes."""
+        from world.vitals.peril_resolution import select_abandonment_pool
+
+        pc = CharacterFactory()
+        sheet = CharacterSheetFactory(character=pc)
+        entry = RosterEntryFactory(character_sheet=sheet)
+        RosterTenureFactory(roster_entry=entry, end_date=None)
+        self.assertIsNone(pc.db_account)
         pool = select_abandonment_pool(pc)
         self.assertEqual(pool.name, "abandonment_pvp")
 

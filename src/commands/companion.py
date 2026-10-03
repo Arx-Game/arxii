@@ -30,6 +30,7 @@ _SUBVERBS: dict[str, str] = {
     "mount": "mount_companion",
     "dismount": "dismount_companion",
     "emote": "companion_emote",
+    "promote": "promote_summon",
 }
 # "list" and "status" are handled locally (status hub), not dispatched.
 
@@ -45,6 +46,7 @@ _MAX_NAME_LENGTH = 100
 
 # Subverbs whose only kwarg is bind's parsed kwargs.
 _BIND_SUBVERB = "bind"
+_PROMOTE_SUBVERB = "promote"
 
 # Subverbs that take a single bare companion identifier (positional, not key=value).
 _POSITIONAL_SUBVERBS = frozenset({"release", "fight", "deploy", "mount"})
@@ -83,12 +85,17 @@ class CmdCompanion(DispatchCommand):
         companion mount <name|id>             - mount a ridable companion
         companion dismount                    - dismount your current mount
         companion emote <name|id> <text>      - pose as a bonded, present companion
+        companion promote <npc> archetype=<name|id> gift=<name|id> name=<text>
+                                              - bind an in-fight summon or a charmed
+                                                nameless enemy into a Companion
 
-    ``name=`` must be the final token on ``bind`` (it greedily consumes the rest
-    of the line so names with spaces work). ``emote`` requires the companion be
-    bound to you AND present in your current room (#3294); authorship (block/
+    ``name=`` must be the final token on ``bind``/``promote`` (it greedily consumes
+    the rest of the line so names with spaces work). ``emote`` requires the companion
+    be bound to you AND present in your current room (#3294); authorship (block/
     mute/consent) stays on your own persona, and the feed shows the companion as
-    the actor with a tell naming you.
+    the actor with a tell naming you. ``promote`` targets a live ``CombatOpponent`` in
+    the caller's room by name (#4091 Decision 19) — a charmed nameless enemy stays
+    biddable this way after victory, while its charmer remains present.
     """
 
     key = "companion"
@@ -122,6 +129,8 @@ class CmdCompanion(DispatchCommand):
         """Resolve the subverb's arguments into dispatch kwargs."""
         if self._subverb == _BIND_SUBVERB:
             return self._args_bind(parse_greedy_kwargs(self._rest, greedy_key=_NAME_KWARG))
+        if self._subverb == _PROMOTE_SUBVERB:
+            return self._args_promote(self._rest)
         if self._subverb == _ORDER_SUBVERB:
             return self._args_order(self._rest)
         if self._subverb == _EMOTE_SUBVERB:
@@ -224,6 +233,69 @@ class CmdCompanion(DispatchCommand):
             msg = "Companion names must be 100 characters or fewer."
             raise CommandError(msg)
         return {
+            "archetype_id": archetype.pk,
+            "gift_id": gift.pk,
+            "name": name,
+        }
+
+    @staticmethod
+    def _split_leading_name(rest: str) -> str:
+        """Split the leading bare-word NPC name off the front of a token stream,
+        stopping at the first ``key=value`` token (#4091 ``promote``)."""
+        tokens = rest.split()
+        leading: list[str] = []
+        for token in tokens:
+            if "=" in token:
+                break
+            leading.append(token)
+        return " ".join(leading)
+
+    def _args_promote(self, rest: str) -> dict[str, Any]:
+        """Resolve promote kwargs: combat_opponent_id, archetype_id, gift_id, name (#4091).
+
+        ``<npc>`` is the leading bare-word name of a live ``CombatOpponent`` in the
+        caller's room — either an in-fight summon or a charmed nameless enemy whose
+        bind window Decision 19 keeps open after victory. The same refusal message
+        covers "no such target" and "found, but not something you can bind" so the
+        two cases stay indistinguishable on the wire.
+        """
+        from world.combat.constants import OpponentStatus  # noqa: PLC0415
+        from world.combat.models import CombatOpponent  # noqa: PLC0415
+
+        npc_name = self._split_leading_name(rest)
+        parsed = parse_greedy_kwargs(rest, greedy_key=_NAME_KWARG)
+        archetype = self._resolve_archetype(parsed.get(_ARCHETYPE_KWARG, ""))
+        gift = self._resolve_owned_gift(parsed.get(_GIFT_KWARG, ""))
+        name = parsed.get(_NAME_KWARG, "").strip()
+        if not name:
+            msg = "Specify a name: name=<text> (must be the final token)."
+            raise CommandError(msg)
+        if len(name) > _MAX_NAME_LENGTH:
+            msg = "Companion names must be 100 characters or fewer."
+            raise CommandError(msg)
+        if not npc_name:
+            msg = "Usage: companion promote <npc> archetype=<name|id> gift=<name|id> name=<text>"
+            raise CommandError(msg)
+
+        target = self.caller.search(npc_name, location=self.caller.location, quiet=True)
+        if isinstance(target, list):
+            target = target[0] if target else None
+        combat_opponent = None
+        if target is not None:
+            combat_opponent = (
+                CombatOpponent.objects.filter(
+                    objectdb=target,
+                    status__in=[OpponentStatus.ACTIVE, OpponentStatus.WON_OVER],
+                )
+                .order_by("-pk")
+                .first()
+            )
+        if combat_opponent is None:
+            msg = "They are not someone you can bind."  # PLACEHOLDER
+            raise CommandError(msg)
+
+        return {
+            "combat_opponent_id": combat_opponent.pk,
             "archetype_id": archetype.pk,
             "gift_id": gift.pk,
             "name": name,

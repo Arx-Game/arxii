@@ -434,9 +434,15 @@ def batch_condition_expiration_cleanup() -> None:
 
     from world.conditions.models import ConditionInstance
 
-    count, _ = ConditionInstance.objects.filter(
-        expires_at__lt=timezone.now(),
-    ).delete()
+    count, _ = (
+        ConditionInstance.objects.filter(
+            expires_at__lt=timezone.now(),
+        )
+        # Allegiance holds are owned by combat.lapsed_allegiance_sweep (#4091),
+        # which fires the removal event the bulk delete would drop.
+        .filter(condition__sets_allegiance="")
+        .delete()
+    )
     logger.info("Condition expiration cleanup: %d expired conditions deleted", count)
 
 
@@ -775,16 +781,7 @@ def register_all_tasks() -> None:
         )
     )
 
-    from world.combat.tasks import check_and_resolve_timed_encounters
-
-    register_task(
-        CronDefinition(
-            task_key="combat.timer_check",
-            callable=check_and_resolve_timed_encounters,
-            interval=timedelta(seconds=30),
-            description="Auto-resolve expired timed combat rounds.",
-        )
-    )
+    _register_combat_tasks()
 
     from world.conditions.services import batch_chronic_effect_tick, decay_all_conditions_tick
     from world.locations.tasks import decayed_modifier_cleanup_task
@@ -1113,6 +1110,34 @@ def _register_late_tasks(roll_and_echo_weather: object) -> None:
     )
     _register_area_quality_decay_task()
     _register_memory_snapshot_task()
+
+
+def _register_combat_tasks() -> None:
+    """Register the combat round timer and the allegiance-lapse sweep (#4091).
+
+    Extracted from ``register_all_tasks`` to keep that function under the
+    ruff PLR0915 statement limit.
+    """
+    from world.combat.tasks import check_and_resolve_timed_encounters
+    from world.npc_services.allegiance_outcomes import lapsed_allegiance_sweep
+
+    register_task(
+        CronDefinition(
+            task_key="combat.timer_check",
+            callable=check_and_resolve_timed_encounters,
+            interval=timedelta(seconds=30),
+            description="Auto-resolve expired timed combat rounds.",
+        )
+    )
+    register_task(
+        CronDefinition(
+            task_key="combat.lapsed_allegiance_sweep",
+            callable=lapsed_allegiance_sweep,
+            interval=timedelta(minutes=1),
+            phase=CronPhase.CLEANUP,
+            description="End charms that ran out with nobody acting; close bind windows (#4091).",
+        )
+    )
 
 
 def _register_room_ward_upkeep_task() -> None:

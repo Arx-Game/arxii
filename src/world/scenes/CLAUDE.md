@@ -236,6 +236,10 @@ the unified Persona identity system, and non-combat scene rounds.
   seam in the same or an enclosing function -- enforced by `tools/lint_undelivered_interaction.py`
   (the `undelivered-interaction` pre-commit hook) and the `outcome-delivery-reviewer` agent. See
   "Result delivery" in `docs/systems/scenes.md` and ADR-0297.
+- **`send_outcome_text_to_non_web(interaction, *, location)`**: the telnet-parity half of
+  `deliver_outcome_interaction`, run immediately rather than on commit, for a caller that
+  pushes the payload synchronously itself (combat's encounter OUTCOME line, which must land
+  before the aftermath digest, #4091). Same recipients as the push; webclient sessions skipped.
 - **`push_interaction(..., *, location=None)`**: gained an optional `location` kwarg (#3807).
   Omitted, it resolves from the writer persona's own character location, byte-identical to
   before. A caller passes it explicitly for a Narrator-authored row, since the Narrator's

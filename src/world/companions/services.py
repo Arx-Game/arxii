@@ -519,23 +519,25 @@ class PromoteSummonError(Exception):
 
 
 def _is_charmed_by_caster(opponent, caster_character) -> bool:
-    """Check if opponent's objectdb has an active Charmed condition sourced by caster.
+    """Check if opponent's objectdb has an active allegiance condition sourced by caster.
 
-    Uses get_active_conditions + ConditionInstance.source_character FK check —
-    NOT just condition-name presence (which would let any charmer acquire
-    another charmer's target).
+    Reads by ``ConditionTemplate.sets_allegiance`` + ``ConditionInstance.source_character`` —
+    NOT condition-name presence (which would let any charmer acquire another
+    charmer's target, or break on a renamed/reauthored row, #4091).
     """
-    from world.conditions.constants import CHARM_CONDITION_NAME  # noqa: PLC0415
-    from world.conditions.models import ConditionTemplate  # noqa: PLC0415
-    from world.conditions.services import get_active_conditions  # noqa: PLC0415
+    from world.conditions.constants import Allegiance  # noqa: PLC0415
+    from world.npc_services.allegiance import allegiance_sourced_by  # noqa: PLC0415
 
     if opponent.objectdb_id is None:
         return False
-    charm_template = ConditionTemplate.objects.filter(name=CHARM_CONDITION_NAME).first()
-    if charm_template is None:
-        return False
-    active = get_active_conditions(opponent.objectdb, condition=charm_template)
-    return any(inst.source_character_id == caster_character.pk for inst in active)
+    return (
+        allegiance_sourced_by(
+            opponent.objectdb,
+            caster_character,
+            kinds=frozenset({Allegiance.ALLY_OF_CASTER}),
+        )
+        is not None
+    )
 
 
 @transaction.atomic
@@ -553,9 +555,12 @@ def promote_summon_to_companion(
     - Summon path: combat_opponent.summoned_by == caster_sheet AND
       allegiance == ALLY AND status == ACTIVE.
     - Charmed-enemy path: combat_opponent.objectdb has an active Charmed
-      condition whose source_character is the caster's character. Stored
-      allegiance stays ENEMY for charmed foes (derived-on-read via
-      derive_allegiance).
+      condition whose source_character is the caster's character, and
+      combat_opponent is either ACTIVE (in-fight) or WON_OVER with its
+      encounter COMPLETED and its bind window still open
+      (world.combat.won_over.bind_window_open — Decision 19: the charmer must
+      still be in the room). Stored allegiance stays ENEMY for charmed foes
+      (derived-on-read via derive_allegiance).
 
     On the charmed-enemy path, bind_difficulty is reduced by
     archetype.charm_difficulty_reduction, and the charm condition is consumed
@@ -563,8 +568,12 @@ def promote_summon_to_companion(
 
     Does NOT transfer the CombatOpponent.objectdb — bind_companion creates a
     fresh CompanionObject (the summon's objectdb is a CombatNPC typeclass,
-    wrong for companion behavior). Does NOT remove the CombatOpponent row;
-    encounter cleanup handles that.
+    wrong for companion behavior). Does NOT remove the CombatOpponent row.
+    On the ACTIVE/summon path the nameless body's ObjectDB survives this call
+    and encounter cleanup deletes it later, as before. On the WON_OVER path,
+    a successful bind deletes the nameless won-over body's ObjectDB
+    immediately (world.combat.won_over.delete_won_over_npc) — the fresh
+    CompanionObject replaces it; there is no later cleanup to rely on.
 
     Args:
         caster_sheet: The promoting character's sheet.
@@ -583,10 +592,12 @@ def promote_summon_to_companion(
     from world.checks.models import CheckType  # noqa: PLC0415
     from world.checks.services import perform_check  # noqa: PLC0415
     from world.combat.constants import CombatAllegiance, OpponentStatus  # noqa: PLC0415
+    from world.combat.won_over import bind_window_open  # noqa: PLC0415
     from world.companions.content import BIND_ATTEMPT_CHECK_NAME  # noqa: PLC0415
-    from world.conditions.constants import CHARM_CONDITION_NAME  # noqa: PLC0415
-    from world.conditions.models import ConditionTemplate  # noqa: PLC0415
+    from world.conditions.constants import Allegiance  # noqa: PLC0415
     from world.conditions.services import remove_condition  # noqa: PLC0415
+    from world.npc_services.allegiance import allegiance_sourced_by  # noqa: PLC0415
+    from world.scenes.constants import RoundStatus  # noqa: PLC0415
 
     caster_character = caster_sheet.character
 
@@ -596,9 +607,20 @@ def promote_summon_to_companion(
         and combat_opponent.allegiance == CombatAllegiance.ALLY
         and combat_opponent.status == OpponentStatus.ACTIVE
     )
+    # Decision 19: the charmed-enemy path also accepts a WON_OVER opponent of an
+    # already-COMPLETED encounter — the bind window that keeps the nameless body
+    # alive after victory. ``bind_window_open`` is the single source of truth for
+    # that window (telnet's ``companion promote`` and the digest's ``can_bind``
+    # consult the same predicate, #4091 fix round 1) — the charmer must still be
+    # in the room, not merely have charmed it once.
+    charm_status_ok = combat_opponent.status == OpponentStatus.ACTIVE or (
+        combat_opponent.status == OpponentStatus.WON_OVER
+        and combat_opponent.encounter.status == RoundStatus.COMPLETED
+        and bind_window_open(combat_opponent)
+    )
     is_charmed_enemy = (
         not is_summon
-        and combat_opponent.status == OpponentStatus.ACTIVE
+        and charm_status_ok
         and _is_charmed_by_caster(combat_opponent, caster_character)
     )
     if not is_summon and not is_charmed_enemy:
@@ -635,9 +657,20 @@ def promote_summon_to_companion(
 
     # --- Consume charm on the charmed-enemy path ---
     if charm_applied and combat_opponent.objectdb is not None:
-        charm_template = ConditionTemplate.get_by_name(CHARM_CONDITION_NAME)
-        if charm_template is not None:
-            remove_condition(combat_opponent.objectdb, charm_template)
+        instance = allegiance_sourced_by(
+            combat_opponent.objectdb,
+            caster_character,
+            kinds=frozenset({Allegiance.ALLY_OF_CASTER}),
+        )
+        if instance is not None:
+            remove_condition(combat_opponent.objectdb, instance.condition)
+
+    # The fresh CompanionObject above replaces the nameless body entirely; a
+    # won-over opponent's bind window closes on a successful bind (Decision 19).
+    if combat_opponent.status == OpponentStatus.WON_OVER:
+        from world.combat.won_over import delete_won_over_npc  # noqa: PLC0415
+
+        delete_won_over_npc(combat_opponent)
 
     return companion
 

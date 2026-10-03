@@ -11,6 +11,8 @@ from typing import TYPE_CHECKING
 from world.magic.models.techniques import ConditionTargetKind
 
 if TYPE_CHECKING:
+    from evennia.objects.models import ObjectDB
+
     from world.magic.models.techniques import Technique
 
 
@@ -56,3 +58,25 @@ def is_technique_hostile(technique: Technique) -> bool:
     return any(
         row.target_kind == ConditionTargetKind.ENEMY for row in technique.cached_removed_conditions
     )
+
+
+def is_allegiance_renewal(
+    technique: Technique,
+    *,
+    caster: ObjectDB,  # noqa: OBJECTDB_PARAM - ConditionInstance.source_character is ObjectDB
+    target: ObjectDB,  # noqa: OBJECTDB_PARAM - the cast target's character body
+) -> bool:
+    """A recast of a pure allegiance technique on a target the caster already holds (#4091).
+
+    Decision 9: renewing a charm is a cast, never a fight. Derived from authored
+    payload rows only, like ``is_technique_hostile``.
+    """
+    if technique.cached_damage_profiles or technique.cached_removed_conditions:
+        return False
+    rows = technique.cached_condition_applications
+    if not rows or any(not row.condition.sets_allegiance for row in rows):
+        return False
+    from world.npc_services.allegiance import allegiance_instances_for  # noqa: PLC0415
+
+    instances = allegiance_instances_for([target.pk]).get(target.pk, [])
+    return any(i.source_character_id == caster.pk for i in instances)

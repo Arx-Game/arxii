@@ -213,6 +213,21 @@ class ConditionTemplateAdmin(admin.ModelAdmin):
             },
         ),
         (
+            "Allegiance",
+            {
+                "fields": [
+                    "sets_allegiance",
+                    "allegiance_break_check_type",
+                    "settle_consequence_pool",
+                    "exploitable_tiers",
+                ],
+                "description": (
+                    "Charm, turn and calm. Blank sets_allegiance means this condition "
+                    "changes no one's side (#4091)."
+                ),
+            },
+        ),
+        (
             "Display",
             {
                 "fields": [

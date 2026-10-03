@@ -140,6 +140,34 @@ class ResolveSocialVerbTests(TestCase):
         # select_npc_actions). Assert morale is at/below the threshold.
         self.assertLessEqual(self.opponent.morale, BREAK_MORALE_THRESHOLD)
 
+    def test_decisive_parley_calms_by_field_not_by_name(self) -> None:
+        """#4091 final review: parley finds its calm condition by
+        ``sets_allegiance=NEUTRAL``, so a staff rename of Calm keeps it working."""
+        from world.combat.constants import PARLEY_DECISIVE_SUCCESS_LEVEL
+        from world.conditions.charm_content import ensure_charm_content
+        from world.conditions.constants import CALM_CONDITION_NAME
+        from world.conditions.models import ConditionInstance, ConditionTemplate
+
+        ensure_charm_content()
+        calm = ConditionTemplate.objects.get(name=CALM_CONDITION_NAME)
+        calm.name = "Hushed Truce"
+        calm.save(update_fields=["name"])
+        # A second, untouched foe keeps the fight open so cleanup leaves the body.
+        CombatOpponentFactory(encounter=self.encounter, threat_pool=ThreatPoolFactory())
+        self.opponent.morale = FALTER_MORALE_THRESHOLD
+        self.opponent.save()
+        declare_parley(self.participant, self.opponent)
+        decisive = CheckOutcomeFactory(
+            name="ParleyDecisive", success_level=PARLEY_DECISIVE_SUCCESS_LEVEL
+        )
+
+        with force_check_outcome(decisive):
+            resolve_round(self.encounter)
+
+        self.assertTrue(
+            ConditionInstance.objects.filter(target=self.opponent.objectdb, condition=calm).exists()
+        )
+
     def test_taunt_increments_threat(self) -> None:
         declare_taunt(self.participant, self.opponent)
 

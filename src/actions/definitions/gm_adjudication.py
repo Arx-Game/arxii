@@ -636,13 +636,15 @@ def _narrate_gm_condition(
     """
     from world.scenes.constants import InteractionMode, InteractionVisibility  # noqa: PLC0415
     from world.scenes.interaction_services import (  # noqa: PLC0415
-        _broadcast_to_location,
         _build_interaction_payload,
         _send_to_objects,
         create_interaction,
         get_active_scene,
     )
-    from world.scenes.narrator import get_or_create_narrator_persona  # noqa: PLC0415
+    from world.scenes.narrator import (  # noqa: PLC0415
+        get_or_create_narrator_persona,
+        narrate_room_outcome,
+    )
     from world.scenes.services import active_persona_for_sheet  # noqa: PLC0415
 
     sheet = target.character_sheet
@@ -653,13 +655,17 @@ def _narrate_gm_condition(
     label = target_persona.name if target_persona is not None else target.key
     narration = f"{label} is now {template.name}. {note}"
     visible = template.is_visible_to_others
+    room = actor.location if visible else None
+    if room is not None:
+        narrate_room_outcome(room, narration)
+        return
+
     narrator = get_or_create_narrator_persona()
-    scene = get_active_scene(actor.location)
     interaction = create_interaction(
         persona=narrator,
         content=narration,
         mode=InteractionMode.OUTCOME,
-        scene=scene,
+        scene=get_active_scene(actor.location),
         receivers=None if visible else [target_persona],
         visibility=InteractionVisibility.DEFAULT
         if visible
@@ -674,17 +680,8 @@ def _narrate_gm_condition(
         scene_id=interaction.scene_id,
         receiver_persona_ids=[target_persona.pk] if not visible and target_persona else None,
     )
-
-    room = actor.location if visible else None
-    if room is not None:
-        _broadcast_to_location(room, payload)
-    else:
-        _send_to_objects([target], payload)
-
-    if room is not None:
-        room.msg_contents(narration)
-    else:
-        target.msg(narration)
+    _send_to_objects([target], payload)
+    target.msg(narration)
 
 
 @dataclass

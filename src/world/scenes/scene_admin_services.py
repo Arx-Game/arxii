@@ -159,17 +159,33 @@ def finish_scene_full(scene: Scene, by_account: AccountDB | None = None) -> None
        GMPrompt for this scene while it is still active, so a room-text release
        still has a live scene to broadcast into.
     2. ``scene.finish_scene()`` — sets ``date_finished`` + ``is_active=False``.
-    3. Clear ``scene.running_beat`` if set (#3425) — the session-prep run pointer
+    3. ``close_scene_clocks(scene, SceneClockClosedReason.SCENE_ENDED)`` (#3567) —
+       clocks opened in this scene stop with it; a battle scene running the same
+       beat has its own row and keeps the GM scene's clock alive.
+    4. Clear ``scene.running_beat`` if set (#3425) — the session-prep run pointer
        ``RunBeatAction`` wrote only lives for the scene's duration.
-    4. ``on_scene_finished(scene)`` — awards scene-completion progression rewards.
-    5. ``process_deferred_fatigue_resets`` — drains any pending fatigue-reset
+    5. ``on_scene_finished(scene)`` — awards scene-completion progression rewards.
+    6. ``process_deferred_fatigue_resets`` — drains any pending fatigue-reset
        tasks for all participant accounts.
-    6. ``teardown_conjured_hazards`` (alongside ``teardown_conjured_obstacles`` /
-       ``teardown_ramparts``): disarms any Trap the scene's room holds whose
-       ``created_by_sheet`` is set, i.e. a GM-placed trap rather than a
-       staff-authored one.
-    7. ``broadcast_scene_message(scene, SceneAction.END)`` - pushes the END
-       event over the scene's WebSocket channel.
+    7. Teardowns, when ``scene.location`` is set (#2019/#2209/#3002):
+       ``teardown_conjured_obstacles``, ``teardown_ramparts``, and
+       ``teardown_conjured_hazards`` (disarms any Trap the scene's room holds
+       whose ``created_by_sheet`` is set, i.e. a GM-placed trap rather than a
+       staff-authored one).
+    8. Engagement revalidation, when ``scene.location`` is set (#2051):
+       ``invalidate_active_scene_cache`` busts the room's in-memory active-scene
+       cache, then ``revalidate_engagements`` re-checks each occupant's engaged
+       covenant roles (Durance vows tied to co-presence may dim once the scene
+       is gone).
+    9. ``clear_queue_on_scene_finish(scene)`` (#2356), when ``scene.location`` is
+       set — closes any active speaker queue for the room.
+    10. ``expire_scene_scoped_conditions`` (#2514) — clears scene-scoped
+        conditions (social moods, etc.) for all participants.
+    11. ``release_won_over_npcs_in_room(scene.location)`` (Decision 19), when
+        ``scene.location`` is set — a still-open charmed-nameless bind window
+        closes at scene end (R3).
+    12. ``broadcast_scene_message(scene, SceneAction.END)`` - pushes the END
+        event over the scene's WebSocket channel.
 
     ``by_account`` is accepted for call-site symmetry (so both the web viewset
     and the upcoming ``FinishSceneAction`` can pass their actor without branching)
@@ -266,5 +282,14 @@ def finish_scene_full(scene: Scene, by_account: AccountDB | None = None) -> None
         if persona.character_sheet is not None and persona.character_sheet.character is not None
     ]
     expire_scene_scoped_conditions(participant_targets)
+
+    # Decision 19: a charmed nameless enemy's bind window stays open only while its
+    # charmer is in the room. The scene ending closes it regardless, so sweep this
+    # room's still-open WON_OVER ephemeral bodies rather than leaving them for the
+    # periodic release_closed_bind_windows() sweep to eventually catch.
+    if scene.location is not None:
+        from world.combat.won_over import release_won_over_npcs_in_room  # noqa: PLC0415
+
+        release_won_over_npcs_in_room(scene.location)
 
     broadcast_scene_message(scene, SceneAction.END)

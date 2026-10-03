@@ -1545,6 +1545,15 @@ An ABANDONED encounter (GM force-end) skips the aftermath-rules/pools/counters
 step earlier in `complete_encounter` but still reaches this step, so an
 ABANDONED encounter still delivers a digest.
 
+The digest's won-over rows (#4091) are the one part read *before* cleanup:
+`complete_encounter` takes `won_over_snapshot(encounter)` just ahead of
+`cleanup_completed_encounter` and passes it as `deliver_aftermath_digests(...,
+won_over=snapshot)`. Cleanup deletes ephemeral WON_OVER bodies, which cascades their
+allegiance `ConditionInstance` away, so a read after it would drop every calmed or
+turned mook. A row whose body cleanup deleted reports `present=False`, no condition
+badge, and every action flag off. The serializer's `aftermath` field, read later from
+the API, builds rows live and so lists only won-over opponents whose bodies survive.
+
 `build_aftermath_digest` never writes anything; it reads rows the completion
 seam already wrote earlier in the same transaction. The aftermath
 `ConsequenceOutcome`, any `LegendEntry` rows, and the `BeatCompletion` for the

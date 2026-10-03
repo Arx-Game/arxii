@@ -266,12 +266,46 @@ _Avoid_: partial combo (say "round combo with open slots"), combo preview
 A combo slot no declared focused action fills yet this round. The "needs one more: Defense" hint is the list of open slots' requirement labels.
 _Avoid_: empty slot, missing slot
 
-**Allegiance**:
-Which side a `CombatOpponent` fights on — `ENEMY` (hostile to PCs, the default) or `ALLY`
-(fights for the party). Allegiance is mutable: a summon spell creates an ALLY opponent; future
-charm / switch-sides effects flip an existing ENEMY to ALLY. Both cases use the same field on
-the same model; no parallel model is needed (ADR-0059).
-_Avoid_: faction, team, side (as model names)
+**Allegiance (stored vs effective)** (#4091, ADR-4091 amending ADR-0059):
+Two different reads of the same word. **Stored** is `CombatOpponent.allegiance`
+(`CombatAllegiance`: `ENEMY` default, `ALLY`), mutable, written once at creation for
+a summon or companion, and never touched by a charm. **Effective** is
+`effective_allegiance`/`effective_allegiances` (`world.npc_services.allegiance`): the
+stored value composed with whatever allegiance-flagged conditions the bearer carries
+right now (charmed, turned, calmed), the value that actually decides targeting and
+victory. A charmed enemy stays stored ENEMY forever; only its effective allegiance
+changes while the charm holds. No condition ever writes the stored field.
+_Avoid_: faction, team, side (as model names); "allegiance" alone when the stored vs
+effective distinction matters to the sentence
+
+**Turned** (`Allegiance.TURNED`, #4091):
+An effective allegiance meaning the bearer attacks its own former side's other
+opponents, never a PC and never itself. Set by a condition whose
+`ConditionTemplate.sets_allegiance = TURNED`. Distinct from a charmed
+(`ALLY_OF_CASTER`) opponent, which fights FOR the party instead.
+_Avoid_: switched sides, flipped, defected (informal narration only; the state is
+Turned)
+
+**Won over** (`OpponentStatus.WON_OVER`, #4091):
+What a `CombatOpponent` becomes at encounter victory when it carries an effective
+allegiance other than ENEMY (charmed, turned, or calmed) rather than being beaten
+down. A won-over opponent never counts toward "any hostile remain," so a field where
+every remaining enemy is won over ends as an ordinary VICTORY; its authored
+aftermath pool fires on that victory the same way a `DEFEATED` opponent's does. Won
+over is a status stamped once, at the moment the fight ends; the allegiance that
+earned it can keep changing (settled, broken, lapsed) afterward.
+_Avoid_: pacified, converted, subdued (for the status specifically; "charmed" /
+"turned" / "calmed" name HOW it was won over)
+
+**Bind window** (`bind_window_open`, #4091):
+Whether a charmed nameless (ephemeral, persona-less) `CombatOpponent` is still
+eligible to be bound as a companion after the fight: open exactly while its charmer
+remains in the same room. Shared by the digest row's `can_bind` flag, telnet
+`companion promote`, and `promote_summon_to_companion`'s charmed-enemy path, so
+all three agree. A nameless charmed body with a closed bind window is deleted by
+the lapse sweep or scene finish rather than kept with nothing to do.
+_Avoid_: bind timer, charm window (the window is about the charmer's presence, not
+a countdown)
 
 **Summon**:
 An ALLY `CombatOpponent` conjured during combat by a technique. It has `allegiance=ALLY`,

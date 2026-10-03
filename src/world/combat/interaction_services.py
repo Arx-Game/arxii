@@ -587,13 +587,28 @@ def render_encounter_outcome_narration(
     active_labels: list[str],
     fled_labels: list[str],
     defeated_opponent_labels: list[str],
+    won_over: list[tuple[str, str]] | None = None,
 ) -> str:
-    """Ceremonial encounter-level OUTCOME line (#876)."""
+    """Ceremonial encounter-level OUTCOME line (#876).
+
+    ``won_over`` is ``(name, verb)`` pairs for opponents won over rather than
+    beaten down — charmed, turned or calmed (#4091 Decision 7). A field won
+    over this way ends in an ordinary VICTORY line; no violence is implied.
+    """
     # Fail-loud on unknown outcomes: values are the closed EncounterOutcome enum.
     clauses: list[str] = [_ENCOUNTER_OUTCOME_HEADLINES[outcome]]
     if outcome == EncounterOutcome.VICTORY:
         if defeated_opponent_labels:
             clauses.append(f"{join_labels(defeated_opponent_labels)} will trouble no one further.")
+        if won_over:
+            by_verb: dict[str, list[str]] = {}
+            for name, verb in won_over:
+                by_verb.setdefault(verb, []).append(name)
+            parts = [
+                f"{join_labels(names)} {'is' if len(names) == 1 else 'are'} {verb}"
+                for verb, names in by_verb.items()
+            ]
+            clauses.append(f"{join_labels(parts)}.")
         if active_labels:
             clauses.append(f"{join_labels(active_labels)} stand victorious.")
     elif outcome == EncounterOutcome.DEFEAT and active_labels:
@@ -603,13 +618,14 @@ def render_encounter_outcome_narration(
     return " ".join(clauses)
 
 
-def broadcast_action_outcome(
+def broadcast_action_outcome(  # noqa: PLR0913 - all keyword-only, one per outcome-broadcast facet
     *,
     encounter: CombatEncounter,
     narration: str,
     audience: CastAudience | None = None,
     unattributed_narration: str = "",
     target_personas: list[Persona] | None = None,
+    deliver_telnet: bool = False,
 ) -> Interaction | None:
     """Persist a Narrator-authored OUTCOME interaction and broadcast it.
 
@@ -621,6 +637,17 @@ def broadcast_action_outcome(
     interaction is still persisted (durable) but not broadcast.
 
     Args:
+        deliver_telnet: After the non-concealed room broadcast, also send the
+            line as plain text to every non-web session in the room
+            (``send_outcome_text_to_non_web``, #3807), synchronously so the
+            web push keeps its place ahead of any follow-up push (fix round
+            4), so a bare telnet session gets the line too. Only the
+            top-level encounter-outcome call opts into this (#4091 fix round
+            2); every per-action narration caller of this function (flee,
+            technique cast, NPC actions, windup, sustained rituals, cleanup)
+            keeps the pre-existing WebSocket-only behavior unchanged -- fixing
+            telnet parity for those is a separate, broader #3807 gap outside
+            this fix's scope.
         audience: Who perceived this outcome, from ``resolve_cast_audience``
             (#2734). ``None`` -- the default, and what every non-cast caller
             passes -- keeps the room-wide broadcast byte-identical to its
@@ -660,6 +687,7 @@ def broadcast_action_outcome(
         _broadcast_to_location,
         _build_interaction_payload,
         create_interaction,
+        send_outcome_text_to_non_web,
         write_target_personas,
     )
 
@@ -701,6 +729,14 @@ def broadcast_action_outcome(
 
     if not concealed:
         _broadcast_to_location(room, _payload(interaction))
+        if deliver_telnet:
+            # Synchronous, right after the synchronous web push (#4091 fix round 4):
+            # deliver_outcome_interaction would defer BOTH channels to on_commit,
+            # landing the OUTCOME line after the aftermath digest that
+            # complete_encounter pushes immediately. _broadcast_to_location only
+            # reaches webclient sessions with the structured payload, so this adds
+            # the plain-text line for non-web sessions only -- nothing twice.
+            send_outcome_text_to_non_web(interaction, location=room)
         return interaction
 
     # Concealed: deliberately NOT _broadcast_to_location. Live delivery has to match

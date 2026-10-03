@@ -1061,10 +1061,13 @@ Persistent states that modify capabilities, checks, and resistances with stage p
   (`_process_duration_and_progression`). See ADR-0083 for the separate OOC
   unseen-observer transparency guarantee this composes with.
 - **Charm/Calm content (#1590):** `ensure_charm_content()` seeds the `Charm` `ConditionCategory`
-  (`alters_behavior=True`) + `Charmed`/`Calm` templates; `derive_allegiance()` reads active
-  `alters_behavior` conditions to compute `Allegiance` (see combat + ADR-0058).
+  (`alters_behavior=True`) + `Charmed`/`Calm` templates. **[CORRECTED #4091, ADR-4091]**
+  `derive_allegiance()`/`effective_allegiances()` read `ConditionTemplate.sets_allegiance` by
+  field, never `alters_behavior` and never the condition's name (`alters_behavior` is the
+  PC-consent gate, a separate axis); see combat's Allegiance entries and ADR-4091, amending
+  ADR-0058/ADR-0059.
 - **Integrates with:** combat (DoT, capability blocking, NPC allegiance reads via
-  `ConditionCategory.alters_behavior`; `select_npc_actions` consults `derive_allegiance`),
+  `ConditionTemplate.sets_allegiance`; `select_npc_actions` consults `effective_allegiances`),
   magic (power sources, resonance-environment boon/injury application, behavior-consent gating
   via `ConditionCategory.alters_behavior`), progression (interactions), scenes (telnet `treat` +
   web Treat panel surface converges on the `SceneActionRequest` consent seam via the
@@ -4719,9 +4722,13 @@ register as additional kinds.
   result)`. Persona-less NPCs (mooks) use the session-scoped
   `world.npc_services.ephemeral_disposition` store; the promotion seam to durable rows is
   future work (ADR-0058).
-- **Allegiance (#1590):** `derive_allegiance(opponent, encounter)` derives `ENEMY` /
-  `ALLY_OF_CASTER` / `NEUTRAL` from active `alters_behavior` conditions (charm/calm);
-  consumed by combat's `select_npc_actions` per opponent.
+- **Allegiance (#1590, #4091, ADR-4091):** `effective_allegiance(opponent, instances)` /
+  `effective_allegiances(opponents)` (`world.npc_services.allegiance`) derive `ENEMY` /
+  `ALLY_OF_CASTER` / `TURNED` / `NEUTRAL` from the stored `CombatOpponent.allegiance` composed
+  with the bearer's active `ConditionTemplate.sets_allegiance`-flagged conditions, read by that
+  field, never by a condition's name or `alters_behavior`. Consumed by combat's
+  `select_npc_actions` per opponent and by `_classify_encounter_outcome`'s won-over victory
+  check; see the Combat system doc's Allegiance entries.
 - **Regard (#1717):** `NpcRegard` — a notable NPC's signed opinion
   (`-1000`..`1000`) of a persona/Organization/Society, mirroring
   `LocationOwnership`'s discriminator pattern. Read via `get_regard(holder_persona,
@@ -7565,8 +7572,10 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
   composition.
 - **Effect-palette / summon / allegiance additions (#1584):**
   - `CombatOpponent.allegiance` (`CombatAllegiance`: ENEMY default / ALLY) — mutable
-    side-field; ALLY opponents fight *for* the party (summons, and future charm/
-    switch-sides targets). See ADR-0059.
+    stored side-field for summons and companions only. **[CORRECTED #4091]** A charm/
+    turn/calm never writes this field; charm/switch-sides is instead a derived
+    *effective* allegiance read from the bearer's active conditions (see combat's
+    Allegiance entry and ADR-4091, amending ADR-0059).
   - `CombatOpponent.summoned_by` (FK → `CharacterSheet`, nullable) — conjurer bond; set on
     summoned ALLY opponents.
   - `CombatOpponent.bond_expires_round` (int, nullable) — round at which the summon expires.

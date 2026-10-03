@@ -64,7 +64,8 @@ from world.conditions.services import get_active_conditions
 from world.covenants.factories import CovenantRoleFactory
 from world.fatigue.constants import EffortLevel
 from world.magic.factories import EffectTypeFactory, GiftFactory, TechniqueFactory
-from world.scenes.constants import RoundStatus
+from world.scenes.constants import InteractionMode, RoundStatus
+from world.scenes.models import Interaction
 from world.traits.factories import CheckOutcomeFactory
 from world.vitals.models import CharacterVitals
 
@@ -726,6 +727,35 @@ class ResolveFleeTest(TestCase):
         assert outcome.pool == pool
         assert outcome.selected_consequence == consequence
         assert outcome.combat_interaction is not None
+
+    def test_flee_narration_uses_persona_name_not_sheet_for(self) -> None:
+        """Both the flee ACTION line and the FLED encounter line name the ACTIVE
+        persona, never ``str(CharacterSheet)``'s "Sheet for {key}" (#4091 fix round 2).
+
+        A single fleeing PC with no other participants completes the encounter
+        as FLED, so this exercises both ``actor_label`` sites: the per-action
+        flee narration (``_resolve_flee``) and the top-level encounter outcome
+        line (``_broadcast_encounter_outcome``).
+        """
+        encounter, _ = self._make_encounter()
+        participant = self._add_pc(encounter, role=self.fast_role)
+        self._seed_config()
+        persona = participant.character_sheet.primary_persona
+        persona.name = "The Masked Flight Risk"
+        persona.save(update_fields=["name"])
+        declare_flee(participant)
+
+        success = CheckOutcomeFactory(name="FleePersonaTestSuccess", success_level=0)
+        with force_check_outcome(success):
+            resolve_round(encounter)
+
+        contents = " ".join(
+            Interaction.objects.filter(
+                scene=encounter.scene, mode=InteractionMode.OUTCOME
+            ).values_list("content", flat=True)
+        )
+        assert "The Masked Flight Risk" in contents
+        assert "Sheet for" not in contents
 
     def test_flee_failure_stays_active(self) -> None:
         """Forced FAILURE (level -2) → participant stays ACTIVE."""

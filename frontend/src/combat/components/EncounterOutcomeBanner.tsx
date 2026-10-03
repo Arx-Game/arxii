@@ -40,12 +40,17 @@ export interface EncounterOutcomeBannerProps {
   digests?: EncounterOutcomeDigestEntry[];
   /** Shown as a Dismiss button when provided, clearing the lingering rail (#3551). */
   onDismiss?: () => void;
+  /** Threaded down to each digest's WonOverRows (#4091). */
+  characterId?: number | null;
+  sceneId?: string | null;
 }
 
 export function EncounterOutcomeBanner({
   outcome,
   digests,
   onDismiss,
+  characterId = null,
+  sceneId = null,
 }: EncounterOutcomeBannerProps) {
   const style = OUTCOME_STYLES[outcome] ?? OUTCOME_STYLES.abandoned;
   const showTitles = (digests?.length ?? 0) > 1;
@@ -68,6 +73,8 @@ export function EncounterOutcomeBanner({
               key={entry.participantId}
               digest={entry.digest}
               title={showTitles ? entry.characterName : undefined}
+              characterId={characterId}
+              sceneId={sceneId}
             />
           ))}
         </div>

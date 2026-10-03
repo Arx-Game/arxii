@@ -181,7 +181,14 @@ export function CombatTurnPanel({
             Encounter Concluded: Round {encounter.round_number ?? 0}
           </h2>
         </div>
-        <EncounterOutcomeBanner outcome={outcome} digests={digests} onDismiss={onDismissOutcome} />
+        <EncounterOutcomeBanner
+          outcome={outcome}
+          digests={digests}
+          onDismiss={onDismissOutcome}
+          characterId={characterId}
+          // No scene id, no Settle: WonOverRows hides it rather than post to ''.
+          sceneId={encounter.scene ? String(encounter.scene) : null}
+        />
       </div>
     );
   }

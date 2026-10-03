@@ -14,7 +14,7 @@ if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
 
     from actions.constants import ActionCategory, TargetKind
-    from actions.models import ActionEnhancement
+    from actions.models import ActionEnhancement, ActionTemplate
     from actions.types import TargetFilters
     from flows.scene_data_manager import SceneDataManager
 
@@ -144,6 +144,19 @@ class Action:
         directly and never reaches ``execute()``. A single live dispatch only
         ever travels one of those routes, so there is no double-application.
         """
+
+    def resolve_action_template(self) -> ActionTemplate | None:
+        """The ActionTemplate this registry action resolves through, or None (#4091).
+
+        Default: resolved by ``template_name``, None when blank. Override when the
+        template isn't found by name — e.g. ``SettleAction``, whose one template is
+        found by ``settles_allegiance``, never by name.
+        """
+        if not self.template_name:
+            return None
+        from actions.models import ActionTemplate  # noqa: PLC0415
+
+        return ActionTemplate.objects.filter(name=self.template_name).first()
 
     def check_availability(
         self,

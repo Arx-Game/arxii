@@ -135,6 +135,7 @@ class Allegiance(models.TextChoices):
     ENEMY = "enemy", "Enemy"
     ALLY_OF_CASTER = "ally", "Fights for the charmer"
     NEUTRAL = "neutral", "Will not attack"
+    TURNED = "turned", "Turns on its own side"
 
 
 class FoundationalCapability:

@@ -468,6 +468,67 @@ class WeaponContribution:
 
 
 @dataclass(frozen=True)
+class WonOverRow:
+    """One WON_OVER opponent, as this viewer may act on it (#4091).
+
+    ``condition`` is the designating allegiance instance, gated by visibility
+    (``None`` when the condition is not visible to others and the viewer isn't
+    its source) — the badge it carries, not the verb/label text, which the
+    outcome line already named. ``can_bind``/``can_take_into_service`` require
+    the viewer to be the one who charmed this NPC; ``can_send_away`` requires
+    only that the viewer applied the designating instance (any verb);
+    ``can_settle`` (ruling R2) depends only on the opponent's own state.
+    ``bind_window_open`` is viewer-independent (unlike ``can_bind``, which also
+    requires the viewer to be the charmer): it is Decision 19's own predicate
+    (``_window_open``), true only when the designating hold is the charm kind
+    (``Allegiance.ALLY_OF_CASTER`` — never Turned or Calmed) AND its source is
+    still in the room. A web surface that wants to say "only the charmer can
+    bind this" to a non-charmer viewer must gate on this flag, not on
+    ``verb``/display text, which says nothing about whether the window is even
+    open (#4091 demo-fidelity fix: the note previously showed on nameless
+    Turned/Calmed rows too, where no viewer can ever bind).
+    """
+
+    opponent_id: int
+    name: str
+    verb: str
+    source_label: str
+    nameless: bool
+    persona_id: int | None
+    present: bool
+    condition: ConditionInstance | None
+    holds_until_settled: bool
+    strength: int
+    can_bind: bool
+    can_take_into_service: bool
+    can_send_away: bool
+    can_settle: bool
+    bind_window_open: bool
+
+
+@dataclass(frozen=True)
+class WonOverSnapshot:
+    """The encounter-wide half of the won-over digest rows, taken BEFORE cleanup (#4091).
+
+    ``cleanup_completed_encounter`` deletes ephemeral WON_OVER bodies, and the
+    delete cascades away their allegiance ``ConditionInstance``; reading the rows
+    afterward would silently drop every calmed or turned mook. ``complete_encounter``
+    takes this snapshot first and hands it to ``deliver_aftermath_digests``.
+
+    ``opponents`` are the identity-map-shared rows, so a body deleted by cleanup
+    later reads ``objectdb_id is None`` here too. Every dict is keyed by
+    ``CombatOpponent.pk`` (never ``objectdb_id``, which cleanup nulls). After
+    cleanup, ``refresh_won_over_holds`` swaps in the surviving bodies' live
+    ``instances``; ``designations`` and ``source_labels`` stay pre-cleanup.
+    """
+
+    opponents: list[CombatOpponent]
+    instances: dict[int, list[ConditionInstance]]
+    designations: dict[int, ConditionInstance]
+    source_labels: dict[int, str]
+
+
+@dataclass(frozen=True)
 class AftermathDigest:
     """What one encounter changed for one participant, assembled at conclusion (#3551).
 
@@ -477,7 +538,9 @@ class AftermathDigest:
     SECRET beat, whose line only a GM or staff may see. ``companions_lost`` holds
     the names of this owner's companions released inside the aftermath window
     (#3652) - a companion defeated at EXTREME/LETHAL stakes and released when
-    the fight completes.
+    the fight completes. ``won_over`` holds every WON_OVER opponent of the
+    encounter (not just this viewer's own charms), with per-row action flags
+    computed against this viewer (#4091).
     """
 
     outcome: str
@@ -492,3 +555,4 @@ class AftermathDigest:
     legend_recognitions: dict[int, list[dict[str, str]]] = field(default_factory=dict)
     # Existing story/scenario objective and authored branch selected for this fight.
     objective: dict[str, object] | None = None
+    won_over: list[WonOverRow] = field(default_factory=list)

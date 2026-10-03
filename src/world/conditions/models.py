@@ -13,6 +13,7 @@ from __future__ import annotations
 from decimal import Decimal
 from typing import TYPE_CHECKING
 
+from django.core.exceptions import ValidationError
 from django.db import models
 from django.db.models import Q
 from django.utils.functional import cached_property
@@ -20,6 +21,7 @@ from django.utils.functional import cached_property
 from core.models import ArxSharedMemoryModel as SharedMemoryModel
 from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
 from world.conditions.constants import (
+    Allegiance,
     BreakFreeMode,
     ConditionInteractionOutcome,
     ConditionInteractionTrigger,
@@ -442,6 +444,41 @@ class ConditionTemplate(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
     passive_decay_max_severity = models.PositiveIntegerField(null=True, blank=True)
     passive_decay_blocked_in_engagement = models.BooleanField(default=True)
 
+    # === Allegiance (#4091) ===
+    sets_allegiance = models.CharField(
+        max_length=10,
+        choices=Allegiance.choices,
+        blank=True,
+        default="",
+        help_text=(
+            "Which side this condition puts its bearer on while it holds. Blank = no "
+            "allegiance effect. Read by this field, never by the condition's name, so "
+            "renaming the row changes nothing (#4091)."
+        ),
+    )
+    allegiance_break_check_type = models.ForeignKey(
+        _CHECK_TYPE_FK,
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="+",
+        help_text=(
+            "The check a player character rolls to break this hold when they harm its "
+            "bearer. Required when sets_allegiance is set."
+        ),
+    )
+    settle_consequence_pool = models.ForeignKey(
+        _CONSEQUENCE_POOL_FK,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="+",
+        help_text=(
+            "Graded results when this hold is settled or broken. A stage's own settle "
+            "pool replaces this one at that stage. Empty = the hold simply ends."
+        ),
+    )
+
     # === Clash-Lock Marker (Task 1.5) ===
     is_clash_lock = models.BooleanField(
         default=False,
@@ -498,6 +535,17 @@ class ConditionTemplate(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
 
     def __str__(self) -> str:
         return self.name
+
+    def clean(self) -> None:
+        super().clean()
+        if self.sets_allegiance == Allegiance.ENEMY:
+            raise ValidationError(
+                {"sets_allegiance": "Leave blank for no allegiance effect; Enemy is not one."}
+            )
+        if self.sets_allegiance and self.allegiance_break_check_type_id is None:
+            raise ValidationError(
+                {"allegiance_break_check_type": "Required when this condition sets allegiance."}
+            )
 
     @classmethod
     def get_by_name(cls, name: str) -> ConditionTemplate:
@@ -610,6 +658,17 @@ class ConditionStage(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
         blank=True,
         related_name="condition_stages",
         help_text="Consequence pool that fires per action while at this stage.",
+    )
+    settle_consequence_pool = models.ForeignKey(
+        _CONSEQUENCE_POOL_FK,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="+",
+        help_text=(
+            "Graded results when a hold at this stage is settled or broken. Replaces the "
+            "template's settle pool at this stage; empty = use the template's (#4091)."
+        ),
     )
 
     # === Dynamic Thumbnail (#2196) ===

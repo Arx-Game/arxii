@@ -213,9 +213,8 @@ def charm_into_asset(
     """
     from world.assets.constants import AssetAcquisitionSource  # noqa: PLC0415
     from world.assets.models import NPCAsset  # noqa: PLC0415
-    from world.conditions.constants import CHARM_CONDITION_NAME  # noqa: PLC0415
-    from world.conditions.models import ConditionTemplate  # noqa: PLC0415
-    from world.conditions.services import get_active_conditions  # noqa: PLC0415
+    from world.conditions.constants import Allegiance  # noqa: PLC0415
+    from world.npc_services.allegiance import allegiance_sourced_by  # noqa: PLC0415
 
     target_character = target_persona.character_sheet.character
     if target_character is None:
@@ -223,15 +222,11 @@ def charm_into_asset(
         raise CharmError(msg, user_message=msg)
 
     # Verify the target is charmed BY THE CHARMER (source_character check).
-    charm_template = ConditionTemplate.objects.filter(name=CHARM_CONDITION_NAME).first()
-    if charm_template is None:
-        msg = "They are not charmed by you."
-        raise CharmError(msg, user_message=msg)
-
     charmer_character = charmer_persona.character_sheet.character
-    active = get_active_conditions(target_character, condition=charm_template)
-    is_charmed_by_charmer = any(inst.source_character_id == charmer_character.pk for inst in active)
-    if not is_charmed_by_charmer:
+    instance = allegiance_sourced_by(
+        target_character, charmer_character, kinds=frozenset({Allegiance.ALLY_OF_CASTER})
+    )
+    if instance is None:
         msg = "They are not charmed by you."
         raise CharmError(msg, user_message=msg)
 

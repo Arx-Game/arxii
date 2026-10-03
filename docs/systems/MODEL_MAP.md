@@ -2677,7 +2677,7 @@
 - `classify_source(source: object | None) -> flows.events.payloads.DamageSource - Return a ``DamageSource`` describing *source*'s origin.`
 - `cleanup_completed_encounter(encounter: 'CombatEncounter') -> 'None' - Delete encounter-ephemeral CombatNPC ObjectDBs. Persistent NPCs and PCs`
 - `collect_check_modifiers(character_sheet: 'CharacterSheet', check_type: 'CheckType', *, scene: 'Scene | None' = None, extra_contributions: list[world.checks.types.ModifierContribution] | None = None, skip_fashion: bool = False) -> world.checks.types.ModifierBreakdown - Aggregate all modifier contributions for a check into a ModifierBreakdown.`
-- `combatants_hostile_to(actor: 'CombatParticipant | CombatOpponent') -> 'dict[str, list]' - Return the combatants *actor* may attack, grouped by kind.`
+- `combatants_hostile_to(actor: 'CombatParticipant | CombatOpponent', *, allegiances: 'dict[int, Allegiance] | None' = None) -> 'dict[str, list]' - Return the combatants *actor* may attack, grouped by kind (#1584, #4091).`
 - `complete_encounter(encounter: 'CombatEncounter', *, outcome: 'EncounterOutcome') -> 'None' - Single completion seam for round resolution and the GM end endpoint (#876).`
 - `compute_intensity_for_clash(participant: 'CombatParticipant', action: 'CombatRoundAction') -> 'int' - Return technique.intensity + active INTENSITY_BUMP pull bonuses for the clash floor gate.`
 - `declare_action(participant: 'CombatParticipant', *, focused_action: 'Technique | None' = None, focused_category: 'str | None' = None, effort_level: 'str', focused_opponent_target: 'CombatOpponent | None' = None, focused_ally_target: 'CombatParticipant | None' = None, physical_passive: 'Technique | None' = None, social_passive: 'Technique | None' = None, mental_passive: 'Technique | None' = None, confirm_soulfray_risk: 'bool' = False, strain_commitment: 'int' = 0, fury_commitment: 'FuryTier | None' = None, fury_anchor: 'CharacterSheet | None' = None, cast_destination: 'Position | None' = None, cast_position_a: 'Position | None' = None, cast_position_b: 'Position | None' = None) -> 'CombatRoundAction' - Declare a PC's action for the current round.`
@@ -2695,6 +2695,7 @@
 - `declare_taunt(participant: 'CombatParticipant', opponent: 'CombatOpponent') -> 'CombatRoundAction' - Declare a taunting maneuver — draw an NPC's aggro, auto-ready (#2015).`
 - `declare_use_item(participant: 'CombatParticipant', item_instance: 'ItemInstance', *, target: 'CombatParticipant | CombatOpponent | None' = None) -> 'CombatRoundAction' - Declare using a held on-use item as this round's action (#2023, #2120).`
 - `deduct_anima(character: 'ObjectDB', effective_cost: 'int', *, lethal: 'bool' = True) -> 'int' - Deduct anima from character, returning the overburn deficit.`
+- `delete_ephemeral_npc(opponent: 'CombatOpponent') -> 'bool' - Guarded delete of one ephemeral combat NPC's ``ObjectDB``.`
 - `detect_available_combos(encounter: 'CombatEncounter', round_number: 'int') -> 'list[AvailableCombo]' - Scan declared actions to find combos whose slots are all satisfied.`
 - `dispatch_interpose(interposer: 'ObjectDB', protected: 'ObjectDB', pre_payload: 'DamagePreApplyPayload', *, approach: 'str | None', extra_modifiers: 'int' = 0, select_best_check_rating: 'bool' = False) -> 'ChallengeResolutionResult | None' - Resolve *interposer*'s interpose attempt and apply the graded outcome.`
 - `dispatch_succor(succorer: 'ObjectDB', protected: 'ObjectDB', *, approach: 'str | None', extra_modifiers: 'int' = 0) -> 'float' - Resolve *succorer*'s Succor attempt against *protected* and return the multiplier.`
@@ -2931,6 +2932,7 @@
   - condition -> conditions.ConditionTemplate [FK]
   - resist_check_type -> checks.CheckType [FK] (nullable)
   - consequence_pool -> actions.ConsequencePool [FK] (nullable)
+  - settle_consequence_pool -> actions.ConsequencePool [FK] (nullable)
   - thumbnail -> evennia_extensions.Media [FK] (nullable)
   - properties -> mechanics.Property [M2M]
   - on_entry_conditions -> conditions.ConditionTemplate [M2M]
@@ -2960,6 +2962,8 @@
   - break_free_check_type -> checks.CheckType [FK] (nullable)
   - thumbnail -> evennia_extensions.Media [FK] (nullable)
   - parent_condition -> conditions.ConditionTemplate [FK] (nullable)
+  - allegiance_break_check_type -> checks.CheckType [FK] (nullable)
+  - settle_consequence_pool -> actions.ConsequencePool [FK] (nullable)
   - corruption_resonance -> magic.Resonance [FK] (nullable)
   - properties -> mechanics.Property [M2M]
   - reactive_triggers -> flows.TriggerDefinition [M2M]
@@ -8820,6 +8824,7 @@
 - `invalidate_active_scene_cache(location: 'ObjectDB') -> 'None' - Clear the cached active scene for a location.`
 - `persona_discovery_between(persona: 'Persona | None', linked: 'Persona | None', discovered_by: 'CharacterSheet') -> 'PersonaDiscovery | None' - The existing ``PersonaDiscovery`` row for this (unordered) persona pair + discoverer, if`
 - `persona_for_character(character: 'Character') -> 'Persona' - Return the PC's PRIMARY persona; raise loud on missing sheet/persona.`
+- `persona_names_for_sheets(sheet_ids: 'Iterable[int]') -> 'dict[int, str]' - Batched ``active_persona_for_sheet`` name lookup, ONE round trip (two queries).`
 - `record_persona_discovery(persona: 'Persona | None', linked: 'Persona | None', discovered_by: 'CharacterSheet') -> 'PersonaDiscovery | None' - Record that ``discovered_by`` learned ``persona`` and ``linked`` are the same person.`
 - `register_unseen_observer(scene: 'Scene', observer: 'CharacterSheet', source_label: 'str') -> 'None' - Record that observer can unseen-witness scene; broadcast the OOC state if new.`
 - `set_active_persona(sheet: 'CharacterSheet', persona: 'Persona') -> 'None' - Set the character's active face (#981) — the ONLY mutator.`

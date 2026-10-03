@@ -313,6 +313,44 @@ def has_persistent_identity_references(objectdb: ObjectDB) -> bool:
     return False
 
 
+def delete_ephemeral_npc(opponent: CombatOpponent) -> bool:
+    """Guarded delete of one ephemeral combat NPC's ``ObjectDB``.
+
+    Layer 5 of the multi-layer guard: a defensive re-check right before the
+    delete, in case a corrupt row escaped Layers 1-4.
+
+    ``ObjectDB`` isn't an ``ArxSharedMemoryModel``, so its ``delete()`` nulls
+    referrers' FKs via a bulk ``SET_NULL`` UPDATE outside
+    ``core.deletion.IdentityMapCollector`` — the cached ``opponent`` would
+    otherwise keep reporting the deleted ``objectdb`` forever. Setting the
+    field and saving on THIS held instance is enough: idmapper's identity map
+    means there is only one cached ``CombatOpponent`` per pk in the process,
+    so no further cache flush is needed afterward (fix round 3 — a bare
+    ``flush_instance_cache()`` call here previously evicted the ENTIRE class
+    cache, including every other live encounter's cached opponents, once per
+    mob in the cleanup loop). Mirrors ``release_companion``'s identical
+    objectdb-nulling fix (``world/companions/services.py`` — that one keeps
+    its own narrower flush; unrelated to this fix).
+
+    Shared by this module's own ``cleanup_completed_encounter`` ephemeral
+    sweep and ``world.combat.won_over.delete_won_over_npc`` (#4091 fix round
+    2) — one guard, one identity-map fix, not two copies of either.
+    """
+    objectdb = opponent.objectdb
+    if objectdb is None or not opponent.objectdb_is_ephemeral:
+        return False
+    if not is_combat_npc_typeclass(objectdb):
+        logger.error("Refusing to delete: %s is not a CombatNPC typeclass", objectdb)
+        return False
+    if has_persistent_identity_references(objectdb):
+        logger.error("Refusing to delete: %s has persistent identity references", objectdb)
+        return False
+    objectdb.delete()
+    opponent.objectdb = None
+    opponent.save(update_fields=["objectdb"])
+    return True
+
+
 def _character_has_death_deferred(character: ObjectDB) -> bool:  # noqa: OBJECTDB_PARAM
     """Return True if the character has any active condition granting death_deferred.
 
@@ -661,6 +699,11 @@ class CombatTechniqueResolver:
         SINGLE/SELF branch does not, since that case is hard-gated pre-flight by
         ``_check_combat_target_prerequisites`` in ``resolve_combat_technique``
         before this method is ever reached for an AoE-independent enumeration.
+
+        AREA additionally drops any opponent whose EFFECTIVE allegiance is
+        ALLY_OF_CASTER (a summon, or a charmed NPC) — a PC's AoE spares the party's
+        own side (Decision 4, #4091); a TURNED or calmed opponent stays in the AoE
+        set, since neither fights for the party.
         """
         from actions.constants import ActionTargetType  # noqa: PLC0415
 
@@ -680,6 +723,11 @@ class CombatTechniqueResolver:
                 .exclude(status=OpponentStatus.DEFEATED)
                 .order_by("pk")
             )
+
+            from world.npc_services.allegiance import effective_allegiances  # noqa: PLC0415
+
+            allegiances = effective_allegiances(opponents)
+            opponents = [o for o in opponents if allegiances[o.pk] != Allegiance.ALLY_OF_CASTER]
             return self._filter_by_target_prerequisites(technique, opponents)
 
         if target_type == ActionTargetType.FILTERED_GROUP:
@@ -1326,33 +1374,63 @@ def _check_combat_target_prerequisites(
 
 def combatants_hostile_to(
     actor: CombatParticipant | CombatOpponent,
+    *,
+    allegiances: dict[int, Allegiance] | None = None,
+    opponents: list[CombatOpponent] | None = None,
 ) -> dict[str, list]:
-    """Return the combatants *actor* may attack, grouped by kind.
+    """Return the combatants *actor* may attack, grouped by kind (#1584, #4091).
 
-    Single source of truth for friend/foe resolution (Tasks 7 and 13 use this):
+    Reads EFFECTIVE allegiance (stored side composed with allegiance conditions):
+    - A PC participant, an ALLY summon or a charmed NPC: hostile to ENEMY and TURNED
+      opponents; never to PCs.
+    - A TURNED NPC: hostile to other stored-ENEMY opponents still effectively ENEMY.
+    - A calmed (NEUTRAL) NPC: hostile to no one.
+    - An ENEMY opponent: hostile to PCs and stored ALLY summons only (Decision 3).
 
-    - A PC participant is hostile to ENEMY opponents (not to ALLY summons).
-    - An ALLY opponent (summon/charmed) is hostile to ENEMY opponents only.
-    - An ENEMY opponent is hostile to PCs *and* any ALLY summons.
+    ``opponents`` is the encounter's ACTIVE opponents when the caller already
+    holds them (``select_npc_actions`` computes them once per round, #4091 final
+    review), so a round with many charmed or turned attackers does not re-query
+    them per attacker. Rows are identity-map shared, so one that fled earlier in
+    the same pass is dropped by its live status.
     """
-    enc = actor.encounter
+    from world.npc_services.allegiance import effective_allegiances  # noqa: PLC0415
+
+    if opponents is None:
+        opponents = list(
+            CombatOpponent.objects.filter(
+                encounter_id=actor.encounter_id, status=OpponentStatus.ACTIVE
+            )
+        )
+    else:
+        opponents = [o for o in opponents if o.status == OpponentStatus.ACTIVE]
+    if allegiances is None:
+        allegiances = effective_allegiances(opponents)
+    if isinstance(actor, CombatParticipant):
+        side = Allegiance.ALLY_OF_CASTER
+    else:
+        side = allegiances.get(actor.pk, Allegiance.ENEMY)
+    if side == Allegiance.ALLY_OF_CASTER:
+        targets = [
+            o for o in opponents if allegiances.get(o.pk) in (Allegiance.ENEMY, Allegiance.TURNED)
+        ]
+        return {"participants": [], "opponents": targets}
+    if side == Allegiance.TURNED:
+        targets = [
+            o
+            for o in opponents
+            if o.pk != actor.pk
+            and o.allegiance == CombatAllegiance.ENEMY
+            and allegiances.get(o.pk) == Allegiance.ENEMY
+        ]
+        return {"participants": [], "opponents": targets}
+    if side == Allegiance.NEUTRAL:
+        return {"participants": [], "opponents": []}
     active_pcs = list(
-        CombatParticipant.objects.filter(encounter=enc, status=ParticipantStatus.ACTIVE)
-    )
-    enemies = list(
-        CombatOpponent.objects.filter(
-            encounter=enc, status=OpponentStatus.ACTIVE, allegiance=CombatAllegiance.ENEMY
+        CombatParticipant.objects.filter(
+            encounter_id=actor.encounter_id, status=ParticipantStatus.ACTIVE
         )
     )
-    allies = list(
-        CombatOpponent.objects.filter(
-            encounter=enc, status=OpponentStatus.ACTIVE, allegiance=CombatAllegiance.ALLY
-        )
-    )
-    if isinstance(actor, CombatParticipant) or actor.allegiance == CombatAllegiance.ALLY:
-        # PC side: hostile to ENEMY opponents only.
-        return {"participants": [], "opponents": enemies}
-    # ENEMY opponent: hostile to PCs and any ALLY summons.
+    allies = [o for o in opponents if o.allegiance == CombatAllegiance.ALLY]
     return {"participants": active_pcs, "opponents": allies}
 
 
@@ -4129,56 +4207,6 @@ def _select_opponent_targets(
     )
 
 
-def _exclude_charmers_party(
-    opponent: CombatOpponent, participants: list[CombatParticipant]
-) -> list[CombatParticipant]:
-    """Return ``participants`` minus the charm source's party (#1590).
-
-    The charmer is the ``source_character`` on the opponent's active Charm
-    condition. If it resolves to an active ``CombatParticipant``, exclude it.
-    MVP: parties are 1:1 with participants (no party grouping yet), so we
-    exclude the single charmer participant. If the source is unresolvable
-    (no ``source_character`` on the Charm, or the charmer left the encounter),
-    the charmed NPC has no party to fight for — returning ``[]`` so the caller
-    skips the round is intentional (NOT a fall-back to ENEMY: a charmed NPC
-    must never attack the charmer's side even if the charmer is gone).
-    """
-    from world.conditions.constants import CHARM_CONDITION_NAME  # noqa: PLC0415
-    from world.conditions.services import get_active_conditions  # noqa: PLC0415
-
-    if opponent.objectdb_id is None:
-        return participants
-    charmer_pk = None
-    for inst in get_active_conditions(opponent.objectdb):
-        if inst.condition.name == CHARM_CONDITION_NAME and inst.source_character_id is not None:
-            charmer_pk = inst.source_character_id
-            break
-    if charmer_pk is None:
-        return []
-    return [p for p in participants if p.character_sheet.character_id != charmer_pk]
-
-
-def _get_opponent_targets(
-    opponent: CombatOpponent,
-    active_participants: list[CombatParticipant],
-    encounter: CombatEncounter,
-) -> list[CombatParticipant]:
-    """Return the PCs an NPC is allowed to target after consulting allegiance.
-
-    Calm (``NEUTRAL``) returns an empty list so the NPC skips the round.
-    Charm (``ALLY_OF_CASTER``) excludes the charmer's party. Everything else
-    returns the full active participant list (#1590).
-    """
-    from world.npc_services.allegiance import derive_allegiance  # noqa: PLC0415
-
-    allegiance = derive_allegiance(opponent, encounter)
-    if allegiance == Allegiance.NEUTRAL:
-        return []
-    if allegiance == Allegiance.ALLY_OF_CASTER:
-        return _exclude_charmers_party(opponent, list(active_participants))
-    return list(active_participants)
-
-
 def _batch_fetch_cooldown_data(
     opponents: list[CombatOpponent],
     entries_by_pool: dict[int, list[ThreatPoolEntry]],
@@ -4319,9 +4347,11 @@ def select_npc_actions(
 
     For each active opponent with a threat pool, picks a weighted-random
     entry from eligible threat pool entries and assigns targets. Targeting is
-    allegiance-aware (#1590, ADR-0058): a charmed opponent (``ALLY_OF_CASTER``)
-    skips the charmer's party, and a calmed opponent (``NEUTRAL``) holds and
-    takes no action; an opponent left with no valid targets skips the round.
+    allegiance-aware (#1590, #4091, ADR-0058 as amended by ADR-4091): a charmed
+    opponent (``ALLY_OF_CASTER``) targets ENEMY/TURNED opponents, a turned
+    opponent (``TURNED``) targets its own former (stored-ENEMY) side, and a
+    calmed opponent (``NEUTRAL``) holds and takes no action; an opponent left
+    with no valid targets skips the round.
 
     Raises ValueError if the encounter is not in DECLARING status.
     """
@@ -4349,6 +4379,16 @@ def select_npc_actions(
 
     if not opponents:
         return []
+
+    # Effective allegiance for every active opponent, computed once per round
+    # (#4091) — includes opponents with no threat pool (e.g. mirrored bosses)
+    # so a charmed/turned attacker's hostile pool sees the whole encounter.
+    from world.npc_services.allegiance import effective_allegiances  # noqa: PLC0415
+
+    all_active = list(
+        CombatOpponent.objects.filter(encounter=encounter, status=OpponentStatus.ACTIVE)
+    )
+    allegiances = effective_allegiances(all_active)
 
     # Batch-prefetch all threat pool entries for all opponent pools
     pool_ids = {o.threat_pool_id for o in opponents if o.threat_pool_id}
@@ -4428,6 +4468,8 @@ def select_npc_actions(
                 threat_map=threat_maps.get(opponent.pk),
                 shield_participant_ids=shield_participant_ids,
                 locked_participant_id=active_locks_by_opponent.get(opponent.pk),
+                allegiances=allegiances,
+                active_opponents=all_active,
             )
         )
 
@@ -4469,13 +4511,15 @@ def _build_opponent_round_actions(  # noqa: PLR0913
     threat_map: dict[int, int] | None = None,
     shield_participant_ids: set[int] | None = None,
     locked_participant_id: int | None = None,
+    allegiances: dict[int, Allegiance],
+    active_opponents: list[CombatOpponent],
 ) -> list[CombatOpponentAction]:
     """Create one opponent's NPC action rows for the current round.
 
     Returns the created actions, or an empty list when the opponent skips the
     round — no eligible (off-cooldown) threat entry, or the empty-pool guard:
-    no valid target (a #1584 ALLY summon with no live enemy, or a #1590
-    calmed/neutral opponent whose threat-read yielded no PCs).
+    no valid target (a #1584 ALLY summon or #4091 charmed/turned NPC with no
+    live hostile, or a #1590 calmed/neutral opponent).
     """
     from world.combat.morale import (  # noqa: PLC0415
         OpponentMoraleState,
@@ -4493,7 +4537,11 @@ def _build_opponent_round_actions(  # noqa: PLR0913
         return []
 
     target_pool, targeting_participants = _npc_action_target_pool(
-        opponent, active_participants, encounter
+        opponent,
+        active_participants,
+        encounter,
+        allegiances=allegiances,
+        active_opponents=active_opponents,
     )
     if not target_pool:
         return []
@@ -4653,38 +4701,43 @@ def _execute_npc_attack(  # noqa: PLR0913
 def _npc_action_target_pool(
     opponent: CombatOpponent,
     active_participants: list[CombatParticipant],
-    encounter: CombatEncounter,
+    encounter: CombatEncounter,  # noqa: ARG001 - kept for caller signature symmetry
+    *,
+    allegiances: dict[int, Allegiance],
+    active_opponents: list[CombatOpponent],
 ) -> tuple[list, bool]:
-    """Route an opponent's targeting by allegiance (#1584 + #1590).
+    """Route an opponent's targeting by EFFECTIVE allegiance (#1584, #1590, #4091).
 
-    Two allegiance systems compose here:
+    * **ALLY_OF_CASTER** (a #1584 ALLY summon, or a charmed NPC) targets
+      ``combatants_hostile_to``'s opponent pool — ACTIVE opponents whose
+      effective allegiance is ENEMY or TURNED — minus untargetable
+      (intangible) opponents; never a PC.
+    * **TURNED** targets other ACTIVE opponents still on its former
+      (stored-ENEMY, effectively ENEMY) side; never a PC, never itself.
+    * **NEUTRAL** (calmed) skips the round: empty opponent pool.
+    * **ENEMY** (the common case) targets the PC side as today — enemies
+      ignore charmed/turned NPCs (Decision 3).
 
-    * **#1584 `CombatOpponent.allegiance`** routes an ALLY *summon* onto its
-      hostile ENEMY opponents (opponent-vs-opponent damage). Intangible opponents
-      (objectdb set, grants_intangibility active) are excluded (#1584 Task 8);
-      opponents with no objectdb are kept (they cannot be queried for it).
-    * **#1590 threat-read** (`_get_opponent_targets`) refines an ENEMY opponent's
-      PC targets — calm (NEUTRAL) yields no PCs (the empty-pool guard then makes it
-      skip the round), charm (ALLY_OF_CASTER) excludes the charmer's party.
-
-    An ENEMY opponent targets the (threat-read-filtered) PC side; an ALLY summon
-    targets ENEMY opponents. ``active_participants`` is already intangibility- and
-    can_act-filtered by ``select_npc_actions``.
+    ``active_participants`` is already intangibility- and can_act-filtered by
+    ``select_npc_actions``.
 
     Returns ``(target_pool, targeting_participants)``.
     """
-    if opponent.allegiance == CombatAllegiance.ALLY:
+    side = allegiances.get(opponent.pk, Allegiance.ENEMY)
+    if side in (Allegiance.ALLY_OF_CASTER, Allegiance.TURNED):
         from world.conditions.services import is_untargetable  # noqa: PLC0415
 
         opponent_pool = [
             opp
-            for opp in combatants_hostile_to(opponent)["opponents"]
+            for opp in combatants_hostile_to(
+                opponent, allegiances=allegiances, opponents=active_opponents
+            )["opponents"]
             if opp.objectdb_id is None or not is_untargetable(opp.objectdb)
         ]
         return opponent_pool, False
-
-    # ENEMY opponent: #1590's allegiance threat-read decides the PC pool.
-    return _get_opponent_targets(opponent, active_participants, encounter), True
+    if side == Allegiance.NEUTRAL:
+        return [], True
+    return list(active_participants), True
 
 
 def _set_npc_action_targets(  # noqa: PLR0913
@@ -4697,7 +4750,14 @@ def _set_npc_action_targets(  # noqa: PLR0913
     threat_map: dict[int, int] | None = None,
     shield_participant_ids: set[int] | None = None,
 ) -> None:
-    """Populate exactly one target relation on an NPC action (#1584)."""
+    """Populate exactly one target relation on an NPC action (#1584).
+
+    The opponent branch (an ALLY/charmed/turned attacker, #4091) never forwards
+    ``threat_map``/``shield_participant_ids`` — both are pre-computed keyed by
+    CombatParticipant pk, and a CombatOpponent pk can collide with one of those
+    keys (they are independent sequences), silently corrupting HIGHEST_THREAT /
+    SPECIFIC_ROLE selection for opponent targets.
+    """
     if targeting_participants:
         action.targets.set(
             _select_targets(
@@ -4714,8 +4774,8 @@ def _set_npc_action_targets(  # noqa: PLR0913
                 entry,
                 target_pool,
                 rotation=rotation,
-                _threat_map=threat_map,
-                _shield_participant_ids=shield_participant_ids,
+                _threat_map=None,
+                _shield_participant_ids=None,
             )
         )
 
@@ -4746,12 +4806,14 @@ def _select_windup_targets(  # noqa: PLR0913
             _threat_map=threat_map,
             _shield_participant_ids=shield_participant_ids,
         )
+    # See _set_npc_action_targets: never forward the participant-keyed maps
+    # into opponent-targeting selection (threat-map pk collision, #4091).
     return _select_opponent_targets(
         entry,
         target_pool,
         rotation=rotation,
-        _threat_map=threat_map,
-        _shield_participant_ids=shield_participant_ids,
+        _threat_map=None,
+        _shield_participant_ids=None,
     )
 
 
@@ -4997,6 +5059,9 @@ def _mature_one_pending_attack(
     encounter: CombatEncounter,
     pending: PendingOpponentAttack,
     round_number: int,
+    *,
+    allegiances: dict[int, Allegiance],
+    active_opponents: list[CombatOpponent],
 ) -> None:
     """Resolve a single matured wind-up: fizzle, lose-target, or fire (#2637 design 3)."""
     from world.vitals.services import is_dead  # noqa: PLC0415
@@ -5040,7 +5105,11 @@ def _mature_one_pending_attack(
         ).select_related("character_sheet__character")
     )
     target_pool, targeting_participants = _npc_action_target_pool(
-        pending.opponent, active_participants, encounter
+        pending.opponent,
+        active_participants,
+        encounter,
+        allegiances=allegiances,
+        active_opponents=active_opponents,
     )
     if not target_pool:
         _broadcast_windup_fizzled(pending, reason="loses its target")
@@ -5078,8 +5147,23 @@ def _mature_pending_opponent_attacks(encounter: CombatEncounter, round_number: i
             resolves_round=round_number,
         ).select_related("opponent", "threat_entry", "target__character_sheet__character")
     )
+    if not pending_rows:
+        return
+
+    from world.npc_services.allegiance import effective_allegiances  # noqa: PLC0415
+
+    all_active = list(
+        CombatOpponent.objects.filter(encounter=encounter, status=OpponentStatus.ACTIVE)
+    )
+    allegiances = effective_allegiances(all_active)
     for pending in pending_rows:
-        _mature_one_pending_attack(encounter, pending, round_number)
+        _mature_one_pending_attack(
+            encounter,
+            pending,
+            round_number,
+            allegiances=allegiances,
+            active_opponents=all_active,
+        )
 
 
 def _mature_sustained_technique(sustained: SustainedAction, round_number: int) -> None:
@@ -6058,6 +6142,14 @@ def apply_damage_to_opponent(  # noqa: PLR0913
     (#2207) hook — the opponent's own DAMAGE_PRE_APPLY trigger band still
     runs. See :func:`_resolve_opponent_pre_apply`.
 
+    Allegiance-break rolls (#4091, Decision 16) do NOT live here — they used to,
+    once per call, which meant a multi-profile technique or a combo rider rolled
+    (and narrated a "holds" line) several times for one blow. They are rolled
+    once per opponent per PC action, after all of that action's damage (every
+    profile plus any combo rider) is known — see
+    :func:`_attempt_allegiance_breaks_for_action`, called from
+    :func:`_resolve_pc_action`.
+
     ``execute_missing_health_multiplier`` (#2643): the resolving technique damage
     profile's ``execute_missing_health_multiplier`` (default 0 = no-op, matching every
     existing caller byte-for-byte). Scales damage up as the opponent's PRE-hit health
@@ -6190,22 +6282,26 @@ def _apply_passive_technique(
     Target resolution (v1):
 
     - ``SELF`` → the actor's own character.
-    - ``ENEMY`` → every ACTIVE ``allegiance=ENEMY`` opponent's ``objectdb``. An
-      ALLY summon fights on the actor's side, so enemy-targeted AoE never lands on
-      it (#1584). Mirrors ``_resolve_condition_target``'s ENEMY branch, which
-      returns ``opp.objectdb`` for an active opponent. Every opponent (including
-      ephemeral CombatNPCs) is created with an ObjectDB by ``add_opponent``; the FK
-      is only nulled if the ObjectDB is destroyed externally, so we skip opponents
-      whose ``objectdb`` is None — matching the focused path's None-guard.
+    - ``ENEMY`` → every ACTIVE opponent's ``objectdb`` whose EFFECTIVE allegiance
+      is not ALLY_OF_CASTER (#1584, #4091). An ALLY summon or a charmed NPC fights
+      on the actor's side, so enemy-targeted AoE never lands on either; a TURNED
+      or calmed (NEUTRAL) opponent is still the party's opponent for a passive —
+      only a charmed/summoned ally is spared. Mirrors ``_resolve_condition_target``'s
+      ENEMY branch, which returns ``opp.objectdb`` for an active opponent. Every
+      opponent (including ephemeral CombatNPCs) is created with an ObjectDB by
+      ``add_opponent``; the FK is only nulled if the ObjectDB is destroyed
+      externally, so we skip opponents whose ``objectdb`` is None — matching the
+      focused path's None-guard.
     - ``ALLY`` → every ACTIVE participant except the actor.
 
-    When ``technique.combo_opening_probing`` is set, every ACTIVE ENEMY opponent
+    When ``technique.combo_opening_probing`` is set, every such ACTIVE opponent
     gains that much probing (the combo-opening reward) via ``increment_probing`` —
     the combo-opening effect for ephemeral opponents regardless of conditions.
     """
     from world.conditions.services import bulk_apply_conditions  # noqa: PLC0415
     from world.conditions.types import BulkConditionApplication  # noqa: PLC0415
     from world.magic.models.techniques import ConditionTargetKind  # noqa: PLC0415
+    from world.npc_services.allegiance import effective_allegiances  # noqa: PLC0415
 
     actor = participant.character_sheet.character
 
@@ -6216,6 +6312,7 @@ def _apply_passive_technique(
             status=OpponentStatus.ACTIVE,
         ).select_related("objectdb")
     )
+    allegiances = effective_allegiances(active_opponents)
     active_allies = list(
         CombatParticipant.objects.filter(
             encounter=encounter,
@@ -6225,12 +6322,13 @@ def _apply_passive_technique(
         .select_related("character_sheet__character")
     )
 
-    # Combo-opening probing: granted to every active ENEMY opponent independent of
-    # any condition application (the combo-opening effect for ephemeral opponents).
-    # ALLY summons are on the actor's side, so probing them is meaningless (#1584).
+    # Combo-opening probing: granted to every opponent not fighting on the actor's
+    # side, independent of any condition application (the combo-opening effect for
+    # ephemeral opponents). A charmed/summoned ally is on the actor's side, so
+    # probing it is meaningless (#1584); a turned or calmed opponent still gets it.
     if technique.combo_opening_probing:
         for opp in active_opponents:
-            if opp.allegiance == CombatAllegiance.ENEMY:
+            if allegiances[opp.pk] != Allegiance.ALLY_OF_CASTER:
                 increment_probing(opp, technique.combo_opening_probing)
 
     # resolve_round prefetches ``..._passive__condition_applications__condition`` so
@@ -6258,7 +6356,7 @@ def _apply_passive_technique(
             targets = [
                 opp.objectdb
                 for opp in active_opponents
-                if opp.allegiance == CombatAllegiance.ENEMY and opp.objectdb is not None
+                if allegiances[opp.pk] != Allegiance.ALLY_OF_CASTER and opp.objectdb is not None
             ]
         elif row.target_kind == ConditionTargetKind.ALLY:
             targets = [ally.character_sheet.character for ally in active_allies]
@@ -7204,7 +7302,11 @@ def _group_combo_outcomes(
     combo_groups: dict[int, list[tuple[ActionOutcome, CombatParticipant]]] = defaultdict(list)
     for outcome in action_outcomes:
         if outcome.combo_used is not None and outcome.participant_id is not None:
-            participant = CombatParticipant.objects.filter(pk=outcome.participant_id).first()
+            participant = (
+                CombatParticipant.objects.filter(pk=outcome.participant_id)
+                .select_related("character_sheet__character")
+                .first()
+            )
             if participant is not None:
                 combo_groups[outcome.combo_used.pk].append((outcome, participant))
     return combo_groups
@@ -7226,8 +7328,14 @@ def _broadcast_combo_finisher_narration(
         broadcast_action_outcome,
         render_combo_finisher_narration,
     )
+    from world.scenes.services import persona_names_for_sheets  # noqa: PLC0415
 
-    contributor_labels = [str(p) for _, p in group]
+    # Persona display name, not str(CombatParticipant) -> str(CharacterSheet)
+    # ("Sheet for {key}") -- #4091 fix round 3.
+    persona_names = persona_names_for_sheets(p.character_sheet_id for _, p in group)
+    contributor_labels = [
+        persona_names.get(p.character_sheet_id, p.character_sheet.character.key) for _, p in group
+    ]
     total_damage = sum(dr.damage_dealt for outcome, _ in group for dr in outcome.damage_results)
     # Determine target label from the first outcome's action.
     target_label = None
@@ -7994,7 +8102,7 @@ def _resolve_parley(
         morale_state_for,
         tier_has_morale,
     )
-    from world.conditions.constants import CALM_CONDITION_NAME  # noqa: PLC0415
+    from world.conditions.constants import Allegiance  # noqa: PLC0415
     from world.conditions.models import ConditionTemplate  # noqa: PLC0415
     from world.conditions.services import apply_condition  # noqa: PLC0415
     from world.npc_services.social_disposition import (  # noqa: PLC0415
@@ -8032,7 +8140,14 @@ def _resolve_parley(
     if target.tier == OpponentTier.BOSS:
         required_decisive_level += BOSS_PARLEY_RESISTANCE_STEP
     if success_level >= required_decisive_level and target.objectdb is not None:
-        calm = ConditionTemplate.objects.filter(name=CALM_CONDITION_NAME).first()
+        # Designated by field, never by name (#4091 final review): the calming
+        # condition is the one that sets NEUTRAL; lowest pk when staff author several.
+        # The REQUIRED dashboard probe `allegiance-calm-condition` reports none.
+        calm = (
+            ConditionTemplate.objects.filter(sets_allegiance=Allegiance.NEUTRAL)
+            .order_by("pk")
+            .first()
+        )
         if calm is not None:
             apply_condition(
                 target.objectdb,
@@ -8428,8 +8543,13 @@ def _resolve_flee(
             summary="flee attempt",
         )
 
+    from world.scenes.services import active_persona_for_sheet  # noqa: PLC0415
+
     narration = render_flee_outcome_narration(
-        actor_label=str(participant),
+        # The persona this PC is CURRENTLY presenting as, not str(participant)
+        # -> "Sheet for {key}" (#4091 fix round 2). One call per action, not a
+        # per-participant loop.
+        actor_label=active_persona_for_sheet(participant.character_sheet).name,
         escaped=escaped,
         at_cost=escaped and consequence_applies,
     )
@@ -8517,6 +8637,7 @@ def _record_and_broadcast_pc_action(  # noqa: PLR0913
         paid_price_snippet,
         technique_display_name,
     )
+    from world.scenes.services import active_persona_for_sheet  # noqa: PLC0415
 
     target_label = target.name if target is not None else None
     caster_character = participant.character_sheet.character
@@ -8533,7 +8654,9 @@ def _record_and_broadcast_pc_action(  # noqa: PLR0913
         None,
     )
     narration = render_action_outcome_narration(
-        actor_label=str(participant),
+        # The persona this PC is CURRENTLY presenting as, not str(participant)
+        # -> "Sheet for {key}" (#4091 fix round 2). One call per action.
+        actor_label=active_persona_for_sheet(participant.character_sheet).name,
         technique_name=technique_display_name(caster_character, technique),
         target_label=target_label,
         outcome=outcome,
@@ -8728,6 +8851,66 @@ def _apply_combo_rider(
     outcome.damage_results.append(dmg_result)
 
 
+def _attempt_allegiance_breaks_for_action(
+    participant: CombatParticipant, outcome: ActionOutcome
+) -> None:
+    """#4091 Decision 16, fix round 1: one break-attempt roll per opponent per PC
+    action, not per damage call.
+
+    ``outcome.damage_results`` at the point this is called (from
+    ``_resolve_pc_action``, right after the technique pipeline AND any combo
+    rider have both run, before the wind-up interception rider) holds every
+    ``OpponentDamageResult`` this single PC action produced — every damage
+    profile against every target, plus the combo rider's own hit. Grouping by
+    ``opponent_id`` and summing ``damage_dealt`` gives the blow's TOTAL pressure
+    against each opponent it actually harmed, so a multi-profile technique or a
+    combo-upgraded hit rolls exactly once per opponent, against the combined
+    damage -- never once per profile (previously inside ``apply_damage_to_opponent``
+    itself, which fired, and narrated a "holds" line, on every single profile/
+    rider call).
+
+    Only a PC's own chosen strike reaches here (this function is called only
+    from ``_resolve_pc_action``) -- NPC-vs-NPC (``_resolve_npc_action_on_opponent_
+    target``), reflected, rampart, and duel-mirror damage never do.
+    """
+    from world.npc_services.allegiance import (  # noqa: PLC0415
+        allegiance_instances_for,
+        designating_instance,
+    )
+    from world.npc_services.allegiance_outcomes import attempt_allegiance_break  # noqa: PLC0415
+
+    totals: dict[int, int] = {}
+    for result in outcome.damage_results:
+        opponent_id = result.opponent_id
+        if opponent_id is None or result.damage_dealt <= 0:
+            continue
+        totals[opponent_id] = totals.get(opponent_id, 0) + result.damage_dealt
+    if not totals:
+        return
+
+    # Batched (#4091 final review): one opponent fetch and one allegiance-instance
+    # fetch for every harmed opponent, not a SELECT plus get_active_conditions each.
+    opponents = [
+        opponent
+        for opponent in CombatOpponent.objects.filter(pk__in=totals)
+        .exclude(status=OpponentStatus.DEFEATED)
+        .select_related("objectdb")
+        .order_by("pk")
+        if opponent.objectdb_id is not None
+    ]
+    by_target = allegiance_instances_for(o.objectdb_id for o in opponents)
+    for opponent in opponents:
+        instance = designating_instance(by_target.get(opponent.objectdb_id, []))
+        if instance is None:
+            continue
+        attempt_allegiance_break(
+            striker=participant.character_sheet,
+            opponent=opponent,
+            damage_dealt=totals[opponent.pk],
+            instance=instance,
+        )
+
+
 def _maybe_record_npc_regard_on_defeat(
     participant: CombatParticipant,
     action: CombatRoundAction,
@@ -8880,6 +9063,12 @@ def _resolve_pc_action(
     if action.combo_upgrade and target is not None:
         _apply_combo_rider(participant, action, target, outcome)
 
+    # #4091 Decision 16: one break-attempt roll per opponent this action
+    # harmed, against the combined pipeline + combo-rider damage. Must run
+    # after both of the above and before the wind-up rider below (which is
+    # not part of this blow's own pressure).
+    _attempt_allegiance_breaks_for_action(participant, outcome)
+
     # Wind-up interception rider (#2637 design 4): a landing hit on a
     # winding-up opponent downgrades its telegraphed attack. No new button —
     # rides the existing damage-landed moment.
@@ -8910,6 +9099,32 @@ def _resolve_pc_action(
     _maybe_record_npc_regard_on_defeat(participant, action, target, outcome)
 
     return outcome
+
+
+def _npc_action_target_label(
+    label_targets: list[CombatParticipant] | list[CombatOpponent],
+) -> str | None:
+    """Join display labels for an NPC action's targets, batched (#4091 fix round 3).
+
+    ``label_targets`` holds either PC ``CombatParticipant``s (the normal
+    PC-facing path) or NPC ``CombatOpponent``s (the ALLY-summon/charmed-NPC
+    opponent-target path) — never a mix. A PC target gets its persona name
+    (never ``str(CombatParticipant)``'s ``"Sheet for {key}"``); an opponent
+    target's ``.name`` was already correct.
+    """
+    if not label_targets:
+        return None
+    if isinstance(label_targets[0], CombatParticipant):
+        from world.scenes.services import persona_names_for_sheets  # noqa: PLC0415
+
+        persona_names = persona_names_for_sheets(p.character_sheet_id for p in label_targets)
+        names = [
+            persona_names.get(p.character_sheet_id, p.character_sheet.character.key)
+            for p in label_targets
+        ]
+    else:
+        names = [t.name for t in label_targets]
+    return ", ".join(names)
 
 
 def _resolve_npc_action_on_target(  # noqa: PLR0913 - per-target resolution needs full context
@@ -9024,22 +9239,55 @@ def _resolve_npc_action_on_target(  # noqa: PLR0913 - per-target resolution need
         condition_applications.extend((target_obj, ct) for ct in conditions)
 
 
-def _resolve_npc_action_on_opponent_target(
+def _allegiance_credit_sheet(
+    opponent: CombatOpponent, encounter: CombatEncounter
+) -> CharacterSheet | None:
+    """Who gets damage/defeat credit for an NPC fighting on the party's behalf (#4091).
+
+    A summon credits its summoner. A charmed or turned NPC credits the PC who applied
+    the designating allegiance condition, only while that PC is an ACTIVE participant.
+    """
+    if opponent.summoned_by_id is not None:
+        return opponent.summoned_by
+    if opponent.objectdb_id is None:
+        return None
+
+    from world.npc_services.allegiance import allegiance_instance_on  # noqa: PLC0415
+
+    instance = allegiance_instance_on(opponent.objectdb)
+    if instance is None or instance.source_character_id is None:
+        return None
+    participant = (
+        CombatParticipant.objects.filter(
+            encounter=encounter,
+            status=ParticipantStatus.ACTIVE,
+            character_sheet__character_id=instance.source_character_id,
+        )
+        .select_related("character_sheet")
+        .first()
+    )
+    return participant.character_sheet if participant is not None else None
+
+
+def _resolve_npc_action_on_opponent_target(  # noqa: PLR0913 - needs full resolution context
     target_opponent: CombatOpponent,
     *,
     opponent: CombatOpponent,
     npc_action: CombatOpponentAction,
     outcome: ActionOutcome,
+    conditions: list,
+    condition_applications: list,
 ) -> None:
-    """Resolve one NPC action against a single OPPONENT target (#1584 Task 7b).
+    """Resolve one NPC action against a single OPPONENT target (#1584 Task 7b, #4091).
 
-    Routes an ALLY summon's attack at an ENEMY opponent. Damage only — the PC
-    survivability pipeline (``process_damage_consequences``) and the threat
-    entry's ``conditions_applied`` path stay PC-only here;
-    ``apply_damage_to_opponent`` already sets ``OpponentStatus.DEFEATED``
-    internally. The summoner (``opponent.summoned_by``, a ``CharacterSheet`` or
-    ``None``) receives damage/defeat achievement credit; null-safe for
-    non-summon attackers.
+    Routes an ALLY summon's, or a charmed/turned NPC's, attack at a hostile opponent.
+    Damage only — the PC survivability pipeline (``process_damage_consequences``)
+    stays PC-only here; ``apply_damage_to_opponent`` already sets
+    ``OpponentStatus.DEFEATED`` internally. Damage/defeat achievement credit goes to
+    ``_allegiance_credit_sheet`` (the summoner, or the PC who won the attacker over);
+    null-safe when neither applies. A threat entry's ``conditions_applied`` now lands
+    on an opponent target too, when the hit dealt damage (#4091) — the bulk apply
+    after the resolution loops in ``_resolve_npc_action`` covers it.
     """
     # Mirror the participant guard: skip an escaped/defeated (non-ACTIVE) target.
     if target_opponent.status != OpponentStatus.ACTIVE:
@@ -9049,9 +9297,11 @@ def _resolve_npc_action_on_opponent_target(
         target_opponent,
         int(npc_action.threat_entry.base_damage * npc_action.damage_scale),
         damage_type=npc_action.threat_entry.damage_type,
-        source_sheet=opponent.summoned_by,
+        source_sheet=_allegiance_credit_sheet(opponent, opponent.encounter),
     )
     outcome.damage_results.append(dmg_result)
+    if dmg_result.damage_dealt > 0 and conditions and target_opponent.objectdb_id is not None:
+        condition_applications.extend((target_opponent.objectdb, ct) for ct in conditions)
 
 
 def _resolve_npc_action(
@@ -9064,8 +9314,10 @@ def _resolve_npc_action(
 
     Exactly one target relation is populated per action: participant ``targets``
     (the normal PC-facing path — applies damage, knockout/death transitions, and
-    threat-entry conditions) or ``opponent_targets`` (an ALLY summon attacking
-    ENEMY opponents — damage only; #1584).
+    threat-entry conditions) or ``opponent_targets`` (an ALLY summon, or a charmed/
+    turned NPC, attacking a hostile opponent — damage plus threat-entry conditions
+    on a damaging hit; #1584, #4091). No survivability pipeline either way for the
+    opponent-target path.
 
     When ``defense_check_type`` is None (production), the defense check type is
     sourced from ``npc_action.threat_entry.defense_check_type`` (#1994). A
@@ -9108,7 +9360,7 @@ def _resolve_npc_action(
     # Lazy factory: mint the ACTION-mode Interaction only when the first
     # survivability tier actually fires (#864). Memoised so all targets of this
     # NPC action share one row.
-    npc_action_label = ", ".join(str(t) for t in label_targets) if label_targets else None
+    npc_action_label = _npc_action_target_label(label_targets)
     _npc_interaction_cache: list[Interaction] = []
 
     def _get_npc_action_interaction() -> Interaction:
@@ -9137,14 +9389,18 @@ def _resolve_npc_action(
             get_npc_action_interaction=_get_npc_action_interaction,
         )
 
-    # Opponent-target path (#1584): an ALLY summon attacking ENEMY opponents.
-    # Damage only — no survivability pipeline, no conditions (out of scope 7b).
+    # Opponent-target path (#1584, #4091): an ALLY summon or a charmed/turned NPC
+    # attacking a hostile opponent. Damage, plus threat-entry conditions on a
+    # damaging hit (fed into the same bulk-apply call below); no survivability
+    # pipeline.
     for target_opponent in opponent_targets:
         _resolve_npc_action_on_opponent_target(
             target_opponent,
             opponent=opponent,
             npc_action=npc_action,
             outcome=outcome,
+            conditions=conditions,
+            condition_applications=condition_applications,
         )
 
     # Bulk-apply all conditions from this NPC action
@@ -9163,7 +9419,9 @@ def _resolve_npc_action(
         render_action_outcome_narration,
     )
 
-    npc_target_label = ", ".join(str(t) for t in label_targets) if label_targets else None
+    # Same label_targets as npc_action_label above -- reuse rather than
+    # re-running persona_names_for_sheets for the identical list.
+    npc_target_label = npc_action_label
     npc_narration = render_action_outcome_narration(
         actor_label=str(opponent),
         technique_name=npc_action.threat_entry.name,
@@ -9379,11 +9637,17 @@ def cleanup_completed_encounter(encounter: CombatEncounter) -> None:
     before each delete in case a corrupt row escaped Layers 1–4.
 
     CombatOpponent rows are preserved (historical record). Only the ephemeral
-    ObjectDB is destroyed; the SET_NULL FK behavior nulls
-    CombatOpponent.objectdb after deletion.
+    ObjectDB is destroyed, via ``delete_ephemeral_npc`` — which also nulls the
+    cached ``CombatOpponent.objectdb`` reference, since ``ObjectDB.delete()``'s
+    own SET_NULL update bypasses the identity map (#4091 fix round 2).
 
     Also breaks any still-pending PC ``SustainedAction`` for this encounter
     (#2705 adversarial review, Fix 3) — see ``_break_pending_sustained_actions``.
+
+    A WON_OVER opponent with an open bind window (Decision 19, R3: a charmed
+    nameless foe whose charmer is still in the room) is skipped here — the
+    body stays alive for binding and is deleted later by
+    ``release_closed_bind_windows()`` or ``release_won_over_npcs_in_room()``.
     """
     _break_pending_sustained_actions(encounter)
 
@@ -9481,27 +9745,17 @@ def cleanup_completed_encounter(encounter: CombatEncounter) -> None:
 
     remove_escalation_room_triggers(encounter)
 
+    from world.combat.won_over import bind_window_open  # noqa: PLC0415
+
     qs = CombatOpponent.objects.filter(
         encounter=encounter,
         objectdb_is_ephemeral=True,
     ).select_related("objectdb")
     for opp in qs:
-        objectdb = opp.objectdb
-        if objectdb is None:
-            continue
-        if not is_combat_npc_typeclass(objectdb):
-            logger.error(
-                "Refusing to delete: %s is not a CombatNPC typeclass",
-                objectdb,
-            )
-            continue
-        if has_persistent_identity_references(objectdb):
-            logger.error(
-                "Refusing to delete: %s has persistent identity references",
-                objectdb,
-            )
-            continue
-        objectdb.delete()
+        if bind_window_open(opp):
+            continue  # Decision 19: deleted later by the sweep or scene finish
+
+        delete_ephemeral_npc(opp)
 
 
 def maybe_pause_encounter_for_disconnect(character_sheet: CharacterSheet) -> None:
@@ -9530,15 +9784,13 @@ def _check_encounter_completion(encounter: CombatEncounter) -> bool:
     PC is "down" (cannot act — dead or incapacitated). A dying-but-conscious PC
     can still act, so the encounter is not lost while any PC can_act.
     """
+    from world.combat.won_over import hostile_opponents_remain  # noqa: PLC0415
     from world.vitals.services import can_act  # noqa: PLC0415
 
     # Only ENEMY opponents block victory; an ALLY summon staying active must not
-    # keep the encounter open (#1584).
-    all_opponents_down = not CombatOpponent.objects.filter(
-        encounter=encounter,
-        status=OpponentStatus.ACTIVE,
-        allegiance=CombatAllegiance.ENEMY,
-    ).exists()
+    # keep the encounter open (#1584). A won-over enemy (charmed, turned, calmed
+    # during THIS encounter — ruling R1) does not count as hostile either (#4091).
+    all_opponents_down = not hostile_opponents_remain(encounter)
 
     active_participants = CombatParticipant.objects.filter(
         encounter=encounter,
@@ -9554,21 +9806,32 @@ def _classify_encounter_outcome(encounter: CombatEncounter) -> EncounterOutcome:
     """Classify a completing encounter (#876 spec §1).
 
     1. No ACTIVE opponents and no Hero Killer present → VICTORY. An unbeatable
-       Hero Killer (#875) on the field at any status forbids VICTORY.
+       Hero Killer (#875) still ACTIVE and still hostile forbids VICTORY — but
+       a Hero Killer won over (charmed/turned/calmed) counts as won over like
+       any other enemy: social victory ends the fight too (#4091 fix round 2).
+       A FLED (or otherwise non-ACTIVE) Hero Killer keeps the original "at any
+       status forbids VICTORY" behavior.
     2. No ACTIVE participants and at least one FLED → FLED.
     3. Else → DEFEAT (catch-all: downed ACTIVE participants, or all-REMOVED).
     """
     # VICTORY hinges on ENEMY opponents only — an ALLY summon left standing is
-    # part of the winning side, not a reason to withhold victory (#1584).
-    any_active_opponents = CombatOpponent.objects.filter(
-        encounter=encounter,
-        status=OpponentStatus.ACTIVE,
-        allegiance=CombatAllegiance.ENEMY,
-    ).exists()
+    # part of the winning side, not a reason to withhold victory (#1584). A
+    # won-over enemy (charmed, turned, calmed during THIS encounter — ruling
+    # R1) does not count as hostile either (#4091).
+    from world.combat.won_over import hostile_opponents_remain  # noqa: PLC0415
+
+    any_active_opponents = hostile_opponents_remain(encounter)
     if not any_active_opponents:
-        hero_killer_present = CombatOpponent.objects.filter(
-            encounter=encounter, tier=OpponentTier.HERO_KILLER
-        ).exists()
+        # Reaching this branch already proves no ACTIVE+stored-ENEMY opponent
+        # (Hero Killer included) is still effectively hostile -- hostile_opponents_remain
+        # just said so. So an ACTIVE Hero Killer found here is, by construction, won
+        # over; exclude it from "present" (#4091 fix round 2). A FLED/DEFEATED/REMOVED
+        # Hero Killer is untouched by that guarantee and still blocks VICTORY.
+        hero_killer_present = (
+            CombatOpponent.objects.filter(encounter=encounter, tier=OpponentTier.HERO_KILLER)
+            .exclude(status=OpponentStatus.ACTIVE)
+            .exists()
+        )
         if not hero_killer_present:
             return EncounterOutcome.VICTORY
         # An unbeatable Hero Killer was on the field -- never a victory.
@@ -9590,7 +9853,8 @@ def complete_encounter(encounter: CombatEncounter, *, outcome: EncounterOutcome)
     Order: persist flip → Narrator OUTCOME interaction → aftermath (anchored to
     that interaction, before ephemeral-NPC cleanup) → opponent aftermath pools
     → companion defeat resolution (#3652) → counters → completion event →
-    cleanup → acute-peril scene-round hand-off → aftermath digest (#3551).
+    won-over snapshot (#4091) → cleanup → acute-peril scene-round hand-off →
+    aftermath digest (#3551).
     ABANDONED is administrative closure: skips aftermath, opponent pools,
     companion defeats, and counters, but still narrates, emits, cleans up, and
     delivers the aftermath digest.
@@ -9608,6 +9872,11 @@ def complete_encounter(encounter: CombatEncounter, *, outcome: EncounterOutcome)
     encounter.completed_at = timezone.now()
     encounter.save(update_fields=["status", "outcome", "completed_at"])
 
+    if outcome == EncounterOutcome.VICTORY:
+        from world.combat.won_over import stamp_won_over_opponents  # noqa: PLC0415
+
+        stamp_won_over_opponents(encounter)
+
     interaction = _broadcast_encounter_outcome(encounter, outcome)
 
     if outcome != EncounterOutcome.ABANDONED:
@@ -9620,12 +9889,25 @@ def complete_encounter(encounter: CombatEncounter, *, outcome: EncounterOutcome)
 
     install_encounter_beat_trigger(encounter)
     _emit_encounter_completed(encounter, outcome)
+
+    # Read the won-over rows while the bodies still exist (#4091 final review):
+    # cleanup deletes ephemeral WON_OVER bodies, cascading their allegiance
+    # instances away, so a digest read after it would drop every calmed mook.
+    # The rest of the digest must stay after cleanup (it reports the conditions
+    # a PC carries OUT of the fight and the peril hand-off), so only this part moves.
+    from world.combat.won_over import won_over_snapshot  # noqa: PLC0415
+
+    won_over = won_over_snapshot(encounter)
     cleanup_completed_encounter(encounter)
+    # Survivors' holds as cleanup left them (an UNTIL_END_OF_COMBAT hold is gone).
+    from world.combat.won_over import refresh_won_over_holds  # noqa: PLC0415
+
+    won_over = refresh_won_over_holds(encounter, won_over)
     _hand_off_acute_peril_to_scene_round(encounter)
 
     from world.combat.aftermath import deliver_aftermath_digests  # noqa: PLC0415
 
-    deliver_aftermath_digests(encounter)
+    deliver_aftermath_digests(encounter, won_over=won_over)
 
 
 def _hand_off_acute_peril_to_scene_round(encounter: CombatEncounter) -> None:
@@ -9669,6 +9951,8 @@ def _broadcast_encounter_outcome(
         broadcast_action_outcome,
         render_encounter_outcome_narration,
     )
+    from world.combat.won_over import won_over_labels  # noqa: PLC0415
+    from world.scenes.services import persona_names_for_sheets  # noqa: PLC0415
 
     participants = list(
         CombatParticipant.objects.filter(encounter=encounter).select_related(
@@ -9676,17 +9960,31 @@ def _broadcast_encounter_outcome(
         )
     )
     opponents = list(CombatOpponent.objects.filter(encounter=encounter))
+    # Persona display name, not str(CombatParticipant) -> str(CharacterSheet)
+    # ("Sheet for {key}") -- a player-facing line shows the face the character
+    # is CURRENTLY presenting as, batched in one call (#4091 fix round 2).
+    persona_names = persona_names_for_sheets(p.character_sheet_id for p in participants)
+
+    def _label(participant: CombatParticipant) -> str:
+        return persona_names.get(
+            participant.character_sheet_id, participant.character_sheet.character.key
+        )
+
     narration = render_encounter_outcome_narration(
         outcome=outcome,
-        active_labels=[str(p) for p in participants if p.status == ParticipantStatus.ACTIVE],
-        fled_labels=[str(p) for p in participants if p.status == ParticipantStatus.FLED],
+        active_labels=[_label(p) for p in participants if p.status == ParticipantStatus.ACTIVE],
+        fled_labels=[_label(p) for p in participants if p.status == ParticipantStatus.FLED],
         defeated_opponent_labels=[
             o.name
             for o in opponents
             if o.status == OpponentStatus.DEFEATED and o.allegiance == CombatAllegiance.ENEMY
         ],
+        won_over=[(name, verb) for name, verb, _src in won_over_labels(encounter)],
     )
-    return broadcast_action_outcome(encounter=encounter, narration=narration)
+    # deliver_telnet=True: the top-level encounter outcome (including the
+    # won-over clause) must reach a bare telnet session too (#4091 fix round 2,
+    # #3807) -- unlike this function's other, per-action callers.
+    return broadcast_action_outcome(encounter=encounter, narration=narration, deliver_telnet=True)
 
 
 def _apply_aftermath_rules(
@@ -9769,11 +10067,14 @@ def _apply_aftermath_rules(
 
 
 def _apply_opponent_aftermath_pools(encounter: CombatEncounter, outcome: EncounterOutcome) -> None:
-    """Fire each DEFEATED opponent's authored aftermath pool on PC victory (#876 §4).
+    """Fire each overcome opponent's authored aftermath pool on PC victory (#876 §4, #4091).
 
-    Deterministic (story-consequence semantics, like beat pools). Context follows
-    the beats GLOBAL idiom: the opponent's ObjectDB when set, else an unsaved
-    stub that is only identity-safe for non-character effects.
+    "Overcome" covers both a DEFEATED enemy and a WON_OVER one (charmed, turned
+    or calmed into standing down rather than beaten down — Decision 10): the
+    same per-opponent pool pays out either way. Deterministic (story-consequence
+    semantics, like beat pools). Context follows the beats GLOBAL idiom: the
+    opponent's ObjectDB when set, else an unsaved stub that is only
+    identity-safe for non-character effects.
     """
     if outcome != EncounterOutcome.VICTORY:
         return
@@ -9787,7 +10088,7 @@ def _apply_opponent_aftermath_pools(encounter: CombatEncounter, outcome: Encount
 
     qs = CombatOpponent.objects.filter(
         encounter=encounter,
-        status=OpponentStatus.DEFEATED,
+        status__in=[OpponentStatus.DEFEATED, OpponentStatus.WON_OVER],
         aftermath_pool__isnull=False,
     ).select_related("aftermath_pool", "objectdb")
     for opponent in qs:
@@ -9957,6 +10258,7 @@ def _resolve_declared_challenges(
         ChallengeResolutionRequest,
         resolve_challenge_declarations,
     )
+    from world.scenes.services import persona_names_for_sheets  # noqa: PLC0415
 
     declarations = list(
         RoundChallengeDeclaration.objects.filter(
@@ -9995,12 +10297,20 @@ def _resolve_declared_challenges(
     # final-round) come after, preserving their insertion order.
     ordered.extend(decl_by_participant.values())
 
+    # Batched, not one active_persona_for_sheet call per declaration (#4091 fix
+    # round 2) -- this builds the whole request list in one comprehension.
+    persona_names = persona_names_for_sheets(
+        decl.participant.character_sheet_id for decl in ordered
+    )
     requests = [
         ChallengeResolutionRequest(
             character=decl.participant.character_sheet.character,
             challenge_instance=decl.challenge_instance,
             approach=decl.challenge_approach,
-            actor_label=str(decl.participant),
+            actor_label=persona_names.get(
+                decl.participant.character_sheet_id,
+                decl.participant.character_sheet.character.key,
+            ),
         )
         for decl in ordered
     ]
@@ -11926,15 +12236,25 @@ def _broadcast_break_celebration(encounter: CombatEncounter, boss: CombatOpponen
 
 def _break_bar_contributor_labels(boss: CombatOpponent) -> list[str]:
     """Distinct PC labels credited on any ``BreakBarContribution`` row for *boss* this encounter."""
+    from world.scenes.services import persona_names_for_sheets  # noqa: PLC0415
+
     participant_ids = (
         BreakBarContribution.objects.filter(opponent=boss, participant__isnull=False)
         .values_list("participant_id", flat=True)
         .distinct()
     )
-    participants = CombatParticipant.objects.filter(pk__in=participant_ids).select_related(
-        "character_sheet"
+    participants = list(
+        CombatParticipant.objects.filter(pk__in=participant_ids).select_related(
+            "character_sheet__character"
+        )
     )
-    return [str(p) for p in participants]
+    # Persona display name, not str(CombatParticipant) -> str(CharacterSheet)
+    # ("Sheet for {key}") -- #4091 fix round 3.
+    persona_names = persona_names_for_sheets(p.character_sheet_id for p in participants)
+    return [
+        persona_names.get(p.character_sheet_id, p.character_sheet.character.key)
+        for p in participants
+    ]
 
 
 @transaction.atomic

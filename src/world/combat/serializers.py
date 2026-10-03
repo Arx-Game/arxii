@@ -363,6 +363,29 @@ class ObjectiveSnapshotSerializer(serializers.Serializer):
     branches = ObjectiveBranchSerializer(many=True)
 
 
+class WonOverRowSerializer(serializers.Serializer):
+    """Schema-only shape of one AftermathDigest.won_over row (#4091).
+
+    Never instantiated for output.
+    """
+
+    opponent_id = serializers.IntegerField()
+    name = serializers.CharField()
+    verb = serializers.CharField()
+    source_label = serializers.CharField()
+    nameless = serializers.BooleanField()
+    persona_id = serializers.IntegerField(allow_null=True)
+    present = serializers.BooleanField()
+    condition = ConditionInstanceSerializer(allow_null=True)
+    holds_until_settled = serializers.BooleanField()
+    strength = serializers.IntegerField()
+    can_bind = serializers.BooleanField()
+    can_take_into_service = serializers.BooleanField()
+    can_send_away = serializers.BooleanField()
+    can_settle = serializers.BooleanField()
+    bind_window_open = serializers.BooleanField()
+
+
 class AftermathDigestSerializer(serializers.Serializer):
     """Schema-only shape of ParticipantSerializer.aftermath (#3551).
 
@@ -376,6 +399,7 @@ class AftermathDigestSerializer(serializers.Serializer):
     beat = AftermathBeatSerializer(allow_null=True)
     objective = ObjectiveSnapshotSerializer(allow_null=True)
     peril_round_active = serializers.BooleanField()
+    won_over = WonOverRowSerializer(many=True)
 
 
 class ParticipantSerializer(serializers.ModelSerializer):
@@ -720,6 +744,7 @@ class ParticipantSerializer(serializers.ModelSerializer):
             "beat": beat,
             "objective": digest.objective,
             "peril_round_active": digest.peril_round_active,
+            "won_over": WonOverRowSerializer(digest.won_over, many=True, context=self.context).data,
         }
 
 

@@ -60,7 +60,9 @@ class OutcomeBroadcastTest(TestCase):
             min_success_level=1, multiplier=Decimal("0.50"), label="Partial"
         )
 
-    def _setup_encounter(self, *, pc_hit_text: str = "", npc_hit_text: str = ""):
+    def _setup_encounter(
+        self, *, pc_hit_text: str = "", npc_hit_text: str = "", mook_health: int = 50
+    ):
         scene = SceneFactory()
         encounter = CombatEncounterFactory(
             scene=scene,
@@ -72,8 +74,8 @@ class OutcomeBroadcastTest(TestCase):
         opponent = CombatOpponentFactory(
             encounter=encounter,
             tier=OpponentTier.MOOK,
-            health=50,
-            max_health=50,
+            health=mook_health,
+            max_health=mook_health,
             threat_pool=pool,
         )
         sheet = CharacterSheetFactory()
@@ -114,16 +116,42 @@ class OutcomeBroadcastTest(TestCase):
         return encounter
 
     def test_resolution_creates_and_broadcasts_outcome(self) -> None:
-        encounter = self._setup_encounter()
+        # mook_health=15: the PC's 20-damage hit (SL=2, full multiplier) defeats
+        # it this round, so the encounter actually completes as VICTORY and
+        # reaches _broadcast_encounter_outcome -- the only caller of
+        # broadcast_action_outcome that opts into deliver_telnet=True
+        # (a synchronous _broadcast_to_location plus a non-web text line,
+        # #4091 fix round 4).
+        # Without this, the round never completes and the test's own name
+        # ("...and_broadcasts_outcome") is proven only by the unrelated,
+        # always-synchronous per-action ACTION-interaction push (#4091 fix
+        # round 3 -- caught as a false positive in round 2's review).
+        encounter = self._setup_encounter(mook_health=15)
 
         def mock_check_fn(*args, **kwargs):  # type: ignore[no-untyped-def]
             return MagicMock(success_level=2)
 
+        # No captureOnCommitCallbacks: the encounter-outcome push is synchronous.
         with mock.patch("world.scenes.interaction_services._broadcast_to_location") as broadcast:
             resolve_round(encounter, offense_check_fn=mock_check_fn)
 
-        assert Interaction.objects.filter(mode=InteractionMode.OUTCOME).exists()
-        assert broadcast.called
+        # Narrowed to the TOP-LEVEL encounter-outcome row specifically (its
+        # ceremonial headline, see _ENCOUNTER_OUTCOME_HEADLINES) -- every
+        # per-action attack narration is ALSO mode=OUTCOME and ALSO pushed via
+        # this same mocked _broadcast_to_location, so an unscoped id set would
+        # pass even with the encounter-outcome push removed (the exact false
+        # positive #4091 fix round 2's review caught here).
+        encounter_outcome_ids = set(
+            Interaction.objects.filter(
+                mode=InteractionMode.OUTCOME, content__icontains="field falls silent"
+            ).values_list("pk", flat=True)
+        )
+        assert encounter_outcome_ids
+        assert any(
+            call.args[1]["id"] in encounter_outcome_ids
+            and call.args[1]["mode"] == InteractionMode.OUTCOME
+            for call in broadcast.call_args_list
+        ), broadcast.call_args_list
 
     def test_authored_technique_line_heads_the_pc_outcome(self) -> None:
         encounter = self._setup_encounter(pc_hit_text="{actor} hurls a spear of rime at {target}")

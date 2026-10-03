@@ -15,9 +15,11 @@ term is chosen and the rest are listed under `_Avoid_`.
   Prepared Text (#4101)
 - [covenants](src/world/covenants/AGENT_GLOSSARY.md)
 - [scenes](src/world/scenes/AGENT_GLOSSARY.md)
-- [combat](src/world/combat/AGENT_GLOSSARY.md)
+- [combat](src/world/combat/AGENT_GLOSSARY.md), also holds the #4091 allegiance terms
+  (ADR-4091): Allegiance (stored vs effective), Turned, Won over, Bind window
 - [battles](src/world/battles/AGENT_GLOSSARY.md)
-- [conditions](src/world/conditions/AGENT_GLOSSARY.md)
+- [conditions](src/world/conditions/AGENT_GLOSSARY.md), also holds the #4091 settle terms
+  (ADR-4091): Settle, Settle pool, Hold strength
 - [vitals](src/world/vitals/AGENT_GLOSSARY.md) - also holds Certain death (deferred) (#4098)
 - [worship](src/world/worship/AGENT_GLOSSARY.md)
 - [ceremonies](src/world/ceremonies/AGENT_GLOSSARY.md)
@@ -55,7 +57,8 @@ term is chosen and the rest are listed under `_Avoid_`.
 - [species](src/world/species/AGENT_GLOSSARY.md)
 - [missions](src/world/missions/AGENT_GLOSSARY.md)
 - [journals](src/world/journals/AGENT_GLOSSARY.md)
-- [npc_services](src/world/npc_services/AGENT_GLOSSARY.md) — incl. the #2827 tier-ladder terms
+- [npc_services](src/world/npc_services/AGENT_GLOSSARY.md), incl. the #2827 tier-ladder terms
+  and a pointer to where the #4091 allegiance terms actually live (combat and conditions, above)
 - [tasking](src/world/tasking/AGENT_GLOSSARY.md)
 - [tavern_games](src/world/tavern_games/AGENT_GLOSSARY.md)
 - [tarot](src/world/tarot/AGENT_GLOSSARY.md)

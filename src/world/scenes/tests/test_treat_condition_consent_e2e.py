@@ -91,16 +91,13 @@ class TreatConditionWebConsentE2ETests(TestCase):
         self.helper_sheet = CharacterSheetFactory(character=self.helper_char)
         self.target_sheet = CharacterSheetFactory(character=self.target_char)
 
-        # Two accounts wired via the roster: helper (POSTs the request) and
-        # target (unused for a POST now that create auto-resolves against the
-        # NPC target persona, #2214; kept for parity with the sibling unit
-        # tests and in case a future respond-path regression test needs it).
-        # Both need roster wiring so the account-based get_account_personas
-        # resolves their personas.
+        # Only the helper (who POSTs the request) is wired via the roster, so the
+        # account-based get_account_personas resolves their persona. The target
+        # stays an NPC: an active RosterTenure would make it an (offline) player
+        # character, whose request waits PENDING for their answer instead of
+        # auto-resolving (#2214, #4091 ``is_player_character``).
         self.helper_account = AccountFactory()
         _give_account_character(self.helper_account, self.helper_char)
-        self.target_account = AccountFactory()
-        _give_account_character(self.target_account, self.target_char)
 
         self.scene = SceneFactory(is_active=True, location=self.room)
         # Bust the per-location active-scene cache.

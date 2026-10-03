@@ -3484,6 +3484,33 @@ def _resolve_break_free_outcome(
     )
 
 
+def _break_free_blocked(
+    template: ConditionTemplate, instance: ConditionInstance, *, in_combat_tick: bool
+) -> BreakFreeResult | None:
+    """Guard checks that end an attempt before any roll (#2706, #4091 Decision 15)."""
+    if template.sets_allegiance:
+        # NPCs are targets; an allegiance hold is never rolled off by its bearer.
+        # Only a PC's settle or a PC's blow ends it.
+        return BreakFreeResult(
+            attempted=False,
+            broke_free=False,
+            message="This hold is not one you can shake off.",
+        )
+    if template.break_free_mode == BreakFreeMode.NONE:
+        return BreakFreeResult(
+            attempted=False,
+            broke_free=False,
+            message="This effect cannot be shaken off.",
+        )
+    if not instance.is_aware and not in_combat_tick:
+        return BreakFreeResult(
+            attempted=False,
+            broke_free=False,
+            message="You don't notice anything wrong.",
+        )
+    return None
+
+
 def attempt_break_free(
     instance: ConditionInstance,
     *,
@@ -3521,19 +3548,9 @@ def attempt_break_free(
 
     template = instance.condition
 
-    if template.break_free_mode == BreakFreeMode.NONE:
-        return BreakFreeResult(
-            attempted=False,
-            broke_free=False,
-            message="This effect cannot be shaken off.",
-        )
-
-    if not instance.is_aware and not in_combat_tick:
-        return BreakFreeResult(
-            attempted=False,
-            broke_free=False,
-            message="You don't notice anything wrong.",
-        )
+    blocked = _break_free_blocked(template, instance, in_combat_tick=in_combat_tick)
+    if blocked is not None:
+        return blocked
 
     if not in_combat_tick:
         now = timezone.now()

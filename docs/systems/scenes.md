@@ -448,7 +448,12 @@ the target rows are written, so the live push's involvement mark already carries
 `target_persona_ids`. `deliver_outcome_interaction` registers a `transaction.on_commit`
 callback: it pushes the WebSocket payload via `push_interaction`, then sends the same
 `interaction.content` as plain text to the non-web sessions of exactly the objects the push
-reached (telnet parity). A social-check result additionally schedules the resolution-theater
+reached (telnet parity). That text half is its own function,
+`send_outcome_text_to_non_web(interaction, *, location)`, for a caller that must push
+synchronously instead: combat's encounter OUTCOME line (`broadcast_action_outcome(...,
+deliver_telnet=True)`) pushes via `_broadcast_to_location` and then sends the text at once,
+because `complete_encounter` pushes the aftermath digest immediately after it and a deferred
+push would land behind the digest (#4091). A social-check result additionally schedules the resolution-theater
 success-level wheel to the roller and target; see "Resolution theater" in
 `docs/systems/checks.md`.
 

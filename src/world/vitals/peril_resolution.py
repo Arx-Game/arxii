@@ -161,15 +161,27 @@ def clear_abandoned(victim_sheet: "CharacterSheet") -> None:
 
 
 def is_pc_source(source_character: "ObjectDB | None") -> bool:  # noqa: OBJECTDB_PARAM
-    """Return True when source_character is a player-controlled character.
+    """Return True when source_character is a player character.
 
-    Uses the canonical PC-detection convention: a character is player-controlled
-    iff ``character.db_account`` is not None (mirrors ``_persona_is_npc`` in
-    ``world.scenes.action_services``). Returns False for None sources.
+    Uses the canonical, offline-safe PC-detection convention: an active
+    ``RosterTenure`` (``world.roster.services.activity.is_player_character``),
+    NOT ``character.db_account`` (#4091 task 12 fix round 3 -- Evennia's
+    ``unpuppet_object`` clears ``db_account`` the instant nobody is actively
+    connected, so an offline PC source used to read as an NPC here and could
+    kill, breaking ADR-0023's PvP-is-non-lethal rule). ``is_player_character``
+    also counts a puppeted character (``db_account`` set), so nothing the old
+    test called a PC stops being one. Returns False for a None source; a source
+    with no CharacterSheet (e.g. an ephemeral combat mook) is a PC only while
+    someone is puppeting it, the same answer the pre-#4091 test gave.
     """
+    from world.roster.services.activity import is_player_character  # noqa: PLC0415
+
     if source_character is None:
         return False
-    return source_character.db_account is not None
+    sheet = source_character.character_sheet
+    if sheet is None:
+        return source_character.db_account is not None
+    return is_player_character(sheet)
 
 
 def death_is_permitted(

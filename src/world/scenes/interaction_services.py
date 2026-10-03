@@ -1096,8 +1096,9 @@ def deliver_outcome_interaction(interaction: Interaction, *, location: ObjectDB 
 
     1. Pushes the structured payload via ``push_interaction(interaction,
        location=location)``, letting it resolve receivers/targets itself.
-    2. Sends ``interaction.content`` as plain text to the non-web sessions
-       (``non_web_sessions`` — telnet/ssh parity, mirrors ``_send_involvement_mark``)
+    2. Sends ``interaction.content`` as plain text (``send_outcome_text_to_non_web``)
+       to the non-web sessions (``non_web_sessions`` — telnet/ssh parity, mirrors
+       ``_send_involvement_mark``)
        of exactly the objects the push reached: a receiver-scoped row reaches its
        writer + receiver characters regardless of ``location`` (a Narrator writer is
        unplaced, and a Battle-backed scene has none either); any other row reaches
@@ -1107,22 +1108,42 @@ def deliver_outcome_interaction(interaction: Interaction, *, location: ObjectDB 
 
     def _deliver() -> None:
         push_interaction(interaction, location=location)
-
-        r_ids, r_chars = _query_receivers(interaction)
-        if _is_delivery_receiver_scoped(interaction, has_receivers=bool(r_ids)):
-            writer_char = interaction.persona.character_sheet.character
-            recipients: Iterable[ObjectDB] = [writer_char, *r_chars]
-        elif location is not None:
-            recipients = location.contents
-        else:
-            recipients = []
-
-        for obj in recipients:
-            non_web = non_web_sessions(obj)
-            if non_web:
-                obj.msg(interaction.content, session=non_web)
+        send_outcome_text_to_non_web(interaction, location=location)
 
     transaction.on_commit(_deliver)
+
+
+def send_outcome_text_to_non_web(
+    interaction: Interaction,
+    *,
+    location: ObjectDB | None,  # noqa: OBJECTDB_PARAM - any room may host it, see above
+) -> None:
+    """Send ``interaction.content`` as plain text to the non-web sessions it reaches, now.
+
+    The telnet/ssh-parity half of ``deliver_outcome_interaction``, factored out so
+    a caller that pushes the structured payload itself, synchronously, can add the
+    same text line without the on-commit deferral (#4091 fix round 4: the
+    encounter OUTCOME line has to reach the web before the aftermath digest that
+    ``complete_encounter`` pushes immediately after it). Recipients are exactly the
+    objects ``push_interaction`` reaches: a receiver-scoped row reaches its writer +
+    receiver characters regardless of ``location``; any other row reaches
+    ``location.contents``, or nobody when ``location`` is ``None``. Webclient
+    sessions are skipped (``non_web_sessions``), so nothing reaches a web session
+    twice.
+    """
+    r_ids, r_chars = _query_receivers(interaction)
+    if _is_delivery_receiver_scoped(interaction, has_receivers=bool(r_ids)):
+        writer_char = interaction.persona.character_sheet.character
+        recipients: Iterable[ObjectDB] = [writer_char, *r_chars]
+    elif location is not None:
+        recipients = location.contents
+    else:
+        recipients = []
+
+    for obj in recipients:
+        non_web = non_web_sessions(obj)
+        if non_web:
+            obj.msg(interaction.content, session=non_web)
 
 
 def push_ephemeral_interaction(  # noqa: PLR0913 - ephemeral payload mirrors persisted payload

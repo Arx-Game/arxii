@@ -3498,7 +3498,9 @@ class RitualSessionContributeSerializer(serializers.Serializer):
             if victim is None:
                 raise serializers.ValidationError({"victim_sheet_id": "No such character."})
             character = victim.character
-            if character is not None and character.db_account is not None:
+            from world.roster.services.activity import is_player_character  # noqa: PLC0415
+
+            if character is not None and is_player_character(victim):
                 raise serializers.ValidationError(
                     {"victim_sheet_id": "Only NPCs may be offered as sacrifices."}
                 )

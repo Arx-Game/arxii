@@ -44,7 +44,9 @@ import {
 import {
   Award,
   Ban,
+  DoorOpen,
   Eye,
+  Heart,
   HeartPulse,
   IdCard,
   type LucideIcon,
@@ -188,6 +190,11 @@ const ITEM_ICONS: Record<string, LucideIcon> = {
   scene_interpose: Shield,
   treat: HeartPulse,
   give_mission: ScrollText,
+  // #4091 task 12 left these two items wired with no icon (Task 14 owns
+  // frontend). Matches each action's own `icon` metadata (allegiance.py
+  // SendAwayAction.icon="door-open", charm_asset.py CharmAssetAction.icon="heart").
+  send_away: DoorOpen,
+  charm_asset: Heart,
   mute: VolumeX,
   block: Ban,
 };
@@ -283,6 +290,16 @@ export function PersonaMenu({
   const { mutateAsync: dispatchGuard, isPending: isGuardPending } = useDispatchPlayerAction(
     characterId ?? 0
   );
+  // #4091 task 12 wired these two items into the menu's `items` list with
+  // their own kwargs ({target_persona_id: persona.pk}, plus role_context
+  // "contact" for charm_asset) but left no handlerFor case to fire them —
+  // a dead click, caught while adding their ITEM_ICONS entries above
+  // (fold-in, not filed: CLAUDE.md "Fold In, Don't File").
+  const { mutateAsync: dispatchSendAway, isPending: isSendAwayPending } = useDispatchPlayerAction(
+    characterId ?? 0
+  );
+  const { mutateAsync: dispatchCharmAsset, isPending: isCharmAssetPending } =
+    useDispatchPlayerAction(characterId ?? 0);
 
   const performAction = useMutation({
     mutationFn: (params: {
@@ -379,6 +396,60 @@ export function PersonaMenu({
       .catch(() => {});
   }
 
+  // Matches persona_menu.py's own hardcoded kwargs for these two items
+  // exactly ({"target_persona_id": persona.pk} / {..., "role_context":
+  // "contact"}) — the server never forwards kwargs to the menu payload, so
+  // the frontend has to mirror them the same way identify/challenge/
+  // scene_succor/scene_interpose already do.
+  // On a successful send-away/take-into-service, the persona menu's own
+  // availability (its items can change once the hold is gone) and whatever
+  // aftermath/rail queries are reading this encounter (#4091 fix round 1,
+  // item 4) both need a refetch — not just a toast. `['persona-menu']` is
+  // the key prefix `usePersonaMenuQuery` (personaMenuApi.ts) scopes under
+  // (no exported key factory exists there to import).
+  function invalidateAfterAllegianceAction() {
+    queryClient.invalidateQueries({ queryKey: ['persona-menu'] }).catch(() => {});
+    queryClient.invalidateQueries({ queryKey: combatKeys.all }).catch(() => {});
+  }
+
+  function handleSendAway() {
+    dispatchSendAway({
+      ref: { backend: 'registry', registry_key: 'send_away' },
+      kwargs: { target_persona_id: personaId },
+    })
+      .then((result) => {
+        if (isDispatchFailure(result)) {
+          toast.error(result.message ?? 'Could not send them away.');
+          return;
+        }
+        if (result.message) toast.success(result.message);
+        invalidateAfterAllegianceAction();
+      })
+      .catch((err: unknown) => {
+        // #4091 fix round 1, item 4: an HTTP-level failure (postDispatchAction
+        // throws on non-2xx) used to be swallowed silently here.
+        toast.error(err instanceof Error ? err.message : 'Could not send them away.');
+      });
+  }
+
+  function handleCharmAsset() {
+    dispatchCharmAsset({
+      ref: { backend: 'registry', registry_key: 'charm_asset' },
+      kwargs: { target_persona_id: personaId, role_context: 'contact' },
+    })
+      .then((result) => {
+        if (isDispatchFailure(result)) {
+          toast.error(result.message ?? 'Could not take them into service.');
+          return;
+        }
+        if (result.message) toast.success(result.message);
+        invalidateAfterAllegianceAction();
+      })
+      .catch((err: unknown) => {
+        toast.error(err instanceof Error ? err.message : 'Could not take them into service.');
+      });
+  }
+
   function handleMute() {
     createMute.mutate({
       muted_persona: personaId,
@@ -420,6 +491,10 @@ export function PersonaMenu({
         return () => handleGuard('scene_succor');
       case 'scene_interpose':
         return () => handleGuard('scene_interpose');
+      case 'send_away':
+        return handleSendAway;
+      case 'charm_asset':
+        return handleCharmAsset;
       case 'treat':
         return () => setTreatDialogOpen(true);
       case 'give_mission':
@@ -438,6 +513,8 @@ export function PersonaMenu({
     challenge: isChallengePending,
     scene_succor: isGuardPending,
     scene_interpose: isGuardPending,
+    send_away: isSendAwayPending,
+    charm_asset: isCharmAssetPending,
     mute: createMute.isPending,
   };
 

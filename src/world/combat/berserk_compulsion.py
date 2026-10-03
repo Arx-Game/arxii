@@ -223,21 +223,28 @@ def _seed_rampage_encounter(
 
 
 def _nearest_npc_sheet(character: ObjectDB, room: ObjectDB) -> CharacterSheet | None:
-    """The first living sheeted NPC co-located with the berserker."""
+    """The first living sheeted NPC co-located with the berserker.
+
+    A berserk rampage must never target a PC (PCs roll, NPCs are targets) --
+    the canonical, offline-safe PC test is ``is_player_character`` (an active
+    RosterTenure or a live puppet), not ``db_account`` alone (#4091): an offline
+    PC's ``db_account`` reads ``None``, which would have let a rampage target them.
+    """
     from django.core.exceptions import ObjectDoesNotExist  # noqa: PLC0415
 
+    from world.roster.services.activity import is_player_character  # noqa: PLC0415
     from world.vitals.services import can_act  # noqa: PLC0415
 
     for obj in room.contents:
         if obj == character:
             continue
         try:
-            if obj.db_account is not None:
-                continue
             sheet = obj.character_sheet
         except (AttributeError, ObjectDoesNotExist):
             continue
-        if sheet is not None and can_act(sheet):
+        if sheet is None or is_player_character(sheet):
+            continue
+        if can_act(sheet):
             return sheet
     return None
 

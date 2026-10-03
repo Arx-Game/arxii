@@ -331,7 +331,11 @@ class CompleteEncounterTests(_CompletionSeamTestBase):
         )
 
         # Capture at call time: cleanup deletes the ephemeral NPC ObjectDB
-        # afterwards, which nulls the instance's pk in place.
+        # afterwards, which nulls the instance's pk in place. The expected pk is
+        # read up front for the same reason: ``delete_ephemeral_npc`` also nulls
+        # the identity-map-shared ``opponent.objectdb`` (#4091 fix round 2).
+        expected_objectdb_pk = opponent.objectdb_id
+        self.assertIsNotNone(expected_objectdb_pk)
         captured: dict[str, object] = {}
 
         def _capture(*, pool: object, context: object) -> list:
@@ -348,8 +352,10 @@ class CompleteEncounterTests(_CompletionSeamTestBase):
 
         mock_apply.assert_called_once()
         self.assertEqual(captured["pool"], pool)
-        self.assertEqual(captured["character_pk"], opponent.objectdb_id)
+        self.assertEqual(captured["character_pk"], expected_objectdb_pk)
         self.assertEqual(captured["scene"], encounter.scene)
+        # The pool fired against the live NPC before cleanup deleted it.
+        self.assertIsNone(opponent.objectdb_id)
 
     def test_opponent_aftermath_pool_skipped_on_defeat(self) -> None:
         encounter = self._make_encounter()

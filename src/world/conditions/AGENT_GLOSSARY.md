@@ -13,8 +13,36 @@ One step in a progressive condition (`ConditionStage`), ordered within its templ
 _Avoid_: phase, level, step
 
 **alters_behavior**:
-A boolean flag on `ConditionCategory` marking conditions that change how a character BEHAVES (compulsion, charm, fear, rage) rather than only their capabilities or stats. It is the consent gate: a behavior-altering effect on another PC requires that PC's consent; pure capability/stat effects do not. The canonical behavior-altering category is `Control`, seeded with `alters_behavior=True`, and the fury `Berserk` condition belongs to it.
+A boolean flag on `ConditionCategory` marking conditions that change how a character BEHAVES (compulsion, charm, fear, rage) rather than only their capabilities or stats. It is the consent gate: a behavior-altering effect on another PC requires that PC's consent; pure capability/stat effects do not. The canonical behavior-altering category is `Control`, seeded with `alters_behavior=True`, and the fury `Berserk` condition belongs to it. Distinct from `sets_allegiance` (below): `alters_behavior` is the PC-consent gate and is never read to derive an NPC's side; before #4091 a name match stood in for the allegiance read, which `sets_allegiance` replaced.
 _Avoid_: is_mental, is_control, hostile (the flag is about behavior-change, not harm)
+
+**sets_allegiance / Hold strength** (#4091, ADR-4091):
+`ConditionTemplate.sets_allegiance` names which effective allegiance (ally of the
+caster, turned, or neutral/calm) a condition puts its bearer on while it holds;
+blank means no allegiance effect. Read by this field, never by the condition's
+name, so renaming the row changes nothing. **Hold strength** is the derived
+difficulty of breaking that hold by force: severity points
+(`charm_strength_points`, severity times a tuning constant) plus the hold's own
+caster's level opposition, the same `level_opposition` term `attempt_break_free`
+already uses. The bearer itself never rolls to shake an allegiance hold off
+(`attempt_break_free` refuses outright); only a PC's settle action or a PC's
+blow against the held NPC can end it, both reading hold strength to decide how
+hard it is.
+_Avoid_: charm strength (informal; "hold strength" is the canonical term since
+the same mechanism also grades a turn or a calm, not only a charm), charm level
+
+**Settle / Settle pool** (#4091, ADR-4091):
+**Settle** is the one `ActionTemplate.settles_allegiance = True` social action
+(key `settle`) anyone present may take against a held NPC to end an allegiance
+hold on purpose, as an alternative to striking it or waiting it out.
+**Settle pool** is `ConditionTemplate.settle_consequence_pool` (or a
+`ConditionStage`'s own override, which replaces the template's pool at that
+stage): the authored `ConsequencePool` graded across tiers that decides how the
+NPC settles (stays fond, changed, wary, and so on). The same settle pool also
+grades a successful break-under-harm roll; settling and breaking are two routes
+into the same graded ending, never two separate result tables.
+_Avoid_: resolve, pacify, calm down (informal narration; "settle" is the
+specific action name)
 
 **conceals_from_perception**:
 A boolean flag on `ConditionCategory` marking conditions that make the bearer imperceptible to others (invisibility, magical concealment, stealth). Aggregated by `is_concealed()`; `can_perceive()` composes it with per-observer detection state (`ConditionInstance.detected_by`) and co-location. Distinct from `grants_intangibility` — untargetable is not the same as unseen. The OOC player-transparency guarantee this powers is a separate, unconditional mechanism (ADR-0083), not gated by this flag's detection contest.

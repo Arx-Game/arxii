@@ -208,6 +208,16 @@ remains the offline safety net). `bump_society_reputation`/
 `bump_organization_reputation` (`world.societies.renown`) gained the same call
 so a `FACTION_STANDING_AT_LEAST` beat flips just as promptly.
 
+## Send away (#4091, ADR-4091)
+
+Sending a won-over NPC away (`send_away`, telnet `sendaway`) is not a ladder transition. A named
+NPC's `location` is simply cleared (never deleted): most NPCs have no home to return to, so a GM
+places it again when the story calls for it. Its persona, `CharacterSheet`, and `ObjectDB` row,
+and whatever tier it had reached on the ladder above, all survive untouched; only the allegiance
+condition that made it friendly is lifted. An ephemeral nameless NPC (never on the ladder at all,
+since it carries no `CharacterSheet`) is deleted instead, through the same identity-map-safe guard
+the lapse sweep uses.
+
 ## Deliberately not here
 
 Tier-0 *consumers* (mob formation, stealth publicness, venue economics) are

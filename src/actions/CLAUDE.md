@@ -689,6 +689,13 @@ and the model for any later per-target menu (items, room objects, exits).
   Identify, Challenge (`target`) and the scene guard actions (`target_persona_id`); each caller
   still runs its own perception/consent/presence checks afterward, so resolving never grants
   anything by itself.
+- **Won-over NPC items (#4091).** In the SCENE group, "Send away" (`send_away` key,
+  `definitions/allegiance.py`) and "Take into service" (`charm_asset` key,
+  `definitions/charm_asset.py`) target a persona the actor holds an allegiance hold over
+  (charmed, turned, or calmed). Both gate on the one shared predicate,
+  `world.npc_services.allegiance.actor_holds_sway_present`, that telnet's `sendaway`/`retain`
+  and the won-over digest row's own flags also consult, so the menu, telnet, and the digest
+  never disagree about whether the hold is still live and the actor is still in the room.
 
 ## Adding a New Action
 

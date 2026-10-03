@@ -368,9 +368,10 @@ class _FeedingCommand(ConsentRequestCommand):
         <key> <character>            - PC target: opens a consent request (DRINK)
         <key> <character> = <mode>   - NPC target only: sip / drink / gorge
 
-    An NPC target (no player account) skips consent entirely — wide open at the
-    consent layer, priced at the justice layer — and dispatches the registry
-    action directly with the chosen amount mode.
+    An NPC target (no active RosterTenure -- not just "no player account": an
+    offline PC still has one, #4091 task 12 fix round 3) skips consent entirely
+    — wide open at the consent layer, priced at the justice layer — and
+    dispatches the registry action directly with the chosen amount mode.
     """
 
     _MODES: ClassVar[dict[str, str]] = {"sip": "SIP", "drink": "DRINK", "gorge": "GORGE"}
@@ -387,9 +388,17 @@ class _FeedingCommand(ConsentRequestCommand):
                 raise CommandError(msg)
             mode = self._MODES[mode_key]
             self.args = raw.strip()
+        from world.roster.services.activity import is_player_character  # noqa: PLC0415
+
         name = self.require_args(f"Whom do you want to {self.action_key}?")
         target = self.search_or_raise(name)
-        if target.db_account is None:
+        target_sheet = target.character_sheet
+        # A sheetless target is a PC only while puppeted (the pre-#4091 test).
+        if target_sheet is None:
+            target_is_pc = target.db_account is not None
+        else:
+            target_is_pc = is_player_character(target_sheet)
+        if not target_is_pc:
             self._feed_npc(target, mode or self._DEFAULT_MODE)
             return
         if mode is not None and mode != self._DEFAULT_MODE:

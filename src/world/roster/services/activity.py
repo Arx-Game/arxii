@@ -205,6 +205,36 @@ def sweep_activity_states() -> dict[str, int]:
     }
 
 
+def is_player_character(sheet: CharacterSheet) -> bool:
+    """Whether this character counts as a player character for PC/NPC rulings
+    (#4091): True when EITHER of these holds.
+
+    1. **It is held by an account** -- an active ``RosterTenure`` on its current
+       ``RosterEntry``. This is the offline-safe half: Evennia's
+       ``unpuppet_object`` clears ``character.db_account`` the instant nobody is
+       connected (``del obj.account`` -- ``evennia/accounts/accounts.py``), so an
+       OFFLINE player's character would otherwise read as an NPC. "Held" covers a
+       player's own PC and a GM's Story NPC (``mint_story_npc`` / the
+       ``claim_as_npc`` branch), both of which mint an active tenure. A bare
+       ``RosterEntry`` without a tenure does not count -- major NPCs are rostered
+       too (see ``RosterEntry``'s own docstring).
+    2. **Someone is puppeting it right now** -- ``character.db_account`` is set.
+       This was the pre-#4091 test at every call site, so keeping it means no
+       character that used to count as a PC stops counting as one; the only
+       widening is offline PCs. A puppeted NPC therefore still reads True, exactly
+       as it always has.
+
+    The puppet check is free (no query); the tenure half costs one query via
+    ``current_roster_entry`` plus one (cached) via ``RosterEntry.current_tenure``
+    -- safe to call once per check; batch callers should fetch tenures themselves
+    rather than loop this.
+    """
+    if sheet.character.db_account is not None:
+        return True
+    entry = current_roster_entry(sheet)
+    return entry is not None and entry.current_tenure is not None
+
+
 def is_original_character(sheet: CharacterSheet) -> bool:
     """Whether this character is a player's own creation (#3996).
 

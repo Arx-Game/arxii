@@ -64,7 +64,7 @@ def pick_up_body(carrier: ObjectDB, target: ObjectDB) -> CarriedBody:
     if CarriedBody.objects.filter(carried=target_sheet).exists():
         msg = f"Someone is already carrying {target.key}."
         raise CarryError(msg)
-    if _consent_blocks_body_handling(carrier_sheet, target_sheet, target):
+    if _consent_blocks_body_handling(carrier_sheet, target_sheet):
         msg = f"{target.key}'s player has not consented to body handling."
         raise CarryError(msg)
     link = CarriedBody.objects.create(carrier=carrier_sheet, carried=target_sheet)
@@ -142,16 +142,21 @@ def _carried_key(link: CarriedBody) -> str:
 def _consent_blocks_body_handling(
     carrier_sheet: CharacterSheet | None,
     target_sheet: CharacterSheet,
-    target: ObjectDB,
 ) -> bool:
-    """Body-handling consent for PC targets; NPC bodies are open."""
+    """Body-handling consent for PC targets; NPC bodies are open.
+
+    The real PC test is "does the target have an active RosterTenure" --
+    ``owner_tenure is None`` below already answers that correctly for an NPC
+    (no tenure at all). There used to also be an early ``target.db_account is
+    None`` shortcut here, which wrongly short-circuited to "no consent needed"
+    for an OFFLINE PC too (#4091 task 12 fix round 3) -- removed rather than
+    fixed, since the tenure check already covers its case correctly.
+    """
     from world.consent.services import (  # noqa: PLC0415
         body_handling_category,
         consent_blocks_targeting,
     )
 
-    if target.db_account is None:
-        return False
     owner_tenure = _active_tenure_for_sheet(target_sheet)
     actor_tenure = _active_tenure_for_sheet(carrier_sheet)
     if owner_tenure is None:

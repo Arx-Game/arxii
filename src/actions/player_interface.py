@@ -1373,6 +1373,7 @@ def _scene_actions(character: ObjectDB) -> list[PlayerAction]:
     apply.
     """
     del character  # placeholder for per-character filtering in a follow-up PR
+    from actions.definitions.social import settle  # noqa: PLC0415
     from actions.models import ActionTemplate  # noqa: PLC0415
     from actions.registry import SOCIAL_ACTIONS_BY_TEMPLATE_NAME  # noqa: PLC0415
 
@@ -1381,8 +1382,14 @@ def _scene_actions(character: ObjectDB) -> list[PlayerAction]:
     for template in templates:
         # Derive the dispatch key from the registry singleton, not name.lower():
         # multi-word templates ("Restore to Sense") have a distinct registry key
-        # ("restore_sense") that a slug transform cannot reproduce (#1172).
-        social_action = SOCIAL_ACTIONS_BY_TEMPLATE_NAME.get(template.name)
+        # ("restore_sense") that a slug transform cannot reproduce (#1172). The
+        # Settle template is found by its settles_allegiance flag, never by name
+        # (#4091, ruling R7: at most one template may carry it).
+        social_action = (
+            settle
+            if template.settles_allegiance
+            else SOCIAL_ACTIONS_BY_TEMPLATE_NAME.get(template.name)
+        )
         action_key = social_action.key if social_action is not None else template.name.lower()
         ref = ActionRef(
             backend=ActionBackend.REGISTRY,

@@ -18,6 +18,14 @@ in #672 (in-combat companion) and is the intended substrate for #1590
 (charm/switch-sides), which is a future `allegiance` flip on an existing ENEMY
 opponent with no new model needed.
 
+> **Superseded in part by ADR-4091 (2026-10-03, D4).** The "future `allegiance`
+> flip" sentence above did not hold once charm/switch-sides was built: allegiance
+> stays derived on read instead, composed from the bearer's active
+> `ConditionTemplate.sets_allegiance`-flagged conditions each time it is checked.
+> `CombatOpponent.allegiance` still exists and is still mutable exactly as
+> described above for summons and companions; no condition ever writes it. See
+> ADR-4091 for the full decision and why a stored flip was rejected.
+
 > Status: accepted · Source: issue #1584 · Confidence: built & E2E-tested (
 > `integration_tests/pipeline/test_summon_e2e.py`); `CombatOpponent.allegiance/
 > summoned_by/bond_expires_round`; `CombatOpponentAction.opponent_targets` (

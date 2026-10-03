@@ -25119,6 +25119,7 @@ export interface components {
       beat: components['schemas']['AftermathBeat'] | null;
       objective: components['schemas']['ObjectiveSnapshot'] | null;
       peril_round_active: boolean;
+      won_over: components['schemas']['WonOverRow'][];
     };
     /** @description Schema-only shape of one legend line in an aftermath digest (#3551). */
     AftermathLegend: {
@@ -35875,9 +35876,10 @@ export interface components {
      *     * `defeated` - Defeated
      *     * `fled` - Fled
      *     * `removed` - Removed
+     *     * `won_over` - Won over
      * @enum {string}
      */
-    OpponentStatusEnum: 'active' | 'defeated' | 'fled' | 'removed';
+    OpponentStatusEnum: 'active' | 'defeated' | 'fled' | 'removed' | 'won_over';
     /**
      * @description * `swarm` - Swarm
      *     * `mook` - Mook
@@ -48847,6 +48849,28 @@ export interface components {
       persona_id: number;
       /** @description Slug from the window's choices payload. */
       choice: string;
+    };
+    /**
+     * @description Schema-only shape of one AftermathDigest.won_over row (#4091).
+     *
+     *     Never instantiated for output.
+     */
+    WonOverRow: {
+      opponent_id: number;
+      name: string;
+      verb: string;
+      source_label: string;
+      nameless: boolean;
+      persona_id: number | null;
+      present: boolean;
+      condition: components['schemas']['ConditionInstance'] | null;
+      holds_until_settled: boolean;
+      strength: number;
+      can_bind: boolean;
+      can_take_into_service: boolean;
+      can_send_away: boolean;
+      can_settle: boolean;
+      bind_window_open: boolean;
     };
     /** @description One AmbientEmoteCondition leaf, nested in a room-detail ambient line (#3477). */
     WorldBuilderAmbientCondition: {

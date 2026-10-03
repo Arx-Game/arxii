@@ -1824,6 +1824,7 @@ class SelectSurroundedTerminalPoolTests(TestCase):
         from evennia_extensions.factories import AccountFactory, CharacterFactory
         from world.battles.resolution import select_surrounded_terminal_pool
         from world.battles.services import add_place, create_battle
+        from world.roster.factories import RosterEntryFactory, RosterTenureFactory
         from world.vitals.factories import ensure_surrounded_content
 
         content = ensure_surrounded_content()
@@ -1834,15 +1835,48 @@ class SelectSurroundedTerminalPoolTests(TestCase):
         participant = enlist_participant(
             battle=battle, character_sheet=CharacterSheetFactory(), side=attacker, place=place
         )
-        # A bare CharacterSheetFactory() character has db_account=None (NPC by
-        # convention — see world/vitals/peril_resolution.py:is_pc_source); attach a
-        # real account so this participant is classified as an opposing PC.
+        # The canonical PC test is an active RosterTenure (#4091 task 12 fix round
+        # 3), not db_account -- see world/roster/services/activity.py:is_player_character.
+        # db_account is also wired here for an "online" PC shape.
         pc_character = CharacterFactory()
         pc_character.db_account = AccountFactory()
         pc_character.save()
+        pc_sheet = CharacterSheetFactory(character=pc_character)
+        entry = RosterEntryFactory(character_sheet=pc_sheet)
+        RosterTenureFactory(roster_entry=entry, end_date=None)
         enlist_participant(
             battle=battle,
-            character_sheet=CharacterSheetFactory(character=pc_character),
+            character_sheet=pc_sheet,
+            side=defender,
+            place=place,
+        )
+        pool = select_surrounded_terminal_pool(battle=battle, participant=participant)
+        assert pool == content["pools"]["surrounded_terminal_pvp"]
+
+    def test_routes_to_pvp_pool_when_opposing_offline_pc_present_at_place(self) -> None:
+        """#4091 task 12 fix round 3: an OFFLINE opposing PC (active tenure, no
+        db_account) must still route to the death-forbidden pvp pool -- the
+        "AFK never kills" regression this fix round closes."""
+        from world.battles.resolution import select_surrounded_terminal_pool
+        from world.battles.services import add_place, create_battle
+        from world.roster.factories import RosterEntryFactory, RosterTenureFactory
+        from world.vitals.factories import ensure_surrounded_content
+
+        content = ensure_surrounded_content()
+        battle = create_battle(name="Routing Test 3")
+        attacker = add_side(battle=battle, role=BattleSideRole.ATTACKER)
+        defender = add_side(battle=battle, role=BattleSideRole.DEFENDER)
+        place = add_place(battle=battle, name="The Gates")
+        participant = enlist_participant(
+            battle=battle, character_sheet=CharacterSheetFactory(), side=attacker, place=place
+        )
+        offline_pc_sheet = CharacterSheetFactory()
+        entry = RosterEntryFactory(character_sheet=offline_pc_sheet)
+        RosterTenureFactory(roster_entry=entry, end_date=None)
+        assert offline_pc_sheet.character.db_account is None
+        enlist_participant(
+            battle=battle,
+            character_sheet=offline_pc_sheet,
             side=defender,
             place=place,
         )

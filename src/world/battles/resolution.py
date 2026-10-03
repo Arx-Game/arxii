@@ -267,7 +267,13 @@ def select_surrounded_terminal_pool(
     active PC participant at the same ``place`` — an actual PC opponent present means
     ADR-0023 (PvP non-lethal) applies, so ``surrounded_terminal_pvp`` (no death row at
     all) is used instead. This replaces ``select_abandonment_pool``'s ``ObjectDB``
-    source-character routing, which doesn't apply here (see Task 2).
+    source-character routing, which doesn't apply here (see Task 2). PC detection is
+    the batched form of ``world.roster.services.activity.is_player_character``
+    (#4091): an opponent counts as a PC when it is puppeted right now
+    (``db_account`` set, the pre-#4091 test) OR holds an active RosterTenure, which
+    covers an offline PC opponent whose ``db_account`` reads ``None`` and would
+    otherwise have let a battle round kill them. One query for every opposing
+    participant's roster tenure, not one per participant.
 
     Returns ``None`` on a seeding gap (the named pool doesn't exist) rather than raising
     — matches the "never crash the round, hold the victim" convention the sibling
@@ -277,6 +283,7 @@ def select_surrounded_terminal_pool(
     """
     from actions.models import ConsequencePool  # noqa: PLC0415
     from world.battles.constants import BattleParticipantStatus  # noqa: PLC0415
+    from world.roster.models import RosterEntry  # noqa: PLC0415
     from world.vitals.constants import (  # noqa: PLC0415
         POOL_SURROUNDED_TERMINAL_ENEMY,
         POOL_SURROUNDED_TERMINAL_PVP,
@@ -289,9 +296,15 @@ def select_surrounded_terminal_pool(
         if participant.place_id is not None
         else []
     )
+    opposing = [p for p in others if p.side_id != participant.side_id]
     opposing_pc_present = any(
-        p.side_id != participant.side_id and p.character_sheet.character.db_account is not None
-        for p in others
+        p.character_sheet.character.db_account is not None for p in opposing
+    ) or (
+        bool(opposing)
+        and RosterEntry.objects.filter(
+            character_sheet_id__in=[p.character_sheet_id for p in opposing],
+            tenures__end_date__isnull=True,
+        ).exists()
     )
     pool_name = (
         POOL_SURROUNDED_TERMINAL_PVP if opposing_pc_present else POOL_SURROUNDED_TERMINAL_ENEMY

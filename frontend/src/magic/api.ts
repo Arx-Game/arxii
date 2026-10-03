@@ -29,6 +29,7 @@ import type {
   AudereUltimateState,
   BindMotifStyleRequest,
   ChooseUltimateRequest,
+  CharacterGift,
   CharacterResonance,
   CrossXPLockRequest,
   CrossXPLockResponse,
@@ -97,6 +98,7 @@ function jsonHeaders(): HeadersInit {
 const SOUL_TETHER_URL = '/api/magic/soul-tether';
 const THREADS_URL = '/api/magic/threads';
 const CHAR_RESONANCES_URL = '/api/magic/character-resonances';
+const CHARACTER_GIFTS_URL = '/api/magic/character-gifts';
 const RELATIONSHIPS_URL = '/api/relationships/relationships';
 const THREAD_HUB_SUMMARY_URL = '/api/magic/thread-hub-summary/';
 const THREAD_PULL_PREVIEW_URL = '/api/magic/thread-pull-preview/';
@@ -297,6 +299,20 @@ export async function getCharacterResonances(
   const res = await apiFetch(url);
   if (!res.ok) throw new Error('Failed to load character resonances');
   return res.json() as Promise<CharacterResonance[]>;
+}
+
+/**
+ * GET /api/magic/character-gifts/?character=<id>
+ *
+ * The gifts a character holds (`CharacterGiftViewSet`, `pagination_class = None`
+ * — bare array). Each row's `gift_detail` is the Gift catalog entry (id, name) —
+ * `promote_summon`'s `gift_id` kwarg wants `gift_detail.id`, not this row's own
+ * `id`. Backs the Bind-as-companion gift picker (#4091).
+ */
+export async function fetchCharacterGifts(characterId: number): Promise<CharacterGift[]> {
+  const res = await apiFetch(`${CHARACTER_GIFTS_URL}/?character=${characterId}`);
+  if (!res.ok) throw new Error('Failed to load character gifts');
+  return res.json() as Promise<CharacterGift[]>;
 }
 
 // ---------------------------------------------------------------------------
