@@ -4,6 +4,7 @@ from django.test import TestCase
 from evennia.accounts.models import AccountDB
 
 from actions.definitions.progression import ManageTrainingAction, PurchaseUnlockAction
+from evennia_extensions.factories import AccountFactory
 from world.action_points.factories import ActionPointConfigFactory
 from world.character_sheets.factories import CharacterSheetFactory
 from world.classes.factories import CharacterClassLevelFactory
@@ -28,12 +29,8 @@ from world.skills.factories import (
 )
 from world.skills.models import TrainingAllocation
 from world.species.factories import LanguageFactory
-from world.traits.models import (
-    CharacterTraitValue,
-    Trait,
-    TraitCategory,
-    TraitType,
-)
+from world.traits.factories import TraitFactory
+from world.traits.models import CharacterTraitValue, TraitType
 
 
 class ManageTrainingActionTests(TestCase):
@@ -507,14 +504,12 @@ class PurchaseUnlockActionTests(TestCase):
 
 class PurchaseLanguageBreakthroughActionTests(TestCase):
     def setUp(self) -> None:
-        self.account = AccountDB.objects.create(username="langbuyaction", email="b@b.com")
+        self.account = AccountFactory(username="langbuyaction", email="b@b.com")
         self.sheet = CharacterSheetFactory()
         self.character = self.sheet.character
         self.character.db_account = self.account
         self.character.save()
-        self.trait = Trait.objects.create(
-            name="ActionBuyTongue", trait_type=TraitType.LANGUAGE, category=TraitCategory.GENERAL
-        )
+        self.trait = TraitFactory(name="ActionBuyTongue", trait_type=TraitType.LANGUAGE)
         self.language = LanguageFactory(name="ActionBuyTongue", trait=self.trait)
         TraitRatingUnlock.objects.create(trait=self.trait, target_rating=30)
         CharacterTraitValue.objects.create(character=self.sheet, trait=self.trait, value=29)
@@ -532,3 +527,12 @@ class PurchaseLanguageBreakthroughActionTests(TestCase):
     def test_missing_language_id_fails(self) -> None:
         result = PurchaseUnlockAction().run(self.character, unlock_type="language_breakthrough")
         self.assertFalse(result.success)
+
+    def test_unknown_language_id_fails_cleanly(self) -> None:
+        """An unknown language_id returns a clean failure, not a raw DoesNotExist."""
+        result = PurchaseUnlockAction().run(
+            self.character, unlock_type="language_breakthrough", language_id=999999
+        )
+        self.assertFalse(result.success)
+        self.assertIn("language", result.message.lower())
+        self.assertIn("matching query does not exist", result.message.lower())
