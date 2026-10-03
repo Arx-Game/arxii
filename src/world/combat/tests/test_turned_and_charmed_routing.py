@@ -102,6 +102,34 @@ class RoutingTests(TestCase):
         hostile = combatants_hostile_to(ally)["opponents"]
         self.assertCountEqual(hostile, [self.a, self.b])
 
+    def _hostile_queries_for(self, attacker_count: int) -> int:
+        from django.db import connection
+        from django.test.utils import CaptureQueriesContext
+
+        from world.combat.models import CombatOpponent
+        from world.npc_services.allegiance import effective_allegiances
+
+        attackers = []
+        for _ in range(attacker_count):
+            attacker = CombatOpponentFactory(encounter=self.enc)
+            ConditionInstanceFactory(target=attacker.objectdb, condition=self.charm)
+            attackers.append(attacker)
+        all_active = list(CombatOpponent.objects.filter(encounter=self.enc))
+        allegiances = effective_allegiances(all_active)
+        with CaptureQueriesContext(connection) as ctx:
+            for attacker in attackers:
+                hostile = combatants_hostile_to(
+                    attacker, allegiances=allegiances, opponents=all_active
+                )["opponents"]
+                self.assertIn(self.b, hostile)
+        return len(ctx.captured_queries)
+
+    def test_hostile_pool_queries_stay_flat_as_charmed_attackers_grow(self):
+        """#4091 final review: a passed-in opponent list is reused, never
+        re-queried once per charmed or turned attacker."""
+        self.assertEqual(self._hostile_queries_for(1), 0)
+        self.assertEqual(self._hostile_queries_for(4), 0)
+
     def test_opponent_pk_never_reads_participant_threat(self):
         # Threat-map pk collision: opponent targets must ignore participant threat maps.
         ConditionInstanceFactory(target=self.a.objectdb, condition=self.charm)

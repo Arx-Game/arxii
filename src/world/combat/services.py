@@ -1376,6 +1376,7 @@ def combatants_hostile_to(
     actor: CombatParticipant | CombatOpponent,
     *,
     allegiances: dict[int, Allegiance] | None = None,
+    opponents: list[CombatOpponent] | None = None,
 ) -> dict[str, list]:
     """Return the combatants *actor* may attack, grouped by kind (#1584, #4091).
 
@@ -1385,11 +1386,23 @@ def combatants_hostile_to(
     - A TURNED NPC: hostile to other stored-ENEMY opponents still effectively ENEMY.
     - A calmed (NEUTRAL) NPC: hostile to no one.
     - An ENEMY opponent: hostile to PCs and stored ALLY summons only (Decision 3).
+
+    ``opponents`` is the encounter's ACTIVE opponents when the caller already
+    holds them (``select_npc_actions`` computes them once per round, #4091 final
+    review), so a round with many charmed or turned attackers does not re-query
+    them per attacker. Rows are identity-map shared, so one that fled earlier in
+    the same pass is dropped by its live status.
     """
     from world.npc_services.allegiance import effective_allegiances  # noqa: PLC0415
 
-    enc = actor.encounter
-    opponents = list(CombatOpponent.objects.filter(encounter=enc, status=OpponentStatus.ACTIVE))
+    if opponents is None:
+        opponents = list(
+            CombatOpponent.objects.filter(
+                encounter_id=actor.encounter_id, status=OpponentStatus.ACTIVE
+            )
+        )
+    else:
+        opponents = [o for o in opponents if o.status == OpponentStatus.ACTIVE]
     if allegiances is None:
         allegiances = effective_allegiances(opponents)
     if isinstance(actor, CombatParticipant):
@@ -1413,7 +1426,9 @@ def combatants_hostile_to(
     if side == Allegiance.NEUTRAL:
         return {"participants": [], "opponents": []}
     active_pcs = list(
-        CombatParticipant.objects.filter(encounter=enc, status=ParticipantStatus.ACTIVE)
+        CombatParticipant.objects.filter(
+            encounter_id=actor.encounter_id, status=ParticipantStatus.ACTIVE
+        )
     )
     allies = [o for o in opponents if o.allegiance == CombatAllegiance.ALLY]
     return {"participants": active_pcs, "opponents": allies}
@@ -4454,6 +4469,7 @@ def select_npc_actions(
                 shield_participant_ids=shield_participant_ids,
                 locked_participant_id=active_locks_by_opponent.get(opponent.pk),
                 allegiances=allegiances,
+                active_opponents=all_active,
             )
         )
 
@@ -4496,6 +4512,7 @@ def _build_opponent_round_actions(  # noqa: PLR0913
     shield_participant_ids: set[int] | None = None,
     locked_participant_id: int | None = None,
     allegiances: dict[int, Allegiance],
+    active_opponents: list[CombatOpponent],
 ) -> list[CombatOpponentAction]:
     """Create one opponent's NPC action rows for the current round.
 
@@ -4520,7 +4537,11 @@ def _build_opponent_round_actions(  # noqa: PLR0913
         return []
 
     target_pool, targeting_participants = _npc_action_target_pool(
-        opponent, active_participants, encounter, allegiances=allegiances
+        opponent,
+        active_participants,
+        encounter,
+        allegiances=allegiances,
+        active_opponents=active_opponents,
     )
     if not target_pool:
         return []
@@ -4683,6 +4704,7 @@ def _npc_action_target_pool(
     encounter: CombatEncounter,  # noqa: ARG001 - kept for caller signature symmetry
     *,
     allegiances: dict[int, Allegiance],
+    active_opponents: list[CombatOpponent],
 ) -> tuple[list, bool]:
     """Route an opponent's targeting by EFFECTIVE allegiance (#1584, #1590, #4091).
 
@@ -4707,7 +4729,9 @@ def _npc_action_target_pool(
 
         opponent_pool = [
             opp
-            for opp in combatants_hostile_to(opponent, allegiances=allegiances)["opponents"]
+            for opp in combatants_hostile_to(
+                opponent, allegiances=allegiances, opponents=active_opponents
+            )["opponents"]
             if opp.objectdb_id is None or not is_untargetable(opp.objectdb)
         ]
         return opponent_pool, False
@@ -5037,6 +5061,7 @@ def _mature_one_pending_attack(
     round_number: int,
     *,
     allegiances: dict[int, Allegiance],
+    active_opponents: list[CombatOpponent],
 ) -> None:
     """Resolve a single matured wind-up: fizzle, lose-target, or fire (#2637 design 3)."""
     from world.vitals.services import is_dead  # noqa: PLC0415
@@ -5080,7 +5105,11 @@ def _mature_one_pending_attack(
         ).select_related("character_sheet__character")
     )
     target_pool, targeting_participants = _npc_action_target_pool(
-        pending.opponent, active_participants, encounter, allegiances=allegiances
+        pending.opponent,
+        active_participants,
+        encounter,
+        allegiances=allegiances,
+        active_opponents=active_opponents,
     )
     if not target_pool:
         _broadcast_windup_fizzled(pending, reason="loses its target")
@@ -5128,7 +5157,13 @@ def _mature_pending_opponent_attacks(encounter: CombatEncounter, round_number: i
     )
     allegiances = effective_allegiances(all_active)
     for pending in pending_rows:
-        _mature_one_pending_attack(encounter, pending, round_number, allegiances=allegiances)
+        _mature_one_pending_attack(
+            encounter,
+            pending,
+            round_number,
+            allegiances=allegiances,
+            active_opponents=all_active,
+        )
 
 
 def _mature_sustained_technique(sustained: SustainedAction, round_number: int) -> None:
