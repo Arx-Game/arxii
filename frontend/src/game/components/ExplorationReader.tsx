@@ -197,7 +197,7 @@ export function ExplorationReader({
                           {/* The avatar is an indent (#4128): left-click is the persona
                               menu; the right button belongs to the frame's sorting menu. */}
                           <span
-                            className="float-left mr-2 mt-0.5"
+                            className="float-left mr-2 flex"
                             data-testid="pose-avatar"
                             data-pose-avatar
                           >
@@ -213,7 +213,7 @@ export function ExplorationReader({
                                   name: row.item.persona.name,
                                   thumbnailUrl: row.item.persona.thumbnail_url,
                                 }}
-                                size="sm"
+                                size="xs"
                               />
                             </PersonaMenu>
                           </span>

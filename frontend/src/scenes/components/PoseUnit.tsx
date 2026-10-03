@@ -473,7 +473,7 @@ export function PoseUnit({
   const avatar = (
     <PersonaAvatar
       source={{ name: interaction.persona.name, thumbnailUrl: interaction.persona.thumbnail_url }}
-      size="sm"
+      size="xs"
     />
   );
   const posedAt = new Date(interaction.timestamp);
@@ -485,7 +485,7 @@ export function PoseUnit({
       data-persona-name={interaction.persona.name}
     >
       <span
-        className="float-left mr-2 mt-0.5"
+        className="float-left mr-2 flex"
         data-testid="pose-avatar"
         data-pose-avatar
         onDoubleClick={onAddTarget ? () => onAddTarget(interaction.persona.name) : undefined}

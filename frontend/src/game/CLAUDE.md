@@ -36,7 +36,7 @@ Core game interface for real-time RPG interaction with WebSocket communication a
   conversation tabs, filters the scene feed, ambient poses and notes through
   `visibleInteractions`/`visibleNotes` before either reader sees them, shows
   "Everything is switched off. Press a chip to bring one kind back." while All is
-  off, and provides `FeedBlockControlsContext` from the session's minimised and
+  off, and provides `FeedBlockControlsContext` from the session's minimized and
   dismissed keys. A reference view gets neither strip nor filtering. Renders
   `ConversationTabStrip` above the feed when `conversationTabs` is passed
   (#2165), and remembers each conversation tab's scroll offset (`Map<threadKey,
@@ -95,7 +95,7 @@ kinds, on, wake, custom}`; a kind belongs to at most one chip; `DEFAULT_FEED_CHI
   `feedItemKey` (`i:<id>` / `n:<id>`). The layout lives in `PlayPreferences`
   (`feedChips`, `feedAll`), per account per browser.
 - **`feedBlockControls.ts`**: The context `FeedBlockFrame` reads: the session's
-  minimised keys and the minimise/restore/dismiss dispatchers `GameWindow` provides;
+  minimized keys and the minimize/restore/dismiss dispatchers `GameWindow` provides;
   null in a reference view, so history renders without controls.
 - **`feedRows.ts`**: `interleaveNotes(items, notes)` (#3856) sorts an item list and
   the session's `FeedNote`s into one column by parsed time (server timestamps may

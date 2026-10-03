@@ -30,6 +30,18 @@ function firstLineLeft(body: Locator): Promise<number> {
   });
 }
 
+/** The left edge of the second rendered line of the first text node inside `body`. */
+function secondLineLeft(body: Locator): Promise<number> {
+  return body.evaluate((el) => {
+    const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+    const text = walker.nextNode();
+    if (!text) return Number.NaN;
+    const range = document.createRange();
+    range.selectNodeContents(text);
+    return range.getClientRects()[1]?.left ?? Number.NaN;
+  });
+}
+
 /** The left edge of the last rendered line of text inside `body`. */
 function lastLineLeft(body: Locator): Promise<number> {
   return body.evaluate((el) => {
@@ -57,6 +69,30 @@ test.describe('a pose is a prose line (#4128)', () => {
   test.beforeEach(async ({ page }) => {
     await page.setViewportSize({ width: 1600, height: 900 });
     await mockRestRoutes(page);
+    // The persona menu's server half (#4030), so the play menu renders its
+    // social items and not a Loading line. Registered after the harness's
+    // catch-all, so it wins.
+    await page.route('**/api/actions/characters/*/personas/*/menu/', (route) =>
+      route.fulfill({
+        json: {
+          persona_id: 9,
+          is_self: false,
+          scene_id: null,
+          viewer_persona_id: 7,
+          notice: '',
+          items: [
+            { key: 'look', label: 'Look', group: 'perception', available: true, reason: '' },
+            { key: 'mute', label: 'Mute', group: 'social', available: true, reason: '' },
+            { key: 'block', label: 'Block…', group: 'social', available: true, reason: '' },
+          ],
+          groups: [
+            { key: 'perception', empty_state: '' },
+            { key: 'social', empty_state: '' },
+          ],
+          scene_actions: [],
+        },
+      })
+    );
   });
 
   test('the avatar is an indent: the first line starts beside it, the rest wrap back under it', async ({
@@ -72,6 +108,9 @@ test.describe('a pose is a prose line (#4128)', () => {
     if (!avatarBox) throw new Error('no avatar');
     const body = line.getByTestId('pose-body');
     expect(await firstLineLeft(body)).toBeGreaterThan(avatarBox.x + avatarBox.width);
+    // An indent is the first line only: the avatar fits inside one line of text,
+    // so line 2 is already flush left, not just the next paragraph.
+    expect(await secondLineLeft(body)).toBeLessThan(avatarBox.x + 2);
     expect(await lastLineLeft(body)).toBeLessThan(avatarBox.x + 2);
     // No header row: nothing between the top of the line and the first text line.
     await expect(line.locator('header')).toHaveCount(0);
@@ -144,6 +183,9 @@ test.describe('a pose is a prose line (#4128)', () => {
     await expect(play.getByRole('menuitem').first()).toHaveText('Reply');
     await expect(play.getByRole('menuitem').nth(1)).toHaveText('Kudos');
     await expect(play.getByRole('menuitem', { name: 'View sheet' })).toBeVisible();
+    // Mute and Block stay in the play menu (left click), by ruling.
+    await expect(play.getByRole('menuitem', { name: 'Mute' })).toBeVisible();
+    await expect(play.getByRole('menuitem', { name: /^Block/ })).toBeVisible();
     await page.screenshot({ path: `${OUT}/play-menu-1600.png` });
   });
 });

@@ -10,7 +10,7 @@ export interface PersonaAvatarSource {
 
 interface PersonaAvatarProps {
   source: PersonaAvatarSource;
-  size?: 'sm' | 'md' | 'lg';
+  size?: 'xs' | 'sm' | 'md' | 'lg';
   className?: string;
 }
 
@@ -27,6 +27,8 @@ function colorForName(name: string): string {
 }
 
 const SIZE_CLASSES = {
+  // One line of feed text (20px): the pose line's indent avatar (#4128).
+  xs: 'h-5 w-5 text-[9px]',
   sm: 'h-6 w-6 text-[10px]',
   md: 'h-8 w-8 text-xs',
   lg: 'h-12 w-12 text-base',
