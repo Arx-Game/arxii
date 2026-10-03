@@ -9,6 +9,8 @@ from world.items.services.appearance import visible_worn_items_for
 if TYPE_CHECKING:
     from collections.abc import Iterable
 
+    from evennia.objects.models import ObjectDB
+
     from commands.types import Kwargs
     from world.conditions.models import ConditionInstance
 
@@ -20,11 +22,11 @@ class CharacterState(BaseState):
     def appearance_template(self) -> str:
         """Template for ``return_appearance``.
 
-        Renders name, description, then optional status, worn, and markings
-        sections. Each optional section is omitted entirely when its display
-        method returns an empty string.
+        Renders name, description, then optional status, allegiance, worn, and
+        markings sections. Each optional section is omitted entirely when its
+        display method returns an empty string.
         """
-        return "{name}\n{desc}{status_section}{worn_section}{markings_section}"
+        return "{name}\n{desc}{status_section}{allegiance_section}{worn_section}{markings_section}"
 
     def get_categories(self) -> dict:
         # For now, no extra character-specific categories.
@@ -302,12 +304,67 @@ class CharacterState(BaseState):
             return ""
         return f"|wStatus:|n {iter_to_str(clauses, endsep=', and')}."
 
+    def get_display_allegiance(
+        self,
+        looker: "BaseState | object | None" = None,
+        **kwargs: "Kwargs",
+    ) -> str:
+        """The active hold on this NPC, its fade, and what the looker can do about it (#4091).
+
+        PLACEHOLDER system prose: ``<Condition> (<stage>), from <source>: <time left>.``,
+        then, when the looker can act on it, a second line: ``You can: <verb>, <verb>,
+        ...``. Returns ``""`` when there is no active allegiance hold
+        (``allegiance_instance_on``), or when the hold's condition is not
+        ``is_visible_to_others`` and the looker is not the hold's own source.
+
+        Every verb reuses the SAME predicate that gates the live command, never a
+        parallel check: ``settle`` shows for persona-backed targets only (ruling
+        R2); ``sendaway`` and ``retain``/``companion promote`` show only for the
+        looker who sourced the hold, gated by ``actor_holds_sway_present`` (the
+        shared predicate the ``sendaway``/``retain`` telnet verbs and the
+        ``send_away``/``charm_asset`` action prerequisites consult) and, for a
+        nameless charmed NPC, ``bind_window_open`` (the same predicate
+        ``companion promote`` and ``promote_summon_to_companion`` consult).
+        ``cast <technique> at`` is offered to anyone who can see the hold at all —
+        the placeholder stands in for whichever technique the looker would pick.
+        Names come from personas (``get_display_name`` / ``persona_names_for_sheets``),
+        never ``str(participant)``.
+        """
+        from world.npc_services.allegiance import allegiance_instance_on  # noqa: PLC0415
+
+        instance = allegiance_instance_on(self.obj)
+        if instance is None:
+            return ""
+
+        looker_obj = looker.obj if looker is not None and hasattr(looker, "obj") else None
+        is_source = looker_obj is not None and instance.source_character_id == looker_obj.pk
+        if not instance.condition.is_visible_to_others and not is_source:
+            return ""
+
+        line = _allegiance_hold_line(instance)
+        if looker_obj is None:
+            return line
+
+        target_name = self.get_display_name(looker=looker, **kwargs).lower()
+        # BaseState.obj type-hints ArxTypeclass (the typeclasses), not ObjectDB, though
+        # every real instance is ObjectDB-backed -- same known gap as ItemState's
+        # constructor call in service_functions/outfits.py.
+        verb_prefixes = _allegiance_verb_prefixes(
+            self.obj,
+            instance,
+            looker_obj,  # ty: ignore[invalid-argument-type]
+            is_source=is_source,
+        )
+        verb_prefixes.append("cast <technique> at")
+        verbs_text = ", ".join(f"{prefix} {target_name}" for prefix in verb_prefixes)
+        return f"{line}\nYou can: {verbs_text}"
+
     def return_appearance(
         self,
         mode: str = "look",
         **kwargs: "Kwargs",
     ) -> str:
-        """Render character appearance with optional worn/status sections.
+        """Render character appearance with optional worn/status/allegiance sections.
 
         ``looker`` is propagated via ``**kwargs`` so it binds to each
         display-component method's first positional parameter, matching the
@@ -317,16 +374,138 @@ class CharacterState(BaseState):
         desc = self.get_display_desc(mode=mode, **kwargs)
         worn = self.get_display_worn(**kwargs)
         status = self.get_display_status(**kwargs)
+        allegiance = self.get_display_allegiance(**kwargs)
         markings = self.get_display_markings(**kwargs)
 
         appearance = self.appearance_template.format(
             name=name,
             desc=desc,
             status_section=f"\n{status}" if status else "",
+            allegiance_section=f"\n{allegiance}" if allegiance else "",
             worn_section=f"\n{worn}" if worn else "",
             markings_section=f"\n{markings}" if markings else "",
         )
         return self.format_appearance(appearance, **kwargs)
+
+
+def _allegiance_hold_line(instance: "ConditionInstance") -> str:
+    """``<Condition> (<stage>), from <source>: <time left>.`` (#4091).
+
+    The stage parenthetical is omitted for a hold with no ``current_stage``
+    (Charmed/Calm have no progression); the source clause is omitted for a
+    hold with no ``source_character`` (never expected in practice, but the
+    FK is nullable).
+    """
+    condition = instance.condition
+    stage = instance.current_stage
+    stage_part = ""
+    if stage is not None:
+        stage_text = f"{stage.name}, stage {stage.stage_order} of {len(condition.cached_stages)}"
+        stage_part = f" ({stage_text})"
+    source_name = _allegiance_source_name(instance)
+    from_part = f", from {source_name}" if source_name else ""
+    time_text = _allegiance_time_text(instance)
+    return f"{condition.name}{stage_part}{from_part}: {time_text}."
+
+
+def _allegiance_verb_prefixes(
+    obj: "ObjectDB",  # noqa: OBJECTDB_PARAM - the live NPC body being looked at
+    instance: "ConditionInstance",
+    looker_obj: "ObjectDB",  # noqa: OBJECTDB_PARAM - the looker's own character
+    *,
+    is_source: bool,
+) -> list[str]:
+    """Bare verb prefixes (no target name yet) the looker can act on this hold with.
+
+    Every prefix reuses the SAME predicate that gates the live command, never a
+    parallel check: ``settle`` shows for a persona-backed target only (ruling R2);
+    ``retain``/``companion promote`` and ``sendaway`` show only for the looker who
+    sourced the hold, gated by ``actor_holds_sway_present`` (the shared predicate
+    the ``sendaway``/``retain`` telnet verbs and the ``send_away``/``charm_asset``
+    action prerequisites consult) and, for a nameless charmed NPC,
+    ``bind_window_open`` (the same predicate ``companion promote`` and
+    ``promote_summon_to_companion`` consult). The caller appends ``cast
+    <technique> at`` itself -- offered to anyone who can see the hold at all.
+    """
+    from world.conditions.constants import Allegiance  # noqa: PLC0415
+    from world.npc_services.allegiance import (  # noqa: PLC0415
+        ALLEGIANCE_HOLD_KINDS,
+        actor_holds_sway_present,
+    )
+
+    prefixes: list[str] = []
+    sheet = obj.character_sheet
+    if sheet is not None:
+        prefixes.append("settle")
+    if is_source and instance.condition.sets_allegiance == Allegiance.ALLY_OF_CASTER:
+        if sheet is not None:
+            if actor_holds_sway_present(
+                looker_obj,
+                obj,
+                kinds=frozenset({Allegiance.ALLY_OF_CASTER}),
+                instances=[instance],
+            ):
+                prefixes.append("retain")
+        elif _bind_window_open_for(obj):
+            prefixes.append("companion promote")
+    if actor_holds_sway_present(looker_obj, obj, kinds=ALLEGIANCE_HOLD_KINDS, instances=[instance]):
+        prefixes.append("sendaway")
+    return prefixes
+
+
+def _allegiance_source_name(instance: "ConditionInstance") -> str:
+    """The hold's source, by persona (never ``str(participant)``) -- same
+    fallback convention as ``world.combat.won_over._source_label``: a source
+    with no persona-mapped entry falls back to its own ``ObjectDB.key``."""
+    from world.scenes.services import persona_names_for_sheets  # noqa: PLC0415
+
+    source = instance.source_character
+    if source is None:
+        return ""
+    return persona_names_for_sheets([source.pk]).get(source.pk, source.key)
+
+
+_SECONDS_PER_HOUR = 3600
+_SECONDS_PER_MINUTE = 60
+
+
+def _allegiance_time_text(instance: "ConditionInstance") -> str:
+    """``holds until settled`` for a rounds-measured hold, else ``about N
+    hours left`` (or minutes, under an hour) rounded up from
+    ``instance.expires_at - timezone.now()``."""
+    import math  # noqa: PLC0415
+
+    from django.utils import timezone  # noqa: PLC0415
+
+    from world.conditions.constants import DurationType  # noqa: PLC0415
+
+    condition = instance.condition
+    if condition.default_duration_type == DurationType.ROUNDS or instance.expires_at is None:
+        return "holds until settled"
+    total_seconds = max((instance.expires_at - timezone.now()).total_seconds(), 0)
+    if total_seconds < _SECONDS_PER_HOUR:
+        minutes = math.ceil(total_seconds / _SECONDS_PER_MINUTE)
+        unit = "minute" if minutes == 1 else "minutes"
+        return f"about {minutes} {unit} left"
+    hours = math.ceil(total_seconds / _SECONDS_PER_HOUR)
+    unit = "hour" if hours == 1 else "hours"
+    return f"about {hours} {unit} left"
+
+
+def _bind_window_open_for(obj: "ObjectDB") -> bool:  # noqa: OBJECTDB_PARAM - the live NPC body
+    """``bind_window_open`` (Decision 19) for whichever won-over ``CombatOpponent``
+    this nameless body currently has, if any -- the same predicate ``companion
+    promote`` and ``promote_summon_to_companion`` consult (#4091 fix round 1)."""
+    from world.combat.constants import OpponentStatus  # noqa: PLC0415
+    from world.combat.models import CombatOpponent  # noqa: PLC0415
+    from world.combat.won_over import bind_window_open  # noqa: PLC0415
+
+    opponent = (
+        CombatOpponent.objects.filter(objectdb=obj, status=OpponentStatus.WON_OVER)
+        .order_by("-pk")
+        .first()
+    )
+    return opponent is not None and bind_window_open(opponent)
 
 
 def _is_ravenous_condition(instance: "ConditionInstance") -> bool:
