@@ -4504,6 +4504,30 @@ paths:
               schema:
                 $ref: '#/components/schemas/CharacterDraft'
           description: ''
+  /api/character-creation/drafts/{id}/beats/:
+    get:
+      operationId: character_creation_drafts_beats_list
+      description: The Backgrounds beat pool as this draft meets it, with its state
+        on each (#4124).
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+        required: true
+      tags:
+      - character-creation
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/BeatPoolEntry'
+          description: ''
   /api/character-creation/drafts/{id}/cg-points/:
     get:
       operationId: character_creation_drafts_cg_points_retrieve
@@ -42700,6 +42724,43 @@ components:
       description: |-
         * `success` - Success
         * `failure` - Failure
+    BeatPoolEntry:
+      type: object
+      description: A ``world.character_creation.types.BeatPoolEntry`` (#4124).
+      properties:
+        beat_id:
+          type: integer
+        name:
+          type: string
+        prompt:
+          type: string
+        life_stage:
+          type: string
+        selection:
+          type: string
+        taken:
+          type: boolean
+        unknown:
+          type: boolean
+        line:
+          type: string
+        answer_offer_ids:
+          type: array
+          items:
+            type: integer
+        kept:
+          type: boolean
+      required:
+      - answer_offer_ids
+      - beat_id
+      - kept
+      - life_stage
+      - line
+      - name
+      - prompt
+      - selection
+      - taken
+      - unknown
     BeatReadiness:
       type: object
       description: |-
@@ -58927,12 +58988,14 @@ components:
       enum:
       - childhood
       - youth
+      - adulthood
       - at_the_glimpse
       - since_the_glimpse
       type: string
       description: |-
         * `childhood` - Childhood
         * `youth` - Youth
+        * `adulthood` - Before the Glimpse
         * `at_the_glimpse` - At the Glimpse
         * `since_the_glimpse` - Since the Glimpse
     ListenerPost:
@@ -64163,6 +64226,7 @@ components:
 
             * `childhood` - Childhood
             * `youth` - Youth
+            * `adulthood` - Before the Glimpse
             * `at_the_glimpse` - At the Glimpse
             * `since_the_glimpse` - Since the Glimpse
         anchor_source:

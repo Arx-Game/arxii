@@ -1155,7 +1155,7 @@ class LifeBeat(CachedPropertiesMixin, NaturalKeyMixin, CreditedContent, SharedMe
     its answers are ``DistinctionOffer`` rows in ``OfferChapter.BACKGROUNDS``
     opened by this beat, each a ``CHOICE`` at the distinction's own price; a beat
     grants nothing free, so an Upbringing carries no mechanical power to balance
-    (ADR-0333). ``selection`` says whether one answer or any may be taken;
+    (the ADR `adr-4124`). ``selection`` says whether one answer or any may be taken;
     "neither" is a taken beat with no pick. Natural key is (life_stage, name).
     """
 

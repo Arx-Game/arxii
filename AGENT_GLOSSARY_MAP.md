@@ -31,7 +31,7 @@ term is chosen and the rest are listed under `_Avoid_`.
   Seat, Hall, Land Shape, Demesne, House State, Household, Contested Title, and (#3983 Plan B
   Task 7) Claim Grants, Founder Place, Capital (canonical; areas holds a stub), Claim Tier
   (though `OriginTemplate.max_claim_tier` itself is a `character_creation` field —
-  `character_creation` has no `AGENT_GLOSSARY.md` of its own yet, see houses.md's Founder mode
+  `character_creation` now has `src/world/character_creation/AGENT_GLOSSARY.md` (#4124: beat, life stage, unknown beat, kept beat, told background, maturation floor); see houses.md's Founder mode
   section)
 - [realms](src/world/realms/AGENT_GLOSSARY.md)
 - [relationships](src/world/relationships/AGENT_GLOSSARY.md)

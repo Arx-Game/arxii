@@ -89,7 +89,7 @@ expands seed data in this public repo (TehomCD ruling, 2026-07-17).
 |---|-------|-------------------|
 | 1 | Origin | `selected_area` is set |
 | 2 | Heritage | Beginnings, species, gender selected; family/tarot complete; CG points >= 0; species allowed by beginnings |
-| 3 | Lineage | Upbringing chosen and accessible; family path resolved (claim: playable family of an offered kind in the area's realm; name: unique name; none: tarot card; with claim and name both offered and nothing chosen, the path resolves to name, #4024); every required prompt on that path answered (`get_lineage_errors`, #3617) |
+| 3 | Lineage | Upbringing chosen and accessible; family path resolved (claim: playable family of an offered kind in the area's realm; name: unique name; none: tarot card; with claim and name both offered and nothing chosen, the path resolves to name, #4024); every required prompt on that path answered (`get_lineage_errors`, #3617). The beats (#4124) are never required: a stage with none taken is a quiet one |
 | 5 | Path | Path selected (`get_path_errors`) |
 | 6 | Gift | Tradition, gift, >=1 technique(s), gift resonance, and Anima Check stat/skill all selected and valid (`compute_magic_errors`, 5-branch return-first gate); renders the `GiftStage` funnel component (#2426 Task 10) |
 | 7 | Attributes & Skills | All 12 primary stats present, valid range (1-5), points remaining = 0; skill point allocation validated against budget (moved in from Path, #2426 Task 9). Draft allocations are display-scale; finalization stores stats ×10 and bridges each CG skill into a matching `CharacterTraitValue` row so checks and DP progression read them (ADR-0193, #2894) |
@@ -199,8 +199,10 @@ from world.character_creation.enemies import (
 ### Distinction offers (`offers.py`, #3675)
 
 The only reader of `DistinctionOffer` rows. Every chapter's picker (`ChapterOffers`,
-`GlimpseAxes`, the schooling stances, the Upbringing answer block) goes through this
-module, never the model directly.
+`GlimpseAxes`, the schooling stances, the Upbringing answer block, the beats block)
+goes through this module, never the model directly. `BACKGROUNDS` (#4124) is the
+chapter a beat's answers live in; `beat_pool` / `beats_for` / `taken_beat_ids` /
+`one_of_beat_conflicts` are its beat-side readers.
 
 ```python
 from world.character_creation.offers import (
@@ -595,9 +597,46 @@ authored underneath it. See the authoring recipes in
 uses existing organisation mechanisms), ADR-0269 (Upbringings price standing as
 family influence x position), and ADR-0273 (family entry is a Vacancy).
 
-**Page order:** Upbringing picker, `scope: 'any'` prompts, the family block (path
-picker when the Upbringing allows more than one path, then the path body), then
-`scope: 'path'` prompts.
+**Page order (#4124):** Upbringing picker, the family block (path picker when the
+Upbringing allows more than one path, then the path body: the house and the parents
+come first), `scope: 'any'` prompts, `scope: 'path'` prompts, then the beats
+(`BeatsBlock`), then the record.
+
+### Backgrounds: the beats of a life (#4124)
+
+A character's background is written as **beats** across the stages of a life
+(`LifeStage`: childhood, youth, before the Glimpse, at the Glimpse, since), from one
+shared library (`LifeBeat`, a content model) that every Beginning offers unless a
+`LifeBeatExclusion` says otherwise. A beat is a prompt over priced distinction offers:
+its answers are `DistinctionOffer` rows in `OfferChapter.BACKGROUNDS`, opened by the
+beat (`DistinctionOffer.beat`, `opener_key` `beat:<id>`), every one
+`OfferArrival.CHOICE` at the distinction's own price. **A beat grants nothing free**, so
+an Upbringing carries no mechanical power to balance (the ADR `adr-4124`). A beat's
+`selection` is one-of (the page draws the answers across; the distinctions sync refuses
+a second pick on it, `offers.one_of_beat_conflicts`) or any-that-apply (drawn down).
+"Neither" is a taken beat with no pick.
+
+The draft's state lives at `draft_data["beats"]`: `{"<beat_id>": {"taken", "unknown",
+"line"}}`, the whole map replaced on each PATCH (`_validate_beats`);
+`GET drafts/<id>/beats/` returns the pool as the draft meets it (`offers.beats_for`,
+`BeatPoolEntry`: taken, unknown, the line, the answers' offer ids, `kept`). A beat's
+answers open only while it is taken and not unknown (`_opener_satisfied`), so removing a
+beat drops its picks through `reconcile_offer_picks`. `Beginnings.beat_mode`
+`ONE_KEPT` (the Sleeper) takes the one unexcluded beat itself and marks nothing else
+addable; every other beat stands unknown. Nothing counts beats by age: the purse is
+the only governor.
+
+At finalize (`_finalize_beats`) each taken beat becomes a `CharacterOriginSlot` row with
+`beat` set (`slot` null; exactly one of the two), its `unknown` state and its line; the
+answers are ordinary `CharacterDistinction` rows whose source is the beat. The told
+background (`Profile.background`) is drafted from the Upbringing answers and the beats
+by stage (`assemble_origin_prose`) and is the player's to edit; the beats themselves are
+the owner's and staff's (the sheet's private block, `character_sheets.md`). A `Secret`
+may name an unknown beat (`Secret.resolves_beat`); when the subject learns it the beat
+is no longer unknown. Age is experience through beats, not banked stat points:
+`CharacterSheet.maturation_floor` is the creation age and milestones at or below it never
+bank (`progression/services/maturation.py`); an eternal-youth species prices its long
+life through `Species.cg_point_cost` on the purse's species line.
 
 **Name path:** pick a Family Template (`draft.resolve_family_template()`; the sole
 offered template, else `draft_data.family_template_id`), name the family (checked

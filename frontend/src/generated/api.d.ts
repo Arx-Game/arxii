@@ -2909,6 +2909,23 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/character-creation/drafts/{id}/beats/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description The Backgrounds beat pool as this draft meets it, with its state on each (#4124). */
+    get: operations['character_creation_drafts_beats_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/character-creation/drafts/{id}/cg-points/': {
     parameters: {
       query?: never;
@@ -25945,6 +25962,19 @@ export interface components {
      * @enum {string}
      */
     BeatOutcomeEnum: 'success' | 'failure';
+    /** @description A ``world.character_creation.types.BeatPoolEntry`` (#4124). */
+    BeatPoolEntry: {
+      beat_id: number;
+      name: string;
+      prompt: string;
+      life_stage: string;
+      selection: string;
+      taken: boolean;
+      unknown: boolean;
+      line: string;
+      answer_offer_ids: number[];
+      kept: boolean;
+    };
     /**
      * @description GM readiness dashboard payload for a beat (#3562).
      *
@@ -33638,11 +33668,12 @@ export interface components {
     /**
      * @description * `childhood` - Childhood
      *     * `youth` - Youth
+     *     * `adulthood` - Before the Glimpse
      *     * `at_the_glimpse` - At the Glimpse
      *     * `since_the_glimpse` - Since the Glimpse
      * @enum {string}
      */
-    LifeStageEnum: 'childhood' | 'youth' | 'at_the_glimpse' | 'since_the_glimpse';
+    LifeStageEnum: 'childhood' | 'youth' | 'adulthood' | 'at_the_glimpse' | 'since_the_glimpse';
     /**
      * @description Board row for a standing listener post.
      *
@@ -36361,6 +36392,7 @@ export interface components {
        *
        *     * `childhood` - Childhood
        *     * `youth` - Youth
+       *     * `adulthood` - Before the Glimpse
        *     * `at_the_glimpse` - At the Glimpse
        *     * `since_the_glimpse` - Since the Glimpse
        */
@@ -52955,6 +52987,27 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['CharacterDraft'];
+        };
+      };
+    };
+  };
+  character_creation_drafts_beats_list: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['BeatPoolEntry'][];
         };
       };
     };
