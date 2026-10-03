@@ -23,8 +23,10 @@ Redux Toolkit store for global client state management. Minimal use of Redux - o
   at 500, never counted as unread; `clearConsoleLines`).
   `minimizedFeed` / `dismissedFeed` (#3856 PR 2) hold the `feedItemKey`s of blocks
   this viewer folded or removed from their own view (`minimizeFeedItem`,
-  `restoreFeedItem`, `dismissFeedItem`); in memory only, nothing is deleted for
-  anyone else, and a dismissed block never badges.
+  `restoreFeedItem`, `dismissFeedItem`, and the batch forms `minimizeFeedItems`,
+  `dismissFeedItems`, `restoreAllFeed` for the sorting menu's per-character and
+  all-lines actions, #4128); in memory only, nothing is deleted for anyone else,
+  and a dismissed block never badges.
   Each per-character `Session` also carries the **conversation-tab state** (#2165):
   `openThreadTabs` (ordered thread keys with an open tab; never contains `'room'`,
   which is always the anchor) and `activeThreadTab` (the focused tab's key, or

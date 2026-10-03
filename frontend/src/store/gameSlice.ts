@@ -425,6 +425,37 @@ export const gameSlice = createSlice({
         session.dismissedFeed.push(action.payload.key);
       }
     },
+    /** Fold several lines at once (#4128): one character's, or every line shown. */
+    minimizeFeedItems: (
+      state,
+      action: PayloadAction<{ character: MyRosterEntry['name']; keys: string[] }>
+    ) => {
+      const session = state.sessions[action.payload.character];
+      if (!session) return;
+      for (const key of action.payload.keys) {
+        if (!session.minimizedFeed.includes(key)) session.minimizedFeed.push(key);
+      }
+    },
+    /** Hide several lines at once (#4128); a hidden line is no longer folded. */
+    dismissFeedItems: (
+      state,
+      action: PayloadAction<{ character: MyRosterEntry['name']; keys: string[] }>
+    ) => {
+      const session = state.sessions[action.payload.character];
+      if (!session) return;
+      const keys = new Set(action.payload.keys);
+      session.minimizedFeed = session.minimizedFeed.filter((k) => !keys.has(k));
+      for (const key of keys) {
+        if (!session.dismissedFeed.includes(key)) session.dismissedFeed.push(key);
+      }
+    },
+    /** Expand all (#4128): unfold every line; hidden lines stay hidden. */
+    restoreAllFeed: (state, action: PayloadAction<MyRosterEntry['name']>) => {
+      const session = state.sessions[action.payload];
+      if (session && session.minimizedFeed.length > 0) {
+        session.minimizedFeed = [];
+      }
+    },
     restoreDismissedFeed: (state, action: PayloadAction<MyRosterEntry['name']>) => {
       const session = state.sessions[action.payload];
       if (session && session.dismissedFeed.length > 0) {
@@ -757,6 +788,9 @@ export const {
   minimizeFeedItem,
   restoreFeedItem,
   dismissFeedItem,
+  minimizeFeedItems,
+  dismissFeedItems,
+  restoreAllFeed,
   restoreDismissedFeed,
   setSessionScene,
   addSceneInteraction,

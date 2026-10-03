@@ -248,7 +248,7 @@ function sameKinds(a: readonly FeedKind[], b: readonly FeedKind[]): boolean {
   return a.length === b.length && b.every((kind) => a.includes(kind));
 }
 
-/** The key minimise and dismiss are recorded under, per viewer. */
+/** The key minimize and dismiss are recorded under, per viewer. */
 export function feedItemKey(type: 'interaction' | 'note', id: number | string): string {
   return type === 'interaction' ? `i:${id}` : `n:${id}`;
 }

@@ -1903,7 +1903,7 @@ describe('ThreadedNarrativeReader', () => {
       ).toBeInTheDocument();
     });
 
-    it('labels the thread\'s root pose "Opening pose" and leaves an ordinary reply unlabeled (#3759 review finding F4, #3787 Task 7)', () => {
+    it('labels no pose by its role: the thread header names the thread and the parent chip names the reply (#4128)', () => {
       // #3787 Task 7 -- the "Reply in <title>" branch this test used to cover
       // is deleted: its own doc comment said it was a stand-in for per-pose
       // parent data that didn't exist yet. That data exists now
@@ -1923,7 +1923,7 @@ describe('ThreadedNarrativeReader', () => {
           fetchNextPage={vi.fn()}
         />
       );
-      expect(screen.getByText('Opening pose')).toBeInTheDocument();
+      expect(screen.queryByText('Opening pose')).not.toBeInTheDocument();
       expect(screen.queryByText('Reply in root content')).not.toBeInTheDocument();
       expect(screen.queryByText(/^Reply in /)).not.toBeInTheDocument();
     });
@@ -2027,11 +2027,10 @@ describe('ThreadedNarrativeReader', () => {
         />
       );
       // Both legacy poses render their content directly -- no click needed,
-      // no collapsible-card affordance at all -- and are labeled
-      // "Standalone" (Minor M-1), never "Opening pose".
+      // no collapsible-card affordance at all -- and carry no role label (#4128).
       expect(screen.getByText('ordinary room narration')).toBeInTheDocument();
       expect(screen.getByText('another ordinary pose')).toBeInTheDocument();
-      expect(screen.getAllByText('Standalone')).toHaveLength(2);
+      expect(screen.queryByText('Standalone')).not.toBeInTheDocument();
       // Exactly ONE collapsible-card header (`aria-expanded`) exists in the
       // whole reader -- thread-a's, the only REAL (thread_id-bearing) group.
       const expandableHeaders = container.querySelectorAll('[aria-expanded]');
@@ -2046,12 +2045,11 @@ describe('ThreadedNarrativeReader', () => {
       // works normally alongside the legacy poses.
       expect(screen.getByText('thread root')).toBeInTheDocument();
       expect(screen.getByText('thread reply')).toBeInTheDocument();
-      // Deviation from the fix-round brief's literal wording (see this
-      // branch's own comment in the source): a legacy pose still gets its
-      // "Reply" affordance -- losing it would make it impossible to start a
-      // NEW thread from an ordinary, un-replied pose, the single most
-      // common shape a scene starts in.
-      expect(screen.getAllByRole('button', { name: /^reply$/i })).toHaveLength(4); // 2 legacy + 2 real
+      // No Reply link under any pose (#4128): Reply lives in the avatar's play
+      // menu, so starting a new thread from an un-replied pose is one
+      // left-click away without a link under every line.
+      expect(screen.queryByRole('button', { name: /^reply$/i })).toBeNull();
+      expect(screen.getAllByTestId('scene-messages')).toHaveLength(4); // 2 legacy + 2 real
     });
   });
 
@@ -2097,10 +2095,10 @@ describe('ThreadedNarrativeReader', () => {
       fireEvent.click(answerThis);
       expect(onReply).toHaveBeenCalledWith(expect.objectContaining({ id: 1 }));
 
-      // The other, uninvolved row keeps the ordinary quiet Reply link and
-      // gets no involvement box at all.
+      // The other, uninvolved row gets no involvement box at all, and no
+      // Reply link either (#4128): its Reply is in the avatar's play menu.
       expect(screen.queryByTestId('involvement-mark-2')).toBeNull();
-      expect(screen.getByRole('button', { name: /^reply$/i })).toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: /^reply$/i })).toBeNull();
     });
 
     it('renders the involved row ONCE, inside the marked treatment, not twice (D1)', () => {
@@ -2262,9 +2260,9 @@ describe('ThreadedNarrativeReader', () => {
       // reply: "Writer 2" and "He turns the blade aside."
       const header = screen.getByRole('button', { name: /Writer 1.*3 poses/ });
       expect(header).toHaveTextContent('She lunges through his guard.');
-      // ...and it reads as a real thread's opening pose, not as the
-      // "Standalone" an un-replied pose gets (`poseRoleLabel`).
-      expect(screen.getByText('Opening pose')).toBeInTheDocument();
+      // ...and no pose carries a role label any more (#4128): the header is
+      // what says this is a thread.
+      expect(screen.queryByText('Opening pose')).toBeNull();
       expect(screen.queryByText('Standalone')).toBeNull();
     });
 

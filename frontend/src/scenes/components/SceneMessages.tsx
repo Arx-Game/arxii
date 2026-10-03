@@ -14,6 +14,8 @@ interface Props {
   /** Avatar identity-click affordance passthrough to PoseUnit (#2156). */
   onAvatarClick?: (persona: PoseUnitAvatarClickPersona) => void;
   readOnly?: boolean;
+  /** Reply to a pose (#4128): the avatar's play menu offers it. */
+  onReply?: (interaction: Interaction) => void;
   /** Passthrough to PoseUnit's parent-reply chip (#3787) -- see its own doc comment. */
   interactionsById?: ReadonlyMap<number, Interaction>;
 }
@@ -79,6 +81,7 @@ export function SceneMessages({
   canGm,
   onAvatarClick,
   readOnly = false,
+  onReply,
   interactionsById,
 }: Props) {
   // Collect the set of ACTION interaction IDs that are already embedded inside
@@ -147,6 +150,7 @@ export function SceneMessages({
             canGm={canGm}
             onAvatarClick={onAvatarClick}
             readOnly={readOnly}
+            onReply={onReply}
             interactionsById={interactionsById}
           />
         );

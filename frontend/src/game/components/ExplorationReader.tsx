@@ -49,6 +49,15 @@ export function ExplorationReader({
     () => interleaveNotes(ambientInteractions, notes),
     [ambientInteractions, notes]
   );
+  // The sorting menu's "all from <name>" and "Minimize all" (#4128).
+  const keysOf = (personaId: number) =>
+    ambientInteractions
+      .filter((item) => item.persona.id === personaId)
+      .map((item) => feedItemKey('interaction', item.id));
+  const allKeys = () => [
+    ...ambientInteractions.map((item) => feedItemKey('interaction', item.id)),
+    ...notes.map((note) => feedItemKey('note', note.id)),
+  ];
   // The newest line stays in view as poses and notes arrive, until the reader
   // scrolls up to read; this reader owns its scroll container.
   const stick = useStickToBottom();
@@ -167,7 +176,7 @@ export function ExplorationReader({
                 {rows.map((row) =>
                   row.type === 'note' ? (
                     <li key={row.note.id} data-feed-row={`note:${row.note.id}`}>
-                      <FeedNoteBlock note={row.note} />
+                      <FeedNoteBlock note={row.note} allKeys={allKeys} />
                     </li>
                   ) : (
                     <li
@@ -177,40 +186,57 @@ export function ExplorationReader({
                       <FeedBlockFrame
                         itemKey={feedItemKey('interaction', row.item.id)}
                         stub={`${row.item.persona.name} · ${new Date(row.item.timestamp).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}`}
+                        persona={{ id: row.item.persona.id, name: row.item.persona.name }}
+                        keysOf={keysOf}
+                        allKeys={allKeys}
                       >
-                        <article className="border-b pb-3 last:border-b-0">
-                          <header className="mb-1 flex items-center gap-2 text-xs text-muted-foreground">
+                        <article
+                          className="group relative -mx-2 rounded-md py-1 pl-2 pr-20 [display:flow-root] hover:bg-muted/40"
+                          data-testid="ambient-line"
+                        >
+                          {/* The avatar is an indent (#4128): left-click is the persona
+                              menu; the right button belongs to the frame's sorting menu. */}
+                          <span
+                            className="float-left mr-2 flex"
+                            data-testid="pose-avatar"
+                            data-pose-avatar
+                          >
                             <PersonaMenu
                               personaId={row.item.persona.id}
                               personaName={row.item.persona.name}
                               thumbnailUrl={row.item.persona.thumbnail_url}
                               leftClick
+                              contextMenu={false}
                             >
-                              <span className="flex items-center gap-2">
-                                <PersonaAvatar
-                                  source={{
-                                    name: row.item.persona.name,
-                                    thumbnailUrl: row.item.persona.thumbnail_url,
-                                  }}
-                                  size="sm"
-                                />
-                                <span className="font-medium text-foreground">
-                                  {row.item.persona.name}
-                                </span>
-                              </span>
+                              <PersonaAvatar
+                                source={{
+                                  name: row.item.persona.name,
+                                  thumbnailUrl: row.item.persona.thumbnail_url,
+                                }}
+                                size="xs"
+                              />
                             </PersonaMenu>
-                            <time dateTime={row.item.timestamp}>
-                              {new Date(row.item.timestamp).toLocaleTimeString([], {
-                                hour: 'numeric',
-                                minute: '2-digit',
-                              })}
-                            </time>
-                          </header>
-                          <ActorLine
-                            line={row.item.line}
-                            content={row.item.content}
-                            actorName={row.item.attributed_companion_name ?? row.item.persona.name}
-                          />
+                          </span>
+                          <time
+                            dateTime={row.item.timestamp}
+                            title={new Date(row.item.timestamp).toLocaleString()}
+                            className="absolute right-2 top-1 text-xs text-muted-foreground opacity-0 group-focus-within:opacity-100 group-hover:opacity-100"
+                            data-testid="pose-time"
+                          >
+                            {new Date(row.item.timestamp).toLocaleTimeString([], {
+                              hour: 'numeric',
+                              minute: '2-digit',
+                            })}
+                          </time>
+                          <div className="whitespace-pre-line">
+                            <ActorLine
+                              line={row.item.line}
+                              content={row.item.content}
+                              actorName={
+                                row.item.attributed_companion_name ?? row.item.persona.name
+                              }
+                            />
+                          </div>
                         </article>
                       </FeedBlockFrame>
                     </li>

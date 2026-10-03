@@ -704,7 +704,13 @@ def _line_for(payload: InteractionPayload, content: str) -> str:
     garbled sentence, never a bare fragment.
     """
     name = payload["attributed_companion_name"] or payload["persona"]["name"]
-    return render_line(name, payload["mode"], content, language_name=payload["language_name"])
+    return render_line(
+        name,
+        payload["mode"],
+        content,
+        language_name=payload["language_name"],
+        place_name=payload.get("place_name"),
+    )
 
 
 def _build_interaction_payload(  # noqa: PLR0913 - payload needs all interaction fields

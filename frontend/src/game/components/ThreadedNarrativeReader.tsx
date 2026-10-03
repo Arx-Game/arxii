@@ -53,44 +53,6 @@ function ownExchangeKey(item: Interaction): string {
 }
 
 /**
- * #3759 Wave 9 review finding F4: the flat, non-chip pose-context label the
- * spec's anti-reinvention ledger says to KEEP, not replace with per-pose
- * parent-chip persistence -- "Opening pose" for a REAL thread's own root
- * pose, "Standalone" for an ordinary un-replied pose. Shared between Threads
- * view (where `rootPose` is already in scope as `group.interactions[0]`) and
- * Chronological view (where it's looked up via `groupByKey`, below) so both
- * views render identical labels for the identical pose.
- *
- * #3759 Wave 9 fix round 1 Minor M-1: the GROUP (not merely "is this the
- * group's own root") gates "Opening pose" -- an ordinary, un-replied pose is
- * trivially its own group's root by construction, but "Opening pose" asserts
- * a THREAD that doesn't exist for it. "Standalone" (matching Chronological's
- * own pre-existing phrasing for this exact case) is correct for both views.
- * M-1 read that off `item.thread_id`. The GROUP's key is used instead because
- * it is the one thing that stays right across both views: a `legacy:` key is
- * exactly the un-replied pose M-1 is about, and any other key is a genuine
- * exchange, whose first row is a real thread's real opening pose.
- *
- * #3787 Task 7: the third case this used to cover -- an ordinary reply deep
- * in a real thread -- used to return `Reply in <title>` as a stand-in for
- * per-pose parent data that didn't exist yet (that branch's own doc comment
- * said so). It does now (`Interaction.reply_to`, #3787 Tasks 1-2), and
- * `PoseUnit.tsx`'s parent chip ("Answering “...”") renders it
- * directly on the pose itself -- a real quote of what was actually answered,
- * not a derived thread title -- so this label goes empty for that case
- * rather than duplicating weaker information beside the chip.
- */
-function poseRoleLabel(
-  item: Interaction,
-  rootPose: Interaction | undefined,
-  groupKey: string
-): string {
-  if (groupKey.startsWith('legacy:')) return 'Standalone';
-  if (!rootPose || rootPose.id === item.id) return 'Opening pose';
-  return '';
-}
-
-/**
  * The involved-viewer treatment (#3787 demo Screen 1): a row whose
  * `target_persona_ids` names the viewer's own active persona gets a distinct,
  * highlighted restatement of the SAME (already per-viewer-rendered) content
@@ -236,9 +198,18 @@ function PoseReadTarget({
   observe,
   highlighted,
   readEligible = true,
+  sorting,
   children,
 }: {
-  pose: { id: number; timestamp: string; name?: string; availability?: 'retained' | 'temporary' };
+  pose: {
+    id: number;
+    timestamp: string;
+    name?: string;
+    personaId?: number;
+    availability?: 'retained' | 'temporary';
+  };
+  /** The sorting menu's key lists (#4128): one character's lines, and every line. */
+  sorting?: { keysOf: (personaId: number) => string[]; allKeys: () => string[] };
   observe: (
     element: HTMLElement,
     pose: {
@@ -282,6 +253,13 @@ function PoseReadTarget({
           hour: 'numeric',
           minute: '2-digit',
         })}`}
+        persona={
+          pose.personaId !== undefined && pose.name
+            ? { id: pose.personaId, name: pose.name }
+            : undefined
+        }
+        keysOf={sorting?.keysOf}
+        allKeys={sorting?.allKeys}
       >
         {children}
         <div ref={readSentinelRef} aria-hidden="true" className="h-px" />
@@ -496,6 +474,21 @@ export function ThreadedNarrativeReader({
     () => new Map(interactions.map((item) => [item.id, item])),
     [interactions]
   );
+  // The sorting menu's "all from <name>" and "Minimize all" (#4128) act on
+  // every loaded line, not only the rendered window.
+  const sorting = useMemo(
+    () => ({
+      keysOf: (personaId: number) =>
+        interactions
+          .filter((item) => item.persona.id === personaId)
+          .map((item) => feedItemKey('interaction', item.id)),
+      allKeys: () => [
+        ...interactions.map((item) => feedItemKey('interaction', item.id)),
+        ...(notes ?? []).map((note) => feedItemKey('note', note.id)),
+      ],
+    }),
+    [interactions, notes]
+  );
   // #3759 Wave 9 (F1/F2): replaces the old flat, whole-list
   // `historyStartOverride` -- one window per THREAD (keyed by `group.key`)
   // instead of one for the whole list. See `ThreadWindow`'s own doc comment
@@ -642,9 +635,6 @@ export function ThreadedNarrativeReader({
       )
     )[0].key;
   }, [realThreadGroups]);
-  // Looked up by Chronological view's role-label rendering (#3759 Wave 9 F4)
-  // to find a pose's thread root without a linear scan of `groups` per pose.
-  const groupByKey = useMemo(() => new Map(groups.map((group) => [group.key, group])), [groups]);
   /**
    * Resolves a thread's currently-shown window, clamped against its OWN
    * current pose count (#3759 Wave 9 F1/F2). Absent from `threadWindows`
@@ -710,7 +700,6 @@ export function ThreadedNarrativeReader({
     // the old `groups.length <= 1` case -- expanded, not collapsed.
     setExpandedKeys(new Set(mostRecentGroupKey ? [mostRecentGroupKey] : []));
   }, [groups, mostRecentGroupKey]);
-  const [collapsedPoses, setCollapsedPoses] = useState<Set<number>>(new Set());
   // Optimistic mirror of "Mark conversation read" (#3759 spec section 7): the
   // server call is fire-and-forget, like markPosesRead's dwell-tracked path,
   // so unread badges are cleared locally immediately rather than waiting on
@@ -882,13 +871,6 @@ export function ThreadedNarrativeReader({
     );
     el?.scrollIntoView({ block: 'start' });
   };
-  const togglePose = (id: number) =>
-    setCollapsedPoses((previous) => {
-      const next = new Set(previous);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
 
   // --- Reading-position anchors (#3759 Decision #3 / Wave 6) ---------------
   // The anchor identifies a pose (+ thread) and a pixel offset, never a raw
@@ -1293,6 +1275,7 @@ export function ThreadedNarrativeReader({
         onAddTarget={onAddTarget}
         onAttachAction={onAttachAction}
         readOnly={readOnly}
+        onReply={onReply}
         interactionsById={interactionsById}
       />
     );
@@ -1496,29 +1479,12 @@ export function ThreadedNarrativeReader({
                         }}
                       >
                         <div className="px-2 py-1">
-                          <FeedNoteBlock note={row.note} />
+                          <FeedNoteBlock note={row.note} allKeys={sorting.allKeys} />
                         </div>
                       </div>
                     );
                   }
                   const item = row.item;
-                  const poseCollapsed = collapsedPoses.has(item.id);
-                  // #3759 Wave 9 review finding F4: switched from the old
-                  // "In a thread"/"Standalone" label to the same
-                  // "Opening pose"/"Reply in <title>" phrasing Threads view
-                  // uses (see `poseRoleLabel`'s own doc comment). Decided in
-                  // favor of consistency: Chronological flattens every
-                  // thread into one timeline, so knowing WHICH thread a
-                  // reply belongs to (not just that it's "in a thread" at
-                  // all) is strictly more useful here, and there's no demo
-                  // image for this screen (the review's own scope table
-                  // marks it `textonly`) to visually contradict.
-                  const groupKey = exchangeKey(item);
-                  const roleLabel = poseRoleLabel(
-                    item,
-                    groupByKey.get(groupKey)?.interactions[0],
-                    groupKey
-                  );
                   return (
                     <div
                       key={item.id}
@@ -1537,41 +1503,23 @@ export function ThreadedNarrativeReader({
                           id: item.id,
                           timestamp: item.timestamp,
                           name: item.persona.name,
+                          personaId: item.persona.id,
                           availability: item.availability,
                         }}
                         observe={observe}
+                        sorting={sorting}
                         highlighted={String(item.id) === highlightedPoseId}
-                        readEligible={!poseCollapsed}
                       >
-                        {roleLabel && <p className="text-xs text-muted-foreground">{roleLabel}</p>}
-                        {poseCollapsed ? (
-                          <article
-                            className="mx-2 rounded border border-dashed px-3 py-2 text-sm"
-                            data-testid={`collapsed-pose-${item.id}`}
-                          >
-                            <strong>{item.persona.name}</strong>
-                            <p className="mt-1 line-clamp-3 whitespace-pre-wrap text-muted-foreground">
-                              {item.line ?? item.content}
-                            </p>
-                            <button
-                              type="button"
-                              className="mt-1 min-h-9 underline"
-                              onClick={() => togglePose(item.id)}
-                            >
-                              Show full pose
-                            </button>
-                          </article>
-                        ) : (
-                          <SceneMessages
-                            sceneId={sceneId}
-                            filteredInteractions={[item]}
-                            onAvatarClick={onAvatarClick}
-                            onAddTarget={onAddTarget}
-                            onAttachAction={onAttachAction}
-                            readOnly={readOnly}
-                            interactionsById={interactionsById}
-                          />
-                        )}
+                        <SceneMessages
+                          sceneId={sceneId}
+                          filteredInteractions={[item]}
+                          onAvatarClick={onAvatarClick}
+                          onAddTarget={onAddTarget}
+                          onAttachAction={onAttachAction}
+                          readOnly={readOnly}
+                          onReply={onReply}
+                          interactionsById={interactionsById}
+                        />
                       </PoseReadTarget>
                     </div>
                   );
@@ -1609,7 +1557,7 @@ export function ThreadedNarrativeReader({
                       if (row.type === 'note') {
                         return (
                           <div key={row.note.id} data-feed-row={`note:${row.note.id}`}>
-                            <FeedNoteBlock note={row.note} />
+                            <FeedNoteBlock note={row.note} allKeys={sorting.allKeys} />
                           </div>
                         );
                       }
@@ -1634,23 +1582,14 @@ export function ThreadedNarrativeReader({
                       // more could still arrive) keeps the full card treatment
                       // below, unchanged.
                       //
-                      // Deviation from the fix-round brief's literal wording (noted
-                      // in the wave report): the brief describes this as "the same
-                      // visual form Chronological view already gives a single
-                      // pose," which has NO "Show less"/"Reply" footer at all. That
-                      // exact substitution regressed a real, tested integration
-                      // (`GamePage.test.tsx`'s reference-mode round-trip test): its
-                      // fixture pose has no `thread_id` either -- the single most
-                      // common shape a scene starts in -- and replying to a
-                      // standalone pose is literally how a NEW thread begins.
-                      // Keeping the per-pose fold/Reply footer (identical to a real
-                      // thread's own per-pose footer, just below) doesn't
-                      // reintroduce anything THREAD-level (no header/chevron/
-                      // collapse toggle survives), so it still satisfies the
-                      // brief's own explicit, unambiguous requirement.
+                      // Since #4128 a single pose here is exactly the line
+                      // Chronological gives it: no "Show less"/Reply footer. The
+                      // fold (`FeedBlockFrame`) replaced the per-pose collapse, and
+                      // Reply lives in the avatar's play menu, so replying to a
+                      // standalone pose, which is how a new thread begins, is one
+                      // left-click away without a link under every line.
                       if (group.key.startsWith('legacy:')) {
                         const item = root;
-                        const poseCollapsed = collapsedPoses.has(item.id);
                         return (
                           <div key={group.key} data-thread-id={group.key}>
                             <PoseReadTarget
@@ -1658,66 +1597,14 @@ export function ThreadedNarrativeReader({
                                 id: item.id,
                                 timestamp: item.timestamp,
                                 name: item.persona.name,
+                                personaId: item.persona.id,
                                 availability: item.availability,
                               }}
                               observe={observe}
+                              sorting={sorting}
                               highlighted={String(item.id) === highlightedPoseId}
-                              readEligible={!poseCollapsed}
                             >
-                              {/* #3759 Wave 9 review Minor M-1: `poseRoleLabel` itself
-                          returns "Standalone" here (gated on `item.thread_id`,
-                          not merely "is this the group's root"), never
-                          "Opening pose" -- that label asserts a thread that
-                          doesn't exist for a genuinely un-replied pose. */}
-                              <p className="text-xs text-muted-foreground">
-                                {poseRoleLabel(item, root, group.key)}
-                              </p>
-                              {poseCollapsed ? (
-                                <article
-                                  className="mx-2 rounded border border-dashed px-3 py-2 text-sm"
-                                  data-testid={`collapsed-pose-${item.id}`}
-                                >
-                                  <strong>{item.persona.name}</strong>
-                                  <p className="mt-1 line-clamp-3 whitespace-pre-wrap text-muted-foreground">
-                                    {item.line ?? item.content}
-                                  </p>
-                                  <button
-                                    type="button"
-                                    className="mt-1 min-h-9 underline"
-                                    onClick={() => togglePose(item.id)}
-                                  >
-                                    Show full pose
-                                  </button>
-                                </article>
-                              ) : (
-                                <>
-                                  {/* #3787 D1: the involved viewer reads the row ONCE,
-                              inside the marked treatment, instead of reading the
-                              plain bubble and then a restatement of the same
-                              sentence. `poseBody` is the identical per-viewer
-                              rendering either way. */}
-                                  {renderPoseBody(item)}
-                                  <div className="flex items-center justify-end gap-2 px-2 text-xs text-muted-foreground">
-                                    <button
-                                      type="button"
-                                      className="inline-flex min-h-9 items-center gap-1 underline"
-                                      onClick={() => togglePose(item.id)}
-                                    >
-                                      Show less
-                                    </button>
-                                    {onReply &&
-                                      !readOnly &&
-                                      !isInvolvingViewer(item, viewerPersonaId) && (
-                                        <ReplyControl
-                                          item={item}
-                                          onReply={onReply}
-                                          involved={false}
-                                          venue={viewerVenue}
-                                        />
-                                      )}
-                                  </div>
-                                </>
-                              )}
+                              {renderPoseBody(item)}
                             </PoseReadTarget>
                           </div>
                         );
@@ -1805,8 +1692,6 @@ export function ThreadedNarrativeReader({
                                 </button>
                               )}
                               {visiblePoses.map((item) => {
-                                const poseCollapsed = collapsedPoses.has(item.id);
-                                const roleLabel = poseRoleLabel(item, root, group.key);
                                 return (
                                   <PoseReadTarget
                                     key={`pose-${item.id}`}
@@ -1814,58 +1699,15 @@ export function ThreadedNarrativeReader({
                                       id: item.id,
                                       timestamp: item.timestamp,
                                       name: item.persona.name,
+                                      personaId: item.persona.id,
                                       availability: item.availability,
                                     }}
                                     observe={observe}
+                                    sorting={sorting}
                                     highlighted={String(item.id) === highlightedPoseId}
-                                    readEligible={!poseCollapsed}
                                   >
                                     {/* #3759 Wave 9 review finding F4. */}
-                                    {roleLabel && (
-                                      <p className="text-xs text-muted-foreground">{roleLabel}</p>
-                                    )}
-                                    {poseCollapsed ? (
-                                      <article
-                                        className="mx-2 rounded border border-dashed px-3 py-2 text-sm"
-                                        data-testid={`collapsed-pose-${item.id}`}
-                                      >
-                                        <strong>{item.persona.name}</strong>
-                                        <p className="mt-1 line-clamp-3 whitespace-pre-wrap text-muted-foreground">
-                                          {item.line ?? item.content}
-                                        </p>
-                                        <button
-                                          type="button"
-                                          className="mt-1 min-h-9 underline"
-                                          onClick={() => togglePose(item.id)}
-                                        >
-                                          Show full pose
-                                        </button>
-                                      </article>
-                                    ) : (
-                                      <>
-                                        {/* #3787 D1 -- see the Chronological branch. */}
-                                        {renderPoseBody(item)}
-                                        <div className="flex items-center justify-end gap-2 px-2 text-xs text-muted-foreground">
-                                          <button
-                                            type="button"
-                                            className="inline-flex min-h-9 items-center gap-1 underline"
-                                            onClick={() => togglePose(item.id)}
-                                          >
-                                            Show less
-                                          </button>
-                                          {onReply &&
-                                            !readOnly &&
-                                            !isInvolvingViewer(item, viewerPersonaId) && (
-                                              <ReplyControl
-                                                item={item}
-                                                onReply={onReply}
-                                                involved={false}
-                                                venue={viewerVenue}
-                                              />
-                                            )}
-                                        </div>
-                                      </>
-                                    )}
+                                    {renderPoseBody(item)}
                                   </PoseReadTarget>
                                 );
                               })}

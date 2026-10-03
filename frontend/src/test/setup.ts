@@ -67,8 +67,12 @@ if (!window.Element.prototype.scrollIntoView) {
 // drives a pointer-drag interaction (e.g. LookDialog.test.tsx's title-bar drag) needs it.
 if (typeof window.PointerEvent === 'undefined') {
   class PointerEventPolyfill extends MouseEvent {
+    // `pointerType` is how code tells a touch from a mouse (a long-press is
+    // the touch form of a held right-click, #4128); carry it from the init.
+    readonly pointerType: string;
     constructor(type: string, params: PointerEventInit = {}) {
       super(type, params);
+      this.pointerType = params.pointerType ?? 'mouse';
     }
   }
   // @ts-expect-error jsdom doesn't implement PointerEvent

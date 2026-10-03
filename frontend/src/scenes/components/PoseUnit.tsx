@@ -31,6 +31,7 @@ import { fetchReactionEmojiCatalog, postInteractionReaction } from '../queries';
 import type { Interaction, ActionLink } from '../types';
 import type { ActionAttachmentInfo } from '../actionTypes';
 import { PoseUnitDetailPanel } from './PoseUnitDetailPanel';
+import { useKudos } from '../hooks/useKudos';
 
 // ---------------------------------------------------------------------------
 // Action chip
@@ -69,11 +70,12 @@ interface PoseUnitAvatarProps {
 }
 
 /**
- * Avatar thumbnail in the bubble header. Identity click surface (#2156) — a
- * left click opens the character card; since #4030 the avatar is also
+ * Avatar thumbnail on an action card's header. Identity click surface (#2156):
+ * a left click opens the character card; since #4030 the avatar is also
  * wrapped in `PersonaMenu` so a right-click reaches the same action menu the
  * name offers. Renders as a plain (non-interactive) avatar when
- * `onAvatarClick` isn't provided.
+ * `onAvatarClick` isn't provided. A pose line (#4128) does not use it: its
+ * avatar's left click is the play menu, whose View sheet opens the card.
  */
 function PoseUnitAvatar({ interaction, onAvatarClick }: PoseUnitAvatarProps) {
   // #3294 — no companion art exists; the owner's own thumbnail stands in even
@@ -124,38 +126,20 @@ function PoseUnitAvatar({ interaction, onAvatarClick }: PoseUnitAvatarProps) {
 // Companion attribution (#3294)
 // ---------------------------------------------------------------------------
 
-interface PoseUnitActorLabelProps {
-  interaction: Interaction;
-  onAddTarget?: (personaName: string) => void;
-}
-
 /**
- * The pose's displayed actor name (#3294): the bonded companion when the pose
- * carries `attributed_companion`, else the writer's own (already per-viewer
- * resolved) persona name. A companion pose always shows an owner tell next to
- * the name — honest puppetry, never a hidden actor. Double-click-to-target
- * still names the owner's own persona (`interaction.persona.name`), since a
- * companion has no targetable Persona of its own.
+ * A companion pose always shows an owner tell (#3294): honest puppetry, never a
+ * hidden actor. The name itself is in the line (#3858); this is the tell alone,
+ * after the body, since the header row that carried both is gone (#4128).
  */
-function PoseUnitActorLabel({ interaction, onAddTarget }: PoseUnitActorLabelProps) {
-  const companion = interaction.attributed_companion;
-  const displayName = companion ? companion.name : interaction.persona.name;
+function CompanionTell({ interaction }: { interaction: Interaction }) {
+  if (!interaction.attributed_companion) return null;
   return (
     <span
-      onDoubleClick={() => onAddTarget?.(interaction.persona.name)}
-      className="cursor-pointer text-sm font-medium"
-      title="Double-click to add as target"
+      className="text-xs text-muted-foreground"
+      title={`Puppeted by ${interaction.persona.name}`}
+      data-testid="companion-owner-tell"
     >
-      {displayName}
-      {companion && (
-        <span
-          className="ml-1 text-xs font-normal text-muted-foreground"
-          title={`Puppeted by ${interaction.persona.name}`}
-          data-testid="companion-owner-tell"
-        >
-          (via {interaction.persona.name})
-        </span>
-      )}
+      (via {interaction.persona.name})
     </span>
   );
 }
@@ -289,6 +273,8 @@ export interface PoseUnitProps {
   onAvatarClick?: (persona: PoseUnitAvatarClickPersona) => void;
   /** Historical readers must not mount mutation controls. */
   readOnly?: boolean;
+  /** Reply to this pose (#4128): the first item of the avatar's play menu. */
+  onReply?: (interaction: Interaction) => void;
   /**
    * Lookup for resolving `interaction.reply_to` to its parent Interaction
    * (#3787) -- `reply_to` itself carries only `{id, timestamp}` (a thread
@@ -316,6 +302,7 @@ export function PoseUnit({
   canGm = false,
   onAvatarClick,
   readOnly = false,
+  onReply,
   interactionsById,
 }: PoseUnitProps) {
   const isAction = interaction.mode === 'action';
@@ -340,6 +327,8 @@ export function PoseUnit({
   const viewerPersonaId = useViewerPersonaId();
   const isSelfPose = viewerPersonaId != null && interaction.persona.id === viewerPersonaId;
   const canNominate = Boolean(sceneId) && !isSelfPose;
+  // The play menu's Kudos (#4128); the strip's standalone chip moved here.
+  const kudos = useKudos(sceneId, interaction.id);
 
   // -------------------------------------------------------------------------
   // State 3: standalone ACTION (not linked to any pose)
@@ -474,29 +463,62 @@ export function PoseUnit({
   }
 
   // -------------------------------------------------------------------------
-  // State 1 + 2: POSE (with or without linked actions)
+  // State 1 + 2: POSE (with or without linked actions): one prose line (#4128).
+  // The actor is in the sentence (#3858), the avatar is an indent (a float: the
+  // first line starts beside it, the rest wrap back under it), the time shows
+  // on hover, and nothing else sits on the line. Left-click on the avatar is
+  // the play menu (Reply, Kudos, then the persona's actions); the right button
+  // is the sorting menu, owned by FeedBlockFrame, so the persona menu's own
+  // right-click is off here.
   // -------------------------------------------------------------------------
+  const avatar = (
+    <PersonaAvatar
+      source={{ name: interaction.persona.name, thumbnailUrl: interaction.persona.thumbnail_url }}
+      size="xs"
+    />
+  );
+  const posedAt = new Date(interaction.timestamp);
   return (
-    <div className="my-1.5 max-w-[85%] rounded-lg bg-muted/40 px-3 py-2" data-testid="pose-unit">
-      {/* Header: avatar + name + timestamp */}
-      <div className="flex items-center gap-2">
-        <PoseUnitAvatar interaction={interaction} onAvatarClick={onAvatarClick} />
+    <div
+      className="group relative -mx-2 rounded-md py-1 pl-2 pr-20 [display:flow-root] hover:bg-muted/40"
+      data-testid="pose-unit"
+      data-persona-id={interaction.persona.id}
+      data-persona-name={interaction.persona.name}
+    >
+      <span
+        className="float-left mr-2 flex"
+        data-testid="pose-avatar"
+        data-pose-avatar
+        onDoubleClick={onAddTarget ? () => onAddTarget(interaction.persona.name) : undefined}
+      >
         {readOnly ? (
-          <PoseUnitActorLabel interaction={interaction} />
+          avatar
         ) : (
           <PersonaMenu
             personaId={interaction.persona.id}
             personaName={interaction.persona.name}
+            thumbnailUrl={interaction.persona.thumbnail_url}
             leftClick
+            contextMenu={false}
+            poseActions={{
+              onReply: onReply ? () => onReply(interaction) : undefined,
+              onKudos: kudos.give,
+              kudosDisabled: !kudos.canGive,
+            }}
             onAttachAction={onAttachAction}
           >
-            <PoseUnitActorLabel interaction={interaction} onAddTarget={onAddTarget} />
+            {avatar}
           </PersonaMenu>
         )}
-        <span className="text-xs text-muted-foreground">
-          {new Date(interaction.timestamp).toLocaleString()}
-        </span>
-      </div>
+      </span>
+      <time
+        dateTime={interaction.timestamp}
+        title={posedAt.toLocaleString()}
+        className="absolute right-2 top-1 text-xs text-muted-foreground opacity-0 group-focus-within:opacity-100 group-hover:opacity-100"
+        data-testid="pose-time"
+      >
+        {posedAt.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}
+      </time>
 
       {/* Action chips (state 1 only) */}
       {hasLinks && (
@@ -514,8 +536,8 @@ export function PoseUnit({
         />
       )}
 
-      {/* Prose body: the actor in the line (#3858) */}
-      <div className="mt-1">
+      {/* Prose body: the actor in the line (#3858); paragraph breaks kept (#4128) */}
+      <div className="whitespace-pre-line" data-testid="pose-body">
         <p>
           <ActorLine
             line={interaction.line}
@@ -525,17 +547,15 @@ export function PoseUnit({
         </p>
       </div>
 
+      <CompanionTell interaction={interaction} />
+
       {/* Expandable outcome detail panel */}
       {expanded && actionInteractionIds.length > 0 && (
         <PoseUnitDetailPanel actionInteractionIds={actionInteractionIds} />
       )}
 
       {!readOnly && (
-        <ReactionStrip
-          windows={interaction.reaction_windows ?? []}
-          sceneId={sceneId}
-          interactionId={interaction.id}
-        />
+        <ReactionStrip windows={interaction.reaction_windows ?? []} sceneId={sceneId} />
       )}
 
       {/* Dramatic-moment tag badges (#1139) */}

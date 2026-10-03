@@ -4,6 +4,7 @@
  */
 
 import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { Provider } from 'react-redux';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -82,6 +83,21 @@ describe('the actor in the line (#3858)', () => {
     expect(line).toHaveTextContent('Alice waves.');
     expect(line).toHaveAttribute('data-actor', 'Alice');
     expect(screen.queryByText('Hello world')).not.toBeInTheDocument();
+  });
+
+  it('finds the name after a lead-in, so a whisper emote or tabletalk reads like a pose (#4128)', () => {
+    render(
+      <Wrapper>
+        <PoseUnit
+          interaction={makeInteraction({ line: 'At the long table, Quietly, Alice deals.' })}
+          sceneId="1"
+        />
+      </Wrapper>
+    );
+    const line = screen.getByTestId('actor-line');
+    expect(line).toHaveTextContent('At the long table, Quietly, Alice deals.');
+    expect(line).toHaveAttribute('data-actor', 'Alice');
+    expect(screen.getByText('Alice')).toHaveClass('font-semibold');
   });
 
   it('falls back to the recorded content on a row without a line', () => {
@@ -187,8 +203,8 @@ describe('PoseUnit', () => {
       </Wrapper>
     );
 
-    // Header persona name
-    expect(screen.getByText('Alice')).toBeInTheDocument();
+    // The actor is in the line (#3858); no header row names them again (#4128).
+    expect(screen.queryByText(new Date(interaction.timestamp).toLocaleString())).toBeNull();
 
     // Two action chips
     const chips = screen.getByTestId('action-chips').querySelectorAll('button');
@@ -336,7 +352,7 @@ describe('PoseUnit', () => {
     expect(screen.queryByTestId('pose-unit-detail-panel')).toBeNull();
   });
 
-  it('calls onAddTarget on double-click of persona name', () => {
+  it('calls onAddTarget on double-click of the avatar (#4128: the name is in the line)', () => {
     const onAddTarget = vi.fn();
     const interaction = makeInteraction({ mode: 'pose' });
 
@@ -346,8 +362,7 @@ describe('PoseUnit', () => {
       </Wrapper>
     );
 
-    const span = screen.getByTitle('Double-click to add as target');
-    fireEvent.doubleClick(span);
+    fireEvent.doubleClick(screen.getByTestId('pose-avatar'));
     expect(onAddTarget).toHaveBeenCalledWith('Alice');
   });
 
@@ -439,8 +454,8 @@ describe('PoseUnit', () => {
   // Chat-bubble restyle + avatar identity click (#2156)
   // ---------------------------------------------------------------------------
 
-  it('clicking the avatar fires onAvatarClick with the interaction persona (POSE)', () => {
-    const onAvatarClick = vi.fn();
+  it('left-clicking the avatar opens the play menu: Reply, Kudos, then the persona menu (#4128)', async () => {
+    const onReply = vi.fn();
     const interaction = makeInteraction({
       mode: 'pose',
       persona: { id: 10, name: 'Alice', thumbnail_url: '/alice.png' },
@@ -448,16 +463,22 @@ describe('PoseUnit', () => {
 
     render(
       <Wrapper>
-        <PoseUnit interaction={interaction} sceneId="1" onAvatarClick={onAvatarClick} />
+        <PoseUnit interaction={interaction} sceneId="1" onReply={onReply} />
       </Wrapper>
     );
 
-    fireEvent.click(screen.getByRole('button', { name: 'View Alice' }));
-    expect(onAvatarClick).toHaveBeenCalledWith({
-      id: 10,
-      name: 'Alice',
-      thumbnail_url: '/alice.png',
-    });
+    // A Radix dropdown opens on pointer down, which a real click produces.
+    await userEvent.click(within(screen.getByTestId('pose-avatar')).getByRole('button'));
+    const menu = await screen.findByRole('menu');
+    const labels = within(menu)
+      .getAllByRole('menuitem')
+      .map((el) => el.textContent);
+    expect(labels.slice(0, 2)).toEqual(['Reply', 'Kudos']);
+    expect(labels).toContain('Look');
+    expect(labels).toContain('View sheet');
+
+    await userEvent.click(within(menu).getByRole('menuitem', { name: 'Reply' }));
+    expect(onReply).toHaveBeenCalledWith(interaction);
   });
 
   it('clicking the avatar fires onAvatarClick on the standalone ACTION branch', () => {
@@ -478,26 +499,20 @@ describe('PoseUnit', () => {
     expect(onAvatarClick).toHaveBeenCalledWith({ id: 10, name: 'Alice', thumbnail_url: null });
   });
 
-  it('avatar is not an interactive button when onAvatarClick is not provided', () => {
+  it('a read-only line has a plain avatar and no menus', () => {
     const interaction = makeInteraction({ mode: 'pose' });
 
     render(
       <Wrapper>
-        <PoseUnit interaction={interaction} sceneId="1" />
+        <PoseUnit interaction={interaction} sceneId="1" readOnly />
       </Wrapper>
     );
 
-    expect(screen.queryByRole('button', { name: 'View Alice' })).toBeNull();
+    fireEvent.click(screen.getByTestId('pose-avatar'));
+    expect(screen.queryByRole('menu')).toBeNull();
   });
 
-  // ---------------------------------------------------------------------------
-  // Right-click on the avatar opens the persona menu (#4030) — left-click keeps
-  // opening the character card (covered above); a right-click reaches the same
-  // action menu the name already offers.
-  // ---------------------------------------------------------------------------
-
-  it('right-clicking the avatar opens the persona menu with Look and View sheet', async () => {
-    const onAvatarClick = vi.fn();
+  it('right-clicking the avatar does not open the persona menu: that button is the sorting menu (#4128)', () => {
     const interaction = makeInteraction({
       mode: 'pose',
       persona: { id: 10, name: 'Alice', thumbnail_url: '/alice.png' },
@@ -505,21 +520,34 @@ describe('PoseUnit', () => {
 
     render(
       <Wrapper>
-        <PoseUnit interaction={interaction} sceneId="1" onAvatarClick={onAvatarClick} />
+        <PoseUnit interaction={interaction} sceneId="1" />
       </Wrapper>
     );
 
-    fireEvent.contextMenu(screen.getByRole('button', { name: 'View Alice' }));
-    const menu = await screen.findByRole('menu');
-    const labels = within(menu)
-      .getAllByRole('menuitem')
-      .map((el) => el.textContent);
-    expect(labels).toEqual(['Look', 'View sheet']);
-    // The right-click never fires the left-click card-open handler.
-    expect(onAvatarClick).not.toHaveBeenCalled();
+    fireEvent.contextMenu(screen.getByTestId('pose-avatar'));
+    expect(screen.queryByRole('menu')).toBeNull();
   });
 
-  it('POSE branch still exposes data-testid="pose-unit" as a chat bubble', () => {
+  it('shows the time only as a hover affordance, and keeps paragraph breaks (#4128)', () => {
+    const interaction = makeInteraction({
+      mode: 'pose',
+      content: 'first paragraph.\n\nsecond paragraph.',
+      line: 'Alice first paragraph.\n\nsecond paragraph.',
+    });
+
+    render(
+      <Wrapper>
+        <PoseUnit interaction={interaction} sceneId="1" />
+      </Wrapper>
+    );
+
+    const time = screen.getByTestId('pose-time');
+    expect(time).toHaveClass('opacity-0');
+    expect(time).toHaveClass('group-hover:opacity-100');
+    expect(screen.getByTestId('pose-body')).toHaveClass('whitespace-pre-line');
+  });
+
+  it('POSE branch is a prose line, not a bubble (#4128)', () => {
     const interaction = makeInteraction({ mode: 'pose' });
 
     render(
@@ -528,13 +556,13 @@ describe('PoseUnit', () => {
       </Wrapper>
     );
 
-    const bubble = screen.getByTestId('pose-unit');
-    expect(bubble).toHaveClass('rounded-lg');
-    expect(bubble).toHaveClass('bg-muted/40');
-    expect(bubble).not.toHaveClass('border-b');
+    const line = screen.getByTestId('pose-unit');
+    expect(line).not.toHaveClass('bg-muted/40');
+    expect(line).toHaveClass('group');
+    expect(line).not.toHaveClass('border-b');
   });
 
-  it('standalone ACTION branch also renders as a bubble', () => {
+  it('standalone ACTION branch still renders as a bubble', () => {
     const interaction = makeInteraction({ mode: 'action', action_links: [] });
 
     render(

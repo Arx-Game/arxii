@@ -7,6 +7,8 @@ import { VISION_FRAME_CLASS, VISION_GLYPH, VISION_TEXT_CLASS } from '@/worship/v
 
 interface FeedNoteBlockProps {
   note: FeedNote;
+  /** Every loaded line's key, for the sorting menu's Minimize all / Expand all (#4128). */
+  allKeys?: () => string[];
 }
 
 /** The glyph a boxed note leads with; every other boxed kind gets ✦. */
@@ -29,24 +31,25 @@ const BOX_GLYPHS: Partial<Record<FeedNote['kind'], string>> = { look: '◎', err
  * result, an item line and a gemit all reach the client as Evennia's HTML
  * (colour spans, `<br>`), and the terminal face would read as a transcript.
  */
-export function FeedNoteBlock({ note }: FeedNoteBlockProps) {
+export function FeedNoteBlock({ note, allKeys }: FeedNoteBlockProps) {
   const time = new Date(note.timestamp).toLocaleTimeString([], {
     hour: 'numeric',
     minute: '2-digit',
   });
-  // Any block minimises or dismisses, per viewer (#3856 PR 2); the stub names
+  // Any block minimizes or dismisses, per viewer (#3856 PR 2); the stub names
   // the kind and the time, the way a pose's stub names its author.
   return (
     <FeedBlockFrame
       itemKey={feedItemKey('note', note.id)}
       stub={`${KIND_LABELS[note.kind]} · ${time}`}
+      allKeys={allKeys}
     >
       <FeedNoteBody note={note} time={time} />
     </FeedBlockFrame>
   );
 }
 
-function FeedNoteBody({ note, time }: FeedNoteBlockProps & { time: string }) {
+function FeedNoteBody({ note, time }: { note: FeedNote; time: string }) {
   const { kind } = note;
 
   if (kind === 'vision') {

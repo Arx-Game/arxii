@@ -15,7 +15,10 @@ import type { ActionAttachmentInfo } from '@/scenes/actionTypes';
 import { useAppDispatch, useAppSelector } from '@/store/hooks';
 import {
   dismissFeedItem,
+  dismissFeedItems,
   minimizeFeedItem,
+  minimizeFeedItems,
+  restoreAllFeed,
   restoreFeedItem,
   restoreDismissedFeed,
   setActiveSession,
@@ -653,6 +656,10 @@ export function GameWindow({
       minimize: (key) => active && dispatch(minimizeFeedItem({ character: active, key })),
       restore: (key) => active && dispatch(restoreFeedItem({ character: active, key })),
       dismiss: (key) => active && dispatch(dismissFeedItem({ character: active, key })),
+      minimizeMany: (keys) => active && dispatch(minimizeFeedItems({ character: active, keys })),
+      dismissMany: (keys) => active && dispatch(dismissFeedItems({ character: active, keys })),
+      restoreAll: () => active && dispatch(restoreAllFeed(active)),
+      restoreDismissed: () => active && dispatch(restoreDismissedFeed(active)),
     }),
     [minimizedKeys, active, dispatch]
   );

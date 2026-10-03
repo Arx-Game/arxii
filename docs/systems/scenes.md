@@ -138,13 +138,16 @@ is intentional product behavior. Only `react_to_window` (the IC reaction-window 
 ### The actor in the line (#3858, ADR-0299)
 
 A pose or a say reads as a whole sentence with its actor in it on every protocol:
-`Apostate is testing`, `Apostate says, "Test"`. The card above a web bubble is
-metadata and never stands in for the actor. `world/scenes/line_rendering.render_line`
-is the one formatter: a pose opens with the name (semipose glue for `'s`/`,`; a pose
-that already opens with the name is left alone), say/whisper/mutter/shout quote the
-text after their verb and name the language, emit/action/outcome pass through. It
-runs at display time only; `Interaction.content` stays what was typed, and
-threading, muting, comprehension and search keep reading it.
+`Apostate is testing`, `Apostate says, "Test"`. On the web that sentence is the
+whole line (#4128, ADR-4128): no header row, the avatar an indent, the time on
+hover. `world/scenes/line_rendering.render_line` is the one formatter: a pose opens
+with the name (semipose glue for `'s`/`,`; a pose that already opens with the name
+is left alone), say/whisper/mutter/shout quote the text after their verb and name
+the language, emit/action/outcome pass through. Two lead-ins (#4128): a whisper
+whose text opens with `:` is the emote form, `Quietly, Nyx leans in`, and anything
+said or posed at a place opens with the place, `At the long table, Bram deals`
+(`place_name`). It runs at display time only; `Interaction.content` stays what was
+typed, and threading, muting, comprehension and search keep reading it.
 
 - **Web, live:** `InteractionPayload.line`, built by `_build_interaction_payload`
   from the display name (the attributed companion's, else the persona's) and rebuilt
@@ -153,14 +156,17 @@ threading, muting, comprehension and search keep reading it.
 - **Web, REST:** `InteractionListSerializer.line` (`get_line`), from the per-viewer
   name `get_persona` resolves (#1109) and the per-viewer content `get_content`
   produces (a muted row stays blank).
-- **Telnet:** `PoseAction` broadcasts `render_line("{caller}", POSE, text)` through
-  `message_location`, whose mapping resolves `{caller}` per looker; whisper, mutter
+- **Telnet:** `PoseAction` broadcasts `render_line("{caller}", POSE, text,
+  place_name=..., actor_name=<persona name>)` through `message_location`, whose
+  mapping resolves `{caller}` per looker; `actor_name` is what the already-named
+  check reads, since the placeholder can never match typed text. Whisper, mutter
   and the companion emote use the formatter too. Say keeps `$You() $conj(say)`
   (the speaker's second-person echo, #2993 M2).
 - **Readers:** `ActorLine` (`frontend/src/scenes/components/ActorLine.tsx`) renders
   `line ?? content` as the body in `PoseUnit` and `ExplorationReader`, setting the
-  leading name semibold when the line opens with the card's own name;
-  `ThreadedNarrativeReader`'s collapsed and thread excerpts read the line.
+  actor's name semibold when the line opens with it, after any lead-in;
+  `ThreadedNarrativeReader`'s thread excerpts read the line. The per-pose collapse
+  is gone (#4128): the fold (`FeedBlockFrame`) is the one way a line shrinks.
 
 ### Companion pose attribution (#3294)
 
@@ -1403,10 +1409,10 @@ scene toolset (`ActionPanel`, `PlaceBar`, `ConsentPrompt`, `CharacterCardDrawer`
 no child re-fetches the same scene/roster data.
 
 **Feed presentation:** `PoseUnit` (`frontend/src/scenes/components/PoseUnit.tsx`)
-renders each interaction as a chat bubble — avatar thumbnail, author, timestamp,
-the body, and reactions — never monospace/terminal
+renders each interaction as one prose line (#4128): the avatar as an indent, the
+sentence, the time on hover, reactions below — never monospace/terminal
 styling (ratified presentation bar; terminal-style rendering on the primary feed is
-a defect, not a variant). `GameWindow` renders this structured bubble feed whenever
+a defect, not a variant). `GameWindow` renders this structured line feed whenever
 the active session has a scene; with no active scene it renders `ExplorationReader`
 (`frontend/src/game/components/ExplorationReader.tsx`). Since #3856 both readers
 also show the session's typed text lines (`FeedNote`s: look results, item lines,
@@ -1417,7 +1423,7 @@ untyped text is gone. Above the column sit the player's filter chips (#3856 PR 2
 kinds, a press shows or hides them, All is the master switch, a right-click edits
 the chip (name, kinds, wake, delete), up to three custom chips; a kind no chip owns
 still shows unless All is off. Showing and waking are separate: only kinds under a
-chip set to wake badge the top bar and puppet tabs. Any block minimises to a stub or
+chip set to wake badge the top bar and puppet tabs. Any block minimizes to a stub or
 leaves the viewer's own view (`FeedBlockFrame`); nothing is deleted for others. In the
 live column, `Show hidden` below the chips clears the active character's dismissed
 blocks in one action, without a reload or socket reconnect. Retained blocks return

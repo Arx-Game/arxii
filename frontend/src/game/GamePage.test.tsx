@@ -9,6 +9,7 @@ import { saveThreadTabs, loadThreadTabs } from './threadTabsStorage';
 import { saveConversationAnchor } from './playPreferences';
 import { renderWithProviders } from '@/test/utils/renderWithProviders';
 import { stubResizeObserver, type ResizeObserverStub } from '@/test/utils/resizeObserver';
+import { HOLD_MS } from './hooks/useLineGestures';
 import { store } from '@/store/store';
 import { setAccount } from '@/store/authSlice';
 import { mockAccount } from '@/test/mocks/account';
@@ -374,6 +375,27 @@ function seedActiveSceneWithRoom(viewerPlaceId: number | null = null) {
       },
     })
   );
+}
+
+/** The sorting gestures (#4128): a quick right-click on a block folds it. */
+function foldBlock(block: HTMLElement): void {
+  fireEvent.pointerDown(block, { button: 2, clientX: 20, clientY: 10 });
+  fireEvent.pointerUp(block, { button: 2 });
+}
+
+/** A held right-click opens the block's sorting menu; Hide takes it out of this view. */
+async function hideBlock(block: HTMLElement): Promise<void> {
+  fireEvent.pointerDown(block, { button: 2, clientX: 20, clientY: 10 });
+  await act(async () => {
+    await new Promise((resolve) => setTimeout(resolve, HOLD_MS + 20));
+  });
+  fireEvent.pointerUp(block, { button: 2 });
+  const menu = await screen.findByRole('menu');
+  fireEvent.click(within(menu).getByRole('menuitem', { name: 'Hide' }));
+}
+
+function blockOf(element: HTMLElement): HTMLElement {
+  return element.closest('[data-feed-block]') as HTMLElement;
 }
 
 describe('GamePage', () => {
@@ -969,19 +991,19 @@ describe('GamePage', () => {
       expect(stored.feedChips.find((chip) => chip.id === 'rp')?.on).toBe(false);
     });
 
-    it('minimises a pose to a stub, reopens it, and dismisses it from this view only', async () => {
+    it('minimizes a pose to a stub, reopens it, and dismisses it from this view only', async () => {
       store.dispatch(setAccount(mockAccount));
       seedActiveSceneWithPose();
 
       renderWithProviders(<GamePage />);
 
       expect(await screen.findByTestId('pose-unit')).toBeInTheDocument();
-      fireEvent.click(screen.getByRole('button', { name: 'Minimise' }));
+      foldBlock(blockOf(screen.getByTestId('pose-unit')));
       expect(screen.queryByTestId('pose-unit')).not.toBeInTheDocument();
       fireEvent.click(screen.getByRole('button', { name: new RegExp(`^${ACTIVE_NAME} · `) }));
       expect(await screen.findByTestId('pose-unit')).toBeInTheDocument();
 
-      fireEvent.click(screen.getByRole('button', { name: 'Dismiss' }));
+      await hideBlock(blockOf(screen.getByTestId('pose-unit')));
       expect(screen.queryByTestId('pose-unit')).not.toBeInTheDocument();
       // Nothing was deleted: the interaction is still in the session and on the server.
       expect(store.getState().game.sessions[ACTIVE_NAME].sceneInteractions).toHaveLength(1);
@@ -1010,11 +1032,9 @@ describe('GamePage', () => {
         poseBlock.compareDocumentPosition(note.closest('[data-feed-block]') as HTMLElement) &
           Node.DOCUMENT_POSITION_FOLLOWING
       ).toBeTruthy();
-      fireEvent.click(within(poseBlock).getByRole('button', { name: 'Dismiss' }));
-      fireEvent.click(
-        within(
-          screen.getByText('Rain rests on the stones.').closest('[data-feed-block]') as HTMLElement
-        ).getByRole('button', { name: 'Dismiss' })
+      await hideBlock(poseBlock);
+      await hideBlock(
+        screen.getByText('Rain rests on the stones.').closest('[data-feed-block]') as HTMLElement
       );
       expect(screen.queryByText('stretches languidly.')).not.toBeInTheDocument();
       expect(screen.queryByText('Rain rests on the stones.')).not.toBeInTheDocument();
@@ -1042,11 +1062,7 @@ describe('GamePage', () => {
       seedActiveSceneWithPose();
       renderWithProviders(<GamePage />);
       const pose = await screen.findByText('stretches languidly.');
-      fireEvent.click(
-        within(pose.closest('[data-feed-block]') as HTMLElement).getByRole('button', {
-          name: 'Dismiss',
-        })
-      );
+      await hideBlock(pose.closest('[data-feed-block]') as HTMLElement);
       const all = within(screen.getByRole('toolbar', { name: 'Feed filters' })).getByRole(
         'button',
         { name: 'All' }
@@ -1059,11 +1075,7 @@ describe('GamePage', () => {
       expect(screen.queryByText('stretches languidly.')).not.toBeInTheDocument();
       fireEvent.click(all);
       const restored = screen.getByText('stretches languidly.');
-      fireEvent.click(
-        within(restored.closest('[data-feed-block]') as HTMLElement).getByRole('button', {
-          name: 'Dismiss',
-        })
-      );
+      await hideBlock(restored.closest('[data-feed-block]') as HTMLElement);
       const roleplay = within(screen.getByRole('toolbar', { name: 'Feed filters' })).getByRole(
         'button',
         { name: 'Roleplay' }
@@ -1087,10 +1099,10 @@ describe('GamePage', () => {
       );
       for (const key of ['{Enter}', ' ']) {
         const pose = await screen.findByText('stretches languidly.');
-        const dismiss = within(pose.closest('[data-feed-block]') as HTMLElement).getByRole(
-          'button',
-          { name: 'Dismiss' }
-        );
+        foldBlock(blockOf(pose));
+        const dismiss = within(
+          document.querySelector('[data-feed-stub="i:1"]') as HTMLElement
+        ).getByRole('button', { name: 'Hide' });
         dismiss.focus();
         await user.keyboard('{Enter}');
         expect(screen.queryByText('stretches languidly.')).not.toBeInTheDocument();
@@ -1144,31 +1156,23 @@ describe('GamePage', () => {
       );
       renderWithProviders(<GamePage />);
       const ambient = await screen.findByText('quietly crosses the courtyard.');
-      fireEvent.click(
-        within(ambient.closest('[data-feed-block]') as HTMLElement).getByRole('button', {
-          name: 'Dismiss',
-        })
-      );
+      await hideBlock(ambient.closest('[data-feed-block]') as HTMLElement);
       expect(screen.queryByText('quietly crosses the courtyard.')).not.toBeInTheDocument();
       fireEvent.click(screen.getByRole('button', { name: 'Show hidden' }));
       expect(screen.getByText('quietly crosses the courtyard.')).toBeInTheDocument();
     });
 
-    it('recovers a dismissed minimised stub as an expanded block', async () => {
+    it('recovers a dismissed minimized stub as an expanded block', async () => {
       store.dispatch(setAccount(mockAccount));
       seedActiveSceneWithPose();
       renderWithProviders(<GamePage />);
       const pose = await screen.findByText('stretches languidly.');
-      fireEvent.click(
-        within(pose.closest('[data-feed-block]') as HTMLElement).getByRole('button', {
-          name: 'Minimise',
-        })
-      );
+      foldBlock(pose.closest('[data-feed-block]') as HTMLElement);
       expect(screen.queryByText('stretches languidly.')).not.toBeInTheDocument();
       fireEvent.click(
         within(document.querySelector('[data-feed-stub="i:1"]') as HTMLElement).getByRole(
           'button',
-          { name: 'Dismiss' }
+          { name: 'Hide' }
         )
       );
       fireEvent.click(screen.getByRole('button', { name: 'Show hidden' }));
@@ -1188,11 +1192,7 @@ describe('GamePage', () => {
           .closest('button') as HTMLElement
       );
       const whisper = screen.getByText('meet me by the fountain at midnight.');
-      fireEvent.click(
-        within(whisper.closest('[data-feed-block]') as HTMLElement).getByRole('button', {
-          name: 'Dismiss',
-        })
-      );
+      await hideBlock(whisper.closest('[data-feed-block]') as HTMLElement);
       const toolbar = screen.getByRole('toolbar', { name: 'Feed filters' });
       const showHidden = screen.getByRole('button', { name: 'Show hidden' });
       const tabs = screen.getByRole('tablist', { name: 'Conversations' });
@@ -1260,11 +1260,7 @@ describe('GamePage', () => {
       store.dispatch(setActiveSession(ACTIVE_NAME));
       renderWithProviders(<GamePage />);
       const whisper = await screen.findByText('a secret only Aria hears.');
-      fireEvent.click(
-        within(whisper.closest('[data-feed-block]') as HTMLElement).getByRole('button', {
-          name: 'Dismiss',
-        })
-      );
+      await hideBlock(whisper.closest('[data-feed-block]') as HTMLElement);
       fireEvent.click(screen.getByRole('button', { name: SECOND_NAME }));
       expect(screen.getByRole('button', { name: 'Show hidden' })).toBeInTheDocument();
       fireEvent.click(screen.getByRole('button', { name: 'Show hidden' }));
@@ -1282,11 +1278,7 @@ describe('GamePage', () => {
       seedActiveSceneWithPose();
       renderWithProviders(<GamePage />);
       const oldPose = await screen.findByText('stretches languidly.');
-      fireEvent.click(
-        within(oldPose.closest('[data-feed-block]') as HTMLElement).getByRole('button', {
-          name: 'Dismiss',
-        })
-      );
+      await hideBlock(oldPose.closest('[data-feed-block]') as HTMLElement);
       act(() => {
         store.dispatch(
           setSessionRoom({
@@ -2057,10 +2049,12 @@ describe('GamePage', () => {
       renderWithProviders(<GamePage />);
       await screen.findByText('stretches languidly.');
 
-      // Drawer-whisper (#2156): clicking the pose's avatar opens the
-      // character card; "Whisper" sets an UNLOCKED composer mode targeting
-      // the persona, before any conversation tab exists.
-      await user.click(screen.getByRole('button', { name: `View ${ACTIVE_NAME}` }));
+      // Drawer-whisper (#2156): the pose's avatar opens the play menu (#4128),
+      // whose "View sheet" opens the character card; "Whisper" there sets an
+      // UNLOCKED composer mode targeting the persona, before any conversation
+      // tab exists.
+      await user.click(within(screen.getAllByTestId('pose-avatar')[0]).getByRole('button'));
+      await user.click(await screen.findByRole('menuitem', { name: 'View sheet' }));
       await user.click(await screen.findByRole('button', { name: 'Whisper' }));
       expect(screen.getByText(`Whisper → ${ACTIVE_NAME}`)).toBeInTheDocument();
 
@@ -2448,13 +2442,15 @@ describe('GamePage', () => {
       });
 
       // In reference mode: the "Reading history" banner and its "Draft
-      // preserved" composer replacement are up, and Reply (readOnly-gated)
-      // is hidden.
+      // preserved" composer replacement are up, and the live pose's avatar
+      // play menu (#4128) is off the page with the live feed (the mocked
+      // reference page is empty, so no avatar renders at all here).
       await waitFor(() => {
         expect(screen.getByText(/reading history/i)).toBeInTheDocument();
       });
       expect(screen.getByText(/draft preserved for your live conversation/i)).toBeInTheDocument();
-      expect(screen.queryByRole('button', { name: /^reply$/i })).not.toBeInTheDocument();
+      expect(screen.queryByText('stretches languidly.')).not.toBeInTheDocument();
+      expect(screen.queryByTestId('pose-avatar')).not.toBeInTheDocument();
 
       const user = userEvent.setup();
       await user.click(screen.getByRole('button', { name: /return to live/i }));
@@ -2467,7 +2463,9 @@ describe('GamePage', () => {
         expect(screen.queryByText(/reading history/i)).not.toBeInTheDocument();
       });
       expect(screen.getByText('stretches languidly.')).toBeInTheDocument();
-      expect(screen.getByRole('button', { name: /^reply$/i })).toBeInTheDocument();
+      expect(
+        within(screen.getAllByTestId('pose-avatar')[0]).getByRole('button')
+      ).toBeInTheDocument();
     });
   });
 

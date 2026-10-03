@@ -640,7 +640,13 @@ class InteractionListSerializer(serializers.ModelSerializer):
             name = obj.attributed_companion.name
         else:
             name = self.get_persona(obj)["name"]
-        return render_line(name, obj.mode, content, language_name=self.get_language_name(obj))
+        return render_line(
+            name,
+            obj.mode,
+            content,
+            language_name=self.get_language_name(obj),
+            place_name=self.get_place_name(obj),
+        )
 
     def get_attributed_companion(self, obj: Interaction) -> dict | None:
         """Cosmetic companion pose attribution (#3294): ``{id, name}`` or ``None``.

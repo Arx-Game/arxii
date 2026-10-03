@@ -4,26 +4,21 @@
  * window: a chip per choice with its count; the viewer's own reaction is
  * highlighted. One tap reacts; settled windows render counts only.
  *
- * Also renders the first-kudos chip (#2031): when no kudos-kind window has
- * been lazily opened on this pose yet, a standalone "Kudos" chip lazily
- * opens one via reactToInteraction. Once a kudos window exists it takes
- * over via the normal per-window row above — no duplicate chip.
+ * The first kudos (#2031) used to be a standalone "Kudos" chip here; since
+ * #4128 it lives in the avatar's play menu (`useKudos`). Once a kudos window
+ * exists it renders as a normal per-window row with its count.
  */
 import { useMemo } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAppSelector } from '@/store/hooks';
 import { actingPersonaId } from '@/roster/persona';
 import { useMyRosterEntriesQuery } from '@/roster/queries';
-import { reactToWindow, reactToInteraction } from '../queries';
+import { reactToWindow } from '../queries';
 import type { ReactionWindowPayload } from '../types';
-
-// Matches ReactionWindowKind.KUDOS's wire value (src/world/scenes/constants.py).
-const KUDOS_KIND = 'kudos';
 
 interface ReactionStripProps {
   windows: ReactionWindowPayload[];
   sceneId: string;
-  interactionId: number;
 }
 
 /** A reaction chip is yours, available to press, or shown but out of reach. */
@@ -33,7 +28,7 @@ function reactionChipClass(isMine: boolean, canReact: boolean): string {
   return 'border-muted-foreground/20 opacity-60';
 }
 
-export function ReactionStrip({ windows, sceneId, interactionId }: ReactionStripProps) {
+export function ReactionStrip({ windows, sceneId }: ReactionStripProps) {
   const queryClient = useQueryClient();
   // Resolve the viewer's acting persona (mirrors PersonaContextMenu).
   const activeCharacterName = useAppSelector((state) => state.game.active);
@@ -47,19 +42,6 @@ export function ReactionStrip({ windows, sceneId, interactionId }: ReactionStrip
       reactToWindow(windowId, { persona_id: personaId as number, choice }),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['scene-interactions', sceneId] }),
   });
-  const kudosMutation = useMutation({
-    mutationFn: () =>
-      reactToInteraction({
-        persona_id: personaId as number,
-        interaction_id: interactionId,
-        kind: KUDOS_KIND,
-        choice: KUDOS_KIND,
-      }),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['scene-interactions', sceneId] }),
-  });
-
-  const hasKudosWindow = windows.some((window) => window.kind === KUDOS_KIND);
-
   return (
     <div data-testid="reaction-strip" className="mt-1 flex flex-col gap-1">
       {windows.map((window) => {
@@ -96,26 +78,6 @@ export function ReactionStrip({ windows, sceneId, interactionId }: ReactionStrip
           </div>
         );
       })}
-      {!hasKudosWindow && (
-        <div className="flex flex-wrap items-center gap-1">
-          <button
-            type="button"
-            title="Kudos"
-            disabled={personaId == null || kudosMutation.isPending}
-            onClick={() => kudosMutation.mutate()}
-            className={`rounded-full border px-2 py-0.5 text-xs transition-colors ${
-              personaId == null
-                ? 'border-muted-foreground/20 opacity-60'
-                : 'border-muted-foreground/30 hover:border-amber-500/60'
-            }`}
-          >
-            Kudos
-          </button>
-          {kudosMutation.isError && (
-            <span className="text-xs text-destructive">{kudosMutation.error.message}</span>
-          )}
-        </div>
-      )}
     </div>
   );
 }

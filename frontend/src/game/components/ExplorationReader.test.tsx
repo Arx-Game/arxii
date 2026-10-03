@@ -75,12 +75,11 @@ describe('ExplorationReader', () => {
     );
     expect(screen.getByRole('heading', { name: 'Quiet courtyard' })).toBeInTheDocument();
     expect(screen.getByText('Rain rests on the stones.')).toBeInTheDocument();
-    // The body is the whole line (#3858); the header still names the writer.
+    // The body is the whole line (#3858); nothing names the writer twice (#4128).
     expect(screen.getByTestId('actor-line')).toHaveTextContent(
       'Mara says, "A bell sounds beyond the wall."'
     );
-    // Once on the card, once at the head of the line.
-    expect(screen.getAllByText('Mara')).toHaveLength(2);
+    expect(screen.getAllByText('Mara')).toHaveLength(1);
   });
 
   it('renders notes among the ambient poses at their time, not in a section of their own (#3856)', () => {
@@ -127,6 +126,36 @@ describe('ExplorationReader', () => {
     expect(rows).toEqual(['note:n1', 'interaction:9', 'note:n2']);
     expect(screen.getByRole('alert')).toHaveTextContent("Command 'lok' is not available.");
     expect(screen.queryByText('Nearby activity')).not.toBeInTheDocument();
+  });
+
+  it('renders an ambient pose as one line: avatar as indent, time on hover, no header (#4128)', () => {
+    render(
+      <Wrapper>
+        <ExplorationReader
+          room={room}
+          ambientInteractions={[
+            {
+              id: 9,
+              persona: { id: 4, name: 'Mara', thumbnail_url: '' },
+              content: 'glances up.',
+              line: 'Mara glances up.',
+              mode: 'pose',
+              timestamp: '2026-01-01T00:00:20Z',
+              scene_id: null,
+              place_id: null,
+              place_name: null,
+              receiver_persona_ids: [],
+              target_persona_ids: [],
+            },
+          ]}
+        />
+      </Wrapper>
+    );
+    const line = screen.getByTestId('ambient-line');
+    expect(line.querySelector('header')).toBeNull();
+    expect(within(line).getByTestId('pose-avatar')).toHaveClass('float-left');
+    expect(within(line).getByTestId('pose-time')).toHaveClass('opacity-0');
+    expect(within(line).getByTestId('actor-line')).toHaveAttribute('data-actor', 'Mara');
   });
 
   it('keeps the newest line in view as activity arrives, until the reader scrolls up', () => {
@@ -178,22 +207,7 @@ describe('ExplorationReader persona menu (#4030)', () => {
     target_persona_ids: [],
   };
 
-  it('right-click on the name opens the menu with Look and View sheet', async () => {
-    render(
-      <Wrapper>
-        <ExplorationReader room={room} ambientInteractions={[ambientInteraction]} />
-      </Wrapper>
-    );
-
-    fireEvent.contextMenu(screen.getByText('Mara'));
-    const menu = await screen.findByRole('menu');
-    const labels = within(menu)
-      .getAllByRole('menuitem')
-      .map((el) => el.textContent);
-    expect(labels).toEqual(['Look', 'View sheet']);
-  });
-
-  it('right-click on the avatar also opens the menu', async () => {
+  it('right-click on the avatar is not the persona menu: that button is the sorting menu (#4128)', () => {
     render(
       <Wrapper>
         <ExplorationReader room={room} ambientInteractions={[ambientInteraction]} />
@@ -202,11 +216,10 @@ describe('ExplorationReader persona menu (#4030)', () => {
 
     // No thumbnail_url in the fixture — the avatar renders as the persona's initial.
     fireEvent.contextMenu(screen.getByText('M'));
-    const menu = await screen.findByRole('menu');
-    expect(within(menu).getByRole('menuitem', { name: 'Look' })).toBeInTheDocument();
+    expect(screen.queryByRole('menu')).toBeNull();
   });
 
-  it('left-click on the name opens the menu (leftClick)', async () => {
+  it('left-click on the avatar opens the persona menu with Look and View sheet', async () => {
     const user = userEvent.setup();
     render(
       <Wrapper>
@@ -214,7 +227,11 @@ describe('ExplorationReader persona menu (#4030)', () => {
       </Wrapper>
     );
 
-    await user.click(screen.getByRole('button', { name: /Mara/ }));
-    expect(await screen.findByRole('menu')).toBeInTheDocument();
+    await user.click(within(screen.getByTestId('pose-avatar')).getByRole('button'));
+    const menu = await screen.findByRole('menu');
+    const labels = within(menu)
+      .getAllByRole('menuitem')
+      .map((el) => el.textContent);
+    expect(labels).toEqual(['Look', 'View sheet']);
   });
 });

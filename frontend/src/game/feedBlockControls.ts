@@ -12,6 +12,11 @@ export interface FeedBlockControls {
   minimize: (key: string) => void;
   restore: (key: string) => void;
   dismiss: (key: string) => void;
+  /** The sorting menu's batch actions (#4128): several keys, or everything. */
+  minimizeMany: (keys: string[]) => void;
+  dismissMany: (keys: string[]) => void;
+  restoreAll: () => void;
+  restoreDismissed: () => void;
 }
 
 export const FeedBlockControlsContext = createContext<FeedBlockControls | null>(null);
