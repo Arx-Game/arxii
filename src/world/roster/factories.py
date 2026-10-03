@@ -3,6 +3,7 @@ Factories for roster models.
 """
 
 from django.utils import timezone
+from evennia.accounts.models import AccountDB
 import factory
 import factory.django as factory_django
 
@@ -320,8 +321,13 @@ class NPCPresetSkillLineFactory(factory_django.DjangoModelFactory):
     value = 25
 
 
-def grant_test_tenure(character_sheet: CharacterSheet) -> RosterTenure:
+def grant_test_tenure(
+    character_sheet: CharacterSheet, account: AccountDB | None = None
+) -> RosterTenure:
     """Give ``character_sheet`` a live, non-staff tenure (achievement-eligible, #3024).
+
+    ``account`` makes that account the player, with no puppet: the state of a player who is
+    offline or on the web, which is when ``character.account`` is None (#4132).
 
     Reuses the sheet's existing RosterEntry when one exists (a second would
     violate the OneToOne); otherwise creates one.
@@ -329,4 +335,8 @@ def grant_test_tenure(character_sheet: CharacterSheet) -> RosterTenure:
     entry = character_sheet.roster_entry_or_none
     if entry is None:
         entry = RosterEntryFactory(character_sheet=character_sheet)
-    return RosterTenureFactory(roster_entry=entry, end_date=None)
+    if account is None:
+        return RosterTenureFactory(roster_entry=entry, end_date=None)
+    return RosterTenureFactory(
+        roster_entry=entry, player_data=PlayerDataFactory(account=account), end_date=None
+    )

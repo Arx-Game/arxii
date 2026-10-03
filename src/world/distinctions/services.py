@@ -396,10 +396,6 @@ def approve_sheet_update_request(
 
     enforce_advancement_gate(character_sheet)
 
-    if character_sheet.character.account is None:
-        msg = "This character has no linked account."
-        raise SheetUpdateRequestError(msg)
-
     with transaction.atomic():
         locked_req = SheetUpdateRequest.objects.select_for_update().filter(pk=request.pk).first()
         if locked_req is None or locked_req.status != SheetUpdateRequestStatus.PENDING:

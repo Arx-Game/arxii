@@ -28,7 +28,7 @@ from world.gm.constants import GMLevel
 from world.gm.factories import GMProfileFactory, GMTableFactory, GMTableMembershipFactory
 from world.narrative.models import NarrativeMessage
 from world.progression.models.rewards import ExperiencePointsData
-from world.roster.factories import RosterEntryFactory, RosterTenureFactory
+from world.roster.factories import RosterEntryFactory, RosterTenureFactory, grant_test_tenure
 
 
 class GMAwardDistinctionActionTests(TestCase):
@@ -53,6 +53,7 @@ class GMAwardDistinctionActionTests(TestCase):
         self.target_account = AccountFactory(username="award_target_acct")
         self.target.account = self.target_account
         self.target.save()
+        grant_test_tenure(self.target_sheet, self.target_account)
         ExperiencePointsData.objects.get_or_create(
             account=self.target_account,
             defaults={"total_earned": 100, "total_spent": 0},

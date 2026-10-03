@@ -28,6 +28,7 @@ from world.progression.services import (
     spend_xp_on_unlock,
 )
 from world.progression.types import DevelopmentSource, ProgressionReason
+from world.roster.factories import grant_test_tenure
 from world.traits.factories import CharacterTraitValueFactory, TraitFactory
 
 
@@ -124,8 +125,7 @@ class UnlockServiceTest(TestCase):
         )
         cls.sheet = CharacterSheetFactory()
         cls.character = cls.sheet.character
-        cls.character.db_account = cls.account
-        cls.character.save()
+        grant_test_tenure(cls.sheet, cls.account)
 
         # Give character a class level
         cls.class_level = CharacterClassLevelFactory(character=cls.character.sheet_data, level=3)

@@ -9,6 +9,7 @@ from world.progression.models import CharacterXP, ExperiencePointsData, KudosPoi
 from world.progression.services.awards import award_xp
 from world.progression.services.xp_ledger import spend_xp_for_character
 from world.progression.types import ProgressionReason
+from world.roster.factories import grant_test_tenure
 from world.scenes.factories import SceneFactory
 from world.scenes.models import SceneParticipation
 from world.vitals.constants import CharacterLifeState
@@ -36,8 +37,7 @@ class DeathKudosTests(TestCase):
             died_in_scene=cls.scene,
         )
         cls.character = cls.sheet.character
-        cls.character.db_account = cls.recipient_account
-        cls.character.save(update_fields=["db_account"])
+        grant_test_tenure(cls.sheet, cls.recipient_account)
         CharacterXP.objects.create(
             character=cls.character.sheet_data,
             total_earned=LIFETIME_SPENT,
@@ -123,8 +123,7 @@ class OffscreenDeathKudosTests(TestCase):
             died_at=timezone.now(),
         )
         cls.character = cls.sheet.character
-        cls.character.db_account = cls.recipient_account
-        cls.character.save(update_fields=["db_account"])
+        grant_test_tenure(cls.sheet, cls.recipient_account)
 
     def test_player_rejected_staff_allowed(self) -> None:
         player = AccountFactory()
@@ -162,8 +161,7 @@ class DeathKudosReadsRealSpendTests(TestCase):
             died_in_scene=cls.scene,
         )
         cls.character = cls.sheet.character
-        cls.character.db_account = cls.recipient_account
-        cls.character.save(update_fields=["db_account"])
+        grant_test_tenure(cls.sheet, cls.recipient_account)
 
     def setUp(self) -> None:
         ExperiencePointsData.flush_instance_cache()

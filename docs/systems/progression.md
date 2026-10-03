@@ -447,7 +447,9 @@ spend_xp_for_character(sheet, xp_cost, "Unlocked Duelist 4", gm=None)
 ```
 
 Raises `InsufficientXPError` (carrying `required`/`available`, so a caller can phrase
-its own refusal) or `NoAccountForCharacterError` — both from
+its own refusal) or `NoAccountForCharacterError` (the sheet has no current roster tenure; the
+paying account is `account_for_sheet(sheet)`, never `character.account`, which Evennia clears
+when the player stops puppeting, #4132) — both from
 `world.progression.exceptions`, both carrying `user_message`. Current callers:
 `spend_xp_on_unlock` (class levels), `world.skills.services.purchase_skill_breakthrough`,
 `world.species.language_progression.purchase_language_breakthrough` (#4090),
