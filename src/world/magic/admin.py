@@ -2194,10 +2194,32 @@ class TechniqueTierBudgetAdmin(admin.ModelAdmin):
     list_display = ["tier", "power_budget", "representative_level", "label"]
 
 
+class AudereMajoraThresholdForm(forms.ModelForm):
+    """A threshold's minimum warp stage must be a Soulfray stage (#4089): the Crossing
+    gate compares the caster's Soulfray stage order against it (``audere_majora.py:359``)."""
+
+    class Meta:
+        model = AudereMajoraThreshold
+        fields = "__all__"  # noqa: DJ007 - admin form mirrors the model
+
+    def clean_minimum_warp_stage(self):
+        from world.magic.services.soulfray import is_soulfray_stage  # noqa: PLC0415
+
+        stage = self.cleaned_data.get("minimum_warp_stage")
+        if stage is not None and not is_soulfray_stage(stage):
+            msg = (
+                "Pick a Soulfray stage: the Crossing gate compares the caster's Soulfray stage "
+                "against this one."
+            )
+            raise ValidationError(msg)
+        return stage
+
+
 @admin.register(AudereMajoraThreshold)
 class AudereMajoraThresholdAdmin(admin.ModelAdmin):
     """#3831 - one authored Crossing-the-Threshold boundary level (5/10/15/20)."""
 
+    form = AudereMajoraThresholdForm
     list_display = [
         "boundary_level",
         "target_stage",
@@ -2237,6 +2259,13 @@ class AudereMajoraThresholdAdmin(admin.ModelAdmin):
             {"fields": ("magnitude", "risk", "reach", "archetypes")},
         ),
     )
+
+    def formfield_for_foreignkey(self, db_field, request, **kwargs):
+        if db_field.name == "minimum_warp_stage":  # noqa: STRING_LITERAL
+            from world.magic.services.soulfray import soulfray_stages  # noqa: PLC0415
+
+            kwargs["queryset"] = soulfray_stages()
+        return super().formfield_for_foreignkey(db_field, request, **kwargs)
 
 
 @admin.register(AnimaConfig)

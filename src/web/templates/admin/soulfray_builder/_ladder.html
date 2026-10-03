@@ -1,0 +1,28 @@
+<div class="module" id="ladder-module">
+  <h2>The ladder
+    <span class="sf-chips">
+      <span class="sf-chip">{{ ladder|length }} stage{{ ladder|length|pluralize }}</span>
+      <span class="sf-chip">{{ pooled_count }} with a pool</span>
+      {% if lethal_count %}<span class="sf-chip sf-chip--kill">{{ lethal_count }} can kill</span>{% endif %}
+    </span>
+  </h2>
+  <div class="sf-tblwrap">
+  <table class="tuning-table sf-table">
+    <thead><tr><th>#</th><th>Stage</th><th>From severity</th><th>Danger</th>
+      <th>Consequences</th><th>Can kill</th></tr></thead>
+    <tbody>
+      {% for row in ladder %}
+      <tr class="{% if row.is_open %}sf-row--open{% endif %} {% if row.summary.can_kill %}sf-row--kill{% endif %}">
+        <td class="sf-num">{{ row.summary.stage.stage_order }}</td>
+        <td>{% if row.is_open %}<b>{{ row.summary.stage.name }}</b> (open){% else %}<a href="{% url 'admin_soulfray_builder' row.summary.stage.pk %}">{{ row.summary.stage.name }}</a>{% endif %}</td>
+        <td class="sf-num">{{ row.summary.stage.severity_threshold|default_if_none:"-" }}</td>
+        <td><div class="sf-bar"><span class="sf-bar-fill {% if row.summary.can_kill %}sf-bar-fill--kill{% endif %}" style="width:{{ row.bar_percent }}%"></span></div></td>
+        <td class="sf-num">{{ row.summary.consequence_count }}</td>
+        <td>{% if row.summary.can_kill %}<b>Yes</b>{% else %}No{% endif %}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  <p class="sf-live {% if ladder_line.0 == 'warn' %}sf-live--warn{% endif %}">{{ ladder_line.1 }}</p>
+</div>

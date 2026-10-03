@@ -511,6 +511,29 @@ MarriagePact — ADR-0212), Betrothal (promised unions the WEDDING rite solemniz
 the any-viewer Match Dossier. See `src/world/societies/AGENT_GLOSSARY.md`.
 _Avoid_: treaty, engagement, org report.
 
+**The three progression currencies (XP, Development, Legend)**:
+Three separate currencies drive advancement, and conflating them is the most common
+reading mistake in this codebase. **XP** unlocks a mechanical benefit at an authored
+cutoff (a class level, a trait rating): it stands for the roleplay and content
+creation that justify the unlock, and is largely player-driven (nominations, kudos
+claims, GM story reward) rather than automatic. **Development** is progress toward a
+skill, stat or thread cutoff: it stands for the time, effort and resources the
+character invests, and mostly accrues from ordinary play (`DevelopmentPoints` on
+skills/stats; resonance invested into a `Thread.developed_points`; Action Points
+spent through weekly training). Threads already carry both currencies at once: every
+tenth internal thread level is an XP-locked boundary (`ThreadXPLockedLevel`), so
+crossing it needs accrued Development AND a separate XP spend. **Legend** is
+progress toward a character level (a Durance step, an Audere Majora crossing): it
+comes only from legendary achievement at great personal risk, kept deliberately
+separate so neither time nor effort alone levels a character (`LegendRequirement`,
+#3463, ADR-0249; see **Legend / Legend Points** above). Most unlocks cost both XP and
+Development; Legend gates level advancement on its own axis and never substitutes
+for either. See `docs/adr/adr-4088-xp-development-and-legend-are-three-currencies.md`
+for the full decision record, `docs/systems/progression.md` for the model lineup,
+and `progression/AGENT_GLOSSARY.md` / `magic/AGENT_GLOSSARY.md` for per-app detail.
+_Avoid_: using "XP" loosely for any advancement currency; treating Development or
+time-played as something that can level a character on its own.
+
 **XP / Kudos / Development Points**:
 Out-of-character advancement currencies for creating content and developing a character;
 XP is never a combat reward (combat merits Legend, not XP). _Avoid_: using XP for in-combat awards.
@@ -518,7 +541,8 @@ XP is earned, held and spent by the **account** (ADR-0053), and every movement o
 names the character it was earned on or spent on — the per-character **attribution ledger**
 (#3748, ADR-0288; see `progression/AGENT_GLOSSARY.md`), which is what character-loss
 reimbursement reads. Attribution is not ownership: there is one balance, and it is the
-account's.
+account's. `Kudos` is a fourth, separate "good sport" currency (claimable for XP, never
+for Development or Legend) and is not one of the three progression currencies above.
 
 ## Achievements & discovery
 

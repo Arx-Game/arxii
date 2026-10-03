@@ -17,4 +17,18 @@ missed), but for languages the opposite holds: a character who learns a tongue a
 *should* be able to reread old scene logs in the clear, and the seed's determinism is exactly what
 makes that recompute stable and byte-identical across live delivery, WS push, and every later read.
 
+**Amendment (#4090, 2026-10-03).** Comprehension is trained fluency plus the
+`ConditionModifierEffect` bonuses an active condition carries toward the language trait's
+`ModifierTarget` (`comprehension_value`; batched on the reread by
+`condition_modifier_totals_by_sheet`), recomputed live like the rest of comprehension: while a
+condition lasts, old lines in that tongue read clear on reread, and they garble again after it
+ends. Any condition source counts (a technique's applied condition, a GM's catalog
+application, anything else that applies a condition); `CharacterModifier` sources such as
+distinctions and equipment do not. The bonus is listener-side only: speaking, the speaker's
+own band, teaching and self-study stay on trained fluency. Rejected: a per-application
+language column on `ConditionInstance` and a bespoke temporary-fluency model, both parallel to
+the existing condition effect rows. Trained fluency's weekly rates are tuned on
+`LanguageTrainingConfig`, and language training parks one rating below an authored
+`TraitRatingUnlock` until an XP breakthrough (`purchase_language_breakthrough`).
+
 > Status: accepted · Source: #2993

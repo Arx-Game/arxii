@@ -36,11 +36,17 @@ class DependencyTier(StrEnum):
 
 @dataclass(frozen=True, slots=True)
 class ProbeResult:
-    """The outcome of resolving one `ContentProbe`."""
+    """The outcome of resolving one `ContentProbe`.
+
+    `admin_url` lets a probe that knows the exact page to author its gap on
+    (the Soulfray Stage Builder at the first empty stage, #4089) name it; the
+    panel prefers it over the model changelist.
+    """
 
     present: bool
     missing: tuple[str, ...] = ()
     detail: str = ""
+    admin_url: str | None = None
 
 
 class ContentProbe:
@@ -219,7 +225,13 @@ class DependencyRow:
 
     @property
     def admin_url(self) -> str | None:
-        """Admin changelist where staff author this dependency's rows (#3831), or None."""
+        """Where staff author this dependency's rows (#3831), or None.
+
+        The probe's own `admin_url` when it named one (#4089), else the model's
+        admin changelist.
+        """
+        if self.result.admin_url:
+            return self.result.admin_url
         from web.admin.authoring.links import admin_changelist_url  # noqa: PLC0415
 
         model_label = self.dependency.admin_model or self.dependency.probe.model_label()
@@ -633,31 +645,60 @@ def _probe_personalization_copy() -> ProbeResult:
     )
 
 
+def _soulfray_builder_link(stage_pk: int | None) -> str:
+    """The Soulfray Stage Builder at one stage, or its index (which opens the first)."""
+    from django.urls import reverse  # noqa: PLC0415
+
+    if stage_pk is None:
+        return reverse("admin_soulfray_builder_index")
+    return reverse("admin_soulfray_builder", args=[stage_pk])
+
+
 def _probe_soulfray_stage_pools() -> ProbeResult:
-    """Every `ConditionStage` of the Soulfray template carries a `consequence_pool`.
+    """Every Soulfray stage has a pool that draws at least one consequence (#4089).
 
-    Consumer: the Soulfray corruption-severity progression
-    (`world/magic/audere.py`, `world/conditions/services.py`). A stage without a
-    pool means a character who progresses to that stage accumulates severity but
-    the game has nothing to draw a consequence from - the corruption effect at
-    that stage silently does nothing.
-
-    Note: the FK from `ConditionStage` to `ConditionTemplate` is named `condition`
-    (not `template`), so the filter below reads `condition__name__iexact`.
+    Consumer: `world/magic/services/soulfray.py` `_fire_stage_consequence_pool()`.
+    A stage with no pool, or a pool whose effective consequences are empty (no
+    rows, or a child pool that excludes every row it inherits), means a caster
+    who reaches it gains severity and the resilience roll has nothing to draw.
+    Reads `soulfray_ladder_summary()`, the same helper the Soulfray Stage
+    Builder's ladder reads, so the two never disagree.
     """
-    from world.conditions.models import ConditionStage  # noqa: PLC0415
     from world.magic.audere import SOULFRAY_CONDITION_NAME  # noqa: PLC0415
+    from world.magic.services.soulfray import soulfray_ladder_summary  # noqa: PLC0415
 
-    stages = ConditionStage.objects.filter(condition__name__iexact=SOULFRAY_CONDITION_NAME)
-    if not stages.exists():
+    summaries = soulfray_ladder_summary()
+    if not summaries:
         detail = f"No ConditionStage rows exist for the {SOULFRAY_CONDITION_NAME} template."
         return ProbeResult(present=False, detail=detail)
-    unpooled = tuple(stages.filter(consequence_pool__isnull=True).values_list("name", flat=True))
-    if unpooled:
-        detail = f"Soulfray stage(s) with no consequence_pool: {', '.join(unpooled)}."
-    else:
-        detail = ""
-    return ProbeResult(present=not unpooled, missing=unpooled, detail=detail)
+    target = next((s for s in summaries if not s.consequence_count), summaries[0])
+    link = _soulfray_builder_link(target.stage.pk)
+    empty = tuple(summary.stage.name for summary in summaries if not summary.consequence_count)
+    if not empty:
+        return ProbeResult(present=True, admin_url=link)
+    detail = f"{len(empty)} stage(s) with no pool, or a pool with no consequences in it."
+    return ProbeResult(present=False, missing=empty, detail=detail, admin_url=link)
+
+
+def _probe_soulfray_death_risk() -> ProbeResult:
+    """Some Soulfray stage's effective pool holds a `character_loss` consequence (#4089).
+
+    Consumers: `world/magic/services/soulfray.py` `nonlethal_severity_ceiling()`
+    and `get_soulfray_warning()`. With no lethal stage the non-lethal cap never
+    applies, the safety checkpoint never warns of death, and Audere's death
+    deferral has nothing to defer.
+    """
+    from world.magic.services.soulfray import soulfray_ladder_summary  # noqa: PLC0415
+
+    summaries = soulfray_ladder_summary()
+    link = _soulfray_builder_link(None) if summaries else None
+    if any(summary.can_kill for summary in summaries):
+        return ProbeResult(present=True, admin_url=link)
+    return ProbeResult(
+        present=False,
+        detail="No Soulfray stage's pool holds a consequence marked Can kill.",
+        admin_url=link,
+    )
 
 
 def _probe_surrounded_condition_bundle() -> ProbeResult:
@@ -1717,14 +1758,27 @@ def _declarations() -> tuple[ContentDependency, ...]:
             key="soulfray-stage-pools",
             label="Soulfray stage consequence pools",
             tier=DependencyTier.REQUIRED,
-            consumer="world/magic/audere.py, world/conditions/services.py (Soulfray progression)",
+            consumer="world/magic/services/soulfray.py _fire_stage_consequence_pool()",
             consequence=(
-                "A Soulfray stage with no consequence_pool means a character who "
-                "progresses to it accumulates severity but the game has nothing to "
-                "draw a consequence from - that stage's corruption effect silently "
-                "does nothing."
+                "A caster who reaches the stage gains severity and nothing happens: there "
+                "is nothing for the resilience roll to draw."
             ),
             probe=CustomProbe(fn=_probe_soulfray_stage_pools),
+        ),
+        ContentDependency(
+            key="soulfray-death-risk",
+            label="Some Soulfray stage can kill",
+            tier=DependencyTier.REQUIRED,
+            consumer=(
+                "world/magic/services/soulfray.py nonlethal_severity_ceiling(), "
+                "get_soulfray_warning()"
+            ),
+            consequence=(
+                "Soulfray never kills. Non-lethal casts are never capped, the safety "
+                "checkpoint never warns of death, and Audere's death deferral has nothing "
+                "to defer."
+            ),
+            probe=CustomProbe(fn=_probe_soulfray_death_risk),
         ),
         ContentDependency(
             key="stakes-escalation-curves",
@@ -1862,6 +1916,21 @@ def _declarations() -> tuple[ContentDependency, ...]:
                 "the aura-scaling term of the power formula is silently disabled."
             ),
             probe=AnyRowProbe(label="AuraPowerConfig"),
+        ),
+        ContentDependency(
+            key="language-training-config",
+            label="Language training config singleton",
+            tier=DependencyTier.TUNING,
+            consumer=(
+                "world/species/language_progression.py get_language_training_config() "
+                "via actions/definitions/language.py TrainLanguageAction"
+            ),
+            consequence=(
+                "Language training runs at the shipped default rates (15 dp with a "
+                "teacher, 8 dp self-study) until staff save the singleton; the first "
+                "training session creates it at those defaults."
+            ),
+            probe=AnyRowProbe(label="LanguageTrainingConfig"),
         ),
         ContentDependency(
             key="soulfray-config",

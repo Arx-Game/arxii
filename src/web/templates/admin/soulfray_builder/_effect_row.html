@@ -1,0 +1,9 @@
+{% comment %}
+One effect form as a table row. Takes `ef` (an EffectForm, bound, unbound or a
+formset's empty_form). The delete box shows only on a saved effect.
+{% endcomment %}
+<tr>
+  <td>{% for hidden in ef.hidden_fields %}{{ hidden }}{% endfor %}{{ ef.effect_type }} {{ ef.target }} {{ ef.execution_order }}</td>
+  <td>{{ ef.damage_amount }} {{ ef.damage_type }} {{ ef.condition_template }} {{ ef.condition_severity }} {{ ef.property }} {{ ef.property_value }} {{ ef.distinction }} {{ ef.distinction_rank }}</td>
+  <td>{% if ef.instance.pk %}{{ ef.DELETE }}{% endif %}{{ ef.errors }}</td>
+</tr>

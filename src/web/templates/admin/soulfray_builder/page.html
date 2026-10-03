@@ -1,0 +1,158 @@
+{% extends "admin/base_site.html" %}
+{% load i18n static %}
+
+{% block title %}{{ title }} | {% translate 'Site administration' %}{% endblock %}
+
+{% block extrastyle %}
+{{ block.super }}
+{% comment %}
+`admin/base.html` links base.css, dark_mode.css and responsive.css only. `forms.css`
+(`.form-row`, `.aligned label`, `.submit-row`) is linked by `change_form.html`, so a
+custom page extending `base_site.html` asks for it itself (#3667). `widgets.css`
+styles the autocomplete selects.
+{% endcomment %}
+<link rel="stylesheet" href="{% static 'admin/css/forms.css' %}">
+<link rel="stylesheet" href="{% static 'admin/css/widgets.css' %}">
+{% endblock %}
+
+{% block extrahead %}
+{{ block.super }}
+<script src="{% url 'admin:jsi18n' %}"></script>
+{{ media }}
+<script src="{% static 'admin/js/builder_formsets.js' %}"></script>
+{% endblock %}
+
+{% block breadcrumbs %}
+<div class="breadcrumbs">
+  <a href="{% url 'admin:index' %}">{% translate 'Home' %}</a>
+  &rsaquo; Conditions
+  &rsaquo; <a href="{% url 'admin:arxii_conditiontemplate_changelist' %}">Condition templates</a>
+  &rsaquo; <a href="{% url 'admin:arxii_conditiontemplate_change' stage.condition_id %}">Soulfray</a>
+  &rsaquo; Stage Builder
+</div>
+{% endblock %}
+
+{% block content %}
+{% include "admin/tuning/_panel_css.html" %}
+{% include "admin/soulfray_builder/_css.html" %}
+<div id="soulfray-builder-root">
+  {% comment %}No h1 here: admin's base renders the view's `title` as the page's one h1.{% endcomment %}
+  <p class="sf-intro">Author what each Soulfray stage does when a caster lands on it. One
+    stage per save; the ladder at the top opens the others.</p>
+
+  {% if needs_setup %}
+    {% include "admin/upbringing_builder/_setup.html" %}
+  {% else %}
+  <div class="sf-columns">
+    <div class="sf-main">
+      {% include "admin/soulfray_builder/_ladder.html" %}
+      {% if conflict %}
+      <p class="errornote">Change the pool or its parent, or edit its rows, in one save; not
+        both. Nothing was saved.</p>
+      {% endif %}
+      <form method="post" id="soulfray-stage-form">
+        {% csrf_token %}
+        {% include "admin/soulfray_builder/_stage.html" %}
+        {% include "admin/soulfray_builder/_penalty.html" %}
+        {% include "admin/soulfray_builder/_consequences.html" %}
+        <div class="submit-row">
+          <input type="submit" name="save" value="Save" class="default">
+          <input type="submit" name="save_continue" value="Save and continue editing">
+          {% if next_stage %}
+          <input type="submit" name="save_next" value="Save and open {{ next_stage.name }}">
+          {% endif %}
+        </div>
+      </form>
+    </div>
+    <aside class="sf-rail">
+      {% include "admin/soulfray_builder/_rail.html" %}
+    </aside>
+  </div>
+  {% endif %}
+</div>
+
+{{ pool_parents|json_script:"sf-pool-parents" }}
+<script>
+(function () {
+  // Shared clone helpers (admin/js/builder_formsets.js): there is no saved row to
+  // fetch a fragment for until the whole page is saved. Clicks are delegated
+  // because "+ Add a consequence" inserts rows that carry their own
+  // "Add an effect" button.
+  var formsets = window.arxBuilderFormsets;
+  // A new row's effects formset is prefixed "new<row index>". Its effect template
+  // is shared by every new row and spells that prefix with this placeholder; the
+  // literal lives here, outside every <template>, so cloning a row never rewrites it.
+  var NEW_ROW_PREFIX = "new" + "__prefix__";
+
+  function cloneNewRowEffect(button, index) {
+    var html = document.getElementById(button.dataset.template).innerHTML;
+    html = html.split(NEW_ROW_PREFIX).join(button.dataset.prefix);
+    html = html.split("__prefix__").join(String(index));
+    var holder = document.createElement("tbody");
+    holder.innerHTML = html;
+    return holder.firstElementChild;
+  }
+
+  // A consequence row clones as two <tr>s: the row and its full-width effect
+  // editor row, so every element of the template is appended, not just the first.
+  function cloneRows(templateId, index) {
+    var html = document.getElementById(templateId).innerHTML;
+    var holder = document.createElement("tbody");
+    holder.innerHTML = html.split("__prefix__").join(String(index));
+    return Array.prototype.slice.call(holder.children);
+  }
+
+  function add(button) {
+    var index = formsets.nextFormIndex(button.dataset.prefix);
+    var rows;
+    if (button.id === "add-row-btn") {
+      rows = cloneRows(button.dataset.template, index);
+    } else if (button.dataset.newRow) {
+      rows = [cloneNewRowEffect(button, index)];
+    } else {
+      rows = [formsets.cloneFromTemplate(button.dataset.template, index, "tbody")];
+    }
+    var target = document.getElementById(button.dataset.target);
+    rows.forEach(function (row) {
+      target.appendChild(row);
+      formsets.announceFormsetAdded(button.dataset.prefix, row);
+    });
+  }
+
+  // "+ effect" shows or hides the row's full-width effect editor row.
+  function toggleEditor(button) {
+    var editor = document.getElementById(button.getAttribute("aria-controls"));
+    var open = editor.hidden;
+    editor.hidden = !open;
+    button.setAttribute("aria-expanded", open ? "true" : "false");
+  }
+
+  // "New pool" in the pool select reveals the new pool's name; any pool hides it.
+  // Picking an existing pool resets "inherits" to that pool's own parent, so a
+  // switch never re-parents the pool it lands on (the server keeps the chosen
+  // pool's parent too unless the author changes this select).
+  var poolSelect = document.getElementById("id_pool-pool");
+  var parentSelect = document.getElementById("id_pool-parent");
+  var newPoolName = document.getElementById("new-pool-name");
+  var parentsData = document.getElementById("sf-pool-parents");
+  var poolParents = parentsData ? JSON.parse(parentsData.textContent) : {};
+  if (poolSelect && newPoolName) {
+    poolSelect.addEventListener("change", function () {
+      newPoolName.hidden = poolSelect.value !== "";
+      if (parentSelect && poolSelect.value !== "") {
+        var parent = poolParents[poolSelect.value];
+        parentSelect.value = parent === null || parent === undefined ? "" : String(parent);
+      }
+    });
+  }
+
+  var root = document.getElementById("soulfray-builder-root");
+  root.addEventListener("click", function (event) {
+    var toggle = event.target.closest(".sf-effect-toggle");
+    if (toggle) { toggleEditor(toggle); return; }
+    var button = event.target.closest("#add-row-btn, .sf-add-effect");
+    if (button) { add(button); }
+  });
+})();
+</script>
+{% endblock %}

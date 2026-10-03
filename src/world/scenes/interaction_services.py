@@ -861,6 +861,7 @@ def _reply_parent_payload(interaction: Interaction) -> ReplyParentPayload | None
 def _language_render_for(
     interaction: Interaction,
     persona: Persona,
+    listeners: Iterable[ObjectDB],
 ) -> Callable[[ObjectDB], str] | None:
     """Per-recipient language-comprehension renderer for the broadcast branch (#2993).
 
@@ -869,17 +870,28 @@ def _language_render_for(
     exactly as before #2993. The writer and staff always get ground truth; any
     object without a resolvable sheet (no CharacterSheet — e.g. an NPC prop or
     other non-player object) also gets ground truth rather than a garbled read.
+    The listener reads comprehension (trained plus active-condition bonuses, #4090),
+    computed for every object in ``listeners`` with one batched ``comprehension_values``
+    read before any delivery; the speaker's band stays on trained fluency.
     """
     language = interaction.language if interaction.language_id else None
     if language is None or language.is_universal:
         return None
 
     from world.species.language_constants import fluency_band  # noqa: PLC0415
-    from world.species.language_services import fluency_value, render_speech  # noqa: PLC0415
+    from world.species.language_services import (  # noqa: PLC0415
+        comprehension_values,
+        fluency_value,
+        render_speech,
+    )
 
     speaker_sheet = persona.character_sheet
     speaker_band = fluency_band(fluency_value(speaker_sheet, language))
     writer_char = speaker_sheet.character
+    # CharacterSheet shares ObjectDB's pk, so a listener's pk is its sheet pk.
+    listener_values = comprehension_values(
+        [obj.pk for obj in listeners if obj.pk != writer_char.pk], language
+    )
 
     def _render_for(obj: ObjectDB) -> str:
         if obj.pk == writer_char.pk:
@@ -901,7 +913,7 @@ def _language_render_for(
             interaction.content,
             language=language,
             speaker_band=speaker_band,
-            listener_value=fluency_value(sheet, language),
+            listener_value=listener_values.get(sheet.pk, 0),
         )
 
     return _render_for
@@ -1056,7 +1068,9 @@ def push_interaction(
         _send_to_objects([writer_char, *r_chars], payload)
     else:
         _broadcast_to_location(
-            location, payload, render_for=_language_render_for(interaction, persona)
+            location,
+            payload,
+            render_for=_language_render_for(interaction, persona, location.contents),
         )
 
 

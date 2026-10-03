@@ -20,7 +20,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from django.contrib import messages
+from django.contrib import admin, messages
 from django.db import transaction
 from django.db.models import Case, IntegerField, QuerySet, Value, When
 from django.forms import BaseModelFormSet, Media
@@ -120,6 +120,10 @@ def _render_page(
         request,
         "admin/tradition_slate/page.html",
         {
+            # The admin chrome (site header, user tools, theme toggle) reads these. The
+            # app-list sidebar stays off: the builder's two columns need the width.
+            **admin.site.each_context(request),
+            "is_nav_sidebar_enabled": False,
             "title": f"Traditions offered to {beginning.name}",
             "beginning": beginning,
             "state_formset": forms.state,

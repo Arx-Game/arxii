@@ -514,6 +514,14 @@ def purchase_skill_breakthrough(character: ObjectDB, skill: Skill) -> tuple[bool
     xp_cost = unlock.get_xp_cost_for_character(character)
 
     with transaction.atomic():
+        # Re-read under lock: another purchase (or training) may have moved the value
+        # between the read above and this transaction, so re-check the boundary still
+        # holds before spending XP (double-spend guard). Write through the locked
+        # instance so the identity map isn't left holding the stale, unlocked one.
+        skill_value = CharacterSkillValue.objects.select_for_update().get(pk=skill_value.pk)
+        if skill_value.value + 1 != target_rating:
+            return False, f"{skill.name} is not at a breakthrough boundary."
+
         try:
             spend_xp_for_character(
                 character.sheet_data,

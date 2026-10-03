@@ -35,6 +35,9 @@ class ValuationProvenance(str, Enum):
     INERT_PAYLOAD
         A capability grant with no cast seam yet — valued 0 explicitly, not
         silently dropped.
+    NOT_COMBAT_POWER
+        A ConditionModifierEffect toward a LANGUAGE trait (#4090): comprehension,
+        not combat power; valued 0 explicitly, never priced as a roll bonus.
     """
 
     FORMULA = "FORMULA"
@@ -43,6 +46,7 @@ class ValuationProvenance(str, Enum):
     UNPRICED_DISPEL = "UNPRICED_DISPEL"
     UNPRICEABLE = "UNPRICEABLE"
     INERT_PAYLOAD = "INERT_PAYLOAD"
+    NOT_COMBAT_POWER = "NOT_COMBAT_POWER"
 
 
 @dataclass(frozen=True, slots=True)
@@ -97,7 +101,8 @@ class PayloadValuation:
     """One priced payload line inside a technique's combat-power report (#3279)."""
 
     #: "damage" / "buff" / "debuff" / "control" / "mitigation" / "heal" /
-    #: "dispel" / "capability".
+    #: "dispel" / "capability" / "utility" (a LANGUAGE-trait effect reported as
+    #: not combat power, #4090 — see ``ValuationProvenance.NOT_COMBAT_POWER``).
     kind: str
     label: str
     value: float
@@ -110,6 +115,9 @@ class PayloadValuation:
 #: constant rather than a bare string.
 FLAG_NOT_CASTABLE_STANDALONE = "not_castable_standalone"
 FLAG_UNDERSPECIFIED = "underspecified"
+#: A report carries a ConditionModifierEffect toward a LANGUAGE trait (#4090) — priced
+#: as ValuationProvenance.NOT_COMBAT_POWER, never as a combat roll bonus.
+FLAG_NOT_COMBAT_POWER = "not_combat_power"
 
 
 @dataclass(frozen=True, slots=True)

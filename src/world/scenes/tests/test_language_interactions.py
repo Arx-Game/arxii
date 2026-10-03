@@ -8,7 +8,9 @@ the list/detail API's per-viewer comprehension gating.
 
 from unittest.mock import patch
 
+from django.db import connection
 from django.test import TestCase
+from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 from rest_framework import status
 from rest_framework.test import APITestCase
@@ -16,6 +18,8 @@ from rest_framework.test import APITestCase
 from evennia_extensions.factories import AccountFactory, CharacterFactory, ObjectDBFactory
 from evennia_extensions.models import PlayerData
 from world.character_sheets.factories import CharacterSheetFactory
+from world.conditions.factories import ConditionInstanceFactory
+from world.mechanics.models import ModifierTarget
 from world.roster.factories import PlayerDataFactory, RosterEntryFactory, RosterTenureFactory
 from world.scenes.constants import InteractionMode
 from world.scenes.factories import (
@@ -26,7 +30,11 @@ from world.scenes.factories import (
 )
 from world.scenes.interaction_services import create_interaction, record_interaction
 from world.scenes.mute_services import set_mute
-from world.species.factories import LanguageFactory
+from world.species.factories import (
+    LanguageFactory,
+    make_language_with_target,
+    make_understanding_condition,
+)
 from world.traits.factories import CharacterTraitValueFactory
 from world.traits.models import Trait, TraitCategory, TraitType
 
@@ -323,3 +331,127 @@ class TestInteractionListComprehensionAPI(APITestCase):
         assert response.status_code == status.HTTP_200_OK
         self.assertNotEqual(response.data["content"], "")
         self.assertNotEqual(response.data["content"], self.CONTENT)
+
+
+class TestReadbackComprehensionUnderCondition(APITestCase):
+    """#4090: the reread honours a viewer's active condition while it lasts."""
+
+    CONTENT = "nobody at this table repeats a word of it"
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        ModifierTarget.clear_trait_cache()
+        cls.language, cls.target = make_language_with_target("RereadCompTongue")
+        cls.condition = make_understanding_condition("Placeholder Reread Understanding", cls.target)
+        cls.writer_account, cls.writer_sheet = _build_language_account()
+        CharacterTraitValueFactory(character=cls.writer_sheet, trait=cls.language.trait, value=100)
+        cls.viewer_account, cls.viewer_sheet = _build_language_account()
+        cls.scene = SceneFactory()
+        cls.say = InteractionFactory(
+            persona=cls.writer_sheet.primary_persona,
+            scene=cls.scene,
+            mode=InteractionMode.SAY,
+            language=cls.language,
+            content=cls.CONTENT,
+        )
+        cls.pose = InteractionFactory(
+            persona=cls.writer_sheet.primary_persona,
+            scene=cls.scene,
+            mode=InteractionMode.POSE,
+            content="sets both hands flat on the table.",
+        )
+        cls.emit = InteractionFactory(
+            persona=cls.writer_sheet.primary_persona,
+            scene=cls.scene,
+            mode=InteractionMode.EMIT,
+            content="the candle gutters in the draft.",
+        )
+        InteractionFactory(
+            persona=cls.viewer_sheet.primary_persona,
+            scene=cls.scene,
+            mode=InteractionMode.POSE,
+            content="listens.",
+        )
+
+    def setUp(self) -> None:
+        ModifierTarget.clear_trait_cache()
+
+    def _rows(self, account) -> dict[int, dict]:
+        self.client.force_authenticate(user=account)
+        response = self.client.get(reverse("interaction-list"))
+        assert response.status_code == status.HTTP_200_OK
+        return {row["id"]: row for row in response.data["results"]}
+
+    def test_condition_reads_clear_then_garbles_after_it_ends(self) -> None:
+        self.assertEqual(self._rows(self.viewer_account)[self.say.pk]["content"], "...")
+        instance = ConditionInstanceFactory(
+            target=self.viewer_sheet.character, condition=self.condition, severity=4
+        )
+        rows = self._rows(self.viewer_account)
+        self.assertEqual(rows[self.say.pk]["content"], self.CONTENT)
+        name = self.writer_sheet.primary_persona.name
+        self.assertEqual(
+            rows[self.say.pk]["line"], f'{name} says in {self.language.name}, "{self.CONTENT}"'
+        )
+        instance.delete()
+        self.assertEqual(self._rows(self.viewer_account)[self.say.pk]["content"], "...")
+
+    def test_pose_and_emit_read_byte_identical_with_and_without_condition(self) -> None:
+        """Controller ruling F12: a pose and an emit both read the same whether or
+        not the viewer currently carries the understanding condition -- comprehension
+        only ever touches language-tagged content."""
+        before_pose = self._rows(self.viewer_account)[self.pose.pk]
+        before_emit = self._rows(self.viewer_account)[self.emit.pk]
+        ConditionInstanceFactory(
+            target=self.viewer_sheet.character, condition=self.condition, severity=4
+        )
+        after_pose = self._rows(self.viewer_account)[self.pose.pk]
+        after_emit = self._rows(self.viewer_account)[self.emit.pk]
+        self.assertEqual(before_pose["content"], "sets both hands flat on the table.")
+        self.assertEqual(before_pose["content"], after_pose["content"])
+        self.assertEqual(before_pose["line"], after_pose["line"])
+        self.assertIsNone(after_pose["language_id"])
+        self.assertEqual(before_emit["content"], "the candle gutters in the draft.")
+        self.assertEqual(before_emit["content"], after_emit["content"])
+        self.assertEqual(before_emit["line"], after_emit["line"])
+        self.assertIsNone(after_emit["language_id"])
+
+    def test_condition_on_non_participant_sheet_does_not_leak(self) -> None:
+        other_character = CharacterFactory()
+        other_sheet = CharacterSheetFactory(character=other_character)
+        other_entry = RosterEntryFactory(character_sheet=other_sheet)
+        player_data = PlayerData.objects.get(account=self.viewer_account)
+        RosterTenureFactory(player_data=player_data, roster_entry=other_entry)
+        ConditionInstanceFactory(target=other_character, condition=self.condition, severity=4)
+        self.assertEqual(self._rows(self.viewer_account)[self.say.pk]["content"], "...")
+
+    def test_query_count_does_not_grow_with_page_size(self) -> None:
+        from evennia.utils.idmapper import models as idmapper_models
+
+        ConditionInstanceFactory(
+            target=self.viewer_sheet.character, condition=self.condition, severity=4
+        )
+        self.client.force_authenticate(user=self.viewer_account)
+        url = reverse("interaction-list")
+        self.client.get(url)  # warm caches (ModifierTarget trait cache, content types)
+        # Flush the idmapper identity map before each measured call: a bare
+        # (non-``to_attr``) ``prefetch_related`` on a SharedMemoryModel instance is
+        # silently skipped once ``_prefetched_objects_cache`` holds the key (see
+        # reference-plain-prefetch-related-stale-on-idmapper), so comparing a
+        # just-warmed small page against a large page full of never-before-fetched
+        # rows would be comparing a hot read to a cold one -- not page-size growth.
+        idmapper_models.flush_cache()
+        with CaptureQueriesContext(connection) as small:
+            self.client.get(url)
+        for index in range(6):
+            InteractionFactory(
+                persona=self.writer_sheet.primary_persona,
+                scene=self.scene,
+                mode=InteractionMode.SAY,
+                language=self.language,
+                content=f"{self.CONTENT} {index}",
+            )
+        idmapper_models.flush_cache()
+        with CaptureQueriesContext(connection) as large:
+            self.client.get(url)
+        self.assertEqual(len(small.captured_queries), len(large.captured_queries))

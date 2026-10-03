@@ -22,7 +22,7 @@ from world.contributors.models import CreditedContent
 class PathStage(models.IntegerChoices):
     """Evolution stages for character paths."""
 
-    PROSPECT = 1, "Prospect"  # Level 1-2 - pre-awakening, selected in CG
+    PROSPECT = 1, "Prospect"  # Level 1-2 - post-Glimpse, has magic, selected in CG
     POTENTIAL = 2, "Potential"  # Level 3 - awakening potential
     PUISSANT = 3, "Puissant"  # Level 6 - magical power
     TRUE = 4, "True"  # Level 11 - true mastery

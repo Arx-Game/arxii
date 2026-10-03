@@ -1,0 +1,9 @@
+{% comment %}
+One row's effect editor as a full-width table row under it, toggled by that row's
+"+ effect" button (`_effect_toggle.html`). Hidden is not dropped: its inputs still
+post, so a saved effect's fields always round-trip. Opens by itself when the
+formset carries errors. Takes `formset` and `new_row`.
+{% endcomment %}
+<tr class="sf-effect-editor-row" id="effect-editor-{{ formset.prefix }}"{% if not formset.total_error_count %} hidden{% endif %}>
+  <td colspan="8">{% include "admin/soulfray_builder/_effect_editor.html" %}</td>
+</tr>

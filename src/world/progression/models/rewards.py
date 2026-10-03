@@ -20,7 +20,12 @@ from world.progression.constants import (
     DP_COST_MULTIPLIER,
 )
 from world.progression.types import DevelopmentSource, ProgressionReason
-from world.traits.models import CharacterTraitChange, CharacterTraitValue, TraitChangeSource
+from world.traits.models import (
+    CharacterTraitChange,
+    CharacterTraitValue,
+    TraitChangeSource,
+    TraitType,
+)
 
 CHARACTER_SHEET_MODEL = "arxii.CharacterSheet"
 TRAIT_MODEL = "arxii.Trait"
@@ -178,6 +183,31 @@ class DevelopmentPoints(SharedMemoryModel):
     created_date = models.DateTimeField(auto_now_add=True)
     updated_date = models.DateTimeField(auto_now=True)
 
+    def _language_rating_ceiling(self, current_value: int) -> int | None:
+        """The lowest authored ``TraitRatingUnlock`` rating above *current_value* (#4090).
+
+        LANGUAGE traits only, and the type check runs before any query so every other
+        trait's award path is unchanged. Skills park at their XP boundaries on
+        ``CharacterSkillValue`` (``world.skills.services._apply_development_to_skill``),
+        and other DevelopmentPoints-levelled traits carry no authored rating locks, so
+        widening this would change skill check-use development, which is not ruled.
+
+        Unlike skills, which park at every x9 boundary whether or not staff authored a
+        breakthrough there, a language parks only where staff authored a
+        ``TraitRatingUnlock``. That difference is intended (the #4090 spec Amendment):
+        an unauthored lock would strand a language with nothing to buy.
+        """
+        if self.trait.trait_type != TraitType.LANGUAGE:
+            return None
+        from world.progression.models.unlocks import TraitRatingUnlock  # noqa: PLC0415
+
+        return (
+            TraitRatingUnlock.objects.filter(trait=self.trait, target_rating__gt=current_value)
+            .order_by("target_rating")
+            .values_list("target_rating", flat=True)
+            .first()
+        )
+
     def award_points(self, amount: int) -> list[tuple[int, int]]:
         """Award development points and level up the trait when thresholds are crossed.
 
@@ -189,6 +219,9 @@ class DevelopmentPoints(SharedMemoryModel):
         represents the minimum progression level. Values below 10 will be implicitly
         advanced to 10 on first dp award (cumulative_dp_for_level returns 0 for
         levels <= 10).
+
+        A LANGUAGE trait stops one rating below an authored ``TraitRatingUnlock``
+        (#4090); surplus dp there dissipates.
 
         Args:
             amount: Development points to award.
@@ -213,15 +246,27 @@ class DevelopmentPoints(SharedMemoryModel):
         level_ups: list[tuple[int, int]] = []
         starting_level: int = trait_value.value
         current_level: int = starting_level
+        ceiling = self._language_rating_ceiling(starting_level)
 
         while True:
             next_level = current_level + 1
+            if ceiling is not None and next_level >= ceiling:
+                break
             dp_needed = cumulative_dp_for_level(next_level)
             if self.total_earned >= dp_needed:
                 level_ups.append((current_level, next_level))
                 current_level = next_level
             else:
                 break
+
+        if ceiling is not None and current_level == ceiling - 1:
+            # Parked at an XP lock: surplus dp dissipates instead of banking (the
+            # 2026-07-09 ephemerality ruling skills follow), so buying the breakthrough
+            # never back-pays development earned while gated.
+            parked_cap = cumulative_dp_for_level(current_level)
+            if self.total_earned > parked_cap:
+                self.total_earned = parked_cap
+                self.save(update_fields=["total_earned"])
 
         if level_ups:
             trait_value.value = current_level

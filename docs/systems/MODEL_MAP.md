@@ -90,6 +90,7 @@
 - `advance_resolution(pending: 'PendingActionResolution', context: 'ResolutionContext', player_decision: 'str | None' = None) -> 'PendingActionResolution' - Resume a paused pipeline after player decision.`
 - `apply_resolution(pending: 'PendingResolution', context: 'ResolutionContext') -> 'list[AppliedEffect]' - Apply all effects from the selected consequence.`
 - `get_effective_consequences(pool: 'ConsequencePool') -> 'list[WeightedConsequence]' - Resolve pool inheritance into a flat list of weighted consequences.`
+- `merge_pool_entries(own_entries: 'list[ConsequencePoolEntry]', parent_entries: 'list[ConsequencePoolEntry] | None') -> 'list[WeightedConsequence]' - Single-depth pool inheritance over already-fetched entries; runs no query.`
 - `perform_check(character: 'ObjectDB', check_type: 'CheckType', target_difficulty: int = 0, extra_modifiers: int = 0, effort_level: str | None = None, fatigue_penalty: int = 0, specialization: 'Specialization | None' = None, *, situation_ctx: 'SituationContext | None' = None, level_override: int | None = None, stat_override: str | int | None = None) -> world.checks.types.CheckResult - Main check resolution function.`
 - `resolve_scene_action(*, character: 'ObjectDB', action_template: 'ActionTemplate | None', action_key: 'str', difficulty: 'int') -> 'SceneActionResult' - Resolve a scene-based action check using an ActionTemplate.`
 - `select_consequence_from_result(character: 'ObjectDB', check_result: 'CheckResult', consequences: 'list[WeightedConsequence]') -> 'PendingResolution' - Select a consequence using an existing check result.`
@@ -2638,7 +2639,7 @@
   - participant -> combat.CombatParticipant [FK]
 
 ### Service Functions
-- `accumulate_soulfray(*, character: 'ObjectDB', anima: 'CharacterAnima', deficit: 'int', soulfray_config: 'SoulfrayConfig | None', check_result: 'CheckResult | None', lethal: 'bool' = True) -> 'SoulfrayResult | None' - Accumulate Soulfray severity from the pool state and apply stage consequences.`
+- `accumulate_soulfray(*, character: 'ObjectDB', anima: 'CharacterAnima', deficit: 'int', soulfray_config: 'SoulfrayConfig | None', check_result: 'CheckResult | None', lethal: 'bool' = True, defer_reveal: 'bool' = False) -> 'SoulfrayResult | None' - Accumulate Soulfray severity from the pool state and apply stage consequences.`
 - `accumulate_threat(encounter: 'CombatEncounter', opponent: 'CombatOpponent', participant: 'CombatParticipant', amount: 'int') -> 'None' - Increment the threat value for an (opponent, participant) pairing (#2020).`
 - `acknowledge_encounter_risk(encounter: 'CombatEncounter', character_sheet: 'CharacterSheet') -> 'EncounterRiskAcknowledgement' - Idempotently record that a character acknowledged the encounter's risk (#777).`
 - `active_combat_engagement_for(character: 'ObjectDB') -> 'CharacterEngagement | None' - The character's live COMBAT ``CharacterEngagement`` (``source`` is the encounter), or None.`
@@ -3053,6 +3054,7 @@
 
 ### Service Functions
 - `active_concealments(target: 'ObjectDB') -> django.db.models.query.QuerySet`
+- `active_condition_instances_by_sheet(sheet_ids: collections.abc.Iterable[int]) -> list[world.conditions.models.ConditionInstance] - Active condition instances on many sheets, in one query and with no teardown (#4090).`
 - `advance_condition_severity(instance: world.conditions.models.ConditionInstance, amount: int) -> world.conditions.types.SeverityAdvanceResult - Increment a condition's severity and advance stage if threshold crossed.`
 - `advance_condition_stage(*, payload: object, condition_name: str) -> int | None - Advance the bearer's condition by one stage *now*, on this event (#3416).`
 - `apply_condition(target: 'ObjectDB', condition: world.conditions.models.ConditionTemplate, *, severity: int = 1, duration_rounds: int | None = None, source_character: 'ObjectDB | None' = None, source_technique: 'Technique | None' = None, source_description: str = '') -> world.conditions.types.ApplyConditionResult - Apply a condition to a target, handling stacking and interactions.`
@@ -3064,6 +3066,7 @@
 - `can_perceive(actor: 'ObjectDB', target: 'ObjectDB') -> bool - Whether *actor* can perceive *target*.`
 - `clear_all_conditions(target: 'ObjectDB', *, only_negative: bool = False, only_category: 'ConditionCategory | None' = None) -> int - Remove all conditions from a target.`
 - `condition_contributions(character_sheet: 'CharacterSheet', check_type: world.checks.models.CheckType) -> list[world.checks.types.ModifierContribution] - Adapt get_check_modifier's breakdown into a list of ModifierContribution.`
+- `condition_modifier_totals_by_sheet(sheet_ids: collections.abc.Iterable[int], modifier_target: 'ModifierTarget') -> dict[int, int] - Batched ``get_condition_modifier_total`` across many sheets (#4090).`
 - `decay_all_conditions_tick() -> world.conditions.types.DecayTickSummary - Scheduler entry point. Decays all opt-in conditions by one tick.`
 - `decay_condition_severity(instance: world.conditions.models.ConditionInstance, amount: int, *, _skip_corruption_sync: bool = False) -> world.conditions.types.SeverityDecayResult - Inverse of advance_condition_severity. Walks stage down if threshold crossed.`
 - `emit_event(event_name: str, payload: Any, location: Any, *, parent_stack: flows.flow_stack.FlowStack | None = None) -> flows.flow_stack.FlowStack - Dispatch ``event_name`` to every handler in ``location`` + contents.`
@@ -3109,6 +3112,7 @@
 - `remove_condition_by_name(*, payload: object, condition_name: str) -> bool - Remove a named condition from the character carried by the payload.`
 - `remove_conditions_by_category(target: 'ObjectDB', category: 'ConditionCategory') -> list[world.conditions.models.ConditionTemplate] - Remove all conditions in a category from a target.`
 - `resolve_damage_type_resistance(character: 'ObjectDB', damage_amount: int, damage_type: 'DamageType | None') -> int - Net damage-type resistance (condition + gift-thread) and return reduced damage (>=0).`
+- `scaled_condition_effect_value(effect: world.conditions.models.ConditionModifierEffect, instance: world.conditions.models.ConditionInstance) -> int - One ConditionModifierEffect's contribution on one active instance (#4090).`
 - `suppress_condition(target: 'ObjectDB', condition: world.conditions.models.ConditionTemplate, *, duration_rounds: int | None = None) -> bool - Temporarily suppress a condition's effects.`
 - `unsuppress_condition(target: 'ObjectDB', condition: world.conditions.models.ConditionTemplate) -> bool - Remove suppression from a condition.`
 
@@ -6368,7 +6372,7 @@
 - `survivability_save_baselines(character: 'ObjectDB') -> 'ThreadSurvivabilitySaves' - Per-tier survivability save modifiers from thread investment (#1250).`
 - `threads_blocked_by_cap(character_sheet: 'CharacterSheet') -> 'list[Thread]' - Return threads that are at their effective cap (no further imbuing helps).`
 - `update_thread_narrative(thread: 'Thread', *, name: 'str | None' = None, description: 'str | None' = None) -> 'Thread' - Update the narrative name and/or description of a thread.`
-- `use_technique(*, character: 'ObjectDB', technique: 'Technique', resolve_fn: 'Callable[..., Any]', confirm_soulfray_risk: 'bool' = True, check_result: 'CheckResult | None' = None, targets: 'list | None' = None, strain_commitment: 'int' = 0, applicable_threads: 'Sequence[ApplicableThread] | None' = None, cast_pull: 'CastPullDeclaration | None' = None, pull_target: 'ObjectDB | None' = None, power_intensity_bonus: 'int' = 0, lethal: 'bool' = True, control_penalty: 'int' = 0, apply_variant: 'bool' = True, preferred_resonance=None, situation_ctx: 'object | None' = None, target_sheet: 'CharacterSheet | None' = None, strain_config: 'object | None' = None, strain_power_enabled: 'bool' = True) -> 'TechniqueUseResult' - Orchestrate technique use from cost validation through post-cast events.`
+- `use_technique(*, character: 'ObjectDB', technique: 'Technique', resolve_fn: 'Callable[..., Any]', confirm_soulfray_risk: 'bool' = True, check_result: 'CheckResult | None' = None, targets: 'list | None' = None, strain_commitment: 'int' = 0, applicable_threads: 'Sequence[ApplicableThread] | None' = None, cast_pull: 'CastPullDeclaration | None' = None, pull_target: 'ObjectDB | None' = None, power_intensity_bonus: 'int' = 0, lethal: 'bool' = True, control_penalty: 'int' = 0, apply_variant: 'bool' = True, preferred_resonance=None, situation_ctx: 'object | None' = None, target_sheet: 'CharacterSheet | None' = None, strain_config: 'object | None' = None, strain_power_enabled: 'bool' = True, defer_soulfray_reveal: 'bool' = False) -> 'TechniqueUseResult' - Orchestrate technique use from cost validation through post-cast events.`
 - `validate_alteration_resolution(*, pending_tier: 'int', pending_affinity_id: 'int', pending_resonance_id: 'int', payload: 'dict', is_staff: 'bool', character_sheet: 'CharacterSheet | None' = None) -> 'list[str]' - Validate a resolution payload against the pending's tier and origin.`
 - `weave_thread(character_sheet: 'CharacterSheet', target_kind: 'str', target: 'object', resonance: 'ResonanceModel', *, name: 'str' = '', description: 'str' = '') -> 'Thread' - Create a new Thread anchored to the given target.`
 
@@ -9778,6 +9782,8 @@
 **Pointed to by:**
   - beginnings <- character_creation.Beginnings
   - native_species <- species.Species
+
+### LanguageTrainingConfig
 
 ### Species
 **Foreign Keys:**

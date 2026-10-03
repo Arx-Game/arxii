@@ -10,6 +10,8 @@ from rest_framework import status
 from rest_framework.test import APITestCase
 
 from evennia_extensions.factories import AccountFactory
+from world.conditions.factories import ConditionInstanceFactory
+from world.mechanics.models import ModifierTarget
 from world.roster.factories import (
     PlayerDataFactory,
     RosterEntryFactory,
@@ -17,6 +19,10 @@ from world.roster.factories import (
 )
 from world.species.language_constants import FLUENT_GRANT_VALUE, Fluency, fluency_band
 from world.species.models import Language
+from world.species.tests.test_language_comprehension import (
+    make_language_with_target,
+    make_understanding_condition,
+)
 from world.traits.models import CharacterTraitValue, Trait, TraitCategory, TraitType
 
 URL = "/api/species/my-languages/"
@@ -95,3 +101,75 @@ class MyLanguagesViewTests(APITestCase):
         response = self.client.get(URL)
         assert response.status_code == status.HTTP_200_OK
         assert response.data == []
+
+    def _understanding(self, name: str, *, severity: int):
+        ModifierTarget.clear_trait_cache()
+        language, target = make_language_with_target(name)
+        condition = make_understanding_condition(f"Placeholder {name} Charm", target)
+        instance = ConditionInstanceFactory(
+            target=self.sheet.character, condition=condition, severity=severity
+        )
+        return language, instance
+
+    def test_condition_only_language_appears_marked_temporary(self) -> None:
+        language, _instance = self._understanding("SheetTongueA", severity=4)
+        self.client.force_authenticate(user=self.user)
+        rows = {row["name"]: row for row in self.client.get(URL).data}
+        row = rows[language.name]
+        assert row["fluency"] == 0
+        assert row["band"] == Fluency.NONE.value
+        assert row["effective_fluency"] == 80
+        assert row["effective_band"] == Fluency.FLUENT.value
+        assert row["temporary_sources"] == ["Placeholder SheetTongueA Charm"]
+
+    def test_trained_language_raised_by_condition_keeps_trained_level(self) -> None:
+        language, _instance = self._understanding("SheetTongueB", severity=2)
+        CharacterTraitValue.objects.create(character=self.sheet, trait=language.trait, value=20)
+        self.client.force_authenticate(user=self.user)
+        row = next(r for r in self.client.get(URL).data if r["name"] == language.name)
+        assert (row["fluency"], row["band"]) == (20, Fluency.BROKEN.value)
+        assert (row["effective_fluency"], row["effective_band"]) == (
+            60,
+            Fluency.CONVERSATIONAL.value,
+        )
+
+    def test_condition_only_row_disappears_when_condition_ends(self) -> None:
+        language, instance = self._understanding("SheetTongueC", severity=4)
+        instance.delete()
+        self.client.force_authenticate(user=self.user)
+        names = [row["name"] for row in self.client.get(URL).data]
+        assert language.name not in names
+
+    def test_trained_row_without_condition_has_no_temporary_sources(self) -> None:
+        CharacterTraitValue.objects.create(character=self.sheet, trait=self.khatic_trait, value=15)
+        self.client.force_authenticate(user=self.user)
+        row = next(r for r in self.client.get(URL).data if r["name"] == "Khatic")
+        assert row["effective_fluency"] == 15
+        assert row["temporary_sources"] == []
+
+    def _query_count_fixture(self, count: int) -> None:
+        """count trained languages plus count condition-only languages (query-count pin)."""
+        for i in range(count):
+            trait = Trait.objects.create(
+                name=f"QueryCountTrained{i}",
+                trait_type=TraitType.LANGUAGE,
+                category=TraitCategory.GENERAL,
+            )
+            Language.objects.create(name=f"QueryCountTrained{i}", trait=trait)
+            CharacterTraitValue.objects.create(character=self.sheet, trait=trait, value=20)
+        for i in range(count):
+            self._understanding(f"QueryCountCond{i}", severity=2)
+
+    def test_query_count_fixed_for_one_language(self) -> None:
+        self._query_count_fixture(1)
+        self.client.force_authenticate(user=self.user)
+        with self.assertNumQueries(13):
+            response = self.client.get(URL)
+        assert response.status_code == status.HTTP_200_OK
+
+    def test_query_count_fixed_for_three_languages(self) -> None:
+        self._query_count_fixture(3)
+        self.client.force_authenticate(user=self.user)
+        with self.assertNumQueries(13):
+            response = self.client.get(URL)
+        assert response.status_code == status.HTTP_200_OK

@@ -22,6 +22,11 @@ than a silent zero:
   best-guess simplification).
 
 Both are pre-existing gaps in the reused formula, not new scope this module adds.
+
+**Language exclusion lane (#4090).** A condition carrying a ``ConditionModifierEffect``
+toward a LANGUAGE trait prices as ``ValuationProvenance.NOT_COMBAT_POWER`` instead —
+comprehension is not a combat roll bonus, so it is reported explicitly rather than
+silently priced at 0 or folded into the generic modifier-shift row.
 """
 
 from __future__ import annotations
@@ -33,6 +38,7 @@ from typing import TYPE_CHECKING
 from world.magic.services import capability_power_eval, de_valuation
 from world.magic.types.condition_power import ConditionPowerReport
 from world.magic.types.technique_power import (
+    FLAG_NOT_COMBAT_POWER,
     EvalContext,
     PayloadValuation,
     ReferenceFrame,
@@ -157,6 +163,20 @@ def _capability_effect_rows(
     return rows
 
 
+def _apply_language_exclusion(
+    template: ConditionTemplate, *, flags: list[str], valuations: list[PayloadValuation]
+) -> None:
+    """Flags + prices the NOT_COMBAT_POWER row when *template* carries a language
+    modifier effect (#4090). Mutates ``flags``/``valuations`` in place so the
+    decision lives here rather than as another branch in ``evaluate_condition``
+    (keeps that function's cyclomatic complexity in budget).
+    """
+    if not de_valuation.has_language_modifier_effects(template):
+        return
+    flags.append(FLAG_NOT_COMBAT_POWER)
+    valuations.append(de_valuation.not_combat_power_valuation(template))
+
+
 def evaluate_condition(
     template: ConditionTemplate,
     *,
@@ -214,6 +234,8 @@ def evaluate_condition(
             template, at_severity=at_severity, context=context, reference=reference
         )
     )
+
+    _apply_language_exclusion(template, flags=flags, valuations=valuations)
 
     if de_valuation.is_team_lane_condition(template):
         flags.append(TEAM_LANE_EXCLUDED_FLAG)

@@ -3,14 +3,14 @@ The Builders panel (#3675 Task 10, Decision 11 of the spec: every builder is
 one click from the Authoring Workbench and from the row it edits). Included
 directly in `dashboard.html` right after the intro paragraph, on the initial
 GET - not an HTMX fragment like the stats/queue/reference panels below it,
-since its four option lists are built once by `authoring_dashboard` itself
+since its five option lists are built once by `authoring_dashboard` itself
 and never refresh on their own.
 
 Each row is a small GET form: the picker (a labelled select) posts nothing of its own, it
 only names which existing row to open, and its own `*_pick` view (a plain
 redirect, 400 on a missing/unknown pk) does the rest. Takes `builders`, a
-dict of `distinctions`/`beginnings`/`upbringings`/`glimpse_tag_count` built by
-`web.admin.authoring.views._builders_context`.
+dict of `distinctions`/`beginnings`/`upbringings`/`soulfray_stages`/
+`glimpse_tag_count` built by `web.admin.authoring.views._builders_context`.
 {% endcomment %}
 <style>
   #panel-authoring-builders .ab-picker {
@@ -83,6 +83,22 @@ dict of `distinctions`/`beginnings`/`upbringings`/`glimpse_tag_count` built by
           <button type="submit">New Upbringing</button>
         </form>
         <p class="help">Author one Upbringing's questions, answers and offers.</p>
+      </td>
+    </tr>
+    <tr>
+      <th>Soulfray Stage Builder</th>
+      <td>
+        <form method="get" action="{% url 'admin_soulfray_builder_pick' %}" class="ab-picker">
+          <label for="soulfray-builder-select">Soulfray stage to open in the builder</label>
+          <select id="soulfray-builder-select" name="pk">
+            {% for stage in builders.soulfray_stages %}
+            <option value="{{ stage.pk }}">{{ stage.stage_order }}. {{ stage.name }}</option>
+            {% endfor %}
+          </select>
+          <button type="submit">Open</button>
+        </form>
+        <p class="help">Author what each Soulfray stage does: its consequences and their
+          effects, its penalty, and whether it can kill.</p>
       </td>
     </tr>
     <tr>

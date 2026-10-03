@@ -4,7 +4,11 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
+    from actions.models import ConsequencePool
+    from actions.types import WeightedConsequence
+    from world.checks.models import Consequence
     from world.checks.types import CheckResult
+    from world.conditions.models import ConditionStage
     from world.magic.models import Resonance, Restriction, Technique
     from world.mechanics.types import AppliedEffect
 
@@ -49,6 +53,47 @@ class SoulfrayWarning:
     has_death_risk: bool
 
 
+@dataclass(frozen=True)
+class SoulfrayStageSummary:
+    """One Soulfray stage as the resilience roll sees it (#4089).
+
+    ``consequences`` are the pool's effective rows (parent merged, exclusions
+    and reweights honoured, ``actions.services.merge_pool_entries``);
+    ``shared_consequence_ids`` are the ones that come from the parent pool.
+    Derived on read and never stored, so the Required-content panel, the
+    Soulfray Stage Builder and the game's own cap all read the same thing.
+    """
+
+    stage: ConditionStage
+    pool: ConsequencePool | None
+    consequences: tuple[WeightedConsequence, ...]
+    shared_consequence_ids: frozenset[int]
+
+    @property
+    def consequence_count(self) -> int:
+        return len(self.consequences)
+
+    @property
+    def can_kill(self) -> bool:
+        return any(wc.character_loss for wc in self.consequences)
+
+
+@dataclass(frozen=True)
+class SoulfrayReveal:
+    """The #924 outcome wheel for one Soulfray stage draw (#4089).
+
+    ``faces`` is the drawn tier as authored, UNFILTERED: a row a modifier removed
+    from the draw (a Can kill row on a non-lethal cast) is still a face, so the
+    wheel spins past it and the player never learns it was removed. ``selected``
+    is always a face the filtered draw actually picked.
+    """
+
+    title: str
+    stage_label: str
+    faces: tuple[Consequence, ...]
+    selected: Consequence
+
+
 @dataclass
 class SoulfrayResult:
     """Result of Soulfray accumulation in Step 7 of use_technique()."""
@@ -58,6 +103,8 @@ class SoulfrayResult:
     stage_advanced: bool
     resilience_check: CheckResult | None = None
     stage_consequence: AppliedEffect | None = None
+    #: The stage draw's outcome wheel, or ``None`` when the drawn tier is routine.
+    reveal: SoulfrayReveal | None = None
 
 
 @dataclass

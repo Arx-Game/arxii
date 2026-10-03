@@ -20,6 +20,7 @@ from evennia.accounts.models import AccountDB
 
 from evennia_extensions.models import PlayerData
 from web.admin.authoring.views import _builders_context
+from web.admin.tests.soulfray_ladder import build_ladder
 from world.character_creation.factories import BeginningsFactory, OriginTemplateFactory
 from world.contributors.factories import ContentContributorFactory
 from world.distinctions.factories import DistinctionFactory
@@ -41,6 +42,7 @@ class BuildersPanelTestCase(TestCase):
         cls.beginning = BeginningsFactory(name="Panel Beginning")
         cls.upbringing = OriginTemplateFactory(beginning=cls.beginning, name="Panel Upbringing")
         cls.tag = GlimpseTagFactory(name="Panel Tag")
+        cls.ladder = build_ladder()
 
 
 class BuildersPanelRenderTest(BuildersPanelTestCase):
@@ -63,6 +65,9 @@ class BuildersPanelRenderTest(BuildersPanelTestCase):
         assert reverse("admin_tradition_slate_pick") in body
         assert reverse("admin_upbringing_builder_pick") in body
         assert reverse("admin_upbringing_builder_new") in body
+        assert reverse("admin_soulfray_builder_pick") in body
+        assert f'value="{self.ladder.stages[0].pk}"' in body
+        assert "1. Fraying" in body
 
     def test_panel_absent_when_setup_required(self):
         self.client.force_login(self.unlinked)
@@ -89,14 +94,14 @@ class BuildersPanelRenderTest(BuildersPanelTestCase):
 class BuildersContextQueryCountTest(BuildersPanelTestCase):
     """``_builders_context()`` stays at one query per option list (#3675 review).
 
-    Four lists, four queries: distinctions, beginnings, upbringings (one query
+    Five lists, five queries: distinctions, beginnings, upbringings (one query
     even with the ``select_related("beginning")`` label-building comprehension),
-    and the glimpse tag count. A regression here is an N+1 hiding behind the
-    docstring's "one query each" claim.
+    the Soulfray stages (#4089), and the glimpse tag count. A regression here is
+    an N+1 hiding behind the docstring's "one query each" claim.
     """
 
-    def test_builders_context_runs_four_queries(self):
-        with self.assertNumQueries(4):
+    def test_builders_context_runs_five_queries(self):
+        with self.assertNumQueries(5):
             _builders_context()
 
 
@@ -228,3 +233,11 @@ class BuildersPanelStylingTest(BuildersPanelTestCase):
             token for token in emitted - self.ADMIN_PROVIDED_CLASSES if f".{token}" not in css
         )
         assert not undefined, f"class hooks with no CSS rule reaching the page: {undefined}"
+
+
+class SoulfrayBuilderPickFromPanelTest(BuildersPanelTestCase):
+    def test_redirects_to_the_builder(self):
+        self.client.force_login(self.author)
+        stage = self.ladder.stages[1]
+        resp = self.client.get(reverse("admin_soulfray_builder_pick"), {"pk": stage.pk})
+        assert resp["Location"] == reverse("admin_soulfray_builder", args=[stage.pk])

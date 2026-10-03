@@ -7,6 +7,7 @@ from django.contrib import admin
 from world.contributors.admin import CREDIT_FIELDSET
 from world.species.models import (
     Language,
+    LanguageTrainingConfig,
     Species,
     SpeciesGiftGrant,
     SpeciesStatBonus,
@@ -117,3 +118,10 @@ class LanguageAdmin(admin.ModelAdmin):
     list_display = ["name"]
     search_fields = ["name", "description"]
     ordering = ["name"]
+
+
+@admin.register(LanguageTrainingConfig)
+class LanguageTrainingConfigAdmin(admin.ModelAdmin):
+    """Singleton tuning for weekly language training (#4090)."""
+
+    list_display = ["__str__", "teacher_dp_per_session", "self_study_dp_per_session"]

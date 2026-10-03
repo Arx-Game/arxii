@@ -785,6 +785,49 @@ Audere into the moment a character's magic reaches powers otherwise out of reach
 
 ---
 
+## Soulfray Stage Builder (#4089, BUILT 2026-10-03)
+
+Authoring a Soulfray stage's consequences meant hand-editing a `ConditionStage` change
+form, its separate consequence pool, and each consequence's own change form - no single
+page, and nothing told staff a stage had nothing to draw or that no stage could kill.
+
+**Built:**
+- `soulfray_ladder_summary()` (`world/magic/services/soulfray.py`) resolves every
+  Soulfray stage's EFFECTIVE consequences (own pool entries merged with a shared
+  parent's) in two queries; `soulfray_stages()`/`is_soulfray_stage()` are the shared
+  lookups; `nonlethal_ceiling_for(summaries)` is the pure non-lethal cap formula. The
+  admin page, the Required-content probes, and the game's own non-lethal cap all read
+  this one call, so they can never disagree.
+- **Fixed:** the non-lethal cap and the safety checkpoint's death warning used to read a
+  stage's own pool entries only; a `character_loss` row inherited from a shared parent
+  pool was drawn by a lethal cast but never capped for a non-lethal one, and the
+  checkpoint never warned of it. Both now read the merged, effective consequences.
+- **The Soulfray Stage Builder** (`src/web/admin/soulfray_builder/`) - one page per stage:
+  its own fields, on-entry conditions, resilience-check penalty, consequence pool (own
+  rows plus an optional one-level-deep shared parent), every row ("What the roll can
+  draw"), and each own row's effects, saved in one transaction and credited. "Copy rows
+  from &lt;stage&gt;" prefills a new stage from a neighbor's own rows. Two
+  Required-content rows ("Soulfray stage consequence pools", "Some Soulfray stage can
+  kill") link straight into the stage with the gap.
+- **The outcome wheel reaches Soulfray.** A dramatic stage draw (any option ticked
+  `theater` or Can-kill) now spins the same #924 roulette wheel every other dramatic
+  check outcome does, built from the drawn tier's UNFILTERED options so a row a
+  non-lethal cast's own filter removed still shows and is spun past; delivered to the
+  caster only, after the triggering action's own wheel(s) on the scene path, never to
+  telnet.
+- **ADR-4089-A** records that the Crossing gate's climax comes from the encounter's
+  intensity, never from a Required-content row demanding authored high-tier threat
+  content; **ADR-4089-B** records the wheel rules above.
+- The `AudereMajoraThreshold.minimum_warp_stage` picker (form, admin formfield, and
+  autocomplete) now offers Soulfray stages only - a non-Soulfray pick there was always a
+  content error, since the Crossing gate compares the caster's Soulfray stage order
+  against it.
+
+Full record: `docs/systems/magic.md`'s "Soulfray" section; `src/web/admin/CLAUDE.md`'s
+"Soulfray Stage Builder" section; ADR-4089-A and ADR-4089-B.
+
+---
+
 ## GM narration of mechanical events (#4101, BUILT)
 
 Audere surges and Audere Majora Crossings used to resolve their authored text as a flat

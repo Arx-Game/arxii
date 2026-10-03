@@ -28,6 +28,7 @@ _KEY_ID = "id"
 _KEY_CLASS = "class"
 _KEY_THREAD = "thread"
 _KEY_LEVEL = "level"
+_KEY_LANGUAGE = "language"
 
 # Number of recent XPTransaction rows shown on the ``progression unlocks`` listing (#2122).
 _RECENT_XP_TRANSACTION_COUNT = 5
@@ -49,6 +50,7 @@ _OPERATION_REMOVE = "remove"
 _UNLOCK_TYPE_CLASS_LEVEL = "class_level"
 _UNLOCK_TYPE_THREAD_XP_LOCK = "thread_xp_lock"
 _UNLOCK_TYPE_SKILL_BREAKTHROUGH = "skill_breakthrough"
+_UNLOCK_TYPE_LANGUAGE_BREAKTHROUGH = "language_breakthrough"
 
 # Keys returned by get_available_unlocks_for_character.
 _AVAILABLE_KEY = "available"
@@ -249,13 +251,14 @@ class CmdProgressionUnlock(DispatchCommand):
     """Browse and purchase progression unlocks with XP.
 
     Usage:
-        progression unlocks             - list available class-level, thread XP-lock, and
-                                           skill-breakthrough unlocks
+        progression unlocks             - list available class-level, thread XP-lock,
+                                           skill-breakthrough, and language-breakthrough unlocks
         progression unlock class=<id>   - purchase a class-level unlock
         progression unlock thread=<id> level=<n>
                                         - purchase a thread XP-lock boundary
         progression unlock skill=<id>   - purchase a skill breakthrough (clears an XP-boundary
                                            plateau so training resumes; #2115)
+        progression unlock language=<id>   - purchase a language breakthrough (#4090)
     """
 
     key = "progression"
@@ -278,7 +281,7 @@ class CmdProgressionUnlock(DispatchCommand):
         if self._subverb != _SUBVERB_UNLOCK:
             self.msg(
                 "Unknown progression command. Try: unlocks, unlock class=<id>, "
-                "unlock thread=<id> level=<n>."
+                "unlock thread=<id> level=<n>, unlock skill=<id>, unlock language=<id>."
             )
             return
 
@@ -296,11 +299,12 @@ class CmdProgressionUnlock(DispatchCommand):
         class_id = parsed.get(_KEY_CLASS)
         thread_id = parsed.get(_KEY_THREAD)
         skill_id = parsed.get(_KEY_SKILL)
+        language_id = parsed.get(_KEY_LANGUAGE)
         level = parsed.get(_KEY_LEVEL)
 
-        provided_count = sum(x is not None for x in (class_id, thread_id, skill_id))
+        provided_count = sum(x is not None for x in (class_id, thread_id, skill_id, language_id))
         if provided_count > 1:
-            msg = "Provide exactly one of class=<id>, thread=<id>, or skill=<id>."
+            msg = "Provide exactly one of class=<id>, thread=<id>, skill=<id>, or language=<id>."
             raise CommandError(msg)
 
         if class_id is not None:
@@ -319,7 +323,12 @@ class CmdProgressionUnlock(DispatchCommand):
                 "unlock_type": _UNLOCK_TYPE_SKILL_BREAKTHROUGH,
                 "skill_id": _require_positive_int(skill_id, _KEY_SKILL),
             }
-        msg = "Provide class=<id>, thread=<id> level=<n>, or skill=<id>."
+        if language_id is not None:
+            return {
+                "unlock_type": _UNLOCK_TYPE_LANGUAGE_BREAKTHROUGH,
+                "language_id": _require_positive_int(language_id, _KEY_LANGUAGE),
+            }
+        msg = "Provide class=<id>, thread=<id> level=<n>, skill=<id>, or language=<id>."
         raise CommandError(msg)
 
     def _show_listing(self) -> None:
@@ -343,6 +352,8 @@ class CmdProgressionUnlock(DispatchCommand):
         if sheet is not None:
             lines.extend(self._render_thread_unlocks(sheet, has_entries=bool(entries)))
         lines.extend(self._render_skill_breakthroughs(character, has_entries=bool(entries)))
+        if sheet is not None:
+            lines.extend(self._render_language_breakthroughs(sheet))
 
         self.msg("\n".join(lines))
 
@@ -444,4 +455,20 @@ class CmdProgressionUnlock(DispatchCommand):
                 lines.append(
                     f"[skill] {prospect.skill.name} at threshold {rating}: not yet authored"
                 )
+        return lines
+
+    def _render_language_breakthroughs(self, sheet: Any) -> list[str]:
+        """Rendered lines for languages parked at an XP lock (#4090)."""
+        from world.species.language_progression import languages_at_lock  # noqa: PLC0415
+
+        prospects = languages_at_lock(sheet)
+        if not prospects:
+            return []
+        lines = ["", "Language breakthroughs:"]
+        for prospect in prospects:
+            language_name = prospect.language.name
+            lines.append(
+                f"[language] {language_name} breakthrough to "
+                f"{prospect.next_rating}: {prospect.xp_cost} XP"
+            )
         return lines

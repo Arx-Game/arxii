@@ -276,6 +276,31 @@ class CmdProgressionUnlockListTests(TestCase):
                 _make_progression_cmd(self.character, "unlocks").func()
         self.character.msg.assert_called_once()
 
+    def test_bare_unlocks_lists_language_breakthroughs(self) -> None:
+        """``progression unlocks`` lists languages parked at an XP lock (#4090)."""
+        from world.species.factories import LanguageFactory
+        from world.species.types import LanguageBreakthroughProspect
+
+        language = LanguageFactory()
+        prospect = LanguageBreakthroughProspect(language=language, next_rating=30, xp_cost=60)
+
+        with (
+            patch(
+                "world.progression.services.spends.get_available_unlocks_for_character",
+                return_value={"available": [], "locked": []},
+            ),
+            patch("world.magic.services.threads.near_xp_lock_threads", return_value=[]),
+            patch("world.skills.services.skills_at_boundary", return_value=[]),
+            patch(
+                "world.species.language_progression.languages_at_lock",
+                return_value=[prospect],
+            ),
+        ):
+            _make_progression_cmd(self.character).func()
+
+        sent = "\n".join(str(c.args[0]) for c in self.character.msg.call_args_list)
+        self.assertIn(f"[language] {language.name} breakthrough to 30: 60 XP", sent)
+
 
 class CmdProgressionUnlockXPBalanceTests(TestCase):
     """``progression unlocks`` shows the caller's XP balance + recent transactions (#2122)."""
@@ -407,6 +432,16 @@ class CmdProgressionUnlockDispatchTests(TestCase):
         self.assertEqual(ref.registry_key, "purchase_unlock")
         self.assertEqual(kwargs["unlock_type"], "skill_breakthrough")
         self.assertEqual(kwargs["skill_id"], 9)
+
+    @patch("commands.command.dispatch_player_action")
+    def test_unlock_language_dispatches_language_breakthrough_kwargs(self, mock_dispatch):
+        """``progression unlock language=<id>`` dispatches language_breakthrough (#4090)."""
+        mock_dispatch.return_value = self.success_result
+        _make_progression_cmd(self.character, "unlock language=4").func()
+        _, ref, kwargs = mock_dispatch.call_args.args
+        self.assertEqual(ref.registry_key, "purchase_unlock")
+        self.assertEqual(kwargs["unlock_type"], "language_breakthrough")
+        self.assertEqual(kwargs["language_id"], 4)
 
     @patch("commands.command.dispatch_player_action")
     def test_failure_message_surfaces_to_caller(self, mock_dispatch):

@@ -1,0 +1,7 @@
+{% comment %}
+"+ effect" in a row's Effects cell. It opens that row's effect editor, which sits in
+the full-width row below (`_effect_editor_row.html`) so the editor never squeezes
+into this narrow cell or scrolls the table sideways (#4089 F8). Takes `formset`.
+{% endcomment %}
+<button type="button" class="sf-effect-toggle" aria-expanded="{% if formset.total_error_count %}true{% else %}false{% endif %}"
+        aria-controls="effect-editor-{{ formset.prefix }}">+ effect</button>

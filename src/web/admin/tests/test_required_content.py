@@ -388,28 +388,136 @@ class TestRealDeclarations(TestCase):
 
 
 class TestSoulfrayStagePoolProbe(TestCase):
-    """Both directions: a stage without a pool must flip the probe."""
+    """A stage counts as missing with no pool OR a pool that draws nothing (#4089)."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        from world.conditions.factories import ConditionStageFactory
+        from world.magic.audere import SOULFRAY_CONDITION_NAME
+
+        cls.template = ConditionTemplateFactory(name=SOULFRAY_CONDITION_NAME, has_progression=True)
+        cls.stage = ConditionStageFactory(
+            condition=cls.template, stage_order=1, name="Fraying", severity_threshold=1
+        )
 
     def test_missing_when_a_stage_has_no_pool(self) -> None:
-        from world.conditions.factories import ConditionStageFactory
-        from world.magic.audere import SOULFRAY_CONDITION_NAME
-
-        template = ConditionTemplateFactory(name=SOULFRAY_CONDITION_NAME)
-        ConditionStageFactory(condition=template, stage_order=1, consequence_pool=None)
         result = rc._probe_soulfray_stage_pools()
         self.assertFalse(result.present)
+        self.assertEqual(result.missing, ("Fraying",))
 
-    def test_present_when_every_stage_has_a_pool(self) -> None:
+    def test_missing_when_a_stages_pool_is_empty(self) -> None:
         from actions.factories import ConsequencePoolFactory
+
+        self.stage.consequence_pool = ConsequencePoolFactory()
+        self.stage.save(update_fields=["consequence_pool"])
+        result = rc._probe_soulfray_stage_pools()
+        self.assertFalse(result.present)
+        self.assertIn("a pool with no consequences in it", result.detail)
+
+    def test_missing_when_the_child_excludes_every_parent_row(self) -> None:
+        from actions.factories import ConsequencePoolEntryFactory, ConsequencePoolFactory
+
+        parent = ConsequencePoolFactory()
+        entry = ConsequencePoolEntryFactory(pool=parent)
+        child = ConsequencePoolFactory(parent=parent)
+        ConsequencePoolEntryFactory(pool=child, consequence=entry.consequence, is_excluded=True)
+        self.stage.consequence_pool = child
+        self.stage.save(update_fields=["consequence_pool"])
+        self.assertFalse(rc._probe_soulfray_stage_pools().present)
+
+    def test_present_when_every_stage_draws_something(self) -> None:
+        from actions.factories import ConsequencePoolEntryFactory
+
+        entry = ConsequencePoolEntryFactory()
+        self.stage.consequence_pool = entry.pool
+        self.stage.save(update_fields=["consequence_pool"])
+        self.assertTrue(rc._probe_soulfray_stage_pools().present)
+
+    def test_missing_when_soulfray_has_no_stages(self) -> None:
+        from world.conditions.models import ConditionStage
+
+        ConditionStage.objects.filter(pk=self.stage.pk).delete()
+        self.assertFalse(rc._probe_soulfray_stage_pools().present)
+
+
+class TestSoulfrayDeathRiskProbe(TestCase):
+    """Some Soulfray stage's effective pool holds a character_loss row (#4089)."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        from actions.factories import ConsequencePoolEntryFactory, ConsequencePoolFactory
         from world.conditions.factories import ConditionStageFactory
         from world.magic.audere import SOULFRAY_CONDITION_NAME
 
-        template = ConditionTemplateFactory(name=SOULFRAY_CONDITION_NAME)
+        template = ConditionTemplateFactory(name=SOULFRAY_CONDITION_NAME, has_progression=True)
+        cls.parent = ConsequencePoolFactory(name="Soulfray - common")
+        cls.pool = ConsequencePoolFactory(name="Soulfray - Unravelling", parent=cls.parent)
+        ConsequencePoolEntryFactory(pool=cls.pool)
         ConditionStageFactory(
-            condition=template, stage_order=1, consequence_pool=ConsequencePoolFactory()
+            condition=template,
+            stage_order=5,
+            name="Unravelling",
+            severity_threshold=66,
+            consequence_pool=cls.pool,
         )
-        result = rc._probe_soulfray_stage_pools()
-        self.assertTrue(result.present)
+
+    def test_missing_when_no_row_can_kill(self) -> None:
+        result = rc._probe_soulfray_death_risk()
+        self.assertFalse(result.present)
+        self.assertIn("Can kill", result.detail)
+
+    def test_present_when_a_stage_pool_holds_a_lethal_row(self) -> None:
+        from actions.factories import ConsequencePoolEntryFactory
+        from world.checks.factories import ConsequenceFactory
+
+        ConsequencePoolEntryFactory(
+            pool=self.pool, consequence=ConsequenceFactory(character_loss=True)
+        )
+        self.assertTrue(rc._probe_soulfray_death_risk().present)
+
+    def test_present_when_the_lethal_row_comes_from_the_parent_pool(self) -> None:
+        from actions.factories import ConsequencePoolEntryFactory
+        from world.checks.factories import ConsequenceFactory
+
+        ConsequencePoolEntryFactory(
+            pool=self.parent, consequence=ConsequenceFactory(character_loss=True)
+        )
+        self.assertTrue(rc._probe_soulfray_death_risk().present)
+
+    def test_declared_as_required(self) -> None:
+        dependency = next(d for d in rc._declarations() if d.key == "soulfray-death-risk")
+        self.assertEqual(dependency.tier, rc.DependencyTier.REQUIRED)
+        self.assertEqual(dependency.label, "Some Soulfray stage can kill")
+
+
+class TestSoulfrayRowsLinkToTheBuilder(TestCase):
+    """Both Soulfray rows link into the Soulfray Stage Builder (#4089)."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        from web.admin.tests.soulfray_ladder import build_ladder
+
+        cls.ladder = build_ladder()
+
+    @staticmethod
+    def _row(key: str) -> rc.DependencyRow:
+        dependency = next(d for d in rc._declarations() if d.key == key)
+        return rc.DependencyRow(dependency=dependency, result=dependency.probe.resolve(None))
+
+    def test_pools_row_opens_the_first_stage_missing_a_pool(self) -> None:
+        from django.urls import reverse
+
+        self.assertEqual(
+            self._row("soulfray-stage-pools").admin_url,
+            reverse("admin_soulfray_builder", args=[self.ladder.stages[0].pk]),
+        )
+
+    def test_death_risk_row_opens_the_builder(self) -> None:
+        from django.urls import reverse
+
+        self.assertEqual(
+            self._row("soulfray-death-risk").admin_url, reverse("admin_soulfray_builder_index")
+        )
 
 
 class TestSurroundedConditionBundleProbe(TestCase):
@@ -846,6 +954,29 @@ class TestRequiredContentPanelRendersDependencyDetail(DeclarationPatchMixin, Tes
             "Nothing missing. Every required content dependency resolved against this database.",
             body,
         )
+
+    def test_the_present_summary_counts_both_tiers(self) -> None:
+        """The summary once read "0 dependencies present" whatever was present: a
+        filter chain cannot add two lengths in one expression."""
+        from django.urls import reverse
+
+        present = rc.CustomProbe(fn=lambda: rc.ProbeResult(present=True))
+        required = self._dependency(present, "count-required")
+        tuning = rc.ContentDependency(
+            key="count-tuning",
+            label="Tuning sentinel",
+            tier=rc.DependencyTier.TUNING,
+            consumer=self.CONSUMER,
+            consequence=self.CONSEQUENCE,
+            probe=present,
+        )
+
+        self.client.force_login(self.super)
+        with self.patch_declarations((required, tuning)):
+            resp = self.client.get(reverse("admin_ops_required_content"))
+
+        body = " ".join(resp.content.decode().split())
+        self.assertIn("2 dependencies present", body)
 
 
 class TestTraditionStandardLinesProbes(TestCase):

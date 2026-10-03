@@ -26,6 +26,12 @@ from world.magic.factories import (
 )
 from world.magic.models.techniques import ConditionTargetKind
 from world.magic.services.condition_application import apply_technique_conditions
+from world.mechanics.models import ModifierTarget
+from world.species.factories import (
+    make_language_with_target,
+    make_understanding_condition,
+)
+from world.species.language_services import comprehension_value
 
 
 class ApplyTechniqueConditionsEmptyTest(TestCase):
@@ -750,3 +756,33 @@ class RemoveTechniqueConditionsTest(TestCase):
         self.assertEqual(len(result), 1)
         self.assertTrue(result[0].success)
         mock_check.assert_not_called()
+
+
+@tag("postgres")
+class TechniqueAppliedUnderstandingTests(TestCase):
+    """#4090: a cast-applied understanding condition raises comprehension like a GM's."""
+
+    def test_cast_applied_condition_raises_comprehension_like_gm(self) -> None:
+        ModifierTarget.clear_trait_cache()
+        language, target = make_language_with_target("CastCompTongue")
+        condition = make_understanding_condition("Placeholder Cast Understanding", target)
+        sheet = CharacterSheetFactory()
+        room = ObjectDBFactory(db_key="CastCompRoom", db_typeclass_path="typeclasses.rooms.Room")
+        sheet.character.location = room
+        sheet.character.save()
+        technique = TechniqueFactory(gift=GiftFactory())
+        TechniqueAppliedConditionFactory(
+            technique=technique,
+            condition=condition,
+            target_kind=ConditionTargetKind.SELF,
+            minimum_success_level=1,
+            base_severity=4,
+        )
+        apply_technique_conditions(
+            technique=technique,
+            success_level=1,
+            eff_intensity=0,
+            targets_by_kind={ConditionTargetKind.SELF: [sheet.character]},
+            source_character=sheet.character,
+        )
+        self.assertEqual(comprehension_value(sheet, language), 80)

@@ -195,6 +195,8 @@ CONFIG_TABLE_MODELS = (
     "MantleLevelDefinition",
     # world/justice/models.py
     "SentenceLadderRung",
+    # world/species/models.py
+    "LanguageTrainingConfig",
 )
 
 

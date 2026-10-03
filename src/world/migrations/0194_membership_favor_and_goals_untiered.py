@@ -4,7 +4,7 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-    dependencies = [("arxii", "0192_gmprompt_subject_persona")]
+    dependencies = [("arxii", "0193_languagetrainingconfig_and_more")]
 
     operations = [
         migrations.RemoveField(

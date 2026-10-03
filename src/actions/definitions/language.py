@@ -6,7 +6,8 @@ already knows the tongue (fluency >= 1). ``TrainLanguageAction`` is the
 weekly-gated dp-award session, mirroring ``TrainTechniqueAction``'s
 teacher-vs-self-study split (`technique_training.py`) but against the
 cumulative ``DevelopmentPoints``/``CharacterTraitValue`` fluency track instead
-of a meter.
+of a meter. Session dp rates come from ``LanguageTrainingConfig``
+(`world.species.language_progression.get_language_training_config`).
 """
 
 from __future__ import annotations
@@ -23,11 +24,6 @@ if TYPE_CHECKING:
 
     from actions.types import ActionContext
     from world.species.models import Language
-
-# PLACEHOLDER tuning values (#2993) -- Apostate's ratified defaults, pending a
-# real balance pass once language training sees play.
-TEACHER_DP_PER_SESSION = 15
-SELF_STUDY_DP_PER_SESSION = 8
 
 
 def _co_present_fluent_teacher(
@@ -182,11 +178,16 @@ class TrainLanguageAction(Action):
                 ),
             )
 
+        from world.species.language_progression import (  # noqa: PLC0415
+            get_language_training_config,
+        )
+
+        config = get_language_training_config()
         if teacher is not None:
-            amount = TEACHER_DP_PER_SESSION
+            amount = config.teacher_dp_per_session
             source = DevelopmentSource.TRAINING
         else:
-            amount = SELF_STUDY_DP_PER_SESSION
+            amount = config.self_study_dp_per_session
             source = DevelopmentSource.PRACTICE
 
         dev_tracker, _created = DevelopmentPoints.objects.get_or_create(
@@ -204,11 +205,25 @@ class TrainLanguageAction(Action):
             description=f"Language training: {amount} dp for {language.name}",
         )
 
+        from world.species.language_progression import language_lock_rating  # noqa: PLC0415
+
+        breakthrough_rating = language_lock_rating(sheet, language)
         mode = "with a teacher" if teacher is not None else "through self-study"
-        message = f"You study {language.name} {mode}, gaining {amount} development points."
+        if breakthrough_rating is not None and not level_ups:
+            # Parked at an authored XP lock: the session's dp dissipated in
+            # award_points, so the message says what skills say at a plateau
+            # (world.skills.services._boundary_message) instead of claiming a gain.
+            message = f"You study {language.name} {mode}."
+        else:
+            message = f"You study {language.name} {mode}, gaining {amount} development points."
         if level_ups:
             _old_level, new_level = level_ups[-1]
             message += f" Your fluency deepens to {new_level}."
+        if breakthrough_rating is not None:
+            message += (
+                f" Your {language.name} is at threshold {breakthrough_rating}: training "
+                "maintains, does not advance until the breakthrough is unlocked."
+            )
 
         return ActionResult(
             success=True,
@@ -218,5 +233,6 @@ class TrainLanguageAction(Action):
                 "amount": amount,
                 "self_study": teacher is None,
                 "level_ups": level_ups,
+                "breakthrough_rating": breakthrough_rating,
             },
         )

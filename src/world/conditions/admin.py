@@ -306,6 +306,17 @@ class ConditionStageAdmin(admin.ModelAdmin):
     def has_thumbnail(self, obj):
         return bool(obj.thumbnail)
 
+    def get_search_results(self, request, queryset, search_term):
+        """Autocomplete honours the requesting admin's own narrowed field (#4089): the
+        Majora threshold's warp-stage picker offers Soulfray stages only."""
+        from web.admin.autocomplete import source_field_queryset  # noqa: PLC0415
+
+        queryset, may_have_duplicates = super().get_search_results(request, queryset, search_term)
+        limited = source_field_queryset(request, self.admin_site)
+        if limited is not None:
+            queryset = queryset.filter(pk__in=limited.values("pk"))
+        return queryset, may_have_duplicates
+
 
 # =============================================================================
 # Interaction Admins (for standalone management)
