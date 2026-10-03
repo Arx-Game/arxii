@@ -9,7 +9,7 @@ from evennia.objects.models import ObjectDB
 
 from world.checks.factories import CheckTypeFactory
 from world.combat.aftermath import build_aftermath_digest, render_aftermath_digest
-from world.combat.constants import EncounterOutcome
+from world.combat.constants import EncounterOutcome, OpponentStatus
 from world.combat.factories import (
     CombatEncounterFactory,
     CombatOpponentFactory,
@@ -142,10 +142,12 @@ class WonOverDigestTests(TestCase):
         self.assertTrue(nameless_row.can_bind)
         self.assertFalse(nameless_row.can_settle)
         self.assertTrue(nameless_row.can_send_away)
+        self.assertTrue(nameless_row.bind_window_open)
 
         self.assertTrue(named_row.can_take_into_service)
         self.assertTrue(named_row.can_settle)
         self.assertTrue(named_row.can_send_away)
+        self.assertTrue(named_row.bind_window_open)
 
     def test_can_bind_is_false_once_the_charmer_leaves_the_room(self):
         """#4091 fix round 1: can_bind must use the same bind-window predicate
@@ -190,6 +192,59 @@ class WonOverDigestTests(TestCase):
         self.assertFalse(named_row.can_take_into_service)
         self.assertFalse(named_row.can_send_away)
         self.assertTrue(named_row.can_settle)
+        # bind_window_open is viewer-independent (#4091 demo-fidelity fix) — the
+        # charm window is open for everyone watching, even a viewer who can't
+        # use it themselves (can_bind also requires being the charmer).
+        self.assertTrue(nameless_row.bind_window_open)
+
+    def test_bind_window_open_is_false_for_turned_or_calmed_even_with_the_source_present(self):
+        """#4091 demo-fidelity fix: the web "only <charmer> can bind it" note must
+        gate on `bind_window_open`, not on `verb`/display text — Turned and Calmed
+        never open a bind window (Decision 19, R3 - charm only), no matter how
+        co-located the source is."""
+        turned_template = ConditionTemplateFactory(
+            name="Won-over digest turned",
+            sets_allegiance=Allegiance.TURNED,
+            allegiance_break_check_type=CheckTypeFactory(name="Won-over digest turned break"),
+        )
+        turned_opponent = CombatOpponentFactory(
+            encounter=self.enc, name="Turned Mook", status=OpponentStatus.WON_OVER
+        )
+        turned_opponent.objectdb.location = self.room
+        turned_opponent.objectdb.save()
+        ConditionInstanceFactory(
+            target=turned_opponent.objectdb,
+            condition=turned_template,
+            source_character=self.source,
+        )
+
+        # A fresh calmed opponent (not self.calmed, whose body cleanup already
+        # deleted) -- body present and co-located with the source, same as the
+        # turned one above, isolating the allegiance-kind check from the
+        # deleted-body case `test_deleted_body_row_reports_absent_with_no_actions`
+        # already covers.
+        calmed_opponent = CombatOpponentFactory(
+            encounter=self.enc, name="Freshly Calmed Mook", status=OpponentStatus.WON_OVER
+        )
+        calmed_opponent.objectdb.location = self.room
+        calmed_opponent.objectdb.save()
+        ConditionInstanceFactory(
+            target=calmed_opponent.objectdb,
+            condition=self.calm,
+            source_character=self.source,
+        )
+
+        rows = self._rows_by_opponent(self.pc_a.character_sheet)
+        turned_row = rows[turned_opponent.pk]
+        calmed_row = rows[calmed_opponent.pk]
+
+        self.assertEqual(turned_row.verb, "turned")
+        self.assertFalse(turned_row.bind_window_open)
+        self.assertFalse(turned_row.can_bind)
+
+        self.assertEqual(calmed_row.verb, "calmed")
+        self.assertFalse(calmed_row.bind_window_open)
+        self.assertFalse(calmed_row.can_bind)
 
     def test_render_includes_won_over_line_with_source_and_duration(self):
         digest = build_aftermath_digest(self.enc, self.pc_a)
@@ -213,6 +268,7 @@ class WonOverDigestTests(TestCase):
         self.assertTrue(named["can_settle"])
         self.assertIsNotNone(named["condition"])
         self.assertEqual(named["source_label"], "Wren's Velvet Bond")
+        self.assertTrue(named["bind_window_open"])
 
     def test_cleaned_up_calmed_mook_still_reaches_web_and_telnet_digests(self):
         """#4091 final review: cleanup deletes the calmed body (cascading its Calm
@@ -246,6 +302,7 @@ class WonOverDigestTests(TestCase):
             self.assertFalse(row.can_take_into_service)
             self.assertFalse(row.can_send_away)
             self.assertFalse(row.can_settle)
+            self.assertFalse(row.bind_window_open)
 
     def test_can_take_into_service_is_false_once_the_charmer_leaves_the_room(self):
         """#4091 final review: the flag uses the same presence+hold predicate as the
@@ -274,3 +331,4 @@ class WonOverDigestTests(TestCase):
             self.assertFalse(row.can_take_into_service)
             self.assertFalse(row.can_send_away)
             self.assertFalse(row.can_settle)
+            self.assertFalse(row.bind_window_open)

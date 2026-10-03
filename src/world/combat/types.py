@@ -478,6 +478,15 @@ class WonOverRow:
     the viewer to be the one who charmed this NPC; ``can_send_away`` requires
     only that the viewer applied the designating instance (any verb);
     ``can_settle`` (ruling R2) depends only on the opponent's own state.
+    ``bind_window_open`` is viewer-independent (unlike ``can_bind``, which also
+    requires the viewer to be the charmer): it is Decision 19's own predicate
+    (``_window_open``), true only when the designating hold is the charm kind
+    (``Allegiance.ALLY_OF_CASTER`` — never Turned or Calmed) AND its source is
+    still in the room. A web surface that wants to say "only the charmer can
+    bind this" to a non-charmer viewer must gate on this flag, not on
+    ``verb``/display text, which says nothing about whether the window is even
+    open (#4091 demo-fidelity fix: the note previously showed on nameless
+    Turned/Calmed rows too, where no viewer can ever bind).
     """
 
     opponent_id: int
@@ -494,6 +503,7 @@ class WonOverRow:
     can_take_into_service: bool
     can_send_away: bool
     can_settle: bool
+    bind_window_open: bool
 
 
 @dataclass(frozen=True)

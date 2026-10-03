@@ -48870,6 +48870,7 @@ export interface components {
       can_take_into_service: boolean;
       can_send_away: boolean;
       can_settle: boolean;
+      bind_window_open: boolean;
     };
     /** @description One AmbientEmoteCondition leaf, nested in a room-detail ambient line (#3477). */
     WorldBuilderAmbientCondition: {

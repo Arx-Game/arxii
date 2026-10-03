@@ -361,6 +361,15 @@ def won_over_rows(
             if body is not None and (current.condition.is_visible_to_others or is_source)
             else None
         )
+        # Decision 19: the same bind-window predicate telnet's `companion promote`
+        # and `promote_summon_to_companion` consult (#4091 fix round 1) — a charm
+        # alone is not enough; the charmer must still be in the room. Reuses the
+        # snapshot's instances to stay batched. Computed once and exposed on the
+        # row as `bind_window_open` (viewer-independent, unlike `can_bind`) so a
+        # web surface can tell "nobody can bind this" (Turned/Calmed, or the
+        # charmer left) from "someone else charmed it" without matching on verb
+        # text (#4091 demo-fidelity fix round).
+        window_open = body is not None and _window_open(opponent, instances)
 
         rows.append(
             WonOverRow(
@@ -374,13 +383,7 @@ def won_over_rows(
                 condition=visible_condition,
                 holds_until_settled=current.condition.default_duration_type == DurationType.ROUNDS,
                 strength=current.effective_severity,
-                # Decision 19: the same bind-window predicate telnet's `companion
-                # promote` and `promote_summon_to_companion` consult (#4091 fix
-                # round 1) — a charm alone is not enough; the charmer must still
-                # be in the room. Reuses the snapshot's instances to stay batched.
-                can_bind=body is not None
-                and charmer_is_viewer
-                and _window_open(opponent, instances),
+                can_bind=window_open and charmer_is_viewer,
                 # The ONE shared presence+hold predicate (``actor_holds_sway_present``)
                 # also used by the persona menu, telnet and the action prerequisites
                 # (#4091 task 12; take-into-service gated the same way in the final
@@ -400,6 +403,7 @@ def won_over_rows(
                     )
                 ),
                 can_settle=body is not None and persona_id is not None and present,
+                bind_window_open=window_open,
             )
         )
     return rows

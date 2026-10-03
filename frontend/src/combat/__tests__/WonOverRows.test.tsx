@@ -122,6 +122,7 @@ const baseRow: WonOverRow = {
   can_take_into_service: false,
   can_send_away: true,
   can_settle: false,
+  bind_window_open: true,
 };
 
 describe('WonOverRows', () => {
@@ -210,6 +211,42 @@ describe('WonOverRows', () => {
     expect(screen.getByTestId('won-over-charmer-note-7')).toHaveTextContent(
       'only Wren can bind it'
     );
+  });
+
+  it('shows no charmer note on a nameless Turned row, even though can_bind is also false there', () => {
+    renderWithProviders(
+      <WonOverRows
+        rows={[
+          {
+            ...baseRow,
+            verb: 'turned',
+            can_bind: false,
+            // Turned never opens a bind window (charm-only, Decision 19/R3) --
+            // this must be what gates the note, not can_bind alone and never
+            // verb/display text.
+            bind_window_open: false,
+          },
+        ]}
+        characterId={42}
+        sceneId="1"
+      />
+    );
+
+    expect(screen.queryByText('Bind as companion')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('won-over-charmer-note-7')).not.toBeInTheDocument();
+  });
+
+  it('shows no charmer note on a nameless Calmed row, even though can_bind is also false there', () => {
+    renderWithProviders(
+      <WonOverRows
+        rows={[{ ...baseRow, verb: 'calmed', can_bind: false, bind_window_open: false }]}
+        characterId={42}
+        sceneId="1"
+      />
+    );
+
+    expect(screen.queryByText('Bind as companion')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('won-over-charmer-note-7')).not.toBeInTheDocument();
   });
 
   it('Send away dispatches send_away with the opponent id and invalidates the combat cache', async () => {

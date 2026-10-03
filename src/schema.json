@@ -87466,7 +87466,10 @@ components:
           type: boolean
         can_settle:
           type: boolean
+        bind_window_open:
+          type: boolean
       required:
+      - bind_window_open
       - can_bind
       - can_send_away
       - can_settle

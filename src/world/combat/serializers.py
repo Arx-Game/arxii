@@ -383,6 +383,7 @@ class WonOverRowSerializer(serializers.Serializer):
     can_take_into_service = serializers.BooleanField()
     can_send_away = serializers.BooleanField()
     can_settle = serializers.BooleanField()
+    bind_window_open = serializers.BooleanField()
 
 
 class AftermathDigestSerializer(serializers.Serializer):

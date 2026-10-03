@@ -242,8 +242,14 @@ function WonOverRowItem({
   const showSettle = row.can_settle && !row.nameless && sceneId != null;
   const showStrikeFirstHint = !row.nameless;
   // A nameless row someone else charmed: still bindable in principle, just
-  // not by this viewer.
-  const showCharmerNote = row.nameless && !row.can_bind;
+  // not by this viewer. Gated on `bind_window_open` (viewer-independent: true
+  // only for the charm kind, ALLY_OF_CASTER, with its source still in the
+  // room) rather than `can_bind` alone -- `can_bind` is False for every
+  // viewer on a Turned or Calmed row too (bind only exists for a charm), and
+  // matching on `verb`/display text is exactly what this must not do
+  // (demo-fidelity fix: the note previously showed on nameless Turned/Calmed
+  // rows, where no viewer can ever bind).
+  const showCharmerNote = row.nameless && !row.can_bind && row.bind_window_open;
 
   const conditionLabel = row.condition?.name ?? capitalize(row.verb);
   const hasStages = row.condition?.total_stages != null && row.condition?.stage_order != null;
