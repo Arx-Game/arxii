@@ -75420,11 +75420,12 @@ components:
       description: |-
         Discriminated list item for purchasable progression unlocks.
 
-        Three ``unlock_type`` variants are supported:
+        Four ``unlock_type`` variants are supported:
 
         - ``class_level`` — purchase a class/level unlock with XP.
         - ``thread_xp_lock`` — purchase the next XP-locked boundary on a thread.
         - ``skill_breakthrough`` — purchase a skill's XP-boundary breakthrough (#2115).
+        - ``language_breakthrough`` — purchase a language's XP-boundary breakthrough (#4090).
       properties:
         unlock_type:
           type: string
@@ -75473,12 +75474,16 @@ components:
         skill_id:
           type: integer
           nullable: true
+        language_id:
+          type: integer
+          nullable: true
       required:
       - boundary_level
       - class_level_unlock_id
       - class_name
       - dev_points_to_boundary
       - display_name
+      - language_id
       - locked_reason
       - requirements_met
       - skill_id
@@ -75754,6 +75759,9 @@ components:
         skill_id:
           type: integer
           nullable: true
+        language_id:
+          type: integer
+          nullable: true
       required:
       - unlock_type
     PurchaseUnlockResponse:
@@ -75775,6 +75783,9 @@ components:
           type: integer
           nullable: true
         skill_id:
+          type: integer
+          nullable: true
+        language_id:
           type: integer
           nullable: true
       required:
@@ -86582,11 +86593,13 @@ components:
       - class_level
       - thread_xp_lock
       - skill_breakthrough
+      - language_breakthrough
       type: string
       description: |-
         * `class_level` - Class Level
         * `thread_xp_lock` - Thread XP Lock
         * `skill_breakthrough` - Skill Breakthrough
+        * `language_breakthrough` - Language Breakthrough
     UnreadMailCount:
       type: object
       description: Response shape for ``PlayerMailViewSet.unread_count`` -- schema

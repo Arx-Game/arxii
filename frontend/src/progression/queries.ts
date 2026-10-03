@@ -40,13 +40,18 @@ export function useClaimKudosMutation() {
 // Unlock shop (#3045)
 // ---------------------------------------------------------------------------
 
-export const progressionUnlocksKey = (
-  unlockType?: 'class_level' | 'thread_xp_lock' | 'skill_breakthrough'
-) => ['progression-unlocks', unlockType ?? 'all'];
+export type UnlockType =
+  | 'class_level'
+  | 'thread_xp_lock'
+  | 'skill_breakthrough'
+  | 'language_breakthrough';
 
-export function useProgressionUnlocksQuery(
-  unlockType?: 'class_level' | 'thread_xp_lock' | 'skill_breakthrough'
-) {
+export const progressionUnlocksKey = (unlockType?: UnlockType) => [
+  'progression-unlocks',
+  unlockType ?? 'all',
+];
+
+export function useProgressionUnlocksQuery(unlockType?: UnlockType) {
   const account = useAccount();
   return useQuery({
     queryKey: progressionUnlocksKey(unlockType),

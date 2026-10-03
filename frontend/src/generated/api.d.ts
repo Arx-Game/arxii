@@ -42972,11 +42972,12 @@ export interface components {
     /**
      * @description Discriminated list item for purchasable progression unlocks.
      *
-     *     Three ``unlock_type`` variants are supported:
+     *     Four ``unlock_type`` variants are supported:
      *
      *     - ``class_level`` — purchase a class/level unlock with XP.
      *     - ``thread_xp_lock`` — purchase the next XP-locked boundary on a thread.
      *     - ``skill_breakthrough`` — purchase a skill's XP-boundary breakthrough (#2115).
+     *     - ``language_breakthrough`` — purchase a language's XP-boundary breakthrough (#4090).
      */
     ProgressionUnlockItem: {
       unlock_type: string;
@@ -42996,6 +42997,7 @@ export interface components {
       thread_target_kind: string | null;
       dev_points_to_boundary: number | null;
       skill_id: number | null;
+      language_id: number | null;
     };
     /**
      * @description Validate a staff-driven promotion/demotion before it reaches ``promote_gm`` (#2000).
@@ -43146,6 +43148,7 @@ export interface components {
       thread_id?: number | null;
       boundary_level?: number | null;
       skill_id?: number | null;
+      language_id?: number | null;
     };
     /** @description Response serializer for a completed unlock purchase. */
     PurchaseUnlockResponse: {
@@ -43155,6 +43158,7 @@ export interface components {
       thread_id?: number | null;
       boundary_level?: number | null;
       skill_id?: number | null;
+      language_id?: number | null;
     };
     /**
      * @description * `militia` - Militia
@@ -48466,9 +48470,14 @@ export interface components {
      * @description * `class_level` - Class Level
      *     * `thread_xp_lock` - Thread XP Lock
      *     * `skill_breakthrough` - Skill Breakthrough
+     *     * `language_breakthrough` - Language Breakthrough
      * @enum {string}
      */
-    UnlockTypeEnum: 'class_level' | 'thread_xp_lock' | 'skill_breakthrough';
+    UnlockTypeEnum:
+      | 'class_level'
+      | 'thread_xp_lock'
+      | 'skill_breakthrough'
+      | 'language_breakthrough';
     /** @description Response shape for ``PlayerMailViewSet.unread_count`` -- schema only, never a model. */
     UnreadMailCount: {
       readonly count: number;

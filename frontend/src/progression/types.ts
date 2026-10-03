@@ -9,7 +9,10 @@ import type { components } from '@/generated/api';
 // world.progression.serializers.unlocks / ProgressionUnlockViewSet.
 // ---------------------------------------------------------------------------
 
-/** A single purchasable unlock row (class_level / thread_xp_lock / skill_breakthrough). */
+/**
+ * A single purchasable unlock row (class_level / thread_xp_lock / skill_breakthrough /
+ * language_breakthrough).
+ */
 export type ProgressionUnlockItem = components['schemas']['ProgressionUnlockItem'];
 export type PaginatedProgressionUnlockItemList =
   components['schemas']['PaginatedProgressionUnlockItemList'];
