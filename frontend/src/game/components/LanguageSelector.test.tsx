@@ -43,7 +43,7 @@ describe('LanguageSelector', () => {
     // Radix leaves `pointer-events: none` on the body while the menu is open.
     const user = userEvent.setup({ pointerEventsCheck: 0 });
     render(<LanguageSelector character="Wren" />);
-    await user.click(screen.getByRole('button', { name: 'Change spoken language' }));
+    await user.click(screen.getByTitle('Change spoken language'));
     expect(screen.getByRole('menuitem', { name: /Arvani/ })).toBeInTheDocument();
     expect(screen.queryByRole('menuitem', { name: /Tongue A/ })).not.toBeInTheDocument();
   });
