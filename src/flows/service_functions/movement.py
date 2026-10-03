@@ -142,9 +142,9 @@ def traverse_exit(
         **kwargs: Additional keyword arguments.
 
     Raises:
-        CommandError: If the traversal cannot be completed.
+        CommandError: If traversal finishes without reaching the supplied destination.
     """
-    # Use Evennia's at_traverse hook for compatibility
+    # Use the exit's existing traversal and failure hooks.
     if hasattr(exit.obj, "at_traverse"):
         try:
             exit.obj.at_traverse(caller.obj, destination.obj)
@@ -163,11 +163,13 @@ def traverse_exit(
             msg = "You cannot go that way."
             raise CommandError(msg)
 
-    # #2177: react to ward/alarm on successful entry. Guard on actual
-    # arrival (not just "no exception raised") because the pre-existing
-    # at_traverse-exception branch above falls through to here without
-    # returning when at_failed_traverse exists -- this task doesn't change
-    # that existing control flow, only avoids reacting on a failed move.
+    # Hooks can refuse without raising or move the actor somewhere else.
+    # Only the supplied destination counts as arrival for this traversal.
+    if caller.obj.location != destination.obj:
+        msg = "You cannot go that way."
+        raise CommandError(msg)
+
+    # React to wards and charge movement fatigue only on actual arrival.
     if caller.obj.location == destination.obj:
         from world.items.services.encumbrance import charge_move_fatigue  # noqa: PLC0415
         from world.room_features.services import react_to_unauthorized_entry  # noqa: PLC0415

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, ClassVar
+from typing import TYPE_CHECKING, Any, ClassVar
 import uuid
 
 from evennia.objects.models import ObjectDB
@@ -16,6 +16,15 @@ from actions.definitions.item_helpers import (
     emit_typed_item_intent,
     resolve_item_instance,
     resolve_typed_item,
+)
+from actions.definitions.room_target_helpers import (
+    UNAVAILABLE,
+    RoomTargetPrerequisite,
+    apply_room_enhancements,
+    blocking_exit_challenges,
+    emit_room_intent,
+    room_target,
+    room_target_refusal,
 )
 from actions.prerequisites import Prerequisite
 from actions.target_menu_types import MenuTargetKind
@@ -40,10 +49,11 @@ from flows.service_functions.movement import check_exit_traversal, move_object, 
 from world.areas.positioning.travel import find_route
 from world.conditions.services import can_perceive
 from world.items.exceptions import InventoryError, NotReachable
-from world.mechanics.constants import ChallengeType
-from world.mechanics.models import ChallengeInstance
 from world.scenes.models import Persona
 from world.scenes.services import active_persona_for_sheet
+
+if TYPE_CHECKING:
+    from actions.models import ActionEnhancement
 
 _GET_DROP_KINDS = frozenset({MenuTargetKind.ITEMS, MenuTargetKind.OBJECTS})
 _GET_DROP_UNAVAILABLE = "That isn't available."
@@ -455,7 +465,7 @@ class GiveAction(Action):
 
 @dataclass
 class TraverseExitAction(Action):
-    """Move through an exit."""
+    """Move through an exit using existing authoritative traversal services."""
 
     key: str = "traverse_exit"
     name: str = "Go"
@@ -463,56 +473,108 @@ class TraverseExitAction(Action):
     category: str = "movement"
     action_category: ActionCategory = ActionCategory.PHYSICAL
     target_type: TargetType = TargetType.SINGLE
-
     objectdb_target_kwargs: ClassVar[frozenset[str]] = frozenset({"target"})
+    menu_kinds: ClassVar[frozenset[MenuTargetKind]] = frozenset({MenuTargetKind.EXITS})
 
-    def execute(
+    def is_applicable(self, actor: ObjectDB | None, *, kwargs: dict[str, Any]) -> bool:
+        return room_target(actor, kwargs, self.menu_kinds) is not None
+
+    def get_prerequisites(self) -> list[Prerequisite]:
+        return [*super().get_prerequisites(), RoomTargetPrerequisite(self)]
+
+    def _apply_enhancements(
         self,
-        actor: ObjectDB,
-        context: ActionContext | None = None,
-        **kwargs: Any,
+        context: ActionContext,
+        actor: ObjectDB | None,
+        enhancements: list[ActionEnhancement] | None,
+    ) -> None:
+        apply_room_enhancements(
+            context, actor, enhancements, super()._apply_enhancements, self.menu_kinds
+        )
+
+    def _emit_intent(self, context: ActionContext, actor: ObjectDB | None) -> ActionResult | None:
+        return emit_room_intent(context, actor, super()._emit_intent, self.menu_kinds)
+
+    # Repeat the full typed gate at each authored initialization/permission boundary.
+    def execute(  # noqa: C901, PLR0912
+        self, actor: ObjectDB, context: ActionContext | None = None, **kwargs: Any
     ) -> ActionResult:
-        target = kwargs.get("target")
+        typed = MENU_TARGET_KEY in kwargs
+        sdm = context.scene_data if context else SceneDataManager()
+        if typed:
+            reason = room_target_refusal(self, actor, kwargs, scene_data=sdm)
+            if reason:
+                return ActionResult(success=False, message=reason)
+            resolved = room_target(actor, kwargs, self.menu_kinds)
+            if resolved is None:
+                return ActionResult(success=False, message=UNAVAILABLE)
+            target = resolved.game_object
+        else:
+            target = kwargs.get("target")
         if target is None:
             return ActionResult(success=False, message="Go where?")
-
-        # Check for active challenges blocking this exit
-        blocking_challenges = ChallengeInstance.objects.filter(
-            location=target,
-            is_active=True,
-            is_revealed=True,
-            template__challenge_type=ChallengeType.INHIBITOR,
-        ).select_related("template")
-
-        if blocking_challenges.exists():
-            challenge_data = [
-                {
-                    "id": ci.pk,
-                    "name": ci.template.name,
-                    "description": ci.template.description_template,
-                }
-                for ci in blocking_challenges
-            ]
+        blocking = blocking_exit_challenges(target)
+        if blocking.exists():
             return ActionResult(
                 success=False,
                 message="The way is blocked.",
-                data={"challenges": challenge_data},
+                data={
+                    "challenges": [
+                        {
+                            "id": ci.pk,
+                            "name": ci.template.name,
+                            "description": ci.template.description_template,
+                        }
+                        for ci in blocking
+                    ]
+                },
             )
-
-        sdm = context.scene_data if context else SceneDataManager()
         caller_state = sdm.initialize_state_for_object(actor)
         exit_state = sdm.initialize_state_for_object(target)
 
-        check_exit_traversal(caller_state, exit_state)
+        def current_refusal(destination: ObjectDB | None = None) -> str | None:
+            fresh = room_target(actor, kwargs, self.menu_kinds)
+            if fresh is None or fresh.game_object != target:
+                return UNAVAILABLE
+            if destination is not None and target.destination != destination:
+                return UNAVAILABLE
+            return room_target_refusal(self, actor, kwargs, scene_data=sdm)
 
+        if typed:
+            reason = current_refusal()
+            if reason:
+                return ActionResult(success=False, message=reason)
+        try:
+            check_exit_traversal(caller_state, exit_state)
+        except CommandError as error:
+            if not typed:
+                raise
+            return ActionResult(success=False, message=str(error))
+        if typed:
+            reason = current_refusal()
+            if reason:
+                return ActionResult(success=False, message=reason)
         destination = target.destination
         dest_state = sdm.initialize_state_for_object(destination)
-        traverse_exit(caller_state, exit_state, dest_state)
-
-        # Re-initialize caller state for new location and send room state
+        if typed:
+            reason = current_refusal(destination)
+            if reason:
+                return ActionResult(success=False, message=reason)
+            try:
+                check_exit_traversal(caller_state, exit_state)
+            except CommandError as error:
+                return ActionResult(success=False, message=str(error))
+            reason = current_refusal(destination)
+            if reason:
+                return ActionResult(success=False, message=reason)
+        try:
+            traverse_exit(caller_state, exit_state, dest_state)
+        except CommandError as error:
+            caller_state = sdm.initialize_state_for_object(actor)
+            send_room_state(caller_state)
+            return ActionResult(success=False, message=error.msg)
         caller_state = sdm.initialize_state_for_object(actor)
         send_room_state(caller_state)
-
         return ActionResult(success=True)
 
 

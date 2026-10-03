@@ -10,6 +10,14 @@ from evennia.objects.models import ObjectDB
 
 from actions.base import Action
 from actions.definitions.item_helpers import emit_typed_item_intent, resolve_typed_item
+from actions.definitions.room_target_helpers import (
+    MENU_TARGET_KEY,
+    UNAVAILABLE,
+    RoomTargetPrerequisite,
+    apply_room_enhancements,
+    emit_room_intent,
+    room_target,
+)
 from actions.prerequisites import Prerequisite
 from actions.target_menu_types import MenuTargetKind, MenuTargetRequest
 from actions.target_resolution import resolve_menu_target, resolve_persona_pk_to_character
@@ -17,6 +25,7 @@ from actions.types import ActionContext, ActionResult, TargetType
 from flows.scene_data_manager import SceneDataManager
 
 if TYPE_CHECKING:
+    from actions.models import ActionEnhancement
     from typeclasses.types import ArxTypeclass
     from world.items.models import ItemInstance
 
@@ -97,14 +106,20 @@ def _render_physical_look(
     actor: ObjectDB,
     target: ObjectDB,
     context: ActionContext | None,
+    *,
+    validate_target: Callable[[], bool] | None = None,
 ) -> ActionResult:
-    """Render one authorized deliberate physical Look with existing extras."""
+    """Render physical Look, rechecking typed scope after initialization."""
     sdm = context.scene_data if context else SceneDataManager()
     target_state = sdm.initialize_state_for_object(cast("ArxTypeclass", target))
     looker_state = sdm.initialize_state_for_object(cast("ArxTypeclass", actor))
+    if validate_target is not None and not validate_target():
+        return ActionResult(success=False, message=UNAVAILABLE)
     description = target_state.return_appearance(mode="look", looker=cast(Any, looker_state))
     from actions.definitions.examine_extras import gather_examine_extras  # noqa: PLC0415
 
+    if validate_target is not None and not validate_target():
+        return ActionResult(success=False, message=UNAVAILABLE)
     extras = gather_examine_extras(actor, target)
     if extras.cancelled:
         return ActionResult(success=True, message="")
@@ -128,6 +143,28 @@ class LookAction(Action):
     target_type: TargetType = TargetType.SINGLE
 
     objectdb_target_kwargs: ClassVar[frozenset[str]] = frozenset({"target"})
+    menu_kinds: ClassVar[frozenset[MenuTargetKind]] = frozenset(
+        {MenuTargetKind.OBJECTS, MenuTargetKind.EXITS}
+    )
+
+    def is_applicable(self, actor: ObjectDB | None, *, kwargs: dict[str, Any]) -> bool:
+        return room_target(actor, kwargs, self.menu_kinds) is not None
+
+    def get_prerequisites(self) -> list[Prerequisite]:
+        return [*super().get_prerequisites(), RoomTargetPrerequisite(self)]
+
+    def _apply_enhancements(
+        self,
+        context: ActionContext,
+        actor: ObjectDB | None,
+        enhancements: list[ActionEnhancement] | None,
+    ) -> None:
+        apply_room_enhancements(
+            context, actor, enhancements, super()._apply_enhancements, self.menu_kinds
+        )
+
+    def _emit_intent(self, context: ActionContext, actor: ObjectDB | None) -> ActionResult | None:
+        return emit_room_intent(context, actor, super()._emit_intent, self.menu_kinds)
 
     def execute(
         self,
@@ -135,6 +172,17 @@ class LookAction(Action):
         context: ActionContext | None = None,
         **kwargs: Any,
     ) -> ActionResult:
+        if MENU_TARGET_KEY in kwargs:
+            resolved = room_target(actor, kwargs, self.menu_kinds)
+            if resolved is None or resolved.game_object is None:
+                return ActionResult(success=False, message=UNAVAILABLE)
+            target = resolved.game_object
+
+            def still_current() -> bool:
+                fresh = room_target(actor, kwargs, self.menu_kinds)
+                return fresh is not None and fresh.game_object == target
+
+            return _render_physical_look(actor, target, context, validate_target=still_current)
         target = _resolve_look_target(kwargs)
         if target is None:
             return ActionResult(success=False, message=_LOOK_AT_WHAT_MESSAGE)
