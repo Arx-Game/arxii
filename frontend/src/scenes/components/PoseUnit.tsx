@@ -479,7 +479,7 @@ export function PoseUnit({
   const posedAt = new Date(interaction.timestamp);
   return (
     <div
-      className="group relative -mx-2 rounded-md px-2 py-1 [display:flow-root] hover:bg-muted/40"
+      className="group relative -mx-2 rounded-md py-1 pl-2 pr-20 [display:flow-root] hover:bg-muted/40"
       data-testid="pose-unit"
       data-persona-id={interaction.persona.id}
       data-persona-name={interaction.persona.name}

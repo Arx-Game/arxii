@@ -2045,12 +2045,11 @@ describe('ThreadedNarrativeReader', () => {
       // works normally alongside the legacy poses.
       expect(screen.getByText('thread root')).toBeInTheDocument();
       expect(screen.getByText('thread reply')).toBeInTheDocument();
-      // Deviation from the fix-round brief's literal wording (see this
-      // branch's own comment in the source): a legacy pose still gets its
-      // "Reply" affordance -- losing it would make it impossible to start a
-      // NEW thread from an ordinary, un-replied pose, the single most
-      // common shape a scene starts in.
-      expect(screen.getAllByRole('button', { name: /^reply$/i })).toHaveLength(4); // 2 legacy + 2 real
+      // No Reply link under any pose (#4128): Reply lives in the avatar's play
+      // menu, so starting a new thread from an un-replied pose is one
+      // left-click away without a link under every line.
+      expect(screen.queryByRole('button', { name: /^reply$/i })).toBeNull();
+      expect(screen.getAllByTestId('scene-messages')).toHaveLength(4); // 2 legacy + 2 real
     });
   });
 
@@ -2096,10 +2095,10 @@ describe('ThreadedNarrativeReader', () => {
       fireEvent.click(answerThis);
       expect(onReply).toHaveBeenCalledWith(expect.objectContaining({ id: 1 }));
 
-      // The other, uninvolved row keeps the ordinary quiet Reply link and
-      // gets no involvement box at all.
+      // The other, uninvolved row gets no involvement box at all, and no
+      // Reply link either (#4128): its Reply is in the avatar's play menu.
       expect(screen.queryByTestId('involvement-mark-2')).toBeNull();
-      expect(screen.getByRole('button', { name: /^reply$/i })).toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: /^reply$/i })).toBeNull();
     });
 
     it('renders the involved row ONCE, inside the marked treatment, not twice (D1)', () => {

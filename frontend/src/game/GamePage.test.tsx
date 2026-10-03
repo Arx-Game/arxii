@@ -2442,13 +2442,15 @@ describe('GamePage', () => {
       });
 
       // In reference mode: the "Reading history" banner and its "Draft
-      // preserved" composer replacement are up, and Reply (readOnly-gated)
-      // is hidden.
+      // preserved" composer replacement are up, and the live pose's avatar
+      // play menu (#4128) is off the page with the live feed (the mocked
+      // reference page is empty, so no avatar renders at all here).
       await waitFor(() => {
         expect(screen.getByText(/reading history/i)).toBeInTheDocument();
       });
       expect(screen.getByText(/draft preserved for your live conversation/i)).toBeInTheDocument();
-      expect(screen.queryByRole('button', { name: /^reply$/i })).not.toBeInTheDocument();
+      expect(screen.queryByText('stretches languidly.')).not.toBeInTheDocument();
+      expect(screen.queryByTestId('pose-avatar')).not.toBeInTheDocument();
 
       const user = userEvent.setup();
       await user.click(screen.getByRole('button', { name: /return to live/i }));
@@ -2461,7 +2463,9 @@ describe('GamePage', () => {
         expect(screen.queryByText(/reading history/i)).not.toBeInTheDocument();
       });
       expect(screen.getByText('stretches languidly.')).toBeInTheDocument();
-      expect(screen.getByRole('button', { name: /^reply$/i })).toBeInTheDocument();
+      expect(
+        within(screen.getAllByTestId('pose-avatar')[0]).getByRole('button')
+      ).toBeInTheDocument();
     });
   });
 
