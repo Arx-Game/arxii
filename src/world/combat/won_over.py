@@ -69,13 +69,13 @@ def stamp_won_over_opponents(encounter: CombatEncounter) -> list[CombatOpponent]
             credited[instance.source_character_id] = (
                 credited.get(instance.source_character_id, 0) + 1
             )
-    if won:
-        CombatOpponent.objects.filter(pk__in=[o.pk for o in won]).update_with_reason(
-            reason="issue #4091: won-over opponents stop counting as hostile",
-            status=OpponentStatus.WON_OVER,
-        )
-        for opponent in won:  # keep identity-mapped instances in step with the row
-            opponent.status = OpponentStatus.WON_OVER
+    # Per-row saves, not a bulk .update(): a fight has only a handful of
+    # opponents, and a bulk update leaves every cached CombatOpponent instance
+    # (including these very `enemies` instances, idmapper-shared with any other
+    # holder in this process) reporting the stale status (#4091 fix round 1).
+    for opponent in won:
+        opponent.status = OpponentStatus.WON_OVER
+        opponent.save(update_fields=["status"])
     if credited:
         participants = CombatParticipant.objects.filter(
             encounter=encounter, character_sheet__character_id__in=credited
@@ -103,25 +103,62 @@ def won_over_labels(encounter: CombatEncounter) -> list[tuple[str, str, str]]:
         )
     )
     by_target = allegiance_instances_for(o.objectdb_id for o in opponents)
-    labels: list[tuple[str, str, str]] = []
+    designations: dict[int, ConditionInstance] = {}
     for opponent in opponents:
         instance = designating_instance(by_target.get(opponent.objectdb_id, []))
+        if instance is not None:
+            designations[opponent.pk] = instance
+
+    source_ids = {
+        instance.source_character_id
+        for instance in designations.values()
+        if instance.source_character_id is not None
+    }
+    source_labels = _participant_labels_by_character_id(encounter, source_ids)
+
+    labels: list[tuple[str, str, str]] = []
+    for opponent in opponents:
+        instance = designations.get(opponent.pk)
         if instance is None:
             continue  # the hold already ended; nothing to say
         labels.append(
             (
                 opponent.name,
                 won_over_verb(instance.condition.sets_allegiance),
-                _source_label(instance),
+                _source_label(instance, source_labels),
             )
         )
     return labels
 
 
-def _source_label(instance: ConditionInstance) -> str:
+def _participant_labels_by_character_id(
+    encounter: CombatEncounter, character_ids: set[int]
+) -> dict[int, str]:
+    """``str(CombatParticipant)`` per source character id, batched — ONE query.
+
+    This is the exact label the ceremonial OUTCOME line uses for a PC
+    (``_broadcast_encounter_outcome``'s ``str(p) for p in participants``), so a
+    charm/turn/calm source who is a concealed-identity PC gets the same
+    persona-respecting label there and in the won-over clause (#4091 fix round
+    2 - a raw ``ObjectDB.key`` must never leak where the outcome line would
+    show a persona).
+    """
+    if not character_ids:
+        return {}
+    participants = CombatParticipant.objects.filter(
+        encounter=encounter, character_sheet__character_id__in=character_ids
+    ).select_related("character_sheet__character")
+    return {p.character_sheet.character_id: str(p) for p in participants}
+
+
+def _source_label(instance: ConditionInstance, source_labels: dict[int, str]) -> str:
     source = instance.source_character
     if source is None:
         return ""
+    # A PC source resolves to the same str(CombatParticipant) label the outcome
+    # line uses; a non-participant source (an NPC ally, say) falls back to its
+    # raw key — there is no persona-respecting label to match there.
+    label = source_labels.get(source.pk, source.key)
     if instance.source_technique_id is not None:
-        return f"{source.key}'s {instance.source_technique.name}"
-    return source.key
+        return f"{label}'s {instance.source_technique.name}"
+    return label

@@ -20,12 +20,13 @@ from world.combat.factories import (
     CombatParticipantFactory,
     EncounterAftermathRuleFactory,
 )
-from world.combat.models import CombatEncounter
+from world.combat.models import CombatEncounter, CombatOpponent
 from world.combat.services import (
     _check_encounter_completion,
     _classify_encounter_outcome,
     complete_encounter,
 )
+from world.combat.won_over import stamp_won_over_opponents, won_over_labels
 from world.conditions.constants import Allegiance
 from world.conditions.factories import ConditionInstanceFactory, ConditionTemplateFactory
 from world.scenes.constants import InteractionMode, InteractionVisibility
@@ -187,3 +188,33 @@ class SocialVictoryTests(TestCase):
 
         stat_def = _get_or_create_stat_def(STAT_KEY_OPPONENTS_WON_OVER)
         self.assertEqual(self.pc.character_sheet.stats.get(stat_def), 2)
+
+    def test_stamping_updates_the_held_instance_with_no_refresh(self):  # fix round 1
+        a = CombatOpponentFactory(encounter=self.enc)
+        self._win_over(a, self.charm)
+
+        # Held BEFORE completion, never refreshed afterward. stamp_won_over_opponents
+        # must mutate this exact identity-mapped instance (not just the DB row) —
+        # a bulk .update() would leave it stale (#4091 fix round 1).
+        held = CombatOpponent.objects.get(pk=a.pk)
+        self.assertIs(held, a)
+
+        complete_encounter(self.enc, outcome=EncounterOutcome.VICTORY)
+
+        self.assertEqual(a.status, OpponentStatus.WON_OVER)
+
+    def test_won_over_source_label_matches_the_outcome_line_pc_label(self):  # fix round 2
+        # Stamps directly rather than through complete_encounter: cleanup
+        # deletes the ephemeral opponent's ObjectDB (and cascades its
+        # ConditionInstance) right after the OUTCOME line is built, so this
+        # isolates the label logic from that teardown.
+        a = CombatOpponentFactory(encounter=self.enc)
+        self._win_over(a, self.charm)
+
+        stamp_won_over_opponents(self.enc)
+
+        [(_name, _verb, source_label)] = won_over_labels(self.enc)
+        # str(self.pc) is exactly what _broadcast_encounter_outcome uses for a
+        # PC's active_labels entry — the won-over source label must match it,
+        # never a raw ObjectDB.key.
+        self.assertEqual(source_label, str(self.pc))
