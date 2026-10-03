@@ -9791,7 +9791,8 @@ def complete_encounter(encounter: CombatEncounter, *, outcome: EncounterOutcome)
     Order: persist flip → Narrator OUTCOME interaction → aftermath (anchored to
     that interaction, before ephemeral-NPC cleanup) → opponent aftermath pools
     → companion defeat resolution (#3652) → counters → completion event →
-    cleanup → acute-peril scene-round hand-off → aftermath digest (#3551).
+    won-over snapshot (#4091) → cleanup → acute-peril scene-round hand-off →
+    aftermath digest (#3551).
     ABANDONED is administrative closure: skips aftermath, opponent pools,
     companion defeats, and counters, but still narrates, emits, cleans up, and
     delivers the aftermath digest.
@@ -9826,12 +9827,21 @@ def complete_encounter(encounter: CombatEncounter, *, outcome: EncounterOutcome)
 
     install_encounter_beat_trigger(encounter)
     _emit_encounter_completed(encounter, outcome)
+
+    # Read the won-over rows while the bodies still exist (#4091 final review):
+    # cleanup deletes ephemeral WON_OVER bodies, cascading their allegiance
+    # instances away, so a digest read after it would drop every calmed mook.
+    # The rest of the digest must stay after cleanup (it reports the conditions
+    # a PC carries OUT of the fight and the peril hand-off), so only this part moves.
+    from world.combat.won_over import won_over_snapshot  # noqa: PLC0415
+
+    won_over = won_over_snapshot(encounter)
     cleanup_completed_encounter(encounter)
     _hand_off_acute_peril_to_scene_round(encounter)
 
     from world.combat.aftermath import deliver_aftermath_digests  # noqa: PLC0415
 
-    deliver_aftermath_digests(encounter)
+    deliver_aftermath_digests(encounter, won_over=won_over)
 
 
 def _hand_off_acute_peril_to_scene_round(encounter: CombatEncounter) -> None:

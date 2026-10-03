@@ -9,7 +9,7 @@ from datetime import datetime
 from typing import TYPE_CHECKING, cast
 
 from world.combat.constants import AFTERMATH_ATTRIBUTION_WINDOW, EncounterOutcome, ParticipantStatus
-from world.combat.types import AftermathDigest
+from world.combat.types import AftermathDigest, WonOverSnapshot
 
 if TYPE_CHECKING:
     from world.character_sheets.models import CharacterSheet
@@ -43,7 +43,10 @@ def has_acute_peril(character_sheet: CharacterSheet) -> bool:
 
 
 def build_aftermath_digest(
-    encounter: CombatEncounter, participant: CombatParticipant
+    encounter: CombatEncounter,
+    participant: CombatParticipant,
+    *,
+    won_over: WonOverSnapshot | None = None,
 ) -> AftermathDigest:
     """Assemble what this encounter changed for this participant.
 
@@ -55,6 +58,9 @@ def build_aftermath_digest(
     [encounter.created_at, completed_at + AFTERMATH_ATTRIBUTION_WINDOW) so the
     window's upper edge also excludes a later fight's condition in the same scene,
     not just a later fight's consequence/legend/beat rows.
+
+    ``won_over`` is the snapshot ``complete_encounter`` took before cleanup deleted
+    the ephemeral bodies (#4091); without it the rows are read live.
     """
     from django.db.models import Q  # noqa: PLC0415
 
@@ -157,7 +163,7 @@ def build_aftermath_digest(
         beat_visible_to_player=beat_visible_to_player,
         peril_round_active=has_acute_peril(sheet),
         companions_lost=companions_lost,
-        won_over=won_over_rows(encounter, sheet),
+        won_over=won_over_rows(encounter, sheet, snapshot=won_over),
     )
 
 
@@ -231,10 +237,12 @@ def render_aftermath_digest(digest: AftermathDigest, *, include_secret_beat: boo
     return "\n".join(lines)
 
 
-def deliver_aftermath_digests(encounter: CombatEncounter) -> None:
+def deliver_aftermath_digests(
+    encounter: CombatEncounter, *, won_over: WonOverSnapshot | None = None
+) -> None:
     """One private Narrator OUTCOME interaction per ACTIVE or FLED participant, pushed
     to that character only, plus ``character.msg(text)`` for telnet. REMOVED rows
-    get nothing.
+    get nothing. ``won_over`` is the pre-cleanup snapshot (see ``build_aftermath_digest``).
     """
     from world.combat.models import CombatParticipant  # noqa: PLC0415
     from world.combat.narrator import get_or_create_narrator_persona  # noqa: PLC0415
@@ -257,7 +265,7 @@ def deliver_aftermath_digests(encounter: CombatEncounter) -> None:
         if character is None:
             continue
 
-        digest = build_aftermath_digest(encounter, participant)
+        digest = build_aftermath_digest(encounter, participant, won_over=won_over)
         text = render_aftermath_digest(digest, include_secret_beat=False)
 
         try:

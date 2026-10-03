@@ -497,6 +497,26 @@ class WonOverRow:
 
 
 @dataclass(frozen=True)
+class WonOverSnapshot:
+    """The encounter-wide half of the won-over digest rows, taken BEFORE cleanup (#4091).
+
+    ``cleanup_completed_encounter`` deletes ephemeral WON_OVER bodies, and the
+    delete cascades away their allegiance ``ConditionInstance``; reading the rows
+    afterward would silently drop every calmed or turned mook. ``complete_encounter``
+    takes this snapshot first and hands it to ``deliver_aftermath_digests``.
+
+    ``opponents`` are the identity-map-shared rows, so a body deleted by cleanup
+    later reads ``objectdb_id is None`` here too. Every dict is keyed by
+    ``CombatOpponent.pk`` (never ``objectdb_id``, which cleanup nulls).
+    """
+
+    opponents: list[CombatOpponent]
+    instances: dict[int, list[ConditionInstance]]
+    designations: dict[int, ConditionInstance]
+    source_labels: dict[int, str]
+
+
+@dataclass(frozen=True)
 class AftermathDigest:
     """What one encounter changed for one participant, assembled at conclusion (#3551).
 

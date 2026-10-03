@@ -13,7 +13,7 @@ from typing import TYPE_CHECKING
 
 from world.combat.constants import CombatAllegiance, OpponentStatus
 from world.combat.models import CombatOpponent, CombatParticipant
-from world.combat.types import WonOverRow
+from world.combat.types import WonOverRow, WonOverSnapshot
 from world.conditions.constants import Allegiance, DurationType
 
 if TYPE_CHECKING:
@@ -234,20 +234,18 @@ def won_over_labels(encounter: CombatEncounter) -> list[tuple[str, str, str]]:
     return labels
 
 
-def won_over_rows(encounter: CombatEncounter, viewer: CharacterSheet) -> list[WonOverRow]:
-    """One row per WON_OVER opponent of the encounter, for the digest (#4091).
+def won_over_snapshot(encounter: CombatEncounter) -> WonOverSnapshot:
+    """The viewer-independent half of the digest rows, read while the bodies exist.
 
-    Every WON_OVER opponent is included (not only this viewer's own charms) —
-    the action flags are what differ per viewer. ``applied_since=encounter.created_at``
+    ``complete_encounter`` takes this BEFORE ``cleanup_completed_encounter``
+    (#4091 final review): cleanup deletes ephemeral WON_OVER bodies and their
+    allegiance instances cascade away with them. ``applied_since=encounter.created_at``
     (ruling R1), same as ``won_over_labels``. Batched: one opponent query, one
     instance query, one persona-name query pair.
     """
     from world.npc_services.allegiance import (  # noqa: PLC0415
-        ALLEGIANCE_HOLD_KINDS,
-        actor_holds_sway_present,
         allegiance_instances_for,
         designating_instance,
-        won_over_verb,
     )
     from world.scenes.services import persona_names_for_sheets  # noqa: PLC0415
 
@@ -259,9 +257,12 @@ def won_over_rows(encounter: CombatEncounter, viewer: CharacterSheet) -> list[Wo
     by_target = allegiance_instances_for(
         (o.objectdb_id for o in opponents), applied_since=encounter.created_at
     )
+    instances: dict[int, list[ConditionInstance]] = {}
     designations: dict[int, ConditionInstance] = {}
     for opponent in opponents:
-        instance = designating_instance(by_target.get(opponent.objectdb_id, []))
+        mine = by_target.get(opponent.objectdb_id, []) if opponent.objectdb_id else []
+        instances[opponent.pk] = mine
+        instance = designating_instance(mine)
         if instance is not None:
             designations[opponent.pk] = instance
 
@@ -271,23 +272,60 @@ def won_over_rows(encounter: CombatEncounter, viewer: CharacterSheet) -> list[Wo
         if instance.source_character_id is not None
     }
     source_names = persona_names_for_sheets(source_ids)
+    source_labels = {
+        pk: _source_label(instance, source_names) for pk, instance in designations.items()
+    }
+    return WonOverSnapshot(
+        opponents=[o for o in opponents if o.pk in designations],
+        instances=instances,
+        designations=designations,
+        source_labels=source_labels,
+    )
 
+
+def won_over_rows(
+    encounter: CombatEncounter,
+    viewer: CharacterSheet,
+    *,
+    snapshot: WonOverSnapshot | None = None,
+) -> list[WonOverRow]:
+    """One row per WON_OVER opponent of the encounter, for the digest (#4091).
+
+    Every WON_OVER opponent is included (not only this viewer's own charms) —
+    the action flags are what differ per viewer. Pass the ``snapshot`` taken
+    before cleanup (``complete_encounter`` does) so a body cleanup deleted still
+    gets its row; without one, a fresh snapshot is read now. A deleted body reads
+    ``present=False`` with every action flag False and no condition badge (its
+    instance no longer exists).
+    """
+    from world.npc_services.allegiance import (  # noqa: PLC0415
+        ALLEGIANCE_HOLD_KINDS,
+        actor_holds_sway_present,
+        won_over_verb,
+    )
+
+    if snapshot is None:
+        snapshot = won_over_snapshot(encounter)
+
+    viewer_char = viewer.character
     viewer_char_id = viewer.character_id
+    charm_kinds = frozenset({Allegiance.ALLY_OF_CASTER})
     rows: list[WonOverRow] = []
-    for opponent in opponents:
-        instance = designations.get(opponent.pk)
-        if instance is None:
-            continue  # the hold already ended; nothing to say
+    for opponent in snapshot.opponents:
+        instance = snapshot.designations[opponent.pk]
+        instances = snapshot.instances[opponent.pk]
+        body = opponent.objectdb if opponent.objectdb_id is not None else None
 
-        present = opponent.objectdb_id is not None and opponent.objectdb.location is not None
-        nameless = opponent.objectdb_is_ephemeral
+        present = body is not None and body.location is not None
         persona_id = opponent.persona_id
         is_source = instance.source_character_id == viewer_char_id
         charmer_is_viewer = (
             is_source and instance.condition.sets_allegiance == Allegiance.ALLY_OF_CASTER
         )
         visible_condition = (
-            instance if (instance.condition.is_visible_to_others or is_source) else None
+            instance
+            if body is not None and (instance.condition.is_visible_to_others or is_source)
+            else None
         )
 
         rows.append(
@@ -295,8 +333,8 @@ def won_over_rows(encounter: CombatEncounter, viewer: CharacterSheet) -> list[Wo
                 opponent_id=opponent.pk,
                 name=opponent.name,
                 verb=won_over_verb(instance.condition.sets_allegiance),
-                source_label=_source_label(instance, source_names),
-                nameless=nameless,
+                source_label=snapshot.source_labels[opponent.pk],
+                nameless=opponent.objectdb_is_ephemeral,
                 persona_id=persona_id,
                 present=present,
                 condition=visible_condition,
@@ -305,25 +343,26 @@ def won_over_rows(encounter: CombatEncounter, viewer: CharacterSheet) -> list[Wo
                 # Decision 19: the same bind-window predicate telnet's `companion
                 # promote` and `promote_summon_to_companion` consult (#4091 fix
                 # round 1) — a charm alone is not enough; the charmer must still
-                # be in the room. Reuses this call's own already-fetched
-                # `by_target` instances rather than `bind_window_open`'s public,
-                # re-querying form, to keep this batched.
-                can_bind=charmer_is_viewer
-                and _window_open(opponent, by_target.get(opponent.objectdb_id, [])),
-                can_take_into_service=charmer_is_viewer and persona_id is not None,
-                # #4091 task 12 fix round 1: the ONE shared presence+hold predicate
-                # (``actor_holds_sway_present``) also used by the persona menu, telnet,
-                # and the send_away action prerequisite -- this flag used to just be
-                # ``is_source and present``, which (unlike the action) never checked
-                # whether the viewer was still IN THE ROOM with the target. Reuses this
-                # call's own already-fetched `by_target` instances to stay batched.
-                can_send_away=(
-                    opponent.objectdb_id is not None
+                # be in the room. Reuses the snapshot's instances to stay batched.
+                can_bind=body is not None
+                and charmer_is_viewer
+                and _window_open(opponent, instances),
+                # The ONE shared presence+hold predicate (``actor_holds_sway_present``)
+                # also used by the persona menu, telnet and the action prerequisites
+                # (#4091 task 12; take-into-service gated the same way in the final
+                # review: the button showed while the action refused).
+                can_take_into_service=(
+                    body is not None
+                    and persona_id is not None
+                    and charmer_is_viewer
                     and actor_holds_sway_present(
-                        viewer.character,
-                        opponent.objectdb,
-                        kinds=ALLEGIANCE_HOLD_KINDS,
-                        instances=by_target.get(opponent.objectdb_id, []),
+                        viewer_char, body, kinds=charm_kinds, instances=instances
+                    )
+                ),
+                can_send_away=(
+                    body is not None
+                    and actor_holds_sway_present(
+                        viewer_char, body, kinds=ALLEGIANCE_HOLD_KINDS, instances=instances
                     )
                 ),
                 can_settle=persona_id is not None and present,
