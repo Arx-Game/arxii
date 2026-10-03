@@ -171,24 +171,23 @@ Never migrate `arxiidev` itself, and never point any of this at production.
 `CREATE DATABASE ... TEMPLATE arxiidev` fails whenever anything holds a
 connection to it; the `pg_dump` pipe above has no such problem.
 
-### Do not test a backfill by replaying the migration graph
+### Never commit a test for a one-off migration
 
-A unit test that rewinds the schema with `MigrationExecutor` to the migration
-before a backfill, builds rows through historical models, and migrates forward
-again costs the whole chain's DDL twice per test, and that cost grows with every
-migration anyone adds afterwards. `test_offers_migration.py` (#3684) did this for
-0110: by 2026-09-24 its two tests took 1043 s and 992 s on `main`, 34 minutes of a
-shard budgeted at ~344 s, and on a branch seven migrations further along they died
-with `MemoryError` and hung the parallel runner until the 4-hour cancel (#3998). It
-was also doomed by design: ADR-0276 regenerates the chain from a deployed commit,
-which deletes the very nodes such a test names.
+A data migration runs once per database and is then history: a committed test for it
+guards nothing after the deploy and costs CI time on every run forever. Tehom ruled
+this 2026-10-03 after the 0170 deploy fix shipped one (#4134). Prove the migration,
+then throw the proof away:
 
-Prove a backfill the way section 6 says, against a database with rows in it, and
-keep any unit test on the backfill's own function: call `forwards(apps, editor)`
-with `django.apps.apps` and factory rows when the source models still exist, or
-skip the unit test when the same PR's contract migration removes them. A test
-that still needs historical models is a sign the expand/migrate/contract split
-put the contract too early.
+- Against real rows, with the scratch-database recipe above: run the *old* body and
+  watch it fail, then the fix and watch it pass.
+- Or with a throwaway script or uncommitted test file that calls the migration's own
+  function (`relevel(apps, None)`) on factory rows. Delete it before committing.
+
+Replaying the migration graph in a test is worse still: `test_offers_migration.py`
+(#3684) rewound the schema for 0110 and by 2026-09-24 its two tests took 1043 s and
+992 s on `main`, 34 minutes of a shard budgeted at ~344 s, then died with
+`MemoryError` and hung the parallel runner until the 4-hour cancel (#3998). ADR-0276
+chain regeneration also deletes the very nodes such a test names.
 
 ## 6. A constraint on a column added in the same migration
 
