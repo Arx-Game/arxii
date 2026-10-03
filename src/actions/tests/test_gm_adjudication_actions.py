@@ -50,11 +50,11 @@ from world.scenes.models import Interaction
 from world.scenes.narrator import NARRATOR_PERSONA_NAME
 from world.scenes.services import active_persona_for_sheet
 from world.societies.factories import OrganizationFactory
-from world.species.language_services import comprehension_value
-from world.species.tests.test_language_comprehension import (
+from world.species.factories import (
     make_language_with_target,
     make_understanding_condition,
 )
+from world.species.language_services import comprehension_value
 from world.traits.constants import STAT_DISPLAY_DIVISOR
 from world.traits.factories import CheckSystemSetupFactory, TraitFactory
 from world.traits.models import (

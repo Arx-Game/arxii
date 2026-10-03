@@ -24,7 +24,11 @@ from world.mechanics.factories import (
 )
 from world.mechanics.models import ModifierTarget
 from world.progression.models.rewards import DevelopmentPoints
-from world.species.factories import LanguageFactory
+from world.species.factories import (
+    LanguageFactory,
+    make_language_with_target,
+    make_understanding_condition,
+)
 from world.species.language_services import (
     comprehension_value,
     condition_language_bonuses,
@@ -33,24 +37,6 @@ from world.species.language_services import (
 from world.species.models import Language, LanguageTrainingConfig
 from world.traits.factories import CharacterTraitValueFactory, TraitFactory
 from world.traits.models import CharacterTraitValue, TraitType
-
-
-def make_language_with_target(name: str, *, restricted: bool = False):
-    """A Language, its LANGUAGE trait, and the ModifierTarget pointing at that trait."""
-    trait = TraitFactory(name=name, trait_type=TraitType.LANGUAGE)
-    language = LanguageFactory(name=name, trait=trait, restricted=restricted)
-    target = ModifierTargetFactory(
-        name=name, category=ModifierCategoryFactory(name="language"), target_trait=trait
-    )
-    return language, target
-
-
-def make_understanding_condition(name: str, target, *, value: int = 20):
-    template = ConditionTemplateFactory(name=name)
-    ConditionModifierEffectFactory(
-        condition=template, modifier_target=target, value=value, scales_with_severity=True
-    )
-    return template
 
 
 def _train(sheet, language, value: int) -> None:

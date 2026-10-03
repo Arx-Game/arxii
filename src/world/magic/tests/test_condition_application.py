@@ -27,11 +27,11 @@ from world.magic.factories import (
 from world.magic.models.techniques import ConditionTargetKind
 from world.magic.services.condition_application import apply_technique_conditions
 from world.mechanics.models import ModifierTarget
-from world.species.language_services import comprehension_value
-from world.species.tests.test_language_comprehension import (
+from world.species.factories import (
     make_language_with_target,
     make_understanding_condition,
 )
+from world.species.language_services import comprehension_value
 
 
 class ApplyTechniqueConditionsEmptyTest(TestCase):

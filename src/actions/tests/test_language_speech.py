@@ -26,12 +26,12 @@ from world.mechanics.models import ModifierTarget
 from world.scenes.constants import InteractionMode
 from world.scenes.models import Interaction
 from world.species import language_services
-from world.species.factories import LanguageFactory
-from world.species.language_services import comprehension_values
-from world.species.tests.test_language_comprehension import (
+from world.species.factories import (
+    LanguageFactory,
     make_language_with_target,
     make_understanding_condition,
 )
+from world.species.language_services import comprehension_values
 from world.traits.models import CharacterTraitValue, Trait, TraitCategory, TraitType
 
 
@@ -385,11 +385,16 @@ class ConditionComprehensionLiveTests(TestCase):
         assert self._ws_content() == self.TEXT
 
     def test_weak_condition_reads_partly_garbled(self) -> None:
+        """Severity 2 lifts a trained-0 listener to conversational: some words, not all."""
         ConditionInstanceFactory(target=self.listener, condition=self.condition, severity=2)
         heard = self._heard()
-        assert heard.startswith(f'Envoy says in {self.language.name}, "')
-        assert "..." in heard
-        assert heard != f'Envoy says in {self.language.name}, "{self.TEXT}"'
+        prefix = f'Envoy says in {self.language.name}, "'
+        assert heard.startswith(prefix)
+        assert heard != f'{prefix}..."'
+        assert heard != f'{prefix}{self.TEXT}"'
+        heard_words = set(heard.removeprefix(prefix).removesuffix('"').split())
+        assert heard_words & set(self.TEXT.split())
+        assert "..." in heard_words
 
     def test_without_condition_garbles_entirely(self) -> None:
         assert self._heard() == f'Envoy says in {self.language.name}, "..."'
