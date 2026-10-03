@@ -11,6 +11,8 @@ Counters tracked:
 - ``combat.knockouts_dealt`` — per-PC count of KOs caused by their actions.
 - ``combat.killshots`` — per-PC count of deaths caused by their actions.
 - ``combat.times_kod`` — per-PC count of KO transitions suffered.
+- ``combat.opponents_won_over`` — per-PC count of opponents charmed, turned or
+  calmed into standing down in a fight their side won (#4091).
 
 Phase 3 — combat-resolution-loop PR.
 
@@ -41,6 +43,7 @@ STAT_KEY_OPPONENTS_DEFEATED = "combat.opponents_defeated"
 STAT_KEY_KNOCKOUTS_DEALT = "combat.knockouts_dealt"
 STAT_KEY_KILLSHOTS = "combat.killshots"
 STAT_KEY_TIMES_KOD = "combat.times_kod"
+STAT_KEY_OPPONENTS_WON_OVER = "combat.opponents_won_over"
 STAT_KEY_ENCOUNTERS_WON = "combat.encounters_won"
 STAT_KEY_ENCOUNTERS_LOST = "combat.encounters_lost"
 STAT_KEY_ENCOUNTERS_FLED = "combat.encounters_fled"
@@ -69,6 +72,10 @@ _STAT_KEY_DISPLAY: dict[str, tuple[str, str]] = {
     STAT_KEY_TIMES_KOD: (
         "Times Knocked Out",
         "Number of times you have been knocked out in combat.",
+    ),
+    STAT_KEY_OPPONENTS_WON_OVER: (
+        "Opponents Won Over",
+        "Opponents you charmed, turned or calmed in a fight your side won.",
     ),
     STAT_KEY_ENCOUNTERS_WON: (
         "Encounters Won",

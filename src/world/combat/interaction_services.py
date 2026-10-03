@@ -587,13 +587,28 @@ def render_encounter_outcome_narration(
     active_labels: list[str],
     fled_labels: list[str],
     defeated_opponent_labels: list[str],
+    won_over: list[tuple[str, str]] | None = None,
 ) -> str:
-    """Ceremonial encounter-level OUTCOME line (#876)."""
+    """Ceremonial encounter-level OUTCOME line (#876).
+
+    ``won_over`` is ``(name, verb)`` pairs for opponents won over rather than
+    beaten down — charmed, turned or calmed (#4091 Decision 7). A field won
+    over this way ends in an ordinary VICTORY line; no violence is implied.
+    """
     # Fail-loud on unknown outcomes: values are the closed EncounterOutcome enum.
     clauses: list[str] = [_ENCOUNTER_OUTCOME_HEADLINES[outcome]]
     if outcome == EncounterOutcome.VICTORY:
         if defeated_opponent_labels:
             clauses.append(f"{join_labels(defeated_opponent_labels)} will trouble no one further.")
+        if won_over:
+            by_verb: dict[str, list[str]] = {}
+            for name, verb in won_over:
+                by_verb.setdefault(verb, []).append(name)
+            parts = [
+                f"{join_labels(names)} {'is' if len(names) == 1 else 'are'} {verb}"
+                for verb, names in by_verb.items()
+            ]
+            clauses.append(f"{join_labels(parts)}.")
         if active_labels:
             clauses.append(f"{join_labels(active_labels)} stand victorious.")
     elif outcome == EncounterOutcome.DEFEAT and active_labels:

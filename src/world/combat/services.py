@@ -9588,15 +9588,13 @@ def _check_encounter_completion(encounter: CombatEncounter) -> bool:
     PC is "down" (cannot act — dead or incapacitated). A dying-but-conscious PC
     can still act, so the encounter is not lost while any PC can_act.
     """
+    from world.combat.won_over import hostile_opponents_remain  # noqa: PLC0415
     from world.vitals.services import can_act  # noqa: PLC0415
 
     # Only ENEMY opponents block victory; an ALLY summon staying active must not
-    # keep the encounter open (#1584).
-    all_opponents_down = not CombatOpponent.objects.filter(
-        encounter=encounter,
-        status=OpponentStatus.ACTIVE,
-        allegiance=CombatAllegiance.ENEMY,
-    ).exists()
+    # keep the encounter open (#1584). A won-over enemy (charmed, turned, calmed
+    # during THIS encounter — ruling R1) does not count as hostile either (#4091).
+    all_opponents_down = not hostile_opponents_remain(encounter)
 
     active_participants = CombatParticipant.objects.filter(
         encounter=encounter,
@@ -9617,12 +9615,12 @@ def _classify_encounter_outcome(encounter: CombatEncounter) -> EncounterOutcome:
     3. Else → DEFEAT (catch-all: downed ACTIVE participants, or all-REMOVED).
     """
     # VICTORY hinges on ENEMY opponents only — an ALLY summon left standing is
-    # part of the winning side, not a reason to withhold victory (#1584).
-    any_active_opponents = CombatOpponent.objects.filter(
-        encounter=encounter,
-        status=OpponentStatus.ACTIVE,
-        allegiance=CombatAllegiance.ENEMY,
-    ).exists()
+    # part of the winning side, not a reason to withhold victory (#1584). A
+    # won-over enemy (charmed, turned, calmed during THIS encounter — ruling
+    # R1) does not count as hostile either (#4091).
+    from world.combat.won_over import hostile_opponents_remain  # noqa: PLC0415
+
+    any_active_opponents = hostile_opponents_remain(encounter)
     if not any_active_opponents:
         hero_killer_present = CombatOpponent.objects.filter(
             encounter=encounter, tier=OpponentTier.HERO_KILLER
@@ -9665,6 +9663,11 @@ def complete_encounter(encounter: CombatEncounter, *, outcome: EncounterOutcome)
     encounter.outcome = outcome
     encounter.completed_at = timezone.now()
     encounter.save(update_fields=["status", "outcome", "completed_at"])
+
+    if outcome == EncounterOutcome.VICTORY:
+        from world.combat.won_over import stamp_won_over_opponents  # noqa: PLC0415
+
+        stamp_won_over_opponents(encounter)
 
     interaction = _broadcast_encounter_outcome(encounter, outcome)
 
@@ -9727,6 +9730,7 @@ def _broadcast_encounter_outcome(
         broadcast_action_outcome,
         render_encounter_outcome_narration,
     )
+    from world.combat.won_over import won_over_labels  # noqa: PLC0415
 
     participants = list(
         CombatParticipant.objects.filter(encounter=encounter).select_related(
@@ -9743,6 +9747,7 @@ def _broadcast_encounter_outcome(
             for o in opponents
             if o.status == OpponentStatus.DEFEATED and o.allegiance == CombatAllegiance.ENEMY
         ],
+        won_over=[(name, verb) for name, verb, _src in won_over_labels(encounter)],
     )
     return broadcast_action_outcome(encounter=encounter, narration=narration)
 
@@ -9827,11 +9832,14 @@ def _apply_aftermath_rules(
 
 
 def _apply_opponent_aftermath_pools(encounter: CombatEncounter, outcome: EncounterOutcome) -> None:
-    """Fire each DEFEATED opponent's authored aftermath pool on PC victory (#876 §4).
+    """Fire each overcome opponent's authored aftermath pool on PC victory (#876 §4, #4091).
 
-    Deterministic (story-consequence semantics, like beat pools). Context follows
-    the beats GLOBAL idiom: the opponent's ObjectDB when set, else an unsaved
-    stub that is only identity-safe for non-character effects.
+    "Overcome" covers both a DEFEATED enemy and a WON_OVER one (charmed, turned
+    or calmed into standing down rather than beaten down — Decision 10): the
+    same per-opponent pool pays out either way. Deterministic (story-consequence
+    semantics, like beat pools). Context follows the beats GLOBAL idiom: the
+    opponent's ObjectDB when set, else an unsaved stub that is only
+    identity-safe for non-character effects.
     """
     if outcome != EncounterOutcome.VICTORY:
         return
@@ -9845,7 +9853,7 @@ def _apply_opponent_aftermath_pools(encounter: CombatEncounter, outcome: Encount
 
     qs = CombatOpponent.objects.filter(
         encounter=encounter,
-        status=OpponentStatus.DEFEATED,
+        status__in=[OpponentStatus.DEFEATED, OpponentStatus.WON_OVER],
         aftermath_pool__isnull=False,
     ).select_related("aftermath_pool", "objectdb")
     for opponent in qs:

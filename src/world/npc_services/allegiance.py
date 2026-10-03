@@ -73,7 +73,7 @@ def allegiance_instances_for(
     qs = (
         ConditionInstance.objects.filter(_active_q(), target_id__in=ids)
         .exclude(condition__sets_allegiance="")
-        .select_related("condition", "current_stage")
+        .select_related("condition", "current_stage", "source_character", "source_technique")
     )
     if applied_since is not None:
         qs = qs.filter(applied_at__gte=applied_since)
