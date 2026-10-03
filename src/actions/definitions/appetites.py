@@ -52,7 +52,12 @@ class _FeedBaseAction(Action):
                 success=False,
                 message=f"Use the {self.appetite_verb} command on a target.",
             )
-        if target.db_account is not None:
+        target_sheet = target.character_sheet
+        if target_sheet is None:
+            return ActionResult(success=False, message="There is nothing there to draw from.")
+        from world.roster.services.activity import is_player_character  # noqa: PLC0415
+
+        if is_player_character(target_sheet):
             return ActionResult(
                 success=False,
                 message=(
@@ -60,9 +65,6 @@ class _FeedBaseAction(Action):
                     f"consent — use `{self.appetite_verb} <name>` in a scene."
                 ),
             )
-        target_sheet = target.character_sheet
-        if target_sheet is None:
-            return ActionResult(success=False, message="There is nothing there to draw from.")
         mode = str(kwargs.get("amount_mode") or FeedMode.DRINK)
         outcome = feed_anima(actor_sheet, target_sheet, amount_mode=mode)
         return ActionResult(

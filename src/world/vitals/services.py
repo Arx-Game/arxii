@@ -1070,15 +1070,21 @@ def mark_fed_to_death(victim_sheet: CharacterSheet) -> bool:
     """Kill an NPC drained past empty by feeding (#2853). Returns True on death.
 
     The narrow public seam for the appetite arc's gorge-kill: guards that the
-    victim is genuinely an NPC (no live account) and not already dead, ensures
+    victim is genuinely an NPC (no active RosterTenure -- not just "no live
+    account": Evennia clears ``db_account`` the instant an OFFLINE PC
+    disconnects, #4091 task 12 fix round 3) and not already dead, ensures
     a vitals row exists (instantiated NPCs are provisioned lazily), zeroes
     health, then routes through the same ``_mark_dead`` finalization aging
     deaths use — estate settlement, kinship flags, lifecycle propagation. Story
     protection is the caller's gate (``is_death_prevented_by_story``); PC
-    victims are refused here as a second line of defense.
+    victims (online or offline) are refused here as a second line of defense.
     """
     character = victim_sheet.character
-    if character is None or character.db_account is not None:
+    if character is None:
+        return False
+    from world.roster.services.activity import is_player_character  # noqa: PLC0415
+
+    if is_player_character(victim_sheet):
         return False
     from world.vitals.models import CharacterVitals  # noqa: PLC0415
 

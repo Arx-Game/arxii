@@ -439,7 +439,9 @@ def npc_boon_tier_shift(request: SceneActionRequest) -> int:
     if boon is None or request.target_persona is None:
         return 0
     target_sheet = request.target_persona.character_sheet
-    if target_sheet.character.db_account is not None:
+    from world.roster.services.activity import is_player_character  # noqa: PLC0415
+
+    if is_player_character(target_sheet):
         return 0
     asker_sheet = request.initiator_persona.character_sheet
     return boon_cost_tier_shift(boon, target_sheet) + _rank_gap_shift(asker_sheet, target_sheet)

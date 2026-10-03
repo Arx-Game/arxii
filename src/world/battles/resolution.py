@@ -267,7 +267,11 @@ def select_surrounded_terminal_pool(
     active PC participant at the same ``place`` — an actual PC opponent present means
     ADR-0023 (PvP non-lethal) applies, so ``surrounded_terminal_pvp`` (no death row at
     all) is used instead. This replaces ``select_abandonment_pool``'s ``ObjectDB``
-    source-character routing, which doesn't apply here (see Task 2).
+    source-character routing, which doesn't apply here (see Task 2). PC detection is
+    the canonical, offline-safe active-RosterTenure test (#4091 task 12 fix round 3) —
+    not ``db_account``, which reads ``None`` for an offline PC opponent too and would
+    have let a battle round kill them. Batched: one query for every opposing
+    participant's roster tenure, not one per participant.
 
     Returns ``None`` on a seeding gap (the named pool doesn't exist) rather than raising
     — matches the "never crash the round, hold the victim" convention the sibling
@@ -277,6 +281,7 @@ def select_surrounded_terminal_pool(
     """
     from actions.models import ConsequencePool  # noqa: PLC0415
     from world.battles.constants import BattleParticipantStatus  # noqa: PLC0415
+    from world.roster.models import RosterEntry  # noqa: PLC0415
     from world.vitals.constants import (  # noqa: PLC0415
         POOL_SURROUNDED_TERMINAL_ENEMY,
         POOL_SURROUNDED_TERMINAL_PVP,
@@ -289,9 +294,12 @@ def select_surrounded_terminal_pool(
         if participant.place_id is not None
         else []
     )
-    opposing_pc_present = any(
-        p.side_id != participant.side_id and p.character_sheet.character.db_account is not None
-        for p in others
+    opposing_sheet_ids = [p.character_sheet_id for p in others if p.side_id != participant.side_id]
+    opposing_pc_present = (
+        bool(opposing_sheet_ids)
+        and RosterEntry.objects.filter(
+            character_sheet_id__in=opposing_sheet_ids, tenures__end_date__isnull=True
+        ).exists()
     )
     pool_name = (
         POOL_SURROUNDED_TERMINAL_PVP if opposing_pc_present else POOL_SURROUNDED_TERMINAL_ENEMY

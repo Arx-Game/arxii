@@ -237,11 +237,28 @@ class FeedAnimaTest(TestCase):
 
 class MarkFedToDeathGuardTest(TestCase):
     def test_refuses_pc_victims(self):
+        """A PC victim (active RosterTenure) is refused -- the canonical PC test
+        (#4091 task 12 fix round 3), not db_account."""
+        from world.roster.factories import RosterEntryFactory, RosterTenureFactory
         from world.vitals.services import mark_fed_to_death
 
         sheet = CharacterSheetFactory()
-        with patch.object(type(sheet.character), "db_account", new=object(), create=True):
-            self.assertFalse(mark_fed_to_death(sheet))
+        entry = RosterEntryFactory(character_sheet=sheet)
+        RosterTenureFactory(roster_entry=entry, end_date=None)
+        self.assertFalse(mark_fed_to_death(sheet))
+
+    def test_refuses_offline_pc_victims(self):
+        """#4091 task 12 fix round 3: an OFFLINE PC victim (active tenure, no
+        db_account) must still be refused -- db_account alone would have let
+        this through, since Evennia clears it on disconnect."""
+        from world.roster.factories import RosterEntryFactory, RosterTenureFactory
+        from world.vitals.services import mark_fed_to_death
+
+        sheet = CharacterSheetFactory()
+        entry = RosterEntryFactory(character_sheet=sheet)
+        RosterTenureFactory(roster_entry=entry, end_date=None)
+        self.assertIsNone(sheet.character.db_account)
+        self.assertFalse(mark_fed_to_death(sheet))
 
     def test_kills_sheeted_npc_via_death_finalization(self):
         from world.vitals.models import CharacterVitals
