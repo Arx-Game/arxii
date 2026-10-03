@@ -364,3 +364,24 @@ class IsPlayerCharacterTests(TestCase):
         npc = mint_story_npc(gm_account=gm_account, name="Fix Round 4 Story NPC")
 
         self.assertTrue(is_player_character(npc.sheet_data))
+
+    def test_offline_pc_with_an_active_tenure_counts_as_a_player_character(self) -> None:
+        sheet, _account, _roster, _entry = _build_sheet_with_tenure()
+        self.assertIsNone(sheet.character.db_account)
+
+        self.assertTrue(is_player_character(sheet))
+
+    def test_puppeted_character_without_a_tenure_counts_as_a_player_character(self) -> None:
+        """The pre-#4091 test (``db_account`` set) still counts, so nothing that
+        read as a PC before reads as an NPC now."""
+        sheet = CharacterSheetFactory()
+        sheet.character.db_account = AccountFactory(username="puppeted_no_tenure")
+        sheet.character.save()
+
+        self.assertTrue(is_player_character(sheet))
+
+    def test_unpuppeted_character_without_a_tenure_is_not_a_player_character(self) -> None:
+        sheet = CharacterSheetFactory()
+        RosterEntryFactory(character_sheet=sheet)
+
+        self.assertFalse(is_player_character(sheet))
