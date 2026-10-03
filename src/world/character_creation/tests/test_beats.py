@@ -6,6 +6,7 @@ one-of beat refuses a second answer; a Sleeper-style Beginning keeps one beat.
 """
 
 from django.test import TestCase
+from evennia.accounts.models import AccountDB
 from rest_framework.test import APIClient
 
 from evennia_extensions.factories import AccountFactory
@@ -23,6 +24,7 @@ from world.character_creation.factories import (
     LifeBeatExclusionFactory,
     LifeBeatFactory,
 )
+from world.character_creation.models import CharacterOriginSlot
 from world.character_creation.offers import (
     beat_pool,
     beats_for,
@@ -31,7 +33,15 @@ from world.character_creation.offers import (
     reconcile_offer_picks,
     visible_offers,
 )
+from world.character_creation.services import finalize_character
+from world.character_creation.tests.finalization_fixtures import FinalizationTestMixin
+from world.character_sheets.factories import CharacterSheetFactory
 from world.distinctions.factories import DistinctionFactory
+from world.distinctions.models import CharacterDistinction
+from world.progression.services.maturation import available_points, next_milestone_year
+from world.roster.factories import RosterEntryFactory
+from world.secrets.factories import SecretFactory
+from world.secrets.services import grant_secret_knowledge
 
 
 def _answer(beat, name, cost):
@@ -243,3 +253,117 @@ class BeatsEndpointTests(TestCase):
             format="json",
         )
         self.assertEqual(resp.status_code, 400)
+
+
+class FinalizeBeatsTest(FinalizationTestMixin, TestCase):
+    """A finalized draft carries its beats onto the sheet (#4124)."""
+
+    def setUp(self) -> None:
+        self._flush_common_caches()
+        self.account = AccountDB.objects.create(username="beats_finalize")
+        self._setup_finalization_base(self, prefix="Beats", height_min=700, height_max=800)
+        self.household = LifeBeatFactory(name="The household")
+        self.patient = _answer(self.household, "Patient", 10)
+        self.work = LifeBeatFactory(
+            name="The work", life_stage=LifeStage.ADULTHOOD, selection=BeatSelection.ANY
+        )
+        self.youth = LifeBeatFactory(name="The first rule", life_stage=LifeStage.YOUTH)
+
+    def test_taken_beats_become_rows_and_draft_the_background(self) -> None:
+        draft = self._create_base_draft()
+        draft.draft_data["beats"] = {
+            str(self.household.pk): {"taken": True, "line": "A line about the house."},
+            str(self.youth.pk): {"taken": True, "unknown": True},
+        }
+        draft.draft_data["distinctions"] = [
+            {
+                "distinction_id": self.patient.distinction_id,
+                "distinction_name": "Patient",
+                "rank": 1,
+                "cost": 10,
+                "offer_ids": [self.patient.pk],
+                "sources": ["The household"],
+                "arrivals": [OfferArrival.CHOICE],
+            }
+        ]
+        draft.save()
+
+        character = finalize_character(draft, add_to_roster=True)
+        sheet = character.sheet_data
+
+        rows = {row.beat_id: row for row in CharacterOriginSlot.objects.filter(sheet=sheet)}
+        self.assertEqual(set(rows), {self.household.pk, self.youth.pk})
+        self.assertEqual(rows[self.household.pk].value, "A line about the house.")
+        self.assertFalse(rows[self.household.pk].unknown)
+        self.assertTrue(rows[self.youth.pk].unknown)
+        self.assertIsNone(rows[self.household.pk].slot_id)
+        held = CharacterDistinction.objects.get(
+            character=sheet, distinction=self.patient.distinction
+        )
+        self.assertEqual(held.source_description, "The household")
+        background = sheet.true_profile.background
+        self.assertIn("Childhood: The household", background)
+        self.assertIn("A line about the house.", background)
+        self.assertNotIn("The first rule", background)
+        # Age is experience through beats, not banked points (#4124).
+        self.assertEqual(sheet.maturation_floor, 25)
+        self.assertEqual(available_points(sheet), 0)
+
+    def test_an_untaken_pool_writes_nothing(self) -> None:
+        draft = self._create_base_draft()
+        draft.save()
+        character = finalize_character(draft, add_to_roster=True)
+        self.assertFalse(CharacterOriginSlot.objects.filter(sheet=character.sheet_data).exists())
+
+
+class MaturationFloorTest(TestCase):
+    """Milestones at or below the creation age never bank (#4124)."""
+
+    def test_a_character_made_at_forty_five_starts_at_zero_and_earns_at_forty_seven(self):
+        sheet = CharacterSheetFactory(matured_years=45, maturation_floor=45)
+        self.assertEqual(available_points(sheet), 0)
+        self.assertEqual(next_milestone_year(sheet.matured_years), 47)
+        sheet.matured_years = 47
+        sheet.save(update_fields=["matured_years"])
+        self.assertEqual(available_points(sheet), 1)
+
+    def test_a_character_made_before_the_rule_keeps_its_bank(self):
+        sheet = CharacterSheetFactory(matured_years=45, maturation_floor=0)
+        self.assertGreater(available_points(sheet), 0)
+
+
+class SpeciesPriceTest(TestCase):
+    """An eternal-youth species prices its long life into the purse (#4124)."""
+
+    def test_the_species_own_cost_rides_the_species_line(self):
+        from world.species.factories import SpeciesFactory
+
+        species = SpeciesFactory(name="Elf", eternal_youth=True, cg_point_cost=12)
+        draft = CharacterDraftFactory(selected_species=species)
+        lines = [e for e in draft.calculate_cg_points_breakdown() if e["category"] == "species"]
+        self.assertEqual(lines, [{"category": "species", "item": "Elf", "cost": 12}])
+
+
+class SecretResolvesBeatTest(TestCase):
+    """A secret naming an unknown beat fills it in when the subject learns it (#4124)."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.sheet = CharacterSheetFactory()
+        cls.entry = RosterEntryFactory(character_sheet=cls.sheet)
+        cls.beat = LifeBeatFactory(name="The work", life_stage=LifeStage.ADULTHOOD)
+        cls.row = CharacterOriginSlot.objects.create(
+            sheet=cls.sheet, beat=cls.beat, unknown=True, value=""
+        )
+        cls.secret = SecretFactory(subject_sheet=cls.sheet, resolves_beat=cls.row)
+
+    def test_the_subject_learning_it_resolves_the_beat(self):
+        grant_secret_knowledge(roster_entry=self.entry, secret=self.secret)
+        self.row.refresh_from_db()
+        self.assertFalse(self.row.unknown)
+
+    def test_someone_else_learning_it_does_not(self):
+        other = RosterEntryFactory()
+        grant_secret_knowledge(roster_entry=other, secret=self.secret)
+        self.row.refresh_from_db()
+        self.assertTrue(self.row.unknown)

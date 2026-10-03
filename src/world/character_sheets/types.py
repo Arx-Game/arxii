@@ -304,6 +304,23 @@ class StorySection(TypedDict):
     origin_slots: list[OriginSlotEntry]
 
 
+class BeatEntry(TypedDict):
+    """A beat of the character's life (#4124), the owner's and staff's only.
+
+    ``answers`` are the names of the character's distinctions that are this beat's
+    answers (the beat's offers joined to the held rows, never a string match);
+    ``unknown`` is a blank the world may fill; ``line`` is the player's own.
+    """
+
+    beat_id: int
+    name: str
+    life_stage: str
+    prompt: str
+    unknown: bool
+    line: str
+    answers: list[str]
+
+
 class OriginSlotEntry(TypedDict):
     """A character's origin-story slot answer (#2478).
 

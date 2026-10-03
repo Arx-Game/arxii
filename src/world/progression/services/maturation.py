@@ -33,9 +33,14 @@ if TYPE_CHECKING:
     from world.character_sheets.models import CharacterSheet
 
 
-def milestone_count(matured_years: int) -> int:
-    """Milestones earned by ``matured_years``: the ``MATURATION_MILESTONES`` reached."""
-    return len(_milestone_years(matured_years))
+def milestone_count(matured_years: int, floor: int = 0) -> int:
+    """Milestones earned by ``matured_years``: the ``MATURATION_MILESTONES`` reached.
+
+    ``floor`` (#4124, ``CharacterSheet.maturation_floor``) is the matured years the
+    character arrived with; milestones at or below it never count. A character made
+    before the rule carries 0 and keeps every milestone.
+    """
+    return len(_milestone_years(matured_years, floor))
 
 
 def next_milestone_year(matured_years: int) -> int | None:
@@ -56,12 +61,13 @@ def available_points(sheet: "CharacterSheet") -> int:
     spent = MaturationSpend.objects.filter(
         character_sheet=sheet,
         milestone_year__lte=sheet.matured_years,
+        milestone_year__gt=sheet.maturation_floor,
     ).count()
-    return max(0, milestone_count(sheet.matured_years) - spent)
+    return max(0, milestone_count(sheet.matured_years, sheet.maturation_floor) - spent)
 
 
-def _milestone_years(matured_years: int) -> list[int]:
-    return [year for year in MATURATION_MILESTONES if year <= matured_years]
+def _milestone_years(matured_years: int, floor: int = 0) -> list[int]:
+    return [year for year in MATURATION_MILESTONES if floor < year <= matured_years]
 
 
 def stat_cap_for(sheet: "CharacterSheet") -> int | None:
@@ -90,7 +96,11 @@ def spend_maturation_point(sheet: "CharacterSheet", trait: Trait) -> MaturationS
             "milestone_year", flat=True
         )
     )
-    unspent = [y for y in _milestone_years(sheet.matured_years) if y not in spent_years]
+    unspent = [
+        y
+        for y in _milestone_years(sheet.matured_years, sheet.maturation_floor)
+        if y not in spent_years
+    ]
     if not unspent:
         raise MaturationNoPointsError(MaturationNoPointsError.user_message)
 

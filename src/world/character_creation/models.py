@@ -1937,7 +1937,11 @@ class CharacterDraft(SharedMemoryModel):
             return
         from world.species.services import total_species_gift_cost  # noqa: PLC0415
 
-        species_cost = total_species_gift_cost(self.selected_species)
+        # The species' own price (#4124, eternal youth) rides the same line as its
+        # gift grants.
+        species_cost = (
+            total_species_gift_cost(self.selected_species) + self.selected_species.cg_point_cost
+        )
         if not species_cost:
             return
         breakdown.append(

@@ -1099,6 +1099,16 @@ class CharacterSheet(SharedMemoryModel):
     path_intent_or_none = ReverseOneToOneOrNone("path_intent")
 
     @PrunedCachedProperty
+    def origin_slot_rows(self) -> list:
+        """Every Upbringing answer and beat row on this sheet (#2478, #4124). Cleared by
+        any CharacterOriginSlot save or delete through its related_cache_fields."""
+        return list(
+            self.origin_slots.select_related("slot", "choice", "organization", "beat").order_by(
+                "slot__sort_order", "beat__sort_order", "id"
+            )
+        )
+
+    @PrunedCachedProperty
     def goal_rows(self) -> list:
         """The character's goals, numbered within their horizons (#3621). Cleared by any
         CharacterGoal save or delete through its related_cache_fields (ADR-0278, #4106)."""
