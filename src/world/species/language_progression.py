@@ -120,6 +120,14 @@ def purchase_language_breakthrough(sheet: CharacterSheet, language: Language) ->
 
     xp_cost = unlock.get_xp_cost_for_character(sheet.character)
     with transaction.atomic():
+        # Re-read under lock: another purchase (or training) may have moved the value
+        # between the read above and this transaction, so re-check the lock still
+        # holds before spending XP (double-spend guard). Write through the locked
+        # instance so the identity map isn't left holding the stale, unlocked one.
+        trait_value = CharacterTraitValue.objects.select_for_update().get(pk=trait_value.pk)
+        if trait_value.value + 1 != unlock.target_rating:
+            return not_parked
+
         try:
             spend_xp_for_character(
                 sheet, xp_cost, f"Breakthrough: {language.name} to {unlock.target_rating}"

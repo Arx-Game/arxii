@@ -12,7 +12,11 @@ from evennia_extensions.factories import AccountFactory
 from world.character_sheets.factories import CharacterSheetFactory
 from world.progression.factories import DevelopmentPointsFactory, ExperiencePointsDataFactory
 from world.progression.models import TraitRatingUnlock, TraitXPCost, XPCostChart, XPCostEntry
-from world.progression.models.rewards import DevelopmentPoints, cumulative_dp_for_level
+from world.progression.models.rewards import (
+    DevelopmentPoints,
+    ExperiencePointsData,
+    cumulative_dp_for_level,
+)
 from world.species.factories import LanguageFactory
 from world.species.language_progression import (
     get_language_training_config,
@@ -171,3 +175,75 @@ class PurchaseLanguageBreakthroughTests(TestCase):
         self.assertEqual(prospects[0].language, self.language)
         self.assertEqual(prospects[0].next_rating, 30)
         self.assertEqual(prospects[0].xp_cost, 60)
+
+    def test_double_purchase_second_call_refused_not_parked(self) -> None:
+        """A second purchase against the same breakthrough is refused, not re-spent (#4090)."""
+        CharacterTraitValue.objects.create(character=self.sheet, trait=self.trait, value=29)
+        DevelopmentPointsFactory(
+            character_sheet=self.sheet, trait=self.trait, total_earned=cumulative_dp_for_level(29)
+        )
+        ExperiencePointsDataFactory(account=self.account, total_earned=200, total_spent=0)
+
+        first_success, _message = purchase_language_breakthrough(self.sheet, self.language)
+        self.assertTrue(first_success)
+
+        second_success, message = purchase_language_breakthrough(self.sheet, self.language)
+        self.assertFalse(second_success)
+        self.assertEqual(message, f"Your {self.language.name} is not waiting at a breakthrough.")
+        ledger = ExperiencePointsData.objects.get(account=self.account)
+        self.assertEqual(ledger.total_spent, 60)
+
+    def test_two_locks_after_buying_the_first_training_parks_at_the_second_minus_one(
+        self,
+    ) -> None:
+        """Buying the 20 lock resumes training, which parks one below the still-authored
+        30 lock from setUp (not past it) — #4090's chained-breakthrough case."""
+        TraitRatingUnlock.objects.create(trait=self.trait, target_rating=20)
+        CharacterTraitValue.objects.create(character=self.sheet, trait=self.trait, value=19)
+        DevelopmentPointsFactory(
+            character_sheet=self.sheet, trait=self.trait, total_earned=cumulative_dp_for_level(19)
+        )
+        ExperiencePointsDataFactory(account=self.account, total_earned=200, total_spent=0)
+
+        success, _message = purchase_language_breakthrough(self.sheet, self.language)
+        self.assertTrue(success)
+        self.assertEqual(
+            CharacterTraitValue.objects.get(character=self.sheet, trait=self.trait).value, 20
+        )
+
+        tracker = DevelopmentPoints.objects.get(character_sheet=self.sheet, trait=self.trait)
+        tracker.award_points(100_000)
+        self.assertEqual(
+            CharacterTraitValue.objects.get(character=self.sheet, trait=self.trait).value, 29
+        )
+
+    def test_value_moving_between_the_read_and_the_lock_refuses_the_stale_purchase(self) -> None:
+        """Simulates a race: something else moves the trait's value between the unlocked
+        read (which still sees it parked at 29, below the 30 lock) and the locked
+        re-read inside the atomic block. The re-check must catch the mismatch and
+        refuse, rather than spend XP against a cost computed off the stale value
+        (#4090 double-spend fix)."""
+        trait_value = CharacterTraitValue.objects.create(
+            character=self.sheet, trait=self.trait, value=29
+        )
+        ExperiencePointsDataFactory(account=self.account, total_earned=100, total_spent=0)
+
+        real_select_for_update = CharacterTraitValue.objects.select_for_update
+
+        def racing_select_for_update(*args: object, **kwargs: object) -> object:
+            racer = CharacterTraitValue.objects.get(pk=trait_value.pk)
+            racer.value = 30
+            racer.save(update_fields=["value"])
+            return real_select_for_update(*args, **kwargs)
+
+        with mock.patch.object(
+            CharacterTraitValue.objects,
+            "select_for_update",
+            side_effect=racing_select_for_update,
+        ):
+            success, message = purchase_language_breakthrough(self.sheet, self.language)
+
+        self.assertFalse(success)
+        self.assertEqual(message, f"Your {self.language.name} is not waiting at a breakthrough.")
+        ledger = ExperiencePointsData.objects.get(account=self.account)
+        self.assertEqual(ledger.total_spent, 0)
