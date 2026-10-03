@@ -116,6 +116,15 @@ class ActionTemplate(NaturalKeyMixin, SharedMemoryModel):
             "resonance grant for the actor (used by the Entrance social action)."
         ),
     )
+    settles_allegiance = models.BooleanField(
+        default=False,
+        help_text=(
+            "If true, this is the Settle action: resolving it against an NPC under an "
+            "allegiance condition ends that condition through the condition's settle pool "
+            "(#4091). At most one template may set it; it must be a social template with "
+            "no consequence pool of its own."
+        ),
+    )
 
     class Meta:
         app_label = "arxii"
@@ -127,6 +136,18 @@ class ActionTemplate(NaturalKeyMixin, SharedMemoryModel):
 
     def clean(self) -> None:
         super().clean()
+        if self.settles_allegiance:
+            if self.category != "social":  # noqa: STRING_LITERAL - mirrors _SOCIAL_CATEGORY
+                raise ValidationError({"category": "The Settle action must be a social action."})
+            if self.consequence_pool_id is not None:
+                raise ValidationError(
+                    {"consequence_pool": "The condition's settle pool supplies the results."}
+                )
+            others = ActionTemplate.objects.filter(settles_allegiance=True).exclude(pk=self.pk)
+            if others.exists():
+                raise ValidationError(
+                    {"settles_allegiance": "Another template is already the Settle action."}
+                )
         if self.pk is None:
             return  # Can't validate gate count before first save
         gate_count = self.gates.count()

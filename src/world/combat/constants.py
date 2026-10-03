@@ -266,6 +266,7 @@ class OpponentStatus(models.TextChoices):
     DEFEATED = "defeated", "Defeated"
     FLED = "fled", "Fled"
     REMOVED = "removed", "Removed"
+    WON_OVER = "won_over", "Won over"
 
 
 class CombatAllegiance(models.TextChoices):

@@ -13,6 +13,7 @@ from __future__ import annotations
 from world.conditions.constants import (
     CALM_CONDITION_NAME,
     CHARM_CONDITION_NAME,
+    Allegiance,
     BreakFreeMode,
     DurationType,
 )
@@ -41,6 +42,7 @@ def ensure_charm_content() -> None:
             "is_stackable": False,
             "can_be_dispelled": True,
             "break_free_mode": BreakFreeMode.SELF_INITIATED,
+            "sets_allegiance": Allegiance.ALLY_OF_CASTER,
         },
         name=CHARM_CONDITION_NAME,
     )
@@ -54,6 +56,7 @@ def ensure_charm_content() -> None:
             "is_stackable": False,
             "can_be_dispelled": True,
             "break_free_mode": BreakFreeMode.SELF_INITIATED,
+            "sets_allegiance": Allegiance.NEUTRAL,
         },
         name=CALM_CONDITION_NAME,
     )
