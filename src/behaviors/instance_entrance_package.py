@@ -99,6 +99,14 @@ def instance_refuses(instance: "InstancedRoom", actor_obj: "ObjectDB") -> bool:
     return not _admits(instance, actor_obj)
 
 
+def run_admits(destination: "ObjectDB | None", actor_obj: "ObjectDB | None") -> bool:
+    """Return the existing attached entrance gate, including defunct refusal."""
+    if actor_obj is None:
+        return False
+    instance = _instance_for_room(destination)
+    return instance is not None and _admits(instance, actor_obj)
+
+
 def restrict_to_run(
     state: BaseState,
     pkg: BehaviorPackageInstance,
@@ -110,9 +118,4 @@ def restrict_to_run(
     lifecycle record is gone (a defunct doorway awaiting teardown) - an
     entrance is never a public exit.
     """
-    if actor is None:
-        return False
-    instance = _instance_for_room(state.obj.destination)
-    if instance is None:
-        return False
-    return _admits(instance, actor.obj)
+    return run_admits(state.obj.destination, None if actor is None else actor.obj)

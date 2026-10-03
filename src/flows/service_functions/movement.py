@@ -99,31 +99,32 @@ def check_exit_traversal(
         msg = "You cannot go that way."
         raise CommandError(msg)
 
-    # Encumbrance hard stop (#2862): ONLY the extreme combination refuses —
-    # far-too-heavy load AND an exhausted physical pool — and the message
-    # names both causes so nobody is ever mysteriously stuck.
+    check_exit_traversal_after_permission(caller.obj, exit.obj)
+
+
+def check_exit_traversal_after_permission(
+    caller_obj: ObjectDB, exit_obj: ObjectDB, *, read_only: bool = False
+) -> None:
+    """Check existing movement blockers after exit permission has succeeded."""
     from world.items.services.encumbrance import movement_blocked_message  # noqa: PLC0415
 
-    blocked = movement_blocked_message(caller.obj)
+    blocked = movement_blocked_message(caller_obj, read_only=read_only)
     if blocked is not None:
         raise CommandError(blocked)
-
-    # Check if the exit has a destination
-    if not hasattr(exit.obj, "destination") or not exit.obj.destination:
-        msg = "That exit doesn't lead anywhere."
-        raise CommandError(msg)
-
-    # #2989 — the unresistable expulsion bar. Pre-traversal (not post-arrival
-    # like guard detection/ward reaction) because a barred character must
-    # never even land in the room: no check, no roll, no way around it.
-    destination = exit.obj.destination
-    barred_sheet = caller.obj.character_sheet
+    missing_destination = "That exit doesn't lead anywhere."
+    try:
+        destination = exit_obj.destination
+    except AttributeError:
+        raise CommandError(missing_destination) from None
+    if not destination:
+        raise CommandError(missing_destination)
+    barred_sheet = caller_obj.character_sheet
     if barred_sheet is not None:
         from world.npc_services.expulsion_services import active_bar_for  # noqa: PLC0415
 
         if active_bar_for(destination, barred_sheet) is not None:
-            msg = "You are barred from entering there."
-            raise CommandError(msg)
+            message = "You are barred from entering there."
+            raise CommandError(message)
 
 
 def traverse_exit(

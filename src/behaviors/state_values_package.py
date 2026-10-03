@@ -4,6 +4,14 @@ from behaviors.models import BehaviorPackageInstance
 from flows.object_states.base_state import BaseState
 
 
+def state_values(pkg: BehaviorPackageInstance) -> dict:
+    """Read the existing authored initial-value mapping."""
+    values = pkg.get_from_data("values")
+    if values is None:
+        values = pkg.data or {}
+    return values if isinstance(values, dict) else {}
+
+
 def initialize_state(state: BaseState, pkg: BehaviorPackageInstance) -> None:
     """Apply values from ``pkg.data`` to ``state``.
 
@@ -27,11 +35,6 @@ def initialize_state(state: BaseState, pkg: BehaviorPackageInstance) -> None:
         ````
     """
 
-    values = pkg.get_from_data("values")
-    if values is None:
-        values = pkg.data or {}
-    if not isinstance(values, dict):
-        values = {}
-    for attr, value in values.items():
+    for attr, value in state_values(pkg).items():
         if isinstance(attr, str):
             state.set_attribute(attr, value)
