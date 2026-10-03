@@ -145,6 +145,11 @@ class ModifierTarget(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
             "Blank falls back to the target name."
         ),
     )
+    # F12 (#4090): the help_text below is stale — this FK is also populated for the
+    # LANGUAGE category (comprehension traits), not only "stat category". Left as a
+    # code comment instead of a help_text edit because any help_text change here
+    # generates an AlterField migration (verified via `makemigrations --dry-run`);
+    # fix the wording for real the next time this field's migration churns anyway.
     target_trait = models.ForeignKey(
         TRAIT_MODEL,
         on_delete=models.SET_NULL,

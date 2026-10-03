@@ -55,6 +55,7 @@ from world.magic.services.technique_effects import (
 )
 from world.magic.types.technique_power import (
     FLAG_NOT_CASTABLE_STANDALONE,
+    FLAG_NOT_COMBAT_POWER,
     FLAG_UNDERSPECIFIED,
     EvalContext,
     PayloadValuation,
@@ -518,18 +519,23 @@ def _condition_application_valuations(  # noqa: PLR0913 - cohesive per-technique
         if is_enemy:
             enemy_durations.append(duration)
 
-        valuations.append(
-            _routed_condition_valuation(
-                row,
-                is_enemy=is_enemy,
-                power=power,
-                bands=bands,
-                context=context,
-                duration=duration,
-                reference=reference,
-                multiplier_cache=multiplier_cache,
-            )
+        routed = _routed_condition_valuation(
+            row,
+            is_enemy=is_enemy,
+            power=power,
+            bands=bands,
+            context=context,
+            duration=duration,
+            reference=reference,
+            multiplier_cache=multiplier_cache,
         )
+        if de_valuation.has_language_modifier_effects(row.condition):
+            language_row = de_valuation.not_combat_power_valuation(row.condition)
+            if routed.provenance == ValuationProvenance.UNPRICEABLE:
+                routed = language_row
+            else:
+                valuations.append(language_row)
+        valuations.append(routed)
 
     control = _hard_control_valuation(
         technique, enemy_durations=enemy_durations, reference=reference
@@ -790,6 +796,8 @@ def evaluate_technique(
     formula_amplified_de, estimated_amplified_de = provenance_split(amplified_valuations)
 
     flags: list[str] = _readiness_and_profile_flags(technique)
+    if any(v.provenance == ValuationProvenance.NOT_COMBAT_POWER for v in valuations):
+        flags.append(FLAG_NOT_COMBAT_POWER)
 
     divisor = 1 + technique.windup_rounds if technique.windup_rounds > 0 else 1
     if technique.windup_rounds > 0:

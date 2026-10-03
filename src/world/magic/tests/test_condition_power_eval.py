@@ -13,18 +13,26 @@ from django.test import TestCase
 from world.combat.defend_content import DEFEND_PASSIVE_NAME, ensure_defend_content
 from world.conditions.factories import (
     ConditionDamageOverTimeFactory,
+    ConditionModifierEffectFactory,
     ConditionTemplateFactory,
 )
 from world.magic.models.techniques import Technique
 from world.magic.services.condition_power_eval import evaluate_condition
-from world.magic.types.technique_power import EvalContext, ReferenceFrame, ValuationProvenance
+from world.magic.types.technique_power import (
+    FLAG_NOT_COMBAT_POWER,
+    EvalContext,
+    ReferenceFrame,
+    ValuationProvenance,
+)
+from world.mechanics.factories import ModifierCategoryFactory, ModifierTargetFactory
 from world.traits.factories import (
     CheckOutcomeFactory,
     CheckRankFactory,
     ResultChartFactory,
     ResultChartOutcomeFactory,
+    TraitFactory,
 )
-from world.traits.models import ResultChart
+from world.traits.models import ResultChart, TraitType
 
 _KIND_MITIGATION = "mitigation"
 _KIND_DEBUFF = "debuff"
@@ -126,7 +134,6 @@ class TeamLaneGapTests(ConditionPowerEvalTestCase):
     """Decision 6: the team-damage-percent lane surfaces as a named UNPRICEABLE gap."""
 
     def test_team_lane_condition_flags_gap_not_silent_zero(self) -> None:
-        from world.conditions.factories import ConditionModifierEffectFactory
         from world.mechanics.factories import TeamDamagePercentTargetFactory
 
         template = ConditionTemplateFactory()
@@ -201,3 +208,56 @@ class ReferenceFrameSharingTests(ConditionPowerEvalTestCase):
 
         self.assertIsNotNone(condition_report)
         self.assertIsNotNone(capability_report)
+
+
+class LanguageEffectExclusionTests(ConditionPowerEvalTestCase):
+    def test_language_condition_is_not_combat_power_not_unpriceable(self) -> None:
+        trait = TraitFactory(name="CondPricingTongue", trait_type=TraitType.LANGUAGE)
+        target = ModifierTargetFactory(
+            name="CondPricingTongue",
+            category=ModifierCategoryFactory(name="language"),
+            target_trait=trait,
+        )
+        template = ConditionTemplateFactory()
+        ConditionModifierEffectFactory(
+            condition=template, modifier_target=target, value=20, scales_with_severity=True
+        )
+        reference = ReferenceFrame(outgoing_dpr=0.0, incoming_dpr=30.0, source_label="test")
+
+        report = evaluate_condition(template, at_severity=2, duration_rounds=3, reference=reference)
+
+        self.assertEqual(report.total_de, 0.0)
+        self.assertIn(FLAG_NOT_COMBAT_POWER, report.flags)
+        self.assertEqual(
+            [v.provenance for v in report.valuations], [ValuationProvenance.NOT_COMBAT_POWER]
+        )
+
+    def test_staged_language_effect_on_stage_one_is_not_combat_power(self) -> None:
+        """F4: a language effect authored on a STAGE, not the condition itself, must
+        still be caught — ``has_language_modifier_effects`` checks
+        ``Q(condition=c) | Q(stage__condition=c))``, not condition-level rows only."""
+        from world.conditions.factories import ConditionStageFactory
+
+        trait = TraitFactory(name="StagedPricingTongue", trait_type=TraitType.LANGUAGE)
+        target = ModifierTargetFactory(
+            name="StagedPricingTongue",
+            category=ModifierCategoryFactory(name="language"),
+            target_trait=trait,
+        )
+        template = ConditionTemplateFactory(has_progression=True)
+        stage_one = ConditionStageFactory(condition=template, stage_order=1)
+        ConditionModifierEffectFactory(
+            condition=None,
+            stage=stage_one,
+            modifier_target=target,
+            value=20,
+            scales_with_severity=True,
+        )
+        reference = ReferenceFrame(outgoing_dpr=0.0, incoming_dpr=30.0, source_label="test")
+
+        report = evaluate_condition(template, at_severity=2, duration_rounds=3, reference=reference)
+
+        provenances = [v.provenance for v in report.valuations]
+        self.assertIn(FLAG_NOT_COMBAT_POWER, report.flags)
+        self.assertIn(ValuationProvenance.NOT_COMBAT_POWER, provenances)
+        self.assertNotIn(ValuationProvenance.UNPRICEABLE, provenances)

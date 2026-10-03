@@ -23,7 +23,12 @@ from decimal import Decimal
 import statistics
 from typing import TYPE_CHECKING
 
-from world.magic.types.technique_power import EvalContext, ReferenceFrame
+from world.magic.types.technique_power import (
+    EvalContext,
+    PayloadValuation,
+    ReferenceFrame,
+    ValuationProvenance,
+)
 
 if TYPE_CHECKING:
     from world.conditions.models import ConditionTemplate
@@ -192,18 +197,21 @@ def modifier_effect_shift(condition: ConditionTemplate, *, severity: float) -> f
     Queries ``ConditionModifierEffect.objects.filter(condition=condition).exclude(
     modifier_target__name=TEAM_DAMAGE_PERCENT_TARGET_NAME)`` — the team-damage-percent
     lane is priced separately (technique-only; #3390's standalone condition evaluator
-    surfaces it as an ``UNPRICEABLE`` gap, see ``condition_power_eval.py``). Returns
-    ``None`` when the condition carries no such (non-team-lane) row, else
+    surfaces it as an ``UNPRICEABLE`` gap, see ``condition_power_eval.py``).
+    Language-trait effects (#4090) are excluded too: the estimate prices a modifier as
+    a bonus on the 1-100 combat roll, and a fluency bonus is not one. Returns ``None``
+    when the condition carries no such (non-team-lane, non-language) row, else
     ``sum(effect.value * severity if effect.scales_with_severity else effect.value for
     effect in effects)``.
     """
     from world.conditions.models import ConditionModifierEffect  # noqa: PLC0415
     from world.mechanics.constants import TEAM_DAMAGE_PERCENT_TARGET_NAME  # noqa: PLC0415
+    from world.traits.models import TraitType  # noqa: PLC0415
 
     effects = list(
-        ConditionModifierEffect.objects.filter(condition=condition).exclude(
-            modifier_target__name=TEAM_DAMAGE_PERCENT_TARGET_NAME
-        )
+        ConditionModifierEffect.objects.filter(condition=condition)
+        .exclude(modifier_target__name=TEAM_DAMAGE_PERCENT_TARGET_NAME)
+        .exclude(modifier_target__target_trait__trait_type=TraitType.LANGUAGE)
     )
     if not effects:
         return None
@@ -211,6 +219,38 @@ def modifier_effect_shift(condition: ConditionTemplate, *, severity: float) -> f
     return sum(
         (effect.value * severity if effect.scales_with_severity else effect.value)
         for effect in effects
+    )
+
+
+def has_language_modifier_effects(condition: ConditionTemplate) -> bool:
+    """True when *condition* carries a ConditionModifierEffect toward a LANGUAGE trait (#4090).
+
+    Designated by ``target_trait.trait_type``, never by name. Unlike
+    ``modifier_effect_shift`` (condition-level rows only), this also catches a
+    language effect authored on one of the condition's STAGES
+    (``Q(condition=condition) | Q(stage__condition=condition)``) — a staged
+    understanding condition whose language effect sits on a stage still has to
+    report "not combat power," not a silent gap.
+    """
+    from django.db.models import Q  # noqa: PLC0415
+
+    from world.conditions.models import ConditionModifierEffect  # noqa: PLC0415
+    from world.traits.models import TraitType  # noqa: PLC0415
+
+    return ConditionModifierEffect.objects.filter(
+        Q(condition=condition) | Q(stage__condition=condition),
+        modifier_target__target_trait__trait_type=TraitType.LANGUAGE,
+    ).exists()
+
+
+def not_combat_power_valuation(condition: ConditionTemplate) -> PayloadValuation:
+    """The explicit zero row a language effect reports instead of a silent zero (#4090)."""
+    return PayloadValuation(
+        kind="utility",
+        label=condition.name,
+        value=0.0,
+        provenance=ValuationProvenance.NOT_COMBAT_POWER,
+        detail="language comprehension effect; not combat power",
     )
 
 
