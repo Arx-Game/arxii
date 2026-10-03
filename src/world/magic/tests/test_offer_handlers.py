@@ -22,6 +22,7 @@ from actions.factories import ActionTemplateFactory
 from commands.exceptions import CommandError
 from world.classes.factories import PathFactory
 from world.classes.models import PathStage
+from world.gm.models import GMPrompt
 from world.magic.entry_flourish import PendingEntryFlourishOffer
 from world.magic.exceptions import GiftResonanceUnresolvable
 from world.magic.factories import (
@@ -30,7 +31,6 @@ from world.magic.factories import (
     ensure_dramatic_entrance_content,
     wire_audere_power_multipliers,
 )
-from world.magic.models.dramatic_moment import DramaticMomentSuggestion
 from world.magic.tests.majora_fixtures import build_crossing_world
 from world.magic.types.techniques import SoulfrayWarning
 from world.scenes.tests.cast_test_helpers import (
@@ -217,9 +217,7 @@ class SoulfrayPendingHandlerAcceptEntranceTests(CastScenarioMixin):
             "accept must re-dispatch through the entrance path, granting a flourish offer",
         )
         self.assertTrue(
-            DramaticMomentSuggestion.objects.filter(
-                character_sheet=self.caster.character_sheet
-            ).exists(),
+            GMPrompt.objects.filter(character_sheet=self.caster.character_sheet).exists(),
         )
 
     def test_accept_entrance_soulfray_surfaces_redispatch_failure(self) -> None:

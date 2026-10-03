@@ -447,6 +447,12 @@ vi.mock('@/crossover/components/LinkedStoriesPanel', () => ({
   LinkedStoriesPanel: () => <div data-testid="linked-stories-panel" />,
 }));
 
+// #4101: GMPromptQueue self-fetches the GM prompt queue; mock it so the scene
+// test doesn't hit real fetch (same pattern as LinkedStoriesPanel above).
+vi.mock('../../components/GMPromptQueue', () => ({
+  GMPromptQueue: () => <div data-testid="gm-prompt-queue-mount" />,
+}));
+
 // Captures the props each render passes so #3412 S4's speakingAs assertion
 // can inspect them without deep-rendering the real composer.
 const mockCommandInput = vi.fn();

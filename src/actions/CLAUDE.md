@@ -442,6 +442,21 @@ They do not use the command system, dispatchers, or handlers.
   `events.py`'s host-lifecycle actions) close the recognition loop a qualifying
   entrance opens.
 
+  **GM prompt narration (#4101).** `communication.py`'s `EmitAction`/`PemitAction`
+  (keys `"emit"`/`"pemit"`) accept an optional
+  `gm_prompt_id` kwarg (telnet `emit/prompt <id> <text>` / `pemit/prompt <id>
+  <name>[,<name>...]=<text>`, the web `GMPromptViewSet.narrate` dispatch): when
+  present, `NarratesOwnPromptPrerequisite` gates it to the prompt's addressed GM
+  (or staff), and `execute()` links the created Interaction back to the prompt via
+  `world.gm.prompt_services.link_prompt_narration`. `dramatic_moments.py`'s
+  `DismissGMPromptAction` (key `"dismiss_gm_prompt"`) closes a narration-kind
+  prompt the same way `DismissDramaticMomentSuggestionAction` closes a
+  `dramatic_moment` one, but addressed-GM-or-staff gated instead of scene-GM/
+  owner/staff. Both back the telnet `gm prompts` / `gm prompt
+  send|dismiss|done` namespace (`commands/gm_ops.py`, see `src/commands/CLAUDE.md`)
+  and the web `GMPromptViewSet` (`world/gm/views.py`). See `docs/systems/scenes.md`'s
+  "GM narration of mechanical events" section and ADR-4101 for the full model.
+
   **Battle-front composition (#2225):** `_execute_technique_entrance` calls
   `_resolve_battle_context(actor_sheet, scene)` before dispatching. When the
   actor is an active `BattleParticipant` stationed at a `BattlePlace` whose

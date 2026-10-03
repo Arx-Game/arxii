@@ -27,6 +27,9 @@ from world.magic.factories import (
 from world.magic.tests.audere_test_helpers import build_audere_gate_fixture
 from world.mechanics.constants import EngagementType
 from world.mechanics.engagement import CharacterEngagement
+from world.scenes.constants import InteractionMode
+from world.scenes.factories import SceneFactory
+from world.scenes.models import Interaction
 from world.vitals.constants import CharacterLifeState
 from world.vitals.factories import CharacterVitalsFactory
 from world.vitals.models import CharacterVitals
@@ -147,6 +150,50 @@ class CleanupAuderaMajoraTeardownTests(TestCase):
         cleanup_completed_encounter(self.encounter)
 
         assert not PendingAudereMajoraOffer.objects.filter(character_sheet=self.sheet).exists()
+
+    def test_cleanup_releases_withheld_manifestation_before_deleting(self) -> None:
+        """A withheld Crossing manifestation is never silently dropped when the
+        encounter ends unresolved (#4101 fix round 1, I1) -- the bulk delete
+        below must send it first, to the offer's own captured scene."""
+        from world.classes.models import PathStage
+        from world.conditions.factories import (
+            ConditionStageFactory,
+            ConditionTemplateFactory,
+        )
+        from world.magic.audere import SOULFRAY_CONDITION_NAME
+        from world.magic.audere_majora import AudereMajoraThreshold
+
+        tier = IntensityTierFactory(
+            name="Major_majora_withheld_tier", threshold=10, control_modifier=0
+        )
+        soulfray_t = ConditionTemplateFactory(name=SOULFRAY_CONDITION_NAME, has_progression=True)
+        warp_stage = ConditionStageFactory(condition=soulfray_t, stage_order=3, name="Ripping_wh")
+        threshold = AudereMajoraThreshold.objects.create(
+            boundary_level=51,
+            target_stage=PathStage.PUISSANT,
+            minimum_intensity_tier=tier,
+            minimum_warp_stage=warp_stage,
+            requires_active_audere=False,
+            vision_text="[PLACEHOLDER VISION]",
+            manifestation_text="withheld manifestation",
+        )
+        scene = SceneFactory()
+        PendingAudereMajoraOffer.objects.create(
+            character_sheet=self.sheet,
+            threshold=threshold,
+            fired_intensity=20,
+            soulfray_stage_order=3,
+            manifestation_withheld=True,
+            scene=scene,
+        )
+
+        with self.captureOnCommitCallbacks(execute=True):
+            cleanup_completed_encounter(self.encounter)
+
+        assert not PendingAudereMajoraOffer.objects.filter(character_sheet=self.sheet).exists()
+        assert Interaction.objects.filter(
+            content="withheld manifestation", mode=InteractionMode.EMIT, scene=scene
+        ).exists()
 
 
 class CleanupCertainDeathBackstopTests(TestCase):

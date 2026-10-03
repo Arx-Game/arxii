@@ -1,6 +1,6 @@
 """Dramatic-moment suggestion confirm/dismiss actions (#2183).
 
-Bridges the GM-facing ``DramaticMomentSuggestion`` inbox (Task 3's
+Bridges the GM-facing ``GMPrompt`` inbox (Task 3's
 ``resolve_dramatic_moment_suggestion``) to a shared web+telnet dispatch seam.
 
 Both actions are **account-authorized** (mirroring ``actions/definitions/events.py``'s
@@ -24,6 +24,7 @@ from actions.types import ActionResult, TargetType
 from world.magic.exceptions import (
     DramaticMomentCapExceeded,
     DramaticMomentSuggestionAlreadyResolved,
+    DramaticMomentSuggestionWrongKind,
     EndorsementValidationError,
 )
 
@@ -32,7 +33,7 @@ if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
 
     from actions.types import ActionContext
-    from world.magic.models.dramatic_moment import DramaticMomentSuggestion
+    from world.gm.models import GMPrompt
     from world.scenes.models import Scene
 
 _MSG_WHICH_SUGGESTION = "Which suggestion? Provide a suggestion id."
@@ -41,19 +42,25 @@ _RESOLVE_EXCEPTIONS = (
     EndorsementValidationError,
     DramaticMomentCapExceeded,
     DramaticMomentSuggestionAlreadyResolved,
+    DramaticMomentSuggestionWrongKind,
 )
 
 
-def _suggestion_or_none(suggestion_id: Any) -> DramaticMomentSuggestion | None:
-    from world.magic.models.dramatic_moment import DramaticMomentSuggestion  # noqa: PLC0415
+def _suggestion_or_none(suggestion_id: Any) -> GMPrompt | None:
+    from world.gm.constants import GMPromptKind  # noqa: PLC0415
+    from world.gm.models import GMPrompt  # noqa: PLC0415
 
     if suggestion_id is None:
         return None
     try:
-        return DramaticMomentSuggestion.objects.select_related(
-            "scene", "moment_type", "character_sheet"
-        ).get(pk=int(suggestion_id))
-    except (DramaticMomentSuggestion.DoesNotExist, ValueError, TypeError):
+        # #4101 fix round 1: GMPrompt also carries narration kinds now, each
+        # addressed to one specific GM -- without this filter a scene GM/owner/
+        # staff could confirm/dismiss another GM's own narration prompt by id,
+        # since _account_can_gm_scene gates on the SCENE, not on addressed_to.
+        return GMPrompt.objects.select_related("scene", "moment_type", "character_sheet").get(
+            pk=int(suggestion_id), kind=GMPromptKind.DRAMATIC_MOMENT
+        )
+    except (GMPrompt.DoesNotExist, ValueError, TypeError):
         return None
 
 
@@ -146,3 +153,40 @@ class DismissDramaticMomentSuggestionAction(_DramaticMomentSuggestionActionBase)
             account=kwargs.get("account"),
             confirm=False,
         )
+
+
+@dataclass
+class DismissGMPromptAction(_DramaticMomentSuggestionActionBase):
+    """The addressed GM dismisses a narration prompt; its defaults go out (#4101).
+
+    Expects kwargs: ``prompt_id`` (int), ``account`` (AccountDB -- must be the
+    prompt's own ``addressed_to``, or staff). Unlike the dramatic-moment
+    confirm/dismiss actions above (scene-GM/owner/staff gated), a narration
+    prompt is addressed to one specific GM -- only that GM may close it, with
+    a staff bypass (ruling R9-2, #4101 fix round 2) matching
+    ``narration_prompt_for``'s own gate, which lets staff narrate the same
+    prompt. The bypass check lives here, in the action's own authorization
+    gate -- never in the view, which is dispatch plumbing only.
+    """
+
+    key: str = "dismiss_gm_prompt"
+    name: str = "Dismiss GM Prompt"
+    icon: str = "x"
+
+    def execute(self, actor, context=None, **kwargs: Any) -> ActionResult:
+        from core_management.permissions import is_staff_observer  # noqa: PLC0415
+        from world.gm.exceptions import GMPromptError  # noqa: PLC0415
+        from world.gm.models import GMPrompt  # noqa: PLC0415
+        from world.gm.prompt_services import dismiss_gm_prompt  # noqa: PLC0415
+
+        account = kwargs.get("account")
+        prompt = GMPrompt.objects.filter(pk=kwargs.get("prompt_id")).first()
+        if prompt is None or account is None:
+            return ActionResult(success=False, message="That prompt is not addressed to you.")
+        if not is_staff_observer(account) and prompt.addressed_to_id != account.pk:
+            return ActionResult(success=False, message="That prompt is not addressed to you.")
+        try:
+            dismiss_gm_prompt(prompt, resolver=account)
+        except GMPromptError as exc:
+            return ActionResult(success=False, message=exc.user_message)
+        return ActionResult(success=True, data={"prompt_id": prompt.pk})

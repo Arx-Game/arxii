@@ -31,9 +31,11 @@ from world.magic.models import (
     CapabilityPowerConfig,
     CharacterAnima,
     CharacterAura,
+    CharacterCrossingText,
     CharacterGift,
     CharacterGiftUnlock,
     CharacterResonance,
+    CharacterSurgeText,
     CharacterTechnique,
     CharacterThreadWeavingUnlock,
     CharacterTradition,
@@ -126,7 +128,6 @@ from world.magic.models.appetites import (
     FeedingRecord,
 )
 from world.magic.models.dramatic_moment import (
-    DramaticMomentSuggestion,
     DramaticMomentTag,
     DramaticMomentType,
 )
@@ -1109,6 +1110,16 @@ class AudereThresholdAdmin(admin.ModelAdmin):
                 )
             },
         ),
+        (
+            "Offer dialog copy (#4101)",
+            {
+                "fields": (
+                    "offer_title",
+                    "offer_strip_label",
+                    "offer_body_text",
+                )
+            },
+        ),
     )
 
 
@@ -1665,29 +1676,75 @@ class DramaticMomentTagAdmin(admin.ModelAdmin):
         return False
 
 
-@admin.register(DramaticMomentSuggestion)
-class DramaticMomentSuggestionAdmin(admin.ModelAdmin):
-    autocomplete_fields = ["character_sheet", "interaction", "resolved_by", "scene"]
-    list_display = (
-        "id",
+class CharacterCrossingTextAdminForm(forms.ModelForm):
+    """Approved admin-form labels for three player-facing fields (#4101, F8/F8b).
+
+    The approved demo labels are "Character" / "Vision (private)" /
+    "Manifestation (room)" -- set as ADMIN FORM labels, never ``verbose_name``
+    on the model field, so no migration is generated for a cosmetic
+    admin-only rename.
+    """
+
+    class Meta:
+        model = CharacterCrossingText
+        fields = "__all__"  # noqa: DJ007 - admin form mirrors the model
+        labels = {
+            "character_sheet": "Character",
+            "vision_text": "Vision (private)",
+            "manifestation_text": "Manifestation (room)",
+        }
+
+
+@admin.register(CharacterCrossingText)
+class CharacterCrossingTextAdmin(admin.ModelAdmin):
+    """A character's own prepared Audere Majora crossing text (#4101).
+
+    Staff may author directly here; a table GM authors the same row through the
+    REST surface instead (``PreparedCrossingTextViewSet``). ``save_model`` stamps
+    ``prepared_by`` to the editing staff account when it isn't already set, so a
+    row authored in admin still carries provenance without a visible field a
+    staffer could spoof on someone else's behalf.
+    """
+
+    form = CharacterCrossingTextAdminForm
+    autocomplete_fields = ("character_sheet", "prepared_by")
+    list_display = ("character_sheet", "prepared_by", "crossing", "updated_at")
+    # Names the character in __str__ with no extra query per row (F8) -- the
+    # same chain CharacterSheet.__str__ itself reads (`self.character.key`).
+    list_select_related = ("character_sheet__character",)
+    readonly_fields = ("crossing", "prepared_by", "created_at", "updated_at")
+    fields = (
         "character_sheet",
-        "moment_type",
-        "scene",
-        "status",
-        "success_level",
-        "resolved_by",
+        "vision_text",
+        "manifestation_text",
+        "deed_title",
+        "prepared_by",
+        "crossing",
         "created_at",
+        "updated_at",
     )
-    list_filter = ("status", "moment_type")
-    readonly_fields = tuple(f.name for f in DramaticMomentSuggestion._meta.fields)  # noqa: SLF001
 
-    def has_add_permission(self, request) -> bool:  # noqa: ARG002
-        # Suggestions are only ever created by maybe_suggest_dramatic_moments() and
-        # resolved via resolve_dramatic_moment_suggestion() — no admin-authored rows.
-        return False
+    def save_model(self, request, obj, form, change) -> None:
+        if obj.prepared_by_id is None:
+            obj.prepared_by = request.user
+        super().save_model(request, obj, form, change)
 
-    def has_change_permission(self, request, obj=None) -> bool:  # noqa: ARG002
-        return False
+
+@admin.register(CharacterSurgeText)
+class CharacterSurgeTextAdmin(admin.ModelAdmin):
+    """A character's own prepared Audere surge line (#4101). No patron layer, no crossing link."""
+
+    autocomplete_fields = ("character_sheet", "prepared_by")
+    list_display = ("character_sheet", "prepared_by", "updated_at")
+    # Names the character in __str__ with no extra query per row (F8).
+    list_select_related = ("character_sheet__character",)
+    readonly_fields = ("prepared_by", "updated_at")
+    fields = ("character_sheet", "surge_text", "prepared_by", "updated_at")
+
+    def save_model(self, request, obj, form, change) -> None:
+        if obj.prepared_by_id is None:
+            obj.prepared_by = request.user
+        super().save_model(request, obj, form, change)
 
 
 @admin.register(GiftUnlock)
@@ -2154,6 +2211,32 @@ class AudereMajoraThresholdAdmin(admin.ModelAdmin):
     list_select_related = ["minimum_intensity_tier", "minimum_warp_stage"]
     autocomplete_fields = ["minimum_intensity_tier", "minimum_warp_stage"]
     filter_horizontal = ["archetypes"]
+    fieldsets = (
+        (
+            None,
+            {
+                "fields": (
+                    "boundary_level",
+                    "target_stage",
+                    "minimum_intensity_tier",
+                    "minimum_warp_stage",
+                    "requires_active_audere",
+                )
+            },
+        ),
+        (
+            "Ceremony text (spoiler-private)",
+            {"fields": ("vision_text", "manifestation_text", "deed_title")},
+        ),
+        (
+            "Offer dialog copy (#4101)",
+            {"fields": ("offer_title", "offer_strip_label")},
+        ),
+        (
+            "Renown award",
+            {"fields": ("magnitude", "risk", "reach", "archetypes")},
+        ),
+    )
 
 
 @admin.register(AnimaConfig)

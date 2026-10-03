@@ -785,6 +785,46 @@ Audere into the moment a character's magic reaches powers otherwise out of reach
 
 ---
 
+## GM narration of mechanical events (#4101, BUILT)
+
+Audere surges and Audere Majora Crossings used to resolve their authored text as a flat
+broadcast with no chance for the GM running the scene to narrate it themselves.
+
+**Built:**
+- `DramaticMomentSuggestion` (the #2183 technique-entrance confirm inbox) is renamed
+  `GMPrompt`, moved to `world/gm`, and gains a `kind` (`GMPromptKind`): the original
+  `dramatic_moment` confirm kind plus six narration kinds, three of them this app's own
+  (`audere_surge`, via `world.magic.audere._announce_surge`; `crossing`, via
+  `world.magic.audere_majora._route_crossing`; `audere_ultimate`, via
+  `world.magic.services.ultimates._route_ultimate_chosen`) and three from other apps
+  (`miracle`, `death`, `stake_outcome`; see `docs/roadmap/gm-system.md`'s Phase 10).
+- Each event source calls `world.gm.prompt_services.route_narratable_event`, which prompts
+  every opted-in GM (`GMPromptFilter`/`GMPromptGroup.AUDERE` covers all three magic kinds)
+  with a `GMPrompt` to narrate; with none opted in, the resolved text delivers unprompted,
+  byte-identical to pre-#4101 behavior.
+- **Prepared per-character text** (`models/prepared_text.py`): `CharacterCrossingText`/
+  `CharacterSurgeText`, authored by staff or a character's table GM, resolved field by
+  field (the character's own prepared text, then, Crossing only, the patron
+  `AudereMajoraFaithVariant`, then the authored tier default). A Crossing's prepared text
+  is consumed on use; a surge's is reusable.
+- **A GM's narration never releases the authored defaults by itself.** Both legs (room,
+  private) go out at most once each, independently, only when the prompt's event closes.
+  A Crossing's private vision still logs (`narrate_privately`) even with no active scene.
+- **The ultimate-pick reveal is GM-signal-only**: no authored default line exists for a
+  readied pick, so with no GM opted in nothing extra is delivered; the pick itself still
+  works exactly as before #4098.
+- Full record: `docs/systems/magic.md`'s "GM Prompt Queue" section;
+  `docs/systems/scenes.md`'s "GM narration of mechanical events" section;
+  `docs/architecture/runtime-modifiers-audere.md`'s "GM narration of surges and Crossings"
+  section; ADR-4101.
+
+**Deferred (spec scope, not a gap in this build):** a new mechanical event wanting GM
+narration needs a new `GMPromptKind` + `GMPromptGroup` mapping + event-source call site;
+the queue, filter, and composer surfaces are already generic over `kind` and need no
+further change.
+
+---
+
 ## Deeper design & history
 
 - Scope-by-scope build record: [`magic-build-history.md`](magic-build-history.md)

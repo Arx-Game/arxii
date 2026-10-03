@@ -565,6 +565,44 @@ def _probe_audere_ultimate_copy() -> ProbeResult:
     )
 
 
+_AUDERE_OFFER_COPY_FIELDS = ("offer_title", "offer_strip_label", "offer_body_text")
+
+# Mirrors _AUDERE_OFFER_COPY_FIELDS above, but for the per-row AudereMajoraThreshold
+# fields (#4101 fold-in: the crossing gate strip joined the crossing dialog title).
+_AUDERE_MAJORA_OFFER_COPY_FIELDS = ("offer_title", "offer_strip_label")
+
+
+def _probe_audere_offer_copy() -> ProbeResult:
+    """The Audere and crossing offer dialog copy is authored over PLACEHOLDER (#4101).
+
+    A missing `AudereThreshold` singleton contributes nothing to `missing` here (same
+    rationale as `_probe_audere_ultimate_copy` above): that absence is already the
+    REQUIRED `audere-threshold` row's failure state, and `AudereMajoraThreshold` is a
+    separate per-boundary-level table with no row-existence dependency on it, so its
+    rows are still probed even when the singleton doesn't exist.
+    """
+    from world.magic.audere import AudereThreshold  # noqa: PLC0415
+    from world.magic.audere_majora import AudereMajoraThreshold  # noqa: PLC0415
+
+    missing: list[str] = []
+    threshold = AudereThreshold.objects.cached_singleton()
+    if threshold is not None:
+        missing.extend(
+            f for f in _AUDERE_OFFER_COPY_FIELDS if _PLACEHOLDER_MARK in getattr(threshold, f)
+        )
+    missing.extend(
+        f"crossing level {row.boundary_level} {field}"
+        for row in AudereMajoraThreshold.objects.all()
+        for field in _AUDERE_MAJORA_OFFER_COPY_FIELDS
+        if _PLACEHOLDER_MARK in getattr(row, field)
+    )
+    if not missing:
+        return ProbeResult(present=True)
+    return ProbeResult(
+        present=False, missing=tuple(missing), detail=f"Still placeholder: {', '.join(missing)}."
+    )
+
+
 def _probe_personalization_copy() -> ProbeResult:
     """Every make-it-yours panel key exists and is authored over its PLACEHOLDER (#4099).
 
@@ -1776,6 +1814,18 @@ def _declarations() -> tuple[ContentDependency, ...]:
                 "framing line and the deferred-death line."
             ),
             probe=CustomProbe(fn=_probe_audere_ultimate_copy),
+            admin_model="AudereThreshold",
+        ),
+        ContentDependency(
+            key="audere-offer-copy",
+            label="Audere and crossing offer dialog copy",
+            tier=DependencyTier.TUNING,
+            consumer=(
+                "frontend/src/magic/components/AudereOfferDialog.tsx, "
+                "AudereOfferGate.tsx, AudereMajoraOfferDialog.tsx"
+            ),
+            consequence="Players see PLACEHOLDER headings on the Audere and crossing offers.",
+            probe=CustomProbe(fn=_probe_audere_offer_copy),
             admin_model="AudereThreshold",
         ),
         ContentDependency(

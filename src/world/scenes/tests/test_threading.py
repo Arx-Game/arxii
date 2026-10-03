@@ -305,7 +305,7 @@ class TestInvolvementMarkTelnetParity(TestCase):
     session renders its own ``InvolvementFlag`` chip off ``target_persona_ids``
     (#3787 Task 7) and would otherwise see the raw line a second time in its
     System lane. ``ObjectSessionHandler.all`` (the real method
-    ``_non_web_sessions`` calls via ``obj.sessions.all()``) is patched per
+    ``non_web_sessions`` calls via ``obj.sessions.all()``) is patched per
     character to return a fake session stamped with the ``protocol_key`` a
     real telnet or webclient connection would carry (mirroring
     ``web/tests/test_text_inputfunc.py``'s ``_session()`` helper, the
@@ -376,7 +376,7 @@ class TestInvolvementMarkTelnetParity(TestCase):
     def test_mixed_session_character_gets_mark_on_telnet_only_no_leak(self) -> None:
         """A character connected on telnet AND web at once (#3787 review finding).
 
-        ``_non_web_sessions`` (``world/scenes/interaction_services.py``) filters
+        ``non_web_sessions`` (``world/scenes/interaction_services.py``) filters
         per SESSION, not per character, so a character holding both protocols at
         once is the case neither existing test exercises: `test_telnet_session_
         gets_the_mark_web_session_does_not` gives Bob a telnet-only session and

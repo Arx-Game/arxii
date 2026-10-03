@@ -5,6 +5,7 @@ from __future__ import annotations
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db import transaction
 from django.db.models import Count, Q, QuerySet
+from django.http import Http404
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from django_filters.rest_framework import DjangoFilterBackend
@@ -16,12 +17,26 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from actions.definitions.communication import EmitAction, PemitAction
+from actions.definitions.dramatic_moments import (
+    ConfirmDramaticMomentSuggestionAction,
+    DismissDramaticMomentSuggestionAction,
+    DismissGMPromptAction,
+)
+from actions.types import ActionResult
 from world.distinctions.models import CharacterDistinction, Distinction
-from world.gm.constants import GMApplicationStatus, GMTableStatus, TableRequestKind
+from world.gm.constants import (
+    GMApplicationStatus,
+    GMPromptGroup,
+    GMPromptKind,
+    GMTableStatus,
+    TableRequestKind,
+)
 from world.gm.filters import (
     CatalogSuggestionFilter,
     GMApplicationFilter,
     GMProfileFilter,
+    GMPromptQueueFilter,
     GMTableFilter,
     GMTableMembershipFilter,
     TableUpdateRequestFilter,
@@ -30,13 +45,20 @@ from world.gm.models import (
     CatalogSuggestion,
     GMApplication,
     GMProfile,
+    GMPrompt,
+    GMPromptFilter,
     GMRosterInvite,
     GMSummonOffer,
     GMTable,
     GMTableMembership,
     TableUpdateRequest,
 )
-from world.gm.permissions import IsGM, IsGMOrStaff
+from world.gm.permissions import CanViewGMPromptQueue, IsGM, IsGMOrStaff
+from world.gm.prompt_services import (
+    narration_location_for,
+    prompt_visible_to,
+    visible_prompts_for,
+)
 from world.gm.serializers import (
     CatalogSuggestionDetailSerializer,
     DemandRansomSerializer,
@@ -51,12 +73,15 @@ from world.gm.serializers import (
     GMInviteRevokeSerializer,
     GMProfileMineSerializer,
     GMProfileSerializer,
+    GMPromptFilterSerializer,
+    GMPromptSerializer,
     GMRosterInviteSerializer,
     GMSummonOfferSerializer,
     GMTableMembershipSerializer,
     GMTableSerializer,
     MintGMCharacterRequestSerializer,
     MintGMCharacterResultSerializer,
+    NarrateGMPromptSerializer,
     PromoteGMInputSerializer,
     TableUpdateRequestCreateSerializer,
     TableUpdateRequestSerializer,
@@ -81,6 +106,8 @@ from world.gm.services import (
 )
 from world.player_submissions.constants import SubmissionStatus
 from world.roster.models.applications import RosterApplication
+from world.roster.services.selection import character_for_request
+from world.scenes.models import Scene
 from world.stories.pagination import StandardResultsSetPagination
 
 
@@ -950,3 +977,161 @@ class DiscoveryView(APIView):
             actor_level_index=user_breadth_index(request.user),
         )
         return Response(DiscoveryResultSerializer(found).data)
+
+
+class _GMPromptSceneQuerySerializer(serializers.Serializer):
+    """Validates ``?scene=`` for ``GMPromptViewSet`` (#4101 fix round 3, finding M1) --
+    a plain integer field so a missing/non-numeric value 400s through ordinary
+    serializer validation, not a hand-rolled ``request.query_params`` read."""
+
+    scene = serializers.IntegerField()
+
+
+class GMPromptViewSet(mixins.ListModelMixin, viewsets.GenericViewSet):
+    """The one GM prompt queue (#4101; was the #2183 suggestion inbox).
+
+    List is scoped to a single ``?scene=`` (a scene-less narration prompt, e.g.
+    a stake outcome, still surfaces for the GM it's addressed to via
+    ``visible_prompts_for``). ``get_queryset()`` is the one source: it resolves
+    the validated scene (``get_scene()``) and returns ``visible_prompts_for``
+    directly; ``GMPromptQueueFilter`` only narrows that by ``kind``, and
+    ``CanViewGMPromptQueue`` (``world/gm/permissions.py``) owns the "only the
+    scene's GM may view an empty queue" 403 -- authorization lives in a
+    permission class, not inline in the view or the FilterSet (#4101 fix round
+    3, finding M1). ``confirm``/``dismiss``/``narrate`` dispatch the REGISTRY
+    actions that own the real authorization/validation -- this view is
+    dispatch plumbing only.
+    """
+
+    serializer_class = GMPromptSerializer
+    permission_classes = [IsAuthenticated, CanViewGMPromptQueue]
+    pagination_class = StandardResultsSetPagination
+    filter_backends = [DjangoFilterBackend]
+    filterset_class = GMPromptQueueFilter
+    queryset = GMPrompt.objects.none()
+
+    def get_scene(self) -> Scene:
+        """The validated ``?scene=`` -- required (400 if missing/non-numeric), 404 if
+        unknown. Shared by ``get_queryset()`` and ``CanViewGMPromptQueue``."""
+        params = _GMPromptSceneQuerySerializer(data=self.request.query_params)
+        params.is_valid(raise_exception=True)
+        return get_object_or_404(Scene, pk=params.validated_data["scene"])
+
+    def get_queryset(self) -> QuerySet[GMPrompt]:
+        return visible_prompts_for(self.request.user, scene=self.get_scene())
+
+    def _own_prompt(self, pk: str | None) -> GMPrompt:
+        """The prompt, scoped to what ``request.user`` may see (#4101 fix round 2,
+        finding 6) -- an id outside their visible queue 404s regardless of kind,
+        same as it never appearing in ``GET .../prompts/?scene=``. Staff bypass
+        lives in ``prompt_visible_to`` itself (#4101 fix round 3, finding M2) --
+        the one place that decision is made, not duplicated here.
+        """
+        prompt = get_object_or_404(GMPrompt, pk=pk)
+        if not prompt_visible_to(self.request.user, prompt):
+            raise Http404
+        return prompt
+
+    @action(detail=True, methods=["post"])
+    def confirm(self, request: Request, pk: str | None = None) -> Response:
+        prompt = self._own_prompt(pk)
+        # The kind gate lives in the action itself (ConfirmDramaticMomentSuggestionAction
+        # only ever resolves a DRAMATIC_MOMENT-kind suggestion id) -- #4101 fix round 2,
+        # finding 6: no duplicate check here.
+        result = ConfirmDramaticMomentSuggestionAction().run(
+            actor=None, account=request.user, suggestion_id=prompt.pk
+        )
+        return self._result(result, prompt)
+
+    @action(detail=True, methods=["post"])
+    def dismiss(self, request: Request, pk: str | None = None) -> Response:
+        prompt = self._own_prompt(pk)
+        if prompt.kind == GMPromptKind.DRAMATIC_MOMENT:
+            result = DismissDramaticMomentSuggestionAction().run(
+                actor=None, account=request.user, suggestion_id=prompt.pk
+            )
+        else:
+            result = DismissGMPromptAction().run(
+                actor=None, account=request.user, prompt_id=prompt.pk
+            )
+        return self._result(result, prompt)
+
+    @action(detail=True, methods=["post"])
+    def narrate(self, request: Request, pk: str | None = None) -> Response:
+        prompt = self._own_prompt(pk)
+        actor = character_for_request(request, entry_id=None)
+        if actor is None:
+            return Response({"detail": "Play a character to narrate."}, status=400)
+        # The receiver-presence check (audience="chosen") needs a room to test
+        # against -- ``narration_location_for`` (#4101 fix round 1) is the one
+        # place this resolves, shared with telnet's `gm prompt send`. May
+        # still end up None -- the serializer refuses "chosen" outright rather
+        # than treating "nowhere" as a room.
+        location = narration_location_for(prompt, actor)
+        body = NarrateGMPromptSerializer(data=request.data, context={"location": location})
+        body.is_valid(raise_exception=True)
+        data = body.validated_data
+        if data["audience"] == NarrateGMPromptSerializer.AUDIENCE_ROOM:
+            result = EmitAction().run(actor=actor, text=data["text"], gm_prompt_id=prompt.pk)
+        else:
+            result = PemitAction().run(
+                actor=actor,
+                text=data["text"],
+                receivers=data["receivers"],
+                gm_prompt_id=prompt.pk,
+            )
+        return self._result(result, prompt)
+
+    def _result(self, result: ActionResult, prompt: GMPrompt) -> Response:
+        if not result.success:
+            return Response({"detail": result.message}, status=status.HTTP_400_BAD_REQUEST)
+        prompt.refresh_from_db()
+        data = dict(GMPromptSerializer(prompt, context=self.get_serializer_context()).data)
+        # A successful narrate still carries a message when the dispatched
+        # EmitAction/PemitAction has one to report -- e.g. the prompt closed
+        # (a sibling dismiss, scene-end expiry) between resolve and link, so
+        # the line went out in full but unlinked (#4101 Task 10; previously
+        # dropped here, see `_MSG_PROMPT_CLOSED_MEANWHILE`,
+        # `actions/definitions/communication.py`). Confirm/dismiss results
+        # carry no message today, so this is a no-op for them.
+        if result.message:
+            data["message"] = result.message
+        return Response(data)
+
+
+class GMPromptFilterViewSet(viewsets.GenericViewSet):
+    """A GM's per-group prompt switches (#4101; demo Screen 5).
+
+    Always exactly five rows (one per ``GMPromptGroup``) -- a missing row is
+    synthesized as enabled (no row = prompted, see ``GMPromptFilter``'s
+    docstring), so there is nothing to paginate or filter.
+    """
+
+    permission_classes = [IsAuthenticated]
+    serializer_class = GMPromptFilterSerializer
+    pagination_class = None
+    filter_backends = []
+    queryset = GMPromptFilter.objects.none()
+
+    def list(self, request: Request) -> Response:
+        muted = set(
+            GMPromptFilter.objects.filter(account=request.user, enabled=False).values_list(
+                "group", flat=True
+            )
+        )
+        rows = [
+            {"group": value, "label": label, "enabled": value not in muted}
+            for value, label in GMPromptGroup.choices
+        ]
+        return Response(GMPromptFilterSerializer(rows, many=True).data)
+
+    @action(detail=False, methods=["post"])
+    def set(self, request: Request) -> Response:
+        body = GMPromptFilterSerializer(data=request.data)
+        body.is_valid(raise_exception=True)
+        GMPromptFilter.objects.update_or_create(
+            account=request.user,
+            group=body.validated_data["group"],
+            defaults={"enabled": body.validated_data["enabled"]},
+        )
+        return self.list(request)

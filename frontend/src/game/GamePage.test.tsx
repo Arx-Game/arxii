@@ -8,6 +8,7 @@ import { GamePage } from './GamePage';
 import { saveThreadTabs, loadThreadTabs } from './threadTabsStorage';
 import { saveConversationAnchor } from './playPreferences';
 import { renderWithProviders } from '@/test/utils/renderWithProviders';
+import { stubResizeObserver, type ResizeObserverStub } from '@/test/utils/resizeObserver';
 import { store } from '@/store/store';
 import { setAccount } from '@/store/authSlice';
 import { mockAccount } from '@/test/mocks/account';
@@ -2572,6 +2573,80 @@ describe('GamePage', () => {
       // test, so its bypass never applies either) would restore exactly that
       // corrupted value here.
       expect(feedContainer.scrollTop).not.toBe(999);
+    });
+  });
+
+  describe('the scene feed follows its newest line', () => {
+    afterEach(() => {
+      vi.unstubAllGlobals();
+    });
+
+    /** jsdom lays nothing out: report the heights a browser would, then let the observer see them. */
+    function growFeed(feed: HTMLElement, observer: ResizeObserverStub, height: number): void {
+      Object.defineProperty(feed, 'scrollHeight', { value: height, configurable: true });
+      Object.defineProperty(feed, 'clientHeight', { value: 700, configurable: true });
+      act(() => observer.resize());
+    }
+
+    it('stays at the bottom as the feed grows, and leaves a reader who scrolled up where they are', () => {
+      const observer = stubResizeObserver();
+      store.dispatch(setAccount(mockAccount));
+      seedActiveSceneWithPose();
+      renderWithProviders(<GamePage />);
+      const feed = screen.getByTestId('feed-scroll-container');
+
+      // Any growth counts, not only a new pose: a note, a row measured taller
+      // than its estimate. The old effect watched the pose count alone.
+      growFeed(feed, observer, 2000);
+      expect(feed.scrollTop).toBe(2000);
+
+      // The reader turns the wheel; a move with no input behind it is not theirs.
+      fireEvent.wheel(feed);
+      feed.scrollTop = 300;
+      fireEvent.scroll(feed);
+      growFeed(feed, observer, 2400);
+      expect(feed.scrollTop).toBe(300);
+    });
+
+    it('does not pull a reader off the reading position the room tab restores', () => {
+      const observer = stubResizeObserver();
+      store.dispatch(setAccount(mockAccount));
+      seedActiveSceneWithPose();
+      saveConversationAnchor(
+        '100',
+        {
+          anchors: { threads: { poseId: '1', threadId: null, offsetPx: 0 }, chronological: null },
+          expanded: [],
+        },
+        1
+      );
+      renderWithProviders(<GamePage />);
+      const feed = screen.getByTestId('feed-scroll-container');
+      const restored = feed.scrollTop;
+
+      growFeed(feed, observer, 2000);
+
+      expect(feed.scrollTop).toBe(restored);
+    });
+
+    it('does not follow while a historical reference is being read', async () => {
+      const observer = stubResizeObserver();
+      store.dispatch(setAccount(mockAccount));
+      seedActiveSceneWithPose();
+      renderWithProviders(<GamePage />, {
+        initialEntries: [
+          '/game?referenceKind=scene&referenceKey=scene:100&referencePose=1' +
+            '&referenceTimestamp=2026-01-01T00%3A00%3A00.000Z',
+        ],
+      });
+      await waitFor(() => {
+        expect(screen.getByText(/reading history/i)).toBeInTheDocument();
+      });
+      const feed = screen.getByTestId('feed-scroll-container');
+
+      growFeed(feed, observer, 2000);
+
+      expect(feed.scrollTop).toBe(0);
     });
   });
 });

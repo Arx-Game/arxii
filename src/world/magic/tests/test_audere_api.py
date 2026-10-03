@@ -156,6 +156,24 @@ class PendingAudereOfferListTests(APITestCase):
         response = self.client.get(_PENDING_URL)
         self.assertIn(response.status_code, (401, 403))
 
+    def test_offer_copy_fields_present(self) -> None:
+        """offer_title/offer_strip_label/offer_body_text ride the offer payload (#4101)."""
+        my_offer = _open_gate_for_tenure(self.my_tenure, self.gate)
+
+        self.client.force_authenticate(user=self.my_account)
+        response = self.client.get(_PENDING_URL)
+
+        self.assertEqual(response.status_code, 200, response.content)
+        rows = [row for row in response.data["results"] if row["id"] == my_offer.pk]
+        self.assertEqual(len(rows), 1)
+        threshold = self.gate.threshold
+        self.assertEqual(rows[0]["offer_title"], threshold.offer_title)
+        self.assertEqual(rows[0]["offer_strip_label"], threshold.offer_strip_label)
+        self.assertEqual(
+            rows[0]["offer_body_text"],
+            threshold.offer_body_text.replace("{intensity}", str(my_offer.fired_intensity)),
+        )
+
 
 class AudereRespondViewTests(APITestCase):
     """POST /api/magic/audere/respond/ — accept/decline a pending offer."""

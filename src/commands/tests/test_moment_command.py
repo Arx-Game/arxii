@@ -17,13 +17,16 @@ from evennia.utils.create import create_object
 from commands.dramatic_moments import CmdMoment
 from evennia_extensions.factories import AccountFactory, CharacterFactory
 from world.character_sheets.factories import CharacterSheetFactory
-from world.magic.constants import SuggestionStatus
+from world.gm.constants import GMPromptKind, GMPromptStatus
+from world.gm.factories import GMPromptFactory
+from world.gm.models import GMPrompt
+from world.gm.prompt_services import route_narratable_event
+from world.gm.types import NarratableEvent
 from world.magic.factories import (
     CharacterResonanceFactory,
-    DramaticMomentSuggestionFactory,
     DramaticMomentTypeFactory,
 )
-from world.magic.models.dramatic_moment import DramaticMomentSuggestion, DramaticMomentTag
+from world.magic.models.dramatic_moment import DramaticMomentTag
 from world.scenes.factories import SceneFactory, SceneGMParticipationFactory
 
 
@@ -53,7 +56,7 @@ class MomentTelnetE2ETest(TestCase):
         self.moment_type = DramaticMomentTypeFactory(
             resonance=self.resonance_holder.resonance, per_scene_cap=1
         )
-        self.suggestion = DramaticMomentSuggestionFactory(
+        self.suggestion = GMPromptFactory(
             moment_type=self.moment_type,
             character_sheet=self.sheet,
             scene=self.scene,
@@ -87,14 +90,64 @@ class MomentTelnetE2ETest(TestCase):
         self.assertIn(self.moment_type.label, msg)
 
     def test_non_gm_suggestions_refused(self) -> None:
-        """A non-GM must never see pending suggestions (oracle leak, #2183 review)."""
+        """A non-GM must never see pending suggestions (oracle leak, #2183 review).
+
+        #4101 fix round 1: this now lists via ``visible_prompts_for`` (ruling
+        R12-2, one visibility source) rather than a bespoke gate -- a non-GM's
+        query is simply empty, not a special "you may not" denial. The
+        guarantee under test is that no pk/label of the real suggestion ever
+        appears, not the wording of the empty state.
+        """
         _run(self.outsider_character, "suggestions")
 
         self.outsider_character.msg.assert_called()
         msg = self.outsider_character.msg.call_args[0][0]
-        self.assertIn("gm", msg.lower())
+        self.assertIn("no pending", msg.lower())
         self.assertNotIn(str(self.suggestion.pk), msg)
         self.assertNotIn(self.moment_type.label, msg)
+
+    def test_suggestions_excludes_narration_prompts(self) -> None:
+        """#4101 fix round 2: a narration-kind GMPrompt (miracle/death/crossing/
+        ...), addressed to a different GM, must never surface in this
+        dramatic_moment-only listing -- and must not crash on ``moment_type.label``
+        (narration prompts carry no moment_type)."""
+        other_gm = AccountFactory()
+        [narration_prompt] = route_narratable_event(
+            NarratableEvent(
+                kind=GMPromptKind.MIRACLE,
+                scene=self.scene,
+                character_sheet=self.sheet,
+                room_text="a wonder occurs",
+            ),
+            candidates=[other_gm],
+        )
+
+        _run(self.gm_character, "suggestions")
+
+        self.gm_character.msg.assert_called()
+        msg = self.gm_character.msg.call_args[0][0]
+        self.assertIn(str(self.suggestion.pk), msg)
+        self.assertIn(self.moment_type.label, msg)
+        self.assertNotIn(f"#{narration_prompt.pk}:", msg)
+
+    def test_suggestions_excluded_when_group_muted(self) -> None:
+        """#4101 fix round 1: the real bug `visible_prompts_for` fixes here -- a
+        GM who muted the dramatic_moment group must see telnet match the web
+        (``prompts_enabled``), not the old private query, which never checked
+        mute at all."""
+        from world.gm.constants import GMPromptGroup
+        from world.gm.factories import GMPromptFilterFactory
+
+        GMPromptFilterFactory(
+            account=self.gm_account, group=GMPromptGroup.DRAMATIC_MOMENT, enabled=False
+        )
+
+        _run(self.gm_character, "suggestions")
+
+        self.gm_character.msg.assert_called()
+        msg = self.gm_character.msg.call_args[0][0]
+        self.assertIn("no pending", msg.lower())
+        self.assertNotIn(str(self.suggestion.pk), msg)
 
     def test_suggestions_no_active_scene_reports_error(self) -> None:
         lone_room = create_object("typeclasses.rooms.Room", key="LoneRoom", nohome=True)
@@ -115,7 +168,7 @@ class MomentTelnetE2ETest(TestCase):
         _run(self.gm_character, f"confirm {self.suggestion.pk}")
 
         self.suggestion.refresh_from_db()
-        self.assertEqual(self.suggestion.status, SuggestionStatus.CONFIRMED)
+        self.assertEqual(self.suggestion.status, GMPromptStatus.CONFIRMED)
         self.assertIsNotNone(self.suggestion.confirmed_tag)
         self.gm_character.msg.assert_called()
         msg = self.gm_character.msg.call_args[0][0]
@@ -125,7 +178,7 @@ class MomentTelnetE2ETest(TestCase):
         _run(self.outsider_character, f"confirm {self.suggestion.pk}")
 
         self.suggestion.refresh_from_db()
-        self.assertEqual(self.suggestion.status, SuggestionStatus.PENDING)
+        self.assertEqual(self.suggestion.status, GMPromptStatus.PENDING)
         self.outsider_character.msg.assert_called()
         msg = self.outsider_character.msg.call_args[0][0]
         self.assertIn("gm", msg.lower())
@@ -145,7 +198,7 @@ class MomentTelnetE2ETest(TestCase):
         _run(self.gm_character, f"dismiss {self.suggestion.pk}")
 
         self.suggestion.refresh_from_db()
-        self.assertEqual(self.suggestion.status, SuggestionStatus.DISMISSED)
+        self.assertEqual(self.suggestion.status, GMPromptStatus.DISMISSED)
         self.assertIsNone(self.suggestion.confirmed_tag)
         self.gm_character.msg.assert_called()
         msg = self.gm_character.msg.call_args[0][0]
@@ -155,18 +208,63 @@ class MomentTelnetE2ETest(TestCase):
         _run(self.outsider_character, f"dismiss {self.suggestion.pk}")
 
         self.suggestion.refresh_from_db()
-        self.assertEqual(self.suggestion.status, SuggestionStatus.PENDING)
+        self.assertEqual(self.suggestion.status, GMPromptStatus.PENDING)
         self.outsider_character.msg.assert_called()
         msg = self.outsider_character.msg.call_args[0][0]
         self.assertIn("gm", msg.lower())
+
+    def test_confirm_narration_prompt_refused(self) -> None:
+        """#4101 fix round 2: the Action's own lookup (``_suggestion_or_none``)
+        must refuse a narration-kind prompt by id, even for a real scene GM --
+        telnet confirm/dismiss dispatch the Action directly with no prior
+        kind-filtering gate of their own, so this lookup is load-bearing, not
+        just defense in depth."""
+        other_gm = AccountFactory()
+        [narration_prompt] = route_narratable_event(
+            NarratableEvent(
+                kind=GMPromptKind.MIRACLE,
+                scene=self.scene,
+                character_sheet=self.sheet,
+                room_text="a wonder occurs",
+            ),
+            candidates=[other_gm],
+        )
+
+        _run(self.gm_character, f"confirm {narration_prompt.pk}")
+
+        narration_prompt.refresh_from_db()
+        self.assertEqual(narration_prompt.status, GMPromptStatus.PENDING)
+        self.gm_character.msg.assert_called()
+        msg = self.gm_character.msg.call_args[0][0]
+        self.assertIn("which suggestion", msg.lower())
+
+    def test_dismiss_narration_prompt_refused(self) -> None:
+        other_gm = AccountFactory()
+        [narration_prompt] = route_narratable_event(
+            NarratableEvent(
+                kind=GMPromptKind.MIRACLE,
+                scene=self.scene,
+                character_sheet=self.sheet,
+                room_text="a wonder occurs",
+            ),
+            candidates=[other_gm],
+        )
+
+        _run(self.gm_character, f"dismiss {narration_prompt.pk}")
+
+        narration_prompt.refresh_from_db()
+        self.assertEqual(narration_prompt.status, GMPromptStatus.PENDING)
+        self.gm_character.msg.assert_called()
+        msg = self.gm_character.msg.call_args[0][0]
+        self.assertIn("which suggestion", msg.lower())
 
     def test_double_confirm_second_call_fails(self) -> None:
         _run(self.gm_character, f"confirm {self.suggestion.pk}")
         _run(self.gm_character, f"confirm {self.suggestion.pk}")
 
         self.assertEqual(
-            DramaticMomentSuggestion.objects.get(pk=self.suggestion.pk).status,
-            SuggestionStatus.CONFIRMED,
+            GMPrompt.objects.get(pk=self.suggestion.pk).status,
+            GMPromptStatus.CONFIRMED,
         )
         msg = self.gm_character.msg.call_args[0][0]
         self.assertIn("already", msg.lower())

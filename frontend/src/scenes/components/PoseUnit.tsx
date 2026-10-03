@@ -23,9 +23,9 @@ import { NominateButton } from '@/components/NominateButton';
 import { PersonaMenu } from './PersonaMenu';
 import { ActionResult } from './ActionResult';
 import { ActorLine } from './ActorLine';
+import { NarratedEventTag } from './NarratedEventTag';
 import { ReactionStrip } from './ReactionStrip';
 import { DramaticMomentTagDialog } from './DramaticMomentTagDialog';
-import { DramaticMomentSuggestionChip } from './DramaticMomentSuggestionChip';
 import { EndorsementControl } from './EndorsementControl';
 import { fetchReactionEmojiCatalog, postInteractionReaction } from '../queries';
 import type { Interaction, ActionLink } from '../types';
@@ -329,7 +329,6 @@ export function PoseUnit({
 
   const actionInteractionIds = actionLinks.map((l) => l.action_interaction.id);
   const dramaticTags = interaction.dramatic_moment_tags ?? [];
-  const dramaticSuggestions = interaction.dramatic_moment_suggestions ?? [];
 
   // Resolve the viewer's active persona to detect self-pose — mirrors
   // EndorsementControl's self-endorsement guard (same signal, same source).
@@ -423,6 +422,53 @@ export function PoseUnit({
         data-testid="pose-unit-outcome"
       >
         <FormattedContent content={interaction.content} />
+      </div>
+    );
+  }
+
+  // -------------------------------------------------------------------------
+  // NARRATION: a GM's EMIT/PEMIT line tied to a GM prompt (#4101, demo Screen
+  // 3; F1). The GM already delivered this through EmitAction/PemitAction
+  // (ADR-0293), so it is a narration, not a character's pose — no speaker
+  // header, avatar, Kudos or nominate. The room leg (no receivers; mode
+  // 'emit') reads as a speakerless line, mirroring the OUTCOME branch above.
+  // The receiver-scoped leg (mode 'whisper', the private vision) renders as
+  // its own tinted block. Theme tokens only — never the demo's literal amber.
+  // -------------------------------------------------------------------------
+  if (interaction.narrates) {
+    const isPrivate = interaction.receiver_persona_ids.length > 0;
+    if (isPrivate) {
+      return (
+        <div
+          role="note"
+          data-testid="pose-unit-narration-private"
+          className="my-1.5 max-w-[85%] rounded-r-md border-l-2 border-primary bg-primary/10 px-3 py-2"
+        >
+          <p className="text-sm italic text-foreground">
+            &ldquo;
+            <FormattedContent content={interaction.content} />
+            &rdquo;
+          </p>
+          <NarratedEventTag
+            narrates={interaction.narrates}
+            receiverPersonaIds={interaction.receiver_persona_ids}
+          />
+        </div>
+      );
+    }
+    return (
+      <div
+        role="note"
+        data-testid="pose-unit-narration"
+        className="my-1.5 max-w-[85%] border-l-2 border-border pl-2"
+      >
+        <p className="text-sm italic text-muted-foreground">
+          <FormattedContent content={interaction.content} />
+        </p>
+        <NarratedEventTag
+          narrates={interaction.narrates}
+          receiverPersonaIds={interaction.receiver_persona_ids}
+        />
       </div>
     );
   }
@@ -525,11 +571,6 @@ export function PoseUnit({
             sceneId={sceneId}
           />
         </div>
-      )}
-
-      {/* GM confirm/dismiss inbox: technique-driven dramatic-moment suggestions (#2183) */}
-      {canGm && !readOnly && (
-        <DramaticMomentSuggestionChip suggestions={dramaticSuggestions} sceneId={sceneId} />
       )}
 
       <div className="flex items-center gap-1">

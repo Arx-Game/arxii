@@ -306,6 +306,22 @@ through normal progression. If they don't survive, it's sacrifice.
 
 **Depends on:** Tier advancement system, technique revelation.
 
+### GM narration of surges and Crossings (#4101) [BUILT & WIRED]
+
+An Audere surge (`_announce_surge`) and an Audere Majora Crossing (`_route_crossing`)
+each resolve their own text (the character's prepared `CharacterSurgeText`/
+`CharacterCrossingText` first, then, Crossing only, the patron `AudereMajoraFaithVariant`,
+then the authored tier default), then call `world.gm.prompt_services
+.route_narratable_event` with `GMPromptKind.AUDERE_SURGE`/`CROSSING`. With a GM opted in
+(`GMPromptGroup.AUDERE`), that text becomes a `GMPrompt` the GM narrates instead of an
+automatic broadcast; with none, the resolved text broadcasts/logs exactly as before
+#4101. A Crossing's private vision still logs via `narrate_privately` even with no
+active scene. `Technique.is_ultimate`'s reveal pick (`_route_ultimate_chosen`,
+`GMPromptKind.AUDERE_ULTIMATE`) is GM-signal-only: no authored default line exists for a
+pick, so with no GM opted in nothing is delivered. Full model/queue reference:
+`docs/systems/magic.md`'s "GM Prompt Queue" section; `docs/systems/scenes.md`'s "GM
+narration of mechanical events" section; ADR-4101.
+
 ### Relationship Event Intensity Spikes
 
 Thread bonds between characters should feed intensity spikes during dramatic

@@ -61,6 +61,8 @@ const PENDING_FIXTURE: PaginatedPendingAudereMajoraOfferList = {
       boundary_level: 5,
       target_stage_display: 'Ascendant',
       vision_text: '[TEST VISION]',
+      offer_title: 'The Threshold Stands Before You',
+      offer_strip_label: 'The threshold stands open: answer it',
       faith_variant_id: null,
       advisory_text: '',
       risk_text: '',

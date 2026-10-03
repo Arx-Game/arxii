@@ -15,13 +15,13 @@ from actions.factories import ActionTemplateFactory
 from world.combat.constants import ParticipantStatus, RiskLevel
 from world.combat.factories import CombatEncounterFactory, CombatParticipantFactory
 from world.combat.models import CombatParticipant, CombatRoundAction
+from world.gm.models import GMPrompt
 from world.magic.entry_flourish import PendingEntryFlourishOffer
 from world.magic.factories import (
     CharacterResonanceFactory,
     ResonanceFactory,
     ensure_dramatic_entrance_content,
 )
-from world.magic.models.dramatic_moment import DramaticMomentSuggestion
 from world.scenes.action_constants import ActionRequestStatus
 from world.scenes.cast_services import request_technique_cast, resolve_accepted_cast
 from world.scenes.constants import RoundStatus
@@ -149,9 +149,7 @@ class TestAcceptedEntranceCastHooks(CastScenarioMixin):
             ).exists()
         )
         self.assertTrue(
-            DramaticMomentSuggestion.objects.filter(
-                character_sheet=self.caster.character_sheet
-            ).exists()
+            GMPrompt.objects.filter(character_sheet=self.caster.character_sheet).exists()
         )
         self.assertTrue(
             CombatParticipant.objects.filter(
@@ -189,9 +187,7 @@ class TestAcceptedEntranceCastHooks(CastScenarioMixin):
             ).exists()
         )
         self.assertFalse(
-            DramaticMomentSuggestion.objects.filter(
-                character_sheet=self.caster.character_sheet
-            ).exists()
+            GMPrompt.objects.filter(character_sheet=self.caster.character_sheet).exists()
         )
         # #2226: combat seating IS generalized — a non-entrance benign accepted cast
         # at an embattled ally seats the caster.
@@ -239,7 +235,5 @@ class TestAcceptedEntranceCastHooks(CastScenarioMixin):
             ).exists()
         )
         self.assertFalse(
-            DramaticMomentSuggestion.objects.filter(
-                character_sheet=self.caster.character_sheet
-            ).exists()
+            GMPrompt.objects.filter(character_sheet=self.caster.character_sheet).exists()
         )

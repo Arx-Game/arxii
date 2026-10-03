@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, ClassVar
+import uuid
 
 from django.core.exceptions import ValidationError
 from django.db import models
@@ -12,12 +13,16 @@ from django.utils import timezone
 from core.managers import ArxSharedMemoryManager
 from core.models import ArxSharedMemoryModel as SharedMemoryModel
 from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
+from evennia_extensions.mixins import RelatedCacheClearingMixin
 from world.areas.constants import AreaLevel
 from world.contributors.models import CreditedContent
 from world.gm.constants import (
     CatalogSuggestionProposalKind,
     GMApplicationStatus,
     GMLevel,
+    GMPromptGroup,
+    GMPromptKind,
+    GMPromptStatus,
     GMTableStatus,
     TableRequestKind,
     TableRequestStatus,
@@ -1123,3 +1128,258 @@ class DistinctionChangeRequestDetails(SharedMemoryModel):
         else:
             msg = f"Unknown action: {self.action}"
             raise ValidationError(msg)
+
+
+class GMPrompt(RelatedCacheClearingMixin, SharedMemoryModel):
+    """One entry in a GM's prompt queue (#4101; was DramaticMomentSuggestion, #2183).
+
+    The ``dramatic_moment`` kind is the original suggestion: a high-success
+    technique entrance asks the scene's GM to confirm a DramaticMomentType, and
+    confirming mints a DramaticMomentTag (resonance + renown) via
+    ``world.magic.services.gain.resolve_dramatic_moment_suggestion``.
+    """
+
+    related_cache_fields: ClassVar[list[str]] = ["interaction"]
+
+    kind = models.CharField(
+        max_length=20,
+        choices=GMPromptKind.choices,
+        default=GMPromptKind.DRAMATIC_MOMENT,
+        db_index=True,
+        help_text="What this prompt is about; dramatic_moment is the confirm kind.",
+    )
+    event_group = models.UUIDField(
+        default=uuid.uuid4,
+        db_index=True,
+        help_text=(
+            "Ties this prompt to its sibling GMPrompts routed from the same event "
+            "(#4101) -- route_narratable_event stamps one value per call, shared across "
+            "every addressed GM's own copy. Release-on-last-close (dismiss_gm_prompt) "
+            "groups siblings by this field, not by matching other columns, since two "
+            "events for the same scene/character/kind can carry identical text."
+        ),
+    )
+    addressed_to = models.ForeignKey(
+        ACCOUNT_DB_MODEL,
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="gm_prompts_addressed",
+        help_text=(
+            "The GM this narration prompt is for. Null only on dramatic_moment "
+            "prompts, which keep the scene GM/owner/staff gate."
+        ),
+    )
+    moment_type = models.ForeignKey(
+        "arxii.DramaticMomentType",
+        on_delete=models.PROTECT,
+        related_name="suggestions",
+        null=True,
+        blank=True,
+    )
+    character_sheet = models.ForeignKey(
+        "arxii.CharacterSheet",
+        on_delete=models.CASCADE,
+        related_name="gm_prompts",
+        null=True,
+        blank=True,
+    )
+    subject_persona = models.ForeignKey(
+        "arxii.Persona",
+        on_delete=models.SET_NULL,
+        related_name="+",
+        null=True,
+        blank=True,
+        help_text=(
+            "The face the subject was presenting as when this prompt was created "
+            "(#4101 R9-3) -- frozen at event time so a later persona switch "
+            "(undisguising, wearing a different mask) never rewrites history on an "
+            "already-narrated row. Resolved via active_persona_for_sheet at "
+            "route_narratable_event's create time; for a dramatic_moment prompt "
+            "anchored to an entrance pose, the pose's own persona. Null when no "
+            "sheet is attached (e.g. a STAKE_OUTCOME prompt) or the persona was "
+            "later deleted -- the player-facing narrates payload omits the "
+            "subject's name entirely rather than falling back to the current face."
+        ),
+    )
+    room_text = models.TextField(
+        blank=True,
+        default="",
+        help_text="Resolved authored room line offered in the composer (may be blank).",
+    )
+    private_text = models.TextField(
+        blank=True,
+        default="",
+        help_text=(
+            "Resolved authored private line for the character this concerns, e.g. "
+            "the Crossing vision. Spoiler-private: shown only to the addressed GM."
+        ),
+    )
+    prepared_for_character = models.BooleanField(
+        default=False,
+        help_text="True when the defaults came from the character's prepared text.",
+    )
+    stake_outcome = models.ForeignKey(
+        "arxii.StakeOutcome",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="gm_prompts",
+        help_text="The resolved stake, for stake_outcome prompts.",
+    )
+    scene = models.ForeignKey(
+        "arxii.Scene",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="gm_prompts",
+        help_text="Scene context; nullable for resilience to scene cleanup.",
+    )
+    interaction = models.ForeignKey(
+        "arxii.Interaction",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="gm_prompts",
+        db_constraint=False,  # arxii_interaction is partitioned (composite PK)
+        help_text="The entrance pose that triggered this prompt; nullable.",
+    )
+    interaction_timestamp = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="Denormalized from interaction.timestamp for the partitioned-table composite FK.",
+    )
+    technique = models.ForeignKey(
+        "arxii.Technique",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="gm_prompts",
+        help_text=(
+            "The technique the entrance was cast with. Carried so that confirming "
+            "the suggestion can resolve the resonance from the thread the character "
+            "wove into that technique's gift. Null for a manual GM tag with no "
+            "technique behind it."
+        ),
+    )
+    success_level = models.PositiveSmallIntegerField(
+        null=True,
+        blank=True,
+        help_text="Cast success level that triggered this suggestion.",
+    )
+    status = models.CharField(
+        max_length=20,
+        choices=GMPromptStatus.choices,
+        default=GMPromptStatus.PENDING,
+        db_index=True,
+    )
+    resolved_by = models.ForeignKey(
+        "accounts.AccountDB",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="gm_prompts_resolved",
+        help_text="GM account that confirmed or dismissed this prompt.",
+    )
+    confirmed_tag = models.OneToOneField(
+        "arxii.DramaticMomentTag",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="source_suggestion",
+        help_text="The DramaticMomentTag minted on confirmation, if any.",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        verbose_name = "GM Prompt"
+        verbose_name_plural = "GM Prompts"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["moment_type", "character_sheet", "scene"],
+                condition=Q(status="pending", kind="dramatic_moment"),
+                name="gm_prompt_one_pending_moment_per_type_sheet_scene",
+            ),
+            models.CheckConstraint(
+                condition=~Q(kind="dramatic_moment")
+                | Q(
+                    moment_type__isnull=False,
+                    success_level__isnull=False,
+                    character_sheet__isnull=False,
+                ),
+                name="gm_prompt_dramatic_moment_fields",
+            ),
+            models.CheckConstraint(
+                condition=Q(kind="dramatic_moment") | Q(addressed_to__isnull=False),
+                name="gm_prompt_narration_is_addressed",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"GMPrompt({self.character_sheet_id}, {self.status})"
+
+
+class GMPromptFilter(SharedMemoryModel):
+    """A GM's choice to be prompted (or not) for one group of event kinds (#4101).
+
+    No row = prompted. Keyed by account so a staff member GMing a scene is covered.
+    """
+
+    account = models.ForeignKey(
+        ACCOUNT_DB_MODEL,
+        on_delete=models.CASCADE,
+        related_name="gm_prompt_filters",
+    )
+    group = models.CharField(max_length=20, choices=GMPromptGroup.choices)
+    enabled = models.BooleanField(default=True)
+
+    class Meta:
+        verbose_name = "GM Prompt Filter"
+        verbose_name_plural = "GM Prompt Filters"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["account", "group"], name="unique_gm_prompt_filter_per_group"
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"GMPromptFilter({self.account_id}, {self.group}, {self.enabled})"
+
+
+class GMPromptNarration(SharedMemoryModel):
+    """Links one narration Interaction to the GMPrompt it narrates (#4101).
+
+    A side row, not an Interaction column: the FK lives on the specific side
+    (ADR-0010) and the partitioned Interaction table stays untouched. Composite
+    reference shape per ADR-0293's named precedent, InteractionReceiver. The
+    unique constraint is on ``interaction`` only (never ``prompt``) -- a GM may
+    narrate one prompt any number of times, NO CAP BY DESIGN (#4101 fix round
+    1 ruling): a room line, then one or more private lines to different
+    recipients, or several of either, each its own Interaction row linked
+    back to the same prompt.
+    """
+
+    prompt = models.ForeignKey(GMPrompt, on_delete=models.CASCADE, related_name="narrations")
+    interaction = models.ForeignKey(
+        "arxii.Interaction",
+        on_delete=models.CASCADE,
+        related_name="prompt_narrations",
+        db_constraint=False,  # arxii_interaction is partitioned (composite PK)
+    )
+    interaction_timestamp = models.DateTimeField(
+        help_text="Denormalized from interaction.timestamp for the partitioned-table composite FK.",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = "GM Prompt Narration"
+        verbose_name_plural = "GM Prompt Narrations"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["interaction"], name="one_prompt_per_narration_interaction"
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"GMPromptNarration(prompt={self.prompt_id}, interaction={self.interaction_id})"

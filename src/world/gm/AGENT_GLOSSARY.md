@@ -116,3 +116,34 @@ applies at approval; distinction approval creates-and-approves a
 separate accept step). Reviewable by staff or any GM whose table the requesting persona
 actively sits at (#2631 ruling), never by a GM the player has no table with.
 _Avoid_: job, +request, ticket, petition (that's `player_submissions`' staff inbox).
+
+**GM Prompt** (`GMPrompt`, #4101; was `DramaticMomentSuggestion`, #2183):
+One entry in a GM's prompt queue. Carries a `kind` (`GMPromptKind`): `dramatic_moment`
+(the original confirm kind: a GM confirms or dismisses, no narration) and six
+narration kinds (`audere_surge`, `audere_ultimate`, `crossing`, `miracle`, `death`,
+`stake_outcome`) a GM narrates with a room line, a private line, or both, then closes
+once done. Addressed to one specific GM (narration kinds) or gated the same way the
+original suggestion was (scene GM/owner/staff, `dramatic_moment` only). Created by
+`route_narratable_event`, one copy per opted-in GM, sharing an `event_group`.
+_Avoid_: suggestion (except for the `dramatic_moment` kind, where it is still accurate),
+notification, alert.
+
+**Narratable Event** (`NarratableEvent`):
+The frozen-text value object an event source hands `route_narratable_event`: kind,
+scene, subject character sheet, the resolved room/private text, and whether that text
+came from the subject's own prepared text. Not a model; it exists only to cross one
+function call.
+
+**GM Prompt Filter** (`GMPromptFilter`):
+A GM's per-account, per-`GMPromptGroup` opt-out switch (dramatic moment / Audere /
+miracles / deaths / stake outcomes). No row for a group means that GM is prompted for
+it: the absence of a row is never "not configured yet," it is the enabled state.
+_Avoid_: subscription, notification setting.
+
+**Prompt Narration** (`GMPromptNarration`):
+The side row linking one narration `Interaction` (an EMIT or PEMIT a GM sent with a
+`gm_prompt_id`) back to the `GMPrompt` it narrates. A GM may narrate one prompt any
+number of times, no cap by design, so this is `(prompt, interaction)`, not a
+one-to-one. Release of a prompt's authored defaults is computed from these rows at
+close time, never from the prompt's own status alone.
+_Avoid_: GM reply, prompt response.

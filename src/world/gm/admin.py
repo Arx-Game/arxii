@@ -12,6 +12,7 @@ from world.gm.models import (
     GMLevelCap,
     GMLevelChange,
     GMProfile,
+    GMPrompt,
     GMRewardConfig,
     GMRosterInvite,
     GMTable,
@@ -251,3 +252,37 @@ class TableUpdateRequestAdmin(admin.ModelAdmin):
     raw_id_fields = ["membership", "resolved_by"]
     readonly_fields = ["created_at", "resolved_at", "completed_at"]
     inlines = [ProfileTextRequestDetailsInline, DistinctionChangeRequestDetailsInline]
+
+
+@admin.register(GMPrompt)
+class GMPromptAdmin(admin.ModelAdmin):
+    autocomplete_fields = [
+        "addressed_to",
+        "character_sheet",
+        "interaction",
+        "resolved_by",
+        "scene",
+        "subject_persona",
+    ]
+    list_display = (
+        "id",
+        "kind",
+        "character_sheet",
+        "addressed_to",
+        "moment_type",
+        "scene",
+        "status",
+        "success_level",
+        "resolved_by",
+        "created_at",
+    )
+    list_filter = ("status", "kind", "moment_type")
+    readonly_fields = tuple(f.name for f in GMPrompt._meta.fields)  # noqa: SLF001
+
+    def has_add_permission(self, request) -> bool:  # noqa: ARG002
+        # Prompts are only ever created by maybe_suggest_dramatic_moments() and
+        # resolved via resolve_dramatic_moment_suggestion() — no admin-authored rows.
+        return False
+
+    def has_change_permission(self, request, obj=None) -> bool:  # noqa: ARG002
+        return False

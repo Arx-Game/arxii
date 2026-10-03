@@ -9486,6 +9486,176 @@ export interface paths {
     patch: operations['gm_profiles_mine_partial_update'];
     trace?: never;
   };
+  '/api/gm/prompt-filters/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description A GM's per-group prompt switches (#4101; demo Screen 5).
+     *
+     *     Always exactly five rows (one per ``GMPromptGroup``) -- a missing row is
+     *     synthesized as enabled (no row = prompted, see ``GMPromptFilter``'s
+     *     docstring), so there is nothing to paginate or filter.
+     */
+    get: operations['gm_prompt_filters_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/gm/prompt-filters/set/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * @description A GM's per-group prompt switches (#4101; demo Screen 5).
+     *
+     *     Always exactly five rows (one per ``GMPromptGroup``) -- a missing row is
+     *     synthesized as enabled (no row = prompted, see ``GMPromptFilter``'s
+     *     docstring), so there is nothing to paginate or filter.
+     */
+    post: operations['gm_prompt_filters_set_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/gm/prompts/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description The one GM prompt queue (#4101; was the #2183 suggestion inbox).
+     *
+     *     List is scoped to a single ``?scene=`` (a scene-less narration prompt, e.g.
+     *     a stake outcome, still surfaces for the GM it's addressed to via
+     *     ``visible_prompts_for``). ``get_queryset()`` is the one source: it resolves
+     *     the validated scene (``get_scene()``) and returns ``visible_prompts_for``
+     *     directly; ``GMPromptQueueFilter`` only narrows that by ``kind``, and
+     *     ``CanViewGMPromptQueue`` (``world/gm/permissions.py``) owns the "only the
+     *     scene's GM may view an empty queue" 403 -- authorization lives in a
+     *     permission class, not inline in the view or the FilterSet (#4101 fix round
+     *     3, finding M1). ``confirm``/``dismiss``/``narrate`` dispatch the REGISTRY
+     *     actions that own the real authorization/validation -- this view is
+     *     dispatch plumbing only.
+     */
+    get: operations['gm_prompts_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/gm/prompts/{id}/confirm/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * @description The one GM prompt queue (#4101; was the #2183 suggestion inbox).
+     *
+     *     List is scoped to a single ``?scene=`` (a scene-less narration prompt, e.g.
+     *     a stake outcome, still surfaces for the GM it's addressed to via
+     *     ``visible_prompts_for``). ``get_queryset()`` is the one source: it resolves
+     *     the validated scene (``get_scene()``) and returns ``visible_prompts_for``
+     *     directly; ``GMPromptQueueFilter`` only narrows that by ``kind``, and
+     *     ``CanViewGMPromptQueue`` (``world/gm/permissions.py``) owns the "only the
+     *     scene's GM may view an empty queue" 403 -- authorization lives in a
+     *     permission class, not inline in the view or the FilterSet (#4101 fix round
+     *     3, finding M1). ``confirm``/``dismiss``/``narrate`` dispatch the REGISTRY
+     *     actions that own the real authorization/validation -- this view is
+     *     dispatch plumbing only.
+     */
+    post: operations['gm_prompts_confirm_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/gm/prompts/{id}/dismiss/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * @description The one GM prompt queue (#4101; was the #2183 suggestion inbox).
+     *
+     *     List is scoped to a single ``?scene=`` (a scene-less narration prompt, e.g.
+     *     a stake outcome, still surfaces for the GM it's addressed to via
+     *     ``visible_prompts_for``). ``get_queryset()`` is the one source: it resolves
+     *     the validated scene (``get_scene()``) and returns ``visible_prompts_for``
+     *     directly; ``GMPromptQueueFilter`` only narrows that by ``kind``, and
+     *     ``CanViewGMPromptQueue`` (``world/gm/permissions.py``) owns the "only the
+     *     scene's GM may view an empty queue" 403 -- authorization lives in a
+     *     permission class, not inline in the view or the FilterSet (#4101 fix round
+     *     3, finding M1). ``confirm``/``dismiss``/``narrate`` dispatch the REGISTRY
+     *     actions that own the real authorization/validation -- this view is
+     *     dispatch plumbing only.
+     */
+    post: operations['gm_prompts_dismiss_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/gm/prompts/{id}/narrate/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * @description The one GM prompt queue (#4101; was the #2183 suggestion inbox).
+     *
+     *     List is scoped to a single ``?scene=`` (a scene-less narration prompt, e.g.
+     *     a stake outcome, still surfaces for the GM it's addressed to via
+     *     ``visible_prompts_for``). ``get_queryset()`` is the one source: it resolves
+     *     the validated scene (``get_scene()``) and returns ``visible_prompts_for``
+     *     directly; ``GMPromptQueueFilter`` only narrows that by ``kind``, and
+     *     ``CanViewGMPromptQueue`` (``world/gm/permissions.py``) owns the "only the
+     *     scene's GM may view an empty queue" 403 -- authorization lives in a
+     *     permission class, not inline in the view or the FilterSet (#4101 fix round
+     *     3, finding M1). ``confirm``/``dismiss``/``narrate`` dispatch the REGISTRY
+     *     actions that own the real authorization/validation -- this view is
+     *     dispatch plumbing only.
+     */
+    post: operations['gm_prompts_narrate_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/gm/queue/': {
     parameters: {
       query?: never;
@@ -12593,90 +12763,6 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
-  '/api/magic/dramatic-moment-suggestions/': {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    /**
-     * @description GM confirm/dismiss inbox for PENDING dramatic-moment suggestions (#2183).
-     *
-     *     GET  /api/magic/dramatic-moment-suggestions/?scene=<id> — PENDING suggestions for a scene.
-     *     POST .../{id}/confirm/ — confirm (mints a DramaticMomentTag via the REGISTRY action).
-     *     POST .../{id}/dismiss/ — dismiss.
-     *
-     *     List is scoped to a single ``?scene=`` — same gate as ``DramaticMomentTagViewSet
-     *     .perform_create`` (scene GM, owner, or staff). ``confirm``/``dismiss`` re-check that
-     *     same gate against the suggestion's own scene before dispatching the REGISTRY action
-     *     (which independently re-checks it again — defense in depth for a direct-call caller).
-     */
-    get: operations['magic_dramatic_moment_suggestions_list'];
-    put?: never;
-    post?: never;
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  '/api/magic/dramatic-moment-suggestions/{id}/confirm/': {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    get?: never;
-    put?: never;
-    /**
-     * @description GM confirm/dismiss inbox for PENDING dramatic-moment suggestions (#2183).
-     *
-     *     GET  /api/magic/dramatic-moment-suggestions/?scene=<id> — PENDING suggestions for a scene.
-     *     POST .../{id}/confirm/ — confirm (mints a DramaticMomentTag via the REGISTRY action).
-     *     POST .../{id}/dismiss/ — dismiss.
-     *
-     *     List is scoped to a single ``?scene=`` — same gate as ``DramaticMomentTagViewSet
-     *     .perform_create`` (scene GM, owner, or staff). ``confirm``/``dismiss`` re-check that
-     *     same gate against the suggestion's own scene before dispatching the REGISTRY action
-     *     (which independently re-checks it again — defense in depth for a direct-call caller).
-     */
-    post: operations['magic_dramatic_moment_suggestions_confirm_create'];
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  '/api/magic/dramatic-moment-suggestions/{id}/dismiss/': {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    get?: never;
-    put?: never;
-    /**
-     * @description GM confirm/dismiss inbox for PENDING dramatic-moment suggestions (#2183).
-     *
-     *     GET  /api/magic/dramatic-moment-suggestions/?scene=<id> — PENDING suggestions for a scene.
-     *     POST .../{id}/confirm/ — confirm (mints a DramaticMomentTag via the REGISTRY action).
-     *     POST .../{id}/dismiss/ — dismiss.
-     *
-     *     List is scoped to a single ``?scene=`` — same gate as ``DramaticMomentTagViewSet
-     *     .perform_create`` (scene GM, owner, or staff). ``confirm``/``dismiss`` re-check that
-     *     same gate against the suggestion's own scene before dispatching the REGISTRY action
-     *     (which independently re-checks it again — defense in depth for a direct-call caller).
-     */
-    post: operations['magic_dramatic_moment_suggestions_dismiss_create'];
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
   '/api/magic/dramatic-moment-tags/': {
     parameters: {
       query?: never;
@@ -13174,6 +13260,135 @@ export interface paths {
     options?: never;
     head?: never;
     patch?: never;
+    trace?: never;
+  };
+  '/api/magic/prepared-crossing-texts/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description Staff or the character's table GM prepares a character's own Crossing text (#4101).
+     *
+     *     Private to its author: a player never reads their own unused prepared text (it is
+     *     a spoiler, resolved only at crossing time), and an unrelated GM never sees it either
+     *     — ``get_queryset`` scopes non-staff to characters at one of their own active tables.
+     */
+    get: operations['magic_prepared_crossing_texts_list'];
+    put?: never;
+    /**
+     * @description Staff or the character's table GM prepares a character's own Crossing text (#4101).
+     *
+     *     Private to its author: a player never reads their own unused prepared text (it is
+     *     a spoiler, resolved only at crossing time), and an unrelated GM never sees it either
+     *     — ``get_queryset`` scopes non-staff to characters at one of their own active tables.
+     */
+    post: operations['magic_prepared_crossing_texts_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/magic/prepared-crossing-texts/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description Staff or the character's table GM prepares a character's own Crossing text (#4101).
+     *
+     *     Private to its author: a player never reads their own unused prepared text (it is
+     *     a spoiler, resolved only at crossing time), and an unrelated GM never sees it either
+     *     — ``get_queryset`` scopes non-staff to characters at one of their own active tables.
+     */
+    get: operations['magic_prepared_crossing_texts_retrieve'];
+    put?: never;
+    post?: never;
+    /**
+     * @description Staff or the character's table GM prepares a character's own Crossing text (#4101).
+     *
+     *     Private to its author: a player never reads their own unused prepared text (it is
+     *     a spoiler, resolved only at crossing time), and an unrelated GM never sees it either
+     *     — ``get_queryset`` scopes non-staff to characters at one of their own active tables.
+     */
+    delete: operations['magic_prepared_crossing_texts_destroy'];
+    options?: never;
+    head?: never;
+    /**
+     * @description Staff or the character's table GM prepares a character's own Crossing text (#4101).
+     *
+     *     Private to its author: a player never reads their own unused prepared text (it is
+     *     a spoiler, resolved only at crossing time), and an unrelated GM never sees it either
+     *     — ``get_queryset`` scopes non-staff to characters at one of their own active tables.
+     */
+    patch: operations['magic_prepared_crossing_texts_partial_update'];
+    trace?: never;
+  };
+  '/api/magic/prepared-surge-texts/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description Staff or the character's table GM prepares a character's own surge line (#4101).
+     *
+     *     No patron layer and nothing to "use up" — unlike Crossing text, a surge line is
+     *     reusable (it fires on every surge), so there is no consumed-record refusal here.
+     */
+    get: operations['magic_prepared_surge_texts_list'];
+    put?: never;
+    /**
+     * @description Staff or the character's table GM prepares a character's own surge line (#4101).
+     *
+     *     No patron layer and nothing to "use up" — unlike Crossing text, a surge line is
+     *     reusable (it fires on every surge), so there is no consumed-record refusal here.
+     */
+    post: operations['magic_prepared_surge_texts_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/magic/prepared-surge-texts/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description Staff or the character's table GM prepares a character's own surge line (#4101).
+     *
+     *     No patron layer and nothing to "use up" — unlike Crossing text, a surge line is
+     *     reusable (it fires on every surge), so there is no consumed-record refusal here.
+     */
+    get: operations['magic_prepared_surge_texts_retrieve'];
+    put?: never;
+    post?: never;
+    /**
+     * @description Staff or the character's table GM prepares a character's own surge line (#4101).
+     *
+     *     No patron layer and nothing to "use up" — unlike Crossing text, a surge line is
+     *     reusable (it fires on every surge), so there is no consumed-record refusal here.
+     */
+    delete: operations['magic_prepared_surge_texts_destroy'];
+    options?: never;
+    head?: never;
+    /**
+     * @description Staff or the character's table GM prepares a character's own surge line (#4101).
+     *
+     *     No patron layer and nothing to "use up" — unlike Crossing text, a surge line is
+     *     reusable (it fires on every surge), so there is no consumed-record refusal here.
+     */
+    patch: operations['magic_prepared_surge_texts_partial_update'];
     trace?: never;
   };
   '/api/magic/progression/': {
@@ -29448,41 +29663,6 @@ export interface components {
       description?: string;
     };
     /**
-     * @description Read-only GM confirm/dismiss inbox row (#2183).
-     *
-     *     List/confirm/dismiss all render this shape; there is no client-writable field —
-     *     resolution (confirm/dismiss) happens exclusively through the viewset's dispatch
-     *     of the REGISTRY actions, never through a serializer ``create``/``update``.
-     */
-    DramaticMomentSuggestion: {
-      readonly id: number;
-      readonly moment_type: number;
-      readonly moment_type_label: string;
-      /** @description The character this sheet belongs to */
-      readonly character_sheet: number;
-      /** @description Scene context; nullable for resilience to scene cleanup. */
-      readonly scene: number | null;
-      /** @description The entrance pose that triggered this suggestion; nullable. */
-      readonly interaction: number | null;
-      /** @description Cast success level that triggered this suggestion. */
-      readonly success_level: number;
-      /** @default pending */
-      readonly status: components['schemas']['DramaticMomentSuggestionStatusEnum'];
-      /** @description GM account that confirmed or dismissed this suggestion. */
-      readonly resolved_by: number | null;
-      /** @description The DramaticMomentTag minted on confirmation, if any. */
-      readonly confirmed_tag: number | null;
-      /** Format: date-time */
-      readonly created_at: string;
-    };
-    /**
-     * @description * `pending` - Pending
-     *     * `confirmed` - Confirmed
-     *     * `dismissed` - Dismissed
-     * @enum {string}
-     */
-    DramaticMomentSuggestionStatusEnum: 'pending' | 'confirmed' | 'dismissed';
-    /**
      * @description Create + read dramatic-moment tags (#1139).
      *
      *     Write: accepts ``moment_type`` plus EITHER ``interaction`` (pose) — from which
@@ -31131,6 +31311,93 @@ export interface components {
       /** @description Whether this GM may author custom (template=null) stakes: True for staff. */
       readonly allow_custom_stakes: boolean;
     };
+    /** @description One queue row (#4101). Read-only; resolution goes through actions. */
+    GMPrompt: {
+      readonly id: number;
+      /**
+       * @description What this prompt is about; dramatic_moment is the confirm kind.
+       *
+       *     * `dramatic_moment` - Dramatic Moment
+       *     * `audere_surge` - Audere
+       *     * `audere_ultimate` - Ultimate
+       *     * `crossing` - Crossing
+       *     * `miracle` - Miracle
+       *     * `death` - Death
+       *     * `stake_outcome` - Stake outcome
+       * @default dramatic_moment
+       */
+      readonly kind: components['schemas']['GMPromptKindEnum'];
+      readonly kind_label: string;
+      /** @default pending */
+      readonly status: components['schemas']['GMPromptStatusEnum'];
+      /** @description Scene context; nullable for resilience to scene cleanup. */
+      readonly scene: number | null;
+      /** @description The character this sheet belongs to */
+      readonly character_sheet: number | null;
+      readonly subject_name: string;
+      readonly subject_persona_id: number | null;
+      readonly moment_type: number | null;
+      /** @default  */
+      readonly moment_type_label: string;
+      /** @default  */
+      readonly technique_name: string;
+      /** @default  */
+      readonly stake_summary: string;
+      /** @description Resolved authored room line offered in the composer (may be blank). */
+      readonly room_text: string;
+      /** @description Resolved authored private line for the character this concerns, e.g. the Crossing vision. Spoiler-private: shown only to the addressed GM. */
+      readonly private_text: string;
+      /** @description True when the defaults came from the character's prepared text. */
+      readonly prepared_for_character: boolean;
+      /** Format: date-time */
+      readonly created_at: string;
+    };
+    /** @description One per-group row of a GM's prompt-filter switches (#4101; demo Screen 5). */
+    GMPromptFilter: {
+      group: components['schemas']['GMPromptFilterGroupEnum'];
+      readonly label: string;
+      enabled: boolean;
+    };
+    /**
+     * @description * `dramatic_moment` - Dramatic Moment
+     *     * `audere` - Audere / Audere Majora
+     *     * `miracle` - Miracles
+     *     * `death` - Deaths
+     *     * `stake_outcome` - Stake outcomes
+     * @enum {string}
+     */
+    GMPromptFilterGroupEnum: 'dramatic_moment' | 'audere' | 'miracle' | 'death' | 'stake_outcome';
+    /** @description One per-group row of a GM's prompt-filter switches (#4101; demo Screen 5). */
+    GMPromptFilterRequest: {
+      group: components['schemas']['GMPromptFilterGroupEnum'];
+      enabled: boolean;
+    };
+    /**
+     * @description * `dramatic_moment` - Dramatic Moment
+     *     * `audere_surge` - Audere
+     *     * `audere_ultimate` - Ultimate
+     *     * `crossing` - Crossing
+     *     * `miracle` - Miracle
+     *     * `death` - Death
+     *     * `stake_outcome` - Stake outcome
+     * @enum {string}
+     */
+    GMPromptKindEnum:
+      | 'dramatic_moment'
+      | 'audere_surge'
+      | 'audere_ultimate'
+      | 'crossing'
+      | 'miracle'
+      | 'death'
+      | 'stake_outcome';
+    /**
+     * @description * `pending` - Pending
+     *     * `confirmed` - Confirmed
+     *     * `dismissed` - Dismissed
+     *     * `narrated` - Narrated
+     * @enum {string}
+     */
+    GMPromptStatusEnum: 'pending' | 'confirmed' | 'dismissed' | 'narrated';
     /** @description For GM create/list operations on invites for their own characters. */
     GMRosterInvite: {
       readonly id: number;
@@ -31705,6 +31972,14 @@ export interface components {
       readonly label: string;
       readonly conflict_points: number;
     };
+    /**
+     * @description * `perception` - Perception
+     *     * `conflict` - Conflict
+     *     * `scene` - Scene
+     *     * `social` - Social
+     * @enum {string}
+     */
+    GroupB77Enum: 'perception' | 'conflict' | 'scene' | 'social';
     /** @description Read-only mirror of :class:`world.missions.types.GroupBallotState` (#1036). */
     GroupBallotState: {
       character_id: number;
@@ -31735,14 +32010,6 @@ export interface components {
       is_paused: boolean;
       track: components['schemas']['TrackView'] | null;
     };
-    /**
-     * @description * `perception` - Perception
-     *     * `conflict` - Conflict
-     *     * `scene` - Scene
-     *     * `social` - Social
-     * @enum {string}
-     */
-    GroupEnum: 'perception' | 'conflict' | 'scene' | 'social';
     /** @description POST body for the #1036 group-pick endpoint. */
     GroupPickRequestRequest: {
       option_id: number;
@@ -32461,15 +32728,32 @@ export interface components {
         [key: string]: unknown;
       }[];
       /**
-       * @description PENDING dramatic-moment suggestions anchored to this interaction (#2183).
+       * @description The event this row narrates (#4101), e.g. "part of X's Crossing".
        *
-       *     GM-gated: a plain participant sees an empty list. Reads
-       *     ``cached_dramatic_moment_suggestions`` (Prefetch(to_attr=...) set by the view
-       *     queryset, already filtered to PENDING) — never a fresh query.
+       *     Not GM-gated (unlike the retired per-pose suggestion embed): a
+       *     narration row is a GM's own authored line, already delivered to
+       *     whoever the audience was; tagging it with the event it narrates is
+       *     plain feed metadata, not a spoiler. Reads from the Prefetch
+       *     (``cached_prompt_narrations``) only -- see ``narrated_event_payload``'s
+       *     own docstring for why it must never query.
+       *
+       *     ``subject_name`` is overridden here with the page's per-viewer display
+       *     map (#4101 fix round 3, ruling R9-3) -- ``narrated_event_payload``'s own
+       *     value is the subject's FROZEN persona's raw name (correct for the
+       *     live WebSocket push, which has no per-viewer concept at all), but the
+       *     REST feed must show is_fake_name/undiscovered faces exactly as the rest
+       *     of this page shows that same persona -- a disguised subject's line
+       *     must never unmask them just because this field resolves differently
+       *     from ``get_persona``. ``_persona_display_map`` already folded this
+       *     row's subject persona into its one page-wide discovery query.
        */
-      readonly dramatic_moment_suggestions: {
-        [key: string]: unknown;
-      }[];
+      readonly narrates: {
+        prompt_id: number;
+        kind: string;
+        kind_label: string;
+        subject_name: string;
+        subject_persona_id: number;
+      } | null;
       /** @description List of resonances claimed by the endorsee (pose author). */
       readonly endorsable_resonances: {
         [key: string]: unknown;
@@ -32679,15 +32963,32 @@ export interface components {
         [key: string]: unknown;
       }[];
       /**
-       * @description PENDING dramatic-moment suggestions anchored to this interaction (#2183).
+       * @description The event this row narrates (#4101), e.g. "part of X's Crossing".
        *
-       *     GM-gated: a plain participant sees an empty list. Reads
-       *     ``cached_dramatic_moment_suggestions`` (Prefetch(to_attr=...) set by the view
-       *     queryset, already filtered to PENDING) — never a fresh query.
+       *     Not GM-gated (unlike the retired per-pose suggestion embed): a
+       *     narration row is a GM's own authored line, already delivered to
+       *     whoever the audience was; tagging it with the event it narrates is
+       *     plain feed metadata, not a spoiler. Reads from the Prefetch
+       *     (``cached_prompt_narrations``) only -- see ``narrated_event_payload``'s
+       *     own docstring for why it must never query.
+       *
+       *     ``subject_name`` is overridden here with the page's per-viewer display
+       *     map (#4101 fix round 3, ruling R9-3) -- ``narrated_event_payload``'s own
+       *     value is the subject's FROZEN persona's raw name (correct for the
+       *     live WebSocket push, which has no per-viewer concept at all), but the
+       *     REST feed must show is_fake_name/undiscovered faces exactly as the rest
+       *     of this page shows that same persona -- a disguised subject's line
+       *     must never unmask them just because this field resolves differently
+       *     from ``get_persona``. ``_persona_display_map`` already folded this
+       *     row's subject persona into its one page-wide discovery query.
        */
-      readonly dramatic_moment_suggestions: {
-        [key: string]: unknown;
-      }[];
+      readonly narrates: {
+        prompt_id: number;
+        kind: string;
+        kind_label: string;
+        subject_name: string;
+        subject_persona_id: number;
+      } | null;
       /** @description List of resonances claimed by the endorsee (pose author). */
       readonly endorsable_resonances: {
         [key: string]: unknown;
@@ -36898,21 +37199,6 @@ export interface components {
       previous?: string | null;
       results: components['schemas']['DraftApplication'][];
     };
-    PaginatedDramaticMomentSuggestionList: {
-      /** @example 123 */
-      count: number;
-      /**
-       * Format: uri
-       * @example http://api.example.org/accounts/?page=4
-       */
-      next?: string | null;
-      /**
-       * Format: uri
-       * @example http://api.example.org/accounts/?page=2
-       */
-      previous?: string | null;
-      results: components['schemas']['DramaticMomentSuggestion'][];
-    };
     PaginatedDramaticMomentTagList: {
       /** @example 123 */
       count: number;
@@ -37205,6 +37491,21 @@ export interface components {
        */
       previous?: string | null;
       results: components['schemas']['GMProfile'][];
+    };
+    PaginatedGMPromptList: {
+      /** @example 123 */
+      count: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results: components['schemas']['GMPrompt'][];
     };
     PaginatedGMRosterInviteList: {
       /** @example 123 */
@@ -38271,6 +38572,36 @@ export interface components {
        */
       previous?: string | null;
       results: components['schemas']['Prayer'][];
+    };
+    PaginatedPreparedCrossingTextList: {
+      /** @example 123 */
+      count: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results: components['schemas']['PreparedCrossingText'][];
+    };
+    PaginatedPreparedSurgeTextList: {
+      /** @example 123 */
+      count: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results: components['schemas']['PreparedSurgeText'][];
     };
     PaginatedProclamationList: {
       /** @example 123 */
@@ -40627,6 +40958,30 @@ export interface components {
       status?: components['schemas']['StatusD66Enum'];
     };
     /**
+     * @description A character's own prepared Audere Majora crossing text (#4101).
+     *
+     *     Authored by staff or the character's table GM (``may_prepare_text_for``).
+     *     Never readable by the crossing player themselves — the vision is a spoiler —
+     *     nor by an unrelated GM; the viewset's queryset is the read-side gate.
+     */
+    PatchedPreparedCrossingTextRequest: {
+      /** @description The character this sheet belongs to */
+      character_sheet?: number;
+      /** @description Shown ONLY to the crossing player. Blank = the patron or tier vision. */
+      vision_text?: string;
+      /** @description The room line for this crossing. Blank = the patron or tier line. */
+      manifestation_text?: string;
+      /** @description Public deed name for this crossing. Blank = the tier's deed title. */
+      deed_title?: string;
+    };
+    /** @description A character's own prepared Audere surge line (#4101). No patron layer. */
+    PatchedPreparedSurgeTextRequest: {
+      /** @description The character this sheet belongs to */
+      character_sheet?: number;
+      /** @description Room line when this character surges. {name} = primary-persona name. */
+      surge_text?: string;
+    };
+    /**
      * @description Full serializer for RiskCalibration (#1770 pillar 5).
      *
      *     Staff-write / authenticated-read — enforced by IsStaffOrReadOnly on the
@@ -41538,7 +41893,14 @@ export interface components {
       readonly boundary_level: number;
       /** @description Human-readable label for the target PathStage. */
       readonly target_stage_display: string;
-      /** @description Return faith variant vision text if set, else the threshold's. */
+      /**
+       * @description Layered: prepared (character), else faith variant, else the threshold's (#4101).
+       *
+       *     Empty while ``manifestation_withheld`` (#4101 fix round 1, controller
+       *     ruling I3): a GM was present at gate-open, so the GM narrates or
+       *     releases the vision -- the offer poll must never show it to the player
+       *     first.
+       */
       readonly vision_text: string;
       /** @description Faith variant selected at offer creation; null = no faith coupling. */
       readonly faith_variant_id: number | null;
@@ -41549,6 +41911,8 @@ export interface components {
       readonly eligible_paths: components['schemas']['EligiblePath'][];
       /** @description Return the PathIntent's intended_path_id if it is among eligible paths, else None. */
       readonly intended_path_id: number | null;
+      readonly offer_title: string;
+      readonly offer_strip_label: string;
       /** Format: date-time */
       readonly created_at: string;
     };
@@ -41575,6 +41939,12 @@ export interface components {
       readonly advisory_text: string;
       /** @description The authored reveal promise, only when accepting would reveal something. */
       readonly reveal_framing_text: string;
+      /** @description The authored Audere offer dialog heading (#4101); '' when unconfigured. */
+      readonly offer_title: string;
+      /** @description The authored Audere gate strip label (#4101); '' when unconfigured. */
+      readonly offer_strip_label: string;
+      /** @description The authored Audere offer line, with {intensity} substituted (#4101). */
+      readonly offer_body_text: string;
       /** Format: date-time */
       readonly created_at: string;
     };
@@ -41827,7 +42197,7 @@ export interface components {
     PersonaMenuItem: {
       key: string;
       label: string;
-      group: components['schemas']['GroupEnum'];
+      group: components['schemas']['GroupB77Enum'];
       available: boolean;
       reason: string;
     };
@@ -42446,6 +42816,66 @@ export interface components {
       | 'outcome_tier'
       | 'faction_standing_at_least'
       | 'npc_regard_at_least';
+    /**
+     * @description A character's own prepared Audere Majora crossing text (#4101).
+     *
+     *     Authored by staff or the character's table GM (``may_prepare_text_for``).
+     *     Never readable by the crossing player themselves — the vision is a spoiler —
+     *     nor by an unrelated GM; the viewset's queryset is the read-side gate.
+     */
+    PreparedCrossingText: {
+      readonly id: number;
+      /** @description The character this sheet belongs to */
+      character_sheet: number;
+      readonly character_name: string;
+      /** @description Shown ONLY to the crossing player. Blank = the patron or tier vision. */
+      vision_text?: string;
+      /** @description The room line for this crossing. Blank = the patron or tier line. */
+      manifestation_text?: string;
+      /** @description Public deed name for this crossing. Blank = the tier's deed title. */
+      deed_title?: string;
+      readonly prepared_by_role: string;
+      /** @description Set when a crossing used this text; a used text never fires again. */
+      readonly crossing: number | null;
+      /** Format: date-time */
+      readonly updated_at: string;
+    };
+    /**
+     * @description A character's own prepared Audere Majora crossing text (#4101).
+     *
+     *     Authored by staff or the character's table GM (``may_prepare_text_for``).
+     *     Never readable by the crossing player themselves — the vision is a spoiler —
+     *     nor by an unrelated GM; the viewset's queryset is the read-side gate.
+     */
+    PreparedCrossingTextRequest: {
+      /** @description The character this sheet belongs to */
+      character_sheet: number;
+      /** @description Shown ONLY to the crossing player. Blank = the patron or tier vision. */
+      vision_text?: string;
+      /** @description The room line for this crossing. Blank = the patron or tier line. */
+      manifestation_text?: string;
+      /** @description Public deed name for this crossing. Blank = the tier's deed title. */
+      deed_title?: string;
+    };
+    /** @description A character's own prepared Audere surge line (#4101). No patron layer. */
+    PreparedSurgeText: {
+      readonly id: number;
+      /** @description The character this sheet belongs to */
+      character_sheet: number;
+      readonly character_name: string;
+      /** @description Room line when this character surges. {name} = primary-persona name. */
+      surge_text?: string;
+      readonly prepared_by_role: string;
+      /** Format: date-time */
+      readonly updated_at: string;
+    };
+    /** @description A character's own prepared Audere surge line (#4101). No patron layer. */
+    PreparedSurgeTextRequest: {
+      /** @description The character this sheet belongs to */
+      character_sheet: number;
+      /** @description Room line when this character surges. {name} = primary-persona name. */
+      surge_text?: string;
+    };
     /**
      * @description * `public` - Public
      *     * `private` - Private
@@ -61364,6 +61794,157 @@ export interface operations {
       };
     };
   };
+  gm_prompt_filters_list: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['GMPromptFilter'][];
+        };
+      };
+    };
+  };
+  gm_prompt_filters_set_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['GMPromptFilterRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['GMPromptFilter'];
+        };
+      };
+    };
+  };
+  gm_prompts_list: {
+    parameters: {
+      query?: {
+        /**
+         * @description What this prompt is about; dramatic_moment is the confirm kind.
+         *
+         *     * `dramatic_moment` - Dramatic Moment
+         *     * `audere_surge` - Audere
+         *     * `audere_ultimate` - Ultimate
+         *     * `crossing` - Crossing
+         *     * `miracle` - Miracle
+         *     * `death` - Death
+         *     * `stake_outcome` - Stake outcome
+         */
+        kind?:
+          | 'audere_surge'
+          | 'audere_ultimate'
+          | 'crossing'
+          | 'death'
+          | 'dramatic_moment'
+          | 'miracle'
+          | 'stake_outcome';
+        /** @description A page number within the paginated result set. */
+        page?: number;
+        /** @description Number of results to return per page. */
+        page_size?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedGMPromptList'];
+        };
+      };
+    };
+  };
+  gm_prompts_confirm_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this GM Prompt. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['GMPrompt'];
+        };
+      };
+    };
+  };
+  gm_prompts_dismiss_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this GM Prompt. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['GMPrompt'];
+        };
+      };
+    };
+  };
+  gm_prompts_narrate_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this GM Prompt. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['GMPrompt'];
+        };
+      };
+    };
+  };
   gm_queue_list: {
     parameters: {
       query?: {
@@ -65237,82 +65818,6 @@ export interface operations {
       };
     };
   };
-  magic_dramatic_moment_suggestions_list: {
-    parameters: {
-      query?: {
-        character_sheet?: number;
-        /** @description A page number within the paginated result set. */
-        page?: number;
-        /** @description Number of results to return per page. */
-        page_size?: number;
-        scene?: number;
-        /**
-         * @description * `pending` - Pending
-         *     * `confirmed` - Confirmed
-         *     * `dismissed` - Dismissed
-         */
-        status?: 'confirmed' | 'dismissed' | 'pending';
-      };
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    requestBody?: never;
-    responses: {
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/json': components['schemas']['PaginatedDramaticMomentSuggestionList'];
-        };
-      };
-    };
-  };
-  magic_dramatic_moment_suggestions_confirm_create: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        /** @description A unique integer value identifying this dramatic moment suggestion. */
-        id: number;
-      };
-      cookie?: never;
-    };
-    requestBody?: never;
-    responses: {
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/json': components['schemas']['DramaticMomentSuggestion'];
-        };
-      };
-    };
-  };
-  magic_dramatic_moment_suggestions_dismiss_create: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        /** @description A unique integer value identifying this dramatic moment suggestion. */
-        id: number;
-      };
-      cookie?: never;
-    };
-    requestBody?: never;
-    responses: {
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/json': components['schemas']['DramaticMomentSuggestion'];
-        };
-      };
-    };
-  };
   magic_dramatic_moment_tags_list: {
     parameters: {
       query?: {
@@ -65885,6 +66390,232 @@ export interface operations {
           [name: string]: unknown;
         };
         content?: never;
+      };
+    };
+  };
+  magic_prepared_crossing_texts_list: {
+    parameters: {
+      query?: {
+        /** @description A page number within the paginated result set. */
+        page?: number;
+        /** @description Number of results to return per page. */
+        page_size?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedPreparedCrossingTextList'];
+        };
+      };
+    };
+  };
+  magic_prepared_crossing_texts_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['PreparedCrossingTextRequest'];
+      };
+    };
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PreparedCrossingText'];
+        };
+      };
+    };
+  };
+  magic_prepared_crossing_texts_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PreparedCrossingText'];
+        };
+      };
+    };
+  };
+  magic_prepared_crossing_texts_destroy: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description No response body */
+      204: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  magic_prepared_crossing_texts_partial_update: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: {
+      content: {
+        'application/json': components['schemas']['PatchedPreparedCrossingTextRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PreparedCrossingText'];
+        };
+      };
+    };
+  };
+  magic_prepared_surge_texts_list: {
+    parameters: {
+      query?: {
+        /** @description A page number within the paginated result set. */
+        page?: number;
+        /** @description Number of results to return per page. */
+        page_size?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedPreparedSurgeTextList'];
+        };
+      };
+    };
+  };
+  magic_prepared_surge_texts_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['PreparedSurgeTextRequest'];
+      };
+    };
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PreparedSurgeText'];
+        };
+      };
+    };
+  };
+  magic_prepared_surge_texts_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PreparedSurgeText'];
+        };
+      };
+    };
+  };
+  magic_prepared_surge_texts_destroy: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description No response body */
+      204: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  magic_prepared_surge_texts_partial_update: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: {
+      content: {
+        'application/json': components['schemas']['PatchedPreparedSurgeTextRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PreparedSurgeText'];
+        };
       };
     };
   };

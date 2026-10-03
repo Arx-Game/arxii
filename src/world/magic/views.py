@@ -38,7 +38,6 @@ from world.magic.constants import (
     PendingAlterationStatus,
     RestrictionKind,
     RitualExecutionKind,
-    SuggestionStatus,
     TargetKind,
     is_ghost_tutor_ritual,
     is_imbuing_ritual,
@@ -54,6 +53,8 @@ from world.magic.filters import (
     CharacterGiftFilter,
     CharacterResonanceFilter,
     ConsequencePoolCatalogFilter,
+    PreparedCrossingTextFilter,
+    PreparedSurgeTextFilter,
     ResonanceGrantFilterSet,
     RitualSessionFilterSet,
     ThreadFilter,
@@ -62,8 +63,10 @@ from world.magic.filters import (
 from world.magic.models import (
     CharacterAnima,
     CharacterAura,
+    CharacterCrossingText,
     CharacterGift,
     CharacterResonance,
+    CharacterSurgeText,
     EffectType,
     Facet,
     Gift,
@@ -82,11 +85,10 @@ from world.magic.models import (
     ThreadWeavingTeachingOffer,
 )
 from world.magic.models.dramatic_moment import (
-    DramaticMomentSuggestion,
     DramaticMomentTag,
     DramaticMomentType,
 )
-from world.magic.permissions import IsRitualAuthorOrStaff, IsThreadOwner
+from world.magic.permissions import CanPrepareCharacterText, IsRitualAuthorOrStaff, IsThreadOwner
 from world.magic.serializers import (
     AcceptSoulTetherSerializer,
     AcceptTeachingOfferResponseSerializer,
@@ -113,7 +115,6 @@ from world.magic.serializers import (
     CrossXPLockResponseSerializer,
     CrossXPLockSerializer,
     DissolveSerializer,
-    DramaticMomentSuggestionSerializer,
     DramaticMomentTagSerializer,
     DramaticMomentTypeSerializer,
     EffectTypeSerializer,
@@ -129,6 +130,8 @@ from world.magic.serializers import (
     LibraryEntrySerializer,
     PendingAlterationSerializer,
     PoseEndorsementSerializer,
+    PreparedCrossingTextSerializer,
+    PreparedSurgeTextSerializer,
     ProgressionStageSerializer,
     PurchaseGiftUnlockRequestSerializer,
     ReadiedUltimateSerializer,
@@ -159,6 +162,7 @@ from world.magic.serializers import (
     ThreadPullPreviewResponseSerializer,
     ThreadSerializer,
     ThreadWeavingTeachingOfferSerializer,
+    primary_persona_names_for,
 )
 from world.magic.services import (
     get_library_entries,
@@ -2810,85 +2814,93 @@ class DramaticMomentTagViewSet(mixins.CreateModelMixin, mixins.ListModelMixin, G
 
 
 # =============================================================================
-# Dramatic Moment Suggestions — GM confirm/dismiss inbox (#2183)
+# Prepared per-character Audere text (#4101)
 # =============================================================================
 
-_ERR_SUGGESTION_PERMISSION = (
-    "Only the scene's GM, owner, or staff may resolve dramatic-moment suggestions."
-)
-_ERR_SUGGESTION_SCENE_REQUIRED = "A scene id is required (?scene=<id>)."
+_ERR_PREPARED_TEXT_ALREADY_USED = "That text was used by a crossing and is now a record."
 
 
-class DramaticMomentSuggestionViewSet(mixins.ListModelMixin, GenericViewSet):
-    """GM confirm/dismiss inbox for PENDING dramatic-moment suggestions (#2183).
+class _BatchedCharacterNameListMixin:
+    """Shared ``list()`` override for the two prepared-text ViewSets (#4101).
 
-    GET  /api/magic/dramatic-moment-suggestions/?scene=<id> — PENDING suggestions for a scene.
-    POST .../{id}/confirm/ — confirm (mints a DramaticMomentTag via the REGISTRY action).
-    POST .../{id}/dismiss/ — dismiss.
-
-    List is scoped to a single ``?scene=`` — same gate as ``DramaticMomentTagViewSet
-    .perform_create`` (scene GM, owner, or staff). ``confirm``/``dismiss`` re-check that
-    same gate against the suggestion's own scene before dispatching the REGISTRY action
-    (which independently re-checks it again — defense in depth for a direct-call caller).
+    ``CharacterSheet.primary_persona`` is a ``.get()``, which is NOT
+    prefetch-cacheable — calling it once per row in a list response is an N+1.
+    This batches the whole page's primary-persona names into one extra query
+    (``primary_persona_names_for``) and hands it to the serializer via context,
+    rather than a ``to_attr`` prefetch on the idmapper-cached ``CharacterSheet``/
+    ``Persona`` models. Non-list actions (retrieve/create/update) are single-row
+    and keep the serializer's own per-object fallback.
     """
 
-    queryset = DramaticMomentSuggestion.objects.select_related(
-        "moment_type", "character_sheet", "scene", "interaction"
-    ).order_by("-created_at")
-    serializer_class = DramaticMomentSuggestionSerializer
-    permission_classes = [IsAuthenticated]
-    pagination_class = StandardResultsSetPagination
-    filter_backends = [DjangoFilterBackend]
-    filterset_fields = ["scene", "character_sheet", "status"]
-
     def list(self, request: Request, *args: object, **kwargs: object) -> Response:
-        from world.scenes.models import Scene  # noqa: PLC0415
-        from world.scenes.permissions import IsSceneGMOrOwnerOrStaff  # noqa: PLC0415
-
-        scene_id = request.query_params.get("scene")  # noqa: USE_FILTERSET
-        if not scene_id:
-            return Response(
-                {"detail": _ERR_SUGGESTION_SCENE_REQUIRED}, status=status.HTTP_400_BAD_REQUEST
-            )
-        scene = get_object_or_404(Scene, pk=scene_id)
-        if not IsSceneGMOrOwnerOrStaff().has_object_permission(request, self, scene):
-            raise PermissionDenied(_ERR_SUGGESTION_PERMISSION)
-
-        qs = self.filter_queryset(
-            self.get_queryset().filter(scene=scene, status=SuggestionStatus.PENDING)
-        )
-        page = self.paginate_queryset(qs)
-        serializer = self.get_serializer(page if page is not None else qs, many=True)
+        queryset = self.filter_queryset(self.get_queryset())
+        page = self.paginate_queryset(queryset)
+        objs = page if page is not None else queryset
+        names = primary_persona_names_for(obj.character_sheet_id for obj in objs)
+        context = {**self.get_serializer_context(), "character_names": names}
+        serializer = self.get_serializer(objs, many=True, context=context)
         if page is not None:
             return self.get_paginated_response(serializer.data)
         return Response(serializer.data)
 
-    def _resolve(self, request: Request, pk: str | None, *, confirm: bool) -> Response:
-        from actions.definitions.dramatic_moments import (  # noqa: PLC0415
-            ConfirmDramaticMomentSuggestionAction,
-            DismissDramaticMomentSuggestionAction,
+
+class PreparedCrossingTextViewSet(_BatchedCharacterNameListMixin, viewsets.ModelViewSet):
+    """Staff or the character's table GM prepares a character's own Crossing text (#4101).
+
+    Private to its author: a player never reads their own unused prepared text (it is
+    a spoiler, resolved only at crossing time), and an unrelated GM never sees it either
+    — ``get_queryset`` scopes non-staff to characters at one of their own active tables.
+    """
+
+    serializer_class = PreparedCrossingTextSerializer
+    permission_classes = [IsAuthenticated, CanPrepareCharacterText]
+    filter_backends = [DjangoFilterBackend]
+    filterset_class = PreparedCrossingTextFilter
+    pagination_class = StandardResultsSetPagination
+    http_method_names = ["get", "post", "patch", "delete"]
+
+    def get_queryset(self):
+        user = self.request.user
+        if user.is_staff:
+            return CharacterCrossingText.objects.select_related("prepared_by")
+        return (
+            CharacterCrossingText.objects.select_related("prepared_by")
+            .filter(
+                character_sheet__personas__gm_table_memberships__left_at__isnull=True,
+                character_sheet__personas__gm_table_memberships__table__gm__account=user,
+            )
+            .distinct()
         )
-        from world.scenes.permissions import IsSceneGMOrOwnerOrStaff  # noqa: PLC0415
 
-        suggestion = get_object_or_404(DramaticMomentSuggestion, pk=pk)
-        if not IsSceneGMOrOwnerOrStaff().has_object_permission(request, self, suggestion.scene):
-            raise PermissionDenied(_ERR_SUGGESTION_PERMISSION)
+    def perform_destroy(self, instance: CharacterCrossingText) -> None:
+        if instance.crossing_id is not None:
+            raise serializers.ValidationError({"detail": _ERR_PREPARED_TEXT_ALREADY_USED})
+        instance.delete()
 
-        action_cls = (
-            ConfirmDramaticMomentSuggestionAction
-            if confirm
-            else DismissDramaticMomentSuggestionAction
+
+class PreparedSurgeTextViewSet(_BatchedCharacterNameListMixin, viewsets.ModelViewSet):
+    """Staff or the character's table GM prepares a character's own surge line (#4101).
+
+    No patron layer and nothing to "use up" — unlike Crossing text, a surge line is
+    reusable (it fires on every surge), so there is no consumed-record refusal here.
+    """
+
+    serializer_class = PreparedSurgeTextSerializer
+    permission_classes = [IsAuthenticated, CanPrepareCharacterText]
+    filter_backends = [DjangoFilterBackend]
+    filterset_class = PreparedSurgeTextFilter
+    pagination_class = StandardResultsSetPagination
+    http_method_names = ["get", "post", "patch", "delete"]
+
+    def get_queryset(self):
+        user = self.request.user
+        if user.is_staff:
+            return CharacterSurgeText.objects.select_related("prepared_by")
+        return (
+            CharacterSurgeText.objects.select_related("prepared_by")
+            .filter(
+                character_sheet__personas__gm_table_memberships__left_at__isnull=True,
+                character_sheet__personas__gm_table_memberships__table__gm__account=user,
+            )
+            .distinct()
         )
-        result = action_cls().run(actor=None, account=request.user, suggestion_id=suggestion.pk)
-        if not result.success:
-            return Response({"detail": result.message}, status=status.HTTP_400_BAD_REQUEST)
-        suggestion.refresh_from_db()
-        return Response(DramaticMomentSuggestionSerializer(suggestion).data)
-
-    @action(detail=True, methods=["post"])
-    def confirm(self, request: Request, pk: str | None = None) -> Response:
-        return self._resolve(request, pk, confirm=True)
-
-    @action(detail=True, methods=["post"])
-    def dismiss(self, request: Request, pk: str | None = None) -> Response:
-        return self._resolve(request, pk, confirm=False)

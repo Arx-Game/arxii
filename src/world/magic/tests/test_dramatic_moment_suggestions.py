@@ -1,18 +1,23 @@
 """Tests for the technique-entrance suggestion bridge (#2183).
 
 Task 3 of the dramatic-technique-driven-combat-entrance feature: the
-DramaticMomentSuggestion model + maybe_suggest_dramatic_moments /
+GMPrompt model + maybe_suggest_dramatic_moments /
 resolve_dramatic_moment_suggestion services + the "Grand Entrance" seed. Nothing
 calls these services yet — Tasks 4/5/6 wire the actual technique-entrance cast
 path to maybe_suggest_dramatic_moments and a GM-facing resolve surface to
 resolve_dramatic_moment_suggestion.
 """
 
+from unittest import mock
+
 from django.test import TestCase, override_settings
 
 from evennia_extensions.factories import AccountFactory
 from world.character_sheets.factories import CharacterSheetFactory
-from world.magic.constants import GainSource, SuggestionStatus
+from world.gm.constants import GMPromptGroup, GMPromptStatus
+from world.gm.factories import GMPromptFilterFactory
+from world.gm.models import GMPrompt
+from world.magic.constants import GainSource
 from world.magic.exceptions import DramaticMomentSuggestionAlreadyResolved
 from world.magic.factories import (
     CharacterResonanceFactory,
@@ -22,12 +27,17 @@ from world.magic.factories import (
     ensure_dramatic_entrance_content,
 )
 from world.magic.models import CharacterResonance, ResonanceGrant
-from world.magic.models.dramatic_moment import DramaticMomentSuggestion, DramaticMomentType
+from world.magic.models.dramatic_moment import DramaticMomentType
 from world.magic.services.gain import (
     maybe_suggest_dramatic_moments,
     resolve_dramatic_moment_suggestion,
 )
-from world.scenes.factories import InteractionFactory, SceneFactory
+from world.scenes.factories import (
+    InteractionFactory,
+    SceneFactory,
+    SceneGMParticipationFactory,
+    SceneOwnerParticipationFactory,
+)
 
 
 class MaybeSuggestDramaticMomentsTest(TestCase):
@@ -58,14 +68,12 @@ class MaybeSuggestDramaticMomentsTest(TestCase):
         )
         self.assertEqual(len(created), 1)
         suggestion = created[0]
-        self.assertEqual(suggestion.status, SuggestionStatus.PENDING)
+        self.assertEqual(suggestion.status, GMPromptStatus.PENDING)
         self.assertEqual(suggestion.success_level, 3)
         self.assertEqual(suggestion.scene, self.scene)
         self.assertEqual(suggestion.interaction, self.interaction)
         self.assertEqual(suggestion.interaction_timestamp, self.interaction.timestamp)
-        self.assertEqual(
-            DramaticMomentSuggestion.objects.filter(status=SuggestionStatus.PENDING).count(), 1
-        )
+        self.assertEqual(GMPrompt.objects.filter(status=GMPromptStatus.PENDING).count(), 1)
 
     def test_suggest_respects_threshold(self):
         created = maybe_suggest_dramatic_moments(
@@ -74,7 +82,7 @@ class MaybeSuggestDramaticMomentsTest(TestCase):
             success_level=2,
         )
         self.assertEqual(created, [])
-        self.assertFalse(DramaticMomentSuggestion.objects.exists())
+        self.assertFalse(GMPrompt.objects.exists())
 
     def test_suggest_skips_unflagged(self):
         self.moment_type.suggest_on_technique_entrance = False
@@ -85,7 +93,7 @@ class MaybeSuggestDramaticMomentsTest(TestCase):
             success_level=5,
         )
         self.assertEqual(created, [])
-        self.assertFalse(DramaticMomentSuggestion.objects.exists())
+        self.assertFalse(GMPrompt.objects.exists())
 
     def test_suggest_does_not_filter_on_claimed_resonance(self):
         """Eligibility is the success threshold and the per-scene cap, nothing else.
@@ -103,7 +111,7 @@ class MaybeSuggestDramaticMomentsTest(TestCase):
         )
         self.assertEqual(len(created), 1)
         self.assertEqual(created[0].character_sheet, other_sheet)
-        self.assertTrue(DramaticMomentSuggestion.objects.exists())
+        self.assertTrue(GMPrompt.objects.exists())
 
     def test_suggest_records_the_entrance_technique(self):
         """The technique is carried so confirm-time can read its woven thread."""
@@ -131,7 +139,7 @@ class MaybeSuggestDramaticMomentsTest(TestCase):
             success_level=5,
         )
         self.assertEqual(created, [])
-        self.assertFalse(DramaticMomentSuggestion.objects.exists())
+        self.assertFalse(GMPrompt.objects.exists())
 
     def test_suggest_idempotent_per_scene(self):
         first = maybe_suggest_dramatic_moments(
@@ -146,9 +154,7 @@ class MaybeSuggestDramaticMomentsTest(TestCase):
             success_level=4,
         )
         self.assertEqual(second, [])
-        self.assertEqual(
-            DramaticMomentSuggestion.objects.filter(status=SuggestionStatus.PENDING).count(), 1
-        )
+        self.assertEqual(GMPrompt.objects.filter(status=GMPromptStatus.PENDING).count(), 1)
 
     def test_suggest_returns_empty_without_scene(self):
         created = maybe_suggest_dramatic_moments(
@@ -157,7 +163,70 @@ class MaybeSuggestDramaticMomentsTest(TestCase):
             success_level=5,
         )
         self.assertEqual(created, [])
-        self.assertFalse(DramaticMomentSuggestion.objects.exists())
+        self.assertFalse(GMPrompt.objects.exists())
+
+    def test_suggest_skips_when_every_scene_gm_muted_dramatic_moment(self):
+        """#4101 fix round 1: the group-mute check is now one batched query
+        (prompt_recipients) instead of a per-GM prompts_enabled() loop -- same
+        semantics, proven here: every scene GM muted the group means no suggestion."""
+        gm = AccountFactory()
+        SceneGMParticipationFactory(scene=self.scene, account=gm)
+        GMPromptFilterFactory(account=gm, group=GMPromptGroup.DRAMATIC_MOMENT, enabled=False)
+        created = maybe_suggest_dramatic_moments(
+            character_sheet=self.sheet,
+            scene=self.scene,
+            success_level=5,
+        )
+        self.assertEqual(created, [])
+        self.assertFalse(GMPrompt.objects.exists())
+
+    def test_suggest_proceeds_when_one_of_two_gms_unmuted(self):
+        muted_gm = AccountFactory()
+        unmuted_gm = AccountFactory()
+        SceneGMParticipationFactory(scene=self.scene, account=muted_gm)
+        SceneGMParticipationFactory(scene=self.scene, account=unmuted_gm)
+        GMPromptFilterFactory(account=muted_gm, group=GMPromptGroup.DRAMATIC_MOMENT, enabled=False)
+        created = maybe_suggest_dramatic_moments(
+            character_sheet=self.sheet,
+            scene=self.scene,
+            success_level=5,
+        )
+        self.assertEqual(len(created), 1)
+
+    def test_suggest_proceeds_with_no_scene_gms(self):
+        """No GM participations at all -- the gate only screens an existing,
+        fully-muted GM pool, never an empty one (matches the pre-fix behavior)."""
+        created = maybe_suggest_dramatic_moments(
+            character_sheet=self.sheet,
+            scene=self.scene,
+            success_level=5,
+        )
+        self.assertEqual(len(created), 1)
+
+    def test_new_suggestion_is_pushed_live_to_unmuted_scene_gms(self):
+        """#4101 final review, F1: a dramatic moment reaches the scene's GMs live
+        with the same gm_prompt frame a narration prompt gets; a GM who muted the
+        group and a non-GM owner get nothing."""
+        gm = AccountFactory()
+        muted_gm = AccountFactory()
+        owner = AccountFactory()
+        SceneGMParticipationFactory(scene=self.scene, account=gm)
+        SceneGMParticipationFactory(scene=self.scene, account=muted_gm)
+        SceneOwnerParticipationFactory(scene=self.scene, account=owner)
+        GMPromptFilterFactory(account=muted_gm, group=GMPromptGroup.DRAMATIC_MOMENT, enabled=False)
+        for account in (gm, muted_gm, owner):
+            account.msg = mock.Mock()
+        with self.captureOnCommitCallbacks(execute=True):
+            [created] = maybe_suggest_dramatic_moments(
+                character_sheet=self.sheet, scene=self.scene, success_level=5
+            )
+        gm.msg.assert_called_once()
+        self.assertEqual(
+            gm.msg.call_args.kwargs["gm_prompt"][1],
+            {"prompt_id": created.pk, "scene_id": self.scene.pk, "kind": created.kind},
+        )
+        muted_gm.msg.assert_not_called()
+        owner.msg.assert_not_called()
 
 
 class ResolveDramaticMomentSuggestionTest(TestCase):
@@ -188,7 +257,7 @@ class ResolveDramaticMomentSuggestionTest(TestCase):
         resolved = resolve_dramatic_moment_suggestion(
             self.suggestion, resolver=self.resolver, confirm=True
         )
-        self.assertEqual(resolved.status, SuggestionStatus.CONFIRMED)
+        self.assertEqual(resolved.status, GMPromptStatus.CONFIRMED)
         self.assertIsNotNone(resolved.confirmed_tag)
         self.assertEqual(resolved.resolved_by, self.resolver)
         cr = CharacterResonance.objects.get(character_sheet=self.sheet, resonance=self.resonance)
@@ -200,7 +269,7 @@ class ResolveDramaticMomentSuggestionTest(TestCase):
         resolved = resolve_dramatic_moment_suggestion(
             self.suggestion, resolver=self.resolver, confirm=False
         )
-        self.assertEqual(resolved.status, SuggestionStatus.DISMISSED)
+        self.assertEqual(resolved.status, GMPromptStatus.DISMISSED)
         self.assertIsNone(resolved.confirmed_tag)
         self.assertEqual(resolved.resolved_by, self.resolver)
         self.assertFalse(ResonanceGrant.objects.filter(source=GainSource.DRAMATIC_MOMENT).exists())
@@ -210,6 +279,26 @@ class ResolveDramaticMomentSuggestionTest(TestCase):
         with self.assertRaises(DramaticMomentSuggestionAlreadyResolved):
             resolve_dramatic_moment_suggestion(
                 self.suggestion, resolver=self.resolver, confirm=True
+            )
+
+    def test_resolve_refuses_non_dramatic_moment_kind(self):
+        """#4101 fix round 1: this service must never act on a narration prompt."""
+        from world.gm.constants import GMPromptKind
+        from world.gm.prompt_services import route_narratable_event
+        from world.gm.types import NarratableEvent
+        from world.magic.exceptions import DramaticMomentSuggestionWrongKind
+
+        [narration_prompt] = route_narratable_event(
+            NarratableEvent(
+                kind=GMPromptKind.DEATH,
+                scene=self.scene,
+                character_sheet=self.sheet,
+            ),
+            candidates=[self.resolver],
+        )
+        with self.assertRaises(DramaticMomentSuggestionWrongKind):
+            resolve_dramatic_moment_suggestion(
+                narration_prompt, resolver=self.resolver, confirm=False
             )
 
 

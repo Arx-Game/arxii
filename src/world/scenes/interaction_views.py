@@ -5,7 +5,7 @@ from http import HTTPMethod
 from typing import Any
 from uuid import UUID
 
-from django.db.models import Prefetch, Q, QuerySet
+from django.db.models import Prefetch, QuerySet
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import mixins, status, viewsets
 from rest_framework.decorators import action
@@ -59,7 +59,6 @@ from world.scenes.models import (
     Persona,
     ReactionEmoji,
     Scene,
-    SceneParticipation,
 )
 from world.scenes.place_models import InteractionReceiver
 from world.scenes.reachability import UnreachableError
@@ -173,7 +172,7 @@ def _seed_fresh_pose_caches(
         del interaction.cached_endorsements
         del interaction.cached_reaction_windows
         del interaction.cached_dramatic_moment_tags
-        del interaction.cached_dramatic_moment_suggestions
+        del interaction.cached_prompt_narrations
     else:
         interaction.cached_receivers = []
         interaction.cached_favorites = []
@@ -181,12 +180,12 @@ def _seed_fresh_pose_caches(
         # cached_action_links already populated by `_on_created` -- see above.
         interaction.cached_endorsements = []
         del interaction.cached_reaction_windows
-        # Neither dramatic-moment tags nor suggestions are ever created by
-        # `_on_created` above -- both require a technique-entrance cast or the
-        # GM tag endpoint, an entirely separate pipeline from plain pose
-        # submission -- so a brand-new interaction genuinely has none yet.
+        # Neither dramatic-moment tags nor prompt narrations are ever created by
+        # `_on_created` above -- both require a technique-entrance cast / GM tag
+        # endpoint or a GM narrate dispatch, an entirely separate pipeline from
+        # plain pose submission -- so a brand-new interaction genuinely has none yet.
         interaction.cached_dramatic_moment_tags = []
-        interaction.cached_dramatic_moment_suggestions = []
+        interaction.cached_prompt_narrations = []
     # The replay-matching `comparison_fields["target"]` check guarantees the
     # freshly-resolved `target_personas` here is identical to the stored row's
     # real set on a replay too, so this assignment is safe in both branches.
@@ -313,37 +312,14 @@ class InteractionViewSet(
             for r in rows:
                 entry_map.setdefault(r.endorsee_sheet_id, []).append(r)
         context["scene_entry_endorsements"] = entry_map
-        # Viewer's GM/owner status for the ?scene= filter, computed once per
-        # request (not once per interaction row, and not via Scene.is_gm()/
-        # is_owner()'s participations_cached — a fresh query per distinct
-        # in-memory Scene instance since select_related builds a new one per
-        # row). Pre-seeds InteractionListSerializer._viewer_can_gm_scene's
-        # per-scene cache directly so the dramatic_moment_suggestions field
-        # never re-derives it (#2183).
-        viewer_can_gm_cache: dict[int, bool] = {}
-        if scene_id:
-            user = self.request.user
-            if user.is_authenticated:
-                viewer_can_gm_cache[int(scene_id)] = bool(
-                    user.is_staff
-                    or SceneParticipation.objects.filter(
-                        Q(is_gm=True) | Q(is_owner=True),
-                        scene_id=scene_id,
-                        account_id=user.pk,
-                    ).exists()
-                )
-        context["_viewer_can_gm_cache"] = viewer_can_gm_cache
         return context
 
     def get_queryset(self) -> QuerySet[Interaction]:
         # Deferred: world.combat imports world.scenes at module scope elsewhere;
         # importing CombatRoundAction lazily keeps this view free of an import cycle.
         from world.combat.models import CombatRoundAction  # noqa: PLC0415
-        from world.magic.constants import SuggestionStatus  # noqa: PLC0415
-        from world.magic.models.dramatic_moment import (  # noqa: PLC0415
-            DramaticMomentSuggestion,
-            DramaticMomentTag,
-        )
+        from world.gm.models import GMPromptNarration  # noqa: PLC0415
+        from world.magic.models.dramatic_moment import DramaticMomentTag  # noqa: PLC0415
 
         base_qs = Interaction.objects.select_related(
             "persona__character_sheet",
@@ -431,11 +407,18 @@ class InteractionViewSet(
                 to_attr="cached_dramatic_moment_tags",
             ),
             Prefetch(
-                "dramatic_moment_suggestions",
-                queryset=DramaticMomentSuggestion.objects.filter(
-                    status=SuggestionStatus.PENDING
-                ).select_related("moment_type"),
-                to_attr="cached_dramatic_moment_suggestions",
+                "prompt_narrations",
+                # #4101: the per-pose dramatic-moment-suggestion embed is retired in
+                # favor of the GMPromptViewSet queue -- this feeds the feed's
+                # "part of X's Crossing" narration tag instead (see get_narrates).
+                # R9-3 (#4101 fix round 3): the subject's face is FROZEN at event
+                # time on GMPrompt.subject_persona itself now (never re-derived from
+                # the character's current active/primary face), so this just
+                # select_relateds it -- the serializer's own display-map lookup
+                # (_persona_display_map) handles per-viewer masking from there,
+                # with no further query.
+                queryset=GMPromptNarration.objects.select_related("prompt__subject_persona"),
+                to_attr="cached_prompt_narrations",
             ),
         )
 

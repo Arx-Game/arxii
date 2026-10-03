@@ -1,6 +1,7 @@
-import { fireEvent, render, screen, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
+import { stubResizeObserver } from '@/test/utils/resizeObserver';
 import { Provider } from 'react-redux';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { store } from '@/store/store';
@@ -126,6 +127,40 @@ describe('ExplorationReader', () => {
     expect(rows).toEqual(['note:n1', 'interaction:9', 'note:n2']);
     expect(screen.getByRole('alert')).toHaveTextContent("Command 'lok' is not available.");
     expect(screen.queryByText('Nearby activity')).not.toBeInTheDocument();
+  });
+
+  it('keeps the newest line in view as activity arrives, until the reader scrolls up', () => {
+    const observer = stubResizeObserver();
+    try {
+      const note = (id: string) => ({
+        id,
+        kind: 'system' as const,
+        content: `Line ${id}.`,
+        timestamp: '2026-01-01T00:00:10.000Z',
+      });
+      const { rerender } = render(<ExplorationReader room={room} notes={[note('n1')]} />);
+      const reader = screen.getByTestId('exploration-reader');
+      // jsdom lays nothing out: report the heights a browser would, then fire
+      // the observer where the browser would have seen the content grow.
+      const arrive = (notes: ReturnType<typeof note>[], height: number) => {
+        rerender(<ExplorationReader room={room} notes={notes} />);
+        Object.defineProperty(reader, 'scrollHeight', { value: height, configurable: true });
+        Object.defineProperty(reader, 'clientHeight', { value: 400, configurable: true });
+        act(() => observer.resize());
+      };
+
+      arrive([note('n1'), note('n2')], 1000);
+      expect(reader.scrollTop).toBe(1000);
+
+      // The reader turns the wheel; a move with no input behind it is not theirs.
+      fireEvent.wheel(reader);
+      reader.scrollTop = 200;
+      fireEvent.scroll(reader);
+      arrive([note('n1'), note('n2'), note('n3')], 1200);
+      expect(reader.scrollTop).toBe(200);
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 });
 

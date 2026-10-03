@@ -406,6 +406,15 @@ audit), `DivineInterventionConfigAdmin` (singleton).
 **API**: `GET /api/worship/miracles/` — staff-facing catalog browser
 (`IsAdminUser`). No player-facing API — intervention is automatic.
 
+**GM narration (#4101):** `perform_divine_intervention` calls `_route_miracle` instead of
+broadcasting `miracle.narrative_text` directly: `route_narratable_event(NarratableEvent(
+kind=GMPromptKind.MIRACLE, scene=..., character_sheet=..., room_text=miracle
+.narrative_text))` prompts every opted-in GM present with a `GMPrompt` to narrate
+(`GMPromptGroup.MIRACLE`); with no GM opted in, the authored `narrative_text` broadcasts
+unprompted exactly as before #4101. Full model/queue reference: `docs/systems/magic.md`'s
+"GM Prompt Queue" section and `docs/systems/scenes.md`'s "GM narration of mechanical
+events" section.
+
 ### Audere Majora Faith Coupling (#2360)
 
 When a faithful character crosses Audere Majora, the ceremony gets faith-specific

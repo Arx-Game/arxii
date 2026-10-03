@@ -306,12 +306,15 @@ resolving on accept).
   ._create_technique_entrance` (`world/scenes/action_views.py`, #2183 Task 8 fold-in)
   dispatches the same seam for the REST caller rather than the unrelated technique-as-
   `ActionEnhancement` consent path the rest of that endpoint uses.
-- **Recognition bridge:** a qualifying cast never auto-tags — it creates a
-  `DramaticMomentSuggestion` (PENDING) a GM later confirms (mints a real
+- **Recognition bridge:** a qualifying cast never auto-tags; it creates a PENDING
+  `GMPrompt` of kind `dramatic_moment` (was `DramaticMomentSuggestion`, renamed and
+  moved to `world/gm` by #4101) a GM later confirms (mints a real
   `DramaticMomentTag`, full resonance + renown award) or dismisses, gated on
   `DramaticMomentType.suggest_on_technique_entrance` / `.suggestion_min_success_level`.
-  Web: `DramaticMomentSuggestionViewSet`. Telnet: `CmdMoment`. Frontend:
-  `DramaticMomentSuggestionChip` in `PoseUnit`.
+  Web (#4101): `GMPromptViewSet`, the one GM prompt queue — replaced the dedicated
+  `DramaticMomentSuggestionViewSet`. Telnet: `CmdMoment`. Frontend: the per-pose
+  `DramaticMomentSuggestionChip` embed is retired with the viewset; `GMPromptQueue`
+  covers this kind alongside the narration kinds below.
 - **Combat integration:** `CombatRoundAction.from_entrance` marks a hostile entrance-seeded
   declaration so the suggestion fires at round resolution once the real success level is
   known; a benign entrance cast landing on an embattled ally seats the caster into the fight
@@ -319,6 +322,27 @@ resolving on accept).
   [combat.md](combat.md) "What's PROVEN".
 - **Details:** [magic.md](../systems/magic.md#technique-entrance-2183) · ADR:
   [0113](../adr/0113-entrance-carries-the-cast.md).
+
+### GM narration of mechanical events: DONE (#4101)
+
+The `dramatic_moment` queue above generalizes to a full GM prompt queue: six more kinds
+(`audere_surge`, `audere_ultimate`, `crossing`, `miracle`, `death`, `stake_outcome`), each
+fired by `route_narratable_event` from its own event source, that a GM narrates with a room
+line, a private line, or both, through an ordinary `EmitAction`/`PemitAction`
+(`gm_prompt_id` kwarg), then closes. The authored room/private defaults release only when
+the prompt's event closes, never merely because a GM narrated one leg, and
+`GMPrompt.subject_persona` freezes the subject's face at routing time so a later disguise
+switch never rewrites an already-narrated prompt. Per-GM, per-group opt-out
+(`GMPromptFilter`). Telnet parity: `gm prompts` / `gm prompt send|dismiss|done`,
+`emit/prompt` / `pemit/prompt`. Web: `GMPromptQueue`/`NarrationComposer`
+(`frontend/src/scenes/components/`).
+
+**Details:** [scenes.md](../systems/scenes.md#gm-narration-of-mechanical-events-4101) ·
+[magic.md](../systems/magic.md) "GM Prompt Queue" · ADR:
+[4101](../adr/adr-4101-gm-prompts-are-one-queue-and-narration-links-to-the-prompt.md).
+
+**Deferred (spec scope, not a gap in this build):** a new mechanical event wanting GM
+narration needs a new `GMPromptKind` + group mapping + event-source call site.
 
 ### Companion Pose Attribution — DONE (#3294)
 

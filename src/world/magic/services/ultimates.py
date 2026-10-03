@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import dataclasses
 from dataclasses import dataclass
+import logging
 from typing import TYPE_CHECKING
 
 from django.db import IntegrityError, transaction
@@ -32,6 +33,8 @@ if TYPE_CHECKING:
     from world.companions.models import Companion
     from world.magic.models import Gift, KnownUltimate, Technique
     from world.worship.models import WorshippedBeing
+
+logger = logging.getLogger(__name__)
 
 _CATEGORY_ORDER = (RoleArchetype.SWORD, RoleArchetype.SHIELD, RoleArchetype.CROWN)
 _KEY_SEP = ":"
@@ -425,9 +428,59 @@ def choose_ultimate(sheet: CharacterSheet, choice_key: str) -> KnownUltimate:
         # same-request double-submit gets, never a raw IntegrityError (#4098 fix
         # round 1, M2).
         raise UltimateRevealClosed from exc
+    transaction.on_commit(lambda: _route_ultimate_chosen(locked, technique))
     if created:
         fire_first_discoveries(locked, [technique])
     return known
+
+
+def _route_ultimate_chosen(sheet: CharacterSheet, technique: Technique) -> None:
+    """The reveal's pick is a narratable Audere moment for the scene GM (#4101).
+
+    The subject exclusion (the choosing character is never addressed about
+    their own pick) now lives inside ``route_narratable_event`` itself (#4101
+    fix round 2, ruling R7-1) -- this just calls the plain candidate path (no
+    ``candidates=``).
+
+    The scene lookup and ``route_narratable_event`` call run inside their own
+    ``transaction.atomic()`` (#4101 fix round 2, ruling R7-2/R7-3) -- that is
+    the savepoint that actually contains a ``DatabaseError`` here, matching the
+    shape of ``_announce_surge``/``_route_crossing`` even though this one fires
+    via ``transaction.on_commit`` (the enclosing transaction has already
+    committed by the time it runs). ``_deliver()`` is a no-op -- no authored
+    default line exists for an ultimate pick (#4101) -- kept as an explicit
+    function rather than a bare ``pass`` so this stays the same shape as its
+    two siblings if one is ever authored.
+    """
+    from django.db import DatabaseError  # noqa: PLC0415
+
+    from world.gm.constants import GMPromptKind  # noqa: PLC0415
+    from world.gm.prompt_services import route_narratable_event  # noqa: PLC0415
+    from world.gm.types import NarratableEvent  # noqa: PLC0415
+    from world.scenes.models import Scene  # noqa: PLC0415
+
+    def _deliver() -> None:
+        return
+
+    try:
+        with transaction.atomic():
+            scene = Scene.objects.active_for_room(sheet.character.location).first()
+            prompts = route_narratable_event(
+                NarratableEvent(
+                    kind=GMPromptKind.AUDERE_ULTIMATE,
+                    scene=scene,
+                    character_sheet=sheet,
+                    technique=technique,
+                ),
+            )
+    except DatabaseError:
+        logger.exception(
+            "Ultimate-choice routing failed to create GM prompts for sheet %s (#4101).",
+            sheet.pk,
+        )
+        prompts = []
+    if not prompts:
+        _deliver()
 
 
 def readied_ultimate(sheet: CharacterSheet) -> KnownUltimate | None:

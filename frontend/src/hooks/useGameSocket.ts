@@ -15,7 +15,7 @@ import {
 } from '@/store/gameSlice';
 import { setAccount } from '@/store/authSlice';
 import { parseGameMessage } from './parseGameMessage';
-import { WS_MESSAGE_TYPE, EVENNIA_CONTROL_TYPES } from './types';
+import { WS_MESSAGE_TYPE, EVENNIA_CONTROL_TYPES, SERVER_QUIT_CLOSE_REASONS } from './types';
 import { classifyText } from '@/game/feedKinds';
 import { emitActionResult } from './actionResultBus';
 import { emitHazardPrompt } from './hazardPromptBus';
@@ -45,6 +45,7 @@ import { handleBattleStatePayload } from './handleBattleStatePayload';
 import type { BattleStatePayload } from '@/battles/types';
 import { handleKudosReceivedPayload } from './handleKudosReceivedPayload';
 import { handleMailArrivedPayload } from './handleMailArrivedPayload';
+import { handleGMPromptPayload } from './handleGMPromptPayload';
 
 import { useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -442,6 +443,11 @@ function handlerFor(msgType: SocketMessageType): IncomingMessageHandler | undefi
     case WS_MESSAGE_TYPE.WEBCLIENT_OPTIONS:
       return () => undefined;
 
+    // A new GM prompt landed in this GM's queue (#4101): refetch every open
+    // queue for this GM (`GMPromptQueue`'s `useGMPrompts`).
+    case WS_MESSAGE_TYPE.GM_PROMPT:
+      return () => handleGMPromptPayload();
+
     default:
       return undefined;
   }
@@ -805,16 +811,28 @@ export function useGameSocket() {
         if (sockets[character] !== socket) return;
         clearEntryRecovery(character);
         const wasLocalClose = localCloseIntent.has(socket);
+        // A typed `quit` is the player leaving too, but the server is the one
+        // that closes the socket for it, so nothing marked it locally. The
+        // close reason is how the server says so; without reading it the
+        // backoff below reconnected a second later and the quit did nothing.
+        const wasServerQuit = !wasLocalClose && SERVER_QUIT_CLOSE_REASONS.has(event.reason);
         dispatch(setSessionConnectionStatus({ character, status: false }));
         finishGenerationResyncs(character, generation, dispatch);
         delete sockets[character];
         delete connectionReadiness[character];
-        if (wasLocalClose) {
+        if (wasLocalClose || wasServerQuit) {
           clearReconnect(character);
+          // The rest of "Leave the world" (#3818), which `disconnect` and its
+          // menu item do themselves for a local close.
+          if (wasServerQuit) dispatch(endSession(character));
           // Only reset game state if this was the last active connection.
           const remainingConnections = Object.keys(sockets).length;
           if (remainingConnections === 0) {
             dispatch(resetGame());
+          }
+          if (wasServerQuit) {
+            queryClient.invalidateQueries({ queryKey: ['account'] }).catch(() => {});
+            navigate('/hall');
           }
           return;
         }

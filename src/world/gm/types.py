@@ -7,6 +7,7 @@ from datetime import datetime
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
+    from world.character_sheets.models import CharacterSheet
     from world.gm.models import (
         CheckTypeSituationFit,
         ConsequencePoolGuide,
@@ -14,7 +15,10 @@ if TYPE_CHECKING:
         SituationDifficultyGuide,
         SituationKind,
     )
+    from world.magic.models import Technique
     from world.mechanics.models import ChallengeTemplate, SituationTemplate
+    from world.scenes.models import Scene
+    from world.stories.models import StakeOutcome
 
 
 @dataclass(frozen=True)
@@ -69,3 +73,17 @@ class DiscoveryResult:
     templates: list[SituationTemplate]
     challenges: list[ChallengeTemplate]
     kinds: list[KindResult]
+
+
+@dataclass(frozen=True)
+class NarratableEvent:
+    """A mechanical event a GM may narrate (#4101). Text is already resolved."""
+
+    kind: str
+    scene: Scene | None
+    character_sheet: CharacterSheet | None
+    room_text: str = ""
+    private_text: str = ""
+    prepared_for_character: bool = False
+    technique: Technique | None = None
+    stake_outcome: StakeOutcome | None = None

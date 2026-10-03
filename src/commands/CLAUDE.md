@@ -67,7 +67,16 @@ actions, backends, and service functions.
 - **`evennia_overrides/communication.py`**: `CmdSay`, `CmdWhisper`, `CmdPose`, `CmdPage`,
   `CmdPemit` (`pemit <name>[,<name>...]=<text>`, `cmd:all()`, #906/#2117 — private GM narration to
   specific characters via `PemitAction`, gated on `MinimumGMLevelPrerequisite(GMLevel.STARTING)`,
-  staff bypass preserved). `CmdSay` gains a per-utterance language switch (#2993): a leading
+  staff bypass preserved), `CmdEmit` (`emit <text>`, `cmd:all()`, room-wide narration with no
+  name prefix via `EmitAction`; a bare emit carries no GM-level gate). Both commands' own
+  `get_prerequisites()` add `NarratesOwnPromptPrerequisite` (#4101), which no-ops unless a
+  `gm_prompt_id` kwarg is present, so the `/prompt <id>` switch below is the only path that
+  gates on the prompt's own addressed-GM-or-staff rule (`narration_prompt_for`). Both commands
+  gain that switch:
+  `emit/prompt <id> <text>` / `pemit/prompt <id> <name>[,<name>...]=<text>` pass `gm_prompt_id=<id>`
+  through to the action, linking the delivered line back to that GM prompt
+  (`world.gm.prompt_services.link_prompt_narration`); the web composer's send buttons dispatch
+  the same two actions with the same kwarg. `CmdSay` gains a per-utterance language switch (#2993): a leading
   `say (tongue) text` tag (`_LANGUAGE_TAG_RE`, iexact `Language` name lookup) sets `language_id`
   for that one say only, without touching the speaker's sticky `current_language` — an unknown
   tongue raises `CommandError` naming it; no tag leaves kwargs unchanged (the sticky/current path).
@@ -536,7 +545,18 @@ actions, backends, and service functions.
   resolves by pk-or-name, and `reason=` is required — it becomes the token's
   `provenance_note`), `gm condition
   <character> condition=<name> [severity=<n>] [duration=<n>] [note=<text>]`
-  (`GMApplyConditionAction`). `gm suggest <kind>=<text>` (#2127 — `kind` one of
+  (`GMApplyConditionAction`). `gm prompts` (#4101) lists the caller's PENDING/NARRATED
+  GM prompts for the scene active where they stand, via `visible_prompts_for_location`,
+  the one visibility source the REST queue also reads, so a muted GM or one standing
+  outside any scene sees the same thing on both faces. `gm prompt send <id>` narrates
+  whichever of a prompt's two authored defaults (room, private) isn't already covered
+  through the linked `EmitAction`/`PemitAction`, then closes the prompt: a GM never
+  needs a separate `done` for a prompt sent this way. `gm prompt dismiss <id>` /
+  `gm prompt done <id>` close a prompt directly (`done` is the GM-facing name for
+  closing one that has already been narrated, same backend close, `DismissGMPromptAction`).
+  `gm prompts` labels each row with the verbs that resolve it: a dramatic-moment row names
+  `moment confirm|dismiss <id>`, since `gm prompt` closes narration kinds only.
+  `gm suggest <kind>=<text>` (#2127 — `kind` one of
   `new_situation`/`check_fit`/`difficulty_guide`/`pool_guide`/`other`) dispatches
   `SubmitCatalogSuggestionAction` (`actions/definitions/gm_catalog.py`), gated
   `MinimumGMLevelPrerequisite(GMLevel.STARTING)` plus a `proposal_kind` tier check
@@ -1106,8 +1126,8 @@ actions, backends, and service functions.
   dismiss <id>` resolve one. Account-authorized (mirrors `CmdEvent`'s host-lifecycle
   dispatch: `actor=None, account=self.caller.account`) via
   `ConfirmDramaticMomentSuggestionAction` / `DismissDramaticMomentSuggestionAction`
-  (`actions/definitions/dramatic_moments.py`) — the same seam the web
-  `DramaticMomentSuggestionViewSet` uses. GM-gated (scene GM, owner, or staff) entirely in
+  (`actions/definitions/dramatic_moments.py`) — the same seam the web `GMPromptViewSet`
+  (#4101; retired the dedicated `DramaticMomentSuggestionViewSet`) uses. GM-gated (scene GM, owner, or staff) entirely in
   the Actions; no business logic in the command. `moment tag <character>=<type>` (#2227)
   is the direct-tagging telnet parity for the web `DramaticMomentTagDialog` — a thin
   command calling `create_dramatic_moment_tag` directly (the same service the web

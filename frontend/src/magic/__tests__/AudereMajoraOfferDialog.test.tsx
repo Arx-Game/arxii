@@ -54,6 +54,8 @@ const OFFER: PendingAudereMajoraOffer = {
   boundary_level: 5,
   target_stage_display: 'Ascendant',
   vision_text: '[TEST VISION]',
+  offer_title: 'The Threshold Stands Before You',
+  offer_strip_label: 'The threshold stands open: answer it',
   faith_variant_id: null,
   advisory_text: '',
   risk_text: '',
@@ -109,6 +111,31 @@ describe('AudereMajoraOfferDialog (via AudereMajoraOfferGate)', () => {
     const vision = screen.getByTestId('majora-vision');
     expect(vision.tagName.toLowerCase()).toBe('blockquote');
     expect(vision.textContent).toBe('[TEST VISION]');
+  });
+
+  it('renders no vision block when vision_text is empty (#4101 fix round 1, I3)', async () => {
+    // The server sends "" while a GM is present and will narrate/release the
+    // vision -- the dialog must degrade cleanly with no hardcoded copy.
+    renderGate([{ ...OFFER, vision_text: '' }]);
+
+    await screen.findByRole('alertdialog');
+    expect(screen.queryByTestId('majora-vision')).not.toBeInTheDocument();
+  });
+
+  it('renders offer_title as the dialog heading (#4101)', async () => {
+    renderGate([{ ...OFFER, offer_title: 'Authored crossing heading' }]);
+
+    await screen.findByRole('alertdialog');
+    expect(screen.getByText('Authored crossing heading')).toBeInTheDocument();
+  });
+
+  it('renders offer_strip_label on the gate strip (#4101 fold-in)', async () => {
+    renderGate([{ ...OFFER, offer_strip_label: 'Authored crossing strip label' }]);
+
+    await screen.findByRole('alertdialog');
+    expect(screen.getByTestId('audere-majora-gate-strip')).toHaveTextContent(
+      'Authored crossing strip label'
+    );
   });
 
   it('renders advisory_text and risk_text each in a role="alert" block', async () => {

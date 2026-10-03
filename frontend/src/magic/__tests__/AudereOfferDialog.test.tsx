@@ -45,6 +45,9 @@ const OFFER: PendingAudereOffer = {
   anima_pool_bonus: 10,
   advisory_text: '',
   reveal_framing_text: '',
+  offer_title: 'The Audere Gate Stands Open',
+  offer_strip_label: 'The Audere gate stands open: answer it',
+  offer_body_text: 'Battered down. Break through. Power beyond your limits waits.',
   created_at: '2026-06-01T00:00:00Z',
 };
 
@@ -98,6 +101,23 @@ describe('AudereOfferDialog (via AudereOfferGate)', () => {
     expect(screen.getByText(/Anima maximum/)).toBeInTheDocument();
   });
 
+  it('renders offer_title as the dialog heading and offer_strip_label on the strip (#4101)', async () => {
+    renderGate([{ ...OFFER, offer_title: 'Authored heading' }]);
+
+    await screen.findByRole('alertdialog');
+    expect(screen.getByText('Authored heading')).toBeInTheDocument();
+    expect(screen.getByTestId('audere-gate-strip')).toHaveTextContent(OFFER.offer_strip_label);
+  });
+
+  // #4101 final review, F10: with no AudereThreshold the server sends '' for
+  // both authored labels; the dialog and the strip still have a name.
+  it('keeps an accessible name when the authored title and strip label are blank', async () => {
+    renderGate([{ ...OFFER, offer_title: '', offer_strip_label: '' }]);
+
+    expect(await screen.findByRole('alertdialog', { name: 'Audere offer' })).toBeInTheDocument();
+    expect(screen.getByTestId('audere-gate-strip')).toHaveAccessibleName('Audere offer');
+  });
+
   it('renders the advisory VERBATIM inside a role="alert" element', async () => {
     renderGate([{ ...OFFER, advisory_text: ADVISORY }]);
 
@@ -121,8 +141,9 @@ describe('AudereOfferDialog (via AudereOfferGate)', () => {
     expect(framing).toHaveTextContent('PLACEHOLDER framing');
     // Demo fidelity: the framing sentence is the TAIL of the same paragraph as
     // the offer text, not a second, separately styled paragraph.
-    const offerParagraph = screen.getByText(/Battered down\. Break through\./);
+    const offerParagraph = screen.getByTestId('audere-offer-body');
     expect(offerParagraph.tagName).toBe('P');
+    expect(offerParagraph).toHaveTextContent(OFFER.offer_body_text);
     expect(offerParagraph).toContainElement(framing);
   });
 

@@ -7,7 +7,7 @@
 import { Flame } from 'lucide-react';
 import { usePendingAudereOffers, useRespondToAudere } from '@/magic/queries';
 import { useAutoOpenOncePerOffer } from '@/magic/hooks';
-import { AudereOfferDialog } from './AudereOfferDialog';
+import { AUDERE_OFFER_FALLBACK_NAME, AudereOfferDialog } from './AudereOfferDialog';
 import type { PendingAudereOffer } from '@/magic/types';
 
 interface AudereOfferGateProps {
@@ -41,9 +41,11 @@ export function AudereOfferGate({
         onClick={() => setDialogOpen(true)}
         className="flex w-full animate-pulse items-center gap-2 rounded-md border border-fuchsia-500/60 bg-fuchsia-950/40 px-3 py-2 text-left text-sm font-semibold text-fuchsia-300 shadow-[0_0_24px_-8px] shadow-fuchsia-500/60 motion-reduce:animate-none"
         data-testid="audere-gate-strip"
+        // The strip label is authored and may be '' (#4101 final review, F10).
+        aria-label={offer.offer_strip_label ? undefined : AUDERE_OFFER_FALLBACK_NAME}
       >
         <Flame className="h-4 w-4 shrink-0" />
-        The Audere gate stands open: answer it
+        {offer.offer_strip_label}
       </button>
       <AudereOfferDialog
         offer={offer}

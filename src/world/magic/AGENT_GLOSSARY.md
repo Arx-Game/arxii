@@ -256,8 +256,19 @@ A staff-tagged scene moment of an authored category that simultaneously grants a
 A self-grant of Resonance triggered on a successful Entrance social action, where the entrant declares one of their claimed Resonances to broadcast. Idempotent per scene; it is the actor-side complement to the peer-side scene-entry endorsement.
 
 **Technique Entrance** (#2183):
-An Entrance whose check IS a technique cast (`enter <technique>[=<target>]` / the web `EntranceTechniqueAttachment`) — the cast's own success level substitutes for the entrance's social roll entirely, one check driving every downstream consequence (see ADR-0113). Distinct from **Entry Flourish** (the resonance self-grant this success level unlocks alongside), **Dramatic Moment** (the GM-tagged reward category a qualifying entrance may *suggest*, never auto-grant), and **Dramatic Surge** (`world/combat/AGENT_GLOSSARY.md` — a different system entirely: an intensity-modifier jump at a combat beat, not a recognition/reward mechanism). A qualifying success creates a `DramaticMomentSuggestion` — a PENDING, GM-facing suggestion (not an automatic tag) — via `maybe_suggest_dramatic_moments`, resolved by `resolve_dramatic_moment_suggestion` (confirm mints a real `DramaticMomentTag`; dismiss closes it with no reward).
-_Avoid_: technique-cast entrance (use "Technique Entrance"); auto-tag, auto-grant (recognition is never automatic — see ADR-0113).
+An Entrance whose check IS a technique cast (`enter <technique>[=<target>]` / the web `EntranceTechniqueAttachment`), the cast's own success level substitutes for the entrance's social roll entirely, one check driving every downstream consequence (see ADR-0113). Distinct from **Entry Flourish** (the resonance self-grant this success level unlocks alongside), **Dramatic Moment** (the GM-tagged reward category a qualifying entrance may *suggest*, never auto-grant), and **Dramatic Surge** (`world/combat/AGENT_GLOSSARY.md`, a different system entirely: an intensity-modifier jump at a combat beat, not a recognition/reward mechanism). A qualifying success creates a PENDING `GMPrompt` of kind `dramatic_moment` (`world/gm/AGENT_GLOSSARY.md`, #4101; was `DramaticMomentSuggestion`), via `maybe_suggest_dramatic_moments`, resolved by `resolve_dramatic_moment_suggestion` (confirm mints a real `DramaticMomentTag`; dismiss closes it with no reward).
+_Avoid_: technique-cast entrance (use "Technique Entrance"); auto-tag, auto-grant (recognition is never automatic, see ADR-0113); DramaticMomentSuggestion (renamed, see `world/gm/AGENT_GLOSSARY.md`'s "GM Prompt").
+
+**Prepared Text** (`CharacterCrossingText`, `CharacterSurgeText`, #4101):
+One character's own authored line for their next Audere surge or Audere Majora
+Crossing, written by staff or that character's table GM, play-adjacent (never catalog
+content, never exported). Resolved field by field: the character's own prepared text
+first, then the Crossing's patron variant (surges have no patron layer), then the
+tier's authored default. A Crossing's prepared text is consumed (linked to the
+`AudereMajoraCrossing` it fired) on use; a surge's is reusable. Feeds the `room_text`/
+`private_text` a `world/gm/AGENT_GLOSSARY.md` GM Prompt carries for that event.
+_Avoid_: custom vision, override text, patron text (patron variant is a narrower,
+pre-existing layer underneath this one).
 
 **Endorsement**:
 A peer's recognition of another character's pose (`PoseEndorsement`) that settles at the weekly tick to grant Resonance from a shared pot. A legitimate, live Resonance-award mechanism alongside scene-entry and style-presentation endorsements.

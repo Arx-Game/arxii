@@ -117,3 +117,50 @@ class TableRequestRole(models.TextChoices):
 
     MINE = "mine", "Mine"
     GM = "gm", "GM"
+
+
+class GMPromptStatus(models.TextChoices):
+    """Lifecycle of a GMPrompt (#2183; generalized #4101)."""
+
+    PENDING = "pending", "Pending"
+    CONFIRMED = "confirmed", "Confirmed"
+    DISMISSED = "dismissed", "Dismissed"
+    NARRATED = "narrated", "Narrated"
+
+
+class GMPromptKind(models.TextChoices):
+    """What a GM prompt is about (#4101). Labels are GM-facing chrome."""
+
+    DRAMATIC_MOMENT = "dramatic_moment", "Dramatic Moment"
+    AUDERE_SURGE = "audere_surge", "Audere"
+    AUDERE_ULTIMATE = "audere_ultimate", "Ultimate"
+    CROSSING = "crossing", "Crossing"
+    MIRACLE = "miracle", "Miracle"
+    DEATH = "death", "Death"
+    STAKE_OUTCOME = "stake_outcome", "Stake outcome"
+
+
+class GMPromptGroup(models.TextChoices):
+    """The per-GM filter's granularity (demo Screen 5)."""
+
+    DRAMATIC_MOMENT = "dramatic_moment", "Dramatic Moment"
+    AUDERE = "audere", "Audere / Audere Majora"
+    MIRACLE = "miracle", "Miracles"
+    DEATH = "death", "Deaths"
+    STAKE_OUTCOME = "stake_outcome", "Stake outcomes"
+
+
+PROMPT_GROUP_FOR_KIND: dict[str, str] = {
+    GMPromptKind.DRAMATIC_MOMENT: GMPromptGroup.DRAMATIC_MOMENT,
+    GMPromptKind.AUDERE_SURGE: GMPromptGroup.AUDERE,
+    GMPromptKind.AUDERE_ULTIMATE: GMPromptGroup.AUDERE,
+    GMPromptKind.CROSSING: GMPromptGroup.AUDERE,
+    GMPromptKind.MIRACLE: GMPromptGroup.MIRACLE,
+    GMPromptKind.DEATH: GMPromptGroup.DEATH,
+    GMPromptKind.STAKE_OUTCOME: GMPromptGroup.STAKE_OUTCOME,
+}
+
+# Every kind a GM narrates (everything but the confirm-only dramatic moment).
+NARRATION_PROMPT_KINDS: frozenset[str] = frozenset(
+    k for k in GMPromptKind.values if k != GMPromptKind.DRAMATIC_MOMENT
+)

@@ -24,6 +24,7 @@ from commands.utils.argsplit import split_bracketed_prefix
 from world.scenes.place_models import Place
 
 _CMD_ALL_LOCK = "cmd:all()"
+_SWITCH_PROMPT = "prompt"
 
 
 def _flag_page_contact(sender_char: object, target_char: object) -> None:
@@ -380,6 +381,7 @@ class CmdPemit(ArxCommand):
     """GM private narrative emit to specific characters (#906).
 
     Usage: pemit <name>[,<name>...]=<text>
+           pemit/prompt <id> <name>[,<name>...]=<text>
 
     Delivers GM narration only to the listed characters; the persisted
     interaction is receiver-scoped, so nobody else (or the log) sees more
@@ -388,6 +390,10 @@ class CmdPemit(ArxCommand):
     Requires STARTING-tier GM trust or higher (or staff) -- gated by
     ``PemitAction``'s ``MinimumGMLevelPrerequisite`` (#2117). The command
     lock is ``cmd:all()``; real authorization lives entirely in the Action.
+
+    ``/prompt <id>`` (#4101) links the delivered line to the named GM prompt
+    (``gm prompts``) as the narration that covers it -- see
+    ``world.gm.prompt_services`` for the linking/closing rules.
     """
 
     key = "pemit"
@@ -395,7 +401,15 @@ class CmdPemit(ArxCommand):
     action = PemitAction()
 
     def resolve_action_args(self) -> dict[str, Any]:
+        switches = {s.lower() for s in (self.switches or [])}
+        prompt_id: int | None = None
         args = (self.args or "").strip()
+        if _SWITCH_PROMPT in switches:
+            head, _, args = args.partition(" ")
+            if not head.isdigit():
+                msg = "Usage: pemit/prompt <id> <name>[,<name>...]=<text>"
+                raise CommandError(msg)
+            prompt_id = int(head)
         if "=" not in args:
             msg = "Usage: pemit <name>[,<name>...]=<text>"
             raise CommandError(msg)
@@ -412,14 +426,24 @@ class CmdPemit(ArxCommand):
                 msg = f"Could not find '{name}'."
                 raise CommandError(msg)
             receivers.append(target)
-        return {"receivers": receivers, "text": text}
+        result: dict[str, Any] = {"receivers": receivers, "text": text}
+        if prompt_id is not None:
+            result["gm_prompt_id"] = prompt_id
+        return result
 
 
 class CmdEmit(ArxCommand):
     """Emit raw text to the room (no character name prepended).
 
+    Usage: emit <text>
+           emit/prompt <id> <text>
+
     Classic MUSH emit: the text appears as-is. The interaction metadata
     still records who wrote it, but the content has no automatic prefix.
+
+    ``/prompt <id>`` (#4101) links the delivered line to the named GM prompt
+    (``gm prompts``) as the narration that covers it -- see
+    ``world.gm.prompt_services`` for the linking/closing rules.
     """
 
     key = "emit"
@@ -427,6 +451,14 @@ class CmdEmit(ArxCommand):
     action = EmitAction()
 
     def resolve_action_args(self) -> dict[str, Any]:
+        switches = {s.lower() for s in (self.switches or [])}
+        if _SWITCH_PROMPT in switches:
+            head, _, text = (self.args or "").strip().partition(" ")
+            if not head.isdigit() or not text.strip():
+                msg = "Usage: emit/prompt <id> <text>"
+                raise CommandError(msg)
+            return {"text": text.strip(), "gm_prompt_id": int(head)}
+
         text = (self.args or "").strip()
         if not text:
             msg = "Emit what?"

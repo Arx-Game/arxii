@@ -27,4 +27,46 @@ describe('wsPayloadToInteraction (#3858)', () => {
     const { line: _line, ...older } = payload;
     expect(wsPayloadToInteraction(older).line).toBeUndefined();
   });
+
+  // #4101 Task 11 fix round 1, item 11: the WS payload's `narrates` must map
+  // through, including the no-subject shape (a stake outcome, or a subject
+  // this payload cannot name).
+  it('maps narrates through as-is', () => {
+    const withNarrates: InteractionWsPayload = {
+      ...payload,
+      narrates: {
+        prompt_id: 7,
+        kind: 'crossing',
+        kind_label: 'Crossing',
+        subject_name: 'Rowan Ashcombe',
+        subject_persona_id: 30,
+      },
+    };
+    expect(wsPayloadToInteraction(withNarrates).narrates).toEqual({
+      prompt_id: 7,
+      kind: 'crossing',
+      kind_label: 'Crossing',
+      subject_name: 'Rowan Ashcombe',
+      subject_persona_id: 30,
+    });
+  });
+
+  it('maps narrates with no subject (a stake outcome) through with the keys absent', () => {
+    const noSubject: InteractionWsPayload = {
+      ...payload,
+      narrates: { prompt_id: 9, kind: 'stake_outcome', kind_label: 'Stake outcome' },
+    };
+    const row = wsPayloadToInteraction(noSubject);
+    expect(row.narrates).toEqual({
+      prompt_id: 9,
+      kind: 'stake_outcome',
+      kind_label: 'Stake outcome',
+    });
+    expect(row.narrates).not.toHaveProperty('subject_name');
+    expect(row.narrates).not.toHaveProperty('subject_persona_id');
+  });
+
+  it('defaults narrates to null when the payload carries none', () => {
+    expect(wsPayloadToInteraction(payload).narrates).toBeNull();
+  });
 });

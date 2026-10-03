@@ -19,7 +19,7 @@ from world.scenes.models import (
 )
 from world.scenes.place_models import InteractionReceiver
 from world.scenes.thread_services import thread_anchor_ids, thread_roots
-from world.scenes.types import PersonaPayload, ReactionAggregation
+from world.scenes.types import NarratedEventPayload, PersonaPayload, ReactionAggregation
 
 if TYPE_CHECKING:
     from evennia_extensions.models import PlayerData
@@ -111,7 +111,7 @@ class InteractionListSerializer(serializers.ModelSerializer):
         source="cached_action_links",
     )
     dramatic_moment_tags = serializers.SerializerMethodField()
-    dramatic_moment_suggestions = serializers.SerializerMethodField()
+    narrates = serializers.SerializerMethodField()
     endorsee_sheet_id = serializers.SerializerMethodField()
     endorsable_resonances = serializers.SerializerMethodField()
     pose_endorsers = serializers.SerializerMethodField()
@@ -165,7 +165,7 @@ class InteractionListSerializer(serializers.ModelSerializer):
             "target_persona_ids",
             "action_links",
             "dramatic_moment_tags",
-            "dramatic_moment_suggestions",
+            "narrates",
             "endorsable_resonances",
             "pose_endorsers",
             "my_pose_endorsement",
@@ -380,10 +380,20 @@ class InteractionListSerializer(serializers.ModelSerializer):
         return obj.persona.character_sheet_id
 
     def _persona_display_map(self) -> dict[int, tuple[str, bool, bool]]:
-        """Cache the page's persona-display resolution on the shared context (O(1) queries)."""
+        """Cache the page's persona-display resolution on the shared context (O(1) queries).
+
+        Includes each row's narrated-event subject persona (#4101 fix round 3,
+        ruling R9-3) alongside the writer personas -- a disguised/undiscovered
+        subject must read exactly as the rest of the feed shows that same
+        persona, through the SAME one discovery query, not a parallel
+        resolution. ``narrated_event_subject_persona`` peeks the warm
+        ``cached_prompt_narrations`` link (select_related on the view's
+        Prefetch) and never queries.
+        """
         cached = self.context.get("_persona_display_map")
         if cached is not None:
             return cached
+        from world.gm.prompt_services import narrated_event_subject_persona  # noqa: PLC0415
         from world.scenes.persona_display import build_persona_display_map  # noqa: PLC0415
 
         if self.parent is not None:
@@ -392,8 +402,13 @@ class InteractionListSerializer(serializers.ModelSerializer):
             rows = [self.instance]
         else:
             rows = []
+        personas = [row.persona for row in rows]
+        for row in rows:
+            subject = narrated_event_subject_persona(row)
+            if subject is not None:
+                personas.append(subject)
         display_map = build_persona_display_map(
-            [row.persona for row in rows],
+            personas,
             viewer_persona_ids=set(self.context.get("persona_ids", set())),
             viewer_sheet_ids=set(self.context.get("viewer_sheet_ids", set())),
             is_staff=bool(self.context.get("is_staff", False)),
@@ -826,54 +841,40 @@ class InteractionListSerializer(serializers.ModelSerializer):
         self.context[cache_key] = revealed
         return revealed
 
-    def _viewer_can_gm_scene(self, scene: Scene | None) -> bool:
-        """Mirror ``SceneListSerializer.get_viewer_can_gm`` for this interaction's scene (#2183).
+    def get_narrates(self, obj: Interaction) -> NarratedEventPayload | None:
+        """The event this row narrates (#4101), e.g. "part of X's Crossing".
 
-        Cached on the serializer context per scene id (a page of interactions can, in
-        principle, span more than one scene). For the common ``?scene=<id>`` list request,
-        ``InteractionViewSet.get_serializer_context`` pre-seeds this cache with the one
-        relevant scene's answer computed via a single targeted ``SceneParticipation``
-        query — so this field never falls through to ``scene.is_gm()``/``scene.is_owner()``
-        (which would cost a fresh ``participations_cached`` query per distinct in-memory
-        Scene instance, since ``select_related`` builds a new one per row). The fallback
-        below only fires for requests without a scene filter.
+        Not GM-gated (unlike the retired per-pose suggestion embed): a
+        narration row is a GM's own authored line, already delivered to
+        whoever the audience was; tagging it with the event it narrates is
+        plain feed metadata, not a spoiler. Reads from the Prefetch
+        (``cached_prompt_narrations``) only -- see ``narrated_event_payload``'s
+        own docstring for why it must never query.
+
+        ``subject_name`` is overridden here with the page's per-viewer display
+        map (#4101 fix round 3, ruling R9-3) -- ``narrated_event_payload``'s own
+        value is the subject's FROZEN persona's raw name (correct for the
+        live WebSocket push, which has no per-viewer concept at all), but the
+        REST feed must show is_fake_name/undiscovered faces exactly as the rest
+        of this page shows that same persona -- a disguised subject's line
+        must never unmask them just because this field resolves differently
+        from ``get_persona``. ``_persona_display_map`` already folded this
+        row's subject persona into its one page-wide discovery query.
         """
-        if scene is None:
-            return False
-        cache: dict[int, bool] = self.context.setdefault("_viewer_can_gm_cache", {})
-        if scene.pk in cache:
-            return cache[scene.pk]
-        request = self.context.get("request")
-        user = request.user if request is not None else None
-        result = bool(
-            user is not None
-            and user.is_authenticated
-            and (user.is_staff or scene.is_gm(user) or scene.is_owner(user))
-        )
-        cache[scene.pk] = result
-        return result
+        from world.gm.prompt_services import narrated_event_payload  # noqa: PLC0415
 
-    def get_dramatic_moment_suggestions(self, obj: Interaction) -> list[dict]:
-        """PENDING dramatic-moment suggestions anchored to this interaction (#2183).
-
-        GM-gated: a plain participant sees an empty list. Reads
-        ``cached_dramatic_moment_suggestions`` (Prefetch(to_attr=...) set by the view
-        queryset, already filtered to PENDING) — never a fresh query.
-        """
-        if not self._viewer_can_gm_scene(obj.scene):
-            return []
-        suggestions = obj.cached_dramatic_moment_suggestions
-        return [
-            {
-                "id": s.pk,
-                "moment_type_id": s.moment_type_id,
-                "moment_type_label": s.moment_type.label,
-                "character_sheet_id": s.character_sheet_id,
-                "success_level": s.success_level,
-                "status": s.status,
-            }
-            for s in suggestions
-        ]
+        payload = narrated_event_payload(obj)
+        if payload is None or "subject_persona_id" not in payload:  # noqa: STRING_LITERAL
+            return payload
+        resolved = self._persona_display_map().get(payload["subject_persona_id"])
+        if resolved is None:
+            # Fail closed: a subject this page did not resolve gets no name,
+            # never the frozen persona's raw one.
+            payload.pop("subject_name", None)
+            payload.pop("subject_persona_id", None)
+            return payload
+        payload["subject_name"] = resolved[0]
+        return payload
 
     # Reads `CharacterSheet.cached_resonances` (a `PrunedCachedProperty`,
     # #3816 Task 3) -- fed by the prefetched
