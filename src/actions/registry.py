@@ -9,6 +9,7 @@ from actions.definitions.accusations import (
     SmearAction,
     mint_accusation,
 )
+from actions.definitions.allegiance import SendAwayAction
 from actions.definitions.almanach import (
     AlmanachAddHoldingAction,
     AlmanachBatchUnclaimedAction,
@@ -924,6 +925,7 @@ _ALL_ACTIONS: list[Action] = [
     coerce,
     reveal_secret,
     CharmAssetAction(),
+    SendAwayAction(),
     mint_accusation,
     SmearAction(),
     RefuteAccusationAction(),

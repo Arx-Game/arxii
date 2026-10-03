@@ -111,6 +111,20 @@ def build_persona_menu(actor: ObjectDB, persona: Persona) -> PersonaMenu:
                 {"target_persona_id": persona.pk},
             ),
             _treat_item(actor, persona, scene),
+            _registry_item(
+                actor,
+                "send_away",
+                "Send away",
+                PersonaMenuGroupKey.SCENE,
+                {"target_persona_id": persona.pk},
+            ),
+            _registry_item(
+                actor,
+                "charm_asset",
+                "Take into service",
+                PersonaMenuGroupKey.SCENE,
+                {"target_persona_id": persona.pk, "role_context": "contact"},
+            ),
         ]
         if _viewer_can_gm(actor, scene):
             items.append(

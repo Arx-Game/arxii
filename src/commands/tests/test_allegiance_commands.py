@@ -1,15 +1,19 @@
-"""Tests for the telnet ``settle`` command (#4091, task 8).
+"""Tests for the telnet ``settle``/``sendaway``/``retain`` commands (#4091, tasks 8+12).
 
 ``CmdSettle`` is a bare ``ConsentRequestCommand`` shell (no pose text, R7) —
 it opens the SAME ``create_action_request`` the web consent flow uses. These
 tests mirror ``CmdIntimidateTests`` (``test_consent_commands.py``): a scene
 with both characters in one room, then assert the dispatched command removes
 the charm and the narrated settle line reaches the room (telnet parity).
+
+``CmdSendAwayTests``/``CmdRetainTests`` (task 12) prove telnet reaches the
+same ``send_away``/``charm_asset`` actions the persona menu and web dispatch
+use — no new business logic lives in the commands.
 """
 
 from __future__ import annotations
 
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 from django.test import TestCase
 
@@ -18,7 +22,7 @@ from actions.factories import (
     ConsequencePoolEntryFactory,
     ConsequencePoolFactory,
 )
-from commands.allegiance import CmdSettle
+from commands.allegiance import CmdRetain, CmdSendAway, CmdSettle
 from evennia_extensions.factories import ObjectDBFactory
 from world.character_sheets.factories import CharacterSheetFactory
 from world.checks.factories import CheckTypeFactory, ConsequenceFactory
@@ -28,6 +32,25 @@ from world.conditions.factories import ConditionInstanceFactory, ConditionTempla
 from world.conditions.models import ConditionInstance
 from world.scenes.factories import SceneFactory
 from world.traits.factories import CheckSystemSetupFactory
+
+
+def _msg_texts(mock_msg: MagicMock) -> list[str]:
+    """Flatten every ``.msg(...)`` call's text, whichever calling convention.
+
+    ``Object.msg_contents`` calls each recipient's ``.msg(text=(str, {}),
+    ...)`` (keyword, text wrapped in an outcmd tuple); ``ArxCommand.msg``
+    calls ``self.caller.msg(text)`` (positional, bare string).
+    """
+    texts: list[str] = []
+    for call in mock_msg.call_args_list:
+        text = call.kwargs.get("text")
+        if text is None and call.args:
+            text = call.args[0]
+        if isinstance(text, tuple):
+            text = text[0]
+        if text is not None:
+            texts.append(str(text))
+    return texts
 
 
 class CmdSettleTests(TestCase):
@@ -141,3 +164,104 @@ class CmdSettleTests(TestCase):
         self.assertFalse(ConditionInstance.objects.filter(pk=instance.pk).exists())
         texts = self._msg_texts(self.initiator_char.msg)
         self.assertTrue(any(authored_label in text for text in texts))
+
+
+class CmdSendAwayTests(TestCase):
+    """``sendaway <npc>`` reaches ``SendAwayAction`` (task 12, telnet parity)."""
+
+    def setUp(self) -> None:
+        self.room = ObjectDBFactory(db_key="Hall", db_typeclass_path="typeclasses.rooms.Room")
+        self.initiator_char = ObjectDBFactory(
+            db_key="Tamsin",
+            db_typeclass_path="typeclasses.characters.Character",
+            location=self.room,
+        )
+        self.target_char = ObjectDBFactory(
+            db_key="Captain Hale",
+            db_typeclass_path="typeclasses.characters.Character",
+            location=self.room,
+        )
+        CharacterSheetFactory(character=self.initiator_char)
+        CharacterSheetFactory(character=self.target_char)
+
+        self.charm = ConditionTemplateFactory(
+            name="Enthralled Sendaway Cmd",
+            sets_allegiance=Allegiance.ALLY_OF_CASTER,
+            allegiance_break_check_type=CheckTypeFactory(name="Allegiance Break Sendaway Cmd"),
+        )
+        ConditionInstanceFactory(
+            target=self.target_char,
+            condition=self.charm,
+            source_character=self.initiator_char,
+            severity=4,
+        )
+
+    def _run(self, caller: object, args: str) -> CmdSendAway:
+        cmd = CmdSendAway()
+        cmd.caller = caller
+        cmd.args = args
+        cmd.raw_string = f"sendaway {args}"
+        caller.msg = MagicMock()
+        cmd.func()
+        return cmd
+
+    def test_sendaway_reaches_the_action(self) -> None:
+        with patch("world.scenes.narrator.narrate_room_outcome"):
+            cmd = self._run(self.initiator_char, self.target_char.key)
+
+        texts = _msg_texts(cmd.caller.msg)
+        self.assertTrue(any("send" in text.lower() for text in texts))
+        self.target_char.refresh_from_db()
+        self.assertIsNone(self.target_char.db_location)
+
+
+class CmdRetainTests(TestCase):
+    """``retain <npc>=<role>`` reaches ``CharmAssetAction`` (task 12, telnet parity)."""
+
+    def setUp(self) -> None:
+        self.room = ObjectDBFactory(db_key="Hall", db_typeclass_path="typeclasses.rooms.Room")
+        self.initiator_char = ObjectDBFactory(
+            db_key="Tamsin",
+            db_typeclass_path="typeclasses.characters.Character",
+            location=self.room,
+        )
+        self.target_char = ObjectDBFactory(
+            db_key="Captain Hale",
+            db_typeclass_path="typeclasses.characters.Character",
+            location=self.room,
+        )
+        CharacterSheetFactory(character=self.initiator_char)
+        CharacterSheetFactory(character=self.target_char)
+
+        self.charm = ConditionTemplateFactory(
+            name="Enthralled Retain Cmd",
+            sets_allegiance=Allegiance.ALLY_OF_CASTER,
+            allegiance_break_check_type=CheckTypeFactory(name="Allegiance Break Retain Cmd"),
+        )
+        ConditionInstanceFactory(
+            target=self.target_char,
+            condition=self.charm,
+            source_character=self.initiator_char,
+            severity=4,
+        )
+
+    def _run(self, caller: object, args: str) -> CmdRetain:
+        cmd = CmdRetain()
+        cmd.caller = caller
+        cmd.args = args
+        cmd.raw_string = f"retain {args}"
+        caller.msg = MagicMock()
+        cmd.func()
+        return cmd
+
+    def test_retain_reaches_the_action(self) -> None:
+        cmd = self._run(self.initiator_char, f"{self.target_char.key}=informant")
+
+        texts = _msg_texts(cmd.caller.msg)
+        self.assertTrue(any("charmed" in text.lower() for text in texts))
+
+    def test_retain_accepts_hyphenated_personal_favor(self) -> None:
+        cmd = self._run(self.initiator_char, f"{self.target_char.key}=personal-favor")
+
+        texts = _msg_texts(cmd.caller.msg)
+        self.assertTrue(any("charmed" in text.lower() for text in texts))

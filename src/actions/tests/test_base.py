@@ -482,6 +482,7 @@ class ActionRegistryTests(TestCase):
             "promote_summon",
             "companion_emote",
             "charm_asset",
+            "send_away",
             "lock_exit",
             "unlock_exit",
             "pick_lock",

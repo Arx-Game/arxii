@@ -19,6 +19,8 @@ from actions.persona_menu import (
     build_persona_menu,
 )
 from evennia_extensions.factories import AccountFactory, RoomProfileFactory
+from world.checks.factories import CheckTypeFactory
+from world.conditions.constants import Allegiance
 from world.conditions.factories import (
     ConditionCategoryFactory,
     ConditionInstanceFactory,
@@ -143,6 +145,37 @@ class PersonaMenuServiceTests(django.test.TestCase):
         SceneParticipationFactory(scene=scene, account=self.viewer_account, is_gm=True)
         keys = [i.key for i in build_persona_menu(self.viewer, self.persona).items]
         assert "give_mission" in keys
+
+    def test_charm_holder_sees_send_away_and_charm_asset_available(self) -> None:
+        """#4091 task 12: the viewer's own charm makes both items available."""
+        SceneFactory(location=self.room, is_active=True)
+        charm = ConditionTemplateFactory(
+            sets_allegiance=Allegiance.ALLY_OF_CASTER,
+            allegiance_break_check_type=CheckTypeFactory(name="Persona Menu Allegiance Break"),
+        )
+        ConditionInstanceFactory(
+            target=self.target, condition=charm, source_character=self.viewer, severity=4
+        )
+
+        send_away_item = self._item("send_away")
+        charm_asset_item = self._item("charm_asset")
+
+        assert send_away_item.available
+        assert charm_asset_item.available
+
+    def test_without_a_charm_send_away_and_charm_asset_are_unavailable_with_a_reason(
+        self,
+    ) -> None:
+        """#4091 task 12: no charm from this viewer -> unavailable, with a reason."""
+        SceneFactory(location=self.room, is_active=True)
+
+        send_away_item = self._item("send_away")
+        charm_asset_item = self._item("charm_asset")
+
+        assert not send_away_item.available
+        assert send_away_item.reason
+        assert not charm_asset_item.available
+        assert charm_asset_item.reason
 
 
 class PersonaMenuViewTests(django.test.TestCase):
