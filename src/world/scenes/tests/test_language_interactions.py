@@ -426,12 +426,21 @@ class TestReadbackComprehensionUnderCondition(APITestCase):
         self.assertEqual(self._rows(self.viewer_account)[self.say.pk]["content"], "...")
 
     def test_query_count_does_not_grow_with_page_size(self) -> None:
+        from evennia.utils.idmapper import models as idmapper_models
+
         ConditionInstanceFactory(
             target=self.viewer_sheet.character, condition=self.condition, severity=4
         )
         self.client.force_authenticate(user=self.viewer_account)
         url = reverse("interaction-list")
         self.client.get(url)  # warm caches (ModifierTarget trait cache, content types)
+        # Flush the idmapper identity map before each measured call: a bare
+        # (non-``to_attr``) ``prefetch_related`` on a SharedMemoryModel instance is
+        # silently skipped once ``_prefetched_objects_cache`` holds the key (see
+        # reference-plain-prefetch-related-stale-on-idmapper), so comparing a
+        # just-warmed small page against a large page full of never-before-fetched
+        # rows would be comparing a hot read to a cold one -- not page-size growth.
+        idmapper_models.flush_cache()
         with CaptureQueriesContext(connection) as small:
             self.client.get(url)
         for index in range(6):
@@ -442,6 +451,7 @@ class TestReadbackComprehensionUnderCondition(APITestCase):
                 language=self.language,
                 content=f"{self.CONTENT} {index}",
             )
+        idmapper_models.flush_cache()
         with CaptureQueriesContext(connection) as large:
             self.client.get(url)
         self.assertEqual(len(small.captured_queries), len(large.captured_queries))
