@@ -393,7 +393,11 @@ class _FeedingCommand(ConsentRequestCommand):
         name = self.require_args(f"Whom do you want to {self.action_key}?")
         target = self.search_or_raise(name)
         target_sheet = target.character_sheet
-        target_is_pc = target_sheet is not None and is_player_character(target_sheet)
+        # A sheetless target is a PC only while puppeted (the pre-#4091 test).
+        if target_sheet is None:
+            target_is_pc = target.db_account is not None
+        else:
+            target_is_pc = is_player_character(target_sheet)
         if not target_is_pc:
             self._feed_npc(target, mode or self._DEFAULT_MODE)
             return
