@@ -98,6 +98,27 @@ class CharacterStateAllegianceFullVerbTests(TestCase):
         )
         self.assertEqual(result, expected)
 
+    def test_outranked_calmer_still_sees_sendaway(self) -> None:
+        """#4091 final review: sendaway uses the send_away action's own predicate,
+        not only the designating instance, so Tamsin's Calm under Wren's charm
+        still offers her the verb the action would accept."""
+        calm = ConditionTemplateFactory(
+            name="Hushed",
+            sets_allegiance=Allegiance.NEUTRAL,
+            default_duration_type=DurationType.INGAME_TIME,
+            is_visible_to_others=True,
+        )
+        ConditionInstanceFactory(
+            target=self.captain,
+            condition=calm,
+            source_character=self.tamsin,
+            expires_at=timezone.now() + timedelta(hours=1),
+        )
+        result = self.captain_state.get_display_allegiance(looker=self.tamsin_state)
+        self.assertIn("Enthralled (Fond, stage 2 of 3), from Wren", result)
+        self.assertIn("sendaway captain hale", result)
+        self.assertNotIn("retain captain hale", result)
+
     def test_omitted_from_return_appearance_when_no_hold(self) -> None:
         from world.conditions.services import remove_condition
 

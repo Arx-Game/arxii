@@ -448,7 +448,11 @@ def _allegiance_verb_prefixes(
                 prefixes.append("retain")
         elif _bind_window_open_for(obj):
             prefixes.append("companion promote")
-    if actor_holds_sway_present(looker_obj, obj, kinds=ALLEGIANCE_HOLD_KINDS, instances=[instance]):
+    # No ``instances=``: the same query the ``send_away`` action prerequisite runs,
+    # so a looker whose own hold is outranked by someone else's (a calmer under
+    # another PC's charm) still sees the verb the action would accept (#4091 final
+    # review).
+    if actor_holds_sway_present(looker_obj, obj, kinds=ALLEGIANCE_HOLD_KINDS):
         prefixes.append("sendaway")
     return prefixes
 
