@@ -53,44 +53,6 @@ function ownExchangeKey(item: Interaction): string {
 }
 
 /**
- * #3759 Wave 9 review finding F4: the flat, non-chip pose-context label the
- * spec's anti-reinvention ledger says to KEEP, not replace with per-pose
- * parent-chip persistence -- "Opening pose" for a REAL thread's own root
- * pose, "Standalone" for an ordinary un-replied pose. Shared between Threads
- * view (where `rootPose` is already in scope as `group.interactions[0]`) and
- * Chronological view (where it's looked up via `groupByKey`, below) so both
- * views render identical labels for the identical pose.
- *
- * #3759 Wave 9 fix round 1 Minor M-1: the GROUP (not merely "is this the
- * group's own root") gates "Opening pose" -- an ordinary, un-replied pose is
- * trivially its own group's root by construction, but "Opening pose" asserts
- * a THREAD that doesn't exist for it. "Standalone" (matching Chronological's
- * own pre-existing phrasing for this exact case) is correct for both views.
- * M-1 read that off `item.thread_id`. The GROUP's key is used instead because
- * it is the one thing that stays right across both views: a `legacy:` key is
- * exactly the un-replied pose M-1 is about, and any other key is a genuine
- * exchange, whose first row is a real thread's real opening pose.
- *
- * #3787 Task 7: the third case this used to cover -- an ordinary reply deep
- * in a real thread -- used to return `Reply in <title>` as a stand-in for
- * per-pose parent data that didn't exist yet (that branch's own doc comment
- * said so). It does now (`Interaction.reply_to`, #3787 Tasks 1-2), and
- * `PoseUnit.tsx`'s parent chip ("Answering “...”") renders it
- * directly on the pose itself -- a real quote of what was actually answered,
- * not a derived thread title -- so this label goes empty for that case
- * rather than duplicating weaker information beside the chip.
- */
-function poseRoleLabel(
-  item: Interaction,
-  rootPose: Interaction | undefined,
-  groupKey: string
-): string {
-  if (groupKey.startsWith('legacy:')) return 'Standalone';
-  if (!rootPose || rootPose.id === item.id) return 'Opening pose';
-  return '';
-}
-
-/**
  * The involved-viewer treatment (#3787 demo Screen 1): a row whose
  * `target_persona_ids` names the viewer's own active persona gets a distinct,
  * highlighted restatement of the SAME (already per-viewer-rendered) content
@@ -673,9 +635,6 @@ export function ThreadedNarrativeReader({
       )
     )[0].key;
   }, [realThreadGroups]);
-  // Looked up by Chronological view's role-label rendering (#3759 Wave 9 F4)
-  // to find a pose's thread root without a linear scan of `groups` per pose.
-  const groupByKey = useMemo(() => new Map(groups.map((group) => [group.key, group])), [groups]);
   /**
    * Resolves a thread's currently-shown window, clamped against its OWN
    * current pose count (#3759 Wave 9 F1/F2). Absent from `threadWindows`
@@ -1535,22 +1494,6 @@ export function ThreadedNarrativeReader({
                   }
                   const item = row.item;
                   const poseCollapsed = collapsedPoses.has(item.id);
-                  // #3759 Wave 9 review finding F4: switched from the old
-                  // "In a thread"/"Standalone" label to the same
-                  // "Opening pose"/"Reply in <title>" phrasing Threads view
-                  // uses (see `poseRoleLabel`'s own doc comment). Decided in
-                  // favor of consistency: Chronological flattens every
-                  // thread into one timeline, so knowing WHICH thread a
-                  // reply belongs to (not just that it's "in a thread" at
-                  // all) is strictly more useful here, and there's no demo
-                  // image for this screen (the review's own scope table
-                  // marks it `textonly`) to visually contradict.
-                  const groupKey = exchangeKey(item);
-                  const roleLabel = poseRoleLabel(
-                    item,
-                    groupByKey.get(groupKey)?.interactions[0],
-                    groupKey
-                  );
                   return (
                     <div
                       key={item.id}
@@ -1577,7 +1520,6 @@ export function ThreadedNarrativeReader({
                         highlighted={String(item.id) === highlightedPoseId}
                         readEligible={!poseCollapsed}
                       >
-                        {roleLabel && <p className="text-xs text-muted-foreground">{roleLabel}</p>}
                         {poseCollapsed ? (
                           <article
                             className="mx-2 rounded border border-dashed px-3 py-2 text-sm"
@@ -1701,14 +1643,6 @@ export function ThreadedNarrativeReader({
                               highlighted={String(item.id) === highlightedPoseId}
                               readEligible={!poseCollapsed}
                             >
-                              {/* #3759 Wave 9 review Minor M-1: `poseRoleLabel` itself
-                          returns "Standalone" here (gated on `item.thread_id`,
-                          not merely "is this the group's root"), never
-                          "Opening pose" -- that label asserts a thread that
-                          doesn't exist for a genuinely un-replied pose. */}
-                              <p className="text-xs text-muted-foreground">
-                                {poseRoleLabel(item, root, group.key)}
-                              </p>
                               {poseCollapsed ? (
                                 <article
                                   className="mx-2 rounded border border-dashed px-3 py-2 text-sm"
@@ -1843,7 +1777,6 @@ export function ThreadedNarrativeReader({
                               )}
                               {visiblePoses.map((item) => {
                                 const poseCollapsed = collapsedPoses.has(item.id);
-                                const roleLabel = poseRoleLabel(item, root, group.key);
                                 return (
                                   <PoseReadTarget
                                     key={`pose-${item.id}`}
@@ -1860,9 +1793,6 @@ export function ThreadedNarrativeReader({
                                     readEligible={!poseCollapsed}
                                   >
                                     {/* #3759 Wave 9 review finding F4. */}
-                                    {roleLabel && (
-                                      <p className="text-xs text-muted-foreground">{roleLabel}</p>
-                                    )}
                                     {poseCollapsed ? (
                                       <article
                                         className="mx-2 rounded border border-dashed px-3 py-2 text-sm"

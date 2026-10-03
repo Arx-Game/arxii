@@ -991,7 +991,7 @@ describe('GamePage', () => {
       expect(stored.feedChips.find((chip) => chip.id === 'rp')?.on).toBe(false);
     });
 
-    it('minimises a pose to a stub, reopens it, and dismisses it from this view only', async () => {
+    it('minimizes a pose to a stub, reopens it, and dismisses it from this view only', async () => {
       store.dispatch(setAccount(mockAccount));
       seedActiveSceneWithPose();
 
@@ -1162,7 +1162,7 @@ describe('GamePage', () => {
       expect(screen.getByText('quietly crosses the courtyard.')).toBeInTheDocument();
     });
 
-    it('recovers a dismissed minimised stub as an expanded block', async () => {
+    it('recovers a dismissed minimized stub as an expanded block', async () => {
       store.dispatch(setAccount(mockAccount));
       seedActiveSceneWithPose();
       renderWithProviders(<GamePage />);

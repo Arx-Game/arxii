@@ -34,7 +34,7 @@ export function FeedNoteBlock({ note }: FeedNoteBlockProps) {
     hour: 'numeric',
     minute: '2-digit',
   });
-  // Any block minimises or dismisses, per viewer (#3856 PR 2); the stub names
+  // Any block minimizes or dismisses, per viewer (#3856 PR 2); the stub names
   // the kind and the time, the way a pose's stub names its author.
   return (
     <FeedBlockFrame

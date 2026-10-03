@@ -900,8 +900,8 @@ describe('gameSlice', () => {
     });
   });
 
-  describe('minimise and dismiss (#3856)', () => {
-    it('minimises a block once, restores it, and dismissing drops the minimised mark', () => {
+  describe('minimize and dismiss (#3856)', () => {
+    it('minimizes a block once, restores it, and dismissing drops the minimized mark', () => {
       let state = createStateWithSession('TestCharacter', {}, 'TestCharacter');
       state = reducer(state, minimizeFeedItem({ character: 'TestCharacter', key: 'i:5' }));
       state = reducer(state, minimizeFeedItem({ character: 'TestCharacter', key: 'i:5' }));
