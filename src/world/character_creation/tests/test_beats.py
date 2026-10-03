@@ -246,7 +246,15 @@ class BeatsEndpointTests(TestCase):
             f"/api/distinctions/drafts/{self.draft.id}/distinctions/sync/", one, format="json"
         )
         self.assertEqual(resp.status_code, 200, resp.content)
-        self.assertEqual([d["distinction_name"] for d in resp.json()["distinctions"]], ["Patient"])
+        (entry,) = resp.json()["distinctions"]
+        self.assertEqual(entry["distinction_name"], "Patient")
+        # Priced at the distinction's own cost, on the purse like any chapter's pick.
+        self.assertEqual(entry["cost"], 10)
+        self.draft.refresh_from_db()
+        lines = [
+            e for e in self.draft.calculate_cg_points_breakdown() if e["category"] == "distinction"
+        ]
+        self.assertEqual(lines, [{"category": "distinction", "item": "Patient", "cost": 10}])
 
     def test_a_malformed_beats_map_is_refused(self):
         resp = self.client.patch(
