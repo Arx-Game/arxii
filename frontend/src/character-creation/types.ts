@@ -917,6 +917,9 @@ export interface DraftData {
   origin_anchors?: Record<string, number | null>;
   // PERSON question answers: slot id -> the named person's name (#3660)
   origin_figures?: Record<string, string>;
+  // The beats of the life (#4124): beat id -> taken / unknown / the optional line.
+  // The whole map is sent on every save; a beat absent from it is not taken.
+  beats?: Record<string, DraftBeatState>;
   // The name given to a newly founded family on the 'named' family path (#3617)
   new_family_name?: string;
   concept?: string;
@@ -1197,6 +1200,7 @@ export const CONNECTION_KIND_LABELS: Record<string, string> = {
 export const LIFE_STAGE_LABELS: Record<string, string> = {
   childhood: 'Childhood',
   youth: 'Youth',
+  adulthood: 'Before the Glimpse',
   at_the_glimpse: 'At the Glimpse',
   since_the_glimpse: 'Since the Glimpse',
 };
@@ -1440,7 +1444,41 @@ export type OfferChapter =
   | 'lineage'
   | 'appearance'
   | 'actors_sheet'
-  | 'enemy';
+  | 'enemy'
+  | 'backgrounds';
+
+/** One beat of the Backgrounds library as this draft meets it (#4124):
+ * `GET /api/character-creation/drafts/{id}/beats/`. Its answers are the
+ * `backgrounds` chapter's offers whose `opener_key` is `beat:<beat_id>`. */
+export interface BeatPoolEntry {
+  beat_id: number;
+  name: string;
+  prompt: string;
+  life_stage: string;
+  selection: 'one_of' | 'any';
+  taken: boolean;
+  unknown: boolean;
+  line: string;
+  answer_offer_ids: number[];
+  kept: boolean;
+}
+
+/** The draft's own state on one beat, under `draft_data.beats[<beat_id>]` (#4124). */
+export interface DraftBeatState {
+  taken?: boolean;
+  unknown?: boolean;
+  line?: string;
+}
+
+/** The stages of a life in the order a life has them (#4124); the values sort
+ * alphabetically, which is not that order. */
+export const LIFE_STAGE_ORDER: readonly string[] = [
+  'childhood',
+  'youth',
+  'adulthood',
+  'at_the_glimpse',
+  'since_the_glimpse',
+];
 
 /** A distinction offer visible to the draft in the requested chapter (#3675). */
 export type VisibleOffer = components['schemas']['VisibleOffer'];

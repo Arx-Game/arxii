@@ -51,10 +51,7 @@ export function GuidelinesBand({ block, goals }: GuidelinesBandProps) {
   const longTerm = goals.filter((goal) => goal.horizon === 'long_term');
 
   return (
-    <Band
-      title="Goals and guidelines"
-      note="Goals are yours and staff's. Strangers learn the rest in play, or hear a version as rumor."
-    >
+    <Band title="Goals and guidelines">
       <div className="refsheet-columns-3">
         <Prompt question="They would never" answer={block.never_do} />
         <Prompt question="Protects at all costs" answer={block.protect} />

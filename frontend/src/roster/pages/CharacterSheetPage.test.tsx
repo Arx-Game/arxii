@@ -182,6 +182,7 @@ function makeSheet(overrides: Partial<CharacterSheetPayload> = {}): CharacterShe
       introductions: [],
     },
     goals: [],
+    beats: [],
     personas: [],
     theming: {},
     profile_picture: null,
@@ -412,6 +413,53 @@ describe('CharacterSheetPage', () => {
     } as unknown as ReturnType<typeof useCharacterSheetQuery>);
     const { container } = mountSheet();
     expect(container.querySelector('.refsheet')).toHaveAttribute('data-ink', 'verdigris');
+  });
+
+  it('draws the private sheet for a payload that carries beats, and nothing of it otherwise', () => {
+    // #4124: the beats arrive for the owner and staff only; the two headings and the
+    // shifted region exist only when they do, so a stranger's page is unchanged.
+    setEntry(ENTRY);
+    setOwnership(true);
+    mockUseCharacterSheetQuery.mockReturnValue({
+      data: makeSheet({
+        beats: [
+          {
+            beat_id: 1,
+            name: 'The household',
+            life_stage: 'childhood',
+            prompt: '',
+            unknown: false,
+            line: 'A line.',
+            answers: ['Patient'],
+          },
+          {
+            beat_id: 2,
+            name: 'The work',
+            life_stage: 'adulthood',
+            prompt: '',
+            unknown: true,
+            line: '',
+            answers: [],
+          },
+        ],
+      }),
+    } as unknown as ReturnType<typeof useCharacterSheetQuery>);
+    mountSheet();
+    expect(screen.getByRole('heading', { name: 'Public sheet' })).toBeInTheDocument();
+    const region = screen.getByRole('region', { name: 'Private sheet' });
+    expect(within(region).getByText('The household')).toBeInTheDocument();
+    expect(within(region).getByText('Patient')).toBeInTheDocument();
+    expect(within(region).getByText('A line.')).toBeInTheDocument();
+    expect(within(region).getByText('The work')).toBeInTheDocument();
+    expect(within(region).queryByText(/yours and staff/i)).toBeNull();
+  });
+
+  it('draws no private sheet and no public heading when the payload carries no beats', () => {
+    setEntry(ENTRY);
+    setOwnership(false);
+    mountSheet();
+    expect(screen.queryByRole('region', { name: 'Private sheet' })).toBeNull();
+    expect(screen.queryByRole('heading', { name: 'Public sheet' })).toBeNull();
   });
 
   it('offers the Journal door to a stranger, alongside the Friend button', () => {

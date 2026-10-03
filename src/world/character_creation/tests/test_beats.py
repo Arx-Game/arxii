@@ -104,6 +104,7 @@ class BeatPoolTests(TestCase):
         entries = beats_for(draft)
         self.assertEqual([e.name for e in entries], ["The work"])
         self.assertTrue(entries[0].taken)
+        self.assertTrue(entries[0].kept)
 
 
 class BeatAnswerTests(TestCase):
@@ -217,6 +218,7 @@ class BeatsEndpointTests(TestCase):
                     "unknown": False,
                     "line": "",
                     "answer_offer_ids": [self.patient.pk, self.spoiled.pk],
+                    "kept": False,
                 }
             ],
         )

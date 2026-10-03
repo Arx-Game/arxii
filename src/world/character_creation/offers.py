@@ -184,6 +184,7 @@ def beats_for(draft: CharacterDraft) -> list[BeatPoolEntry]:
                 unknown=bool(state.get("unknown")),
                 line=str(state.get("line") or ""),
                 answer_offer_ids=[offer.pk for offer in beat.answers],
+                kept=kept,
             )
         )
     return out

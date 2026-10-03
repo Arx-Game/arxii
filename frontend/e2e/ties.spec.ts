@@ -240,6 +240,7 @@ function sheetPayload(ties: unknown[], tiesApThisWeek: number | null) {
       introductions: [],
     },
     goals: [],
+    beats: [],
     personas: [],
     theming: {},
     profile_picture: null,

@@ -208,6 +208,18 @@ export interface CharacterSheetStory {
   origin_slots: CharacterSheetOriginSlot[];
 }
 
+/** Mirrors `world.character_sheets.types.BeatEntry` (#4124): a beat of the life, on the
+ * private sheet. The list arrives empty for anyone but the owner and staff. */
+export interface CharacterSheetBeat {
+  beat_id: number;
+  name: string;
+  life_stage: string;
+  prompt: string;
+  unknown: boolean;
+  line: string;
+  answers: string[];
+}
+
 /** Mirrors `world.character_sheets.types.EnemyEntry` (#3621); owner, staff and GM only. */
 export interface CharacterSheetEnemy {
   kind: 'person' | 'group';
@@ -396,6 +408,8 @@ export interface CharacterSheetPayload {
   story: CharacterSheetStory;
   actor_sheet: CharacterSheetActorSheet;
   goals: CharacterSheetGoal[];
+  /** The beats of the life (#4124); empty for anyone but the owner and staff. */
+  beats: CharacterSheetBeat[];
   personas: CharacterSheetPersona[];
   theming: Record<string, unknown>;
   profile_picture: string | null;

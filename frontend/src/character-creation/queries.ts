@@ -4,6 +4,7 @@
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
+  getDraftBeats,
   addDraftComment,
   addToRoster,
   canCreateCharacter,
@@ -84,6 +85,8 @@ export const characterCreationKeys = {
   // Distinctions are offered by CG chapter, not a standalone stage (#3675).
   draftOffers: (draftId: number, chapter: OfferChapter) =>
     [...characterCreationKeys.all, 'draft-offers', draftId, chapter] as const,
+  // The Backgrounds beat pool (#4124).
+  draftBeats: (draftId: number) => [...characterCreationKeys.all, 'draft-beats', draftId] as const,
   families: (areaId: number) => [...characterCreationKeys.all, 'families', areaId] as const,
   familiesWithOpenKinSlots: (areaId?: number) =>
     [...characterCreationKeys.all, 'families-open', areaId] as const,
@@ -361,6 +364,15 @@ export function useDraftCGPoints(draftId: number | undefined) {
  * mount (Path/Tradition, Glimpse, Lineage, Appearance, the Actor's Sheet)
  * calls this with its own `chapter` rather than reading a Distinctions stage.
  */
+/** The Backgrounds beat pool as the draft meets it (#4124). */
+export function useDraftBeats(draftId: number | undefined) {
+  return useQuery({
+    queryKey: characterCreationKeys.draftBeats(draftId!),
+    queryFn: () => getDraftBeats(draftId!),
+    enabled: !!draftId,
+  });
+}
+
 export function useDraftOffers(
   draftId: number | undefined,
   chapter: OfferChapter,

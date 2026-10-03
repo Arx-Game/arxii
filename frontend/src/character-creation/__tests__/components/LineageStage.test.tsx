@@ -60,6 +60,9 @@ vi.mock('../../api', () => ({
   getVacancies: vi.fn().mockResolvedValue([]),
   // LineageRecord's CG point tally (#3660).
   getCGPointBudget: vi.fn(),
+  // The beats of the life (#4124); an empty pool mounts nothing.
+  getDraftBeats: vi.fn().mockResolvedValue([]),
+  getDraftOffers: vi.fn().mockResolvedValue({ offers: [], closed: [] }),
 }));
 
 describe('LineageStage', () => {

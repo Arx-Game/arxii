@@ -76,6 +76,9 @@ class BeatPoolEntry:
     unknown: bool
     line: str
     answer_offer_ids: list[int]
+    #: The Beginning keeps this beat itself (``BeatMode.ONE_KEPT``): taken by the
+    #: Beginning, never removed by the player.
+    kept: bool = False
 
 
 @dataclass(frozen=True)

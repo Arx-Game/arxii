@@ -1104,6 +1104,7 @@ class BeatPoolEntrySerializer(serializers.Serializer):
     unknown = serializers.BooleanField()
     line = serializers.CharField(allow_blank=True)
     answer_offer_ids = serializers.ListField(child=serializers.IntegerField())
+    kept = serializers.BooleanField()
 
 
 class ClosedDistinctionSerializer(serializers.Serializer):

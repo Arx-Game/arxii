@@ -7,6 +7,7 @@ import { throwApiError } from '@/lib/errors';
 import type { components } from '@/generated/api';
 import type { PaginatedResponse } from '@/shared/types';
 import type {
+  BeatPoolEntry,
   Affinity,
   CGExplanations,
   ApplicationComment,
@@ -335,6 +336,15 @@ export async function getDraftOffers(
   const res = await apiFetch(`${BASE_URL}/drafts/${draftId}/offers/?chapter=${chapter}`);
   if (!res.ok) {
     throw new Error('Failed to load chapter offers');
+  }
+  return res.json();
+}
+
+/** The Backgrounds beat pool as this draft meets it (#4124). */
+export async function getDraftBeats(draftId: number): Promise<BeatPoolEntry[]> {
+  const res = await apiFetch(`${BASE_URL}/drafts/${draftId}/beats/`);
+  if (!res.ok) {
+    throw new Error('Failed to load the beats');
   }
   return res.json();
 }

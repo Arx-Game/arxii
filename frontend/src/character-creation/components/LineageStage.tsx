@@ -41,6 +41,7 @@ import { resolveFamilyPath, Stage, STAGE_LABELS } from '../types';
 import type { CharacterDraft, Family, KinSlot, KinSlotPool, TarotCard } from '../types';
 import { UpbringingPicker } from './lineage/UpbringingPicker';
 import { UpbringingPrompts } from './lineage/UpbringingPrompts';
+import { BeatsBlock } from './lineage/BeatsBlock';
 import { FamilyPathSection } from './lineage/FamilyPathSection';
 import { LineageRecord } from './lineage/LineageRecord';
 
@@ -138,19 +139,13 @@ export function LineageStage({ draft, onStageSelect }: LineageStageProps) {
 
         {template && (
           <>
-            <UpbringingPrompts
-              draft={draft}
-              template={template}
-              path={path}
-              influence={influence}
-              copy={copy}
-              scope="any"
-            />
             {template.parentage_note && (
               <div className="space-y-3 text-sm">
                 <Paragraphs text={template.parentage_note} />
               </div>
             )}
+            {/* The house and the parents come first (#4124): the Upbringing's general
+                prompts used to sit above them, and read as the stage's opening. */}
             <FamilyPathSection
               draft={draft}
               template={template}
@@ -165,8 +160,17 @@ export function LineageStage({ draft, onStageSelect }: LineageStageProps) {
               path={path}
               influence={influence}
               copy={copy}
+              scope="any"
+            />
+            <UpbringingPrompts
+              draft={draft}
+              template={template}
+              path={path}
+              influence={influence}
+              copy={copy}
               scope="path"
             />
+            <BeatsBlock draft={draft} copy={copy} />
             <LineageRecord draft={draft} template={template} path={path} />
           </>
         )}
