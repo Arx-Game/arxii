@@ -343,6 +343,121 @@ class PcActionAllegianceBreakAggregationTests(TestCase):
         self.assertEqual(kwargs["damage_dealt"], 17)
 
 
+class MissingBreakCheckTypeTests(TestCase):
+    """#4091 final review ruling: an allegiance condition with no
+    ``allegiance_break_check_type`` skips the roll (the hold persists) and logs one
+    warning, rather than raising inside the atomic ``resolve_round`` and leaving
+    the encounter stuck retrying forever."""
+
+    def setUp(self) -> None:
+        DamageSuccessLevelMultiplierFactory(
+            min_success_level=2, multiplier=Decimal("1.00"), label="Full 4091 nocheck"
+        )
+        self.charm = ConditionTemplateFactory(
+            name="Charm No Break Check 4091",
+            sets_allegiance=Allegiance.ALLY_OF_CASTER,
+            allegiance_break_check_type=None,
+        )
+        self.encounter = CombatEncounterFactory(status=RoundStatus.DECLARING, round_number=1)
+        self.opp = CombatOpponentFactory(
+            encounter=self.encounter, health=500, max_health=500, soak_value=0, level=1
+        )
+        # A second, unheld foe keeps the encounter open after the round.
+        CombatOpponentFactory(encounter=self.encounter, health=500, max_health=500)
+        self.instance = ConditionInstanceFactory(
+            target=self.opp.objectdb, condition=self.charm, severity=6
+        )
+        self.sheet = CharacterSheetFactory()
+        self.participant = CombatParticipantFactory(
+            encounter=self.encounter, character_sheet=self.sheet
+        )
+        CharacterVitals.objects.create(character_sheet=self.sheet, health=100, max_health=100)
+        CharacterAnimaFactory(character=self.sheet, current=50, maximum=50)
+        CharacterEngagementFactory(character=self.sheet)
+
+    def test_blow_resolves_the_round_and_leaves_the_hold(self):
+        from world.combat.services import resolve_round
+
+        technique = TechniqueFactory(
+            gift=GiftFactory(),
+            effect_type=EffectTypeFactory(base_power=10),
+            action_template=ActionTemplateFactory(check_type=CheckTypeFactory()),
+        )
+        CombatRoundAction.objects.create(
+            participant=self.participant,
+            round_number=1,
+            focused_category=ActionCategory.PHYSICAL,
+            focused_action=technique,
+            focused_opponent_target=self.opp,
+        )
+        with (
+            patch("world.combat.services.perform_check") as mock_perform,
+            self.assertLogs("world.npc_services.allegiance_outcomes", level="WARNING") as logs,
+        ):
+            mock_perform.return_value = MagicMock(success_level=2)
+            resolve_round(self.encounter)
+
+        self.assertEqual(len(logs.records), 1)
+        self.assertIn("Charm No Break Check 4091", logs.output[0])
+        self.opp.refresh_from_db()
+        self.assertLess(self.opp.health, 500)  # the blow landed
+        self.assertTrue(ConditionInstance.objects.filter(pk=self.instance.pk).exists())
+
+
+class BreakLookupBatchingTests(TestCase):
+    """#4091 final review: gathering the held opponents a blow harmed is one
+    opponent fetch plus one allegiance-instance fetch, however many it hit."""
+
+    def setUp(self) -> None:
+        self.charm = ConditionTemplateFactory(
+            name="Charm Batch 4091",
+            sets_allegiance=Allegiance.ALLY_OF_CASTER,
+            allegiance_break_check_type=CheckTypeFactory(name="Batch Break 4091"),
+        )
+        self.encounter = CombatEncounterFactory()
+        self.participant = CombatParticipantFactory(encounter=self.encounter)
+
+    def _outcome_hitting(self, count: int) -> ActionOutcome:
+        from world.combat.types import OpponentDamageResult
+
+        outcome = ActionOutcome(entity_type="pc", entity_label="Striker")
+        for _ in range(count):
+            opp = CombatOpponentFactory(encounter=self.encounter)
+            ConditionInstanceFactory(target=opp.objectdb, condition=self.charm, severity=6)
+            outcome.damage_results.append(
+                OpponentDamageResult(
+                    damage_dealt=5,
+                    health_damaged=True,
+                    probed=False,
+                    probing_increment=0,
+                    defeated=False,
+                    opponent_id=opp.pk,
+                )
+            )
+        return outcome
+
+    def _queries_for(self, count: int) -> int:
+        from django.db import connection
+        from django.test.utils import CaptureQueriesContext
+
+        from world.combat.services import _attempt_allegiance_breaks_for_action
+
+        outcome = self._outcome_hitting(count)
+        with (
+            patch("world.npc_services.allegiance_outcomes.attempt_allegiance_break") as mock_break,
+            CaptureQueriesContext(connection) as ctx,
+        ):
+            _attempt_allegiance_breaks_for_action(self.participant, outcome)
+        self.assertEqual(mock_break.call_count, count)
+        self.assertTrue(all(c.kwargs["instance"] is not None for c in mock_break.call_args_list))
+        return len(ctx.captured_queries)
+
+    def test_query_count_is_flat_as_targets_grow(self):
+        one = self._queries_for(1)
+        self.assertEqual(one, 2)
+        self.assertEqual(self._queries_for(4), one)
+
+
 class ResolveNpcActionOnOpponentTargetNeverRollsTest(TestCase):
     """An NPC's own attack on an opponent target never rolls a break attempt.
 

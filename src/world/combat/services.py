@@ -8838,6 +8838,10 @@ def _attempt_allegiance_breaks_for_action(
     from ``_resolve_pc_action``) -- NPC-vs-NPC (``_resolve_npc_action_on_opponent_
     target``), reflected, rampart, and duel-mirror damage never do.
     """
+    from world.npc_services.allegiance import (  # noqa: PLC0415
+        allegiance_instances_for,
+        designating_instance,
+    )
     from world.npc_services.allegiance_outcomes import attempt_allegiance_break  # noqa: PLC0415
 
     totals: dict[int, int] = {}
@@ -8846,13 +8850,29 @@ def _attempt_allegiance_breaks_for_action(
         if opponent_id is None or result.damage_dealt <= 0:
             continue
         totals[opponent_id] = totals.get(opponent_id, 0) + result.damage_dealt
+    if not totals:
+        return
 
-    for opponent_id, total_damage in totals.items():
-        opponent = CombatOpponent.objects.filter(pk=opponent_id).first()
-        if opponent is None or opponent.status == OpponentStatus.DEFEATED:
+    # Batched (#4091 final review): one opponent fetch and one allegiance-instance
+    # fetch for every harmed opponent, not a SELECT plus get_active_conditions each.
+    opponents = [
+        opponent
+        for opponent in CombatOpponent.objects.filter(pk__in=totals)
+        .exclude(status=OpponentStatus.DEFEATED)
+        .select_related("objectdb")
+        .order_by("pk")
+        if opponent.objectdb_id is not None
+    ]
+    by_target = allegiance_instances_for(o.objectdb_id for o in opponents)
+    for opponent in opponents:
+        instance = designating_instance(by_target.get(opponent.objectdb_id, []))
+        if instance is None:
             continue
         attempt_allegiance_break(
-            striker=participant.character_sheet, opponent=opponent, damage_dealt=total_damage
+            striker=participant.character_sheet,
+            opponent=opponent,
+            damage_dealt=totals[opponent.pk],
+            instance=instance,
         )
 
 

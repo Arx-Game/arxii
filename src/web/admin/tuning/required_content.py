@@ -1295,7 +1295,8 @@ def _declarations() -> tuple[ContentDependency, ...]:
             consumer="world/npc_services/allegiance_outcomes.py attempt_allegiance_break()",
             consequence=(
                 "A player character striking an NPC under this hold has no check to "
-                "roll, and the blow errors instead of testing the hold."
+                "roll: the blow never tests the hold, which simply persists (a "
+                "warning is logged naming the condition)."
             ),
             probe=CustomProbe(fn=_probe_allegiance_break_checks),
             admin_model="ConditionTemplate",

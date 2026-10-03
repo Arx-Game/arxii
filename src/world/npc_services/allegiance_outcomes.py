@@ -24,6 +24,7 @@ regardless of who cast it or how hard the PC hit.
 
 from __future__ import annotations
 
+import logging
 from typing import TYPE_CHECKING
 
 from world.checks.constants import ModifierSourceKind
@@ -44,6 +45,8 @@ if TYPE_CHECKING:
     from world.combat.models import CombatOpponent
     from world.conditions.models import ConditionInstance
     from world.scenes.models import Scene
+
+logger = logging.getLogger(__name__)
 
 
 def charm_strength_points(instance: ConditionInstance) -> int:
@@ -177,6 +180,7 @@ def attempt_allegiance_break(
     opponent: CombatOpponent,
     damage_dealt: int,
     extra_pressure: int = 0,
+    instance: ConditionInstance | None = None,
 ) -> AllegianceBreakResult | None:
     """Decision 16: the PC who harms a held NPC rolls to break the hold.
 
@@ -187,6 +191,17 @@ def attempt_allegiance_break(
     break; a faded hold cast by a low-level caster on a strong-willed NPC breaks
     easily. Success ends the hold through its settle pool at the striker's tier.
     Failure: the hold stands and the NPC does not fight back.
+
+    ``instance`` is the opponent's designating allegiance instance when the caller
+    already fetched it in a batch (``_attempt_allegiance_breaks_for_action``);
+    omitted, it is looked up here.
+
+    A hold whose condition has no ``allegiance_break_check_type`` is missing
+    content: no roll is made, the hold persists, and one warning names the
+    condition (#4091 final review ruling). Raising here would roll back the whole
+    atomic ``resolve_round`` and the round timer would retry it forever, leaving
+    the encounter stuck. The REQUIRED ``allegiance-break-check`` dashboard row is
+    the sentinel that tells staff to fill it in.
     """
     from world.checks.services import compute_resist_increment, perform_check  # noqa: PLC0415
     from world.fatigue.constants import EffortLevel  # noqa: PLC0415
@@ -195,10 +210,19 @@ def attempt_allegiance_break(
 
     if opponent.objectdb_id is None or damage_dealt <= 0:
         return None
-    instance = allegiance_instance_on(opponent.objectdb)
+    if instance is None:
+        instance = allegiance_instance_on(opponent.objectdb)
     if instance is None:
         return None
     check_type = instance.condition.allegiance_break_check_type
+    if check_type is None:
+        logger.warning(
+            "Allegiance condition %r (pk=%s) has no allegiance_break_check_type; "
+            "skipping the break roll, the hold persists.",
+            instance.condition.name,
+            instance.condition_id,
+        )
+        return None
     strength = charm_strength_points(instance) + _caster_level_opposition_points(
         instance, check_type
     )
