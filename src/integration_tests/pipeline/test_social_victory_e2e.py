@@ -186,8 +186,9 @@ class SocialVictoryTelnetE2ETests(TestCase):
 
         The PC's session is a bare telnet session (no webclient outputfunc):
         the final assertion proves the won-over clause reaches it as plain
-        text via deliver_outcome_interaction's telnet-parity line (#3807),
-        not merely the WebSocket ``interaction=`` payload (#4091 fix round 2).
+        text via send_outcome_text_to_non_web's telnet-parity line (#3807),
+        not merely the WebSocket ``interaction=`` payload (#4091 fix rounds 2
+        and 4).
         """
         self.character.msg = MagicMock()
         telnet_session = MagicMock()

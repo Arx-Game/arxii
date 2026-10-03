@@ -637,10 +637,11 @@ def broadcast_action_outcome(  # noqa: PLR0913 - all keyword-only, one per outco
     interaction is still persisted (durable) but not broadcast.
 
     Args:
-        deliver_telnet: Route the non-concealed room broadcast through
-            ``deliver_outcome_interaction`` (#3807) instead of a bare
-            ``_broadcast_to_location``, so a bare telnet session gets the
-            line as plain text too, not only the WebSocket payload. Only the
+        deliver_telnet: After the non-concealed room broadcast, also send the
+            line as plain text to every non-web session in the room
+            (``send_outcome_text_to_non_web``, #3807), synchronously so the
+            web push keeps its place ahead of any follow-up push (fix round
+            4), so a bare telnet session gets the line too. Only the
             top-level encounter-outcome call opts into this (#4091 fix round
             2); every per-action narration caller of this function (flee,
             technique cast, NPC actions, windup, sustained rituals, cleanup)
@@ -686,7 +687,7 @@ def broadcast_action_outcome(  # noqa: PLR0913 - all keyword-only, one per outco
         _broadcast_to_location,
         _build_interaction_payload,
         create_interaction,
-        deliver_outcome_interaction,
+        send_outcome_text_to_non_web,
         write_target_personas,
     )
 
@@ -727,16 +728,15 @@ def broadcast_action_outcome(  # noqa: PLR0913 - all keyword-only, one per outco
         )
 
     if not concealed:
+        _broadcast_to_location(room, _payload(interaction))
         if deliver_telnet:
-            # deliver_outcome_interaction (#3807), not a bare _broadcast_to_location:
-            # the latter only pushes the structured WebSocket payload, with no
-            # telnet-parity text line -- the ceremonial OUTCOME line (including
-            # the won-over clause, #4091) never reached a bare telnet session
-            # before this fix (fix round 2). Opt-in: see deliver_telnet's
-            # docstring for why every other caller keeps the old behavior.
-            deliver_outcome_interaction(interaction, location=room)
-        else:
-            _broadcast_to_location(room, _payload(interaction))
+            # Synchronous, right after the synchronous web push (#4091 fix round 4):
+            # deliver_outcome_interaction would defer BOTH channels to on_commit,
+            # landing the OUTCOME line after the aftermath digest that
+            # complete_encounter pushes immediately. _broadcast_to_location only
+            # reaches webclient sessions with the structured payload, so this adds
+            # the plain-text line for non-web sessions only -- nothing twice.
+            send_outcome_text_to_non_web(interaction, location=room)
         return interaction
 
     # Concealed: deliberately NOT _broadcast_to_location. Live delivery has to match

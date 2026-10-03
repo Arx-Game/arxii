@@ -120,7 +120,8 @@ class OutcomeBroadcastTest(TestCase):
         # it this round, so the encounter actually completes as VICTORY and
         # reaches _broadcast_encounter_outcome -- the only caller of
         # broadcast_action_outcome that opts into deliver_telnet=True
-        # (deliver_outcome_interaction, deferred to transaction.on_commit).
+        # (a synchronous _broadcast_to_location plus a non-web text line,
+        # #4091 fix round 4).
         # Without this, the round never completes and the test's own name
         # ("...and_broadcasts_outcome") is proven only by the unrelated,
         # always-synchronous per-action ACTION-interaction push (#4091 fix
@@ -130,10 +131,8 @@ class OutcomeBroadcastTest(TestCase):
         def mock_check_fn(*args, **kwargs):  # type: ignore[no-untyped-def]
             return MagicMock(success_level=2)
 
-        with (
-            mock.patch("world.scenes.interaction_services._broadcast_to_location") as broadcast,
-            self.captureOnCommitCallbacks(execute=True),
-        ):
+        # No captureOnCommitCallbacks: the encounter-outcome push is synchronous.
+        with mock.patch("world.scenes.interaction_services._broadcast_to_location") as broadcast:
             resolve_round(encounter, offense_check_fn=mock_check_fn)
 
         # Narrowed to the TOP-LEVEL encounter-outcome row specifically (its

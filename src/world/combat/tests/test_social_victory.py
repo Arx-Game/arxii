@@ -286,10 +286,9 @@ class SocialVictoryTests(TestCase):
         telnet_session.protocol_key = "telnet"
         character.msg = MagicMock()
 
-        with (
-            _patch_sessions({character.pk: [telnet_session]}),
-            self.captureOnCommitCallbacks(execute=True),
-        ):
+        # No captureOnCommitCallbacks: the line is sent synchronously (fix round 4),
+        # so it must already be there with no on-commit callback ever run.
+        with _patch_sessions({character.pk: [telnet_session]}):
             complete_encounter(self.enc, outcome=EncounterOutcome.VICTORY)
 
         # Plain-text calls are the ones with no "interaction" kwarg (#3807's
@@ -300,6 +299,60 @@ class SocialVictoryTests(TestCase):
             if call.args and "interaction" not in call.kwargs
         ]
         self.assertTrue(text_calls, character.msg.call_args_list)
-        text = " ".join(str(call.args[0]) for call in text_calls)
+        texts = [str(call.args[0]) for call in text_calls]
+        self.assertIn(_outcome_interaction(self.enc).content, texts)
+        text = " ".join(texts)
         self.assertIn("charmed", text)
         self.assertIn("calmed", text)
+
+    def _place_pc_with_session(self, protocol_key: str) -> tuple[object, object]:
+        from evennia.objects.models import ObjectDB
+
+        room = ObjectDB.objects.get(pk=self.enc.room_id)
+        character = self.pc.character_sheet.character
+        character.location = room
+        character.save()
+        session = MagicMock()
+        session.protocol_key = protocol_key
+        character.msg = MagicMock()
+        return character, session
+
+    def test_web_session_gets_one_outcome_push_before_the_aftermath_digest(self):  # fix round 4
+        """The OUTCOME push is synchronous, so it lands before the digest push.
+
+        complete_encounter pushes the aftermath digest immediately; an
+        on-commit-deferred OUTCOME push (fix round 2's routing) landed after it,
+        so the web reader saw the digest first. The on-commit callbacks are
+        executed here so a deferred push would still be recorded, just late.
+        """
+        a = CombatOpponentFactory(encounter=self.enc, name="Bandit")
+        self._win_over(a, self.charm)
+        character, web_session = self._place_pc_with_session("webclient/websocket")
+
+        with (
+            _patch_sessions({character.pk: [web_session]}),
+            self.captureOnCommitCallbacks(execute=True),
+        ):
+            complete_encounter(self.enc, outcome=EncounterOutcome.VICTORY)
+
+        outcome = _outcome_interaction(self.enc)
+        digest = Interaction.objects.get(
+            scene=self.enc.scene,
+            mode=InteractionMode.OUTCOME,
+            visibility=InteractionVisibility.PERCEIVED_ONLY,
+        )
+        pushed_ids = [
+            call.kwargs["interaction"][1]["id"]
+            for call in character.msg.call_args_list
+            if "interaction" in call.kwargs
+        ]
+        self.assertEqual(pushed_ids.count(outcome.pk), 1, pushed_ids)
+        self.assertIn(digest.pk, pushed_ids)
+        self.assertLess(pushed_ids.index(outcome.pk), pushed_ids.index(digest.pk), pushed_ids)
+        # A webclient session never also gets the OUTCOME line as plain text.
+        text_args = [
+            str(call.args[0])
+            for call in character.msg.call_args_list
+            if call.args and "interaction" not in call.kwargs
+        ]
+        self.assertNotIn(outcome.content, text_args)
