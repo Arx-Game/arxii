@@ -334,6 +334,29 @@ class RefusalsTest(SaveTestCase):
         self.assertTrue(Consequence.objects.filter(label="Fraying Failure").exists())
         self.assertFalse(Consequence.objects.filter(label="PLACEHOLDER edited").exists())
 
+    def test_a_table_that_shrank_since_the_page_loaded_is_refused(self) -> None:
+        data = self._values(self.fraying)
+        data[f"rows-{self._row_index(data, 'Fraying Failure')}-label"] = ["PLACEHOLDER edited"]
+        # The shared pool stops offering a row between this page's GET and its POST, so
+        # every posted row past it now names the wrong table row. Saved through the
+        # instance (a queryset update would leave the identity-mapped entry stale), and
+        # put back by a cleanup so the cached instance never outlives this test's rollback.
+        entry = ConsequencePoolEntry.objects.get(
+            pool=self.common, consequence__label="common Partial Success"
+        )
+        entry.is_excluded = True
+        entry.save(update_fields=["is_excluded"])
+
+        def _restore() -> None:
+            entry.is_excluded = False
+            entry.save(update_fields=["is_excluded"])
+
+        self.addCleanup(_restore)
+        resp = self._post(self.fraying, data)
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.context["forms"].rows.non_form_errors(), [TABLE_CHANGED_ERROR])
+        self.assertFalse(Consequence.objects.filter(label="PLACEHOLDER edited").exists())
+
     def test_a_bad_row_re_renders_with_errors(self) -> None:
         data = self._values(self.tearing)
         self._add_row(data, outcome_tier=self.ladder.outcomes["Failure"].pk, label="")
