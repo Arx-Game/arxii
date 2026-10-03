@@ -507,7 +507,9 @@ class WonOverSnapshot:
 
     ``opponents`` are the identity-map-shared rows, so a body deleted by cleanup
     later reads ``objectdb_id is None`` here too. Every dict is keyed by
-    ``CombatOpponent.pk`` (never ``objectdb_id``, which cleanup nulls).
+    ``CombatOpponent.pk`` (never ``objectdb_id``, which cleanup nulls). After
+    cleanup, ``refresh_won_over_holds`` swaps in the surviving bodies' live
+    ``instances``; ``designations`` and ``source_labels`` stay pre-cleanup.
     """
 
     opponents: list[CombatOpponent]

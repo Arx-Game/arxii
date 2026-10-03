@@ -18,7 +18,7 @@ from world.combat.factories import (
 from world.combat.serializers import ParticipantSerializer
 from world.combat.services import complete_encounter
 from world.combat.won_over import won_over_rows
-from world.conditions.constants import Allegiance
+from world.conditions.constants import Allegiance, DurationType
 from world.conditions.factories import ConditionInstanceFactory, ConditionTemplateFactory
 from world.magic.factories import TechniqueFactory
 from world.scenes.constants import InteractionMode, InteractionVisibility
@@ -37,6 +37,13 @@ class WonOverDigestTests(TestCase):
             name="Won-over digest charm",
             sets_allegiance=Allegiance.ALLY_OF_CASTER,
             allegiance_break_check_type=check,
+        )
+        cls.combat_charm = ConditionTemplateFactory(
+            name="Won-over digest fleeting charm",
+            sets_allegiance=Allegiance.ALLY_OF_CASTER,
+            allegiance_break_check_type=check,
+            default_duration_type=DurationType.UNTIL_END_OF_COMBAT,
+            is_visible_to_others=True,
         )
         cls.calm = ConditionTemplateFactory(
             name="Won-over digest calm",
@@ -98,6 +105,19 @@ class WonOverDigestTests(TestCase):
             target=self.calmed.objectdb,
             condition=self.calm,
             source_character=self.pc_b.character_sheet.character,
+        )
+
+        # A persistent (persona-backed) NPC under an UNTIL_END_OF_COMBAT charm:
+        # cleanup's end-of-combat sweep removes the hold, but the body survives.
+        self.fleeting = CombatOpponentFactory(
+            encounter=self.enc, name="Hired Blade", persona=PersonaFactory(name="Corvin")
+        )
+        self.fleeting.objectdb.location = room
+        self.fleeting.objectdb.save()
+        ConditionInstanceFactory(
+            target=self.fleeting.objectdb,
+            condition=self.combat_charm,
+            source_character=self.source,
         )
 
         for participant in (self.pc_a, self.pc_b):
@@ -239,3 +259,18 @@ class WonOverDigestTests(TestCase):
         rows = self._rows_by_opponent(self.pc_a.character_sheet)
 
         self.assertFalse(rows[self.named.pk].can_take_into_service)
+
+    def test_end_of_combat_hold_on_a_surviving_npc_offers_no_actions(self):
+        """Re-review: cleanup's end-of-combat sweep removed the hold after the
+        snapshot, so the surviving body's row must not offer what the server
+        would refuse."""
+        self.assertIsNotNone(self.fleeting.objectdb_id)
+        for digest in self.delivered_digests:
+            row = next(r for r in digest.won_over if r.opponent_id == self.fleeting.pk)
+            self.assertEqual(row.verb, "charmed")
+            self.assertTrue(row.present)
+            self.assertIsNone(row.condition)
+            self.assertFalse(row.can_bind)
+            self.assertFalse(row.can_take_into_service)
+            self.assertFalse(row.can_send_away)
+            self.assertFalse(row.can_settle)

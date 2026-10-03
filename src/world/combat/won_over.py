@@ -8,6 +8,7 @@ stored ``allegiance`` is never touched (D4).
 
 from __future__ import annotations
 
+from dataclasses import replace
 import logging
 from typing import TYPE_CHECKING
 
@@ -283,6 +284,30 @@ def won_over_snapshot(encounter: CombatEncounter) -> WonOverSnapshot:
     )
 
 
+def refresh_won_over_holds(
+    encounter: CombatEncounter, snapshot: WonOverSnapshot
+) -> WonOverSnapshot:
+    """The snapshot with each SURVIVING body's holds re-read as they stand now.
+
+    Called by ``complete_encounter`` after cleanup, once for every viewer (one
+    batched query). Cleanup's ``expire_end_of_combat_conditions`` may have removed
+    an UNTIL_END_OF_COMBAT hold from a persistent NPC since the snapshot; a row built
+    from the stale instance would show a badge and offer actions the server then
+    refuses. Name, verb and source label stay from the snapshot; a body cleanup
+    deleted keeps its pre-cleanup instances (its row is inert either way).
+    """
+    from world.npc_services.allegiance import allegiance_instances_for  # noqa: PLC0415
+
+    survivors = [o for o in snapshot.opponents if o.objectdb_id is not None]
+    by_target = allegiance_instances_for(
+        (o.objectdb_id for o in survivors), applied_since=encounter.created_at
+    )
+    instances = dict(snapshot.instances)
+    for opponent in survivors:
+        instances[opponent.pk] = by_target.get(opponent.objectdb_id, [])
+    return replace(snapshot, instances=instances)
+
+
 def won_over_rows(
     encounter: CombatEncounter,
     viewer: CharacterSheet,
@@ -297,10 +322,16 @@ def won_over_rows(
     gets its row; without one, a fresh snapshot is read now. A deleted body reads
     ``present=False`` with every action flag False and no condition badge (its
     instance no longer exists).
+
+    The badge and the action flags come from ``snapshot.instances``, which
+    ``refresh_won_over_holds`` re-reads for surviving bodies after cleanup (see
+    there). A surviving body whose hold is gone keeps its row, with no badge and
+    no actions.
     """
     from world.npc_services.allegiance import (  # noqa: PLC0415
         ALLEGIANCE_HOLD_KINDS,
         actor_holds_sway_present,
+        designating_instance,
         won_over_verb,
     )
 
@@ -313,18 +344,21 @@ def won_over_rows(
     rows: list[WonOverRow] = []
     for opponent in snapshot.opponents:
         instance = snapshot.designations[opponent.pk]
-        instances = snapshot.instances[opponent.pk]
-        body = opponent.objectdb if opponent.objectdb_id is not None else None
+        instances = snapshot.instances.get(opponent.pk, [])
+        live = designating_instance(instances)
+        # No live hold (body deleted, or the hold ended in cleanup): nothing to act on.
+        body = opponent.objectdb if opponent.objectdb_id is not None and live else None
 
-        present = body is not None and body.location is not None
         persona_id = opponent.persona_id
-        is_source = instance.source_character_id == viewer_char_id
+        present = opponent.objectdb_id is not None and opponent.objectdb.location is not None
+        current = live or instance
+        is_source = current.source_character_id == viewer_char_id
         charmer_is_viewer = (
-            is_source and instance.condition.sets_allegiance == Allegiance.ALLY_OF_CASTER
+            is_source and current.condition.sets_allegiance == Allegiance.ALLY_OF_CASTER
         )
         visible_condition = (
-            instance
-            if body is not None and (instance.condition.is_visible_to_others or is_source)
+            current
+            if body is not None and (current.condition.is_visible_to_others or is_source)
             else None
         )
 
@@ -338,8 +372,8 @@ def won_over_rows(
                 persona_id=persona_id,
                 present=present,
                 condition=visible_condition,
-                holds_until_settled=instance.condition.default_duration_type == DurationType.ROUNDS,
-                strength=instance.effective_severity,
+                holds_until_settled=current.condition.default_duration_type == DurationType.ROUNDS,
+                strength=current.effective_severity,
                 # Decision 19: the same bind-window predicate telnet's `companion
                 # promote` and `promote_summon_to_companion` consult (#4091 fix
                 # round 1) — a charm alone is not enough; the charmer must still
@@ -365,7 +399,7 @@ def won_over_rows(
                         viewer_char, body, kinds=ALLEGIANCE_HOLD_KINDS, instances=instances
                     )
                 ),
-                can_settle=persona_id is not None and present,
+                can_settle=body is not None and persona_id is not None and present,
             )
         )
     return rows

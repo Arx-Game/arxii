@@ -9899,6 +9899,10 @@ def complete_encounter(encounter: CombatEncounter, *, outcome: EncounterOutcome)
 
     won_over = won_over_snapshot(encounter)
     cleanup_completed_encounter(encounter)
+    # Survivors' holds as cleanup left them (an UNTIL_END_OF_COMBAT hold is gone).
+    from world.combat.won_over import refresh_won_over_holds  # noqa: PLC0415
+
+    won_over = refresh_won_over_holds(encounter, won_over)
     _hand_off_acute_peril_to_scene_round(encounter)
 
     from world.combat.aftermath import deliver_aftermath_digests  # noqa: PLC0415
