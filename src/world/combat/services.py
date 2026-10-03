@@ -787,9 +787,6 @@ class CombatTechniqueResolver:
                     # execute from (mirrors how damage_intensity_multiplier reaches
                     # compute_damage_budget above, in _profile_damage).
                     execute_missing_health_multiplier=profile.execute_missing_health_multiplier,
-                    # #4091 Decision 16: a PC's technique damage on a held opponent
-                    # rolls a break attempt against the hold.
-                    allegiance_break_striker=self.participant.character_sheet,
                 )
             )
             weapon_landed = weapon_landed or (profile.uses_equipped_weapon and weapon is not None)
@@ -6095,7 +6092,6 @@ def apply_damage_to_opponent(  # noqa: PLR0913
     source_sheet: CharacterSheet | None = None,
     skip_guardian_shield: bool = False,
     execute_missing_health_multiplier: Decimal = Decimal(0),
-    allegiance_break_striker: CharacterSheet | None = None,
 ) -> OpponentDamageResult:
     """Apply damage to an NPC opponent, accounting for soak, probing,
     and damage-type resistance.
@@ -6111,12 +6107,13 @@ def apply_damage_to_opponent(  # noqa: PLR0913
     (#2207) hook — the opponent's own DAMAGE_PRE_APPLY trigger band still
     runs. See :func:`_resolve_opponent_pre_apply`.
 
-    ``allegiance_break_striker`` (#4091, Decision 16): when set, a PC is choosing
-    to harm a (possibly charmed/turned) opponent, and a landing, non-defeating hit
-    rolls a break attempt against the opponent's allegiance hold (if any) via
-    :func:`world.npc_services.allegiance_outcomes.attempt_allegiance_break`. Only a
-    PC's own chosen strike passes this — NPC-vs-NPC, reflected, rampart, and duel-
-    mirror damage never do.
+    Allegiance-break rolls (#4091, Decision 16) do NOT live here — they used to,
+    once per call, which meant a multi-profile technique or a combo rider rolled
+    (and narrated a "holds" line) several times for one blow. They are rolled
+    once per opponent per PC action, after all of that action's damage (every
+    profile plus any combo rider) is known — see
+    :func:`_attempt_allegiance_breaks_for_action`, called from
+    :func:`_resolve_pc_action`.
 
     ``execute_missing_health_multiplier`` (#2643): the resolving technique damage
     profile's ``execute_missing_health_multiplier`` (default 0 = no-op, matching every
@@ -6194,15 +6191,6 @@ def apply_damage_to_opponent(  # noqa: PLR0913
         _break_engagement_lock_on_defeat(opponent)
 
     opponent.save(update_fields=["health", "probing_current", "status"])
-
-    if allegiance_break_striker is not None and damage_through > 0 and not defeated:
-        from world.npc_services.allegiance_outcomes import (  # noqa: PLC0415
-            attempt_allegiance_break,
-        )
-
-        attempt_allegiance_break(
-            striker=allegiance_break_striker, opponent=opponent, damage_dealt=damage_through
-        )
 
     if defeated:
         _emit_companion_fall(opponent)
@@ -8816,12 +8804,49 @@ def _apply_combo_rider(
         combo.bonus_damage,
         bypass_soak=combo.bypass_soak,
         source_sheet=participant.character_sheet,
-        # #4091 Decision 16: a PC's combo-rider damage on a held opponent rolls a
-        # break attempt against the hold too.
-        allegiance_break_striker=participant.character_sheet,
     )
     outcome.combo_used = combo
     outcome.damage_results.append(dmg_result)
+
+
+def _attempt_allegiance_breaks_for_action(
+    participant: CombatParticipant, outcome: ActionOutcome
+) -> None:
+    """#4091 Decision 16, fix round 1: one break-attempt roll per opponent per PC
+    action, not per damage call.
+
+    ``outcome.damage_results`` at the point this is called (from
+    ``_resolve_pc_action``, right after the technique pipeline AND any combo
+    rider have both run, before the wind-up interception rider) holds every
+    ``OpponentDamageResult`` this single PC action produced — every damage
+    profile against every target, plus the combo rider's own hit. Grouping by
+    ``opponent_id`` and summing ``damage_dealt`` gives the blow's TOTAL pressure
+    against each opponent it actually harmed, so a multi-profile technique or a
+    combo-upgraded hit rolls exactly once per opponent, against the combined
+    damage -- never once per profile (previously inside ``apply_damage_to_opponent``
+    itself, which fired, and narrated a "holds" line, on every single profile/
+    rider call).
+
+    Only a PC's own chosen strike reaches here (this function is called only
+    from ``_resolve_pc_action``) -- NPC-vs-NPC (``_resolve_npc_action_on_opponent_
+    target``), reflected, rampart, and duel-mirror damage never do.
+    """
+    from world.npc_services.allegiance_outcomes import attempt_allegiance_break  # noqa: PLC0415
+
+    totals: dict[int, int] = {}
+    for result in outcome.damage_results:
+        opponent_id = result.opponent_id
+        if opponent_id is None or result.damage_dealt <= 0:
+            continue
+        totals[opponent_id] = totals.get(opponent_id, 0) + result.damage_dealt
+
+    for opponent_id, total_damage in totals.items():
+        opponent = CombatOpponent.objects.filter(pk=opponent_id).first()
+        if opponent is None or opponent.status == OpponentStatus.DEFEATED:
+            continue
+        attempt_allegiance_break(
+            striker=participant.character_sheet, opponent=opponent, damage_dealt=total_damage
+        )
 
 
 def _maybe_record_npc_regard_on_defeat(
@@ -8975,6 +9000,12 @@ def _resolve_pc_action(
     # action is combo-upgraded and the target is alive.
     if action.combo_upgrade and target is not None:
         _apply_combo_rider(participant, action, target, outcome)
+
+    # #4091 Decision 16: one break-attempt roll per opponent this action
+    # harmed, against the combined pipeline + combo-rider damage. Must run
+    # after both of the above and before the wind-up rider below (which is
+    # not part of this blow's own pressure).
+    _attempt_allegiance_breaks_for_action(participant, outcome)
 
     # Wind-up interception rider (#2637 design 4): a landing hit on a
     # winding-up opponent downgrades its telegraphed attack. No new button —

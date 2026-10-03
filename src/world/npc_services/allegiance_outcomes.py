@@ -170,6 +170,7 @@ def attempt_allegiance_break(
     elif opponent.objectdb.location is not None and instance.condition.is_visible_to_others:
         narrate_room_outcome(
             opponent.objectdb.location,
+            # PLACEHOLDER player prose (#4091).
             f"The {instance.condition.name} on {opponent.name} holds through the blow.",
         )
     return AllegianceBreakResult(
