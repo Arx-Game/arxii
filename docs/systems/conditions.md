@@ -80,8 +80,14 @@ condition's `observer_description`, same as any other condition's, surfaces on t
 (`CharacterState.get_display_allegiance`, #4091) alongside the hold's stage, source and
 time-to-fade, so filling it in changes what a bystander sees of a charmed/turned/calmed NPC's
 Status line, not only its own sheet. `CHARM_CONDITION_NAME`/
-`CALM_CONDITION_NAME` remain as historical-snapshot literals (the data migration, and the
-out-of-scope parley Calm producer); no runtime code reads them to derive allegiance.
+`CALM_CONDITION_NAME` remain as historical-snapshot literals (the data migration and the
+sample-content seeder); no runtime code reads them. Parley's decisive calm picks the
+`sets_allegiance = neutral` template with the lowest pk (REQUIRED dashboard row
+`allegiance-calm-condition`). A hold whose condition has no `allegiance_break_check_type`
+(missing content; `clean()` blocks it in admin) skips the break roll and logs one warning: the
+hold persists rather than the round erroring, and the REQUIRED `allegiance-break-check` row
+names the condition. Batched allegiance reads (`allegiance_instances_for`) ignore a hold past
+its `expires_at` before the lapse sweep removes it.
 
 ### Condition Effects (Abstract base: `ConditionOrStageEffect`)
 
