@@ -12,6 +12,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from django.contrib import admin
 from django.http import HttpRequest, HttpResponse
 from django.shortcuts import render
 
@@ -55,7 +56,11 @@ def _series_row(series: WeeklySeries) -> dict[str, Any]:
 @superuser_required
 def ops_dashboard(request: HttpRequest) -> HttpResponse:
     """Game Ops dashboard skeleton: four HTMX-loaded panels."""
-    context = {"title": "Game Ops"}
+    context = {
+        **admin.site.each_context(request),
+        "is_nav_sidebar_enabled": False,
+        "title": "Game Ops",
+    }
     return render(request, "admin/tuning/ops.html", context)
 
 

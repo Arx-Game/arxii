@@ -571,6 +571,11 @@ class SoulfrayBuilderStylingTest(SoulfrayPageTestCase):
             r'\.sf-table input\[name\$="-character_loss"\] \{ accent-color: var\(--error-fg\); \}',
         )
 
+    def test_the_effect_toggle_sits_on_its_own_line(self) -> None:
+        """F9: "+ effect" is a block under the effect list, never run on after "no effect"."""
+        css = reachable_css(self._body())
+        self.assertRegex(css, r"\.sf-effect-toggle \{\s*display: block;")
+
     def test_each_effect_editor_is_a_full_width_row_its_toggle_opens(self) -> None:
         """F8: the editor sits in a colspan row under its consequence, never in the
         narrow Effects cell, so opening it cannot scroll the table sideways."""
