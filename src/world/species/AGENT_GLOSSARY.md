@@ -87,6 +87,22 @@ Domain-local vocabulary for `world.species`. Root terms live in
   (30-69), fluent (70+). `FLUENT_GRANT_VALUE=70` is what CG/universal grants
   set. Trained like any other trait via `TrainLanguageAction`'s weekly
   teacher/self-study DP sessions; LANGUAGE-typed traits are rust-exempt.
+  Trained fluency is what gates speaking: the speak gate, the speaker's own
+  band, teaching, and self-study all read fluency, never comprehension.
+- **Comprehension**: fluency plus any active-condition bonus toward that
+  language, listener-side only (#4090: `language_services.comprehension_value`
+  /`comprehension_values`). A condition's `ConditionModifierEffect` toward the
+  language trait's `ModifierTarget` counts; a `CharacterModifier` row from a
+  distinction or equipment does not. Recomputed live like the rest of
+  comprehension: the bonus reads clear while the condition lasts and garbles
+  again once it ends. Garbling (see below) applies to spoken text only;
+  nothing about a language is ever masked outside dialogue rendering.
+- **Language breakthrough**: the XP spend
+  (`language_progression.purchase_language_breakthrough`) that clears an
+  authored `TraitRatingUnlock` a language's weekly training is parked one
+  rating below (#4090). Mirrors a skill's XP-boundary breakthrough, but a
+  language parks ONLY where staff authored a lock row, never at every x9
+  boundary the way a skill does.
 - **Garble** — the per-observer comprehension rendering of speech in a
   language the listener doesn't fully know: `language_services.garble_text`
   keeps a fraction of words (`BAND_KEEP_RATIO` by `min(speaker_band,

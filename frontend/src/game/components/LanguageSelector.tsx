@@ -11,6 +11,11 @@
  * the same `send` path `CommandInput` uses for command submission — there is
  * no REST dispatch for this. `SetLanguageAction`/`CmdSpeak` own the actual
  * mutation server-side; this component just fires the command and refetches.
+ *
+ * Lists TRAINED languages only (`fluency > 0`, #4090): a condition can raise
+ * what a character understands but never lets them speak a tongue they were
+ * never taught, so a condition-only row is filtered out here the same way it
+ * is on the sheet's "Speaks" line.
  */
 import {
   DropdownMenu,
@@ -33,7 +38,8 @@ interface LanguageSelectorProps {
 export function LanguageSelector({ character }: LanguageSelectorProps) {
   const { send } = useGameSocket();
   const { data: languages } = useMyLanguages();
-  const rows = languages ?? [];
+  // Trained tongues only: a condition grants understanding, never speech (#4090).
+  const rows = (languages ?? []).filter((row) => row.fluency > 0);
   const currentLabel = rows.find((row) => row.is_current)?.name ?? UNIVERSAL_LABEL;
 
   const handleSelect = (name: string | null) => {

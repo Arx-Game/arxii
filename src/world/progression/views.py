@@ -76,6 +76,7 @@ from world.progression.services.nominations import nominations_by_account
 from world.progression.services.spends import get_available_unlocks_for_character
 from world.roster.models import RosterEntry
 from world.skills.services import skills_at_boundary
+from world.species.language_progression import languages_at_lock
 from world.stories.pagination import StandardResultsSetPagination
 
 # Default and maximum transaction limit for pagination
@@ -561,7 +562,8 @@ class UnlockTypeFilterBackend(BaseFilterBackend):
 class ProgressionUnlockViewSet(viewsets.GenericViewSet):
     """Unlock shop: list available unlocks and purchase them with XP.
 
-    GET /api/progression/unlocks/ — list class-level and thread XP-lock items.
+    GET /api/progression/unlocks/ — list class-level, thread XP-lock, skill-breakthrough,
+    and language-breakthrough items.
     POST /api/progression/unlocks/purchase/ — buy an unlock via PurchaseUnlockAction.
     """
 
@@ -604,6 +606,7 @@ class ProgressionUnlockViewSet(viewsets.GenericViewSet):
                     "thread_target_kind": None,
                     "dev_points_to_boundary": None,
                     "skill_id": None,
+                    "language_id": None,
                 },
             )
 
@@ -631,6 +634,7 @@ class ProgressionUnlockViewSet(viewsets.GenericViewSet):
                     "thread_target_kind": thread.target_kind,
                     "dev_points_to_boundary": prospect.dev_points_to_boundary,
                     "skill_id": None,
+                    "language_id": None,
                 },
             )
 
@@ -656,6 +660,34 @@ class ProgressionUnlockViewSet(viewsets.GenericViewSet):
                     "thread_target_kind": None,
                     "dev_points_to_boundary": None,
                     "skill_id": skill.pk,
+                    "language_id": None,
+                },
+            )
+
+        for language_prospect in languages_at_lock(sheet):
+            language = language_prospect.language
+            items.append(
+                {
+                    "unlock_type": "language_breakthrough",
+                    "display_name": (
+                        f"{language.name} Breakthrough to {language_prospect.next_rating}"
+                    ),
+                    "xp_cost": language_prospect.xp_cost,
+                    "requirements_met": True,
+                    "locked_reason": None,
+                    "class_level_unlock_id": None,
+                    "class_name": None,
+                    "target_level": None,
+                    "thread_id": None,
+                    "boundary_level": None,
+                    "thread_name": None,
+                    "thread_level": None,
+                    "thread_resonance_id": None,
+                    "thread_resonance_name": None,
+                    "thread_target_kind": None,
+                    "dev_points_to_boundary": None,
+                    "skill_id": None,
+                    "language_id": language.pk,
                 },
             )
 
@@ -682,6 +714,8 @@ class ProgressionUnlockViewSet(viewsets.GenericViewSet):
             action_kwargs["class_level_unlock_id"] = data["class_level_unlock_id"]
         elif data["unlock_type"] == PurchaseUnlockSerializer.UNLOCK_TYPE_SKILL_BREAKTHROUGH:
             action_kwargs["skill_id"] = data["skill_id"]
+        elif data["unlock_type"] == PurchaseUnlockSerializer.UNLOCK_TYPE_LANGUAGE_BREAKTHROUGH:
+            action_kwargs["language_id"] = data["language_id"]
         else:
             action_kwargs["thread_id"] = data["thread_id"]
             action_kwargs["boundary_level"] = data["boundary_level"]

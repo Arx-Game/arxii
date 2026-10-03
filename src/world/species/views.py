@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from django.db.models import Q
 from drf_spectacular.utils import extend_schema
 from rest_framework import viewsets
 from rest_framework.permissions import IsAuthenticated
@@ -40,7 +41,9 @@ class MyLanguagesViewSet(viewsets.ViewSet):
     """Read-only list of the requester's own active character's languages (#2993).
 
     Self-scoped only — no ``character`` query parameter, unlike the item-first
-    visible-worn endpoints. Rows are computed by joining ``Language`` against
+    visible-worn endpoints. Rows join trained fluency with active-condition
+    bonuses (#4090, ``condition_language_bonuses``) — a condition-only language
+    appears while the condition lasts. Computed by joining ``Language`` against
     the character's ``CharacterTraitValue`` fluency (one batched query, not
     per-language lookups) and ``CharacterSheet.current_language``.
 
@@ -61,30 +64,45 @@ class MyLanguagesViewSet(viewsets.ViewSet):
         if sheet is None:
             return Response([])
 
+        from world.species.language_services import condition_language_bonuses  # noqa: PLC0415
+
+        bonuses = condition_language_bonuses(sheet)
         languages = list(
-            Language.objects.filter(trait__character_values__character=sheet)
+            Language.objects.filter(
+                Q(trait__character_values__character=sheet) | Q(pk__in=list(bonuses))
+            )
             .distinct()
             .order_by("name")
         )
         if not languages:
             return Response([])
 
-        trait_ids = [lang.trait_id for lang in languages]
+        trait_ids = [lang.trait_id for lang in languages if lang.trait_id is not None]
         fluency_by_trait = dict(
             CharacterTraitValue.objects.filter(character=sheet, trait_id__in=trait_ids).values_list(
                 "trait_id", "value"
             )
         )
 
-        rows = [
-            MyLanguageRow(
-                language_id=lang.pk,
-                name=lang.name,
-                fluency=fluency_by_trait.get(lang.trait_id, 0),
-                band=fluency_band(fluency_by_trait.get(lang.trait_id, 0)).value,
-                is_current=lang.pk == sheet.current_language_id,
+        rows: list[MyLanguageRow] = []
+        for lang in languages:
+            trained = fluency_by_trait.get(lang.trait_id, 0)
+            bonus = bonuses.get(lang.pk)
+            effective = max(0, trained + bonus.total) if bonus else trained
+            # A trained row always shows; a condition-only row only while its bonus is positive.
+            if lang.trait_id not in fluency_by_trait and effective <= 0:
+                continue
+            rows.append(
+                MyLanguageRow(
+                    language_id=lang.pk,
+                    name=lang.name,
+                    fluency=trained,
+                    band=fluency_band(trained).value,
+                    is_current=lang.pk == sheet.current_language_id,
+                    effective_fluency=effective,
+                    effective_band=fluency_band(effective).value,
+                    temporary_sources=bonus.sources if bonus else (),
+                )
             )
-            for lang in languages
-        ]
         serializer = MyLanguageSerializer(rows, many=True)
         return Response(serializer.data)

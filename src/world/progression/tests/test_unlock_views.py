@@ -26,6 +26,8 @@ from world.progression.models import (
 from world.roster.factories import RosterEntryFactory, RosterTenureFactory
 from world.roster.services.selection import set_selected_entry
 from world.skills.factories import CharacterSkillValueFactory, SkillFactory
+from world.species.factories import LanguageFactory
+from world.traits.models import CharacterTraitValue, Trait, TraitCategory, TraitType
 
 
 class UnlockShopViewTests(TestCase):
@@ -308,3 +310,27 @@ class UnlockShopViewTests(TestCase):
         )
 
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_list_includes_language_breakthrough_item(self):
+        """GET includes a language_breakthrough item for a gated language (#4090)."""
+        trait = Trait.objects.create(
+            name="ViewListTongue", trait_type=TraitType.LANGUAGE, category=TraitCategory.GENERAL
+        )
+        language = LanguageFactory(name="ViewListTongue", trait=trait)
+        TraitRatingUnlock.objects.create(trait=trait, target_rating=30)
+        CharacterTraitValue.objects.create(character=self.sheet, trait=trait, value=29)
+
+        response = self.client.get("/api/progression/unlocks/?unlock_type=language_breakthrough")
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        results = response.data["results"]
+        self.assertEqual(len(results), 1)
+        item = results[0]
+        self.assertEqual(item["language_id"], language.pk)
+        self.assertEqual(item["display_name"], f"{language.name} Breakthrough to 30")
+        self.assertTrue(item["requirements_met"])
+
+        unfiltered = self.client.get("/api/progression/unlocks/")
+        for other_item in unfiltered.data["results"]:
+            if other_item["unlock_type"] != "language_breakthrough":
+                self.assertIsNone(other_item["language_id"])

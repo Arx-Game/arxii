@@ -152,9 +152,15 @@ export function CharacterSheetPage() {
                 isMyCharacter={isMyCharacter}
                 rumor={null}
                 languages={
-                  isActiveCharacter && myLanguages?.length
-                    ? myLanguages.map((row) => row.name).join(', ')
-                    : null
+                  // Trained languages only (#4090): a condition can raise
+                  // comprehension of a tongue the character never speaks, so
+                  // "Speaks" stays scoped to fluency > 0, same as the picker.
+                  (() => {
+                    const spoken = (myLanguages ?? []).filter((row) => row.fluency > 0);
+                    return isActiveCharacter && spoken.length
+                      ? spoken.map((row) => row.name).join(', ')
+                      : null;
+                  })()
                 }
               />
             )}

@@ -111,7 +111,7 @@ from world.progression.types import (
 | Model | Purpose | Key Fields |
 |-------|---------|------------|
 | `ClassLevelUnlock` | Unlocking a new level in a character class | `character_class`, `target_level` |
-| `TraitRatingUnlock` | Unlocking a major trait rating threshold. Wired for skill XP boundaries via `purchase_skill_breakthrough` (`world.skills.services`, #2115) — `trait` resolves to `Skill.trait`, `target_rating` to the skill's next rating (20/30/40/50) | `trait`, `target_rating` (divisible by 10) |
+| `TraitRatingUnlock` | Unlocking a major trait rating threshold. Wired for skill XP boundaries via `purchase_skill_breakthrough` (`world.skills.services`, #2115), where `trait` resolves to `Skill.trait` and `target_rating` to the skill's next rating (20/30/40/50); and for language XP locks via `purchase_language_breakthrough` (`world.species.language_progression`, #4090), where `trait` resolves to `Language.trait` and `target_rating` to the next rating a language's weekly training parks one below. A language parks ONLY where staff authored a row here, unlike a skill, which parks at every x9 boundary regardless of authoring | `trait`, `target_rating` (divisible by 10) |
 | `CharacterUnlock` | Records what class levels a character has unlocked | `character`, `character_class`, `target_level`, `unlocked_date`, `xp_spent` |
 
 ### Requirements (Abstract Hierarchy)
@@ -296,6 +296,14 @@ level-up in the call, `source=DEVELOPMENT_LEVEL_UP`) — the durable record that
 no `CharacterTraitChange` row. See `docs/systems/INDEX.md`'s Traits entry for the full
 `CharacterTraitChange` shape and its other writers (CG finalize, maturation).
 
+**Language XP locks (#4090).** For a LANGUAGE-typed trait only, `award_points` stops
+leveling one rating below an authored `TraitRatingUnlock` and lets surplus `total_earned`
+dissipate instead of banking it, the same ephemerality skills follow at their XP
+boundaries; see species.md's "Language XP locks and breakthroughs" section.
+`purchase_language_breakthrough` (`world.species.language_progression`) is the
+counterpart purchase, writing its own `CharacterTraitChange` with
+`source=TraitChangeSource.XP_BREAKTHROUGH` when it clears the lock.
+
 **GM story-reward stat raise (#3055 slice 1c).** `world.progression.services.awards
 .award_stat_raise(sheet, trait, *, granting_tenure)` is the pure-fiat counterpart to
 `spend_level_stat_point` (`services/stat_points.py`): same cap enforcement
@@ -442,6 +450,7 @@ Raises `InsufficientXPError` (carrying `required`/`available`, so a caller can p
 its own refusal) or `NoAccountForCharacterError` — both from
 `world.progression.exceptions`, both carrying `user_message`. Current callers:
 `spend_xp_on_unlock` (class levels), `world.skills.services.purchase_skill_breakthrough`,
+`world.species.language_progression.purchase_language_breakthrough` (#4090),
 `world.magic.services.gift_acquisition.spend_xp_on_gift_unlock`,
 `world.magic.services.threads.accept_thread_weaving_unlock`, and
 `world.distinctions.services.approve_sheet_update_request`.
@@ -717,10 +726,10 @@ and the panel a player reads can never disagree.
 ### Unlock Shop
 
 - `GET /api/progression/unlocks/` — List purchasable unlocks for the played character; returns a paginated wrapper (`{ count, next, previous, page_size, num_pages, current_page, results: [...] }`)
-  - Items are discriminated by `unlock_type`: `class_level` (authored `ClassLevelUnlock`), `thread_xp_lock` (next `ThreadXPLockedLevel` boundary), or `skill_breakthrough` (a skill parked at an XP boundary, via `world.skills.services.skills_at_boundary`, #2115) — the `skill_id` field is populated for that variant; `requirements_met=False`/`locked_reason="Not yet authored"` when no `TraitRatingUnlock` exists yet for that boundary
+  - Items are discriminated by `unlock_type`: `class_level` (authored `ClassLevelUnlock`), `thread_xp_lock` (next `ThreadXPLockedLevel` boundary), `skill_breakthrough` (a skill parked at an XP boundary, via `world.skills.services.skills_at_boundary`, #2115, with the `skill_id` field populated for that variant), or `language_breakthrough` (a language parked at an authored XP lock, via `world.species.language_progression.languages_at_lock`, #4090, with the `language_id` field populated for that variant); `requirements_met=False`/`locked_reason="Not yet authored"` when no `TraitRatingUnlock` exists yet for that boundary
   - Query parameter `unlock_type` filters the list to a single variant
   - Requires a played character (set by the Evennia session / test client)
-- `POST /api/progression/unlocks/purchase/` — Purchase an unlock with XP; body `{ unlock_type, class_level_unlock_id }`, `{ unlock_type, thread_id, boundary_level }`, or `{ unlock_type: "skill_breakthrough", skill_id }`; dispatches `PurchaseUnlockAction` (`registry_key="purchase_unlock"`) and returns the action result on success
+- `POST /api/progression/unlocks/purchase/` — Purchase an unlock with XP; body `{ unlock_type, class_level_unlock_id }`, `{ unlock_type, thread_id, boundary_level }`, `{ unlock_type: "skill_breakthrough", skill_id }`, or `{ unlock_type: "language_breakthrough", language_id }` (#4090); dispatches `PurchaseUnlockAction` (`registry_key="purchase_unlock"`) and returns the action result on success. Telnet: `progression unlock language=<id>` (`CmdProgressionUnlock`, `src/commands/progression.py`)
 
 **Web surface (#3045):** the character-sheet "Advancement" tab's Breakthroughs and Class
 Unlocks cards (`frontend/src/progression/components/advancement/`) are thin readers/writers
@@ -871,19 +880,22 @@ this does not preempt the NPC-trainer check-composition design question (#2740/#
 ### `progression` — Browse/purchase XP unlocks
 
 ```
-progression unlocks              — list class-level, thread XP-lock, and skill-breakthrough
-                                    unlocks
+progression unlocks              — list class-level, thread XP-lock, skill-breakthrough, and
+                                    language-breakthrough unlocks
 progression unlock class=<id>    — purchase a class-level unlock
 progression unlock thread=<id> level=<n>
                                  — purchase a thread XP-lock boundary
 progression unlock skill=<id>    — purchase a skill's XP-boundary breakthrough (#2115)
+progression unlock language=<id> - purchase a language's XP-lock breakthrough (#4090)
 ```
 
 `progression unlocks` reads the same service functions as `GET /api/progression/unlocks/`.
 `progression unlock` dispatches `PurchaseUnlockAction`
 (`registry_key="purchase_unlock"`). See `docs/systems/skills.md`'s "XP Boundaries" section
 for the skill-breakthrough purchase's mechanics (rust payoff, ephemeral dev points,
-`purchase_skill_breakthrough`).
+`purchase_skill_breakthrough`); see species.md's "Language Mechanics" section ("Language
+XP locks and breakthroughs") for the language-breakthrough purchase's mechanics
+(`purchase_language_breakthrough`, #4090).
 
 `progression unlocks` also prepends the caller's **XP balance** (`ExperiencePointsData
 .current_available`) and last-5 `XPTransaction` rows (#2122) — the only telnet display of

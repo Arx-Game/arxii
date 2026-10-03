@@ -1,6 +1,6 @@
 /**
- * BreakthroughsCard tests (#3045). Mocks `@/progression/queries` (no msw) —
- * mirrors MotifStylePanel.test.tsx's idiom.
+ * BreakthroughsCard tests (#3045, #4090). Mocks `@/progression/queries` (no
+ * msw) — mirrors MotifStylePanel.test.tsx's idiom.
  */
 
 import { screen } from '@testing-library/react';
@@ -36,6 +36,7 @@ const authoredItem: ProgressionUnlockItem = {
   thread_target_kind: null,
   dev_points_to_boundary: null,
   skill_id: 5,
+  language_id: null,
 };
 
 const unauthoredItem = {
@@ -47,19 +48,37 @@ const unauthoredItem = {
   skill_id: 9,
 };
 
+const languageItem: ProgressionUnlockItem = {
+  ...authoredItem,
+  unlock_type: 'language_breakthrough',
+  display_name: 'Tongue A Breakthrough to 30',
+  xp_cost: 60,
+  skill_id: null,
+  language_id: 4,
+};
+
 function setupMocks(options?: {
   items?: (typeof authoredItem)[];
+  languageItems?: ProgressionUnlockItem[];
   isLoading?: boolean;
   isError?: boolean;
   purchaseOverrides?: { isPending?: boolean; variables?: unknown };
 }) {
   const mutate = vi.fn();
 
-  vi.mocked(progressionQueries.useProgressionUnlocksQuery).mockReturnValue({
-    data: { results: options?.items ?? [authoredItem] },
-    isLoading: options?.isLoading ?? false,
-    error: options?.isError ? new Error('failed') : null,
-  } as unknown as ReturnType<typeof useProgressionUnlocksQuery>);
+  vi.mocked(progressionQueries.useProgressionUnlocksQuery).mockImplementation(
+    (unlockType) =>
+      ({
+        data: {
+          results:
+            unlockType === 'language_breakthrough'
+              ? (options?.languageItems ?? [])
+              : (options?.items ?? [authoredItem]),
+        },
+        isLoading: options?.isLoading ?? false,
+        error: options?.isError ? new Error('failed') : null,
+      }) as unknown as ReturnType<typeof useProgressionUnlocksQuery>
+  );
 
   vi.mocked(progressionQueries.usePurchaseUnlockMutation).mockReturnValue({
     mutate,
@@ -75,11 +94,14 @@ describe('BreakthroughsCard', () => {
     vi.clearAllMocks();
   });
 
-  it('queries the skill_breakthrough unlock type', () => {
+  it('queries both breakthrough unlock types', () => {
     setupMocks();
     renderWithProviders(<BreakthroughsCard />);
     expect(progressionQueries.useProgressionUnlocksQuery).toHaveBeenCalledWith(
       'skill_breakthrough'
+    );
+    expect(progressionQueries.useProgressionUnlocksQuery).toHaveBeenCalledWith(
+      'language_breakthrough'
     );
   });
 
@@ -92,7 +114,7 @@ describe('BreakthroughsCard', () => {
   });
 
   it('shows the empty state when nothing is parked at a boundary', () => {
-    setupMocks({ items: [] });
+    setupMocks({ items: [], languageItems: [] });
     renderWithProviders(<BreakthroughsCard />);
     expect(screen.getByTestId('breakthroughs-empty')).toBeInTheDocument();
   });
@@ -121,5 +143,16 @@ describe('BreakthroughsCard', () => {
     renderWithProviders(<BreakthroughsCard />);
     expect(screen.getByTestId('unlock-cost-unset')).toHaveTextContent('Cost unset');
     expect(screen.queryByText('0 XP')).not.toBeInTheDocument();
+  });
+
+  it('lists a language breakthrough and buys it with language_id', async () => {
+    const { mutate } = setupMocks({ items: [], languageItems: [languageItem] });
+    renderWithProviders(<BreakthroughsCard />);
+    expect(screen.getByText('Tongue A Breakthrough to 30')).toBeInTheDocument();
+    await userEvent.click(screen.getByTestId('unlock-buy-button'));
+    expect(mutate).toHaveBeenCalledWith(
+      { unlock_type: 'language_breakthrough', language_id: 4 },
+      expect.anything()
+    );
   });
 });

@@ -38,6 +38,7 @@ from world.magic.factories import (
     UltimateTechniqueFactory,
 )
 from world.magic.models import CharacterGift, CharacterTechnique, Thread
+from world.mechanics.models import ModifierTarget
 from world.narrative.models import NarrativeMessage
 from world.progression.models import DevelopmentPoints, ExperiencePointsData, MaturationStatCap
 from world.progression.types import ProgressionReason
@@ -49,6 +50,11 @@ from world.scenes.models import Interaction
 from world.scenes.narrator import NARRATOR_PERSONA_NAME
 from world.scenes.services import active_persona_for_sheet
 from world.societies.factories import OrganizationFactory
+from world.species.factories import (
+    make_language_with_target,
+    make_understanding_condition,
+)
+from world.species.language_services import comprehension_value
 from world.traits.constants import STAT_DISPLAY_DIVISOR
 from world.traits.factories import CheckSystemSetupFactory, TraitFactory
 from world.traits.models import (
@@ -1244,3 +1250,24 @@ class GMRemoveConditionActionJourneyTests(GMAdjudicationActionsTestBase):
 
         final_list = GMListConditionsAction().run(actor=self.gm_actor, target=self.target)
         self.assertEqual(final_list.data["conditions"], [])
+
+
+class GMApplyUnderstandingConditionTests(GMAdjudicationActionsTestBase):
+    """#4090: a GM-applied understanding condition raises the target's comprehension."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        ModifierTarget.clear_trait_cache()
+        self.language, self.fluency_target = make_language_with_target("GMCompTongue")
+        self.condition = make_understanding_condition(
+            "Placeholder GM Understanding", self.fluency_target
+        )
+
+    def test_gm_applied_condition_raises_comprehension(self) -> None:
+        sheet = self.target.sheet_data
+        self.assertEqual(comprehension_value(sheet, self.language), 0)
+        result = GMApplyConditionAction().run(
+            actor=self.gm_actor, target=self.target, condition_ref=self.condition.name, severity=4
+        )
+        self.assertTrue(result.success, result.message)
+        self.assertEqual(comprehension_value(sheet, self.language), 80)

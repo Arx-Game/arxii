@@ -220,9 +220,10 @@ class ManageTrainingAction(Action):
 
 @dataclass
 class PurchaseUnlockAction(Action):
-    """Purchase a class-level, thread XP-lock, or skill-breakthrough unlock with XP.
+    """Purchase a class-level, thread XP-lock, skill-breakthrough, or language-breakthrough
+    unlock with XP.
 
-    All three unlock types spend account XP through their respective service
+    All four unlock types spend account XP through their respective service
     functions; this action is a thin action.run() wrapper around them.
     """
 
@@ -236,6 +237,7 @@ class PurchaseUnlockAction(Action):
     _UNLOCK_TYPE_CLASS_LEVEL = "class_level"
     _UNLOCK_TYPE_THREAD_XP_LOCK = "thread_xp_lock"
     _UNLOCK_TYPE_SKILL_BREAKTHROUGH = "skill_breakthrough"
+    _UNLOCK_TYPE_LANGUAGE_BREAKTHROUGH = "language_breakthrough"
 
     def execute(
         self,
@@ -253,6 +255,7 @@ class PurchaseUnlockAction(Action):
         from world.magic.types.alterations import AlterationGateError  # noqa: PLC0415
         from world.progression.models import ClassLevelUnlock  # noqa: PLC0415
         from world.skills.models import Skill  # noqa: PLC0415
+        from world.species.models import Language  # noqa: PLC0415
 
         unlock_type = kwargs.get("unlock_type")
 
@@ -263,10 +266,13 @@ class PurchaseUnlockAction(Action):
                 return self._purchase_thread_xp_lock(actor, kwargs)
             if unlock_type == self._UNLOCK_TYPE_SKILL_BREAKTHROUGH:
                 return self._purchase_skill_breakthrough(actor, kwargs)
+            if unlock_type == self._UNLOCK_TYPE_LANGUAGE_BREAKTHROUGH:
+                return self._purchase_language_breakthrough(actor, kwargs)
         except (
             ClassLevelUnlock.DoesNotExist,
             Thread.DoesNotExist,
             Skill.DoesNotExist,
+            Language.DoesNotExist,
             CharacterSheet.DoesNotExist,
             AlterationGateError,
             InvalidImbueAmount,
@@ -286,8 +292,9 @@ class PurchaseUnlockAction(Action):
             message=(
                 "Invalid or missing unlock_type. "
                 f"Expected '{self._UNLOCK_TYPE_CLASS_LEVEL}', "
-                f"'{self._UNLOCK_TYPE_THREAD_XP_LOCK}', or "
-                f"'{self._UNLOCK_TYPE_SKILL_BREAKTHROUGH}'."
+                f"'{self._UNLOCK_TYPE_THREAD_XP_LOCK}', "
+                f"'{self._UNLOCK_TYPE_SKILL_BREAKTHROUGH}', or "
+                f"'{self._UNLOCK_TYPE_LANGUAGE_BREAKTHROUGH}'."
             ),
         )
 
@@ -371,5 +378,32 @@ class PurchaseUnlockAction(Action):
             data={
                 "unlock_type": self._UNLOCK_TYPE_SKILL_BREAKTHROUGH,
                 "skill_id": skill.pk,
+            },
+        )
+
+    def _purchase_language_breakthrough(
+        self,
+        actor: ObjectDB,
+        kwargs: dict[str, Any],
+    ) -> ActionResult:
+        """Clear the XP lock the actor's language training is parked at (#4090)."""
+        from world.species.language_progression import (  # noqa: PLC0415
+            purchase_language_breakthrough,
+        )
+        from world.species.models import Language  # noqa: PLC0415
+
+        language_id = kwargs.get("language_id")
+        if language_id is None:
+            return ActionResult(success=False, message="language_id is required.")
+        language = Language.objects.get(pk=language_id)
+        success, message = purchase_language_breakthrough(actor.sheet_data, language)
+        if not success:
+            return ActionResult(success=False, message=message)
+        return ActionResult(
+            success=True,
+            message=message,
+            data={
+                "unlock_type": self._UNLOCK_TYPE_LANGUAGE_BREAKTHROUGH,
+                "language_id": language.pk,
             },
         )

@@ -35001,8 +35001,11 @@ export interface components {
      * @description Slim shape for ``MyLanguageRow`` (``world.species.types``).
      *
      *     Backs the ``my-languages`` read-only list endpoint: the requester's own
-     *     active character's known languages, with fluency/band and which one is
-     *     the sticky ``current_language``.
+     *     active character's known languages. ``fluency``/``band`` are TRAINED (the
+     *     picker lists ``fluency > 0`` rows only); ``effective_fluency``/``effective_band``
+     *     add active-condition bonuses (#4090), and ``temporary_sources`` names the
+     *     conditions contributing to that bonus (empty when none). ``is_current`` is
+     *     which language is the sticky ``current_language``.
      */
     MyLanguage: {
       readonly language_id: number;
@@ -35010,6 +35013,9 @@ export interface components {
       readonly fluency: number;
       readonly band: string;
       readonly is_current: boolean;
+      readonly effective_fluency: number;
+      readonly effective_band: string;
+      readonly temporary_sources: string[];
     };
     /** @description Serialize a summary of a roster entry for account menus. */
     MyRosterEntry: {
@@ -42972,11 +42978,12 @@ export interface components {
     /**
      * @description Discriminated list item for purchasable progression unlocks.
      *
-     *     Three ``unlock_type`` variants are supported:
+     *     Four ``unlock_type`` variants are supported:
      *
      *     - ``class_level`` — purchase a class/level unlock with XP.
      *     - ``thread_xp_lock`` — purchase the next XP-locked boundary on a thread.
      *     - ``skill_breakthrough`` — purchase a skill's XP-boundary breakthrough (#2115).
+     *     - ``language_breakthrough`` — purchase a language's XP-boundary breakthrough (#4090).
      */
     ProgressionUnlockItem: {
       unlock_type: string;
@@ -42996,6 +43003,7 @@ export interface components {
       thread_target_kind: string | null;
       dev_points_to_boundary: number | null;
       skill_id: number | null;
+      language_id: number | null;
     };
     /**
      * @description Validate a staff-driven promotion/demotion before it reaches ``promote_gm`` (#2000).
@@ -43146,6 +43154,7 @@ export interface components {
       thread_id?: number | null;
       boundary_level?: number | null;
       skill_id?: number | null;
+      language_id?: number | null;
     };
     /** @description Response serializer for a completed unlock purchase. */
     PurchaseUnlockResponse: {
@@ -43155,6 +43164,7 @@ export interface components {
       thread_id?: number | null;
       boundary_level?: number | null;
       skill_id?: number | null;
+      language_id?: number | null;
     };
     /**
      * @description * `militia` - Militia
@@ -48466,9 +48476,14 @@ export interface components {
      * @description * `class_level` - Class Level
      *     * `thread_xp_lock` - Thread XP Lock
      *     * `skill_breakthrough` - Skill Breakthrough
+     *     * `language_breakthrough` - Language Breakthrough
      * @enum {string}
      */
-    UnlockTypeEnum: 'class_level' | 'thread_xp_lock' | 'skill_breakthrough';
+    UnlockTypeEnum:
+      | 'class_level'
+      | 'thread_xp_lock'
+      | 'skill_breakthrough'
+      | 'language_breakthrough';
     /** @description Response shape for ``PlayerMailViewSet.unread_count`` -- schema only, never a model. */
     UnreadMailCount: {
       readonly count: number;

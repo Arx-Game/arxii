@@ -65,6 +65,17 @@ Acquisition rides the XP-unlock contract (ADR-0053). See the gift/resonance econ
   `provision_starting_languages` grants CG starting/universal languages at `finalize_magic_data`,
   `TrainLanguageAction`/`speak`/`say (tongue)` cover post-CG training and speech, and comprehension
   garbles live per viewer (telnet, WS, scene-log reads) rather than persisting a snapshot.
+- **Comprehension from active conditions + language XP locks** - [BUILT & WIRED] (#4090, ADR-0214
+  amendment): a listener's comprehension is trained fluency plus any active-condition bonus
+  toward that language (`comprehension_value`/`comprehension_values`, batched on the scene-log
+  reread by `conditions.services.condition_modifier_totals_by_sheet`), listener-side only, never
+  the speaker's own band, teaching, or self-study. The DE pricing pipeline reports a
+  language-comprehension `ConditionModifierEffect` as `NOT_COMBAT_POWER` rather than mispricing it
+  as a roll bonus (see magic.md). Weekly training dp rates moved off hardcoded constants onto the
+  staff-tunable `LanguageTrainingConfig` singleton; a language's training now parks one rating
+  below an authored `TraitRatingUnlock` until an XP breakthrough
+  (`purchase_language_breakthrough`, telnet `progression unlock language=<id>`), the same
+  ephemeral-surplus pattern skills already follow at their XP boundaries.
 
 ## Deeper detail
 

@@ -1,15 +1,37 @@
 """Tests for Task 5 (#2993): say/whisper/mutter speak languages, per-listener delivery."""
 
+import traceback
 from unittest.mock import patch
 
+from django.db import connection
 from django.test import TestCase
 
-from actions.definitions.communication import MutterAction, SayAction, WhisperAction
+from actions.definitions.communication import (
+    EmitAction,
+    MutterAction,
+    PoseAction,
+    SayAction,
+    WhisperAction,
+)
 from evennia_extensions.factories import CharacterFactory, ObjectDBFactory
 from world.character_sheets.factories import CharacterSheetFactory
+from world.conditions.constants import DurationType
+from world.conditions.factories import (
+    ConditionInstanceFactory,
+    ConditionModifierEffectFactory,
+    ConditionTemplateFactory,
+)
+from world.conditions.services import expire_scene_scoped_conditions
+from world.mechanics.models import ModifierTarget
 from world.scenes.constants import InteractionMode
 from world.scenes.models import Interaction
-from world.species.factories import LanguageFactory
+from world.species import language_services
+from world.species.factories import (
+    LanguageFactory,
+    make_language_with_target,
+    make_understanding_condition,
+)
+from world.species.language_services import comprehension_values
 from world.traits.models import CharacterTraitValue, Trait, TraitCategory, TraitType
 
 
@@ -323,3 +345,186 @@ class MutterActionLanguageTests(LanguageSpeechTestCase):
         )
 
         assert result.success is False
+
+
+class ConditionComprehensionLiveTests(TestCase):
+    """#4090: a listener's active condition raises comprehension on live delivery."""
+
+    TEXT = "the north gate opens at the second bell so bring the lamp oil"
+
+    def setUp(self) -> None:
+        ModifierTarget.clear_trait_cache()
+        CharacterTraitValue.flush_instance_cache()
+        self.language, self.target = make_language_with_target("LiveCompTongue")
+        self.condition = make_understanding_condition("Placeholder Live Understanding", self.target)
+        self.room = _make_room()
+        self.speaker = CharacterFactory(db_key="Envoy", location=self.room)
+        self.speaker_sheet = CharacterSheetFactory(character=self.speaker)
+        self.speaker_fluency = CharacterTraitValue.objects.create(
+            character=self.speaker_sheet, trait=self.language.trait, value=100
+        )
+        self.listener = CharacterFactory(db_key="Wren", location=self.room)
+        self.listener_sheet = CharacterSheetFactory(character=self.listener)
+
+    def _heard(self) -> str:
+        with patch.object(self.listener, "msg") as mock_msg:
+            result = SayAction().run(self.speaker, text=self.TEXT, language_id=self.language.pk)
+        assert result.success is True
+        sent_text, _options = mock_msg.call_args_list[0].args[0]
+        return sent_text
+
+    def _ws_content(self) -> str:
+        with patch.object(self.listener, "msg") as mock_msg:
+            SayAction().run(self.speaker, text=self.TEXT, language_id=self.language.pk)
+        payloads = [call.kwargs for call in mock_msg.call_args_list if "interaction" in call.kwargs]
+        return payloads[-1]["interaction"][1]["content"]
+
+    def test_strong_condition_reads_clear_on_telnet_and_ws(self) -> None:
+        ConditionInstanceFactory(target=self.listener, condition=self.condition, severity=4)
+        assert self._heard() == f'Envoy says in {self.language.name}, "{self.TEXT}"'
+        assert self._ws_content() == self.TEXT
+
+    def test_weak_condition_reads_partly_garbled(self) -> None:
+        """Severity 2 lifts a trained-0 listener to conversational: some words, not all."""
+        ConditionInstanceFactory(target=self.listener, condition=self.condition, severity=2)
+        heard = self._heard()
+        prefix = f'Envoy says in {self.language.name}, "'
+        assert heard.startswith(prefix)
+        assert heard != f'{prefix}..."'
+        assert heard != f'{prefix}{self.TEXT}"'
+        heard_words = set(heard.removeprefix(prefix).removesuffix('"').split())
+        assert heard_words & set(self.TEXT.split())
+        assert "..." in heard_words
+
+    def test_without_condition_garbles_entirely(self) -> None:
+        assert self._heard() == f'Envoy says in {self.language.name}, "..."'
+
+    def test_condition_does_not_let_the_listener_speak(self) -> None:
+        ConditionInstanceFactory(target=self.listener, condition=self.condition, severity=4)
+        result = SayAction().run(self.listener, text="hello", language_id=self.language.pk)
+        assert result.success is False
+        assert result.message == "You don't know that tongue."
+
+    def test_speaker_under_condition_is_heard_at_trained_level(self) -> None:
+        """F5: a condition on the SPEAKER does not lift their band; listeners hear trained."""
+        self.speaker_fluency.value = 20
+        self.speaker_fluency.save(update_fields=["value"])
+        ConditionInstanceFactory(target=self.speaker, condition=self.condition, severity=4)
+        CharacterTraitValue.objects.create(
+            character=self.listener_sheet, trait=self.language.trait, value=100
+        )
+        heard = self._heard()
+        assert "..." in heard
+        assert heard != f'Envoy says in {self.language.name}, "{self.TEXT}"'
+        assert self._ws_content() != self.TEXT
+
+    def test_scene_sweep_ends_the_effect(self) -> None:
+        scene_condition = ConditionTemplateFactory(
+            name="Placeholder Scene Understanding", default_duration_type=DurationType.SCENE
+        )
+        ConditionModifierEffectFactory(
+            condition=scene_condition, modifier_target=self.target, value=80
+        )
+        ConditionInstanceFactory(target=self.listener, condition=scene_condition)
+        assert self._heard() == f'Envoy says in {self.language.name}, "{self.TEXT}"'
+        expire_scene_scoped_conditions([self.listener])
+        assert self._heard() == f'Envoy says in {self.language.name}, "..."'
+
+
+class GarbleScopeTests(TestCase):
+    """Decision 9: poses and emits are never language-tagged, so never garbled."""
+
+    def setUp(self) -> None:
+        ModifierTarget.clear_trait_cache()
+        self.language, _target = make_language_with_target("ScopeTongue")
+        room = _make_room()
+        self.speaker = CharacterFactory(db_key="Envoy", location=room)
+        sheet = CharacterSheetFactory(character=self.speaker)
+        CharacterTraitValue.objects.create(character=sheet, trait=self.language.trait, value=100)
+        sheet.current_language = self.language
+        sheet.save(update_fields=["current_language"])
+
+    def test_pose_emit_and_tagged_pose_store_no_language(self) -> None:
+        PoseAction().run(self.speaker, text="sets both hands flat on the table.")
+        PoseAction().run(
+            self.speaker, text="looks to each face in turn.", language_id=self.language.pk
+        )
+        EmitAction().run(self.speaker, text="A bell tolls somewhere below.")
+        for content in (
+            "sets both hands flat on the table.",
+            "looks to each face in turn.",
+            "A bell tolls somewhere below.",
+        ):
+            assert Interaction.objects.get(content=content).language_id is None
+
+
+class ComprehensionQueryCountTests(TestCase):
+    """#4090: listener comprehension is one batched read per say, not one per listener."""
+
+    TEXT = "the ferry waits at the low quay until the tide turns"
+
+    def setUp(self) -> None:
+        ModifierTarget.clear_trait_cache()
+        CharacterTraitValue.flush_instance_cache()
+        self.language, self.target = make_language_with_target("QueryCountTongue")
+        self.condition = make_understanding_condition(
+            "Placeholder Query Understanding", self.target
+        )
+
+    def _room_with_listeners(self, count: int):
+        room = _make_room()
+        speaker = CharacterFactory(db_key="Envoy", location=room)
+        speaker_sheet = CharacterSheetFactory(character=speaker)
+        CharacterTraitValue.objects.create(
+            character=speaker_sheet, trait=self.language.trait, value=100
+        )
+        sheets = []
+        for index in range(count):
+            listener = CharacterFactory(db_key=f"Listener{index}", location=room)
+            sheets.append(CharacterSheetFactory(character=listener))
+            CharacterTraitValue.objects.create(
+                character=sheets[-1], trait=self.language.trait, value=10
+            )
+            ConditionInstanceFactory(target=listener, condition=self.condition, severity=4)
+        return speaker, sheets
+
+    def _comprehension_queries_for_say(self, listener_count: int) -> int:
+        """Queries issued from inside language_services during one say (both live paths).
+
+        Other per-recipient reads (object-state construction resolves condition
+        thumbnails per recipient) are outside comprehension, so they are not counted.
+        """
+        speaker, _sheets = self._room_with_listeners(listener_count)
+        # Warm the one-time caches (the language's trait FK, get_for_trait's map).
+        ModifierTarget.get_for_trait(self.language.trait)
+        services_file = language_services.__file__
+        counted: list[str] = []
+
+        def _count_comprehension(execute, sql, params, many, context):
+            if any(frame.filename == services_file for frame in traceback.extract_stack()):
+                counted.append(sql)
+            return execute(sql, params, many, context)
+
+        with connection.execute_wrapper(_count_comprehension):
+            result = SayAction().run(speaker, text=self.TEXT, language_id=self.language.pk)
+        assert result.success is True
+        return len(counted)
+
+    def test_say_to_one_or_four_listeners_costs_the_same_comprehension_queries(self) -> None:
+        """Covers both live paths: telnet per-recipient delivery and the web push."""
+        one = self._comprehension_queries_for_say(1)
+        four = self._comprehension_queries_for_say(4)
+        assert one > 0
+        assert one == four, (one, four)
+
+    def test_comprehension_values_is_constant_in_sheet_count(self) -> None:
+        _speaker, one_sheet = self._room_with_listeners(1)
+        _speaker, four_sheets = self._room_with_listeners(4)
+        self.language.trait  # noqa: B018 - warm the FK so only the batched reads are counted
+        ModifierTarget.get_for_trait(self.language.trait)
+        with self.assertNumQueries(3):
+            one = comprehension_values([one_sheet[0].pk], self.language)
+        with self.assertNumQueries(3):
+            four = comprehension_values([sheet.pk for sheet in four_sheets], self.language)
+        assert one == {one_sheet[0].pk: 90}
+        assert four == {sheet.pk: 90 for sheet in four_sheets}

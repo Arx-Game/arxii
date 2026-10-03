@@ -44,7 +44,7 @@ export async function claimKudosForXP(
 // ---------------------------------------------------------------------------
 
 export async function fetchProgressionUnlocks(
-  unlockType?: 'class_level' | 'thread_xp_lock' | 'skill_breakthrough'
+  unlockType?: 'class_level' | 'thread_xp_lock' | 'skill_breakthrough' | 'language_breakthrough'
 ): Promise<PaginatedProgressionUnlockItemList> {
   const query = unlockType ? `?unlock_type=${unlockType}` : '';
   const res = await apiFetch(`/api/progression/unlocks/${query}`);

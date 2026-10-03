@@ -1918,6 +1918,21 @@ def _declarations() -> tuple[ContentDependency, ...]:
             probe=AnyRowProbe(label="AuraPowerConfig"),
         ),
         ContentDependency(
+            key="language-training-config",
+            label="Language training config singleton",
+            tier=DependencyTier.TUNING,
+            consumer=(
+                "world/species/language_progression.py get_language_training_config() "
+                "via actions/definitions/language.py TrainLanguageAction"
+            ),
+            consequence=(
+                "Language training runs at the shipped default rates (15 dp with a "
+                "teacher, 8 dp self-study) until staff save the singleton; the first "
+                "training session creates it at those defaults."
+            ),
+            probe=AnyRowProbe(label="LanguageTrainingConfig"),
+        ),
+        ContentDependency(
             key="soulfray-config",
             label="Soulfray config singleton",
             tier=DependencyTier.TUNING,

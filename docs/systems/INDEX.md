@@ -1009,7 +1009,11 @@ Persistent states that modify capabilities, checks, and resistances with stage p
   `process_round_end()`, `process_damage_interactions()` (wired into combat #2018), `get_treatment_candidates()`,
   `perform_treatment()` (routes `mend_on_*` through `world.vitals.services.mend_wound()`
   alongside its existing severity-decay path, #2644), `get_effective_capability_value()`
-  (the one-oracle agency/requirement answer — see "Capability magnitude curve" below)
+  (the one-oracle agency/requirement answer — see "Capability magnitude curve" below),
+  `condition_modifier_totals_by_sheet(sheet_ids, modifier_target)` (#4090, batched
+  `get_condition_modifier_total` across many sheets in two queries regardless of sheet count; a
+  pure read, never tears down an expired instance; backs `species.language_services
+  .comprehension_values`)
 - **Capability magnitude curve (#2708 — `magic.CapabilityPowerConfig`):** staff-tunable
   singleton (`power_per_doubling`, default 10) driving
   `world.magic.services.capability_curve.apply_capability_curve` /
@@ -1122,6 +1126,18 @@ ADR-0214), and species-gift provisioning.
   (`src/commands/language.py`); `say`/`whisper`/`mutter` resolve a per-utterance language
   (`_resolve_spoken_language`, `actions/definitions/communication.py`); `GET
   /api/species/my-languages/` (`MyLanguagesViewSet`). See species.md's Language Mechanics section.
+  **Comprehension from active conditions + XP locks (#4090, ADR-0214 amendment):**
+  `comprehension_value(sheet, language)` / batched `comprehension_values(sheet_ids, language, *,
+  trained_by_sheet=None)` (`language_services.py`): trained fluency plus active-condition
+  `ConditionModifierEffect` bonuses toward the language trait's `ModifierTarget`, listener-side
+  only, via `conditions.services.condition_modifier_totals_by_sheet`;
+  `condition_language_bonuses(sheet)` backs the sheet's temporary rows. Weekly training dp rates
+  are tuned on the singleton `LanguageTrainingConfig` (admin, TUNING dashboard entry;
+  `language_progression.get_language_training_config`); a LANGUAGE trait's
+  `DevelopmentPoints.award_points` parks one rating below an authored `TraitRatingUnlock`,
+  discarding surplus dp instead of banking it, until `purchase_language_breakthrough(sheet,
+  language)` spends XP (telnet `progression unlock language=<id>`; see progression.md's Unlock
+  Shop).
 - **Key Methods:** `Species.get_stat_bonuses_dict()`, `Species.is_subspecies`
 - **Integrates with:** character_creation (Beginnings.allowed_species, CG points
   breakdown, `provision_starting_languages` at CG finalize), forms (physical traits — per-species

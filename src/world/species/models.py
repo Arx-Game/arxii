@@ -10,6 +10,7 @@ This module contains:
 from typing import TYPE_CHECKING
 
 from django.core.exceptions import ValidationError
+from django.core.validators import MinValueValidator
 from django.db import models
 from django.utils.functional import cached_property
 
@@ -352,3 +353,33 @@ class Language(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
         super().clean()
         if self.pk is None and self.trait_id is None:
             raise ValidationError({"trait": "New languages must link a LANGUAGE-type trait."})
+
+
+class LanguageTrainingConfig(SharedMemoryModel):
+    """Singleton tuning for weekly language training sessions (#4090).
+
+    Staff edit the development points one ``TrainLanguageAction`` session awards. Lazily
+    created at its defaults by
+    ``world.species.language_progression.get_language_training_config``.
+    """
+
+    teacher_dp_per_session = models.PositiveIntegerField(
+        default=15,
+        validators=[MinValueValidator(1)],
+        help_text=(
+            "Development points one weekly session awards with a co-present teacher "
+            "who is fluent in the language."
+        ),
+    )
+    self_study_dp_per_session = models.PositiveIntegerField(
+        default=8,
+        validators=[MinValueValidator(1)],
+        help_text="Development points one weekly self-study session awards.",
+    )
+
+    class Meta:
+        verbose_name = "Language training config"
+        verbose_name_plural = "Language training config"
+
+    def __str__(self) -> str:
+        return "Language training config"

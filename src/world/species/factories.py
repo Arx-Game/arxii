@@ -13,6 +13,7 @@ from world.species.models import Language, Species, SpeciesGiftGrant, SpeciesSta
 if TYPE_CHECKING:
     from world.conditions.models import ConditionTemplate
     from world.distinctions.models import Distinction
+    from world.mechanics.models import ModifierTarget
 
 
 class LanguageFactory(factory_django.DjangoModelFactory):
@@ -610,3 +611,42 @@ def apply_shade_undeath(character) -> None:
             origin=DistinctionOrigin.GM_AWARD,
             rank=1,
         )
+
+
+def make_language_with_target(
+    name: str, *, restricted: bool = False
+) -> tuple[Language, "ModifierTarget"]:
+    """A Language, its LANGUAGE trait, and the ModifierTarget pointing at that trait (#4090).
+
+    The ModifierTarget is what a condition's ConditionModifierEffect points at to raise
+    comprehension of the language.
+    """
+    from world.mechanics.factories import (
+        ModifierCategoryFactory,
+        ModifierTargetFactory,
+    )
+    from world.traits.factories import TraitFactory
+    from world.traits.models import TraitType
+
+    trait = TraitFactory(name=name, trait_type=TraitType.LANGUAGE)
+    language = LanguageFactory(name=name, trait=trait, restricted=restricted)
+    target = ModifierTargetFactory(
+        name=name, category=ModifierCategoryFactory(name="language"), target_trait=trait
+    )
+    return language, target
+
+
+def make_understanding_condition(
+    name: str, target: "ModifierTarget", *, value: int = 20
+) -> "ConditionTemplate":
+    """A condition whose severity-scaled effect raises comprehension via *target* (#4090)."""
+    from world.conditions.factories import (
+        ConditionModifierEffectFactory,
+        ConditionTemplateFactory,
+    )
+
+    template = ConditionTemplateFactory(name=name)
+    ConditionModifierEffectFactory(
+        condition=template, modifier_target=target, value=value, scales_with_severity=True
+    )
+    return template

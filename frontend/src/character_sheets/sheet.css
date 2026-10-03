@@ -526,6 +526,17 @@
   border-color: hsl(var(--accent));
 }
 
+/* Temporary language row (#4090): the tag sits on the level, the gloss below it. */
+.refsheet-glance .refsheet-tag {
+  margin-left: 0.35rem;
+  vertical-align: 0.15em;
+}
+.refsheet-gloss {
+  display: block;
+  color: hsl(var(--muted-foreground));
+  font-size: 0.95rem;
+}
+
 /* Label chips on a tie (#3957). VALENCE colours the resting state — a public label,
    which carries no marker at all — and a MARKER, where there is one, takes the chip
    whole: ink and border both.

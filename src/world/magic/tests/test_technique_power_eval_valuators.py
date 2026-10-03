@@ -42,15 +42,25 @@ from world.magic.factories import (
 from world.magic.models.techniques import ConditionTargetKind, Technique, TechniqueTreatment
 from world.magic.services.targeting import protective_magnitude
 from world.magic.services.technique_power_eval import evaluate_technique
-from world.magic.types.technique_power import EvalContext, ReferenceFrame, ValuationProvenance
-from world.mechanics.factories import TeamDamagePercentTargetFactory
+from world.magic.types.technique_power import (
+    FLAG_NOT_COMBAT_POWER,
+    EvalContext,
+    ReferenceFrame,
+    ValuationProvenance,
+)
+from world.mechanics.factories import (
+    ModifierCategoryFactory,
+    ModifierTargetFactory,
+    TeamDamagePercentTargetFactory,
+)
 from world.traits.factories import (
     CheckOutcomeFactory,
     CheckRankFactory,
     ResultChartFactory,
     ResultChartOutcomeFactory,
+    TraitFactory,
 )
-from world.traits.models import ResultChart
+from world.traits.models import ResultChart, TraitType
 
 # PayloadValuation.kind values this suite filters on (a free string field, not a
 # TextChoices — named constants here per the string-literal lint rule).
@@ -315,3 +325,93 @@ class TreatmentHealingTests(TechniquePowerEvalValuatorTestCase):
         heal_rows = [v for v in report.valuations if v.kind == _KIND_HEAL]
         self.assertEqual(len(heal_rows), 1)
         self.assertAlmostEqual(heal_rows[0].value, 6.0, places=6)
+
+
+class LanguageEffectExclusionTests(TechniquePowerEvalValuatorTestCase):
+    """Decision 10 (#4090): a fluency bonus is not priced as a combat roll bonus."""
+
+    def _language_target(self):
+        trait = TraitFactory(name="PricingTongue", trait_type=TraitType.LANGUAGE)
+        return ModifierTargetFactory(
+            name="PricingTongue",
+            category=ModifierCategoryFactory(name="language"),
+            target_trait=trait,
+        )
+
+    def test_language_only_technique_reports_not_combat_power(self) -> None:
+        technique = self._technique()
+        condition = ConditionTemplateFactory(default_duration_value=3)
+        ConditionModifierEffectFactory(
+            condition=condition,
+            modifier_target=self._language_target(),
+            value=20,
+            scales_with_severity=True,
+        )
+        TechniqueAppliedConditionFactory(
+            technique=technique, condition=condition, target_kind=ConditionTargetKind.SELF
+        )
+        reference = ReferenceFrame(outgoing_dpr=20.0, incoming_dpr=15.0, source_label="test")
+
+        report = evaluate_technique(technique, EvalContext(level=10), reference)
+
+        self.assertEqual(report.baseline_de, 0.0)
+        self.assertIn(FLAG_NOT_COMBAT_POWER, report.flags)
+        provenances = [v.provenance for v in report.valuations]
+        self.assertIn(ValuationProvenance.NOT_COMBAT_POWER, provenances)
+        self.assertNotIn(ValuationProvenance.UNPRICEABLE, provenances)
+
+    def test_stat_buff_price_is_unchanged_by_an_added_language_row(self) -> None:
+        stat_target = ModifierTargetFactory(name="PricingStatTarget")
+        reference = ReferenceFrame(outgoing_dpr=20.0, incoming_dpr=15.0, source_label="test")
+
+        plain = self._technique()
+        plain_condition = ConditionTemplateFactory(default_duration_value=3)
+        ConditionModifierEffectFactory(
+            condition=plain_condition, modifier_target=stat_target, value=10
+        )
+        TechniqueAppliedConditionFactory(
+            technique=plain, condition=plain_condition, target_kind=ConditionTargetKind.SELF
+        )
+
+        mixed = self._technique()
+        mixed_condition = ConditionTemplateFactory(default_duration_value=3)
+        ConditionModifierEffectFactory(
+            condition=mixed_condition, modifier_target=stat_target, value=10
+        )
+        ConditionModifierEffectFactory(
+            condition=mixed_condition, modifier_target=self._language_target(), value=40
+        )
+        TechniqueAppliedConditionFactory(
+            technique=mixed, condition=mixed_condition, target_kind=ConditionTargetKind.SELF
+        )
+
+        plain_report = evaluate_technique(plain, EvalContext(level=10), reference)
+        mixed_report = evaluate_technique(mixed, EvalContext(level=10), reference)
+
+        self.assertAlmostEqual(plain_report.baseline_de, mixed_report.baseline_de, places=6)
+        self.assertNotIn(FLAG_NOT_COMBAT_POWER, plain_report.flags)
+        self.assertIn(FLAG_NOT_COMBAT_POWER, mixed_report.flags)
+
+    def test_batched_language_lookup_does_not_scale_queries_with_condition_count(self) -> None:
+        """#4090 review fix: ``has_language_modifier_effects`` used to run one query per
+        applied-condition row inside ``_condition_application_valuations`` (which itself
+        runs twice per technique -- baseline + amplified power -- so N rows cost 2N
+        queries). ``de_valuation.condition_ids_with_language_effects`` is the batched
+        replacement: one query covering any number of condition ids. This test isolates
+        that specific function's query count rather than wrapping the whole
+        ``evaluate_technique`` pipeline, because ``_routed_condition_valuation`` has its
+        own, pre-existing, out-of-scope per-row queries (team-lane + generic-modifier
+        checks) that already scale with row count for reasons unrelated to this fix --
+        asserting a flat total query count across the whole pipeline would conflate the
+        two and either fail for the wrong reason or hide a regression in the right one.
+        """
+        from world.magic.services import de_valuation
+
+        one_condition_id = [ConditionTemplateFactory().pk]
+        three_condition_ids = [ConditionTemplateFactory().pk for _ in range(3)]
+
+        with self.assertNumQueries(1):
+            de_valuation.condition_ids_with_language_effects(one_condition_id)
+
+        with self.assertNumQueries(1):
+            de_valuation.condition_ids_with_language_effects(three_condition_ids)

@@ -994,6 +994,33 @@ technique's `target_spec`, built by `_target_spec_for_technique_action` in
 path. Magic checks use a single placeholder Arcana aspect; how `Aspect` should apply to
 magic checks at all is an open design question (#1363).
 
+### Language comprehension effects are not combat power (#4090)
+
+The DE (damage-equivalent) pricing pipeline (`world/magic/services/technique_power_eval.py` and
+its standalone siblings `condition_power_eval.py`/`capability_power_eval.py`, sharing the
+row/technique-independent formula core in `de_valuation.py`, #3390, ADR-0239; see INDEX.md's
+"Game Tuning & Game Ops Dashboards" for the full evaluator writeup) prices a
+`ConditionModifierEffect` as a bonus on the 1-100 combat roll. A language-comprehension bonus
+(a `ModifierTarget` whose `target_trait.trait_type` is `LANGUAGE`) is not that, so it is excluded
+rather than mispriced:
+
+- `de_valuation.modifier_effect_shift(condition, *, severity)` excludes any effect whose
+  `modifier_target.target_trait.trait_type == TraitType.LANGUAGE`, alongside the pre-existing
+  team-damage-percent-lane exclusion.
+- `de_valuation.has_language_modifier_effects(condition, *, language_condition_ids=None)`
+  reports whether a condition carries a language effect at all, including one authored on a
+  STAGE, which `modifier_effect_shift`'s condition-level-only query would miss, so a staged
+  understanding condition still reports "not combat power" rather than a silent zero.
+  `condition_ids_with_language_effects(condition_ids)` is its batch sibling: one query up front
+  for every condition id a loop will check, never one `has_language_modifier_effects` call per
+  row (the #4090 review finding the batch form exists to fix).
+- When a condition carries a language effect, `de_valuation.not_combat_power_valuation(condition)`
+  reports the explicit `PayloadValuation(value=0.0,
+  provenance=ValuationProvenance.NOT_COMBAT_POWER)` row instead of a silent gap, and the standalone
+  condition evaluator (`condition_power_eval.py`) appends the `FLAG_NOT_COMBAT_POWER`
+  (`"not_combat_power"`) flag. `technique_power_eval.py` appends the same flag to a technique's
+  report whenever any of its valuations carries `ValuationProvenance.NOT_COMBAT_POWER`.
+
 ### Motif System
 
 | Model | Purpose | Key Fields |

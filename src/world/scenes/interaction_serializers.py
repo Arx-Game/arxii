@@ -465,8 +465,9 @@ class InteractionListSerializer(serializers.ModelSerializer):
         this interaction (whisper target / mutter receiver / escalated
         visibility) -- the speaker chose that audience, so it never garbles on
         reread, mirroring ``push_interaction``'s ``receiver_scoped`` live rule
-        (#2993 I1). Everyone else reads through their best fluency across ONLY
-        the sheets that actually participated in this interaction's SCENE
+        (#2993 I1). Everyone else reads through their best comprehension (trained
+        fluency plus active-condition bonuses, #4090) across ONLY the sheets that
+        participated in this interaction's SCENE
         (#2993 C1) -- ``SceneParticipation`` (world/scenes/models.py) is
         account-scoped, not persona-scoped, so it can't discriminate between
         two concurrently-active characters on the same account (the exact
@@ -502,7 +503,7 @@ class InteractionListSerializer(serializers.ModelSerializer):
         else:
             participant_sheet_ids = self._scene_participant_sheet_id_map().get(obj.scene_id, set())
         listener_value = max(
-            (self._fluency_for_sheet(sid, language) for sid in participant_sheet_ids),
+            (self._comprehension_for_sheet(sid, language) for sid in participant_sheet_ids),
             default=0,
         )
         return render_speech(
@@ -591,6 +592,34 @@ class InteractionListSerializer(serializers.ModelSerializer):
         if sheet_id is None:
             return 0
         return self._fluency_map(language).get(sheet_id, 0)
+
+    def _comprehension_map(self, language: "Language") -> dict[int, int]:
+        """Context-cached viewer sheet_id -> comprehension for one language (#4090).
+
+        Delegates to ``comprehension_values`` (language_services.py) -- the SAME rule
+        the live say path uses, never a parallel re-derivation (Controller ruling F2) --
+        passing this page's already-batched ``_fluency_map`` as ``trained_by_sheet`` so
+        the shared function skips its own trait-value query and the whole call stays at
+        most two extra queries per (page, language) via ``condition_modifier_totals_by_sheet``,
+        never one per row. Only viewer sheets are folded; the speaker's band stays on
+        trained fluency (Decision 3).
+        """
+        cache: dict[int, dict[int, int]] = self.context.setdefault("_comprehension_map_cache", {})
+        if language.pk in cache:
+            return cache[language.pk]
+        from world.species.language_services import comprehension_values  # noqa: PLC0415
+
+        viewer_sheet_ids: set[int] = set(self.context.get("viewer_sheet_ids", set()))
+        result = comprehension_values(
+            viewer_sheet_ids, language, trained_by_sheet=self._fluency_map(language)
+        )
+        cache[language.pk] = result
+        return result
+
+    def _comprehension_for_sheet(self, sheet_id: int | None, language: "Language") -> int:
+        if sheet_id is None:
+            return 0
+        return self._comprehension_map(language).get(sheet_id, 0)
 
     def get_language_name(self, obj: Interaction) -> str | None:
         return obj.language.name if obj.language_id else None

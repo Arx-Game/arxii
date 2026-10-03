@@ -138,6 +138,9 @@ from world.conditions.services import (
     get_aggro_priority,            # Int priority for targeting
     get_condition_modifier_vow_contributions, # Per-instance (source_vow_id, name, value) rows for a ModifierTarget (#2643)
     priced_percent_severity,       # Apply-time percent severity priced vs the landing target's level (#2643)
+    scaled_condition_effect_value, # One ConditionModifierEffect's contribution on one active instance (#4090)
+    active_condition_instances_by_sheet, # Pure-read get_active_conditions sibling, many sheets at once (#4090)
+    condition_modifier_totals_by_sheet, # Batched get_condition_modifier_total across many sheets (#4090)
 
     # Round processing
     process_round_start,           # Start-of-round DoT and effects
@@ -422,6 +425,21 @@ value = get_capability_value(character, flight_capability)  # 0 = can't fly
 # Bulk: all capabilities at once (used by obstacle system)
 caps = get_all_capability_values(character)  # {"movement": 5, "flight": 0}
 ```
+
+**Batched reads for many sheets at once (#4090).** `active_condition_instances_by_sheet
+(sheet_ids)` is the pure-read sibling of `get_active_conditions`: the same canonical active
+predicate plus skipping an in-game-time instance whose `expires_at` has passed, but across many
+sheets in one query and with no teardown of an expired instance (a reader must not write).
+`condition_modifier_totals_by_sheet(sheet_ids, modifier_target)` is the batched sibling of
+`get_condition_modifier_total`: two queries regardless of how many sheets (the active instances,
+then the matching template-/stage-level `ConditionModifierEffect` rows), returning
+`dict[int, int]` keyed on each sheet's pk (CharacterSheet shares ObjectDB's pk, so a
+`ConditionInstance.target_id` is already the sheet pk). Both share the one scaling rule,
+`scaled_condition_effect_value(effect, instance)`: `scales_with_severity` multiplies by the
+instance's `effective_severity`, else a staged instance scales by its current stage's
+`severity_multiplier`. `world.species.language_services.comprehension_values` is the first
+caller: a listener's language comprehension is trained fluency plus
+`condition_modifier_totals_by_sheet`'s bonus toward that language's `ModifierTarget`.
 
 ### ConditionInstance Properties
 

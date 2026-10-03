@@ -4,19 +4,22 @@ from __future__ import annotations
 
 from django.test import TestCase
 
-from actions.definitions.language import (
-    SELF_STUDY_DP_PER_SESSION,
-    TEACHER_DP_PER_SESSION,
-    SetLanguageAction,
-    TrainLanguageAction,
-)
+from actions.definitions.language import SetLanguageAction, TrainLanguageAction
 from commands.evennia_overrides.communication import CmdSay
 from commands.exceptions import CommandError
 from evennia_extensions.factories import CharacterFactory, ObjectDBFactory
 from world.character_sheets.factories import CharacterSheetFactory
-from world.progression.models.rewards import DevelopmentPoints, DevelopmentTransaction
+from world.progression.factories import DevelopmentPointsFactory
+from world.progression.models import TraitRatingUnlock
+from world.progression.models.rewards import (
+    DevelopmentPoints,
+    DevelopmentTransaction,
+    cumulative_dp_for_level,
+)
 from world.progression.types import DevelopmentSource
 from world.species.factories import LanguageFactory
+from world.species.language_progression import get_language_training_config
+from world.species.models import LanguageTrainingConfig
 from world.traits.models import CharacterTraitValue, Trait, TraitCategory, TraitType
 
 
@@ -49,6 +52,7 @@ class LanguageActionTestCase(TestCase):
     def setUp(self) -> None:
         DevelopmentPoints.flush_instance_cache()
         CharacterTraitValue.flush_instance_cache()
+        LanguageTrainingConfig.objects.flush_singleton_cache()
 
     def _sheeted_character(self, room, *, key, fluency=None):
         character = CharacterFactory(db_key=key, location=room)
@@ -114,13 +118,13 @@ class TrainLanguageActionTests(LanguageActionTestCase):
         result = TrainLanguageAction().run(speaker, language_id=self.language.pk)
 
         assert result.success is True
-        assert result.data["amount"] == SELF_STUDY_DP_PER_SESSION
+        assert result.data["amount"] == get_language_training_config().self_study_dp_per_session
         assert result.data["self_study"] is True
         dev = DevelopmentPoints.objects.get(character_sheet=sheet, trait=self.trait)
-        assert dev.total_earned == SELF_STUDY_DP_PER_SESSION
+        assert dev.total_earned == get_language_training_config().self_study_dp_per_session
         txn = DevelopmentTransaction.objects.get(character_sheet=sheet, trait=self.trait)
         assert txn.source == DevelopmentSource.PRACTICE
-        assert txn.amount == SELF_STUDY_DP_PER_SESSION
+        assert txn.amount == get_language_training_config().self_study_dp_per_session
 
     def test_fluent_co_located_teacher_awards_training_amount(self) -> None:
         room = _make_room()
@@ -132,13 +136,13 @@ class TrainLanguageActionTests(LanguageActionTestCase):
         )
 
         assert result.success is True
-        assert result.data["amount"] == TEACHER_DP_PER_SESSION
+        assert result.data["amount"] == get_language_training_config().teacher_dp_per_session
         assert result.data["self_study"] is False
         dev = DevelopmentPoints.objects.get(character_sheet=sheet, trait=self.trait)
-        assert dev.total_earned == TEACHER_DP_PER_SESSION
+        assert dev.total_earned == get_language_training_config().teacher_dp_per_session
         txn = DevelopmentTransaction.objects.get(character_sheet=sheet, trait=self.trait)
         assert txn.source == DevelopmentSource.TRAINING
-        assert txn.amount == TEACHER_DP_PER_SESSION
+        assert txn.amount == get_language_training_config().teacher_dp_per_session
 
     def test_teacher_not_fluent_falls_back_to_self_study(self) -> None:
         room = _make_room()
@@ -151,7 +155,7 @@ class TrainLanguageActionTests(LanguageActionTestCase):
 
         assert result.success is True
         assert result.data["self_study"] is True
-        assert result.data["amount"] == SELF_STUDY_DP_PER_SESSION
+        assert result.data["amount"] == get_language_training_config().self_study_dp_per_session
 
     def test_teacher_not_co_present_falls_back_to_self_study(self) -> None:
         room = _make_room()
@@ -180,7 +184,7 @@ class TrainLanguageActionTests(LanguageActionTestCase):
         assert second.message == f"You've already studied {self.language.name} this week."
         dev = DevelopmentPoints.objects.get(character_sheet=sheet, trait=self.trait)
         # Only the first session's dp landed.
-        assert dev.total_earned == SELF_STUDY_DP_PER_SESSION
+        assert dev.total_earned == get_language_training_config().self_study_dp_per_session
 
     def test_teacher_and_self_study_sessions_both_gate_on_the_same_week(self) -> None:
         """PRACTICE and TRAINING share one weekly slot per (sheet, trait)."""
@@ -210,7 +214,7 @@ class TrainLanguageActionTests(LanguageActionTestCase):
         room = _make_room()
         speaker, sheet = self._sheeted_character(room, key="Student")
         teacher, _teacher_sheet = self._sheeted_character(room, key="Teacher", fluency=100)
-        # 93 + TEACHER_DP_PER_SESSION (15) = 108 >= cumulative_dp_for_level(11) (100).
+        # 93 + the default teacher rate (15) = 108 >= cumulative_dp_for_level(11) (100).
         DevelopmentPoints.objects.create(character_sheet=sheet, trait=self.trait, total_earned=93)
 
         result = TrainLanguageAction().run(
@@ -222,6 +226,63 @@ class TrainLanguageActionTests(LanguageActionTestCase):
         trait_value = CharacterTraitValue.objects.get(character=sheet, trait=self.trait)
         assert trait_value.value == 11
         assert "fluency deepens to 11" in result.message
+
+    def test_session_uses_admin_edited_rates(self) -> None:
+        LanguageTrainingConfig.objects.create(
+            pk=1, teacher_dp_per_session=40, self_study_dp_per_session=21
+        )
+        room = _make_room()
+        student, sheet = self._sheeted_character(room, key="Student")
+
+        result = TrainLanguageAction().run(student, language_id=self.language.pk)
+
+        assert result.success is True
+        assert result.data["amount"] == 21
+        dev = DevelopmentPoints.objects.get(character_sheet=sheet, trait=self.trait)
+        assert dev.total_earned == 21
+
+    def test_session_at_a_lock_reports_the_breakthrough(self) -> None:
+        room = _make_room()
+        student, sheet = self._sheeted_character(room, key="Student", fluency=19)
+        DevelopmentPointsFactory(
+            character_sheet=sheet, trait=self.trait, total_earned=cumulative_dp_for_level(19)
+        )
+        TraitRatingUnlock.objects.create(trait=self.trait, target_rating=20)
+
+        result = TrainLanguageAction().run(student, language_id=self.language.pk)
+
+        assert result.success is True
+        assert result.data["breakthrough_rating"] == 20
+        assert result.data["level_ups"] == []
+        assert "breakthrough" in result.message
+        value = CharacterTraitValue.objects.get(character=sheet, trait=self.trait).value
+        assert value == 19
+
+    def test_session_at_a_lock_maintains_without_claiming_a_gain(self) -> None:
+        """A parked session's dp dissipates, so it uses the skills' plateau wording (F6)."""
+        room = _make_room()
+        student, sheet = self._sheeted_character(room, key="Student", fluency=19)
+        DevelopmentPointsFactory(
+            character_sheet=sheet, trait=self.trait, total_earned=cumulative_dp_for_level(19)
+        )
+        TraitRatingUnlock.objects.create(trait=self.trait, target_rating=20)
+
+        result = TrainLanguageAction().run(student, language_id=self.language.pk)
+
+        assert "development points" not in result.message
+        assert "gaining" not in result.message
+        assert "training maintains, does not advance" in result.message
+        dev = DevelopmentPoints.objects.get(character_sheet=sheet, trait=self.trait)
+        assert dev.total_earned == cumulative_dp_for_level(19)
+
+    def test_unparked_session_has_no_breakthrough_rating(self) -> None:
+        room = _make_room()
+        student, _sheet = self._sheeted_character(room, key="Student")
+
+        result = TrainLanguageAction().run(student, language_id=self.language.pk)
+
+        assert result.data["breakthrough_rating"] is None
+        assert "gaining" in result.message
 
 
 class RestrictedTrainLanguageActionTests(TestCase):
@@ -271,10 +332,10 @@ class RestrictedTrainLanguageActionTests(TestCase):
         )
 
         assert result.success is True
-        assert result.data["amount"] == TEACHER_DP_PER_SESSION
+        assert result.data["amount"] == get_language_training_config().teacher_dp_per_session
         assert result.data["self_study"] is False
         dev = DevelopmentPoints.objects.get(character_sheet=sheet, trait=self.trait)
-        assert dev.total_earned == TEACHER_DP_PER_SESSION
+        assert dev.total_earned == get_language_training_config().teacher_dp_per_session
         txn = DevelopmentTransaction.objects.get(character_sheet=sheet, trait=self.trait)
         assert txn.source == DevelopmentSource.TRAINING
 
@@ -285,10 +346,10 @@ class RestrictedTrainLanguageActionTests(TestCase):
         result = TrainLanguageAction().run(speaker, language_id=self.language.pk)
 
         assert result.success is True
-        assert result.data["amount"] == SELF_STUDY_DP_PER_SESSION
+        assert result.data["amount"] == get_language_training_config().self_study_dp_per_session
         assert result.data["self_study"] is True
         dev = DevelopmentPoints.objects.get(character_sheet=sheet, trait=self.trait)
-        assert dev.total_earned == SELF_STUDY_DP_PER_SESSION
+        assert dev.total_earned == get_language_training_config().self_study_dp_per_session
         txn = DevelopmentTransaction.objects.get(character_sheet=sheet, trait=self.trait)
         assert txn.source == DevelopmentSource.PRACTICE
 
@@ -309,7 +370,7 @@ class RestrictedTrainLanguageActionTests(TestCase):
         result = TrainLanguageAction().run(speaker, language_id=unrestricted_language.pk)
 
         assert result.success is True
-        assert result.data["amount"] == SELF_STUDY_DP_PER_SESSION
+        assert result.data["amount"] == get_language_training_config().self_study_dp_per_session
         assert result.data["self_study"] is True
 
 
