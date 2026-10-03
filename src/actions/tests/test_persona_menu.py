@@ -178,8 +178,9 @@ class PersonaMenuServiceTests(django.test.TestCase):
         assert charm_asset_item.reason == "They are not charmed by you."
 
     def test_pc_target_cannot_be_sent_away_or_retained(self) -> None:
-        """#4091 task 12 fix round 1 ruling 3: a PC carrying the viewer's own hold
-        is still refused -- an NPC-only guard, never matched by name."""
+        """#4091 task 12 fix round 1 ruling 3 (NPC-only guard) + fix round 2 (the
+        canonical test is an active RosterTenure, not db_account -- a RosterEntry
+        alone doesn't count, since major NPCs are rostered too)."""
         SceneFactory(location=self.room, is_active=True)
         charm = ConditionTemplateFactory(
             sets_allegiance=Allegiance.ALLY_OF_CASTER,
@@ -190,7 +191,7 @@ class PersonaMenuServiceTests(django.test.TestCase):
         ConditionInstanceFactory(
             target=self.target, condition=charm, source_character=self.viewer, severity=4
         )
-        self.target.db_account = AccountFactory()
+        RosterTenureFactory(roster_entry=self.target_sheet.roster_entry)
 
         send_away_item = self._item("send_away")
         charm_asset_item = self._item("charm_asset")

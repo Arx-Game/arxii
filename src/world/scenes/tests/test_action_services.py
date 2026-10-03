@@ -661,10 +661,15 @@ class TestRespondToActionTarget(TestCase):
 
 
 def _make_pc_persona():
-    """Create a Persona backed by a Character that has a db_account (a real player).
+    """Create a Persona backed by a Character that has a db_account (a real player)
+    AND an active RosterTenure.
 
-    The result passes ``_persona_is_npc`` as False.  Mirrors the pattern used in
-    integration-test consent flows: CharacterSheet → primary_persona + wired account.
+    The result passes ``_persona_is_npc`` as False. ``_persona_is_npc`` checks for
+    an active ``RosterTenure`` (#4091 task 12 fix round 2 -- ``db_account`` alone
+    reads None for an offline PC too), so a PC test double needs one; db_account is
+    still wired here to also exercise the "online" shape callers may otherwise care
+    about. Mirrors the pattern used in integration-test consent flows: CharacterSheet
+    → primary_persona + wired account + roster tenure.
     """
     account = AccountFactory()
     character = CharacterFactory()
@@ -673,6 +678,8 @@ def _make_pc_persona():
     # Wire the account to the character so _persona_is_npc returns False.
     character.db_account = account
     character.save(update_fields=["db_account"])
+    entry = RosterEntryFactory(character_sheet=sheet)
+    RosterTenureFactory(roster_entry=entry, end_date=None)
     return persona, account
 
 
@@ -683,6 +690,45 @@ def _make_npc_persona():
     default, so the result passes ``_persona_is_npc`` as True.
     """
     return PersonaFactory()
+
+
+class OfflinePCStaysPendingTests(TestCase):
+    """#4091 task 12 fix round 2: an OFFLINE PC (active RosterTenure, no
+    db_account) must stay PENDING like any other PC target -- db_account alone
+    would have misread it as an NPC and auto-resolved its consent request
+    without them."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.scene = SceneFactory()
+        cls.initiator = PersonaFactory()
+        character = CharacterFactory()
+        sheet = CharacterSheetFactory(character=character)
+        cls.offline_pc_persona = sheet.primary_persona
+        entry = RosterEntryFactory(character_sheet=sheet)
+        RosterTenureFactory(roster_entry=entry, end_date=None)
+        cls.action_template = ActionTemplateFactory()
+
+    def test_offline_pc_additional_target_stays_pending(self) -> None:
+        self.assertIsNone(self.offline_pc_persona.character_sheet.character.db_account)
+
+        request = SceneActionRequestFactory(
+            scene=self.scene,
+            initiator_persona=self.initiator,
+            target_persona=None,
+            action_key="intimidate",
+            action_template=self.action_template,
+            status=ActionRequestStatus.PENDING,
+        )
+        SceneActionTarget.objects.create(
+            action_request=request, target_persona=self.offline_pc_persona
+        )
+        _auto_resolve_npc_targets(request)
+
+        row = SceneActionTarget.objects.get(
+            action_request=request, target_persona=self.offline_pc_persona
+        )
+        self.assertEqual(row.status, ActionRequestStatus.PENDING)
 
 
 class MultiTargetE2ETests(TestCase):

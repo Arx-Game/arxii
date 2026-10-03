@@ -213,6 +213,27 @@ class FeedAnimaTest(TestCase):
         self.assertFalse(outcome.was_lethal)
         kill.assert_not_called()
 
+    def test_offline_pc_victim_never_dies_of_feeding(self):
+        """#4091 task 12 fix round 2: an OFFLINE PC (active RosterTenure, no
+        db_account) must not die of feeding -- db_account alone reads None for
+        an offline PC too (Evennia's unpuppet_object clears it), so it used to
+        be misread as an NPC here."""
+        from world.roster.factories import RosterEntryFactory, RosterTenureFactory
+
+        entry = RosterEntryFactory(character_sheet=self.victim)
+        RosterTenureFactory(roster_entry=entry, end_date=None)
+        self.assertIsNone(self.victim.character.db_account)
+
+        _anima(self.feeder, current=10)
+        _anima(self.victim, current=2, maximum=2)
+        with (
+            _quiet_reconcile(),
+            patch("world.vitals.services.mark_fed_to_death") as kill,
+        ):
+            outcome = feed_anima(self.feeder, self.victim, amount_mode=FeedMode.GORGE)
+        self.assertFalse(outcome.was_lethal)
+        kill.assert_not_called()
+
 
 class MarkFedToDeathGuardTest(TestCase):
     def test_refuses_pc_victims(self):

@@ -9,7 +9,9 @@ is ever rolled by this action -- plus the task 12 fix round 1 rulings: the share
 presence predicate (the charmer must still be in the room), a failed ephemeral
 delete falling back to the named-NPC path instead of lying about success, the
 hold actually being removed (not just the body moved), and an NPC-only guard (a
-PC carrying the actor's hold is refused, never matched by name).
+PC carrying the actor's hold is refused, never matched by name) -- and fix round 2:
+the NPC-only guard is offline-safe (an active ``RosterTenure``, not ``db_account``,
+since Evennia clears ``db_account`` for an offline PC too).
 """
 
 from __future__ import annotations
@@ -27,6 +29,7 @@ from world.combat.factories import CombatEncounterFactory, CombatOpponentFactory
 from world.conditions.constants import Allegiance
 from world.conditions.factories import ConditionInstanceFactory, ConditionTemplateFactory
 from world.conditions.models import ConditionInstance
+from world.roster.factories import RosterEntryFactory, RosterTenureFactory
 
 
 def _room() -> object:
@@ -124,14 +127,44 @@ class SendAwayNamedNPCTests(TestCase):
         self.assertEqual(self.npc_char.db_location_id, self.room.pk)
 
     def test_pc_target_is_refused_as_not_an_npc(self) -> None:
-        """Fix round 1 ruling 3: a PC carrying the actor's hold is refused,
-        never matched by name -- the canonical PC/NPC test is db_account."""
+        """Fix round 1 ruling 3: a PC carrying the actor's hold is refused, never
+        matched by name. The canonical PC/NPC test is an active ``RosterTenure``
+        (fix round 2) -- this PC is both actively puppeted (``db_account`` set)
+        AND rostered, so it's refused either way; see the offline-PC test below
+        for the case that actually distinguishes the two tests."""
         pc_char = _character("Lady Vance", self.room)
         pc_char.db_account = AccountFactory()
+        entry = RosterEntryFactory(character_sheet=pc_char.character_sheet)
+        RosterTenureFactory(roster_entry=entry)
         pc_persona = pc_char.character_sheet.primary_persona
         ConditionInstanceFactory(
             target=pc_char,
             condition=_charm("Send Away PC Guard Charm"),
+            source_character=self.wren,
+            severity=4,
+        )
+
+        result = get_action("send_away").run(actor=self.wren, target_persona_id=pc_persona.pk)
+
+        self.assertFalse(result.success)
+        self.assertIn("will of their own", result.message)
+        pc_char.refresh_from_db()
+        self.assertEqual(pc_char.db_location_id, self.room.pk)
+
+    def test_offline_pc_with_active_tenure_is_refused_as_not_an_npc(self) -> None:
+        """Fix round 2: ``db_account`` is also ``None`` for an OFFLINE PC (Evennia's
+        ``unpuppet_object`` clears it the instant nobody is connected), so the
+        canonical test must be an active ``RosterTenure``, not ``db_account``."""
+        entry = RosterEntryFactory()
+        pc_char = entry.character_sheet.character
+        pc_char.location = self.room
+        pc_char.save()
+        RosterTenureFactory(roster_entry=entry)
+        self.assertIsNone(pc_char.db_account)
+        pc_persona = entry.character_sheet.primary_persona
+        ConditionInstanceFactory(
+            target=pc_char,
+            condition=_charm("Send Away Offline PC Charm"),
             source_character=self.wren,
             severity=4,
         )

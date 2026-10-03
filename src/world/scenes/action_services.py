@@ -1211,8 +1211,19 @@ def _accrue_engagement_for_primary(action_request: SceneActionRequest) -> None:
 
 
 def _persona_is_npc(persona: Persona) -> bool:
-    """True when the persona has no controlling player account (NPC)."""
-    return persona.character_sheet.character.db_account is None
+    """True when nobody is currently assigned to play this persona's character.
+
+    "PC targets stay PENDING" means player-character, not "online right now" --
+    an offline PC's consent request must still wait for them, not auto-resolve
+    as if they were an NPC. ``character.db_account`` is the wrong proxy for
+    that: Evennia's ``unpuppet_object`` clears it the moment nobody is
+    actively connected, so an offline PC would read as an NPC under it (#4091
+    task 12 fix round 2). ``is_player_character`` checks for an active
+    ``RosterTenure`` instead, which is offline-safe.
+    """
+    from world.roster.services.activity import is_player_character  # noqa: PLC0415
+
+    return not is_player_character(persona.character_sheet)
 
 
 def _deny_action_target(action_target: SceneActionTarget, blacklist_actor: bool) -> None:

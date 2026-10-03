@@ -77,10 +77,11 @@ def _drop_named_npc(body: ObjectDB, condition: ConditionTemplate | None) -> None
         remove_condition(body, condition)
 
 
-#: A player character can't be "sent away" like a hireling (#4091 task 12 fix
-#: round 1); canonical PC/NPC test per ``_persona_is_npc``/``_victim_is_npc``
-#: (``world/scenes/action_services.py``, ``world/magic/services/feeding.py``):
-#: no controlling account means NPC. Never matched on a name.
+#: A player character can't be "sent away" like a hireling (#4091 task 12).
+#: Canonical PC/NPC test per ``is_player_character``
+#: (``world/roster/services/activity.py``, fix round 2) -- an active
+#: ``RosterTenure``, NOT ``db_account`` (that reads None for an OFFLINE PC too,
+#: since Evennia's ``unpuppet_object`` clears it). Never matched on a name.
 _NOT_AN_NPC_SEND_AWAY_MESSAGE = "They have a will of their own; you cannot send them away."
 
 
@@ -98,6 +99,7 @@ class HoldsAllegianceOverTargetPrerequisite(Prerequisite):
             ALLEGIANCE_HOLD_KINDS,
             actor_holds_sway_present,
         )
+        from world.roster.services.activity import is_player_character  # noqa: PLC0415
 
         body, _opponent = _resolve_send_away_target((context or {}).get("kwargs", {}))
         if (
@@ -106,7 +108,8 @@ class HoldsAllegianceOverTargetPrerequisite(Prerequisite):
             or body.db_location_id != actor.db_location_id
         ):
             return False, "They are not here."
-        if body.db_account is not None:
+        sheet = body.character_sheet
+        if sheet is not None and is_player_character(sheet):
             return False, _NOT_AN_NPC_SEND_AWAY_MESSAGE
         if not actor_holds_sway_present(actor, body, kinds=ALLEGIANCE_HOLD_KINDS):
             return False, "They are not under your sway."

@@ -25,10 +25,11 @@ if TYPE_CHECKING:
 # Same role contexts as coercion — charm-acquired assets serve the same roles.
 _CHARMABLE_ROLE_CONTEXTS = frozenset({"informant", "contact", "personal_favor"})
 
-#: A player character can't be "taken into service" like an NPC (#4091 task 12
-#: fix round 1); canonical PC/NPC test per ``_persona_is_npc``/``_victim_is_npc``
-#: (``world/scenes/action_services.py``, ``world/magic/services/feeding.py``):
-#: no controlling account means NPC. Never matched on a name.
+#: A player character can't be "taken into service" like an NPC (#4091 task 12).
+#: Canonical PC/NPC test per ``is_player_character``
+#: (``world/roster/services/activity.py``, fix round 2) -- an active
+#: ``RosterTenure``, NOT ``db_account`` (that reads None for an OFFLINE PC too,
+#: since Evennia's ``unpuppet_object`` clears it). Never matched on a name.
 _NOT_AN_NPC_RETAIN_MESSAGE = "They have a will of their own; you cannot take them into service."
 
 
@@ -51,6 +52,7 @@ class CharmedByActorPrerequisite(Prerequisite):
     ) -> tuple[bool, str]:
         from world.conditions.constants import Allegiance  # noqa: PLC0415
         from world.npc_services.allegiance import actor_holds_sway_present  # noqa: PLC0415
+        from world.roster.services.activity import is_player_character  # noqa: PLC0415
         from world.scenes.models import Persona  # noqa: PLC0415
 
         kwargs = (context or {}).get("kwargs", {})
@@ -66,7 +68,7 @@ class CharmedByActorPrerequisite(Prerequisite):
             or body.db_location_id != actor.db_location_id
         ):
             return False, "They are not here."
-        if body.db_account is not None:
+        if is_player_character(persona.character_sheet):
             return False, _NOT_AN_NPC_RETAIN_MESSAGE
         kinds = frozenset({Allegiance.ALLY_OF_CASTER})
         if not actor_holds_sway_present(actor, body, kinds=kinds):

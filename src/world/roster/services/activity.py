@@ -205,6 +205,24 @@ def sweep_activity_states() -> dict[str, int]:
     }
 
 
+def is_player_character(sheet: CharacterSheet) -> bool:
+    """Whether a CURRENT player holds this character (an active ``RosterTenure``) --
+    the canonical, offline-safe PC/NPC test (#4091 task 12 fix round 2).
+
+    ``character.db_account`` is NOT the right proxy: Evennia's ``unpuppet_object``
+    clears it the instant nobody is actively connected (``del obj.account`` --
+    ``evennia/accounts/accounts.py``), so an OFFLINE player's character reads
+    identically to an NPC under that check. A bare ``RosterEntry`` doesn't count
+    either -- major NPCs are rostered too (see ``RosterEntry``'s own docstring).
+    The real answer is an active tenure: someone is assigned to play this
+    character right now, online or not. One query via ``current_roster_entry``,
+    one more (cached) via ``RosterEntry.current_tenure`` -- safe to call once per
+    check; batch callers should fetch tenures themselves rather than loop this.
+    """
+    entry = current_roster_entry(sheet)
+    return entry is not None and entry.current_tenure is not None
+
+
 def is_original_character(sheet: CharacterSheet) -> bool:
     """Whether this character is a player's own creation (#3996).
 

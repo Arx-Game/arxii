@@ -236,9 +236,21 @@ def _apply_victim_fatigue(victim_sheet, taken: int) -> int:
 
 
 def _victim_is_npc(victim_sheet) -> bool:
-    """A victim with no live player account is an NPC for feeding lethality."""
+    """Whether this victim is an NPC for feeding lethality (only NPCs can die of it).
+
+    Player-character status is the ruling's own axis -- not whether someone is
+    online right now. ``character.db_account`` is the wrong proxy for that:
+    Evennia's ``unpuppet_object`` clears it the moment nobody is actively
+    connected, so an offline PC victim used to read as an NPC and could be
+    killed by feeding (#4091 task 12 fix round 2). ``is_player_character``
+    checks for an active ``RosterTenure`` instead, which is offline-safe.
+    """
+    from world.roster.services.activity import is_player_character  # noqa: PLC0415
+
     character = victim_sheet.character
-    return character is None or character.db_account is None
+    if character is None:
+        return True
+    return not is_player_character(victim_sheet)
 
 
 def _maybe_kill_npc_victim(feeder_sheet, victim_sheet, scene) -> bool:
