@@ -1,5 +1,6 @@
-import { render, screen } from '@testing-library/react';
-import { describe, expect, it } from 'vitest';
+import { fireEvent, render, screen, within } from '@testing-library/react';
+import { describe, expect, it, vi } from 'vitest';
+import { FeedBlockControlsContext, type FeedBlockControls } from '../feedBlockControls';
 import type { FeedNote } from '@/hooks/types';
 import { FeedNoteBlock } from './FeedNoteBlock';
 
@@ -66,5 +67,34 @@ describe('FeedNoteBlock (#3856)', () => {
     const lantern = screen.getByText('Lantern');
     expect(lantern).toHaveClass('text-green-400');
     expect(document.querySelector('img')).not.toHaveAttribute('onerror');
+  });
+
+  it("a note's Minimize all folds every loaded line, not just the note (#4128)", async () => {
+    const minimizeMany = vi.fn();
+    const controls: FeedBlockControls = {
+      minimized: new Set(),
+      minimize: vi.fn(),
+      restore: vi.fn(),
+      dismiss: vi.fn(),
+      minimizeMany,
+      dismissMany: vi.fn(),
+      restoreAll: vi.fn(),
+      restoreDismissed: vi.fn(),
+    };
+    render(
+      <FeedBlockControlsContext.Provider value={controls}>
+        <FeedNoteBlock
+          note={note('look', 'Rain rests on the stones.')}
+          allKeys={() => ['i:1', 'i:2', 'n:n1']}
+        />
+      </FeedBlockControlsContext.Provider>
+    );
+
+    // The keyboard route: a contextmenu with no press behind it.
+    fireEvent.contextMenu(screen.getByText('Rain rests on the stones.'));
+    const menu = await screen.findByRole('menu');
+    fireEvent.click(within(menu).getByRole('menuitem', { name: 'Minimize all' }));
+
+    expect(minimizeMany).toHaveBeenCalledWith(['i:1', 'i:2', 'n:n1']);
   });
 });

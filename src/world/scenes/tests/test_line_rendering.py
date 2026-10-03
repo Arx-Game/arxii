@@ -77,9 +77,34 @@ class RenderLineTests(SimpleTestCase):
         # message_location's mapping resolves ``{caller}`` per looker afterwards.
         assert render_line("{caller}", InteractionMode.POSE, "waves.") == "{caller} waves."
 
+    def test_the_telnet_placeholder_leaves_an_already_named_pose_alone(self) -> None:
+        # The placeholder can never match the typed text; the actor's name does.
+        line = render_line(
+            "{caller}", InteractionMode.POSE, "Bram deals the cards.", actor_name="Bram"
+        )
+        assert line == "Bram deals the cards."
+
 
 class LeadInTests(SimpleTestCase):
     """Whisper emotes and tabletalk read as sentences with a lead-in (#4128)."""
+
+    def test_telnet_and_web_agree_on_every_form(self) -> None:
+        # The telnet line is the web line with ``{caller}`` where the name goes,
+        # for each form the spec names, including a pose that names its actor.
+        cases = [
+            (InteractionMode.POSE, "deals the cards.", None),
+            (InteractionMode.POSE, "Bram deals the cards.", None),
+            (InteractionMode.POSE, "Bram deals the cards.", "the long table"),
+            (InteractionMode.POSE, "deals the cards.", "the long table"),
+            (InteractionMode.WHISPER, ":leans in.", None),
+            (InteractionMode.WHISPER, ":Bram leans in.", None),
+            (InteractionMode.SAY, "I fold.", "the long table"),
+        ]
+        for mode, content, place in cases:
+            with self.subTest(mode=mode, content=content, place=place):
+                web = render_line("Bram", mode, content, place_name=place)
+                telnet = render_line("{caller}", mode, content, place_name=place, actor_name="Bram")
+                assert telnet.replace("{caller}", "Bram") == web
 
     def test_a_whisper_emote_reads_quietly(self) -> None:
         assert (

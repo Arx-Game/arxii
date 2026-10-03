@@ -1479,7 +1479,7 @@ export function ThreadedNarrativeReader({
                         }}
                       >
                         <div className="px-2 py-1">
-                          <FeedNoteBlock note={row.note} />
+                          <FeedNoteBlock note={row.note} allKeys={sorting.allKeys} />
                         </div>
                       </div>
                     );
@@ -1557,7 +1557,7 @@ export function ThreadedNarrativeReader({
                       if (row.type === 'note') {
                         return (
                           <div key={row.note.id} data-feed-row={`note:${row.note.id}`}>
-                            <FeedNoteBlock note={row.note} />
+                            <FeedNoteBlock note={row.note} allKeys={sorting.allKeys} />
                           </div>
                         );
                       }

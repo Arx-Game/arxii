@@ -85,6 +85,21 @@ describe('the actor in the line (#3858)', () => {
     expect(screen.queryByText('Hello world')).not.toBeInTheDocument();
   });
 
+  it('finds the name after a lead-in, so a whisper emote or tabletalk reads like a pose (#4128)', () => {
+    render(
+      <Wrapper>
+        <PoseUnit
+          interaction={makeInteraction({ line: 'At the long table, Quietly, Alice deals.' })}
+          sceneId="1"
+        />
+      </Wrapper>
+    );
+    const line = screen.getByTestId('actor-line');
+    expect(line).toHaveTextContent('At the long table, Quietly, Alice deals.');
+    expect(line).toHaveAttribute('data-actor', 'Alice');
+    expect(screen.getByText('Alice')).toHaveClass('font-semibold');
+  });
+
   it('falls back to the recorded content on a row without a line', () => {
     render(
       <Wrapper>

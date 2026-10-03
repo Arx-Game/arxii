@@ -70,11 +70,12 @@ interface PoseUnitAvatarProps {
 }
 
 /**
- * Avatar thumbnail in the bubble header. Identity click surface (#2156) — a
- * left click opens the character card; since #4030 the avatar is also
+ * Avatar thumbnail on an action card's header. Identity click surface (#2156):
+ * a left click opens the character card; since #4030 the avatar is also
  * wrapped in `PersonaMenu` so a right-click reaches the same action menu the
  * name offers. Renders as a plain (non-interactive) avatar when
- * `onAvatarClick` isn't provided.
+ * `onAvatarClick` isn't provided. A pose line (#4128) does not use it: its
+ * avatar's left click is the play menu, whose View sheet opens the card.
  */
 function PoseUnitAvatar({ interaction, onAvatarClick }: PoseUnitAvatarProps) {
   // #3294 — no companion art exists; the owner's own thumbnail stands in even

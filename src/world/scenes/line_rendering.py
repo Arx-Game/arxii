@@ -45,9 +45,9 @@ def _already_named(name: str, content: str) -> bool:
     return bool(rest) and (rest[0].isspace() or rest[0] in _SEMIPOSE_OPENERS)
 
 
-def _pose_line(name: str, content: str) -> str:
-    """``name content``, with semipose glue; an already-named pose is left alone."""
-    if not content or _already_named(name, content):
+def _pose_line(name: str, content: str, actor_name: str) -> str:
+    """``name content``, with semipose glue; a pose already naming the actor is left alone."""
+    if not content or _already_named(actor_name, content):
         return content
     glue = "" if content.startswith(_SEMIPOSE_OPENERS) else " "
     return f"{name}{glue}{content}"
@@ -60,13 +60,14 @@ def _at_place(line: str, place_name: str | None) -> str:
     return f"At {place_name}, {line}"
 
 
-def render_line(
+def render_line(  # noqa: PLR0913 - the channel knobs of one pure formatter; cohesive
     name: str,
     mode: str,
     content: str,
     *,
     language_name: str | None = None,
     place_name: str | None = None,
+    actor_name: str | None = None,
 ) -> str:
     """Render the line a viewer reads for ``content`` said or posed by ``name``.
 
@@ -76,7 +77,10 @@ def render_line(
     companion pose (#3294). ``content`` is the per-viewer content the channel
     already produced, so a comprehension-garbled say (#2993) reads as a garbled
     sentence rather than a bare fragment. ``place_name`` is the place the line
-    was said at, when it was said at one (tabletalk).
+    was said at, when it was said at one (tabletalk). ``actor_name`` is the name
+    an already-named pose would open with; it defaults to ``name`` and exists for
+    telnet, whose ``name`` is the ``{caller}`` placeholder and so could never match
+    the text a player typed (``Bram deals.`` must not read ``Bram Bram deals.``).
 
     - pose: ``name content`` (semipose glue; an already-named pose is left alone)
     - whisper opening with ``:``: ``Quietly, name content`` (the emote form)
@@ -84,11 +88,12 @@ def render_line(
     - any of those at a place: ``At place, `` before the sentence
     - anything else (emit, action, outcome): ``content`` untouched
     """
+    named = actor_name if actor_name is not None else name
     if mode == InteractionMode.WHISPER and content.startswith(_EMOTE_MARK):
-        emote = _pose_line(name, content[len(_EMOTE_MARK) :].lstrip())
+        emote = _pose_line(name, content[len(_EMOTE_MARK) :].lstrip(), named)
         return _at_place(_WHISPER_EMOTE_LEAD_IN + emote if emote else "", place_name)
     if mode == InteractionMode.POSE:
-        return _at_place(_pose_line(name, content), place_name)
+        return _at_place(_pose_line(name, content, named), place_name)
     verb = _SPEECH_VERBS.get(mode)
     if verb is None:
         return content

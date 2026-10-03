@@ -622,7 +622,12 @@ class PoseAction(Action):
         def _broadcast() -> None:
             # The actor is in the line on telnet too (#3858): ``{caller}`` is
             # resolved per looker by message_location's mapping, so a disguise
-            # reads as whatever that looker sees.
+            # reads as whatever that looker sees. The persona's own name is what
+            # an already-named pose opens with (#4128), the same check the web
+            # line makes, so the two never disagree on ``Bram deals.``.
+            from world.scenes.services import active_persona_for_sheet  # noqa: PLC0415
+
+            persona = active_persona_for_sheet(actor.character_sheet)
             # A place-scoped row is receiver-scoped (record_interaction fills its
             # receivers from PlacePresence) while this room line is not, so the
             # line stays untagged there until room delivery is place-aware (#3933).
@@ -633,6 +638,7 @@ class PoseAction(Action):
                     InteractionMode.POSE,
                     text,
                     place_name=place.name if place is not None else None,
+                    actor_name=persona.name if persona is not None else None,
                 ),
                 echo_of=InteractionMode.POSE if place is None else None,
             )

@@ -27,7 +27,7 @@ Core game interface for real-time RPG interaction with WebSocket communication a
   completed encounter, until the player dismisses the outcome banner.
 - **`GameWindow.tsx`**: Central communication hub with session tabs and
   command input. When the composition root passes a `sceneFeed` prop (an
-  active scene), the center renders the structured chat-bubble feed
+  active scene), the center renders the structured prose-line feed
   (`ThreadedNarrativeReader`) instead of a terminal transcript; with no scene it
   renders `ExplorationReader`. Both take the session's `notes` (#3856) and show
   them at their time among the poses; a reference view gets none. Owns the feed
@@ -342,7 +342,7 @@ chips, dismissed?)` counts unread per waking chip for the strip's "new" pills,
   #3856, since every text frame is a note in the column now.
 - **`ChatWindow.tsx`**: Retained legacy component for isolated compatibility tests; `/game` now uses `ExplorationReader` —
   the fallback center feed when there's no active scene to structure into
-  chat bubbles.
+  prose lines.
 - **`CommandInput.tsx`**: Textarea input with Enter to submit, Shift+Enter for
   newline, command history. **The label is the truth (#3857):** `GamePage`'s
   `effectiveComposerMode` derives Pose for the room anchor whenever no mode is

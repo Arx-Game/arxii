@@ -242,7 +242,8 @@ the unified Persona identity system, and non-combat scene rounds.
   character is never physically placed anywhere.
 
 ### `line_rendering.py` (#3858, ADR-0299)
-- **`render_line(name, mode, content, *, language_name=None, place_name=None)`**: the one
+- **`render_line(name, mode, content, *, language_name=None, place_name=None,
+  actor_name=None)`**: the one
   formatter that puts the actor into a pose or say line, at display time, for the WebSocket
   payload (`InteractionPayload.line`), the REST row (`InteractionListSerializer.line`) and telnet
   (`PoseAction` with `{caller}`, whisper, mutter, the companion emote). Pure; `content` is

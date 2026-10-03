@@ -176,7 +176,7 @@ export function ExplorationReader({
                 {rows.map((row) =>
                   row.type === 'note' ? (
                     <li key={row.note.id} data-feed-row={`note:${row.note.id}`}>
-                      <FeedNoteBlock note={row.note} />
+                      <FeedNoteBlock note={row.note} allKeys={allKeys} />
                     </li>
                   ) : (
                     <li
