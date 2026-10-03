@@ -26,6 +26,7 @@ from world.magic.services.gift_acquisition import (
     accept_technique_offer,
     spend_xp_on_gift_unlock,
 )
+from world.roster.factories import grant_test_tenure
 
 
 class GiftAcquisitionE2ETest(TestCase):
@@ -47,8 +48,7 @@ class GiftAcquisitionE2ETest(TestCase):
 
         self.sheet = CharacterSheetFactory()
         self.account = AccountFactory()
-        self.sheet.character.account = self.account
-        self.sheet.character.save()
+        grant_test_tenure(self.sheet, self.account)
         self.teacher_tenure = RosterTenureFactory()
         self.unlock = GiftUnlock.objects.create(gift=self.gift, xp_cost=10)
 

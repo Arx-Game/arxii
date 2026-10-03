@@ -36,6 +36,7 @@ from world.magic.models import (
     CharacterThreadWeavingUnlock,
     Thread,
 )
+from world.roster.factories import grant_test_tenure
 
 
 class GiftAcquisitionActionE2ETest(TestCase):
@@ -52,8 +53,7 @@ class GiftAcquisitionActionE2ETest(TestCase):
 
         self.sheet = CharacterSheetFactory()
         self.account = AccountFactory()
-        self.sheet.character.account = self.account
-        self.sheet.character.save()
+        grant_test_tenure(self.sheet, self.account)
 
         self.teacher_tenure = RosterTenureFactory()
         self.gift_unlock = GiftUnlockFactory(gift=self.gift, xp_cost=10)
@@ -141,8 +141,7 @@ class ThreadWeavingOfferAcceptanceActionParityTest(TestCase):
 
         self.sheet = CharacterSheetFactory()
         self.account = AccountFactory()
-        self.sheet.character.account = self.account
-        self.sheet.character.save()
+        grant_test_tenure(self.sheet, self.account)
 
         self.teacher_tenure = RosterTenureFactory()
         self.unlock = ThreadWeavingUnlockFactory(xp_cost=100)

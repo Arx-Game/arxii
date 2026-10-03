@@ -37,9 +37,22 @@ from world.journals.types import JournalError
 from world.relationships.constants import LabelAwareness, TypeValence
 from world.relationships.factories import RelationshipTypeFactory
 from world.relationships.services import declare_label, get_or_create_side
-from world.roster.factories import PlayerDataFactory, RosterTenureFactory, grant_test_tenure
+from world.roster.factories import (
+    PlayerDataFactory,
+    RosterEntryFactory,
+    RosterTenureFactory,
+    grant_test_tenure,
+)
 from world.scenes.factories import PersonaFactory
 from world.scenes.models import Block, Mute
+
+
+def _play_sheet(sheet, account) -> None:
+    """Make ``account`` the player of ``sheet`` through a live tenure, with no puppet (#4132)."""
+    entry = sheet.roster_entry_or_none or RosterEntryFactory(character_sheet=sheet)
+    RosterTenureFactory(
+        roster_entry=entry, player_data=PlayerDataFactory(account=account), end_date=None
+    )
 
 
 @patch("world.journals.services.increment_stat")
@@ -52,8 +65,17 @@ class CreateJournalEntryTest(TestCase):
         cls.current_week = get_current_game_week()
         cls.account = AccountFactory()
         cls.author = CharacterSheetFactory()
-        cls.author.character.db_account = cls.account
-        cls.author.character.save()
+        _play_sheet(cls.author, cls.account)
+
+    def test_weekly_xp_goes_to_the_tenure_account_without_a_puppet(
+        self,
+        mock_award,
+        mock_stat,  # noqa: ARG002
+    ) -> None:
+        """#4132: the poster's account is the tenure's, not ``character.db_account``."""
+        self.assertIsNone(self.author.character.db_account)
+        create_journal_entry(author=self.author, title="t", body="b", is_public=True)
+        self.assertEqual(mock_award.call_args.kwargs["account"], self.account)
 
     def test_creates_entry(
         self,
@@ -272,8 +294,7 @@ class JournalXPOptOutTests(TestCase):
     def setUpTestData(cls) -> None:
         cls.account = AccountFactory()
         cls.sheet = CharacterSheetFactory()
-        cls.sheet.character.db_account = cls.account
-        cls.sheet.character.save()
+        _play_sheet(cls.sheet, cls.account)
 
     def test_award_weekly_xp_false_writes_no_tracker(
         self,
@@ -305,11 +326,9 @@ class CreateJournalResponseTest(TestCase):
         cls.author_account = AccountFactory(username="journal_author")
         cls.responder_account = AccountFactory(username="journal_responder")
         cls.author = CharacterSheetFactory()
-        cls.author.character.db_account = cls.author_account
-        cls.author.character.save()
+        _play_sheet(cls.author, cls.author_account)
         cls.responder = CharacterSheetFactory()
-        cls.responder.character.db_account = cls.responder_account
-        cls.responder.character.save()
+        _play_sheet(cls.responder, cls.responder_account)
         # ADR-0307 (#3941): Retort/Condemn are consent-gated. This class predates the
         # gate and exercises the XP/stat plumbing, not the gate itself — open the door
         # so its existing retort tests keep testing what they always tested.
@@ -684,8 +703,7 @@ class EditJournalEntryTests(TestCase):
 
 
 def _with_account(sheet):
-    sheet.character.db_account = AccountFactory()
-    sheet.character.save()
+    _play_sheet(sheet, AccountFactory())
     return sheet
 
 

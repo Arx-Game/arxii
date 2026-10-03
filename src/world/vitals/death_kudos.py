@@ -121,6 +121,7 @@ def award_death_kudos(
     """
     from django.core.exceptions import ObjectDoesNotExist  # noqa: PLC0415
 
+    from world.magic.services.gain import account_for_sheet  # noqa: PLC0415
     from world.progression.models import KudosTransaction  # noqa: PLC0415
     from world.progression.services.kudos import award_kudos  # noqa: PLC0415
 
@@ -134,7 +135,8 @@ def award_death_kudos(
     if is_retired(sheet):
         msg = "That character has been laid to rest; the window has closed."
         raise DeathKudosError(msg)
-    recipient_account = dead_character.db_account
+    # The tenure's account, not ``db_account``: a dead character is never puppeted (#4132).
+    recipient_account = account_for_sheet(sheet)
     if recipient_account is None:
         msg = "That character has no player to receive the honor."
         raise DeathKudosError(msg)
