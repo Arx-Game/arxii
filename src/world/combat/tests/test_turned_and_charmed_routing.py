@@ -4,7 +4,6 @@ from decimal import Decimal
 from unittest.mock import MagicMock, patch
 
 from django.test import TestCase
-from django.test.utils import tag
 
 from world.checks.factories import CheckTypeFactory
 from world.combat.constants import ActionCategory, CombatAllegiance, OpponentTier
@@ -110,12 +109,13 @@ class RoutingTests(TestCase):
         self.assertTrue(all(a.opponent_targets.exists() for a in actions))
 
 
-@tag("postgres")
 class ConditionsAppliedOnOpponentTargetTests(TestCase):
     """A charmed NPC's damaging hit applies the threat entry's conditions (#4091).
 
-    Postgres-only: bulk_apply_conditions' stacking/interaction read uses PG-only
-    SQL (DISTINCT ON), mirroring test_opponent_vs_opponent.py's damage-path tests.
+    Runs on SQLite: bulk_apply_conditions' DISTINCT ON read
+    (``world/conditions/services.py``'s ``_build_bulk_context``) only fires for
+    templates with ``has_progression=True``; both templates here use the factory
+    default (``False``), so that PG-only path never runs.
     """
 
     @classmethod
