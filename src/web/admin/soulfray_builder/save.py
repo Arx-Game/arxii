@@ -33,12 +33,17 @@ from dataclasses import dataclass, field
 
 from django.db import transaction
 from django.db.models import Model
+from evennia.utils.idmapper.models import SharedMemoryModel
 
 from actions.models import ConsequencePool, ConsequencePoolEntry
 from web.admin.authoring.credit import stamp_written
 from web.admin.soulfray_builder.forms import BuilderForms, PoolForm, TableRow
 from world.checks.models import Consequence, ConsequenceEffect
-from world.conditions.models import ConditionCheckModifier, ConditionStage
+from world.conditions.models import (
+    ConditionCheckModifier,
+    ConditionStage,
+    ConditionStageOnEntry,
+)
 from world.contributors.models import ContentContributor, CreditedContent
 from world.magic.models import SoulfrayConfig
 
@@ -49,6 +54,18 @@ _NOT_CLONED = frozenset({"consequence", "written_by", "written_on", "reviewed_by
 NEW_POOL_NAME_REQUIRED = (
     "Name the new pool: this save adds rows or a shared parent and the stage has no pool "
     "picked to hold them."
+)
+
+
+#: Every identity-mapped model this save can create a row of; a rolled-back save
+#: evicts its new rows. ``ConditionCheckModifier`` is a plain ``models.Model``, so
+#: it has no identity map to evict from.
+_CREATED_MODELS = (
+    Consequence,
+    ConsequencePool,
+    ConsequencePoolEntry,
+    ConsequenceEffect,
+    ConditionStageOnEntry,
 )
 
 
@@ -69,6 +86,13 @@ class CacheGuard:
 
     def __init__(self) -> None:
         self._kept: dict[int, tuple[Model, dict[str, object], dict[str, object]]] = {}
+        self._cached_before: dict[type[SharedMemoryModel], set[object]] = {}
+
+    def watch_created(self, *models: type[SharedMemoryModel]) -> None:
+        """Note which pks of ``models`` the identity map holds now, so ``restore`` can
+        evict the rows a rolled-back transaction created. Eviction, never a refetch."""
+        for model in models:
+            self._cached_before[model] = {row.pk for row in model.get_all_cached_instances()}
 
     def keep(self, *rows: Model | None) -> None:
         for row in rows:
@@ -85,6 +109,10 @@ class CacheGuard:
         for row, values, relations in self._kept.values():
             row.__dict__.update(values)
             row._state.fields_cache = dict(relations)  # noqa: SLF001
+        for model, before in self._cached_before.items():
+            for row in model.get_all_cached_instances():
+                if row.pk not in before:
+                    model.flush_cached_instance(row, force=True)
 
 
 def cache_guard_for(forms: BuilderForms) -> CacheGuard:
@@ -136,6 +164,8 @@ def pool_switch_conflict(forms: BuilderForms) -> bool:
 
 
 def _save_penalty(stage: ConditionStage, config: SoulfrayConfig, value: int | None) -> None:
+    """``ConditionCheckModifier`` is a plain ``models.Model`` (not identity-mapped), so the
+    row edited here is this query's own instance and a rollback leaves nothing cached."""
     existing = ConditionCheckModifier.objects.filter(
         stage=stage, check_type=config.resilience_check_type
     ).first()
@@ -299,12 +329,14 @@ def save_stage(
 ) -> ConditionStage:
     """Write every layer in one transaction and credit each touched CreditedContent row.
 
-    A failure inside the transaction restores ``guard``'s rows (and the pool row
-    this save re-points or re-parents) before it propagates, so the identity map
-    never holds a value the rollback took back out of the database.
+    A failure inside the transaction restores ``guard``'s rows (and the pool,
+    and entry rows this save edits in place) and evicts every row the
+    transaction created before it propagates, so the identity map never holds a
+    value or a row the rollback took back out of the database.
     """
     guard = guard if guard is not None else cache_guard_for(forms)
     shared_ids = {row.consequence.pk for row in forms.table if row.shared_from is not None}
+    guard.watch_created(*_CREATED_MODELS)
     try:
         with transaction.atomic():
             stage = forms.stage.save()

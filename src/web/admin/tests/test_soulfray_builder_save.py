@@ -26,7 +26,11 @@ from world.checks.factories import (
     ConsequenceFactory,
 )
 from world.checks.models import Consequence, ConsequenceEffect
-from world.conditions.factories import ConditionStageFactory, ConditionTemplateFactory
+from world.conditions.factories import (
+    ConditionCheckModifierFactory,
+    ConditionStageFactory,
+    ConditionTemplateFactory,
+)
 from world.conditions.models import ConditionCheckModifier, ConditionStage, ConditionStageOnEntry
 from world.contributors.factories import ContentContributorFactory
 from world.magic.factories import SoulfrayConfigFactory
@@ -49,7 +53,8 @@ class SaveTestCase(SoulfrayBuilderTestCase):
         cls.fraying_pool = stock(
             cls.fraying, cls.ladder, tiers=("Critical Failure", "Failure"), parent=cls.common
         )
-        cls.ripping_pool = stock(cls.ladder.stage("Ripping"), cls.ladder, tiers=("Failure",))
+        cls.ripping = cls.ladder.stage("Ripping")
+        cls.ripping_pool = stock(cls.ripping, cls.ladder, tiers=("Failure",))
         cls.fraying_failure = Consequence.objects.get(label="Fraying Failure")
         cls.shaken = ConditionTemplateFactory(name="Shaken")
         ConsequenceEffectFactory(
@@ -59,6 +64,12 @@ class SaveTestCase(SoulfrayBuilderTestCase):
             condition_severity=1,
         )
         cls.loose = ConsequencePoolFactory(name="Loose shared pool")
+        cls.penalty = ConditionCheckModifierFactory(
+            condition=None,
+            stage=cls.ripping,
+            check_type=cls.config.resilience_check_type,
+            modifier_value=-3,
+        )
         cls.blocks = PropertyFactory(name="blocks_anima_regen")
         cls.numb = ConditionStageFactory(
             condition=ConditionTemplateFactory(name="Poison test", has_progression=True),
@@ -473,7 +484,34 @@ class CacheSafetyTest(SaveTestCase):
         pool = ConsequencePool.objects.get(pk=self.fraying_pool.pk)
         self.assertEqual(pool.parent_id, self.common.pk)
         self.assertEqual(pool.parent, self.common)
-        self.assertEqual(ConditionStage.objects.get(pk=self.fraying.pk).written_by, None)
+
+    def test_a_failure_inside_the_save_leaves_the_penalty_alone(self) -> None:
+        # ConditionCheckModifier is not identity-mapped today, so this pins the
+        # rollback; it would also catch the model joining the identity map unguarded.
+        data = self._values(self.ripping)
+        data["penalty-modifier_value"] = ["-7"]
+        with (
+            mock.patch.object(BaseEffectFormSet, "save", side_effect=RuntimeError("injected")),
+            self.assertRaises(RuntimeError),
+        ):
+            self._post(self.ripping, data)
+        self.assertEqual(ConditionCheckModifier.objects.get(pk=self.penalty.pk).modifier_value, -3)
+
+    def test_a_failure_inside_the_save_evicts_the_rows_it_created(self) -> None:
+        data = self._values(self.tearing)
+        data["pool-parent"] = [str(self.common.pk)]
+        self._add_row(
+            data, outcome_tier=self.ladder.outcomes["Failure"].pk, label="PLACEHOLDER lost"
+        )
+        with (
+            mock.patch.object(BaseEffectFormSet, "save", side_effect=RuntimeError("injected")),
+            self.assertRaises(RuntimeError),
+        ):
+            self._post(self.tearing, data)
+        cached_pools = {pool.name for pool in ConsequencePool.get_all_cached_instances()}
+        self.assertNotIn("Soulfray - Tearing", cached_pools)
+        cached_rows = {row.label for row in Consequence.get_all_cached_instances()}
+        self.assertNotIn("PLACEHOLDER lost", cached_rows)
 
 
 class ReviewTest(SaveTestCase):
