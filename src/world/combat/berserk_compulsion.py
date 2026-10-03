@@ -226,10 +226,9 @@ def _nearest_npc_sheet(character: ObjectDB, room: ObjectDB) -> CharacterSheet | 
     """The first living sheeted NPC co-located with the berserker.
 
     A berserk rampage must never target a PC (PCs roll, NPCs are targets) --
-    the canonical, offline-safe PC test is an active RosterTenure
-    (``is_player_character``), not ``db_account`` (#4091 task 12 fix round 3):
-    an offline PC's ``db_account`` also reads ``None``, which would have let a
-    rampage target them.
+    the canonical, offline-safe PC test is ``is_player_character`` (an active
+    RosterTenure or a live puppet), not ``db_account`` alone (#4091): an offline
+    PC's ``db_account`` reads ``None``, which would have let a rampage target them.
     """
     from django.core.exceptions import ObjectDoesNotExist  # noqa: PLC0415
 

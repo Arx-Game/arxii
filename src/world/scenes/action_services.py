@@ -1218,8 +1218,8 @@ def _persona_is_npc(persona: Persona) -> bool:
     as if they were an NPC. ``character.db_account`` is the wrong proxy for
     that: Evennia's ``unpuppet_object`` clears it the moment nobody is
     actively connected, so an offline PC would read as an NPC under it (#4091
-    task 12 fix round 2). ``is_player_character`` checks for an active
-    ``RosterTenure`` instead, which is offline-safe.
+    task 12 fix round 2). ``is_player_character`` also accepts an active
+    ``RosterTenure``, which is offline-safe.
     """
     from world.roster.services.activity import is_player_character  # noqa: PLC0415
 

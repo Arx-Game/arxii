@@ -79,9 +79,9 @@ def _drop_named_npc(body: ObjectDB, condition: ConditionTemplate | None) -> None
 
 #: A player character can't be "sent away" like a hireling (#4091 task 12).
 #: Canonical PC/NPC test per ``is_player_character``
-#: (``world/roster/services/activity.py``, fix round 2) -- an active
-#: ``RosterTenure``, NOT ``db_account`` (that reads None for an OFFLINE PC too,
-#: since Evennia's ``unpuppet_object`` clears it). Never matched on a name.
+#: (``world/roster/services/activity.py``) -- an active ``RosterTenure`` OR a
+#: live puppet; ``db_account`` alone reads None for an OFFLINE PC, since
+#: Evennia's ``unpuppet_object`` clears it. Never matched on a name.
 _NOT_AN_NPC_SEND_AWAY_MESSAGE = "They have a will of their own; you cannot send them away."
 
 

@@ -31,9 +31,10 @@ owed while offline, only answered later) and `_victim_is_npc`
 (`world/magic/services/feeding.py`, gates whether GORGE feeding can kill the
 victim; an offline PC could be fed to death, since the feeding code believed
 it was looking at an NPC). All three were fixed by switching to
-`is_player_character(sheet)`, which answers from an active `RosterTenure`
-(held by a player, or a GM's Story NPC, both mint one) rather than from live
-connectivity.
+`is_player_character(sheet)`, which answers True for an active `RosterTenure`
+(held by a player, or a GM's Story NPC, both mint one) OR a live puppet
+(`db_account` set). The puppet half keeps every character the old check
+called a PC still a PC; the tenure half adds offline PCs.
 
 ## What to check
 
@@ -54,8 +55,10 @@ connectivity.
      `world.roster.services.activity.is_player_character(sheet)`. Watch for
      the inverse mistake too: a plain `RosterEntry` existing is not enough
      (major/Story NPCs are rostered too); the test needs an **active
-     `RosterTenure`** specifically, which is what `is_player_character`
-     checks.
+     `RosterTenure`** specifically (or a live puppet), which is what
+     `is_player_character` checks. A batched caller that queries tenures
+     itself must keep the puppet half too (see
+     `select_surrounded_terminal_pool` in `world/battles/resolution.py`).
    - If the real question is **"is someone actively connected and puppeting
      this character right now"**, a momentary, connectivity-scoped question
      where an offline PC genuinely should be treated the same as an NPC for
@@ -76,7 +79,9 @@ connectivity.
 3. **Confirm the direction of the fix, not just its presence.** A diff that
    adds `is_player_character` alongside an unremoved `db_account is None`
    check on the same decision has not actually fixed anything; check that the
-   old check is replaced, not duplicated.
+   old check is replaced, not duplicated. The one legitimate leftover is a
+   character with no `CharacterSheet` (there is nothing to pass the helper):
+   `db_account is not None` is the whole answer there, as in `is_pc_source`.
 
 4. **Harm asymmetry.** Weight findings by what happens on the wrong branch.
    A guard that merely declines an interaction is Important; a guard whose

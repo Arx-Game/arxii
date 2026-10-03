@@ -268,9 +268,11 @@ def select_surrounded_terminal_pool(
     ADR-0023 (PvP non-lethal) applies, so ``surrounded_terminal_pvp`` (no death row at
     all) is used instead. This replaces ``select_abandonment_pool``'s ``ObjectDB``
     source-character routing, which doesn't apply here (see Task 2). PC detection is
-    the canonical, offline-safe active-RosterTenure test (#4091 task 12 fix round 3) —
-    not ``db_account``, which reads ``None`` for an offline PC opponent too and would
-    have let a battle round kill them. Batched: one query for every opposing
+    the batched form of ``world.roster.services.activity.is_player_character``
+    (#4091): an opponent counts as a PC when it is puppeted right now
+    (``db_account`` set, the pre-#4091 test) OR holds an active RosterTenure, which
+    covers an offline PC opponent whose ``db_account`` reads ``None`` and would
+    otherwise have let a battle round kill them. One query for every opposing
     participant's roster tenure, not one per participant.
 
     Returns ``None`` on a seeding gap (the named pool doesn't exist) rather than raising
@@ -294,11 +296,14 @@ def select_surrounded_terminal_pool(
         if participant.place_id is not None
         else []
     )
-    opposing_sheet_ids = [p.character_sheet_id for p in others if p.side_id != participant.side_id]
-    opposing_pc_present = (
-        bool(opposing_sheet_ids)
+    opposing = [p for p in others if p.side_id != participant.side_id]
+    opposing_pc_present = any(
+        p.character_sheet.character.db_account is not None for p in opposing
+    ) or (
+        bool(opposing)
         and RosterEntry.objects.filter(
-            character_sheet_id__in=opposing_sheet_ids, tenures__end_date__isnull=True
+            character_sheet_id__in=[p.character_sheet_id for p in opposing],
+            tenures__end_date__isnull=True,
         ).exists()
     )
     pool_name = (

@@ -243,7 +243,7 @@ def _victim_is_npc(victim_sheet) -> bool:
     Evennia's ``unpuppet_object`` clears it the moment nobody is actively
     connected, so an offline PC victim used to read as an NPC and could be
     killed by feeding (#4091 task 12 fix round 2). ``is_player_character``
-    checks for an active ``RosterTenure`` instead, which is offline-safe.
+    also accepts an active ``RosterTenure``, which is offline-safe.
     """
     from world.roster.services.activity import is_player_character  # noqa: PLC0415
 
