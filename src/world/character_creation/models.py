@@ -2673,7 +2673,12 @@ class DistinctionOffer(
     def _opener_is_set(self, field: str) -> bool:
         if field in ("prompt", "enemy_degree", "feature_rows"):
             return bool(getattr(self, field))
-        return getattr(self, f"{field}_id") is not None
+        if getattr(self, f"{field}_id") is not None:
+            return True
+        # An inline row under an unsaved parent (the beat admin, #4124) has the
+        # opener assigned as an object with no pk yet; the cached relation counts.
+        relation = self._meta.get_field(field)
+        return relation.is_cached(self) and relation.get_cached_value(self) is not None
 
     @property
     def set_openers(self) -> list[str]:

@@ -159,6 +159,8 @@ class OfferForm(forms.ModelForm):
             # The Appearance chapter's other opener (#3739): a line offered on every
             # trait row and marking rather than under a section.
             "feature_rows",
+            # The Backgrounds chapter's opener (#4124): the beat this line answers.
+            "beat",
             "sort_order",
         ]
         widgets = {
@@ -176,6 +178,10 @@ class OfferForm(forms.ModelForm):
             ),
             "appearance_section": AutocompleteSelect(
                 DistinctionOffer._meta.get_field("appearance_section"),  # noqa: SLF001
+                admin.site,
+            ),
+            "beat": AutocompleteSelect(
+                DistinctionOffer._meta.get_field("beat"),  # noqa: SLF001
                 admin.site,
             ),
         }

@@ -367,3 +367,55 @@ class SecretResolvesBeatTest(TestCase):
         grant_secret_knowledge(roster_entry=other, secret=self.secret)
         self.row.refresh_from_db()
         self.assertTrue(self.row.unknown)
+
+
+class LifeBeatAdminTest(TestCase):
+    """The beat library admin (#4124): answers save as Backgrounds choices on the beat."""
+
+    @classmethod
+    def setUpTestData(cls):
+        from evennia_extensions.factories import AccountFactory as _AccountFactory
+
+        cls.staff = _AccountFactory(is_staff=True, is_superuser=True)
+        cls.distinction = DistinctionFactory(name="Patient", cost_per_rank=10, max_rank=1)
+        cls.beginning = BeginningsFactory(name="Sleeper")
+
+    def test_adding_a_beat_with_an_answer_and_an_exclusion(self):
+        from django.urls import reverse
+
+        self.client.force_login(self.staff)
+        offers_prefix = "distinction_offers"
+        exclusions_prefix = "exclusions"
+        data = {
+            "name": "The household",
+            "life_stage": LifeStage.CHILDHOOD,
+            "prompt": "Placeholder prompt.",
+            "selection": BeatSelection.ONE_OF,
+            "sort_order": 1,
+            "is_active": "on",
+            f"{offers_prefix}-TOTAL_FORMS": "1",
+            f"{offers_prefix}-INITIAL_FORMS": "0",
+            f"{offers_prefix}-MIN_NUM_FORMS": "0",
+            f"{offers_prefix}-MAX_NUM_FORMS": "1000",
+            f"{offers_prefix}-0-distinction": self.distinction.pk,
+            f"{offers_prefix}-0-name": "",
+            f"{offers_prefix}-0-player_line": "Placeholder gloss.",
+            f"{offers_prefix}-0-sort_order": "0",
+            f"{offers_prefix}-0-is_active": "on",
+            f"{exclusions_prefix}-TOTAL_FORMS": "1",
+            f"{exclusions_prefix}-INITIAL_FORMS": "0",
+            f"{exclusions_prefix}-MIN_NUM_FORMS": "0",
+            f"{exclusions_prefix}-MAX_NUM_FORMS": "1000",
+            f"{exclusions_prefix}-0-beginning": self.beginning.pk,
+            f"{exclusions_prefix}-0-reason": "Starts blank.",
+        }
+        response = self.client.post(reverse("admin:arxii_lifebeat_add"), data, follow=True)
+        self.assertEqual(response.status_code, 200)
+        from world.character_creation.models import LifeBeat
+
+        beat = LifeBeat.objects.get(name="The household")
+        (offer,) = beat.distinction_offers.all()
+        self.assertEqual(offer.chapter, OfferChapter.BACKGROUNDS)
+        self.assertEqual(offer.arrives_as, OfferArrival.CHOICE)
+        self.assertEqual(offer.name, "Patient")
+        self.assertEqual([e.beginning_id for e in beat.exclusions.all()], [self.beginning.pk])

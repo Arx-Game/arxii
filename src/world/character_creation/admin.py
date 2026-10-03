@@ -2,9 +2,11 @@
 Character Creation admin configuration.
 """
 
+from django import forms
 from django.contrib import admin
 from django.utils.html import format_html
 
+from world.character_creation.constants import OfferArrival, OfferChapter
 from world.character_creation.models import (
     AppearanceSection,
     BeginningEnemyOffer,
@@ -14,10 +16,13 @@ from world.character_creation.models import (
     CGPointBudget,
     CharacterDraft,
     CharacterOriginSlot,
+    DistinctionOffer,
     DraftApplication,
     DraftApplicationComment,
     DraftMarking,
     EnemyReason,
+    LifeBeat,
+    LifeBeatExclusion,
     OfferFirstLook,
     OriginTemplate,
     OriginTemplateSlot,
@@ -92,6 +97,15 @@ class BeginningEnemyOfferInline(admin.TabularInline):
     ]
 
 
+class BeatExclusionForBeginningInline(admin.TabularInline):
+    """The library beats this Beginning never meets (#4124); the rest apply."""
+
+    model = LifeBeatExclusion
+    extra = 0
+    autocomplete_fields = ["beat"]
+    fields = ["beat", "reason"]
+
+
 @admin.register(Beginnings)
 class BeginningsAdmin(GrantReachOnSaveMixin, admin.ModelAdmin):
     """Admin for Beginnings - worldbuilding paths in character creation."""
@@ -116,7 +130,12 @@ class BeginningsAdmin(GrantReachOnSaveMixin, admin.ModelAdmin):
     search_fields = ["name", "description"]
     ordering = ["starting_area__name", "sort_order", "name"]
     filter_horizontal = ["allowed_species", "starting_languages"]
-    inlines = [BeginningTraditionInline, BeginningsCodexGrantInline, BeginningEnemyOfferInline]
+    inlines = [
+        BeginningTraditionInline,
+        BeginningsCodexGrantInline,
+        BeginningEnemyOfferInline,
+        BeatExclusionForBeginningInline,
+    ]
 
     fieldsets = [
         (None, {"fields": ["name", "description", "art", "starting_area"]}),
@@ -127,7 +146,7 @@ class BeginningsAdmin(GrantReachOnSaveMixin, admin.ModelAdmin):
         (
             "Species Selection",
             {
-                "fields": ["allowed_species", "cg_point_cost"],
+                "fields": ["allowed_species", "cg_point_cost", "beat_mode"],
                 "description": "Select species (parent species include all subtypes)",
             },
         ),
@@ -230,14 +249,105 @@ class OriginTemplateSlotChoiceAdmin(admin.ModelAdmin):
     autocomplete_fields = ["slot"]
 
 
+class BeatAnswerForm(forms.ModelForm):
+    """An answer row on the beat admin (#4124): the chapter and arrival are not the
+    operator's to pick, so the form fixes them before the model's own clean runs."""
+
+    class Meta:
+        model = DistinctionOffer
+        fields = ["distinction", "name", "player_line", "sort_order", "is_active"]
+
+    def __init__(self, *args: object, **kwargs: object) -> None:
+        super().__init__(*args, **kwargs)
+        self.instance.chapter = OfferChapter.BACKGROUNDS
+        self.instance.arrives_as = OfferArrival.CHOICE
+
+
+class BeatAnswerInline(admin.TabularInline):
+    """A beat's answers (#4124): one ``DistinctionOffer`` per answer, every one a priced
+    choice in the Backgrounds chapter. The chapter and arrival are fixed on save."""
+
+    model = DistinctionOffer
+    form = BeatAnswerForm
+    fk_name = "beat"
+    extra = 1
+    autocomplete_fields = ["distinction"]
+    fields = ["distinction", "name", "player_line", "sort_order", "is_active"]
+    verbose_name = "Answer"
+    verbose_name_plural = "Answers"
+
+
+class BeatExclusionInline(admin.TabularInline):
+    """The Beginnings that never meet this beat (#4124); every other Beginning does."""
+
+    model = LifeBeatExclusion
+    extra = 0
+    autocomplete_fields = ["beginning"]
+    fields = ["beginning", "reason"]
+
+
+@admin.register(LifeBeat)
+class LifeBeatAdmin(admin.ModelAdmin):
+    """The Backgrounds beat library (#4124): one row per beat, authored once for every
+    Beginning; its answers and its exclusions sit inline."""
+
+    list_display = ["name", "life_stage", "selection", "sort_order", "is_active"]
+    list_filter = ["life_stage", "selection", "is_active"]
+    search_fields = ["name", "prompt"]
+    ordering = ["life_stage", "sort_order", "name"]
+    inlines = [BeatAnswerInline, BeatExclusionInline]
+    fieldsets = [
+        (None, {"fields": ["name", "life_stage", "prompt", "selection"]}),
+        ("Listing", {"fields": ["sort_order", "is_active"]}),
+        CREDIT_FIELDSET,
+    ]
+
+    def save_formset(self, request, form, formset, change):
+        """An answer is always a Backgrounds choice opened by this beat; every saved row is
+        credited to the operator, mirroring the Glimpse tag admin (#3675)."""
+        if formset.model is not DistinctionOffer:
+            super().save_formset(request, form, formset, change)
+            return
+        from web.admin.authoring.contributors import current_contributor  # noqa: PLC0415
+        from web.admin.authoring.credit import stamp_written  # noqa: PLC0415
+
+        instances = formset.save(commit=False)
+        for obj in formset.deleted_objects:
+            obj.delete()
+        contributor = current_contributor(request.user)
+        for obj in instances:
+            obj.chapter = OfferChapter.BACKGROUNDS
+            obj.arrives_as = OfferArrival.CHOICE
+            obj.beat = form.instance
+            obj.save()
+            if contributor is not None:
+                stamp_written(obj, contributor)
+        formset.save_m2m()
+
+
 @admin.register(CharacterOriginSlot)
 class CharacterOriginSlotAdmin(admin.ModelAdmin):
-    """Read-only admin for character origin-slot answers (#2478)."""
+    """Read-only admin for character origin-slot answers and beat rows (#2478, #4124)."""
 
-    list_display = ["sheet", "slot", "organization", "figure_name", "choice", "value"]
-    list_filter = ["slot__template__beginning__starting_area", "slot__kind", "organization"]
-    search_fields = ["value", "figure_name", "organization__name"]
-    readonly_fields = ["sheet", "slot", "value", "choice", "organization", "figure_name"]
+    list_display = [
+        "sheet",
+        "slot",
+        "beat",
+        "unknown",
+        "organization",
+        "figure_name",
+        "choice",
+        "value",
+    ]
+    list_filter = [
+        "slot__template__beginning__starting_area",
+        "slot__kind",
+        "beat__life_stage",
+        "unknown",
+        "organization",
+    ]
+    search_fields = ["value", "figure_name", "organization__name", "beat__name"]
+    readonly_fields = ["sheet", "slot", "beat", "value", "choice", "organization", "figure_name"]
     autocomplete_fields = ["sheet"]
 
 

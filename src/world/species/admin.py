@@ -70,7 +70,7 @@ class SpeciesAdmin(admin.ModelAdmin):
         (None, {"fields": ["name", "parent", "sort_order"]}),
         ("Description", {"fields": ["description", "codex_entry"]}),
         ("Languages", {"fields": ["starting_languages"]}),
-        ("Aging (#2756)", {"fields": ["eternal_youth", "decline_start_age"]}),
+        ("Aging (#2756)", {"fields": ["eternal_youth", "decline_start_age", "cg_point_cost"]}),
         CREDIT_FIELDSET,
     ]
     raw_id_fields = ["codex_entry"]
