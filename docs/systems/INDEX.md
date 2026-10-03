@@ -121,6 +121,9 @@ Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Sc
     `ThreadWeavingUnlock`,
     `CharacterThreadWeavingUnlock`, `ThreadWeavingTeachingOffer`,
     `SoulTetherConfig` (singleton pk=1, rescue + sineating tuning knobs),
+    `SoulfrayReveal` (the #924 outcome wheel for a dramatic Soulfray stage draw, #4089 -
+    `title`, `stage_label`, `faces` built from the drawn tier's UNFILTERED effective
+    consequences, `selected`),
     `ThreadSurvivabilityTuning` (per-`VitalBonusTarget` tuning row for the
     universal thread survivability baseline — `vital_target` unique choice,
     `coefficient`, `cap`, `half_saturation`; one row each for DR and MAX_HEALTH;
@@ -304,6 +307,18 @@ Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Sc
   - `character.combat_pulls` (`CharacterCombatPullHandler` in `world/combat`)
     — `active()`, `active_for_encounter()`, `active_pull_vital_bonuses()`
 - **Key Services:**
+  - **Soulfray ladder (#4089, `world/magic/services/soulfray.py`):** `soulfray_stages()`
+    (every `ConditionStage` of the Soulfray template, ladder order), `is_soulfray_stage(stage)`,
+    `soulfray_ladder_summary() -> list[SoulfrayStageSummary]` (each stage's EFFECTIVE
+    consequences - own pool entries merged with its shared parent's, two queries total -
+    read by the admin Soulfray Stage Builder, the Required-content pools/death-risk probes,
+    and `nonlethal_ceiling_for`), `nonlethal_ceiling_for(summaries)` (highest severity a
+    non-lethal cast may reach: the lowest `severity_threshold` among stages that can kill,
+    minus one, floored at 0; `None` when no stage with a threshold can kill). Authoring: the
+    **Soulfray Stage Builder** (`src/web/admin/soulfray_builder/`) is the single page that
+    edits a stage's own consequence pool, its shared parent, and every row's effects; see
+    `src/web/admin/CLAUDE.md`'s "Soulfray Stage Builder" section and `docs/systems/magic.md`'s
+    "Soulfray" section.
   - Economy: `grant_resonance(character_sheet, resonance, amount, source, source_ref=None)`,
     `spend_resonance_for_imbuing(character_sheet, thread, amount) -> ThreadImbueResult`,
     `spend_resonance_for_pull(...)` (low-level spend; called by the pull helpers),

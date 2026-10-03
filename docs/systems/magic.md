@@ -2288,6 +2288,68 @@ filterset (pre-existing gap).
 
 ---
 
+### Soulfray (world/magic/services/soulfray.py, #4089)
+
+**The ladder summary is the one read every Soulfray surface shares.**
+`soulfray_ladder_summary() -> list[SoulfrayStageSummary]` walks every `ConditionStage`
+of the Soulfray template in ladder order and resolves each one's EFFECTIVE
+consequences - its own pool entries merged with its shared parent's, the same
+single-depth merge `actions.services.merge_pool_entries`/`get_effective_consequences`
+use for an ordinary consequence pool draw - in two queries total regardless of ladder
+size. `SoulfrayStageSummary.can_kill` is true when any of those effective consequences
+carries `character_loss`; `consequence_count` and `shared_consequence_ids` (ids the
+stage's own pool also draws from its parent) round out what the Soulfray Stage Builder's
+ladder, rail and Required-content probes all read from one call. `soulfray_stages()`
+(exact `condition__name` match, ladder-ordered) and `is_soulfray_stage(stage)` are the
+shared lookups every Soulfray consumer in this module uses, including the `ConditionStage`
+admin's "Open in Soulfray Stage Builder" object-tool link (`web/admin/authoring/links.py`)
+and the `AudereMajoraThreshold.minimum_warp_stage` picker below.
+
+**The non-lethal cap and the checkpoint's death warning now read inherited lethal rows
+(#4089 Task 2).** `nonlethal_ceiling_for(summaries)` is a pure function over an
+already-built ladder summary: `(lowest severity_threshold among stages that can kill) -
+1`, floored at 0, or `None` when no threshold-bearing stage can kill. It is read both by
+`nonlethal_severity_ceiling()` (wraps it over a fresh `soulfray_ladder_summary()` call;
+`calculate_soulfray_severity(..., lethal=False)` bounds its result below this ceiling)
+and by the Soulfray Stage Builder's Danger rail, so the game and the authoring page agree
+on the same number. Before #4089, `nonlethal_severity_ceiling()`'s cap and
+`get_soulfray_warning()`'s `has_death_risk` flag (the safety checkpoint's death warning)
+each read a stage's own pool entries only; a `character_loss` row a stage's pool inherited
+from a shared parent pool was drawn by a lethal cast but never capped for a non-lethal
+one, and the checkpoint never warned of it. Both now read `get_effective_consequences`
+(`get_soulfray_warning`) or `soulfray_ladder_summary()` (`nonlethal_severity_ceiling`),
+which merge in the inherited rows the same way the draw itself does.
+
+**Authoring path.** A Soulfray stage's own fields, its on-entry conditions, its
+resilience-check penalty, its consequence pool (own rows and an optional one-level-deep
+shared parent) and each own row's effects are authored on the **Soulfray Stage Builder**
+(`web/admin/soulfray_builder/`), the single page that replaces hand-editing the stage's
+admin change form plus its pool's and consequences' separate pages. Two Required-content
+rows ("Soulfray stage consequence pools", "Some Soulfray stage can kill") flag a stage
+with nothing to draw or a ladder with no lethal stage, linking straight into the builder.
+Full detail: `src/web/admin/CLAUDE.md`'s "Soulfray Stage Builder" section.
+
+**A dramatic stage draw spins the #924 outcome wheel (#4089 Task 7).** Stage-consequence
+resolution now produces `SoulfrayReveal` (`title`, `stage_label`, `faces`, `selected`)
+whenever the drawn tier is dramatic (`should_emit_theater`: any face is ticked
+`theater` or can kill) - the same per-result rule every other check-outcome wheel in the
+game uses (ADR-4089). `_soulfray_reveal` builds its `faces` from the drawn tier's
+UNFILTERED effective consequences (`consequence_pool_faces(..., min_faces=1)`, a lone
+candidate still spins): a `character_loss` row a non-lethal cast's own filter removed from
+the actual draw still shows as a face the wheel spins past, and neither the screen nor the
+payload reveals that it was filtered - the draw's `selected` face is always one the
+filtered draw actually picked. `accumulate_soulfray(..., defer_reveal=False)` sends the
+reveal to the caster on commit (`transaction.on_commit`, so a rolled-back cast never
+spins a wheel) via `deliver_soulfray_reveal` (the existing `maybe_emit_resolution_theater`
+emitter, web-only: telnet has no `roulette_result` output). The scene-action path
+(`world.scenes.action_services`) instead calls `use_technique(..., defer_soulfray_reveal=
+True)` and plays the held reveal itself, through `_schedule_check_outcome_theater`'s
+`soulfray_reveal` kwarg, AFTER the action's own wheel(s) and to the caster only - a
+Soulfray stage draw is the caster's own backlash, not something the rest of the scene's
+audience watches. See `world/checks/CLAUDE.md`'s "#924 theater" section and ADR-4089.
+
+---
+
 ### Audere & Audere Majora (models/audere.py, audere_majora.py)
 
 **Surge broadcast on accept (#3451).** `AudereThreshold.surge_manifestation_text`
@@ -2314,6 +2376,17 @@ that gates deed creation.
 | `AudereMajoraThreshold` | One row per boundary level (5/10/15/20). Inherits `RenownAwardConfig`. | `boundary_level`, `target_stage`, `minimum_intensity_tier` FK, `minimum_warp_stage` FK, `requires_active_audere`, `deed_title` (public — non-spoiler), `vision_text`/`manifestation_text` (spoiler-private — DB-only) |
 | `PendingAudereMajoraOffer` | Poll-able Crossing offer, one per character | `character_sheet` FK, `threshold` FK |
 | `AudereMajoraCrossing` | Irreversible receipt of a completed crossing (inherits `AbstractClassLevelAdvancement`) | `character_sheet` FK, `threshold` FK, `chosen_path` FK, `scene` FK, `declaration_interaction` FK, `level_before`, `level_after`, `legend_entry` OneToOneField → `societies.LegendEntry` (related_name `audere_majora_crossing`; null when no deed was minted) |
+
+**The warp-stage picker only offers Soulfray stages (#4089).** The Crossing gate
+compares the caster's current Soulfray stage order against `minimum_warp_stage`
+(`audere_majora.py:359`), so a non-Soulfray `ConditionStage` there is always a
+content error. `AudereMajoraThresholdAdmin.formfield_for_foreignkey` narrows the
+field's queryset to `soulfray_stages()`, `AudereMajoraThresholdForm.clean_minimum_warp_stage`
+refuses a non-Soulfray pick server-side, and `ConditionStageAdmin.get_search_results`
+narrows the field's own autocomplete the same way via the generic
+`web.admin.autocomplete.source_field_queryset` helper - a small seam any admin's
+`get_search_results` can call to honour a remote admin's own
+`formfield_for_foreignkey` narrowing without that remote app importing this one.
 
 **Deed minting.** `cross_threshold` calls `_mint_crossing_deed(crossing)` after writing
 the receipt. This resolves the character's primary persona, calls `fire_renown_award`

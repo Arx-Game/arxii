@@ -128,6 +128,13 @@ check warrants theater, built by `check_outcome_faces`/`maybe_emit_resolution_th
 (`world/checks/theater.py`) and rendered on the frontend as a flat proportional disc.
 For a social check its faces are read only from the check's own `ResultChart` bands,
 weighted by roll-range width, never from `rollmod` or an outcome guarantee (ADR-0297);
-the wheel always lands on the outcome that actually resolved.
+the wheel always lands on the outcome that actually resolved. A consequence-pool draw
+(a weighted pool, not a chart) spins by the same shared gate, `should_emit_theater`: the
+drawn tier spins when any candidate is ticked `theater` or carries `character_loss`. A
+Soulfray stage draw (#4089) reuses this gate and `consequence_pool_faces` with
+`min_faces=1` (a lone candidate still spins), builds its faces from the drawn tier's
+UNFILTERED effective consequences so a row a non-lethal cast's own filter removed still
+shows and is spun past, delivers to the caster only, and on the scene action path is held
+and replayed after that action's own wheel(s) (ADR-4089).
 _Avoid_: prism, roulette prism (the pre-Part-C frontend shape, since replaced),
 roulette wheel alone (ambiguous with the older equal-weighted consequence-pool spin)

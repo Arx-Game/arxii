@@ -551,28 +551,32 @@ others.
 - **The panel** - `web/templates/admin/authoring/_builders_panel.html`,
   included in `dashboard.html` right after the intro paragraph (before the
   stats panel), rendered only when setup is not required - a plain include
-  on the initial GET, not an HTMX fragment, since its four option lists never
+  on the initial GET, not an HTMX fragment, since its five option lists never
   refresh on their own. `authoring_dashboard`'s `_builders_context()` builds
-  them in four queries total (never per row): active `Distinction`s and
+  them in five queries total (never per row): active `Distinction`s and
   active `Beginnings`, both by name; active `OriginTemplate`s as
   `{"pk": ..., "label": "{beginning} › {name}"}` dicts, ordered by beginning
-  then name; and the active `GlimpseTag` count.
-- **Four rows** - Distinction Builder (a `<select>` of distinctions + Open,
+  then name; every Soulfray stage (`world.magic.services.soulfray
+  .soulfray_stages()`, ladder order, #4089); and the active `GlimpseTag`
+  count.
+- **Five rows** - Distinction Builder (a `<select>` of distinctions + Open,
   plus a "New distinction" link to `admin_distinction_builder_new` and, since
   #3709, an "Add from a table" link to `admin_distinction_paste`);
   tradition slate (a `<select>` of Beginnings + Open); Upbringing Builder (a
   `<select>` of Upbringings + Open, plus a second `<select>` of Beginnings +
   "New Upbringing" - `admin_upbringing_builder_new?beginning=` already reads
-  that param, no new view needed for it); Glimpse tags (a link to
-  `admin:arxii_glimpsetag_changelist` naming the active count). Each row
-  carries one line of fixed help copy under it.
+  that param, no new view needed for it); Soulfray Stage Builder (a `<select>`
+  of stages, each option labelled `"{stage_order}. {name}"`, + Open, #4089);
+  Glimpse tags (a link to `admin:arxii_glimpsetag_changelist` naming the
+  active count). Each row carries one line of fixed help copy under it.
 - **Pick routes** - each `<select>` posts nothing; picking a row and clicking
   Open is a plain GET to a `*_pick` view (`distinction_builder_pick`,
-  `tradition_slate_pick`, `upbringing_builder_pick`, living beside their own
-  builder's other views): `_distinction_builder/pick/?pk=` ->
-  `admin_distinction_builder_pick`, `_tradition_slate/pick/?pk=` ->
+  `tradition_slate_pick`, `upbringing_builder_pick`, `soulfray_builder_pick`,
+  living beside their own builder's other views): `_distinction_builder/pick/?pk=`
+  -> `admin_distinction_builder_pick`, `_tradition_slate/pick/?pk=` ->
   `admin_tradition_slate_pick`, `_upbringing_builder/pick/?pk=` ->
-  `admin_upbringing_builder_pick`. Each redirects to the matching builder
+  `admin_upbringing_builder_pick`, `_soulfray_builder/pick/?pk=` ->
+  `admin_soulfray_builder_pick`. Each redirects to the matching builder
   page for that pk, or 400s on a missing or unknown one - never a silent
   redirect to a stale or absent row.
 - **Cross-links between builder pages** - a `builder_link` simple tag
@@ -599,8 +603,8 @@ others.
   `clean()` (Task 9 review), differing only in the noun naming the owner in
   the message. Both now mix in `web.admin.authoring.offers
   .DistinctionOfferFormSetMixin` and set their own `owner_noun`.
-- Tests: `web/admin/tests/test_authoring_builders_panel.py` (the panel's four
-  rows and their option lists, the setup-gate absence, the three pick
+- Tests: `web/admin/tests/test_authoring_builders_panel.py` (the panel's five
+  rows and their option lists, the setup-gate absence, the four pick
   routes' redirects and 400s, and the panel's own styling guard); the
   cross-link assertions live beside each builder's own tests
   (`test_distinction_builder.py`, `test_tradition_slate.py`,
@@ -617,6 +621,7 @@ If an agent is asked about any of these topics, this is the system:
 - "reference search across the content database / staff docs / Arx I dump"
 - "the Builders panel / how to get to a builder page from the dashboard"
 - "cross-links between the Distinction Builder, tradition slate and Upbringing Builder"
+- "the Soulfray Stage Builder / authoring a Soulfray stage's consequences"
 
 ## Upbringing Builder (#3660)
 
@@ -1032,6 +1037,125 @@ gate, plain Django forms, `base_site.html`, a page-owned `extrastyle` link.
   row that links a distinction to one of those.
 - Deliberate no-ADR: recorded in the approved #3675 spec, the same precedent
   #3660/#3675 set above.
+
+## Soulfray Stage Builder (#4089)
+
+**Purpose:** author one Soulfray `ConditionStage`'s whole consequence ladder - its own
+fields, its on-entry conditions, the `ConditionCheckModifier` penalty tied to it, its
+consequence pool (its own rows, plus optionally one shared parent pool), every row of
+"what the roll can draw" (own or shared), and each own row's effects - on one admin
+page in one transaction. Pattern mirrors the Distinction and Upbringing Builders:
+`superuser_required`, the contributor gate, plain Django forms, `base_site.html`.
+
+- **Ways in** - the Builders panel's "Soulfray Stage Builder" row (above); the "Open in
+  Soulfray Stage Builder" object-tool button on a Soulfray stage's own `ConditionStage`
+  change form (`web/admin/authoring/links.py:builder_url`'s generic `ConditionStage`
+  branch, gated by `world.magic.services.soulfray.is_soulfray_stage`; it renders nothing
+  on a non-Soulfray stage); both Required-content rows below, whose `admin_url` opens
+  straight into the stage with the gap; the bare `_soulfray_builder/` opens the first
+  stage by `stage_order`, or redirects to the Authoring Workbench with an error when no
+  Soulfray stages exist yet.
+- **Files** - `web/admin/soulfray_builder/`: `views.py` (`soulfray_builder`,
+  `soulfray_builder_review`, `soulfray_builder_index`, `soulfray_builder_pick`),
+  `forms.py` (`StageForm`; `OnEntryFormSet`; `PenaltyForm`; `PoolForm` - picks the
+  stage's pool or names a new one, and its one-level-deep shared parent; `TableRow`/
+  `consequence_table` - the stage's own rows merged with its parent's, the same merge
+  `actions.services.merge_pool_entries` uses, so the table always matches the draw;
+  `ConsequenceRowForm`/`ConsequenceRowFormSet` via `BaseConsequenceRowFormSet` - a
+  **plain** formset, not model-backed, since a row is either this stage's own
+  `ConsequencePoolEntry` or one shared from the parent pool, and the two save
+  differently; `EffectForm`/`EffectFormSet` via `inlineformset_factory`, served either
+  from a saved row's own `e<consequence pk>` prefix or an added row's unsaved
+  `new<row index>` prefix; `BuilderForms` bundles every layer), `save.py`
+  (`CacheGuard`/`cache_guard_for`/`save_stage`, `require_pool_for_new_rows`,
+  `pool_switch_conflict`, `live_new_rows`), `live.py` (pure reads over
+  `world.magic.services.soulfray.soulfray_ladder_summary()`: `ladder_rows`, `danger`,
+  `stage_counts`, `checks`, `table_line`, `kill_odds`, `effect_line` - the same helper
+  the Required-content probes and the game's non-lethal cap read, so the page, the
+  panel and the game never disagree). Templates in
+  `web/templates/admin/soulfray_builder/`: `page.html`, `_css.html`, `_ladder.html`,
+  `_stage.html`, `_penalty.html`, `_consequences.html`, `_effect_editor.html`,
+  `_effect_row.html`, `_rail.html`.
+- **Stylesheets** - the page links `admin/css/forms.css` and `admin/css/widgets.css`
+  itself, in its own `extrastyle` block (the same obligation every custom admin page
+  extending `base_site.html` carries, #3667), plus the jsi18n script and the shared
+  `admin/js/builder_formsets.js`. `SoulfrayBuilderStylingTest`
+  (`web/admin/tests/test_soulfray_builder.py`) is the guard - it asserts the stylesheet
+  link reaches the page, never that a class name merely appears in the markup.
+- **URLs** (all superuser-only): `_soulfray_builder/` -> `admin_soulfray_builder_index`;
+  `_soulfray_builder/pick/` -> `admin_soulfray_builder_pick` (`?pk=`, GET redirect, 400
+  on a missing, unknown or non-Soulfray pk - the Builders panel's own picker);
+  `_soulfray_builder/<int:stage_pk>/` -> `admin_soulfray_builder`;
+  `_soulfray_builder/<int:stage_pk>/review/` -> `admin_soulfray_builder_review` (POST).
+- **Gate** - `@superuser_required`, then `current_contributor(request.user)`; an
+  unlinked operator sees the setup guidance (the shared `upbringing_builder/_setup.html`)
+  instead and nothing is saved.
+- **Credit** - a POST that validates saves every layer in one `transaction.atomic()`
+  block (`save_stage`), then `stamp_written` credits every `CreditedContent` row the
+  save actually touched: the stage, the pool (only when the save touched it), every own
+  row's `Consequence` the save created or edited, and the effects of a row this stage
+  owns. A shared row (one the parent pool owns) is never credited here even when its
+  weight or Remove changes on this page - its own pool's authoring owns its credit.
+  "Mark reviewed" (`soulfray_builder_review`, its own POST) stamps the stage, its pool,
+  and the pool's own consequences and their effects - "own" meaning rows this pool
+  holds that its parent does not, so a shared row is reviewed wherever its own pool is
+  reviewed - and never touches authorship or unsaved edits.
+- **What one save writes** - the consequence table's columns (Roll result / What
+  happens / Weight / Can kill / Spin the wheel / Effects / From / Remove) are one row
+  per draw candidate. The stage form, the on-entry formset and the penalty modifier
+  always save; the pool form creates a new pool when one is named and none is picked,
+  or re-parents/re-targets an existing one; each existing row either edits its own
+  `Consequence` fields (an own row) or writes a child `ConsequencePoolEntry` carrying
+  the reweight/drop (a shared row); a row added on the page ("+ Add a consequence" or
+  "Copy rows from &lt;stage&gt;") creates its `Consequence`, its pool entry, its copied
+  effects (when copied from another stage's own row) and the effects typed into its own
+  `new<index>` formset - all inside the one transaction (spec story 5: one Save).
+- **Row semantics** - an own row (no `shared_from`) edits its `Consequence` directly,
+  and Remove deletes its `ConsequencePoolEntry` only: the `Consequence` itself is
+  authored content and stays. A shared row (inherited from the parent pool) can only be
+  reweighted or dropped from THIS stage's table (a child `ConsequencePoolEntry` with
+  `weight_override`/`is_excluded`) - never edited at the source, since its wording and
+  effects belong to whichever stage owns the parent pool, and every stage sharing it
+  would see the edit. "Copy rows from &lt;stage&gt;" prefills unbound new rows from
+  another stage's own (non-shared) rows; saving one clones its effects onto a fresh
+  `Consequence`.
+- **Editable effect types** (`BUILDER_EFFECT_TYPES`): `DEAL_DAMAGE`,
+  `APPLY_CONDITION`, `REMOVE_CONDITION`, `MAGICAL_SCARS`, `ADD_PROPERTY`,
+  `REMOVE_PROPERTY`, `GRANT_DISTINCTION` - the effect kinds whose required fields are
+  all on `EffectForm`, so the model's own `clean()` can never name a field the form
+  lacks. A consequence's other effect types (anything outside that list) are listed
+  read-only with a link to the stock Consequence admin change form.
+- **Checks (`live.checks`)** - warnings never block a save (authored content is never
+  refused by its own checklist, spec C.6): every roll result draws something at this
+  stage, or names which ones draw nothing; some stage can kill across the whole ladder;
+  every stage has consequences; a stage reachable by a non-lethal cast that sits one
+  below a death stage (check its warning text says so); a pool also shared by another
+  stage (an edit here changes that stage too). The row table's own "Spin the wheel"
+  column carries the game-wide rule as its help text: a roll result spins the #924
+  outcome wheel when any of its options is ticked (`Consequence.theater`) or can kill
+  (`character_loss`) - the same rule every other check-outcome wheel in the game uses,
+  never a Soulfray-specific one (ADR-4089).
+- **Required-content sentinel** (`web/admin/tuning/required_content.py`) - two
+  `DependencyTier.REQUIRED` rows read `soulfray_ladder_summary()`, the same helper this
+  page's ladder reads, so the panel and the page never disagree: "Soulfray stage
+  consequence pools" (`_probe_soulfray_stage_pools` - flags any stage whose effective
+  pool draws no consequence at all, own rows and inherited rows together) and "Some
+  Soulfray stage can kill" (`_probe_soulfray_death_risk` - flags a ladder with no
+  `character_loss` row anywhere, inherited rows included). Both set
+  `ProbeResult.admin_url` (`_soulfray_builder_link`) to the exact stage the gap is on -
+  the first stage with no consequences, or this page's bare index when every stage has
+  rows but none kill - so the Required-content panel's own link opens straight into
+  this builder instead of a model changelist.
+- **What is authored here:** a Soulfray stage's own fields, its on-entry conditions,
+  its resilience-check penalty, its own `ConsequencePoolEntry`/`Consequence` rows, a
+  shared parent pool's reweight/drop from this stage, and each own row's
+  `BUILDER_EFFECT_TYPES` effects. **What is not:** a shared row's own wording and
+  effects (authored on whichever stage's own pool is the parent, or the stock
+  Consequence admin directly), or the Soulfray `ConditionTemplate`/`SoulfrayConfig`
+  rows themselves (stock admin).
+- Deliberate no-ADR for the page-layout/formset decisions: the same precedent the
+  other Builder pages above set. The Crossing-authoring-checklist and outcome-wheel
+  rulings are ADR-4089.
 
 ## Glimpse Tag Admin Offers (#3675, Task 9)
 
