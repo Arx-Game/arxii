@@ -50,7 +50,7 @@ The checks app defines types of checks (Stealth, Diplomacy, Perception, etc.) an
   happens through this module's own `maybe_emit_resolution_theater` on commit, and on the scene
   action path is held (`defer_reveal`/`defer_soulfray_reveal`) and replayed by
   `_schedule_check_outcome_theater` AFTER that action's own wheel(s), to the caster only. See
-  `docs/systems/magic.md`'s "Soulfray" section and ADR-4089.
+  `docs/systems/magic.md`'s "Soulfray" section and ADR-4089-B.
 
 ### `types.py`
 - **`CheckResult`**: Dataclass returned by perform_check. Contains outcome, chart, ranks, and point breakdowns. No roll numbers exposed.

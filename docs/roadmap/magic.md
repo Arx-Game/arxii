@@ -815,16 +815,16 @@ page, and nothing told staff a stage had nothing to draw or that no stage could 
   non-lethal cast's own filter removed still shows and is spun past; delivered to the
   caster only, after the triggering action's own wheel(s) on the scene path, never to
   telnet.
-- **ADR-4089** records two owner rulings: the Crossing gate's climax comes from the
-  encounter's intensity, never from a Required-content row demanding authored high-tier
-  threat content; and the wheel rules above.
+- **ADR-4089-A** records that the Crossing gate's climax comes from the encounter's
+  intensity, never from a Required-content row demanding authored high-tier threat
+  content; **ADR-4089-B** records the wheel rules above.
 - The `AudereMajoraThreshold.minimum_warp_stage` picker (form, admin formfield, and
   autocomplete) now offers Soulfray stages only - a non-Soulfray pick there was always a
   content error, since the Crossing gate compares the caster's Soulfray stage order
   against it.
 
 Full record: `docs/systems/magic.md`'s "Soulfray" section; `src/web/admin/CLAUDE.md`'s
-"Soulfray Stage Builder" section; ADR-4089.
+"Soulfray Stage Builder" section; ADR-4089-A and ADR-4089-B.
 
 ---
 

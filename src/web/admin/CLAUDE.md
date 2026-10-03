@@ -1058,15 +1058,25 @@ page in one transaction. Pattern mirrors the Distinction and Upbringing Builders
 - **Files** - `web/admin/soulfray_builder/`: `views.py` (`soulfray_builder`,
   `soulfray_builder_review`, `soulfray_builder_index`, `soulfray_builder_pick`),
   `forms.py` (`StageForm`; `OnEntryFormSet`; `PenaltyForm`; `PoolForm` - picks the
-  stage's pool or names a new one, and its one-level-deep shared parent; `TableRow`/
+  stage's pool or names a new one, and its one-level-deep shared parent. The pool select
+  offers only `stage_pool_choices()`: Soulfray stage pools plus pools nothing else uses
+  (`held_by_another_consumer()` walks every reverse relation onto `ConsequencePool`, hidden
+  `related_name="+"` ones included, so a technique's clash pool, a trap's or an item's never
+  shows). The parent select never offers the stage's own pool. A switched pool whose parent
+  select the author left alone keeps its own parent (`clean` swaps it in, and the page
+  script resets the select to the chosen pool's parent from the `sf-pool-parents` JSON), and
+  a parent change on a pool another stage or consumer holds is refused; `TableRow`/
   `consequence_table` - the stage's own rows merged with its parent's, the same merge
   `actions.services.merge_pool_entries` uses, so the table always matches the draw;
   `ConsequenceRowForm`/`ConsequenceRowFormSet` via `BaseConsequenceRowFormSet` - a
   **plain** formset, not model-backed, since a row is either this stage's own
   `ConsequencePoolEntry` or one shared from the parent pool, and the two save
-  differently; `EffectForm`/`EffectFormSet` via `inlineformset_factory`, served either
-  from a saved row's own `e<consequence pk>` prefix or an added row's unsaved
-  `new<row index>` prefix; `BuilderForms` bundles every layer), `save.py`
+  differently. A shared row's form disables `outcome_tier`, `label`, `character_loss`
+  and `theater` (`SHARED_ROW_READ_ONLY_FIELDS`, set per row by the formset's
+  `get_form_kwargs`), so Django ignores whatever is posted for them;
+  `EffectForm`/`EffectFormSet` via `inlineformset_factory`, served either from an own
+  saved row's `e<consequence pk>` prefix or an added row's unsaved `new<row index>`
+  prefix (a shared row gets none); `BuilderForms` bundles every layer), `save.py`
   (`CacheGuard`/`cache_guard_for`/`save_stage`, `require_pool_for_new_rows`,
   `pool_switch_conflict`, `live_new_rows`), `live.py` (pure reads over
   `world.magic.services.soulfray.soulfray_ladder_summary()`: `ladder_rows`, `danger`,
@@ -1075,13 +1085,22 @@ page in one transaction. Pattern mirrors the Distinction and Upbringing Builders
   panel and the game never disagree). Templates in
   `web/templates/admin/soulfray_builder/`: `page.html`, `_css.html`, `_ladder.html`,
   `_stage.html`, `_penalty.html`, `_consequences.html`, `_effect_editor.html`,
-  `_effect_row.html`, `_rail.html`.
+  `_effect_row.html`, `_form_row.html`, `_rail.html`.
 - **Stylesheets** - the page links `admin/css/forms.css` and `admin/css/widgets.css`
   itself, in its own `extrastyle` block (the same obligation every custom admin page
   extending `base_site.html` carries, #3667), plus the jsi18n script and the shared
   `admin/js/builder_formsets.js`. `SoulfrayBuilderStylingTest`
   (`web/admin/tests/test_soulfray_builder.py`) is the guard - it asserts the stylesheet
   link reaches the page, never that a class name merely appears in the markup.
+- **Rendering** - every form row is admin's aligned row (`_form_row.html`, the markup
+  `admin/includes/fieldset.html` emits): the label and an `.sf-field` holding the widget
+  share one `.flex-container`, so `forms.css` puts the label in its 160px column with the
+  widget beside it, and the help line sits under the widget. A row with a second widget
+  (Resist check and its difficulty, Applied on entry, the pool and its "inherits" pick)
+  keeps them inside the one `.sf-field`, whose own labels `_css.html` sizes to their text.
+  The styling test reads the rendered tree for that shape and requires the forms.css rules
+  that lay it out; #4089's demo-fidelity review caught the first build stacking every label
+  above its field because the `.flex-container` was missing.
 - **URLs** (all superuser-only): `_soulfray_builder/` -> `admin_soulfray_builder_index`;
   `_soulfray_builder/pick/` -> `admin_soulfray_builder_pick` (`?pk=`, GET redirect, 400
   on a missing, unknown or non-Soulfray pk - the Builders panel's own picker);
@@ -1097,7 +1116,8 @@ page in one transaction. Pattern mirrors the Distinction and Upbringing Builders
   owns. A shared row (one the parent pool owns) is never credited here even when its
   weight or Remove changes on this page - its own pool's authoring owns its credit.
   "Mark reviewed" (`soulfray_builder_review`, its own POST) stamps the stage, its pool,
-  and the pool's own consequences and their effects - "own" meaning rows this pool
+  and the pool's own consequences and their effects under a `CacheGuard`, so a failure
+  part way puts every stamped identity-mapped row back - "own" meaning rows this pool
   holds that its parent does not, so a shared row is reviewed wherever its own pool is
   reviewed - and never touches authorship or unsaved edits.
 - **What one save writes** - the consequence table's columns (Roll result / What
@@ -1106,7 +1126,7 @@ page in one transaction. Pattern mirrors the Distinction and Upbringing Builders
   always save; the pool form creates a new pool when one is named and none is picked,
   or re-parents/re-targets an existing one; each existing row either edits its own
   `Consequence` fields (an own row) or writes a child `ConsequencePoolEntry` carrying
-  the reweight/drop (a shared row); a row added on the page ("+ Add a consequence" or
+  the reweight/drop (a shared row: its content is never written, ruling RF-1); a row added on the page ("+ Add a consequence" or
   "Copy rows from &lt;stage&gt;") creates its `Consequence`, its pool entry, its copied
   effects (when copied from another stage's own row) and the effects typed into its own
   `new<index>` formset - all inside the one transaction (spec story 5: one Save).
@@ -1116,7 +1136,10 @@ page in one transaction. Pattern mirrors the Distinction and Upbringing Builders
   reweighted or dropped from THIS stage's table (a child `ConsequencePoolEntry` with
   `weight_override`/`is_excluded`) - never edited at the source, since its wording and
   effects belong to whichever stage owns the parent pool, and every stage sharing it
-  would see the edit. "Copy rows from &lt;stage&gt;" prefills unbound new rows from
+  would see the edit (spec story 7, ruling RF-1). The page draws its Roll result and text
+  as text, Can kill and Spin the wheel as disabled boxes, and its effects as read-only
+  lines with no effect editor; `save._update_row` writes only its child entry, whatever
+  the POST carries. "Copy rows from &lt;stage&gt;" prefills unbound new rows from
   another stage's own (non-shared) rows; saving one clones its effects onto a fresh
   `Consequence`.
 - **Editable effect types** (`BUILDER_EFFECT_TYPES`): `DEAL_DAMAGE`,
@@ -1134,7 +1157,7 @@ page in one transaction. Pattern mirrors the Distinction and Upbringing Builders
   column carries the game-wide rule as its help text: a roll result spins the #924
   outcome wheel when any of its options is ticked (`Consequence.theater`) or can kill
   (`character_loss`) - the same rule every other check-outcome wheel in the game uses,
-  never a Soulfray-specific one (ADR-4089).
+  never a Soulfray-specific one (ADR-4089-B).
 - **Required-content sentinel** (`web/admin/tuning/required_content.py`) - two
   `DependencyTier.REQUIRED` rows read `soulfray_ladder_summary()`, the same helper this
   page's ladder reads, so the panel and the page never disagree: "Soulfray stage
@@ -1154,8 +1177,8 @@ page in one transaction. Pattern mirrors the Distinction and Upbringing Builders
   Consequence admin directly), or the Soulfray `ConditionTemplate`/`SoulfrayConfig`
   rows themselves (stock admin).
 - Deliberate no-ADR for the page-layout/formset decisions: the same precedent the
-  other Builder pages above set. The Crossing-authoring-checklist and outcome-wheel
-  rulings are ADR-4089.
+  other Builder pages above set. The Crossing-authoring-checklist ruling is
+  ADR-4089-A and the outcome-wheel rulings are ADR-4089-B.
 
 ## Glimpse Tag Admin Offers (#3675, Task 9)
 

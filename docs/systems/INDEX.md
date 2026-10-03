@@ -316,7 +316,8 @@ Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Sc
     non-lethal cast may reach: the lowest `severity_threshold` among stages that can kill,
     minus one, floored at 0; `None` when no stage with a threshold can kill). Authoring: the
     **Soulfray Stage Builder** (`src/web/admin/soulfray_builder/`) is the single page that
-    edits a stage's own consequence pool, its shared parent, and every row's effects; see
+    edits a stage's own consequence pool, its shared parent, and each own row's effects
+    (a shared parent's rows are drop/reweight only there); see
     `src/web/admin/CLAUDE.md`'s "Soulfray Stage Builder" section and `docs/systems/magic.md`'s
     "Soulfray" section.
   - Economy: `grant_resonance(character_sheet, resonance, amount, source, source_ref=None)`,

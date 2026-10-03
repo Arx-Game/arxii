@@ -2324,7 +2324,10 @@ which merge in the inherited rows the same way the draw itself does.
 resilience-check penalty, its consequence pool (own rows and an optional one-level-deep
 shared parent) and each own row's effects are authored on the **Soulfray Stage Builder**
 (`web/admin/soulfray_builder/`), the single page that replaces hand-editing the stage's
-admin change form plus its pool's and consequences' separate pages. Two Required-content
+admin change form plus its pool's and consequences' separate pages. A row the stage
+inherits from its shared parent is drop/reweight only there (spec story 7, ruling RF-1):
+its wording, Can kill, Spin the wheel and effects belong to the parent pool, so the page
+shows them read-only and the save writes only the stage's child entry for it. Two Required-content
 rows ("Soulfray stage consequence pools", "Some Soulfray stage can kill") flag a stage
 with nothing to draw or a ladder with no lethal stage, linking straight into the builder.
 Full detail: `src/web/admin/CLAUDE.md`'s "Soulfray Stage Builder" section.
@@ -2333,7 +2336,7 @@ Full detail: `src/web/admin/CLAUDE.md`'s "Soulfray Stage Builder" section.
 resolution now produces `SoulfrayReveal` (`title`, `stage_label`, `faces`, `selected`)
 whenever the drawn tier is dramatic (`should_emit_theater`: any face is ticked
 `theater` or can kill) - the same per-result rule every other check-outcome wheel in the
-game uses (ADR-4089). `_soulfray_reveal` builds its `faces` from the drawn tier's
+game uses (ADR-4089-B). `_soulfray_reveal` builds its `faces` from the drawn tier's
 UNFILTERED effective consequences (`consequence_pool_faces(..., min_faces=1)`, a lone
 candidate still spins): a `character_loss` row a non-lethal cast's own filter removed from
 the actual draw still shows as a face the wheel spins past, and neither the screen nor the
@@ -2346,7 +2349,7 @@ emitter, web-only: telnet has no `roulette_result` output). The scene-action pat
 True)` and plays the held reveal itself, through `_schedule_check_outcome_theater`'s
 `soulfray_reveal` kwarg, AFTER the action's own wheel(s) and to the caster only - a
 Soulfray stage draw is the caster's own backlash, not something the rest of the scene's
-audience watches. See `world/checks/CLAUDE.md`'s "#924 theater" section and ADR-4089.
+audience watches. See `world/checks/CLAUDE.md`'s "#924 theater" section and ADR-4089-B.
 
 ---
 

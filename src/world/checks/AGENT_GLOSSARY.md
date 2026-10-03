@@ -135,6 +135,6 @@ Soulfray stage draw (#4089) reuses this gate and `consequence_pool_faces` with
 `min_faces=1` (a lone candidate still spins), builds its faces from the drawn tier's
 UNFILTERED effective consequences so a row a non-lethal cast's own filter removed still
 shows and is spun past, delivers to the caster only, and on the scene action path is held
-and replayed after that action's own wheel(s) (ADR-4089).
+and replayed after that action's own wheel(s) (ADR-4089-B).
 _Avoid_: prism, roulette prism (the pre-Part-C frontend shape, since replaced),
 roulette wheel alone (ambiguous with the older equal-weighted consequence-pool spin)
