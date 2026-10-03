@@ -17,7 +17,7 @@ from world.conditions.constants import (
     ConditionInteractionTrigger,   # ON_OTHER_APPLIED, ON_SELF_APPLIED, WHILE_BOTH_PRESENT
     ConditionInteractionOutcome,   # REMOVE_SELF, REMOVE_OTHER, REMOVE_BOTH, PREVENT_OTHER,
                                    # PREVENT_SELF, TRANSFORM_SELF, MERGE
-    Allegiance,                    # ENEMY, ALLY_OF_CASTER, NEUTRAL
+    Allegiance,                    # ENEMY, ALLY_OF_CASTER, NEUTRAL, TURNED
     CHARM_CONDITION_NAME,          # "Charmed"
     CALM_CONDITION_NAME,           # "Calm"
 )
@@ -56,15 +56,32 @@ from world.conditions.types import (
 
 | Model | Purpose | Key Fields |
 |-------|---------|------------|
-| `ConditionTemplate` | Condition definition (e.g., Burning, Frozen) | `name`, `category`, `description`, `player_description`, `observer_description`, duration settings, stacking settings, progression flag, removal settings (`cure_check_type`/`cure_difficulty`), apply-time resist-check (`resist_check_type`/`resist_difficulty`, #1738), combat settings (`affects_turn_order`, `draws_aggro`), display settings |
-| `ConditionStage` | Stage in a progressive condition | `condition`, `stage_order`, `name`, `rounds_to_next`, `resist_check_type`, `resist_difficulty`, `severity_multiplier` |
+| `ConditionTemplate` | Condition definition (e.g., Burning, Frozen) | `name`, `category`, `description`, `player_description`, `observer_description`, duration settings, stacking settings, progression flag, removal settings (`cure_check_type`/`cure_difficulty`), apply-time resist-check (`resist_check_type`/`resist_difficulty`, #1738), combat settings (`affects_turn_order`, `draws_aggro`), display settings, allegiance settings (`sets_allegiance`, `allegiance_break_check_type`, `settle_consequence_pool`, #4091, see below) |
+| `ConditionStage` | Stage in a progressive condition | `condition`, `stage_order`, `name`, `rounds_to_next`, `resist_check_type`, `resist_difficulty`, `severity_multiplier`, `settle_consequence_pool` (#4091, overrides the template's pool at this stage) |
 
 **Charm / Calm content (#1590).** The `Charm` `ConditionCategory` (`alters_behavior=True`) and
 `Charmed` / `Calm` templates are seeded idempotently by `ensure_charm_content()` in
-`world.conditions.charm_content`, aggregated via `ensure_conditions_content()`. The
-`Allegiance` enum is derived from active `alters_behavior` conditions on an NPC. Charm on an
-NPC alters a non-player's behavior; ADR-0024's PC consent gate does not apply. See ADR-0058 for
-the two-tier NPC disposition model.
+`world.conditions.charm_content`, aggregated via `ensure_conditions_content()`.
+`alters_behavior` is the PC-consent gate (ADR-0024's PC consent gate does not apply to an NPC
+target, since charm on an NPC alters a non-player's behavior). See ADR-0058 for the two-tier
+NPC disposition model.
+
+**Allegiance fields (#4091, ADR-4091, amending ADR-0059).** `ConditionTemplate.sets_allegiance`
+(blank, or an `Allegiance` value other than `ENEMY`) names the effective allegiance a condition
+puts its bearer on while it holds; it is read by this field, never by the condition's name, so
+a renamed row changes nothing. A condition that sets it must also carry
+`allegiance_break_check_type` (the check a PC rolls to break the hold by harming its bearer,
+`clean()`-enforced) and may carry `settle_consequence_pool` (graded results when the hold is
+settled or broken; a stage's own `settle_consequence_pool` replaces it at that stage). The
+`Allegiance` enum derived from these fields (`world.npc_services.allegiance
+.effective_allegiances`) feeds NPC targeting and the victory check; see the Combat system doc's
+Allegiance entries and ADR-4091 for the full decision. **Authoring note:** an allegiance
+condition's `observer_description`, same as any other condition's, surfaces on telnet `look`
+(`CharacterState.get_display_allegiance`, #4091) alongside the hold's stage, source and
+time-to-fade, so filling it in changes what a bystander sees of a charmed/turned/calmed NPC's
+Status line, not only its own sheet. `CHARM_CONDITION_NAME`/
+`CALM_CONDITION_NAME` remain as historical-snapshot literals (the data migration, and the
+out-of-scope parley Calm producer); no runtime code reads them to derive allegiance.
 
 ### Condition Effects (Abstract base: `ConditionOrStageEffect`)
 

@@ -166,6 +166,17 @@ per-NPC code). `<name>` interpolates the presented name. Builders author rows vi
 `/api/npc-services/reaction-lines/`.
 _Avoid_: custom NPC scripts, per-NPC handlers.
 
+## Allegiance module (#4091, ADR-4091)
+
+`world.npc_services.allegiance` and `world.npc_services.allegiance_outcomes` hold
+the derived-allegiance and hold-ending logic for charmed, turned, and calmed
+NPCs (break under harm, settling, the lapse sweep). The glossary terms live
+beside the apps that own the surfaces they name: Allegiance (stored vs
+effective), Turned, Won over, and Bind window are in
+`world/combat/AGENT_GLOSSARY.md`; Settle, Settle pool, and Hold strength are in
+`world/conditions/AGENT_GLOSSARY.md`. This app is where the derivation and the
+settle/break math actually run, not where the vocabulary is defined.
+
 ## Tier ladder (#2827)
 
 - **Sheet-spine** — the identity rule (ADR-0176): the CharacterSheet is the

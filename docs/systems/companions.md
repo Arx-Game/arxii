@@ -228,6 +228,33 @@ companion emote <name|id> <text>      — pose as a bonded, present companion (#
 `name=` must be the final token on `bind` (it greedily consumes the rest of
 the line so names with spaces work).
 
+## Promotion after victory (#4091, ADR-4091)
+
+`world.companions.services.promote_summon_to_companion` (#2502) has a second validation path
+beside the summon path described above: a **charmed enemy**. On this path
+`combat_opponent.objectdb` carries an active allegiance condition
+(`ConditionTemplate.sets_allegiance = ALLY_OF_CASTER`) sourced by the promoting caster
+(`_is_charmed_by_caster`, read by field, never by the condition's name). The opponent must be
+either `ACTIVE` (promoted mid-fight) or `WON_OVER` with its encounter `COMPLETED` and its bind
+window still open (`world.combat.won_over.bind_window_open`, Decision 19 of ADR-4091): the
+charmer must still be in the room, not merely have charmed the enemy at some point. This is the
+same predicate the won-over digest row's `can_bind` flag and telnet `companion promote` consult,
+so all three agree on whether a bind is on offer.
+
+On the charmed-enemy path, `bind_difficulty` is reduced by
+`CompanionArchetype.charm_difficulty_reduction`, and the charm condition is consumed on a
+successful bind. Stored allegiance stays `ENEMY` the whole time (derived-on-read, per ADR-4091);
+only the effective allegiance says this opponent is friendly. The charmed enemy's own
+`CombatOpponent.objectdb` is never transferred into the new `Companion`: `bind_companion` creates
+a fresh `CompanionObject`, since the summon/mook body is the wrong typeclass for companion
+behavior. On the `WON_OVER` path a successful bind deletes the nameless won-over body immediately
+(`world.combat.won_over.delete_won_over_npc`, the same identity-map-safe guard the lapse sweep and
+send away use); there is no later cleanup pass to rely on for that body.
+
+Telnet: `companion promote <npc> archetype=<name|id> gift=<name|id> name=<text>`
+(`CmdCompanion`, `commands/companion.py`), dispatching the same `PromoteSummonAction`
+(`promote_summon` key) the web bind action uses.
+
 ## Consent-delegation (governing principle, not built)
 
 An action requiring consent that targets a companion should route that

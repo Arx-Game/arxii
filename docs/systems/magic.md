@@ -857,6 +857,14 @@ upkeep. See ADR-0255 (amends ADR-0118).
 - Hostile → `seed_or_feed_encounter_from_cast` (combat).
 - Benign + behavior-altering → PENDING `SceneActionRequest` (consent required).
 - Benign + capability/stat → resolves immediately, including on other PCs.
+- **Allegiance renewal is a cast, never a fight (#4091, ADR-4091 Decision 9).** A pure
+  allegiance technique (charm/turn/calm: no damage profile, no removed conditions, every
+  applied condition sets allegiance) re-cast on a target the caster already holds routes
+  through the ordinary immediate-cast path (`is_allegiance_renewal`,
+  `world.magic.services.hostility`) even though the same technique aimed at a fresh target is
+  hostile (its condition rows target `ENEMY`). Striking first on a fresh target still opens a
+  fight as usual; renewal only applies when the caster's own active hold on that exact target
+  is already there.
 - **Any benign cast that affects an ACTIVE combatant** seats the caster in
   that combatant's encounter (#2226, ADR-0119) — via
   `seat_caster_for_benign_intervention`, called post-resolution on both the

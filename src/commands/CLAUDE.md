@@ -219,6 +219,19 @@ actions, backends, and service functions.
   `add`'s NPC name already has); `<tier>` must be `elite`/`boss`/`hero_killer`.
 - **`consent.py`**: `ConsentRequestCommand` (base), `CmdIntimidate`, `CmdPersuade`, `CmdDeceive`, `CmdFlirt`, `CmdSeduce`, `CmdPerform`, `CmdEntrance`, `CmdRestoreSense` — telnet shells for social consent-flow actions (#1337/#1338/#1695); `CmdAccept` (extended to check offer registry first; consent
   fall-through unchanged), `CmdDeny` — target responses. All call `create_action_request` / `respond_to_action_request` — the same service the web viewset calls.
+- **`allegiance.py`**: After-fight allegiance choices for a charmed, turned, or calmed NPC
+  (#4091, ADR-4091). `CmdSettle` (`settle <character>`, `ConsentRequestCommand`) dispatches the
+  one `settles_allegiance` `ActionTemplate` through the ordinary scene social-action pipeline
+  (action key `settle`) - anyone present may settle the hold, not just the one who applied it.
+  `CmdSendAway` (`sendaway <character>`) dispatches `SendAwayAction` (key `send_away`,
+  `actions/definitions/allegiance.py`): resolves a named target to its `target_persona_id`, or
+  (for a nameless ephemeral opponent with no persona) its live `WON_OVER` `combat_opponent_id`.
+  `CmdRetain` (`retain <character>=<informant|contact|personal_favor>`) dispatches
+  `CharmAssetAction` (key `charm_asset`, `actions/definitions/charm_asset.py`, #2502) - taking a
+  charmed named NPC into service as an `NPCAsset`; the hyphenated and underscored spellings of
+  `personal_favor`/`personal-favor` both resolve. Both `sendaway` and `retain` are gated by the
+  same `world.npc_services.allegiance.actor_holds_sway_present` predicate the persona menu's
+  "Send away"/"Take into service" items and the won-over digest row's flags also consult.
 - **`social/grievance.py`**: `CmdGrievance` (`+grievance`, #1429) — the telnet face of the secret-victim grievance prompt; thin over `world.secrets.services.register_secret_grievance` (the same service the web `/api/secrets/grievance/` endpoint calls). A wronged character picks a `GrievanceOption` for a secret they've learned; it applies a one-sided relationship swing toward the perpetrator.
 - **`ritual.py`**: `CmdRitual` (alias `perform`) — telnet face of
   `PerformRitualAction` and multi-participant session lifecycle:
@@ -765,12 +778,17 @@ actions, backends, and service functions.
   `CmdSignature`/`CmdSanctum`). No business logic in the command.
 - **`companion.py`**: `CmdCompanion` (`companion`, #1918) — the companion lifecycle namespace. One
   `DispatchCommand` routes a leading subverb (`bind` / `fight` / `deploy` / `release` / `order` /
-  `mount` / `dismount` / `emote`) through
+  `mount` / `dismount` / `emote` / `promote`) through
   `dispatch_player_action` — the same seam the web `CompanionViewSet` uses — reaching the Actions in
   `actions/definitions/companions.py`. Bare `companion`/`companion status`/`companion list` = status hub
   (active companions + remaining capacity). Grammar:
   `companion bind archetype=<name|id> gift=<name|id> name=<text>`,
   `companion release <name|id>`, `companion fight <name|id>`, `companion deploy <name|id>`,
+  `companion promote <npc> archetype=<name|id> gift=<name|id> name=<text>` (#4091,
+  `PromoteSummonAction`, key `promote_summon`): `name=` is the final token on both `bind` and
+  `promote` (it greedily consumes the rest of the line so names with spaces work); `<npc>` may
+  be an active summon or a charmed enemy the caster holds sway over, including a WON_OVER
+  nameless enemy whose bind window is still open (`world.combat.won_over.bind_window_open`),
   `companion emote <name|id> <text>` (#3294 — pose *as* a bonded, present companion;
   `CompanionEmoteAction`, key `companion_emote`, gated by `CompanionPresentPrerequisite`
   — owned, active, AND co-located with the actor. Authorship for block/mute/consent stays

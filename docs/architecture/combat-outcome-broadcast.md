@@ -168,6 +168,32 @@ authored default death line), so the Narrator's OUTCOME line is the only account
 as before #4101. See `docs/systems/scenes.md`'s "GM narration of mechanical events" and
 `docs/systems/magic.md`'s "GM Prompt Queue" for the full model.
 
+## Encounter-level ceremonial OUTCOME: the won-over clause (#876, #4091)
+
+Beside the per-action OUTCOME line this doc describes, `complete_encounter` also broadcasts one
+ceremonial, encounter-level OUTCOME line through the same `broadcast_action_outcome` seam:
+`_broadcast_encounter_outcome` (`world/combat/services.py`) assembles active/fled/defeated side
+labels and calls `render_encounter_outcome_narration` (`world/combat/interaction_services.py`,
+#876) to build the headline ("The party stands victorious.", etc.).
+
+**The won-over clause (#4091).** `render_encounter_outcome_narration` takes an optional
+`won_over: list[tuple[str, str]]` of (name, verb) pairs, grouped by verb into a clause like
+"Toma and Vex are charmed." on a `VICTORY` line, alongside (never instead of) a defeated-opponent
+clause when both kinds of overcome opponent exist in the same fight. No violence is implied by
+this clause; a field won over entirely this way reads only the won-over clause and the standing
+side's own line.
+
+**Telnet parity is synchronous here, unlike every per-action caller.** `broadcast_action_outcome`
+takes a `deliver_telnet: bool = False` kwarg; every per-action narration caller (flee, technique
+cast, NPC actions, windup, sustained rituals, cleanup) leaves it `False` and keeps the
+WebSocket-only behavior this doc's scope describes. Only `_broadcast_encounter_outcome` passes
+`deliver_telnet=True`: after the room broadcast, it also sends `interaction.content` as plain
+text to every non-web session in the room, synchronously
+(`world.scenes.interaction_services.send_outcome_text_to_non_web`), so a bare telnet session
+reads the top-level encounter result (including the won-over clause) and so the push order stays
+outcome line, then the private aftermath digest, on both web and telnet. Fixing telnet parity for
+the rest of the per-action callers is a separate, broader gap, left out of scope here.
+
 ## Scope / follow-ups
 
 **In:** ACTION broadcast (PC actions + clash contributions); `InteractionMode.OUTCOME`; Narrator
