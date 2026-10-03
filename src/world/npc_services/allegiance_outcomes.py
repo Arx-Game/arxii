@@ -233,3 +233,49 @@ def attempt_allegiance_break(
         broke=broke,
         ending=ending,
     )
+
+
+def lapsed_allegiance_sweep() -> None:
+    """Remove expired allegiance holds with no roll and no pool (Decisions 17, 18, 21).
+
+    The NPC returns to its old stance; nothing attacks, and no encounter opens
+    (#4121 decides when a lapsed NPC turns hostile; a GM can start a fight by hand).
+    Removal goes through ``remove_condition`` so CONDITION_REMOVED fires. Also closes
+    bind windows whose charmer has left (Decision 19) -- this is also how a kept
+    nameless charmed NPC gets deleted once its window closes (#4091 task 7).
+
+    Runs every minute (``combat.lapsed_allegiance_sweep``) and owns every
+    ``sets_allegiance``-bearing ``ConditionInstance``; the hourly
+    ``batch_condition_expiration_cleanup`` (``world/game_clock/tasks.py``) skips those
+    rows so its bulk ``.delete()`` never silently drops the removal event this sweep
+    fires per row.
+    """
+    from django.utils import timezone  # noqa: PLC0415
+
+    from world.combat.won_over import release_closed_bind_windows  # noqa: PLC0415
+    from world.conditions.models import ConditionInstance  # noqa: PLC0415
+    from world.conditions.services import remove_condition  # noqa: PLC0415
+    from world.scenes.narrator import narrate_room_outcome  # noqa: PLC0415
+    from world.scenes.services import persona_names_for_sheets  # noqa: PLC0415
+
+    expired = list(
+        ConditionInstance.objects.filter(expires_at__lt=timezone.now())
+        .exclude(condition__sets_allegiance="")
+        .select_related("condition", "target")
+    )
+    # Batched: CharacterSheet shares ObjectDB's pk (CLAUDE.md), so each target's own
+    # pk IS its sheet id -- no need to fetch the sheet first, and no per-instance
+    # persona query. A target with no sheet (an ephemeral combat mook) is simply
+    # absent from the map, so it falls back to the ObjectDB's own key, which equals
+    # that mook's CombatOpponent.name.
+    persona_names = persona_names_for_sheets(instance.target_id for instance in expired)
+    for instance in expired:
+        target = instance.target
+        condition = instance.condition
+        room = target.location
+        remove_condition(target, condition)
+        if room is not None and condition.is_visible_to_others:
+            name = persona_names.get(target.pk, target.key)
+            # R6: PLACEHOLDER system line (#4091).
+            narrate_room_outcome(room, f"The {condition.name} on {name} has run out.")
+    release_closed_bind_windows()
