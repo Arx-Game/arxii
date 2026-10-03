@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+from unittest import mock
+
 from django.urls import reverse
 
 from actions.factories import ConsequencePoolEntryFactory, ConsequencePoolFactory
 from actions.models import ConsequencePool, ConsequencePoolEntry
 from evennia_extensions.models import PlayerData
-from web.admin.soulfray_builder.forms import TABLE_CHANGED_ERROR
+from web.admin.soulfray_builder.forms import TABLE_CHANGED_ERROR, BaseEffectFormSet
 from web.admin.soulfray_builder.save import NEW_POOL_NAME_REQUIRED
 from web.admin.tests.soulfray_ladder import (
     SoulfrayBuilderTestCase,
@@ -256,6 +258,30 @@ class RowEditsTest(SaveTestCase):
         stage = ConditionStage.objects.get(pk=self.fraying.pk)
         self.assertEqual(stage.description, "PLACEHOLDER still saved")
 
+    def test_a_shared_row_edited_here_is_saved_but_not_credited(self) -> None:
+        shared = Consequence.objects.get(label="common Success")
+        data = self._values(self.fraying)
+        data[f"rows-{self._row_index(data, 'common Success')}-label"] = ["PLACEHOLDER shared"]
+        prefix = f"e{shared.pk}"
+        data.update(
+            {
+                f"{prefix}-TOTAL_FORMS": ["1"],
+                f"{prefix}-0-id": [""],
+                f"{prefix}-0-consequence": [str(shared.pk)],
+                f"{prefix}-0-effect_type": [EffectType.APPLY_CONDITION],
+                f"{prefix}-0-target": ["self"],
+                f"{prefix}-0-execution_order": ["1"],
+                f"{prefix}-0-condition_template": [str(self.shaken.pk)],
+                f"{prefix}-0-condition_severity": ["2"],
+            }
+        )
+        self.assertEqual(self._post(self.fraying, data).status_code, 302)
+        shared = Consequence.objects.get(pk=shared.pk)
+        self.assertEqual((shared.label, shared.written_by), ("PLACEHOLDER shared", None))
+        effect = ConsequenceEffect.objects.get(consequence=shared)
+        self.assertIsNone(effect.written_by)
+        self.assertEqual(ConditionStage.objects.get(pk=self.fraying.pk).written_by, self.writer)
+
     def test_copy_rows_clone_their_effects(self) -> None:
         data = self._values(self.tearing, f"?copy_from={self.fraying.pk}")
         self.assertEqual(self._post(self.tearing, data).status_code, 302)
@@ -380,6 +406,74 @@ class RefusalsTest(SaveTestCase):
     def test_a_stage_from_another_condition_is_404(self) -> None:
         self.client.force_login(self.author)
         self.assertEqual(self.client.post(self._url(self.numb), {}).status_code, 404)
+
+
+class CacheSafetyTest(SaveTestCase):
+    """A save that does not commit leaves the identity-mapped rows as they were.
+
+    Every read here is the ordinary cached ``get(pk=...)``, never a flush: the live
+    game reads the same instances, so the cache itself is what is asserted on.
+    """
+
+    def _edit_stage(self, data: dict[str, list[str]]) -> None:
+        data["stage-name"] = ["PLACEHOLDER renamed"]
+        data["stage-severity_threshold"] = ["99"]
+
+    def _assert_stage_untouched(self, stage: ConditionStage, name: str, threshold: int) -> None:
+        cached = ConditionStage.objects.get(pk=stage.pk)
+        self.assertEqual((cached.name, cached.severity_threshold), (name, threshold))
+
+    def test_a_refused_save_with_no_pool_name_leaves_the_cached_stage_alone(self) -> None:
+        data = self._values(self.tearing)
+        self._edit_stage(data)
+        data["pool-new_name"] = [""]
+        self._add_row(
+            data, outcome_tier=self.ladder.outcomes["Failure"].pk, label="PLACEHOLDER homeless"
+        )
+        self.assertEqual(self._post(self.tearing, data).status_code, 200)
+        self._assert_stage_untouched(self.tearing, "Tearing", 6)
+
+    def test_a_refused_pool_switch_leaves_the_cached_stage_and_effects_alone(self) -> None:
+        data = self._values(self.fraying)
+        self._edit_stage(data)
+        data["pool-parent"] = [str(self.loose.pk)]
+        data[f"rows-{self._row_index(data, 'Fraying Failure')}-label"] = ["PLACEHOLDER edited"]
+        data[f"e{self.fraying_failure.pk}-0-condition_severity"] = ["4"]
+        resp = self._post(self.fraying, data)
+        self.assertIn("Nothing was saved", resp.content.decode())
+        self._assert_stage_untouched(self.fraying, "Fraying", 1)
+        effect = ConsequenceEffect.objects.get(consequence=self.fraying_failure)
+        self.assertEqual(ConsequenceEffect.objects.get(pk=effect.pk).condition_severity, 1)
+
+    def test_a_failure_inside_the_save_leaves_the_cached_stage_pool_alone(self) -> None:
+        data = self._values(self.tearing)
+        self._edit_stage(data)
+        data["pool-parent"] = [str(self.common.pk)]
+        self._add_row(
+            data, outcome_tier=self.ladder.outcomes["Failure"].pk, label="PLACEHOLDER lost"
+        )
+        with (
+            mock.patch.object(BaseEffectFormSet, "save", side_effect=RuntimeError("injected")),
+            self.assertRaises(RuntimeError),
+        ):
+            self._post(self.tearing, data)
+        stage = ConditionStage.objects.get(pk=self.tearing.pk)
+        self.assertIsNone(stage.consequence_pool_id)
+        self.assertIsNone(stage.consequence_pool)
+        self._assert_stage_untouched(self.tearing, "Tearing", 6)
+
+    def test_a_failure_inside_the_save_leaves_the_cached_pool_parent_alone(self) -> None:
+        data = self._values(self.fraying)
+        data["pool-parent"] = [str(self.loose.pk)]
+        with (
+            mock.patch.object(BaseEffectFormSet, "save", side_effect=RuntimeError("injected")),
+            self.assertRaises(RuntimeError),
+        ):
+            self._post(self.fraying, data)
+        pool = ConsequencePool.objects.get(pk=self.fraying_pool.pk)
+        self.assertEqual(pool.parent_id, self.common.pk)
+        self.assertEqual(pool.parent, self.common)
+        self.assertEqual(ConditionStage.objects.get(pk=self.fraying.pk).written_by, None)
 
 
 class ReviewTest(SaveTestCase):

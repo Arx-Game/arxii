@@ -30,6 +30,7 @@ from web.admin.soulfray_builder.forms import (
     build_forms,
 )
 from web.admin.soulfray_builder.save import (
+    cache_guard_for,
     live_new_rows,
     pool_switch_conflict,
     require_pool_for_new_rows,
@@ -236,13 +237,22 @@ def soulfray_builder(request: HttpRequest, stage_pk: int) -> HttpResponse:
             needs_setup=contributor is None,
             copy_from=copy_from,
         )
+    # Validating binds posted values onto cached rows the live game reads; every
+    # refusal puts them back after the page (which re-validates) has rendered.
+    guard = cache_guard_for(forms)
+    refusal: dict[str, bool] | None = None
     if contributor is None:
-        return _render_page(request, stage, forms, config=config, needs_setup=True)
-    if not _all_valid(forms):
-        return _render_page(request, stage, forms, config=config)
-    if pool_switch_conflict(forms):
-        return _render_page(request, stage, forms, config=config, conflict=True)
-    save_stage(stage, forms, config, contributor)
+        refusal = {"needs_setup": True}
+    elif not _all_valid(forms):
+        refusal = {}
+    elif pool_switch_conflict(forms):
+        refusal = {"conflict": True}
+    if refusal is not None:
+        try:
+            return _render_page(request, stage, forms, config=config, **refusal)
+        finally:
+            guard.restore()
+    save_stage(stage, forms, config, contributor, guard=guard)
     messages.success(request, "Saved and credited to you.")
     return redirect(_after_save_url(request, stage))
 
