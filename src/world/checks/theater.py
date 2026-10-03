@@ -75,6 +75,7 @@ def consequence_pool_faces(
     consequences: list[WeightedConsequence],
     outcome: CheckOutcome | None,
     selected_consequence_id: int | None,
+    min_faces: int = MIN_CONSEQUENCE_FACES,
 ) -> tuple[list[Consequence], Consequence | None]:
     """Build faces for the selected tier of an action-template pool.
 
@@ -83,11 +84,16 @@ def consequence_pool_faces(
     least two candidates. The selected identity comes from the backend's
     character-loss-protected resolution, so the wheel lands on what actually
     applied rather than re-rolling on the client.
+
+    ``min_faces`` defaults to the scene second-stage rule; a Soulfray stage draw
+    passes 1, since a lone ticked or lethal row still spins (#4089). Faces carry
+    the row's authored ``theater`` so ``should_emit_theater`` can read them;
+    callers emitting with ``force=True`` are unaffected.
     """
     if outcome is None:
         return [], None
     tier_consequences = [c for c in consequences if c.outcome_tier == outcome]
-    if len(tier_consequences) < MIN_CONSEQUENCE_FACES:
+    if len(tier_consequences) < min_faces:
         return [], None
 
     faces: list[Consequence] = []
@@ -98,6 +104,7 @@ def consequence_pool_faces(
             label=weighted.label,
             weight=weighted.weight,
             character_loss=weighted.character_loss,
+            theater=weighted.consequence.theater,
         )
         faces.append(face)
         if weighted.pk == selected_consequence_id:

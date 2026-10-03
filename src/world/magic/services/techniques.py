@@ -1243,6 +1243,7 @@ def _complete_technique_cast(  # noqa: PLR0913
     declared_strain,
     effective_strain,
     price_payment=None,
+    defer_soulfray_reveal: bool = False,
 ) -> TechniqueUseResult:
     """Deduct anima, resolve the cast, and emit all post-cast effects."""
     deficit = deduct_anima(character, cost.effective_cost, lethal=lethal)
@@ -1263,6 +1264,7 @@ def _complete_technique_cast(  # noqa: PLR0913
         soulfray_config=SoulfrayConfig.objects.cached_singleton(),
         check_result=effective_check_result,
         lethal=lethal,
+        defer_reveal=defer_soulfray_reveal,
     )
     mishap = _resolve_control_mishap(
         character=character, stats=stats, check_result=effective_check_result
@@ -1353,8 +1355,15 @@ def use_technique(  # noqa: PLR0913
     target_sheet: CharacterSheet | None = None,
     strain_config: object | None = None,
     strain_power_enabled: bool = True,
+    defer_soulfray_reveal: bool = False,
 ) -> TechniqueUseResult:
-    """Orchestrate technique use from cost validation through post-cast events."""
+    """Orchestrate technique use from cost validation through post-cast events.
+
+    ``defer_soulfray_reveal=True`` holds a dramatic Soulfray stage draw's outcome
+    wheel on ``result.soulfray_result.reveal`` instead of sending it on commit
+    (#4089). Only a caller that plays the reveal itself, in order with its own
+    wheels (the scene action path), passes it; that caller must never drop it.
+    """
     _validate_strain_commitment(strain_commitment)
     stats, anima, cost, effective_strain = _calculate_technique_cost(
         character=character,
@@ -1426,4 +1435,5 @@ def use_technique(  # noqa: PLR0913
         declared_strain=strain_commitment,
         effective_strain=effective_strain,
         price_payment=price_payment,
+        defer_soulfray_reveal=defer_soulfray_reveal,
     )

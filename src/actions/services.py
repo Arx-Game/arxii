@@ -30,41 +30,53 @@ if TYPE_CHECKING:
     from world.mechanics.types import AppliedEffect
 
 
+def merge_pool_entries(
+    own_entries: list[ConsequencePoolEntry],
+    parent_entries: list[ConsequencePoolEntry] | None,
+) -> list[WeightedConsequence]:
+    """Single-depth pool inheritance over already-fetched entries; runs no query.
+
+    ``parent_entries`` is ``None`` for a pool with no parent. The parent's
+    non-excluded rows come first; the child then drops a row (``is_excluded``),
+    reweights one (``weight_override`` on a row the parent already has) or adds
+    its own. Shared by ``get_effective_consequences`` (one pool) and
+    ``world.magic.services.soulfray.soulfray_ladder_summary`` (a whole ladder in
+    one entries query), so the draw and the authoring surfaces read one rule.
+    """
+    if parent_entries is None:
+        return _entries_to_weighted(own_entries)
+
+    merged: dict[int, WeightedConsequence] = {}
+    for entry in parent_entries:
+        if not entry.is_excluded:
+            merged[entry.consequence_id] = _entry_to_weighted(entry)
+
+    for entry in own_entries:
+        cid = entry.consequence_id
+        if entry.is_excluded:
+            merged.pop(cid, None)
+        elif cid in merged:
+            if entry.weight_override is not None:
+                merged[cid] = _entry_to_weighted(entry)
+        else:
+            merged[cid] = _entry_to_weighted(entry)
+
+    return list(merged.values())
+
+
 def get_effective_consequences(pool: ConsequencePool) -> list[WeightedConsequence]:
     """Resolve pool inheritance into a flat list of weighted consequences.
 
-    For pools without a parent, returns the pool's own entries.
-    For child pools, starts with the parent's entries, then applies
-    the child's modifications (additions, exclusions, weight overrides).
+    For pools without a parent, returns the pool's own entries. For child
+    pools, starts with the parent's entries, then applies the child's
+    modifications (additions, exclusions, weight overrides); see
+    ``merge_pool_entries``.
     """
     entries = list(pool.entries.select_related("consequence"))
-
     if pool.parent_id is None:
-        return _entries_to_weighted(entries)
-
-    # Start with parent's effective consequences
+        return merge_pool_entries(entries, None)
     parent_entries = list(pool.parent.entries.select_related("consequence"))
-    parent_by_consequence_id: dict[int, WeightedConsequence] = {}
-    for entry in parent_entries:
-        if entry.is_excluded:
-            continue
-        wc = _entry_to_weighted(entry)
-        parent_by_consequence_id[entry.consequence_id] = wc
-
-    # Apply child modifications
-    for entry in entries:
-        cid = entry.consequence_id
-        if entry.is_excluded:
-            parent_by_consequence_id.pop(cid, None)
-        elif cid in parent_by_consequence_id:
-            # Override weight
-            if entry.weight_override is not None:
-                parent_by_consequence_id[cid] = _entry_to_weighted(entry)
-        else:
-            # Add new consequence
-            parent_by_consequence_id[cid] = _entry_to_weighted(entry)
-
-    return list(parent_by_consequence_id.values())
+    return merge_pool_entries(entries, parent_entries)
 
 
 def _entries_to_weighted(

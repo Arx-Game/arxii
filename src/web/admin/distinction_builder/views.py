@@ -13,7 +13,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from django.contrib import messages
+from django.contrib import admin, messages
 from django.db import transaction
 from django.forms import Media
 from django.http import HttpRequest, HttpResponse, HttpResponseBadRequest
@@ -129,6 +129,10 @@ def _render_page(
         request,
         "admin/distinction_builder/page.html",
         {
+            # The admin chrome (site header, user tools, theme toggle) reads these. The
+            # app-list sidebar stays off: the builder's two columns need the width.
+            **admin.site.each_context(request),
+            "is_nav_sidebar_enabled": False,
             "title": distinction.name if distinction.pk else "New Distinction",
             "distinction": distinction,
             "form": forms.form,

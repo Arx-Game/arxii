@@ -1,0 +1,12 @@
+{% comment %}
+One field as admin's aligned form row (the markup `admin/includes/fieldset.html`
+emits and `forms.css` styles): the label in the 160px label column, the widget
+beside it in `.sf-field`, the help line under the widget. Takes `field` (a bound
+field) and optional `extra_help` (appended to its help text).
+{% endcomment %}
+<div class="form-row">{{ field.errors }}
+  <div>
+    <div class="flex-container">{{ field.label_tag }}<div class="sf-field">{{ field }}</div></div>
+    {% if field.help_text or extra_help %}<div class="help">{{ field.help_text }}{% if extra_help %} {{ extra_help }}{% endif %}</div>{% endif %}
+  </div>
+</div>

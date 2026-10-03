@@ -4,6 +4,7 @@ from pathlib import Path
 import re
 
 from django.conf import settings
+from django.contrib import admin
 from django.contrib.staticfiles import finders
 from django.test import TestCase
 from django.urls import reverse
@@ -56,6 +57,16 @@ class BuilderTestCase(TestCase):
 
 
 class BuilderGetTest(BuilderTestCase):
+    def test_renders_inside_the_admin_chrome(self) -> None:
+        """The view merges ``admin.site.each_context``: site header and user tools."""
+        self.client.force_login(self.author)
+        url = reverse("admin_distinction_builder", args=[self.distinction.pk])
+        body = self.client.get(url).content.decode()
+        self.assertIn(str(admin.site.site_header), body)
+        self.assertIn('id="user-tools"', body)
+        # The app-list sidebar stays off: it would squeeze the builder's two columns.
+        self.assertNotIn('id="nav-sidebar"', body)
+
     def test_renders_the_four_panels_and_the_rail(self):
         self.client.force_login(self.author)
         resp = self.client.get(reverse("admin_distinction_builder", args=[self.distinction.pk]))

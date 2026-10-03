@@ -1,0 +1,48 @@
+<div class="module" id="stage-module">
+  <h2>The stage
+    <span class="sf-chips">
+      <span class="sf-chip">stage {{ stage.stage_order }} of {{ ladder|length }}</span>
+      {% for prop in stage.properties.all %}<span class="sf-chip">{{ prop.name }}</span>{% endfor %}
+      {% if summary.can_kill %}<span class="sf-chip sf-chip--kill">can kill</span>{% endif %}
+    </span>
+  </h2>
+  {% if forms.stage.non_field_errors %}<p class="errornote">{{ forms.stage.non_field_errors }}</p>{% endif %}
+  <div class="aligned">
+    {% include "admin/soulfray_builder/_form_row.html" with field=forms.stage.name %}
+    {% if summary.can_kill %}
+    {% include "admin/soulfray_builder/_form_row.html" with field=forms.stage.description extra_help="Because a consequence here can kill, the checkpoint also says so." %}
+    {% else %}
+    {% include "admin/soulfray_builder/_form_row.html" with field=forms.stage.description %}
+    {% endif %}
+    {% include "admin/soulfray_builder/_form_row.html" with field=forms.stage.severity_threshold %}
+    {% include "admin/soulfray_builder/_form_row.html" with field=forms.stage.advancement_resist_failure_kind %}
+    <div class="form-row">{{ forms.stage.resist_check_type.errors }}{{ forms.stage.resist_difficulty.errors }}
+      <div>
+        <div class="flex-container">{{ forms.stage.resist_check_type.label_tag }}<div class="sf-field">{{ forms.stage.resist_check_type }} {{ forms.stage.resist_difficulty.label_tag }} {{ forms.stage.resist_difficulty }}</div></div>
+        <div class="help">{{ forms.stage.resist_check_type.help_text }}</div>
+      </div>
+    </div>
+    {% include "admin/soulfray_builder/_form_row.html" with field=forms.stage.properties %}
+    <div class="form-row">
+      {{ forms.on_entry.management_form }}
+      {% if forms.on_entry.non_form_errors %}<p class="errornote">{{ forms.on_entry.non_form_errors }}</p>{% endif %}
+      <div>
+        <div class="flex-container"><label>Applied on entry:</label>
+          <div class="sf-field sf-onentry-list">
+            {% for f in forms.on_entry.forms %}
+            <div class="sf-onentry">{% for hidden in f.hidden_fields %}{{ hidden }}{% endfor %}{{ f.condition }} severity {{ f.severity }}{% if f.instance.pk %} {{ f.DELETE.label_tag }} {{ f.DELETE }}{% endif %}{{ f.errors }}</div>
+            {% endfor %}
+          </div>
+        </div>
+        <div class="help">A condition put on the caster once, when they reach this stage.</div>
+      </div>
+    </div>
+  </div>
+  <details class="sf-more">
+    <summary>More</summary>
+    <div class="aligned">
+      {% include "admin/soulfray_builder/_form_row.html" with field=forms.stage.severity_multiplier %}
+      {% include "admin/soulfray_builder/_form_row.html" with field=forms.stage.rounds_to_next %}
+    </div>
+  </details>
+</div>

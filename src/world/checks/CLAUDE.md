@@ -39,6 +39,18 @@ The checks app defines types of checks (Stealth, Diplomacy, Perception, etc.) an
   to the roller and (when present) the target. Action-template steps with at least two effective
   consequences queue a second weighted pool wheel immediately after the chart wheel; explicit
   stage labels are optional payload metadata and do not alter the existing roulette contract.
+  `consequence_pool_faces` takes a keyword-only `min_faces` (default `MIN_CONSEQUENCE_FACES`,
+  2) so a caller with a different "worth a spin" bar can lower it; `should_emit_theater`
+  (any face ticked `theater` or `character_loss`) is the shared gate every caller reads before
+  building a wheel. **Soulfray stage draws (#4089):** `world.magic.services.soulfray` reuses
+  this module (`consequence_pool_faces(..., min_faces=1)`, a lone candidate still spins;
+  `should_emit_theater`) to build a `SoulfrayReveal` from the drawn tier's UNFILTERED effective
+  consequences, so a `character_loss` row a non-lethal cast's own filter removed still shows as
+  a face the wheel spins past. Delivery is web-only (telnet has no `roulette_result` output),
+  happens through this module's own `maybe_emit_resolution_theater` on commit, and on the scene
+  action path is held (`defer_reveal`/`defer_soulfray_reveal`) and replayed by
+  `_schedule_check_outcome_theater` AFTER that action's own wheel(s), to the caster only. See
+  `docs/systems/magic.md`'s "Soulfray" section and ADR-4089-B.
 
 ### `types.py`
 - **`CheckResult`**: Dataclass returned by perform_check. Contains outcome, chart, ranks, and point breakdowns. No roll numbers exposed.

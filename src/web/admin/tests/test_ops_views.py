@@ -36,6 +36,16 @@ class TestOpsDashboardView(TestCase):
         self.assertIn('id="panel-ops-story"', body)
         self.assertIn('id="panel-ops-reports"', body)
 
+    def test_dashboard_renders_the_admin_site_chrome_once(self) -> None:
+        from django.contrib import admin
+
+        self.client.force_login(self.super)
+        body = self.client.get(reverse("admin_ops")).content.decode()
+        self.assertIn(str(admin.site.site_header), body)
+        self.assertIn('id="user-tools"', body)
+        self.assertNotIn('id="nav-sidebar"', body)
+        self.assertEqual(body.count("<h1>Game Ops</h1>"), 1)
+
 
 class TestOpsFragmentViews(TestCase):
     """Each fragment is superuser-only, mirroring the dashboard's gate."""
