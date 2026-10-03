@@ -75,7 +75,12 @@ def comprehension_value(sheet: CharacterSheet, language: Language) -> int:
     return comprehension_values([sheet.pk], language)[sheet.pk]
 
 
-def comprehension_values(sheet_ids: Iterable[int], language: Language) -> dict[int, int]:
+def comprehension_values(
+    sheet_ids: Iterable[int],
+    language: Language,
+    *,
+    trained_by_sheet: dict[int, int] | None = None,
+) -> dict[int, int]:
     """Listener-side fluency for many sheets at once, keyed by sheet pk (#4090).
 
     Trained fluency plus active-condition bonuses, floored at 0. Only the LISTENER reads
@@ -85,10 +90,19 @@ def comprehension_values(sheet_ids: Iterable[int], language: Language) -> dict[i
     equipment do not), through the one ``ModifierTarget`` that
     ``ModifierTarget.get_for_trait`` returns for the language's trait.
 
-    At most three queries however many sheets: one trained-fluency read, then the pure
-    batched condition read (``condition_modifier_totals_by_sheet``, which never tears down
-    an expired condition). A live say computes every listener's value with one call.
-    Every requested id is in the result (0 when it has no fluency row or no sheet).
+    This is the ONE comprehension rule (Controller ruling F2) -- live delivery and the
+    scene-log reread both compute through here, never a parallel re-derivation.
+    ``trained_by_sheet``, when given, is used as the trained-fluency read instead of
+    querying ``CharacterTraitValue`` again -- the reread passes its own page-batched
+    ``_fluency_map`` so the two callers share the formula without a duplicate query;
+    every id this function needs must already be a key in it (0 when absent, same as
+    the self-queried default).
+
+    At most three queries however many sheets: one trained-fluency read (skipped
+    entirely when ``trained_by_sheet`` is supplied), then the pure batched condition
+    read (``condition_modifier_totals_by_sheet``, which never tears down an expired
+    condition). A live say computes every listener's value with one call. Every
+    requested id is in the result (0 when it has no fluency row or no sheet).
     """
     ids = set(sheet_ids)
     if not ids:
@@ -97,16 +111,18 @@ def comprehension_values(sheet_ids: Iterable[int], language: Language) -> dict[i
         return dict.fromkeys(ids, 0)
     from world.conditions.services import condition_modifier_totals_by_sheet  # noqa: PLC0415
     from world.mechanics.models import ModifierTarget  # noqa: PLC0415
-    from world.traits.models import CharacterTraitValue  # noqa: PLC0415
 
-    trained = dict(
-        CharacterTraitValue.objects.filter(
-            character_id__in=ids, trait_id=language.trait_id
-        ).values_list("character_id", "value")
-    )
+    if trained_by_sheet is None:
+        from world.traits.models import CharacterTraitValue  # noqa: PLC0415
+
+        trained_by_sheet = dict(
+            CharacterTraitValue.objects.filter(
+                character_id__in=ids, trait_id=language.trait_id
+            ).values_list("character_id", "value")
+        )
     target = ModifierTarget.get_for_trait(language.trait)
     bonuses = condition_modifier_totals_by_sheet(ids, target) if target is not None else {}
-    return {pk: max(0, trained.get(pk, 0) + bonuses.get(pk, 0)) for pk in ids}
+    return {pk: max(0, trained_by_sheet.get(pk, 0) + bonuses.get(pk, 0)) for pk in ids}
 
 
 def condition_language_bonuses(sheet: CharacterSheet) -> dict[int, ConditionFluencyBonus]:

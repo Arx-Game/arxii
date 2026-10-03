@@ -596,29 +596,23 @@ class InteractionListSerializer(serializers.ModelSerializer):
     def _comprehension_map(self, language: "Language") -> dict[int, int]:
         """Context-cached viewer sheet_id -> comprehension for one language (#4090).
 
-        Trained fluency (``_fluency_map``) plus the viewer sheets' active-condition bonuses
-        toward the language trait's ModifierTarget, floored at 0. Batched page-wide: at
-        most two extra queries per (page, language) via
-        ``condition_modifier_totals_by_sheet``, never one per row. Only viewer sheets are
-        folded; the speaker's band stays on trained fluency (Decision 3).
+        Delegates to ``comprehension_values`` (language_services.py) -- the SAME rule
+        the live say path uses, never a parallel re-derivation (Controller ruling F2) --
+        passing this page's already-batched ``_fluency_map`` as ``trained_by_sheet`` so
+        the shared function skips its own trait-value query and the whole call stays at
+        most two extra queries per (page, language) via ``condition_modifier_totals_by_sheet``,
+        never one per row. Only viewer sheets are folded; the speaker's band stays on
+        trained fluency (Decision 3).
         """
         cache: dict[int, dict[int, int]] = self.context.setdefault("_comprehension_map_cache", {})
         if language.pk in cache:
             return cache[language.pk]
-        trained = self._fluency_map(language)
-        viewer_sheet_ids: set[int] = set(self.context.get("viewer_sheet_ids", set()))
-        result = {sid: trained.get(sid, 0) for sid in viewer_sheet_ids}
-        if language.trait_id is not None and viewer_sheet_ids:
-            from world.conditions.services import (  # noqa: PLC0415
-                condition_modifier_totals_by_sheet,
-            )
-            from world.mechanics.models import ModifierTarget  # noqa: PLC0415
+        from world.species.language_services import comprehension_values  # noqa: PLC0415
 
-            target = ModifierTarget.get_for_trait(language.trait)
-            if target is not None:
-                bonuses = condition_modifier_totals_by_sheet(viewer_sheet_ids, target)
-                for sid, bonus in bonuses.items():
-                    result[sid] = max(0, result.get(sid, 0) + bonus)
+        viewer_sheet_ids: set[int] = set(self.context.get("viewer_sheet_ids", set()))
+        result = comprehension_values(
+            viewer_sheet_ids, language, trained_by_sheet=self._fluency_map(language)
+        )
         cache[language.pk] = result
         return result
 
