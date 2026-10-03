@@ -205,11 +205,25 @@ class TrainLanguageAction(Action):
             description=f"Language training: {amount} dp for {language.name}",
         )
 
+        from world.species.language_progression import language_lock_rating  # noqa: PLC0415
+
+        breakthrough_rating = language_lock_rating(sheet, language)
         mode = "with a teacher" if teacher is not None else "through self-study"
-        message = f"You study {language.name} {mode}, gaining {amount} development points."
+        if breakthrough_rating is not None and not level_ups:
+            # Parked at an authored XP lock: the session's dp dissipated in
+            # award_points, so the message says what skills say at a plateau
+            # (world.skills.services._boundary_message) instead of claiming a gain.
+            message = f"You study {language.name} {mode}."
+        else:
+            message = f"You study {language.name} {mode}, gaining {amount} development points."
         if level_ups:
             _old_level, new_level = level_ups[-1]
             message += f" Your fluency deepens to {new_level}."
+        if breakthrough_rating is not None:
+            message += (
+                f" Your {language.name} is at threshold {breakthrough_rating}: training "
+                "maintains, does not advance until the breakthrough is unlocked."
+            )
 
         return ActionResult(
             success=True,
@@ -219,5 +233,6 @@ class TrainLanguageAction(Action):
                 "amount": amount,
                 "self_study": teacher is None,
                 "level_ups": level_ups,
+                "breakthrough_rating": breakthrough_rating,
             },
         )

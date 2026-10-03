@@ -3,6 +3,10 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from world.species.models import Language
 
 
 @dataclass(frozen=True)
@@ -29,3 +33,12 @@ class ConditionFluencyBonus:
     language_id: int
     total: int
     sources: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class LanguageBreakthroughProspect:
+    """A language parked one below an authored XP lock, with its cost (#4090)."""
+
+    language: Language
+    next_rating: int
+    xp_cost: int
