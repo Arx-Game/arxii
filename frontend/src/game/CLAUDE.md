@@ -270,7 +270,9 @@ chips, dismissed?)` counts unread per waking chip for the strip's "new" pills,
   (name, description); below them one `Activity` list of the room's ambient
   interactions and the session's notes, ordered by time through `feedRows.ts`.
   An ambient row's body is the server's `line` (#3858) through
-  `scenes/components/ActorLine.tsx`, the actor in the sentence, as in `PoseUnit`.
+  `scenes/components/ActorLine.tsx`, the actor in the sentence, as in `PoseUnit`, and
+  since #4128 the same prose line: avatar as indent, time on hover, no header row;
+  left-click on the avatar is the persona menu, the right button is the frame's.
   It owns its scroll container and follows its newest line through
   `useStickToBottom`.
 - **`hooks/useStickToBottom.ts`**: The one rule for every feed: the newest line
@@ -308,12 +310,28 @@ chips, dismissed?)` counts unread per waking chip for the strip's "new" pills,
   another chip carries it, "Wake me when this arrives", Delete chip. Controlled;
   every change writes through to the preferences at once. No explainer text, by
   ruling.
-- **`FeedBlockFrame.tsx`**: Wraps any block in the column (#3856 PR 2) with hover
-  or focus controls, minimise and dismiss; a minimised block is a one-line stub
-  ("Nyx · 11:29", "Look results · 11:30") with a reopen press. `PoseReadTarget`
-  carries it for poses in both scene views, `FeedNoteBlock` for notes,
-  `ExplorationReader` for its ambient articles. Outside a provider it renders the
-  block as it is.
+- **`FeedBlockFrame.tsx`**: Wraps any block in the column (#3856 PR 2; gestures #4128,
+  ADR-4128) and owns its sorting. Nothing sits on the block: a quick right-click on the
+  text folds it to a one-line stub ("Nyx · 11:29", "Look · 11:30") and unfolds it again;
+  a held right-click (`HOLD_MS`), a long-press, or a right-click on the avatar
+  (`[data-pose-avatar]`) opens `LineMenu` at the pointer. The stub keeps a reopen press
+  and a Hide control. Callers pass `persona`, `keysOf` and `allKeys` so the menu's
+  per-character and all-lines items act on every loaded line: `PoseReadTarget` (the
+  reader's `sorting` memo) for poses in both scene views, `ExplorationReader` for its
+  ambient lines; `FeedNoteBlock` passes none, so a note's menu has no per-character
+  items. Outside a provider it renders the block as it is and no gesture fires.
+- **`LineMenu.tsx`**: The sorting menu (#4128): information flow only, how text renders.
+  A controlled Radix `DropdownMenu` anchored to a zero-size trigger at the pointer, headed
+  by who and when: Minimize or Expand, Hide; Minimize all from <name>, Hide all from
+  <name>; Minimize all, Expand all, Unhide all. There is no hide-everything, by ruling.
+  While open it suppresses the browser's own context menu at document level: on Windows
+  `contextmenu` fires on mouse up, after a held press has already opened ours under the
+  pointer, so a guard on the line never sees it. Labels are American English (Minimize).
+- **`hooks/useLineGestures.ts`**: The right button and the long-press on a line (#4128):
+  `onFold` on a quick right-click on the text, `onMenu(x, y)` on a held one, on a
+  right-click on the avatar, or on a touch held for `HOLD_MS`; a plain tap does nothing,
+  so scrolling on a phone never folds; `contextmenu` is always prevented. Left click is
+  play flow and is not read here. The test pointer polyfill carries `pointerType`.
 - **`FeedNoteBlock.tsx`**: One typed text line in either reader (#3856), styled
   by `FeedKind` after the approved demo: a boxed note for `look` (subject title +
   prose body), `item` and `system`; the destructive tokens and `role="alert"` for
@@ -461,7 +479,9 @@ list (never populated in production): the server-composed persona menu is that f
   out alts").
 - **Dynamic commands**: Commands discovered from server with generated forms
 - **Real-time updates**: WebSocket integration for live game state
-- **Context menus**: Right-click actions on game entities
+- **Two menus by button (#4128, ADR-4128)**: left click is play flow (the avatar's
+  persona menu with Reply and Kudos first), right click is information flow (fold, hide,
+  per-character and all-lines sorting through `LineMenu`)
 - **Message formatting**: Rich text display for game messages
 
 ## Integration Points
