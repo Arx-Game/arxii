@@ -2057,10 +2057,12 @@ describe('GamePage', () => {
       renderWithProviders(<GamePage />);
       await screen.findByText('stretches languidly.');
 
-      // Drawer-whisper (#2156): clicking the pose's avatar opens the
-      // character card; "Whisper" sets an UNLOCKED composer mode targeting
-      // the persona, before any conversation tab exists.
-      await user.click(screen.getByRole('button', { name: `View ${ACTIVE_NAME}` }));
+      // Drawer-whisper (#2156): the pose's avatar opens the play menu (#4128),
+      // whose "View sheet" opens the character card; "Whisper" there sets an
+      // UNLOCKED composer mode targeting the persona, before any conversation
+      // tab exists.
+      await user.click(within(screen.getAllByTestId('pose-avatar')[0]).getByRole('button'));
+      await user.click(await screen.findByRole('menuitem', { name: 'View sheet' }));
       await user.click(await screen.findByRole('button', { name: 'Whisper' }));
       expect(screen.getByText(`Whisper → ${ACTIVE_NAME}`)).toBeInTheDocument();
 

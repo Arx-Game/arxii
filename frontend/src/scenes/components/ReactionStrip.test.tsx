@@ -32,10 +32,8 @@ vi.mock('@/store/hooks', () => ({
 }));
 
 import { ReactionStrip } from './ReactionStrip';
-import { reactToWindow, reactToInteraction } from '../queries';
+import { reactToWindow } from '../queries';
 import { useMyRosterEntriesQuery } from '@/roster/queries';
-
-const INTERACTION_ID = 99;
 
 function makeWindow(overrides: Partial<ReactionWindowPayload> = {}): ReactionWindowPayload {
   return {
@@ -95,7 +93,7 @@ describe('ReactionStrip', () => {
   });
 
   it('renders a chip per choice with counts', () => {
-    render(<ReactionStrip windows={[makeWindow()]} sceneId="1" interactionId={INTERACTION_ID} />, {
+    render(<ReactionStrip windows={[makeWindow()]} sceneId="1" />, {
       wrapper: createWrapper(),
     });
     expect(screen.getByText('Moonlight 1')).toBeInTheDocument();
@@ -105,7 +103,7 @@ describe('ReactionStrip', () => {
   it('fires the mutation with the chosen slug', async () => {
     const user = userEvent.setup();
     vi.mocked(reactToWindow).mockResolvedValue(undefined);
-    render(<ReactionStrip windows={[makeWindow()]} sceneId="1" interactionId={INTERACTION_ID} />, {
+    render(<ReactionStrip windows={[makeWindow()]} sceneId="1" />, {
       wrapper: createWrapper(),
     });
     await user.click(screen.getByText('Thorns'));
@@ -115,83 +113,35 @@ describe('ReactionStrip', () => {
   });
 
   it('disables chips once the viewer has reacted', () => {
-    render(
-      <ReactionStrip
-        windows={[makeWindow({ my_reaction: '11' })]}
-        sceneId="1"
-        interactionId={INTERACTION_ID}
-      />,
-      { wrapper: createWrapper() }
-    );
+    render(<ReactionStrip windows={[makeWindow({ my_reaction: '11' })]} sceneId="1" />, {
+      wrapper: createWrapper(),
+    });
     expect(screen.getByText('Moonlight 1')).toBeDisabled();
     expect(screen.getByText('Thorns')).toBeDisabled();
   });
 
   it('settled windows render read-only with a closed note', () => {
-    render(
-      <ReactionStrip
-        windows={[makeWindow({ is_open: false })]}
-        sceneId="1"
-        interactionId={INTERACTION_ID}
-      />,
-      { wrapper: createWrapper() }
-    );
+    render(<ReactionStrip windows={[makeWindow({ is_open: false })]} sceneId="1" />, {
+      wrapper: createWrapper(),
+    });
     expect(screen.getByText('(scene closed)')).toBeInTheDocument();
     expect(screen.getByText('Moonlight 1')).toBeDisabled();
   });
 
-  // --- First-kudos chip (#2031) ---------------------------------------
+  // --- Kudos (#2031, moved to the avatar's play menu in #4128) --------
 
-  it('renders a kudos chip when no kudos window exists yet, even with no windows at all', () => {
-    render(<ReactionStrip windows={[]} sceneId="1" interactionId={INTERACTION_ID} />, {
+  it('renders no standalone kudos chip; the first kudos is a menu item now', () => {
+    render(<ReactionStrip windows={[]} sceneId="1" />, {
       wrapper: createWrapper(),
     });
     expect(screen.getByTestId('reaction-strip')).toBeInTheDocument();
-    expect(screen.getByText('Kudos')).toBeInTheDocument();
+    expect(screen.queryByText('Kudos')).toBeNull();
   });
 
-  it('does not render a duplicate kudos chip when an open kudos window exists', () => {
-    render(
-      <ReactionStrip windows={[makeKudosWindow()]} sceneId="1" interactionId={INTERACTION_ID} />,
-      { wrapper: createWrapper() }
-    );
-    expect(screen.getAllByText('Kudos')).toHaveLength(1);
-  });
-
-  it('POSTs the exact kudos body via reactToInteraction on click', async () => {
-    const user = userEvent.setup();
-    vi.mocked(reactToInteraction).mockResolvedValue(undefined);
-    render(<ReactionStrip windows={[]} sceneId="1" interactionId={INTERACTION_ID} />, {
+  it('still renders an opened kudos window as a row with its count', () => {
+    render(<ReactionStrip windows={[makeKudosWindow()]} sceneId="1" />, {
       wrapper: createWrapper(),
     });
-    await user.click(screen.getByText('Kudos'));
-    await waitFor(() => {
-      expect(reactToInteraction).toHaveBeenCalledWith({
-        persona_id: 7,
-        interaction_id: INTERACTION_ID,
-        kind: 'kudos',
-        choice: 'kudos',
-      });
-    });
-  });
-
-  it('disables the kudos chip when no persona is resolved', () => {
-    vi.mocked(useMyRosterEntriesQuery).mockReturnValue({ data: [] } as never);
-    render(<ReactionStrip windows={[]} sceneId="1" interactionId={INTERACTION_ID} />, {
-      wrapper: createWrapper(),
-    });
-    expect(screen.getByText('Kudos')).toBeDisabled();
-  });
-
-  it('surfaces the 400 detail message when the kudos POST fails', async () => {
-    const user = userEvent.setup();
-    vi.mocked(reactToInteraction).mockRejectedValue(new Error('Already gave kudos on this pose.'));
-    render(<ReactionStrip windows={[]} sceneId="1" interactionId={INTERACTION_ID} />, {
-      wrapper: createWrapper(),
-    });
-    await user.click(screen.getByText('Kudos'));
-    await waitFor(() => {
-      expect(screen.getByText('Already gave kudos on this pose.')).toBeInTheDocument();
-    });
+    expect(screen.getAllByText(/Kudos/)).toHaveLength(1);
   });
 });

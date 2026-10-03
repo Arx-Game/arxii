@@ -1293,6 +1293,7 @@ export function ThreadedNarrativeReader({
         onAddTarget={onAddTarget}
         onAttachAction={onAttachAction}
         readOnly={readOnly}
+        onReply={onReply}
         interactionsById={interactionsById}
       />
     );
@@ -1569,6 +1570,7 @@ export function ThreadedNarrativeReader({
                             onAddTarget={onAddTarget}
                             onAttachAction={onAttachAction}
                             readOnly={readOnly}
+                            onReply={onReply}
                             interactionsById={interactionsById}
                           />
                         )}

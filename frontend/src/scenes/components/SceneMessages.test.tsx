@@ -50,7 +50,7 @@ function Wrapper({ children }: { children: React.ReactNode }) {
 }
 
 describe('SceneMessages', () => {
-  it('calls onAddTarget when persona name is double-clicked', () => {
+  it('calls onAddTarget when the avatar is double-clicked (#4128: the name is in the line)', () => {
     const onAddTarget = vi.fn();
     const interactions = [
       makeInteraction({ id: 1, persona: { id: 10, name: 'Alice' } }),
@@ -63,9 +63,9 @@ describe('SceneMessages', () => {
       </Wrapper>
     );
 
-    const spans = screen.getAllByTitle('Double-click to add as target');
-    // First span is Alice
-    fireEvent.doubleClick(spans[0]);
+    const avatars = screen.getAllByTestId('pose-avatar');
+    // First line is Alice's
+    fireEvent.doubleClick(avatars[0]);
 
     expect(onAddTarget).toHaveBeenCalledWith('Alice');
   });
