@@ -60,6 +60,7 @@ def build_aftermath_digest(
 
     from world.checks.outcome_models import ConsequenceOutcome  # noqa: PLC0415
     from world.combat.objective_branches import objective_snapshot  # noqa: PLC0415
+    from world.combat.won_over import won_over_rows  # noqa: PLC0415
     from world.conditions.services import get_active_conditions  # noqa: PLC0415
     from world.scenes.constants import InteractionMode  # noqa: PLC0415
     from world.societies.models import LegendEntry, LegendEntryRecognition  # noqa: PLC0415
@@ -156,6 +157,7 @@ def build_aftermath_digest(
         beat_visible_to_player=beat_visible_to_player,
         peril_round_active=has_acute_peril(sheet),
         companions_lost=companions_lost,
+        won_over=won_over_rows(encounter, sheet),
     )
 
 
@@ -191,6 +193,15 @@ def render_aftermath_digest(digest: AftermathDigest, *, include_secret_beat: boo
     if digest.conditions:
         condition_labels = [c.condition.name for c in digest.conditions]
         lines.append(f"You carry out of the fight: {join_labels(condition_labels)}.")
+
+    if digest.won_over:
+        entries = []
+        for row in digest.won_over:
+            detail = row.verb if not row.source_label else f"{row.verb}, by {row.source_label}"
+            if row.holds_until_settled:
+                detail = f"{detail}; holds until settled"
+            entries.append(f"{row.name} ({detail})")
+        lines.append(f"Won over: {join_labels(entries)}.")
 
     if digest.companions_lost:
         lines.append(f"You lost {join_labels(digest.companions_lost)}.")

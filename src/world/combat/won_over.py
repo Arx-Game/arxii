@@ -13,9 +13,11 @@ from typing import TYPE_CHECKING
 
 from world.combat.constants import CombatAllegiance, OpponentStatus
 from world.combat.models import CombatOpponent, CombatParticipant
-from world.conditions.constants import Allegiance
+from world.combat.types import WonOverRow
+from world.conditions.constants import Allegiance, DurationType
 
 if TYPE_CHECKING:
+    from world.character_sheets.models import CharacterSheet
     from world.combat.models import CombatEncounter
     from world.conditions.models import ConditionInstance
 
@@ -143,6 +145,81 @@ def won_over_labels(encounter: CombatEncounter) -> list[tuple[str, str, str]]:
             )
         )
     return labels
+
+
+def won_over_rows(encounter: CombatEncounter, viewer: CharacterSheet) -> list[WonOverRow]:
+    """One row per WON_OVER opponent of the encounter, for the digest (#4091).
+
+    Every WON_OVER opponent is included (not only this viewer's own charms) —
+    the action flags are what differ per viewer. ``applied_since=encounter.created_at``
+    (ruling R1), same as ``won_over_labels``. Batched: one opponent query, one
+    instance query, one persona-name query pair.
+    """
+    from world.npc_services.allegiance import (  # noqa: PLC0415
+        allegiance_instances_for,
+        designating_instance,
+        won_over_verb,
+    )
+    from world.scenes.services import persona_names_for_sheets  # noqa: PLC0415
+
+    opponents = list(
+        CombatOpponent.objects.filter(encounter=encounter, status=OpponentStatus.WON_OVER)
+        .select_related("objectdb", "persona")
+        .order_by("pk")
+    )
+    by_target = allegiance_instances_for(
+        (o.objectdb_id for o in opponents), applied_since=encounter.created_at
+    )
+    designations: dict[int, ConditionInstance] = {}
+    for opponent in opponents:
+        instance = designating_instance(by_target.get(opponent.objectdb_id, []))
+        if instance is not None:
+            designations[opponent.pk] = instance
+
+    source_ids = {
+        instance.source_character_id
+        for instance in designations.values()
+        if instance.source_character_id is not None
+    }
+    source_names = persona_names_for_sheets(source_ids)
+
+    viewer_char_id = viewer.character_id
+    rows: list[WonOverRow] = []
+    for opponent in opponents:
+        instance = designations.get(opponent.pk)
+        if instance is None:
+            continue  # the hold already ended; nothing to say
+
+        present = opponent.objectdb_id is not None and opponent.objectdb.location is not None
+        nameless = opponent.objectdb_is_ephemeral
+        persona_id = opponent.persona_id
+        is_source = instance.source_character_id == viewer_char_id
+        charmer_is_viewer = (
+            is_source and instance.condition.sets_allegiance == Allegiance.ALLY_OF_CASTER
+        )
+        visible_condition = (
+            instance if (instance.condition.is_visible_to_others or is_source) else None
+        )
+
+        rows.append(
+            WonOverRow(
+                opponent_id=opponent.pk,
+                name=opponent.name,
+                verb=won_over_verb(instance.condition.sets_allegiance),
+                source_label=_source_label(instance, source_names),
+                nameless=nameless,
+                persona_id=persona_id,
+                present=present,
+                condition=visible_condition,
+                holds_until_settled=instance.condition.default_duration_type == DurationType.ROUNDS,
+                strength=instance.effective_severity,
+                can_bind=charmer_is_viewer and nameless and present,
+                can_take_into_service=charmer_is_viewer and persona_id is not None,
+                can_send_away=is_source and present,
+                can_settle=persona_id is not None and present,
+            )
+        )
+    return rows
 
 
 def _source_label(instance: ConditionInstance, source_names: dict[int, str]) -> str:

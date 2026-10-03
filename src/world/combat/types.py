@@ -468,6 +468,35 @@ class WeaponContribution:
 
 
 @dataclass(frozen=True)
+class WonOverRow:
+    """One WON_OVER opponent, as this viewer may act on it (#4091).
+
+    ``condition`` is the designating allegiance instance, gated by visibility
+    (``None`` when the condition is not visible to others and the viewer isn't
+    its source) — the badge it carries, not the verb/label text, which the
+    outcome line already named. ``can_bind``/``can_take_into_service`` require
+    the viewer to be the one who charmed this NPC; ``can_send_away`` requires
+    only that the viewer applied the designating instance (any verb);
+    ``can_settle`` (ruling R2) depends only on the opponent's own state.
+    """
+
+    opponent_id: int
+    name: str
+    verb: str
+    source_label: str
+    nameless: bool
+    persona_id: int | None
+    present: bool
+    condition: ConditionInstance | None
+    holds_until_settled: bool
+    strength: int
+    can_bind: bool
+    can_take_into_service: bool
+    can_send_away: bool
+    can_settle: bool
+
+
+@dataclass(frozen=True)
 class AftermathDigest:
     """What one encounter changed for one participant, assembled at conclusion (#3551).
 
@@ -477,7 +506,9 @@ class AftermathDigest:
     SECRET beat, whose line only a GM or staff may see. ``companions_lost`` holds
     the names of this owner's companions released inside the aftermath window
     (#3652) - a companion defeated at EXTREME/LETHAL stakes and released when
-    the fight completes.
+    the fight completes. ``won_over`` holds every WON_OVER opponent of the
+    encounter (not just this viewer's own charms), with per-row action flags
+    computed against this viewer (#4091).
     """
 
     outcome: str
@@ -492,3 +523,4 @@ class AftermathDigest:
     legend_recognitions: dict[int, list[dict[str, str]]] = field(default_factory=dict)
     # Existing story/scenario objective and authored branch selected for this fight.
     objective: dict[str, object] | None = None
+    won_over: list[WonOverRow] = field(default_factory=list)
