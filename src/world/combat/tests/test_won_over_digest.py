@@ -59,6 +59,14 @@ class WonOverDigestTests(TestCase):
         self.named.objectdb.location = room
         self.named.objectdb.save()
 
+        # can_bind now also requires the bind window be open (#4091 fix round 1):
+        # the charmer must be in the SAME room as the nameless body, not merely
+        # have charmed it once. CombatParticipantFactory places the charmer
+        # nowhere by default.
+        self.room = room
+        self.source.location = room
+        self.source.save()
+
         self.nameless = CombatOpponentFactory(encounter=self.enc, name="Lurking Foot")
 
         ConditionInstanceFactory(
@@ -98,6 +106,21 @@ class WonOverDigestTests(TestCase):
 
         self.assertTrue(named_row.can_take_into_service)
         self.assertTrue(named_row.can_settle)
+
+    def test_can_bind_is_false_once_the_charmer_leaves_the_room(self):
+        """#4091 fix round 1: can_bind must use the same bind-window predicate
+        as telnet's ``companion promote`` and ``promote_summon_to_companion`` —
+        a charm alone isn't enough once the charmer has left."""
+        from evennia import create_object
+
+        other_room = create_object("typeclasses.rooms.Room", key="Elsewhere", nohome=True)
+        self.source.location = other_room
+        self.source.save()
+
+        rows = self._rows_by_opponent(self.pc_a.character_sheet)
+        nameless_row = rows[self.nameless.pk]
+
+        self.assertFalse(nameless_row.can_bind)
 
     def test_non_charmer_viewer_can_only_settle_the_named(self):
         rows = self._rows_by_opponent(self.pc_b.character_sheet)

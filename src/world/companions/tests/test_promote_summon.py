@@ -242,6 +242,12 @@ class PromoteSummonTests(TestCase):
         self.encounter.status = RoundStatus.COMPLETED
         self.encounter.save(update_fields=["status"])
 
+        # Decision 19's bind window requires the charmer be in the SAME room as
+        # the opponent (not ``self.room`` from setUp — ``self.encounter`` spawns
+        # its own combat room).
+        self.sheet.character.location = opponent.objectdb.location
+        self.sheet.character.save()
+
         objectdb_pk = opponent.objectdb_id
         charm_template = ConditionTemplate.get_by_name(CHARM_CONDITION_NAME)
         target_character = opponent.objectdb
@@ -349,3 +355,108 @@ class PromoteSummonTests(TestCase):
             )
 
         self.assertEqual(companion.name, "Renamed Foe")
+
+    def test_won_over_opponent_refused_once_charmer_leaves_the_room(self):
+        """Fix round 1: the won-over promote path must require
+        ``bind_window_open`` — a surviving charm condition is not enough once
+        the charmer has left the room (#4091 Decision 19)."""
+        from evennia import create_object
+
+        from world.conditions.constants import CHARM_CONDITION_NAME
+        from world.conditions.models import ConditionTemplate
+        from world.conditions.services import apply_condition
+        from world.scenes.constants import RoundStatus
+
+        opponent = CombatOpponentFactory(
+            encounter=self.encounter,
+            threat_pool=self.threat_pool,
+        )
+        opponent.allegiance = CombatAllegiance.ENEMY
+        opponent.status = OpponentStatus.WON_OVER
+        opponent.save(update_fields=["allegiance", "status"])
+        self.encounter.status = RoundStatus.COMPLETED
+        self.encounter.save(update_fields=["status"])
+
+        # Start the charmer IN the opponent's room (a legitimate charm), then
+        # move them away — ``self.room`` from setUp isn't where the opponent's
+        # ephemeral body spawned (``self.encounter`` has its own combat room).
+        self.sheet.character.location = opponent.objectdb.location
+        self.sheet.character.save()
+
+        charm_template = ConditionTemplate.get_by_name(CHARM_CONDITION_NAME)
+        target_character = opponent.objectdb
+        apply_condition(target_character, charm_template, source_character=self.sheet.character)
+
+        other_room = create_object("typeclasses.rooms.Room", key="Promote Elsewhere", nohome=True)
+        self.sheet.character.location = other_room
+        self.sheet.character.save()
+
+        with self.assertRaises(PromoteSummonError) as ctx:
+            promote_summon_to_companion(
+                caster_sheet=self.sheet,
+                combat_opponent=opponent,
+                archetype=self.archetype,
+                granting_gift=self.gift,
+                name="Should Fail",
+            )
+        self.assertIn("cannot be promoted", ctx.exception.user_message)
+
+    def test_second_promote_of_same_won_over_opponent_is_refused_cleanly(self):
+        """Fix round 1: a successful won-over promote deletes the nameless body
+        and nulls the cached ``objectdb`` (``delete_won_over_npc``) — a second
+        promote attempt on the same ``CombatOpponent`` must be refused cleanly
+        rather than reaching ``_is_charmed_by_caster`` with a deleted object."""
+        from world.checks.test_helpers import force_check_outcome
+        from world.conditions.constants import CHARM_CONDITION_NAME
+        from world.conditions.models import ConditionTemplate
+        from world.conditions.services import apply_condition
+        from world.scenes.constants import RoundStatus
+        from world.traits.factories import CheckOutcomeFactory
+
+        charmed_archetype = CompanionArchetypeFactory(
+            name="Twice Bound Beast",
+            bind_difficulty=20,
+            capacity_cost=5,
+            charm_difficulty_reduction=20,  # auto-success
+        )
+
+        opponent = CombatOpponentFactory(
+            encounter=self.encounter,
+            threat_pool=self.threat_pool,
+        )
+        opponent.allegiance = CombatAllegiance.ENEMY
+        opponent.status = OpponentStatus.WON_OVER
+        opponent.save(update_fields=["allegiance", "status"])
+        self.encounter.status = RoundStatus.COMPLETED
+        self.encounter.save(update_fields=["status"])
+
+        self.sheet.character.location = opponent.objectdb.location
+        self.sheet.character.save()
+
+        charm_template = ConditionTemplate.get_by_name(CHARM_CONDITION_NAME)
+        target_character = opponent.objectdb
+        apply_condition(target_character, charm_template, source_character=self.sheet.character)
+
+        success = CheckOutcomeFactory(name="Forced Twice Bind Success", success_level=5)
+        with force_check_outcome(success):
+            promote_summon_to_companion(
+                caster_sheet=self.sheet,
+                combat_opponent=opponent,
+                archetype=charmed_archetype,
+                granting_gift=self.gift,
+                name="First Bind",
+            )
+
+        # The held opponent instance's own cache, not a re-query: proves the
+        # delete fix, not just the DB row.
+        self.assertIsNone(opponent.objectdb_id)
+
+        with self.assertRaises(PromoteSummonError) as ctx:
+            promote_summon_to_companion(
+                caster_sheet=self.sheet,
+                combat_opponent=opponent,
+                archetype=charmed_archetype,
+                granting_gift=self.gift,
+                name="Second Bind",
+            )
+        self.assertIn("cannot be promoted", ctx.exception.user_message)

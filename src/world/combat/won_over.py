@@ -120,7 +120,17 @@ def bind_window_open(opponent: CombatOpponent) -> bool:
 
 
 def delete_won_over_npc(opponent: CombatOpponent) -> bool:
-    """Guarded delete of one won-over ephemeral NPC (Layer 5 of the multi-layer guard)."""
+    """Guarded delete of one won-over ephemeral NPC (Layer 5 of the multi-layer guard).
+
+    ``ObjectDB`` isn't an ``ArxSharedMemoryModel``, so its ``delete()`` nulls
+    referrers' FKs via a bulk ``SET_NULL`` UPDATE outside
+    ``core.deletion.IdentityMapCollector`` — the cached ``opponent`` (and any
+    other process-cached ``CombatOpponent`` for this pk) would otherwise keep
+    reporting the deleted ``objectdb`` forever (fix round 1 — a stale
+    ``won_over_rows``/``present`` and a second ``_is_charmed_by_caster`` reaching
+    a deleted object). Mirrors ``release_companion``'s identical fix
+    (``world/companions/services.py``).
+    """
     from world.combat.services import (  # noqa: PLC0415
         has_persistent_identity_references,
         is_combat_npc_typeclass,
@@ -133,6 +143,9 @@ def delete_won_over_npc(opponent: CombatOpponent) -> bool:
         logger.error("Refusing to delete won-over NPC %s", objectdb)
         return False
     objectdb.delete()
+    opponent.objectdb = None
+    opponent.save(update_fields=["objectdb"])
+    CombatOpponent.flush_instance_cache()
     return True
 
 
@@ -302,7 +315,14 @@ def won_over_rows(encounter: CombatEncounter, viewer: CharacterSheet) -> list[Wo
                 condition=visible_condition,
                 holds_until_settled=instance.condition.default_duration_type == DurationType.ROUNDS,
                 strength=instance.effective_severity,
-                can_bind=charmer_is_viewer and nameless and present,
+                # Decision 19: the same bind-window predicate telnet's `companion
+                # promote` and `promote_summon_to_companion` consult (#4091 fix
+                # round 1) — a charm alone is not enough; the charmer must still
+                # be in the room. Reuses this call's own already-fetched
+                # `by_target` instances rather than `bind_window_open`'s public,
+                # re-querying form, to keep this batched.
+                can_bind=charmer_is_viewer
+                and _window_open(opponent, by_target.get(opponent.objectdb_id, [])),
                 can_take_into_service=charmer_is_viewer and persona_id is not None,
                 can_send_away=is_source and present,
                 can_settle=persona_id is not None and present,

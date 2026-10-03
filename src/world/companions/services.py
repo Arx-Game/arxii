@@ -555,9 +555,12 @@ def promote_summon_to_companion(
     - Summon path: combat_opponent.summoned_by == caster_sheet AND
       allegiance == ALLY AND status == ACTIVE.
     - Charmed-enemy path: combat_opponent.objectdb has an active Charmed
-      condition whose source_character is the caster's character. Stored
-      allegiance stays ENEMY for charmed foes (derived-on-read via
-      derive_allegiance).
+      condition whose source_character is the caster's character, and
+      combat_opponent is either ACTIVE (in-fight) or WON_OVER with its
+      encounter COMPLETED and its bind window still open
+      (world.combat.won_over.bind_window_open — Decision 19: the charmer must
+      still be in the room). Stored allegiance stays ENEMY for charmed foes
+      (derived-on-read via derive_allegiance).
 
     On the charmed-enemy path, bind_difficulty is reduced by
     archetype.charm_difficulty_reduction, and the charm condition is consumed
@@ -565,8 +568,12 @@ def promote_summon_to_companion(
 
     Does NOT transfer the CombatOpponent.objectdb — bind_companion creates a
     fresh CompanionObject (the summon's objectdb is a CombatNPC typeclass,
-    wrong for companion behavior). Does NOT remove the CombatOpponent row;
-    encounter cleanup handles that.
+    wrong for companion behavior). Does NOT remove the CombatOpponent row.
+    On the ACTIVE/summon path the nameless body's ObjectDB survives this call
+    and encounter cleanup deletes it later, as before. On the WON_OVER path,
+    a successful bind deletes the nameless won-over body's ObjectDB
+    immediately (world.combat.won_over.delete_won_over_npc) — the fresh
+    CompanionObject replaces it; there is no later cleanup to rely on.
 
     Args:
         caster_sheet: The promoting character's sheet.
@@ -585,6 +592,7 @@ def promote_summon_to_companion(
     from world.checks.models import CheckType  # noqa: PLC0415
     from world.checks.services import perform_check  # noqa: PLC0415
     from world.combat.constants import CombatAllegiance, OpponentStatus  # noqa: PLC0415
+    from world.combat.won_over import bind_window_open  # noqa: PLC0415
     from world.companions.content import BIND_ATTEMPT_CHECK_NAME  # noqa: PLC0415
     from world.conditions.constants import Allegiance  # noqa: PLC0415
     from world.conditions.services import remove_condition  # noqa: PLC0415
@@ -601,10 +609,14 @@ def promote_summon_to_companion(
     )
     # Decision 19: the charmed-enemy path also accepts a WON_OVER opponent of an
     # already-COMPLETED encounter — the bind window that keeps the nameless body
-    # alive after victory (see world.combat.won_over.bind_window_open).
+    # alive after victory. ``bind_window_open`` is the single source of truth for
+    # that window (telnet's ``companion promote`` and the digest's ``can_bind``
+    # consult the same predicate, #4091 fix round 1) — the charmer must still be
+    # in the room, not merely have charmed it once.
     charm_status_ok = combat_opponent.status == OpponentStatus.ACTIVE or (
         combat_opponent.status == OpponentStatus.WON_OVER
         and combat_opponent.encounter.status == RoundStatus.COMPLETED
+        and bind_window_open(combat_opponent)
     )
     is_charmed_enemy = (
         not is_summon

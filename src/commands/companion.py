@@ -291,7 +291,7 @@ class CmdCompanion(DispatchCommand):
                 .first()
             )
         if combat_opponent is None:
-            msg = "They are not someone you can bind."
+            msg = "PLACEHOLDER They are not someone you can bind."
             raise CommandError(msg)
 
         return {
