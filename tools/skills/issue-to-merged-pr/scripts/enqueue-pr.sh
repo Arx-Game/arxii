@@ -28,6 +28,8 @@ PR="$1"
 SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 # shellcheck disable=SC1091
 source "$SCRIPT_DIR/_wt-helpers.sh"
+# shellcheck disable=SC1091
+source "$SCRIPT_DIR/_evidence-helpers.sh"
 REPO_FULL=$(gh repo view --json nameWithOwner --jq .nameWithOwner)
 REPO_OWNER=${REPO_FULL%%/*}
 REPO_NAME=${REPO_FULL##*/}
@@ -39,8 +41,11 @@ if [[ -z "$LINKED_ISSUE" ]]; then
   echo "For partial work, file a child issue and make this PR close the child." >&2
   exit 1
 fi
-ISSUE_LABELS=$(gh issue view "$LINKED_ISSUE" --json labels --jq '.labels[].name')
-if grep -qx "review:evidence-required" <<<"$ISSUE_LABELS"; then
+ISSUE_METADATA=$(gh issue view "$LINKED_ISSUE" --json labels,body)
+ISSUE_LABELS=$(jq -r '[.labels[].name] | join("\n")' <<<"$ISSUE_METADATA")
+ISSUE_BODY_TEXT=$(jq -r '.body // ""' <<<"$ISSUE_METADATA")
+# The label, or a demo link in the spec (#4125): either gates the enqueue.
+if evidence_required "$ISSUE_LABELS" "$ISSUE_BODY_TEXT"; then
   EVIDENCE_FILE="${PR_EVIDENCE_FILE:-}"
   EVIDENCE_URL="${PR_EVIDENCE_URL:-}"
   if [[ -z "$EVIDENCE_FILE" && -z "$EVIDENCE_URL" ]]; then

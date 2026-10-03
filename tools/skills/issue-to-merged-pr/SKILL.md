@@ -144,6 +144,14 @@ Await-approval, and Implementation.
   Fixed at pickup time instead of left as a self-compulsion. Backend-only issues
   still get it only by deliberate choice; extend the label check if a similar
   recurring gap shows up there.
+  **Since #4125 the same label is applied when the issue body carries a demo
+  link** (`claude.ai/artifact/...` or `claude.ai/code/artifact/...`), and
+  `open-pr.sh`/`enqueue-pr.sh` read the body themselves, so a demo-backed issue
+  is gated even when it was picked up before the fix or never labelled. The
+  helper is `scripts/_evidence-helpers.sh` (`evidence_required`). #4098, #4099
+  and #4101 carried demos and no `frontend` label, and their demo-fidelity
+  reviews reached the PR with the screenshots "taken locally and not attached".
+
 - After `start-work.sh` succeeds, `cd` into the emitted `worktree_path`. **Do NOT
   use `EnterWorktree` or create another worktree** — `start-work.sh` already ran
   `git worktree add`. Using a native worktree tool on top of it recreates the

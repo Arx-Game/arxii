@@ -24,7 +24,23 @@ ISSUE = "1234"
 _GH_STUB = """#!/usr/bin/env bash
 case "$*" in
   *"issue view"*body*)
-    if [[ "${STUB_NO_APPROVAL:-0}" == "1" ]]; then
+    if [[ "${STUB_DEMO_ONLY:-0}" == "1" ]]; then
+      # A demo-backed issue that never got the label (#4125): approved, no
+      # review:evidence-required, a demo link in the spec.
+      LABELS=$'status:implementing\nspec:approved'
+      BODY=$'## Discovery assessment\n'
+      BODY+=$'- Outcome: bounded change.\n'
+      BODY+=$'- Success signal: the check passes.\n'
+      BODY+=$'- Stakeholder provenance: roles recorded.\n'
+      BODY+=$'- Impact: low and reversible.\n'
+      BODY+=$'- Lane rationale: existing pattern.\n'
+      BODY+=$'- Users: players.\n- Non-goals: unrelated work.\n'
+      BODY+=$'- Outcome-changing assumptions: none.\n- Options: one.\n'
+      BODY+=$'- Scenarios: one.\n'
+      BODY+='<!-- discovery:lane=standard;state=complete -->\n'
+      BODY+='<!-- spec:start -->\n**Demo:** https://claude.ai/artifact/AbCdEf123456\n'
+      BODY+='### Goal\nExample.\n<!-- spec:end -->'
+    elif [[ "${STUB_NO_APPROVAL:-0}" == "1" ]]; then
       LABELS=$'status:implementing\nreview:evidence-required'
       BODY=$'## Discovery assessment\n'
       BODY+=$'- Outcome: bounded change.\n'
@@ -130,6 +146,18 @@ class OpenPrBodyTests(unittest.TestCase):
             "requires spec:approved" in result.stderr
             or "complete lightweight marker" in result.stderr
         )
+
+    def test_demo_link_alone_requires_evidence(self) -> None:
+        """#4125: an issue whose spec carries a demo link is evidence-gated even
+        without the review:evidence-required label, so a PR for it cannot open
+        with no report."""
+        result = _run_dry_run({"STUB_DEMO_ONLY": "1"})
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("requires review evidence", result.stderr)
+
+    def test_demo_link_alone_accepts_a_report(self) -> None:
+        body = _dry_run_body({"STUB_DEMO_ONLY": "1", "PR_EVIDENCE_FILE": "docs/reviews/1234.md"})
+        self.assert_report_line(body, "- Report: `docs/reviews/1234.md`")
 
     def test_open_pr_requires_quality_review_disposition(self) -> None:
         result = _run_dry_run(
