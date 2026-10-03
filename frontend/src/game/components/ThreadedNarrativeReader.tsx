@@ -236,9 +236,18 @@ function PoseReadTarget({
   observe,
   highlighted,
   readEligible = true,
+  sorting,
   children,
 }: {
-  pose: { id: number; timestamp: string; name?: string; availability?: 'retained' | 'temporary' };
+  pose: {
+    id: number;
+    timestamp: string;
+    name?: string;
+    personaId?: number;
+    availability?: 'retained' | 'temporary';
+  };
+  /** The sorting menu's key lists (#4128): one character's lines, and every line. */
+  sorting?: { keysOf: (personaId: number) => string[]; allKeys: () => string[] };
   observe: (
     element: HTMLElement,
     pose: {
@@ -282,6 +291,13 @@ function PoseReadTarget({
           hour: 'numeric',
           minute: '2-digit',
         })}`}
+        persona={
+          pose.personaId !== undefined && pose.name
+            ? { id: pose.personaId, name: pose.name }
+            : undefined
+        }
+        keysOf={sorting?.keysOf}
+        allKeys={sorting?.allKeys}
       >
         {children}
         <div ref={readSentinelRef} aria-hidden="true" className="h-px" />
@@ -495,6 +511,21 @@ export function ThreadedNarrativeReader({
   const interactionsById = useMemo(
     () => new Map(interactions.map((item) => [item.id, item])),
     [interactions]
+  );
+  // The sorting menu's "all from <name>" and "Minimize all" (#4128) act on
+  // every loaded line, not only the rendered window.
+  const sorting = useMemo(
+    () => ({
+      keysOf: (personaId: number) =>
+        interactions
+          .filter((item) => item.persona.id === personaId)
+          .map((item) => feedItemKey('interaction', item.id)),
+      allKeys: () => [
+        ...interactions.map((item) => feedItemKey('interaction', item.id)),
+        ...(notes ?? []).map((note) => feedItemKey('note', note.id)),
+      ],
+    }),
+    [interactions, notes]
   );
   // #3759 Wave 9 (F1/F2): replaces the old flat, whole-list
   // `historyStartOverride` -- one window per THREAD (keyed by `group.key`)
@@ -1538,9 +1569,11 @@ export function ThreadedNarrativeReader({
                           id: item.id,
                           timestamp: item.timestamp,
                           name: item.persona.name,
+                          personaId: item.persona.id,
                           availability: item.availability,
                         }}
                         observe={observe}
+                        sorting={sorting}
                         highlighted={String(item.id) === highlightedPoseId}
                         readEligible={!poseCollapsed}
                       >
@@ -1660,9 +1693,11 @@ export function ThreadedNarrativeReader({
                                 id: item.id,
                                 timestamp: item.timestamp,
                                 name: item.persona.name,
+                                personaId: item.persona.id,
                                 availability: item.availability,
                               }}
                               observe={observe}
+                              sorting={sorting}
                               highlighted={String(item.id) === highlightedPoseId}
                               readEligible={!poseCollapsed}
                             >
@@ -1816,9 +1851,11 @@ export function ThreadedNarrativeReader({
                                       id: item.id,
                                       timestamp: item.timestamp,
                                       name: item.persona.name,
+                                      personaId: item.persona.id,
                                       availability: item.availability,
                                     }}
                                     observe={observe}
+                                    sorting={sorting}
                                     highlighted={String(item.id) === highlightedPoseId}
                                     readEligible={!poseCollapsed}
                                   >

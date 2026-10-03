@@ -49,6 +49,15 @@ export function ExplorationReader({
     () => interleaveNotes(ambientInteractions, notes),
     [ambientInteractions, notes]
   );
+  // The sorting menu's "all from <name>" and "Minimize all" (#4128).
+  const keysOf = (personaId: number) =>
+    ambientInteractions
+      .filter((item) => item.persona.id === personaId)
+      .map((item) => feedItemKey('interaction', item.id));
+  const allKeys = () => [
+    ...ambientInteractions.map((item) => feedItemKey('interaction', item.id)),
+    ...notes.map((note) => feedItemKey('note', note.id)),
+  ];
   // The newest line stays in view as poses and notes arrive, until the reader
   // scrolls up to read; this reader owns its scroll container.
   const stick = useStickToBottom();
@@ -177,6 +186,9 @@ export function ExplorationReader({
                       <FeedBlockFrame
                         itemKey={feedItemKey('interaction', row.item.id)}
                         stub={`${row.item.persona.name} · ${new Date(row.item.timestamp).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}`}
+                        persona={{ id: row.item.persona.id, name: row.item.persona.name }}
+                        keysOf={keysOf}
+                        allKeys={allKeys}
                       >
                         <article className="border-b pb-3 last:border-b-0">
                           <header className="mb-1 flex items-center gap-2 text-xs text-muted-foreground">
