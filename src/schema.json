@@ -61485,8 +61485,11 @@ components:
         Slim shape for ``MyLanguageRow`` (``world.species.types``).
 
         Backs the ``my-languages`` read-only list endpoint: the requester's own
-        active character's known languages, with fluency/band and which one is
-        the sticky ``current_language``.
+        active character's known languages. ``fluency``/``band`` are TRAINED (the
+        picker lists ``fluency > 0`` rows only); ``effective_fluency``/``effective_band``
+        add active-condition bonuses (#4090), and ``temporary_sources`` names the
+        conditions contributing to that bonus (empty when none). ``is_current`` is
+        which language is the sticky ``current_language``.
       properties:
         language_id:
           type: integer
@@ -61503,12 +61506,26 @@ components:
         is_current:
           type: boolean
           readOnly: true
+        effective_fluency:
+          type: integer
+          readOnly: true
+        effective_band:
+          type: string
+          readOnly: true
+        temporary_sources:
+          type: array
+          items:
+            type: string
+          readOnly: true
       required:
       - band
+      - effective_band
+      - effective_fluency
       - fluency
       - is_current
       - language_id
       - name
+      - temporary_sources
     MyRosterEntry:
       type: object
       description: Serialize a summary of a roster entry for account menus.

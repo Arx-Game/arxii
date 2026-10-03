@@ -35001,8 +35001,11 @@ export interface components {
      * @description Slim shape for ``MyLanguageRow`` (``world.species.types``).
      *
      *     Backs the ``my-languages`` read-only list endpoint: the requester's own
-     *     active character's known languages, with fluency/band and which one is
-     *     the sticky ``current_language``.
+     *     active character's known languages. ``fluency``/``band`` are TRAINED (the
+     *     picker lists ``fluency > 0`` rows only); ``effective_fluency``/``effective_band``
+     *     add active-condition bonuses (#4090), and ``temporary_sources`` names the
+     *     conditions contributing to that bonus (empty when none). ``is_current`` is
+     *     which language is the sticky ``current_language``.
      */
     MyLanguage: {
       readonly language_id: number;
@@ -35010,6 +35013,9 @@ export interface components {
       readonly fluency: number;
       readonly band: string;
       readonly is_current: boolean;
+      readonly effective_fluency: number;
+      readonly effective_band: string;
+      readonly temporary_sources: string[];
     };
     /** @description Serialize a summary of a roster entry for account menus. */
     MyRosterEntry: {
