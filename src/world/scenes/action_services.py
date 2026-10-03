@@ -300,6 +300,7 @@ def _validate_request_preconditions(  # noqa: PLR0913 - mirrors create_action_re
     initiator_persona: Persona,
     target_persona: Persona | None,
     action_key: str,
+    action_template: ActionTemplate | None,
     technique: Technique | None,
     delivery: str,
     boon: BoonAsk | None,
@@ -336,8 +337,7 @@ def _validate_request_preconditions(  # noqa: PLR0913 - mirrors create_action_re
             character_id=initiator_persona.character_sheet_id,
         )
 
-    template = _action_template_for_key(action_key)
-    if template is not None and template.settles_allegiance:
+    if action_template is not None and action_template.settles_allegiance:
         from world.npc_services.allegiance import allegiance_instance_on  # noqa: PLC0415
 
         target_character = target_persona.character_sheet.character if target_persona else None
@@ -492,10 +492,14 @@ def create_action_request(  # noqa: PLR0913 - the one dispatch orchestrator
     """
     _validate_direct_strain_commitment(initiator_persona, strain_commitment)
 
+    # Resolved once and reused below (SceneActionRequest.action_template) rather than
+    # calling _action_template_for_key(action_key) a second time.
+    action_template = _action_template_for_key(action_key)
     _validate_request_preconditions(
         initiator_persona=initiator_persona,
         target_persona=target_persona,
         action_key=action_key,
+        action_template=action_template,
         technique=technique,
         delivery=delivery,
         boon=boon,
@@ -510,7 +514,7 @@ def create_action_request(  # noqa: PLR0913 - the one dispatch orchestrator
         initiator_persona=initiator_persona,
         target_persona=target_persona,
         action_key=action_key,
-        action_template=_action_template_for_key(action_key),
+        action_template=action_template,
         effort_level=effort_level,
         status=ActionRequestStatus.PENDING,
         technique=technique,
@@ -1124,6 +1128,7 @@ def _resolve_action_against_persona(
             target=target_character,
             actor=character,
             check_result=result.action_resolution.main_result.check_result,
+            scene=action_request.scene,
         )
 
     result.disposition_message = apply_social_disposition_delta(

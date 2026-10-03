@@ -21,6 +21,7 @@ if TYPE_CHECKING:
     from actions.models import ConsequencePool
     from world.checks.types import CheckResult
     from world.conditions.models import ConditionInstance
+    from world.scenes.models import Scene
 
 
 def charm_strength_points(instance: ConditionInstance) -> int:
@@ -63,6 +64,7 @@ def end_allegiance_with_pool(
     *,
     actor: ObjectDB,  # noqa: OBJECTDB_PARAM - the acting PC's character, as ResolutionContext takes
     check_result: CheckResult,
+    scene: Scene | None = None,
 ) -> AllegianceEnding:
     from world.checks.consequence_resolution import (  # noqa: PLC0415
         apply_resolution,
@@ -71,6 +73,7 @@ def end_allegiance_with_pool(
     from world.checks.types import ResolutionContext  # noqa: PLC0415
     from world.conditions.services import remove_condition  # noqa: PLC0415
     from world.scenes.narrator import narrate_room_outcome  # noqa: PLC0415
+    from world.scenes.services import active_persona_for_sheet  # noqa: PLC0415
 
     target = instance.target
     condition = instance.condition
@@ -78,11 +81,17 @@ def end_allegiance_with_pool(
     pool = settle_pool_for(instance)
     if pool is not None:
         pending = select_consequence_from_result(actor, check_result, pool.cached_consequences)
-        apply_resolution(pending, ResolutionContext(character=actor, target=target))
-        label = pending.selected_consequence.label or None
+        apply_resolution(pending, ResolutionContext(character=actor, target=target, scene=scene))
+        # An unsaved sentinel (no authored row for this tier, e.g. no botch row in
+        # the pool) carries no real pk -- never narrate its synthetic label.
+        if pending.selected_consequence.pk is not None:
+            label = pending.selected_consequence.label or None
     remove_condition(target, condition)
     if target.location is not None and condition.is_visible_to_others:
-        text = label or f"The {condition.name} on {target.key} ends."
+        # PLACEHOLDER: the target's presented face (#981), never target.key -- R2
+        # guarantees Settle always targets a persona.
+        persona_name = active_persona_for_sheet(target.character_sheet).name
+        text = label or f"The {condition.name} on {persona_name} ends."
         narrate_room_outcome(target.location, text)
     return AllegianceEnding(condition_name=condition.name, consequence_label=label)
 
@@ -92,6 +101,7 @@ def settle_allegiance(
     target: ObjectDB,  # noqa: OBJECTDB_PARAM - an NPC body
     actor: ObjectDB,  # noqa: OBJECTDB_PARAM - the settling PC's character
     check_result: CheckResult,
+    scene: Scene | None = None,
 ) -> AllegianceEnding | None:
     """Decision 17: an active settle ends the hold at the settler's tier."""
     from world.npc_services.allegiance import allegiance_instance_on  # noqa: PLC0415
@@ -99,4 +109,4 @@ def settle_allegiance(
     instance = allegiance_instance_on(target)
     if instance is None:
         return None
-    return end_allegiance_with_pool(instance, actor=actor, check_result=check_result)
+    return end_allegiance_with_pool(instance, actor=actor, check_result=check_result, scene=scene)

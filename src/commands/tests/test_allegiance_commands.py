@@ -13,15 +13,21 @@ from unittest.mock import MagicMock
 
 from django.test import TestCase
 
-from actions.factories import ActionTemplateFactory
+from actions.factories import (
+    ActionTemplateFactory,
+    ConsequencePoolEntryFactory,
+    ConsequencePoolFactory,
+)
 from commands.allegiance import CmdSettle
 from evennia_extensions.factories import ObjectDBFactory
 from world.character_sheets.factories import CharacterSheetFactory
-from world.checks.factories import CheckTypeFactory
+from world.checks.factories import CheckTypeFactory, ConsequenceFactory
+from world.checks.test_helpers import force_check_outcome
 from world.conditions.constants import Allegiance
 from world.conditions.factories import ConditionInstanceFactory, ConditionTemplateFactory
 from world.conditions.models import ConditionInstance
 from world.scenes.factories import SceneFactory
+from world.traits.factories import CheckSystemSetupFactory
 
 
 class CmdSettleTests(TestCase):
@@ -106,3 +112,32 @@ class CmdSettleTests(TestCase):
 
         self.assertTrue(ConditionInstance.objects.filter(pk=self.instance.pk).exists())
         cmd.caller.msg.assert_called()
+
+    def test_settle_narrates_the_authored_consequence_label(self) -> None:
+        """A settle pool's authored success label reaches the room verbatim."""
+        outcomes = CheckSystemSetupFactory.create()["outcomes"]
+        pool = ConsequencePoolFactory(name="Settle Cmd authored pool")
+        authored_label = "The spell breaks, and she blinks, herself again."
+        success_row = ConsequenceFactory(outcome_tier=outcomes["success"], label=authored_label)
+        ConsequencePoolEntryFactory(pool=pool, consequence=success_row)
+        labeled_condition = ConditionTemplateFactory(
+            name="Enthralled Settle Cmd Labeled",
+            sets_allegiance=Allegiance.ALLY_OF_CASTER,
+            allegiance_break_check_type=CheckTypeFactory(name="Allegiance Break Cmd Labeled"),
+            settle_consequence_pool=pool,
+        )
+        # Settle the labeled charm instead of self.instance, so only one
+        # allegiance condition is active on the target.
+        self.instance.delete()
+        instance = ConditionInstanceFactory(
+            target=self.target_char,
+            condition=labeled_condition,
+            severity=4,
+        )
+
+        with force_check_outcome(outcomes["success"]):
+            self._run(self.initiator_char, self.target_char.key)
+
+        self.assertFalse(ConditionInstance.objects.filter(pk=instance.pk).exists())
+        texts = self._msg_texts(self.initiator_char.msg)
+        self.assertTrue(any(authored_label in text for text in texts))
