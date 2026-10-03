@@ -112,7 +112,7 @@ def persona_names_for_sheets(sheet_ids: Iterable[int]) -> dict[int, str]:
             "pk", "active_persona_id"
         )
     )
-    primary_needed = [pk for pk in ids if pk not in active_persona_id_by_sheet]
+    primary_needed = {pk for pk in ids if pk not in active_persona_id_by_sheet}
 
     personas = Persona.objects.filter(
         Q(pk__in=active_persona_id_by_sheet.values())

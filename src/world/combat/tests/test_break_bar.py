@@ -447,8 +447,45 @@ class BreakBarCelebrationTests(TestCase):
         narration = Interaction.objects.filter(
             scene=encounter.scene, mode=InteractionMode.OUTCOME
         ).latest("timestamp")
-        self.assertIn(str(p1), narration.content)
-        self.assertIn(str(p2), narration.content)
+        # The persona name each contributor is CURRENTLY presenting as, never
+        # str(CombatParticipant)'s "Sheet for {key}" (#4091 fix round 3).
+        self.assertIn(p1.character_sheet.character.key, narration.content)
+        self.assertIn(p2.character_sheet.character.key, narration.content)
+        self.assertNotIn("Sheet for", narration.content)
+
+    def test_celebration_uses_persona_name_not_sheet_for(self):
+        """Proves persona-name resolution specifically, not incidental default
+        match with the character key (#4091 fix round 3)."""
+        encounter = CombatEncounterFactory()
+        opp = BossOpponentFactory(
+            encounter=encounter,
+            break_bar_threshold=1,
+            break_bar_current=1,
+            vulnerability_rounds=2,
+        )
+        p1 = CombatParticipantFactory(encounter=encounter)
+        persona = p1.character_sheet.primary_persona
+        persona.name = "The Wall Breaker"
+        persona.save(update_fields=["name"])
+        outcomes = [
+            ActionOutcome(
+                entity_type="pc",
+                entity_label="PC1",
+                damage_results=[_dmg_result(opp.pk)],
+                participant_id=p1.pk,
+                effect_type_id=EffectTypeFactory().pk,
+            ),
+        ]
+
+        assess_break_bar(encounter, outcomes)
+        opp.refresh_from_db()
+        self.assertEqual(opp.break_bar_current, 0)
+
+        narration = Interaction.objects.filter(
+            scene=encounter.scene, mode=InteractionMode.OUTCOME
+        ).latest("timestamp")
+        self.assertIn("The Wall Breaker", narration.content)
+        self.assertNotIn("Sheet for", narration.content)
 
 
 class BreakBarDebuffAndSuppressionFeedTests(TestCase):

@@ -7221,7 +7221,11 @@ def _group_combo_outcomes(
     combo_groups: dict[int, list[tuple[ActionOutcome, CombatParticipant]]] = defaultdict(list)
     for outcome in action_outcomes:
         if outcome.combo_used is not None and outcome.participant_id is not None:
-            participant = CombatParticipant.objects.filter(pk=outcome.participant_id).first()
+            participant = (
+                CombatParticipant.objects.filter(pk=outcome.participant_id)
+                .select_related("character_sheet__character")
+                .first()
+            )
             if participant is not None:
                 combo_groups[outcome.combo_used.pk].append((outcome, participant))
     return combo_groups
@@ -7243,8 +7247,14 @@ def _broadcast_combo_finisher_narration(
         broadcast_action_outcome,
         render_combo_finisher_narration,
     )
+    from world.scenes.services import persona_names_for_sheets  # noqa: PLC0415
 
-    contributor_labels = [str(p) for _, p in group]
+    # Persona display name, not str(CombatParticipant) -> str(CharacterSheet)
+    # ("Sheet for {key}") -- #4091 fix round 3.
+    persona_names = persona_names_for_sheets(p.character_sheet_id for _, p in group)
+    contributor_labels = [
+        persona_names.get(p.character_sheet_id, p.character_sheet.character.key) for _, p in group
+    ]
     total_damage = sum(dr.damage_dealt for outcome, _ in group for dr in outcome.damage_results)
     # Determine target label from the first outcome's action.
     target_label = None
@@ -8937,6 +8947,32 @@ def _resolve_pc_action(
     return outcome
 
 
+def _npc_action_target_label(
+    label_targets: list[CombatParticipant] | list[CombatOpponent],
+) -> str | None:
+    """Join display labels for an NPC action's targets, batched (#4091 fix round 3).
+
+    ``label_targets`` holds either PC ``CombatParticipant``s (the normal
+    PC-facing path) or NPC ``CombatOpponent``s (the ALLY-summon/charmed-NPC
+    opponent-target path) — never a mix. A PC target gets its persona name
+    (never ``str(CombatParticipant)``'s ``"Sheet for {key}"``); an opponent
+    target's ``.name`` was already correct.
+    """
+    if not label_targets:
+        return None
+    if isinstance(label_targets[0], CombatParticipant):
+        from world.scenes.services import persona_names_for_sheets  # noqa: PLC0415
+
+        persona_names = persona_names_for_sheets(p.character_sheet_id for p in label_targets)
+        names = [
+            persona_names.get(p.character_sheet_id, p.character_sheet.character.key)
+            for p in label_targets
+        ]
+    else:
+        names = [t.name for t in label_targets]
+    return ", ".join(names)
+
+
 def _resolve_npc_action_on_target(  # noqa: PLR0913 - per-target resolution needs full context
     target_participant: CombatParticipant,
     *,
@@ -9170,7 +9206,7 @@ def _resolve_npc_action(
     # Lazy factory: mint the ACTION-mode Interaction only when the first
     # survivability tier actually fires (#864). Memoised so all targets of this
     # NPC action share one row.
-    npc_action_label = ", ".join(str(t) for t in label_targets) if label_targets else None
+    npc_action_label = _npc_action_target_label(label_targets)
     _npc_interaction_cache: list[Interaction] = []
 
     def _get_npc_action_interaction() -> Interaction:
@@ -9229,7 +9265,9 @@ def _resolve_npc_action(
         render_action_outcome_narration,
     )
 
-    npc_target_label = ", ".join(str(t) for t in label_targets) if label_targets else None
+    # Same label_targets as npc_action_label above -- reuse rather than
+    # re-running persona_names_for_sheets for the identical list.
+    npc_target_label = npc_action_label
     npc_narration = render_action_outcome_narration(
         actor_label=str(opponent),
         technique_name=npc_action.threat_entry.name,
@@ -9764,7 +9802,9 @@ def _broadcast_encounter_outcome(
     persona_names = persona_names_for_sheets(p.character_sheet_id for p in participants)
 
     def _label(participant: CombatParticipant) -> str:
-        return persona_names.get(participant.character_sheet_id, str(participant))
+        return persona_names.get(
+            participant.character_sheet_id, participant.character_sheet.character.key
+        )
 
     narration = render_encounter_outcome_narration(
         outcome=outcome,
@@ -10104,7 +10144,8 @@ def _resolve_declared_challenges(
             challenge_instance=decl.challenge_instance,
             approach=decl.challenge_approach,
             actor_label=persona_names.get(
-                decl.participant.character_sheet_id, str(decl.participant)
+                decl.participant.character_sheet_id,
+                decl.participant.character_sheet.character.key,
             ),
         )
         for decl in ordered
@@ -12031,15 +12072,25 @@ def _broadcast_break_celebration(encounter: CombatEncounter, boss: CombatOpponen
 
 def _break_bar_contributor_labels(boss: CombatOpponent) -> list[str]:
     """Distinct PC labels credited on any ``BreakBarContribution`` row for *boss* this encounter."""
+    from world.scenes.services import persona_names_for_sheets  # noqa: PLC0415
+
     participant_ids = (
         BreakBarContribution.objects.filter(opponent=boss, participant__isnull=False)
         .values_list("participant_id", flat=True)
         .distinct()
     )
-    participants = CombatParticipant.objects.filter(pk__in=participant_ids).select_related(
-        "character_sheet"
+    participants = list(
+        CombatParticipant.objects.filter(pk__in=participant_ids).select_related(
+            "character_sheet__character"
+        )
     )
-    return [str(p) for p in participants]
+    # Persona display name, not str(CombatParticipant) -> str(CharacterSheet)
+    # ("Sheet for {key}") -- #4091 fix round 3.
+    persona_names = persona_names_for_sheets(p.character_sheet_id for p in participants)
+    return [
+        persona_names.get(p.character_sheet_id, p.character_sheet.character.key)
+        for p in participants
+    ]
 
 
 @transaction.atomic

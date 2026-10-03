@@ -188,6 +188,28 @@ class ComboJourneyTests(TestCase):
         self.opponent.refresh_from_db()
         self.assertLess(self.opponent.health, self.opponent.max_health)
 
+    def test_combo_finisher_narration_uses_persona_name_not_sheet_for(self) -> None:
+        """The joint finisher line names each contributor's persona, never
+        str(CombatParticipant)'s "Sheet for {key}" (#4091 fix round 3)."""
+        persona = self.participants[0].character_sheet.primary_persona
+        persona.name = "The Journey Vanguard"
+        persona.save(update_fields=["name"])
+        for action in self.actions:
+            upgrade_action_to_combo(action, self.combo)
+
+        resolve_round(self.encounter)
+
+        from world.scenes.constants import InteractionMode
+        from world.scenes.models import Interaction
+
+        contents = " ".join(
+            Interaction.objects.filter(
+                scene=self.encounter.scene, mode=InteractionMode.OUTCOME
+            ).values_list("content", flat=True)
+        )
+        self.assertIn("The Journey Vanguard", contents)
+        self.assertNotIn("Sheet for", contents)
+
     def test_learned_combo_surfaces_in_picker(self) -> None:
         """After discovery, the combo shows as known_by_participant=True."""
         # First, resolve a round with the combo to trigger discovery.
