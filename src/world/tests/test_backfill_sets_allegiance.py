@@ -20,7 +20,7 @@ from world.conditions.constants import Allegiance
 from world.conditions.factories import ConditionTemplateFactory
 from world.conditions.models import ConditionTemplate
 
-_migration = import_module("world.migrations.0194_backfill_sets_allegiance")
+_migration = import_module("world.migrations.0196_backfill_sets_allegiance")
 
 
 def _historical_apps():
@@ -36,7 +36,7 @@ def _historical_apps():
     """
     with override_settings(MIGRATION_MODULES={}):
         loader = MigrationExecutor(connection).loader
-        return loader.project_state(("arxii", "0194_backfill_sets_allegiance")).apps
+        return loader.project_state(("arxii", "0196_backfill_sets_allegiance")).apps
 
 
 class BackfillTests(TestCase):
