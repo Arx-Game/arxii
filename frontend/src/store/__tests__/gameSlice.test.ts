@@ -21,6 +21,9 @@ import {
   restoreFeedItem,
   dismissFeedItem,
   restoreDismissedFeed,
+  minimizeFeedItems,
+  dismissFeedItems,
+  restoreAllFeed,
   setSessionCommands,
   setSessionRoom,
   setSessionScene,
@@ -918,6 +921,42 @@ describe('gameSlice', () => {
       const initialState = createStateWithSession('TestCharacter', {}, 'TestCharacter');
       const result = reducer(initialState, dismissFeedItem({ character: 'Nobody', key: 'i:1' }));
       expect(result).toEqual(initialState);
+    });
+  });
+
+  describe('fold and hide many at once (#4128)', () => {
+    it('minimizes a set of keys once each and expanding all clears only the fold', () => {
+      let state = createStateWithSession('TestCharacter', {}, 'TestCharacter');
+      state = reducer(state, dismissFeedItem({ character: 'TestCharacter', key: 'i:9' }));
+      state = reducer(
+        state,
+        minimizeFeedItems({ character: 'TestCharacter', keys: ['i:1', 'i:2', 'i:1'] })
+      );
+      state = reducer(state, minimizeFeedItems({ character: 'TestCharacter', keys: ['i:2'] }));
+      expect(state.sessions['TestCharacter'].minimizedFeed).toEqual(['i:1', 'i:2']);
+
+      state = reducer(state, restoreAllFeed('TestCharacter'));
+      expect(state.sessions['TestCharacter'].minimizedFeed).toEqual([]);
+      expect(state.sessions['TestCharacter'].dismissedFeed).toEqual(['i:9']);
+    });
+
+    it('hiding a set drops their folds and never repeats a key', () => {
+      let state = createStateWithSession('TestCharacter', {}, 'TestCharacter');
+      state = reducer(state, minimizeFeedItems({ character: 'TestCharacter', keys: ['i:1'] }));
+      state = reducer(
+        state,
+        dismissFeedItems({ character: 'TestCharacter', keys: ['i:1', 'n:n2', 'n:n2'] })
+      );
+      expect(state.sessions['TestCharacter'].minimizedFeed).toEqual([]);
+      expect(state.sessions['TestCharacter'].dismissedFeed).toEqual(['i:1', 'n:n2']);
+    });
+
+    it('ignores a session that does not exist', () => {
+      const initialState = createStateWithSession('TestCharacter', {}, 'TestCharacter');
+      expect(
+        reducer(initialState, minimizeFeedItems({ character: 'Nobody', keys: ['i:1'] }))
+      ).toEqual(initialState);
+      expect(reducer(initialState, restoreAllFeed('Nobody'))).toEqual(initialState);
     });
   });
 

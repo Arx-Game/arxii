@@ -9,6 +9,10 @@ function controls(overrides: Partial<FeedBlockControls> = {}): FeedBlockControls
     minimize: vi.fn(),
     restore: vi.fn(),
     dismiss: vi.fn(),
+    minimizeMany: vi.fn(),
+    dismissMany: vi.fn(),
+    restoreAll: vi.fn(),
+    restoreDismissed: vi.fn(),
     ...overrides,
   };
 }
