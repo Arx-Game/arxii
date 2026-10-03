@@ -11,13 +11,15 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from django.contrib import messages
+from django.db import transaction
 from django.db.models import Count
 from django.http import HttpRequest, HttpResponse, HttpResponseBadRequest
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
-from django.views.decorators.http import require_GET
+from django.views.decorators.http import require_POST
 
 from web.admin.authoring.contributors import current_contributor
+from web.admin.authoring.credit import stamp_reviewed
 from web.admin.soulfray_builder import live
 from web.admin.soulfray_builder.forms import (
     BUILDER_EFFECT_TYPES,
@@ -27,12 +29,21 @@ from web.admin.soulfray_builder.forms import (
     EffectFormSet,
     build_forms,
 )
+from web.admin.soulfray_builder.save import (
+    live_new_rows,
+    pool_switch_conflict,
+    require_pool_for_new_rows,
+    save_stage,
+)
 from web.admin.tuning.views import superuser_required
 from world.checks.models import ConsequenceEffect
 from world.conditions.models import ConditionStage
 from world.magic.models import SoulfrayConfig
 from world.magic.services.soulfray import soulfray_ladder_summary, soulfray_stages
 from world.traits.models import CheckOutcome
+
+#: The submit button's name for "Save and open <next stage>" (page.html).
+SAVE_NEXT = "save_next"
 
 
 @dataclass(frozen=True)
@@ -177,22 +188,96 @@ def _render_page(  # noqa: PLR0913 - the page's own render switches, all keyword
     )
 
 
+def _all_valid(forms: BuilderForms) -> bool:
+    """Validate every layer (no short-circuit, so every error renders at once).
+
+    An added row's effects are validated only when the row is created by this
+    save: a blank or Removed added row is skipped, and so are its effects, so a
+    half-filled effect on it never blocks the save.
+    """
+    results = [
+        forms.stage.is_valid(),
+        forms.on_entry.is_valid(),
+        forms.penalty.is_valid(),
+        forms.pool.is_valid(),
+        forms.rows.is_valid(),
+        *(effects.is_valid() for effects in forms.effects.values()),
+    ]
+    live = live_new_rows(forms)
+    results.extend(forms.new_effects[index].is_valid() for index in live)
+    if results[3] and results[4]:
+        results.append(require_pool_for_new_rows(forms))
+    return all(results)
+
+
+def _after_save_url(request: HttpRequest, stage: ConditionStage) -> str:
+    if SAVE_NEXT in request.POST:
+        following = soulfray_stages().filter(stage_order__gt=stage.stage_order).first()
+        if following is not None:
+            return reverse("admin_soulfray_builder", args=[following.pk])
+    return reverse("admin_soulfray_builder", args=[stage.pk])
+
+
 @superuser_required
-@require_GET
 def soulfray_builder(request: HttpRequest, stage_pk: int) -> HttpResponse:
-    """GET renders one Soulfray stage. (Task 5 adds POST.)"""
+    """GET renders one Soulfray stage; POST saves every layer in one transaction."""
     stage = _stage_or_404(stage_pk)
     config = SoulfrayConfig.objects.cached_singleton()
+    contributor = current_contributor(request.user)
     copy_from = _copy_source(request, stage)
-    forms = build_forms(None, stage, config, copy_from)
-    return _render_page(
-        request,
-        stage,
-        forms,
-        config=config,
-        needs_setup=current_contributor(request.user) is None,
-        copy_from=copy_from,
-    )
+    data = request.POST if request.method == "POST" else None
+    forms = build_forms(data, stage, config, copy_from)
+    if request.method != "POST":
+        return _render_page(
+            request,
+            stage,
+            forms,
+            config=config,
+            needs_setup=contributor is None,
+            copy_from=copy_from,
+        )
+    if contributor is None:
+        return _render_page(request, stage, forms, config=config, needs_setup=True)
+    if not _all_valid(forms):
+        return _render_page(request, stage, forms, config=config)
+    if pool_switch_conflict(forms):
+        return _render_page(request, stage, forms, config=config, conflict=True)
+    save_stage(stage, forms, config, contributor)
+    messages.success(request, "Saved and credited to you.")
+    return redirect(_after_save_url(request, stage))
+
+
+@superuser_required
+@require_POST
+def soulfray_builder_review(request: HttpRequest, stage_pk: int) -> HttpResponse:
+    """Mark the stage, its pool, the pool's own consequences and their effects reviewed.
+
+    "Own" means rows this pool holds that its parent does not: a shared row this
+    stage only reweights is the shared pool's, reviewed wherever that is reviewed.
+    Authorship and unsaved edits on the page are never touched.
+    """
+    stage = _stage_or_404(stage_pk)
+    contributor = current_contributor(request.user)
+    if contributor is None:
+        messages.error(request, "Link a contributor before marking this stage reviewed.")
+        return redirect("admin_soulfray_builder", stage_pk=stage.pk)
+    with transaction.atomic():
+        stamp_reviewed(stage, contributor)
+        pool = stage.consequence_pool
+        if pool is not None:
+            stamp_reviewed(pool, contributor)
+            entries = pool.entries.filter(is_excluded=False).select_related("consequence")
+            if pool.parent_id is not None:
+                entries = entries.exclude(consequence__pool_entries__pool_id=pool.parent_id)
+            consequences = [entry.consequence for entry in entries]
+            for consequence in consequences:
+                stamp_reviewed(consequence, contributor)
+            for effect in ConsequenceEffect.objects.filter(
+                consequence_id__in=[c.pk for c in consequences]
+            ):
+                stamp_reviewed(effect, contributor)
+    messages.success(request, "Marked reviewed.")
+    return redirect("admin_soulfray_builder", stage_pk=stage.pk)
 
 
 @superuser_required

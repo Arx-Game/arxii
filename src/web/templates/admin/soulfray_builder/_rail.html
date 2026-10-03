@@ -38,4 +38,8 @@ threshold's spoiler-private ceremony text.
     <b>{% if stage.written_by %}{{ stage.written_by.name }} on {{ stage.written_on }}{% else %}Not yet written{% endif %}</b></div>
   <div class="sf-stat"><span>Reviewed by</span>
     <b>{% if stage.reviewed_by %}{{ stage.reviewed_by.name }} on {{ stage.reviewed_on }}{% else %}Not yet reviewed{% endif %}</b></div>
+  <form method="post" action="{% url 'admin_soulfray_builder_review' stage.pk %}">
+    {% csrf_token %}
+    <div class="submit-row"><input type="submit" value="Mark reviewed"></div>
+  </form>
 </div>

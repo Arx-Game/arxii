@@ -22,6 +22,7 @@ from dataclasses import dataclass, field
 from django import forms
 from django.contrib import admin
 from django.contrib.admin.widgets import AutocompleteSelect, AutocompleteSelectMultiple
+from django.core.exceptions import ValidationError
 from django.forms import (
     BaseFormSet,
     BaseInlineFormSet,
@@ -35,6 +36,7 @@ from actions.types import _entry_to_weighted
 from world.checks.constants import EffectType
 from world.checks.models import Consequence, ConsequenceEffect
 from world.conditions.models import ConditionCheckModifier, ConditionStage, ConditionStageOnEntry
+from world.magic.audere import SOULFRAY_CONDITION_NAME
 from world.magic.models import SoulfrayConfig
 from world.traits.models import CheckOutcome
 
@@ -151,6 +153,55 @@ class PoolForm(forms.Form):
         },
     )
 
+    def __init__(self, *args: object, stage: ConditionStage | None = None, **kwargs: object):
+        super().__init__(*args, **kwargs)
+        self.stage = stage
+
+    def _parents_another_stage(self, pool: ConsequencePool) -> bool:
+        """Some other Soulfray stage's own pool inherits from ``pool``."""
+        children = ConsequencePool.objects.filter(
+            parent=pool, condition_stages__condition__name=SOULFRAY_CONDITION_NAME
+        )
+        if self.stage is not None:
+            children = children.exclude(condition_stages__pk=self.stage.pk)
+        return children.exists()
+
+    def clean(self) -> dict[str, object]:
+        """Pool inheritance is one level deep (``consequence_pools.py:70``), and a
+        stage's own pool is never another stage's shared parent (spec C.6), from
+        either side: the parent picked is no stage's own pool, and the pool picked
+        is no other stage's parent."""
+        cleaned = super().clean()
+        pool = cleaned.get("pool")
+        parent = cleaned.get("parent")
+        if pool is not None and self._parents_another_stage(pool):
+            self.add_error(
+                "pool",
+                f"{pool.name} is another Soulfray stage's shared parent, so it cannot be this "
+                "stage's own pool. Pick or create a pool of this stage's own.",
+            )
+        if parent is not None:
+            if pool is not None and parent.pk == pool.pk:
+                self.add_error("parent", "A pool cannot inherit from itself.")
+            elif parent.condition_stages.filter(condition__name=SOULFRAY_CONDITION_NAME).exists():
+                self.add_error(
+                    "parent",
+                    f"{parent.name} is a Soulfray stage's own pool, so it cannot be another "
+                    "stage's shared parent. Pick or create a shared pool that no stage uses.",
+                )
+            elif pool is not None and pool.children.exists():
+                self.add_error(
+                    "pool",
+                    f"{pool.name} is already a parent pool, so it cannot inherit from another: "
+                    "inheritance is one level deep.",
+                )
+        new_name = (cleaned.get("new_name") or "").strip()
+        if pool is None and new_name and ConsequencePool.objects.filter(name=new_name).exists():
+            self.add_error(
+                "new_name", "A pool with this name exists. Pick it above or choose another name."
+            )
+        return cleaned
+
 
 class ConsequenceRowForm(forms.Form):
     """One row of "What the roll can draw"."""
@@ -174,12 +225,48 @@ class ConsequenceRowForm(forms.Form):
             self.fields["outcome_tier"].choices = choices.outcome_tier
 
 
-class BaseConsequenceRowFormSet(BaseFormSet):
-    """Knows which consequence ids the page was rendered with (``known_ids``)."""
+COPY_SOURCE_GONE_ERROR = "A copied row no longer exists on any Soulfray stage."
+TABLE_CHANGED_ERROR = (
+    "This stage's consequence table changed after the page was loaded, so the rows on this "
+    "page no longer line up with it. Nothing was saved. Reload the page and make the edit again."
+)
 
-    def __init__(self, *args: object, known_ids: frozenset[int] = frozenset(), **kwargs: object):
+
+class BaseConsequenceRowFormSet(BaseFormSet):
+    """Knows the consequence ids of the table the page was rendered with, in row order.
+
+    The save matches row form ``i`` to ``table[i]`` by index, so a row below
+    ``len(table)`` must post exactly ``table[i]``'s consequence and a row past it
+    must post none. Anything else means the table moved between the GET and this
+    POST (a row added to or dropped from the pool or its parent), and the save
+    is refused rather than writing one row's edit onto another.
+    """
+
+    def __init__(self, *args: object, table_ids: Sequence[int] = (), **kwargs: object):
         super().__init__(*args, **kwargs)
-        self.known_ids = known_ids
+        self.table_ids = tuple(table_ids)
+
+    def clean(self) -> None:
+        """Rows line up with the table; a copied row still exists on a Soulfray stage."""
+        super().clean()
+        if len(self.forms) < len(self.table_ids):
+            raise ValidationError(TABLE_CHANGED_ERROR)
+        for index, form in enumerate(self.forms):
+            data = form.cleaned_data
+            cid = data.get("consequence")
+            expected = self.table_ids[index] if index < len(self.table_ids) else None
+            if cid != expected:
+                raise ValidationError(TABLE_CHANGED_ERROR)
+            source = data.get("copy_of")
+            if (
+                cid is None
+                and source
+                and not ConsequencePoolEntry.objects.filter(
+                    consequence_id=source,
+                    pool__condition_stages__condition__name=SOULFRAY_CONDITION_NAME,
+                ).exists()
+            ):
+                raise ValidationError(COPY_SOURCE_GONE_ERROR)
 
 
 ConsequenceRowFormSet = formset_factory(
@@ -507,7 +594,7 @@ def build_forms(
         data,
         prefix="rows",
         initial=initial,
-        known_ids=frozenset(row.consequence.pk for row in table),
+        table_ids=[row.consequence.pk for row in table],
         form_kwargs={"choices": choices},
     )
     return BuilderForms(
@@ -521,6 +608,7 @@ def build_forms(
         pool=PoolForm(
             data,
             prefix="pool",
+            stage=stage,
             initial={
                 "pool": pool.pk if pool else None,
                 "parent": pool.parent_id if pool else None,
