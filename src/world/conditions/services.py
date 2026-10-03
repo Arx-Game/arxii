@@ -1983,6 +1983,22 @@ def get_capability_status(
     return result
 
 
+def scaled_condition_effect_value(
+    effect: ConditionModifierEffect, instance: ConditionInstance
+) -> int:
+    """One ConditionModifierEffect's contribution on one active instance (#4090).
+
+    The single scaling rule every condition-modifier read shares: ``scales_with_severity``
+    multiplies by the instance's effective severity; otherwise a staged instance scales
+    by its current stage's ``severity_multiplier``.
+    """
+    if effect.scales_with_severity:
+        return int(effect.value * instance.effective_severity)
+    if instance.current_stage:
+        return int(effect.value * instance.current_stage.severity_multiplier)
+    return effect.value
+
+
 def get_condition_modifier_total(
     character_sheet: "CharacterSheet",
     modifier_target: "ModifierTarget",
@@ -2012,12 +2028,7 @@ def get_condition_modifier_total(
         effects = ConditionModifierEffect.objects.filter(query, modifier_target=modifier_target)
 
         for effect in effects:
-            value = effect.value
-            if effect.scales_with_severity:
-                value = int(value * instance.effective_severity)
-            elif instance.current_stage:
-                value = int(value * instance.current_stage.severity_multiplier)
-            total += value
+            total += scaled_condition_effect_value(effect, instance)
 
     return total
 
@@ -2044,15 +2055,69 @@ def get_condition_modifier_breakdown(
             query |= Q(stage=instance.current_stage)
         effects = ConditionModifierEffect.objects.filter(query, modifier_target=modifier_target)
 
-        for effect in effects:
-            value = effect.value
-            if effect.scales_with_severity:
-                value = int(value * instance.effective_severity)
-            elif instance.current_stage:
-                value = int(value * instance.current_stage.severity_multiplier)
-            rows.append((instance.condition.name, value))
+        rows.extend(
+            (instance.condition.name, scaled_condition_effect_value(effect, instance))
+            for effect in effects
+        )
 
     return rows
+
+
+def condition_modifier_totals_by_sheet(
+    sheet_ids: Iterable[int],
+    modifier_target: "ModifierTarget",
+) -> dict[int, int]:
+    """Batched ``get_condition_modifier_total`` across many sheets (#4090).
+
+    Two queries regardless of how many sheets: the active instances, then the matching
+    template- and stage-level effects. CharacterSheet shares ObjectDB's pk, so a
+    ConditionInstance's ``target_id`` is the sheet pk. Uses the canonical active predicate
+    (``ConditionHandler._canonical_active_qs``) and also skips an in-game-time instance
+    whose ``expires_at`` has passed; unlike ``get_active_conditions`` it never tears an
+    instance down, because readers (a serializer) must not write.
+    """
+    ids = set(sheet_ids)
+    if not ids:
+        return {}
+    now = timezone.now()
+    # Keep in sync with ConditionHandler._canonical_active_qs in handlers.py
+    instances = list(
+        ConditionInstance.objects.filter(
+            Q(is_suppressed=False) | Q(suppressed_until__isnull=False, suppressed_until__lt=now),
+            target_id__in=ids,
+        )
+        .filter(
+            Q(expires_at__isnull=True)
+            | Q(expires_at__gt=now)
+            | ~Q(condition__default_duration_type=DurationType.INGAME_TIME)
+        )
+        .select_related("current_stage")
+    )
+    if not instances:
+        return {}
+    condition_ids = {instance.condition_id for instance in instances}
+    stage_ids = {instance.current_stage_id for instance in instances if instance.current_stage_id}
+    by_condition: dict[int, list[ConditionModifierEffect]] = {}
+    by_stage: dict[int, list[ConditionModifierEffect]] = {}
+    for effect in ConditionModifierEffect.objects.filter(
+        Q(condition_id__in=condition_ids) | Q(stage_id__in=stage_ids),
+        modifier_target=modifier_target,
+    ):
+        if effect.condition_id is not None:
+            by_condition.setdefault(effect.condition_id, []).append(effect)
+        else:
+            by_stage.setdefault(effect.stage_id, []).append(effect)
+
+    totals: dict[int, int] = {}
+    for instance in instances:
+        effects = list(by_condition.get(instance.condition_id, []))
+        if instance.current_stage_id:
+            effects.extend(by_stage.get(instance.current_stage_id, []))
+        for effect in effects:
+            totals[instance.target_id] = totals.get(
+                instance.target_id, 0
+            ) + scaled_condition_effect_value(effect, instance)
+    return totals
 
 
 @dataclass(frozen=True)
