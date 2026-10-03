@@ -93,13 +93,38 @@ styles the autocomplete selects.
     return holder.firstElementChild;
   }
 
+  // A consequence row clones as two <tr>s: the row and its full-width effect
+  // editor row, so every element of the template is appended, not just the first.
+  function cloneRows(templateId, index) {
+    var html = document.getElementById(templateId).innerHTML;
+    var holder = document.createElement("tbody");
+    holder.innerHTML = html.split("__prefix__").join(String(index));
+    return Array.prototype.slice.call(holder.children);
+  }
+
   function add(button) {
     var index = formsets.nextFormIndex(button.dataset.prefix);
-    var row = button.dataset.newRow
-      ? cloneNewRowEffect(button, index)
-      : formsets.cloneFromTemplate(button.dataset.template, index, "tbody");
-    document.getElementById(button.dataset.target).appendChild(row);
-    formsets.announceFormsetAdded(button.dataset.prefix, row);
+    var rows;
+    if (button.id === "add-row-btn") {
+      rows = cloneRows(button.dataset.template, index);
+    } else if (button.dataset.newRow) {
+      rows = [cloneNewRowEffect(button, index)];
+    } else {
+      rows = [formsets.cloneFromTemplate(button.dataset.template, index, "tbody")];
+    }
+    var target = document.getElementById(button.dataset.target);
+    rows.forEach(function (row) {
+      target.appendChild(row);
+      formsets.announceFormsetAdded(button.dataset.prefix, row);
+    });
+  }
+
+  // "+ effect" shows or hides the row's full-width effect editor row.
+  function toggleEditor(button) {
+    var editor = document.getElementById(button.getAttribute("aria-controls"));
+    var open = editor.hidden;
+    editor.hidden = !open;
+    button.setAttribute("aria-expanded", open ? "true" : "false");
   }
 
   // "New pool" in the pool select reveals the new pool's name; any pool hides it.
@@ -123,6 +148,8 @@ styles the autocomplete selects.
 
   var root = document.getElementById("soulfray-builder-root");
   root.addEventListener("click", function (event) {
+    var toggle = event.target.closest(".sf-effect-toggle");
+    if (toggle) { toggleEditor(toggle); return; }
     var button = event.target.closest("#add-row-btn, .sf-add-effect");
     if (button) { add(button); }
   });

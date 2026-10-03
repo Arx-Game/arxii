@@ -55,11 +55,12 @@
           {% elif row.copy_note %}<span class="sf-quiet">{{ row.copy_note }}</span>
           {% else %}<span class="sf-quiet">no effect</span>{% endif %}
           {% if row.other_effects_url %}<a href="{{ row.other_effects_url }}">more effects in the Consequence admin</a>{% endif %}
-          {% if row.effects %}{% include "admin/soulfray_builder/_effect_editor.html" with formset=row.effects new_row=row.is_new %}{% endif %}
+          {% if row.effects %}{% include "admin/soulfray_builder/_effect_toggle.html" with formset=row.effects %}{% endif %}
         </td>
         <td>{{ row.source }}</td>
         <td>{{ row.form.remove }}</td>
       </tr>
+      {% if row.effects %}{% include "admin/soulfray_builder/_effect_editor_row.html" with formset=row.effects new_row=row.is_new %}{% endif %}
       {% if row.form.errors %}<tr><td colspan="8">{{ row.form.errors }}</td></tr>{% endif %}
       {% endfor %}
     </tbody>
@@ -79,11 +80,12 @@
       <td>{{ forms.rows.empty_form.character_loss }}</td>
       <td>{{ forms.rows.empty_form.theater }}</td>
       <td><span class="sf-quiet">no effect</span>
-        {% include "admin/soulfray_builder/_effect_editor.html" with formset=forms.new_effects_template new_row=True %}
+        {% include "admin/soulfray_builder/_effect_toggle.html" with formset=forms.new_effects_template %}
       </td>
       <td>this stage</td>
       <td></td>
     </tr>
+    {% include "admin/soulfray_builder/_effect_editor_row.html" with formset=forms.new_effects_template new_row=True %}
   </template>
   <template id="empty-effect-new">
     {% include "admin/soulfray_builder/_effect_row.html" with ef=forms.new_effects_template.empty_form %}

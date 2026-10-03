@@ -1088,7 +1088,13 @@ page in one transaction. Pattern mirrors the Distinction and Upbringing Builders
   panel and the game never disagree). Templates in
   `web/templates/admin/soulfray_builder/`: `page.html`, `_css.html`, `_ladder.html`,
   `_stage.html`, `_penalty.html`, `_consequences.html`, `_effect_editor.html`,
-  `_effect_row.html`, `_form_row.html`, `_rail.html`.
+  `_effect_row.html`, `_effect_toggle.html`, `_effect_editor_row.html`, `_form_row.html`,
+  `_rail.html`. A row's "+ effect" (`_effect_toggle.html`) opens its effect editor in a
+  full-width `colspan="8"` row under it (`_effect_editor_row.html`, `hidden` until opened,
+  open by itself when its formset has errors), so the editor never squeezes into the
+  Effects cell or scrolls the table sideways. Like the other builder views, the page
+  merges `admin.site.each_context(request)` (site header, user tools, theme toggle) and
+  turns the app-list sidebar off so its two columns keep their width.
 - **Stylesheets** - the page links `admin/css/forms.css` and `admin/css/widgets.css`
   itself, in its own `extrastyle` block (the same obligation every custom admin page
   extending `base_site.html` carries, #3667), plus the jsi18n script and the shared

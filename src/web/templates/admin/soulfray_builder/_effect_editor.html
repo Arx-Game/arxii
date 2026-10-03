@@ -1,13 +1,12 @@
 {% comment %}
-The "+ effect" editor under one consequence row. Takes `formset` (an
+One consequence row's effect editor, drawn inside `_effect_editor_row.html`. Takes `formset` (an
 EffectFormSet) and `new_row` (true for a row added on the page, whose formset is
 prefixed "new<row index>"). A saved row clones its own `empty-effect-e<pk>`
 template; every new row clones the shared `empty-effect-new` template, whose
 names carry the placeholder row prefix the page script swaps in (P3, #4089: a
 new row's effects save in the same Save as the row).
 {% endcomment %}
-<details class="sf-effect-editor">
-  <summary>+ effect</summary>
+<div class="sf-effect-editor">
   {{ formset.management_form }}
   {% if formset.non_form_errors %}<p class="errornote">{{ formset.non_form_errors }}</p>{% endif %}
   <table class="sf-effect-table">
@@ -23,4 +22,4 @@ new row's effects save in the same Save as the row).
   <button type="button" class="button sf-add-effect" data-prefix="{{ formset.prefix }}"
           data-target="effects-{{ formset.prefix }}"
           {% if new_row %}data-new-row="1" data-template="empty-effect-new"{% else %}data-template="empty-effect-{{ formset.prefix }}"{% endif %}>Add an effect</button>
-</details>
+</div>

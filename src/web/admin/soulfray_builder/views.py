@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from django.contrib import messages
+from django.contrib import admin, messages
 from django.db import transaction
 from django.db.models import Count
 from django.http import HttpRequest, HttpResponse, HttpResponseBadRequest
@@ -170,6 +170,10 @@ def _render_page(  # noqa: PLR0913 - the page's own render switches, all keyword
         request,
         "admin/soulfray_builder/page.html",
         {
+            # The admin chrome (site header, user tools, theme toggle) reads these. The
+            # app-list sidebar stays off: the builder's two columns need the width.
+            **admin.site.each_context(request),
+            "is_nav_sidebar_enabled": False,
             "title": f"{stage.name} - Soulfray Stage Builder",
             "stage": stage,
             "summary": summary,

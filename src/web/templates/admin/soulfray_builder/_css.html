@@ -38,6 +38,8 @@ against admin's own light/dark selectors so the page follows the theme toggle.
   #soulfray-builder-root .sf-num { text-align: right; font-variant-numeric: tabular-nums; }
   #soulfray-builder-root .sf-row--open td { background: var(--selected-row); }
   #soulfray-builder-root .sf-row--kill td { background: var(--sf-kill-bg); }
+  /* A ticked Can kill box reads as danger, as the demo draws it (F7). */
+  #soulfray-builder-root .sf-table input[name$="-character_loss"] { accent-color: var(--error-fg); }
   #soulfray-builder-root .sf-bar {
     position: relative; height: 8px; min-width: 5rem; border-radius: 2px;
     background: var(--hairline-color);
@@ -75,7 +77,12 @@ against admin's own light/dark selectors so the page follows the theme toggle.
   #soulfray-builder-root .sf-effects > li,
   #soulfray-builder-root .sf-checks > li { list-style: none; }
   #soulfray-builder-root .sf-quiet { color: var(--body-quiet-color); font-style: italic; font-size: 0.75rem; }
-  #soulfray-builder-root .sf-effect-editor summary { cursor: pointer; color: var(--link-fg); font-size: 0.75rem; }
+  #soulfray-builder-root .sf-effect-toggle {
+    border: none; background: none; padding: 0; cursor: pointer; color: var(--link-fg);
+    font-size: 0.75rem;
+  }
+  #soulfray-builder-root .sf-effect-editor-row > td { background: var(--darkened-bg); }
+  #soulfray-builder-root .sf-effect-editor { padding: 4px 0; }
   #soulfray-builder-root .sf-effect-table td { padding: 0.2rem 0.3rem; border: none; }
   #soulfray-builder-root .sf-add-effect { margin-top: 0.25rem; }
   #soulfray-builder-root .sf-help-abbr { text-decoration: underline dotted; cursor: help; }

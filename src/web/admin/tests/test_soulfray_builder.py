@@ -8,6 +8,7 @@ from html.parser import HTMLParser
 from pathlib import Path
 import re
 
+from django.contrib import admin
 from django.contrib.staticfiles import finders
 from django.db import connection
 from django.http import QueryDict
@@ -87,6 +88,16 @@ class SoulfrayPageTestCase(SoulfrayBuilderTestCase):
 
 
 class BuilderGetTest(SoulfrayPageTestCase):
+    def test_renders_inside_the_admin_chrome(self) -> None:
+        """The view merges ``admin.site.each_context``: site header and user tools."""
+        self.client.force_login(self.author)
+        url = reverse("admin_soulfray_builder", args=[self.tearing.pk])
+        body = self.client.get(url).content.decode()
+        self.assertIn(str(admin.site.site_header), body)
+        self.assertIn('id="user-tools"', body)
+        # The app-list sidebar stays off: it would squeeze the builder's two columns.
+        self.assertNotIn('id="nav-sidebar"', body)
+
     def test_renders_every_module_and_the_rail(self) -> None:
         resp = self._get(self.tearing)
         self.assertEqual(resp.status_code, 200)
@@ -551,3 +562,30 @@ class SoulfrayBuilderStylingTest(SoulfrayPageTestCase):
         self.assertRegex(css, r"\.sf-effects > li,")
         self.assertRegex(css, r'\.sf-live::before \{\s*content: "\\25CF  live";')
         self.assertRegex(css, r"\.sf-table td\.sf-num input \{ width: 4rem; \}")
+
+    def test_a_ticked_can_kill_box_is_drawn_in_the_error_colour(self) -> None:
+        """F7: the demo draws a lethal row's ticked Can kill box red, not browser blue."""
+        css = reachable_css(self._body())
+        self.assertRegex(
+            css,
+            r'\.sf-table input\[name\$="-character_loss"\] \{ accent-color: var\(--error-fg\); \}',
+        )
+
+    def test_each_effect_editor_is_a_full_width_row_its_toggle_opens(self) -> None:
+        """F8: the editor sits in a colspan row under its consequence, never in the
+        narrow Effects cell, so opening it cannot scroll the table sideways."""
+        tree = _tree(self._body())
+        toggles = [n for n in tree.walk() if "sf-effect-toggle" in n.classes]
+        self.assertTrue(toggles)
+        rows = {n.attrs.get("id"): n for n in tree.walk() if "sf-effect-editor-row" in n.classes}
+        for toggle in toggles:
+            if toggle.inside("sf-effect-editor-row") or toggle.parent is None:
+                continue
+            editor = rows[toggle.attrs["aria-controls"]]
+            self.assertEqual(editor.tag, "tr")
+            self.assertIn("hidden", editor.attrs)
+            self.assertEqual(editor.children[0].attrs.get("colspan"), "8")
+            self.assertTrue(
+                any("sf-effect-editor" in n.classes for n in editor.walk()),
+                "the editor row holds the editor",
+            )
