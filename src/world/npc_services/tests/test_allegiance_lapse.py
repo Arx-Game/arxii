@@ -133,3 +133,30 @@ class LapseSweepTests(TestCase):
         )
         batch_condition_expiration_cleanup()
         self.assertTrue(ConditionInstance.objects.filter(pk=instance.pk).exists())
+
+
+class ExpiredUnsweptHoldTests(TestCase):
+    """#4091 final review: a hold past ``expires_at`` that the sweep has not yet
+    removed must not count, so it cannot win the fight on the batched read."""
+
+    def test_expired_hold_does_not_win_the_fight(self) -> None:
+        from world.combat.factories import CombatOpponentFactory
+        from world.combat.won_over import hostile_opponents_remain
+        from world.npc_services.allegiance import allegiance_instances_for
+
+        charm = ConditionTemplateFactory(
+            name="Expired Charm 4091",
+            default_duration_type=DurationType.INGAME_TIME,
+            sets_allegiance=Allegiance.ALLY_OF_CASTER,
+            allegiance_break_check_type=CheckTypeFactory(name="Expired Break 4091"),
+        )
+        encounter = CombatEncounterFactory()
+        opponent = CombatOpponentFactory(encounter=encounter)
+        ConditionInstanceFactory(
+            target=opponent.objectdb,
+            condition=charm,
+            expires_at=timezone.now() - timedelta(minutes=5),
+        )
+
+        self.assertEqual(allegiance_instances_for([opponent.objectdb_id]), {})
+        self.assertTrue(hostile_opponents_remain(encounter))

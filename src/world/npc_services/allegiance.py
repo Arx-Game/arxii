@@ -68,13 +68,23 @@ def _active_q() -> Q:
 def allegiance_instances_for(
     target_ids: Iterable[int], *, applied_since: datetime | None = None
 ) -> dict[int, list[ConditionInstance]]:
-    """Active allegiance instances for many targets in one query, keyed by target_id."""
+    """Active allegiance instances for many targets in one query, keyed by target_id.
+
+    A hold past its ``expires_at`` is ignored even before the lapse sweep removes
+    it (#4091 final review): ``get_active_conditions`` expires such rows lazily on
+    read, and this batched read must not let an expired hold win a fight meanwhile.
+    """
     ids = [pk for pk in target_ids if pk is not None]
     result: dict[int, list[ConditionInstance]] = defaultdict(list)
     if not ids:
         return result
+    now = timezone.now()
     qs = (
-        ConditionInstance.objects.filter(_active_q(), target_id__in=ids)
+        ConditionInstance.objects.filter(
+            _active_q(),
+            Q(expires_at__isnull=True) | Q(expires_at__gte=now),
+            target_id__in=ids,
+        )
         .exclude(condition__sets_allegiance="")
         .select_related("condition", "current_stage", "source_character", "source_technique")
     )
