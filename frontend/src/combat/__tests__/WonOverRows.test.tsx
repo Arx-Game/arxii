@@ -158,6 +158,49 @@ describe('WonOverRows', () => {
     expect(screen.getByText(/holds until settled/)).toBeInTheDocument();
   });
 
+  it('shows the condition name, a stage bar, and the stage text for a staged row', () => {
+    const stagedRow: WonOverRow = {
+      ...baseRow,
+      nameless: false,
+      persona_id: 99,
+      condition: {
+        id: 1,
+        name: 'Enthralled',
+        description: '',
+        icon: '❦',
+        color_hex: '#b0466e',
+        display_priority: 0,
+        is_visible_to_others: true,
+        category_name: 'Allegiance',
+        is_negative: false,
+        stacks: 1,
+        max_stacks: 1,
+        severity: 6,
+        effective_severity: 3,
+        duration_type: 'real_time',
+        rounds_remaining: null,
+        stage_rounds_remaining: null,
+        applied_at: '2026-01-01T00:00:00Z',
+        expires_at: '2026-01-01T04:00:00Z',
+        stage_name: 'Fond',
+        stage_order: 2,
+        total_stages: 3,
+        is_suppressed: false,
+        suppressed_until: null,
+        source_character_name: 'Wren',
+        source_technique_name: 'Velvet Bond',
+        source_vow_name: null,
+        source_description: '',
+      },
+    };
+
+    renderWithProviders(<WonOverRows rows={[stagedRow]} characterId={42} sceneId="1" />);
+
+    expect(screen.getByText('Enthralled')).toBeInTheDocument();
+    expect(screen.getByTestId('won-over-stage-bar')).toBeInTheDocument();
+    expect(screen.getByText('Fond, stage 2 of 3')).toBeInTheDocument();
+  });
+
   it('hides Bind for a row the viewer did not charm, and shows the charmer note', () => {
     renderWithProviders(
       <WonOverRows rows={[{ ...baseRow, can_bind: false }]} characterId={42} sceneId="1" />
