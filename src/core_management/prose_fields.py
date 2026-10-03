@@ -90,6 +90,8 @@ PROSE_FIELD_NAMES = frozenset(
 #: ``display_name`` are display identifiers, not prose.
 NON_PROSE_TEXT_FIELDS = frozenset(
     {
+        # #4124: why a Beginning never meets a beat; staff-facing authoring note.
+        "reason",
         "action_key",
         "admin_notes",
         "base_action_key",

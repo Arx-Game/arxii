@@ -1204,11 +1204,12 @@ class LifeBeat(CachedPropertiesMixin, NaturalKeyMixin, CreditedContent, SharedMe
         )
 
 
-class LifeBeatExclusion(SharedMemoryModel):
+class LifeBeatExclusion(NaturalKeyMixin, SharedMemoryModel):
     """A beat one Beginning does not offer (#4124).
 
     The library applies to every Beginning by default; this row is the exception.
     A through row rather than an M2M so the reason can be recorded beside it.
+    Content model (it travels with the beats); natural key is (beat, beginning).
     """
 
     beat = models.ForeignKey(LifeBeat, on_delete=models.CASCADE, related_name="exclusions")
@@ -1219,12 +1220,18 @@ class LifeBeatExclusion(SharedMemoryModel):
         max_length=200, blank=True, help_text="Why this Beginning never meets this beat."
     )
 
+    objects = NaturalKeyManager()
+
     class Meta:
         verbose_name = "Life beat exclusion"
         verbose_name_plural = "Life beat exclusions"
         constraints = [
             models.UniqueConstraint(fields=["beat", "beginning"], name="lifebeat_exclusion_unique")
         ]
+
+    class NaturalKeyConfig:
+        fields = ["beat", "beginning"]
+        dependencies = ["arxii.LifeBeat", "arxii.Beginnings"]
 
     def __str__(self) -> str:
         return f"{self.beat} not for {self.beginning}"
