@@ -1060,9 +1060,12 @@ page in one transaction. Pattern mirrors the Distinction and Upbringing Builders
   `forms.py` (`StageForm`; `OnEntryFormSet`; `PenaltyForm`; `PoolForm` - picks the
   stage's pool or names a new one, and its one-level-deep shared parent. The pool select
   offers only `stage_pool_choices()`: Soulfray stage pools plus pools nothing else uses
-  (`held_by_another_consumer()` walks every reverse relation onto `ConsequencePool`, hidden
+  (`held_pool_ids()` walks every reverse relation onto `ConsequencePool`, hidden
   `related_name="+"` ones included, so a technique's clash pool, a trap's or an item's never
-  shows). The parent select never offers the stage's own pool. A switched pool whose parent
+  shows; a pool some non-Soulfray stage holds, or some pool other than a Soulfray stage's
+  own inherits from, is held too). The relations are UNIONed into one subquery, so the
+  list is one query however many pools or consumers exist (pinned by `assertNumQueries`).
+  The parent select never offers the stage's own pool. A switched pool whose parent
   select the author left alone keeps its own parent (`clean` swaps it in, and the page
   script resets the select to the chosen pool's parent from the `sf-pool-parents` JSON), and
   a parent change on a pool another stage or consumer holds is refused; `TableRow`/

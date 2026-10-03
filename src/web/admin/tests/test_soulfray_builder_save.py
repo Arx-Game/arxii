@@ -10,7 +10,11 @@ from actions.factories import ConsequencePoolEntryFactory, ConsequencePoolFactor
 from actions.models import ConsequencePool, ConsequencePoolEntry
 from evennia_extensions.models import PlayerData
 from web.admin.authoring.credit import stamp_reviewed
-from web.admin.soulfray_builder.forms import TABLE_CHANGED_ERROR, BaseEffectFormSet
+from web.admin.soulfray_builder.forms import (
+    TABLE_CHANGED_ERROR,
+    BaseEffectFormSet,
+    stage_pool_choices,
+)
 from web.admin.soulfray_builder.save import NEW_POOL_NAME_REQUIRED
 from web.admin.tests.soulfray_ladder import (
     SoulfrayBuilderTestCase,
@@ -467,6 +471,9 @@ class PoolPickTest(SaveTestCase):
         cls.numb_pool = ConsequencePoolFactory(name="Numb pool")
         cls.numb.consequence_pool = cls.numb_pool
         cls.numb.save(update_fields=["consequence_pool"])
+        # A parentless pool a non-Soulfray pool inherits from (a trap pool's shared base).
+        cls.trap_base = ConsequencePoolFactory(name="Trap base pool")
+        ConsequencePoolFactory(name="Trap pool", parent=cls.trap_base)
 
     @staticmethod
     def _parent_id(pool: ConsequencePool) -> int | None:
@@ -479,9 +486,31 @@ class PoolPickTest(SaveTestCase):
         self.assertTrue({self.fraying_pool, self.ripping_pool, self.loose} <= offered)
         self.assertNotIn(self.clash_pool, offered)
         self.assertNotIn(self.numb_pool, offered)
+        self.assertNotIn(self.trap_base, offered)
+        # common is a Soulfray stage pool's parent, which is not a consumer: still offered
+        # (and refused by clean as another stage's shared parent).
+        self.assertIn(self.common, offered)
+
+    def test_the_pool_list_is_one_query_however_many_pools_and_consumers(self) -> None:
+        with self.assertNumQueries(1):
+            first = list(stage_pool_choices())
+        for index in range(5):
+            held = ConsequencePoolFactory(name=f"Held pool {index}")
+            TechniqueFactory(clash_resolution_pool=held)
+            ConsequencePoolFactory(name=f"Child pool {index}", parent=held)
+            ConsequencePoolFactory(name=f"Free pool {index}")
+        with self.assertNumQueries(1):
+            second = list(stage_pool_choices())
+        added = {pool.name for pool in second} - {pool.name for pool in first}
+        # A held pool stays out; a free pool, or a child pool nothing else holds, is offered.
+        self.assertEqual(
+            added,
+            {f"Free pool {index}" for index in range(5)}
+            | {f"Child pool {index}" for index in range(5)},
+        )
 
     def test_a_pool_another_consumer_holds_is_refused(self) -> None:
-        for held in (self.clash_pool, self.numb_pool):
+        for held in (self.clash_pool, self.numb_pool, self.trap_base):
             with self.subTest(pool=held.name):
                 data = self._values(self.tearing)
                 data["pool-pool"] = [str(held.pk)]
@@ -495,6 +524,21 @@ class PoolPickTest(SaveTestCase):
                     )[0]
                 )
                 self.assertIsNone(self._parent_id(held))
+
+    def test_a_pool_a_non_soulfray_pool_inherits_from_is_refused(self) -> None:
+        """Taking it as this stage's own pool would let this page edit rows the trap
+        pool inherits, so the pick is refused even with the parent select left alone."""
+        data = self._values(self.tearing)
+        data["pool-pool"] = [str(self.trap_base.pk)]
+        resp = self._post(self.tearing, data)
+        self.assertEqual(resp.status_code, 200)
+        errors = resp.context["forms"].pool.errors["pool"]
+        self.assertIn("Pick a Soulfray stage's pool or a pool nothing else uses", errors[0])
+        self.assertIsNone(
+            ConditionStage.objects.filter(pk=self.tearing.pk).values_list(
+                "consequence_pool_id", flat=True
+            )[0]
+        )
 
     def test_another_stages_pool_cannot_be_re_parented_from_here(self) -> None:
         data = self._values(self.tearing)

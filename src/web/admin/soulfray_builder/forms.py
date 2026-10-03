@@ -131,41 +131,61 @@ class PenaltyForm(forms.Form):
     )
 
 
-#: A pool's own make-up (its rows, the pools inheriting from it) and the stages
-#: this builder authors; every other relation onto ``ConsequencePool`` is a consumer.
+#: Relations ``held_pool_ids`` reads specially rather than as plain consumers: a
+#: pool's own rows, the pools inheriting from it (held unless a Soulfray stage's own)
+#: and condition stages (held unless a Soulfray stage).
 _POOL_OWN_RELATED_MODELS = (ConsequencePool, ConsequencePoolEntry, ConditionStage)
 
 
-def held_by_another_consumer() -> Q:
-    """Pools some model other than a condition stage points at: a technique's clash
-    pool, a trap, an item, a damage type's wound pool, and so on.
+def _soulfray_pool_ids() -> QuerySet:
+    """Every Soulfray stage's own pool id, as a subquery."""
+    return soulfray_stages().filter(consequence_pool__isnull=False).values("consequence_pool_id")
 
-    Walks every reverse relation onto ``ConsequencePool``, hidden ones (``related_name
-    ="+"``) included, so a consumer added later is covered without a list to keep.
+
+def held_pool_ids() -> QuerySet:
+    """Ids of pools something other than a Soulfray stage holds, as ONE subquery.
+
+    A consumer is any row of another model pointing at the pool (a technique's clash
+    pool, a trap, an item, a damage type's wound pool, a non-Soulfray condition
+    stage...), found by walking every reverse relation onto ``ConsequencePool``,
+    hidden ``related_name="+"`` ones included, so a consumer added later is covered
+    without a list to keep. A pool is also held when a pool other than a Soulfray
+    stage's own inherits from it: editing it here would change that pool's draws.
+
+    The per-relation selects are UNIONed into one subquery, so a query reading it is
+    one round trip however many pools or consumers exist.
     """
-    held = Q()
+    soulfray_pools = _soulfray_pool_ids()
+    parts: list[QuerySet] = [
+        ConditionStage.objects.filter(consequence_pool__isnull=False)
+        .exclude(consequence_pool__in=soulfray_pools)
+        .values_list("consequence_pool_id", flat=True),
+        ConsequencePool.objects.filter(parent__isnull=False)
+        .exclude(pk__in=soulfray_pools)
+        .values_list("parent_id", flat=True),
+    ]
     for relation in ConsequencePool._meta.get_fields(include_hidden=True):  # noqa: SLF001
         if not relation.auto_created or relation.concrete:
             continue
         if relation.related_model in _POOL_OWN_RELATED_MODELS:
             continue
         name = relation.field.name
-        held |= Q(
-            pk__in=relation.related_model._base_manager.filter(  # noqa: SLF001
+        parts.append(
+            relation.related_model._base_manager.filter(  # noqa: SLF001
                 **{f"{name}__isnull": False}
-            ).values(name)
+            ).values_list(name, flat=True)
         )
-    return held
+    # A compound statement allows no ORDER BY in its parts; Meta.ordering adds one.
+    first, *rest = (part.order_by() for part in parts)
+    return first.union(*rest, all=True)
 
 
 def stage_pool_choices() -> QuerySet[ConsequencePool]:
     """The pools a Soulfray stage may take as its own: another Soulfray stage's pool,
-    or a pool nothing else uses. A pool a non-Soulfray stage or any other consumer
-    holds is never offered, so this page cannot re-parent or edit it."""
-    soulfray_pools = soulfray_stages().filter(consequence_pool__isnull=False)
-    unused = ~Q(condition_stages__isnull=False) & ~held_by_another_consumer()
+    or a pool nothing else holds (``held_pool_ids``). A held pool is never offered, so
+    this page cannot re-parent or edit it. One query."""
     return ConsequencePool.objects.filter(
-        Q(pk__in=soulfray_pools.values("consequence_pool_id")) | unused
+        Q(pk__in=_soulfray_pool_ids()) | ~Q(pk__in=held_pool_ids())
     ).order_by("name")
 
 
@@ -234,7 +254,7 @@ class PoolForm(forms.Form):
             others = others.exclude(pk=self.stage.pk)
         if others.exists():
             return True
-        return ConsequencePool.objects.filter(held_by_another_consumer(), pk=pool.pk).exists()
+        return ConsequencePool.objects.filter(pk=pool.pk, pk__in=held_pool_ids()).exists()
 
     def _effective_parent(self, pool: ConsequencePool | None) -> ConsequencePool | None:
         """The parent this save asks for. A switched pool whose parent select the
