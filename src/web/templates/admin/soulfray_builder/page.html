@@ -101,6 +101,15 @@ styles the autocomplete selects.
     formsets.announceFormsetAdded(button.dataset.prefix, row);
   }
 
+  // "New pool" in the pool select reveals the new pool's name; any pool hides it.
+  var poolSelect = document.getElementById("id_pool-pool");
+  var newPoolName = document.getElementById("new-pool-name");
+  if (poolSelect && newPoolName) {
+    poolSelect.addEventListener("change", function () {
+      newPoolName.hidden = poolSelect.value !== "";
+    });
+  }
+
   var root = document.getElementById("soulfray-builder-root");
   root.addEventListener("click", function (event) {
     var button = event.target.closest("#add-row-btn, .sf-add-effect");

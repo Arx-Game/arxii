@@ -10,7 +10,14 @@
   {% if forms.pool.non_field_errors %}<p class="errornote">{{ forms.pool.non_field_errors }}</p>{% endif %}
   <div class="aligned">
     <div class="form-row">{{ forms.pool.pool.errors }}{{ forms.pool.new_name.errors }}{{ forms.pool.parent.errors }}
-      {{ forms.pool.pool.label_tag }} {{ forms.pool.pool }} {{ forms.pool.new_name }}
+      {% comment %}
+      The new pool's name shows only while the pool select reads "New pool": on a
+      stage with no pool, or (page script) when an author switches a pooled stage
+      to "New pool". It always posts, prefilled "Soulfray - <stage>", so the
+      switch works without the script too.
+      {% endcomment %}
+      {{ forms.pool.pool.label_tag }} {{ forms.pool.pool }}
+      <span id="new-pool-name"{% if forms.pool.pool.value %} hidden{% endif %}>{{ forms.pool.new_name.label_tag }} {{ forms.pool.new_name }}</span>
       {{ forms.pool.parent.label_tag }} {{ forms.pool.parent }}
       <div class="help">Saving creates the pool if it is new. A shared parent pool lets every
         stage carry the same base rows; a stage can drop or reweight one.</div></div>

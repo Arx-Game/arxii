@@ -8,7 +8,6 @@ Required-content probes and the game's non-lethal cap read.
 
 from __future__ import annotations
 
-from collections import defaultdict
 from dataclasses import dataclass
 
 from django.contrib import messages
@@ -103,15 +102,6 @@ def _new_row_view(
 
 
 def _row_views(forms: BuilderForms, copy_from: ConditionStage | None) -> list[RowView]:
-    table_ids = [row.consequence.pk for row in forms.table]
-    effects_by_consequence: dict[int, list[ConsequenceEffect]] = defaultdict(list)
-    if table_ids:
-        for effect in (
-            ConsequenceEffect.objects.filter(consequence_id__in=table_ids)
-            .select_related("condition_template", "property", "distinction")
-            .order_by("execution_order", "pk")
-        ):
-            effects_by_consequence[effect.consequence_id].append(effect)
     copy_counts = _copy_counts(forms)
 
     views: list[RowView] = []
@@ -121,7 +111,7 @@ def _row_views(forms: BuilderForms, copy_from: ConditionStage | None) -> list[Ro
             continue
         row = forms.table[index]
         consequence = row.consequence
-        effects = effects_by_consequence.get(consequence.pk, [])
+        effects = forms.table_effects.get(consequence.pk, [])
         has_other = any(effect.effect_type not in BUILDER_EFFECT_TYPES for effect in effects)
         views.append(
             RowView(

@@ -5,8 +5,10 @@ from __future__ import annotations
 from pathlib import Path
 import re
 
+from django.db import connection
 from django.http import QueryDict
 from django.test import TestCase
+from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 from evennia.accounts.models import AccountDB
 
@@ -19,9 +21,9 @@ from web.admin.soulfray_builder.forms import (
 )
 from web.admin.tests.soulfray_ladder import (
     SoulfrayBuilderTestCase,
-    _superuser,
     build_ladder,
     form_values,
+    make_superuser,
     shared_pool,
     stock,
 )
@@ -33,7 +35,11 @@ from web.admin.tests.test_distinction_builder import (
 from world.checks.constants import EffectType
 from world.checks.factories import CheckTypeFactory, ConsequenceEffectFactory
 from world.checks.models import Consequence
-from world.conditions.factories import ConditionStageFactory, ConditionTemplateFactory
+from world.conditions.factories import (
+    ConditionStageFactory,
+    ConditionTemplateFactory,
+    DamageTypeFactory,
+)
 from world.contributors.factories import ContentContributorFactory
 from world.magic.factories import SoulfrayConfigFactory
 from world.magic.services.soulfray import soulfray_ladder_summary
@@ -47,7 +53,7 @@ class SoulfrayPageTestCase(SoulfrayBuilderTestCase):
         super().setUpTestData()
         cls.writer = ContentContributorFactory(name="Soulfray Writer")
         PlayerData.objects.create(account=cls.author, contributor=cls.writer)
-        cls.unlinked = _superuser("sfunlinked")
+        cls.unlinked = make_superuser("sfunlinked")
         cls.config = SoulfrayConfigFactory(
             resilience_check_type=CheckTypeFactory(name="Magical Endurance")
         )
@@ -110,6 +116,15 @@ class BuilderGetTest(SoulfrayPageTestCase):
         self.assertIn("Soulfray - common", body)
         self.assertIn("this stage", body)
         self.assertIn("Apply Condition, self, Shaken sev 1", body)
+
+    def test_the_new_pool_name_shows_only_for_a_stage_with_no_pool(self) -> None:
+        pooled = self._get(self.fraying).content.decode()
+        self.assertIn('<span id="new-pool-name" hidden>', pooled)
+        unpooled = self._get(self.tearing).content.decode()
+        self.assertIn('<span id="new-pool-name">', unpooled)
+        self.assertIn('value="Soulfray - Tearing"', unpooled)
+        # Hidden is not dropped: the name still posts, so "New pool" works unscripted.
+        self.assertEqual(form_values(pooled)["pool-new_name"], ["Soulfray - Fraying"])
 
     def test_a_stage_from_another_condition_is_404(self) -> None:
         self.assertEqual(self._get(self.numb).status_code, 404)
@@ -219,12 +234,71 @@ class NewRowEffectsFormTest(SoulfrayPageTestCase):
         self.assertEqual(len(effects.forms), 1)
         self.assertTrue(effects.forms[0].has_changed())
 
+    def test_a_saved_rows_prefetched_effects_bind_and_save_on_post(self) -> None:
+        prefix = f"e{self.fraying_failure.pk}"
+        data = self._posted({f"{prefix}-0-condition_severity": ["3"]})
+        effects = build_forms(data, self.fraying, self.config, None).effects[
+            self.fraying_failure.pk
+        ]
+        self.assertTrue(effects.is_valid(), effects.errors)
+        self.assertEqual(len(effects.forms), 1)
+        effect = self.fraying_failure.effects.get()
+        self.assertEqual(effects.forms[0].instance.pk, effect.pk)
+        effects.save()
+        effect.refresh_from_db()
+        self.assertEqual(effect.condition_severity, 3)
+
     def test_a_new_row_posted_without_an_effects_management_form_has_no_effects(self) -> None:
         index = len(consequence_table(self.fraying_pool))
         data = self._posted({"rows-TOTAL_FORMS": [str(index + 1)]})
         effects = build_forms(data, self.fraying, self.config, None).new_effects[index]
         self.assertTrue(effects.is_valid(), effects.errors)
         self.assertEqual(effects.forms, [])
+
+
+class BuilderGetQueryCountTest(SoulfrayBuilderTestCase):
+    """A GET's query count does not grow with the stage's rows or their effects.
+
+    Each row's "Roll result" select, each effect form's damage-type select and
+    each saved row's effects formset used to query per row. Ripping (2 rows) and
+    Sundering (5 rows) each carry one damage effect per row, so any per-row
+    query makes the two counts differ.
+    """
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        super().setUpTestData()
+        PlayerData.objects.create(
+            account=cls.author, contributor=ContentContributorFactory(name="Count Writer")
+        )
+        SoulfrayConfigFactory()
+        cls.small = cls.ladder.stage("Ripping")
+        cls.large = cls.ladder.stage("Sundering")
+        stock(cls.small, cls.ladder, tiers=("Failure", "Success"))
+        stock(cls.large, cls.ladder)
+        damage = DamageTypeFactory()
+        for consequence in Consequence.objects.filter(
+            pool_entries__pool__condition_stages__in=[cls.small, cls.large]
+        ):
+            ConsequenceEffectFactory(
+                consequence=consequence,
+                effect_type=EffectType.DEAL_DAMAGE,
+                damage_amount=4,
+                damage_type=damage,
+            )
+
+    def _count(self, stage) -> int:
+        url = reverse("admin_soulfray_builder", args=[stage.pk])
+        self.client.get(url)  # warm sessions, content types and the config singleton
+        with CaptureQueriesContext(connection) as queries:
+            resp = self.client.get(url)
+        self.assertEqual(resp.status_code, 200)
+        self.assertNotIn("Link a contributor first.", resp.content.decode())
+        return len(queries)
+
+    def test_five_rows_cost_what_two_rows_cost(self) -> None:
+        self.client.force_login(self.author)
+        self.assertEqual(self._count(self.large), self._count(self.small))
 
 
 class IndexAndPickTest(SoulfrayPageTestCase):
@@ -268,7 +342,7 @@ class ObjectToolTest(SoulfrayPageTestCase):
 
 class NoStagesIndexTest(TestCase):
     def test_index_with_no_soulfray_stages_returns_to_the_workbench(self) -> None:
-        self.client.force_login(_superuser("sfnostages"))
+        self.client.force_login(make_superuser("sfnostages"))
         resp = self.client.get(reverse("admin_soulfray_builder_index"))
         self.assertEqual(resp["Location"], reverse("admin_authoring"))
 
@@ -276,7 +350,7 @@ class NoStagesIndexTest(TestCase):
 class NoConfigGetTest(TestCase):
     @classmethod
     def setUpTestData(cls) -> None:
-        cls.author = _superuser("sfnoconfig")
+        cls.author = make_superuser("sfnoconfig")
         PlayerData.objects.create(
             account=cls.author, contributor=ContentContributorFactory(name="No Config Writer")
         )

@@ -121,7 +121,7 @@ def shared_pool(
     return pool
 
 
-def _superuser(name: str) -> AccountDB:
+def make_superuser(name: str) -> AccountDB:
     return AccountDB.objects.create_superuser(name, f"{name}@example.com", "pw-123456")
 
 
@@ -135,7 +135,7 @@ class SoulfrayBuilderTestCase(TestCase):
 
     @classmethod
     def setUpTestData(cls) -> None:
-        cls.author = _superuser("sfauthor")
+        cls.author = make_superuser("sfauthor")
         cls.ladder = build_ladder()
 
 

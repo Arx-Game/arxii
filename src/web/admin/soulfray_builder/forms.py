@@ -15,12 +15,20 @@ saves the effects in the same transaction (spec story 5: one Save).
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from collections import defaultdict
+from collections.abc import Sequence
+from dataclasses import dataclass, field
 
 from django import forms
 from django.contrib import admin
 from django.contrib.admin.widgets import AutocompleteSelect, AutocompleteSelectMultiple
-from django.forms import BaseFormSet, Media, formset_factory, inlineformset_factory
+from django.forms import (
+    BaseFormSet,
+    BaseInlineFormSet,
+    Media,
+    formset_factory,
+    inlineformset_factory,
+)
 
 from actions.models import ConsequencePool, ConsequencePoolEntry
 from actions.types import _entry_to_weighted
@@ -160,6 +168,11 @@ class ConsequenceRowForm(forms.Form):
     )
     remove = forms.BooleanField(required=False, label="Remove")
 
+    def __init__(self, *args: object, choices: BuilderChoices | None = None, **kwargs: object):
+        super().__init__(*args, **kwargs)
+        if choices is not None:
+            self.fields["outcome_tier"].choices = choices.outcome_tier
+
 
 class BaseConsequenceRowFormSet(BaseFormSet):
     """Knows which consequence ids the page was rendered with (``known_ids``)."""
@@ -219,31 +232,121 @@ class EffectForm(forms.ModelForm):
             ),
         }
 
-    def __init__(self, *args: object, **kwargs: object) -> None:
+    def __init__(
+        self, *args: object, choices: BuilderChoices | None = None, **kwargs: object
+    ) -> None:
         super().__init__(*args, **kwargs)
         self.fields["effect_type"].choices = [("", "---------")] + [
             (value, label) for value, label in EffectType.choices if value in BUILDER_EFFECT_TYPES
         ]
+        if choices is not None:
+            self.fields["damage_type"].choices = choices.damage_type
+
+
+@dataclass(frozen=True)
+class BuilderChoices:
+    """The page's model-backed select options, evaluated once per request.
+
+    A ``ModelChoiceField`` re-runs its queryset every time a form renders it, so
+    without this every consequence row (its "Roll result") and every effect form
+    (its damage type) cost a query each. Setting a field's ``choices`` to these
+    lists only changes rendering; a bound field still validates against its
+    queryset.
+    """
+
+    outcome_tier: list[tuple[object, str]]
+    damage_type: list[tuple[object, str]]
+
+    @classmethod
+    def load(cls) -> BuilderChoices:
+        return cls(
+            outcome_tier=list(ConsequenceRowForm.base_fields["outcome_tier"].choices),
+            damage_type=list(EffectForm.base_fields["damage_type"].choices),
+        )
+
+
+class BaseEffectFormSet(BaseInlineFormSet):
+    """An inline formset that can serve its rows from an already-fetched list.
+
+    ``prefetched`` stands in for the formset's queryset everywhere Django reads
+    it (form count, indexing, the pk lookup a bound form uses), so a page of N
+    consequences fetches their effects in one query rather than one per row.
+    The list must hold exactly the rows the queryset would: this consequence's
+    effects of ``BUILDER_EFFECT_TYPES``, fetched in the same request.
+    """
+
+    def __init__(
+        self, *args: object, prefetched: Sequence[ConsequenceEffect] | None = None, **kwargs: object
+    ) -> None:
+        self.prefetched = None if prefetched is None else list(prefetched)
+        super().__init__(*args, **kwargs)
+
+    def get_queryset(self) -> object:
+        if self.prefetched is not None:
+            return self.prefetched
+        return super().get_queryset()
 
 
 EffectFormSet = inlineformset_factory(
-    Consequence, ConsequenceEffect, form=EffectForm, extra=0, can_delete=True
+    Consequence,
+    ConsequenceEffect,
+    form=EffectForm,
+    formset=BaseEffectFormSet,
+    extra=0,
+    can_delete=True,
 )
 
+_EFFECT_RELATIONS = ("condition_template", "property", "distinction", "damage_type")
 
-def effect_formset_for(consequence: Consequence, data: object = None) -> EffectFormSet:
-    """One consequence's editable effects, prefixed ``e<consequence pk>``."""
+
+def effects_by_consequence(consequence_ids: Sequence[int]) -> dict[int, list[ConsequenceEffect]]:
+    """Every effect of these consequences, any type, in firing order. One query, or none."""
+    grouped: dict[int, list[ConsequenceEffect]] = defaultdict(list)
+    if not consequence_ids:
+        return grouped
+    for effect in (
+        ConsequenceEffect.objects.filter(consequence_id__in=consequence_ids)
+        .select_related(*_EFFECT_RELATIONS)
+        .order_by("execution_order", "pk")
+    ):
+        grouped[effect.consequence_id].append(effect)
+    return grouped
+
+
+def effect_formset_for(
+    consequence: Consequence,
+    data: object = None,
+    *,
+    effects: Sequence[ConsequenceEffect] | None = None,
+    choices: BuilderChoices | None = None,
+) -> EffectFormSet:
+    """One consequence's editable effects, prefixed ``e<consequence pk>``.
+
+    ``effects`` is the consequence's already-fetched effects of any type (the
+    builder page passes ``effects_by_consequence``'s list); only the
+    ``BUILDER_EFFECT_TYPES`` among them become forms. Without it the formset
+    queries its own.
+    """
+    prefetched = (
+        None
+        if effects is None
+        else [effect for effect in effects if effect.effect_type in BUILDER_EFFECT_TYPES]
+    )
     return EffectFormSet(
         data,
         instance=consequence,
         prefix=f"e{consequence.pk}",
         queryset=ConsequenceEffect.objects.filter(
             effect_type__in=BUILDER_EFFECT_TYPES
-        ).select_related("condition_template", "property", "distinction", "damage_type"),
+        ).select_related(*_EFFECT_RELATIONS),
+        prefetched=prefetched,
+        form_kwargs={"choices": choices},
     )
 
 
-def new_row_effect_formset(index: int | str, data: object = None) -> EffectFormSet:
+def new_row_effect_formset(
+    index: int | str, data: object = None, *, choices: BuilderChoices | None = None
+) -> EffectFormSet:
     """The effects of a row added on the page, prefixed ``new<row form index>``.
 
     Bound to an unsaved ``Consequence``, so it starts with no forms and its
@@ -264,6 +367,7 @@ def new_row_effect_formset(index: int | str, data: object = None) -> EffectFormS
         instance=Consequence(),
         prefix=prefix,
         queryset=ConsequenceEffect.objects.none(),
+        form_kwargs={"choices": choices},
     )
 
 
@@ -349,7 +453,9 @@ class BuilderForms:
     ``effects`` is keyed by consequence pk (rows the page was rendered with);
     ``new_effects`` by row form index (rows added on the page, every index at or
     past ``len(table)``); ``new_effects_template`` is the unbound ``new__prefix__``
-    formset the add-row template clones.
+    formset the add-row template clones. ``table_effects`` is every effect of the
+    table's consequences, any type, from the one fetch the formsets were fed by;
+    the page lists them from it rather than querying again.
     """
 
     stage: StageForm
@@ -361,6 +467,7 @@ class BuilderForms:
     table: list[TableRow]
     new_effects: dict[int, EffectFormSet]
     new_effects_template: EffectFormSet
+    table_effects: dict[int, list[ConsequenceEffect]] = field(default_factory=dict)
 
     @property
     def media(self) -> Media:
@@ -394,11 +501,14 @@ def build_forms(
             if row.shared_from is None
         ]
     modifier = _modifier(stage, config)
+    choices = BuilderChoices.load()
+    table_effects = effects_by_consequence([row.consequence.pk for row in table])
     rows = ConsequenceRowFormSet(
         data,
         prefix="rows",
         initial=initial,
         known_ids=frozenset(row.consequence.pk for row in table),
+        form_kwargs={"choices": choices},
     )
     return BuilderForms(
         stage=StageForm(data, instance=stage, prefix="stage"),
@@ -418,11 +528,20 @@ def build_forms(
             },
         ),
         rows=rows,
-        effects={row.consequence.pk: effect_formset_for(row.consequence, data) for row in table},
+        effects={
+            row.consequence.pk: effect_formset_for(
+                row.consequence,
+                data,
+                effects=table_effects.get(row.consequence.pk, []),
+                choices=choices,
+            )
+            for row in table
+        },
         table=table,
         new_effects={
-            index: new_row_effect_formset(index, data)
+            index: new_row_effect_formset(index, data, choices=choices)
             for index in range(len(table), len(rows.forms))
         },
-        new_effects_template=new_row_effect_formset("__prefix__"),
+        new_effects_template=new_row_effect_formset("__prefix__", choices=choices),
+        table_effects=table_effects,
     )
