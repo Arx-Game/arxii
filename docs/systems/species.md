@@ -98,6 +98,37 @@ instead of snapshotting per ADR-0170's pattern).
   full per-listener render. `garble_text(seed_key=None)` (SystemRandom, non-reproducible) is
   `mutter_fragment`'s pre-existing behavior — mutter still garbles randomly per-read, not
   per-language.
+
+### Comprehension from active conditions (#4090, ADR-0214 amendment)
+
+A listener's comprehension is trained fluency plus any active-condition bonus toward that
+language, never the speaker's. `comprehension_value(sheet, language)` (the single-sheet entry
+point) and its batched sibling `comprehension_values(sheet_ids, language, *,
+trained_by_sheet=None)` are the ONE comprehension rule: trained fluency (`fluency_value`, or the
+caller's own already-batched read when `trained_by_sheet` is passed) plus
+`condition_modifier_totals_by_sheet` (`world.conditions.services`) summed over the active
+instances on each sheet, floored at 0. Live delivery and the scene-log reread both compute
+through here, never a parallel re-derivation. The bonus is listener-side only: the speak gate,
+the speaker's own band, teaching, and self-study all keep reading `fluency_value` (trained).
+Only an active CONDITION counts; a `CharacterModifier` row from a distinction or equipment does
+not. A condition granting a bonus toward a language reads clear while it lasts and garbles again
+once it ends, the same live-recompute the rest of comprehension already follows.
+
+`condition_language_bonuses(sheet)` returns every language an active condition on the sheet
+changes, keyed by `Language` pk, as a `ConditionFluencyBonus(language_id, total, sources)`. Used
+to build the sheet's temporary rows; a language whose contributions sum to 0 is left out, and
+`sources` names each contributing condition once, in the order read.
+
+**Authoring recipe** for a condition that grants language comprehension: one
+`mechanics.ModifierCategory`, one `mechanics.ModifierTarget` per language with `target_trait` set
+to that language's `Trait`, then a `ConditionTemplate` (or a technique's
+`TechniqueAppliedCondition`, applied the ordinary way) carrying one `ConditionModifierEffect` per
+covered language, pointed at that language's `ModifierTarget`. No seeding anywhere; every row is
+staff-authored content.
+
+`mutter_fragment`'s untagged, per-read-random garble (`garble_text(seed_key=None)`) is
+unaffected; mutter never resolves a language, so it never reads comprehension.
+
 - **CG provisioning** — `provision_starting_languages(sheet, *, beginnings)`
   (`world/species/services.py`, called from `character_creation.services.finalize_magic_data`)
   grants the union of every `is_universal` `Language` and `Beginnings.get_starting_languages(species)`
@@ -113,23 +144,53 @@ instead of snapshotting per ADR-0170's pattern).
   `SetLanguageAction` (`set_language` / telnet `speak <language>`) flips the actor's sticky
   `current_language`; it never teaches, only requires fluency ≥ 1. `TrainLanguageAction`
   (`train_language` / telnet `train_language <language>[=<teacher>]`) is a weekly-gated (per
-  `GameWeek`) `DevelopmentPoints` award session — `TEACHER_DP_PER_SESSION = 15` with a co-present
-  FLUENT teacher, `SELF_STUDY_DP_PER_SESSION = 8` self-study (both PLACEHOLDER, mirrors
-  `TrainTechniqueAction`'s teacher/self-study split); a `LANGUAGE`-typed trait is exempt from rust
-  decay. `say`/`whisper`/`mutter` resolve a per-utterance language via `_resolve_spoken_language`
-  (`actions/definitions/communication.py`) — a `(tongue) rest of the line` prefix on `CmdSay`
-  (`_LANGUAGE_TAG_RE`) switches just that line's language without touching the sticky default.
-  Delivery is per-listener (telnet send and WS push each render the speaker's text through
-  `render_speech` for that specific recipient's fluency); `mutter`'s fragment stays untagged
-  (delegates to `garble_text` with no seed, unchanged random-per-read behavior).
-- **Scene-log read-time comprehension** — `interaction_serializers.py`'s list and detail
+  `GameWeek`) `DevelopmentPoints` award session. The dp a session awards is staff-tuned on the
+  singleton `LanguageTrainingConfig` (`teacher_dp_per_session`, default 15, with a co-present
+  FLUENT teacher; `self_study_dp_per_session`, default 8; lazily created at its defaults by
+  `world.species.language_progression.get_language_training_config`, admin-editable, TUNING
+  dashboard entry), mirroring `TrainTechniqueAction`'s teacher/self-study split; a
+  `LANGUAGE`-typed trait is exempt from rust decay. `say`/`whisper`/`mutter` resolve a
+  per-utterance language via `_resolve_spoken_language` (`actions/definitions/communication.py`):
+  a `(tongue) rest of the line` prefix on `CmdSay` (`_LANGUAGE_TAG_RE`) switches just that
+  line's language without touching the sticky default. Delivery is per-listener (telnet send and
+  WS push each render the speaker's text through `render_speech`, keyed on the LISTENER's
+  `comprehension_value` for that language, #4090); `mutter`'s fragment stays untagged (delegates
+  to `garble_text` with no seed, unchanged random-per-read behavior).
+- **Language XP locks and breakthroughs** (#4090, `world/species/language_progression.py`):
+  a language's weekly training parks one rating below an authored `TraitRatingUnlock` the same
+  way skills park at their XP boundaries. `DevelopmentPoints.award_points` stops leveling the
+  trait at `target_rating - 1` for a LANGUAGE-typed trait when an unlock row exists at
+  `target_rating`, and any surplus dp from GM awards or check-use that session would have earned
+  dissipates rather than banking (the training message reads "Your X is at threshold N: training
+  maintains, does not advance until the breakthrough is unlocked."). Unlike skills, which park at
+  every x9 boundary regardless of authoring, a language parks ONLY where staff authored a
+  `TraitRatingUnlock`; an unauthored lock would strand a language with nothing to buy.
+  `language_lock_rating(sheet, language) -> int | None` reads the single language's parked
+  rating; `languages_at_lock(sheet) -> list[LanguageBreakthroughProspect]` lists every language
+  the sheet is parked in, with its XP cost. `purchase_language_breakthrough(sheet, language) ->
+  tuple[bool, str]` spends account XP to clear the lock: the value rises to the unlock's
+  `target_rating`, a `CharacterTraitChange` records `TraitChangeSource.XP_BREAKTHROUGH`
+  provenance, and the dp tracker is raised to that rating's cumulative floor so training resumes
+  from zero toward the next rating. Reached through `PurchaseUnlockAction`
+  (`unlock_type="language_breakthrough"`, `language_id`) and telnet `progression unlock
+  language=<id>`; see progression.md's Unlock Shop.
+- **Scene-log read-time comprehension**: `interaction_serializers.py`'s list and detail
   serializers apply the same live per-viewer garble on read (including the muted-reveal path, which
   no longer bypasses language garbling); `InteractionPayload`/`Interaction` querysets
-  `select_related("language")`.
-- **Endpoint** — `GET /api/species/my-languages/` (`MyLanguagesViewSet`,
-  `world/species/views.py`) — the caller's active character's known languages (fluency + band),
-  self-scoped only, no `character` query param. Frontend: the composer's `LanguageSelector` and the
-  character sheet's `LanguagesSection`.
+  `select_related("language")`. The reread batches every listener's `comprehension_values` call
+  (trained fluency plus active-condition bonuses) through the shared `trained_by_sheet` map
+  instead of re-querying `CharacterTraitValue` per row.
+- **Endpoint**: `GET /api/species/my-languages/` (`MyLanguagesViewSet`,
+  `world/species/views.py`): the caller's active character's known languages, self-scoped only,
+  no `character` query param. Each `MyLanguage` row (`MyLanguageRow`/`MyLanguageSerializer`) carries
+  `fluency`/`band` (trained: the speak gate, speaker's own band, teaching, self-study) alongside
+  `effective_fluency`/`effective_band` (listener-side: trained plus active-condition bonuses,
+  #4090) and `temporary_sources` (the contributing conditions' names, empty when none). A
+  condition-only language (no trained fluency, present only through
+  `condition_language_bonuses`) appears too; a row with neither a trained value nor a positive
+  bonus is omitted. On the sheet (`LanguagesSection.tsx`), the gloss reads "from <Condition>" with
+  no trained text when there is no training, or "from <Condition> · trained <Band>" when there is.
+  Frontend: the composer's `LanguageSelector` and the character sheet's `LanguagesSection`.
 
 ### Starting-language authoring (#3162)
 
