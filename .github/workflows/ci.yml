@@ -181,8 +181,7 @@ jobs:
             apps: >-
               integration_tests world.mechanics world.room_features world.travel
               world.classes world.weather world.projects world.boundaries
-          # shard-3 (~343s): world.combat half 1 (~178s) + world.items (68)
-          #   + world.checks (35) + world.gm (24) + world.seeds (15)
+          # shard-3: world.combat half 1 + world.items + world.gm
           #   + world.fatigue (10) + world.assets (7) + world.action_points (5)
           #   + core (3) + world.tests (2026-08-04, #2906 single-app-collapse
           #   aggregator completeness guard — world/tests/test_aggregators.py.
@@ -209,7 +208,7 @@ jobs:
             split_part: 1
             split_of: 2
             apps: >-
-              world.items world.checks world.gm world.seeds world.fatigue
+              world.items world.gm world.fatigue
               world.assets world.action_points world.tasking core world.tests
               world.contributors world.beta_reset world.registration
               world.predators world.downtime world.boards world.tavern_games
@@ -260,18 +259,23 @@ jobs:
               commands world.missions world.relationships world.roster world.secrets
               world.goals world.agriculture world.journals world.tarot
               world.ceremonies world.worship
-          # shard-9: the second half of world.stories by itself.
+          # shard-9: the second half of world.stories + world.seeds.
           # split_test_labels.py keeps the story halves complete and disjoint as
-          # test modules change.
+          # test modules change. world.seeds moved here from shard-3
+          # (2026-10-03, #4139): its seeder tests take 13-26s each, and with
+          # world.checks they made shard-3 the slowest parallel shard (315s
+          # against 160-200s for the rest, run 37149758519).
           - name: shard-9
             split_app: world.stories
             split_part: 2
             split_of: 2
-            apps: ""
+            apps: world.seeds
           # shard-10: web and character_creation. Their old estimate was small,
           # but both suites are now large enough to keep off the story shards.
+          # world.checks moved here from shard-3 (2026-10-03, #4139): its
+          # ConsequenceOutcome API tests ran ~14s each there on Postgres.
           - name: shard-10
-            apps: world.character_creation web
+            apps: world.character_creation web world.checks
     # NOTE: We use a manual `docker run` rather than the GitHub Actions `services:`
     # block because the `services:` block has no way to pass a positional COMMAND to
     # the Postgres container. We need to bump `max_locks_per_transaction` past the
