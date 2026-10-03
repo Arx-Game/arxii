@@ -35,6 +35,7 @@ export function BeatsBand({ beats }: { beats: CharacterSheetBeat[] }) {
                 .map((beat) => (
                   <li key={beat.beat_id} className="mb-2">
                     <span className="refsheet-entry-name">{beat.name}</span>
+                    {beat.unknown && <span className="refsheet-note ml-2">Unknown</span>}
                     {!beat.unknown && beat.answers.length > 0 && (
                       <span className="ml-2">{beat.answers.join(', ')}</span>
                     )}

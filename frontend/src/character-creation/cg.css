@@ -1215,6 +1215,16 @@
 .interview .beat-pool button:focus-visible {
   border-color: var(--cg-accent);
 }
+.interview .beat-row .mode {
+  display: block;
+  margin-top: 0.5rem;
+  font-family: 'Cinzel', serif;
+  font-weight: 600;
+  font-size: 0.68rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--cg-label);
+}
 .interview .beat-prompt {
   margin: 0.4rem 0 0;
   color: var(--cg-text-soft);

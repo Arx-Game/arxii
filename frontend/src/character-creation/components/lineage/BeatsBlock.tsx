@@ -85,6 +85,13 @@ export function BeatsBlock({ draft, copy }: Props) {
                 <h4 className="section-h">{beat.name}</h4>
                 <p className="beat-prompt">{beat.prompt}</p>
                 {!beat.unknown && (
+                  <span className="mode">
+                    {beat.selection === 'one_of'
+                      ? (copy?.beats_mode_one_of ?? 'One of')
+                      : (copy?.beats_mode_any ?? 'Any that apply')}
+                  </span>
+                )}
+                {!beat.unknown && (
                   <ChapterOffers
                     draft={draft}
                     chapter="backgrounds"

@@ -101,9 +101,11 @@ describe('BeatsBlock', () => {
     renderWithCharacterCreationProviders(<BeatsBlock draft={createMockDraft()} copy={{}} />);
     const household = screen.getByRole('article', { name: 'The household' });
     expect(within(household).getByRole('list')).toHaveClass('oneof');
+    expect(within(household).getByText('One of')).toBeInTheDocument();
     expect(within(household).getByRole('button', { name: /Patient/ })).toBeInTheDocument();
     const work = screen.getByRole('article', { name: 'The work' });
     expect(within(work).getByRole('list')).not.toHaveClass('oneof');
+    expect(within(work).getByText('Any that apply')).toBeInTheDocument();
     // The untaken youth beat waits in its stage's pool.
     const youth = screen.getByRole('group', { name: /Youth/ });
     expect(within(youth).getByRole('button', { name: 'The first rule' })).toBeInTheDocument();

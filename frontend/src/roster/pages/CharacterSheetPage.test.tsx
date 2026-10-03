@@ -451,6 +451,7 @@ describe('CharacterSheetPage', () => {
     expect(within(region).getByText('Patient')).toBeInTheDocument();
     expect(within(region).getByText('A line.')).toBeInTheDocument();
     expect(within(region).getByText('The work')).toBeInTheDocument();
+    expect(within(region).getByText('Unknown')).toBeInTheDocument();
     expect(within(region).queryByText(/yours and staff/i)).toBeNull();
   });
 
