@@ -21,6 +21,8 @@ from world.species.language_constants import BAND_KEEP_RATIO, Fluency, fluency_b
 from world.species.types import ConditionFluencyBonus
 
 if TYPE_CHECKING:
+    from collections.abc import Iterable
+
     from world.character_sheets.models import CharacterSheet
     from world.species.models import Language
 
@@ -68,24 +70,43 @@ def fluency_value(sheet: CharacterSheet, language: Language) -> int:
 def comprehension_value(sheet: CharacterSheet, language: Language) -> int:
     """Listener-side fluency: trained plus active-condition bonuses, floored at 0 (#4090).
 
-    Only the LISTENER reads this. The speak gate, the speaker's own band, teaching and
-    self-study keep reading ``fluency_value`` (trained), so a condition grants
-    understanding and never speech. Only active conditions count (``CharacterModifier``
-    rows from distinctions or equipment do not), through the one ``ModifierTarget`` that
-    ``ModifierTarget.get_for_trait`` returns for the language's trait. The condition read
-    is the pure batched one (two queries, never tears down an expired condition).
+    The single-sheet entry point to ``comprehension_values``; see there for the rule.
     """
-    trained = fluency_value(sheet, language)
+    return comprehension_values([sheet.pk], language)[sheet.pk]
+
+
+def comprehension_values(sheet_ids: Iterable[int], language: Language) -> dict[int, int]:
+    """Listener-side fluency for many sheets at once, keyed by sheet pk (#4090).
+
+    Trained fluency plus active-condition bonuses, floored at 0. Only the LISTENER reads
+    this. The speak gate, the speaker's own band, teaching and self-study keep reading
+    ``fluency_value`` (trained), so a condition grants understanding and never speech.
+    Only active conditions count (``CharacterModifier`` rows from distinctions or
+    equipment do not), through the one ``ModifierTarget`` that
+    ``ModifierTarget.get_for_trait`` returns for the language's trait.
+
+    At most three queries however many sheets: one trained-fluency read, then the pure
+    batched condition read (``condition_modifier_totals_by_sheet``, which never tears down
+    an expired condition). A live say computes every listener's value with one call.
+    Every requested id is in the result (0 when it has no fluency row or no sheet).
+    """
+    ids = set(sheet_ids)
+    if not ids:
+        return {}
     if language.trait_id is None:
-        return trained
+        return dict.fromkeys(ids, 0)
     from world.conditions.services import condition_modifier_totals_by_sheet  # noqa: PLC0415
     from world.mechanics.models import ModifierTarget  # noqa: PLC0415
+    from world.traits.models import CharacterTraitValue  # noqa: PLC0415
 
+    trained = dict(
+        CharacterTraitValue.objects.filter(
+            character_id__in=ids, trait_id=language.trait_id
+        ).values_list("character_id", "value")
+    )
     target = ModifierTarget.get_for_trait(language.trait)
-    if target is None:
-        return trained
-    bonus = condition_modifier_totals_by_sheet([sheet.pk], target).get(sheet.pk, 0)
-    return max(0, trained + bonus)
+    bonuses = condition_modifier_totals_by_sheet(ids, target) if target is not None else {}
+    return {pk: max(0, trained.get(pk, 0) + bonuses.get(pk, 0)) for pk in ids}
 
 
 def condition_language_bonuses(sheet: CharacterSheet) -> dict[int, ConditionFluencyBonus]:

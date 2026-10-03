@@ -292,23 +292,23 @@ def _resolve_spoken_language(
 
 
 def _render_speech_for_listener(
-    actor: ObjectDB,
     obj: ObjectDB,
     text: str,
     *,
     language: Language,
     speaker_band: Fluency,
+    listener_values: dict[int, int],
 ) -> str:
     """Per-listener comprehension render for live telnet delivery (#2993).
 
     Mirrors ``world.scenes.interaction_services._language_render_for``'s
-    ordering: the writer and staff always get ground truth; an object with no
+    ordering: the writer (handled by the caller) and staff always get ground truth; an
+    object with no
     resolvable CharacterSheet (a prop, an NPC) also gets ground truth rather
     than a garbled read. The listener reads comprehension (trained plus
-    active-condition bonuses, #4090); the speaker's band stays on trained fluency.
+    active-condition bonuses, #4090) from ``listener_values``, computed once for the
+    whole room by ``comprehension_values``; the speaker's band stays on trained fluency.
     """
-    if obj.pk == actor.pk:
-        return text
     account = obj.account
     if account is not None and account.is_staff:
         return text
@@ -317,16 +317,13 @@ def _render_speech_for_listener(
     except ObjectDoesNotExist:
         return text
 
-    from world.species.language_services import (  # noqa: PLC0415
-        comprehension_value,
-        render_speech,
-    )
+    from world.species.language_services import render_speech  # noqa: PLC0415
 
     return render_speech(
         text,
         language=language,
         speaker_band=speaker_band,
-        listener_value=comprehension_value(sheet, language),
+        listener_value=listener_values.get(sheet.pk, 0),
     )
 
 
@@ -338,13 +335,22 @@ def _deliver_say_to_object(  # noqa: PLR0913 - cohesive per-recipient say-delive
     speaker_band: Fluency,
     excluded_ids: set[int],
     sdm: SceneDataManager,
+    listener_values: dict[int, int],
 ) -> None:
     if not hasattr(obj, "msg"):
         return
     if obj.pk in excluded_ids:
         return
-    rendered = _render_speech_for_listener(
-        actor, obj, text, language=language, speaker_band=speaker_band
+    rendered = (
+        text
+        if obj.pk == actor.pk
+        else _render_speech_for_listener(
+            obj,
+            text,
+            language=language,
+            speaker_band=speaker_band,
+            listener_values=listener_values,
+        )
     )
     obj_state = sdm.initialize_state_for_object(obj)
     if obj.pk == actor.pk:
@@ -370,7 +376,10 @@ def _deliver_language_tagged_say(
     # the same tagged line -- the language name is always visible
     # (ratified default #3), only the spoken content garbles.
     from world.species.language_constants import fluency_band  # noqa: PLC0415
-    from world.species.language_services import fluency_value  # noqa: PLC0415
+    from world.species.language_services import (  # noqa: PLC0415
+        comprehension_values,
+        fluency_value,
+    )
 
     speaker_band = fluency_band(fluency_value(actor.sheet_data, language))
     location = actor.location
@@ -392,8 +401,17 @@ def _deliver_language_tagged_say(
     )
 
     excluded_ids = {obj.pk for obj in resolve_broadcast_exclusions(location)}
-    for obj in location.contents:
-        _deliver_say_to_object(obj, actor, text, language, speaker_band, excluded_ids, sdm)
+    contents = list(location.contents)
+    # #4090: every listener's comprehension in one batched read (CharacterSheet shares
+    # ObjectDB's pk), never a per-listener query inside the loop below.
+    listener_values = comprehension_values(
+        [obj.pk for obj in contents if obj.pk != actor.pk and obj.pk not in excluded_ids],
+        language,
+    )
+    for obj in contents:
+        _deliver_say_to_object(
+            obj, actor, text, language, speaker_band, excluded_ids, sdm, listener_values
+        )
 
 
 def _record_say_submission(  # noqa: PLR0913
