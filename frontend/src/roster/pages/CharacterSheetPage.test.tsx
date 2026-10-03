@@ -65,8 +65,16 @@ let browsingEntryId: number | null = null;
 vi.mock('../useBrowsingIdentity', () => ({
   useBrowsingIdentity: () => ({ entryId: browsingEntryId }),
 }));
+// fluency > 0 (#4090): the "Speaks" line is scoped to trained languages only.
+// Mutable so a single test can add a condition-only row and see it dropped.
+let myLanguagesRows: Array<{
+  language_id: number;
+  name: string;
+  is_current: boolean;
+  fluency: number;
+}> = [{ language_id: 1, name: 'Arvani', is_current: true, fluency: 80 }];
 vi.mock('@/species/queries', () => ({
-  useMyLanguages: () => ({ data: [{ language_id: 1, name: 'Arvani', is_current: true }] }),
+  useMyLanguages: () => ({ data: myLanguagesRows }),
 }));
 // The other sections each own a tree of queries that are not what these tests are
 // about; stub them so a section switch renders a marker instead of a panel.
@@ -225,6 +233,7 @@ describe('CharacterSheetPage', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     browsingEntryId = null;
+    myLanguagesRows = [{ language_id: 1, name: 'Arvani', is_current: true, fluency: 80 }];
     setOwnership(false);
     mockUseCharacterSheetQuery.mockReturnValue({
       data: makeSheet(),
@@ -335,6 +344,19 @@ describe('CharacterSheetPage', () => {
     browsingEntryId = 999;
     mountSheet();
     expect(screen.queryByText('Arvani')).not.toBeInTheDocument();
+  });
+
+  it('leaves a condition-only language out of "Speaks" (#4090): trained fluency only', () => {
+    myLanguagesRows = [
+      { language_id: 1, name: 'Arvani', is_current: true, fluency: 80 },
+      { language_id: 2, name: 'Tongue B', is_current: false, fluency: 0 },
+    ];
+    setEntry(ENTRY);
+    setOwnership(true);
+    browsingEntryId = ENTRY.id;
+    mountSheet();
+    expect(screen.getByText('Arvani')).toBeInTheDocument();
+    expect(screen.queryByText('Tongue B')).not.toBeInTheDocument();
   });
 
   it('shows the Beginning from beginnings, and the realm as its own row', () => {
