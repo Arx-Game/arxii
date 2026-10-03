@@ -255,8 +255,8 @@ export interface CharacterSheetPersona {
 
 /**
  * Mirrors `world.character_sheets.types.GoalEntry` (#3621) — one numbered goal.
- * The list arrives empty when the viewer's access does not meet `goals_visibility`,
- * which is indistinguishable from "wrote none"; both render as no goals.
+ * The list arrives empty for anyone but the owner and staff (#4106), which is
+ * indistinguishable from "wrote none"; both render as no goals.
  */
 export interface CharacterSheetGoal {
   domain: string;
@@ -481,7 +481,14 @@ export interface CharacterSheetTie {
  * Reputation is the NAMED TIER only, never the raw value.
  */
 export interface CharacterSheetStanding {
-  memberships: { organization_id: number; organization: string; title: string }[];
+  memberships: {
+    organization_id: number;
+    organization: string;
+    title: string;
+    /** The house's verdict on a standing member (#4106), as its label; '' when in favour. */
+    favor: string;
+    favor_note: string;
+  }[];
   reputations: { organization_id: number; organization: string; tier: string }[];
 }
 

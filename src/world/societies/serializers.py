@@ -296,6 +296,8 @@ class OrganizationMembershipSerializer(serializers.ModelSerializer):
             "joined_date",
             "left_at",
             "exiled_at",
+            "favor",
+            "favor_note",
             "is_active",
             "vacancy_name",
             "presumed_importance",

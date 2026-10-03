@@ -101,6 +101,10 @@ _Avoid_: rank number, rank value.
 A membership whose `exiled_at` is set. A new membership is a separate row; exiled history is retained for audit.
 _Avoid_: kicked, removed.
 
+**Favor** (`OrganizationMembership.favor`, #4106):
+The organization's verdict on a member who is still a member (`MembershipFavor`: `in_favor` / `in_disgrace` / `exiled`), with `favor_note` as the one-line why. A member in disgrace or in exile keeps their name, rank and claim and is counted by every reader of membership; the roster and the sheet's standing entry show the label, nothing for the default. Not the **Exiled** row above (that one is struck off), not **Stature**, not a family's standing (#4060), and not a **Favor token** (currency). Set in the admin for now; an in-play verb is later work (ADR-0327).
+_Avoid_: standing (taken), status, banished (that is the house's `in_exile` state).
+
 **Scandal**:
 A per-society judgment, never a taxonomy: an act whose archetype dot-product against that society's principles falls below the scandal threshold (#1464). Derived at deed birth from the same vectors reputation uses; what one society finds scandalous another may celebrate.
 _Avoid_: scandal type, scandal category, outrage score

@@ -400,6 +400,19 @@ class ObligationState(models.TextChoices):
 # ---------------------------------------------------------------------------
 
 
+class MembershipFavor(models.TextChoices):
+    """A house's verdict on a member who is still a member (#4106).
+
+    Distinct from ``OrganizationMembership.exiled_at``, which strikes a member from the
+    rolls: a member in disgrace or in exile keeps their name, rank and claim, and every
+    reader of membership still counts them. The default shows no word on a roster.
+    """
+
+    IN_FAVOR = "in_favor", "In favour"
+    IN_DISGRACE = "in_disgrace", "In disgrace"
+    EXILED = "exiled", "Exiled"
+
+
 class StandingDirection(models.TextChoices):
     """Which way a :class:`~world.societies.models.StandingDeclaration` pushes standing."""
 

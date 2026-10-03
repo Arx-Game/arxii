@@ -144,6 +144,11 @@ function OrganizationStandingBlock({ standing }: { standing: CharacterSheetStand
                   <Link to={`/orgs/${membership.organization_id}`}>{membership.organization}</Link>
                 }
                 aside={<span className="refsheet-note">{membership.title}</span>}
+                tags={
+                  membership.favor ? (
+                    <Tag title={membership.favor_note || undefined}>{membership.favor}</Tag>
+                  ) : undefined
+                }
               />
             ))}
           </Entries>

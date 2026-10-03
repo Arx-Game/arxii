@@ -85,7 +85,6 @@ from world.forms.models import (
     FormType,
     PersonaTraitDescriptor,
 )
-from world.goals.models import CharacterGoal
 from world.items.models import EquippedItem
 from world.items.services.visibility import compute_worn_visibility
 from world.locations.constants import LocationRole
@@ -121,6 +120,7 @@ from world.scenes.constants import PersonaType
 from world.scenes.models import Persona
 from world.skills.models import CharacterSkillValue, CharacterSpecializationValue
 from world.skills.services import is_skill_at_xp_boundary
+from world.societies.constants import MembershipFavor
 from world.societies.houses.models import Domain
 from world.societies.models import OrganizationMembership, OrganizationReputation
 from world.traits.models import STAT_DISPLAY_DIVISOR, CharacterTraitValue, TraitType
@@ -1264,18 +1264,20 @@ def _build_story(
     )
 
 
+# The goals are a cached handler on the sheet (``CharacterSheet.goal_rows``, ADR-0278),
+# cleared by a goal's own save or delete, so nothing is prefetched here: a
+# ``Prefetch(to_attr=...)`` onto the identity-mapped sheet was never re-fetched once
+# set, and an edited goal kept its old state until a restart (#4106).
 _GOALS_SELECT_RELATED: tuple[str, ...] = ()
-_GOALS_PREFETCH_RELATED: tuple[str | Prefetch, ...] = (
-    Prefetch(
-        "goals",
-        queryset=CharacterGoal.objects.select_related("domain"),
-        to_attr="cached_goals",
-    ),
-)
+_GOALS_PREFETCH_RELATED: tuple[str | Prefetch, ...] = ()
 
 
 def _build_goals(sheet: CharacterSheet) -> list[GoalEntry]:
-    """Build the goals section from prefetched CharacterGoal data."""
+    """Build the goals section from the sheet's cached goal rows.
+
+    The caller decides whether the viewer gets the section at all (the owner and
+    staff only, #4106); this builds every row for one who does.
+    """
     return [
         GoalEntry(
             domain=goal.domain.name,
@@ -1284,7 +1286,7 @@ def _build_goals(sheet: CharacterSheet) -> list[GoalEntry]:
             points=goal.points,
             notes=goal.notes,
         )
-        for goal in sheet.cached_goals
+        for goal in sheet.goal_rows
     ]
 
 
@@ -1544,6 +1546,9 @@ def _build_standing(active: Persona | None, *, visible: bool) -> StandingSection
                 organization_id=row.organization_id,
                 organization=row.organization.name,
                 title=row.get_title(),
+                # #4106: the house's verdict beside the title; "" for the default standing.
+                favor=(row.get_favor_display() if row.favor != MembershipFavor.IN_FAVOR else ""),
+                favor_note=row.favor_note,
             )
             for row in membership_rows
         ],
@@ -2121,7 +2126,10 @@ class CharacterSheetSerializer(serializers.Serializer):
         show_stats = _section_visible(access, sheet.stats_visibility)
         show_skills = _section_visible(access, sheet.skills_visibility)
         show_magic = _section_visible(access, sheet.magic_visibility)
-        show_goals = _section_visible(access, sheet.goals_visibility)
+        # Goals have no tier (#4106): the owner's and staff's, never a friend's or the
+        # public's. A per-viewer grant for showing a private part of a sheet is its own
+        # design question, not a tier.
+        show_goals = privileged
         # #3906 — the only tier defaulting to FRIENDS rather than SELF.
         show_standing = _section_visible(access, sheet.standing_visibility)
         # #1270 — bio (concept/quote/story) reads from the presented face's profile: the real

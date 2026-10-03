@@ -645,12 +645,9 @@ class CharacterSheet(SharedMemoryModel):
         default=SheetVisibility.SELF,
         help_text="Who can see this character's magic.",
     )
-    goals_visibility = models.CharField(
-        max_length=10,
-        choices=SheetVisibility.choices,
-        default=SheetVisibility.SELF,
-        help_text="Who can see this character's goals.",
-    )
+    # Goals carry no tier (#4106): they are the owner's and staff's, full stop. Showing a
+    # private part of a sheet to a chosen reader is a per-viewer grant still to be
+    # designed, not a tier a player opens for everyone at once.
     # #3906 — the only one of these that does NOT default to SELF. Apostate's ruling:
     # standing is friends-by-default with public as the opt-in, because what a house
     # thinks of you is something your friends would know, unlike your stats or goals.
@@ -1087,6 +1084,12 @@ class CharacterSheet(SharedMemoryModel):
     fatigue_or_none = ReverseOneToOneOrNone("fatigue")
     active_alternate_self_or_none = ReverseOneToOneOrNone("active_alternate_self")
     path_intent_or_none = ReverseOneToOneOrNone("path_intent")
+
+    @PrunedCachedProperty
+    def goal_rows(self) -> list:
+        """The character's goals, numbered within their horizons (#3621). Cleared by any
+        CharacterGoal save or delete through its related_cache_fields (ADR-0278, #4106)."""
+        return list(self.goals.select_related("domain").order_by("horizon", "ordinal"))
 
     @PrunedCachedProperty
     def enemy_rows(self) -> list[CharacterEnemy]:

@@ -1718,7 +1718,13 @@ class TestGoalsSection(TestCase):
         """Each goal entry has domain, horizon, ordinal, points, notes (#3621)."""
         goals = self._get_goals()
         for entry in goals:
-            assert set(entry.keys()) == {"domain", "horizon", "ordinal", "points", "notes"}
+            assert set(entry.keys()) == {
+                "domain",
+                "horizon",
+                "ordinal",
+                "points",
+                "notes",
+            }
 
     def test_goal_entry_values(self) -> None:
         """Goal entries contain correct values."""
@@ -2386,6 +2392,43 @@ class TestStandingAndCovenantSections(TestCase):
         standing = self._payload(self.friend)["standing"]
         assert [row["organization"] for row in standing["memberships"]] == ["House du Verane"]
         assert [row["organization"] for row in standing["reputations"]] == ["House du Verane"]
+
+    def test_goals_are_the_owners_and_staffs_whoever_else_is_allowed(self) -> None:
+        """#4106: goals carry no tier. The owner and staff read them; a friend on the
+        allow list, who meets every FRIENDS tier the sheet has, gets none."""
+        from world.goals.factories import CharacterGoalFactory, GoalDomainFactory
+
+        domain = GoalDomainFactory(name="Mastery")
+        CharacterGoalFactory(
+            character=self.sheet, domain=domain, notes="Prove worthy", points=5, ordinal=1
+        )
+        CharacterGoalFactory(
+            character=self.sheet, domain=domain, notes="Find out who did it", points=5, ordinal=2
+        )
+        PlayerAllowList.objects.create(owner=self.player, allowed_player=self.friend)
+
+        owner_goals = self._payload(self.player)["goals"]
+        assert [g["notes"] for g in owner_goals] == ["Prove worthy", "Find out who did it"], (
+            owner_goals
+        )
+        for other in (self.friend, self.stranger):
+            assert self._payload(other)["goals"] == []
+
+    def test_a_houses_verdict_rides_the_standing_entry(self) -> None:
+        """#4106: favor shows as its label beside the title, and the default shows nothing."""
+        from world.societies.constants import MembershipFavor
+
+        PlayerAllowList.objects.create(owner=self.player, allowed_player=self.friend)
+        row = self._payload(self.friend)["standing"]["memberships"][0]
+        assert row["favor"] == ""
+        assert row["favor_note"] == ""
+        self.membership.favor = MembershipFavor.EXILED
+        self.membership.favor_note = "for the attempt on the throne"
+        self.membership.save(update_fields=["favor", "favor_note"])
+        row = self._payload(self.friend)["standing"]["memberships"][0]
+        assert row["favor"] == "Exiled"
+        assert row["favor_note"] == "for the attempt on the throne"
+        assert row["title"]  # still a member, still titled
 
     def test_every_visibility_tier_is_discoverable_from_the_model(self) -> None:
         """The guard on #3923's recurrence shape.
@@ -3071,10 +3114,19 @@ class TestPrefetchCompleteness(TestCase):
         with self.assertNumQueries(0):
             _build_story(sheet=sheet, bio_profile=sheet.true_profile)
 
-    def test_goals_zero_queries(self) -> None:
+    def test_goals_one_query_then_cached(self) -> None:
+        """Goals are a cached handler on the sheet (ADR-0278, #4106): one query the first
+        time, none after, and a goal's own save clears it."""
+        from world.goals.factories import CharacterGoalFactory
+
         sheet = self._get_sheet()
+        with self.assertNumQueries(1):
+            _build_goals(sheet)
         with self.assertNumQueries(0):
             _build_goals(sheet)
+        before = len(_build_goals(sheet))
+        CharacterGoalFactory(character=sheet, notes="A new aim", points=1)
+        self.assertEqual(len(_build_goals(sheet)), before + 1)
 
     def test_personas_zero_queries(self) -> None:
         sheet = self._get_sheet()

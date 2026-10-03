@@ -456,6 +456,9 @@ class OrgMembershipEntry(TypedDict):
     organization_id: int
     organization: str
     title: str
+    #: #4106: the house's verdict on a standing member, as its label; "" when in favour.
+    favor: str
+    favor_note: str
 
 
 class OrgReputationEntry(TypedDict):

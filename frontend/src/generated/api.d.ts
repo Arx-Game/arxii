@@ -30892,6 +30892,13 @@ export interface components {
       percentage: number;
       zone: components['schemas']['ZoneEnum'];
     };
+    /**
+     * @description * `in_favor` - In favour
+     *     * `in_disgrace` - In disgrace
+     *     * `exiled` - Exiled
+     * @enum {string}
+     */
+    FavorEnum: 'in_favor' | 'in_disgrace' | 'exiled';
     FeastDayLine: {
       ic_month: number;
       ic_day: number;
@@ -36132,6 +36139,16 @@ export interface components {
        * @description When the persona was forcibly removed from the organization
        */
       exiled_at?: string | null;
+      /**
+       * @description The organization's standing verdict on this member; they remain a member.
+       *
+       *     * `in_favor` - In favour
+       *     * `in_disgrace` - In disgrace
+       *     * `exiled` - Exiled
+       */
+      favor?: components['schemas']['FavorEnum'];
+      /** @description Why, in one line, for a member in disgrace or exile. */
+      favor_note?: string;
       readonly is_active: boolean;
       /** @default  */
       readonly vacancy_name: string;

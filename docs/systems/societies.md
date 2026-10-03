@@ -49,7 +49,7 @@ tier.range_description                       # "+250 to +499"
 | Model | Purpose | Key Fields |
 |-------|---------|------------|
 | `OrganizationRank` | One rung on an org's five-tier authority ladder | `organization`, `name`, `tier` (1 highest, 5 lowest), `can_invite`, `can_kick`, `can_manage_ranks`, `can_lead_rituals`, `can_declare_standing` (#3290), `can_resolve_appeals` (#3293) |
-| `OrganizationMembership` | Links a Persona to an Organization at a rank; every creation path applies the organization's `OrganizationCodexGrant` rows to the new member (#3788) | `organization`, `persona` (FK to `scenes.Persona`), `rank` (FK to `OrganizationRank`), `joined_date`, `left_at`, `exiled_at` |
+| `OrganizationMembership` | Links a Persona to an Organization at a rank; every creation path applies the organization's `OrganizationCodexGrant` rows to the new member (#3788) | `organization`, `persona` (FK to `scenes.Persona`), `rank` (FK to `OrganizationRank`), `joined_date`, `left_at`, `exiled_at`, `favor` (`MembershipFavor`: in favour / in disgrace / exiled, the organization's verdict on a member who is still a member, #4106; distinct from `exiled_at`, which removes them) + `favor_note` |
 | `OrganizationMembershipOffer` | Pending or resolved invitation/application | `organization`, `from_persona`, `to_persona`, `kind` (`INVITE`/`APPLICATION`), `status` (`PENDING`/`ACCEPTED`/`DECLINED`/`CANCELLED`), `created_at`, `resolved_at` |
 | `SocietyReputation` | Persona's reputation with a Society | `persona`, `society`, `value` (-1000 to +1000) |
 | `OrganizationReputation` | Persona's reputation with an Organization | `persona`, `organization`, `value` (-1000 to +1000) |
