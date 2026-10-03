@@ -82,6 +82,8 @@ const ITEM_GROUPS: Record<string, (typeof GROUP_KEYS)[number]> = {
   challenge: 'conflict',
   scene_succor: 'scene',
   scene_interpose: 'scene',
+  send_away: 'scene',
+  charm_asset: 'scene',
   treat: 'scene',
   give_mission: 'scene',
   mute: 'social',
@@ -94,6 +96,8 @@ const ITEM_LABELS: Record<string, string> = {
   challenge: 'Challenge to a duel',
   scene_succor: 'Succor',
   scene_interpose: 'Interpose',
+  send_away: 'Send away',
+  charm_asset: 'Take into service',
   treat: 'Treat',
   give_mission: 'Give mission',
   mute: 'Mute',
@@ -394,6 +398,38 @@ describe('PersonaMenu', () => {
     expect(mutateAsync).toHaveBeenCalledWith({
       ref: { backend: 'registry', registry_key: 'scene_interpose' },
       kwargs: { target_persona_id: 10 },
+    });
+  });
+
+  // #4091 task 12 wired send_away/charm_asset into the menu's items list but
+  // left no handlerFor case, so clicking either did nothing (found while
+  // adding their ITEM_ICONS entries, task 14's own brief; fixed in the same
+  // PR per CLAUDE.md's Fold In, Don't File).
+  it('Send away and Take into service dispatch target_persona_id (and role_context)', async () => {
+    const user = userEvent.setup();
+    const mutateAsync = vi.fn(() =>
+      Promise.resolve({ backend: 'registry', deferred: false, success: true, message: 'ok' })
+    );
+    vi.mocked(useDispatchPlayerAction).mockReturnValue({
+      mutateAsync,
+      isPending: false,
+    } as unknown as ReturnType<typeof useDispatchPlayerAction>);
+    mockMenu({ items: [item('look'), item('send_away'), item('charm_asset')] });
+    renderMenu({ personaId: 10 });
+    fireEvent.contextMenu(screen.getByText('Cassia Vell'));
+    let menu = await screen.findByRole('menu');
+    await user.click(within(menu).getByRole('menuitem', { name: 'Send away' }));
+    expect(mutateAsync).toHaveBeenCalledWith({
+      ref: { backend: 'registry', registry_key: 'send_away' },
+      kwargs: { target_persona_id: 10 },
+    });
+
+    fireEvent.contextMenu(screen.getByText('Cassia Vell'));
+    menu = await screen.findByRole('menu');
+    await user.click(within(menu).getByRole('menuitem', { name: 'Take into service' }));
+    expect(mutateAsync).toHaveBeenCalledWith({
+      ref: { backend: 'registry', registry_key: 'charm_asset' },
+      kwargs: { target_persona_id: 10, role_context: 'contact' },
     });
   });
 

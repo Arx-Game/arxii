@@ -40949,6 +40949,10 @@ components:
           nullable: true
         peril_round_active:
           type: boolean
+        won_over:
+          type: array
+          items:
+            $ref: '#/components/schemas/WonOverRow'
       required:
       - beat
       - conditions
@@ -40957,6 +40961,7 @@ components:
       - objective
       - outcome
       - peril_round_active
+      - won_over
     AftermathLegend:
       type: object
       description: Schema-only shape of one legend line in an aftermath digest (#3551).
@@ -63121,12 +63126,14 @@ components:
       - defeated
       - fled
       - removed
+      - won_over
       type: string
       description: |-
         * `active` - Active
         * `defeated` - Defeated
         * `fled` - Fled
         * `removed` - Removed
+        * `won_over` - Won over
     OpponentTierEnum:
       enum:
       - swarm
@@ -87421,6 +87428,59 @@ components:
       required:
       - choice
       - persona_id
+    WonOverRow:
+      type: object
+      description: |-
+        Schema-only shape of one AftermathDigest.won_over row (#4091).
+
+        Never instantiated for output.
+      properties:
+        opponent_id:
+          type: integer
+        name:
+          type: string
+        verb:
+          type: string
+        source_label:
+          type: string
+        nameless:
+          type: boolean
+        persona_id:
+          type: integer
+          nullable: true
+        present:
+          type: boolean
+        condition:
+          allOf:
+          - $ref: '#/components/schemas/ConditionInstance'
+          nullable: true
+        holds_until_settled:
+          type: boolean
+        strength:
+          type: integer
+        can_bind:
+          type: boolean
+        can_take_into_service:
+          type: boolean
+        can_send_away:
+          type: boolean
+        can_settle:
+          type: boolean
+      required:
+      - can_bind
+      - can_send_away
+      - can_settle
+      - can_take_into_service
+      - condition
+      - holds_until_settled
+      - name
+      - nameless
+      - opponent_id
+      - persona_id
+      - present
+      - source_label
+      - strength
+      - verb
     WorldBuilderAmbientCondition:
       type: object
       description: One AmbientEmoteCondition leaf, nested in a room-detail ambient

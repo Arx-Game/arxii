@@ -15,6 +15,7 @@
 
 import { OutcomeRoulette } from '../OutcomeRoulette';
 import { ConditionBadge } from './ConditionBadge';
+import { WonOverRows } from './WonOverRows';
 import type { components } from '@/generated/api';
 
 export type AftermathDigest = NonNullable<components['schemas']['Participant']['aftermath']>;
@@ -23,6 +24,10 @@ export interface AftermathDigestProps {
   digest: AftermathDigest;
   /** Character name header, shown only when the viewer sees several digests at once. */
   title?: string;
+  /** Threaded down to WonOverRows for the Bind/Settle/Take into service/Send
+   * away dispatches (#4091). */
+  characterId: number | null;
+  sceneId: string | null;
 }
 
 /** Upper-cases the first letter only, matching render_aftermath_digest's telnet
@@ -33,7 +38,7 @@ function capitalizeFirst(value: string): string {
   return value.length > 0 ? value[0].toUpperCase() + value.slice(1) : value;
 }
 
-export function AftermathDigest({ digest, title }: AftermathDigestProps) {
+export function AftermathDigest({ digest, title, characterId, sceneId }: AftermathDigestProps) {
   const {
     consequence,
     conditions,
@@ -41,7 +46,11 @@ export function AftermathDigest({ digest, title }: AftermathDigestProps) {
     beat,
     objective,
     peril_round_active: perilRoundActive,
+    won_over: wonOver,
   } = digest;
+  // Older cached/fixture payloads may predate won_over (#4091) — never present
+  // once this schema ships, but a hand-built test fixture can still omit it.
+  const wonOverRows = wonOver ?? [];
   const beatText = beat
     ? `${beat.resolution_text || 'The beat is resolved'} (${beat.tier_name ?? 'ungraded'}, ${capitalizeFirst(beat.outcome)})`
     : null;
@@ -71,6 +80,15 @@ export function AftermathDigest({ digest, title }: AftermathDigestProps) {
               <ConditionBadge key={condition.id} condition={condition} />
             ))}
           </div>
+        </div>
+      )}
+
+      {wonOverRows.length > 0 && (
+        <div className="space-y-1" data-testid="aftermath-won-over">
+          <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+            Won over
+          </p>
+          <WonOverRows rows={wonOverRows} characterId={characterId} sceneId={sceneId} />
         </div>
       )}
 

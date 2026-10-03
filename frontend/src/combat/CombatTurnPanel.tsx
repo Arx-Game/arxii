@@ -181,7 +181,13 @@ export function CombatTurnPanel({
             Encounter Concluded: Round {encounter.round_number ?? 0}
           </h2>
         </div>
-        <EncounterOutcomeBanner outcome={outcome} digests={digests} onDismiss={onDismissOutcome} />
+        <EncounterOutcomeBanner
+          outcome={outcome}
+          digests={digests}
+          onDismiss={onDismissOutcome}
+          characterId={characterId}
+          sceneId={String(encounter.scene)}
+        />
       </div>
     );
   }
