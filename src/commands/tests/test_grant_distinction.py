@@ -27,7 +27,7 @@ from world.distinctions.types import DistinctionOrigin
 from world.gm.constants import GMLevel
 from world.gm.factories import GMProfileFactory
 from world.progression.models.rewards import ExperiencePointsData
-from world.roster.factories import RosterEntryFactory, RosterTenureFactory
+from world.roster.factories import RosterEntryFactory, RosterTenureFactory, grant_test_tenure
 
 
 def _build_cmd(caller, args: str = "", switches=None) -> CmdGrantDistinction:
@@ -53,6 +53,7 @@ def _make_target_with_xp(character, xp=100):
     account = AccountFactory()
     character.account = account
     character.save()
+    grant_test_tenure(sheet, account)
     ExperiencePointsData.objects.get_or_create(
         account=account,
         defaults={"total_earned": xp, "total_spent": 0},

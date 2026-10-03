@@ -29,6 +29,7 @@ from world.gm.services import (
     submit_profile_text_request,
     withdraw_table_update_request,
 )
+from world.roster.factories import grant_test_tenure
 
 
 def _fund_sheet(sheet, total_earned=100):
@@ -38,6 +39,7 @@ def _fund_sheet(sheet, total_earned=100):
     account = AccountFactory()
     sheet.character.db_account = account
     sheet.character.save()
+    grant_test_tenure(sheet, account)
     ExperiencePointsData.objects.get_or_create(
         account=account,
         defaults={"total_earned": total_earned, "total_spent": 0},
