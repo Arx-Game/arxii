@@ -90,31 +90,45 @@ def stamp_won_over_opponents(encounter: CombatEncounter) -> list[CombatOpponent]
 
 
 def won_over_labels(encounter: CombatEncounter) -> list[tuple[str, str, str]]:
-    """(name, verb, source label) for each WON_OVER opponent, in pk order."""
+    """(name, verb, source label) for each WON_OVER opponent, in pk order.
+
+    ``applied_since=encounter.created_at`` (ruling R1, fix round 2): a stale
+    higher-precedence hold from before the fight (e.g. an old TURNED) must not
+    out-rank a fresh one applied during it (e.g. a Calm) — only instances
+    applied during THIS encounter are eligible to designate the label.
+    """
     from world.npc_services.allegiance import (  # noqa: PLC0415
         allegiance_instances_for,
         designating_instance,
         won_over_verb,
     )
+    from world.scenes.services import persona_names_for_sheets  # noqa: PLC0415
 
     opponents = list(
         CombatOpponent.objects.filter(encounter=encounter, status=OpponentStatus.WON_OVER).order_by(
             "pk"
         )
     )
-    by_target = allegiance_instances_for(o.objectdb_id for o in opponents)
+    by_target = allegiance_instances_for(
+        (o.objectdb_id for o in opponents), applied_since=encounter.created_at
+    )
     designations: dict[int, ConditionInstance] = {}
     for opponent in opponents:
         instance = designating_instance(by_target.get(opponent.objectdb_id, []))
         if instance is not None:
             designations[opponent.pk] = instance
 
+    # A source's ObjectDB pk IS its CharacterSheet pk (shared O2O primary key),
+    # so persona_names_for_sheets can be fed the raw source_character ids
+    # directly — no CombatParticipant lookup needed, and a source who isn't a
+    # CharacterSheet-backed character at all (an NPC ally casting the charm)
+    # simply has no entry, falling through to its raw key below.
     source_ids = {
         instance.source_character_id
         for instance in designations.values()
         if instance.source_character_id is not None
     }
-    source_labels = _participant_labels_by_character_id(encounter, source_ids)
+    source_names = persona_names_for_sheets(source_ids)
 
     labels: list[tuple[str, str, str]] = []
     for opponent in opponents:
@@ -125,40 +139,31 @@ def won_over_labels(encounter: CombatEncounter) -> list[tuple[str, str, str]]:
             (
                 opponent.name,
                 won_over_verb(instance.condition.sets_allegiance),
-                _source_label(instance, source_labels),
+                _source_label(instance, source_names),
             )
         )
     return labels
 
 
-def _participant_labels_by_character_id(
-    encounter: CombatEncounter, character_ids: set[int]
-) -> dict[int, str]:
-    """``str(CombatParticipant)`` per source character id, batched — ONE query.
+def _source_label(instance: ConditionInstance, source_names: dict[int, str]) -> str:
+    """The charm/turn/calm source's label: ``"<name>"`` or ``"<name>'s <technique>"``.
 
-    This is the exact label the ceremonial OUTCOME line uses for a PC
-    (``_broadcast_encounter_outcome``'s ``str(p) for p in participants``), so a
-    charm/turn/calm source who is a concealed-identity PC gets the same
-    persona-respecting label there and in the won-over clause (#4091 fix round
-    2 - a raw ``ObjectDB.key`` must never leak where the outcome line would
-    show a persona).
+    ``<name>`` is the persona this source is CURRENTLY presenting as — the same
+    convention the outcome line itself uses (#4091 fix round 2) — batched by the
+    caller via ``persona_names_for_sheets``. A source with no persona-mapped
+    entry (an NPC ally casting the charm, not a CharacterSheet-backed PC) falls
+    back to its raw ``ObjectDB.key``: there is no persona to resolve for it.
     """
-    if not character_ids:
-        return {}
-    participants = CombatParticipant.objects.filter(
-        encounter=encounter, character_sheet__character_id__in=character_ids
-    ).select_related("character_sheet__character")
-    return {p.character_sheet.character_id: str(p) for p in participants}
+    from world.magic.services.technique_personalization import (  # noqa: PLC0415
+        technique_display_name,
+    )
 
-
-def _source_label(instance: ConditionInstance, source_labels: dict[int, str]) -> str:
     source = instance.source_character
     if source is None:
         return ""
-    # A PC source resolves to the same str(CombatParticipant) label the outcome
-    # line uses; a non-participant source (an NPC ally, say) falls back to its
-    # raw key — there is no persona-respecting label to match there.
-    label = source_labels.get(source.pk, source.key)
+    label = source_names.get(source.pk, source.key)
     if instance.source_technique_id is not None:
-        return f"{label}'s {instance.source_technique.name}"
+        # What the SOURCE calls their own technique (their personalization hold),
+        # never the catalog's raw name (#4091 fix round 2).
+        return f"{label}'s {technique_display_name(source, instance.source_technique)}"
     return label

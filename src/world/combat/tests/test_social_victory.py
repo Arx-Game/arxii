@@ -2,8 +2,10 @@
 
 from datetime import timedelta
 from unittest import mock
+from unittest.mock import MagicMock
 
 from django.test import TestCase
+from evennia.objects.objects import ObjectSessionHandler
 
 from actions.factories import ConsequencePoolEntryFactory, ConsequencePoolFactory
 from world.checks.factories import CheckTypeFactory, ConsequenceFactory
@@ -40,6 +42,16 @@ def _outcome_interaction(encounter: CombatEncounter) -> Interaction:
         mode=InteractionMode.OUTCOME,
         visibility=InteractionVisibility.DEFAULT,
     )
+
+
+def _patch_sessions(sessions_by_pk: dict) -> object:
+    """Patch ``ObjectSessionHandler.all`` per-character (mirrors
+    world/scenes/tests/test_outcome_delivery.py's helper of the same name)."""
+
+    def _fake_all(handler: ObjectSessionHandler) -> list[object]:
+        return sessions_by_pk.get(handler.obj.pk, [])
+
+    return mock.patch.object(ObjectSessionHandler, "all", _fake_all)
 
 
 class SocialVictoryTests(TestCase):
@@ -89,13 +101,21 @@ class SocialVictoryTests(TestCase):
         self._win_over(a, self.turn)
         self.assertTrue(_check_encounter_completion(self.enc))
 
-    def test_hero_killer_blocks_victory(self):  # Review Focus 4
+    def test_fled_hero_killer_still_blocks_victory(self):  # Review Focus 4
         a = CombatOpponentFactory(encounter=self.enc)
         CombatOpponentFactory(
             encounter=self.enc, tier=OpponentTier.HERO_KILLER, status=OpponentStatus.FLED
         )
         self._win_over(a, self.charm)
         self.assertNotEqual(_classify_encounter_outcome(self.enc), EncounterOutcome.VICTORY)
+
+    def test_won_over_hero_killer_is_a_victory(self):  # fix round 2
+        """A Hero Killer won over counts as won over: social victory ends the fight too."""
+        a = CombatOpponentFactory(encounter=self.enc)
+        hero_killer = CombatOpponentFactory(encounter=self.enc, tier=OpponentTier.HERO_KILLER)
+        self._win_over(a, self.charm)
+        self._win_over(hero_killer, self.calm)
+        self.assertEqual(_classify_encounter_outcome(self.enc), EncounterOutcome.VICTORY)
 
     def test_charm_from_before_the_fight_does_not_win_it(self):  # Review Focus 1
         a = CombatOpponentFactory(encounter=self.enc)
@@ -203,18 +223,83 @@ class SocialVictoryTests(TestCase):
 
         self.assertEqual(a.status, OpponentStatus.WON_OVER)
 
-    def test_won_over_source_label_matches_the_outcome_line_pc_label(self):  # fix round 2
+    def test_won_over_source_label_is_the_pc_persona_name(self):  # fix round 2
         # Stamps directly rather than through complete_encounter: cleanup
         # deletes the ephemeral opponent's ObjectDB (and cascades its
         # ConditionInstance) right after the OUTCOME line is built, so this
         # isolates the label logic from that teardown.
+        persona = self.pc.character_sheet.primary_persona
+        persona.name = "The Hidden Hand"
+        persona.save(update_fields=["name"])
+
         a = CombatOpponentFactory(encounter=self.enc)
         self._win_over(a, self.charm)
 
         stamp_won_over_opponents(self.enc)
 
         [(_name, _verb, source_label)] = won_over_labels(self.enc)
-        # str(self.pc) is exactly what _broadcast_encounter_outcome uses for a
-        # PC's active_labels entry — the won-over source label must match it,
-        # never a raw ObjectDB.key.
-        self.assertEqual(source_label, str(self.pc))
+        # The persona this PC is CURRENTLY presenting as -- never a raw
+        # ObjectDB.key, and never str(CombatParticipant)'s "Sheet for {key}".
+        self.assertEqual(source_label, "The Hidden Hand")
+
+    def test_won_over_source_label_r1_prefers_the_in_fight_hold(self):  # fix round 2, R1 in labels
+        """A pre-fight TURNED must not out-rank an in-fight Calm for the LABEL either.
+
+        TURNED out-ranks NEUTRAL in ALLEGIANCE_PRECEDENCE, so without the
+        applied_since filter the stale pre-fight TURNED would still designate
+        the label as "turned" even though what actually happened THIS fight
+        was a calm.
+        """
+        a = CombatOpponentFactory(encounter=self.enc)
+        stale = ConditionInstanceFactory(
+            target=a.objectdb, condition=self.turn, source_character=self.source
+        )
+        earlier = self.enc.created_at - timedelta(minutes=5)
+        type(stale).objects.filter(pk=stale.pk).update_with_reason(
+            reason="test: backdate applied_at to before the encounter started",
+            applied_at=earlier,
+        )
+        self._win_over(a, self.calm)
+
+        stamp_won_over_opponents(self.enc)
+
+        [(_name, verb, _src)] = won_over_labels(self.enc)
+        self.assertEqual(verb, "calmed")
+
+    def test_victory_line_reaches_a_telnet_only_session(self):  # fix round 2, telnet parity
+        """The OUTCOME line (won-over clause included) must reach a bare telnet
+        session as plain text, not only the WebSocket ``interaction=`` payload.
+        """
+        from evennia.objects.models import ObjectDB
+
+        room = ObjectDB.objects.get(pk=self.enc.room_id)
+        character = self.pc.character_sheet.character
+        character.location = room
+        character.save()
+
+        a = CombatOpponentFactory(encounter=self.enc)
+        b = CombatOpponentFactory(encounter=self.enc)
+        self._win_over(a, self.charm)
+        self._win_over(b, self.calm)
+
+        telnet_session = MagicMock()
+        telnet_session.protocol_key = "telnet"
+        character.msg = MagicMock()
+
+        with (
+            _patch_sessions({character.pk: [telnet_session]}),
+            self.captureOnCommitCallbacks(execute=True),
+        ):
+            complete_encounter(self.enc, outcome=EncounterOutcome.VICTORY)
+
+        # Plain-text calls are the ones with no "interaction" kwarg (#3807's
+        # telnet-parity line); the structured WebSocket payload is a separate call.
+        text_calls = [
+            call
+            for call in character.msg.call_args_list
+            if call.args and "interaction" not in call.kwargs
+        ]
+        self.assertTrue(text_calls, character.msg.call_args_list)
+        text = " ".join(str(call.args[0]) for call in text_calls)
+        self.assertIn("charmed", text)
+        self.assertIn("calmed", text)

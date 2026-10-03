@@ -618,13 +618,14 @@ def render_encounter_outcome_narration(
     return " ".join(clauses)
 
 
-def broadcast_action_outcome(
+def broadcast_action_outcome(  # noqa: PLR0913 - all keyword-only, one per outcome-broadcast facet
     *,
     encounter: CombatEncounter,
     narration: str,
     audience: CastAudience | None = None,
     unattributed_narration: str = "",
     target_personas: list[Persona] | None = None,
+    deliver_telnet: bool = False,
 ) -> Interaction | None:
     """Persist a Narrator-authored OUTCOME interaction and broadcast it.
 
@@ -636,6 +637,16 @@ def broadcast_action_outcome(
     interaction is still persisted (durable) but not broadcast.
 
     Args:
+        deliver_telnet: Route the non-concealed room broadcast through
+            ``deliver_outcome_interaction`` (#3807) instead of a bare
+            ``_broadcast_to_location``, so a bare telnet session gets the
+            line as plain text too, not only the WebSocket payload. Only the
+            top-level encounter-outcome call opts into this (#4091 fix round
+            2); every per-action narration caller of this function (flee,
+            technique cast, NPC actions, windup, sustained rituals, cleanup)
+            keeps the pre-existing WebSocket-only behavior unchanged -- fixing
+            telnet parity for those is a separate, broader #3807 gap outside
+            this fix's scope.
         audience: Who perceived this outcome, from ``resolve_cast_audience``
             (#2734). ``None`` -- the default, and what every non-cast caller
             passes -- keeps the room-wide broadcast byte-identical to its
@@ -675,6 +686,7 @@ def broadcast_action_outcome(
         _broadcast_to_location,
         _build_interaction_payload,
         create_interaction,
+        deliver_outcome_interaction,
         write_target_personas,
     )
 
@@ -715,7 +727,16 @@ def broadcast_action_outcome(
         )
 
     if not concealed:
-        _broadcast_to_location(room, _payload(interaction))
+        if deliver_telnet:
+            # deliver_outcome_interaction (#3807), not a bare _broadcast_to_location:
+            # the latter only pushes the structured WebSocket payload, with no
+            # telnet-parity text line -- the ceremonial OUTCOME line (including
+            # the won-over clause, #4091) never reached a bare telnet session
+            # before this fix (fix round 2). Opt-in: see deliver_telnet's
+            # docstring for why every other caller keeps the old behavior.
+            deliver_outcome_interaction(interaction, location=room)
+        else:
+            _broadcast_to_location(room, _payload(interaction))
         return interaction
 
     # Concealed: deliberately NOT _broadcast_to_location. Live delivery has to match

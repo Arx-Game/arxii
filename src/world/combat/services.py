@@ -8445,8 +8445,13 @@ def _resolve_flee(
             summary="flee attempt",
         )
 
+    from world.scenes.services import active_persona_for_sheet  # noqa: PLC0415
+
     narration = render_flee_outcome_narration(
-        actor_label=str(participant),
+        # The persona this PC is CURRENTLY presenting as, not str(participant)
+        # -> "Sheet for {key}" (#4091 fix round 2). One call per action, not a
+        # per-participant loop.
+        actor_label=active_persona_for_sheet(participant.character_sheet).name,
         escaped=escaped,
         at_cost=escaped and consequence_applies,
     )
@@ -8534,6 +8539,7 @@ def _record_and_broadcast_pc_action(  # noqa: PLR0913
         paid_price_snippet,
         technique_display_name,
     )
+    from world.scenes.services import active_persona_for_sheet  # noqa: PLC0415
 
     target_label = target.name if target is not None else None
     caster_character = participant.character_sheet.character
@@ -8550,7 +8556,9 @@ def _record_and_broadcast_pc_action(  # noqa: PLR0913
         None,
     )
     narration = render_action_outcome_narration(
-        actor_label=str(participant),
+        # The persona this PC is CURRENTLY presenting as, not str(participant)
+        # -> "Sheet for {key}" (#4091 fix round 2). One call per action.
+        actor_label=active_persona_for_sheet(participant.character_sheet).name,
         technique_name=technique_display_name(caster_character, technique),
         target_label=target_label,
         outcome=outcome,
@@ -9610,7 +9618,11 @@ def _classify_encounter_outcome(encounter: CombatEncounter) -> EncounterOutcome:
     """Classify a completing encounter (#876 spec §1).
 
     1. No ACTIVE opponents and no Hero Killer present → VICTORY. An unbeatable
-       Hero Killer (#875) on the field at any status forbids VICTORY.
+       Hero Killer (#875) still ACTIVE and still hostile forbids VICTORY — but
+       a Hero Killer won over (charmed/turned/calmed) counts as won over like
+       any other enemy: social victory ends the fight too (#4091 fix round 2).
+       A FLED (or otherwise non-ACTIVE) Hero Killer keeps the original "at any
+       status forbids VICTORY" behavior.
     2. No ACTIVE participants and at least one FLED → FLED.
     3. Else → DEFEAT (catch-all: downed ACTIVE participants, or all-REMOVED).
     """
@@ -9622,9 +9634,16 @@ def _classify_encounter_outcome(encounter: CombatEncounter) -> EncounterOutcome:
 
     any_active_opponents = hostile_opponents_remain(encounter)
     if not any_active_opponents:
-        hero_killer_present = CombatOpponent.objects.filter(
-            encounter=encounter, tier=OpponentTier.HERO_KILLER
-        ).exists()
+        # Reaching this branch already proves no ACTIVE+stored-ENEMY opponent
+        # (Hero Killer included) is still effectively hostile -- hostile_opponents_remain
+        # just said so. So an ACTIVE Hero Killer found here is, by construction, won
+        # over; exclude it from "present" (#4091 fix round 2). A FLED/DEFEATED/REMOVED
+        # Hero Killer is untouched by that guarantee and still blocks VICTORY.
+        hero_killer_present = (
+            CombatOpponent.objects.filter(encounter=encounter, tier=OpponentTier.HERO_KILLER)
+            .exclude(status=OpponentStatus.ACTIVE)
+            .exists()
+        )
         if not hero_killer_present:
             return EncounterOutcome.VICTORY
         # An unbeatable Hero Killer was on the field -- never a victory.
@@ -9731,6 +9750,7 @@ def _broadcast_encounter_outcome(
         render_encounter_outcome_narration,
     )
     from world.combat.won_over import won_over_labels  # noqa: PLC0415
+    from world.scenes.services import persona_names_for_sheets  # noqa: PLC0415
 
     participants = list(
         CombatParticipant.objects.filter(encounter=encounter).select_related(
@@ -9738,10 +9758,18 @@ def _broadcast_encounter_outcome(
         )
     )
     opponents = list(CombatOpponent.objects.filter(encounter=encounter))
+    # Persona display name, not str(CombatParticipant) -> str(CharacterSheet)
+    # ("Sheet for {key}") -- a player-facing line shows the face the character
+    # is CURRENTLY presenting as, batched in one call (#4091 fix round 2).
+    persona_names = persona_names_for_sheets(p.character_sheet_id for p in participants)
+
+    def _label(participant: CombatParticipant) -> str:
+        return persona_names.get(participant.character_sheet_id, str(participant))
+
     narration = render_encounter_outcome_narration(
         outcome=outcome,
-        active_labels=[str(p) for p in participants if p.status == ParticipantStatus.ACTIVE],
-        fled_labels=[str(p) for p in participants if p.status == ParticipantStatus.FLED],
+        active_labels=[_label(p) for p in participants if p.status == ParticipantStatus.ACTIVE],
+        fled_labels=[_label(p) for p in participants if p.status == ParticipantStatus.FLED],
         defeated_opponent_labels=[
             o.name
             for o in opponents
@@ -9749,7 +9777,10 @@ def _broadcast_encounter_outcome(
         ],
         won_over=[(name, verb) for name, verb, _src in won_over_labels(encounter)],
     )
-    return broadcast_action_outcome(encounter=encounter, narration=narration)
+    # deliver_telnet=True: the top-level encounter outcome (including the
+    # won-over clause) must reach a bare telnet session too (#4091 fix round 2,
+    # #3807) -- unlike this function's other, per-action callers.
+    return broadcast_action_outcome(encounter=encounter, narration=narration, deliver_telnet=True)
 
 
 def _apply_aftermath_rules(
@@ -10023,6 +10054,7 @@ def _resolve_declared_challenges(
         ChallengeResolutionRequest,
         resolve_challenge_declarations,
     )
+    from world.scenes.services import persona_names_for_sheets  # noqa: PLC0415
 
     declarations = list(
         RoundChallengeDeclaration.objects.filter(
@@ -10061,12 +10093,19 @@ def _resolve_declared_challenges(
     # final-round) come after, preserving their insertion order.
     ordered.extend(decl_by_participant.values())
 
+    # Batched, not one active_persona_for_sheet call per declaration (#4091 fix
+    # round 2) -- this builds the whole request list in one comprehension.
+    persona_names = persona_names_for_sheets(
+        decl.participant.character_sheet_id for decl in ordered
+    )
     requests = [
         ChallengeResolutionRequest(
             character=decl.participant.character_sheet.character,
             challenge_instance=decl.challenge_instance,
             approach=decl.challenge_approach,
-            actor_label=str(decl.participant),
+            actor_label=persona_names.get(
+                decl.participant.character_sheet_id, str(decl.participant)
+            ),
         )
         for decl in ordered
     ]

@@ -35,6 +35,7 @@ from unittest.mock import MagicMock, patch
 
 from django.test import TestCase, override_settings, tag
 from evennia.objects.models import ObjectDB
+from evennia.objects.objects import ObjectSessionHandler
 from evennia.utils.idmapper import models as idmapper_models
 
 from actions.definitions.combat_maneuvers import ParleyAction
@@ -76,6 +77,16 @@ def _make_cmd(caller: ObjectDB, args: str) -> CmdDeclareTechnique:
     cmd.raw_string = f"cast {args}"
     cmd.cmdname = "cast"
     return cmd
+
+
+def _patch_sessions(sessions_by_pk: dict) -> object:
+    """Patch ``ObjectSessionHandler.all`` per-character (mirrors
+    world/scenes/tests/test_outcome_delivery.py's helper of the same name)."""
+
+    def _fake_all(handler: ObjectSessionHandler) -> list[object]:
+        return sessions_by_pk.get(handler.obj.pk, [])
+
+    return patch.object(ObjectSessionHandler, "all", _fake_all)
 
 
 @tag("postgres")
@@ -172,8 +183,15 @@ class SocialVictoryTelnetE2ETests(TestCase):
         Round 2: parley Bandit B (faltering morale meets the gate) -> decisive
                  success calms Bandit B -> no hostile opponents remain ->
                  resolve_round auto-completes the encounter as VICTORY.
+
+        The PC's session is a bare telnet session (no webclient outputfunc):
+        the final assertion proves the won-over clause reaches it as plain
+        text via deliver_outcome_interaction's telnet-parity line (#3807),
+        not merely the WebSocket ``interaction=`` payload (#4091 fix round 2).
         """
         self.character.msg = MagicMock()
+        telnet_session = MagicMock()
+        telnet_session.protocol_key = "telnet"
 
         # --- Round 1: telnet cast the charm technique at Bandit A ---
         cmd = _make_cmd(
@@ -222,6 +240,8 @@ class SocialVictoryTelnetE2ETests(TestCase):
                 "world.checks.consequence_resolution.apply_pool_deterministically",
                 return_value=[],
             ) as mock_apply_pool,
+            _patch_sessions({self.character.pk: [telnet_session]}),
+            self.captureOnCommitCallbacks(execute=True),
         ):
             mock_social.return_value = MagicMock(success_level=PARLEY_DECISIVE_SUCCESS_LEVEL)
             resolve_round(self.encounter)
@@ -241,12 +261,15 @@ class SocialVictoryTelnetE2ETests(TestCase):
         # --- Both opponents' aftermath pools fired (one call each) ---
         self.assertEqual(mock_apply_pool.call_count, 2)
 
-        # --- The PC's own telnet session received the won-over clause ---
-        won_over_text = ""
-        for call in self.character.msg.call_args_list:
-            payload = call.kwargs.get("interaction")
-            if payload is None:
-                continue
-            won_over_text += payload[1].get("content", "")
+        # --- The PC's bare telnet session received the won-over clause as
+        # plain text (#3807 telnet parity) -- not merely the WebSocket
+        # "interaction=" kwarg payload (#4091 fix round 2). ---
+        text_calls = [
+            call
+            for call in self.character.msg.call_args_list
+            if call.args and "interaction" not in call.kwargs
+        ]
+        self.assertTrue(text_calls, self.character.msg.call_args_list)
+        won_over_text = " ".join(str(call.args[0]) for call in text_calls)
         self.assertIn("charmed", won_over_text)
         self.assertIn("calmed", won_over_text)

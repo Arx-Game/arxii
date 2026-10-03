@@ -22,6 +22,7 @@ from world.scenes.factories import PersonaFactory
 from world.scenes.services import (
     ActivePersonaError,
     active_persona_for_sheet,
+    persona_names_for_sheets,
     set_active_persona,
 )
 from world.scenes.views import PersonaViewSet
@@ -82,6 +83,43 @@ class ActivePersonaServiceTests(TestCase):
         self.assertEqual(active_persona_for_sheet(self.sheet), self.mask)
         set_active_persona(self.sheet, covered)  # mask removal
         self.assertEqual(active_persona_for_sheet(self.sheet), self.alt)
+
+
+class PersonaNamesForSheetsTests(TestCase):
+    """Batched sibling of active_persona_for_sheet (#4091 fix round 2)."""
+
+    def setUp(self):
+        self.character, self.sheet = _sheet()
+        self.primary = self.sheet.primary_persona
+        self.mask = PersonaFactory(character_sheet=self.sheet, persona_type=PersonaType.TEMPORARY)
+
+    def test_empty_input_returns_empty(self):
+        self.assertEqual(persona_names_for_sheets([]), {})
+
+    def test_unset_resolves_to_primary_name(self):
+        self.assertEqual(
+            persona_names_for_sheets([self.sheet.pk]), {self.sheet.pk: self.primary.name}
+        )
+
+    def test_active_mask_overrides_primary_name(self):
+        """The batched answer must match active_persona_for_sheet, not always PRIMARY."""
+        set_active_persona(self.sheet, self.mask)
+        self.assertEqual(persona_names_for_sheets([self.sheet.pk]), {self.sheet.pk: self.mask.name})
+        self.assertEqual(active_persona_for_sheet(self.sheet).name, self.mask.name)
+
+    def test_batches_several_sheets_in_one_call(self):
+        _other_character, other_sheet = _sheet()
+        set_active_persona(self.sheet, self.mask)
+
+        names = persona_names_for_sheets([self.sheet.pk, other_sheet.pk])
+
+        self.assertEqual(
+            names, {self.sheet.pk: self.mask.name, other_sheet.pk: other_sheet.primary_persona.name}
+        )
+
+    def test_unknown_sheet_id_is_simply_absent(self):
+        names = persona_names_for_sheets([self.sheet.pk, 999999])
+        self.assertEqual(names, {self.sheet.pk: self.primary.name})
 
 
 class SetActivePersonaEndpointTests(TestCase):
