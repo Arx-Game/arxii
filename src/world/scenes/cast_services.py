@@ -40,7 +40,7 @@ from world.magic.services.condition_application import (
     apply_technique_treatments,
     remove_technique_conditions,
 )
-from world.magic.services.hostility import is_technique_hostile
+from world.magic.services.hostility import is_allegiance_renewal, is_technique_hostile
 from world.magic.services.signature_effects import apply_signature_bonus_conditions
 from world.magic.services.targeting import (
     InvalidCastTarget,
@@ -1047,6 +1047,28 @@ def _route_other_pc_cast(  # noqa: PLR0913
     cast_openly: bool = False,
 ) -> CastResult:
     """Route a cast directed at another PC (not the caster's own sheet)."""
+    renewal = is_allegiance_renewal(
+        technique,
+        caster=initiator_persona.character_sheet.character,
+        target=target_persona.character_sheet.character,
+    )
+    if renewal:
+        return _route_immediate_cast(
+            scene=scene,
+            initiator_persona=initiator_persona,
+            target_persona=target_persona,
+            technique=technique,
+            strain_commitment=strain_commitment,
+            fury_commitment=fury_commitment,
+            fury_anchor=fury_anchor,
+            cast_pull=cast_pull,
+            confirm_soulfray_risk=confirm_soulfray_risk,
+            soulfray_consented=soulfray_consented,
+            use_base_form=use_base_form,
+            position_params=position_params,
+            preferred_resonance=preferred_resonance,
+            cast_openly=cast_openly,
+        )
     if is_technique_hostile(technique):
         if cast_pull is not None:
             msg = "Pulls cannot be declared on hostile casts."
