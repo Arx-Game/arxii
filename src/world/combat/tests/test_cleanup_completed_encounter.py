@@ -100,6 +100,38 @@ class CleanupCompletedEncounterTests(EvenniaTestCase):
         # body: nothing reads the deleted body through this cached reference.
         self.assertIsNone(mook.objectdb)
 
+    def test_cleanup_does_not_evict_other_encounters_cached_opponents(self):
+        """#4091 fix round 3: delete_ephemeral_npc must NOT call
+        CombatOpponent.flush_instance_cache() with no arguments -- that rebuilds
+        the WHOLE class cache, evicting every cached CombatOpponent in every
+        live encounter (once per mob deleted in the cleanup loop). Setting
+        objectdb=None and saving on the held instance is enough; no flush is
+        needed at all.
+
+        Holds a cached opponent from a DIFFERENT, still-active encounter, runs
+        cleanup on the first encounter, then asserts a fresh
+        ``CombatOpponent.objects.get(pk=...)`` returns the SAME object (``is``)
+        -- proving the identity map for the untouched encounter was never
+        evicted.
+        """
+        from world.combat.factories import CombatEncounterFactory, ThreatPoolFactory
+        from world.combat.models import CombatOpponent
+        from world.combat.services import add_opponent, cleanup_completed_encounter
+
+        encounter = CombatEncounterFactory()
+        pool = ThreatPoolFactory()
+        add_opponent(encounter, name="Mook", tier="mook", max_health=10, threat_pool=pool)
+
+        other_encounter = CombatEncounterFactory()
+        other_pool = ThreatPoolFactory()
+        other_opponent = add_opponent(
+            other_encounter, name="Other Mob", tier="mook", max_health=10, threat_pool=other_pool
+        )
+
+        cleanup_completed_encounter(encounter)
+
+        self.assertIs(CombatOpponent.objects.get(pk=other_opponent.pk), other_opponent)
+
     def test_cleanup_expires_until_end_of_combat_conditions(self):
         """Generic gap (#763): a non-rite UNTIL_END_OF_COMBAT condition on an
         encounter participant is expired when the encounter completes, while a

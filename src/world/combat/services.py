@@ -321,10 +321,16 @@ def delete_ephemeral_npc(opponent: CombatOpponent) -> bool:
 
     ``ObjectDB`` isn't an ``ArxSharedMemoryModel``, so its ``delete()`` nulls
     referrers' FKs via a bulk ``SET_NULL`` UPDATE outside
-    ``core.deletion.IdentityMapCollector`` — the cached ``opponent`` (and any
-    other process-cached ``CombatOpponent`` for this pk) would otherwise keep
-    reporting the deleted ``objectdb`` forever. Mirrors ``release_companion``'s
-    identical fix (``world/companions/services.py``).
+    ``core.deletion.IdentityMapCollector`` — the cached ``opponent`` would
+    otherwise keep reporting the deleted ``objectdb`` forever. Setting the
+    field and saving on THIS held instance is enough: idmapper's identity map
+    means there is only one cached ``CombatOpponent`` per pk in the process,
+    so no further cache flush is needed afterward (fix round 3 — a bare
+    ``flush_instance_cache()`` call here previously evicted the ENTIRE class
+    cache, including every other live encounter's cached opponents, once per
+    mob in the cleanup loop). Mirrors ``release_companion``'s identical
+    objectdb-nulling fix (``world/companions/services.py`` — that one keeps
+    its own narrower flush; unrelated to this fix).
 
     Shared by this module's own ``cleanup_completed_encounter`` ephemeral
     sweep and ``world.combat.won_over.delete_won_over_npc`` (#4091 fix round
@@ -342,7 +348,6 @@ def delete_ephemeral_npc(opponent: CombatOpponent) -> bool:
     objectdb.delete()
     opponent.objectdb = None
     opponent.save(update_fields=["objectdb"])
-    CombatOpponent.flush_instance_cache()
     return True
 
 
