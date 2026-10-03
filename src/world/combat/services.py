@@ -8067,7 +8067,7 @@ def _resolve_parley(
         morale_state_for,
         tier_has_morale,
     )
-    from world.conditions.constants import CALM_CONDITION_NAME  # noqa: PLC0415
+    from world.conditions.constants import Allegiance  # noqa: PLC0415
     from world.conditions.models import ConditionTemplate  # noqa: PLC0415
     from world.conditions.services import apply_condition  # noqa: PLC0415
     from world.npc_services.social_disposition import (  # noqa: PLC0415
@@ -8105,7 +8105,14 @@ def _resolve_parley(
     if target.tier == OpponentTier.BOSS:
         required_decisive_level += BOSS_PARLEY_RESISTANCE_STEP
     if success_level >= required_decisive_level and target.objectdb is not None:
-        calm = ConditionTemplate.objects.filter(name=CALM_CONDITION_NAME).first()
+        # Designated by field, never by name (#4091 final review): the calming
+        # condition is the one that sets NEUTRAL; lowest pk when staff author several.
+        # The REQUIRED dashboard probe `allegiance-calm-condition` reports none.
+        calm = (
+            ConditionTemplate.objects.filter(sets_allegiance=Allegiance.NEUTRAL)
+            .order_by("pk")
+            .first()
+        )
         if calm is not None:
             apply_condition(
                 target.objectdb,

@@ -1460,6 +1460,27 @@ class TestAllegianceCharmConditionProbe(TestCase):
         self.assertTrue(result.present)
 
 
+class TestAllegianceCalmConditionProbe(TestCase):
+    """`allegiance-calm-condition` reads `sets_allegiance`, never a name (#4091)."""
+
+    def test_missing_when_no_template_sets_allegiance_neutral(self) -> None:
+        ConditionTemplateFactory(name="Calm")  # sets_allegiance blank by default
+        result = _probe_for("allegiance-calm-condition").resolve(None)
+        self.assertFalse(result.present)
+
+    def test_present_when_a_template_sets_allegiance_neutral(self) -> None:
+        from world.checks.factories import CheckTypeFactory
+        from world.conditions.constants import Allegiance
+
+        ConditionTemplateFactory(
+            name="Becalmed",
+            sets_allegiance=Allegiance.NEUTRAL,
+            allegiance_break_check_type=CheckTypeFactory(name="RC Calm Insight"),
+        )
+        result = _probe_for("allegiance-calm-condition").resolve(None)
+        self.assertTrue(result.present)
+
+
 class TestAllegianceBreakCheckProbe(TestCase):
     """`allegiance-break-check` names any allegiance condition missing its break check (#4091)."""
 

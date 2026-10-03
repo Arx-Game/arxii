@@ -1275,6 +1275,20 @@ def _declarations() -> tuple[ContentDependency, ...]:
             ),
         ),
         ContentDependency(
+            key="allegiance-calm-condition",
+            label="A condition that calms (sets_allegiance = Will not attack)",
+            tier=DependencyTier.REQUIRED,
+            consumer="world/combat/services.py _resolve_parley()",
+            consequence=(
+                "No condition calms anyone: a decisive parley never talks a foe out of the fight."
+            ),
+            probe=FilteredRowProbe(
+                label="ConditionTemplate",
+                filters=(("sets_allegiance", "neutral"),),
+                absent_detail="No ConditionTemplate has sets_allegiance = neutral.",
+            ),
+        ),
+        ContentDependency(
             key="allegiance-break-check",
             label="Break check on every allegiance condition",
             tier=DependencyTier.REQUIRED,
