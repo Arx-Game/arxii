@@ -13,6 +13,7 @@ from datetime import timedelta
 from django.test import TestCase
 from django.utils import timezone
 
+from evennia_extensions.factories import AccountFactory
 from world.character_sheets.factories import CharacterSheetFactory
 from world.character_sheets.types import (
     ActivityState,
@@ -30,6 +31,7 @@ from world.roster.services.activity import (
     declare_hiatus,
     end_hiatus,
     freeze_character,
+    is_player_character,
     mark_character_active,
     set_lifecycle_state,
     sweep_activity_states,
@@ -343,3 +345,22 @@ class SetLifecycleStateTests(TestCase):
 
         with self.assertRaises(LifecycleStateError):
             set_lifecycle_state(self.sheet, "BANANA")
+
+
+class IsPlayerCharacterTests(TestCase):
+    """#4091 task 12 fix round 4: ``is_player_character`` means "held by an
+    account" -- a player's own PC, OR a GM's Story NPC -- never "a human is
+    puppeting it right now"."""
+
+    def test_story_npc_with_an_active_tenure_counts_as_a_player_character(self) -> None:
+        from world.gm.constants import GMLevel
+        from world.gm.factories import GMProfileFactory, seed_default_gm_level_caps
+        from world.roster.services.staff_characters import mint_story_npc
+
+        gm_account = AccountFactory(username="story_npc_gm_fix_round_4")
+        GMProfileFactory(account=gm_account, level=GMLevel.JUNIOR)
+        seed_default_gm_level_caps()
+
+        npc = mint_story_npc(gm_account=gm_account, name="Fix Round 4 Story NPC")
+
+        self.assertTrue(is_player_character(npc.sheet_data))

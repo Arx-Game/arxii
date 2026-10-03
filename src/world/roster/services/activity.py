@@ -206,7 +206,7 @@ def sweep_activity_states() -> dict[str, int]:
 
 
 def is_player_character(sheet: CharacterSheet) -> bool:
-    """Whether a CURRENT player holds this character (an active ``RosterTenure``) --
+    """Whether this character is held by an account (an active ``RosterTenure``) --
     the canonical, offline-safe PC/NPC test (#4091 task 12 fix round 2).
 
     ``character.db_account`` is NOT the right proxy: Evennia's ``unpuppet_object``
@@ -214,10 +214,17 @@ def is_player_character(sheet: CharacterSheet) -> bool:
     ``evennia/accounts/accounts.py``), so an OFFLINE player's character reads
     identically to an NPC under that check. A bare ``RosterEntry`` doesn't count
     either -- major NPCs are rostered too (see ``RosterEntry``'s own docstring).
-    The real answer is an active tenure: someone is assigned to play this
-    character right now, online or not. One query via ``current_roster_entry``,
-    one more (cached) via ``RosterEntry.current_tenure`` -- safe to call once per
-    check; batch callers should fetch tenures themselves rather than loop this.
+
+    "Held by an account" means a player's own PC, OR a GM's Story NPC
+    (``world.roster.services.staff_characters.mint_story_npc`` / the
+    ``claim_as_npc`` branch) -- both mint an active ``RosterTenure`` tied to an
+    account, and both are intended to read True here (#4091 task 12 fix round
+    4): a GM's Story NPC genuinely is "held," just by the GM's account instead
+    of a player's. This is deliberately NOT "is a human puppeting this right
+    now" -- it is True whether or not anyone is connected. One query via
+    ``current_roster_entry``, one more (cached) via ``RosterEntry.current_tenure``
+    -- safe to call once per check; batch callers should fetch tenures
+    themselves rather than loop this.
     """
     entry = current_roster_entry(sheet)
     return entry is not None and entry.current_tenure is not None
