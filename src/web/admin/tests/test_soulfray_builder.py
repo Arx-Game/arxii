@@ -2,9 +2,13 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterator
+from dataclasses import dataclass, field as dc_field
+from html.parser import HTMLParser
 from pathlib import Path
 import re
 
+from django.contrib.staticfiles import finders
 from django.db import connection
 from django.http import QueryDict
 from django.test import TestCase
@@ -382,6 +386,63 @@ class NoConfigGetTest(TestCase):
         self.assertIn("No Soulfray config exists", resp.content.decode())
 
 
+_VOID_TAGS = frozenset({"area", "br", "col", "hr", "img", "input", "link", "meta", "source", "wbr"})
+_FIELD_TAGS = frozenset({"input", "select", "textarea"})
+
+
+@dataclass
+class _Node:
+    tag: str
+    attrs: dict[str, str]
+    parent: _Node | None = None
+    children: list[_Node] = dc_field(default_factory=list)
+
+    @property
+    def classes(self) -> set[str]:
+        return set(self.attrs.get("class", "").split())
+
+    def walk(self) -> Iterator[_Node]:
+        for child in self.children:
+            yield child
+            yield from child.walk()
+
+    def inside(self, css_class: str) -> bool:
+        node = self.parent
+        while node is not None:
+            if css_class in node.classes:
+                return True
+            node = node.parent
+        return False
+
+
+class _Tree(HTMLParser):
+    """Just enough of a DOM to read which element sits inside which (no bs4 here)."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.root = _Node("root", {})
+        self._open = self.root
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        node = _Node(tag, {k: v or "" for k, v in attrs}, parent=self._open)
+        self._open.children.append(node)
+        if tag not in _VOID_TAGS:
+            self._open = node
+
+    def handle_endtag(self, tag: str) -> None:
+        node = self._open
+        while node is not None and node.tag != tag:
+            node = node.parent
+        if node is not None and node.parent is not None:
+            self._open = node.parent
+
+
+def _tree(body: str) -> _Node:
+    parser = _Tree()
+    parser.feed(body)
+    return parser.root
+
+
 class SoulfrayBuilderStylingTest(SoulfrayPageTestCase):
     """Every rule the page's layout needs must REACH the page (#3667).
 
@@ -439,3 +500,54 @@ class SoulfrayBuilderStylingTest(SoulfrayPageTestCase):
             token for token in emitted - self.ADMIN_PROVIDED_CLASSES if f".{token}" not in css
         )
         self.assertFalse(undefined, f"class hooks with no CSS rule reaching the page: {undefined}")
+
+    def test_every_form_row_puts_its_label_beside_its_field(self) -> None:
+        """F1: admin's aligned layout, the markup the threshold change form draws.
+
+        ``forms.css`` lays a row out as a label column beside the field only when the
+        label and the field share a ``.flex-container`` (``display: flex``) and the help
+        line sits outside it. This reads the rendered page's tree for that shape, and
+        the forms.css rules that turn it into a row, which the page links.
+        """
+        body = self._body()
+        rows = [
+            node
+            for node in _tree(body).walk()
+            if "form-row" in node.classes and node.inside("aligned")
+        ]
+        self.assertGreaterEqual(len(rows), 11)
+        for row in rows:
+            flex = next((n for n in row.walk() if "flex-container" in n.classes), None)
+            self.assertIsNotNone(flex, f"a form row with no .flex-container: {row.attrs}")
+            self.assertEqual(flex.children[0].tag, "label")
+            fields = [
+                n for n in flex.walk() if n.tag in _FIELD_TAGS and n.attrs.get("type") != "hidden"
+            ]
+            self.assertTrue(fields, f"no field beside {flex.children[0].attrs}")
+            for help_line in (n for n in row.walk() if "help" in n.classes):
+                self.assertFalse(help_line.inside("flex-container"))
+        forms_css = Path(finders.find("admin/css/forms.css")).read_text()
+        self.assertRegex(forms_css, r"\.flex-container \{\s*display: flex;")
+        self.assertRegex(forms_css, r"\.aligned label \{[^}]*width: 160px;")
+        self.assertRegex(forms_css, r"form \.aligned div\.help \{[^}]*margin-left: 160px;")
+        css = reachable_css(body)
+        self.assertRegex(css, r"\.aligned \.sf-field \{[^}]*display: flex;")
+        self.assertRegex(css, r"\.aligned \.sf-field label \{[^}]*width: auto;")
+
+    def test_the_pool_and_its_parent_share_one_row(self) -> None:
+        rows = [n for n in _tree(self._body()).walk() if "form-row" in n.classes]
+        names = [{f.attrs.get("name") for f in row.walk() if f.tag in _FIELD_TAGS} for row in rows]
+        self.assertIn({"pool-pool", "pool-new_name", "pool-parent"}, names)
+
+    def test_one_h1_names_the_stage(self) -> None:
+        """F4: the content area has one h1, the view's title (the branding h1 aside)."""
+        h1s = re.findall(r"<h1>(.*?)</h1>", self._body(), flags=re.DOTALL)
+        self.assertEqual(h1s, ["Fraying - Soulfray Stage Builder"])
+
+    def test_lists_live_lines_and_weight_inputs_have_their_rules(self) -> None:
+        """F2, F3, F5: base.css squares every ``ul > li``; the demo marks live lines."""
+        css = reachable_css(self._body())
+        self.assertRegex(css, r"\.sf-checks > li \{ list-style: none; \}")
+        self.assertRegex(css, r"\.sf-effects > li,")
+        self.assertRegex(css, r'\.sf-live::before \{\s*content: "\\25CF  live";')
+        self.assertRegex(css, r"\.sf-table td\.sf-num input \{ width: 4rem; \}")

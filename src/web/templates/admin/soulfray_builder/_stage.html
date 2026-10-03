@@ -8,31 +8,41 @@
   </h2>
   {% if forms.stage.non_field_errors %}<p class="errornote">{{ forms.stage.non_field_errors }}</p>{% endif %}
   <div class="aligned">
-    <div class="form-row">{{ forms.stage.name.errors }}{{ forms.stage.name.label_tag }} {{ forms.stage.name }}</div>
-    <div class="form-row">{{ forms.stage.description.errors }}{{ forms.stage.description.label_tag }} {{ forms.stage.description }}
-      <div class="help">{{ forms.stage.description.help_text }}{% if summary.can_kill %} Because a consequence here can kill, the checkpoint also says so.{% endif %}</div></div>
-    <div class="form-row">{{ forms.stage.severity_threshold.errors }}{{ forms.stage.severity_threshold.label_tag }} {{ forms.stage.severity_threshold }}
-      <div class="help">{{ forms.stage.severity_threshold.help_text }}</div></div>
-    <div class="form-row">{{ forms.stage.advancement_resist_failure_kind.errors }}{{ forms.stage.advancement_resist_failure_kind.label_tag }} {{ forms.stage.advancement_resist_failure_kind }}
-      <div class="help">{{ forms.stage.advancement_resist_failure_kind.help_text }}</div></div>
-    <div class="form-row">{{ forms.stage.resist_check_type.errors }}{{ forms.stage.resist_difficulty.errors }}{{ forms.stage.resist_check_type.label_tag }} {{ forms.stage.resist_check_type }} {{ forms.stage.resist_difficulty.label_tag }} {{ forms.stage.resist_difficulty }}
-      <div class="help">{{ forms.stage.resist_check_type.help_text }}</div></div>
-    <div class="form-row">{{ forms.stage.properties.errors }}{{ forms.stage.properties.label_tag }} {{ forms.stage.properties }}
-      <div class="help">{{ forms.stage.properties.help_text }}</div></div>
-    <div class="form-row"><label>Applied on entry</label>
+    {% include "admin/soulfray_builder/_form_row.html" with field=forms.stage.name %}
+    {% if summary.can_kill %}
+    {% include "admin/soulfray_builder/_form_row.html" with field=forms.stage.description extra_help="Because a consequence here can kill, the checkpoint also says so." %}
+    {% else %}
+    {% include "admin/soulfray_builder/_form_row.html" with field=forms.stage.description %}
+    {% endif %}
+    {% include "admin/soulfray_builder/_form_row.html" with field=forms.stage.severity_threshold %}
+    {% include "admin/soulfray_builder/_form_row.html" with field=forms.stage.advancement_resist_failure_kind %}
+    <div class="form-row">{{ forms.stage.resist_check_type.errors }}{{ forms.stage.resist_difficulty.errors }}
+      <div>
+        <div class="flex-container">{{ forms.stage.resist_check_type.label_tag }}<div class="sf-field">{{ forms.stage.resist_check_type }} {{ forms.stage.resist_difficulty.label_tag }} {{ forms.stage.resist_difficulty }}</div></div>
+        <div class="help">{{ forms.stage.resist_check_type.help_text }}</div>
+      </div>
+    </div>
+    {% include "admin/soulfray_builder/_form_row.html" with field=forms.stage.properties %}
+    <div class="form-row">
       {{ forms.on_entry.management_form }}
       {% if forms.on_entry.non_form_errors %}<p class="errornote">{{ forms.on_entry.non_form_errors }}</p>{% endif %}
-      {% for f in forms.on_entry.forms %}
-      <div class="sf-onentry">{% for hidden in f.hidden_fields %}{{ hidden }}{% endfor %}{{ f.condition }} severity {{ f.severity }}{% if f.instance.pk %} {{ f.DELETE.label_tag }} {{ f.DELETE }}{% endif %}{{ f.errors }}</div>
-      {% endfor %}
-      <div class="help">A condition put on the caster once, when they reach this stage.</div></div>
+      <div>
+        <div class="flex-container"><label>Applied on entry:</label>
+          <div class="sf-field sf-onentry-list">
+            {% for f in forms.on_entry.forms %}
+            <div class="sf-onentry">{% for hidden in f.hidden_fields %}{{ hidden }}{% endfor %}{{ f.condition }} severity {{ f.severity }}{% if f.instance.pk %} {{ f.DELETE.label_tag }} {{ f.DELETE }}{% endif %}{{ f.errors }}</div>
+            {% endfor %}
+          </div>
+        </div>
+        <div class="help">A condition put on the caster once, when they reach this stage.</div>
+      </div>
+    </div>
   </div>
   <details class="sf-more">
     <summary>More</summary>
     <div class="aligned">
-      <div class="form-row">{{ forms.stage.severity_multiplier.errors }}{{ forms.stage.severity_multiplier.label_tag }} {{ forms.stage.severity_multiplier }}</div>
-      <div class="form-row">{{ forms.stage.rounds_to_next.errors }}{{ forms.stage.rounds_to_next.label_tag }} {{ forms.stage.rounds_to_next }}
-        <div class="help">{{ forms.stage.rounds_to_next.help_text }}</div></div>
+      {% include "admin/soulfray_builder/_form_row.html" with field=forms.stage.severity_multiplier %}
+      {% include "admin/soulfray_builder/_form_row.html" with field=forms.stage.rounds_to_next %}
     </div>
   </details>
 </div>

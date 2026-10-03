@@ -47,7 +47,22 @@ against admin's own light/dark selectors so the page follows the theme toggle.
   }
   #soulfray-builder-root .sf-bar-fill--kill { background: var(--error-fg); }
   #soulfray-builder-root .sf-live { margin: 0; padding: 6px 10px; font-size: 0.75rem; color: var(--sf-ok); }
+  #soulfray-builder-root .sf-live::before {
+    content: "\25CF  live"; margin-right: 0.4rem; font-size: 0.625rem; letter-spacing: 0.08em;
+    text-transform: uppercase; opacity: 0.75;
+  }
   #soulfray-builder-root .sf-live--warn { color: var(--sf-warn); }
+  /* Admin's aligned row puts the label in a 160px column; .sf-field holds the
+     widget and any inline words or second widget beside it (the demo's .field). */
+  #soulfray-builder-root .aligned .sf-field {
+    display: flex; flex-wrap: wrap; gap: 8px; align-items: center; min-width: 0; flex: 1 1 auto;
+  }
+  #soulfray-builder-root .aligned .sf-field label {
+    display: inline; width: auto; min-width: 0; padding: 0; font-weight: normal;
+  }
+  #soulfray-builder-root .aligned .sf-onentry-list { display: block; }
+  #soulfray-builder-root .aligned .sf-onentry ul.errorlist { margin-left: 0; }
+  #soulfray-builder-root .sf-table td.sf-num input { width: 4rem; }
   #soulfray-builder-root .sf-onentry {
     display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; margin-bottom: 0.25rem;
   }
@@ -56,6 +71,9 @@ against admin's own light/dark selectors so the page follows the theme toggle.
   #soulfray-builder-root .sf-effects {
     margin: 0 0 0.25rem; padding: 0; list-style: none; display: grid; gap: 3px; font-size: 0.75rem;
   }
+  /* base.css styles `ul > li` square; resetting the ul alone leaves the bullets. */
+  #soulfray-builder-root .sf-effects > li,
+  #soulfray-builder-root .sf-checks > li { list-style: none; }
   #soulfray-builder-root .sf-quiet { color: var(--body-quiet-color); font-style: italic; font-size: 0.75rem; }
   #soulfray-builder-root .sf-effect-editor summary { cursor: pointer; color: var(--link-fg); font-size: 0.75rem; }
   #soulfray-builder-root .sf-effect-table td { padding: 0.2rem 0.3rem; border: none; }

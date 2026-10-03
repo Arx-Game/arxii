@@ -4,8 +4,12 @@
     result picks a consequence from the table below.</div>
   {% if config %}
   <div class="aligned">
-    <div class="form-row">{{ forms.penalty.modifier_value.errors }}{{ forms.penalty.modifier_value.label_tag }} {{ forms.penalty.modifier_value }} on <b>{{ config.resilience_check_type.name }}</b>
-      <div class="help">{{ forms.penalty.modifier_value.help_text }} Base difficulty {{ config.base_check_difficulty }}, from <a href="{% url 'admin:arxii_soulfrayconfig_changelist' %}">Soulfray config</a>.</div></div>
+    <div class="form-row">{{ forms.penalty.modifier_value.errors }}
+      <div>
+        <div class="flex-container">{{ forms.penalty.modifier_value.label_tag }}<div class="sf-field">{{ forms.penalty.modifier_value }} <span>on <b>{{ config.resilience_check_type.name }}</b></span></div></div>
+        <div class="help">{{ forms.penalty.modifier_value.help_text }} Base difficulty {{ config.base_check_difficulty }}, from <a href="{% url 'admin:arxii_soulfrayconfig_changelist' %}">Soulfray config</a>.</div>
+      </div>
+    </div>
   </div>
   {% else %}
   <p class="errornote">No Soulfray config exists, so there is no resilience roll to penalise.

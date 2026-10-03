@@ -36,7 +36,7 @@ styles the autocomplete selects.
 {% include "admin/tuning/_panel_css.html" %}
 {% include "admin/soulfray_builder/_css.html" %}
 <div id="soulfray-builder-root">
-  <h1>Soulfray Stage Builder</h1>
+  {% comment %}No h1 here: admin's base renders the view's `title` as the page's one h1.{% endcomment %}
   <p class="sf-intro">Author what each Soulfray stage does when a caster lands on it. One
     stage per save; the ladder at the top opens the others.</p>
 
