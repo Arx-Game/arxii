@@ -12,14 +12,19 @@ from typing import TYPE_CHECKING
 
 from world.checks.constants import ModifierSourceKind
 from world.checks.types import ModifierContribution
-from world.npc_services.constants import CHARM_STRENGTH_POINTS_PER_SEVERITY
-from world.npc_services.types import AllegianceEnding
+from world.npc_services.constants import (
+    BREAK_PRESSURE_POINTS_PER_TENTH_HEALTH,
+    CHARM_STRENGTH_POINTS_PER_SEVERITY,
+)
+from world.npc_services.types import AllegianceBreakResult, AllegianceEnding
 
 if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
 
     from actions.models import ConsequencePool
+    from world.character_sheets.models import CharacterSheet
     from world.checks.types import CheckResult
+    from world.combat.models import CombatOpponent
     from world.conditions.models import ConditionInstance
     from world.scenes.models import Scene
 
@@ -88,10 +93,14 @@ def end_allegiance_with_pool(
             label = pending.selected_consequence.label or None
     remove_condition(target, condition)
     if target.location is not None and condition.is_visible_to_others:
-        # PLACEHOLDER: the target's presented face (#981), never target.key -- R2
-        # guarantees Settle always targets a persona.
-        persona_name = active_persona_for_sheet(target.character_sheet).name
-        text = label or f"The {condition.name} on {persona_name} ends."
+        # PLACEHOLDER: the target's presented face (#981), never target.key when one
+        # is available -- R2 guarantees Settle always targets a persona, but Break
+        # (#4091 task 9) reaches here for an ephemeral, persona-less combat mook too,
+        # so this falls back to the ObjectDB's own key rather than crashing on a
+        # None character_sheet.
+        sheet = target.character_sheet  # type: ignore[attr-defined] -- typeclass extension
+        name = active_persona_for_sheet(sheet).name if sheet is not None else target.key
+        text = label or f"The {condition.name} on {name} ends."
         narrate_room_outcome(target.location, text)
     return AllegianceEnding(condition_name=condition.name, consequence_label=label)
 
@@ -110,3 +119,65 @@ def settle_allegiance(
     if instance is None:
         return None
     return end_allegiance_with_pool(instance, actor=actor, check_result=check_result, scene=scene)
+
+
+def harm_pressure_points(damage: int, max_health: int) -> int:
+    """One pressure step per tenth of max health lost in the hit (PLACEHOLDER scale)."""
+    return (max(0, damage) * 10 // max(1, max_health)) * BREAK_PRESSURE_POINTS_PER_TENTH_HEALTH
+
+
+def attempt_allegiance_break(
+    *,
+    striker: CharacterSheet,
+    opponent: CombatOpponent,
+    damage_dealt: int,
+    extra_pressure: int = 0,
+) -> AllegianceBreakResult | None:
+    """Decision 16: the PC who harms a held NPC rolls to break the hold.
+
+    Difficulty = hold strength - the NPC's resistance - the harm's pressure, floored
+    at 0. A strong hold on a weak NPC is hard to break; a faded hold on a strong-
+    willed NPC breaks easily. Success ends the hold through its settle pool at the
+    striker's tier. Failure: the hold stands and the NPC does not fight back.
+    """
+    from world.checks.services import compute_resist_increment, perform_check  # noqa: PLC0415
+    from world.fatigue.constants import EffortLevel  # noqa: PLC0415
+    from world.npc_services.allegiance import allegiance_instance_on  # noqa: PLC0415
+    from world.scenes.narrator import narrate_room_outcome  # noqa: PLC0415
+
+    if opponent.objectdb_id is None or damage_dealt <= 0:
+        return None
+    instance = allegiance_instance_on(opponent.objectdb)
+    if instance is None:
+        return None
+    strength = charm_strength_points(instance)
+    resistance = compute_resist_increment(
+        opponent.objectdb, EffortLevel.MEDIUM, level_override=opponent.level
+    )
+    pressure = harm_pressure_points(damage_dealt, opponent.max_health) + extra_pressure
+    difficulty = max(0, strength - resistance - pressure)
+    check_result = perform_check(
+        striker.character,
+        instance.condition.allegiance_break_check_type,
+        target_difficulty=difficulty,
+    )
+    broke = check_result.outcome is not None and check_result.outcome.success_level > 0
+    ending = None
+    if broke:
+        ending = end_allegiance_with_pool(
+            instance, actor=striker.character, check_result=check_result
+        )
+    elif opponent.objectdb.location is not None and instance.condition.is_visible_to_others:
+        narrate_room_outcome(
+            opponent.objectdb.location,
+            f"The {instance.condition.name} on {opponent.name} holds through the blow.",
+        )
+    return AllegianceBreakResult(
+        condition_name=instance.condition.name,
+        difficulty=difficulty,
+        strength=strength,
+        resistance=resistance,
+        pressure=pressure,
+        broke=broke,
+        ending=ending,
+    )

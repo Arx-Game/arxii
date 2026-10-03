@@ -787,6 +787,9 @@ class CombatTechniqueResolver:
                     # execute from (mirrors how damage_intensity_multiplier reaches
                     # compute_damage_budget above, in _profile_damage).
                     execute_missing_health_multiplier=profile.execute_missing_health_multiplier,
+                    # #4091 Decision 16: a PC's technique damage on a held opponent
+                    # rolls a break attempt against the hold.
+                    allegiance_break_striker=self.participant.character_sheet,
                 )
             )
             weapon_landed = weapon_landed or (profile.uses_equipped_weapon and weapon is not None)
@@ -6092,6 +6095,7 @@ def apply_damage_to_opponent(  # noqa: PLR0913
     source_sheet: CharacterSheet | None = None,
     skip_guardian_shield: bool = False,
     execute_missing_health_multiplier: Decimal = Decimal(0),
+    allegiance_break_striker: CharacterSheet | None = None,
 ) -> OpponentDamageResult:
     """Apply damage to an NPC opponent, accounting for soak, probing,
     and damage-type resistance.
@@ -6106,6 +6110,13 @@ def apply_damage_to_opponent(  # noqa: PLR0913
     ``skip_guardian_shield=True`` skips ONLY the guardian-shields-a-summon
     (#2207) hook — the opponent's own DAMAGE_PRE_APPLY trigger band still
     runs. See :func:`_resolve_opponent_pre_apply`.
+
+    ``allegiance_break_striker`` (#4091, Decision 16): when set, a PC is choosing
+    to harm a (possibly charmed/turned) opponent, and a landing, non-defeating hit
+    rolls a break attempt against the opponent's allegiance hold (if any) via
+    :func:`world.npc_services.allegiance_outcomes.attempt_allegiance_break`. Only a
+    PC's own chosen strike passes this — NPC-vs-NPC, reflected, rampart, and duel-
+    mirror damage never do.
 
     ``execute_missing_health_multiplier`` (#2643): the resolving technique damage
     profile's ``execute_missing_health_multiplier`` (default 0 = no-op, matching every
@@ -6183,6 +6194,15 @@ def apply_damage_to_opponent(  # noqa: PLR0913
         _break_engagement_lock_on_defeat(opponent)
 
     opponent.save(update_fields=["health", "probing_current", "status"])
+
+    if allegiance_break_striker is not None and damage_through > 0 and not defeated:
+        from world.npc_services.allegiance_outcomes import (  # noqa: PLC0415
+            attempt_allegiance_break,
+        )
+
+        attempt_allegiance_break(
+            striker=allegiance_break_striker, opponent=opponent, damage_dealt=damage_through
+        )
 
     if defeated:
         _emit_companion_fall(opponent)
@@ -8796,6 +8816,9 @@ def _apply_combo_rider(
         combo.bonus_damage,
         bypass_soak=combo.bypass_soak,
         source_sheet=participant.character_sheet,
+        # #4091 Decision 16: a PC's combo-rider damage on a held opponent rolls a
+        # break attempt against the hold too.
+        allegiance_break_striker=participant.character_sheet,
     )
     outcome.combo_used = combo
     outcome.damage_results.append(dmg_result)
