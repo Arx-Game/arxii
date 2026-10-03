@@ -18,6 +18,7 @@ says so) from ``technique_power_eval.py``. The existing
 
 from __future__ import annotations
 
+from collections.abc import Collection
 from dataclasses import dataclass
 from decimal import Decimal
 import statistics
@@ -222,25 +223,63 @@ def modifier_effect_shift(condition: ConditionTemplate, *, severity: float) -> f
     )
 
 
-def has_language_modifier_effects(condition: ConditionTemplate) -> bool:
-    """True when *condition* carries a ConditionModifierEffect toward a LANGUAGE trait (#4090).
+def condition_ids_with_language_effects(condition_ids: Collection[int]) -> set[int]:
+    """Batch sibling of ``has_language_modifier_effects`` (#4090 queries-in-loop fix).
 
-    Designated by ``target_trait.trait_type``, never by name. Unlike
-    ``modifier_effect_shift`` (condition-level rows only), this also catches a
-    language effect authored on one of the condition's STAGES
-    (``Q(condition=condition) | Q(stage__condition=condition)``) — a staged
-    understanding condition whose language effect sits on a stage still has to
-    report "not combat power," not a silent gap.
+    One query covering many conditions: returns the subset of *condition_ids* that
+    carry a ``ConditionModifierEffect`` toward a LANGUAGE trait, either directly
+    (``condition_id``) or on one of their stages (``stage__condition_id``) —
+    ``Q(condition_id__in=condition_ids) | Q(stage__condition_id__in=condition_ids)``.
+    Designated by ``target_trait.trait_type``, never by name.
+
+    A caller looping over N applied-condition rows (e.g.
+    ``technique_power_eval._condition_application_valuations``) must call this ONCE
+    with every row's condition id up front, never per-row — that was the #4090 review
+    finding this function exists to fix (N rows -> 2N queries via a naive per-row
+    ``has_language_modifier_effects`` call, since that function ran once per row in a
+    function that itself runs twice per technique).
     """
+    condition_ids = set(condition_ids)
+    if not condition_ids:
+        return set()
+
     from django.db.models import Q  # noqa: PLC0415
 
     from world.conditions.models import ConditionModifierEffect  # noqa: PLC0415
     from world.traits.models import TraitType  # noqa: PLC0415
 
-    return ConditionModifierEffect.objects.filter(
-        Q(condition=condition) | Q(stage__condition=condition),
+    rows = ConditionModifierEffect.objects.filter(
+        Q(condition_id__in=condition_ids) | Q(stage__condition_id__in=condition_ids),
         modifier_target__target_trait__trait_type=TraitType.LANGUAGE,
-    ).exists()
+    ).values_list("condition_id", "stage__condition_id")
+
+    found: set[int] = set()
+    for condition_id, stage_condition_id in rows:
+        found.add(condition_id if condition_id is not None else stage_condition_id)
+    return found
+
+
+def has_language_modifier_effects(
+    condition: ConditionTemplate, *, language_condition_ids: set[int] | None = None
+) -> bool:
+    """True when *condition* carries a ConditionModifierEffect toward a LANGUAGE trait (#4090).
+
+    Designated by ``target_trait.trait_type``, never by name. Unlike
+    ``modifier_effect_shift`` (condition-level rows only), this also catches a
+    language effect authored on one of the condition's STAGES — a staged
+    understanding condition whose language effect sits on a stage still has to
+    report "not combat power," not a silent gap.
+
+    Pass a precomputed ``language_condition_ids`` (from
+    :func:`condition_ids_with_language_effects`, called ONCE over every id a loop will
+    check) to avoid issuing one query per call; this is a membership check against
+    that set with no query at all. Omit it for a genuine single-condition check — the
+    fallback path reuses :func:`condition_ids_with_language_effects`'s own query
+    rather than a second, drifting implementation of the same filter.
+    """
+    if language_condition_ids is not None:
+        return condition.pk in language_condition_ids
+    return condition.pk in condition_ids_with_language_effects([condition.pk])
 
 
 def not_combat_power_valuation(condition: ConditionTemplate) -> PayloadValuation:

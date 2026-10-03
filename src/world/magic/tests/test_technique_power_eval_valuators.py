@@ -391,3 +391,27 @@ class LanguageEffectExclusionTests(TechniquePowerEvalValuatorTestCase):
         self.assertAlmostEqual(plain_report.baseline_de, mixed_report.baseline_de, places=6)
         self.assertNotIn(FLAG_NOT_COMBAT_POWER, plain_report.flags)
         self.assertIn(FLAG_NOT_COMBAT_POWER, mixed_report.flags)
+
+    def test_batched_language_lookup_does_not_scale_queries_with_condition_count(self) -> None:
+        """#4090 review fix: ``has_language_modifier_effects`` used to run one query per
+        applied-condition row inside ``_condition_application_valuations`` (which itself
+        runs twice per technique -- baseline + amplified power -- so N rows cost 2N
+        queries). ``de_valuation.condition_ids_with_language_effects`` is the batched
+        replacement: one query covering any number of condition ids. This test isolates
+        that specific function's query count rather than wrapping the whole
+        ``evaluate_technique`` pipeline, because ``_routed_condition_valuation`` has its
+        own, pre-existing, out-of-scope per-row queries (team-lane + generic-modifier
+        checks) that already scale with row count for reasons unrelated to this fix --
+        asserting a flat total query count across the whole pipeline would conflate the
+        two and either fail for the wrong reason or hide a regression in the right one.
+        """
+        from world.magic.services import de_valuation
+
+        one_condition_id = [ConditionTemplateFactory().pk]
+        three_condition_ids = [ConditionTemplateFactory().pk for _ in range(3)]
+
+        with self.assertNumQueries(1):
+            de_valuation.condition_ids_with_language_effects(one_condition_id)
+
+        with self.assertNumQueries(1):
+            de_valuation.condition_ids_with_language_effects(three_condition_ids)
