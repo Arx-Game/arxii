@@ -63,6 +63,15 @@ it holds rather than "Holdings", which reads as fiefs in this genre and is not w
 section is; it is also the word the will copy inside it already uses (#3901). Friends left the sheet for `/profile/friends`: an OOC
 trusted-partner list belongs to the account, not to a character.
 
+**The private sheet (#4124).** The payload's `beats` (`BeatEntry`: the beat, its stage,
+the answers the character holds from it, the line, `unknown`) is built only for the
+owner and staff (`_build_beats`, the goals gate). When it arrives, the Sheet tab draws
+one "Public sheet" heading over the page and one "Private sheet" region (`BeatsBand`)
+set apart by a tone shift (`.refsheet-private`) and nothing else: no per-section
+caption says who may read it (ApostateCD, 2026-10-03). The origin rows are read through
+`CharacterSheet.origin_slot_rows`, a cached handler a `CharacterOriginSlot` save clears
+(ADR-0278); the Story tab's `origin_slots` are the prompt rows alone.
+
 **Gating is render-or-vanish.** A block a viewer may not read is absent, and the page
 keeps its shape for a stranger, a friend and the owner alike — no empty-state cards. The
 goals band is the owner's and staff's (#4106) and the abilities band is gated by the

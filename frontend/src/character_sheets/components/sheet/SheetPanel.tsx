@@ -21,6 +21,7 @@ import type {
   CharacterSheetPayload,
 } from '@/character_sheets/api';
 import { AbilitiesBand } from './AbilitiesBand';
+import { BeatsBand } from './BeatsBand';
 import { CastRow } from './CastRow';
 import { GuidelinesBand } from './GuidelinesBand';
 import { Entries, Entry, Glance, Heading, Ledger, Prose, Stack, Tag } from './primitives';
@@ -71,8 +72,14 @@ export function SheetPanel({ sheet, isMyCharacter, rumor, languages }: SheetPane
     Boolean(actorSheet.enemy_public_line);
   const hasAbilities = Object.keys(sheet.stats).length > 0 || sheet.skills.length > 0;
 
+  // The private sheet (#4124): the owner's and staff's own reading of the character,
+  // set apart by a tone shift and one heading, never by captions. It is drawn only
+  // when the payload carries it, so a stranger's page is the public sheet alone.
+  const hasPrivate = sheet.beats.length > 0;
+
   return (
     <Stack wide>
+      {hasPrivate && <Heading>Public sheet</Heading>}
       <div className="refsheet-columns">
         <Stack>
           <Heading>At a glance</Heading>
@@ -113,6 +120,13 @@ export function SheetPanel({ sheet, isMyCharacter, rumor, languages }: SheetPane
         )}
         <OriginsBlock story={story} />
       </div>
+
+      {hasPrivate && (
+        <section className="refsheet-private" aria-label="Private sheet">
+          <Heading>Private sheet</Heading>
+          <BeatsBand beats={sheet.beats} />
+        </section>
+      )}
     </Stack>
   );
 }

@@ -57,6 +57,31 @@ class VisibleOffer:
 
 
 @dataclass(frozen=True)
+class BeatPoolEntry:
+    """One beat of the Backgrounds library as this draft meets it (#4124).
+
+    Built by ``world.character_creation.offers.beats_for`` for the Lineage stage:
+    the beat's own words, which stage it belongs to, how many answers it takes,
+    and the draft's state on it (taken, unknown, the optional line). The answers
+    themselves are the ``BACKGROUNDS`` chapter's offers whose ``opener_key`` is
+    ``beat:<beat_id>``, fetched through the ordinary offers endpoint.
+    """
+
+    beat_id: int
+    name: str
+    prompt: str
+    life_stage: str
+    selection: str
+    taken: bool
+    unknown: bool
+    line: str
+    answer_offer_ids: list[int]
+    #: The Beginning keeps this beat itself (``BeatMode.ONE_KEPT``): taken by the
+    #: Beginning, never removed by the player.
+    kept: bool = False
+
+
+@dataclass(frozen=True)
 class ClosedDistinction:
     """One distinction a route's ``closed_distinctions`` hides from every chapter (#3675).
 

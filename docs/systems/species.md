@@ -379,7 +379,7 @@ str(bonus)  # "Infernal: -1 Charm"
 
 All models registered in Django admin:
 
-- **`SpeciesAdmin`** - List display with parent filter, stat bonus summary, and language count. Includes `SpeciesChildrenInline` (read-only subspecies list with change links), `SpeciesStatBonusInline` (editable stat bonuses), and `SpeciesGiftGrantInline` (#2846). Fieldsets cover `codex_entry` and the aging axes (`eternal_youth`, `decline_start_age`). Uses `filter_horizontal` for starting languages.
+- **`SpeciesAdmin`** - List display with parent filter, stat bonus summary, and language count. Includes `SpeciesChildrenInline` (read-only subspecies list with change links), `SpeciesStatBonusInline` (editable stat bonuses), and `SpeciesGiftGrantInline` (#2846). Fieldsets cover `codex_entry` and the aging axes (`eternal_youth`, `decline_start_age`, and `cg_point_cost`, #4124: the species' own CG price, added to the purse's species line beside its gift grants, which is how eternal youth is paid for). Uses `filter_horizontal` for starting languages.
 - **`SpeciesGiftGrantAdmin`** (#2846) - Standalone grant editing with species/inheritable filters.
 - **`LanguageAdmin`** - Simple list with name search (list display not yet extended to `trait`/
   `is_universal`, #2993).

@@ -697,6 +697,20 @@
   line-height: 1.4;
 }
 
+/* ---------- the private sheet (#4124) ---------- */
+
+/* The owner's and staff's own reading of the character: one heading and a tone shift
+   toward the plate's ground, nothing else. A caption would say what the tone already
+   says (ApostateCD, 2026-10-03). */
+.refsheet-private {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  padding: 1.25rem clamp(1rem, 3vw, 1.75rem);
+  border: 1px solid color-mix(in oklab, hsl(var(--border)) 60%, var(--plate-ground));
+  background: color-mix(in oklab, hsl(var(--card)) 88%, var(--plate-ground));
+}
+
 /* ---------- folding bands ---------- */
 
 /* Gated material folds rather than crowding the columns: a band a viewer may not read

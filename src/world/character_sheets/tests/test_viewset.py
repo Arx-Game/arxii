@@ -2414,6 +2414,26 @@ class TestStandingAndCovenantSections(TestCase):
         for other in (self.friend, self.stranger):
             assert self._payload(other)["goals"] == []
 
+    def test_the_beats_are_the_owners_and_staffs_and_a_beat_row_refreshes_the_sheet(self) -> None:
+        """#4124: the private sheet's beats never reach a friend or a stranger, and a
+        beat row saved after the first read shows on the next (ADR-0278)."""
+        from world.character_creation.factories import LifeBeatFactory
+        from world.character_creation.models import CharacterOriginSlot
+
+        beat = LifeBeatFactory(name="The household")
+        PlayerAllowList.objects.create(owner=self.player, allowed_player=self.friend)
+        assert self._payload(self.player)["beats"] == []
+        # By pk, not ``self.sheet``: Django hands each test a deep copy of the class-level
+        # row, and the clear has to land on the identity-mapped instance the view reads.
+        CharacterOriginSlot.objects.create(sheet_id=self.sheet.pk, beat=beat, value="A line.")
+        owner_beats = self._payload(self.player)["beats"]
+        self.assertEqual(
+            [(b["name"], b["line"], b["unknown"], list(b["answers"])) for b in owner_beats],
+            [("The household", "A line.", False, [])],
+        )
+        for other in (self.friend, self.stranger):
+            assert self._payload(other)["beats"] == []
+
     def test_a_houses_verdict_rides_the_standing_entry(self) -> None:
         """#4106: favor shows as its label beside the title, and the default shows nothing."""
         from world.societies.constants import MembershipFavor
@@ -3094,23 +3114,9 @@ class TestPrefetchCompleteness(TestCase):
 
     def test_story_zero_queries(self) -> None:
         sheet = self._get_sheet()
-        # Prefetch origin_slots (mirrors the serializer's prefetch, #2478) so
-        # _build_story doesn't issue a live query for slot answers.
-        from django.db.models import Prefetch
-
-        from world.character_creation.models import CharacterOriginSlot
-
-        sheet = (
-            type(sheet)
-            .objects.prefetch_related(
-                Prefetch(
-                    "origin_slots",
-                    queryset=CharacterOriginSlot.objects.select_related("slot"),
-                    to_attr="cached_origin_slots",
-                )
-            )
-            .get(pk=sheet.pk)
-        )
+        # The origin rows are a cached handler on the sheet (ADR-0278, #4124): prime it
+        # the way the serializer's first read does, then the build is query-free.
+        sheet.origin_slot_rows  # noqa: B018 - priming the handler is the point
         with self.assertNumQueries(0):
             _build_story(sheet=sheet, bio_profile=sheet.true_profile)
 

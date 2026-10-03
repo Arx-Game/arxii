@@ -8,6 +8,7 @@ import factory.django as factory_django
 from world.character_creation.constants import (
     AnchorSource,
     ApplicationStatus,
+    BeatSelection,
     CommentType,
     ConnectionKind,
     LifeStage,
@@ -25,6 +26,8 @@ from world.character_creation.models import (
     DraftApplication,
     DraftApplicationComment,
     EnemyReason,
+    LifeBeat,
+    LifeBeatExclusion,
     OfferFirstLook,
     OriginTemplate,
     OriginTemplateSlot,
@@ -266,6 +269,28 @@ class DistinctionOfferFactory(factory_django.DjangoModelFactory):
     prompt = factory.LazyAttribute(
         lambda o: "never_do" if o.chapter == OfferChapter.ACTORS_SHEET else ""
     )
+
+
+class LifeBeatFactory(factory_django.DjangoModelFactory):
+    """A beat of the Backgrounds library (#4124), a childhood one-of beat by default."""
+
+    class Meta:
+        model = LifeBeat
+
+    name = factory.Sequence(lambda n: f"Beat {n}")
+    life_stage = LifeStage.CHILDHOOD
+    prompt = factory.LazyAttribute(lambda o: f"Placeholder prompt for {o.name}.")
+    selection = BeatSelection.ONE_OF
+    sort_order = 0
+    is_active = True
+
+
+class LifeBeatExclusionFactory(factory_django.DjangoModelFactory):
+    class Meta:
+        model = LifeBeatExclusion
+
+    beat = factory.SubFactory(LifeBeatFactory)
+    beginning = factory.SubFactory(BeginningsFactory)
 
 
 class OfferFirstLookFactory(factory_django.DjangoModelFactory):

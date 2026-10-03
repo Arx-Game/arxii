@@ -473,6 +473,19 @@ class CharacterSheet(SharedMemoryModel):
             "maturation milestones; restoration magic may strip it."
         ),
     )
+    #: #4124: the matured years the character arrived with. Milestones at or below
+    #: it never bank: a new character is experienced through the beats of their
+    #: life, not through free stat points; the first milestone they cross at the
+    #: table is the first they earn. 0 for every character made before the rule.
+    maturation_floor = models.PositiveSmallIntegerField(
+        default=0,
+        db_default=0,
+        validators=[MaxValueValidator(10000)],
+        help_text=(
+            "Matured years at creation; milestones at or below it are never earned. "
+            "0 means the character predates the rule and keeps its banked points."
+        ),
+    )
     aging_paused = models.BooleanField(
         default=False,
         help_text=(
@@ -1084,6 +1097,16 @@ class CharacterSheet(SharedMemoryModel):
     fatigue_or_none = ReverseOneToOneOrNone("fatigue")
     active_alternate_self_or_none = ReverseOneToOneOrNone("active_alternate_self")
     path_intent_or_none = ReverseOneToOneOrNone("path_intent")
+
+    @PrunedCachedProperty
+    def origin_slot_rows(self) -> list:
+        """Every Upbringing answer and beat row on this sheet (#2478, #4124). Cleared by
+        any CharacterOriginSlot save or delete through its related_cache_fields."""
+        return list(
+            self.origin_slots.select_related("slot", "choice", "organization", "beat").order_by(
+                "slot__sort_order", "beat__sort_order", "id"
+            )
+        )
 
     @PrunedCachedProperty
     def goal_rows(self) -> list:

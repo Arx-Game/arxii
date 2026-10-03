@@ -1348,6 +1348,7 @@
   - enemy_offers <- character_creation.BeginningEnemyOffer
   - beginning_traditions <- character_creation.BeginningTradition
   - origin_templates <- character_creation.OriginTemplate
+  - beat_exclusions <- character_creation.LifeBeatExclusion
   - drafts <- character_creation.CharacterDraft
   - first_look_offers <- character_creation.DistinctionOffer
   - offer_pins <- character_creation.OfferFirstLook
@@ -1392,9 +1393,12 @@
 ### CharacterOriginSlot
 **Foreign Keys:**
   - sheet -> character_sheets.CharacterSheet [FK]
-  - slot -> character_creation.OriginTemplateSlot [FK]
+  - slot -> character_creation.OriginTemplateSlot [FK] (nullable)
+  - beat -> character_creation.LifeBeat [FK] (nullable)
   - choice -> character_creation.OriginTemplateSlotChoice [FK] (nullable)
   - organization -> societies.Organization [FK] (nullable)
+**Pointed to by:**
+  - resolving_secrets <- secrets.Secret
 
 ### DistinctionOffer
 **Foreign Keys:**
@@ -1406,6 +1410,7 @@
   - schooling_line -> character_creation.SchoolingLine [FK] (nullable)
   - enemy_reason -> character_creation.EnemyReason [FK] (nullable)
   - appearance_section -> character_creation.AppearanceSection [FK] (nullable)
+  - beat -> character_creation.LifeBeat [FK] (nullable)
   - first_look -> character_creation.Beginnings [M2M]
 **Pointed to by:**
   - pins <- character_creation.OfferFirstLook
@@ -1436,6 +1441,20 @@
   - beginning_enemy_offers <- character_creation.BeginningEnemyOffer
   - distinction_offers <- character_creation.DistinctionOffer
   - character_enemies <- character_sheets.CharacterEnemy
+
+### LifeBeat
+**Foreign Keys:**
+  - written_by -> contributors.ContentContributor [FK] (nullable)
+  - reviewed_by -> contributors.ContentContributor [FK] (nullable)
+**Pointed to by:**
+  - exclusions <- character_creation.LifeBeatExclusion
+  - character_rows <- character_creation.CharacterOriginSlot
+  - distinction_offers <- character_creation.DistinctionOffer
+
+### LifeBeatExclusion
+**Foreign Keys:**
+  - beat -> character_creation.LifeBeat [FK]
+  - beginning -> character_creation.Beginnings [FK]
 
 ### OfferFirstLook
 **Foreign Keys:**
@@ -8825,6 +8844,7 @@
   - subject_sheet -> character_sheets.CharacterSheet [FK]
   - category -> secrets.SecretCategory [FK] (nullable)
   - author_persona -> scenes.Persona [FK] (nullable)
+  - resolves_beat -> character_creation.CharacterOriginSlot [FK] (nullable)
   - legend_deed -> societies.LegendEntry [FK] (nullable)
   - mission_deed -> missions.MissionDeedRecord [FK] (nullable)
   - scene -> scenes.Scene [FK] (nullable)

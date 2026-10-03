@@ -22,7 +22,6 @@ from evennia.objects.models import ObjectDB
 from rest_framework import serializers
 from rest_framework.request import Request
 
-from world.character_creation.models import CharacterOriginSlot
 from world.character_sheets.models import (
     CharacterSheet,
     Profile,
@@ -36,6 +35,7 @@ from world.character_sheets.types import (
     AppearanceSection,
     AuraData,
     AuraThemingData,
+    BeatEntry,
     CovenantRoleEntry,
     DistinctionEntry,
     EnemyEntry,
@@ -1204,13 +1204,9 @@ def _build_magic(sheet: CharacterSheet, *, privileged: bool = False) -> MagicSec
 
 
 _STORY_SELECT_RELATED: tuple[str, ...] = ("true_profile",)  # #1270 — background
-_STORY_PREFETCH_RELATED: tuple[str | Prefetch, ...] = (
-    Prefetch(
-        "origin_slots",
-        queryset=CharacterOriginSlot.objects.select_related("slot", "choice", "organization"),
-        to_attr="cached_origin_slots",
-    ),
-)
+# The origin rows live behind ``CharacterSheet.origin_slot_rows`` (ADR-0278, #4124),
+# cleared by ``CharacterOriginSlot.related_cache_fields``; no to-attr prefetch.
+_STORY_PREFETCH_RELATED: tuple[str | Prefetch, ...] = ()
 
 
 def _build_story(
@@ -1232,14 +1228,9 @@ def _build_story(
             origin_slots=[],
         )
     # Origin-story slot answers are always the real sheet's (#2478) — a cover
-    # identity doesn't get its own origin story. Uses the prefetched attr when
-    # available (serializer path); falls back to a live query only when called
-    # directly (e.g. unit tests without the prefetch set up).
-    raw_slots = (
-        sheet.cached_origin_slots
-        if hasattr(sheet, "cached_origin_slots")
-        else sheet.origin_slots.select_related("slot", "choice", "organization")
-    )
+    # identity doesn't get its own origin story. Beat rows (#4124) are not here:
+    # they are the private sheet's, built by ``_build_beats``.
+    raw_slots = [row for row in sheet.origin_slot_rows if row.slot_id is not None]
     origin_slots = [
         OriginSlotEntry(
             slot_id=row.slot_id,
@@ -1270,6 +1261,46 @@ def _build_story(
 # set, and an edited goal kept its old state until a restart (#4106).
 _GOALS_SELECT_RELATED: tuple[str, ...] = ()
 _GOALS_PREFETCH_RELATED: tuple[str | Prefetch, ...] = ()
+
+
+def _build_beats(sheet: CharacterSheet) -> list[BeatEntry]:
+    """The beats of the character's life (#4124), for the owner and staff only.
+
+    The caller gates on ``privileged``; this builds every beat row. A beat's answers
+    are the sheet's distinctions that the beat's own offers name, joined by id.
+    """
+    rows = [row for row in sheet.origin_slot_rows if row.beat_id is not None]
+    if not rows:
+        return []
+    held: dict[int, str] = {}
+    # The serializer path prefetched the distinctions (``cached_distinctions``); a
+    # direct call reads them live, the way ``_build_distinctions`` does.
+    cds = (
+        sheet.cached_distinctions
+        if hasattr(sheet, "cached_distinctions")
+        else sheet.distinctions.select_related("distinction")
+    )
+    for cd in cds:
+        held[cd.distinction_id] = cd.distinction.name
+    from world.character_creation.offers import LIFE_STAGE_ORDER  # noqa: PLC0415
+
+    rows.sort(key=lambda r: (LIFE_STAGE_ORDER.get(r.beat.life_stage, 99), r.beat.sort_order))
+    return [
+        BeatEntry(
+            beat_id=row.beat_id,
+            name=row.beat.name,
+            life_stage=row.beat.life_stage,
+            prompt=row.beat.prompt,
+            unknown=row.unknown,
+            line=row.value,
+            answers=[
+                held[offer.distinction_id]
+                for offer in row.beat.answers
+                if offer.distinction_id in held
+            ],
+        )
+        for row in rows
+    ]
 
 
 def _build_goals(sheet: CharacterSheet) -> list[GoalEntry]:
@@ -2165,6 +2196,8 @@ class CharacterSheetSerializer(serializers.Serializer):
             # Story reads from the presented face's profile (cover identities show their own).
             "story": _build_story(sheet=sheet, bio_profile=bio_profile, privileged=privileged),
             "goals": _build_goals(sheet) if show_goals else [],
+            # The beats of the life (#4124): the private sheet's, owner and staff only.
+            "beats": _build_beats(sheet) if privileged else [],
             # #3906 — Ties' rail. Standing rides its own tier; covenant roles are
             # public, the way the Titles block beside them has always been.
             "standing": _build_standing(active, visible=show_standing),

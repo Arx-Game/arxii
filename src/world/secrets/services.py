@@ -250,7 +250,24 @@ def grant_secret_knowledge(
         # First time this character learns the fact — if they are the *victim* of it and a
         # player runs them, prompt them so they can decide a relationship effect (#1429).
         _notify_secret_victim_on_learn(secret, roster_entry)
+        _resolve_beat_on_learn(secret, roster_entry)
     return held
+
+
+def _resolve_beat_on_learn(secret: Secret, roster_entry: RosterEntry) -> None:
+    """A secret that names a beat of its subject's own life fills it in (#4124).
+
+    Called by ``grant_secret_knowledge`` the first time a character learns a
+    secret. Only the subject learning their own past resolves the beat; anyone
+    else learning it changes nothing on the sheet.
+    """
+    beat_row = secret.resolves_beat
+    if beat_row is None or roster_entry.character_sheet_id != secret.subject_sheet_id:
+        return
+    if beat_row.sheet_id != secret.subject_sheet_id or not beat_row.unknown:
+        return
+    beat_row.unknown = False
+    beat_row.save(update_fields=["unknown"])
 
 
 # Authored by Dan (2026-06-23) — the framing line shown after the now-known secret's text. (Not

@@ -43,6 +43,8 @@ from world.character_creation.constants import (
     ActorSheetPrompt,
     AnchorSource,
     ApplicationStatus,
+    BeatMode,
+    BeatSelection,
     CommentType,
     ConnectionKind,
     EnemyReasonFits,
@@ -314,6 +316,19 @@ class Beginnings(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
         default=0,
         help_text="CG point cost for this beginning; summed with species gift "
         "grant costs into the character-creation points budget.",
+    )
+    #: #4124: how this Beginning offers the beat library. The library itself is
+    #: shared; a Beginning only excludes (``LifeBeatExclusion``) or, for the one
+    #: Beginning that starts blank, keeps a single beat and marks the rest unknown.
+    beat_mode = models.CharField(
+        max_length=10,
+        choices=BeatMode.choices,
+        default=BeatMode.POOL,
+        db_default=BeatMode.POOL,
+        help_text=(
+            "A pool the player adds beats from (the default), or one kept beat with "
+            "every other beat standing unknown (the Sleeper)."
+        ),
     )
     heritage = models.ForeignKey(
         "arxii.Heritage",
@@ -1128,12 +1143,114 @@ class OriginTemplateSlotChoice(NaturalKeyMixin, CreditedContent, SharedMemoryMod
             )
 
 
-class CharacterOriginSlot(SharedMemoryModel):
-    """A character's authored answer to an origin-story slot (#2478).
+class LifeBeatManager(NaturalKeyManager):
+    pass
+
+
+class LifeBeat(CachedPropertiesMixin, NaturalKeyMixin, CreditedContent, SharedMemoryModel):
+    """One beat of a life, from the shared Backgrounds library (#4124).
+
+    Content model, authored once and offered to every Beginning unless excluded
+    (``LifeBeatExclusion``). A beat is a prompt over priced distinction offers:
+    its answers are ``DistinctionOffer`` rows in ``OfferChapter.BACKGROUNDS``
+    opened by this beat, each a ``CHOICE`` at the distinction's own price; a beat
+    grants nothing free, so an Upbringing carries no mechanical power to balance
+    (the ADR `adr-4124`). ``selection`` says whether one answer or any may be taken;
+    "neither" is a taken beat with no pick. Natural key is (life_stage, name).
+    """
+
+    name = models.CharField(max_length=100, help_text="The beat's name, as the player reads it.")
+    life_stage = models.CharField(
+        max_length=20,
+        choices=LifeStage.choices,
+        help_text="Which stage of a life this beat is pooled under.",
+    )
+    prompt = models.TextField(help_text="The prompt shown above the beat's answers.")
+    selection = models.CharField(
+        max_length=10,
+        choices=BeatSelection.choices,
+        default=BeatSelection.ONE_OF,
+        help_text="One answer (drawn across) or any that apply (drawn down).",
+    )
+    sort_order = models.PositiveSmallIntegerField(default=0)
+    is_active = models.BooleanField(default=True, help_text="Inactive beats are offered nowhere.")
+
+    objects = LifeBeatManager()
+
+    class Meta:
+        verbose_name = "Life beat"
+        verbose_name_plural = "Life beats"
+        ordering = ["life_stage", "sort_order", "id"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["life_stage", "name"], name="lifebeat_stage_name_unique"
+            )
+        ]
+
+    class NaturalKeyConfig:
+        fields = ["life_stage", "name"]
+
+    def __str__(self) -> str:
+        return f"{self.name} ({self.get_life_stage_display()})"
+
+    @PrunedCachedProperty
+    def answers(self) -> list[DistinctionOffer]:
+        """This beat's active offers in sort order; cleared by any offer's save or delete
+        through ``DistinctionOffer.related_cache_fields``."""
+        return list(
+            self.distinction_offers.filter(is_active=True)
+            .select_related("distinction")
+            .order_by("sort_order", "id")
+        )
+
+
+class LifeBeatExclusion(NaturalKeyMixin, SharedMemoryModel):
+    """A beat one Beginning does not offer (#4124).
+
+    The library applies to every Beginning by default; this row is the exception.
+    A through row rather than an M2M so the reason can be recorded beside it.
+    Content model (it travels with the beats); natural key is (beat, beginning).
+    """
+
+    beat = models.ForeignKey(LifeBeat, on_delete=models.CASCADE, related_name="exclusions")
+    beginning = models.ForeignKey(
+        Beginnings, on_delete=models.CASCADE, related_name="beat_exclusions"
+    )
+    reason = models.CharField(
+        max_length=200, blank=True, help_text="Why this Beginning never meets this beat."
+    )
+
+    objects = NaturalKeyManager()
+
+    class Meta:
+        verbose_name = "Life beat exclusion"
+        verbose_name_plural = "Life beat exclusions"
+        constraints = [
+            models.UniqueConstraint(fields=["beat", "beginning"], name="lifebeat_exclusion_unique")
+        ]
+
+    class NaturalKeyConfig:
+        fields = ["beat", "beginning"]
+        dependencies = ["arxii.LifeBeat", "arxii.Beginnings"]
+
+    def __str__(self) -> str:
+        return f"{self.beat} not for {self.beginning}"
+
+
+class CharacterOriginSlot(RelatedCacheClearingMixin, SharedMemoryModel):
+    """A character's authored answer to an origin-story slot, or a beat taken (#2478, #4124).
 
     Instance data — NOT a content model, never exported. Mirrors
-    ``CharacterGlimpseTag`` (``glimpse.py:65-88``).
+    ``CharacterGlimpseTag`` (``glimpse.py:65-88``). A row names exactly one of
+    ``slot`` (an Upbringing prompt's answer) or ``beat`` (a beat the character took,
+    #4124); a beat row may stand ``unknown`` (a Sleeper's blank, or a year nobody
+    speaks of) until a secret naming it (``Secret.resolves_beat``) is learned.
     """
+
+    #: Saving or deleting a row clears the sheet's cached rows
+    #: (``CharacterSheet.origin_slot_rows``, ADR-0278): the sheet read used to
+    #: prefetch these with a ``to_attr``, which Django never re-fetches once set.
+    related_cache_fields: ClassVar[list[str]] = ["sheet"]
 
     sheet = models.ForeignKey(
         "arxii.CharacterSheet",
@@ -1144,8 +1261,23 @@ class CharacterOriginSlot(SharedMemoryModel):
     slot = models.ForeignKey(
         OriginTemplateSlot,
         on_delete=models.PROTECT,
+        null=True,
+        blank=True,
         related_name="character_rows",
-        help_text="The catalog slot this answer fills.",
+        help_text="The catalog slot this answer fills; null for a beat row (#4124).",
+    )
+    beat = models.ForeignKey(
+        LifeBeat,
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="character_rows",
+        help_text="The beat this row takes; null for an Upbringing prompt's answer (#4124).",
+    )
+    unknown = models.BooleanField(
+        default=False,
+        db_default=False,
+        help_text="A beat the character does not remember (#4124); the sheet shows it blank.",
     )
     value = models.TextField(help_text="The player's authored answer.")
     choice = models.ForeignKey(
@@ -1176,11 +1308,29 @@ class CharacterOriginSlot(SharedMemoryModel):
     class Meta:
         verbose_name = "Character Upbringing Answer"
         verbose_name_plural = "Character Upbringing Answers"
-        unique_together = [["sheet", "slot"]]
-        ordering = ["slot__sort_order"]
+        ordering = ["slot__sort_order", "beat__life_stage", "beat__sort_order"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["sheet", "slot"],
+                condition=models.Q(slot__isnull=False),
+                name="characteroriginslot_sheet_slot_unique",
+            ),
+            models.UniqueConstraint(
+                fields=["sheet", "beat"],
+                condition=models.Q(beat__isnull=False),
+                name="characteroriginslot_sheet_beat_unique",
+            ),
+            models.CheckConstraint(
+                condition=(
+                    models.Q(slot__isnull=False, beat__isnull=True)
+                    | models.Q(slot__isnull=True, beat__isnull=False)
+                ),
+                name="characteroriginslot_exactly_one_of_slot_or_beat",
+            ),
+        ]
 
     def __str__(self) -> str:
-        return f"{self.slot} on {self.sheet}"
+        return f"{self.beat if self.beat_id else self.slot} on {self.sheet}"
 
 
 class CharacterDraft(SharedMemoryModel):
@@ -1794,7 +1944,11 @@ class CharacterDraft(SharedMemoryModel):
             return
         from world.species.services import total_species_gift_cost  # noqa: PLC0415
 
-        species_cost = total_species_gift_cost(self.selected_species)
+        # The species' own price (#4124, eternal youth) rides the same line as its
+        # gift grants.
+        species_cost = (
+            total_species_gift_cost(self.selected_species) + self.selected_species.cg_point_cost
+        )
         if not species_cost:
             return
         breakdown.append(
@@ -2343,6 +2497,7 @@ class DistinctionOffer(
         "schooling_line",
         "enemy_reason",
         "appearance_section",
+        "beat",
     ]
 
     distinction = models.ForeignKey(
@@ -2422,6 +2577,14 @@ class DistinctionOffer(
             "section, for the per-feature distinctions (#3739)."
         ),
     )
+    beat = models.ForeignKey(
+        LifeBeat,
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="distinction_offers",
+        help_text="Backgrounds only: the beat this offer is an answer on (#4124).",
+    )
     first_look = models.ManyToManyField(
         Beginnings,
         through="OfferFirstLook",
@@ -2447,6 +2610,7 @@ class DistinctionOffer(
         "enemy_degree",
         "appearance_section",
         "feature_rows",
+        "beat",
     )
 
     class Meta:
@@ -2463,6 +2627,7 @@ class DistinctionOffer(
                         "schooling_line": None,
                         "enemy_reason": None,
                         "appearance_section": None,
+                        "beat": None,
                         "prompt": "",
                         "enemy_degree": "",
                         # A boolean opener is unset when False (#3739): a feature-rows
@@ -2485,6 +2650,7 @@ class DistinctionOffer(
             "enemy_reason",
             "enemy_degree",
             "appearance_section",
+            "beat",
         ]
         dependencies = ["arxii.Distinction"]
 
@@ -2495,6 +2661,7 @@ class DistinctionOffer(
         OfferChapter.APPEARANCE: ("appearance_section", "feature_rows"),
         OfferChapter.ACTORS_SHEET: ("prompt",),
         OfferChapter.ENEMY: ("enemy_reason", "enemy_degree"),
+        OfferChapter.BACKGROUNDS: ("beat",),
     }
 
     def __str__(self) -> str:
@@ -2513,7 +2680,12 @@ class DistinctionOffer(
     def _opener_is_set(self, field: str) -> bool:
         if field in ("prompt", "enemy_degree", "feature_rows"):
             return bool(getattr(self, field))
-        return getattr(self, f"{field}_id") is not None
+        if getattr(self, f"{field}_id") is not None:
+            return True
+        # An inline row under an unsaved parent (the beat admin, #4124) has the
+        # opener assigned as an object with no pk yet; the cached relation counts.
+        relation = self._meta.get_field(field)
+        return relation.is_cached(self) and relation.get_cached_value(self) is not None
 
     @property
     def set_openers(self) -> list[str]:
@@ -2543,6 +2715,8 @@ class DistinctionOffer(
             return f"choice:{self.origin_choice_id}"
         if self.schooling_line_id is not None:
             return f"schooling:{self.schooling_line_id}"
+        if self.beat_id is not None:
+            return f"beat:{self.beat_id}"
         return ""
 
     def clean(self) -> None:

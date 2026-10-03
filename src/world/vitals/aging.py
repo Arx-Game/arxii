@@ -97,12 +97,13 @@ def run_birthday_tick(*, ic_start: datetime, ic_end: datetime) -> int:
         )
         if occurrences == 0:
             continue
-        old_milestones = milestone_count(sheet.matured_years)
+        old_milestones = milestone_count(sheet.matured_years, sheet.maturation_floor)
         sheet.matured_years += occurrences
         sheet.save(update_fields=["matured_years"])
         sync_maturation_spends(sheet)
         aged += 1
-        if milestone_count(sheet.matured_years) > old_milestones and available_points(sheet) > 0:
+        now_milestones = milestone_count(sheet.matured_years, sheet.maturation_floor)
+        if now_milestones > old_milestones and available_points(sheet) > 0:
             character = sheet.character
             if character is not None:
                 character.msg(MILESTONE_MESSAGE)

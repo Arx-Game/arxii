@@ -119,6 +119,9 @@ class OfferChapter(models.TextChoices):
     APPEARANCE = "appearance", "Appearance"
     ACTORS_SHEET = "actors_sheet", "The actor's sheet"
     ENEMY = "enemy", "Who wants you to fail"
+    #: #4124: the beats of a life. Every answer on a beat is one of these lines,
+    #: opened by the beat and priced at the distinction's own cost.
+    BACKGROUNDS = "backgrounds", "Backgrounds, a beat"
 
 
 class ActorSheetPrompt(models.TextChoices):
@@ -251,12 +254,46 @@ class ConnectionKind(models.TextChoices):
 
 
 class LifeStage(models.TextChoices):
-    """When the tie was formed. A tag; orders the sheet's Origins panel (#3660)."""
+    """When the tie was formed, and which stage of a life a beat belongs to (#3660, #4124).
+
+    A tag on an Upbringing prompt; the stage a ``LifeBeat`` is pooled under on the
+    Lineage page and grouped by on the sheet. ``ADULTHOOD`` is the years before the
+    Glimpse that most of the roster has lived through, which no tie-tag needed.
+    """
 
     CHILDHOOD = "childhood", "Childhood"
     YOUTH = "youth", "Youth"
+    ADULTHOOD = "adulthood", "Before the Glimpse"
     AT_THE_GLIMPSE = "at_the_glimpse", "At the Glimpse"
     SINCE_THE_GLIMPSE = "since_the_glimpse", "Since the Glimpse"
+
+
+#: The one optional line a player may write under a taken beat (#4124).
+BEAT_LINE_MAX_LENGTH = 200
+
+
+class BeatSelection(models.TextChoices):
+    """How many of a beat's answers may be taken (#4124).
+
+    Staff set it per beat. ``ONE_OF`` draws the answers across and the distinctions
+    sync refuses a second pick on the same beat; ``ANY`` draws them down and any
+    number may be taken. "Neither" is implicit in both: a taken beat with no pick.
+    """
+
+    ONE_OF = "one_of", "One of"
+    ANY = "any", "Any that apply"
+
+
+class BeatMode(models.TextChoices):
+    """How a Beginning offers the beat library (#4124).
+
+    ``POOL``: every library beat not excluded for this Beginning, added by the
+    player as the life had them. ``ONE_KEPT``: the one beat left unexcluded is
+    the whole stage and every other beat stands unknown (the Sleeper).
+    """
+
+    POOL = "pool", "A pool to add from"
+    ONE_KEPT = "one_kept", "One beat kept, the rest unknown"
 
 
 class AnchorSource(models.TextChoices):

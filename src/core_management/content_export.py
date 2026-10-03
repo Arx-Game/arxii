@@ -111,6 +111,9 @@ CONTENT_MODELS: frozenset[str] = frozenset(
         "character_creation.origintemplate",
         "character_creation.origintemplateslot",
         "character_creation.origintemplateslotchoice",
+        # #4124: the shared beat library; its answers are distinction offers.
+        "character_creation.lifebeat",
+        "character_creation.lifebeatexclusion",
         # character_sheets
         "character_sheets.gender",
         # #2994: internal declared-mood states ("feel <state>"); ships empty in

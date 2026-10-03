@@ -107,6 +107,18 @@ class Secret(SharedMemoryModel):
         related_name="authored_secrets",
         help_text="The narrating persona (player-authored). Null for GM/staff-authored.",
     )
+    #: #4124: the beat of the subject's own life this secret fills in. A beat left
+    #: unknown at creation (a Sleeper's past, a year nobody speaks of) is a hole a
+    #: GM can author a secret against; when the subject learns it, the beat is no
+    #: longer unknown. Specific to general (ADR-0010): secrets point at the beat row.
+    resolves_beat = models.ForeignKey(
+        "arxii.CharacterOriginSlot",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="resolving_secrets",
+        help_text="The subject's unknown beat this secret resolves once they learn it (#4124).",
+    )
     # --- Act anchor (#1573): the recorded act this secret is the hidden truth behind. ---
     # ONE secret = one act. That act surfaces through several *records* — a mission deed (the
     # mechanical act), a legend entry (the public, embellished telling), and/or the scene it

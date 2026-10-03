@@ -132,6 +132,7 @@ function sheetPayload(owner: boolean) {
       introductions: [],
     },
     goals: owner ? [HOUSE_GOAL, FAMILY_GOAL] : [],
+    beats: [],
     personas: [],
     theming: {},
     profile_picture: null,

@@ -1127,6 +1127,29 @@ def _finalize_origin_slots(
     return assemble_origin_prose(sheet)
 
 
+def _finalize_beats(sheet: CharacterSheet, draft: CharacterDraft) -> int:
+    """Write one ``CharacterOriginSlot`` row per beat the draft took (#4124).
+
+    Called from ``_apply_sheet_demographics``. A taken beat becomes a beat row
+    carrying its unknown state and the optional line; its answers are ordinary
+    distinctions, written by ``_create_distinctions`` with the beat as their
+    source. Returns how many rows were written.
+    """
+    from world.character_creation.offers import beats_for  # noqa: PLC0415
+
+    written = 0
+    for entry in beats_for(draft):
+        if not entry.taken:
+            continue
+        CharacterOriginSlot.objects.update_or_create(
+            sheet=sheet,
+            beat_id=entry.beat_id,
+            defaults={"slot": None, "unknown": entry.unknown, "value": entry.line},
+        )
+        written += 1
+    return written
+
+
 def _set_demographics(sheet: CharacterSheet, draft: CharacterDraft) -> None:
     """Apply gender, pronouns, age axes, birthday, species, and family from the draft."""
     if draft.selected_gender:
@@ -1135,6 +1158,10 @@ def _set_demographics(sheet: CharacterSheet, draft: CharacterDraft) -> None:
         _set_pronouns_from_gender(sheet, draft.selected_gender)
     if draft.age:
         sheet.matured_years = draft.age
+        # #4124: milestones at or below the creation age never bank; the beats of
+        # the life are the experience, and the first milestone crossed at the
+        # table is the first earned.
+        sheet.maturation_floor = draft.age
         sheet.ic_birth_year = _derive_ic_birth_year(draft)
     if draft.birthday_month and draft.birthday_day:
         sheet.birthday_month = draft.birthday_month
@@ -1338,7 +1365,12 @@ def _set_descriptive_text(sheet: CharacterSheet, draft: CharacterDraft) -> bool:
         for k in ("origin_slots", "origin_choices", "origin_anchors", "origin_figures")
     )
     if answers_present:
-        profile.background = _finalize_origin_slots(sheet, draft, draft.visible_origin_slot_ids())
+        _finalize_origin_slots(sheet, draft, draft.visible_origin_slot_ids())
+    beats_taken = _finalize_beats(sheet, draft)
+    if answers_present or beats_taken:
+        # The told background starts as a draft from the answers and the beats
+        # (#4124); the player edits it on the sheet from there.
+        profile.background = assemble_origin_prose(sheet)
     # The Actor's Sheet answers (#3621), like concept and quote: set directly at CG; the
     # versioned write path takes over on the first post-CG edit.
     for key, _copy_key in ACTOR_SHEET_QUESTIONS:
@@ -3533,23 +3565,36 @@ def assemble_origin_prose(sheet: CharacterSheet) -> str:
     sheet-editor save. Returns empty string when the sheet has no slots
     filled.
     """
-    slots = list(
-        sheet.origin_slots.select_related("slot__template", "choice").order_by("slot__sort_order")
+    rows = list(
+        sheet.origin_slots.select_related("slot__template", "choice", "beat").order_by(
+            "slot__sort_order", "beat__sort_order"
+        )
     )
-    if not slots:
+    slots = [row for row in rows if row.slot_id is not None]
+    beats = [row for row in rows if row.beat_id is not None and not row.unknown]
+    if not slots and not beats:
         return ""
 
-    template: OriginTemplate | None = slots[0].slot.template
-    if template is None:
-        return ""
-
-    lines = [template.frame_narrative, ""]
+    lines: list[str] = []
+    template: OriginTemplate | None = slots[0].slot.template if slots else None
+    if template is not None:
+        lines += [template.frame_narrative, ""]
     for row in slots:
         lines.append(row.slot.prompt)
         answer = row.choice.name if row.choice is not None else ""
         if row.value:
             answer = f"{answer}: {row.value}" if answer else row.value
         lines.append(answer)
+        lines.append("")
+    # The beats, in the order of a life (#4124): the stage, the beat, the line the
+    # player wrote under it. An unknown beat says nothing here.
+    from world.character_creation.offers import LIFE_STAGE_ORDER  # noqa: PLC0415
+
+    beats.sort(key=lambda r: (LIFE_STAGE_ORDER.get(r.beat.life_stage, 99), r.beat.sort_order))
+    for row in beats:
+        lines.append(f"{row.beat.get_life_stage_display()}: {row.beat.name}")
+        if row.value:
+            lines.append(row.value)
         lines.append("")
     return "\n".join(lines).strip()
 

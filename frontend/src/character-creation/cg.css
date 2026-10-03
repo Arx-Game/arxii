@@ -1164,6 +1164,81 @@
 .interview .stance[aria-disabled='true'] {
   opacity: 0.55;
 }
+/* A one-of block (#4124) runs ACROSS: its answers are alternatives, each a bordered
+   card with a round dot, where an any-that-apply block runs down the hairlines. */
+.interview .stances.oneof {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr));
+  gap: 0.6rem;
+  margin-top: 0.6rem;
+}
+.interview .stances.oneof > li .stance {
+  grid-template-columns: 1.1rem 1fr;
+  border: 1px solid var(--cg-hairline-strong);
+  padding: 0.65rem 0.75rem;
+  height: 100%;
+}
+.interview .stances.oneof > li:last-child .stance {
+  border-bottom: 1px solid var(--cg-hairline-strong);
+}
+.interview .stances.oneof .stance[aria-pressed='true'] {
+  border-color: var(--cg-accent);
+}
+.interview .stances.oneof .stance .price {
+  grid-column: 2;
+  text-align: left;
+  margin-top: 0.3rem;
+}
+/* The beats of a life (#4124): one block per stage, each taken beat an entry. */
+.interview .beat-stage + .beat-stage {
+  margin-top: 1.4rem;
+}
+.interview .beat-pool {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin: 0.5rem 0 0;
+}
+.interview .beat-pool button {
+  font-family: 'Cinzel', serif;
+  font-weight: 600;
+  font-size: 0.75rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  background: transparent;
+  color: var(--cg-accent);
+  border: 1px solid var(--cg-hairline-strong);
+  padding: 0.45rem 0.9rem;
+  cursor: pointer;
+}
+.interview .beat-pool button:hover,
+.interview .beat-pool button:focus-visible {
+  border-color: var(--cg-accent);
+}
+.interview .beat-row .mode {
+  display: block;
+  margin-top: 0.5rem;
+  font-family: 'Cinzel', serif;
+  font-weight: 600;
+  font-size: 0.68rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--cg-label);
+}
+.interview .beat-prompt {
+  margin: 0.4rem 0 0;
+  color: var(--cg-text-soft);
+  font-style: italic;
+}
+.interview .beat-row .field {
+  margin-top: 0.8rem;
+}
+.interview .beat-row .beat-foot {
+  display: flex;
+  gap: 1rem;
+  align-items: center;
+  margin-top: 0.6rem;
+}
 .interview .stance b {
   display: block;
   font-family: 'Cinzel', serif;

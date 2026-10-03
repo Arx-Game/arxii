@@ -9,12 +9,16 @@ offers and removes picks whose offer has gone.
 from __future__ import annotations
 
 from collections import defaultdict
+from collections.abc import Iterable
 from typing import TYPE_CHECKING
 
 from django.db.models import Q
 
 from world.character_creation.constants import (
     ActorSheetPrompt,
+    BeatMode,
+    BeatSelection,
+    LifeStage,
     OfferArrival,
     OfferChapter,
     QuestionKind,
@@ -24,11 +28,13 @@ from world.character_creation.models import (
     BeginningTradition,
     CharacterDraft,
     DistinctionOffer,
+    LifeBeat,
+    LifeBeatExclusion,
     OfferFirstLook,
     TraditionStateLine,
 )
 from world.character_creation.questionnaire import DraftAnswers, anchor_for, visible_slot_ids
-from world.character_creation.types import ClosedDistinction, VisibleOffer
+from world.character_creation.types import BeatPoolEntry, ClosedDistinction, VisibleOffer
 from world.character_sheets.types import EnemyDegree
 from world.distinctions.models import Distinction, DistinctionEffect
 from world.distinctions.types import (
@@ -106,6 +112,106 @@ def _slate_line(draft: CharacterDraft) -> BeginningTradition | None:
     )
 
 
+#: A life's stages in the order a life has them, for pooling and grouping beats;
+#: the choice values sort alphabetically, which is not that order.
+LIFE_STAGE_ORDER: dict[str, int] = {value: i for i, value in enumerate(LifeStage.values)}
+
+#: The ``draft_data`` key holding a draft's beats: ``{"<beat_id>": {"taken": bool,
+#: "unknown": bool, "line": str}}``. A beat absent from the map is not taken.
+BEATS_KEY = "beats"
+
+
+def beat_pool(draft: CharacterDraft) -> list[LifeBeat]:
+    """Every active library beat this draft's Beginning offers, stage by stage (#4124).
+
+    The library applies to every Beginning unless a ``LifeBeatExclusion`` says
+    otherwise; with no Beginning picked there is no pool. Called by ``beats_for``
+    and ``_context``.
+    """
+    beginning_id = draft.selected_beginnings_id
+    if beginning_id is None:
+        return []
+    excluded = set(
+        LifeBeatExclusion.objects.filter(beginning_id=beginning_id).values_list(
+            "beat_id", flat=True
+        )
+    )
+    beats = [b for b in LifeBeat.objects.filter(is_active=True) if b.pk not in excluded]
+    beats.sort(key=lambda b: (LIFE_STAGE_ORDER.get(b.life_stage, 99), b.sort_order, b.pk))
+    return beats
+
+
+def _draft_beat_states(draft: CharacterDraft) -> dict[int, dict]:
+    """The draft's own state per beat id, read off ``draft_data[BEATS_KEY]``."""
+    raw = draft.draft_data.get(BEATS_KEY) or {}
+    out: dict[int, dict] = {}
+    if not isinstance(raw, dict):
+        return out
+    for key, state in raw.items():
+        try:
+            beat_id = int(key)
+        except (TypeError, ValueError):
+            continue
+        if isinstance(state, dict):
+            out[beat_id] = state
+    return out
+
+
+def beats_for(draft: CharacterDraft) -> list[BeatPoolEntry]:
+    """The beat pool as this draft meets it, with the draft's state on each (#4124).
+
+    Called by the draft's ``beats`` endpoint. Under ``BeatMode.ONE_KEPT`` the pool's
+    beats are taken by the Beginning itself (the Sleeper's one kept beat); under
+    ``POOL`` a beat is taken only when the draft says so.
+    """
+    pool = beat_pool(draft)
+    states = _draft_beat_states(draft)
+    kept = (
+        draft.selected_beginnings_id is not None
+        and draft.selected_beginnings.beat_mode == BeatMode.ONE_KEPT
+    )
+    out: list[BeatPoolEntry] = []
+    for beat in pool:
+        state = states.get(beat.pk, {})
+        out.append(
+            BeatPoolEntry(
+                beat_id=beat.pk,
+                name=beat.name,
+                prompt=beat.prompt,
+                life_stage=beat.life_stage,
+                selection=beat.selection,
+                taken=kept or bool(state.get("taken")),
+                unknown=bool(state.get("unknown")),
+                line=str(state.get("line") or ""),
+                answer_offer_ids=[offer.pk for offer in beat.answers],
+                kept=kept,
+            )
+        )
+    return out
+
+
+def taken_beat_ids(draft: CharacterDraft) -> set[int]:
+    """Ids of the beats whose answers are open to this draft: taken, and not unknown."""
+    return {e.beat_id for e in beats_for(draft) if e.taken and not e.unknown}
+
+
+def one_of_beat_conflicts(offers: Iterable[DistinctionOffer]) -> list[str]:
+    """Names of the one-of beats that ``offers`` would answer more than once (#4124).
+
+    Called by the distinctions sync view before it saves: a ``BeatSelection.ONE_OF``
+    beat takes one answer, so two of its offers in one payload is a refused pick,
+    not a reconcile. Offers on any-that-apply beats never conflict.
+    """
+    by_beat: dict[int, set[int]] = defaultdict(set)
+    names: dict[int, str] = {}
+    for offer in offers:
+        if offer.beat_id is None or offer.beat.selection != BeatSelection.ONE_OF:
+            continue
+        by_beat[offer.beat_id].add(offer.distinction_id)
+        names[offer.beat_id] = offer.beat.name
+    return [names[beat_id] for beat_id, dists in by_beat.items() if len(dists) > 1]
+
+
 def _opener_satisfied(offer: DistinctionOffer, ctx: dict) -> bool:
     """Whether the draft has satisfied this offer's opener.
 
@@ -131,6 +237,10 @@ def _opener_satisfied(offer: DistinctionOffer, ctx: dict) -> bool:
         if offer.enemy_reason_id is not None:
             return offer.enemy_reason_id == ctx["enemy_reason_id"]
         return bool(offer.enemy_degree) and offer.enemy_degree == ctx["enemy_degree"]
+    if chapter == OfferChapter.BACKGROUNDS:
+        # A beat's answers open when the beat is taken and not unknown (#4124); a
+        # removed beat closes them, and reconcile drops the picks.
+        return offer.beat_id in ctx["taken_beat_ids"]
     return False
 
 
@@ -149,6 +259,8 @@ def _context(draft: CharacterDraft) -> dict:
         # The enemy chapter's two openers (#3709): the reason picked, the degree picked.
         "enemy_reason_id": enemy.get("reason_id"),
         "enemy_degree": enemy.get("degree", ""),
+        # The Backgrounds chapter's opener (#4124): the beats the draft has taken.
+        "taken_beat_ids": taken_beat_ids(draft),
     }
 
 
@@ -183,6 +295,7 @@ def visible_offers(draft: CharacterDraft) -> dict[int, DistinctionOffer]:
         "schooling_line",
         "enemy_reason",
         "appearance_section",
+        "beat",
     )
     return {o.id: o for o in rows if o.distinction_id not in hidden and _opener_satisfied(o, ctx)}
 
@@ -241,6 +354,8 @@ def opener_label(offer: DistinctionOffer, *, draft: CharacterDraft | None = None
         return _origin_opener_label(offer, draft)
     if offer.schooling_line_id:
         return offer.schooling_line.name
+    if offer.beat_id:
+        return offer.beat.name
     return ""
 
 
@@ -385,6 +500,12 @@ def offers_for(draft: CharacterDraft, chapter: OfferChapter) -> list[VisibleOffe
     for offer in chapter_offers:
         if offer.feature_rows:
             group_orders[offer.id] = _FEATURE_ROWS_GROUP_ORDER
+    # Backgrounds groups by beat, in the pool's own order (stage, then the beat's
+    # sort order), so one beat's answers stay contiguous for the leaf's mounts (#4124).
+    if chapter == OfferChapter.BACKGROUNDS:
+        beat_rank = {beat.pk: i for i, beat in enumerate(beat_pool(draft))}
+        for offer in chapter_offers:
+            group_orders[offer.id] = beat_rank.get(offer.beat_id, len(beat_rank))
     sort_orders = {offer.id: offer.sort_order for offer in chapter_offers}
     out.sort(
         key=lambda o: (

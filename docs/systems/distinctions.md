@@ -2,11 +2,14 @@
 
 Character advantages and disadvantages that mechanically modify stats, rolls, and abilities.
 No CG stage of its own -- since #3675 each CG chapter (the Gift tradition step, the
-Glimpse, Lineage answers, Appearance, the Actor's Sheet, and since #3709 the enemy)
-offers the distinctions that belong to it, each line hanging off the thing the player is
-answering (a tag, an answer, a schooling line, a question, an enemy reason or degree, an
-Appearance section) with a first look pinned per Beginning; see "CG Integration" below,
-`docs/systems/character_creation.md` and ADR-0282.
+Glimpse, Lineage answers, Appearance, the Actor's Sheet, since #3709 the enemy, and
+since #4124 the beats of a life) offers the distinctions that belong to it, each line
+hanging off the thing the player is answering (a tag, an answer, a schooling line, a
+question, an enemy reason or degree, an Appearance section, a beat) with a first look
+pinned per Beginning; see "CG Integration" below, `docs/systems/character_creation.md`
+and ADR-0282. The personality and history catalogue's home is the Backgrounds chapter:
+a distinction no beat offers is unreachable in CG, so the beat library is authored from
+the catalogue backward.
 
 **Source:** `src/world/distinctions/`
 **API Base:** `/api/distinctions/`

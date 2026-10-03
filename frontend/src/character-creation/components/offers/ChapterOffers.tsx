@@ -126,6 +126,13 @@ interface ChapterOffersProps {
   foldUnder?: number;
   wordSeeMore?: string;
   wordHeld?: string;
+  /**
+   * One-of (#4124): the block's offers are alternatives, drawn across as a row of
+   * cards with a round dot, and picking one drops any sibling already picked. The
+   * server refuses two answers on a one-of beat as well; this keeps the page in
+   * step without a round trip.
+   */
+  exclusive?: boolean;
 }
 
 interface PriceWords {
@@ -224,6 +231,7 @@ export function ChapterOffers({
   foldUnder = FOLD_UNDER,
   wordSeeMore,
   wordHeld,
+  exclusive = false,
 }: ChapterOffersProps) {
   const { data: offersData, isLoading } = useDraftOffers(draft.id, chapter);
   const { data: draftDistinctions } = useDraftDistinctions(draft.id);
@@ -244,13 +252,27 @@ export function ChapterOffers({
     return map;
   }, [draftDistinctions]);
 
+  // The block's own offer ids (#4124): an exclusive block drops a sibling pick when
+  // another is taken.
+  const blockOfferIds = useMemo(
+    () =>
+      new Set(
+        (offersData?.offers ?? [])
+          .filter((offer) => (filter ? filter(offer) : true))
+          .map((offer) => offer.offer_id)
+      ),
+    [offersData, filter]
+  );
+
   const applyRank = useCallback(
     (offer: VisibleOffer, rank: number) => {
       // Only the plain (featureless) row for this distinction is replaced (#3739):
       // a per-feature holding of the same distinction is a different pick, and
       // `FeatureDistinctions` owns it.
       const base = choiceEntries(draftDistinctions).filter(
-        (e) => !(e.id === offer.distinction_id && sameFeature(e, {}))
+        (e) =>
+          !(e.id === offer.distinction_id && sameFeature(e, {})) &&
+          !(exclusive && rank > 0 && blockOfferIds.has(e.offer_id))
       );
       const next =
         rank > 0
@@ -269,7 +291,7 @@ export function ChapterOffers({
           : base;
       syncDistinctions.mutate(next);
     },
-    [draftDistinctions, syncDistinctions]
+    [draftDistinctions, syncDistinctions, exclusive, blockOfferIds]
   );
 
   if (isLoading) {
@@ -306,7 +328,7 @@ export function ChapterOffers({
     const busy = offer.is_locked || syncDistinctions.isPending;
     const body = (
       <>
-        <span className="dot sq" />
+        <span className={exclusive ? 'dot' : 'dot sq'} />
         <span>
           <b>
             {offer.name}
@@ -383,7 +405,7 @@ export function ChapterOffers({
           )}
         </label>
       )}
-      <ul className="stances">
+      <ul className={cn('stances', exclusive && 'oneof')}>
         {bundled.map((item) => (
           <li key={item.offer_id}>
             <div className="stance" aria-pressed="true" aria-disabled="true">
