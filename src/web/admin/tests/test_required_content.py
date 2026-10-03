@@ -955,6 +955,29 @@ class TestRequiredContentPanelRendersDependencyDetail(DeclarationPatchMixin, Tes
             body,
         )
 
+    def test_the_present_summary_counts_both_tiers(self) -> None:
+        """The summary once read "0 dependencies present" whatever was present: a
+        filter chain cannot add two lengths in one expression."""
+        from django.urls import reverse
+
+        present = rc.CustomProbe(fn=lambda: rc.ProbeResult(present=True))
+        required = self._dependency(present, "count-required")
+        tuning = rc.ContentDependency(
+            key="count-tuning",
+            label="Tuning sentinel",
+            tier=rc.DependencyTier.TUNING,
+            consumer=self.CONSUMER,
+            consequence=self.CONSEQUENCE,
+            probe=present,
+        )
+
+        self.client.force_login(self.super)
+        with self.patch_declarations((required, tuning)):
+            resp = self.client.get(reverse("admin_ops_required_content"))
+
+        body = " ".join(resp.content.decode().split())
+        self.assertIn("2 dependencies present", body)
+
 
 class TestTraditionStandardLinesProbes(TestCase):
     """Both standard-line tables (#3675): missing rows AND blank text both report.

@@ -34,9 +34,14 @@
       <th>Effects</th><th>From</th><th>Remove</th></tr></thead>
     <tbody id="consequence-rows">
       {% for row in rows %}
+      {% comment %}
+      A shared row is drop/reweight only (ruling RF-1): its Roll result and text
+      render as text, Can kill and Spin the wheel as disabled boxes, and its effects
+      as read-only lines. Its parent pool's own stage edits them.
+      {% endcomment %}
       <tr class="{% if row.is_kill %}sf-row--kill{% endif %}">
-        <td>{% for hidden in row.form.hidden_fields %}{{ hidden }}{% endfor %}{{ row.form.outcome_tier }}</td>
-        <td>{{ row.form.label }}</td>
+        <td>{% for hidden in row.form.hidden_fields %}{{ hidden }}{% endfor %}{% if row.is_shared %}{{ row.consequence.outcome_tier.name }}{% else %}{{ row.form.outcome_tier }}{% endif %}</td>
+        <td>{% if row.is_shared %}{{ row.consequence.label }}{% else %}{{ row.form.label }}{% endif %}</td>
         <td class="sf-num">{{ row.form.weight }}</td>
         <td>{{ row.form.character_loss }}</td>
         <td>{{ row.form.theater }}</td>
@@ -47,7 +52,7 @@
           {% elif row.copy_note %}<span class="sf-quiet">{{ row.copy_note }}</span>
           {% else %}<span class="sf-quiet">no effect</span>{% endif %}
           {% if row.other_effects_url %}<a href="{{ row.other_effects_url }}">more effects in the Consequence admin</a>{% endif %}
-          {% include "admin/soulfray_builder/_effect_editor.html" with formset=row.effects new_row=row.is_new %}
+          {% if row.effects %}{% include "admin/soulfray_builder/_effect_editor.html" with formset=row.effects new_row=row.is_new %}{% endif %}
         </td>
         <td>{{ row.source }}</td>
         <td>{{ row.form.remove }}</td>

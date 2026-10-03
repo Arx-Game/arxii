@@ -30,6 +30,7 @@ from web.admin.soulfray_builder.forms import (
     build_forms,
 )
 from web.admin.soulfray_builder.save import (
+    CacheGuard,
     cache_guard_for,
     live_new_rows,
     pool_switch_conflict,
@@ -37,8 +38,9 @@ from web.admin.soulfray_builder.save import (
     save_stage,
 )
 from web.admin.tuning.views import superuser_required
-from world.checks.models import ConsequenceEffect
+from world.checks.models import Consequence, ConsequenceEffect
 from world.conditions.models import ConditionStage
+from world.contributors.models import CreditedContent
 from world.magic.models import SoulfrayConfig
 from world.magic.services.soulfray import soulfray_ladder_summary, soulfray_stages
 from world.traits.models import CheckOutcome
@@ -54,6 +56,8 @@ class RowView:
     ``is_new`` rows were added on the page (copied or blank): their ``effects``
     formset is prefixed ``new<row index>`` and clones the page's shared
     new-row effect template; a saved row's clones its own ``e<pk>`` template.
+    A shared row (``is_shared``) has no ``effects`` formset: it is drop/reweight
+    only (ruling RF-1), so its text and effects render read-only.
     """
 
     form: ConsequenceRowForm
@@ -61,9 +65,11 @@ class RowView:
     is_kill: bool
     effect_lines: tuple[str, ...]
     other_effects_url: str
-    effects: EffectFormSet
+    effects: EffectFormSet | None
     copy_note: str
     is_new: bool
+    is_shared: bool = False
+    consequence: Consequence | None = None
 
 
 def _stage_or_404(stage_pk: int) -> ConditionStage:
@@ -136,9 +142,11 @@ def _row_views(forms: BuilderForms, copy_from: ConditionStage | None) -> list[Ro
                     if has_other
                     else ""
                 ),
-                effects=forms.effects[consequence.pk],
+                effects=forms.effects.get(consequence.pk),
                 copy_note="",
                 is_new=False,
+                is_shared=row.shared_from is not None,
+                consequence=consequence,
             )
         )
     return views
@@ -185,6 +193,12 @@ def _render_page(  # noqa: PLR0913 - the page's own render switches, all keyword
             "needs_setup": needs_setup,
             "conflict": conflict,
             "media": forms.media,
+            "pool_parents": {
+                str(pk): parent_id
+                for pk, parent_id in forms.pool.fields["pool"].queryset.values_list(
+                    "pk", "parent_id"
+                )
+            },
         },
     )
 
@@ -257,6 +271,19 @@ def soulfray_builder(request: HttpRequest, stage_pk: int) -> HttpResponse:
     return redirect(_after_save_url(request, stage))
 
 
+def _review_rows(stage: ConditionStage) -> list[CreditedContent]:
+    """The stage, its pool, the pool's own consequences and their effects."""
+    pool = stage.consequence_pool
+    if pool is None:
+        return [stage]
+    entries = pool.entries.filter(is_excluded=False).select_related("consequence")
+    if pool.parent_id is not None:
+        entries = entries.exclude(consequence__pool_entries__pool_id=pool.parent_id)
+    consequences = [entry.consequence for entry in entries]
+    effects = ConsequenceEffect.objects.filter(consequence_id__in=[c.pk for c in consequences])
+    return [stage, pool, *consequences, *effects]
+
+
 @superuser_required
 @require_POST
 def soulfray_builder_review(request: HttpRequest, stage_pk: int) -> HttpResponse:
@@ -264,28 +291,24 @@ def soulfray_builder_review(request: HttpRequest, stage_pk: int) -> HttpResponse
 
     "Own" means rows this pool holds that its parent does not: a shared row this
     stage only reweights is the shared pool's, reviewed wherever that is reviewed.
-    Authorship and unsaved edits on the page are never touched.
+    Authorship and unsaved edits on the page are never touched. Each stamp edits an
+    identity-mapped row, so a failure part way puts every stamped row back, the
+    same ``CacheGuard`` the save takes.
     """
     stage = _stage_or_404(stage_pk)
     contributor = current_contributor(request.user)
     if contributor is None:
         messages.error(request, "Link a contributor before marking this stage reviewed.")
         return redirect("admin_soulfray_builder", stage_pk=stage.pk)
-    with transaction.atomic():
-        stamp_reviewed(stage, contributor)
-        pool = stage.consequence_pool
-        if pool is not None:
-            stamp_reviewed(pool, contributor)
-            entries = pool.entries.filter(is_excluded=False).select_related("consequence")
-            if pool.parent_id is not None:
-                entries = entries.exclude(consequence__pool_entries__pool_id=pool.parent_id)
-            consequences = [entry.consequence for entry in entries]
-            for consequence in consequences:
-                stamp_reviewed(consequence, contributor)
-            for effect in ConsequenceEffect.objects.filter(
-                consequence_id__in=[c.pk for c in consequences]
-            ):
-                stamp_reviewed(effect, contributor)
+    guard = CacheGuard()
+    try:
+        with transaction.atomic():
+            for row in _review_rows(stage):
+                guard.keep(row)
+                stamp_reviewed(row, contributor)
+    except BaseException:
+        guard.restore()
+        raise
     messages.success(request, "Marked reviewed.")
     return redirect("admin_soulfray_builder", stage_pk=stage.pk)
 

@@ -9,6 +9,7 @@ from django.urls import reverse
 from actions.factories import ConsequencePoolEntryFactory, ConsequencePoolFactory
 from actions.models import ConsequencePool, ConsequencePoolEntry
 from evennia_extensions.models import PlayerData
+from web.admin.authoring.credit import stamp_reviewed
 from web.admin.soulfray_builder.forms import TABLE_CHANGED_ERROR, BaseEffectFormSet
 from web.admin.soulfray_builder.save import NEW_POOL_NAME_REQUIRED
 from web.admin.tests.soulfray_ladder import (
@@ -33,7 +34,7 @@ from world.conditions.factories import (
 )
 from world.conditions.models import ConditionCheckModifier, ConditionStage, ConditionStageOnEntry
 from world.contributors.factories import ContentContributorFactory
-from world.magic.factories import SoulfrayConfigFactory
+from world.magic.factories import SoulfrayConfigFactory, TechniqueFactory
 from world.mechanics.factories import PropertyFactory
 
 
@@ -113,7 +114,11 @@ class SaveTestCase(SoulfrayBuilderTestCase):
 
     @staticmethod
     def _row_index(data: dict[str, list[str]], label: str) -> int:
-        key = next(k for k, v in data.items() if k.endswith("-label") and v == [label])
+        """The row form index of the table row labelled ``label``. Matched on its
+        posted consequence id: a shared row renders its label as text, not an input."""
+        labelled = Consequence.objects.filter(label=label).values_list("pk", flat=True)
+        pks = {str(pk) for pk in labelled}
+        key = next(k for k, v in data.items() if k.endswith("-consequence") and set(v) & pks)
         return int(key.split("-")[1])
 
 
@@ -269,14 +274,24 @@ class RowEditsTest(SaveTestCase):
         stage = ConditionStage.objects.get(pk=self.fraying.pk)
         self.assertEqual(stage.description, "PLACEHOLDER still saved")
 
-    def test_a_shared_row_edited_here_is_saved_but_not_credited(self) -> None:
+    def test_a_shared_rows_text_and_effects_are_never_written_here(self) -> None:
+        """Ruling RF-1: a shared row is drop/reweight only, whatever the POST carries."""
         shared = Consequence.objects.get(label="common Success")
+        before = Consequence.objects.filter(pk=shared.pk).values(
+            "label", "character_loss", "theater", "outcome_tier_id", "written_by_id"
+        )[0]
         data = self._values(self.fraying)
-        data[f"rows-{self._row_index(data, 'common Success')}-label"] = ["PLACEHOLDER shared"]
+        index = self._row_index(data, "common Success")
+        self.assertNotIn(f"e{shared.pk}-TOTAL_FORMS", data)
+        data[f"rows-{index}-label"] = ["PLACEHOLDER shared"]
+        data[f"rows-{index}-character_loss"] = ["on"]
+        data[f"rows-{index}-theater"] = ["on"]
+        data[f"rows-{index}-outcome_tier"] = [str(self.ladder.outcomes["Failure"].pk)]
         prefix = f"e{shared.pk}"
         data.update(
             {
                 f"{prefix}-TOTAL_FORMS": ["1"],
+                f"{prefix}-INITIAL_FORMS": ["0"],
                 f"{prefix}-0-id": [""],
                 f"{prefix}-0-consequence": [str(shared.pk)],
                 f"{prefix}-0-effect_type": [EffectType.APPLY_CONDITION],
@@ -286,12 +301,34 @@ class RowEditsTest(SaveTestCase):
                 f"{prefix}-0-condition_severity": ["2"],
             }
         )
+        data["stage-description"] = ["PLACEHOLDER saved beside it"]
         self.assertEqual(self._post(self.fraying, data).status_code, 302)
-        shared = Consequence.objects.get(pk=shared.pk)
-        self.assertEqual((shared.label, shared.written_by), ("PLACEHOLDER shared", None))
-        effect = ConsequenceEffect.objects.get(consequence=shared)
-        self.assertIsNone(effect.written_by)
+        after = Consequence.objects.filter(pk=shared.pk).values(
+            "label", "character_loss", "theater", "outcome_tier_id", "written_by_id"
+        )[0]
+        self.assertEqual(after, before)
+        self.assertFalse(ConsequenceEffect.objects.filter(consequence=shared).exists())
+        self.assertFalse(
+            ConsequencePoolEntry.objects.filter(pool=self.fraying_pool, consequence=shared).exists()
+        )
         self.assertEqual(ConditionStage.objects.get(pk=self.fraying.pk).written_by, self.writer)
+
+    def test_a_shared_row_still_drops_and_reweights_beside_a_text_edit(self) -> None:
+        data = self._values(self.fraying)
+        success = self._row_index(data, "common Success")
+        partial = self._row_index(data, "common Partial Success")
+        data[f"rows-{success}-weight"] = ["4"]
+        data[f"rows-{success}-label"] = ["PLACEHOLDER ignored"]
+        data[f"rows-{partial}-remove"] = ["on"]
+        self.assertEqual(self._post(self.fraying, data).status_code, 302)
+        entries = dict(
+            ConsequencePoolEntry.objects.filter(pool=self.fraying_pool).values_list(
+                "consequence__label", "weight_override"
+            )
+        )
+        self.assertEqual(entries["common Success"], 4)
+        self.assertIn("common Partial Success", entries)
+        self.assertTrue(Consequence.objects.filter(label="common Success").exists())
 
     def test_copy_rows_clone_their_effects(self) -> None:
         data = self._values(self.tearing, f"?copy_from={self.fraying.pk}")
@@ -419,6 +456,86 @@ class RefusalsTest(SaveTestCase):
         self.assertEqual(self.client.post(self._url(self.numb), {}).status_code, 404)
 
 
+class PoolPickTest(SaveTestCase):
+    """The pool select offers Soulfray stage pools and pools nothing else uses (I1)."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        super().setUpTestData()
+        cls.clash_pool = ConsequencePoolFactory(name="Clash pool")
+        TechniqueFactory(clash_resolution_pool=cls.clash_pool)
+        cls.numb_pool = ConsequencePoolFactory(name="Numb pool")
+        cls.numb.consequence_pool = cls.numb_pool
+        cls.numb.save(update_fields=["consequence_pool"])
+
+    @staticmethod
+    def _parent_id(pool: ConsequencePool) -> int | None:
+        return ConsequencePool.objects.filter(pk=pool.pk).values_list("parent_id", flat=True)[0]
+
+    def test_the_pool_select_offers_stage_pools_and_unused_pools_only(self) -> None:
+        self.client.force_login(self.author)
+        resp = self.client.get(self._url(self.tearing))
+        offered = set(resp.context["forms"].pool.fields["pool"].queryset)
+        self.assertTrue({self.fraying_pool, self.ripping_pool, self.loose} <= offered)
+        self.assertNotIn(self.clash_pool, offered)
+        self.assertNotIn(self.numb_pool, offered)
+
+    def test_a_pool_another_consumer_holds_is_refused(self) -> None:
+        for held in (self.clash_pool, self.numb_pool):
+            with self.subTest(pool=held.name):
+                data = self._values(self.tearing)
+                data["pool-pool"] = [str(held.pk)]
+                data["pool-parent"] = [str(self.loose.pk)]
+                resp = self._post(self.tearing, data)
+                self.assertEqual(resp.status_code, 200)
+                self.assertIn("pool", resp.context["forms"].pool.errors)
+                self.assertIsNone(
+                    ConditionStage.objects.filter(pk=self.tearing.pk).values_list(
+                        "consequence_pool_id", flat=True
+                    )[0]
+                )
+                self.assertIsNone(self._parent_id(held))
+
+    def test_another_stages_pool_cannot_be_re_parented_from_here(self) -> None:
+        data = self._values(self.tearing)
+        data["pool-pool"] = [str(self.ripping_pool.pk)]
+        data["pool-parent"] = [str(self.loose.pk)]
+        resp = self._post(self.tearing, data)
+        self.assertEqual(resp.status_code, 200)
+        errors = resp.context["forms"].pool.errors["parent"]
+        self.assertIn("Soulfray - Ripping is also used elsewhere", errors[0])
+        self.assertIsNone(self._parent_id(self.ripping_pool))
+
+    def test_switching_to_a_pool_keeps_its_parent_when_the_select_is_left_alone(self) -> None:
+        data = self._values(self.fraying)
+        self.assertEqual(data["pool-parent"], [str(self.common.pk)])
+        data["pool-pool"] = [str(self.loose.pk)]
+        self.assertEqual(self._post(self.fraying, data).status_code, 302)
+        self.assertIsNone(self._parent_id(self.loose))
+        self.assertEqual(
+            ConditionStage.objects.filter(pk=self.fraying.pk).values_list(
+                "consequence_pool_id", flat=True
+            )[0],
+            self.loose.pk,
+        )
+
+    def test_switching_to_a_pool_and_changing_the_select_re_parents_it(self) -> None:
+        data = self._values(self.ripping)
+        self.assertEqual(data["pool-parent"], [""])
+        data["pool-pool"] = [str(self.loose.pk)]
+        data["pool-parent"] = [str(self.common.pk)]
+        self.assertEqual(self._post(self.ripping, data).status_code, 302)
+        self.assertEqual(self._parent_id(self.loose), self.common.pk)
+
+    def test_the_parent_select_never_offers_the_stages_own_pool(self) -> None:
+        self.client.force_login(self.author)
+        resp = self.client.get(self._url(self.ripping))
+        self.assertNotIn(
+            self.ripping_pool, set(resp.context["forms"].pool.fields["parent"].queryset)
+        )
+        self.assertIn('id="sf-pool-parents"', resp.content.decode())
+
+
 class CacheSafetyTest(SaveTestCase):
     """A save that does not commit leaves the identity-mapped rows as they were.
 
@@ -535,6 +652,25 @@ class ReviewTest(SaveTestCase):
         body = self.client.get(self._url(self.fraying)).content.decode()
         self.assertIn(reverse("admin_soulfray_builder_review", args=[self.fraying.pk]), body)
         self.assertIn('value="Mark reviewed"', body)
+
+    def test_a_failure_part_way_leaves_the_cached_rows_unreviewed(self) -> None:
+        calls = {"n": 0}
+
+        def _stamp(row, contributor) -> None:
+            calls["n"] += 1
+            if calls["n"] == 3:
+                message = "injected"
+                raise RuntimeError(message)
+            stamp_reviewed(row, contributor)
+
+        self.client.force_login(self.author)
+        with (
+            mock.patch("web.admin.soulfray_builder.views.stamp_reviewed", side_effect=_stamp),
+            self.assertRaises(RuntimeError),
+        ):
+            self.client.post(reverse("admin_soulfray_builder_review", args=[self.fraying.pk]))
+        self.assertIsNone(ConditionStage.objects.get(pk=self.fraying.pk).reviewed_by)
+        self.assertIsNone(ConsequencePool.objects.get(pk=self.fraying_pool.pk).reviewed_by)
 
     def test_review_is_post_only_and_needs_a_contributor(self) -> None:
         url = reverse("admin_soulfray_builder_review", args=[self.fraying.pk])

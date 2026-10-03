@@ -13,9 +13,12 @@ pool entry, its copied effects, and the effects typed into its own ``new<index>`
 formset, all in the same transaction (spec story 5: one Save). A new row left
 blank or ticked Remove is skipped, and so are its effects.
 
-A shared row (one the parent pool owns) can be reweighted or dropped here, and
-its text and effects edited, but it is never credited here: its own pool's
-authoring owns its credit, which is also why "Mark reviewed" skips it.
+A shared row (one the parent pool owns) is drop/reweight only (spec story 7,
+ruling RF-1): its text, Roll result, Can kill, Spin the wheel and effects are
+never written here, because every stage sharing the parent would see the edit.
+The forms disable those fields and build no effect formset for it, and
+``_update_row`` writes only its child entry. It is never credited here: its own
+pool's authoring owns its credit, which is also why "Mark reviewed" skips it.
 
 Every row these forms are bound to is an identity-mapped instance the live game
 reads too, and validating a ModelForm copies the posted values onto it. So the
@@ -197,6 +200,8 @@ def _save_pool(
         stage.save(update_fields=["consequence_pool"])
         return chosen, True
     touched = False
+    # ``parent`` is the effective one (``PoolForm.clean``): a switched pool whose
+    # parent select was left alone keeps its own, so this writes only a real change.
     parent_id = parent.pk if parent is not None else None
     guard.keep(chosen)
     if chosen.parent_id != parent_id:
@@ -279,30 +284,30 @@ def _update_row(
     guard: CacheGuard,
 ) -> None:
     consequence = row.consequence
-    changed = [name for name in _CONSEQUENCE_FIELDS if getattr(consequence, name) != data[name]]
     entry = ConsequencePoolEntry.objects.filter(pool=pool, consequence=consequence).first()
     guard.keep(entry)
-    if row.shared_from is None:
-        if data["remove"]:
-            entry.delete()
+    if row.shared_from is not None:
+        if data["remove"] != row.dropped or data["weight"] != row.weight:
+            _write_child_entry(pool, consequence, entry, data)
             saved.entries_changed = True
-            return
-        if entry.weight_override is None:
-            if consequence.weight != data["weight"]:
-                changed.append("weight")
-        elif entry.weight_override != data["weight"]:
-            entry.weight_override = data["weight"]
-            entry.save(update_fields=["weight_override"])
-            saved.entries_changed = True
-    elif data["remove"] != row.dropped or data["weight"] != row.weight:
-        _write_child_entry(pool, consequence, entry, data)
+        return
+    changed = [name for name in _CONSEQUENCE_FIELDS if getattr(consequence, name) != data[name]]
+    if data["remove"]:
+        entry.delete()
+        saved.entries_changed = True
+        return
+    if entry.weight_override is None:
+        if consequence.weight != data["weight"]:
+            changed.append("weight")
+    elif entry.weight_override != data["weight"]:
+        entry.weight_override = data["weight"]
+        entry.save(update_fields=["weight_override"])
         saved.entries_changed = True
     if changed:
         for name in changed:
             setattr(consequence, name, data[name])
         consequence.save(update_fields=changed)
-        if row.shared_from is None:
-            saved.credited.append(consequence)
+        saved.credited.append(consequence)
 
 
 def _save_rows(pool: ConsequencePool | None, forms: BuilderForms, guard: CacheGuard) -> _RowsSaved:
@@ -335,7 +340,6 @@ def save_stage(
     value or a row the rollback took back out of the database.
     """
     guard = guard if guard is not None else cache_guard_for(forms)
-    shared_ids = {row.consequence.pk for row in forms.table if row.shared_from is not None}
     guard.watch_created(*_CREATED_MODELS)
     try:
         with transaction.atomic():
@@ -352,10 +356,9 @@ def save_stage(
             if pool is not None and (pool_touched or rows.entries_changed or rows.credited):
                 touched.append(pool)
             touched.extend(rows.credited)
-            for consequence_id, effects in forms.effects.items():
-                saved_effects = effects.save()
-                if consequence_id not in shared_ids:
-                    touched.extend(saved_effects)
+            # Own rows only: a shared row has no effect formset (ruling RF-1).
+            for effects in forms.effects.values():
+                touched.extend(effects.save())
             seen: set[tuple[type, int]] = set()
             for row in touched:
                 key = (type(row), row.pk)

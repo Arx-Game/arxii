@@ -92,11 +92,16 @@
 
 <details>
   <summary>
-    {% blocktranslate count count=snapshot.present_required|length|add:snapshot.present_tuning|length %}
+    {% comment %}Filters chain left to right, so one expression cannot add two
+    lengths: `a|length|add:b|length` adds the list `b` to an int, which `add` turns
+    into "", and the trailing `|length` then reads 0 every time.{% endcomment %}
+    {% with required_count=snapshot.present_required|length tuning_count=snapshot.present_tuning|length %}
+    {% blocktranslate count count=required_count|add:tuning_count %}
     {{ count }} dependency present
     {% plural %}
     {{ count }} dependencies present
     {% endblocktranslate %}
+    {% endwith %}
   </summary>
   <table class="tuning-table required-content-table">
     <thead>

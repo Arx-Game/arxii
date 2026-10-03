@@ -112,10 +112,27 @@ class BuilderGetTest(SoulfrayPageTestCase):
 
     def test_shared_rows_name_their_pool_and_own_rows_say_this_stage(self) -> None:
         body = self._get(self.fraying).content.decode()
-        self.assertIn('value="common Success"', body)
+        self.assertIn('value="Fraying Failure"', body)
         self.assertIn("Soulfray - common", body)
         self.assertIn("this stage", body)
         self.assertIn("Apply Condition, self, Shaken sev 1", body)
+
+    def test_shared_rows_render_read_only(self) -> None:
+        """Ruling RF-1: a shared row's text is text, its boxes disabled, no effect editor."""
+        resp = self._get(self.fraying)
+        body = resp.content.decode()
+        self.assertIn("common Success", body)
+        self.assertNotIn('value="common Success"', body)
+        shared = Consequence.objects.get(label="common Success")
+        self.assertNotIn(f'id="effects-e{shared.pk}"', body)
+        self.assertIn(f'id="effects-e{self.fraying_failure.pk}"', body)
+        index = next(
+            i
+            for i, row in enumerate(resp.context["forms"].table)
+            if row.consequence.pk == shared.pk
+        )
+        for name in ("character_loss", "theater"):
+            self.assertRegex(body, rf'<input[^>]*name="rows-{index}-{name}"[^>]*disabled')
 
     def test_the_new_pool_name_shows_only_for_a_stage_with_no_pool(self) -> None:
         pooled = self._get(self.fraying).content.decode()

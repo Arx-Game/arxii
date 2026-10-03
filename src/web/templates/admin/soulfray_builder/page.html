@@ -71,6 +71,7 @@ styles the autocomplete selects.
   {% endif %}
 </div>
 
+{{ pool_parents|json_script:"sf-pool-parents" }}
 <script>
 (function () {
   // Shared clone helpers (admin/js/builder_formsets.js): there is no saved row to
@@ -102,11 +103,21 @@ styles the autocomplete selects.
   }
 
   // "New pool" in the pool select reveals the new pool's name; any pool hides it.
+  // Picking an existing pool resets "inherits" to that pool's own parent, so a
+  // switch never re-parents the pool it lands on (the server keeps the chosen
+  // pool's parent too unless the author changes this select).
   var poolSelect = document.getElementById("id_pool-pool");
+  var parentSelect = document.getElementById("id_pool-parent");
   var newPoolName = document.getElementById("new-pool-name");
+  var parentsData = document.getElementById("sf-pool-parents");
+  var poolParents = parentsData ? JSON.parse(parentsData.textContent) : {};
   if (poolSelect && newPoolName) {
     poolSelect.addEventListener("change", function () {
       newPoolName.hidden = poolSelect.value !== "";
+      if (parentSelect && poolSelect.value !== "") {
+        var parent = poolParents[poolSelect.value];
+        parentSelect.value = parent === null || parent === undefined ? "" : String(parent);
+      }
     });
   }
 
