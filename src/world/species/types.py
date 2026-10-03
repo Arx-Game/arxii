@@ -20,3 +20,12 @@ class MyLanguageRow:
     fluency: int
     band: str
     is_current: bool
+
+
+@dataclass(frozen=True)
+class ConditionFluencyBonus:
+    """Active conditions' summed fluency bonus toward one language, and their names (#4090)."""
+
+    language_id: int
+    total: int
+    sources: tuple[str, ...]

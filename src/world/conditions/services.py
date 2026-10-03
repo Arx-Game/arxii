@@ -2063,6 +2063,35 @@ def get_condition_modifier_breakdown(
     return rows
 
 
+def active_condition_instances_by_sheet(sheet_ids: Iterable[int]) -> list[ConditionInstance]:
+    """Active condition instances on many sheets, in one query and with no teardown (#4090).
+
+    The pure-read sibling of ``get_active_conditions``: the canonical active predicate
+    (``ConditionHandler._canonical_active_qs``) plus skipping an in-game-time instance whose
+    ``expires_at`` has passed. It never tears an expired instance down, because readers
+    (a serializer, a listener's comprehension) must not write. CharacterSheet shares
+    ObjectDB's pk, so each instance's ``target_id`` is its sheet pk. ``condition`` and
+    ``current_stage`` are joined in.
+    """
+    ids = set(sheet_ids)
+    if not ids:
+        return []
+    now = timezone.now()
+    # Keep in sync with ConditionHandler._canonical_active_qs in handlers.py
+    return list(
+        ConditionInstance.objects.filter(
+            Q(is_suppressed=False) | Q(suppressed_until__isnull=False, suppressed_until__lt=now),
+            target_id__in=ids,
+        )
+        .filter(
+            Q(expires_at__isnull=True)
+            | Q(expires_at__gt=now)
+            | ~Q(condition__default_duration_type=DurationType.INGAME_TIME)
+        )
+        .select_related("condition", "current_stage")
+    )
+
+
 def condition_modifier_totals_by_sheet(
     sheet_ids: Iterable[int],
     modifier_target: "ModifierTarget",
@@ -2076,23 +2105,7 @@ def condition_modifier_totals_by_sheet(
     whose ``expires_at`` has passed; unlike ``get_active_conditions`` it never tears an
     instance down, because readers (a serializer) must not write.
     """
-    ids = set(sheet_ids)
-    if not ids:
-        return {}
-    now = timezone.now()
-    # Keep in sync with ConditionHandler._canonical_active_qs in handlers.py
-    instances = list(
-        ConditionInstance.objects.filter(
-            Q(is_suppressed=False) | Q(suppressed_until__isnull=False, suppressed_until__lt=now),
-            target_id__in=ids,
-        )
-        .filter(
-            Q(expires_at__isnull=True)
-            | Q(expires_at__gt=now)
-            | ~Q(condition__default_duration_type=DurationType.INGAME_TIME)
-        )
-        .select_related("current_stage")
-    )
+    instances = active_condition_instances_by_sheet(sheet_ids)
     if not instances:
         return {}
     condition_ids = {instance.condition_id for instance in instances}

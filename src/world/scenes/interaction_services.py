@@ -869,13 +869,19 @@ def _language_render_for(
     exactly as before #2993. The writer and staff always get ground truth; any
     object without a resolvable sheet (no CharacterSheet — e.g. an NPC prop or
     other non-player object) also gets ground truth rather than a garbled read.
+    The listener reads comprehension (trained plus active-condition bonuses, #4090); the
+    speaker's band stays on trained fluency.
     """
     language = interaction.language if interaction.language_id else None
     if language is None or language.is_universal:
         return None
 
     from world.species.language_constants import fluency_band  # noqa: PLC0415
-    from world.species.language_services import fluency_value, render_speech  # noqa: PLC0415
+    from world.species.language_services import (  # noqa: PLC0415
+        comprehension_value,
+        fluency_value,
+        render_speech,
+    )
 
     speaker_sheet = persona.character_sheet
     speaker_band = fluency_band(fluency_value(speaker_sheet, language))
@@ -901,7 +907,7 @@ def _language_render_for(
             interaction.content,
             language=language,
             speaker_band=speaker_band,
-            listener_value=fluency_value(sheet, language),
+            listener_value=comprehension_value(sheet, language),
         )
 
     return _render_for

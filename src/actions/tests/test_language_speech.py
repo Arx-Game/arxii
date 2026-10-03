@@ -4,12 +4,30 @@ from unittest.mock import patch
 
 from django.test import TestCase
 
-from actions.definitions.communication import MutterAction, SayAction, WhisperAction
+from actions.definitions.communication import (
+    EmitAction,
+    MutterAction,
+    PoseAction,
+    SayAction,
+    WhisperAction,
+)
 from evennia_extensions.factories import CharacterFactory, ObjectDBFactory
 from world.character_sheets.factories import CharacterSheetFactory
+from world.conditions.constants import DurationType
+from world.conditions.factories import (
+    ConditionInstanceFactory,
+    ConditionModifierEffectFactory,
+    ConditionTemplateFactory,
+)
+from world.conditions.services import expire_scene_scoped_conditions
+from world.mechanics.models import ModifierTarget
 from world.scenes.constants import InteractionMode
 from world.scenes.models import Interaction
 from world.species.factories import LanguageFactory
+from world.species.tests.test_language_comprehension import (
+    make_language_with_target,
+    make_understanding_condition,
+)
 from world.traits.models import CharacterTraitValue, Trait, TraitCategory, TraitType
 
 
@@ -323,3 +341,109 @@ class MutterActionLanguageTests(LanguageSpeechTestCase):
         )
 
         assert result.success is False
+
+
+class ConditionComprehensionLiveTests(TestCase):
+    """#4090: a listener's active condition raises comprehension on live delivery."""
+
+    TEXT = "the north gate opens at the second bell so bring the lamp oil"
+
+    def setUp(self) -> None:
+        ModifierTarget.clear_trait_cache()
+        CharacterTraitValue.flush_instance_cache()
+        self.language, self.target = make_language_with_target("LiveCompTongue")
+        self.condition = make_understanding_condition("Placeholder Live Understanding", self.target)
+        self.room = _make_room()
+        self.speaker = CharacterFactory(db_key="Envoy", location=self.room)
+        self.speaker_sheet = CharacterSheetFactory(character=self.speaker)
+        self.speaker_fluency = CharacterTraitValue.objects.create(
+            character=self.speaker_sheet, trait=self.language.trait, value=100
+        )
+        self.listener = CharacterFactory(db_key="Wren", location=self.room)
+        self.listener_sheet = CharacterSheetFactory(character=self.listener)
+
+    def _heard(self) -> str:
+        with patch.object(self.listener, "msg") as mock_msg:
+            result = SayAction().run(self.speaker, text=self.TEXT, language_id=self.language.pk)
+        assert result.success is True
+        sent_text, _options = mock_msg.call_args_list[0].args[0]
+        return sent_text
+
+    def _ws_content(self) -> str:
+        with patch.object(self.listener, "msg") as mock_msg:
+            SayAction().run(self.speaker, text=self.TEXT, language_id=self.language.pk)
+        payloads = [call.kwargs for call in mock_msg.call_args_list if "interaction" in call.kwargs]
+        return payloads[-1]["interaction"][1]["content"]
+
+    def test_strong_condition_reads_clear_on_telnet_and_ws(self) -> None:
+        ConditionInstanceFactory(target=self.listener, condition=self.condition, severity=4)
+        assert self._heard() == f'Envoy says in {self.language.name}, "{self.TEXT}"'
+        assert self._ws_content() == self.TEXT
+
+    def test_weak_condition_reads_partly_garbled(self) -> None:
+        ConditionInstanceFactory(target=self.listener, condition=self.condition, severity=2)
+        heard = self._heard()
+        assert heard.startswith(f'Envoy says in {self.language.name}, "')
+        assert "..." in heard
+        assert heard != f'Envoy says in {self.language.name}, "{self.TEXT}"'
+
+    def test_without_condition_garbles_entirely(self) -> None:
+        assert self._heard() == f'Envoy says in {self.language.name}, "..."'
+
+    def test_condition_does_not_let_the_listener_speak(self) -> None:
+        ConditionInstanceFactory(target=self.listener, condition=self.condition, severity=4)
+        result = SayAction().run(self.listener, text="hello", language_id=self.language.pk)
+        assert result.success is False
+        assert result.message == "You don't know that tongue."
+
+    def test_speaker_under_condition_is_heard_at_trained_level(self) -> None:
+        """F5: a condition on the SPEAKER does not lift their band; listeners hear trained."""
+        self.speaker_fluency.value = 20
+        self.speaker_fluency.save(update_fields=["value"])
+        ConditionInstanceFactory(target=self.speaker, condition=self.condition, severity=4)
+        CharacterTraitValue.objects.create(
+            character=self.listener_sheet, trait=self.language.trait, value=100
+        )
+        heard = self._heard()
+        assert "..." in heard
+        assert heard != f'Envoy says in {self.language.name}, "{self.TEXT}"'
+        assert self._ws_content() != self.TEXT
+
+    def test_scene_sweep_ends_the_effect(self) -> None:
+        scene_condition = ConditionTemplateFactory(
+            name="Placeholder Scene Understanding", default_duration_type=DurationType.SCENE
+        )
+        ConditionModifierEffectFactory(
+            condition=scene_condition, modifier_target=self.target, value=80
+        )
+        ConditionInstanceFactory(target=self.listener, condition=scene_condition)
+        assert self._heard() == f'Envoy says in {self.language.name}, "{self.TEXT}"'
+        expire_scene_scoped_conditions([self.listener])
+        assert self._heard() == f'Envoy says in {self.language.name}, "..."'
+
+
+class GarbleScopeTests(TestCase):
+    """Decision 9: poses and emits are never language-tagged, so never garbled."""
+
+    def setUp(self) -> None:
+        ModifierTarget.clear_trait_cache()
+        self.language, _target = make_language_with_target("ScopeTongue")
+        room = _make_room()
+        self.speaker = CharacterFactory(db_key="Envoy", location=room)
+        sheet = CharacterSheetFactory(character=self.speaker)
+        CharacterTraitValue.objects.create(character=sheet, trait=self.language.trait, value=100)
+        sheet.current_language = self.language
+        sheet.save(update_fields=["current_language"])
+
+    def test_pose_emit_and_tagged_pose_store_no_language(self) -> None:
+        PoseAction().run(self.speaker, text="sets both hands flat on the table.")
+        PoseAction().run(
+            self.speaker, text="looks to each face in turn.", language_id=self.language.pk
+        )
+        EmitAction().run(self.speaker, text="A bell tolls somewhere below.")
+        for content in (
+            "sets both hands flat on the table.",
+            "looks to each face in turn.",
+            "A bell tolls somewhere below.",
+        ):
+            assert Interaction.objects.get(content=content).language_id is None

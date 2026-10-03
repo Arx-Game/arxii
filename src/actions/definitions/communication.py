@@ -304,7 +304,8 @@ def _render_speech_for_listener(
     Mirrors ``world.scenes.interaction_services._language_render_for``'s
     ordering: the writer and staff always get ground truth; an object with no
     resolvable CharacterSheet (a prop, an NPC) also gets ground truth rather
-    than a garbled read.
+    than a garbled read. The listener reads comprehension (trained plus
+    active-condition bonuses, #4090); the speaker's band stays on trained fluency.
     """
     if obj.pk == actor.pk:
         return text
@@ -316,13 +317,16 @@ def _render_speech_for_listener(
     except ObjectDoesNotExist:
         return text
 
-    from world.species.language_services import fluency_value, render_speech  # noqa: PLC0415
+    from world.species.language_services import (  # noqa: PLC0415
+        comprehension_value,
+        render_speech,
+    )
 
     return render_speech(
         text,
         language=language,
         speaker_band=speaker_band,
-        listener_value=fluency_value(sheet, language),
+        listener_value=comprehension_value(sheet, language),
     )
 
 
