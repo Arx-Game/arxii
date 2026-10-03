@@ -519,23 +519,25 @@ class PromoteSummonError(Exception):
 
 
 def _is_charmed_by_caster(opponent, caster_character) -> bool:
-    """Check if opponent's objectdb has an active Charmed condition sourced by caster.
+    """Check if opponent's objectdb has an active allegiance condition sourced by caster.
 
-    Uses get_active_conditions + ConditionInstance.source_character FK check —
-    NOT just condition-name presence (which would let any charmer acquire
-    another charmer's target).
+    Reads by ``ConditionTemplate.sets_allegiance`` + ``ConditionInstance.source_character`` —
+    NOT condition-name presence (which would let any charmer acquire another
+    charmer's target, or break on a renamed/reauthored row, #4091).
     """
-    from world.conditions.constants import CHARM_CONDITION_NAME  # noqa: PLC0415
-    from world.conditions.models import ConditionTemplate  # noqa: PLC0415
-    from world.conditions.services import get_active_conditions  # noqa: PLC0415
+    from world.conditions.constants import Allegiance  # noqa: PLC0415
+    from world.npc_services.allegiance import allegiance_sourced_by  # noqa: PLC0415
 
     if opponent.objectdb_id is None:
         return False
-    charm_template = ConditionTemplate.objects.filter(name=CHARM_CONDITION_NAME).first()
-    if charm_template is None:
-        return False
-    active = get_active_conditions(opponent.objectdb, condition=charm_template)
-    return any(inst.source_character_id == caster_character.pk for inst in active)
+    return (
+        allegiance_sourced_by(
+            opponent.objectdb,
+            caster_character,
+            kinds=frozenset({Allegiance.ALLY_OF_CASTER}),
+        )
+        is not None
+    )
 
 
 @transaction.atomic
@@ -584,9 +586,9 @@ def promote_summon_to_companion(
     from world.checks.services import perform_check  # noqa: PLC0415
     from world.combat.constants import CombatAllegiance, OpponentStatus  # noqa: PLC0415
     from world.companions.content import BIND_ATTEMPT_CHECK_NAME  # noqa: PLC0415
-    from world.conditions.constants import CHARM_CONDITION_NAME  # noqa: PLC0415
-    from world.conditions.models import ConditionTemplate  # noqa: PLC0415
+    from world.conditions.constants import Allegiance  # noqa: PLC0415
     from world.conditions.services import remove_condition  # noqa: PLC0415
+    from world.npc_services.allegiance import allegiance_sourced_by  # noqa: PLC0415
 
     caster_character = caster_sheet.character
 
@@ -635,9 +637,13 @@ def promote_summon_to_companion(
 
     # --- Consume charm on the charmed-enemy path ---
     if charm_applied and combat_opponent.objectdb is not None:
-        charm_template = ConditionTemplate.get_by_name(CHARM_CONDITION_NAME)
-        if charm_template is not None:
-            remove_condition(combat_opponent.objectdb, charm_template)
+        instance = allegiance_sourced_by(
+            combat_opponent.objectdb,
+            caster_character,
+            kinds=frozenset({Allegiance.ALLY_OF_CASTER}),
+        )
+        if instance is not None:
+            remove_condition(combat_opponent.objectdb, instance.condition)
 
     return companion
 

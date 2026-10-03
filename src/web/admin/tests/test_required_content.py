@@ -1437,3 +1437,67 @@ class TestCharacterCreationGapProbes(TestCase):
             self.assertIn(key, keys)
             self.assertEqual(keys[key].tier, rc.DependencyTier.REQUIRED)
             self.assertTrue(keys[key].admin_model)
+
+
+class TestAllegianceCharmConditionProbe(TestCase):
+    """`allegiance-charm-condition` reads `sets_allegiance`, never a name (#4091)."""
+
+    def test_missing_when_no_template_sets_allegiance_ally(self) -> None:
+        ConditionTemplateFactory(name="Charmed")  # sets_allegiance blank by default
+        result = _probe_for("allegiance-charm-condition").resolve(None)
+        self.assertFalse(result.present)
+
+    def test_present_when_a_template_sets_allegiance_ally(self) -> None:
+        from world.checks.factories import CheckTypeFactory
+        from world.conditions.constants import Allegiance
+
+        ConditionTemplateFactory(
+            name="Beguiled",
+            sets_allegiance=Allegiance.ALLY_OF_CASTER,
+            allegiance_break_check_type=CheckTypeFactory(name="RC Insight"),
+        )
+        result = _probe_for("allegiance-charm-condition").resolve(None)
+        self.assertTrue(result.present)
+
+
+class TestAllegianceBreakCheckProbe(TestCase):
+    """`allegiance-break-check` names any allegiance condition missing its break check (#4091)."""
+
+    def test_missing_names_the_template(self) -> None:
+        from world.conditions.constants import Allegiance
+
+        ConditionTemplateFactory(
+            name="No Break Check",
+            sets_allegiance=Allegiance.NEUTRAL,
+            allegiance_break_check_type=None,
+        )
+        result = rc._probe_allegiance_break_checks()
+        self.assertFalse(result.present)
+        self.assertIn("No Break Check", result.missing)
+
+    def test_present_when_every_allegiance_condition_has_a_check(self) -> None:
+        from world.checks.factories import CheckTypeFactory
+        from world.conditions.constants import Allegiance
+
+        ConditionTemplateFactory(
+            name="Has Break Check",
+            sets_allegiance=Allegiance.TURNED,
+            allegiance_break_check_type=CheckTypeFactory(name="RC Break"),
+        )
+        result = rc._probe_allegiance_break_checks()
+        self.assertTrue(result.present)
+
+
+class TestSettleActionTemplateProbe(TestCase):
+    """`settle-action-template` is missing until one ActionTemplate settles allegiance (#4091)."""
+
+    def test_missing_when_no_template_settles_allegiance(self) -> None:
+        result = _probe_for("settle-action-template").resolve(None)
+        self.assertFalse(result.present)
+
+    def test_present_when_a_template_settles_allegiance(self) -> None:
+        from actions.factories import ActionTemplateFactory
+
+        ActionTemplateFactory(name="Settle RC", category="social", settles_allegiance=True)
+        result = _probe_for("settle-action-template").resolve(None)
+        self.assertTrue(result.present)
