@@ -589,6 +589,7 @@ def promote_summon_to_companion(
     from world.conditions.constants import Allegiance  # noqa: PLC0415
     from world.conditions.services import remove_condition  # noqa: PLC0415
     from world.npc_services.allegiance import allegiance_sourced_by  # noqa: PLC0415
+    from world.scenes.constants import RoundStatus  # noqa: PLC0415
 
     caster_character = caster_sheet.character
 
@@ -598,9 +599,16 @@ def promote_summon_to_companion(
         and combat_opponent.allegiance == CombatAllegiance.ALLY
         and combat_opponent.status == OpponentStatus.ACTIVE
     )
+    # Decision 19: the charmed-enemy path also accepts a WON_OVER opponent of an
+    # already-COMPLETED encounter — the bind window that keeps the nameless body
+    # alive after victory (see world.combat.won_over.bind_window_open).
+    charm_status_ok = combat_opponent.status == OpponentStatus.ACTIVE or (
+        combat_opponent.status == OpponentStatus.WON_OVER
+        and combat_opponent.encounter.status == RoundStatus.COMPLETED
+    )
     is_charmed_enemy = (
         not is_summon
-        and combat_opponent.status == OpponentStatus.ACTIVE
+        and charm_status_ok
         and _is_charmed_by_caster(combat_opponent, caster_character)
     )
     if not is_summon and not is_charmed_enemy:
@@ -644,6 +652,13 @@ def promote_summon_to_companion(
         )
         if instance is not None:
             remove_condition(combat_opponent.objectdb, instance.condition)
+
+    # The fresh CompanionObject above replaces the nameless body entirely; a
+    # won-over opponent's bind window closes on a successful bind (Decision 19).
+    if combat_opponent.status == OpponentStatus.WON_OVER:
+        from world.combat.won_over import delete_won_over_npc  # noqa: PLC0415
+
+        delete_won_over_npc(combat_opponent)
 
     return companion
 

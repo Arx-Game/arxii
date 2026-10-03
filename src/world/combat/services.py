@@ -9488,6 +9488,11 @@ def cleanup_completed_encounter(encounter: CombatEncounter) -> None:
 
     Also breaks any still-pending PC ``SustainedAction`` for this encounter
     (#2705 adversarial review, Fix 3) — see ``_break_pending_sustained_actions``.
+
+    A WON_OVER opponent with an open bind window (Decision 19, R3: a charmed
+    nameless foe whose charmer is still in the room) is skipped here — the
+    body stays alive for binding and is deleted later by
+    ``release_closed_bind_windows()`` or ``release_won_over_npcs_in_room()``.
     """
     _break_pending_sustained_actions(encounter)
 
@@ -9585,11 +9590,16 @@ def cleanup_completed_encounter(encounter: CombatEncounter) -> None:
 
     remove_escalation_room_triggers(encounter)
 
+    from world.combat.won_over import bind_window_open  # noqa: PLC0415
+
     qs = CombatOpponent.objects.filter(
         encounter=encounter,
         objectdb_is_ephemeral=True,
     ).select_related("objectdb")
     for opp in qs:
+        if bind_window_open(opp):
+            continue  # Decision 19: deleted later by the sweep or scene finish
+
         objectdb = opp.objectdb
         if objectdb is None:
             continue

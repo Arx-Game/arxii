@@ -33,7 +33,17 @@ class CompanionCommandParsingTests(TestCase):
     def test_subverb_map_covers_all_ops(self) -> None:
         self.assertEqual(
             set(_SUBVERBS),
-            {"bind", "fight", "deploy", "release", "order", "mount", "dismount", "emote"},
+            {
+                "bind",
+                "fight",
+                "deploy",
+                "release",
+                "order",
+                "mount",
+                "dismount",
+                "emote",
+                "promote",
+            },
         )
 
     def test_unknown_subverb_messages_and_does_not_dispatch(self) -> None:
@@ -102,6 +112,10 @@ class CompanionCommandRefTests(TestCase):
     def test_emote_ref(self) -> None:
         ref = self._cmd_with_subverb("emote").resolve_action_ref()
         self.assertEqual(ref.registry_key, "companion_emote")
+
+    def test_promote_ref(self) -> None:
+        ref = self._cmd_with_subverb("promote").resolve_action_ref()
+        self.assertEqual(ref.registry_key, "promote_summon")
 
 
 class CompanionCommandKwargsTests(TestCase):
@@ -343,6 +357,87 @@ class CompanionCommandKwargsTests(TestCase):
         with self.assertRaises(CommandError):
             cmd.resolve_action_args()
 
+    def test_promote_resolves_target_archetype_gift_and_name(self) -> None:
+        cmd = _make_cmd("promote road bandit archetype=Hawk gift=Beastlord name=Pell")
+        cmd._subverb = "promote"
+        cmd._rest = "road bandit archetype=Hawk gift=Beastlord name=Pell"
+
+        cmd.caller.sheet_data = MagicMock()
+        mock_archetype = MagicMock()
+        mock_archetype.pk = 7
+        mock_gift = MagicMock()
+        mock_gift.pk = 3
+        mock_char_gift = MagicMock()
+        mock_char_gift.gift = mock_gift
+        mock_target = MagicMock()
+        cmd.caller.search.return_value = mock_target
+        mock_opponent = MagicMock()
+        mock_opponent.pk = 55
+
+        with (
+            patch("world.companions.models.CompanionArchetype.objects") as arch_obj,
+            patch("world.magic.models.gifts.CharacterGift.objects") as cg_obj,
+            patch("world.combat.models.CombatOpponent.objects") as opp_obj,
+        ):
+            arch_obj.filter.return_value.first.return_value = mock_archetype
+            cg_obj.filter.return_value.filter.return_value.first.return_value = mock_char_gift
+            opp_obj.filter.return_value.order_by.return_value.first.return_value = mock_opponent
+
+            kwargs = cmd.resolve_action_args()
+
+        cmd.caller.search.assert_called_once_with(
+            "road bandit", location=cmd.caller.location, quiet=True
+        )
+        self.assertEqual(kwargs["combat_opponent_id"], 55)
+        self.assertEqual(kwargs["archetype_id"], 7)
+        self.assertEqual(kwargs["gift_id"], 3)
+        self.assertEqual(kwargs["name"], "Pell")
+
+    def test_promote_missing_npc_raises_command_error(self) -> None:
+        cmd = _make_cmd("promote archetype=Hawk gift=Beastlord name=Pell")
+        cmd._subverb = "promote"
+        cmd._rest = "archetype=Hawk gift=Beastlord name=Pell"
+
+        cmd.caller.sheet_data = MagicMock()
+        mock_archetype = MagicMock()
+        mock_archetype.pk = 1
+        mock_char_gift = MagicMock()
+        mock_char_gift.gift = MagicMock(pk=2)
+
+        with (
+            patch("world.companions.models.CompanionArchetype.objects") as arch_obj,
+            patch("world.magic.models.gifts.CharacterGift.objects") as cg_obj,
+        ):
+            arch_obj.filter.return_value.first.return_value = mock_archetype
+            cg_obj.filter.return_value.filter.return_value.first.return_value = mock_char_gift
+
+            with self.assertRaises(CommandError):
+                cmd.resolve_action_args()
+
+    def test_promote_not_found_raises_command_error(self) -> None:
+        """No CombatOpponent resolves: search miss and ``status`` miss share the
+        same refusal (#4091 — indistinguishable on the wire)."""
+        cmd = _make_cmd("promote ghost archetype=Hawk gift=Beastlord name=Pell")
+        cmd._subverb = "promote"
+        cmd._rest = "ghost archetype=Hawk gift=Beastlord name=Pell"
+
+        cmd.caller.sheet_data = MagicMock()
+        mock_archetype = MagicMock()
+        mock_archetype.pk = 1
+        mock_char_gift = MagicMock()
+        mock_char_gift.gift = MagicMock(pk=2)
+        cmd.caller.search.return_value = None
+
+        with (
+            patch("world.companions.models.CompanionArchetype.objects") as arch_obj,
+            patch("world.magic.models.gifts.CharacterGift.objects") as cg_obj,
+        ):
+            arch_obj.filter.return_value.first.return_value = mock_archetype
+            cg_obj.filter.return_value.filter.return_value.first.return_value = mock_char_gift
+
+            with self.assertRaises(CommandError):
+                cmd.resolve_action_args()
+
 
 class CompanionCommandDispatchTests(TestCase):
     """Full func() dispatch tests — mock dispatch_player_action to assert kwargs."""
@@ -474,6 +569,47 @@ class CompanionCommandDispatchTests(TestCase):
         self.assertEqual(ref.registry_key, "companion_emote")
         self.assertEqual(kwargs["companion_id"], 21)
         self.assertEqual(kwargs["text"], "growls at the intruder.")
+
+    def test_promote_dispatches_with_resolved_opponent_and_message_reaches_caller(
+        self,
+    ) -> None:
+        cmd = _make_cmd("promote road bandit archetype=Hawk gift=Beastlord name=Pell")
+        cmd.caller.sheet_data = MagicMock()
+        mock_archetype = MagicMock()
+        mock_archetype.pk = 7
+        mock_gift = MagicMock()
+        mock_gift.pk = 3
+        mock_char_gift = MagicMock()
+        mock_char_gift.gift = mock_gift
+        mock_target = MagicMock()
+        cmd.caller.search.return_value = mock_target
+        mock_opponent = MagicMock()
+        mock_opponent.pk = 55
+        result = DispatchResult(
+            backend=ActionBackend.REGISTRY,
+            deferred=False,
+            detail=ActionResult(success=True, message="Pell the Road Bandit is now bonded to you."),
+        )
+        with (
+            patch("world.companions.models.CompanionArchetype.objects") as arch_obj,
+            patch("world.magic.models.gifts.CharacterGift.objects") as cg_obj,
+            patch("world.combat.models.CombatOpponent.objects") as opp_obj,
+            patch(_DISPATCH, return_value=result) as dispatch,
+        ):
+            arch_obj.filter.return_value.first.return_value = mock_archetype
+            cg_obj.filter.return_value.filter.return_value.first.return_value = mock_char_gift
+            opp_obj.filter.return_value.order_by.return_value.first.return_value = mock_opponent
+
+            cmd.func()
+
+        dispatch.assert_called_once()
+        _, ref, kwargs = dispatch.call_args.args
+        self.assertEqual(ref.registry_key, "promote_summon")
+        self.assertEqual(kwargs["combat_opponent_id"], 55)
+        self.assertEqual(kwargs["archetype_id"], 7)
+        self.assertEqual(kwargs["gift_id"], 3)
+        self.assertEqual(kwargs["name"], "Pell")
+        cmd.caller.msg.assert_called_once_with("Pell the Road Bandit is now bonded to you.")
 
 
 class CompanionCommandStatusHubTests(TestCase):

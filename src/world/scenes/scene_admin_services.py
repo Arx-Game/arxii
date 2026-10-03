@@ -168,7 +168,10 @@ def finish_scene_full(scene: Scene, by_account: AccountDB | None = None) -> None
        ``teardown_ramparts``): disarms any Trap the scene's room holds whose
        ``created_by_sheet`` is set, i.e. a GM-placed trap rather than a
        staff-authored one.
-    7. ``broadcast_scene_message(scene, SceneAction.END)`` - pushes the END
+    7. ``release_won_over_npcs_in_room(scene.location)`` (Decision 19) — a
+       still-open charmed-nameless bind window closes at scene end (R3), when
+       ``scene.location`` is set.
+    8. ``broadcast_scene_message(scene, SceneAction.END)`` - pushes the END
        event over the scene's WebSocket channel.
 
     ``by_account`` is accepted for call-site symmetry (so both the web viewset
@@ -266,5 +269,14 @@ def finish_scene_full(scene: Scene, by_account: AccountDB | None = None) -> None
         if persona.character_sheet is not None and persona.character_sheet.character is not None
     ]
     expire_scene_scoped_conditions(participant_targets)
+
+    # Decision 19: a charmed nameless enemy's bind window stays open only while its
+    # charmer is in the room. The scene ending closes it regardless, so sweep this
+    # room's still-open WON_OVER ephemeral bodies rather than leaving them for the
+    # periodic release_closed_bind_windows() sweep to eventually catch.
+    if scene.location is not None:
+        from world.combat.won_over import release_won_over_npcs_in_room  # noqa: PLC0415
+
+        release_won_over_npcs_in_room(scene.location)
 
     broadcast_scene_message(scene, SceneAction.END)

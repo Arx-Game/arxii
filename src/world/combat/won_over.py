@@ -17,6 +17,8 @@ from world.combat.types import WonOverRow
 from world.conditions.constants import Allegiance, DurationType
 
 if TYPE_CHECKING:
+    from evennia.objects.models import ObjectDB
+
     from world.character_sheets.models import CharacterSheet
     from world.combat.models import CombatEncounter
     from world.conditions.models import ConditionInstance
@@ -89,6 +91,93 @@ def stamp_won_over_opponents(encounter: CombatEncounter) -> list[CombatOpponent]
                 credited[participant.character_sheet.character_id],
             )
     return won
+
+
+def _window_open(opponent: CombatOpponent, instances: list[ConditionInstance]) -> bool:
+    """Pure predicate: does one of ``instances`` keep the bind window open (Decision 19,
+    R3 - charm only). Shared by ``bind_window_open`` and the ``release_closed_bind_windows``
+    sweep so there is one rule."""
+    return any(
+        i.condition.sets_allegiance == Allegiance.ALLY_OF_CASTER
+        and i.source_character_id is not None
+        and i.source_character.db_location_id == opponent.objectdb.db_location_id
+        for i in instances
+    )
+
+
+def bind_window_open(opponent: CombatOpponent) -> bool:
+    """Decision 19: a charmed nameless enemy stays bindable while its charmer is here."""
+    from world.npc_services.allegiance import allegiance_instances_for  # noqa: PLC0415
+
+    if (
+        opponent.status != OpponentStatus.WON_OVER
+        or not opponent.objectdb_is_ephemeral
+        or opponent.objectdb_id is None
+    ):
+        return False
+    instances = allegiance_instances_for([opponent.objectdb_id]).get(opponent.objectdb_id, [])
+    return _window_open(opponent, instances)
+
+
+def delete_won_over_npc(opponent: CombatOpponent) -> bool:
+    """Guarded delete of one won-over ephemeral NPC (Layer 5 of the multi-layer guard)."""
+    from world.combat.services import (  # noqa: PLC0415
+        has_persistent_identity_references,
+        is_combat_npc_typeclass,
+    )
+
+    objectdb = opponent.objectdb
+    if objectdb is None or not opponent.objectdb_is_ephemeral:
+        return False
+    if not is_combat_npc_typeclass(objectdb) or has_persistent_identity_references(objectdb):
+        logger.error("Refusing to delete won-over NPC %s", objectdb)
+        return False
+    objectdb.delete()
+    return True
+
+
+def release_closed_bind_windows() -> int:
+    """Delete every WON_OVER ephemeral NPC whose bind window has closed (Decision 19).
+
+    Batched: one query for the candidates, one ``allegiance_instances_for`` call covering
+    every candidate's objectdb at once. Returns the number deleted.
+    """
+    from world.npc_services.allegiance import allegiance_instances_for  # noqa: PLC0415
+
+    candidates = list(
+        CombatOpponent.objects.filter(
+            status=OpponentStatus.WON_OVER,
+            objectdb_is_ephemeral=True,
+            objectdb__isnull=False,
+        ).select_related("objectdb")
+    )
+    if not candidates:
+        return 0
+    by_target = allegiance_instances_for(o.objectdb_id for o in candidates)
+    count = 0
+    for opponent in candidates:
+        instances = by_target.get(opponent.objectdb_id, [])
+        if not _window_open(opponent, instances) and delete_won_over_npc(opponent):
+            count += 1
+    return count
+
+
+def release_won_over_npcs_in_room(room: ObjectDB) -> int:
+    """Delete every WON_OVER ephemeral NPC currently located in ``room`` (scene finish).
+
+    Called at scene teardown so a still-open charmed-nameless bind window doesn't
+    outlive the scene (Decision 19, R3). Returns the number deleted.
+    """
+    candidates = CombatOpponent.objects.filter(
+        status=OpponentStatus.WON_OVER,
+        objectdb_is_ephemeral=True,
+        objectdb__db_location=room,
+    ).select_related("objectdb")
+    count = 0
+    for opponent in candidates:
+        if delete_won_over_npc(opponent):
+            count += 1
+    return count
 
 
 def won_over_labels(encounter: CombatEncounter) -> list[tuple[str, str, str]]:

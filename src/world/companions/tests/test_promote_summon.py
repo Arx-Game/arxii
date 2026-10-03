@@ -211,3 +211,141 @@ class PromoteSummonTests(TestCase):
                 name="Should Fail",
             )
         self.assertIn("cannot be promoted", ctx.exception.user_message)
+
+    def test_won_over_charmed_opponent_of_completed_encounter_promotes(self):
+        """#4091 Decision 19: a bind window stays open past victory — a WON_OVER
+        charmed opponent of a COMPLETED encounter still promotes for its charmer,
+        and the won-over sweep's ephemeral body is deleted on a successful bind."""
+        from evennia.objects.models import ObjectDB
+
+        from world.checks.test_helpers import force_check_outcome
+        from world.conditions.constants import CHARM_CONDITION_NAME
+        from world.conditions.models import ConditionInstance, ConditionTemplate
+        from world.conditions.services import apply_condition
+        from world.scenes.constants import RoundStatus
+        from world.traits.factories import CheckOutcomeFactory
+
+        charmed_archetype = CompanionArchetypeFactory(
+            name="Won Over Beast",
+            bind_difficulty=20,
+            capacity_cost=5,
+            charm_difficulty_reduction=20,  # auto-success
+        )
+
+        opponent = CombatOpponentFactory(
+            encounter=self.encounter,
+            threat_pool=self.threat_pool,
+        )
+        opponent.allegiance = CombatAllegiance.ENEMY
+        opponent.status = OpponentStatus.WON_OVER
+        opponent.save(update_fields=["allegiance", "status"])
+        self.encounter.status = RoundStatus.COMPLETED
+        self.encounter.save(update_fields=["status"])
+
+        objectdb_pk = opponent.objectdb_id
+        charm_template = ConditionTemplate.get_by_name(CHARM_CONDITION_NAME)
+        target_character = opponent.objectdb
+        charm_result = apply_condition(
+            target_character, charm_template, source_character=self.sheet.character
+        )
+        charm_instance_pk = charm_result.instance.pk
+
+        success = CheckOutcomeFactory(name="Forced Won Over Bind Success", success_level=5)
+        with force_check_outcome(success):
+            companion = promote_summon_to_companion(
+                caster_sheet=self.sheet,
+                combat_opponent=opponent,
+                archetype=charmed_archetype,
+                granting_gift=self.gift,
+                name="Reclaimed Foe",
+            )
+
+        self.assertEqual(companion.name, "Reclaimed Foe")
+
+        # Charm consumed: the ConditionInstance itself is gone (the body it was
+        # on is also gone, below, so this can't be checked via get_active_conditions).
+        self.assertFalse(ConditionInstance.objects.filter(pk=charm_instance_pk).exists())
+
+        # The nameless won-over body is replaced by the fresh CompanionObject.
+        self.assertFalse(ObjectDB.objects.filter(pk=objectdb_pk).exists())
+
+    def test_won_over_opponent_wrong_charmer_rejected(self):
+        """The WON_OVER + COMPLETED path still requires the PROMOTING caster be
+        the one who holds the charm — matches the ACTIVE-path check."""
+        from world.conditions.constants import CHARM_CONDITION_NAME
+        from world.conditions.models import ConditionTemplate
+        from world.conditions.services import apply_condition
+        from world.scenes.constants import RoundStatus
+
+        other_sheet = CharacterSheetFactory()
+        other_sheet.character.location = self.room
+        other_sheet.character.save()
+
+        opponent = CombatOpponentFactory(
+            encounter=self.encounter,
+            threat_pool=self.threat_pool,
+        )
+        opponent.allegiance = CombatAllegiance.ENEMY
+        opponent.status = OpponentStatus.WON_OVER
+        opponent.save(update_fields=["allegiance", "status"])
+        self.encounter.status = RoundStatus.COMPLETED
+        self.encounter.save(update_fields=["status"])
+
+        charm_template = ConditionTemplate.get_by_name(CHARM_CONDITION_NAME)
+        target_character = opponent.objectdb
+        apply_condition(target_character, charm_template, source_character=other_sheet.character)
+
+        with self.assertRaises(PromoteSummonError) as ctx:
+            promote_summon_to_companion(
+                caster_sheet=self.sheet,
+                combat_opponent=opponent,
+                archetype=self.archetype,
+                granting_gift=self.gift,
+                name="Should Fail",
+            )
+        self.assertIn("cannot be promoted", ctx.exception.user_message)
+
+    def test_charmed_enemy_with_renamed_template_still_promotes(self):
+        """#4091: identity is read via ``sets_allegiance``, never the condition's
+        name — a re-authored/renamed charm template still promotes."""
+        from world.checks.factories import CheckTypeFactory
+        from world.checks.test_helpers import force_check_outcome
+        from world.conditions.constants import Allegiance
+        from world.conditions.factories import ConditionTemplateFactory
+        from world.conditions.services import apply_condition
+        from world.traits.factories import CheckOutcomeFactory
+
+        charmed_archetype = CompanionArchetypeFactory(
+            name="Renamed Charm Beast",
+            bind_difficulty=20,
+            capacity_cost=5,
+            charm_difficulty_reduction=20,  # auto-success
+        )
+
+        opponent = CombatOpponentFactory(
+            encounter=self.encounter,
+            threat_pool=self.threat_pool,
+        )
+        opponent.allegiance = CombatAllegiance.ENEMY
+        opponent.status = OpponentStatus.ACTIVE
+        opponent.save(update_fields=["allegiance", "status"])
+
+        renamed_template = ConditionTemplateFactory(
+            name="Totally Not Charm",
+            sets_allegiance=Allegiance.ALLY_OF_CASTER,
+            allegiance_break_check_type=CheckTypeFactory(),
+        )
+        target_character = opponent.objectdb
+        apply_condition(target_character, renamed_template, source_character=self.sheet.character)
+
+        success = CheckOutcomeFactory(name="Forced Renamed Charm Bind Success", success_level=5)
+        with force_check_outcome(success):
+            companion = promote_summon_to_companion(
+                caster_sheet=self.sheet,
+                combat_opponent=opponent,
+                archetype=charmed_archetype,
+                granting_gift=self.gift,
+                name="Renamed Foe",
+            )
+
+        self.assertEqual(companion.name, "Renamed Foe")
