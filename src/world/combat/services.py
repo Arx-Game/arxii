@@ -661,6 +661,11 @@ class CombatTechniqueResolver:
         SINGLE/SELF branch does not, since that case is hard-gated pre-flight by
         ``_check_combat_target_prerequisites`` in ``resolve_combat_technique``
         before this method is ever reached for an AoE-independent enumeration.
+
+        AREA additionally drops any opponent whose EFFECTIVE allegiance is
+        ALLY_OF_CASTER (a summon, or a charmed NPC) — a PC's AoE spares the party's
+        own side (Decision 4, #4091); a TURNED or calmed opponent stays in the AoE
+        set, since neither fights for the party.
         """
         from actions.constants import ActionTargetType  # noqa: PLC0415
 
@@ -680,6 +685,11 @@ class CombatTechniqueResolver:
                 .exclude(status=OpponentStatus.DEFEATED)
                 .order_by("pk")
             )
+
+            from world.npc_services.allegiance import effective_allegiances  # noqa: PLC0415
+
+            allegiances = effective_allegiances(opponents)
+            opponents = [o for o in opponents if allegiances[o.pk] != Allegiance.ALLY_OF_CASTER]
             return self._filter_by_target_prerequisites(technique, opponents)
 
         if target_type == ActionTargetType.FILTERED_GROUP:
@@ -1326,33 +1336,48 @@ def _check_combat_target_prerequisites(
 
 def combatants_hostile_to(
     actor: CombatParticipant | CombatOpponent,
+    *,
+    allegiances: dict[int, Allegiance] | None = None,
 ) -> dict[str, list]:
-    """Return the combatants *actor* may attack, grouped by kind.
+    """Return the combatants *actor* may attack, grouped by kind (#1584, #4091).
 
-    Single source of truth for friend/foe resolution (Tasks 7 and 13 use this):
-
-    - A PC participant is hostile to ENEMY opponents (not to ALLY summons).
-    - An ALLY opponent (summon/charmed) is hostile to ENEMY opponents only.
-    - An ENEMY opponent is hostile to PCs *and* any ALLY summons.
+    Reads EFFECTIVE allegiance (stored side composed with allegiance conditions):
+    - A PC participant, an ALLY summon or a charmed NPC: hostile to ENEMY and TURNED
+      opponents; never to PCs.
+    - A TURNED NPC: hostile to other stored-ENEMY opponents still effectively ENEMY.
+    - A calmed (NEUTRAL) NPC: hostile to no one.
+    - An ENEMY opponent: hostile to PCs and stored ALLY summons only (Decision 3).
     """
+    from world.npc_services.allegiance import effective_allegiances  # noqa: PLC0415
+
     enc = actor.encounter
+    opponents = list(CombatOpponent.objects.filter(encounter=enc, status=OpponentStatus.ACTIVE))
+    if allegiances is None:
+        allegiances = effective_allegiances(opponents)
+    if isinstance(actor, CombatParticipant):
+        side = Allegiance.ALLY_OF_CASTER
+    else:
+        side = allegiances.get(actor.pk, Allegiance.ENEMY)
+    if side == Allegiance.ALLY_OF_CASTER:
+        targets = [
+            o for o in opponents if allegiances.get(o.pk) in (Allegiance.ENEMY, Allegiance.TURNED)
+        ]
+        return {"participants": [], "opponents": targets}
+    if side == Allegiance.TURNED:
+        targets = [
+            o
+            for o in opponents
+            if o.pk != actor.pk
+            and o.allegiance == CombatAllegiance.ENEMY
+            and allegiances.get(o.pk) == Allegiance.ENEMY
+        ]
+        return {"participants": [], "opponents": targets}
+    if side == Allegiance.NEUTRAL:
+        return {"participants": [], "opponents": []}
     active_pcs = list(
         CombatParticipant.objects.filter(encounter=enc, status=ParticipantStatus.ACTIVE)
     )
-    enemies = list(
-        CombatOpponent.objects.filter(
-            encounter=enc, status=OpponentStatus.ACTIVE, allegiance=CombatAllegiance.ENEMY
-        )
-    )
-    allies = list(
-        CombatOpponent.objects.filter(
-            encounter=enc, status=OpponentStatus.ACTIVE, allegiance=CombatAllegiance.ALLY
-        )
-    )
-    if isinstance(actor, CombatParticipant) or actor.allegiance == CombatAllegiance.ALLY:
-        # PC side: hostile to ENEMY opponents only.
-        return {"participants": [], "opponents": enemies}
-    # ENEMY opponent: hostile to PCs and any ALLY summons.
+    allies = [o for o in opponents if o.allegiance == CombatAllegiance.ALLY]
     return {"participants": active_pcs, "opponents": allies}
 
 
@@ -4129,56 +4154,6 @@ def _select_opponent_targets(
     )
 
 
-def _exclude_charmers_party(
-    opponent: CombatOpponent, participants: list[CombatParticipant]
-) -> list[CombatParticipant]:
-    """Return ``participants`` minus the charm source's party (#1590).
-
-    The charmer is the ``source_character`` on the opponent's active Charm
-    condition. If it resolves to an active ``CombatParticipant``, exclude it.
-    MVP: parties are 1:1 with participants (no party grouping yet), so we
-    exclude the single charmer participant. If the source is unresolvable
-    (no ``source_character`` on the Charm, or the charmer left the encounter),
-    the charmed NPC has no party to fight for — returning ``[]`` so the caller
-    skips the round is intentional (NOT a fall-back to ENEMY: a charmed NPC
-    must never attack the charmer's side even if the charmer is gone).
-    """
-    from world.conditions.constants import CHARM_CONDITION_NAME  # noqa: PLC0415
-    from world.conditions.services import get_active_conditions  # noqa: PLC0415
-
-    if opponent.objectdb_id is None:
-        return participants
-    charmer_pk = None
-    for inst in get_active_conditions(opponent.objectdb):
-        if inst.condition.name == CHARM_CONDITION_NAME and inst.source_character_id is not None:
-            charmer_pk = inst.source_character_id
-            break
-    if charmer_pk is None:
-        return []
-    return [p for p in participants if p.character_sheet.character_id != charmer_pk]
-
-
-def _get_opponent_targets(
-    opponent: CombatOpponent,
-    active_participants: list[CombatParticipant],
-    encounter: CombatEncounter,
-) -> list[CombatParticipant]:
-    """Return the PCs an NPC is allowed to target after consulting allegiance.
-
-    Calm (``NEUTRAL``) returns an empty list so the NPC skips the round.
-    Charm (``ALLY_OF_CASTER``) excludes the charmer's party. Everything else
-    returns the full active participant list (#1590).
-    """
-    from world.npc_services.allegiance import derive_allegiance  # noqa: PLC0415
-
-    allegiance = derive_allegiance(opponent, encounter)
-    if allegiance == Allegiance.NEUTRAL:
-        return []
-    if allegiance == Allegiance.ALLY_OF_CASTER:
-        return _exclude_charmers_party(opponent, list(active_participants))
-    return list(active_participants)
-
-
 def _batch_fetch_cooldown_data(
     opponents: list[CombatOpponent],
     entries_by_pool: dict[int, list[ThreatPoolEntry]],
@@ -4319,9 +4294,11 @@ def select_npc_actions(
 
     For each active opponent with a threat pool, picks a weighted-random
     entry from eligible threat pool entries and assigns targets. Targeting is
-    allegiance-aware (#1590, ADR-0058): a charmed opponent (``ALLY_OF_CASTER``)
-    skips the charmer's party, and a calmed opponent (``NEUTRAL``) holds and
-    takes no action; an opponent left with no valid targets skips the round.
+    allegiance-aware (#1590, #4091, ADR-0058 as amended by ADR-4091): a charmed
+    opponent (``ALLY_OF_CASTER``) targets ENEMY/TURNED opponents, a turned
+    opponent (``TURNED``) targets its own former (stored-ENEMY) side, and a
+    calmed opponent (``NEUTRAL``) holds and takes no action; an opponent left
+    with no valid targets skips the round.
 
     Raises ValueError if the encounter is not in DECLARING status.
     """
@@ -4349,6 +4326,16 @@ def select_npc_actions(
 
     if not opponents:
         return []
+
+    # Effective allegiance for every active opponent, computed once per round
+    # (#4091) — includes opponents with no threat pool (e.g. mirrored bosses)
+    # so a charmed/turned attacker's hostile pool sees the whole encounter.
+    from world.npc_services.allegiance import effective_allegiances  # noqa: PLC0415
+
+    all_active = list(
+        CombatOpponent.objects.filter(encounter=encounter, status=OpponentStatus.ACTIVE)
+    )
+    allegiances = effective_allegiances(all_active)
 
     # Batch-prefetch all threat pool entries for all opponent pools
     pool_ids = {o.threat_pool_id for o in opponents if o.threat_pool_id}
@@ -4428,6 +4415,7 @@ def select_npc_actions(
                 threat_map=threat_maps.get(opponent.pk),
                 shield_participant_ids=shield_participant_ids,
                 locked_participant_id=active_locks_by_opponent.get(opponent.pk),
+                allegiances=allegiances,
             )
         )
 
@@ -4469,13 +4457,14 @@ def _build_opponent_round_actions(  # noqa: PLR0913
     threat_map: dict[int, int] | None = None,
     shield_participant_ids: set[int] | None = None,
     locked_participant_id: int | None = None,
+    allegiances: dict[int, Allegiance],
 ) -> list[CombatOpponentAction]:
     """Create one opponent's NPC action rows for the current round.
 
     Returns the created actions, or an empty list when the opponent skips the
     round — no eligible (off-cooldown) threat entry, or the empty-pool guard:
-    no valid target (a #1584 ALLY summon with no live enemy, or a #1590
-    calmed/neutral opponent whose threat-read yielded no PCs).
+    no valid target (a #1584 ALLY summon or #4091 charmed/turned NPC with no
+    live hostile, or a #1590 calmed/neutral opponent).
     """
     from world.combat.morale import (  # noqa: PLC0415
         OpponentMoraleState,
@@ -4493,7 +4482,7 @@ def _build_opponent_round_actions(  # noqa: PLR0913
         return []
 
     target_pool, targeting_participants = _npc_action_target_pool(
-        opponent, active_participants, encounter
+        opponent, active_participants, encounter, allegiances=allegiances
     )
     if not target_pool:
         return []
@@ -4653,38 +4642,40 @@ def _execute_npc_attack(  # noqa: PLR0913
 def _npc_action_target_pool(
     opponent: CombatOpponent,
     active_participants: list[CombatParticipant],
-    encounter: CombatEncounter,
+    encounter: CombatEncounter,  # noqa: ARG001 - kept for caller signature symmetry
+    *,
+    allegiances: dict[int, Allegiance],
 ) -> tuple[list, bool]:
-    """Route an opponent's targeting by allegiance (#1584 + #1590).
+    """Route an opponent's targeting by EFFECTIVE allegiance (#1584, #1590, #4091).
 
-    Two allegiance systems compose here:
+    * **ALLY_OF_CASTER** (a #1584 ALLY summon, or a charmed NPC) targets
+      ``combatants_hostile_to``'s opponent pool — ACTIVE opponents whose
+      effective allegiance is ENEMY or TURNED — minus untargetable
+      (intangible) opponents; never a PC.
+    * **TURNED** targets other ACTIVE opponents still on its former
+      (stored-ENEMY, effectively ENEMY) side; never a PC, never itself.
+    * **NEUTRAL** (calmed) skips the round: empty opponent pool.
+    * **ENEMY** (the common case) targets the PC side as today — enemies
+      ignore charmed/turned NPCs (Decision 3).
 
-    * **#1584 `CombatOpponent.allegiance`** routes an ALLY *summon* onto its
-      hostile ENEMY opponents (opponent-vs-opponent damage). Intangible opponents
-      (objectdb set, grants_intangibility active) are excluded (#1584 Task 8);
-      opponents with no objectdb are kept (they cannot be queried for it).
-    * **#1590 threat-read** (`_get_opponent_targets`) refines an ENEMY opponent's
-      PC targets — calm (NEUTRAL) yields no PCs (the empty-pool guard then makes it
-      skip the round), charm (ALLY_OF_CASTER) excludes the charmer's party.
-
-    An ENEMY opponent targets the (threat-read-filtered) PC side; an ALLY summon
-    targets ENEMY opponents. ``active_participants`` is already intangibility- and
-    can_act-filtered by ``select_npc_actions``.
+    ``active_participants`` is already intangibility- and can_act-filtered by
+    ``select_npc_actions``.
 
     Returns ``(target_pool, targeting_participants)``.
     """
-    if opponent.allegiance == CombatAllegiance.ALLY:
+    side = allegiances.get(opponent.pk, Allegiance.ENEMY)
+    if side in (Allegiance.ALLY_OF_CASTER, Allegiance.TURNED):
         from world.conditions.services import is_untargetable  # noqa: PLC0415
 
         opponent_pool = [
             opp
-            for opp in combatants_hostile_to(opponent)["opponents"]
+            for opp in combatants_hostile_to(opponent, allegiances=allegiances)["opponents"]
             if opp.objectdb_id is None or not is_untargetable(opp.objectdb)
         ]
         return opponent_pool, False
-
-    # ENEMY opponent: #1590's allegiance threat-read decides the PC pool.
-    return _get_opponent_targets(opponent, active_participants, encounter), True
+    if side == Allegiance.NEUTRAL:
+        return [], True
+    return list(active_participants), True
 
 
 def _set_npc_action_targets(  # noqa: PLR0913
@@ -4697,7 +4688,14 @@ def _set_npc_action_targets(  # noqa: PLR0913
     threat_map: dict[int, int] | None = None,
     shield_participant_ids: set[int] | None = None,
 ) -> None:
-    """Populate exactly one target relation on an NPC action (#1584)."""
+    """Populate exactly one target relation on an NPC action (#1584).
+
+    The opponent branch (an ALLY/charmed/turned attacker, #4091) never forwards
+    ``threat_map``/``shield_participant_ids`` — both are pre-computed keyed by
+    CombatParticipant pk, and a CombatOpponent pk can collide with one of those
+    keys (they are independent sequences), silently corrupting HIGHEST_THREAT /
+    SPECIFIC_ROLE selection for opponent targets.
+    """
     if targeting_participants:
         action.targets.set(
             _select_targets(
@@ -4714,8 +4712,8 @@ def _set_npc_action_targets(  # noqa: PLR0913
                 entry,
                 target_pool,
                 rotation=rotation,
-                _threat_map=threat_map,
-                _shield_participant_ids=shield_participant_ids,
+                _threat_map=None,
+                _shield_participant_ids=None,
             )
         )
 
@@ -4746,12 +4744,14 @@ def _select_windup_targets(  # noqa: PLR0913
             _threat_map=threat_map,
             _shield_participant_ids=shield_participant_ids,
         )
+    # See _set_npc_action_targets: never forward the participant-keyed maps
+    # into opponent-targeting selection (threat-map pk collision, #4091).
     return _select_opponent_targets(
         entry,
         target_pool,
         rotation=rotation,
-        _threat_map=threat_map,
-        _shield_participant_ids=shield_participant_ids,
+        _threat_map=None,
+        _shield_participant_ids=None,
     )
 
 
@@ -4997,6 +4997,8 @@ def _mature_one_pending_attack(
     encounter: CombatEncounter,
     pending: PendingOpponentAttack,
     round_number: int,
+    *,
+    allegiances: dict[int, Allegiance],
 ) -> None:
     """Resolve a single matured wind-up: fizzle, lose-target, or fire (#2637 design 3)."""
     from world.vitals.services import is_dead  # noqa: PLC0415
@@ -5040,7 +5042,7 @@ def _mature_one_pending_attack(
         ).select_related("character_sheet__character")
     )
     target_pool, targeting_participants = _npc_action_target_pool(
-        pending.opponent, active_participants, encounter
+        pending.opponent, active_participants, encounter, allegiances=allegiances
     )
     if not target_pool:
         _broadcast_windup_fizzled(pending, reason="loses its target")
@@ -5078,8 +5080,17 @@ def _mature_pending_opponent_attacks(encounter: CombatEncounter, round_number: i
             resolves_round=round_number,
         ).select_related("opponent", "threat_entry", "target__character_sheet__character")
     )
+    if not pending_rows:
+        return
+
+    from world.npc_services.allegiance import effective_allegiances  # noqa: PLC0415
+
+    all_active = list(
+        CombatOpponent.objects.filter(encounter=encounter, status=OpponentStatus.ACTIVE)
+    )
+    allegiances = effective_allegiances(all_active)
     for pending in pending_rows:
-        _mature_one_pending_attack(encounter, pending, round_number)
+        _mature_one_pending_attack(encounter, pending, round_number, allegiances=allegiances)
 
 
 def _mature_sustained_technique(sustained: SustainedAction, round_number: int) -> None:
@@ -6190,22 +6201,26 @@ def _apply_passive_technique(
     Target resolution (v1):
 
     - ``SELF`` → the actor's own character.
-    - ``ENEMY`` → every ACTIVE ``allegiance=ENEMY`` opponent's ``objectdb``. An
-      ALLY summon fights on the actor's side, so enemy-targeted AoE never lands on
-      it (#1584). Mirrors ``_resolve_condition_target``'s ENEMY branch, which
-      returns ``opp.objectdb`` for an active opponent. Every opponent (including
-      ephemeral CombatNPCs) is created with an ObjectDB by ``add_opponent``; the FK
-      is only nulled if the ObjectDB is destroyed externally, so we skip opponents
-      whose ``objectdb`` is None — matching the focused path's None-guard.
+    - ``ENEMY`` → every ACTIVE opponent's ``objectdb`` whose EFFECTIVE allegiance
+      is not ALLY_OF_CASTER (#1584, #4091). An ALLY summon or a charmed NPC fights
+      on the actor's side, so enemy-targeted AoE never lands on either; a TURNED
+      or calmed (NEUTRAL) opponent is still the party's opponent for a passive —
+      only a charmed/summoned ally is spared. Mirrors ``_resolve_condition_target``'s
+      ENEMY branch, which returns ``opp.objectdb`` for an active opponent. Every
+      opponent (including ephemeral CombatNPCs) is created with an ObjectDB by
+      ``add_opponent``; the FK is only nulled if the ObjectDB is destroyed
+      externally, so we skip opponents whose ``objectdb`` is None — matching the
+      focused path's None-guard.
     - ``ALLY`` → every ACTIVE participant except the actor.
 
-    When ``technique.combo_opening_probing`` is set, every ACTIVE ENEMY opponent
+    When ``technique.combo_opening_probing`` is set, every such ACTIVE opponent
     gains that much probing (the combo-opening reward) via ``increment_probing`` —
     the combo-opening effect for ephemeral opponents regardless of conditions.
     """
     from world.conditions.services import bulk_apply_conditions  # noqa: PLC0415
     from world.conditions.types import BulkConditionApplication  # noqa: PLC0415
     from world.magic.models.techniques import ConditionTargetKind  # noqa: PLC0415
+    from world.npc_services.allegiance import effective_allegiances  # noqa: PLC0415
 
     actor = participant.character_sheet.character
 
@@ -6216,6 +6231,7 @@ def _apply_passive_technique(
             status=OpponentStatus.ACTIVE,
         ).select_related("objectdb")
     )
+    allegiances = effective_allegiances(active_opponents)
     active_allies = list(
         CombatParticipant.objects.filter(
             encounter=encounter,
@@ -6225,12 +6241,13 @@ def _apply_passive_technique(
         .select_related("character_sheet__character")
     )
 
-    # Combo-opening probing: granted to every active ENEMY opponent independent of
-    # any condition application (the combo-opening effect for ephemeral opponents).
-    # ALLY summons are on the actor's side, so probing them is meaningless (#1584).
+    # Combo-opening probing: granted to every opponent not fighting on the actor's
+    # side, independent of any condition application (the combo-opening effect for
+    # ephemeral opponents). A charmed/summoned ally is on the actor's side, so
+    # probing it is meaningless (#1584); a turned or calmed opponent still gets it.
     if technique.combo_opening_probing:
         for opp in active_opponents:
-            if opp.allegiance == CombatAllegiance.ENEMY:
+            if allegiances[opp.pk] != Allegiance.ALLY_OF_CASTER:
                 increment_probing(opp, technique.combo_opening_probing)
 
     # resolve_round prefetches ``..._passive__condition_applications__condition`` so
@@ -6258,7 +6275,7 @@ def _apply_passive_technique(
             targets = [
                 opp.objectdb
                 for opp in active_opponents
-                if opp.allegiance == CombatAllegiance.ENEMY and opp.objectdb is not None
+                if allegiances[opp.pk] != Allegiance.ALLY_OF_CASTER and opp.objectdb is not None
             ]
         elif row.target_kind == ConditionTargetKind.ALLY:
             targets = [ally.character_sheet.character for ally in active_allies]
@@ -9024,22 +9041,55 @@ def _resolve_npc_action_on_target(  # noqa: PLR0913 - per-target resolution need
         condition_applications.extend((target_obj, ct) for ct in conditions)
 
 
-def _resolve_npc_action_on_opponent_target(
+def _allegiance_credit_sheet(
+    opponent: CombatOpponent, encounter: CombatEncounter
+) -> CharacterSheet | None:
+    """Who gets damage/defeat credit for an NPC fighting on the party's behalf (#4091).
+
+    A summon credits its summoner. A charmed or turned NPC credits the PC who applied
+    the designating allegiance condition, only while that PC is an ACTIVE participant.
+    """
+    if opponent.summoned_by_id is not None:
+        return opponent.summoned_by
+    if opponent.objectdb_id is None:
+        return None
+
+    from world.npc_services.allegiance import allegiance_instance_on  # noqa: PLC0415
+
+    instance = allegiance_instance_on(opponent.objectdb)
+    if instance is None or instance.source_character_id is None:
+        return None
+    participant = (
+        CombatParticipant.objects.filter(
+            encounter=encounter,
+            status=ParticipantStatus.ACTIVE,
+            character_sheet__character_id=instance.source_character_id,
+        )
+        .select_related("character_sheet")
+        .first()
+    )
+    return participant.character_sheet if participant is not None else None
+
+
+def _resolve_npc_action_on_opponent_target(  # noqa: PLR0913 - needs full resolution context
     target_opponent: CombatOpponent,
     *,
     opponent: CombatOpponent,
     npc_action: CombatOpponentAction,
     outcome: ActionOutcome,
+    conditions: list,
+    condition_applications: list,
 ) -> None:
-    """Resolve one NPC action against a single OPPONENT target (#1584 Task 7b).
+    """Resolve one NPC action against a single OPPONENT target (#1584 Task 7b, #4091).
 
-    Routes an ALLY summon's attack at an ENEMY opponent. Damage only — the PC
-    survivability pipeline (``process_damage_consequences``) and the threat
-    entry's ``conditions_applied`` path stay PC-only here;
-    ``apply_damage_to_opponent`` already sets ``OpponentStatus.DEFEATED``
-    internally. The summoner (``opponent.summoned_by``, a ``CharacterSheet`` or
-    ``None``) receives damage/defeat achievement credit; null-safe for
-    non-summon attackers.
+    Routes an ALLY summon's, or a charmed/turned NPC's, attack at a hostile opponent.
+    Damage only — the PC survivability pipeline (``process_damage_consequences``)
+    stays PC-only here; ``apply_damage_to_opponent`` already sets
+    ``OpponentStatus.DEFEATED`` internally. Damage/defeat achievement credit goes to
+    ``_allegiance_credit_sheet`` (the summoner, or the PC who won the attacker over);
+    null-safe when neither applies. A threat entry's ``conditions_applied`` now lands
+    on an opponent target too, when the hit dealt damage (#4091) — the bulk apply
+    after the resolution loops in ``_resolve_npc_action`` covers it.
     """
     # Mirror the participant guard: skip an escaped/defeated (non-ACTIVE) target.
     if target_opponent.status != OpponentStatus.ACTIVE:
@@ -9049,9 +9099,11 @@ def _resolve_npc_action_on_opponent_target(
         target_opponent,
         int(npc_action.threat_entry.base_damage * npc_action.damage_scale),
         damage_type=npc_action.threat_entry.damage_type,
-        source_sheet=opponent.summoned_by,
+        source_sheet=_allegiance_credit_sheet(opponent, opponent.encounter),
     )
     outcome.damage_results.append(dmg_result)
+    if dmg_result.damage_dealt > 0 and conditions and target_opponent.objectdb_id is not None:
+        condition_applications.extend((target_opponent.objectdb, ct) for ct in conditions)
 
 
 def _resolve_npc_action(
@@ -9064,8 +9116,10 @@ def _resolve_npc_action(
 
     Exactly one target relation is populated per action: participant ``targets``
     (the normal PC-facing path — applies damage, knockout/death transitions, and
-    threat-entry conditions) or ``opponent_targets`` (an ALLY summon attacking
-    ENEMY opponents — damage only; #1584).
+    threat-entry conditions) or ``opponent_targets`` (an ALLY summon, or a charmed/
+    turned NPC, attacking a hostile opponent — damage plus threat-entry conditions
+    on a damaging hit; #1584, #4091). No survivability pipeline either way for the
+    opponent-target path.
 
     When ``defense_check_type`` is None (production), the defense check type is
     sourced from ``npc_action.threat_entry.defense_check_type`` (#1994). A
@@ -9137,14 +9191,18 @@ def _resolve_npc_action(
             get_npc_action_interaction=_get_npc_action_interaction,
         )
 
-    # Opponent-target path (#1584): an ALLY summon attacking ENEMY opponents.
-    # Damage only — no survivability pipeline, no conditions (out of scope 7b).
+    # Opponent-target path (#1584, #4091): an ALLY summon or a charmed/turned NPC
+    # attacking a hostile opponent. Damage, plus threat-entry conditions on a
+    # damaging hit (fed into the same bulk-apply call below); no survivability
+    # pipeline.
     for target_opponent in opponent_targets:
         _resolve_npc_action_on_opponent_target(
             target_opponent,
             opponent=opponent,
             npc_action=npc_action,
             outcome=outcome,
+            conditions=conditions,
+            condition_applications=condition_applications,
         )
 
     # Bulk-apply all conditions from this NPC action

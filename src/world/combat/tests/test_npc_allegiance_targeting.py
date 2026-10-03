@@ -68,12 +68,17 @@ class NpcAllegianceTargetingTest(TestCase):
         self.assertTrue(any(a.opponent_id == self.enemy_opponent.pk for a in actions))
 
     def test_charmed_npc_does_not_target_charmers_party(self):
+        # Decision 1 (#4091) supersedes "skip the charmer's party": a charmed NPC
+        # never targets ANY PC. With no other opponent in this encounter, it has
+        # no hostile target at all and skips the round entirely.
         self._apply_charm(self.enemy_opponent, self.pc_a)
         actions = select_npc_actions(self.encounter)
         targeted = self._targeted_character_ids(actions)
-        self.assertNotIn(self.pc_a.character_sheet_id, targeted)
-        # The charmed NPC still acts; it just cannot target the charmer.
-        self.assertTrue(any(a.opponent_id == self.enemy_opponent.pk for a in actions))
+        self.assertEqual(targeted, set())
+        self.assertEqual(
+            [a for a in actions if a.opponent_id == self.enemy_opponent.pk],
+            [],
+        )
 
     def test_calmed_npc_takes_no_action(self):
         self._apply_calm(self.enemy_opponent)
