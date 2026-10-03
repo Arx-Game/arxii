@@ -6,7 +6,8 @@ already knows the tongue (fluency >= 1). ``TrainLanguageAction`` is the
 weekly-gated dp-award session, mirroring ``TrainTechniqueAction``'s
 teacher-vs-self-study split (`technique_training.py`) but against the
 cumulative ``DevelopmentPoints``/``CharacterTraitValue`` fluency track instead
-of a meter.
+of a meter. Session dp rates come from ``LanguageTrainingConfig``
+(`world.species.language_progression.get_language_training_config`).
 """
 
 from __future__ import annotations
@@ -23,11 +24,6 @@ if TYPE_CHECKING:
 
     from actions.types import ActionContext
     from world.species.models import Language
-
-# PLACEHOLDER tuning values (#2993) -- Apostate's ratified defaults, pending a
-# real balance pass once language training sees play.
-TEACHER_DP_PER_SESSION = 15
-SELF_STUDY_DP_PER_SESSION = 8
 
 
 def _co_present_fluent_teacher(
@@ -182,11 +178,16 @@ class TrainLanguageAction(Action):
                 ),
             )
 
+        from world.species.language_progression import (  # noqa: PLC0415
+            get_language_training_config,
+        )
+
+        config = get_language_training_config()
         if teacher is not None:
-            amount = TEACHER_DP_PER_SESSION
+            amount = config.teacher_dp_per_session
             source = DevelopmentSource.TRAINING
         else:
-            amount = SELF_STUDY_DP_PER_SESSION
+            amount = config.self_study_dp_per_session
             source = DevelopmentSource.PRACTICE
 
         dev_tracker, _created = DevelopmentPoints.objects.get_or_create(
