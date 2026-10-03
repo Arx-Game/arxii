@@ -18,7 +18,13 @@ same viewport/theme. Include a PASS/FAIL/BLOCKED verdict for every mandatory
 criterion and all unresolved findings. A source-only review, a test name, or a
 screenshot of a mockup is not a visual review. If the approved design or original
 review record cannot be reached, report that as BLOCKED rather than inferring a
-pass.
+pass. **The screenshots are the evidence, and a report without them is not a
+review:** every screenshot the checklist cites is a committed file under the
+report's directory or a durable URL a reader can open. A report whose
+screenshots were "taken locally" and are "not attached" is `BLOCKED`, never
+`PASS`, whatever the comparison found; write the files into the report's
+directory before writing a single `MATCH`. #4103 and #4110 reached their PRs
+with exactly that sentence and no images (#4125).
 
 You compare a built surface against the demo page its spec was approved off. You
 do not write the fix and you do not redesign anything: you report, screen by

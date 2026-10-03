@@ -15,6 +15,9 @@
 #   2  superpowers plugin missing
 #   3  issue closed or assigned to a different user
 set -euo pipefail
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck disable=SC1091
+source "$SCRIPT_DIR/_evidence-helpers.sh"
 
 usage() {
   echo "Usage: $0 <issue-number>" >&2
@@ -54,7 +57,7 @@ if [[ "$SKILLS_AVAILABLE" -eq 0 ]]; then
 fi
 
 # 2. Fetch the issue
-ISSUE_JSON=$(gh issue view "$ISSUE" --json number,title,labels,state,assignees,url)
+ISSUE_JSON=$(gh issue view "$ISSUE" --json number,title,labels,state,assignees,url,body)
 
 STATE=$(jq -r '.state' <<<"$ISSUE_JSON")
 if [[ "$STATE" != "OPEN" ]]; then
@@ -121,7 +124,13 @@ gh issue edit "$ISSUE" --add-label "status:spec-draft" >/dev/null
 # is present — and nothing applied it automatically, so it depended on an agent
 # remembering to self-add it. Close that gap mechanically: any issue picked up
 # with the `frontend` label gets it applied here, not left to agent discretion.
-if grep -qx "frontend" <<<"$LABELS"; then
+# The same goes for an issue whose spec carries a demo link (#4125): the demo is
+# the approved design, and a PR for it has to prove the built thing matches,
+# whatever other labels it carries. #4098/#4099/#4101 had demos and no
+# `frontend` label, and their demo-fidelity reviews reached the PR with the
+# screenshots "taken locally and not attached".
+ISSUE_BODY=$(jq -r '.body // ""' <<<"$ISSUE_JSON")
+if grep -qx "frontend" <<<"$LABELS" || issue_body_has_demo_link "$ISSUE_BODY"; then
   gh issue edit "$ISSUE" --add-label "review:evidence-required" >/dev/null
 fi
 

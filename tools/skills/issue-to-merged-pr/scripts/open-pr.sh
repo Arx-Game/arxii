@@ -60,6 +60,8 @@ FOLLOWUPS=("$@")
 
 # Locate template relative to this script.
 SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+# shellcheck disable=SC1091
+source "$SCRIPT_DIR/_evidence-helpers.sh"
 TEMPLATE="$SCRIPT_DIR/../templates/pr-body.md"
 [[ -f "$TEMPLATE" ]] || { echo "ERROR: template not found: $TEMPLATE" >&2; exit 1; }
 
@@ -71,6 +73,7 @@ QUALITY_REVIEW_SUMMARY="${PR_QUALITY_REVIEW:-}"
 SYNC_SUMMARY="${PR_SYNC_SUMMARY:-(no rebase performed)}"
 ISSUE_METADATA=$(gh issue view "$ISSUE" --json labels,body)
 ISSUE_LABELS=$(jq -r '[.labels[].name] | join("\n")' <<<"$ISSUE_METADATA")
+ISSUE_BODY_TEXT=$(jq -r '.body // ""' <<<"$ISSUE_METADATA")
 VALIDATOR="$SCRIPT_DIR/validate-discovery.sh"
 VALIDATION_RESULT=$("$VALIDATOR" "$ISSUE" --allow-approved-legacy) || {
   echo "ERROR: discovery validation failed for issue #$ISSUE." >&2
@@ -115,8 +118,10 @@ if has_issue_label spec:approved; then
 else
   SPEC_GATE_STATUS="validated-lightweight-bypass"
 fi
+# The label, or a demo link in the spec (#4125): either means the PR must carry
+# a validated evidence report before it opens.
 EVIDENCE_REQUIRED=0
-if grep -qx "review:evidence-required" <<<"$ISSUE_LABELS"; then
+if evidence_required "$ISSUE_LABELS" "$ISSUE_BODY_TEXT"; then
   EVIDENCE_REQUIRED=1
 fi
 EVIDENCE_FILE="${PR_EVIDENCE_FILE:-}"
