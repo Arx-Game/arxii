@@ -1,11 +1,47 @@
 # Progression System
 
-XP, kudos, development points, character-level XP, path history, and unlock system for character advancement.
+XP, kudos, development points, character-level XP, path history, and unlock system for
+character advancement, built on three separate advancement currencies (see below).
 
 **Source:** `src/world/progression/`
 **API Base:** `/api/progression/`
 
 ---
+
+## Three progression currencies
+
+Character advancement runs on three separate currencies. Conflating them, or treating
+development points as nothing more than skill growth, is the most common misreading of
+this system.
+
+- **XP** unlocks a mechanical benefit at an authored cutoff (a class level via
+  `ClassLevelUnlock`, a major trait rating via `TraitRatingUnlock`). It stands for the
+  roleplay and content creation that justify the unlock, and is largely player-driven:
+  nominations, kudos claims, and GM story rewards are the production sources, not an
+  automatic tick. See "ExperiencePointsData / CharacterXP" below.
+- **Development** is progress toward a skill, stat, or thread cutoff. It stands for the
+  time, effort, and resources the character invests, not fictional risk. It
+  accrues from what the character spends doing: `DevelopmentPoints` on skills and stats
+  (see "DevelopmentPoints" below), resonance invested into a `magic.Thread`'s
+  `developed_points`, and Action Points spent through weekly training. Threads already
+  carry both currencies on one row: every tenth internal thread level is an authored,
+  separately-priced `ThreadXPLockedLevel` boundary, so Development alone gets a thread
+  to the boundary and an additional XP spend (`cross_thread_xp_lock`, see "Magic (Spec A)"
+  under Integration Points) is what lets it cross.
+- **Legend** is progress toward a character level (a Durance step, an Audere Majora
+  crossing), gated by `LegendRequirement` (see "Requirements" below). It comes only
+  from legendary achievement at great personal risk, settled at the end of a story unit
+  and priced against the earner's own level and station rather than asserted at a flat
+  authored value (#3463, ADR-0249). Legend is deliberately a separate currency: neither
+  time nor effort, however much Development or XP they produce, levels a character on
+  their own.
+
+Most unlocks cost both XP and Development together (the XP purchase gates the spend,
+the authored Development threshold gates the readiness); Legend gates level advancement
+on its own axis and never substitutes for either. See
+`docs/adr/adr-4088-xp-development-and-legend-are-three-currencies.md` for the full
+decision record, and the root `AGENT_GLOSSARY_MAP.md` / this app's
+`AGENT_GLOSSARY.md` for the glossary entries.
 
 ## Enums (types.py)
 
