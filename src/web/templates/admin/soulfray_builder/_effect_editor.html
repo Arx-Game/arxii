@@ -10,6 +10,7 @@ new row's effects save in the same Save as the row).
   {{ formset.management_form }}
   {% if formset.non_form_errors %}<p class="errornote">{{ formset.non_form_errors }}</p>{% endif %}
   <table class="sf-effect-table">
+    <thead><tr><th scope="col">Effect and target</th><th scope="col">Values</th><th scope="col">Remove</th></tr></thead>
     <tbody id="effects-{{ formset.prefix }}">
       {% for ef in formset.forms %}{% include "admin/soulfray_builder/_effect_row.html" %}{% endfor %}
     </tbody>
