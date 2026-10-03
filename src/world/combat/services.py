@@ -313,6 +313,39 @@ def has_persistent_identity_references(objectdb: ObjectDB) -> bool:
     return False
 
 
+def delete_ephemeral_npc(opponent: CombatOpponent) -> bool:
+    """Guarded delete of one ephemeral combat NPC's ``ObjectDB``.
+
+    Layer 5 of the multi-layer guard: a defensive re-check right before the
+    delete, in case a corrupt row escaped Layers 1-4.
+
+    ``ObjectDB`` isn't an ``ArxSharedMemoryModel``, so its ``delete()`` nulls
+    referrers' FKs via a bulk ``SET_NULL`` UPDATE outside
+    ``core.deletion.IdentityMapCollector`` — the cached ``opponent`` (and any
+    other process-cached ``CombatOpponent`` for this pk) would otherwise keep
+    reporting the deleted ``objectdb`` forever. Mirrors ``release_companion``'s
+    identical fix (``world/companions/services.py``).
+
+    Shared by this module's own ``cleanup_completed_encounter`` ephemeral
+    sweep and ``world.combat.won_over.delete_won_over_npc`` (#4091 fix round
+    2) — one guard, one identity-map fix, not two copies of either.
+    """
+    objectdb = opponent.objectdb
+    if objectdb is None or not opponent.objectdb_is_ephemeral:
+        return False
+    if not is_combat_npc_typeclass(objectdb):
+        logger.error("Refusing to delete: %s is not a CombatNPC typeclass", objectdb)
+        return False
+    if has_persistent_identity_references(objectdb):
+        logger.error("Refusing to delete: %s has persistent identity references", objectdb)
+        return False
+    objectdb.delete()
+    opponent.objectdb = None
+    opponent.save(update_fields=["objectdb"])
+    CombatOpponent.flush_instance_cache()
+    return True
+
+
 def _character_has_death_deferred(character: ObjectDB) -> bool:  # noqa: OBJECTDB_PARAM
     """Return True if the character has any active condition granting death_deferred.
 
@@ -9483,8 +9516,9 @@ def cleanup_completed_encounter(encounter: CombatEncounter) -> None:
     before each delete in case a corrupt row escaped Layers 1–4.
 
     CombatOpponent rows are preserved (historical record). Only the ephemeral
-    ObjectDB is destroyed; the SET_NULL FK behavior nulls
-    CombatOpponent.objectdb after deletion.
+    ObjectDB is destroyed, via ``delete_ephemeral_npc`` — which also nulls the
+    cached ``CombatOpponent.objectdb`` reference, since ``ObjectDB.delete()``'s
+    own SET_NULL update bypasses the identity map (#4091 fix round 2).
 
     Also breaks any still-pending PC ``SustainedAction`` for this encounter
     (#2705 adversarial review, Fix 3) — see ``_break_pending_sustained_actions``.
@@ -9600,22 +9634,7 @@ def cleanup_completed_encounter(encounter: CombatEncounter) -> None:
         if bind_window_open(opp):
             continue  # Decision 19: deleted later by the sweep or scene finish
 
-        objectdb = opp.objectdb
-        if objectdb is None:
-            continue
-        if not is_combat_npc_typeclass(objectdb):
-            logger.error(
-                "Refusing to delete: %s is not a CombatNPC typeclass",
-                objectdb,
-            )
-            continue
-        if has_persistent_identity_references(objectdb):
-            logger.error(
-                "Refusing to delete: %s has persistent identity references",
-                objectdb,
-            )
-            continue
-        objectdb.delete()
+        delete_ephemeral_npc(opp)
 
 
 def maybe_pause_encounter_for_disconnect(character_sheet: CharacterSheet) -> None:

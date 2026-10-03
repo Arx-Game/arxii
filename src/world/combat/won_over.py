@@ -120,33 +120,18 @@ def bind_window_open(opponent: CombatOpponent) -> bool:
 
 
 def delete_won_over_npc(opponent: CombatOpponent) -> bool:
-    """Guarded delete of one won-over ephemeral NPC (Layer 5 of the multi-layer guard).
+    """Guarded delete of one won-over ephemeral NPC past its bind window
+    (Decision 19).
 
-    ``ObjectDB`` isn't an ``ArxSharedMemoryModel``, so its ``delete()`` nulls
-    referrers' FKs via a bulk ``SET_NULL`` UPDATE outside
-    ``core.deletion.IdentityMapCollector`` — the cached ``opponent`` (and any
-    other process-cached ``CombatOpponent`` for this pk) would otherwise keep
-    reporting the deleted ``objectdb`` forever (fix round 1 — a stale
-    ``won_over_rows``/``present`` and a second ``_is_charmed_by_caster`` reaching
-    a deleted object). Mirrors ``release_companion``'s identical fix
-    (``world/companions/services.py``).
+    Delegates to the shared ``delete_ephemeral_npc`` guard
+    (``world/combat/services.py``) — the same Layer-5 checks and
+    identity-map-safe delete ``cleanup_completed_encounter``'s generic
+    ephemeral sweep uses (#4091 fix round 2: one guard, one fix, not two
+    copies of either).
     """
-    from world.combat.services import (  # noqa: PLC0415
-        has_persistent_identity_references,
-        is_combat_npc_typeclass,
-    )
+    from world.combat.services import delete_ephemeral_npc  # noqa: PLC0415
 
-    objectdb = opponent.objectdb
-    if objectdb is None or not opponent.objectdb_is_ephemeral:
-        return False
-    if not is_combat_npc_typeclass(objectdb) or has_persistent_identity_references(objectdb):
-        logger.error("Refusing to delete won-over NPC %s", objectdb)
-        return False
-    objectdb.delete()
-    opponent.objectdb = None
-    opponent.save(update_fields=["objectdb"])
-    CombatOpponent.flush_instance_cache()
-    return True
+    return delete_ephemeral_npc(opponent)
 
 
 def release_closed_bind_windows() -> int:
