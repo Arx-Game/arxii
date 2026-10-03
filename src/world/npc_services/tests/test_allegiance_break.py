@@ -30,6 +30,7 @@ from actions.factories import (
 from world.character_sheets.factories import CharacterSheetFactory
 from world.checks.factories import CheckTypeFactory, ConsequenceFactory
 from world.checks.test_helpers import force_check_outcome
+from world.classes.factories import CharacterClassLevelFactory
 from world.combat.constants import ActionCategory
 from world.combat.factories import (
     CombatEncounterFactory,
@@ -159,25 +160,76 @@ class AttemptAllegianceBreakTests(TestCase):
         self.assertLess(high_level_capture.target_difficulty, low_level_capture.target_difficulty)
 
     def test_scale_level_twelve_zeroes_a_severity_six_hold_with_no_damage_pressure(self):
-        """Review item 2 scale check: can level points alone zero out a severity-6
-        hold at a realistic level? Yes, at level 12 (of the 1-30 range), with
-        zero damage pressure needed. Numbers (CHARM_STRENGTH_POINTS_PER_SEVERITY=10,
-        LEVEL_POINTS_PER_LEVEL=5, EFFORT_CHECK_MODIFIER[MEDIUM]=0):
+        """Fix round 2 note: this is the ABSENT-caster case, and stays 0 on
+        purpose (the ruling's item 1: "the caster may be absent... that is a
+        real case", the charmer left the game or was deleted). self.instance
+        has no source_character, so _caster_level_opposition_points
+        contributes 0 regardless of target level. Numbers
+        (CHARM_STRENGTH_POINTS_PER_SEVERITY=10, LEVEL_POINTS_PER_LEVEL=5,
+        EFFORT_CHECK_MODIFIER[MEDIUM]=0):
 
-            strength   = 6 (severity) x 10            = 60
-            resistance = 12 (level) x 5 + 0 (effort)   = 60
-            pressure   = harm_pressure_points(1, 100)  = 0
-            difficulty = max(0, 60 - 60 - 0)           = 0
+            strength   = 6 (severity) x 10 + 0 (no caster) = 60
+            resistance = 12 (level) x 5 + 0 (effort)       = 60
+            pressure   = harm_pressure_points(1, 100)      = 0
+            difficulty = max(0, 60 - 60 - 0)               = 0
 
-        This is reported, not asserted as a bug: the formula is unchanged per
-        the review's instruction ("do not change the formula; the controller
-        will rule on it"). Recorded here as executable proof of the numbers.
+        See ``test_same_level_caster_and_target_no_longer_zeroes_the_hold``
+        below for the general (caster present) case fix round 2 actually
+        fixes: with a REAL same-level caster, this same level-12 target no
+        longer zeroes the difficulty.
         """
         self.opp.level = 12
         self.opp.save(update_fields=["level"])
         with force_check_outcome(self.outcomes["failure"]) as capture:
             attempt_allegiance_break(striker=self.pc_sheet, opponent=self.opp, damage_dealt=1)
         self.assertEqual(capture.target_difficulty, 0)
+
+    def test_same_level_caster_and_target_no_longer_zeroes_the_hold(self):
+        """Review (fix round 2) item 2, test 1: same-level caster and target,
+        using the level-12 case from the round-1 scale finding. Numbers:
+
+            strength   = 6 (severity) x 10 + level_opposition(level=12) = 60 + 60 = 120
+            resistance = 12 (level) x 5 + 0 (effort)                    = 60
+            pressure   = harm_pressure_points(1, 100)                   = 0
+            difficulty = max(0, 120 - 60 - 0)                           = 60
+
+        No longer 0 -- the caster's own level now backs the hold's strength,
+        so a level-12 target no longer voids a level-12 caster's severity-6
+        hold for free.
+        """
+        caster_sheet = CharacterSheetFactory()
+        CharacterClassLevelFactory(character=caster_sheet, level=12, is_primary=True)
+        self.instance.source_character = caster_sheet.character
+        self.instance.save(update_fields=["source_character"])
+        self.opp.level = 12
+        self.opp.save(update_fields=["level"])
+
+        with force_check_outcome(self.outcomes["failure"]) as capture:
+            attempt_allegiance_break(striker=self.pc_sheet, opponent=self.opp, damage_dealt=1)
+        self.assertEqual(capture.target_difficulty, 60)
+
+    def test_higher_level_caster_makes_the_hold_harder_to_break(self):
+        """Review item 2, test 2: a higher-level caster raises strength (and
+        thus difficulty) more than a lower-level caster does, everything else
+        (target level, damage) held equal.
+        """
+        low_caster_sheet = CharacterSheetFactory()
+        CharacterClassLevelFactory(character=low_caster_sheet, level=1, is_primary=True)
+        self.instance.source_character = low_caster_sheet.character
+        self.instance.save(update_fields=["source_character"])
+        with force_check_outcome(self.outcomes["failure"]) as low_caster_capture:
+            attempt_allegiance_break(striker=self.pc_sheet, opponent=self.opp, damage_dealt=5)
+
+        high_caster_sheet = CharacterSheetFactory()
+        CharacterClassLevelFactory(character=high_caster_sheet, level=10, is_primary=True)
+        self.instance.source_character = high_caster_sheet.character
+        self.instance.save(update_fields=["source_character"])
+        with force_check_outcome(self.outcomes["failure"]) as high_caster_capture:
+            attempt_allegiance_break(striker=self.pc_sheet, opponent=self.opp, damage_dealt=5)
+
+        self.assertGreater(
+            high_caster_capture.target_difficulty, low_caster_capture.target_difficulty
+        )
 
     def test_npc_on_npc_damage_never_rolls(self):
         """apply_damage_to_opponent without allegiance_break_striker performs no check.

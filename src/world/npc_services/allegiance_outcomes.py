@@ -4,6 +4,22 @@ Settle (Decision 17) and break (Decision 16) both end the hold through the
 condition's settle pool at the acting PC's roll tier, then remove the condition
 through ``remove_condition`` so the removal event fires. No result ever starts a
 fight (Decision 21). A hold that runs out with nobody acting simply ends (sweep).
+
+Break's difficulty (``attempt_allegiance_break``) is::
+
+    difficulty = max(0, strength - resistance - pressure)
+    strength   = severity points (charm_strength_points) + caster level opposition
+                 (_caster_level_opposition_points)
+    resistance = the target's own level/traits opposing the break (compute_resist_increment)
+    pressure   = the harm's post-soak damage, scaled by the target's max health
+                 (harm_pressure_points)
+
+Both sides of the hold count a level now (fix round 2): the caster's level raises
+strength, the target's level raises resistance (which LOWERS difficulty -- a
+strong-willed target is already straining against the hold internally, so a PC's
+blow has less work left to do). Before fix round 2, only the target's level
+counted, so any opponent roughly level 12+ zeroed a mid-severity hold's difficulty
+regardless of who cast it or how hard the PC hit.
 """
 
 from __future__ import annotations
@@ -23,6 +39,7 @@ if TYPE_CHECKING:
 
     from actions.models import ConsequencePool
     from world.character_sheets.models import CharacterSheet
+    from world.checks.models import CheckType
     from world.checks.types import CheckResult
     from world.combat.models import CombatOpponent
     from world.conditions.models import ConditionInstance
@@ -126,6 +143,34 @@ def harm_pressure_points(damage: int, max_health: int) -> int:
     return (max(0, damage) * 10 // max(1, max_health)) * BREAK_PRESSURE_POINTS_PER_TENTH_HEALTH
 
 
+def _caster_level_opposition_points(instance: ConditionInstance, check_type: CheckType) -> int:
+    """The hold's own caster's level opposing an attempt to break it (#4091 fix round 2).
+
+    Without this, the break difficulty only counted the TARGET's level (via
+    resistance) and never the CASTER's -- one-sided, so a high-enough-level target
+    zeroed the difficulty out regardless of how strong a hold its own (possibly
+    low-level) charmer cast. Reuses the identical pattern
+    ``attempt_break_free`` (``world/conditions/services.py``) already uses for
+    exactly this term -- ``level_opposition``/``get_character_path_level`` verbatim,
+    never a parallel formula.
+
+    0 when the hold has no ``source_character`` (a REAL case: the charmer left the
+    game or was deleted, not a defensive guard) or when that character has no
+    ``CharacterSheet`` (sheetless) -- deliberately NOT the level-1 floor
+    ``get_character_path_level`` would otherwise return for an unresolvable
+    character, since an unknown/gone caster contributes no real opposition.
+    """
+    caster = instance.source_character
+    if caster is None or caster.character_sheet is None:  # type: ignore[attr-defined]
+        return 0
+    from world.checks.services import level_opposition  # noqa: PLC0415
+    from world.progression.services.skill_development import (  # noqa: PLC0415
+        get_character_path_level,
+    )
+
+    return level_opposition(check_type, level=get_character_path_level(caster), character=caster)
+
+
 def attempt_allegiance_break(
     *,
     striker: CharacterSheet,
@@ -136,9 +181,12 @@ def attempt_allegiance_break(
     """Decision 16: the PC who harms a held NPC rolls to break the hold.
 
     Difficulty = hold strength - the NPC's resistance - the harm's pressure, floored
-    at 0. A strong hold on a weak NPC is hard to break; a faded hold on a strong-
-    willed NPC breaks easily. Success ends the hold through its settle pool at the
-    striker's tier. Failure: the hold stands and the NPC does not fight back.
+    at 0, where strength = severity points + the hold's own caster's level
+    opposition (fix round 2 -- see ``_caster_level_opposition_points``). A strong
+    hold (high severity, cast by a high-level caster) on a weak NPC is hard to
+    break; a faded hold cast by a low-level caster on a strong-willed NPC breaks
+    easily. Success ends the hold through its settle pool at the striker's tier.
+    Failure: the hold stands and the NPC does not fight back.
     """
     from world.checks.services import compute_resist_increment, perform_check  # noqa: PLC0415
     from world.fatigue.constants import EffortLevel  # noqa: PLC0415
@@ -150,7 +198,10 @@ def attempt_allegiance_break(
     instance = allegiance_instance_on(opponent.objectdb)
     if instance is None:
         return None
-    strength = charm_strength_points(instance)
+    check_type = instance.condition.allegiance_break_check_type
+    strength = charm_strength_points(instance) + _caster_level_opposition_points(
+        instance, check_type
+    )
     resistance = compute_resist_increment(
         opponent.objectdb, EffortLevel.MEDIUM, level_override=opponent.level
     )
@@ -158,7 +209,7 @@ def attempt_allegiance_break(
     difficulty = max(0, strength - resistance - pressure)
     check_result = perform_check(
         striker.character,
-        instance.condition.allegiance_break_check_type,
+        check_type,
         target_difficulty=difficulty,
     )
     broke = check_result.outcome is not None and check_result.outcome.success_level > 0
