@@ -260,18 +260,18 @@ def _action_template_for_key(action_key: str) -> ActionTemplate | None:
     """Resolve the ActionTemplate a registry social action resolves through.
 
     The consent path runs the template's check chain, so a targeted social request
-    needs its ``action_template`` set at creation. Registry social singletons carry
-    the template's ``name`` via ``Action.template_name``; action_keys without one
-    (standalone casts, rituals) yield None and leave the request template-less —
-    unchanged behaviour (#1172).
+    needs its ``action_template`` set at creation. Registry social singletons resolve
+    their template via ``Action.resolve_action_template()`` — by ``template_name`` for
+    the ordinary case, None for action_keys without one (standalone casts, rituals),
+    or by another field entirely for an override like ``SettleAction`` (#4091, found by
+    ``settles_allegiance``, never by name).
     """
-    from actions.models import ActionTemplate  # noqa: PLC0415
     from actions.registry import get_action  # noqa: PLC0415
 
     action_obj = get_action(action_key)
-    if action_obj is None or not action_obj.template_name:
+    if action_obj is None:
         return None
-    return ActionTemplate.objects.filter(name=action_obj.template_name).first()
+    return action_obj.resolve_action_template()
 
 
 def _dispatch_action_effects(
@@ -335,6 +335,15 @@ def _validate_request_preconditions(  # noqa: PLR0913 - mirrors create_action_re
             action_key=action_key,
             character_id=initiator_persona.character_sheet_id,
         )
+
+    template = _action_template_for_key(action_key)
+    if template is not None and template.settles_allegiance:
+        from world.npc_services.allegiance import allegiance_instance_on  # noqa: PLC0415
+
+        target_character = target_persona.character_sheet.character if target_persona else None
+        if target_character is None or allegiance_instance_on(target_character) is None:
+            msg = "They are under no charm to settle."
+            raise ValidationError(msg)
 
     if boon is not None:
         from world.scenes.boon_services import (  # noqa: PLC0415
@@ -1065,6 +1074,12 @@ def _resolve_action_against_persona(
             perceiver=target_persona.character_sheet,
             perceived=action_request.initiator_persona.character_sheet,
         )
+        if action_template.settles_allegiance:
+            from world.npc_services.allegiance_outcomes import (  # noqa: PLC0415
+                settle_contributions,
+            )
+
+            gated = [*gated, *settle_contributions(target_character)]
         breakdown = collect_check_modifiers(
             action_request.initiator_persona.character_sheet,
             action_template.check_type,
@@ -1101,6 +1116,15 @@ def _resolve_action_against_persona(
     # Berserk condition). The check chain above resolves the action; this is where
     # data-driven condition effects reach the live player path (#1172).
     _dispatch_action_effects(action_request, character, target_character)
+
+    if action_template.settles_allegiance and result.action_resolution.main_result is not None:
+        from world.npc_services.allegiance_outcomes import settle_allegiance  # noqa: PLC0415
+
+        settle_allegiance(
+            target=target_character,
+            actor=character,
+            check_result=result.action_resolution.main_result.check_result,
+        )
 
     result.disposition_message = apply_social_disposition_delta(
         character, target_persona.pk, result.action_resolution

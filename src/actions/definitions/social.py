@@ -109,7 +109,10 @@ class _SocialTemplateAction(Action):
         scene_data = context.scene_data if context is not None else None
         self.dispatch_effects(actor, kwargs.get("target"), scene_data)
 
-        template = ActionTemplate.objects.get(name=self.template_name)
+        template = self.resolve_action_template()
+        if template is None:
+            msg = f"ActionTemplate matching query does not exist: {self.template_name!r}."
+            raise ActionTemplate.DoesNotExist(msg)
         resolution_ctx = ResolutionContext(character=actor, action_context=context)
         resolution = start_action_resolution(
             character=actor,
@@ -859,6 +862,37 @@ class RestoreSenseAction(_SocialTemplateAction):
 
 
 @dataclass
+class SettleAction(_SocialTemplateAction):
+    """Settle a charm, turn or calm on an NPC through the scene pipeline (#4091).
+
+    The template is the one ActionTemplate with ``settles_allegiance`` set, found by
+    that field, never by name. Resolution and the ending run in the consent pipeline
+    (``world.scenes.action_services``); a bare registry ``execute`` has no NPC target
+    to settle against and refuses.
+    """
+
+    key: str = "settle"
+    name: str = "Settle"
+    icon: str = "handshake"
+    description: str = "Talk an NPC out of a charm or a turn, and see how it lands."
+
+    def resolve_action_template(self) -> ActionTemplate | None:
+        from actions.models import ActionTemplate  # noqa: PLC0415
+
+        return ActionTemplate.objects.filter(settles_allegiance=True).order_by("pk").first()
+
+    def execute(
+        self,
+        actor: ObjectDB,
+        context: ActionContext | None = None,
+        **kwargs: Any,
+    ) -> ActionResult:
+        from actions.types import ActionResult as _ActionResult  # noqa: PLC0415
+
+        return _ActionResult(success=False, message="Settle someone from the scene: settle <name>.")
+
+
+@dataclass
 class ResolveFlourishOfferAction(Action):
     """Resolve a pending entry-flourish offer by declaring a resonance."""
 
@@ -916,4 +950,5 @@ boon_menace = MenaceBoonAction()
 perform = PerformAction()
 entrance = EntranceAction()
 restore_sense = RestoreSenseAction()
+settle = SettleAction()
 resolve_entry_flourish = ResolveFlourishOfferAction()

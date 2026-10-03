@@ -490,6 +490,7 @@ from actions.definitions.social import (
     resolve_entry_flourish,
     restore_sense,
     seduce,
+    settle,
 )
 from actions.definitions.speaker_queue import (
     AdvanceSpeakerQueueAction,
@@ -930,6 +931,7 @@ _ALL_ACTIONS: list[Action] = [
     perform,
     entrance,
     restore_sense,
+    settle,
     resolve_entry_flourish,
     resolve_crossing_offer,
     treat_condition,

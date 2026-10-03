@@ -286,6 +286,7 @@ class ActionRegistryTests(TestCase):
             "acknowledge_risk",
             "propose_lethal_duel",
             "restore_sense",
+            "settle",
             "resolve_entry_flourish",
             "resolve_crossing_offer",
             "perform_ritual",

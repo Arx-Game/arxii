@@ -23,6 +23,7 @@ from commands.account.reboot import CmdReboot
 from commands.account.sheet import CmdSheet
 from commands.account.staff_contact import CmdPetition
 from commands.agriculture import CmdHarvest
+from commands.allegiance import CmdSettle
 from commands.alterations import CmdMageScar
 from commands.assets import CmdIntroduce
 from commands.battle import CmdBattle
@@ -315,6 +316,7 @@ class CharacterCmdSet(default_cmds.CharacterCmdSet):
             CmdPerform,
             CmdEntrance,
             CmdRestoreSense,
+            CmdSettle,
             CmdTreatCondition,
             # #2706 — break-free from behavior-altering conditions.
             CmdBreakFree,

@@ -147,3 +147,10 @@ class ReactionMetric(models.TextChoices):
 
     ALLURE = "allure", "Allure"
     MENACE = "menace", "Menace"
+
+
+# #4091 — settling/breaking a charm scales off the hold's strength (severity x
+# stage multiplier) and the striker's pressure (damage dealt). PLACEHOLDER
+# calibration (#4091): staff retunes once play data exists.
+CHARM_STRENGTH_POINTS_PER_SEVERITY: int = 10  # PLACEHOLDER calibration (#4091)
+BREAK_PRESSURE_POINTS_PER_TENTH_HEALTH: int = 5  # PLACEHOLDER calibration (#4091)
