@@ -134,7 +134,7 @@ class _SoulfrayCapTestBase(TestCase):
         # Engage so the social-safety control bonus does not inflate control.
         CharacterEngagementFactory(character=self.anima.character)
 
-    def _run(self, *, lethal: bool):
+    def _run(self, *, lethal: bool, defer_soulfray_reveal: bool = False):
         """Run use_technique twice (create then advance/fire) with a mocked resilience check.
 
         The mocked resilience-check outcome matches the death consequence's
@@ -171,6 +171,7 @@ class _SoulfrayCapTestBase(TestCase):
                 resolve_fn=lambda *, power, ledger, extra_modifiers=0: "resolved",  # noqa: ARG005
                 confirm_soulfray_risk=True,
                 lethal=lethal,
+                defer_soulfray_reveal=defer_soulfray_reveal,
             )
 
 
@@ -210,3 +211,49 @@ class SoulfrayNonLethalTests(_SoulfrayCapTestBase):
         # No character_loss consequence applied.
         if result.soulfray_result is not None:
             self.assertIsNone(result.soulfray_result.stage_consequence)
+
+
+class SoulfrayRevealCastTests(_SoulfrayCapTestBase):
+    """A real cast's Soulfray stage draw spins the #924 wheel once, on commit (#4089).
+
+    The death-risk pool also holds a ticked (``theater``) row in the drawn tier, so the
+    botched resilience roll lands on a tier that warrants a wheel either way.
+    """
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        super().setUpTestData()
+        ticked = ConsequenceFactory(
+            outcome_tier=cls.death_consequence.outcome_tier,
+            label="Soul Scar (nonlethal cap test)",
+            theater=True,
+        )
+        ConsequencePoolEntryFactory(pool=cls.death_pool, consequence=ticked)
+
+    def _soulfray_wheels(self, msg) -> list[str]:
+        labels = []
+        for call in msg.call_args_list:
+            payload = call.kwargs.get("roulette_result")
+            if payload is not None:
+                labels.append(payload[1].get("stage_label") or "")
+        return labels
+
+    def test_a_cast_spins_one_soulfray_wheel_on_commit(self) -> None:
+        with (
+            patch.object(self.character, "msg") as msg,
+            self.captureOnCommitCallbacks(execute=True),
+        ):
+            result = self._run(lethal=True)
+        self.assertIsNotNone(result.soulfray_result.reveal)
+        wheels = self._soulfray_wheels(msg)
+        self.assertEqual(len(wheels), 1)
+        self.assertTrue(wheels[0].startswith("Soulfray · "))
+
+    def test_a_deferred_cast_holds_the_reveal_and_sends_nothing(self) -> None:
+        with (
+            patch.object(self.character, "msg") as msg,
+            self.captureOnCommitCallbacks(execute=True),
+        ):
+            result = self._run(lethal=True, defer_soulfray_reveal=True)
+        self.assertIsNotNone(result.soulfray_result.reveal)
+        self.assertEqual(self._soulfray_wheels(msg), [])

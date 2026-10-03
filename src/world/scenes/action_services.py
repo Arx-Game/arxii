@@ -180,6 +180,7 @@ if TYPE_CHECKING:
     from world.conditions.models import ConditionInstance, TreatmentTemplate
     from world.conditions.types import TreatmentOutcome
     from world.magic.models import FuryTier, PendingAlteration, Technique, Thread
+    from world.magic.types import SoulfrayReveal
     from world.magic.types.pull import CastPullDeclaration
     from world.roster.models import RosterTenure
     from world.scenes.boon_services import BoonAsk
@@ -1456,6 +1457,9 @@ def _resolve_enhanced_action(  # noqa: PLR0913
         control_penalty=fury_res.control_penalty if fury_res else 0,
         power_intensity_bonus=fury_res.intensity_bonus if fury_res else 0,
         strain_power_enabled=False,
+        # #4089: the Soulfray wheel is played by _create_result_interaction, after
+        # this action's own wheels. Its only caller always reaches it.
+        defer_soulfray_reveal=True,
         # Soulfray kills only in combat encounters (#4098 fix round 2) — a
         # technique-enhanced social action is never a CombatEncounter, so a
         # character_loss Soulfray consequence can never be selected here.
@@ -1636,13 +1640,14 @@ def _emit_theater_to_audience(  # noqa: PLR0913 - one payload per audience stage
             )
 
 
-def _schedule_check_outcome_theater(
+def _schedule_check_outcome_theater(  # noqa: PLR0913 - one keyword per wheel source
     *,
     action_request: SceneActionRequest,
     check_result: CheckResult | None,
     initiator_character: ObjectDB,
     target_character: ObjectDB | None,
     resolution: PendingActionResolution | None = None,
+    soulfray_reveal: SoulfrayReveal | None = None,
 ) -> None:
     """Schedule ordered success and consequence reveals for an action resolution.
 
@@ -1650,9 +1655,12 @@ def _schedule_check_outcome_theater(
     multiple pool candidates, its chart reveal is followed immediately by a
     weighted consequence reveal. Both payloads are queued in one commit callback,
     preserving order and ensuring rolled-back resolutions never reach a client.
+
+    ``soulfray_reveal`` is the caster's held Soulfray stage wheel (#4089): it plays
+    last, to the roller only, and is sent even when the action itself has no wheel.
     """
     steps = _resolution_steps(resolution=resolution, check_result=check_result)
-    if not steps:
+    if not steps and soulfray_reveal is None:
         return
 
     title = (
@@ -1676,8 +1684,21 @@ def _schedule_check_outcome_theater(
                 pool_faces=pool_faces,
                 pool_selected=pool_selected,
             )
+        if soulfray_reveal is not None:
+            # The caster's own backlash, after the action's wheels and to the roller only.
+            from world.magic.services.soulfray import deliver_soulfray_reveal  # noqa: PLC0415
+
+            deliver_soulfray_reveal(initiator_character, soulfray_reveal)
 
     transaction.on_commit(_emit)
+
+
+def _soulfray_reveal_of(result: EnhancedSceneActionResult) -> SoulfrayReveal | None:
+    """The Soulfray wheel a technique-enhanced action held back for ordering (#4089)."""
+    technique_result = result.technique_result
+    if technique_result is None or technique_result.soulfray_result is None:
+        return None
+    return technique_result.soulfray_result.reveal
 
 
 def _record_template_consequence_outcomes(
@@ -1811,6 +1832,7 @@ def _create_result_interaction(
             effective_target.character_sheet.character if effective_target is not None else None
         ),
         resolution=result.action_resolution,
+        soulfray_reveal=_soulfray_reveal_of(result),
     )
 
     if mode == InteractionMode.MUTTER:

@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from actions.models import ConsequencePool
     from actions.types import WeightedConsequence
+    from world.checks.models import Consequence
     from world.checks.types import CheckResult
     from world.conditions.models import ConditionStage
     from world.magic.models import Resonance, Restriction, Technique
@@ -77,6 +78,22 @@ class SoulfrayStageSummary:
         return any(wc.character_loss for wc in self.consequences)
 
 
+@dataclass(frozen=True)
+class SoulfrayReveal:
+    """The #924 outcome wheel for one Soulfray stage draw (#4089).
+
+    ``faces`` is the drawn tier as authored, UNFILTERED: a row a modifier removed
+    from the draw (a Can kill row on a non-lethal cast) is still a face, so the
+    wheel spins past it and the player never learns it was removed. ``selected``
+    is always a face the filtered draw actually picked.
+    """
+
+    title: str
+    stage_label: str
+    faces: tuple[Consequence, ...]
+    selected: Consequence
+
+
 @dataclass
 class SoulfrayResult:
     """Result of Soulfray accumulation in Step 7 of use_technique()."""
@@ -86,6 +103,8 @@ class SoulfrayResult:
     stage_advanced: bool
     resilience_check: CheckResult | None = None
     stage_consequence: AppliedEffect | None = None
+    #: The stage draw's outcome wheel, or ``None`` when the drawn tier is routine.
+    reveal: SoulfrayReveal | None = None
 
 
 @dataclass

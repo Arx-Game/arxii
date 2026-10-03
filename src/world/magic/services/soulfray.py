@@ -5,8 +5,16 @@ from __future__ import annotations
 from collections import defaultdict
 from typing import TYPE_CHECKING
 
+from django.db import transaction
+
 from world.magic.models import SoulfrayConfig
-from world.magic.types import MishapResult, SoulfrayResult, SoulfrayStageSummary, SoulfrayWarning
+from world.magic.types import (
+    MishapResult,
+    SoulfrayResult,
+    SoulfrayReveal,
+    SoulfrayStageSummary,
+    SoulfrayWarning,
+)
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -16,6 +24,7 @@ if TYPE_CHECKING:
 
     from actions.models.action_templates import ConsequencePool
     from actions.models.consequence_pools import ConsequencePoolEntry
+    from actions.types import WeightedConsequence
     from world.checks.types import CheckResult
     from world.conditions.models import ConditionStage
     from world.magic.models import CharacterAnima
@@ -304,7 +313,7 @@ def _handle_soulfray_accumulation(
 
     # Fire stage consequence pool if present
     current_stage = soulfray_instance.current_stage
-    resilience_check, stage_consequence = _fire_stage_consequence_pool(
+    resilience_check, stage_consequence, reveal = _fire_stage_consequence_pool(
         character=character,
         current_stage=current_stage,
         soulfray_config=soulfray_config,
@@ -318,6 +327,7 @@ def _handle_soulfray_accumulation(
         stage_advanced=advance_result.stage_changed,
         resilience_check=resilience_check,
         stage_consequence=stage_consequence,
+        reveal=reveal,
     )
 
 
@@ -329,6 +339,7 @@ def accumulate_soulfray(  # noqa: PLR0913
     soulfray_config: SoulfrayConfig | None,
     check_result: CheckResult | None,
     lethal: bool = True,
+    defer_reveal: bool = False,
 ) -> SoulfrayResult | None:
     """Accumulate Soulfray severity from the pool state and apply stage consequences.
 
@@ -336,6 +347,10 @@ def accumulate_soulfray(  # noqa: PLR0913
     protections (technique-interpose fire, standing-ward fire, upkeep). No-op when
     Soulfray is unconfigured or severity is non-positive. ``lethal=False`` bounds the
     accrued severity below the first death-risk stage.
+
+    A dramatic stage draw's outcome wheel (``result.reveal``, #4089) is sent to the
+    roller on commit. ``defer_reveal=True`` skips that send: the caller plays the
+    reveal itself, in order with its own wheels, and must never drop it.
     """
     if not soulfray_config:
         return None
@@ -349,13 +364,18 @@ def accumulate_soulfray(  # noqa: PLR0913
     )
     if soulfray_severity <= 0:
         return None
-    return _handle_soulfray_accumulation(
+    result = _handle_soulfray_accumulation(
         character=character,
         soulfray_severity=soulfray_severity,
         soulfray_config=soulfray_config,
         technique_check_result=check_result,
         lethal=lethal,
     )
+    if result.reveal is not None and not defer_reveal:
+        reveal = result.reveal
+        # On commit, as the scene path does: a rolled-back cast never spins a wheel.
+        transaction.on_commit(lambda: deliver_soulfray_reveal(character, reveal))
+    return result
 
 
 def _fire_stage_consequence_pool(
@@ -365,11 +385,13 @@ def _fire_stage_consequence_pool(
     soulfray_config: SoulfrayConfig,
     technique_check_result: CheckResult | None,
     lethal: bool,
-) -> tuple[CheckResult | None, AppliedEffect | None]:
-    """Fire a Soulfray stage's consequence pool, returning ``(resilience_check, applied)``.
+) -> tuple[CheckResult | None, AppliedEffect | None, SoulfrayReveal | None]:
+    """Fire a Soulfray stage's consequence pool: ``(resilience_check, applied, reveal)``.
 
     When ``lethal`` is False, ``character_loss`` consequences are filtered out of the
     pool before selection, so a non-lethal cast can never roll a death consequence.
+    ``reveal`` is the draw's outcome wheel (#4089), built from the UNFILTERED tier,
+    or ``None`` when the drawn tier is routine or nothing was drawn.
     """
     from world.checks.consequence_resolution import (  # noqa: PLC0415
         apply_resolution,
@@ -382,16 +404,19 @@ def _fire_stage_consequence_pool(
     from world.magic.models import TechniqueOutcomeModifier  # noqa: PLC0415
 
     if not current_stage or not current_stage.consequence_pool_id:
-        return None, None
+        return None, None, None
 
     from actions.services import get_effective_consequences  # noqa: PLC0415
 
-    consequences = get_effective_consequences(current_stage.consequence_pool)
+    all_consequences = get_effective_consequences(current_stage.consequence_pool)
+    consequences = all_consequences
     if not lethal:
-        # Non-lethal: a cast can never roll a character_loss consequence.
-        consequences = [wc for wc in consequences if not wc.character_loss]
+        # Non-lethal: a cast can never roll a character_loss consequence. The wheel
+        # still shows those rows (built from all_consequences below) and spins past
+        # them: a player never learns a modifier removed an option (#4089 ruling).
+        consequences = [wc for wc in all_consequences if not wc.character_loss]
     if not consequences:
-        return None, None
+        return None, None, None
 
     # 1. Stage penalty via ConditionCheckModifier
     stage_modifier = 0
@@ -444,7 +469,70 @@ def _fire_stage_consequence_pool(
     applied = apply_resolution(pending, ResolutionContext(character=character))
     if lethal and pending.selected_consequence.character_loss:
         _resolve_soulfray_character_loss(character)
-    return resilience_check, (applied[0] if applied else None)
+    reveal = _soulfray_reveal(
+        stage=current_stage,
+        soulfray_config=soulfray_config,
+        check_result=resilience_check,
+        consequences=all_consequences,
+        selected_consequence_id=pending.selected_consequence.pk,
+    )
+    return resilience_check, (applied[0] if applied else None), reveal
+
+
+def _soulfray_reveal(
+    *,
+    stage: ConditionStage,
+    soulfray_config: SoulfrayConfig,
+    check_result: CheckResult,
+    consequences: list[WeightedConsequence],
+    selected_consequence_id: int | None,
+) -> SoulfrayReveal | None:
+    """The #924 wheel for this draw, or None when the drawn tier carries no drama.
+
+    Faces come from the UNFILTERED tier (``consequences`` is the full effective
+    pool), so an option a modifier removed still shows; the landed face is the one
+    the filtered draw picked, matched by pk (an unsaved fallback has none, so an
+    empty draw sends no wheel). ``should_emit_theater`` is the existing #924 rule:
+    the tier holds a ticked or a Can kill row.
+    """
+    from world.checks.theater import consequence_pool_faces, should_emit_theater  # noqa: PLC0415
+
+    if selected_consequence_id is None:
+        return None
+    faces, selected = consequence_pool_faces(
+        consequences=consequences,
+        outcome=check_result.outcome,
+        selected_consequence_id=selected_consequence_id,
+        min_faces=1,
+    )
+    if selected is None or not should_emit_theater(faces):
+        return None
+    return SoulfrayReveal(
+        title=soulfray_config.resilience_check_type.name,
+        stage_label=f"Soulfray · {stage.name}",
+        faces=tuple(faces),
+        selected=selected,
+    )
+
+
+def deliver_soulfray_reveal(
+    character: ObjectDB,  # noqa: OBJECTDB_PARAM - the roller, any puppet, as #924 theater
+    reveal: SoulfrayReveal,
+) -> bool:
+    """Send one Soulfray reveal to the roller through the existing #924 emitter.
+
+    Web-only by construction: telnet has no ``roulette_result`` output, and the
+    outcome itself was already applied identically for both clients.
+    """
+    from world.checks.theater import maybe_emit_resolution_theater  # noqa: PLC0415
+
+    return maybe_emit_resolution_theater(
+        character=character,
+        title=reveal.title,
+        consequences=list(reveal.faces),
+        selected=reveal.selected,
+        stage_label=reveal.stage_label,
+    )
 
 
 def _resolve_soulfray_character_loss(character: ObjectDB) -> None:  # noqa: OBJECTDB_PARAM

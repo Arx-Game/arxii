@@ -79,6 +79,19 @@ class ResolutionTheaterTests(TestCase):
         assert faces == []
         assert selected is None
 
+    def test_consequence_pool_faces_carry_theater_and_honour_min_faces(self) -> None:
+        only = Consequence.objects.create(
+            outcome_tier=self.tier, label="Only", weight=1, theater=True
+        )
+        faces, selected = consequence_pool_faces(
+            consequences=[WeightedConsequence(consequence=only, weight=1, character_loss=False)],
+            outcome=self.tier,
+            selected_consequence_id=only.pk,
+            min_faces=1,
+        )
+        assert [face.theater for face in faces] == [True]
+        assert selected is faces[0]
+
     def test_no_drama_no_emit(self) -> None:
         character = MagicMock()
         plain = self._consequence("Bruised ego")
