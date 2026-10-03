@@ -5,6 +5,8 @@ clamped, then folded into ONE MULTIPLIER stage entry alongside the legacy aggreg
 
 from __future__ import annotations
 
+from decimal import Decimal
+
 from django.test import TestCase
 
 from evennia_extensions.factories import CharacterFactory
@@ -12,7 +14,13 @@ from world.character_sheets.factories import CharacterSheetFactory
 from world.conditions.factories import (
     ConditionInstanceFactory,
     ConditionModifierEffectFactory,
+    ConditionStageFactory,
     ConditionTemplateFactory,
+)
+from world.conditions.services import (
+    get_condition_modifier_total,
+    get_condition_modifier_vow_contributions,
+    scaled_condition_effect_value,
 )
 from world.covenants.factories import CovenantRoleFactory
 from world.magic.constants import TEAM_BUFF_LANE_CAP_PERCENT, PowerStage
@@ -154,3 +162,72 @@ class TeamDamagePercentPricingIntegrationTests(TestCase):
         self.assertEqual(len(results), 1)
         # priced: eff_intensity=40, PCT_PER_POWER_TENTHS=10, target_level=4 -> 40/4=10
         self.assertEqual(results[0].severity_applied, 10)
+
+
+class ConditionModifierVowContributionsScalingParityTests(TestCase):
+    """get_condition_modifier_vow_contributions now scales through the shared
+    scaled_condition_effect_value helper (#4090) — these prove its results are
+    unchanged: each row's value must match a direct scaled_condition_effect_value
+    call, and the vow-keyed rows must still sum to get_condition_modifier_total,
+    exactly as the function's own docstring invariant requires."""
+
+    def setUp(self):
+        self.character = CharacterFactory()
+        self.sheet = CharacterSheetFactory(character=self.character)
+        self.lane_target = TeamDamagePercentTargetFactory()
+
+    def test_severity_scaled_row_matches_direct_scaled_effect_value(self):
+        role = CovenantRoleFactory()
+        cond = ConditionTemplateFactory(name="vow-parity-severity")
+        effect = ConditionModifierEffectFactory(
+            condition=cond, modifier_target=self.lane_target, value=20, scales_with_severity=True
+        )
+        instance = ConditionInstanceFactory(
+            target=self.character, condition=cond, source_vow=role, severity=3
+        )
+
+        rows = get_condition_modifier_vow_contributions(self.sheet, self.lane_target)
+
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0].source_vow_id, role.pk)
+        self.assertEqual(rows[0].value, scaled_condition_effect_value(effect, instance))
+        self.assertEqual(rows[0].value, 60)
+
+    def test_stage_scaled_row_matches_direct_scaled_effect_value(self):
+        role = CovenantRoleFactory()
+        staged = ConditionTemplateFactory(name="vow-parity-staged", has_progression=True)
+        stage = ConditionStageFactory(
+            condition=staged, stage_order=1, severity_multiplier=Decimal("2.00")
+        )
+        effect = ConditionModifierEffectFactory(
+            condition=None, stage=stage, modifier_target=self.lane_target, value=10
+        )
+        instance = ConditionInstanceFactory(
+            target=self.character, condition=staged, current_stage=stage, source_vow=role
+        )
+
+        rows = get_condition_modifier_vow_contributions(self.sheet, self.lane_target)
+
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0].value, scaled_condition_effect_value(effect, instance))
+        self.assertEqual(rows[0].value, 20)
+
+    def test_vow_contributions_sum_matches_total(self):
+        """The function's own docstring invariant: sum(rows) == get_condition_modifier_total."""
+        role_a = CovenantRoleFactory()
+        role_b = CovenantRoleFactory()
+        cond_a = ConditionTemplateFactory(name="vow-parity-sum-a")
+        ConditionModifierEffectFactory(
+            condition=cond_a, modifier_target=self.lane_target, value=15, scales_with_severity=True
+        )
+        cond_b = ConditionTemplateFactory(name="vow-parity-sum-b")
+        ConditionModifierEffectFactory(condition=cond_b, modifier_target=self.lane_target, value=5)
+        ConditionInstanceFactory(
+            target=self.character, condition=cond_a, source_vow=role_a, severity=2
+        )
+        ConditionInstanceFactory(target=self.character, condition=cond_b, source_vow=role_b)
+
+        rows = get_condition_modifier_vow_contributions(self.sheet, self.lane_target)
+        total = get_condition_modifier_total(self.sheet, self.lane_target)
+
+        self.assertEqual(sum(row.value for row in rows), total)

@@ -2160,19 +2160,14 @@ def get_condition_modifier_vow_contributions(
             query |= Q(stage=instance.current_stage)
         effects = ConditionModifierEffect.objects.filter(query, modifier_target=modifier_target)
 
-        for effect in effects:
-            value = effect.value
-            if effect.scales_with_severity:
-                value = int(value * instance.effective_severity)
-            elif instance.current_stage:
-                value = int(value * instance.current_stage.severity_multiplier)
-            rows.append(
-                ConditionModifierVowContribution(
-                    source_vow_id=instance.source_vow_id,
-                    source_name=instance.condition.name,
-                    value=value,
-                )
+        rows.extend(
+            ConditionModifierVowContribution(
+                source_vow_id=instance.source_vow_id,
+                source_name=instance.condition.name,
+                value=scaled_condition_effect_value(effect, instance),
             )
+            for effect in effects
+        )
 
     return rows
 
