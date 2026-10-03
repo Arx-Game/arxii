@@ -571,6 +571,7 @@ describe('CombatTurnPanel, aftermath digest (#3551)', () => {
         resolution_text: 'The line holds.',
       },
       peril_round_active: true,
+      won_over: [],
     } as unknown as NonNullable<Participant['aftermath']>;
 
     mockEncounter({
@@ -645,6 +646,7 @@ describe('CombatTurnPanel, aftermath digest (#3551)', () => {
       legend: [],
       beat: null,
       peril_round_active: false,
+      won_over: [],
     } as unknown as NonNullable<Participant['aftermath']>;
 
     const secondAftermath = {
@@ -654,6 +656,7 @@ describe('CombatTurnPanel, aftermath digest (#3551)', () => {
       legend: [],
       beat: null,
       peril_round_active: false,
+      won_over: [],
     } as unknown as NonNullable<Participant['aftermath']>;
 
     mockEncounter({

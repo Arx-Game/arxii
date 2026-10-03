@@ -70,6 +70,9 @@ export const magicKeys = {
   characterResonances: () => [...magicKeys.all, 'character-resonances'] as const,
   characterResonanceList: () => [...magicKeys.characterResonances(), 'list'] as const,
 
+  characterGifts: (characterId: number) =>
+    [...magicKeys.all, 'character-gifts', characterId] as const,
+
   teachingOffers: () => [...magicKeys.all, 'teaching-offers', 'list'] as const,
 
   technique: (id: number) => [...magicKeys.all, 'technique', id] as const,
@@ -212,6 +215,19 @@ export function useCharacterResonances(characterSheetId?: number) {
     queryKey: [...magicKeys.characterResonanceList(), characterSheetId ?? null],
     queryFn: () => api.getCharacterResonances(characterSheetId),
     throwOnError: true,
+  });
+}
+
+/**
+ * The gifts `characterId` holds (#4091) — backs the Bind-as-companion gift
+ * picker on WonOverRows. Disabled when no character id is resolved yet, or
+ * when the caller defers the fetch (e.g. until the form is open) via `enabled`.
+ */
+export function useCharacterGifts(characterId: number | null, enabled = true) {
+  return useQuery({
+    queryKey: magicKeys.characterGifts(characterId ?? 0),
+    queryFn: () => api.fetchCharacterGifts(characterId as number),
+    enabled: enabled && characterId !== null && characterId > 0,
   });
 }
 

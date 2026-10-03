@@ -46,11 +46,8 @@ export function AftermathDigest({ digest, title, characterId, sceneId }: Afterma
     beat,
     objective,
     peril_round_active: perilRoundActive,
-    won_over: wonOver,
+    won_over: wonOverRows,
   } = digest;
-  // Older cached/fixture payloads may predate won_over (#4091) — never present
-  // once this schema ships, but a hand-built test fixture can still omit it.
-  const wonOverRows = wonOver ?? [];
   const beatText = beat
     ? `${beat.resolution_text || 'The beat is resolved'} (${beat.tier_name ?? 'ungraded'}, ${capitalizeFirst(beat.outcome)})`
     : null;

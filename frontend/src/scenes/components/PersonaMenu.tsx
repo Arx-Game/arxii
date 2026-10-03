@@ -401,20 +401,35 @@ export function PersonaMenu({
   // "contact"}) — the server never forwards kwargs to the menu payload, so
   // the frontend has to mirror them the same way identify/challenge/
   // scene_succor/scene_interpose already do.
+  // On a successful send-away/take-into-service, the persona menu's own
+  // availability (its items can change once the hold is gone) and whatever
+  // aftermath/rail queries are reading this encounter (#4091 fix round 1,
+  // item 4) both need a refetch — not just a toast. `['persona-menu']` is
+  // the key prefix `usePersonaMenuQuery` (personaMenuApi.ts) scopes under
+  // (no exported key factory exists there to import).
+  function invalidateAfterAllegianceAction() {
+    queryClient.invalidateQueries({ queryKey: ['persona-menu'] }).catch(() => {});
+    queryClient.invalidateQueries({ queryKey: combatKeys.all }).catch(() => {});
+  }
+
   function handleSendAway() {
     dispatchSendAway({
       ref: { backend: 'registry', registry_key: 'send_away' },
       kwargs: { target_persona_id: personaId },
     })
       .then((result) => {
-        if (!result.message) return;
-        if (result.success) {
-          toast.success(result.message);
-        } else {
-          toast.error(result.message);
+        if (isDispatchFailure(result)) {
+          toast.error(result.message ?? 'Could not send them away.');
+          return;
         }
+        if (result.message) toast.success(result.message);
+        invalidateAfterAllegianceAction();
       })
-      .catch(() => {});
+      .catch((err: unknown) => {
+        // #4091 fix round 1, item 4: an HTTP-level failure (postDispatchAction
+        // throws on non-2xx) used to be swallowed silently here.
+        toast.error(err instanceof Error ? err.message : 'Could not send them away.');
+      });
   }
 
   function handleCharmAsset() {
@@ -423,14 +438,16 @@ export function PersonaMenu({
       kwargs: { target_persona_id: personaId, role_context: 'contact' },
     })
       .then((result) => {
-        if (!result.message) return;
-        if (result.success) {
-          toast.success(result.message);
-        } else {
-          toast.error(result.message);
+        if (isDispatchFailure(result)) {
+          toast.error(result.message ?? 'Could not take them into service.');
+          return;
         }
+        if (result.message) toast.success(result.message);
+        invalidateAfterAllegianceAction();
       })
-      .catch(() => {});
+      .catch((err: unknown) => {
+        toast.error(err instanceof Error ? err.message : 'Could not take them into service.');
+      });
   }
 
   function handleMute() {

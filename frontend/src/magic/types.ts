@@ -25,6 +25,7 @@ export type PaginatedTeachingOfferList =
 // TargetKind — re-export from generated enum
 export type TargetKind = components['schemas']['ThreadTargetKindEnum'];
 export type CharacterResonance = components['schemas']['CharacterResonance'];
+export type CharacterGift = components['schemas']['CharacterGift'];
 export type SineatingPendingOffer = components['schemas']['SineatingPendingOffer'];
 export type PaginatedSineatingPendingOfferList =
   components['schemas']['PaginatedSineatingPendingOfferList'];
