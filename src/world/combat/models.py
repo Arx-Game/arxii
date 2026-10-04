@@ -2673,6 +2673,13 @@ class OpponentTierTemplate(SharedMemoryModel):
         default=1,
         help_text="Tier-level action economy. MOOK/ELITE=1; BOSS=2 or 3.",
     )
+    force_weight_percent = models.PositiveSmallIntegerField(
+        default=100,
+        help_text=(
+            "Percent weight of one opponent of this tier when a standoff compares the "
+            "group's force with the party's (100 = counts as its level once)."
+        ),
+    )
     assess_prose = models.TextField(
         blank=True,
         default="",
@@ -2734,6 +2741,7 @@ class CreatureTemplate(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
     )
     cause_margin_percent = models.SmallIntegerField(
         default=0,
+        validators=[MinValueValidator(-99)],
         help_text=(
             "How far, as a percent of its own force, the party must outweigh the creature "
             "before its cause stops firing."

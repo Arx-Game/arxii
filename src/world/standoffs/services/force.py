@@ -4,7 +4,8 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from world.combat.constants import CauseKind, OpponentTier, ParticipantStatus
+from world.combat.constants import CauseKind, ParticipantStatus
+from world.combat.models import OpponentTierTemplate
 from world.covenants.mentorship import effective_combat_level
 from world.standoffs.constants import StandoffGroupState
 from world.standoffs.services.regard import suppressed_for_all_participants
@@ -29,22 +30,15 @@ def party_force(encounter: CombatEncounter) -> int:
     )
 
 
-def _tier_weight(tier: str, config: StandoffConfig) -> int:
-    return {
-        OpponentTier.SWARM: config.swarm_weight,
-        OpponentTier.MOOK: config.mook_weight,
-        OpponentTier.ELITE: config.elite_weight,
-        OpponentTier.BOSS: config.boss_weight,
-        OpponentTier.HERO_KILLER: config.hero_killer_weight,
-    }[tier]
+def _tier_weights() -> dict[str, int]:
+    """Each tier's force weight (percent), read off its OpponentTierTemplate row."""
+    return {tpl.tier: tpl.force_weight_percent for tpl in OpponentTierTemplate.objects.all()}
 
 
-def group_force(group: StandoffGroup, config: StandoffConfig) -> int:
-    """Sum of active members' level times their tier weight (percent)."""
-    return (
-        sum(member.level * _tier_weight(member.tier, config) for member in active_members(group))
-        // 100
-    )
+def group_force(group: StandoffGroup) -> int:
+    """Sum of active members' level times their tier's force weight (percent)."""
+    weights = _tier_weights()
+    return sum(member.level * weights[member.tier] for member in active_members(group)) // 100
 
 
 def effective_party_force(
@@ -61,7 +55,7 @@ def cause_fires(group: StandoffGroup, config: StandoffConfig) -> bool:
         return False
     margin = 100 + group.creature_template.cause_margin_percent
     weak = effective_party_force(group.encounter, group, config) * 100 <= (
-        group_force(group, config) * margin
+        group_force(group) * margin
     )
     return weak and not suppressed_for_all_participants(group)
 

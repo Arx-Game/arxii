@@ -10,9 +10,9 @@ from __future__ import annotations
 
 from django.core.exceptions import ValidationError
 from django.db import models
-from evennia.utils.idmapper.models import SharedMemoryModel
 
 from core.managers import ArxSharedMemoryManager
+from core.models import ArxSharedMemoryModel as SharedMemoryModel
 from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
 from world.predicates.validation import validate_predicate_tree
 from world.standoffs.constants import (
@@ -128,6 +128,12 @@ class RegardRule(SharedMemoryModel):
         errors = validate_predicate_tree(self.rule)
         if errors:
             raise ValidationError({"rule": errors})
+        if (
+            self.drive_id is not None
+            and self.creature_template_id is not None
+            and not self.creature_template.drives.filter(property_id=self.drive_id).exists()
+        ):
+            raise ValidationError({"drive": "The creature kind has no drive on that property."})
 
 
 class StandoffApproach(NaturalKeyMixin, SharedMemoryModel):
@@ -258,21 +264,6 @@ class StandoffConfig(SharedMemoryModel):
         related_name="+",
         help_text="Condition applied to a group that turns to the party's side.",
     )
-    swarm_weight = models.PositiveSmallIntegerField(
-        default=50, help_text="Percent weight of a swarm opponent in group force."
-    )
-    mook_weight = models.PositiveSmallIntegerField(
-        default=100, help_text="Percent weight of a mook opponent in group force."
-    )
-    elite_weight = models.PositiveSmallIntegerField(
-        default=200, help_text="Percent weight of an elite opponent in group force."
-    )
-    boss_weight = models.PositiveSmallIntegerField(
-        default=400, help_text="Percent weight of a boss opponent in group force."
-    )
-    hero_killer_weight = models.PositiveSmallIntegerField(
-        default=800, help_text="Percent weight of a hero killer opponent in group force."
-    )
     botch_force_bands = models.PositiveSmallIntegerField(
         default=1, help_text="Bands of group force a botched press adds."
     )
@@ -308,7 +299,7 @@ class StandoffGroup(SharedMemoryModel):
     )
     creature_template = models.ForeignKey(
         "arxii.CreatureTemplate",
-        on_delete=models.PROTECT,
+        on_delete=models.CASCADE,
         related_name="standoff_groups",
         help_text="The creature kind that makes up the group.",
     )

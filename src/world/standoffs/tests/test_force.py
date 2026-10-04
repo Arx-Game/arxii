@@ -1,4 +1,9 @@
-"""Force comparison and Predation."""
+"""Force comparison and Predation.
+
+These are pure-math unit tests: opponents are built with fixed levels and the party's
+level is patched, which the real spawn path cannot produce. The journey tests in
+``test_dispatch_e2e`` cover the spawned path.
+"""
 
 from unittest.mock import patch
 
@@ -10,6 +15,7 @@ from world.combat.factories import (
     CombatOpponentFactory,
     CombatParticipantFactory,
     CreatureTemplateFactory,
+    OpponentTierTemplateFactory,
 )
 from world.standoffs.factories import RegardRuleFactory
 from world.standoffs.models import StandoffConfig
@@ -42,6 +48,7 @@ class ForceTests(TestCase):
             )
             for _ in range(4)
         ]
+        self.tier_template = OpponentTierTemplateFactory(tier=OpponentTier.MOOK)
         self.config = StandoffConfig.load()
 
     def _group(self):
@@ -50,12 +57,17 @@ class ForceTests(TestCase):
         return StandoffGroupFactory(encounter=self.encounter, creature_template=self.template)
 
     def test_group_force_uses_level_and_tier_weight(self) -> None:
-        self.assertEqual(group_force(self._group(), self.config), 16)
+        self.assertEqual(group_force(self._group()), 16)
+
+    def test_group_force_reads_the_tier_template_weight(self) -> None:
+        self.tier_template.force_weight_percent = 50
+        self.tier_template.save(update_fields=["force_weight_percent"])
+        self.assertEqual(group_force(self._group()), 8)
 
     def test_group_force_counts_active_members_only(self) -> None:
         self.mooks[0].status = OpponentStatus.DEFEATED
         self.mooks[0].save(update_fields=["status"])
-        self.assertEqual(group_force(self._group(), self.config), 12)
+        self.assertEqual(group_force(self._group()), 12)
 
     def test_predation_fires_on_weak_party(self) -> None:
         with patch(LEVEL_PATH, return_value=1):

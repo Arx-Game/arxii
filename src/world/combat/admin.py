@@ -413,6 +413,7 @@ class OpponentTierTemplateAdmin(admin.ModelAdmin):
         "base_swarm_count",
         "boss_phase_count",
         "base_actions_per_round",
+        "force_weight_percent",
     ]
     list_filter = ["tier"]
 
