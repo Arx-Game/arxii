@@ -260,7 +260,7 @@ def standoff_read(  # noqa: PLR0913 - the focus kwargs are the read verb's whole
         ]
         chosen = (focused or hidden)[:1]
     else:
-        chosen = [random.choice(hidden)]  # noqa: S311 - game roll
+        chosen = [random.choice(hidden)]  # noqa: S311 # NOSONAR game RNG, not crypto
     revealed = [_reveal(group, thing) for thing in chosen]
     # No evaluate_causes here: a read changes none of a cause's inputs (force, emboldening,
     # suppressing regard), so the cause cannot newly fire.
