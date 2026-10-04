@@ -105,6 +105,17 @@ round count). That is a **settled round**. Then:
   `ConditionDamageOverTime` (same `_round_dot_damage` as the combat tick, any `tick_timing`),
   one tick per run, later runs catch up. A target owned by an active round is skipped (the round
   tick advances it).
+- **Edges.** The settled tick skips a target with no character sheet, so a persistent NPC without
+  a sheet converts and expires but never takes settled damage (nothing lethal can happen to it).
+  If combat restarts on a converted row, `rounds_remaining` is None so the duration countdown
+  skips it and the wall clock keeps running; the combat DoT ticks it during the fight and the
+  settled tick skips that target. A converted row stays active and keeps applying modifiers for
+  up to one tick (a minute) past `expires_at`, until `settled_effects_tick` removes it. The hourly
+  `batch_condition_expiration_cleanup` excludes ROUNDS templates, so only the settled tick (and the
+  lapse sweep for allegiance rows) removes a converted row. Applying the condition again
+  (stacking or refresh) returns the row to round-based accounting like a fresh application:
+  `expires_at`, `last_settled_tick_at` and `lapse_warned_at` clear and `rounds_remaining` takes the
+  incoming rounds.
 - **Never lethal.** Settled damage goes only through `apply_clamped_chronic_damage`, never
   `process_damage_consequences`: health stays strictly above the knockout floor, so a settled
   effect cannot wound, down or kill, present or AFK. The clamp is unconditional; no `is_afk`
