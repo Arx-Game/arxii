@@ -53,6 +53,17 @@ class GiftPoolTests(_MinorFixture):
         self.minor_row.delete()
         self.assertEqual(self._gift_groups(), [])
 
+    def test_held_major_gift_with_ultimates_yields_no_gift_group(self) -> None:
+        major = GiftFactory(kind=GiftKind.MAJOR)
+        CharacterGiftFactory(character=self.sheet, gift=major)
+        # Direct add skips Gift.clean(), so the pool filter is the only guard here.
+        major.ultimate_techniques.add(
+            UltimateTechniqueFactory(gift=major, archetype_alignment=RoleArchetype.SWORD)
+        )
+        for group in self._gift_groups():
+            self.assertNotEqual(group.gift, major)
+        self.assertEqual([g.gift for g in self._gift_groups()], [self.minor])
+
     def test_choice_then_known_listed_in_same_group(self) -> None:
         (group,) = self._gift_groups()
         choose_ultimate(self.sheet, group.cards[0].choice_key)
@@ -85,8 +96,9 @@ class GiftCleanTests(TestCase):
     def test_major_gift_with_ultimates_rejected(self) -> None:
         gift = GiftFactory(kind=GiftKind.MAJOR)
         gift.ultimate_techniques.add(UltimateTechniqueFactory(gift=gift))
-        with self.assertRaises(ValidationError):
+        with self.assertRaises(ValidationError) as ctx:
             gift.full_clean()
+        self.assertIn("kind", ctx.exception.message_dict)
 
     def test_minor_gift_with_ultimates_passes(self) -> None:
         gift = GiftFactory(kind=GiftKind.MINOR)
@@ -114,10 +126,14 @@ class GiftAdminFormTests(TestCase):
         gift = GiftFactory(kind=GiftKind.MINOR)
         form = self._form(gift, [UltimateTechniqueFactory(gift=GiftFactory())])
         form.is_valid()
-        self.assertIn("ultimate_techniques", form.errors)
+        self.assertEqual(
+            form.errors["ultimate_techniques"], ["Every ultimate must belong to this gift."]
+        )
 
     def test_major_gift_ultimates_rejected(self) -> None:
         gift = GiftFactory(kind=GiftKind.MAJOR)
         form = self._form(gift, [UltimateTechniqueFactory(gift=gift)])
         form.is_valid()
-        self.assertIn("ultimate_techniques", form.errors)
+        self.assertEqual(
+            form.errors["ultimate_techniques"], ["Only a minor gift carries ultimates here."]
+        )
