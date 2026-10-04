@@ -3,8 +3,10 @@
 The one-minute ``lapsed_allegiance_sweep`` is the only remover of an
 allegiance-bearing ``ConditionInstance`` once it expires -- no roll, no
 consequence pool, and no encounter ever opens as a result (Decision 21: a
-lapse never starts a fight). The hourly ``batch_condition_expiration_cleanup``
-skips these rows so the sweep is the one that fires the removal event.
+lapse never starts a fight). #4120 supersedes "no roll" for holds with a PC
+charmer: a warning in the window before expiry, then an auto-rolled check. The hourly
+``batch_condition_expiration_cleanup`` skips these rows so the sweep is the one
+that fires the removal event.
 """
 
 from __future__ import annotations
@@ -15,7 +17,7 @@ from unittest import mock
 from django.test import TestCase
 from django.utils import timezone
 
-from evennia_extensions.factories import ObjectDBFactory
+from evennia_extensions.factories import AccountFactory, ObjectDBFactory
 from world.character_sheets.factories import CharacterSheetFactory
 from world.checks.factories import CheckTypeFactory
 from world.combat.factories import CombatEncounterFactory
@@ -24,7 +26,10 @@ from world.conditions.constants import Allegiance, DurationType
 from world.conditions.factories import ConditionInstanceFactory, ConditionTemplateFactory
 from world.conditions.models import ConditionInstance
 from world.game_clock.tasks import batch_condition_expiration_cleanup
-from world.npc_services.allegiance_outcomes import lapsed_allegiance_sweep
+from world.npc_services.allegiance_outcomes import (
+    end_allegiance_with_pool,
+    lapsed_allegiance_sweep,
+)
 
 _ROOM_TYPECLASS = "typeclasses.rooms.Room"
 
@@ -160,3 +165,114 @@ class ExpiredUnsweptHoldTests(TestCase):
 
         self.assertEqual(allegiance_instances_for([opponent.objectdb_id]), {})
         self.assertTrue(hostile_opponents_remain(encounter))
+
+
+class LapseWarningAndAutoSettleTests(TestCase):
+    """#4120: warn the charmer once, then roll their check when the hold lapses."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        from evennia import create_object
+
+        cls.charm = ConditionTemplateFactory(
+            name="Auto Charm 4120",
+            default_duration_type=DurationType.INGAME_TIME,
+            is_visible_to_others=True,
+            sets_allegiance=Allegiance.ALLY_OF_CASTER,
+            allegiance_break_check_type=CheckTypeFactory(name="Auto Break 4120"),
+        )
+        cls.no_check_charm = ConditionTemplateFactory(
+            name="No Check Charm 4120",
+            default_duration_type=DurationType.INGAME_TIME,
+            sets_allegiance=Allegiance.ALLY_OF_CASTER,
+            allegiance_break_check_type=None,
+        )
+        room = create_object(_ROOM_TYPECLASS, key="Auto Settle Room 4120", nohome=True)
+        cls.npc = CharacterSheetFactory(
+            character__db_key="Auto Target 4120", character__location=room
+        ).character
+        cls.charmer = CharacterSheetFactory(
+            character__db_key="Auto Charmer 4120", character__location=room
+        ).character
+        cls.charmer.db_account = AccountFactory()
+        cls.charmer.save(update_fields=["db_account"])
+
+    def _hold(self, *, seconds: int, condition=None, charmer="pc") -> ConditionInstance:
+        instance = ConditionInstanceFactory(
+            target=self.npc,
+            condition=condition or self.charm,
+            expires_at=timezone.now() + timedelta(seconds=seconds),
+        )
+        if charmer == "pc":
+            instance.source_character = self.charmer
+            instance.save(update_fields=["source_character"])
+        return instance
+
+    @staticmethod
+    def _result(success_level: int) -> mock.Mock:
+        return mock.Mock(outcome=mock.Mock(success_level=success_level))
+
+    def test_warning_is_sent_once(self) -> None:
+        instance = self._hold(seconds=60)
+        with mock.patch.object(self.charmer, "msg") as msg:
+            lapsed_allegiance_sweep()
+            lapsed_allegiance_sweep()
+        msg.assert_called_once()
+        self.assertIn(self.charm.name, msg.call_args.args[0])
+        instance.refresh_from_db()
+        self.assertIsNotNone(instance.lapse_warned_at)
+
+    def test_no_warning_outside_the_window(self) -> None:
+        self._hold(seconds=60 * 60 * 24)
+        with mock.patch.object(self.charmer, "msg") as msg:
+            lapsed_allegiance_sweep()
+        msg.assert_not_called()
+
+    def test_no_warning_for_a_charmer_without_an_account(self) -> None:
+        instance = self._hold(seconds=60, charmer="none")
+        lapsed_allegiance_sweep()
+        instance.refresh_from_db()
+        self.assertIsNone(instance.lapse_warned_at)
+
+    def _assert_auto_settled(self, success_level: int) -> None:
+        instance = self._hold(seconds=-60)
+        before = CombatEncounter.objects.count()
+        with (
+            mock.patch(
+                "world.checks.services.perform_check", return_value=self._result(success_level)
+            ) as roll,
+            mock.patch(
+                "world.npc_services.allegiance_outcomes.end_allegiance_with_pool",
+                wraps=end_allegiance_with_pool,
+            ) as ending,
+        ):
+            lapsed_allegiance_sweep()
+        roll.assert_called_once()
+        self.assertIs(roll.call_args.args[0], self.charmer)
+        ending.assert_called_once()
+        self.assertFalse(ConditionInstance.objects.filter(pk=instance.pk).exists())
+        self.assertEqual(CombatEncounter.objects.count(), before)
+
+    def test_expired_hold_with_failed_check_ends_without_a_fight(self) -> None:
+        self._assert_auto_settled(-1)
+
+    def test_expired_hold_with_successful_check_ends_without_a_fight(self) -> None:
+        self._assert_auto_settled(1)
+
+    def test_expired_hold_without_a_charmer_is_removed_plainly(self) -> None:
+        instance = self._hold(seconds=-60, charmer="none")
+        with mock.patch("world.checks.services.perform_check") as roll:
+            lapsed_allegiance_sweep()
+        roll.assert_not_called()
+        self.assertFalse(ConditionInstance.objects.filter(pk=instance.pk).exists())
+
+    def test_missing_check_type_removes_plainly_and_logs_a_warning(self) -> None:
+        instance = self._hold(seconds=-60, condition=self.no_check_charm)
+        with (
+            mock.patch("world.checks.services.perform_check") as roll,
+            self.assertLogs("world.npc_services.allegiance_outcomes", level="WARNING") as logs,
+        ):
+            lapsed_allegiance_sweep()
+        roll.assert_not_called()
+        self.assertEqual(len(logs.records), 1)
+        self.assertFalse(ConditionInstance.objects.filter(pk=instance.pk).exists())
