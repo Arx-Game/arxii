@@ -35,6 +35,7 @@ from world.combat.constants import (
     SCALING_CONFIG_PER_EXTRA_MEMBER_PCT,
     ActionCategory,
     BreakContributionKind,
+    CauseKind,
     ClashActionSlot,
     ClashFlavor,
     ClashResolution,
@@ -2723,6 +2724,20 @@ class CreatureTemplate(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
         null=True,
         blank=True,
         help_text="Override probing threshold; null = use tier template scaling.",
+    )
+
+    cause = models.CharField(
+        max_length=20,
+        choices=CauseKind.choices,
+        default=CauseKind.NONE,
+        help_text="Why this creature picks a fight on its own (Predation: it hunts the weak).",
+    )
+    cause_margin_percent = models.SmallIntegerField(
+        default=0,
+        help_text=(
+            "How far, as a percent of its own force, the party must outweigh the creature "
+            "before its cause stops firing."
+        ),
     )
 
     objects = CreatureTemplateManager()

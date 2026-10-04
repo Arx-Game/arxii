@@ -3433,6 +3433,33 @@ def _declarations() -> tuple[ContentDependency, ...]:
             probe=CustomProbe(fn=_probe_personalization_copy),
             admin_model="CGExplanation",
         ),
+        ContentDependency(
+            key="standoff-config",
+            label="Standoff settings singleton",
+            tier=DependencyTier.REQUIRED,
+            consumer="world/standoffs/models.py StandoffConfig.load()",
+            consequence=(
+                "Standoffs have no read check, terms check or group weights; "
+                "players can only fight."
+            ),
+            probe=AnyRowProbe(label="StandoffConfig"),
+        ),
+        ContentDependency(
+            key="standoff-approaches",
+            label="Standoff approaches",
+            tier=DependencyTier.REQUIRED,
+            consumer="world/standoffs/models.py StandoffApproach",
+            consequence="Standoffs offer no approaches; players can only fight.",
+            probe=AnyRowProbe(label="StandoffApproach"),
+        ),
+        ContentDependency(
+            key="standoff-terms",
+            label="Standoff terms",
+            tier=DependencyTier.REQUIRED,
+            consumer="world/standoffs/models.py StandoffTerms",
+            consequence="Standoffs offer no terms; players can only fight.",
+            probe=AnyRowProbe(label="StandoffTerms"),
+        ),
     )
 
 

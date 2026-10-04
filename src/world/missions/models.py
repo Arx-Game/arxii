@@ -697,6 +697,10 @@ class MissionOption(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
         default="",
         help_text="ENCOUNTER options only: the spawned encounter's risk level (#3565).",
     )
+    opens_as_standoff = models.BooleanField(
+        default=False,
+        help_text="ENCOUNTER options only: the spawned encounter opens as a standoff.",
+    )
     # #3568 CONTEST: the party rolls authored_check_type against the template's
     # difficulty plus level_opposition(opposition_check_type, ...) for this sheet.
     # PROTECT (not SET_NULL): resolution reads this sheet unconditionally for a
