@@ -7467,7 +7467,7 @@ from OPEN `StandoffGroup` rows, never a stored flag (ADR-4145-A).
 
 - **Models:** `CreatureDrive`, `RegardRule`, `StandoffApproach`, `StandoffTerms`,
   `StandoffConfig` (singleton), `StandoffGroup`, `StandoffReveal`, `StandoffSparkShare`;
-  `CreatureTemplate.cause` / `cause_margin_percent`; `MissionOption.opens_as_standoff`.
+  `CreatureTemplate.cause` / `cause_margin_percent`; `OpponentTierTemplate.force_weight_percent`; `MissionOption.opens_as_standoff`.
 - **Key functions:** `open_standoff`, `end_standoff_into_fight`,
   `begin_round_or_break_standoff` (`services/state.py`); `evaluate_causes`, `cause_fires`
   (`services/force.py`); `standoff_read`, `standoff_press`, `standoff_terms`,

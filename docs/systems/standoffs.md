@@ -37,13 +37,13 @@ umbrella #4121. Slice 1 shipped; later slices are listed at the end.
 | `RegardRule` (:60) | How a template regards particular characters: predicate `rule` (the one ratified JSON field, ADR-0007), `deed_archetype` FK, `difficulty_shift_bands`, `drive` + `drive_shift`, `suppresses_cause`, `spark_text`, `revealed_text`. |
 | `StandoffApproach` (:133) | A press: `check_type`, `capability` (aims at drives through `Application`), `sway_target` modifier target, `damages_morale`, `archetypes`, `display_order`. |
 | `StandoffTerms` (:181) | `effect` (`TermsEffect`: PASS, FLEE, TURN, TOLL), `required_drive`, `difficulty_shift_bands`, `archetypes`, `display_order`. |
-| `StandoffConfig` (:222) | Singleton: `read_check_type`, `terms_check_type`, `pass_condition`, `turn_condition`, per-tier force weights, `botch_force_bands`, `band_force_percent`. `load()` returns it. |
-| `StandoffGroup` (:296) | One band in one encounter: `creature_template`, `state` (OPEN, SETTLED, FIGHTING), `terms_ease`, `emboldened_bands`, `settled_outcome`. Unique per encounter and template. |
+| `StandoffConfig` (:222) | Singleton: `read_check_type`, `terms_check_type`, `pass_condition`, `turn_condition`, `botch_force_bands`, `band_force_percent`, `over_level_percent_per_tier`, `falter_force_percent`, `break_force_percent`. `load()` returns it. |
+| `StandoffGroup` (:296) | One band in one encounter: `creature_template`, `state` (OPEN, SETTLED, FIGHTING), `terms_ease`, `emboldened_bands`, `settled_outcome`. Unique per encounter and template. Deleting its `creature_template` deletes the group (CASCADE). |
 | `StandoffReveal` (:345) | A thing a read uncovered: `kind` (CAUSE, DRIVE, REGARD) plus the drive or rule. Group-wide, shared knowledge. |
 | `StandoffSparkShare` (:398) | A character choosing to share a spark for a group. Unique per group, sheet and rule. |
 
 Also added elsewhere: `CreatureTemplate.cause` (`CauseKind`: NONE, PREDATION) and
-`cause_margin_percent` (`combat/models.py`, `combat/constants.py`); `CombatEncounter`'s
+`cause_margin_percent` (must stay above -100) (`combat/models.py`, `combat/constants.py`); `OpponentTierTemplate.force_weight_percent` (how much one opponent of a tier counts in group force; default 100 for every tier, staff tune it per tier in admin); `CombatEncounter`'s
 `initiated_by_pc_side` help text now says a cause stamps False;
 `MissionOption.opens_as_standoff` (`missions/models.py:700`, ENCOUNTER options only).
 Migration `0199_creaturetemplate_cause_and_more`. Admin: `world/standoffs/admin.py` with
@@ -61,11 +61,29 @@ drive and regard-rule inlines on the creature template.
   Relationship-gated Allure (`perceiver_sheet`) is applied by scenes at check-modifier time
   and is not yet applied in combat or standoffs (a later slice). Parley now warms its
   target (`npc_services/social_disposition.py`).
-- **Force and cause** (`services/force.py`): `party_force` (:22), `group_force` (:42, level
-  times tier weight percent), `effective_party_force` (:50, less emboldening), `cause_fires`
-  (:58), `evaluate_causes` (:69). Predation fires when the party does not outweigh the group
-  by its margin, unless every active participant matches a suppressing regard rule
-  (`regard.py:93`). A party far above the group never triggers it.
+- **Force and cause** (`services/force.py`): force is relative to the content and reflects live
+  state. `party_force` is the sum over ACTIVE participants of effective combat level times the
+  character's current health fraction (`CharacterVitals`; no vitals row counts as whole),
+  scaled by `over_level_factor`: for a mission standoff (`encounter.scenario_deed.instance.
+  template`), each `LEVELS_PER_TIER` (`stories/services/stakes.py`) levels the party AVERAGE
+  stands above `level_band_max` adds `StandoffConfig.over_level_percent_per_tier` percent, and
+  each tier below `level_band_min` takes it off (never under 25% of base); no mission means no
+  band and a factor of 1.0. `group_force` is the sum over ACTIVE members of level times the
+  tier template's `force_weight_percent` times health fraction times a morale factor
+  (`morale_state_for`: steady 100, falter `falter_force_percent`, break `break_force_percent`;
+  a no-morale tier counts as steady). `effective_party_force` takes off `band_force_percent`
+  per `emboldened_bands`. Predation (`cause_fires`) fires when the party does not outweigh the
+  group by its margin, unless every active participant matches a suppressing regard rule
+  (`regard.py`). Opponent level is the party average at spawn (scaling), so headcount and the
+  mission band are what move the comparison; whittling, wounding or breaking the group stops
+  it firing, wounded party members make it likelier.
+- **NPC-initiated fight is delivered live**: `end_standoff_into_fight(initiated_by_pc_side=
+  False)` sends, after commit, a Narrator OUTCOME "The <group> attack!" through
+  `broadcast_action_outcome(deliver_telnet=True)`, and the actor's result message ends "They
+  attack!". Terms-wheel theater is emitted after commit too. A verb that raises flushes the
+  encounter, its groups and its opponents from the identity map (`flush_cache_on_error`) so
+  the cache matches the rolled-back database. `begin_round_or_break_standoff` returns whether
+  a round began; the GM view answers 409 and the GM action says so when it did not.
 - **Regard** (`services/regard.py`): `regard_matches` (:57), `drive_strength_from` (:105,
   clamped 0..3), `band_shift_from` (:111). Deed knowledge counts only the persona the
   character presents (the primary when none), via common-knowledge `LegendEntry` rows, so an
@@ -104,8 +122,8 @@ drive and regard-rule inlines on the creature template.
   terms with grades), so it carries exactly what the web payload does.
 - Public lines: after a verb really happens (a refusal says nothing), the action layer sends
   one short line through `broadcast_action_outcome` (web and telnet), for example "Vess
-  presses the Roadside Bandits with Threaten: success." It names the actor, verb, group and a
-  plain outcome word only; reveals stay in the reader's own message and the party payload.
+  presses the Roadside Bandits with Threaten: success." It names the actor, verb, group and the
+  same five-tier word the actor's message opens with, lower case; reveals stay in the reader's own message and the party payload.
 - Web: `StandoffCard` (`frontend/src/combat/standoff/StandoffCard.tsx`), rendered by
   `CombatTurnPanel` from the encounter detail's `standoff` block
   (`combat/serializers.py:1366`, `build_standoff_view`).
