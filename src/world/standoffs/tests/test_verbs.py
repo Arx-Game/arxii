@@ -496,6 +496,14 @@ class ResultMessageTests(VerbBase):
         self.assertEqual(accepted.message, "Success. They accept.")
 
 
+class TermsDescriptionMessageTests(VerbBase):
+    def test_success_message_uses_the_terms_description_when_set(self) -> None:
+        terms = StandoffTermsFactory(effect=TermsEffect.PASS, description="PLACEHOLDER they go")
+        with patch(CHECK, return_value=forced(1)):
+            result = standoff_terms(self.participant, self.group, terms)
+        self.assertEqual(result.message, "Success. PLACEHOLDER they go")
+
+
 class TermsTheaterTests(VerbBase):
     def setUp(self) -> None:
         super().setUp()

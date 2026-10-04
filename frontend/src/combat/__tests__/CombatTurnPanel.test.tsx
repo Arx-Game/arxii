@@ -370,6 +370,8 @@ describe('CombatTurnPanel — Phase 8 rail sections', () => {
 
     const panel = screen.getByTestId('combat-turn-panel');
     expect(within(panel).getByTestId('standoff-card')).toBeInTheDocument();
+    expect(within(panel).queryByText(/Round 0/)).toBeNull();
+    expect(within(panel).getAllByText('Standoff').length).toBeGreaterThan(0);
     expect(within(panel).queryByTestId('your-turn-stub')).toBeNull();
     expect(within(panel).queryByTestId('vital-pools-section')).toBeNull();
     expect(within(panel).queryByTestId('combatants-list-section')).toBeNull();

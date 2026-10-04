@@ -196,7 +196,7 @@ export function StandoffCard({ standoff, encounterId, characterId }: StandoffCar
         disabled={isPending}
         onClick={() => fire('standoff_fight')}
         data-testid="standoff-fight"
-        className="h-auto w-full justify-between border-destructive py-2 text-destructive hover:text-destructive"
+        className="h-auto w-full justify-between border-destructive py-2 text-destructive hover:bg-muted hover:text-destructive focus-visible:ring-2"
       >
         <span>Fight</span>
         <span className="text-xs font-normal">starts round one</span>
@@ -228,6 +228,8 @@ function GroupSection({
   const [chosenTermsId, setChosenTermsId] = useState<number | null>(null);
   const chosenTerms = terms.find((t) => t.terms_id === chosenTermsId) ?? null;
   const isOpen = group.state === 'open';
+  const wasRead =
+    group.cause !== null || group.drives.length > 0 || group.revealed_regard.length > 0;
   const selectId = `standoff-focus-${group.group_id}`;
 
   return (
@@ -308,11 +310,11 @@ function GroupSection({
             size="sm"
             variant="outline"
             disabled={disabled || !isOpen || group.hidden_count === 0}
-            className="h-auto w-full justify-between gap-2 whitespace-normal py-2 text-left"
+            className="h-auto w-full justify-between gap-2 whitespace-normal py-2 text-left hover:bg-muted hover:text-foreground focus-visible:ring-2"
             onClick={() => fire('standoff_read', readKwargs(group.group_id, focus))}
           >
             <span className="flex min-w-0 flex-col">
-              <span>Read them</span>
+              <span>{wasRead ? 'Read them again' : 'Read them'}</span>
               {group.read_check ? (
                 <span className="text-xs font-normal text-muted-foreground">
                   {group.read_check} · reveals by success level
@@ -330,7 +332,7 @@ function GroupSection({
             disabled={disabled || !isOpen}
             data-testid={approach.hits_revealed_drive ? 'standoff-approach-hit' : undefined}
             className={cn(
-              'h-auto w-full justify-between gap-2 whitespace-normal py-2 text-left',
+              'h-auto w-full justify-between gap-2 whitespace-normal py-2 text-left hover:bg-muted hover:text-foreground focus-visible:ring-2',
               approach.hits_revealed_drive &&
                 'border-accent shadow-[inset_3px_0_0_hsl(var(--accent))]'
             )}
@@ -409,7 +411,7 @@ function TermsSection({ terms, ease, disabled, chosen, onChoose, onSpin }: Terms
           disabled={disabled}
           aria-pressed={chosen?.terms_id === term.terms_id}
           className={cn(
-            'h-auto w-full justify-between gap-2 whitespace-normal py-2 text-left',
+            'h-auto w-full justify-between gap-2 whitespace-normal py-2 text-left hover:bg-muted hover:text-foreground focus-visible:ring-2',
             chosen?.terms_id === term.terms_id && 'border-primary'
           )}
           onClick={() => onChoose(term.terms_id)}

@@ -543,7 +543,10 @@ def standoff_terms(
     else:
         evaluate_causes(encounter)
     return StandoffActionResult(
-        True, f"{_word(tier)}. They accept.", success_level=tier, settled=True
+        True,
+        f"{_word(tier)}. {terms.description or 'They accept.'}",
+        success_level=tier,
+        settled=True,
     )
 
 

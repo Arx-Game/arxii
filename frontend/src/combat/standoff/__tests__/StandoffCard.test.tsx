@@ -203,6 +203,26 @@ describe('StandoffCard', () => {
     expect(screen.queryByText(/How, you don.t know yet/)).toBeNull();
   });
 
+  it('labels the read row "Read them again" only once something was read', () => {
+    const { unmount } = renderCard();
+    expect(screen.getByRole('button', { name: /^Read them again/ })).toBeInTheDocument();
+    unmount();
+    renderCard({
+      ...STANDOFF,
+      groups: [{ ...STANDOFF.groups[0], cause: null, drives: [], revealed_regard: [] }],
+    });
+    expect(screen.queryByRole('button', { name: /^Read them again/ })).toBeNull();
+  });
+
+  it('keeps option rows readable on hover (muted fill, text colours kept)', () => {
+    renderCard();
+    for (const name of [/Test approach/, /Test terms/, /^Read them/, /^Fight/]) {
+      const cls = screen.getByRole('button', { name }).className;
+      expect(cls).toMatch(/hover:bg-muted/);
+      expect(cls).not.toMatch(/hover:bg-accent/);
+    }
+  });
+
   it('glosses the revealed cause and shows the place', () => {
     renderCard();
     expect(screen.getByText('Test gloss.')).toBeInTheDocument();
