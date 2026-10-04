@@ -48,24 +48,24 @@ _ADD_OPPONENT = "world.combat.services.add_opponent"
 
 
 class ManifestResolutionBase(TestCase):
-    @classmethod
-    def setUpTestData(cls):
+    def setUp(self):
+        # Setup places bodies with ``location =``, not ``move_to``: a ``move_to`` here
+        # leaves state behind that breaks later modules' Evennia object creation.
+        super().setUp()
         OpponentTierTemplateFactory(tier=OpponentTier.MOOK)
         OpponentTierTemplateFactory(tier=OpponentTier.BOSS, base_health=200)
-        cls.encounter = CombatEncounterFactory(round_number=1)
-        cls.sheet = CharacterSheetFactory()
-        cls.participant = CombatParticipantFactory(
-            encounter=cls.encounter, character_sheet=cls.sheet
+        self.encounter = CombatEncounterFactory(round_number=1)
+        self.sheet = CharacterSheetFactory()
+        self.participant = CombatParticipantFactory(
+            encounter=self.encounter, character_sheet=self.sheet
         )
-        cls.technique = TechniqueFactory(
+        self.technique = TechniqueFactory(
             gift=GiftFactory(), effect_type=EffectTypeFactory(name="Attack", base_power=20)
         )
-        cls.avatar_sheet = CharacterSheetFactory()
-        cls.being = WorshippedBeingFactory(avatar_sheet=cls.avatar_sheet)
+        self.avatar_sheet = CharacterSheetFactory()
+        self.being = WorshippedBeingFactory(avatar_sheet=self.avatar_sheet)
 
-    def setUp(self):
-        super().setUp()
-        self.sheet.character.move_to(self.encounter.room, quiet=True)
+        self.sheet.character.location = self.encounter.room
 
     def _bond_being(self, being=None):
         return DevotionStandingFactory(
@@ -248,7 +248,7 @@ class ManifestMoveDoesNotLandTests(ManifestResolutionBase):
         self._bond_being()
         self._manifest_being()
         avatar = self.avatar_sheet.character
-        avatar.move_to(PositionFactory().room, quiet=True)
+        avatar.location = PositionFactory().room
         with patch.object(type(avatar), "move_to", return_value=False):
             self._cast()
         self.assertFalse(self._allies().exists())
@@ -262,7 +262,7 @@ class ManifestPositionedCasterTests(ManifestResolutionBase):
         self.room = self.encounter.room
         self.position = PositionFactory(room=self.room)
         self.caster = self.sheet.character
-        self.caster.move_to(self.room, quiet=True)
+        self.caster.location = self.room
         place_in_position(self.caster, self.position)
         self.avatar = self.avatar_sheet.character
         self._bond_being()
@@ -280,12 +280,12 @@ class ManifestPositionedCasterTests(ManifestResolutionBase):
         self._assert_arrived()
 
     def test_avatar_in_other_room_is_moved_in(self):
-        self.avatar.move_to(PositionFactory().room, quiet=True)
+        self.avatar.location = PositionFactory().room
         self._cast()
         self._assert_arrived()
 
     def test_avatar_already_in_room_arrives(self):
-        self.avatar.move_to(self.room, quiet=True)
+        self.avatar.location = self.room
         self._cast()
         self._assert_arrived()
 
@@ -334,7 +334,7 @@ class ManifestCompanionTests(ManifestResolutionBase):
     def _positioned_caster(self):
         room = self.encounter.room
         position = PositionFactory(room=room)
-        self.sheet.character.move_to(room, quiet=True)
+        self.sheet.character.location = room
         place_in_position(self.sheet.character, position)
         return room, position
 
@@ -353,14 +353,14 @@ class ManifestCompanionTests(ManifestResolutionBase):
     def test_companion_in_other_room_is_moved_in(self):
         companion = self._manifest_companion()
         room, position = self._positioned_caster()
-        companion.objectdb.move_to(PositionFactory().room, quiet=True)
+        companion.objectdb.location = PositionFactory().room
         self._cast()
         self._assert_companion_arrived(companion, room, position)
 
     def test_companion_already_in_room_arrives(self):
         companion = self._manifest_companion()
         room, position = self._positioned_caster()
-        companion.objectdb.move_to(room, quiet=True)
+        companion.objectdb.location = room
         self._cast()
         self._assert_companion_arrived(companion, room, position)
 
@@ -373,7 +373,7 @@ class ManifestCompanionTests(ManifestResolutionBase):
     def test_companion_that_cannot_be_moved_manifests_nothing(self):
         companion = self._manifest_companion()
         self._positioned_caster()
-        companion.objectdb.move_to(PositionFactory().room, quiet=True)
+        companion.objectdb.location = PositionFactory().room
         with patch.object(type(companion.objectdb), "move_to", return_value=False):
             self._cast()
         self.assertFalse(self._allies().exists())
