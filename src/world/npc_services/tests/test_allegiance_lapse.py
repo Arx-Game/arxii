@@ -14,7 +14,7 @@ from __future__ import annotations
 from datetime import timedelta
 from unittest import mock
 
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from django.utils import timezone
 
 from evennia_extensions.factories import AccountFactory, ObjectDBFactory
@@ -22,9 +22,11 @@ from world.character_sheets.factories import CharacterSheetFactory
 from world.checks.factories import CheckTypeFactory
 from world.combat.factories import CombatEncounterFactory
 from world.combat.models import CombatEncounter
-from world.conditions.constants import Allegiance, DurationType
+from world.conditions.charm_content import ensure_charm_content
+from world.conditions.constants import CHARM_CONDITION_NAME, Allegiance, DurationType
 from world.conditions.factories import ConditionInstanceFactory, ConditionTemplateFactory
-from world.conditions.models import ConditionInstance
+from world.conditions.models import ConditionInstance, ConditionTemplate
+from world.conditions.services import apply_condition, settle_round_effects
 from world.game_clock.tasks import batch_condition_expiration_cleanup
 from world.npc_services.allegiance_outcomes import (
     charm_strength_points,
@@ -281,3 +283,54 @@ class LapseWarningAndAutoSettleTests(TestCase):
         roll.assert_not_called()
         self.assertEqual(len(logs.records), 1)
         self.assertFalse(ConditionInstance.objects.filter(pk=instance.pk).exists())
+
+
+@override_settings(SEED_SAMPLE_CONTENT=True)
+class RoundsCharmJourneyTests(TestCase):
+    """#4120: the real ROUNDS Charm now reaches the lapse sweep once combat ends."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        from evennia import create_object
+
+        ensure_charm_content()
+        cls.charm = ConditionTemplate.objects.get(name=CHARM_CONDITION_NAME)
+        cls.charm.allegiance_break_check_type = CheckTypeFactory(name="Journey Break 4120")
+        cls.charm.save(update_fields=["allegiance_break_check_type"])
+        room = create_object(_ROOM_TYPECLASS, key="Journey Room 4120", nohome=True)
+        cls.npc = CharacterSheetFactory(
+            character__db_key="Journey Target 4120", character__location=room
+        ).character
+        cls.charmer = CharacterSheetFactory(
+            character__db_key="Journey Charmer 4120", character__location=room
+        ).character
+        cls.charmer.db_account = AccountFactory()
+        cls.charmer.save(update_fields=["db_account"])
+
+    def test_rounds_charm_settles_then_lapses_without_a_fight(self) -> None:
+        result = apply_condition(
+            self.npc, self.charm, duration_rounds=3, source_character=self.charmer
+        )
+        instance = result.instance
+        self.assertEqual(instance.rounds_remaining, 3)
+        self.assertIsNone(instance.expires_at)
+
+        # Blind before settling: a ROUNDS hold has no expires_at for the sweep to see.
+        lapsed_allegiance_sweep()
+        self.assertTrue(ConditionInstance.objects.filter(pk=instance.pk).exists())
+
+        settle_round_effects([self.npc])
+        instance.refresh_from_db()
+        self.assertIsNotNone(instance.expires_at)
+        self.assertIsNone(instance.rounds_remaining)
+
+        instance.expires_at = timezone.now() - timedelta(minutes=1)
+        instance.save(update_fields=["expires_at"])
+        before = CombatEncounter.objects.count()
+        canned = mock.Mock(outcome=mock.Mock(success_level=-1))
+        with mock.patch("world.checks.services.perform_check", return_value=canned) as roll:
+            lapsed_allegiance_sweep()
+        roll.assert_called_once()
+        self.assertIs(roll.call_args.args[0], self.charmer)
+        self.assertFalse(ConditionInstance.objects.filter(pk=instance.pk).exists())
+        self.assertEqual(CombatEncounter.objects.count(), before)

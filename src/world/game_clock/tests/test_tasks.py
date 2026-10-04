@@ -427,6 +427,25 @@ class WeeklyMoneyOrderingWiringTests(TestCase):
         )
 
 
+class SettledEffectsTaskRegistrationTests(TestCase):
+    """#4120: the settled-effects tick is registered every minute in the cleanup phase."""
+
+    def test_registered_every_minute_in_cleanup_phase(self) -> None:
+        from datetime import timedelta
+
+        from world.game_clock.task_registry import CronPhase, clear_registry, get_registered_tasks
+        from world.game_clock.tasks import register_all_tasks
+
+        clear_registry()
+        self.addCleanup(clear_registry)
+        register_all_tasks()
+
+        tasks = {t.task_key: t for t in get_registered_tasks()}
+        self.assertIn("conditions.settled_effects", tasks)
+        self.assertEqual(tasks["conditions.settled_effects"].interval, timedelta(minutes=1))
+        self.assertEqual(tasks["conditions.settled_effects"].phase, CronPhase.CLEANUP)
+
+
 class MemorySnapshotTaskTests(TestCase):
     """The periodic memory snapshot (#3200).
 
