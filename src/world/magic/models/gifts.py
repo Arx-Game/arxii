@@ -109,6 +109,17 @@ class Gift(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
             "(#2905). Null = defer to the caster's Path, as before."
         ),
     )
+    ultimate_techniques = models.ManyToManyField(
+        "arxii.Technique",
+        blank=True,
+        related_name="ultimate_for_gifts",
+        limit_choices_to={"is_ultimate": True},
+        help_text=(
+            "#4118: this MINOR gift's ultimates, revealed at Audere to any character holding "
+            "it (Path-agnostic). Minor gifts only: a major gift's ultimates hang on its "
+            "Path Gift Grants. Empty is fine; a minor gift needs no ultimate."
+        ),
+    )
 
     objects = GiftManager()
 
