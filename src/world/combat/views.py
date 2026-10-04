@@ -494,11 +494,16 @@ class CombatEncounterViewSet(ModelViewSet):
         """Begin a new declaration phase."""
         encounter = self.get_object()
         try:
-            begin_round_or_break_standoff(encounter, initiated_by_pc_side=None)
+            began = begin_round_or_break_standoff(encounter, initiated_by_pc_side=None)
         except ValueError:
             return Response(
                 {"detail": _ERR_INVALID_STATUS},
                 status=status.HTTP_400_BAD_REQUEST,
+            )
+        if not began:
+            return Response(
+                {"detail": "The standoff has already ended."},
+                status=status.HTTP_409_CONFLICT,
             )
         # Service updates encounter in place via refresh_from_db
         return self._serialize_encounter(request, encounter)

@@ -214,9 +214,11 @@ class BeginEncounterRoundAction(Action):
             return error
 
         try:
-            begin_round_or_break_standoff(encounter, initiated_by_pc_side=None)
+            began = begin_round_or_break_standoff(encounter, initiated_by_pc_side=None)
         except ValueError as err:
             return ActionResult(success=False, message=str(err))
+        if not began:
+            return ActionResult(success=False, message="The standoff has already ended.")
         return ActionResult(success=True, message="Round begins.")
 
 

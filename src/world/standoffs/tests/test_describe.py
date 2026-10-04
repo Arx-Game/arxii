@@ -34,3 +34,9 @@ class DescribeRevealsTests(VerbBase):
             group=self.group, character_sheet=self.participant.character_sheet, regard_rule=rule
         )
         self.assertEqual(self._lines(rule), ["PLACEHOLDER detail"])
+
+    def test_a_cause_reveal_on_a_creature_with_no_cause_says_nothing(self) -> None:
+        reveal = StandoffRevealFactory(group=self.group, kind=RevealKind.CAUSE)
+        self.assertEqual(
+            describe_reveals(self.group, [reveal], self.participant.character_sheet), []
+        )

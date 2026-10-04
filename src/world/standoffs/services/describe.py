@@ -48,6 +48,8 @@ def describe_reveals(
     lines: list[str] = []
     for reveal in reveals:
         if reveal.kind == RevealKind.CAUSE:
+            if group.creature_template.cause == CauseKind.NONE:
+                continue  # nothing to say; the view omits it the same way
             lines.append(f"Cause: {CauseKind(group.creature_template.cause).label}.")
         elif reveal.kind == RevealKind.DRIVE and reveal.drive is not None:
             label = DriveStrength(reveal.drive.strength).label

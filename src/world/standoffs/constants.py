@@ -52,3 +52,5 @@ SUCCESS_LEVEL_WORDS: dict[int, str] = {
     1: "Success",
     2: "Critical success",
 }
+
+FIGHT_BEGINS_MESSAGE = "The fight begins."

@@ -15,6 +15,7 @@ from actions.base import Action
 from actions.constants import ActionCategory
 from actions.definitions.combat_maneuvers import _sheet
 from actions.types import ActionContext, ActionResult, TargetType
+from world.standoffs.constants import FIGHT_BEGINS_MESSAGE, SUCCESS_LEVEL_WORDS
 
 if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
@@ -54,7 +55,11 @@ def _resolve_group(participant: CombatParticipant, group_id: int | None) -> Stan
 
 
 def _to_result(outcome: StandoffActionResult) -> ActionResult:
-    return ActionResult(success=outcome.success, message=outcome.message)
+    """The actor's message; a verb that set the creatures on them says so."""
+    message = outcome.message
+    if outcome.fight_started and message != FIGHT_BEGINS_MESSAGE:
+        message = f"{message} They attack!"
+    return ActionResult(success=outcome.success, message=message)
 
 
 def _announce(participant: CombatParticipant, line: str, outcome: StandoffActionResult) -> None:
@@ -79,7 +84,10 @@ def _actor_label(participant: CombatParticipant) -> str:
 
 
 def _outcome_word(outcome: StandoffActionResult) -> str:
-    return "success" if outcome.success else "failure"
+    """The same five-tier word the actor's own message opens with, in lower case."""
+    if outcome.success_level is None:
+        return "success" if outcome.success else "failure"
+    return SUCCESS_LEVEL_WORDS[max(-2, min(2, outcome.success_level))].lower()
 
 
 def _read_result(

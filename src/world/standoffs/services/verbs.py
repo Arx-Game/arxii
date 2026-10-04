@@ -9,6 +9,7 @@ group, matching ``end_standoff_into_fight``.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from functools import partial
 import random
 from typing import TYPE_CHECKING
 
@@ -34,6 +35,7 @@ from world.conditions.services import apply_condition
 from world.fatigue.constants import EffortLevel
 from world.mechanics.models import Application
 from world.standoffs.constants import (
+    FIGHT_BEGINS_MESSAGE,
     SUCCESS_LEVEL_WORDS,
     RevealKind,
     StandoffGroupState,
@@ -60,6 +62,7 @@ from world.standoffs.services.routing import complete_standoff
 from world.standoffs.services.state import (
     active_members,
     end_standoff_into_fight,
+    flush_cache_on_error,
     is_in_standoff,
     settle_empty_groups,
 )
@@ -73,13 +76,18 @@ BOTCH_LEVEL = -2
 _MSG_OVER = "The standoff is over."
 _MSG_SETTLED = "That group is no longer in the standoff."
 _MSG_EMPTY = "There is nobody left in that group."
-_MSG_UNCONFIGURED = "Standoffs are not set up for this check."
+_MSG_UNCONFIGURED = "You can't do that right now."
 
 
 def _lock(
     encounter: CombatEncounter, group: StandoffGroup | None
 ) -> tuple[CombatEncounter, StandoffGroup | None]:
-    """Lock the encounter row, then the group row, and re-read both."""
+    """Lock the encounter row, then the group row, and re-read both.
+
+    ``select_for_update().get(pk=...)`` takes the row lock; the identity map hands back the
+    resident instance, which is why the ``refresh_from_db`` follows: it makes that instance
+    show what the database holds now that the lock is ours.
+    """
     from world.combat.models import CombatEncounter  # noqa: PLC0415
 
     locked_encounter = CombatEncounter.objects.select_for_update().get(pk=encounter.pk)
@@ -193,6 +201,7 @@ def _reveal(
     return reveal
 
 
+@flush_cache_on_error(lambda participant, *_, **__: participant.encounter)
 @transaction.atomic
 def standoff_read(  # noqa: PLR0913 - the focus kwargs are the read verb's whole payload
     participant: CombatParticipant,
@@ -414,6 +423,7 @@ def _share_shifting_sparks(
             )
 
 
+@flush_cache_on_error(lambda participant, *_, **__: participant.encounter)
 @transaction.atomic
 def standoff_press(
     participant: CombatParticipant, group: StandoffGroup, approach: StandoffApproach
@@ -486,6 +496,7 @@ def _apply_terms(
             apply_condition(member.objectdb, condition, source_character=actor.character)
 
 
+@flush_cache_on_error(lambda participant, *_, **__: participant.encounter)
 @transaction.atomic
 def standoff_terms(
     participant: CombatParticipant, group: StandoffGroup, terms: StandoffTerms
@@ -513,14 +524,19 @@ def standoff_terms(
             sheet, config.terms_check_type, extra_contributions=graded.contributions
         ).total,
     )
+    if result.outcome is None:
+        return _refuse(_MSG_UNCONFIGURED)
     _share_shifting_sparks(group, sheet, set())
     faces, selected = check_outcome_faces(result)
-    maybe_emit_resolution_theater(
-        character=sheet.character,
-        title=terms.name,
-        consequences=faces,
-        selected=selected,
-        force=True,
+    transaction.on_commit(
+        partial(
+            maybe_emit_resolution_theater,
+            character=sheet.character,
+            title=terms.name,
+            consequences=faces,
+            selected=selected,
+            force=True,
+        )
     )
     tier = result.success_level
     if tier < 0:
@@ -538,18 +554,21 @@ def standoff_terms(
     group.settled_outcome = result.outcome
     group.save(update_fields=["state", "settled_outcome"])
     settle_empty_groups(encounter)
+    fight_started = False
     if not encounter.standoff_groups.exclude(state=StandoffGroupState.SETTLED).exists():
         complete_standoff(encounter)
     else:
-        evaluate_causes(encounter)
+        fight_started = evaluate_causes(encounter)
     return StandoffActionResult(
         True,
         f"{_word(tier)}. {terms.description or 'They accept.'}",
         success_level=tier,
         settled=True,
+        fight_started=fight_started,
     )
 
 
+@flush_cache_on_error(lambda _participant, encounter, **__: encounter)
 @transaction.atomic
 def standoff_fight(
     participant: CombatParticipant,  # noqa: ARG001 - uniform verb signature
@@ -563,9 +582,10 @@ def standoff_fight(
     started = end_standoff_into_fight(locked, initiated_by_pc_side=True)
     if not started:
         return _refuse(_MSG_OVER)
-    return StandoffActionResult(True, "The fight begins.", fight_started=True)
+    return StandoffActionResult(True, FIGHT_BEGINS_MESSAGE, fight_started=True)
 
 
+@flush_cache_on_error(lambda participant, *_, **__: participant.encounter)
 @transaction.atomic
 def standoff_share_spark(
     participant: CombatParticipant, group: StandoffGroup, regard_rule: RegardRule

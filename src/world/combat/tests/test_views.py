@@ -178,6 +178,17 @@ class GMLifecycleTest(CombatEncounterViewSetTestBase):
         self.assertEqual(group.state, StandoffGroupState.FIGHTING)
         self.assertIsNone(self.encounter.initiated_by_pc_side)
 
+    def test_begin_round_on_a_standoff_already_broken_is_a_conflict(self) -> None:
+        from unittest.mock import patch
+
+        CombatOpponentFactory(encounter=self.encounter)
+        client = APIClient()
+        client.force_authenticate(user=self.gm_account)
+        with patch("world.combat.views.begin_round_or_break_standoff", return_value=False):
+            response = client.post(f"/api/combat/{self.encounter.pk}/begin_round/")
+        self.assertEqual(response.status_code, http_status.HTTP_409_CONFLICT)
+        self.assertEqual(response.data["detail"], "The standoff has already ended.")
+
     def test_begin_round_non_gm_denied(self) -> None:
         """Non-GM player cannot begin a round."""
         client = APIClient()

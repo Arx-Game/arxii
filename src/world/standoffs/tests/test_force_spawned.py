@@ -73,6 +73,19 @@ class HeadcountTests(SpawnedPredationBase):
         self.assertTrue(self._opened_fight())
 
 
+class OpeningFireBroadcastTests(SpawnedPredationBase):
+    def test_a_cause_that_fires_on_opening_is_broadcast_live(self) -> None:
+        announce = "world.combat.interaction_services.broadcast_action_outcome"
+        with patch(announce) as broadcast, self.captureOnCommitCallbacks(execute=True):
+            encounter = self._spawn(open_standoff=True)
+        self.assertNotEqual(encounter.round_number, 0)
+        broadcast.assert_called_once()
+        self.assertEqual(
+            broadcast.call_args.kwargs["narration"], f"The {self.creature.name} attack!"
+        )
+        self.assertTrue(broadcast.call_args.kwargs["deliver_telnet"])
+
+
 class FewMooksTests(SpawnedPredationBase):
     MOOKS = 2
 

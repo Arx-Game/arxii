@@ -516,6 +516,7 @@ class TermsTheaterTests(VerbBase):
             patch(CHECK, return_value=forced(level)) as roll,
             patch(faces, return_value=(["face"], "picked")) as built,
             patch(theater) as emit,
+            self.captureOnCommitCallbacks(execute=True),
         ):
             standoff_terms(self.participant, self.group, self.terms)
         built.assert_called_once_with(roll.return_value)

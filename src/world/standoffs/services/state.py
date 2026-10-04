@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from collections.abc import Callable
+from functools import partial, wraps
+from typing import TYPE_CHECKING, Any
 
 from django.db import transaction
 
@@ -12,6 +14,52 @@ from world.standoffs.models import StandoffGroup
 
 if TYPE_CHECKING:
     from world.combat.models import CombatEncounter, CombatOpponent
+
+
+def flush_standoff_cache(encounter: CombatEncounter) -> None:
+    """Drop the encounter, its groups and its opponents from the identity map.
+
+    A SharedMemoryModel instance mutated inside a transaction that then rolls back keeps
+    its mutated attributes in the cache while the row reverts; flushing makes the next
+    reader load what the database holds.
+    """
+    from world.combat.models import CombatEncounter, CombatOpponent  # noqa: PLC0415
+
+    for model, owner_field in (
+        (CombatOpponent, "encounter_id"),
+        (StandoffGroup, "encounter_id"),
+    ):
+        for cached in model.get_all_cached_instances():
+            if cached.__dict__.get(owner_field) == encounter.pk:
+                cached.flush_from_cache(force=True)
+    CombatEncounter.flush_cached_instance(encounter)
+
+
+def flush_cache_on_error(
+    encounter_of: Callable[..., CombatEncounter],
+) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
+    """Decorate an ``@transaction.atomic`` verb: on any exception flush what it touched.
+
+    Apply OUTSIDE ``@transaction.atomic`` so the rollback has already happened. The
+    exception is re-raised. ``encounter_of`` takes the verb's own arguments and returns
+    its encounter.
+    """
+
+    def decorate(func: Callable[..., Any]) -> Callable[..., Any]:
+        @wraps(func)
+        def wrapper(*args: Any, **kwargs: Any) -> Any:
+            completed = False
+            try:
+                result = func(*args, **kwargs)
+                completed = True
+            finally:
+                if not completed:
+                    flush_standoff_cache(encounter_of(*args, **kwargs))
+            return result
+
+        return wrapper
+
+    return decorate
 
 
 def is_in_standoff(encounter: CombatEncounter) -> bool:
@@ -59,6 +107,7 @@ def settle_empty_groups(encounter: CombatEncounter) -> bool:
     return settled_any
 
 
+@flush_cache_on_error(lambda encounter, **_: encounter)
 @transaction.atomic
 def end_standoff_into_fight(
     encounter: CombatEncounter, *, initiated_by_pc_side: bool | None
@@ -74,22 +123,41 @@ def end_standoff_into_fight(
     locked = CombatEncounter.objects.select_for_update().get(pk=encounter.pk)
     if not is_in_standoff(locked):
         return False
+    attackers = []
     for group in encounter.standoff_groups.filter(state=StandoffGroupState.OPEN):
         group.state = StandoffGroupState.FIGHTING
         group.save(update_fields=["state"])
+        attackers.append(group.creature_template.name)
     encounter.initiated_by_pc_side = initiated_by_pc_side
     encounter.save(update_fields=["initiated_by_pc_side"])
     begin_declaration_phase(encounter)
+    if initiated_by_pc_side is False:
+        transaction.on_commit(partial(_announce_attack, encounter, attackers))
     return True
+
+
+def _announce_attack(encounter: CombatEncounter, attackers: list[str]) -> None:
+    """Tell the room, live, that the creatures began the fight."""
+    from world.combat.interaction_services import broadcast_action_outcome  # noqa: PLC0415
+
+    broadcast_action_outcome(
+        encounter=encounter,
+        narration=f"The {' and the '.join(attackers)} attack!",
+        deliver_telnet=True,
+    )
 
 
 def begin_round_or_break_standoff(
     encounter: CombatEncounter, *, initiated_by_pc_side: bool | None
-) -> None:
-    """Start a round; if the encounter is still in its standoff, that breaks the standoff."""
+) -> bool:
+    """Start a round; if the encounter is still in its standoff, that breaks the standoff.
+
+    True when a round began (or the standoff broke into one); False when the standoff had
+    already ended by another hand and nothing was written.
+    """
     from world.combat.services import begin_declaration_phase  # noqa: PLC0415
 
     if is_in_standoff(encounter):
-        end_standoff_into_fight(encounter, initiated_by_pc_side=initiated_by_pc_side)
-    else:
-        begin_declaration_phase(encounter)
+        return end_standoff_into_fight(encounter, initiated_by_pc_side=initiated_by_pc_side)
+    begin_declaration_phase(encounter)
+    return True

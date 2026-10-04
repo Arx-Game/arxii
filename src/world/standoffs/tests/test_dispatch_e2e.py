@@ -9,6 +9,7 @@ from actions.types import ActionRef
 from evennia_extensions.factories import CharacterFactory
 from world.character_sheets.factories import CharacterSheetFactory
 from world.checks.factories import CheckTypeFactory
+from world.checks.test_helpers import force_check_outcome
 from world.classes.factories import CharacterClassLevelFactory
 from world.combat.constants import CauseKind, EncounterOutcome, OpponentTier, RiskLevel
 from world.combat.factories import CombatEncounterFactory
@@ -90,21 +91,24 @@ class MissionJourneyTests(StandoffJourneyBase):
         self._open()
 
     def test_read_press_terms_routes_the_deed_and_completes(self) -> None:
-        with patch(CHECK, return_value=_roll(self.success_tier)):
+        # The real perform_check runs with real charts; only the dice outcome is forced.
+        with force_check_outcome(self.success_tier):
             read = self._do(
                 "standoff_read",
                 group_id=self.group.pk,
                 focus_kind=RevealKind.DRIVE,
                 focus_drive_id=self.drive.pk,
             )
-            self.assertTrue(read.success, read.message)
-            self.assertTrue(self.group.reveals.filter(drive=self.drive).exists())
+        self.assertTrue(read.success, read.message)
+        self.assertTrue(self.group.reveals.filter(drive=self.drive).exists())
+        with force_check_outcome(self.success_tier):
             press = self._do("standoff_press", group_id=self.group.pk, approach_id=self.approach.pk)
-            self.assertTrue(press.success, press.message)
-            self.group.refresh_from_db()
-            self.assertEqual(self.group.terms_ease, 1)
+        self.assertTrue(press.success, press.message)
+        self.group.refresh_from_db()
+        self.assertEqual(self.group.terms_ease, 1)
+        with force_check_outcome(self.success_tier):
             terms = self._do("standoff_terms", group_id=self.group.pk, terms_id=self.terms.pk)
-            self.assertTrue(terms.success, terms.message)
+        self.assertTrue(terms.success, terms.message)
         self.deed.refresh_from_db()
         self.assertEqual(self.deed.outcome, self.success_tier)
         self.instance.refresh_from_db()
@@ -113,6 +117,15 @@ class MissionJourneyTests(StandoffJourneyBase):
         self.assertEqual(self.encounter.outcome, EncounterOutcome.VICTORY)
         self.group.refresh_from_db()
         self.assertEqual(self.group.state, StandoffGroupState.SETTLED)
+
+    def test_the_room_line_uses_the_same_five_tier_word_as_the_actor_message(self) -> None:
+        partial = CheckOutcomeFactory(name="Journey partial", success_level=0)
+        announce = "world.combat.interaction_services.broadcast_action_outcome"
+        with patch(announce) as broadcast, force_check_outcome(partial):
+            result = self._do("standoff_read", group_id=self.group.pk)
+        line = broadcast.call_args.kwargs["narration"]
+        self.assertTrue(line.endswith(": partial success."), line)
+        self.assertTrue(result.message.startswith("You study them. Partial success."))
 
     def test_each_verb_announces_one_plain_line_with_no_hidden_detail(self) -> None:
         announce = "world.combat.interaction_services.broadcast_action_outcome"
@@ -211,6 +224,28 @@ class PredationJourneyTests(PredatorBase):
         self.assertIs(self.encounter.initiated_by_pc_side, False)
         self.group.refresh_from_db()
         self.assertEqual(self.group.state, StandoffGroupState.FIGHTING)
+
+
+class NpcInitiatedFightIsDeliveredTests(PredatorBase):
+    def test_a_botch_that_fires_predation_broadcasts_the_attack_and_tells_the_actor(self) -> None:
+        announce = "world.combat.interaction_services.broadcast_action_outcome"
+        result = None
+        with patch(announce) as broadcast, self.captureOnCommitCallbacks(execute=True):
+            for _ in range(20):
+                with force_check_outcome(self.botch_tier):
+                    result = self._do(
+                        "standoff_press", group_id=self.group.pk, approach_id=self.approach.pk
+                    )
+                self.encounter.refresh_from_db()
+                if self.encounter.round_number != 0:
+                    break
+        lines = [call.kwargs["narration"] for call in broadcast.call_args_list]
+        self.assertIn(f"The {self.creature.name} attack!", lines)
+        self.assertTrue(result.message.endswith("They attack!"), result.message)
+        attack_call = next(
+            c for c in broadcast.call_args_list if c.kwargs["narration"].endswith("attack!")
+        )
+        self.assertTrue(attack_call.kwargs["deliver_telnet"])
 
 
 class NotInAStandoffTests(StandoffJourneyBase):
