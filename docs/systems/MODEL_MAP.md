@@ -2677,7 +2677,7 @@
 - `classify_source(source: object | None) -> flows.events.payloads.DamageSource - Return a ``DamageSource`` describing *source*'s origin.`
 - `cleanup_completed_encounter(encounter: 'CombatEncounter') -> 'None' - Delete encounter-ephemeral CombatNPC ObjectDBs. Persistent NPCs and PCs`
 - `collect_check_modifiers(character_sheet: 'CharacterSheet', check_type: 'CheckType', *, scene: 'Scene | None' = None, extra_contributions: list[world.checks.types.ModifierContribution] | None = None, skip_fashion: bool = False) -> world.checks.types.ModifierBreakdown - Aggregate all modifier contributions for a check into a ModifierBreakdown.`
-- `combatants_hostile_to(actor: 'CombatParticipant | CombatOpponent', *, allegiances: 'dict[int, Allegiance] | None' = None) -> 'dict[str, list]' - Return the combatants *actor* may attack, grouped by kind (#1584, #4091).`
+- `combatants_hostile_to(actor: 'CombatParticipant | CombatOpponent', *, allegiances: 'dict[int, Allegiance] | None' = None, opponents: 'list[CombatOpponent] | None' = None) -> 'dict[str, list]' - Return the combatants *actor* may attack, grouped by kind (#1584, #4091).`
 - `complete_encounter(encounter: 'CombatEncounter', *, outcome: 'EncounterOutcome') -> 'None' - Single completion seam for round resolution and the GM end endpoint (#876).`
 - `compute_intensity_for_clash(participant: 'CombatParticipant', action: 'CombatRoundAction') -> 'int' - Return technique.intensity + active INTENSITY_BUMP pull bonuses for the clash floor gate.`
 - `declare_action(participant: 'CombatParticipant', *, focused_action: 'Technique | None' = None, focused_category: 'str | None' = None, effort_level: 'str', focused_opponent_target: 'CombatOpponent | None' = None, focused_ally_target: 'CombatParticipant | None' = None, physical_passive: 'Technique | None' = None, social_passive: 'Technique | None' = None, mental_passive: 'Technique | None' = None, confirm_soulfray_risk: 'bool' = False, strain_commitment: 'int' = 0, fury_commitment: 'FuryTier | None' = None, fury_anchor: 'CharacterSheet | None' = None, cast_destination: 'Position | None' = None, cast_position_a: 'Position | None' = None, cast_position_b: 'Position | None' = None) -> 'CombatRoundAction' - Declare a PC's action for the current round.`
@@ -3053,6 +3053,8 @@
 
 ### PenetrationOutcomeFactor
 
+### SettleConfig
+
 ### TreatmentAttempt
 **Foreign Keys:**
   - helper -> character_sheets.CharacterSheet [FK]
@@ -3115,6 +3117,7 @@
 - `get_ic_now(*, real_now: datetime.datetime | None = None) -> datetime.datetime | None - Return the current IC datetime, or None if no clock exists.`
 - `get_penetration_factor(success_level: int) -> decimal.Decimal - Look up the penetration power factor for a given success level (#639).`
 - `get_resistance_modifier(character_sheet: 'CharacterSheet', damage_type: world.conditions.models.DamageType | None = None) -> world.conditions.types.ResistanceModifierResult - Get the total resistance modifier for a damage type from active conditions.`
+- `get_settle_config() -> world.conditions.models.SettleConfig - Return the SettleConfig singleton (pk=1), creating it lazily on first call.`
 - `get_treatment_candidates(helper_sheet: 'CharacterSheet', target_sheet: 'CharacterSheet', scene: 'Scene') -> list[dict[str, typing.Any]] - Return valid (treatment, target_effect) pairs for helper to attempt on target.`
 - `get_turn_order_modifier(character_sheet: 'CharacterSheet') -> int - Get the total turn order modifier from all conditions.`
 - `has_condition(target: 'ObjectDB', condition: world.conditions.models.ConditionTemplate, *, include_suppressed: bool = False) -> bool - Check if target has a specific condition.`
@@ -3136,6 +3139,8 @@
 - `remove_conditions_by_category(target: 'ObjectDB', category: 'ConditionCategory') -> list[world.conditions.models.ConditionTemplate] - Remove all conditions in a category from a target.`
 - `resolve_damage_type_resistance(character: 'ObjectDB', damage_amount: int, damage_type: 'DamageType | None') -> int - Net damage-type resistance (condition + gift-thread) and return reduced damage (>=0).`
 - `scaled_condition_effect_value(effect: world.conditions.models.ConditionModifierEffect, instance: world.conditions.models.ConditionInstance) -> int - One ConditionModifierEffect's contribution on one active instance (#4090).`
+- `settle_round_effects(targets: collections.abc.Iterable['ObjectDB']) -> list[world.conditions.models.ConditionInstance] - Convert round-counted conditions on the targets into wall-clock expiries (#4120).`
+- `settled_effects_tick() -> world.conditions.types.SettledTickSummary - Scheduler entry point. Run out and tick round-based effects settled after combat (#4120).`
 - `suppress_condition(target: 'ObjectDB', condition: world.conditions.models.ConditionTemplate, *, duration_rounds: int | None = None) -> bool - Temporarily suppress a condition's effects.`
 - `unsuppress_condition(target: 'ObjectDB', condition: world.conditions.models.ConditionTemplate) -> bool - Remove suppression from a condition.`
 
