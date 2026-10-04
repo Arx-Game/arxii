@@ -632,12 +632,13 @@ Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Sc
   `docs/systems/progression.md`'s "Path and Technique Requirements" section;
   `docs/adr/adr-4097-threads-carry-through-technique-prerequisites.md`.
 - **Ultimates (#4098):** `Technique.is_ultimate` flags a technique as a Path x
-  major-Gift / patron / companion ultimate, discovered through `KnownUltimate`
+  major-Gift / patron / companion / minor-gift ultimate, discovered through `KnownUltimate`
   (`character`, `technique`, nullable `crossing`, `readied` - constrained to one row
   per `(character, technique)` and at most one `readied=True` row per character),
   never a `CharacterTechnique`. Attachment M2Ms: `PathGiftGrant.ultimate_techniques`,
   `WorshippedBeing.ultimate_techniques` (`world.worship`), `CompanionArchetype
-  .ultimate_techniques` (`world.companions`). Services
+  .ultimate_techniques` (`world.companions`), and (#4118) `Gift.ultimate_techniques`
+  (minor gifts only, revealed as `UltimateSource.GIFT` through `_gift_pools`). Services
   (`world.magic.services.ultimates`): `ultimate_reveal_for(sheet)` (derives
   the reveal on read - owned/owned-known/bond pools, grouped by category, filtered by
   #4097's prerequisite gate), `has_reveal_cards`, `choose_ultimate` (readies a pick
@@ -662,6 +663,19 @@ Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Sc
   major-Gift grant with no ultimates and an `AudereThreshold` copy field still
   carrying PLACEHOLDER text. Full detail: `docs/systems/magic.md`'s "Ultimates"
   section; `docs/adr/adr-4098-ultimates-are-flagged-techniques-revealed-at-audere.md`.
+- **Manifesting a bound entity (#4118):** `TechniqueManifestOption` (`technique`, one of
+  `being` -> `WorshippedBeing` / `archetype` -> `CompanionArchetype`, `tier`; authored
+  inline on the Technique admin) and `CharacterManifestation` (`character`, `technique`,
+  `option`, nullable `companion`; unique per character and technique; `bond_is_active()`,
+  `clean()` enforces option-belongs-to-technique and an active bond), both in
+  `world/magic/models/manifestation.py`. Service `manifest_bound_entity(participant,
+  technique)` (`world/magic/services/effect_handlers.py`) is called from
+  `CombatTechniqueResolver`; it moves a being's avatar into the caster's room and adds it
+  as an ALLY `CombatOpponent`, or materializes the character's own companion. Probes
+  `manifest-being-avatars`, `manifest-archetype-abilities`, `manifest-tier-templates`.
+  Not built: a CG picker, manifestation outside combat, a persistent Companion made by a
+  cast. Coexists with the flow-payload `summon_ally`. Detail: `docs/systems/magic.md`'s
+  "Manifesting a bound entity"; ADR-4118.
 - **Integrates with:** traits (thread anchor kind TRAIT), progression (XP
   spend for ThreadWeaving and XP-lock crossings), relationships (soul tether,
   magical_flavor; thread anchors RELATIONSHIP_TRACK / RELATIONSHIP_CAPSTONE),

@@ -2487,6 +2487,20 @@ construction rather than by a filter someone could forget.
 | Owned (Path x major Gift) | `PathGiftGrant.ultimate_techniques` (M2M, mirrors `starter_techniques`) | major gifts only |
 | Bond: patron | `WorshippedBeing.ultimate_techniques` (M2M) | devotees of that being |
 | Bond: companion | `CompanionArchetype.ultimate_techniques` (M2M) | that archetype's bonded companions |
+| Gift (#4118) | `Gift.ultimate_techniques` (M2M, `limit_choices_to={"is_ultimate": True}`) | MINOR gifts only; any character holding the gift, Path-agnostic |
+
+A minor gift's ultimates [BUILT & WIRED] are the fourth source (`UltimateSource.GIFT`,
+`_gift_pools` in `world/magic/services/ultimates.py`): any `CharacterGift` row on a MINOR
+gift contributes that gift's `ultimate_techniques` as one reveal group (card kind and
+category rules unchanged; the telnet listing tags it `gift: <name>`). `_pools` drops a
+technique already in an earlier pool, so one reachable through both a patron pool and a
+gift pool shows only in the earlier (patron) group. The membership rules live in the admin
+form (`GiftAdminForm` in `world/magic/admin.py`): only a MINOR gift may carry ultimates, and
+every one must belong to that gift (`technique.gift`). An M2M cannot be validated in a
+model `clean()` before the row has relations, so `Gift.clean()` covers the other direction
+only: it rejects flipping a gift that already has ultimates to MAJOR. A major gift's
+ultimates stay on its Path Gift Grants. No required-content probe flags a minor gift with
+no ultimate: that is allowed.
 
 Court pacts give enhancements only (decision 8), never ultimates of their own. Past-life
 bond ultimates are deferred (spec scope) - the natural home is the past life's alternate
@@ -2507,8 +2521,9 @@ reveal fresh on every read: owned pools (current Path x major Gift, for a plain 
 the new Path x major Gift, for Audere Majora), owned-known pools (any technique the
 character already knows via `KnownUltimate` whose grant is for a Gift still held as
 MAJOR, regardless of which Path is current - so an owned known ultimate survives a
-Crossing), and bond pools (active patron devotion, active companion bond only - a
-released bond's ultimates simply fall out of the pool, no extra check needed).
+Crossing), bond pools (active patron devotion, active companion bond only - a
+released bond's ultimates simply fall out of the pool, no extra check needed), and gift
+pools (held MINOR gifts, #4118).
 Candidates are filtered through #4097's `exclude_unmet_technique_requirements`
 (promoted from the Sphinx's own prerequisite filter, now shared). Each pool is grouped
 by category (`Technique.archetype_alignment` - Sword, Shield, Crown; display labels
@@ -2605,6 +2620,53 @@ Sword/Shield/Crown word.
 longer kills synchronously - see the "Soulfray" note below, `docs/systems/INDEX.md`'s
 Vitals section, `docs/architecture/runtime-modifiers-audere.md`'s "Certain Death
 Deferral" section, and ADR-4098.
+
+### Manifesting a bound entity (#4118)
+
+A technique can bring a bound entity into a fight: a worshipped being's avatar or the
+character's own companion. See `docs/adr/adr-4118-a-manifested-entity-is-per-character-data-chosen-from-an-authored-list.md`.
+Ordinary techniques and ultimates use the same mechanism: a low-tier option on an ordinary
+technique is a limited form, a high-tier option on an ultimate is the full arrival.
+
+| Piece | Status | What it is |
+|-------|--------|------------|
+| `TechniqueManifestOption` (`models/manifestation.py`) | [BUILT & WIRED] | Authored per-technique row: `technique`, then exactly one of `being` (`WorshippedBeing`) or `archetype` (`CompanionArchetype`) (check constraint `manifest_option_exactly_one_entity`), plus `tier` (`OpponentTier`, default MOOK; a being's arrival size, ignored for an archetype). One row per (technique, being) and (technique, archetype). A technique with at least one option is a manifesting technique. Authored in the Technique admin through `TechniqueManifestOptionInline`. |
+| `CharacterManifestation` (`models/manifestation.py`) | [BUILT & WIRED] | Per-character choice: `character` (`CharacterSheet`), `technique`, `option`, nullable `companion` (for an archetype option, the character's own `Companion`). Unique per (character, technique). Keyed by (character, technique) rather than hung on `CharacterTechnique` because an ultimate has no `CharacterTechnique` row. Set by GM or staff in the admin (`CharacterManifestationAdmin`). |
+| `CharacterManifestation.bond_is_active()` | [BUILT & WIRED] | A being option holds while `active_patronage_for(character)` includes that being. An archetype option holds while the companion is the character's own, matches the archetype, and has no `released_at`. |
+| `CharacterManifestation.clean()` | [BUILT & WIRED] | The option must belong to the technique; a being option takes no companion; an archetype option needs one; the bond must be active. |
+| `manifest_bound_entity(participant, technique)` (`services/effect_handlers.py`) | [BUILT & WIRED] | Called from `CombatTechniqueResolver` (`world/combat/services.py`) after conditions apply, past the ward bounce, so a bounced cast manifests nothing. Returns the new ally `CombatOpponent` or None. |
+
+`manifest_bound_entity` returns None (manifests nothing) when the caster is no longer
+ACTIVE in the fight, has no `CharacterManifestation` for the technique, the bond has lapsed,
+a being has no avatar sheet, a companion has no body (`objectdb`), or that entity already
+has a row in this encounter (one row per objectdb per encounter, so a defeated avatar is
+not re-added). For a being it first moves the being's avatar character into the caster's
+room (`add_opponent` refuses a position in another room), then calls `add_opponent` with
+the option's `tier`, `existing_objectdb` and the caster's position, and marks the row
+`allegiance=ALLY`, `summoned_by=caster`. For an archetype it calls
+`materialize_companion_as_combat_opponent` (`world/companions/services.py`, unchanged). A
+being option whose tier has no `OpponentTierTemplate` row makes `add_opponent` raise from
+`compute_opponent_stat_block`; that is deliberate, not guarded, and the
+`manifest-tier-templates` dashboard probe flags it.
+
+**Required-content probes (`web/admin/tuning/required_content.py`, all REQUIRED tier):**
+`manifest-being-avatars` (a being option whose being has no `avatar_sheet`: nobody arrives),
+`manifest-archetype-abilities` (an archetype option whose archetype has no
+`CompanionAbility` rows: it arrives and never acts), `manifest-tier-templates` (a being
+option's tier with no `OpponentTierTemplate`: the cast raises mid-combat).
+
+**Coexists with the flow-payload `summon_ally`.** The threat-pool summon
+(`summon_ally` / `summon_ally_on_condition`, see the effect-handler table below) is
+untouched: it is reactive-flow driven and picks a `ThreatPool` entry, where manifestation is
+a per-character choice among authored options.
+
+**Not built:**
+- [ABSENT] A character-creation picker for the manifested entity: choices are set in the
+  admin by GM or staff.
+- [ABSENT] Manifestation outside combat: the hook is in the combat resolver only.
+- [ABSENT] A persistent bonded Companion created by a cast: a being arrives as a fight
+  opponent row over its existing avatar character, and an archetype option materializes a
+  Companion the character already owns.
 
 ### Dramatic Moment Tagging (#545 / #1139)
 

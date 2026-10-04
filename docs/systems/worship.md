@@ -635,6 +635,19 @@ action dispatch.
 render `presented_being` ONLY. The true `being` of a twisted rite never
 leaves the model layer except via the clue path.
 
+## Manifested by a technique (#4118) [BUILT & WIRED]
+
+A `WorshippedBeing` can be an option on a manifesting technique
+(`TechniqueManifestOption.being`, `world.magic`), sized by the option's `tier`. A
+character's `CharacterManifestation` for that option holds while
+`active_patronage_for(character)` includes the being. `manifest_bound_entity` moves the
+being's `avatar_sheet` character into the caster's room and adds it to the encounter as an
+ALLY `CombatOpponent`. A being with no avatar sheet manifests nothing (probe
+`manifest-being-avatars`); a tier with no `OpponentTierTemplate` makes the cast raise
+(probe `manifest-tier-templates`). This is separate from `WorshippedBeing.ultimate_techniques`
+(an ultimate a devotee may be shown at Audere). See `docs/systems/magic.md`'s "Manifesting a
+bound entity".
+
 ## Deferred (filed)
 
 Coronation type (Wedding **shipped** — #2358/#2999, solemnizes `Betrothal` →
