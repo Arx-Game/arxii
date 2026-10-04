@@ -38,6 +38,7 @@ import { ForcedEscapeBanner } from './components/ForcedEscapeBanner';
 import { SpecialistChoicePanel } from './components/SpecialistChoicePanel';
 import { CommitmentPanel } from './components/CommitmentPanel';
 import { OutcomeRoulette } from './OutcomeRoulette';
+import { StandoffCard } from './standoff/StandoffCard';
 import type { components } from '@/generated/api';
 import type { CastPosition, PositionTargetShape } from '@/actions/types';
 
@@ -332,6 +333,15 @@ export function CombatTurnPanel({
           {isLeaving ? 'Leaving…' : 'Leave Encounter'}
         </button>
       )}
+
+      {/* Standoff (#4145): the pre-round card, present only before round 1. */}
+      {encounter.standoff ? (
+        <StandoffCard
+          standoff={encounter.standoff}
+          encounterId={encounterId}
+          characterId={characterId}
+        />
+      ) : null}
 
       {/* §2 — Section order: YourTurn → ResonanceBudget → VitalPools →
           CombatantsList → ActiveState → RoundFlow */}
