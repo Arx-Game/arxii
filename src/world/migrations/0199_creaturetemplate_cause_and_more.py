@@ -353,6 +353,7 @@ class Migration(migrations.Migration):
             ],
             options={
                 "abstract": False,
+                "ordering": ["pk"],
             },
         ),
         migrations.CreateModel(

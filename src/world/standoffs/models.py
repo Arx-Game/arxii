@@ -71,6 +71,10 @@ class RegardRule(SharedMemoryModel):
         related_name="regard_rules",
         help_text="The creature kind this rule belongs to.",
     )
+    # SANCTIONED DYNAMIC JSON: a predicate rule tree (AND/OR/NOT over the acting
+    # character's own state), validated by ``validate_predicate_tree`` in clean().
+    # Covered by ADR-0007's ratified predicate exception, the same one the missions
+    # ``visibility_rule`` uses. No other JSONField is permitted in standoffs.
     rule = models.JSONField(
         default=dict,
         blank=True,
@@ -273,6 +277,9 @@ class StandoffConfig(SharedMemoryModel):
     )
 
     objects = ArxSharedMemoryManager()
+
+    class Meta:
+        ordering = ["pk"]
 
     @classmethod
     def load(cls) -> StandoffConfig:

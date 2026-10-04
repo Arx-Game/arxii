@@ -846,6 +846,17 @@ class MissionOption(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
             errors["option_kind"] = "A track node accepts only CHECK, CONTEST and BRANCH options."
         return errors
 
+    def _encounter_only_field_errors(self) -> dict[str, str]:
+        """Fields only an ENCOUNTER option may set."""
+        errors: dict[str, str] = {}
+        if self.option_kind == OptionKind.ENCOUNTER:
+            return errors
+        if self.encounter_risk_level:
+            errors["encounter_risk_level"] = "Only ENCOUNTER options may set encounter_risk_level."
+        if self.opens_as_standoff:
+            errors["opens_as_standoff"] = "Only ENCOUNTER options may set opens_as_standoff."
+        return errors
+
     def _kind_errors(self) -> dict[str, str]:
         """BRANCH/EXTERNAL_ACT forbid check fields; AUTHORED+CHECK requires a check type."""
         errors: dict[str, str] = {}
@@ -868,8 +879,7 @@ class MissionOption(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
             errors.update(self._contest_errors())
         if self.option_kind != OptionKind.EXTERNAL_ACT and self.required_act:
             errors["required_act"] = "Only EXTERNAL_ACT options may set required_act."
-        if self.option_kind != OptionKind.ENCOUNTER and self.encounter_risk_level:
-            errors["encounter_risk_level"] = "Only ENCOUNTER options may set encounter_risk_level."
+        errors.update(self._encounter_only_field_errors())
         errors.update(self._opposition_field_errors())
         errors.update(self._track_node_kind_errors())
         return errors

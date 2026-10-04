@@ -3439,10 +3439,20 @@ def _declarations() -> tuple[ContentDependency, ...]:
             tier=DependencyTier.REQUIRED,
             consumer="world/standoffs/models.py StandoffConfig.load()",
             consequence=(
-                "Standoffs have no read check, terms check or group weights; "
-                "players can only fight."
+                "The standoff settings row is missing or incomplete (read check, terms "
+                "check, pass condition and turn condition must all be set); players "
+                "can only fight."
             ),
-            probe=AnyRowProbe(label="StandoffConfig"),
+            probe=FilteredRowProbe(
+                label="StandoffConfig",
+                filters=(
+                    ("read_check_type__isnull", False),
+                    ("terms_check_type__isnull", False),
+                    ("pass_condition__isnull", False),
+                    ("turn_condition__isnull", False),
+                ),
+                absent_detail="No StandoffConfig row has all four of its links set.",
+            ),
         ),
         ContentDependency(
             key="standoff-approaches",
