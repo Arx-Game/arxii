@@ -57,6 +57,16 @@ def _to_result(outcome: StandoffActionResult) -> ActionResult:
     return ActionResult(success=outcome.success, message=outcome.message)
 
 
+def _read_result(
+    outcome: StandoffActionResult, group: StandoffGroup, participant: CombatParticipant
+) -> ActionResult:
+    """A read's message carries what the reader learned, as they may know it."""
+    from world.standoffs.services.describe import describe_reveals  # noqa: PLC0415
+
+    lines = describe_reveals(group, outcome.revealed, participant.character_sheet)
+    return ActionResult(success=outcome.success, message="\n".join([outcome.message, *lines]))
+
+
 @dataclass
 class StandoffReadAction(Action):
     """Read a group of opponents for what drives them (wraps ``standoff_read``)."""
@@ -76,6 +86,7 @@ class StandoffReadAction(Action):
         focus_kind: str | None = None,
         focus_drive_id: int | None = None,
         focus_regard_rule_id: int | None = None,
+        focus_property_id: int | None = None,
         **kwargs: Any,
     ) -> ActionResult:
         from world.standoffs.services.verbs import standoff_read  # noqa: PLC0415
@@ -86,15 +97,15 @@ class StandoffReadAction(Action):
         group = _resolve_group(participant, group_id)
         if group is None:
             return ActionResult(success=False, message=_NO_SUCH_GROUP_MSG)
-        return _to_result(
-            standoff_read(
-                participant,
-                group,
-                focus_kind=focus_kind,
-                focus_drive_id=focus_drive_id,
-                focus_regard_rule_id=focus_regard_rule_id,
-            )
+        outcome = standoff_read(
+            participant,
+            group,
+            focus_kind=focus_kind,
+            focus_drive_id=focus_drive_id,
+            focus_regard_rule_id=focus_regard_rule_id,
+            focus_property_id=focus_property_id,
         )
+        return _read_result(outcome, group, participant)
 
 
 @dataclass

@@ -388,6 +388,27 @@ class ActingOnASparkRevealsItTests(VerbBase):
         shared = list(StandoffSparkShare.objects.values_list("regard_rule", flat=True))
         self.assertEqual(shared, [rule.pk])
 
+    def test_press_aimed_at_a_drive_the_rule_weakened_to_zero_still_shares(self) -> None:
+        drive = CreatureDriveFactory(creature_template=self.template, strength=DriveStrength.MINOR)
+        ApplicationFactory(capability=self.approach.capability, target_property=drive.property)
+        rule = RegardRuleFactory(
+            creature_template=self.template, rule={}, drive=drive.property, drive_shift=-1
+        )
+        with patch(CHECK, return_value=forced(1)):
+            standoff_press(self.participant, self.group, self.approach)
+        shared = list(StandoffSparkShare.objects.values_list("regard_rule", flat=True))
+        self.assertEqual(shared, [rule.pk])
+
+    def test_a_rule_naming_a_drive_with_no_shift_shares_nothing(self) -> None:
+        drive = CreatureDriveFactory(creature_template=self.template, strength=DriveStrength.MINOR)
+        ApplicationFactory(capability=self.approach.capability, target_property=drive.property)
+        RegardRuleFactory(
+            creature_template=self.template, rule={}, drive=drive.property, drive_shift=0
+        )
+        with patch(CHECK, return_value=forced(1)):
+            standoff_press(self.participant, self.group, self.approach)
+        self.assertEqual(self._shares(), 0)
+
     def test_press_missing_a_rules_drive_shares_nothing(self) -> None:
         drive = CreatureDriveFactory(creature_template=self.template, strength=DriveStrength.MINOR)
         RegardRuleFactory(

@@ -128,12 +128,16 @@ def _focus_matches(
     focus_kind: str | None,
     focus_drive_id: int | None,
     focus_regard_rule_id: int | None,
+    focus_property_id: int | None = None,
 ) -> bool:
     kind, drive, rule = thing
     if kind != focus_kind:
         return False
     if kind == RevealKind.DRIVE:
-        return drive is not None and drive.pk == focus_drive_id
+        return drive is not None and (
+            drive.pk == focus_drive_id
+            or (focus_property_id is not None and drive.property_id == focus_property_id)
+        )
     if kind == RevealKind.REGARD:
         return rule is not None and rule.pk == focus_regard_rule_id
     return True
@@ -150,13 +154,14 @@ def _reveal(
 
 
 @transaction.atomic
-def standoff_read(
+def standoff_read(  # noqa: PLR0913 - the focus kwargs are the read verb's whole payload
     participant: CombatParticipant,
     group: StandoffGroup,
     *,
     focus_kind: str | None = None,
     focus_drive_id: int | None = None,
     focus_regard_rule_id: int | None = None,
+    focus_property_id: int | None = None,
 ) -> StandoffActionResult:
     """Read a group: a partial reveals one hidden thing, a success the one looked for."""
     encounter, group = _lock(participant.encounter, group)
@@ -190,7 +195,11 @@ def standoff_read(
         chosen = hidden
     elif tier == 1:
         focused = [
-            t for t in hidden if _focus_matches(t, focus_kind, focus_drive_id, focus_regard_rule_id)
+            t
+            for t in hidden
+            if _focus_matches(
+                t, focus_kind, focus_drive_id, focus_regard_rule_id, focus_property_id
+            )
         ]
         chosen = (focused or hidden)[:1]
     else:
@@ -201,7 +210,7 @@ def standoff_read(
 
 def _press_grade(
     group: StandoffGroup, sheet: CharacterSheet, approach: StandoffApproach
-) -> tuple[SocialDifficulty, list[tuple[CreatureDrive, DriveHit]]]:
+) -> tuple[SocialDifficulty, list[tuple[CreatureDrive, DriveHit]], set[int]]:
     members = active_members(group)
     first, level = _roll_inputs(members)
     drives = list(group.creature_template.drives.select_related("property"))
@@ -230,7 +239,7 @@ def _press_grade(
         ),
         extra_bands=band_shift_toward(group, sheet),
     )
-    return difficulty, hits
+    return difficulty, hits, targeted
 
 
 def press_difficulty(
@@ -267,13 +276,15 @@ def _embolden_on_botch(group: StandoffGroup, config: StandoffConfig) -> None:
 
 
 def _share_shifting_sparks(
-    group: StandoffGroup, sheet: CharacterSheet, hit_property_ids: set[int]
+    group: StandoffGroup, sheet: CharacterSheet, targeted_property_ids: set[int]
 ) -> None:
     """Acting on a spark reveals it: share every matched rule that shifted this roll."""
     for match in regard_matches(group, sheet):
         rule = match.rule
+        # A drive shift counts when the press aims at that drive, even if the shift took
+        # its strength to zero and it no longer registers as a hit.
         shifted = rule.difficulty_shift_bands != 0 or (
-            rule.drive_id is not None and rule.drive_id in hit_property_ids
+            rule.drive_shift != 0 and rule.drive_id in targeted_property_ids
         )
         if shifted:
             StandoffSparkShare.objects.get_or_create(
@@ -295,7 +306,7 @@ def standoff_press(
         return _refuse(_MSG_EMPTY)
     config = StandoffConfig.load()
     sheet = participant.character_sheet
-    graded, hits = _press_grade(group, sheet, approach)
+    graded, hits, targeted = _press_grade(group, sheet, approach)
     result = perform_check(
         sheet.character,
         approach.check_type,
@@ -304,7 +315,7 @@ def standoff_press(
             sheet, approach.check_type, extra_contributions=graded.contributions
         ).total,
     )
-    _share_shifting_sparks(group, sheet, {drive.property_id for drive, _ in hits})
+    _share_shifting_sparks(group, sheet, targeted)
     tier = result.success_level
     message = "Your words do not move them."
     if tier >= 1:

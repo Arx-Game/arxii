@@ -6,26 +6,33 @@ from unittest.mock import patch
 from actions.constants import ActionBackend
 from actions.player_interface import dispatch_player_action
 from actions.types import ActionRef
+from evennia_extensions.factories import CharacterFactory
+from world.character_sheets.factories import CharacterSheetFactory
 from world.checks.factories import CheckTypeFactory
-from world.combat.constants import CauseKind, EncounterOutcome, RiskLevel
+from world.classes.factories import CharacterClassLevelFactory
+from world.combat.constants import CauseKind, EncounterOutcome, OpponentTier, RiskLevel
+from world.combat.factories import CombatEncounterFactory
 from world.combat.models import CombatEncounter, EncounterOutcomeMapping
 from world.conditions.factories import ConditionTemplateFactory
 from world.mechanics.factories import ApplicationFactory
-from world.missions.factories import MissionNodeFactory, MissionOptionRouteFactory
+from world.missions.factories import (
+    MissionNodeFactory,
+    MissionOptionRouteFactory,
+    MissionParticipantFactory,
+)
 from world.missions.services.resolution import resolve_option
 from world.missions.tests.test_encounter_option import EncounterOptionTestBase
 from world.standoffs.constants import DriveStrength, RevealKind, StandoffGroupState, TermsEffect
 from world.standoffs.factories import (
     CreatureDriveFactory,
     StandoffApproachFactory,
+    StandoffGroupFactory,
     StandoffTermsFactory,
 )
 from world.standoffs.models import StandoffConfig
-from world.standoffs.services.force import group_force
 from world.traits.factories import CheckOutcomeFactory
 
 CHECK = "world.standoffs.services.verbs.perform_check"
-LEVEL_PATH = "world.standoffs.services.force.effective_combat_level"
 
 
 def _ref(key: str) -> ActionRef:
@@ -117,32 +124,42 @@ class MissionJourneyTests(StandoffJourneyBase):
         roll.assert_not_called()
 
     def test_a_group_of_another_encounter_is_not_found(self) -> None:
-        result = self._do("standoff_read", group_id=self.group.pk + 999)
+        elsewhere = StandoffGroupFactory(encounter=CombatEncounterFactory())
+        with patch(CHECK) as roll:
+            result = self._do("standoff_read", group_id=elsewhere.pk)
         self.assertFalse(result.success)
+        roll.assert_not_called()
 
 
-class PredationJourneyTests(StandoffJourneyBase):
+class PredatorBase(StandoffJourneyBase):
     def setUp(self) -> None:
         super().setUp()
         self.creature.cause = CauseKind.PREDATION
         self.creature.cause_margin_percent = 0
-        self.creature.save(update_fields=["cause", "cause_margin_percent"])
-        # A strong party at the start, so the standoff opens rather than breaking at once.
-        with patch(LEVEL_PATH, return_value=10_000):
-            self._open()
+        self.creature.tier = OpponentTier.MOOK
+        self.creature.save(update_fields=["cause", "cause_margin_percent", "tier"])
+        # Two level-10 characters against one level-10 creature: the party outweighs it two
+        # to one, so only a run of botches (emboldening) can bring the group's force level.
+        for line in self.option.opponent_lines.all():
+            line.count = 1
+            line.save(update_fields=["count"])
+        ally = CharacterSheetFactory(character=CharacterFactory(location=self.room))
+        MissionParticipantFactory(instance=self.instance, character=ally)
+        for sheet in (self.sheet, ally):
+            CharacterClassLevelFactory(character=sheet, level=10, is_primary=True)
+        self._open()
 
+
+class PredationJourneyTests(PredatorBase):
     def test_botched_presses_tip_the_predator_into_the_fight(self) -> None:
-        config = StandoffConfig.load()
-        # The party just outweighs the group, so only emboldening can tip it.
-        with patch(LEVEL_PATH, return_value=group_force(self.group, config) + 1):
-            self.encounter.refresh_from_db()
-            self.assertEqual(self.encounter.round_number, 0)
-            with patch(CHECK, return_value=_roll(self.botch_tier)):
-                for _ in range(20):
-                    self._do("standoff_press", group_id=self.group.pk, approach_id=self.approach.pk)
-                    self.encounter.refresh_from_db()
-                    if self.encounter.round_number != 0:
-                        break
+        self.encounter.refresh_from_db()
+        self.assertEqual(self.encounter.round_number, 0)
+        with patch(CHECK, return_value=_roll(self.botch_tier)):
+            for _ in range(20):
+                self._do("standoff_press", group_id=self.group.pk, approach_id=self.approach.pk)
+                self.encounter.refresh_from_db()
+                if self.encounter.round_number != 0:
+                    break
         self.assertEqual(self.encounter.round_number, 1)
         self.assertIs(self.encounter.initiated_by_pc_side, False)
         self.group.refresh_from_db()
@@ -154,3 +171,12 @@ class NotInAStandoffTests(StandoffJourneyBase):
         result = self._do("standoff_fight")
         self.assertFalse(result.success)
         self.assertEqual(result.message, "You are not in a standoff.")
+
+
+class ReadMessageTests(PredatorBase):
+    def test_a_read_tells_the_reader_what_it_found(self) -> None:
+        drive = CreatureDriveFactory(creature_template=self.creature, strength=DriveStrength.MAJOR)
+        with patch(CHECK, return_value=_roll(CheckOutcomeFactory(name="Crit", success_level=2))):
+            result = self._do("standoff_read", group_id=self.group.pk)
+        self.assertIn("Cause: Predation.", result.message)
+        self.assertIn(f"Drive: {drive.property.name} (Major).", result.message)

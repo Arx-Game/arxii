@@ -152,18 +152,23 @@ class CmdStandoff(DispatchCommand):
         return kwargs
 
     def _focus(self, group: StandoffGroup, focus: str) -> dict[str, Any]:
+        """The focus a typed word names; a word that names nothing is an unfocused read.
+
+        Drive words resolve against the whole Property catalog, never this group's drives,
+        so a guess cannot show whether the group has that drive.
+        """
+        from world.mechanics.models import Property  # noqa: PLC0415
         from world.standoffs.constants import RevealKind  # noqa: PLC0415
 
         if focus.lower() == _CAUSE_WORD:
             return {"focus_kind": RevealKind.CAUSE}
-        drive = group.creature_template.drives.filter(property__name__iexact=focus).first()
-        if drive is not None:
-            return {"focus_kind": RevealKind.DRIVE, "focus_drive_id": drive.pk}
         for match in self._own_matches(group):
             if match.rule.spark_text.lower() == focus.lower():
                 return {"focus_kind": RevealKind.REGARD, "focus_regard_rule_id": match.rule.pk}
-        msg = f"Nothing called '{focus}' to look for."
-        raise CommandError(msg)
+        prop = Property.objects.filter(name__iexact=focus).first()
+        if prop is not None:
+            return {"focus_kind": RevealKind.DRIVE, "focus_property_id": prop.pk}
+        return {}
 
     def _approach(self, name: str) -> Any:
         from world.standoffs.models import StandoffApproach  # noqa: PLC0415
@@ -216,6 +221,7 @@ class CmdStandoff(DispatchCommand):
     def _show_summary(self) -> None:
         """Print the groups, the viewer's own sparks and the verbs. Nothing unrevealed."""
         from actions.definitions.standoff import _standoff_participant  # noqa: PLC0415
+        from world.standoffs.services.describe import describe_reveals  # noqa: PLC0415
         from world.standoffs.services.state import active_members  # noqa: PLC0415
 
         participant = _standoff_participant(self.caller)
@@ -232,6 +238,14 @@ class CmdStandoff(DispatchCommand):
                 f"    You feel: {match.rule.spark_text}"
                 for match in self._own_matches(group)
                 if match.rule.spark_text
+            )
+            lines.extend(
+                f"    {line}"
+                for line in describe_reveals(
+                    group,
+                    group.reveals.select_related("drive__property", "regard_rule"),
+                    self.caller.sheet_data,
+                )
             )
         lines.append(f"You can: {', '.join(_SUBVERBS)}.")
         self.msg("\n".join(lines))

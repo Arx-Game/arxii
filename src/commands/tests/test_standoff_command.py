@@ -17,11 +17,13 @@ from world.combat.factories import (
     CombatParticipantFactory,
     CreatureTemplateFactory,
 )
+from world.mechanics.factories import PropertyFactory
 from world.standoffs.constants import DriveStrength, RevealKind
 from world.standoffs.factories import (
     CreatureDriveFactory,
     RegardRuleFactory,
     StandoffApproachFactory,
+    StandoffRevealFactory,
     StandoffTermsFactory,
 )
 from world.standoffs.services.state import open_standoff
@@ -83,10 +85,20 @@ class CmdStandoffTests(TestCase):
         _, kwargs = self._dispatched("read Road Bandits cause")
         self.assertEqual(kwargs["focus_kind"], RevealKind.CAUSE)
 
-    def test_read_drive_focus(self) -> None:
+    def test_a_made_up_word_and_an_unrevealed_drive_both_just_read(self) -> None:
         drive = CreatureDriveFactory(creature_template=self.template, strength=DriveStrength.MINOR)
-        _, kwargs = self._dispatched(f"read Road Bandits {drive.property.name}")
-        self.assertEqual(kwargs["focus_drive_id"], drive.pk)
+        made_up_key, made_up = self._dispatched("read Road Bandits zzzzqq")
+        real_key, real = self._dispatched(f"read Road Bandits {drive.property.name}")
+        self.assertEqual((made_up_key, real_key), ("standoff_read", "standoff_read"))
+        self.assertEqual(made_up, {"group_id": self.group.pk})
+        self.assertEqual(real["group_id"], self.group.pk)
+        self.assertEqual(real["focus_property_id"], drive.property_id)
+        self.assertNotIn("focus_drive_id", real)
+
+    def test_a_property_this_group_lacks_resolves_the_same_way(self) -> None:
+        other = PropertyFactory(name="Unheld Property")
+        _, kwargs = self._dispatched("read Road Bandits unheld property")
+        self.assertEqual(kwargs["focus_property_id"], other.pk)
 
     def test_share_resolves_own_spark(self) -> None:
         rule = RegardRuleFactory(creature_template=self.template, rule={}, spark_text="a pang")
@@ -115,6 +127,20 @@ class CmdStandoffTests(TestCase):
         self.assertIn("a pang", text)
         self.assertNotIn("SOMEONE ELSES SPARK", text)
         self.assertNotIn("PLACEHOLDER revealed", text)
+
+    def test_summary_shows_revealed_cause_and_drives_but_not_hidden_ones(self) -> None:
+        self.template.cause = CauseKind.PREDATION
+        self.template.save(update_fields=["cause"])
+        shown = CreatureDriveFactory(creature_template=self.template, strength=DriveStrength.MAJOR)
+        hidden = CreatureDriveFactory(creature_template=self.template, strength=DriveStrength.MINOR)
+        StandoffRevealFactory(group=self.group, kind=RevealKind.CAUSE)
+        StandoffRevealFactory(group=self.group, kind=RevealKind.DRIVE, drive=shown)
+        cmd = self._cmd("")
+        cmd.func()
+        text = cmd.msg.call_args.args[0]
+        self.assertIn("Cause: Predation.", text)
+        self.assertIn(f"Drive: {shown.property.name} (Major).", text)
+        self.assertNotIn(hidden.property.name, text)
 
     def test_summary_outside_a_standoff(self) -> None:
         self.character = CharacterFactory(db_key="bystander")
