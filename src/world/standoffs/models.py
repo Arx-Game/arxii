@@ -193,6 +193,16 @@ class StandoffTerms(NaturalKeyMixin, SharedMemoryModel):
         choices=TermsEffect.choices,
         help_text="What happens to the group when the terms are accepted.",
     )
+    critical_effect = models.CharField(
+        max_length=20,
+        choices=TermsEffect.choices,
+        blank=True,
+        help_text=(
+            "The effect applied INSTEAD of the usual one on a critical success; blank means "
+            "a critical does the same as any success. Any toll comes from the mission's own "
+            "reward lines on the critical tier."
+        ),
+    )
     description = models.TextField(
         blank=True,
         help_text="Outcome shown to players before they commit to these terms (author in admin).",
@@ -227,6 +237,13 @@ class StandoffTerms(NaturalKeyMixin, SharedMemoryModel):
 
     def __str__(self) -> str:
         return self.name
+
+    def clean(self) -> None:
+        super().clean()
+        if self.critical_effect and self.critical_effect == self.effect:
+            raise ValidationError(
+                {"critical_effect": "A critical upgrade must differ from the usual effect."}
+            )
 
 
 class StandoffConfig(SharedMemoryModel):
@@ -438,3 +455,64 @@ class StandoffSparkShare(SharedMemoryModel):
 
     def __str__(self) -> str:
         return f"Spark share for {self.group}"
+
+
+class StandoffReactionLine(SharedMemoryModel):
+    """Authored flavour for how a press or terms roll lands, banded by success level.
+
+    Staff author these (the owner's rule: someone awesome must feel it). The highest
+    ``min_success_level`` that is <= the roll's level wins; a line tied to one creature
+    kind beats a generic line at the same floor. ``<actor>`` is replaced by the name the
+    actor presents under and ``<group>`` by the creature kind's name. Unlike
+    ``NPCReactionLine`` (NPC role/functionary, banded on a character metric) this belongs
+    to a standoff approach or terms row and bands on the roll itself.
+    """
+
+    approach = models.ForeignKey(
+        StandoffApproach,
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="reaction_lines",
+        help_text="The approach this line reacts to (set this or terms, not both).",
+    )
+    terms = models.ForeignKey(
+        StandoffTerms,
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="reaction_lines",
+        help_text="The terms this line reacts to (set this or approach, not both).",
+    )
+    creature_template = models.ForeignKey(
+        "arxii.CreatureTemplate",
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="+",
+        help_text="When set, the line applies only to this creature kind and beats a generic "
+        "line at the same floor.",
+    )
+    min_success_level = models.SmallIntegerField(
+        help_text="Line applies from this success level up (-2 critical failure to 2 critical "
+        "success); the highest floor at or below the roll wins.",
+    )
+    text = models.TextField(
+        help_text="The line shown to the room (author in admin). <actor> is the presented "
+        "name, <group> the creature kind.",
+    )
+
+    class Meta:
+        ordering = ["approach", "terms", "-min_success_level"]
+        constraints = [
+            models.CheckConstraint(
+                condition=(
+                    models.Q(approach__isnull=False, terms__isnull=True)
+                    | models.Q(approach__isnull=True, terms__isnull=False)
+                ),
+                name="standoff_reaction_line_one_parent",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"Reaction line #{self.pk} (>= {self.min_success_level})"

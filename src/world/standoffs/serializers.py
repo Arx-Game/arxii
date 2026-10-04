@@ -54,6 +54,7 @@ class TermsViewSerializer(serializers.Serializer):
     description = serializers.CharField(allow_blank=True)
     grade = serializers.CharField()
     grade_label = serializers.CharField()
+    critical_label = serializers.CharField(allow_blank=True)
 
 
 class StandoffViewSerializer(serializers.Serializer):

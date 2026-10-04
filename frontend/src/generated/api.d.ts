@@ -47353,6 +47353,7 @@ export interface components {
       description: string;
       grade: string;
       grade_label: string;
+      critical_label: string;
     };
     /**
      * @description * `open` - Open

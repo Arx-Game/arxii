@@ -110,6 +110,7 @@ class TermsView:
     description: str
     grade: str
     grade_label: str
+    critical_label: str = ""
 
 
 @dataclass(frozen=True)
@@ -384,6 +385,7 @@ def build_standoff_view(
                     description=terms.description,
                     grade=grade,
                     grade_label=grade_label(grade),
+                    critical_label=terms.get_critical_effect_display(),
                 )
             )
     return view

@@ -416,7 +416,14 @@ function TermsSection({ terms, ease, disabled, chosen, onChoose, onSpin }: Terms
           )}
           onClick={() => onChoose(term.terms_id)}
         >
-          <span>{term.name}</span>
+          <span>
+            {term.name}
+            {term.critical_label ? (
+              <span className="block text-xs text-muted-foreground">
+                On a critical: {term.critical_label}
+              </span>
+            ) : null}
+          </span>
           <Grade value={term.grade} label={term.grade_label} />
         </Button>
       ))}

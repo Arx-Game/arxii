@@ -13,6 +13,7 @@ from world.standoffs.models import (
     RegardRule,
     StandoffApproach,
     StandoffGroup,
+    StandoffReactionLine,
     StandoffReveal,
     StandoffTerms,
 )
@@ -71,3 +72,14 @@ class StandoffRevealFactory(factory_django.DjangoModelFactory):
 
     group = factory.SubFactory(StandoffGroupFactory)
     kind = RevealKind.CAUSE
+
+
+class StandoffReactionLineFactory(factory_django.DjangoModelFactory):
+    """A line on an approach by default; pass ``approach=None, terms=...`` for terms."""
+
+    class Meta:
+        model = StandoffReactionLine
+
+    approach = factory.SubFactory(StandoffApproachFactory)
+    min_success_level = 1
+    text = "PLACEHOLDER <actor> and <group>"

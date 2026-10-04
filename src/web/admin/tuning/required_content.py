@@ -1940,6 +1940,17 @@ def _declarations() -> tuple[ContentDependency, ...]:
             admin_model="AudereThreshold",
         ),
         ContentDependency(
+            key="standoff-reaction-lines",
+            label="Standoff reaction lines",
+            tier=DependencyTier.TUNING,
+            consumer="world/standoffs/services/reactions.py reaction_line_for()",
+            consequence=(
+                "Standoff presses and terms show only the plain outcome line; a "
+                "critical roll gets no bigger authored reaction."
+            ),
+            probe=AnyRowProbe(label="StandoffReactionLine"),
+        ),
+        ContentDependency(
             key="capability-power-config",
             label="Capability power config singleton",
             tier=DependencyTier.TUNING,

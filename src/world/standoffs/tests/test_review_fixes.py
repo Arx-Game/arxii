@@ -9,6 +9,7 @@ from world.standoffs.factories import StandoffApproachFactory, StandoffTermsFact
 from world.standoffs.models import StandoffGroup
 from world.standoffs.services.state import begin_round_or_break_standoff
 from world.standoffs.services.verbs import (
+    standoff_fight,
     standoff_press,
     standoff_read,
     standoff_terms,
@@ -102,15 +103,10 @@ class MoraleShiftLineTests(VerbBase):
         super().setUp()
         self.approach = StandoffApproachFactory(damages_morale=True)
 
-    def _press(self, level: int) -> list:
+    def _press(self, level: int) -> str:
         outcome = CheckOutcomeFactory(name=f"Morale tier {level}", success_level=level)
-        with (
-            patch(BROADCAST) as broadcast,
-            self.captureOnCommitCallbacks(execute=True),
-            force_check_outcome(outcome),
-        ):
-            standoff_press(self.participant, self.group, self.approach)
-        return [call.kwargs["narration"] for call in broadcast.call_args_list]
+        with force_check_outcome(outcome):
+            return standoff_press(self.participant, self.group, self.approach).morale_line
 
     def test_a_press_that_makes_the_group_falter_credits_the_presented_persona(self) -> None:
         from world.scenes.services import active_persona_for_sheet
@@ -118,17 +114,26 @@ class MoraleShiftLineTests(VerbBase):
         for member in self.members:
             member.morale = 55
             member.save(update_fields=["morale"])
-        lines = self._press(2)  # 30 morale damage: 55 -> 25, down to a break
+        line = self._press(2)  # 30 morale damage: 55 -> 25, down to a break
         who = active_persona_for_sheet(self.participant.character_sheet).name
-        self.assertEqual(lines, [f"{who} shakes the {self.template.name}: they break."])
+        self.assertEqual(line, f"{who} shakes the {self.template.name}: they break.")
 
     def test_a_press_that_leaves_morale_state_alone_sends_no_line(self) -> None:
-        self.assertEqual(self._press(1), [])
+        self.assertEqual(self._press(1), "")
 
     def test_a_press_that_only_makes_the_group_falter_says_so(self) -> None:
         for member in self.members:
             member.morale = 70
             member.save(update_fields=["morale"])
-        lines = self._press(2)  # 70 -> 40: steady to falter
-        self.assertEqual(len(lines), 1)
-        self.assertTrue(lines[0].endswith(": they falter."), lines[0])
+        line = self._press(2)  # 70 -> 40: steady to falter
+        self.assertTrue(line.endswith(": they falter."), line)
+
+
+class FightKeywordFlushTests(VerbBase):
+    def test_standoff_fight_flush_finds_the_encounter_when_passed_by_keyword(self) -> None:
+        boom = RuntimeError("boom")
+        with (
+            patch("world.standoffs.services.verbs.end_standoff_into_fight", side_effect=boom),
+            self.assertRaises(RuntimeError),
+        ):
+            standoff_fight(participant=self.participant, encounter=self.encounter)

@@ -21,7 +21,7 @@ if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
 
     from world.combat.models import CombatParticipant
-    from world.standoffs.models import StandoffGroup
+    from world.standoffs.models import StandoffApproach, StandoffGroup, StandoffTerms
     from world.standoffs.types import StandoffActionResult
 
 NOT_IN_STANDOFF_MESSAGE = "You are not in a standoff."
@@ -74,6 +74,34 @@ def _announce(participant: CombatParticipant, line: str, outcome: StandoffAction
     if not outcome.success and outcome.success_level is None:
         return
     broadcast_action_outcome(encounter=participant.encounter, narration=line, deliver_telnet=True)
+    if outcome.morale_line:
+        broadcast_action_outcome(
+            encounter=participant.encounter,
+            narration=outcome.morale_line,
+            deliver_telnet=True,
+        )
+
+
+def _reaction_or_plain(
+    participant: CombatParticipant,
+    group: StandoffGroup,
+    parent: StandoffApproach | StandoffTerms,
+    outcome: StandoffActionResult,
+    plain: str,
+) -> str:
+    """The authored reaction line for this roll, or the plain line when none applies."""
+    from world.standoffs.services.reactions import reaction_text  # noqa: PLC0415
+
+    if outcome.success_level is None:
+        return plain
+    authored = reaction_text(
+        parent,
+        creature_template_id=group.creature_template_id,
+        group_name=group.creature_template.name,
+        actor_name=_actor_label(participant),
+        success_level=outcome.success_level,
+    )
+    return authored or plain
 
 
 def _actor_label(participant: CombatParticipant) -> str:
@@ -179,12 +207,12 @@ class StandoffPressAction(Action):
         if approach is None:
             return ActionResult(success=False, message="No such approach.")
         outcome = standoff_press(participant, group, approach)
-        _announce(
-            participant,
+        plain = (
             f"{_actor_label(participant)} presses the {group.creature_template.name} "
-            f"with {approach.name}: "
-            f"{_outcome_word(outcome)}.",
-            outcome,
+            f"with {approach.name}: {_outcome_word(outcome)}."
+        )
+        _announce(
+            participant, _reaction_or_plain(participant, group, approach, outcome, plain), outcome
         )
         return _to_result(outcome)
 
@@ -221,12 +249,12 @@ class StandoffTermsAction(Action):
         if terms is None:
             return ActionResult(success=False, message="No such terms.")
         outcome = standoff_terms(participant, group, terms)
-        _announce(
-            participant,
+        plain = (
             f"{_actor_label(participant)} names {terms.name} to "
-            f"the {group.creature_template.name}: "
-            f"{_outcome_word(outcome)}.",
-            outcome,
+            f"the {group.creature_template.name}: {_outcome_word(outcome)}."
+        )
+        _announce(
+            participant, _reaction_or_plain(participant, group, terms, outcome, plain), outcome
         )
         return _to_result(outcome)
 

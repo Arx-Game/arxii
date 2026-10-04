@@ -78,6 +78,7 @@ if TYPE_CHECKING:
     from world.combat.models import CombatEncounter, CombatOpponent, CombatParticipant
 
 BOTCH_LEVEL = -2
+CRITICAL_LEVEL = 2
 _MSG_OVER = "The standoff is over."
 _MSG_SETTLED = "That group is no longer in the standoff."
 _MSG_EMPTY = "There is nobody left in that group."
@@ -457,6 +458,7 @@ def standoff_press(
     _share_shifting_sparks(group, sheet, targeted)
     tier = result.success_level
     message = "Your words do not move them."
+    morale_line = ""
     if tier >= 1:
         group.terms_ease += 1
         group.save(update_fields=["terms_ease"])
@@ -464,8 +466,8 @@ def standoff_press(
             before = [morale_state_for(member) for member in members]
             for member in members:
                 apply_morale_damage(member, tier * DEMORALIZE_MORALE_PER_LEVEL)
-            _announce_morale_shift(
-                encounter, group, sheet, before, [morale_state_for(m) for m in members]
+            morale_line = _morale_shift_line(
+                group, sheet, before, [morale_state_for(m) for m in members]
             )
         revealed_ids = {
             drive_id for kind, drive_id, _ in _revealed_set(group) if kind == RevealKind.DRIVE
@@ -483,39 +485,31 @@ def standoff_press(
         message=f"{_word(tier)}. {message}",
         success_level=tier,
         fight_started=fight_started,
+        morale_line=morale_line,
     )
 
 
-def _announce_morale_shift(
-    encounter: CombatEncounter,
+def _morale_shift_line(
     group: StandoffGroup,
     sheet: CharacterSheet,
     before: list[OpponentMoraleState],
     after: list[OpponentMoraleState],
-) -> None:
-    """When a press moves the group's morale to a worse state, tell the room who did it.
+) -> str:
+    """When a press moves the group's morale to a worse state, the room line crediting who did it.
 
-    One line, crediting the persona the actor presents, sent after commit. Nothing is
-    sent when no member's state changed.
+    The persona the actor presents is named, never the character key. Empty when no
+    member's state changed. The action layer sends it right after the press line itself,
+    so the room reads the press before its consequence.
     """
-    from world.combat.interaction_services import broadcast_action_outcome  # noqa: PLC0415
     from world.scenes.services import active_persona_for_sheet  # noqa: PLC0415
 
     changed = [new for old, new in zip(before, after, strict=True) if old != new]
     if not changed:
-        return
+        return ""
     word = "break" if OpponentMoraleState.BREAK in changed else "falter"
-    narration = (
+    return (
         f"{active_persona_for_sheet(sheet).name} shakes the {group.creature_template.name}: "
         f"they {word}."
-    )
-    transaction.on_commit(
-        partial(
-            broadcast_action_outcome,
-            encounter=encounter,
-            narration=narration,
-            deliver_telnet=True,
-        )
     )
 
 
@@ -528,10 +522,17 @@ def _apply_terms(
     terms: StandoffTerms,
     config: StandoffConfig,
     actor: CharacterSheet,
+    tier: int,
 ) -> None:
-    condition = config.turn_condition if terms.effect == TermsEffect.TURN else config.pass_condition
+    """Apply the terms' effect; a critical applies ``critical_effect`` instead when authored."""
+    effect = (
+        terms.critical_effect
+        if tier >= CRITICAL_LEVEL and terms.critical_effect
+        else (terms.effect)
+    )
+    condition = config.turn_condition if effect == TermsEffect.TURN else config.pass_condition
     for member in members:
-        if terms.effect == TermsEffect.FLEE:
+        if effect == TermsEffect.FLEE:
             member.status = OpponentStatus.FLED
             member.save(update_fields=["status"])
         elif condition is not None and member.objectdb is not None:
@@ -591,7 +592,7 @@ def standoff_terms(
             success_level=tier,
             fight_started=fight_started,
         )
-    _apply_terms(members, terms, config, sheet)
+    _apply_terms(members, terms, config, sheet, tier)
     group.state = StandoffGroupState.SETTLED
     group.settled_outcome = result.outcome
     group.save(update_fields=["state", "settled_outcome"])
@@ -610,7 +611,18 @@ def standoff_terms(
     )
 
 
-@flush_cache_on_error(lambda _participant, encounter, **__: encounter)
+def _fight_encounter(
+    participant: CombatParticipant | None = None,  # noqa: ARG001 - mirrors the verb signature
+    encounter: CombatEncounter | None = None,
+) -> CombatEncounter:
+    """The encounter ``standoff_fight`` was called on, whether passed by position or keyword."""
+    if encounter is None:
+        msg = "standoff_fight needs an encounter"
+        raise TypeError(msg)
+    return encounter
+
+
+@flush_cache_on_error(_fight_encounter)
 @transaction.atomic
 def standoff_fight(
     participant: CombatParticipant,  # noqa: ARG001 - uniform verb signature

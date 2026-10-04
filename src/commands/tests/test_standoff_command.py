@@ -165,6 +165,21 @@ class CmdStandoffTests(TestCase):
         self.assertNotIn("SOMEONE ELSES", text)
         self.assertIn("unread", text)
 
+    def test_summary_shows_the_critical_upgrade_on_terms_that_have_one(self) -> None:
+        from world.standoffs.constants import TermsEffect
+
+        config = StandoffConfig.load()
+        config.terms_check_type = CheckTypeFactory()
+        config.save()
+        self.terms.critical_effect = TermsEffect.TURN
+        self.terms.save(update_fields=["critical_effect"])
+        StandoffTermsFactory(name="Plain Terms")
+        cmd = self._cmd("")
+        cmd.func()
+        text = cmd.msg.call_args.args[0]
+        self.assertRegex(text, r"terms Let Us Pass: \w+ \(on a critical: Turn\)")
+        self.assertNotRegex(text, r"terms Plain Terms: \w+ \(on a critical")
+
     def test_summary_shows_a_spark_another_character_shared(self) -> None:
         other = CharacterSheetFactory()
         CombatParticipantFactory(encounter=self.encounter, character_sheet=other)

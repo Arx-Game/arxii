@@ -19,3 +19,4 @@ class StandoffActionResult:
     revealed: list[StandoffReveal] = field(default_factory=list)
     fight_started: bool = False
     settled: bool = False
+    morale_line: str = ""

@@ -290,17 +290,13 @@ def _render_view(view: StandoffView) -> list[str]:
             if spark.group_id == group.group_id and spark.text
         )
         lines.extend(
-            f"    press {approach.name}: {approach.grade_label}"
-            + (
-                f" ({'; '.join(lever.text for lever in approach.levers)})"
-                if approach.levers
-                else ""
-            )
+            f"    press {approach.name}: {approach.grade_label}" + _lever_suffix(approach.levers)
             for approach in view.approaches
             if approach.group_id == group.group_id
         )
         lines.extend(
             f"    terms {terms.name}: {terms.grade_label}"
+            + (f" (on a critical: {terms.critical_label})" if terms.critical_label else "")
             for terms in view.terms
             if terms.group_id == group.group_id
         )

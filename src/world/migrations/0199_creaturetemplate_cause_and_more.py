@@ -672,4 +672,91 @@ class Migration(migrations.Migration):
                 null=True,
             ),
         ),
+        migrations.AddField(
+            model_name="standoffterms",
+            name="critical_effect",
+            field=models.CharField(
+                blank=True,
+                choices=[
+                    ("pass", "Let us pass"),
+                    ("flee", "Clear off"),
+                    ("turn", "Turn"),
+                    ("toll", "Pay us"),
+                ],
+                help_text="The effect applied INSTEAD of the usual one on a critical success; blank means a critical does the same as any success. Any toll comes from the mission's own reward lines on the critical tier.",
+                max_length=20,
+            ),
+        ),
+        migrations.CreateModel(
+            name="StandoffReactionLine",
+            fields=[
+                (
+                    "id",
+                    models.BigAutoField(
+                        auto_created=True,
+                        primary_key=True,
+                        serialize=False,
+                        verbose_name="ID",
+                    ),
+                ),
+                (
+                    "min_success_level",
+                    models.SmallIntegerField(
+                        help_text="Line applies from this success level up (-2 critical failure to 2 critical success); the highest floor at or below the roll wins."
+                    ),
+                ),
+                (
+                    "text",
+                    models.TextField(
+                        help_text="The line shown to the room (author in admin). <actor> is the presented name, <group> the creature kind."
+                    ),
+                ),
+                (
+                    "approach",
+                    models.ForeignKey(
+                        blank=True,
+                        help_text="The approach this line reacts to (set this or terms, not both).",
+                        null=True,
+                        on_delete=django.db.models.deletion.CASCADE,
+                        related_name="reaction_lines",
+                        to="arxii.standoffapproach",
+                    ),
+                ),
+                (
+                    "creature_template",
+                    models.ForeignKey(
+                        blank=True,
+                        help_text="When set, the line applies only to this creature kind and beats a generic line at the same floor.",
+                        null=True,
+                        on_delete=django.db.models.deletion.CASCADE,
+                        related_name="+",
+                        to="arxii.creaturetemplate",
+                    ),
+                ),
+                (
+                    "terms",
+                    models.ForeignKey(
+                        blank=True,
+                        help_text="The terms this line reacts to (set this or approach, not both).",
+                        null=True,
+                        on_delete=django.db.models.deletion.CASCADE,
+                        related_name="reaction_lines",
+                        to="arxii.standoffterms",
+                    ),
+                ),
+            ],
+            options={
+                "ordering": ["approach", "terms", "-min_success_level"],
+                "constraints": [
+                    models.CheckConstraint(
+                        condition=models.Q(
+                            models.Q(("approach__isnull", False), ("terms__isnull", True)),
+                            models.Q(("approach__isnull", True), ("terms__isnull", False)),
+                            _connector="OR",
+                        ),
+                        name="standoff_reaction_line_one_parent",
+                    )
+                ],
+            },
+        ),
     ]

@@ -23,6 +23,7 @@ if TYPE_CHECKING:
     from world.combat.models import CombatEncounter, CombatOpponent, CombatParticipant
     from world.standoffs.models import StandoffConfig, StandoffGroup
 
+DEFAULT_FORCE_WEIGHT_PERCENT = 100  # a tier with no template row counts as one level each
 MIN_PARTY_FORCE_PERCENT = 25  # an under-levelled party never counts for less than this
 
 
@@ -84,12 +85,12 @@ def party_force(encounter: CombatEncounter, config: StandoffConfig) -> float:
     return base * over_level_factor(encounter, config)
 
 
-def _morale_percent(
-    member: CombatOpponent, templates: dict[str, OpponentTierTemplate], config: StandoffConfig
-) -> int:
-    """A faltering or broken member counts for less; a mindless tier is always steady."""
-    if not templates[member.tier].has_morale:
-        return 100
+def _morale_percent(member: CombatOpponent, config: StandoffConfig) -> int:
+    """A faltering or broken member counts for less, mindless or not.
+
+    ``morale_state_for`` reads the raw morale on purpose: a mindless opponent whose morale
+    has been driven low still falters and breaks, so the tier's ``has_morale`` is not read.
+    """
     state = morale_state_for(member)
     if state == OpponentMoraleState.BREAK:
         return config.break_force_percent
@@ -99,14 +100,18 @@ def _morale_percent(
 
 
 def group_force(group: StandoffGroup, config: StandoffConfig) -> float:
-    """Active members' level x tier weight x health x morale, summed."""
-    templates = {tpl.tier: tpl for tpl in OpponentTierTemplate.objects.all()}
+    """Active members' level x tier weight x health x morale, summed.
+
+    A tier with no ``OpponentTierTemplate`` row weighs in at 100 percent, the same
+    "a missing template changes nothing" convention as ``tier_has_morale``.
+    """
+    weights = {tpl.tier: tpl.force_weight_percent for tpl in OpponentTierTemplate.objects.all()}
     return sum(
         member.level
-        * templates[member.tier].force_weight_percent
+        * weights.get(member.tier, DEFAULT_FORCE_WEIGHT_PERCENT)
         / 100
         * _health_fraction(member.health, member.max_health)
-        * _morale_percent(member, templates, config)
+        * _morale_percent(member, config)
         / 100
         for member in active_members(group)
     )

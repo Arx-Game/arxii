@@ -84682,7 +84682,10 @@ components:
           type: string
         grade_label:
           type: string
+        critical_label:
+          type: string
       required:
+      - critical_label
       - description
       - grade
       - grade_label

@@ -7,6 +7,7 @@ from world.standoffs.models import (
     RegardRule,
     StandoffApproach,
     StandoffConfig,
+    StandoffReactionLine,
     StandoffTerms,
 )
 
@@ -27,21 +28,46 @@ class RegardRuleInline(admin.StackedInline):
     autocomplete_fields = ("drive", "deed_archetype")
 
 
+class StandoffReactionLineInline(admin.StackedInline):
+    """Reaction lines edited on the approach or terms page (stacked: they carry prose)."""
+
+    model = StandoffReactionLine
+    extra = 0
+    autocomplete_fields = ("creature_template",)
+
+
+class ApproachReactionLineInline(StandoffReactionLineInline):
+    fk_name = "approach"
+
+
+class TermsReactionLineInline(StandoffReactionLineInline):
+    fk_name = "terms"
+
+
 @admin.register(StandoffApproach)
 class StandoffApproachAdmin(admin.ModelAdmin):
     list_display = ("name", "check_type", "capability", "damages_morale", "display_order")
     search_fields = ("name",)
     autocomplete_fields = ("check_type", "capability", "sway_target")
     filter_horizontal = ("archetypes",)
+    inlines = (ApproachReactionLineInline,)
 
 
 @admin.register(StandoffTerms)
 class StandoffTermsAdmin(admin.ModelAdmin):
-    list_display = ("name", "effect", "required_drive", "difficulty_shift_bands", "display_order")
+    list_display = (
+        "name",
+        "effect",
+        "critical_effect",
+        "required_drive",
+        "difficulty_shift_bands",
+        "display_order",
+    )
     list_filter = ("effect",)
     search_fields = ("name",)
     autocomplete_fields = ("required_drive",)
     filter_horizontal = ("archetypes",)
+    inlines = (TermsReactionLineInline,)
 
 
 @admin.register(StandoffConfig)

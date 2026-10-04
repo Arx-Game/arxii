@@ -35,3 +35,7 @@ _Avoid_: sway (an Application name), lever (the player-facing word for a reveale
 **Read** / **Press**:
 Read is the check that reveals one hidden thing about a group (cause, drive or regard): a partial reveals one at random, a success the one the reader chose, a critical everything. Press is a social approach that eases terms. Both are verbs of `world/standoffs/services/verbs.py`.
 _Avoid_: consider (a Consider read is a level-band concept in combat), probe (a combat health read), persuade
+
+**Reaction line (standoff)** (`StandoffReactionLine`):
+Staff-authored room text for how a press or terms roll lands, banded by success level (highest floor at or below the roll wins; a creature-specific line beats a generic one at the same floor). It replaces the plain outcome line for that action.
+_Avoid_: NPC reaction line (`NPCReactionLine` is a different thing: an NPC role's line banded on the served character's allure or menace), flavour text, barks

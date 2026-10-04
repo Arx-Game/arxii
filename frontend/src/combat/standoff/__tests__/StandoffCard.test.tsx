@@ -81,6 +81,7 @@ const STANDOFF: StandoffView = {
       description: 'Test terms outcome.',
       grade: 'hard',
       grade_label: 'Hard',
+      critical_label: 'Turn',
     },
   ],
   sparks: [{ group_id: 11, regard_rule_id: 41, text: 'Test spark', shared: false }],
@@ -155,6 +156,11 @@ describe('StandoffCard', () => {
       kwargs: { group_id: 11, terms_id: 31 },
     });
     expect(screen.queryByTestId('standoff-terms-confirm')).toBeNull();
+  });
+
+  it('shows what a critical roll on the terms would do instead', () => {
+    renderCard();
+    expect(screen.getByText('On a critical: Turn')).toBeInTheDocument();
   });
 
   it('keeps pressing without naming terms', async () => {

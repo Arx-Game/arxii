@@ -36,7 +36,7 @@ umbrella #4121. Slice 1 shipped; later slices are listed at the end.
 | `CreatureDrive` (:26) | A property a creature template wants, with `DriveStrength` (1 Minor, 2 Major, 3 Defining). Unique per template and property. |
 | `RegardRule` (:60) | How a template regards particular characters: predicate `rule` (the one ratified JSON field, ADR-0007), `deed_archetype` FK, `difficulty_shift_bands`, `drive` + `drive_shift`, `suppresses_cause`, `spark_text`, `revealed_text`. |
 | `StandoffApproach` (:133) | A press: `check_type`, `capability` (aims at drives through `Application`), `sway_target` modifier target, `damages_morale`, `archetypes`, `display_order`. |
-| `StandoffTerms` (:181) | `effect` (`TermsEffect`: PASS, FLEE, TURN, TOLL), `required_drive`, `difficulty_shift_bands`, `archetypes`, `display_order`. |
+| `StandoffTerms` (:181) | `effect` (`TermsEffect`: PASS, FLEE, TURN, TOLL), `critical_effect` (applied instead on a critical), `required_drive`, `difficulty_shift_bands`, `archetypes`, `display_order`. |
 | `StandoffConfig` (:222) | Singleton: `read_check_type`, `terms_check_type`, `pass_condition`, `turn_condition`, `botch_force_bands`, `band_force_percent`, `over_level_percent_per_tier`, `falter_force_percent`, `break_force_percent`. `load()` returns it. |
 | `StandoffGroup` (:296) | One band in one encounter: `creature_template`, `state` (OPEN, SETTLED, FIGHTING), `terms_ease`, `emboldened_bands`, `settled_outcome`. Unique per encounter and template. Deleting its `creature_template` deletes the group (CASCADE). |
 | `StandoffReveal` (:345) | A thing a read uncovered: `kind` (CAUSE, DRIVE, REGARD) plus the drive or rule. Group-wide, shared knowledge. |
@@ -82,8 +82,10 @@ drive and regard-rule inlines on the creature template.
   `broadcast_action_outcome(deliver_telnet=True)`, and the actor's result message ends "They
   attack!". Terms-wheel theater is emitted after commit too. A press with `damages_morale` that moves a
   member's morale state to a worse one (steady to falter, or to break) sends one more line after
-  commit, "<persona> shakes the <group>: they falter." (or "they break."), crediting the persona
-  the actor presents; no line when no state changed. A verb that raises flushes the
+  one more line, "<persona> shakes the <group>: they falter." (or "they break."), crediting the
+  persona the actor presents; no line when no state changed. The verb returns it as
+  `StandoffActionResult.morale_line` and the action layer sends it right after the press line,
+  so the room reads the press before its consequence. A verb that raises flushes the
   encounter, its groups and its opponents from the identity map (`flush_cache_on_error`) so
   the cache matches the rolled-back database. `begin_round_or_break_standoff` returns whether
   a round began; the GM view answers 409 and the GM action says so when it did not.
@@ -110,6 +112,20 @@ drive and regard-rule inlines on the creature template.
   FLED). A terms entry with a `required_drive` is refused until that drive is read. TOLL is
   PASS mechanics, authored with a required Greedy-type drive; any payout comes from the mission
   author's reward lines on the routed tier (`MissionOptionRouteReward`), no new reward model.
+- **Critical upgrade**: `StandoffTerms.critical_effect` (blank = none, `clean()` rejects a value
+  equal to `effect`) is applied instead of `effect` on a critical (success level 2); the settled
+  outcome is still the critical `CheckOutcome`, so the mission routes the critical tier and its
+  reward lines pay any toll. Payload and telnet terms rows carry it as `critical_label` ("on a
+  critical: Turn") so a player knows a spectacular roll can do more.
+- **Reaction lines** (`StandoffReactionLine`, `services/reactions.py`): staff-authored room text
+  on a press approach or a terms row, banded by success level on the -2..2 scale. The highest
+  `min_success_level` at or below the roll wins; at an equal floor a line tied to the group's
+  `creature_template` beats a generic one. `<actor>` is the presented persona name, `<group>` the
+  creature kind. The line REPLACES the plain "presses ... : success." room line (one line per
+  action; no line authored keeps the plain one), and is sent by the action layer through
+  `broadcast_action_outcome(deliver_telnet=True)`. Refusals announce nothing. Admin inlines sit
+  on the approach and terms pages. Distinct from `NPCReactionLine` (NPC role, banded on a
+  character metric).
 - **Sparks**: acting on a spark (press or terms by the matched character while that rule
   shifts their grade) auto-records the share.
 
@@ -161,7 +177,7 @@ Staff author in admin: drives, regard rules and cause on creature templates; app
 terms; the `StandoffConfig` singleton. The tuning dashboard
 (`web/admin/tuning/required_content.py`) carries three REQUIRED entries, `standoff-config`
 (all four links set), `standoff-approaches` and `standoff-terms`; without them players can
-only fight. Player-facing prose (spark text, names) is authored in admin.
+only fight. A TUNING entry, `standoff-reaction-lines`, notes the authored flavour lines. Player-facing prose (spark text, names) is authored in admin.
 
 ## Deviations and rulings
 

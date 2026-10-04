@@ -64,6 +64,19 @@ class ForceTests(TestCase):
         self.tier_template.save(update_fields=["force_weight_percent"])
         self.assertEqual(group_force(self._group(), self.config), 8)
 
+    def test_a_tier_with_no_template_row_weighs_one_hundred_percent(self) -> None:
+        self.tier_template.delete()
+        self.assertEqual(group_force(self._group(), self.config), 16)
+
+    def test_a_mindless_tier_driven_to_break_counts_for_less(self) -> None:
+        self.tier_template.has_morale = False
+        self.tier_template.save(update_fields=["has_morale"])
+        for mook in self.mooks:
+            mook.morale = 0
+            mook.save(update_fields=["morale"])
+        expected = 16 * self.config.break_force_percent / 100
+        self.assertEqual(group_force(self._group(), self.config), expected)
+
     def test_group_force_counts_active_members_only(self) -> None:
         self.mooks[0].status = OpponentStatus.DEFEATED
         self.mooks[0].save(update_fields=["status"])
