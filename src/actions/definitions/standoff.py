@@ -57,6 +57,24 @@ def _to_result(outcome: StandoffActionResult) -> ActionResult:
     return ActionResult(success=outcome.success, message=outcome.message)
 
 
+def _announce(participant: CombatParticipant, line: str, outcome: StandoffActionResult) -> None:
+    """Tell the room what the verb was, once it actually happened (not when it was refused).
+
+    The line names the actor, the verb, the group and a plain outcome word, and nothing the
+    verb learned or any hidden profile detail: reveals travel only in the reader's own
+    message and the party payload.
+    """
+    from world.combat.interaction_services import broadcast_action_outcome  # noqa: PLC0415
+
+    if not outcome.success and outcome.success_level is None:
+        return
+    broadcast_action_outcome(encounter=participant.encounter, narration=line, deliver_telnet=True)
+
+
+def _outcome_word(outcome: StandoffActionResult) -> str:
+    return "success" if outcome.success else "failure"
+
+
 def _read_result(
     outcome: StandoffActionResult, group: StandoffGroup, participant: CombatParticipant
 ) -> ActionResult:
@@ -105,6 +123,11 @@ class StandoffReadAction(Action):
             focus_regard_rule_id=focus_regard_rule_id,
             focus_property_id=focus_property_id,
         )
+        _announce(
+            participant,
+            f"{actor.key} reads the {group.creature_template.name}: {_outcome_word(outcome)}.",
+            outcome,
+        )
         return _read_result(outcome, group, participant)
 
 
@@ -139,7 +162,14 @@ class StandoffPressAction(Action):
         approach = StandoffApproach.objects.filter(pk=approach_id).first()
         if approach is None:
             return ActionResult(success=False, message="No such approach.")
-        return _to_result(standoff_press(participant, group, approach))
+        outcome = standoff_press(participant, group, approach)
+        _announce(
+            participant,
+            f"{actor.key} presses the {group.creature_template.name} with {approach.name}: "
+            f"{_outcome_word(outcome)}.",
+            outcome,
+        )
+        return _to_result(outcome)
 
 
 @dataclass
@@ -173,7 +203,14 @@ class StandoffTermsAction(Action):
         terms = StandoffTerms.objects.filter(pk=terms_id).first()
         if terms is None:
             return ActionResult(success=False, message="No such terms.")
-        return _to_result(standoff_terms(participant, group, terms))
+        outcome = standoff_terms(participant, group, terms)
+        _announce(
+            participant,
+            f"{actor.key} names {terms.name} to the {group.creature_template.name}: "
+            f"{_outcome_word(outcome)}.",
+            outcome,
+        )
+        return _to_result(outcome)
 
 
 @dataclass
@@ -198,7 +235,9 @@ class StandoffFightAction(Action):
         participant = _standoff_participant(actor)
         if participant is None:
             return ActionResult(success=False, message=NOT_IN_STANDOFF_MESSAGE)
-        return _to_result(standoff_fight(participant, participant.encounter))
+        outcome = standoff_fight(participant, participant.encounter)
+        _announce(participant, f"{actor.key} breaks the standoff.", outcome)
+        return _to_result(outcome)
 
 
 @dataclass
@@ -234,4 +273,10 @@ class StandoffShareSparkAction(Action):
         ).first()
         if rule is None:
             return ActionResult(success=False, message="That does not apply to you.")
-        return _to_result(standoff_share_spark(participant, group, rule))
+        outcome = standoff_share_spark(participant, group, rule)
+        _announce(
+            participant,
+            f"{actor.key} shares what they feel about the {group.creature_template.name}.",
+            outcome,
+        )
+        return _to_result(outcome)

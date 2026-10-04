@@ -114,6 +114,31 @@ class MissionJourneyTests(StandoffJourneyBase):
         self.group.refresh_from_db()
         self.assertEqual(self.group.state, StandoffGroupState.SETTLED)
 
+    def test_each_verb_announces_one_plain_line_with_no_hidden_detail(self) -> None:
+        announce = "world.combat.interaction_services.broadcast_action_outcome"
+        group_name = self.creature.name
+        with patch(announce) as broadcast, patch(CHECK, return_value=_roll(self.success_tier)):
+            self._do("standoff_press", group_id=self.group.pk, approach_id=self.approach.pk)
+            self._do("standoff_read", group_id=self.group.pk)
+        lines = [call.kwargs["narration"] for call in broadcast.call_args_list]
+        self.assertEqual(
+            lines,
+            [
+                f"{self.character.key} presses the {group_name} with {self.approach.name}: "
+                "success.",
+                f"{self.character.key} reads the {group_name}: success.",
+            ],
+        )
+        for line in lines:
+            self.assertNotIn(self.drive.property.name, line)
+
+    def test_a_refused_verb_announces_nothing(self) -> None:
+        announce = "world.combat.interaction_services.broadcast_action_outcome"
+        elsewhere = StandoffGroupFactory(encounter=CombatEncounterFactory())
+        with patch(announce) as broadcast:
+            self._do("standoff_read", group_id=elsewhere.pk)
+        broadcast.assert_not_called()
+
     def test_a_verb_after_the_standoff_ended_is_refused(self) -> None:
         self.assertTrue(self._do("standoff_fight").success)
         with patch(CHECK) as roll:

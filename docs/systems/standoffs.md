@@ -98,7 +98,14 @@ drive and regard-rule inlines on the creature template.
   `standoff_read`, `standoff_press`, `standoff_terms`, `standoff_fight`,
   `standoff_share_spark`.
 - Telnet: `CmdStandoff` (`commands/standoff.py`, key `standoff`): bare summary, `read`,
-  `press`, `terms`, `share`, `fight`. Thin dispatch only.
+  `press`, `terms`, `share`, `fight`. Thin dispatch only. The bare summary renders
+  `build_standoff_view` as text (groups, hidden count, revealed cause and drives, visible
+  regard, the viewer's sparks and shared sparks, approaches with grades and lever lines,
+  terms with grades), so it carries exactly what the web payload does.
+- Public lines: after a verb really happens (a refusal says nothing), the action layer sends
+  one short line through `broadcast_action_outcome` (web and telnet), for example "Vess
+  presses the Roadside Bandits with Threaten: success." It names the actor, verb, group and a
+  plain outcome word only; reveals stay in the reader's own message and the party payload.
 - Web: `StandoffCard` (`frontend/src/combat/standoff/StandoffCard.tsx`), rendered by
   `CombatTurnPanel` from the encounter detail's `standoff` block
   (`combat/serializers.py:1366`, `build_standoff_view`).
