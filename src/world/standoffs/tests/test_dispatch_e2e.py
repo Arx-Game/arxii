@@ -121,16 +121,38 @@ class MissionJourneyTests(StandoffJourneyBase):
             self._do("standoff_press", group_id=self.group.pk, approach_id=self.approach.pk)
             self._do("standoff_read", group_id=self.group.pk)
         lines = [call.kwargs["narration"] for call in broadcast.call_args_list]
+        who = self.character.sheet_data.primary_persona.name
         self.assertEqual(
             lines,
             [
-                f"{self.character.key} presses the {group_name} with {self.approach.name}: "
-                "success.",
-                f"{self.character.key} reads the {group_name}: success.",
+                f"{who} presses the {group_name} with {self.approach.name}: success.",
+                f"{who} reads the {group_name}: success.",
             ],
         )
         for line in lines:
             self.assertNotIn(self.drive.property.name, line)
+
+    def test_the_line_carries_the_presented_persona_never_the_character_key(self) -> None:
+        from world.scenes.constants import PersonaType
+        from world.scenes.factories import PersonaFactory
+        from world.scenes.services import set_active_persona
+
+        sheet = self.character.sheet_data
+        alt = PersonaFactory(
+            character_sheet=sheet, name="Masked Stranger", persona_type=PersonaType.ESTABLISHED
+        )
+        set_active_persona(sheet, alt)
+        announce = "world.combat.interaction_services.broadcast_action_outcome"
+        with patch(announce) as broadcast, patch(CHECK, return_value=_roll(self.success_tier)):
+            self._do("standoff_press", group_id=self.group.pk, approach_id=self.approach.pk)
+            self._do("standoff_read", group_id=self.group.pk)
+            self._do("standoff_share_spark", group_id=self.group.pk, regard_rule_id=0)
+            self._do("standoff_fight")
+        lines = [call.kwargs["narration"] for call in broadcast.call_args_list]
+        self.assertGreaterEqual(len(lines), 3)
+        for line in lines:
+            self.assertTrue(line.startswith("Masked Stranger "), line)
+            self.assertNotIn(self.character.key, line)
 
     def test_a_refused_verb_announces_nothing(self) -> None:
         announce = "world.combat.interaction_services.broadcast_action_outcome"

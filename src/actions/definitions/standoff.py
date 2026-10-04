@@ -71,6 +71,13 @@ def _announce(participant: CombatParticipant, line: str, outcome: StandoffAction
     broadcast_action_outcome(encounter=participant.encounter, narration=line, deliver_telnet=True)
 
 
+def _actor_label(participant: CombatParticipant) -> str:
+    """The name the actor is presenting under, never the character's true key."""
+    from world.scenes.services import active_persona_for_sheet  # noqa: PLC0415
+
+    return active_persona_for_sheet(participant.character_sheet).name
+
+
 def _outcome_word(outcome: StandoffActionResult) -> str:
     return "success" if outcome.success else "failure"
 
@@ -125,7 +132,8 @@ class StandoffReadAction(Action):
         )
         _announce(
             participant,
-            f"{actor.key} reads the {group.creature_template.name}: {_outcome_word(outcome)}.",
+            f"{_actor_label(participant)} reads the {group.creature_template.name}: "
+            f"{_outcome_word(outcome)}.",
             outcome,
         )
         return _read_result(outcome, group, participant)
@@ -165,7 +173,8 @@ class StandoffPressAction(Action):
         outcome = standoff_press(participant, group, approach)
         _announce(
             participant,
-            f"{actor.key} presses the {group.creature_template.name} with {approach.name}: "
+            f"{_actor_label(participant)} presses the {group.creature_template.name} "
+            f"with {approach.name}: "
             f"{_outcome_word(outcome)}.",
             outcome,
         )
@@ -206,7 +215,8 @@ class StandoffTermsAction(Action):
         outcome = standoff_terms(participant, group, terms)
         _announce(
             participant,
-            f"{actor.key} names {terms.name} to the {group.creature_template.name}: "
+            f"{_actor_label(participant)} names {terms.name} to "
+            f"the {group.creature_template.name}: "
             f"{_outcome_word(outcome)}.",
             outcome,
         )
@@ -236,7 +246,7 @@ class StandoffFightAction(Action):
         if participant is None:
             return ActionResult(success=False, message=NOT_IN_STANDOFF_MESSAGE)
         outcome = standoff_fight(participant, participant.encounter)
-        _announce(participant, f"{actor.key} breaks the standoff.", outcome)
+        _announce(participant, f"{_actor_label(participant)} breaks the standoff.", outcome)
         return _to_result(outcome)
 
 
@@ -276,7 +286,8 @@ class StandoffShareSparkAction(Action):
         outcome = standoff_share_spark(participant, group, rule)
         _announce(
             participant,
-            f"{actor.key} shares what they feel about the {group.creature_template.name}.",
+            f"{_actor_label(participant)} shares what they feel about "
+            f"the {group.creature_template.name}.",
             outcome,
         )
         return _to_result(outcome)
