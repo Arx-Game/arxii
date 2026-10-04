@@ -49,7 +49,6 @@ const STANDOFF: StandoffView = {
   terms: [{ terms_id: 31, name: 'Test terms', group_id: 11, grade: 'Hard' }],
   sparks: [{ group_id: 11, regard_rule_id: 41, text: 'Test spark', shared: false }],
   shared_sparks: [],
-  owner_options: [],
 };
 
 let client: QueryClient;

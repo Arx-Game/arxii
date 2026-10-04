@@ -122,7 +122,8 @@ standoff.
 - Approaches and terms are listed only for OPEN groups with active members.
 - Approach and terms grades are the viewer's own. Terms with an unread required drive are
   omitted.
-- `owner_options` is reserved and always empty. Group mission ballots still show every
+- There is no owner-only options field: mission owner-only option reasons ship through the
+  mission option reasons (Story 6). Group mission ballots still show every
   participant's gated option labels to the whole group (the pre-existing shared vote,
   `missions/services/multiplayer.py`); only the "because" reason is owner-only.
 

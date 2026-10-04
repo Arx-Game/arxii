@@ -48,4 +48,3 @@ class StandoffViewSerializer(serializers.Serializer):
     terms = TermsViewSerializer(many=True)
     sparks = SparkViewSerializer(many=True)
     shared_sparks = SparkViewSerializer(many=True)
-    owner_options = serializers.ListField(child=serializers.CharField())

@@ -46004,7 +46004,6 @@ export interface components {
       terms: components['schemas']['TermsView'][];
       sparks: components['schemas']['SparkView'][];
       shared_sparks: components['schemas']['SparkView'][];
-      owner_options: string[];
     };
     /**
      * @description Serializer for starting areas.

@@ -228,9 +228,6 @@ class GradeAndTermsTests(ViewBase):
             names = [t.name for t in self.view_for(self.sheet_b).terms]
         self.assertEqual(set(names), {open_terms.name, gated.name})
 
-    def test_owner_options_is_empty(self) -> None:
-        self.assertEqual(self.view_for(self.sheet_a).owner_options, [])
-
 
 class EncounterApiTests(CombatEncounterViewSetTestBase):
     def setUp(self) -> None:
@@ -250,7 +247,7 @@ class EncounterApiTests(CombatEncounterViewSetTestBase):
         self.assertEqual(response.status_code, 200)
         standoff = response.data["standoff"]
         self.assertEqual(len(standoff["groups"]), 1)
-        self.assertEqual(standoff["owner_options"], [])
+        self.assertNotIn("owner_options", standoff)
 
     def test_a_non_participant_gets_none(self) -> None:
         self.assertIsNone(self._get(self.gm_account).data["standoff"])

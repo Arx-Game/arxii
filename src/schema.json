@@ -81792,14 +81792,9 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/SparkView'
-        owner_options:
-          type: array
-          items:
-            type: string
       required:
       - approaches
       - groups
-      - owner_options
       - shared_sparks
       - sparks
       - terms

@@ -92,8 +92,6 @@ class StandoffView:
     terms: list[TermsView] = field(default_factory=list)
     sparks: list[SparkView] = field(default_factory=list)
     shared_sparks: list[SparkView] = field(default_factory=list)
-    # Reserved for mission owner-only options; always empty in this slice.
-    owner_options: list[str] = field(default_factory=list)
 
 
 @dataclass
