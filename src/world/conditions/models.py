@@ -14,10 +14,12 @@ from decimal import Decimal
 from typing import TYPE_CHECKING
 
 from django.core.exceptions import ValidationError
+from django.core.validators import MinValueValidator
 from django.db import models
 from django.db.models import Q
 from django.utils.functional import cached_property
 
+from core.managers import ArxSharedMemoryManager
 from core.models import ArxSharedMemoryModel as SharedMemoryModel
 from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
 from world.conditions.constants import (
@@ -1306,6 +1308,35 @@ class ConditionConditionInteraction(NaturalKeyMixin, SharedMemoryModel):
 # =============================================================================
 
 
+class SettleConfig(SharedMemoryModel):
+    """Singleton (pk=1): how out-of-combat time settles round-based effects (#4120).
+
+    Authored via admin; read through get_settle_config().
+    """
+
+    objects = ArxSharedMemoryManager()
+
+    settled_seconds_per_round = models.PositiveIntegerField(
+        default=300,
+        validators=[MinValueValidator(1)],
+        help_text=(
+            "Real-time seconds of out-of-combat time that count as one round when "
+            "settling round-based effects."
+        ),
+    )
+    lapse_warning_seconds = models.PositiveIntegerField(
+        default=300,
+        validators=[MinValueValidator(1)],
+        help_text=(
+            "Seconds between lapse warnings: the minimum real-time gap before a bearer "
+            "is warned again that a condition is about to lapse."
+        ),
+    )
+
+    def __str__(self) -> str:
+        return "Settle config"
+
+
 class ConditionInstance(SharedMemoryModel):
     """
     An active condition on a character, object, or room.
@@ -1369,6 +1400,23 @@ class ConditionInstance(SharedMemoryModel):
         null=True,
         blank=True,
         help_text="Rounds until progression to next stage",
+    )
+    last_settled_tick_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text=(
+            "When this instance's round-based effects were last settled out of combat "
+            "(#4120). Elapsed time since this point converts to rounds via "
+            "SettleConfig.settled_seconds_per_round."
+        ),
+    )
+    lapse_warned_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text=(
+            "When the bearer was last warned that this condition is about to lapse "
+            "(#4120). Rate-limits the warning to one per SettleConfig.lapse_warning_seconds."
+        ),
     )
 
     # === Break-Free State (#2706) ===

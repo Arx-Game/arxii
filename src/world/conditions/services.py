@@ -67,6 +67,7 @@ from world.conditions.models import (
     DamageSuccessLevelMultiplier,
     DamageType,
     PenetrationOutcomeFactor,
+    SettleConfig,
     TreatmentAttempt,
     TreatmentTemplate,
 )
@@ -165,6 +166,18 @@ def resolve_damage_type_resistance(
     resistance = character.conditions.resistance_modifier(damage_type)
     resistance += gift_thread_resistance(character, damage_type)
     return max(0, damage_amount - resistance)
+
+
+def get_settle_config() -> SettleConfig:
+    """Return the SettleConfig singleton (pk=1), creating it lazily on first call.
+
+    Holds how out-of-combat time settles round-based effects (#4120). Configure via
+    the Django admin.
+    """
+    cfg = SettleConfig.objects.cached_singleton()
+    if cfg is None:
+        cfg, _ = SettleConfig.objects.get_or_create(pk=1)
+    return cfg
 
 
 def get_active_conditions(
