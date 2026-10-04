@@ -299,6 +299,7 @@ def auto_settle_lapsed_allegiance(instance: ConditionInstance) -> bool:
     Returns False when the hold has no played charmer or its condition has no
     ``allegiance_break_check_type`` (missing content: one warning, the caller falls
     back to plain removal). Never opens an encounter or any hostility (Decision 21).
+    The check difficulty (the hold's strength points) is PLACEHOLDER tuning (#4120).
     """
     from world.checks.services import perform_check  # noqa: PLC0415
 
@@ -314,6 +315,7 @@ def auto_settle_lapsed_allegiance(instance: ConditionInstance) -> bool:
             instance.condition_id,
         )
         return False
+    # PLACEHOLDER tuning (#4120): difficulty is just the hold's strength points.
     check_result = perform_check(
         charmer, check_type, target_difficulty=max(0, charm_strength_points(instance))
     )

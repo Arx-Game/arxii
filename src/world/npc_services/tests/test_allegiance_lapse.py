@@ -27,6 +27,7 @@ from world.conditions.factories import ConditionInstanceFactory, ConditionTempla
 from world.conditions.models import ConditionInstance
 from world.game_clock.tasks import batch_condition_expiration_cleanup
 from world.npc_services.allegiance_outcomes import (
+    charm_strength_points,
     end_allegiance_with_pool,
     lapsed_allegiance_sweep,
 )
@@ -237,10 +238,9 @@ class LapseWarningAndAutoSettleTests(TestCase):
     def _assert_auto_settled(self, success_level: int) -> None:
         instance = self._hold(seconds=-60)
         before = CombatEncounter.objects.count()
+        canned = self._result(success_level)
         with (
-            mock.patch(
-                "world.checks.services.perform_check", return_value=self._result(success_level)
-            ) as roll,
+            mock.patch("world.checks.services.perform_check", return_value=canned) as roll,
             mock.patch(
                 "world.npc_services.allegiance_outcomes.end_allegiance_with_pool",
                 wraps=end_allegiance_with_pool,
@@ -249,7 +249,12 @@ class LapseWarningAndAutoSettleTests(TestCase):
             lapsed_allegiance_sweep()
         roll.assert_called_once()
         self.assertIs(roll.call_args.args[0], self.charmer)
+        self.assertEqual(
+            roll.call_args.kwargs["target_difficulty"], max(0, charm_strength_points(instance))
+        )
         ending.assert_called_once()
+        self.assertIs(ending.call_args.kwargs["check_result"], canned)
+        self.assertIs(ending.call_args.kwargs["actor"], self.charmer)
         self.assertFalse(ConditionInstance.objects.filter(pk=instance.pk).exists())
         self.assertEqual(CombatEncounter.objects.count(), before)
 
