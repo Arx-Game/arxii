@@ -28,6 +28,7 @@ if TYPE_CHECKING:
     from world.combat.models import CombatEncounter
     from world.missions.models import MissionInstance, MissionNode, MissionOption
     from world.scenes.models import Scene
+    from world.traits.models import CheckOutcome
 
 logger = logging.getLogger(__name__)
 
@@ -180,6 +181,12 @@ def complete_encounter_for_option(encounter: CombatEncounter) -> MissionDeedReco
             deed.node_id,
         )
         return None
+    return _grade_pending_deed(deed, tier)
+
+
+def _grade_pending_deed(deed: MissionDeedRecord, tier: CheckOutcome) -> MissionDeedRecord:
+    """Unpause the run, route ``deed`` through ``tier`` and narrate it."""
+    instance = deed.instance
     instance.is_paused = False
     instance.save(update_fields=["is_paused"])
     actor = MissionParticipant.objects.get(instance=instance, character=deed.actor)
@@ -196,3 +203,30 @@ def complete_encounter_for_option(encounter: CombatEncounter) -> MissionDeedReco
     )
     _narrate_encounter_resolution(instance, deed, character)
     return deed
+
+
+def complete_standoff_for_option(encounter: CombatEncounter) -> MissionDeedRecord | None:
+    """Grade the pending deed of a standoff the party settled with terms.
+
+    The tier is the lowest ``success_level`` among the groups' ``settled_outcome``
+    (the weakest terms the party had to accept). Same guards as
+    ``complete_encounter_for_option``. Run BEFORE the encounter is completed: it sets the
+    deed's outcome, so the ENCOUNTER_COMPLETED handler's ``complete_encounter_for_option``
+    then returns ``None`` and the mission routes exactly once. Returns ``None`` without
+    touching the deed when no group carries a settled outcome (every group emptied), so
+    the ordinary VICTORY mapping grades it at completion instead.
+    """
+    deed = encounter.scenario_deed
+    if deed is None or deed.outcome_id is not None:
+        return None
+    if deed.instance.status != MissionStatus.ACTIVE:
+        return None
+    outcomes = [
+        group.settled_outcome
+        for group in encounter.standoff_groups.select_related("settled_outcome")
+        if group.settled_outcome is not None
+    ]
+    if not outcomes:
+        return None
+    tier = min(outcomes, key=lambda outcome: outcome.success_level)
+    return _grade_pending_deed(deed, tier)
