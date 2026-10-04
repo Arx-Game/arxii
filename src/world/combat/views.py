@@ -99,6 +99,8 @@ from world.gm.permissions import IsGMOrStaff
 from world.items.models import ItemInstance
 from world.scenes.constants import PersonaType, RoundStatus
 from world.scenes.models import Persona, Scene
+from world.standoffs.constants import StandoffGroupState
+from world.standoffs.models import StandoffGroup
 from world.standoffs.services.state import begin_round_or_break_standoff
 from world.stories.pagination import StandardResultsSetPagination
 
@@ -451,6 +453,11 @@ class CombatEncounterViewSet(ModelViewSet):
                     self._active_conditions_prefetch("objectdb"),
                 ),
                 to_attr="opponents_cached",
+            ),
+            Prefetch(
+                "standoff_groups",
+                queryset=StandoffGroup.objects.filter(state=StandoffGroupState.OPEN),
+                to_attr="standoff_groups_cached",
             ),
             Prefetch(
                 "clashes",

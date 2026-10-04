@@ -159,6 +159,7 @@ function mockEncounter(overrides?: Partial<EncounterDetail>) {
     is_participant: true,
     is_gm: false,
     objective: null,
+    standoff: null,
     participants: [],
     opponents: [],
     current_round_actions: [],

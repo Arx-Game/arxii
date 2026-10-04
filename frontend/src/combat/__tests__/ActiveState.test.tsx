@@ -48,6 +48,7 @@ function makeEncounter(clashes: ClashState[] = []): EncounterDetail {
     is_participant: true,
     is_gm: false,
     objective: null,
+    standoff: null,
     participants: [],
     opponents: [
       {
