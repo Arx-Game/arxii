@@ -23,6 +23,7 @@ from world.conditions.models import (
     DamageType,
     HazardResponseState,
     PenetrationOutcomeFactor,
+    SettleConfig,
     TreatmentTemplate,
 )
 from world.contributors.admin import CREDIT_FIELDSET
@@ -503,3 +504,14 @@ class ConditionStageOnEntryAdmin(admin.ModelAdmin):
     search_fields = ["stage__name", "condition__name"]
     list_select_related = ["stage", "condition"]
     autocomplete_fields = ["stage", "condition"]
+
+
+@admin.register(SettleConfig)
+class SettleConfigAdmin(admin.ModelAdmin):
+    """Singleton (pk=1): how out-of-combat time settles round-based effects (#4120)."""
+
+    list_display = ["pk", "settled_seconds_per_round", "lapse_warning_seconds"]
+
+    def has_add_permission(self, request: object) -> bool:  # noqa: ARG002
+        """Prevent adding a second config; there can be only one."""
+        return not SettleConfig.objects.exists()

@@ -2264,6 +2264,17 @@ def _declarations() -> tuple[ContentDependency, ...]:
             probe=AnyRowProbe(label="FleeConfig"),
         ),
         ContentDependency(
+            key="settle-config",
+            label="Settle rules",
+            tier=DependencyTier.REQUIRED,
+            consumer="world/conditions/services.py get_settle_config()",
+            consequence=(
+                "get_settle_config creates the row lazily with its defaults, so out-of-combat "
+                "settling of round-based effects runs on untuned values until staff author it."
+            ),
+            probe=AnyRowProbe(label="SettleConfig"),
+        ),
+        ContentDependency(
             key="class-stage-health-rates",
             label="Class health growth per level",
             tier=DependencyTier.REQUIRED,

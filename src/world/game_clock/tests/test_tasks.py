@@ -239,10 +239,13 @@ class BatchFormExpirationTests(TestCase):
 
 class BatchConditionExpirationTests(TestCase):
     def test_deletes_expired_conditions(self) -> None:
-        from world.conditions.factories import ConditionInstanceFactory
+        from world.conditions.constants import DurationType
+        from world.conditions.factories import ConditionInstanceFactory, ConditionTemplateFactory
         from world.conditions.models import ConditionInstance
 
+        template = ConditionTemplateFactory(default_duration_type=DurationType.INGAME_TIME)
         expired = ConditionInstanceFactory(
+            condition=template,
             expires_at=timezone.now() - timedelta(hours=1),
         )
         active = ConditionInstanceFactory(
@@ -256,6 +259,29 @@ class BatchConditionExpirationTests(TestCase):
         self.assertNotIn(expired.pk, remaining_pks)
         self.assertIn(active.pk, remaining_pks)
         self.assertIn(no_expiry.pk, remaining_pks)
+
+    def test_converted_rounds_row_survives_but_ingame_time_row_is_deleted(self) -> None:
+        from world.conditions.constants import DurationType
+        from world.conditions.factories import ConditionInstanceFactory, ConditionTemplateFactory
+        from world.conditions.models import ConditionInstance
+
+        past = timezone.now() - timedelta(hours=1)
+        converted = ConditionInstanceFactory(
+            condition=ConditionTemplateFactory(default_duration_type=DurationType.ROUNDS),
+            rounds_remaining=None,
+            expires_at=past,
+            last_settled_tick_at=past,
+        )
+        timed = ConditionInstanceFactory(
+            condition=ConditionTemplateFactory(default_duration_type=DurationType.INGAME_TIME),
+            expires_at=past,
+        )
+
+        batch_condition_expiration_cleanup()
+
+        remaining_pks = set(ConditionInstance.objects.values_list("pk", flat=True))
+        self.assertIn(converted.pk, remaining_pks)
+        self.assertNotIn(timed.pk, remaining_pks)
 
 
 class ProtagonismLockApRegenTests(TestCase):
@@ -425,6 +451,25 @@ class WeeklyMoneyOrderingWiringTests(TestCase):
             tasks["weekly_rollover"].phase,
             tasks["buildings.weekly_upkeep"].phase,
         )
+
+
+class SettledEffectsTaskRegistrationTests(TestCase):
+    """#4120: the settled-effects tick is registered every minute in the cleanup phase."""
+
+    def test_registered_every_minute_in_cleanup_phase(self) -> None:
+        from datetime import timedelta
+
+        from world.game_clock.task_registry import CronPhase, clear_registry, get_registered_tasks
+        from world.game_clock.tasks import register_all_tasks
+
+        clear_registry()
+        self.addCleanup(clear_registry)
+        register_all_tasks()
+
+        tasks = {t.task_key: t for t in get_registered_tasks()}
+        self.assertIn("conditions.settled_effects", tasks)
+        self.assertEqual(tasks["conditions.settled_effects"].interval, timedelta(minutes=1))
+        self.assertEqual(tasks["conditions.settled_effects"].phase, CronPhase.CLEANUP)
 
 
 class MemorySnapshotTaskTests(TestCase):

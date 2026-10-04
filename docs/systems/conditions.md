@@ -89,6 +89,54 @@ hold persists rather than the round erroring, and the REQUIRED `allegiance-break
 names the condition. Batched allegiance reads (`allegiance_instances_for`) ignore a hold past
 its `expires_at` before the lapse sweep removes it.
 
+**Settled round effects (#4120, ADR-4120) [BUILT & WIRED].** Rounds tick only inside combat, so a
+`DurationType.ROUNDS` condition that outlived its fight used to freeze (and a ROUNDS charm never
+carried an `expires_at` for the lapse sweep to see). Now `cleanup_completed_encounter` calls
+`settle_round_effects(targets)` right after `expire_end_of_combat_conditions`: every other unresolved
+`ROUNDS` instance with a round count on the encounter's participants and opponents (players and
+persistent NPCs alike) gets `expires_at = now + rounds * SettleConfig.settled_seconds_per_round`,
+`last_settled_tick_at = now` and `rounds_remaining = None` (idempotent: a converted row has no
+round count), except the acute perils (Bleeding Out, Plummeting; named by
+`acute_peril_hand_off_condition_names`), which keep their scene-round hand-off and stay ROUNDS rows.
+That is a **settled round**. Then:
+
+- **Tick and expiry (`settled_effects_tick`, cron `conditions.settled_effects`, one minute,
+  `CronPhase.CLEANUP`).** Converted rows past `expires_at` come off through `remove_condition`
+  (full teardown); allegiance rows are left to `lapsed_allegiance_sweep`. Each survivor with a
+  full `settled_seconds_per_round` elapsed deals one tick of its template's non-long-term
+  `ConditionDamageOverTime` (same `_round_dot_damage` as the combat tick, any `tick_timing`),
+  one tick per run, later runs catch up. A target owned by an active round is skipped (the round
+  tick advances it).
+- **Edges.** The settled tick skips a target with no character sheet, so a persistent NPC without
+  a sheet converts and expires but never takes settled damage (nothing lethal can happen to it).
+  If combat restarts on a converted row, `rounds_remaining` is None so the duration countdown
+  skips it and the wall clock keeps running; the combat DoT ticks it during the fight and the
+  settled tick skips that target. A converted row stays active and keeps applying modifiers for
+  up to one tick (a minute) past `expires_at`, until `settled_effects_tick` removes it. The hourly
+  `batch_condition_expiration_cleanup` excludes ROUNDS templates, so only the settled tick (and the
+  lapse sweep for allegiance rows) removes a converted row. Applying the condition again
+  (stacking or refresh) returns the row to round-based accounting like a fresh application:
+  `expires_at`, `last_settled_tick_at` and `lapse_warned_at` clear and `rounds_remaining` takes the
+  incoming rounds.
+- **Never lethal.** Settled damage goes only through `apply_clamped_chronic_damage`, never
+  `process_damage_consequences`: health stays strictly above the knockout floor, so a settled
+  effect cannot wound, down or kill, present or AFK. The clamp is unconditional; no `is_afk`
+  helper exists because nothing consumes one. Acute perils (Bleeding Out, Plummeting) are not
+  part of this lane and keep their scene-round hand-off.
+- **Allegiance lapse (`lapsed_allegiance_sweep`).** A hold with a played charmer
+  (`source_character` with an account) gets one "is fading" line when it enters the last
+  `SettleConfig.lapse_warning_seconds` before `expires_at` (stamped in `lapse_warned_at`). At
+  lapse the sweep auto-rolls the template's `allegiance_break_check_type` for the charmer
+  (`perform_check` at `charm_strength_points` difficulty, a PLACEHOLDER) and ends the hold
+  through `end_allegiance_with_pool`. A hold with no played charmer, or no check type (logged),
+  is removed plainly. No encounter opens and nothing attacks (ADR-4091 Decision 21 stands;
+  whether a lapsed NPC turns hostile is #4121). This supersedes Decisions 17/18 and the "no roll
+  at lapse" clause of 21 only for a PC charmer.
+- **`SettleConfig` (singleton pk=1, `get_settle_config()`, admin, REQUIRED dashboard row
+  `settle-config`).** `settled_seconds_per_round` (default 300, paced in minutes because player
+  turns take minutes) and `lapse_warning_seconds` (default 300, the warning lead window before
+  expiry). Both are untuned defaults until staff author them.
+
 ### Condition Effects (Abstract base: `ConditionOrStageEffect`)
 
 Effects use mutually exclusive FKs: `condition` (all stages) OR `stage` (stage-specific). Exactly one must be set.
@@ -98,7 +146,7 @@ Effects use mutually exclusive FKs: `condition` (all stages) OR `stage` (stage-s
 | `ConditionCapabilityEffect` | How a condition affects a capability | `capability`, `value` (additive integer; negative reduces, positive enhances), `scales_with_severity` (inherited from `ConditionOrStageEffect`; honoured by all three readers as of #2708 — see "Capability magnitude curve" below) |
 | `ConditionCheckModifier` | How a condition modifies checks | `check_type` OR `check_category` (exactly one; category targets all checks in a category, including per-character magic checks — #2697), `modifier_value`, `scales_with_severity` |
 | `ConditionResistanceModifier` | How a condition modifies damage resistance | `damage_type` (null = ALL), `modifier_value` |
-| `ConditionDamageOverTime` | Periodic damage from a condition | `damage_type`, `base_damage`, `scales_with_severity`, `scales_with_stacks`, `tick_timing` |
+| `ConditionDamageOverTime` | Periodic damage from a condition | `damage_type`, `base_damage`, `scales_with_severity`, `scales_with_stacks`, `tick_timing` (after combat, a settled ROUNDS row ticks these through the non-lethal clamp, see "Settled round effects") |
 
 #### DoT tick timing (`DamageTickTiming`) — #1762
 
@@ -127,7 +175,7 @@ without being listed (with justification) in that test's `ACKNOWLEDGED_START_OF_
 
 | Model | Purpose | Key Fields |
 |-------|---------|------------|
-| `ConditionInstance` | Active condition on a target | `target` (FK to ObjectDB), `condition`, `current_stage`, `stacks`, `severity`, `applied_at`, `expires_at`, `rounds_remaining`, `stage_rounds_remaining`, `source_character`, `source_technique`, `source_vow` (#2643: nullable FK → `covenants.CovenantRole`, `SET_NULL` — the applier's engaged-vow anchor at apply time; drives vow-keyed diminishing returns on the bounded team-damage-percent lane, see `docs/systems/magic.md`), `source_description` (#3554: rendered to the bearer in `ConditionDetailModal` and to every viewer of a visible condition in the `ConditionBadge` tooltip; `gm_apply_condition` broadcasts a GM's note as a Narrator OUTCOME line, target-only when the template is not `is_visible_to_others`; the WebSocket payload goes to the room, or to the target alone when hidden or when the GM has no location, and the text send is the telnet companion; a sheetless target is named by its key and a hidden condition on one records nothing), `is_suppressed`, `suppressed_until`, `resolved_at`, `abandoned_since_round` (#1479: round at which a downed bearer's acute peril was held/abandoned; cleared when a hostile party drives again) |
+| `ConditionInstance` | Active condition on a target | `target` (FK to ObjectDB), `condition`, `current_stage`, `stacks`, `severity`, `applied_at`, `expires_at`, `rounds_remaining`, `stage_rounds_remaining`, `source_character`, `source_technique`, `source_vow` (#2643: nullable FK → `covenants.CovenantRole`, `SET_NULL` — the applier's engaged-vow anchor at apply time; drives vow-keyed diminishing returns on the bounded team-damage-percent lane, see `docs/systems/magic.md`), `source_description` (#3554: rendered to the bearer in `ConditionDetailModal` and to every viewer of a visible condition in the `ConditionBadge` tooltip; `gm_apply_condition` broadcasts a GM's note as a Narrator OUTCOME line, target-only when the template is not `is_visible_to_others`; the WebSocket payload goes to the room, or to the target alone when hidden or when the GM has no location, and the text send is the telnet companion; a sheetless target is named by its key and a hidden condition on one records nothing), `is_suppressed`, `suppressed_until`, `resolved_at`, `abandoned_since_round` (#1479: round at which a downed bearer's acute peril was held/abandoned; cleared when a hostile party drives again), `last_settled_tick_at` (#4120: set when a ROUNDS row is settled, advanced by `settled_effects_tick`), `lapse_warned_at` (#4120: once-only fading warning stamp) |
 | `HazardResponseState` | Player-response tracking for an environmental-hazard condition (#2846, ADR-0179) | `condition_instance` (O2O, CASCADE — lifecycle rides the instance), `prompted_at`, `last_health_snapshot`, `damage_observations`, `responded_at`, `endured_until`. Service layer: `world.conditions.hazard_prompt` — `ensure_hazard_prompt` (prompt once: `hazard_prompt` websocket message + telnet text), `observe_hazard` (count sweep-observed health drops; fire the per-hazard `flee` callback after the configured unanswered count — never the first), `mark_endured`/`mark_responded`. Hazard-generic: sunlight supplies its refuge logic from `world.species.sun_refuge`; player answers are the `hazard_endure`/`hazard_retreat` actions. |
 
 ---
@@ -145,6 +193,9 @@ from world.conditions.services import (
     clear_all_conditions,          # Bulk removal with filters
     expire_end_of_combat_conditions, # Sweep UNTIL_END_OF_COMBAT conds on targets at combat end
     expire_scene_scoped_conditions,  # Sweep SCENE-duration conds on targets at scene end (#2514)
+    settle_round_effects,          # Convert ROUNDS rows to real-time expires_at after combat (#4120)
+    settled_effects_tick,          # Cron: clamped non-lethal DoT + expiry of settled rows (#4120)
+    get_settle_config,             # SettleConfig singleton (#4120)
 
     # Queries
     get_active_conditions,         # QuerySet of active instances on target

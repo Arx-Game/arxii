@@ -503,6 +503,11 @@ outcome** (a closed issue or a "SHIPPED" line is not proof). See the ledger's go
   warms its target; scene NPCs with no resist effort resist passively). Web `StandoffCard`,
   telnet `standoff`. What is not built yet is listed under "Later slices" in
   `docs/systems/standoffs.md`.
+- **Settle round-based effects after combat** - SHIPPED (#4120, ADR-4120, 2026-10-04): ROUNDS
+  conditions that outlive a fight convert to a real-time expiry at cleanup, tick as slow
+  non-lethal clamped damage (minutes per round), and a lapsing charm warns its PC charmer then
+  auto-rolls the break check; a failed check never makes an NPC attack (#4121 owns that). Acute
+  perils are unchanged. See `docs/systems/conditions.md`.
 - **Negotiate / parley** an NPC down (built pre-#4091, #1590/#1591, ADR-0058); **dispel** a
   condition remains open.
 - **Companions / pets / summons** with breath weapons & ordered abilities.

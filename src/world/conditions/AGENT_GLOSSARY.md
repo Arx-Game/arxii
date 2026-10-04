@@ -44,6 +44,15 @@ into the same graded ending, never two separate result tables.
 _Avoid_: resolve, pacify, calm down (informal narration; "settle" is the
 specific action name)
 
+**Settled round / Settle round effects** (#4120, ADR-4120):
+A **settled round** is a `ROUNDS` condition whose round counter was converted, when combat
+ended, into a real-time `expires_at` (`settle_round_effects`, paced by
+`SettleConfig.settled_seconds_per_round`, with `last_settled_tick_at` marking its last tick). Its
+harm then ticks through `apply_clamped_chronic_damage` and can never wound, down or kill. Not the
+#4091 **Settle** action (`settles_allegiance`), which ends an allegiance hold on purpose: use
+"settle round effects" for the conversion and "settle" alone only for the social action.
+_Avoid_: freeze, convert-to-time (informal), AFK timer, fast-forward
+
 **conceals_from_perception**:
 A boolean flag on `ConditionCategory` marking conditions that make the bearer imperceptible to others (invisibility, magical concealment, stealth). Aggregated by `is_concealed()`; `can_perceive()` composes it with per-observer detection state (`ConditionInstance.detected_by`) and co-location. Distinct from `grants_intangibility` — untargetable is not the same as unseen. The OOC player-transparency guarantee this powers is a separate, unconditional mechanism (ADR-0083), not gated by this flag's detection contest.
 _Avoid_: is_invisible, is_hidden, is_stealthed (the flag is about perceptibility, not any one source of it)
