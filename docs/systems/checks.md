@@ -175,7 +175,11 @@ difficulty = level_opposition(check_type, level=defender_level, character=defend
 
 `social_target_difficulty` (`world/checks/social_target.py`, #4145) is the one difficulty
 function for a character acting socially on a character. It returns a `SocialDifficulty`
-(difficulty, actor-side contributions, eased bands), not an int. Combat's
+(difficulty, actor-side contributions, eased bands), not an int. Scene social actions call
+it too (`_graded_scene_difficulty`, passing the defender's increment, which keeps a PC's
+resist-effort development award and fatigue at the scene call sites; relationship-gated
+Allure stays at scenes' check-modifier time, `perceiver_sheet` is not passed there, and
+combat and standoffs do not apply it yet). Combat's
 `_social_combat_difficulty` (`world/combat/services.py`, backing Demoralize/Taunt/Parley)
 and the standoff verbs call it with `level_override`, because a `CombatOpponent`'s authored
 `level` isn't reachable through its `objectdb`'s class-level rows (an ephemeral NPC has

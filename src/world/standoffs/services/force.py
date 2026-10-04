@@ -67,10 +67,21 @@ def cause_fires(group: StandoffGroup, config: StandoffConfig) -> bool:
 
 
 def evaluate_causes(encounter: CombatEncounter) -> bool:
-    """Settle empty groups; if an OPEN group's cause fires, the fight begins."""
+    """Settle empty groups; if an OPEN group's cause fires, the fight begins.
+
+    Settling the last OPEN group (its members fled or were removed) leaves nothing to
+    negotiate, so the standoff completes as a victory, as when the last terms are accepted.
+    """
     from world.standoffs.models import StandoffConfig  # noqa: PLC0415
 
-    settle_empty_groups(encounter)
+    if (
+        settle_empty_groups(encounter)
+        and not encounter.standoff_groups.exclude(state=StandoffGroupState.SETTLED).exists()
+    ):
+        from world.standoffs.services.routing import complete_standoff  # noqa: PLC0415
+
+        complete_standoff(encounter)
+        return False
     config = StandoffConfig.load()
     for group in encounter.standoff_groups.filter(state=StandoffGroupState.OPEN).select_related(
         "creature_template"

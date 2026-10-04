@@ -60,9 +60,3 @@ class SocialCombatDifficultyLevelTests(TestCase):
 
         self.assertGreater(high_difficulty, low_difficulty)
         self.assertEqual(high_difficulty - low_difficulty, LEVEL_POINTS_PER_LEVEL * (20 - 1))
-
-    def test_no_target_still_returns_none(self):
-        """Rally targets an ally -- target=None stays a no-op (pre-existing behavior)."""
-        self.assertIsNone(
-            _social_combat_difficulty(None, actor_sheet=self.actor, check_type=self.check_type)
-        )

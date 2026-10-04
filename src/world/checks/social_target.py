@@ -17,6 +17,7 @@ from typing import TYPE_CHECKING
 from world.checks.constants import ModifierSourceKind
 from world.checks.services import compute_resist_increment
 from world.checks.types import ModifierContribution
+from world.fatigue.constants import EffortLevel
 from world.mechanics.services import get_modifier_total
 from world.scenes.action_constants import DIFFICULTY_BAND_STEP
 
@@ -49,10 +50,10 @@ def social_target_difficulty(  # noqa: PLR0913
     *,
     actor_sheet: CharacterSheet,
     target_character: ObjectDB | None,
-    check_type: CheckType,  # noqa: ARG001 - part of the shared signature; reserved for check-aware terms
+    check_type: CheckType | None,  # noqa: ARG001 - part of the shared signature; reserved for check-aware terms
     base_difficulty: int = 0,
     target_level: int | None = None,
-    resist_effort: str = "medium",
+    resist_effort: str = EffortLevel.MEDIUM,
     drive_hits: Sequence[DriveHit] = (),
     sway_target: ModifierTarget | None = None,
     mindless_resistance: int = 0,

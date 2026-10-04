@@ -27,6 +27,7 @@ from world.standoffs.factories import (
     StandoffTermsFactory,
 )
 from world.standoffs.models import StandoffConfig, StandoffReveal, StandoffSparkShare
+from world.standoffs.services.force import evaluate_causes
 from world.standoffs.services.state import is_in_standoff, open_standoff
 from world.standoffs.services.verbs import (
     press_difficulty,
@@ -147,12 +148,28 @@ class PressTests(VerbBase):
         self.group.refresh_from_db()
         self.assertEqual(self.group.terms_ease, 1)
 
+    def test_a_critical_press_still_eases_once(self) -> None:
+        with patch(CHECK, return_value=forced(2)):
+            standoff_press(self.participant, self.group, self.approach)
+        self.group.refresh_from_db()
+        self.assertEqual(self.group.terms_ease, 1)
+
     def test_two_presses_each_ease_once(self) -> None:
         with patch(CHECK, return_value=forced(1)):
             standoff_press(self.participant, self.group, self.approach)
             standoff_press(self.participant, self.group, self.approach)
         self.group.refresh_from_db()
         self.assertEqual(self.group.terms_ease, 2)
+
+    def test_last_group_emptied_completes_the_standoff(self) -> None:
+        for member in self.members:
+            member.status = OpponentStatus.FLED
+            member.save(update_fields=["status"])
+        with patch("world.standoffs.services.routing.complete_standoff") as complete:
+            self.assertFalse(evaluate_causes(self.encounter))
+        complete.assert_called_once_with(self.encounter)
+        self.group.refresh_from_db()
+        self.assertEqual(self.group.state, StandoffGroupState.SETTLED)
 
     def test_botch_emboldens(self) -> None:
         with patch(CHECK, return_value=forced(-2)):

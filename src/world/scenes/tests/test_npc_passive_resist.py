@@ -3,6 +3,7 @@
 from django.test import TestCase
 
 from world.character_sheets.factories import CharacterSheetFactory
+from world.character_sheets.models import CharacterSheet
 from world.checks.factories import create_resistance_check_types
 from world.mechanics.models import ModifierTarget
 from world.scenes.action_services import _compute_difficulty_override_for_primary
@@ -33,7 +34,7 @@ class NpcPassiveResistTests(TestCase):
     def setUp(self) -> None:
         ModifierTarget.clear_trait_cache()
 
-    def _override(self, sheet: CharacterSheetFactory) -> int | None:
+    def _override(self, sheet: CharacterSheet) -> int | None:
         request = SceneActionRequestFactory(target_persona=sheet.primary_persona)
         return _compute_difficulty_override_for_primary(request, "")
 

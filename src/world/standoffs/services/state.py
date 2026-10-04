@@ -48,12 +48,15 @@ def active_members(group: StandoffGroup) -> list[CombatOpponent]:
     )
 
 
-def settle_empty_groups(encounter: CombatEncounter) -> None:
-    """An OPEN group with nobody left standing is SETTLED."""
+def settle_empty_groups(encounter: CombatEncounter) -> bool:
+    """An OPEN group with nobody left standing is SETTLED. True when any group was settled."""
+    settled_any = False
     for group in encounter.standoff_groups.filter(state=StandoffGroupState.OPEN):
         if not active_members(group):
             group.state = StandoffGroupState.SETTLED
             group.save(update_fields=["state"])
+            settled_any = True
+    return settled_any
 
 
 @transaction.atomic

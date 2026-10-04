@@ -7871,27 +7871,24 @@ def _record_combat_consequence(  # noqa: PLR0913 - mirrors record_consequence_ou
 
 
 def _social_combat_difficulty(
-    target: CombatOpponent | None,
+    target: CombatOpponent,
     *,
     actor_sheet: CharacterSheet,
     check_type: CheckType,
-    effort_level: str = "medium",
-) -> SocialDifficulty | None:
+    effort_level: str = EffortLevel.MEDIUM,
+) -> SocialDifficulty:
     """Grade a social-combat check against an opponent (#2015, #4145).
 
     Delegates to ``social_target_difficulty`` so combat verbs, scenes and standoffs share
     one grade: Composure defense via ``compute_resist_increment`` plus
     ``MINDLESS_MORALE_RESISTANCE`` for a mindless target (a high resistance tier, not a
-    wall). Returns ``None`` when there is no target (rally targets an ally).
+    wall). Rally targets an ally and never grades here.
 
     ``target_level=target.level`` (whole-branch-review fix, #2707): an ephemeral
     ``CombatOpponent`` has no ``CharacterClassLevel`` rows, so without the override it
     would floor at level 1 regardless of its authored ``level``. The override SUBSTITUTES
     the authored level for the objectdb-resolved one; it does not add a second level term.
     """
-    if target is None:
-        return None
-
     from world.combat.constants import MINDLESS_MORALE_RESISTANCE  # noqa: PLC0415
     from world.combat.morale import tier_has_morale  # noqa: PLC0415
 
@@ -7923,8 +7920,6 @@ def _social_verb_success_level(
     graded = _social_combat_difficulty(
         target, actor_sheet=participant.character_sheet, check_type=check_type
     )
-    if graded is None:
-        return 0
     return _resolve_social_check(
         participant,
         check_type,

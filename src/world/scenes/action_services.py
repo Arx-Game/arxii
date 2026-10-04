@@ -644,7 +644,38 @@ def _compute_difficulty_override_for_primary(
         )
     else:
         increment = _npc_passive_resist_increment(action_request.target_persona)
-    return base + increment
+    return _graded_scene_difficulty(
+        action_request=action_request,
+        target_persona=action_request.target_persona,
+        base=base,
+        increment=increment,
+    )
+
+
+def _graded_scene_difficulty(
+    *,
+    action_request: SceneActionRequest,
+    target_persona: Persona,
+    base: int,
+    increment: int,
+) -> int:
+    """Final scene difficulty for one target, through the shared social function (#4145).
+
+    The defender's resist ``increment`` is computed by the caller (it carries the PC's
+    development award and fatigue, or the NPC's passive medium effort) and passed in so the
+    shared function does not recompute it. ``perceiver_sheet`` is deliberately not passed:
+    scenes add the relationship-gated contributions at check-modifier time already.
+    """
+    from world.checks.social_target import social_target_difficulty  # noqa: PLC0415
+
+    template = action_request.action_template
+    return social_target_difficulty(
+        actor_sheet=action_request.initiator_persona.character_sheet,
+        target_character=target_persona.character_sheet.character,
+        check_type=template.check_type if template is not None else None,
+        base_difficulty=base,
+        resist_increment=increment,
+    ).difficulty
 
 
 def _npc_passive_resist_increment(persona: Persona) -> int:
@@ -1288,7 +1319,12 @@ def _compute_target_difficulty_override(
         )
     else:
         increment = _npc_passive_resist_increment(action_target.target_persona)
-    return base + increment
+    return _graded_scene_difficulty(
+        action_request=action_request,
+        target_persona=action_target.target_persona,
+        base=base,
+        increment=increment,
+    )
 
 
 def _charge_target_pull_flat_bonus(action_request: SceneActionRequest) -> int:

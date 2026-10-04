@@ -30,6 +30,7 @@ from world.combat.constants import (
 )
 from world.combat.morale import apply_morale_damage, tier_has_morale
 from world.conditions.services import apply_condition
+from world.fatigue.constants import EffortLevel
 from world.mechanics.models import Application
 from world.standoffs.constants import RevealKind, StandoffGroupState, TermsEffect
 from world.standoffs.models import (
@@ -233,6 +234,8 @@ def standoff_read(  # noqa: PLR0913 - the focus kwargs are the read verb's whole
     else:
         chosen = [random.choice(hidden)]  # noqa: S311 - game roll
     revealed = [_reveal(group, thing) for thing in chosen]
+    # No evaluate_causes here: a read changes none of a cause's inputs (force, emboldening,
+    # suppressing regard), so the cause cannot newly fire.
     return StandoffActionResult(True, "You read the group.", success_level=tier, revealed=revealed)
 
 
@@ -242,6 +245,10 @@ class GradingContext:
 
     The roll paths and the web view both build this, so a shown grade and the roll behind
     it come from the same inputs.
+
+    ``resist_increment`` uses the FIRST member's Composure with the group's highest level
+    (``max(m.level)``): a group is one creature kind, so members share a Composure and the
+    level is the only thing that varies.
     """
 
     members: list[CombatOpponent]
@@ -278,7 +285,7 @@ def build_grading_context(
         0
         if first_character is None
         else compute_resist_increment(
-            first_character, "medium", level_override=max(m.level for m in members)
+            first_character, EffortLevel.MEDIUM, level_override=max(m.level for m in members)
         )
     )
     return GradingContext(
@@ -421,7 +428,7 @@ def standoff_press(
     tier = result.success_level
     message = "Your words do not move them."
     if tier >= 1:
-        group.terms_ease += tier
+        group.terms_ease += 1
         group.save(update_fields=["terms_ease"])
         if approach.damages_morale:
             for member in members:
@@ -541,4 +548,6 @@ def standoff_share_spark(
     StandoffSparkShare.objects.get_or_create(
         group=group, character_sheet=sheet, regard_rule=regard_rule
     )
+    # No evaluate_causes here: sharing a spark changes none of a cause's inputs (force,
+    # emboldening), and the suppression check reads the party's own regard, not shares.
     return StandoffActionResult(True, "You share what you feel.")

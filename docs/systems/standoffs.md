@@ -52,10 +52,15 @@ drive and regard-rule inlines on the creature template.
 ## Services
 
 - **One difficulty function**: `social_target_difficulty` (`world/checks/social_target.py:48`)
-  returns `SocialDifficulty`. Combat's `_social_combat_difficulty`
-  (`combat/services.py:7873`) and scenes' NPC passive resist
-  (`scenes/action_services.py:650`, `_npc_passive_resist_increment`) feed it too. Parley now
-  warms its target (`npc_services/social_disposition.py`).
+  returns `SocialDifficulty`. Four paths call it: the standoff verbs, combat's
+  `_social_combat_difficulty` (`combat/services.py`), and both scene overrides
+  (`_compute_difficulty_override_for_primary` / `_compute_target_difficulty_override` in
+  `scenes/action_services.py`, through `_graded_scene_difficulty`). Scenes pass the
+  defender's already-computed increment (a PC's declared effort, with its development award
+  and fatigue, or an NPC's passive medium effort via `_npc_passive_resist_increment`).
+  Relationship-gated Allure (`perceiver_sheet`) is applied by scenes at check-modifier time
+  and is not yet applied in combat or standoffs (a later slice). Parley now warms its
+  target (`npc_services/social_disposition.py`).
 - **Force and cause** (`services/force.py`): `party_force` (:22), `group_force` (:42, level
   times tier weight percent), `effective_party_force` (:50, less emboldening), `cause_fires`
   (:58), `evaluate_causes` (:69). Predation fires when the party does not outweigh the group
@@ -75,7 +80,7 @@ drive and regard-rule inlines on the creature template.
 - **Read grading**: checks have five tiers (-2 to 2). Failure reveals nothing; a partial
   reveals one hidden thing at random; a success the thing the reader chose (else the first);
   a critical everything. A drive focus with no id reveals the strongest hidden drive.
-- **Press**: a success adds its tier to `terms_ease` (once per successful press); a botch
+- **Press**: each successful press adds exactly 1 to `terms_ease` (whatever its tier); a botch
   (-2) emboldens the group by `botch_force_bands`; morale damage when `damages_morale`. The
   eased difficulty is the sum of hit-drive strengths in bands; the sway modifier counts once
   plus once per eased band.
