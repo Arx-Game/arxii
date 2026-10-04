@@ -19,6 +19,8 @@ def _serialize(encounter: object) -> dict:
         encounter.participants_cached = list(encounter.participants.all())
     if not hasattr(encounter, "opponents_cached"):
         encounter.opponents_cached = list(encounter.opponents.all())
+    if not hasattr(encounter, "standoff_groups_cached"):
+        encounter.standoff_groups_cached = []
     return EncounterDetailSerializer(encounter, context={}).data
 
 

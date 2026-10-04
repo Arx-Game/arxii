@@ -46,6 +46,8 @@ class EncounterDetailDuelFieldsTests(TestCase):
             encounter.participants_cached = list(encounter.participants.all())
         if not hasattr(encounter, "opponents_cached"):
             encounter.opponents_cached = list(encounter.opponents.all())
+        if not hasattr(encounter, "standoff_groups_cached"):
+            encounter.standoff_groups_cached = []
         return EncounterDetailSerializer(encounter, context={}).data
 
     def test_encounter_type_exposed(self) -> None:
@@ -104,6 +106,8 @@ class PvpDuelEncounterSerializerTests(TestCase):
                     "covenant_role",
                 ).all()
             )
+        if not hasattr(enc, "standoff_groups_cached"):
+            enc.standoff_groups_cached = []
         if not hasattr(enc, "opponents_cached"):
             enc.opponents_cached = list(
                 enc.opponents.select_related(
