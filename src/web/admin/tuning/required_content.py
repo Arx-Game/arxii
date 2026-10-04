@@ -426,6 +426,81 @@ def _probe_path_major_gift_ultimates() -> ProbeResult:
     return ProbeResult(present=False, missing=missing, detail=detail)
 
 
+def _probe_manifest_beings_have_avatars() -> ProbeResult:
+    """Every being a technique can manifest has an avatar sheet (#4118).
+
+    Consumer: `world/magic/services/effect_handlers.py` `manifest_bound_entity`. A being
+    with no avatar sheet has nobody to arrive: the cast silently manifests nothing.
+    """
+    from world.magic.models import TechniqueManifestOption  # noqa: PLC0415
+
+    missing = tuple(
+        f"{technique_name} / {being_name}"
+        for technique_name, being_name in TechniqueManifestOption.objects.filter(
+            being__isnull=False, being__avatar_sheet__isnull=True
+        )
+        .order_by("technique__name", "being__name")
+        .values_list("technique__name", "being__name")
+    )
+    if not missing:
+        return ProbeResult(present=True)
+    detail = f"{len(missing)} manifest option(s) name a being with no avatar sheet."
+    return ProbeResult(present=False, missing=missing, detail=detail)
+
+
+def _probe_manifest_archetypes_have_abilities() -> ProbeResult:
+    """Every companion archetype a technique can manifest has abilities (#4118).
+
+    Consumer: `world/magic/services/effect_handlers.py` `manifest_bound_entity`. An
+    archetype with no `CompanionAbility` rows arrives and never acts.
+    """
+    from world.magic.models import TechniqueManifestOption  # noqa: PLC0415
+
+    missing = tuple(
+        f"{technique_name} / {archetype_name}"
+        for technique_name, archetype_name in TechniqueManifestOption.objects.filter(
+            archetype__isnull=False, archetype__abilities__isnull=True
+        )
+        .order_by("technique__name", "archetype__name")
+        .values_list("technique__name", "archetype__name")
+    )
+    if not missing:
+        return ProbeResult(present=True)
+    detail = (
+        f"{len(missing)} manifest option(s) name a companion archetype with no abilities: "
+        "it would arrive and never act."
+    )
+    return ProbeResult(present=False, missing=missing, detail=detail)
+
+
+def _probe_manifest_tiers_have_templates() -> ProbeResult:
+    """Every tier a being manifest option uses has an `OpponentTierTemplate` (#4118).
+
+    Consumer: `world/magic/services/effect_handlers.py` `manifest_bound_entity`, whose
+    `add_opponent` auto-scaling reads the tier's template through
+    `compute_opponent_stat_block` and raises when the row is absent: the cast errors
+    mid-combat instead of manifesting. `missing` lists the tiers; `detail` names the
+    techniques that use them.
+    """
+    from world.combat.models import OpponentTierTemplate  # noqa: PLC0415
+    from world.magic.models import TechniqueManifestOption  # noqa: PLC0415
+
+    rows = (
+        TechniqueManifestOption.objects.filter(being__isnull=False)
+        .exclude(tier__in=OpponentTierTemplate.objects.values("tier"))
+        .order_by("tier", "technique__name")
+        .values_list("tier", "technique__name")
+    )
+    tiers: dict[str, list[str]] = {}
+    for tier, technique_name in rows:
+        tiers.setdefault(tier, []).append(technique_name)
+    if not tiers:
+        return ProbeResult(present=True)
+    names = "; ".join(f"{tier}: {', '.join(sorted(set(t)))}" for tier, t in tiers.items())
+    detail = f"Manifest options use tier(s) with no OpponentTierTemplate row ({names})."
+    return ProbeResult(present=False, missing=tuple(tiers), detail=detail)
+
+
 def _probe_price_components_active() -> ProbeResult:
     """Every item a PRICE consumes must come from an active item template (#4099).
 
@@ -1897,6 +1972,39 @@ def _declarations() -> tuple[ContentDependency, ...]:
                 "stakes its owner acknowledged mean nothing."
             ),
             probe=CustomProbe(fn=_probe_companion_defeat_pool),
+        ),
+        ContentDependency(
+            key="manifest-being-avatars",
+            label="Manifestable beings have avatar sheets",
+            tier=DependencyTier.REQUIRED,
+            consumer="world/magic/services/effect_handlers.py manifest_bound_entity()",
+            consequence=(
+                "A technique that manifests a being with no avatar sheet has nobody "
+                "to arrive: the cast silently manifests nothing."
+            ),
+            probe=CustomProbe(fn=_probe_manifest_beings_have_avatars),
+        ),
+        ContentDependency(
+            key="manifest-archetype-abilities",
+            label="Manifestable companion archetypes have abilities",
+            tier=DependencyTier.REQUIRED,
+            consumer="world/magic/services/effect_handlers.py manifest_bound_entity()",
+            consequence=(
+                "A technique that manifests an archetype with no abilities brings a "
+                "companion that arrives and never acts."
+            ),
+            probe=CustomProbe(fn=_probe_manifest_archetypes_have_abilities),
+        ),
+        ContentDependency(
+            key="manifest-tier-templates",
+            label="Manifestable being tiers have opponent tier templates",
+            tier=DependencyTier.REQUIRED,
+            consumer="world/magic/services/effect_handlers.py manifest_bound_entity()",
+            consequence=(
+                "A being manifested at a tier with no OpponentTierTemplate row makes "
+                "the opponent auto-scaling raise: the cast errors mid-combat."
+            ),
+            probe=CustomProbe(fn=_probe_manifest_tiers_have_templates),
         ),
         ContentDependency(
             key="capability-power-bridges",

@@ -8,6 +8,7 @@ from unittest import mock
 from django.test import TestCase
 
 from web.admin.tuning import required_content as rc
+from world.character_sheets.factories import CharacterSheetFactory
 from world.conditions.factories import ConditionTemplateFactory
 from world.game_clock.factories import GameClockFactory
 from world.magic.constants import GiftKind
@@ -1167,6 +1168,87 @@ class TestPathMajorGiftUltimatesProbe(TestCase):
         grant = PathGiftGrantFactory()
         grant.ultimate_techniques.add(UltimateTechniqueFactory(gift=grant.gift))
         self.assertTrue(_probe_path_major_gift_ultimates().present)
+
+
+class TestManifestOptionProbes(TestCase):
+    """#4118: a manifest option that cannot arrive or act is a dashboard row."""
+
+    def test_being_without_avatar_sheet_is_missing_then_fixed(self) -> None:
+        from web.admin.tuning.required_content import _probe_manifest_beings_have_avatars
+        from world.magic.factories import TechniqueManifestOptionFactory
+
+        self.assertTrue(_probe_manifest_beings_have_avatars().present)
+        option = TechniqueManifestOptionFactory()
+        result = _probe_manifest_beings_have_avatars()
+        self.assertFalse(result.present)
+        self.assertEqual(result.missing, (f"{option.technique.name} / {option.being.name}",))
+        option.being.avatar_sheet = CharacterSheetFactory()
+        option.being.save()
+        self.assertTrue(_probe_manifest_beings_have_avatars().present)
+
+    def test_archetype_without_abilities_is_missing_then_fixed(self) -> None:
+        from web.admin.tuning.required_content import _probe_manifest_archetypes_have_abilities
+        from world.companions.factories import (
+            CompanionAbilityFactory,
+            CompanionArchetypeFactory,
+        )
+        from world.magic.factories import TechniqueManifestOptionFactory
+
+        self.assertTrue(_probe_manifest_archetypes_have_abilities().present)
+        archetype = CompanionArchetypeFactory()
+        option = TechniqueManifestOptionFactory(being=None, archetype=archetype)
+        result = _probe_manifest_archetypes_have_abilities()
+        self.assertFalse(result.present)
+        self.assertEqual(result.missing, (f"{option.technique.name} / {archetype.name}",))
+        CompanionAbilityFactory(archetype=archetype)
+        self.assertTrue(_probe_manifest_archetypes_have_abilities().present)
+
+    def test_being_tier_without_template_is_missing_then_fixed(self) -> None:
+        from web.admin.tuning.required_content import _probe_manifest_tiers_have_templates
+        from world.combat.constants import OpponentTier
+        from world.combat.factories import OpponentTierTemplateFactory
+        from world.magic.factories import TechniqueManifestOptionFactory
+
+        self.assertTrue(_probe_manifest_tiers_have_templates().present)
+        option = TechniqueManifestOptionFactory(tier=OpponentTier.BOSS)
+        result = _probe_manifest_tiers_have_templates()
+        self.assertFalse(result.present)
+        self.assertEqual(result.missing, (OpponentTier.BOSS,))
+        self.assertIn(option.technique.name, result.detail)
+        OpponentTierTemplateFactory(tier=OpponentTier.BOSS)
+        self.assertTrue(_probe_manifest_tiers_have_templates().present)
+
+    def test_archetype_option_tier_is_never_flagged(self) -> None:
+        from web.admin.tuning.required_content import _probe_manifest_tiers_have_templates
+        from world.companions.factories import CompanionArchetypeFactory
+        from world.magic.factories import TechniqueManifestOptionFactory
+
+        TechniqueManifestOptionFactory(being=None, archetype=CompanionArchetypeFactory())
+        self.assertTrue(_probe_manifest_tiers_have_templates().present)
+
+    def test_good_option_is_not_flagged(self) -> None:
+        from web.admin.tuning.required_content import (
+            _probe_manifest_archetypes_have_abilities,
+            _probe_manifest_beings_have_avatars,
+            _probe_manifest_tiers_have_templates,
+        )
+        from world.combat.factories import OpponentTierTemplateFactory
+        from world.companions.factories import (
+            CompanionAbilityFactory,
+            CompanionArchetypeFactory,
+        )
+        from world.magic.factories import TechniqueManifestOptionFactory
+        from world.worship.factories import WorshippedBeingFactory
+
+        being = WorshippedBeingFactory(avatar_sheet=CharacterSheetFactory())
+        option = TechniqueManifestOptionFactory(being=being)
+        OpponentTierTemplateFactory(tier=option.tier)
+        archetype = CompanionArchetypeFactory()
+        CompanionAbilityFactory(archetype=archetype)
+        TechniqueManifestOptionFactory(being=None, archetype=archetype)
+        self.assertTrue(_probe_manifest_beings_have_avatars().present)
+        self.assertTrue(_probe_manifest_archetypes_have_abilities().present)
+        self.assertTrue(_probe_manifest_tiers_have_templates().present)
 
 
 class TestAudereConditionShapeProbe(TestCase):
