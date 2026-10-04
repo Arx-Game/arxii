@@ -35,6 +35,7 @@ from world.combat.constants import (
     SCALING_CONFIG_PER_EXTRA_MEMBER_PCT,
     ActionCategory,
     BreakContributionKind,
+    CauseKind,
     ClashActionSlot,
     ClashFlavor,
     ClashResolution,
@@ -201,8 +202,8 @@ class CombatEncounter(AbstractRound):
             "Who sprang this fight (#2623): True = a PC participant's action "
             "opened it, False = the opposing side did, NULL = unknown/undirected "
             "(duels, battles, staff-opened). Read by origin_side-parameterized "
-            "situations. No NPC-initiated creation path exists yet — False is "
-            "staff/admin-stampable until one lands."
+            "situations. False is stamped when a creature's cause (Predation) "
+            "breaks a standoff; staff/admin can also stamp it."
         ),
     )
     story_beat = models.ForeignKey(
@@ -2672,6 +2673,13 @@ class OpponentTierTemplate(SharedMemoryModel):
         default=1,
         help_text="Tier-level action economy. MOOK/ELITE=1; BOSS=2 or 3.",
     )
+    force_weight_percent = models.PositiveSmallIntegerField(
+        default=100,
+        help_text=(
+            "Percent weight of one opponent of this tier when a standoff compares the "
+            "group's force with the party's (100 = counts as its level once)."
+        ),
+    )
     assess_prose = models.TextField(
         blank=True,
         default="",
@@ -2723,6 +2731,21 @@ class CreatureTemplate(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
         null=True,
         blank=True,
         help_text="Override probing threshold; null = use tier template scaling.",
+    )
+
+    cause = models.CharField(
+        max_length=20,
+        choices=CauseKind.choices,
+        default=CauseKind.NONE,
+        help_text="Why this creature picks a fight on its own (Predation: it hunts the weak).",
+    )
+    cause_margin_percent = models.SmallIntegerField(
+        default=0,
+        validators=[MinValueValidator(-99)],
+        help_text=(
+            "How far, as a percent of its own force, the party must outweigh the creature "
+            "before its cause stops firing."
+        ),
     )
 
     objects = CreatureTemplateManager()

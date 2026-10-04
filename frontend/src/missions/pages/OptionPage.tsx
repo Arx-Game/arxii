@@ -200,6 +200,7 @@ function OptionEditor({ option }: { option: MissionOption }) {
     authored_check_type: o.authored_check_type ?? null,
     visibility_rule: (o.visibility_rule ?? {}) as PredicateNode,
     encounter_risk_level: o.encounter_risk_level ?? '',
+    opens_as_standoff: o.opens_as_standoff ?? false,
     opponent_lines: opponentLineDraftsFromOption(o.opponent_lines),
     opposition_sheet: o.opposition_sheet ?? null,
     opposition_check_type: o.opposition_check_type ?? null,
@@ -225,6 +226,7 @@ function OptionEditor({ option }: { option: MissionOption }) {
         // Only an ENCOUNTER option may carry a risk level or opponent lines; the
         // backend rejects them on any other kind, so a re-kinded option sends none.
         encounter_risk_level: draft.option_kind === 'encounter' ? draft.encounter_risk_level : '',
+        opens_as_standoff: draft.option_kind === 'encounter' ? draft.opens_as_standoff : false,
         opponent_lines:
           draft.option_kind === 'encounter'
             ? opponentLineDraftsToPayload(draft.opponent_lines)
@@ -419,6 +421,16 @@ function OptionEditor({ option }: { option: MissionOption }) {
                 ))}
               </SelectContent>
             </Select>
+          </div>
+        ) : null}
+        {isEncounter ? (
+          <div className="flex items-center gap-2">
+            <Switch
+              id="opt-opens-as-standoff"
+              checked={draft.opens_as_standoff}
+              onCheckedChange={(v) => setDraft({ ...draft, opens_as_standoff: v })}
+            />
+            <Label htmlFor="opt-opens-as-standoff">Opens as a standoff</Label>
           </div>
         ) : null}
         <div className="md:col-span-2">

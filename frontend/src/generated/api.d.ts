@@ -25331,6 +25331,16 @@ export interface components {
      * @enum {string}
      */
     AppliesToEnum: 'any' | 'claimed' | 'named' | 'none';
+    ApproachView: {
+      approach_id: number;
+      group_id: number;
+      name: string;
+      grade: string;
+      grade_label: string;
+      check_caption: string;
+      levers: components['schemas']['LeverView'][];
+      hits_revealed_drive: boolean;
+    };
     /**
      * @description * `global` - Global
      *     * `org` - Organization
@@ -25956,6 +25966,7 @@ export interface components {
       kind: string;
       check_type_name: string | null;
       base_risk: number;
+      readonly reasons: string[];
     };
     /**
      * @description * `success` - Success
@@ -29772,6 +29783,10 @@ export interface components {
       can_ascend: boolean;
       wake_blocked: boolean;
     };
+    DriveView: {
+      label: string;
+      strength: string;
+    };
     /**
      * @description Read serializer for the DuelChallenge pending-challenge inbox.
      *
@@ -30025,6 +30040,7 @@ export interface components {
       readonly pending_selections: components['schemas']['PendingSelection'][];
       readonly sustained_actions: components['schemas']['SustainedAction'][];
       readonly protection_commitments: components['schemas']['ProtectionCommitment'][];
+      readonly standoff: components['schemas']['StandoffView'] | null;
       readonly is_lethal: boolean;
       readonly duel_winner: components['schemas']['DuelWinner'] | null;
     };
@@ -32094,6 +32110,21 @@ export interface components {
      * @enum {string}
      */
     GroupStoryStatusEnum: 'pending' | 'accepted' | 'withdrawn';
+    GroupView: {
+      group_id: number;
+      name: string;
+      member_count: number;
+      state: string;
+      terms_ease: number;
+      cause: string | null;
+      cause_gloss: string | null;
+      hidden_count: number;
+      drives: components['schemas']['DriveView'][];
+      revealed_regard: string[];
+      read_check: string;
+      read_grade: string;
+      read_grade_label: string;
+    };
     /** @description POST body for the #1036 group-vote endpoint. */
     GroupVoteRequestRequest: {
       option_id: number;
@@ -33640,6 +33671,10 @@ export interface components {
      * @enum {string}
      */
     LevelE58Enum: 'starting' | 'junior' | 'gm' | 'experienced' | 'senior';
+    LeverView: {
+      text: string;
+      is_spark: boolean;
+    };
     /** @description Read-only serializer for library browse cards. */
     LibraryEntry: {
       readonly id: number;
@@ -34363,6 +34398,8 @@ export interface components {
       encounter_risk_level?:
         | components['schemas']['EncounterRiskLevelEnum']
         | components['schemas']['BlankEnum'];
+      /** @description ENCOUNTER options only: the spawned encounter opens as a standoff. */
+      opens_as_standoff?: boolean;
       /** @description Phase 0 predicate tree gating this option's visibility. */
       visibility_rule?: unknown;
       /** @description AUTHORED+CHECK: the check resolved by this option. */
@@ -34448,6 +34485,8 @@ export interface components {
       encounter_risk_level?:
         | components['schemas']['EncounterRiskLevelEnum']
         | components['schemas']['BlankEnum'];
+      /** @description ENCOUNTER options only: the spawned encounter opens as a standoff. */
+      opens_as_standoff?: boolean;
       /** @description Phase 0 predicate tree gating this option's visibility. */
       visibility_rule?: unknown;
       /** @description AUTHORED+CHECK: the check resolved by this option. */
@@ -40586,6 +40625,8 @@ export interface components {
       encounter_risk_level?:
         | components['schemas']['EncounterRiskLevelEnum']
         | components['schemas']['BlankEnum'];
+      /** @description ENCOUNTER options only: the spawned encounter opens as a standoff. */
+      opens_as_standoff?: boolean;
       /** @description Phase 0 predicate tree gating this option's visibility. */
       visibility_rule?: unknown;
       /** @description AUTHORED+CHECK: the check resolved by this option. */
@@ -45275,6 +45316,12 @@ export interface components {
       readonly stage_description: string;
       readonly has_death_risk: boolean;
     };
+    SparkView: {
+      group_id: number;
+      regard_rule_id: number;
+      text: string;
+      shared: boolean;
+    };
     SpeakerQueue: {
       readonly id: number;
       /** @description Room the queue belongs to. */
@@ -45962,6 +46009,14 @@ export interface components {
      * @enum {string}
      */
     StandingEnum: 'core' | 'minor';
+    StandoffView: {
+      place: string;
+      groups: components['schemas']['GroupView'][];
+      approaches: components['schemas']['ApproachView'][];
+      terms: components['schemas']['TermsView'][];
+      sparks: components['schemas']['SparkView'][];
+      shared_sparks: components['schemas']['SparkView'][];
+    };
     /**
      * @description Serializer for starting areas.
      *
@@ -47290,6 +47345,15 @@ export interface components {
     /** @description Serialize media associated with a roster tenure. */
     TenureMediaRequest: {
       sort_order?: number;
+    };
+    TermsView: {
+      terms_id: number;
+      name: string;
+      group_id: number;
+      description: string;
+      grade: string;
+      grade_label: string;
+      critical_label: string;
     };
     /**
      * @description * `open` - Open

@@ -18,6 +18,9 @@ term is chosen and the rest are listed under `_Avoid_`.
 - [combat](src/world/combat/AGENT_GLOSSARY.md), also holds the #4091 allegiance terms
   (ADR-4091): Allegiance (stored vs effective), Turned, Won over, Bind window; and (ADR-4120)
   Settled round
+- [standoffs](src/world/standoffs/AGENT_GLOSSARY.md) (#4145, ADR-4145-A): Standoff, Group,
+  Drive, Cause, Regard rule, Spark, Terms, Approach, Read/Press (_Avoid_: motive, reaction,
+  ask, hook, aura, sway)
 - [battles](src/world/battles/AGENT_GLOSSARY.md)
 - [conditions](src/world/conditions/AGENT_GLOSSARY.md), also holds the #4091 settle terms
   (ADR-4091): Settle, Settle pool, Hold strength; and (ADR-4120) Settled round / Settle round

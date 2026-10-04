@@ -108,6 +108,28 @@ class PickEncounterOptionTests(EncounterOptionTestBase):
         self.instance.refresh_from_db()
         self.assertTrue(self.instance.is_paused)
 
+    def test_standoff_option_opens_a_standoff(self) -> None:
+        from world.standoffs.constants import StandoffGroupState
+        from world.standoffs.models import StandoffGroup
+
+        self.option.opens_as_standoff = True
+        self.option.save(update_fields=["opens_as_standoff"])
+        deed = resolve_option(self.instance, self.entry, self.option, self.participant)
+        encounter = CombatEncounter.objects.get(scenario_deed=deed)
+        self.assertEqual(encounter.round_number, 0)
+        groups = StandoffGroup.objects.filter(encounter=encounter)
+        self.assertEqual(
+            [(g.creature_template_id, g.state) for g in groups],
+            [(self.creature.pk, StandoffGroupState.OPEN)],
+        )
+
+    def test_plain_option_opens_no_standoff(self) -> None:
+        from world.standoffs.models import StandoffGroup
+
+        deed = resolve_option(self.instance, self.entry, self.option, self.participant)
+        encounter = CombatEncounter.objects.get(scenario_deed=deed)
+        self.assertFalse(StandoffGroup.objects.filter(encounter=encounter).exists())
+
     def test_pick_refused_while_paused(self) -> None:
         resolve_option(self.instance, self.entry, self.option, self.participant)
         self.instance.refresh_from_db()

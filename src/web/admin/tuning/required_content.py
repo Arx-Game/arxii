@@ -1940,6 +1940,17 @@ def _declarations() -> tuple[ContentDependency, ...]:
             admin_model="AudereThreshold",
         ),
         ContentDependency(
+            key="standoff-reaction-lines",
+            label="Standoff reaction lines",
+            tier=DependencyTier.TUNING,
+            consumer="world/standoffs/services/reactions.py reaction_line_for()",
+            consequence=(
+                "Standoff presses and terms show only the plain outcome line; a "
+                "critical roll gets no bigger authored reaction."
+            ),
+            probe=AnyRowProbe(label="StandoffReactionLine"),
+        ),
+        ContentDependency(
             key="capability-power-config",
             label="Capability power config singleton",
             tier=DependencyTier.TUNING,
@@ -3443,6 +3454,43 @@ def _declarations() -> tuple[ContentDependency, ...]:
             consequence="Players see PLACEHOLDER text on the Gift stage's make-it-yours panel.",
             probe=CustomProbe(fn=_probe_personalization_copy),
             admin_model="CGExplanation",
+        ),
+        ContentDependency(
+            key="standoff-config",
+            label="Standoff settings singleton",
+            tier=DependencyTier.REQUIRED,
+            consumer="world/standoffs/models.py StandoffConfig.load()",
+            consequence=(
+                "The standoff settings row is missing or incomplete (read check, terms "
+                "check, pass condition and turn condition must all be set); players "
+                "can only fight."
+            ),
+            probe=FilteredRowProbe(
+                label="StandoffConfig",
+                filters=(
+                    ("read_check_type__isnull", False),
+                    ("terms_check_type__isnull", False),
+                    ("pass_condition__isnull", False),
+                    ("turn_condition__isnull", False),
+                ),
+                absent_detail="No StandoffConfig row has all four of its links set.",
+            ),
+        ),
+        ContentDependency(
+            key="standoff-approaches",
+            label="Standoff approaches",
+            tier=DependencyTier.REQUIRED,
+            consumer="world/standoffs/models.py StandoffApproach",
+            consequence="Standoffs offer no approaches; players can only fight.",
+            probe=AnyRowProbe(label="StandoffApproach"),
+        ),
+        ContentDependency(
+            key="standoff-terms",
+            label="Standoff terms",
+            tier=DependencyTier.REQUIRED,
+            consumer="world/standoffs/models.py StandoffTerms",
+            consequence="Standoffs offer no terms; players can only fight.",
+            probe=AnyRowProbe(label="StandoffTerms"),
         ),
     )
 

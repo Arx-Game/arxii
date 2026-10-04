@@ -38,7 +38,6 @@ from world.combat.services import (
     acknowledge_encounter_risk,
     add_opponent,
     add_participant,
-    begin_declaration_phase,
     declare_action,
     join_encounter,
 )
@@ -46,6 +45,7 @@ from world.covenants.mentorship import effective_combat_level
 from world.fatigue.constants import EffortLevel
 from world.scenes.constants import RoundStatus
 from world.scenes.models import Scene
+from world.standoffs.services.state import begin_round_or_break_standoff
 
 if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
@@ -330,7 +330,7 @@ def seed_or_feed_encounter_from_cast(  # noqa: PLR0913 - cast context + entrance
     )
 
     if encounter.status == RoundStatus.BETWEEN_ROUNDS:
-        begin_declaration_phase(encounter)
+        begin_round_or_break_standoff(encounter, initiated_by_pc_side=True)
         encounter.refresh_from_db()
 
     action = declare_action(

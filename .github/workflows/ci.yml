@@ -269,7 +269,7 @@ jobs:
             split_app: world.stories
             split_part: 2
             split_of: 2
-            apps: world.seeds
+            apps: world.seeds world.standoffs
           # shard-10: web and character_creation. Their old estimate was small,
           # but both suites are now large enough to keep off the story shards.
           # world.checks moved here from shard-3 (2026-10-03, #4139): its

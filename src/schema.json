@@ -41412,6 +41412,36 @@ components:
         * `claimed` - Claim a staff-authored family
         * `named` - Name your own family
         * `none` - No family
+    ApproachView:
+      type: object
+      properties:
+        approach_id:
+          type: integer
+        group_id:
+          type: integer
+        name:
+          type: string
+        grade:
+          type: string
+        grade_label:
+          type: string
+        check_caption:
+          type: string
+        levers:
+          type: array
+          items:
+            $ref: '#/components/schemas/LeverView'
+        hits_revealed_drive:
+          type: boolean
+      required:
+      - approach_id
+      - check_caption
+      - grade
+      - grade_label
+      - group_id
+      - hits_revealed_drive
+      - levers
+      - name
     ArcScopeEnum:
       enum:
       - global
@@ -42714,6 +42744,11 @@ components:
           nullable: true
         base_risk:
           type: integer
+        reasons:
+          type: array
+          items:
+            type: string
+          readOnly: true
       required:
       - approach_id
       - base_risk
@@ -42721,6 +42756,7 @@ components:
       - kind
       - label
       - option_id
+      - reasons
     BeatOutcomeEnum:
       enum:
       - success
@@ -50961,6 +50997,16 @@ components:
       - dreamwalk_host
       - is_dreamside
       - wake_blocked
+    DriveView:
+      type: object
+      properties:
+        label:
+          type: string
+        strength:
+          type: string
+      required:
+      - label
+      - strength
     DuelChallenge:
       type: object
       description: |-
@@ -51486,6 +51532,11 @@ components:
           items:
             $ref: '#/components/schemas/ProtectionCommitment'
           readOnly: true
+        standoff:
+          allOf:
+          - $ref: '#/components/schemas/StandoffView'
+          nullable: true
+          readOnly: true
         is_lethal:
           type: boolean
           readOnly: true
@@ -51522,6 +51573,7 @@ components:
       - protection_commitments
       - resolution_order
       - scene
+      - standoff
       - surge_beats
       - sustained_actions
       - volatile_objects
@@ -55772,6 +55824,55 @@ components:
         * `pending` - Pending
         * `accepted` - Accepted
         * `withdrawn` - Withdrawn
+    GroupView:
+      type: object
+      properties:
+        group_id:
+          type: integer
+        name:
+          type: string
+        member_count:
+          type: integer
+        state:
+          type: string
+        terms_ease:
+          type: integer
+        cause:
+          type: string
+          nullable: true
+        cause_gloss:
+          type: string
+          nullable: true
+        hidden_count:
+          type: integer
+        drives:
+          type: array
+          items:
+            $ref: '#/components/schemas/DriveView'
+        revealed_regard:
+          type: array
+          items:
+            type: string
+        read_check:
+          type: string
+        read_grade:
+          type: string
+        read_grade_label:
+          type: string
+      required:
+      - cause
+      - cause_gloss
+      - drives
+      - group_id
+      - hidden_count
+      - member_count
+      - name
+      - read_check
+      - read_grade
+      - read_grade_label
+      - revealed_regard
+      - state
+      - terms_ease
     GroupVoteRequestRequest:
       type: object
       description: 'POST body for the #1036 group-vote endpoint.'
@@ -58931,6 +59032,16 @@ components:
         * `gm` - GM
         * `experienced` - Experienced GM
         * `senior` - Senior GM
+    LeverView:
+      type: object
+      properties:
+        text:
+          type: string
+        is_spark:
+          type: boolean
+      required:
+      - is_spark
+      - text
     LibraryEntry:
       type: object
       description: Read-only serializer for library browse cards.
@@ -60351,6 +60462,9 @@ components:
           oneOf:
           - $ref: '#/components/schemas/EncounterRiskLevelEnum'
           - $ref: '#/components/schemas/BlankEnum'
+        opens_as_standoff:
+          type: boolean
+          description: 'ENCOUNTER options only: the spawned encounter opens as a standoff.'
         visibility_rule:
           description: Phase 0 predicate tree gating this option's visibility.
         authored_check_type:
@@ -60504,6 +60618,9 @@ components:
           oneOf:
           - $ref: '#/components/schemas/EncounterRiskLevelEnum'
           - $ref: '#/components/schemas/BlankEnum'
+        opens_as_standoff:
+          type: boolean
+          description: 'ENCOUNTER options only: the spawned encounter opens as a standoff.'
         visibility_rule:
           description: Phase 0 predicate tree gating this option's visibility.
         authored_check_type:
@@ -70983,6 +71100,9 @@ components:
           oneOf:
           - $ref: '#/components/schemas/EncounterRiskLevelEnum'
           - $ref: '#/components/schemas/BlankEnum'
+        opens_as_standoff:
+          type: boolean
+          description: 'ENCOUNTER options only: the spawned encounter opens as a standoff.'
         visibility_rule:
           description: Phase 0 predicate tree gating this option's visibility.
         authored_check_type:
@@ -80283,6 +80403,22 @@ components:
       - has_death_risk
       - stage_description
       - stage_name
+    SparkView:
+      type: object
+      properties:
+        group_id:
+          type: integer
+        regard_rule_id:
+          type: integer
+        text:
+          type: string
+        shared:
+          type: boolean
+      required:
+      - group_id
+      - regard_rule_id
+      - shared
+      - text
     SpeakerQueue:
       type: object
       properties:
@@ -81665,6 +81801,38 @@ components:
       description: |-
         * `core` - Core Member
         * `minor` - Minor Member
+    StandoffView:
+      type: object
+      properties:
+        place:
+          type: string
+        groups:
+          type: array
+          items:
+            $ref: '#/components/schemas/GroupView'
+        approaches:
+          type: array
+          items:
+            $ref: '#/components/schemas/ApproachView'
+        terms:
+          type: array
+          items:
+            $ref: '#/components/schemas/TermsView'
+        sparks:
+          type: array
+          items:
+            $ref: '#/components/schemas/SparkView'
+        shared_sparks:
+          type: array
+          items:
+            $ref: '#/components/schemas/SparkView'
+      required:
+      - approaches
+      - groups
+      - place
+      - shared_sparks
+      - sparks
+      - terms
     StartingArea:
       type: object
       description: |-
@@ -84499,6 +84667,31 @@ components:
           type: integer
           maximum: 2147483647
           minimum: 0
+    TermsView:
+      type: object
+      properties:
+        terms_id:
+          type: integer
+        name:
+          type: string
+        group_id:
+          type: integer
+        description:
+          type: string
+        grade:
+          type: string
+        grade_label:
+          type: string
+        critical_label:
+          type: string
+      required:
+      - critical_label
+      - description
+      - grade
+      - grade_label
+      - group_id
+      - name
+      - terms_id
     TerrainTypeEnum:
       enum:
       - open

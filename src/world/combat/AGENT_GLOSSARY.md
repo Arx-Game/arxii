@@ -399,3 +399,7 @@ them); only conditions still held that were applied during the encounter show. T
 line ("Deed remembered") only ever reports an authored deed row, since legend settles at
 the end of a story from its outcomes, never per fight.
 _Avoid_: aftermath report, post-combat summary, combat recap
+
+**Standoff** (#4145):
+The pre-round state of a `CombatEncounter` in which the party reads and talks down groups of opponents before the first round. Its terms (Group, Drive, Cause, Regard rule, Spark, Terms, Approach) live in `src/world/standoffs/AGENT_GLOSSARY.md`.
+_Avoid_: parley phase

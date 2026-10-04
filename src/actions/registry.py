@@ -503,6 +503,13 @@ from actions.definitions.speaker_queue import (
 )
 from actions.definitions.species_gm import ApplyShadeUndeathAction
 from actions.definitions.standing_declarations import declare_standing_action
+from actions.definitions.standoff import (
+    StandoffFightAction,
+    StandoffPressAction,
+    StandoffReadAction,
+    StandoffShareSparkAction,
+    StandoffTermsAction,
+)
 from actions.definitions.stealth import SneakAction, UnsneakAction
 from actions.definitions.story_builder import (
     CloseSceneRoomAction,
@@ -799,6 +806,11 @@ _ALL_ACTIONS: list[Action] = [
     DemoralizeAction(),
     TauntAction(),
     ParleyAction(),
+    StandoffReadAction(),
+    StandoffPressAction(),
+    StandoffTermsAction(),
+    StandoffFightAction(),
+    StandoffShareSparkAction(),
     ReadyAction(),
     UpgradeComboAction(),
     RevertComboAction(),

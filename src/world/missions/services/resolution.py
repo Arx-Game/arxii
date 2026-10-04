@@ -88,7 +88,8 @@ from world.missions.services.challenge_options import challenge_options_for_char
 from world.missions.services.renown_emission import emit_terminal_renown_awards
 from world.missions.services.rewards import emit_candidate_rewards, emit_terminal_rewards
 from world.missions.types import PresentedOption
-from world.predicates.predicates import CharacterPredicateContext, evaluate
+from world.predicates.describe import describe_leaf
+from world.predicates.predicates import CharacterPredicateContext, matched_leaves
 from world.traits.models import CheckOutcome
 
 if TYPE_CHECKING:
@@ -271,7 +272,9 @@ def present_options_for_character(
                 )
                 for co in challenge_options_for_character(challenge, character)
             )
-        elif evaluate(option.visibility_rule, CharacterPredicateContext(character)):
+        elif (
+            matched := matched_leaves(option.visibility_rule, CharacterPredicateContext(character))
+        ) is not None:
             # OptionSource.AUTHORED, visibility predicate satisfied.
             presented.append(
                 PresentedOption(
@@ -281,9 +284,16 @@ def present_options_for_character(
                     base_risk=option.authored_base_risk,
                     ic_framing=option.authored_ic_framing,
                     owner=character,
+                    reasons=_because_reasons(matched),
                 )
             )
     return presented
+
+
+def _because_reasons(leaves: list[dict]) -> tuple[str, ...]:
+    """Distinct player-facing reasons for the leaves that let a character through."""
+    lines = (describe_leaf(leaf) for leaf in leaves)
+    return tuple(dict.fromkeys(line for line in lines if line))
 
 
 def enter_node(instance: MissionInstance, node: MissionNode) -> None:

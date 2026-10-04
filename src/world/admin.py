@@ -90,6 +90,7 @@ import world.ships.admin
 import world.skills.admin
 import world.societies.admin
 import world.species.admin
+import world.standoffs.admin
 import world.stories.admin
 import world.tarot.admin
 import world.tasking.admin

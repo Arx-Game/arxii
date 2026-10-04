@@ -7468,6 +7468,24 @@ weights, speed_rank, Thread pulls). `CovenantRank` = administrative authority
 - **Source:** `src/world/covenants/`
 - **Details:** [covenants.md](covenants.md)
 
+### Standoffs (#4145)
+The moment before a fight: round zero of a `CombatEncounter`, where a party reads groups of
+creatures, presses them with social approaches and names terms that settle them. Derived
+from OPEN `StandoffGroup` rows, never a stored flag (ADR-4145-A).
+
+- **Models:** `CreatureDrive`, `RegardRule`, `StandoffApproach`, `StandoffTerms`,
+  `StandoffConfig` (singleton), `StandoffGroup`, `StandoffReveal`, `StandoffSparkShare`;
+  `CreatureTemplate.cause` / `cause_margin_percent`; `OpponentTierTemplate.force_weight_percent`; `MissionOption.opens_as_standoff`.
+- **Key functions:** `open_standoff`, `end_standoff_into_fight`,
+  `begin_round_or_break_standoff` (`services/state.py`); `evaluate_causes`, `cause_fires`
+  (`services/force.py`); `standoff_read`, `standoff_press`, `standoff_terms`,
+  `standoff_fight`, `standoff_share_spark` (`services/verbs.py`); `build_standoff_view`
+  (`services/view.py`); `social_target_difficulty` (`world/checks/social_target.py`, one
+  grade for every social check on a character, ADR-4145-B).
+- **Surfaces:** actions `standoff_*`, telnet `standoff`, `StandoffCard` on the encounter
+  detail's per-viewer `standoff` block.
+- **Details:** [standoffs.md](standoffs.md)
+
 ### Combat
 Turn-based combat engine: encounter lifecycle, NPC threat patterns, damage resolution,
 reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.

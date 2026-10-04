@@ -205,16 +205,20 @@ class BeginEncounterRoundAction(Action):
         context: ActionContext | None = None,
         **kwargs: Any,
     ) -> ActionResult:
-        from world.combat.services import begin_declaration_phase  # noqa: PLC0415
+        from world.standoffs.services.state import (  # noqa: PLC0415
+            begin_round_or_break_standoff,
+        )
 
         encounter, error = _fetch_encounter_and_permission(actor, _active_encounter_in_room)
         if error:
             return error
 
         try:
-            begin_declaration_phase(encounter)
+            began = begin_round_or_break_standoff(encounter, initiated_by_pc_side=None)
         except ValueError as err:
             return ActionResult(success=False, message=str(err))
+        if not began:
+            return ActionResult(success=False, message="The standoff has already ended.")
         return ActionResult(success=True, message="Round begins.")
 
 

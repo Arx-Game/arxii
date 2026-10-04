@@ -75,6 +75,7 @@ from world.checks.services import (
     perform_check,
     perform_check_with_modifiers,
 )
+from world.checks.social_target import SocialDifficulty, social_target_difficulty
 from world.checks.types import ModifierContribution
 from world.combat.constants import (
     ABSORPTION_CAP_PER_MOMENT,
@@ -3214,7 +3215,12 @@ def begin_declaration_phase(encounter: CombatEncounter) -> None:
     Uses select_for_update to prevent concurrent calls.
     Raises ValueError if the encounter is not BETWEEN_ROUNDS.
     """
+    from world.standoffs.services.state import is_in_standoff  # noqa: PLC0415
+
     enc = CombatEncounter.objects.select_for_update().get(pk=encounter.pk)
+    if is_in_standoff(enc):
+        msg = "The standoff has not broken yet."
+        raise ValueError(msg)
     if enc.status != RoundStatus.BETWEEN_ROUNDS:
         msg = (
             f"Cannot begin declaration phase: encounter status is "
@@ -7865,54 +7871,77 @@ def _record_combat_consequence(  # noqa: PLR0913 - mirrors record_consequence_ou
 
 
 def _social_combat_difficulty(
-    target: CombatOpponent | None,
+    target: CombatOpponent,
     *,
-    effort_level: str = "medium",
-) -> int:
-    """Compute the target_difficulty for a social-combat check (#2015).
+    actor_sheet: CharacterSheet,
+    check_type: CheckType,
+    effort_level: str = EffortLevel.MEDIUM,
+) -> SocialDifficulty:
+    """Grade a social-combat check against an opponent (#2015, #4145).
 
-    Composure defense: ``compute_resist_increment`` (the same path scenes use,
-    now wired into combat for the first time). Mindless resistance: a mindless
-    target adds ``MINDLESS_MORALE_RESISTANCE`` — a high resistance tier, not a
-    wall. Returns 0 when there is no target (rally targets an ally).
+    Delegates to ``social_target_difficulty`` so combat verbs, scenes and standoffs share
+    one grade: Composure defense via ``compute_resist_increment`` plus
+    ``MINDLESS_MORALE_RESISTANCE`` for a mindless target (a high resistance tier, not a
+    wall). Rally targets an ally and never grades here.
 
-    Passes ``level_override=target.level`` (whole-branch-review fix, #2707):
-    ``compute_resist_increment`` otherwise resolves the defender's level from its
-    ``objectdb``'s ``CharacterClassLevel`` rows, which an ephemeral ``CombatOpponent``
-    has none of — it would silently floor at 1 regardless of the opponent's authored
-    ``level``, so a level 20 boss resisted Demoralize/Taunt/Parley as though it were
-    level 1 even though it opposed offense checks (via ``level_opposition``) at its
-    real level. The override SUBSTITUTES the authored level for the objectdb-resolved
-    one; it does not add a second level term.
+    ``target_level=target.level`` (whole-branch-review fix, #2707): an ephemeral
+    ``CombatOpponent`` has no ``CharacterClassLevel`` rows, so without the override it
+    would floor at level 1 regardless of its authored ``level``. The override SUBSTITUTES
+    the authored level for the objectdb-resolved one; it does not add a second level term.
     """
-    if target is None:
-        return 0
-
-    from world.checks.services import compute_resist_increment  # noqa: PLC0415
     from world.combat.constants import MINDLESS_MORALE_RESISTANCE  # noqa: PLC0415
     from world.combat.morale import tier_has_morale  # noqa: PLC0415
 
-    difficulty = 0
-    if target.objectdb is not None:
-        difficulty = compute_resist_increment(
-            target.objectdb, effort_level, level_override=target.level
-        )
-    if not tier_has_morale(target):
-        difficulty += MINDLESS_MORALE_RESISTANCE
-    return difficulty
+    return social_target_difficulty(
+        actor_sheet=actor_sheet,
+        target_character=target.objectdb,
+        check_type=check_type,
+        target_level=target.level,
+        resist_effort=effort_level,
+        mindless_resistance=0 if tier_has_morale(target) else MINDLESS_MORALE_RESISTANCE,
+    )
+
+
+def _social_verb_success_level(
+    participant: CombatParticipant,
+    check_type_name: str,
+    action: CombatRoundAction,
+    target: CombatOpponent,
+) -> int:
+    """Look up a social verb's CheckType, grade it against ``target`` and roll it (#4145).
+
+    A missing or inactive CheckType resolves as a failed roll (success level 0).
+    """
+    from world.checks.models import CheckType  # noqa: PLC0415
+
+    check_type = CheckType.objects.filter(name=check_type_name, is_active=True).first()
+    if check_type is None:
+        return 0
+    graded = _social_combat_difficulty(
+        target, actor_sheet=participant.character_sheet, check_type=check_type
+    )
+    return _resolve_social_check(
+        participant,
+        check_type,
+        graded.difficulty,
+        target=_resolve_primary_target_sheet(action),
+        extra_contributions=graded.contributions,
+    )
 
 
 def _resolve_social_check(
     participant: CombatParticipant,
-    check_type_name: str,
+    check_type: CheckType,
     target_difficulty: int,
     target: CharacterSheet | None = None,
+    extra_contributions: list[ModifierContribution] | None = None,
 ) -> int:
     """Roll a social-combat check and return the success_level (#2015).
 
-    Resolves the CheckType by name (seeded by social_combat_content). Routes
-    modifiers through ``collect_check_modifiers`` (the same seam combat uses),
-    then ``perform_check``. Returns ``check_result.success_level``.
+    Routes modifiers through ``collect_check_modifiers`` (the same seam combat uses),
+    folding in ``extra_contributions`` (the actor-side terms from
+    ``social_target_difficulty``), then ``perform_check``. Returns
+    ``check_result.success_level``.
 
     ``target`` (#2536 Task 6 fold-in fix, extended to Parley on review): the
     acting participant's declared opponent, when this social action has one
@@ -7924,18 +7953,16 @@ def _resolve_social_check(
     (targets an ally, not an opponent) keeps the default ``None`` — it has no
     opposing target for a TARGET_* situation to key off.
     """
-    from world.checks.models import CheckType  # noqa: PLC0415
     from world.checks.services import collect_check_modifiers, perform_check  # noqa: PLC0415
     from world.combat.round_context import CombatRoundContext  # noqa: PLC0415
     from world.covenants.perks.context import SituationContext  # noqa: PLC0415
 
-    check_type = CheckType.objects.filter(name=check_type_name, is_active=True).first()
-    if check_type is None:
-        return 0
-
     character = participant.character_sheet.character
     breakdown = collect_check_modifiers(
-        participant.character_sheet, check_type, scene=participant.encounter.scene
+        participant.character_sheet,
+        check_type,
+        scene=participant.encounter.scene,
+        extra_contributions=extra_contributions,
     )
     # #2536 Task 5 review fix (Task 6: now target-threaded for callers that
     # have one — see the docstring above): thread the live round context so
@@ -7977,7 +8004,14 @@ def _resolve_rally(
 
     outcome = ActionOutcome(entity_type=ENTITY_TYPE_PC, entity_label=str(participant))
 
-    success_level = _resolve_social_check(participant, "Rally", RALLY_BASE_DIFFICULTY)
+    from world.checks.models import CheckType  # noqa: PLC0415
+
+    rally_check = CheckType.objects.filter(name="Rally", is_active=True).first()
+    success_level = (
+        0
+        if rally_check is None
+        else _resolve_social_check(participant, rally_check, RALLY_BASE_DIFFICULTY)
+    )
     if success_level >= 1:
         ally = action.focused_ally_target
         if ally is not None:
@@ -8034,10 +8068,7 @@ def _resolve_demoralize(
     if target is None:
         return outcome
 
-    target_difficulty = _social_combat_difficulty(target)
-    success_level = _resolve_social_check(
-        participant, "Demoralize", target_difficulty, target=_resolve_primary_target_sheet(action)
-    )
+    success_level = _social_verb_success_level(participant, "Demoralize", action, target)
 
     if success_level < 1:
         # Failed: mindless targets narrate "the construct is unmoved."
@@ -8064,10 +8095,7 @@ def _resolve_taunt(
 
     target = action.focused_opponent_target
     if target is not None:
-        target_difficulty = _social_combat_difficulty(target)
-        success_level = _resolve_social_check(
-            participant, "Taunt", target_difficulty, target=_resolve_primary_target_sheet(action)
-        )
+        success_level = _social_verb_success_level(participant, "Taunt", action, target)
 
         if success_level >= 1:
             accumulate_threat(
@@ -8088,7 +8116,7 @@ def _resolve_parley(
 
     Rolls the Parley check (charm + Persuasion + Seduction) against the target's
     Composure (+ mindless resistance — a breakthrough grants a fleeting mind). On
-    success, routes through ``apply_social_disposition_delta``. On a decisive
+    success, routes through ``apply_social_disposition_delta_for_level``. On a decisive
     success (SL>=3), calms the opponent. On a critical success (SL>=5) against a
     broken opponent, the NPC yields (FLED).
     """
@@ -8106,7 +8134,7 @@ def _resolve_parley(
     from world.conditions.models import ConditionTemplate  # noqa: PLC0415
     from world.conditions.services import apply_condition  # noqa: PLC0415
     from world.npc_services.social_disposition import (  # noqa: PLC0415
-        apply_social_disposition_delta,
+        apply_social_disposition_delta_for_level,
     )
 
     outcome = ActionOutcome(entity_type=ENTITY_TYPE_PC, entity_label=str(participant))
@@ -8115,10 +8143,7 @@ def _resolve_parley(
     if target is None:
         return outcome
 
-    target_difficulty = _social_combat_difficulty(target)
-    success_level = _resolve_social_check(
-        participant, "Parley", target_difficulty, target=_resolve_primary_target_sheet(action)
-    )
+    success_level = _social_verb_success_level(participant, "Parley", action, target)
 
     if success_level < 1:
         # Failed: mindless targets narrate "it has no mind to reach."
@@ -8130,7 +8155,7 @@ def _resolve_parley(
     actor = participant.character_sheet.character
     target_persona_id = target.persona_id
     if target_persona_id is not None:
-        apply_social_disposition_delta(actor, target_persona_id, _ParleyResult(success_level))
+        apply_social_disposition_delta_for_level(actor, target_persona_id, success_level)
 
     # Decisive success: calm the opponent (Calm condition -> NEUTRAL allegiance).
     # Boss sway resistance (#2642): a BOSS-tier opponent resists — it requires
@@ -8165,33 +8190,6 @@ def _resolve_parley(
         target.save(update_fields=["status"])
 
     return outcome
-
-
-@dataclass
-class _ParleyResult:
-    """Minimal result shim so apply_social_disposition_delta can read success_level.
-
-    The disposition service reads ``result.main_result.check_result.success_level``;
-    this shim provides that shape without constructing a full PendingResolution.
-    """
-
-    main_result: _ParleyMainResult
-
-    def __init__(self, success_level: int) -> None:
-        self.main_result = _ParleyMainResult(success_level)
-
-
-@dataclass
-class _ParleyMainResult:
-    check_result: _ParleyCheckResult
-
-    def __init__(self, success_level: int) -> None:
-        self.check_result = _ParleyCheckResult(success_level)
-
-
-@dataclass
-class _ParleyCheckResult:
-    success_level: int
 
 
 def _resolve_charge_movement(participant: CombatParticipant, action: CombatRoundAction) -> None:

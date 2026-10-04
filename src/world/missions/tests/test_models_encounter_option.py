@@ -30,6 +30,15 @@ class EncounterOptionCleanTests(TestCase):
             option.full_clean()
         self.assertIn("encounter_risk_level", ctx.exception.message_dict)
 
+    def test_non_encounter_option_may_not_open_as_standoff(self) -> None:
+        option = MissionOptionFactory(
+            option_kind=OptionKind.CHECK, authored_check_type=CheckTypeFactory()
+        )
+        option.opens_as_standoff = True
+        with self.assertRaises(ValidationError) as ctx:
+            option.full_clean()
+        self.assertIn("opens_as_standoff", ctx.exception.message_dict)
+
     def test_encounter_forbids_check_and_branch_fields(self) -> None:
         node = MissionNodeFactory(conflict_mode=ConflictMode.GROUP_VOTE)
         base = MissionOptionFactory(

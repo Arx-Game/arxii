@@ -195,6 +195,7 @@ class BeatOption:
     kind: str  # OptionKind value
     check_type_name: str | None
     base_risk: int
+    reasons: tuple[str, ...] = ()  # why this character qualifies; viewer-owned options only
 
 
 @dataclass(frozen=True)
@@ -405,6 +406,9 @@ class PresentedOption:
     ic_framing: str
     owner: ObjectDB
     approach: ChallengeApproach | None = None
+    # "Because" lines for an AUTHORED option gated on the owner's own traits
+    # ("you are Cinderi"); empty for ungated and CHALLENGE fan-out options.
+    reasons: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)

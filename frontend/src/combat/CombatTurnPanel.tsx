@@ -38,6 +38,7 @@ import { ForcedEscapeBanner } from './components/ForcedEscapeBanner';
 import { SpecialistChoicePanel } from './components/SpecialistChoicePanel';
 import { CommitmentPanel } from './components/CommitmentPanel';
 import { OutcomeRoulette } from './OutcomeRoulette';
+import { StandoffCard } from './standoff/StandoffCard';
 import type { components } from '@/generated/api';
 import type { CastPosition, PositionTargetShape } from '@/actions/types';
 
@@ -232,7 +233,9 @@ export function CombatTurnPanel({
     >
       {/* Panel header — round number + observer badge */}
       <div className="flex items-center justify-between">
-        <h2 className="text-sm font-bold text-foreground">Your Turn: Round {roundNumber}</h2>
+        <h2 className="text-sm font-bold text-foreground">
+          {encounter.standoff ? 'Standoff' : `Your Turn: Round ${roundNumber}`}
+        </h2>
         {!isParticipant && (
           <span className="rounded border border-border bg-muted px-2 py-0.5 text-[10px] uppercase tracking-wide text-muted-foreground">
             Observer
@@ -333,85 +336,102 @@ export function CombatTurnPanel({
         </button>
       )}
 
-      {/* §2 — Section order: YourTurn → ResonanceBudget → VitalPools →
-          CombatantsList → ActiveState → RoundFlow */}
-
-      {/* 1. YourTurn — only for participants */}
-      {isParticipant ? (
-        <YourTurn
+      {/* Standoff (#4145): the pre-round card, present only before round 1. */}
+      {encounter.standoff ? (
+        <StandoffCard
+          standoff={encounter.standoff}
           encounterId={encounterId}
           characterId={characterId}
-          characterSheetId={characterSheetId}
-          roundNumber={roundNumber}
-          availableActions={combatActions}
-          readOnly={false}
-          encounter={encounter}
-          castPosition={castPosition}
-          onCastPositionChange={onCastPositionChange}
-          onPositionShapeChange={onPositionShapeChange}
         />
-      ) : (
+      ) : null}
+
+      {/* A standoff is pre-round: its card is the whole panel until round one begins. */}
+      {encounter.standoff ? null : (
         <>
-          <PendingAttacks attacks={encounter.pending_attacks ?? []} viewerParticipantId={null} />
-          <p className="text-xs text-muted-foreground">You are observing this encounter.</p>
+          {/* §2 — Section order: YourTurn → ResonanceBudget → VitalPools →
+            CombatantsList → ActiveState → RoundFlow */}
+
+          {/* 1. YourTurn — only for participants */}
+          {isParticipant ? (
+            <YourTurn
+              encounterId={encounterId}
+              characterId={characterId}
+              characterSheetId={characterSheetId}
+              roundNumber={roundNumber}
+              availableActions={combatActions}
+              readOnly={false}
+              encounter={encounter}
+              castPosition={castPosition}
+              onCastPositionChange={onCastPositionChange}
+              onPositionShapeChange={onPositionShapeChange}
+            />
+          ) : (
+            <>
+              <PendingAttacks
+                attacks={encounter.pending_attacks ?? []}
+                viewerParticipantId={null}
+              />
+              <p className="text-xs text-muted-foreground">You are observing this encounter.</p>
+            </>
+          )}
+
+          {/* 2. ResonanceBudget */}
+          <ResonanceBudget
+            characterSheetId={characterSheetId}
+            collapsed={collapsed.resonanceBudget}
+            onToggleCollapse={() => toggleSection('resonanceBudget')}
+            data-testid="section-resonance-budget"
+          />
+
+          {/* 3. VitalPools */}
+          <VitalPools
+            encounter={encounter}
+            characterId={characterId}
+            characterSheetId={characterSheetId}
+            collapsed={collapsed.vitalPools}
+            onToggleCollapse={() => toggleSection('vitalPools')}
+            data-testid="section-vital-pools"
+          />
+
+          {/* 4. CombatantsList — opponent click-menu (#3381) only for a declaring-phase
+            participant; canDeclareManeuvers mirrors YourTurn's own isDeclaringPhase
+            gate, threaded down from this shared parent so a GM/observer row never
+            renders the menu. */}
+          <CombatantsList
+            encounter={encounter}
+            collapsed={collapsed.combatantsList}
+            onToggleCollapse={() => toggleSection('combatantsList')}
+            characterId={characterId}
+            canDeclareManeuvers={isParticipant && encounter.status === 'declaring'}
+            data-testid="section-combatants-list"
+          />
+
+          {/* 5. CompanionOrders — free directives for deployed companions (#3576). */}
+          <CompanionOrders
+            encounter={encounter}
+            encounterId={encounterId}
+            characterId={characterId}
+            collapsed={collapsed.companionOrders}
+            onToggleCollapse={() => toggleSection('companionOrders')}
+          />
+
+          {/* 6. ActiveState */}
+          <ActiveState
+            encounter={encounter}
+            collapsed={collapsed.activeState}
+            onToggleCollapse={() => toggleSection('activeState')}
+            data-testid="section-active-state"
+          />
+
+          {/* 7. RoundFlow */}
+          <RoundFlow
+            encounter={encounter}
+            collapsed={collapsed.roundFlow}
+            onToggleCollapse={() => toggleSection('roundFlow')}
+            data-testid="section-round-flow"
+          />
         </>
       )}
-
-      {/* 2. ResonanceBudget */}
-      <ResonanceBudget
-        characterSheetId={characterSheetId}
-        collapsed={collapsed.resonanceBudget}
-        onToggleCollapse={() => toggleSection('resonanceBudget')}
-        data-testid="section-resonance-budget"
-      />
-
-      {/* 3. VitalPools */}
-      <VitalPools
-        encounter={encounter}
-        characterId={characterId}
-        characterSheetId={characterSheetId}
-        collapsed={collapsed.vitalPools}
-        onToggleCollapse={() => toggleSection('vitalPools')}
-        data-testid="section-vital-pools"
-      />
-
-      {/* 4. CombatantsList — opponent click-menu (#3381) only for a declaring-phase
-          participant; canDeclareManeuvers mirrors YourTurn's own isDeclaringPhase
-          gate, threaded down from this shared parent so a GM/observer row never
-          renders the menu. */}
-      <CombatantsList
-        encounter={encounter}
-        collapsed={collapsed.combatantsList}
-        onToggleCollapse={() => toggleSection('combatantsList')}
-        characterId={characterId}
-        canDeclareManeuvers={isParticipant && encounter.status === 'declaring'}
-        data-testid="section-combatants-list"
-      />
-
-      {/* 5. CompanionOrders — free directives for deployed companions (#3576). */}
-      <CompanionOrders
-        encounter={encounter}
-        encounterId={encounterId}
-        characterId={characterId}
-        collapsed={collapsed.companionOrders}
-        onToggleCollapse={() => toggleSection('companionOrders')}
-      />
-
-      {/* 6. ActiveState */}
-      <ActiveState
-        encounter={encounter}
-        collapsed={collapsed.activeState}
-        onToggleCollapse={() => toggleSection('activeState')}
-        data-testid="section-active-state"
-      />
-
-      {/* 7. RoundFlow */}
-      <RoundFlow
-        encounter={encounter}
-        collapsed={collapsed.roundFlow}
-        onToggleCollapse={() => toggleSection('roundFlow')}
-        data-testid="section-round-flow"
-      />
 
       {/* 7. OutcomeRoulette — most recent consequence outcome for this character */}
       {latestOutcome !== null && (

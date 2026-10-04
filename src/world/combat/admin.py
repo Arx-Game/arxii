@@ -41,6 +41,7 @@ from world.combat.models import (
     ThreatPoolEntry,
     ThreatRecord,
 )
+from world.standoffs.admin import CreatureDriveInline, RegardRuleInline
 
 
 class CombatOpponentInline(admin.TabularInline):
@@ -412,6 +413,7 @@ class OpponentTierTemplateAdmin(admin.ModelAdmin):
         "base_swarm_count",
         "boss_phase_count",
         "base_actions_per_round",
+        "force_weight_percent",
     ]
     list_filter = ["tier"]
 
@@ -433,7 +435,7 @@ class CreatureTemplateAdmin(admin.ModelAdmin):
     list_display = ("name", "tier", "threat_pool")
     list_filter = ("tier",)
     search_fields = ("name",)
-    inlines = [CreaturePhaseTemplateInline]
+    inlines = [CreaturePhaseTemplateInline, CreatureDriveInline, RegardRuleInline]
 
 
 @admin.register(CreaturePhaseTemplate)

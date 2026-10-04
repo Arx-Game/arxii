@@ -168,6 +168,29 @@ class ResolveSocialVerbTests(TestCase):
             ConditionInstance.objects.filter(target=self.opponent.objectdb, condition=calm).exists()
         )
 
+    def test_parley_success_raises_the_persona_backed_opponents_affection(self) -> None:
+        """#4145: a parley success reaches NPCStanding through the real combat dispatch."""
+        from world.npc_services.models import NPCStanding
+        from world.scenes.constants import PersonaType
+        from world.scenes.factories import PersonaFactory
+
+        persona = PersonaFactory(persona_type=PersonaType.ESTABLISHED)
+        npc = CombatOpponentFactory(
+            encounter=self.encounter, threat_pool=ThreatPoolFactory(), persona=persona
+        )
+        npc.morale = FALTER_MORALE_THRESHOLD
+        npc.save()
+        declare_parley(self.participant, npc)
+        success = CheckOutcomeFactory(name="ParleyAffection", success_level=2)
+
+        with force_check_outcome(success):
+            resolve_round(self.encounter)
+
+        standing = NPCStanding.objects.get(
+            persona=self.participant.character_sheet.primary_persona, npc_persona=persona
+        )
+        self.assertGreater(standing.affection, 0)
+
     def test_taunt_increments_threat(self) -> None:
         declare_taunt(self.participant, self.opponent)
 
@@ -249,7 +272,7 @@ class ResolveSocialCheckSituationContextTests(TestCase):
         # module-level name — patch the source, not world.combat.services.
         with patch("world.checks.services.perform_check") as mock_perform:
             mock_perform.return_value = MagicMock(success_level=1)
-            _resolve_social_check(self.participant, "Rally", 0)
+            _resolve_social_check(self.participant, CheckType.objects.get(name="Rally"), 0)
 
         situation_ctx = mock_perform.call_args.kwargs["situation_ctx"]
         self.assertIsInstance(situation_ctx, SituationContext)
