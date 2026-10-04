@@ -21,6 +21,7 @@ from world.checks.services import (
     perform_check,
 )
 from world.checks.social_target import DriveHit, SocialDifficulty, social_target_difficulty
+from world.checks.theater import check_outcome_faces, maybe_emit_resolution_theater
 from world.combat.constants import (
     DEMORALIZE_MORALE_PER_LEVEL,
     MINDLESS_MORALE_RESISTANCE,
@@ -32,7 +33,12 @@ from world.combat.morale import apply_morale_damage, tier_has_morale
 from world.conditions.services import apply_condition
 from world.fatigue.constants import EffortLevel
 from world.mechanics.models import Application
-from world.standoffs.constants import RevealKind, StandoffGroupState, TermsEffect
+from world.standoffs.constants import (
+    SUCCESS_LEVEL_WORDS,
+    RevealKind,
+    StandoffGroupState,
+    TermsEffect,
+)
 from world.standoffs.models import (
     CreatureDrive,
     RegardRule,
@@ -91,6 +97,11 @@ def _refusal(encounter: CombatEncounter, group: StandoffGroup | None) -> str | N
     if group is not None and group.state != StandoffGroupState.OPEN:
         return _MSG_SETTLED
     return None
+
+
+def _word(tier: int) -> str:
+    """The plain outcome word for a check tier ("Success", "Critical failure"...)."""
+    return SUCCESS_LEVEL_WORDS[max(-2, min(2, tier))]
 
 
 def _refuse(message: str) -> StandoffActionResult:
@@ -219,7 +230,9 @@ def standoff_read(  # noqa: PLR0913 - the focus kwargs are the read verb's whole
     )
     tier = result.success_level
     if tier < 0:
-        return StandoffActionResult(False, "You learn nothing.", success_level=tier)
+        return StandoffActionResult(
+            False, f"You study them. {_word(tier)}. You learn nothing.", success_level=tier
+        )
     if tier >= 2:  # noqa: PLR2004 - critical: everything
         chosen = hidden
     elif tier == 1:
@@ -236,7 +249,9 @@ def standoff_read(  # noqa: PLR0913 - the focus kwargs are the read verb's whole
     revealed = [_reveal(group, thing) for thing in chosen]
     # No evaluate_causes here: a read changes none of a cause's inputs (force, emboldening,
     # suppressing regard), so the cause cannot newly fire.
-    return StandoffActionResult(True, "You read the group.", success_level=tier, revealed=revealed)
+    return StandoffActionResult(
+        True, f"You study them. {_word(tier)}.", success_level=tier, revealed=revealed
+    )
 
 
 @dataclass(frozen=True)
@@ -438,13 +453,15 @@ def standoff_press(
         }
         named = [hit.label for drive, hit in hits if drive.pk in revealed_ids]
         message = "They soften." if not named else f"They soften: {', '.join(named)}."
+        steps = group.terms_ease
+        message += f" Terms are now {steps} {'step' if steps == 1 else 'steps'} easier."
     elif tier <= BOTCH_LEVEL:
         _embolden_on_botch(group, config)
         message = "It goes badly; they grow bolder."
     fight_started = evaluate_causes(encounter)
     return StandoffActionResult(
         success=tier >= 1,
-        message=message,
+        message=f"{_word(tier)}. {message}",
         success_level=tier,
         fight_started=fight_started,
     )
@@ -497,13 +514,24 @@ def standoff_terms(
         ).total,
     )
     _share_shifting_sparks(group, sheet, set())
+    faces, selected = check_outcome_faces(result)
+    maybe_emit_resolution_theater(
+        character=sheet.character,
+        title=terms.name,
+        consequences=faces,
+        selected=selected,
+        force=True,
+    )
     tier = result.success_level
     if tier < 0:
         if tier <= BOTCH_LEVEL:
             _embolden_on_botch(group, config)
         fight_started = evaluate_causes(encounter)
         return StandoffActionResult(
-            False, "They refuse your terms.", success_level=tier, fight_started=fight_started
+            False,
+            f"{_word(tier)}. They refuse your terms.",
+            success_level=tier,
+            fight_started=fight_started,
         )
     _apply_terms(members, terms, config, sheet)
     group.state = StandoffGroupState.SETTLED
@@ -514,7 +542,9 @@ def standoff_terms(
         complete_standoff(encounter)
     else:
         evaluate_causes(encounter)
-    return StandoffActionResult(True, "They accept.", success_level=tier, settled=True)
+    return StandoffActionResult(
+        True, f"{_word(tier)}. They accept.", success_level=tier, settled=True
+    )
 
 
 @transaction.atomic

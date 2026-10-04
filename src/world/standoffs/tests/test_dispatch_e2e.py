@@ -40,7 +40,7 @@ def _ref(key: str) -> ActionRef:
 
 
 def _roll(tier: CheckOutcomeFactory) -> SimpleNamespace:
-    return SimpleNamespace(success_level=tier.success_level, outcome=tier)
+    return SimpleNamespace(success_level=tier.success_level, outcome=tier, chart=None)
 
 
 class StandoffJourneyBase(EncounterOptionTestBase):

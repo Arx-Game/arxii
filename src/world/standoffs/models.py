@@ -187,6 +187,10 @@ class StandoffTerms(NaturalKeyMixin, SharedMemoryModel):
         choices=TermsEffect.choices,
         help_text="What happens to the group when the terms are accepted.",
     )
+    description = models.TextField(
+        blank=True,
+        help_text="Outcome shown to players before they commit to these terms (author in admin).",
+    )
     required_drive = models.ForeignKey(
         "arxii.Property",
         on_delete=models.PROTECT,

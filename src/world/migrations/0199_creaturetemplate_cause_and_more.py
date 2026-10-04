@@ -565,6 +565,13 @@ class Migration(migrations.Migration):
                     ),
                 ),
                 (
+                    "description",
+                    models.TextField(
+                        blank=True,
+                        help_text="Outcome shown to players before they commit to these terms (author in admin).",
+                    ),
+                ),
+                (
                     "difficulty_shift_bands",
                     models.SmallIntegerField(
                         default=0,

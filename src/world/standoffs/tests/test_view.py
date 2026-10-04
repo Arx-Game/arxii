@@ -19,9 +19,9 @@ from world.combat.factories import (
 )
 from world.combat.tests.test_views import CombatEncounterViewSetTestBase
 from world.mechanics.constants import DifficultyIndicator
-from world.mechanics.factories import ApplicationFactory
+from world.mechanics.factories import ApplicationFactory, ModifierTargetFactory
 from world.species.factories import SpeciesFactory
-from world.standoffs.constants import DriveStrength, RevealKind
+from world.standoffs.constants import CAUSE_GLOSSES, DriveStrength, RevealKind
 from world.standoffs.factories import (
     CreatureDriveFactory,
     RegardRuleFactory,
@@ -145,11 +145,13 @@ class HiddenInformationTests(ViewBase):
         with patch(PREVIEW, return_value=0) as preview:
             hidden = self.view_for(self.sheet_b).approaches[0]
             self.assertEqual(hidden.levers, [])
+            self.assertFalse(hidden.hits_revealed_drive)
             self.assertTrue(preview.called)
         StandoffRevealFactory(group=self.group, kind=RevealKind.DRIVE, drive=self.drive)
         with patch(PREVIEW, return_value=0):
             revealed = self.view_for(self.sheet_b).approaches[0]
-        self.assertEqual(revealed.levers, [self.drive.property.name])
+        self.assertEqual(revealed.levers, [f"hits {self.drive.property.name} (Major)"])
+        self.assertTrue(revealed.hits_revealed_drive)
 
 
 class LeverLeakTests(ViewBase):
@@ -167,7 +169,66 @@ class LeverLeakTests(ViewBase):
         StandoffRevealFactory(group=self.group, kind=RevealKind.REGARD, regard_rule=self.rule)
         with patch(PREVIEW, return_value=0):
             after = self.view_for(self.sheet_a).approaches[0].levers
-        self.assertIn("PLACEHOLDER detail A", after)
+        self.assertEqual(after, ["your spark: PLACEHOLDER detail A"])
+
+
+class PresentationTests(ViewBase):
+    """The labels, captions and glosses the card draws from the payload (#4145 demo)."""
+
+    def test_grade_carries_a_human_label_beside_the_value(self) -> None:
+        StandoffApproachFactory()
+        StandoffTermsFactory()
+        with patch(PREVIEW, return_value=-4), patch(CHART, return_value=True):
+            view = self.view_for(self.sheet_b)
+        self.assertEqual(view.approaches[0].grade, DifficultyIndicator.VERY_HARD.value)
+        self.assertEqual(view.approaches[0].grade_label, "Very Hard")
+        self.assertEqual(view.terms[0].grade_label, "Very Hard")
+
+    def test_approach_caption_names_the_check_and_the_sway_modifier(self) -> None:
+        plain = StandoffApproachFactory(sway_target=None)
+        swayed = StandoffApproachFactory(sway_target=ModifierTargetFactory(name="Menace"))
+        with patch(PREVIEW, return_value=0):
+            by_id = {a.approach_id: a for a in self.view_for(self.sheet_b).approaches}
+        self.assertEqual(by_id[plain.pk].check_caption, plain.check_type.name)
+        self.assertEqual(by_id[swayed.pk].check_caption, f"{swayed.check_type.name} + Menace")
+
+    def test_unmatched_approach_hits_no_revealed_drive(self) -> None:
+        StandoffApproachFactory()
+        with patch(PREVIEW, return_value=0):
+            approach = self.view_for(self.sheet_b).approaches[0]
+        self.assertFalse(approach.hits_revealed_drive)
+        self.assertEqual(approach.levers, [])
+
+    def test_read_grade_previews_the_read_check_against_the_group_level(self) -> None:
+        with (
+            patch(PREVIEW, return_value=4) as preview,
+            patch(CHART, return_value=True),
+            patch("world.standoffs.services.view.level_opposition", return_value=9) as opposition,
+        ):
+            group = self.view_for(self.sheet_b).groups[0]
+        self.assertEqual((group.read_grade, group.read_grade_label), ("easy", "Easy"))
+        self.assertEqual(group.read_check, self.config.read_check_type.name)
+        self.assertEqual(opposition.call_args.kwargs["level"], 2)
+        self.assertEqual(preview.call_args.args[2], 9)
+
+    def test_cause_gloss_only_once_the_cause_is_revealed(self) -> None:
+        self.template.cause = CauseKind.PREDATION
+        self.template.save(update_fields=["cause"])
+        self.assertIsNone(self.view_for(self.sheet_b).groups[0].cause_gloss)
+        StandoffRevealFactory(group=self.group, kind=RevealKind.CAUSE)
+        self.assertEqual(
+            self.view_for(self.sheet_b).groups[0].cause_gloss,
+            CAUSE_GLOSSES[CauseKind.PREDATION],
+        )
+
+    def test_terms_carry_their_authored_description(self) -> None:
+        StandoffTermsFactory(description="PLACEHOLDER what happens")
+        with patch(PREVIEW, return_value=0):
+            terms = self.view_for(self.sheet_b).terms[0]
+        self.assertEqual(terms.description, "PLACEHOLDER what happens")
+
+    def test_place_is_the_encounter_room_name(self) -> None:
+        self.assertEqual(self.view_for(self.sheet_b).place, self.encounter.room.db_key)
 
 
 class QueryBoundTests(ViewBase):

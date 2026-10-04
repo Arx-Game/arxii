@@ -45,7 +45,7 @@ SOCIAL = "world.standoffs.services.verbs.social_target_difficulty"
 
 def forced(level: int) -> SimpleNamespace:
     outcome = CheckOutcomeFactory(name=f"Forced tier {level}", success_level=level)
-    return SimpleNamespace(success_level=level, outcome=outcome)
+    return SimpleNamespace(success_level=level, outcome=outcome, chart=None)
 
 
 class VerbBase(TestCase):
@@ -452,3 +452,75 @@ class ActingOnASparkRevealsItTests(VerbBase):
         standoff_fight(self.participant, self.encounter)
         standoff_press(self.participant, self.group, self.approach)
         self.assertEqual(self._shares(), 0)
+
+
+class ResultMessageTests(VerbBase):
+    """Messages name the outcome word, and a press names the new terms ease."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.approach = StandoffApproachFactory()
+        self.terms = StandoffTermsFactory(effect=TermsEffect.PASS)
+
+    def test_press_success_names_the_outcome_and_the_new_ease(self) -> None:
+        with patch(CHECK, return_value=forced(1)):
+            first = standoff_press(self.participant, self.group, self.approach)
+            second = standoff_press(self.participant, self.group, self.approach)
+        self.assertEqual(first.message, "Success. They soften. Terms are now 1 step easier.")
+        self.assertEqual(second.message, "Success. They soften. Terms are now 2 steps easier.")
+
+    def test_press_failure_and_botch_name_the_outcome(self) -> None:
+        with patch(CHECK, return_value=forced(-1)):
+            failed = standoff_press(self.participant, self.group, self.approach)
+        with patch(CHECK, return_value=forced(-2)):
+            botched = standoff_press(self.participant, self.group, self.approach)
+        self.assertEqual(failed.message, "Failure. Your words do not move them.")
+        self.assertEqual(botched.message, "Critical failure. It goes badly; they grow bolder.")
+
+    def test_read_names_the_outcome(self) -> None:
+        self.template.cause = CauseKind.PREDATION
+        self.template.save(update_fields=["cause"])
+        with patch(CHECK, return_value=forced(-1)):
+            missed = standoff_read(self.participant, self.group)
+        self.assertEqual(missed.message, "You study them. Failure. You learn nothing.")
+        with patch(CHECK, return_value=forced(1)):
+            result = standoff_read(self.participant, self.group)
+        self.assertEqual(result.message, "You study them. Success.")
+
+    def test_terms_name_the_outcome(self) -> None:
+        with patch(CHECK, return_value=forced(-1)):
+            refused = standoff_terms(self.participant, self.group, self.terms)
+        self.assertEqual(refused.message, "Failure. They refuse your terms.")
+        with patch(CHECK, return_value=forced(1)):
+            accepted = standoff_terms(self.participant, self.group, self.terms)
+        self.assertEqual(accepted.message, "Success. They accept.")
+
+
+class TermsTheaterTests(VerbBase):
+    def setUp(self) -> None:
+        super().setUp()
+        self.terms = StandoffTermsFactory(effect=TermsEffect.PASS)
+
+    def _assert_emitted(self, level: int) -> None:
+        theater = "world.standoffs.services.verbs.maybe_emit_resolution_theater"
+        faces = "world.standoffs.services.verbs.check_outcome_faces"
+        with (
+            patch(CHECK, return_value=forced(level)) as roll,
+            patch(faces, return_value=(["face"], "picked")) as built,
+            patch(theater) as emit,
+        ):
+            standoff_terms(self.participant, self.group, self.terms)
+        built.assert_called_once_with(roll.return_value)
+        emit.assert_called_once_with(
+            character=self.participant.character_sheet.character,
+            title=self.terms.name,
+            consequences=["face"],
+            selected="picked",
+            force=True,
+        )
+
+    def test_the_terms_roll_emits_the_success_wheel(self) -> None:
+        self._assert_emitted(1)
+
+    def test_a_refused_terms_roll_emits_the_wheel_too(self) -> None:
+        self._assert_emitted(-1)

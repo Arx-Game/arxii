@@ -54,7 +54,7 @@ class StandoffRoutingTests(EncounterOptionTestBase):
         self.terms = StandoffTermsFactory(effect=TermsEffect.PASS)
 
     def _terms(self, tier: CheckOutcomeFactory) -> object:
-        roll = SimpleNamespace(success_level=tier.success_level, outcome=tier)
+        roll = SimpleNamespace(success_level=tier.success_level, outcome=tier, chart=None)
         with patch(CHECK, return_value=roll):
             return standoff_terms(self.combat_participant, self.group, self.terms)
 

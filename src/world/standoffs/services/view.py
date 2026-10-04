@@ -11,10 +11,20 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
-from world.checks.services import collect_check_modifiers, preview_check_difficulty
+from world.checks.services import (
+    collect_check_modifiers,
+    level_opposition,
+    preview_check_difficulty,
+)
 from world.combat.constants import CauseKind, ParticipantStatus
+from world.mechanics.constants import DifficultyIndicator
 from world.mechanics.services import difficulty_indicator_for_rank_difference
-from world.standoffs.constants import DriveStrength, RevealKind, StandoffGroupState
+from world.standoffs.constants import (
+    CAUSE_GLOSSES,
+    DriveStrength,
+    RevealKind,
+    StandoffGroupState,
+)
 from world.standoffs.models import (
     StandoffApproach,
     StandoffConfig,
@@ -55,9 +65,13 @@ class GroupView:
     state: str
     terms_ease: int
     cause: str | None
+    cause_gloss: str | None
     hidden_count: int
     drives: list[DriveView]
     revealed_regard: list[str]
+    read_check: str
+    read_grade: str
+    read_grade_label: str
 
 
 @dataclass(frozen=True)
@@ -66,7 +80,10 @@ class ApproachView:
     group_id: int
     name: str
     grade: str
+    grade_label: str
+    check_caption: str
     levers: list[str]
+    hits_revealed_drive: bool
 
 
 @dataclass(frozen=True)
@@ -82,16 +99,24 @@ class TermsView:
     terms_id: int
     name: str
     group_id: int
+    description: str
     grade: str
+    grade_label: str
 
 
 @dataclass(frozen=True)
 class StandoffView:
+    place: str = ""
     groups: list[GroupView] = field(default_factory=list)
     approaches: list[ApproachView] = field(default_factory=list)
     terms: list[TermsView] = field(default_factory=list)
     sparks: list[SparkView] = field(default_factory=list)
     shared_sparks: list[SparkView] = field(default_factory=list)
+
+
+def grade_label(grade: str) -> str:
+    """The human label of a ``DifficultyIndicator`` value (``very_hard`` -> "Very Hard")."""
+    return DifficultyIndicator(grade).label if grade else ""
 
 
 @dataclass
@@ -159,7 +184,11 @@ class _GroupFacts:
 
 
 def _group_view(
-    facts: _GroupFacts, viewer: CharacterSheet, member_count: int, hidden_count: int
+    facts: _GroupFacts,
+    viewer: CharacterSheet,
+    member_count: int,
+    hidden_count: int,
+    read: tuple[str, str] = ("", ""),
 ) -> GroupView:
     group = facts.group
     template = group.creature_template
@@ -179,6 +208,7 @@ def _group_view(
         state=group.state,
         terms_ease=group.terms_ease,
         cause=CauseKind(template.cause).label if cause_known else None,
+        cause_gloss=CAUSE_GLOSSES.get(template.cause) if cause_known else None,
         hidden_count=hidden_count,
         drives=drives,
         revealed_regard=describe_reveals(
@@ -188,17 +218,29 @@ def _group_view(
             matching_rule_ids={m.rule.pk for m in facts.matches},
             shared_rule_ids=facts.shared_rule_ids,
         ),
+        read_check=read[0],
+        read_grade=read[1],
+        read_grade_label=grade_label(read[1]),
     )
 
 
-def _levers(facts: _GroupFacts, hits: list, targeted: set[int]) -> list[str]:
+def _levers(facts: _GroupFacts, hits: list, targeted: set[int]) -> tuple[list[str], bool]:
     """Revealed drives the approach hits, and regard text only once that rule was read.
+
+    Returns the lever lines and whether any is a revealed drive hit. Drives read
+    "hits <Drive> (<Strength>)"; a regard lever is always the viewer's own spark
+    (``facts.matches`` are their rules), so it reads "your spark: <revealed text>".
 
     A shared spark is not a read: auto-sharing after a press must not expose detail the
     group never revealed, and describe_reveals (telnet) gates on the reveal too.
     """
     revealed_props = facts.revealed_drive_property_ids
-    levers = [hit.label for drive, hit in hits if drive.property_id in revealed_props]
+    hit_levers = [
+        f"hits {hit.label} ({DriveStrength(drive.strength).label})"
+        for drive, hit in hits
+        if drive.property_id in revealed_props
+    ]
+    levers = list(hit_levers)
     revealed_rules = facts.revealed_rule_ids
     for match in facts.matches:
         rule = match.rule
@@ -206,8 +248,15 @@ def _levers(facts: _GroupFacts, hits: list, targeted: set[int]) -> list[str]:
             rule.drive_shift != 0 and rule.drive_id in targeted
         )
         if shifts and rule.pk in revealed_rules and rule.revealed_text:
-            levers.append(rule.revealed_text)
-    return levers
+            levers.append(f"your spark: {rule.revealed_text}")
+    return levers, bool(hit_levers)
+
+
+def _approach_caption(approach: StandoffApproach) -> str:
+    """The check, plus the modifier that adds sway to it, if any."""
+    if approach.sway_target is None:
+        return approach.check_type.name
+    return f"{approach.check_type.name} + {approach.sway_target.name}"
 
 
 def _sparks(facts: _GroupFacts, viewer: CharacterSheet) -> tuple[list[SparkView], list[SparkView]]:
@@ -246,7 +295,7 @@ def build_standoff_view(
     all_terms = list(StandoffTerms.objects.all())
     capability_ids = [a.capability_id for a in approaches]
     grader = _Grader(viewer_sheet)
-    view = StandoffView()
+    view = StandoffView(place=encounter.room.db_key if encounter.room is not None else "")
     for group in encounter.standoff_groups.select_related("creature_template"):
         reveals = list(group.reveals.select_related("drive__property", "regard_rule"))
         shares = list(group.spark_shares.select_related("regard_rule"))
@@ -259,13 +308,34 @@ def build_standoff_view(
             revealed=facts.revealed_set,
             known_matches={viewer_sheet.pk: matches},
         )
-        view.groups.append(_group_view(facts, viewer_sheet, len(members), len(hidden)))
+        is_open = group.state == StandoffGroupState.OPEN and bool(members)
+        ctx = (
+            build_grading_context(group, viewer_sheet, members=members, matches=matches)
+            if is_open
+            else None
+        )
+        read = ("", "")
+        if config.read_check_type is not None:
+            read = (config.read_check_type.name, "")
+            if ctx is not None:
+                difficulty = level_opposition(
+                    config.read_check_type, level=ctx.level, character=ctx.first.objectdb
+                )
+                read = (read[0], grader.grade(config.read_check_type, difficulty, []))
+        view.groups.append(
+            _group_view(
+                facts,
+                viewer_sheet,
+                len(members),
+                len(hidden),
+                read=read,
+            )
+        )
         own, others = _sparks(facts, viewer_sheet)
         view.sparks.extend(own)
         view.shared_sparks.extend(others)
-        if group.state != StandoffGroupState.OPEN or not members:
+        if ctx is None:
             continue
-        ctx = build_grading_context(group, viewer_sheet, members=members, matches=matches)
         targeted_by_capability = targeted_properties_by_capability(
             capability_ids, [drive.property_id for drive in ctx.drives]
         )
@@ -273,15 +343,18 @@ def build_standoff_view(
             graded, hits, targeted = press_grade(
                 group, viewer_sheet, approach, ctx, targeted_by_capability
             )
+            grade = grader.grade(approach.check_type, graded.difficulty, graded.contributions)
+            levers, hits_drive = _levers(facts, hits, targeted)
             view.approaches.append(
                 ApproachView(
                     approach_id=approach.pk,
                     group_id=group.pk,
                     name=approach.name,
-                    grade=grader.grade(
-                        approach.check_type, graded.difficulty, graded.contributions
-                    ),
-                    levers=_levers(facts, hits, targeted),
+                    grade=grade,
+                    grade_label=grade_label(grade),
+                    check_caption=_approach_caption(approach),
+                    levers=levers,
+                    hits_revealed_drive=hits_drive,
                 )
             )
         if config.terms_check_type is None:
@@ -294,14 +367,15 @@ def build_standoff_view(
             ):
                 continue
             graded = terms_difficulty(group, viewer_sheet, terms, ctx, config)
+            grade = grader.grade(config.terms_check_type, graded.difficulty, graded.contributions)
             view.terms.append(
                 TermsView(
                     terms_id=terms.pk,
                     name=terms.name,
                     group_id=group.pk,
-                    grade=grader.grade(
-                        config.terms_check_type, graded.difficulty, graded.contributions
-                    ),
+                    description=terms.description,
+                    grade=grade,
+                    grade_label=grade_label(grade),
                 )
             )
     return view

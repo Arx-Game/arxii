@@ -24,6 +24,7 @@ from world.standoffs.factories import (
     CreatureDriveFactory,
     RegardRuleFactory,
     StandoffApproachFactory,
+    StandoffGroupFactory,
     StandoffRevealFactory,
     StandoffTermsFactory,
 )
@@ -176,6 +177,33 @@ class CmdStandoffTests(TestCase):
         cmd = self._cmd("")
         cmd.func()
         self.assertIn("Shared: a shared pang", cmd.msg.call_args.args[0])
+
+    def test_group_names_take_a_unique_word_or_prefix_case_insensitively(self) -> None:
+        for typed in ("bandits", "BANDITS", "road", "Road Ban"):
+            _, kwargs = self._dispatched(f"press hard stare {typed}")
+            self.assertEqual(kwargs["group_id"], self.group.pk, typed)
+
+    def test_an_ambiguous_group_name_lists_the_matches(self) -> None:
+        other = CreatureTemplateFactory(name="Road Wolves", cause=CauseKind.NONE)
+        CombatOpponentFactory(encounter=self.encounter, creature_template=other)
+        StandoffGroupFactory(encounter=self.encounter, creature_template=other)
+        cmd = self._cmd("press hard stare road")
+        cmd._subverb, cmd._rest = "press", "hard stare road"
+        with self.assertRaises(CommandError) as raised:
+            cmd.resolve_action_args()
+        self.assertIn("Road Bandits", str(raised.exception))
+        self.assertIn("Road Wolves", str(raised.exception))
+        # The exact whole name still wins.
+        _, kwargs = self._dispatched("press hard stare Road Wolves")
+        self.assertNotEqual(kwargs["group_id"], self.group.pk)
+
+    def test_summary_header_names_the_place_and_grades_use_labels(self) -> None:
+        cmd = self._cmd("")
+        cmd.func()
+        text = cmd.msg.call_args.args[0]
+        self.assertTrue(text.startswith(f"Standoff at {self.encounter.room.db_key}:"))
+        self.assertNotIn("impossible", text)
+        self.assertIn("Hard Stare: Impossible", text)
 
     def test_summary_outside_a_standoff(self) -> None:
         self.character = CharacterFactory(db_key="bystander")

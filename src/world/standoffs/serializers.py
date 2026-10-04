@@ -15,9 +15,13 @@ class GroupViewSerializer(serializers.Serializer):
     state = serializers.CharField()
     terms_ease = serializers.IntegerField()
     cause = serializers.CharField(allow_null=True)
+    cause_gloss = serializers.CharField(allow_null=True)
     hidden_count = serializers.IntegerField()
     drives = DriveViewSerializer(many=True)
     revealed_regard = serializers.ListField(child=serializers.CharField())
+    read_check = serializers.CharField()
+    read_grade = serializers.CharField()
+    read_grade_label = serializers.CharField()
 
 
 class ApproachViewSerializer(serializers.Serializer):
@@ -25,7 +29,10 @@ class ApproachViewSerializer(serializers.Serializer):
     group_id = serializers.IntegerField()
     name = serializers.CharField()
     grade = serializers.CharField()
+    grade_label = serializers.CharField()
+    check_caption = serializers.CharField()
     levers = serializers.ListField(child=serializers.CharField())
+    hits_revealed_drive = serializers.BooleanField()
 
 
 class SparkViewSerializer(serializers.Serializer):
@@ -39,10 +46,13 @@ class TermsViewSerializer(serializers.Serializer):
     terms_id = serializers.IntegerField()
     name = serializers.CharField()
     group_id = serializers.IntegerField()
+    description = serializers.CharField(allow_blank=True)
     grade = serializers.CharField()
+    grade_label = serializers.CharField()
 
 
 class StandoffViewSerializer(serializers.Serializer):
+    place = serializers.CharField(allow_blank=True)
     groups = GroupViewSerializer(many=True)
     approaches = ApproachViewSerializer(many=True)
     terms = TermsViewSerializer(many=True)

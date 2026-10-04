@@ -33,6 +33,10 @@ _NOT_IN_STANDOFF = "You are not in a standoff."
 _CAUSE_WORD = "cause"
 
 
+class AmbiguousNameError(CommandError):
+    """A typed name matched several rows; the message lists them."""
+
+
 def _name_splits(text: str) -> list[tuple[str, str]]:
     """Every way to cut ``text`` into a leading and trailing name, longest lead first."""
     words = text.split()
@@ -116,13 +120,24 @@ class CmdStandoff(DispatchCommand):
         )
 
     def _group(self, name: str) -> StandoffGroup:
-        matches = [g for g in self._groups() if g.creature_template.name.lower() == name.lower()]
+        """The group a typed name picks: the whole name, else a unique prefix or whole word."""
+        typed = name.lower()
+        groups = self._groups()
+        matches = [g for g in groups if g.creature_template.name.lower() == typed]
+        if not matches:
+            matches = [
+                g
+                for g in groups
+                if g.creature_template.name.lower().startswith(typed)
+                or typed in g.creature_template.name.lower().split()
+            ]
         if not matches:
             msg = f"No group named '{name}' in this standoff."
             raise CommandError(msg)
         if len(matches) > 1:
-            msg = f"More than one group named '{name}' - be more specific."
-            raise CommandError(msg)
+            listed = ", ".join(sorted({g.creature_template.name for g in matches}))
+            msg = f"'{name}' could mean more than one group: {listed}. Be more specific."
+            raise AmbiguousNameError(msg)
         return matches[0]
 
     def _own_matches(self, group: StandoffGroup) -> list[Any]:
@@ -135,6 +150,8 @@ class CmdStandoff(DispatchCommand):
         for lead, tail in _name_splits(text):
             try:
                 return first(lead), second(tail)
+            except AmbiguousNameError:
+                raise
             except CommandError:
                 continue
         msg = f"Could not tell what '{text}' names. Usage: standoff {self._subverb} ..."
@@ -145,6 +162,8 @@ class CmdStandoff(DispatchCommand):
     def _read_args(self, text: str) -> dict[str, Any]:
         try:
             return {"group_id": self._group(text).pk}
+        except AmbiguousNameError:
+            raise
         except CommandError:
             pass
         group, focus = self._split(text, self._group, lambda focus: focus)
@@ -212,6 +231,8 @@ class CmdStandoff(DispatchCommand):
             try:
                 group = self._group(lead)
                 return {"group_id": group.pk, "regard_rule_id": spark_for(group)(tail).pk}
+            except AmbiguousNameError:
+                raise
             except CommandError:
                 continue
         msg = "Usage: standoff share <group> <spark>."
@@ -240,15 +261,18 @@ def _render_view(view: StandoffView) -> list[str]:
     """Text lines for a ``StandoffView``: the web payload's content, as plain text."""
     from world.standoffs.constants import StandoffGroupState  # noqa: PLC0415
 
-    lines = ["Standoff:"]
+    lines = [f"Standoff at {view.place}:" if view.place else "Standoff:"]
     for group in view.groups:
         lines.append(
             f"  {group.name} ({group.member_count}) - {StandoffGroupState(group.state).label}"
         )
+        if group.read_grade_label:
+            lines.append(f"    read ({group.read_check}): {group.read_grade_label}")
         if group.hidden_count:
             lines.append(f"    There is more to read here ({group.hidden_count} unread).")
         if group.cause is not None:
-            lines.append(f"    Cause: {group.cause}.")
+            gloss = f" {group.cause_gloss}" if group.cause_gloss else ""
+            lines.append(f"    Cause: {group.cause}.{gloss}")
         lines.extend(f"    Drive: {drive.label} ({drive.strength})." for drive in group.drives)
         lines.extend(f"    {line}" for line in group.revealed_regard)
         lines.extend(
@@ -262,13 +286,13 @@ def _render_view(view: StandoffView) -> list[str]:
             if spark.group_id == group.group_id and spark.text
         )
         lines.extend(
-            f"    press {approach.name}: {approach.grade}"
+            f"    press {approach.name}: {approach.grade_label}"
             + (f" ({'; '.join(approach.levers)})" if approach.levers else "")
             for approach in view.approaches
             if approach.group_id == group.group_id
         )
         lines.extend(
-            f"    terms {terms.name}: {terms.grade}"
+            f"    terms {terms.name}: {terms.grade_label}"
             for terms in view.terms
             if terms.group_id == group.group_id
         )

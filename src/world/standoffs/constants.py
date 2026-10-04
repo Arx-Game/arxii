@@ -2,6 +2,8 @@
 
 from django.db import models
 
+from world.combat.constants import CauseKind
+
 
 class DriveStrength(models.IntegerChoices):
     """How hard a drive pulls on a creature. Larger numbers pull harder."""
@@ -34,3 +36,19 @@ class TermsEffect(models.TextChoices):
     FLEE = "flee", "Clear off"
     TURN = "turn", "Turn"
     TOLL = "toll", "Pay us"
+
+
+# Placeholder one-line gloss shown under a revealed cause. Staff-authored prose is a later
+# slice; this is keyed by CauseKind so each kind carries its own line.
+CAUSE_GLOSSES: dict[str, str] = {
+    CauseKind.PREDATION: "They think you're prey.",
+}
+
+# The five check tiers, by ``success_level``, as one plain word each.
+SUCCESS_LEVEL_WORDS: dict[int, str] = {
+    -2: "Critical failure",
+    -1: "Failure",
+    0: "Partial success",
+    1: "Success",
+    2: "Critical success",
+}
