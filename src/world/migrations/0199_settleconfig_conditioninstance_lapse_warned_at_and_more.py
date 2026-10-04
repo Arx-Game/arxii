@@ -34,7 +34,7 @@ class Migration(migrations.Migration):
                     "lapse_warning_seconds",
                     models.PositiveIntegerField(
                         default=300,
-                        help_text="Seconds between lapse warnings: the minimum real-time gap before a bearer is warned again that a condition is about to lapse.",
+                        help_text="Lead time in seconds before a condition expires within which the bearer is sent its single fading warning.",
                         validators=[django.core.validators.MinValueValidator(1)],
                     ),
                 ),

@@ -1328,8 +1328,8 @@ class SettleConfig(SharedMemoryModel):
         default=300,
         validators=[MinValueValidator(1)],
         help_text=(
-            "Seconds between lapse warnings: the minimum real-time gap before a bearer "
-            "is warned again that a condition is about to lapse."
+            "Lead time in seconds before a condition expires within which the bearer "
+            "is sent its single fading warning."
         ),
     )
 
