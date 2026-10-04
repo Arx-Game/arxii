@@ -273,7 +273,7 @@ class StandoffConfig(SharedMemoryModel):
         default=1, help_text="Bands of group force a botched press adds."
     )
     band_force_percent = models.PositiveSmallIntegerField(
-        default=10, help_text="Percent of group force one band is worth."
+        default=10, help_text="Percent of party force one band of emboldening takes away."
     )
 
     objects = ArxSharedMemoryManager()

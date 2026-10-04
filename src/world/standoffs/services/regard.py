@@ -9,10 +9,13 @@ from django.db.models import F, Sum
 from django.db.models.functions import Coalesce
 
 from world.predicates.predicates import CharacterPredicateContext, matched_leaves
+from world.scenes.services import active_persona_for_sheet
 from world.societies.constants import COMMON_KNOWLEDGE_MULTIPLIER
 from world.societies.models import LegendEntry
 
 if TYPE_CHECKING:
+    from collections.abc import Sequence
+
     from world.character_sheets.models import CharacterSheet
     from world.standoffs.models import CreatureDrive, RegardRule, StandoffGroup
 
@@ -30,14 +33,17 @@ class MatchedRegard:
 
 
 def _has_common_knowledge_deed(sheet: CharacterSheet, archetype_id: int) -> bool:
-    """True if one of the sheet's personas has a common-knowledge deed with the archetype.
+    """True if the persona the character is presenting has a common-knowledge deed.
+
+    Only the presented persona counts (the primary when none is set); other personas
+    are never read, so a deed under an alt cannot reveal the link to it.
 
     Same threshold as ``LegendEntry.is_common_knowledge`` and ``known_deed_ids``, as a
     query so no deed rows are walked in Python.
     """
     return (
         LegendEntry.objects.filter(
-            persona__character_sheet=sheet,
+            persona=active_persona_for_sheet(sheet),
             is_active=True,
             archetypes=archetype_id,
             base_value__gt=0,
@@ -48,11 +54,20 @@ def _has_common_knowledge_deed(sheet: CharacterSheet, archetype_id: int) -> bool
     )
 
 
-def regard_matches(group: StandoffGroup, sheet: CharacterSheet) -> list[MatchedRegard]:
-    """Every regard rule of the group's creature kind that applies to ``sheet``."""
+def regard_matches(
+    group: StandoffGroup,
+    sheet: CharacterSheet,
+    rules: Sequence[RegardRule] | None = None,
+) -> list[MatchedRegard]:
+    """Every regard rule of the group's creature kind that applies to ``sheet``.
+
+    ``rules`` lets a caller that checks many sheets fetch the group's rules once.
+    """
+    if rules is None:
+        rules = list(group.creature_template.regard_rules.all())
     ctx = CharacterPredicateContext(sheet.character)
     matches: list[MatchedRegard] = []
-    for rule in group.creature_template.regard_rules.all():
+    for rule in rules:
         reasons = matched_leaves(rule.rule, ctx)
         if reasons is None:
             continue
@@ -80,8 +95,9 @@ def suppressed_for_all_participants(group: StandoffGroup) -> bool:
     sheets = _active_sheets(group)
     if not sheets:
         return False
+    rules = [r for r in group.creature_template.regard_rules.all() if r.suppresses_cause]
     return all(
-        any(match.rule.suppresses_cause for match in regard_matches(group, sheet))
+        any(match.rule.suppresses_cause for match in regard_matches(group, sheet, rules))
         for sheet in sheets
     )
 

@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from django.db import transaction
+
 from world.combat.constants import OpponentStatus
 from world.standoffs.constants import StandoffGroupState
 from world.standoffs.models import StandoffGroup
@@ -54,13 +56,37 @@ def settle_empty_groups(encounter: CombatEncounter) -> None:
             group.save(update_fields=["state"])
 
 
-def end_standoff_into_fight(encounter: CombatEncounter, *, initiated_by_pc_side: bool) -> None:
-    """Every OPEN group goes to FIGHTING and round one begins."""
+@transaction.atomic
+def end_standoff_into_fight(
+    encounter: CombatEncounter, *, initiated_by_pc_side: bool | None
+) -> bool:
+    """Every OPEN group goes to FIGHTING and round one begins.
+
+    Locks the encounter row first and rechecks, so when two things break the standoff at
+    once only the first writes; the second returns False and changes nothing.
+    """
+    from world.combat.models import CombatEncounter  # noqa: PLC0415
     from world.combat.services import begin_declaration_phase  # noqa: PLC0415
 
+    locked = CombatEncounter.objects.select_for_update().get(pk=encounter.pk)
+    if not is_in_standoff(locked):
+        return False
     for group in encounter.standoff_groups.filter(state=StandoffGroupState.OPEN):
         group.state = StandoffGroupState.FIGHTING
         group.save(update_fields=["state"])
     encounter.initiated_by_pc_side = initiated_by_pc_side
     encounter.save(update_fields=["initiated_by_pc_side"])
     begin_declaration_phase(encounter)
+    return True
+
+
+def begin_round_or_break_standoff(
+    encounter: CombatEncounter, *, initiated_by_pc_side: bool | None
+) -> None:
+    """Start a round; if the encounter is still in its standoff, that breaks the standoff."""
+    from world.combat.services import begin_declaration_phase  # noqa: PLC0415
+
+    if is_in_standoff(encounter):
+        end_standoff_into_fight(encounter, initiated_by_pc_side=initiated_by_pc_side)
+    else:
+        begin_declaration_phase(encounter)

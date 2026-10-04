@@ -303,7 +303,7 @@ class Migration(migrations.Migration):
                     "band_force_percent",
                     models.PositiveSmallIntegerField(
                         default=10,
-                        help_text="Percent of group force one band is worth.",
+                        help_text="Percent of party force one band of emboldening takes away.",
                     ),
                 ),
                 (
@@ -652,6 +652,21 @@ class Migration(migrations.Migration):
             constraint=models.UniqueConstraint(
                 fields=("group", "character_sheet", "regard_rule"),
                 name="unique_standoff_spark_share",
+            ),
+        ),
+        migrations.AlterField(
+            model_name="combatencounter",
+            name="initiated_by_pc_side",
+            field=models.BooleanField(
+                blank=True,
+                help_text=(
+                    "Who sprang this fight (#2623): True = a PC participant's action "
+                    "opened it, False = the opposing side did, NULL = unknown/undirected "
+                    "(duels, battles, staff-opened). Read by origin_side-parameterized "
+                    "situations. False is stamped when a creature's cause (Predation) "
+                    "breaks a standoff; staff/admin can also stamp it."
+                ),
+                null=True,
             ),
         ),
     ]

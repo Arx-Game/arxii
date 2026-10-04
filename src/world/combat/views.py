@@ -86,7 +86,6 @@ from world.combat.serializers import (
 from world.combat.services import (
     add_opponent,
     add_participant,
-    begin_declaration_phase,
     end_encounter,
     remove_opponent,
     remove_participant,
@@ -100,6 +99,7 @@ from world.gm.permissions import IsGMOrStaff
 from world.items.models import ItemInstance
 from world.scenes.constants import PersonaType, RoundStatus
 from world.scenes.models import Persona, Scene
+from world.standoffs.services.state import begin_round_or_break_standoff
 from world.stories.pagination import StandardResultsSetPagination
 
 logger = logging.getLogger(__name__)
@@ -494,7 +494,7 @@ class CombatEncounterViewSet(ModelViewSet):
         """Begin a new declaration phase."""
         encounter = self.get_object()
         try:
-            begin_declaration_phase(encounter)
+            begin_round_or_break_standoff(encounter, initiated_by_pc_side=None)
         except ValueError:
             return Response(
                 {"detail": _ERR_INVALID_STATUS},

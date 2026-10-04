@@ -202,8 +202,8 @@ class CombatEncounter(AbstractRound):
             "Who sprang this fight (#2623): True = a PC participant's action "
             "opened it, False = the opposing side did, NULL = unknown/undirected "
             "(duels, battles, staff-opened). Read by origin_side-parameterized "
-            "situations. No NPC-initiated creation path exists yet — False is "
-            "staff/admin-stampable until one lands."
+            "situations. False is stamped when a creature's cause (Predation) "
+            "breaks a standoff; staff/admin can also stamp it."
         ),
     )
     story_beat = models.ForeignKey(

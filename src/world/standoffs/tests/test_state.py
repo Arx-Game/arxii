@@ -14,6 +14,7 @@ from world.scenes.constants import RoundStatus
 from world.standoffs.constants import StandoffGroupState
 from world.standoffs.services.state import (
     active_members,
+    begin_round_or_break_standoff,
     end_standoff_into_fight,
     is_in_standoff,
     open_standoff,
@@ -22,19 +23,18 @@ from world.standoffs.services.state import (
 
 
 class StandoffStateTests(TestCase):
-    def setUp(self) -> None:
-        self.encounter = CombatEncounterFactory()
-        CombatParticipantFactory(encounter=self.encounter)
-        self.bandit = CreatureTemplateFactory()
-        self.hound = CreatureTemplateFactory()
-        self.bandits = [
-            CombatOpponentFactory(encounter=self.encounter, creature_template=self.bandit)
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.encounter = CombatEncounterFactory()
+        CombatParticipantFactory(encounter=cls.encounter)
+        cls.bandit = CreatureTemplateFactory()
+        cls.hound = CreatureTemplateFactory()
+        cls.bandits = [
+            CombatOpponentFactory(encounter=cls.encounter, creature_template=cls.bandit)
             for _ in range(4)
         ]
-        self.hound_opp = CombatOpponentFactory(
-            encounter=self.encounter, creature_template=self.hound
-        )
-        self.plain = CombatOpponentFactory(encounter=self.encounter)
+        cls.hound_opp = CombatOpponentFactory(encounter=cls.encounter, creature_template=cls.hound)
+        cls.plain = CombatOpponentFactory(encounter=cls.encounter)
 
     def test_open_makes_one_group_per_template(self) -> None:
         groups = open_standoff(self.encounter)
@@ -76,3 +76,25 @@ class StandoffStateTests(TestCase):
         self.assertEqual(hound_group.state, StandoffGroupState.SETTLED)
         self.assertEqual(bandit_group.state, StandoffGroupState.OPEN)
         self.assertEqual(active_members(hound_group), [])
+
+    def test_second_break_is_a_no_op(self) -> None:
+        open_standoff(self.encounter)
+        self.assertTrue(end_standoff_into_fight(self.encounter, initiated_by_pc_side=False))
+        self.assertFalse(end_standoff_into_fight(self.encounter, initiated_by_pc_side=True))
+        self.encounter.refresh_from_db()
+        self.assertIs(self.encounter.initiated_by_pc_side, False)
+        self.assertEqual(self.encounter.round_number, 1)
+
+    def test_begin_round_or_break_breaks_a_standoff(self) -> None:
+        open_standoff(self.encounter)
+        begin_round_or_break_standoff(self.encounter, initiated_by_pc_side=True)
+        self.encounter.refresh_from_db()
+        self.assertEqual(self.encounter.round_number, 1)
+        self.assertIs(self.encounter.initiated_by_pc_side, True)
+        self.assertFalse(is_in_standoff(self.encounter))
+
+    def test_begin_round_or_break_begins_a_plain_round(self) -> None:
+        begin_round_or_break_standoff(self.encounter, initiated_by_pc_side=True)
+        self.encounter.refresh_from_db()
+        self.assertEqual(self.encounter.round_number, 1)
+        self.assertIsNone(self.encounter.initiated_by_pc_side)

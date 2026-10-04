@@ -6,6 +6,7 @@ from evennia_extensions.factories import CharacterFactory
 from world.character_sheets.factories import CharacterSheetFactory
 from world.combat.factories import CreatureTemplateFactory
 from world.mechanics.factories import PropertyFactory
+from world.scenes.factories import PersonaFactory
 from world.societies.factories import (
     LegendEntryFactory,
     LegendSpreadFactory,
@@ -54,6 +55,18 @@ class RegardTests(TestCase):
         LegendSpreadFactory(legend_entry=entry, value_added=40)
         self.assertEqual(len(regard_matches(self.group, self.cinderi_sheet)), 1)
         self.assertEqual(regard_matches(self.group, self.other_sheet), [])
+
+    def test_deed_under_a_non_presented_persona_does_not_match(self) -> None:
+        archetype = PhilosophicalArchetypeFactory()
+        RegardRuleFactory(creature_template=self.template, rule={}, deed_archetype=archetype)
+        alt = PersonaFactory(character_sheet=self.other_sheet)
+        entry = LegendEntryFactory(persona=alt, base_value=10)
+        entry.archetypes.add(archetype)
+        LegendSpreadFactory(legend_entry=entry, value_added=40)
+        self.assertEqual(regard_matches(self.group, self.other_sheet), [])
+        self.other_sheet.active_persona = alt
+        self.other_sheet.save(update_fields=["active_persona"])
+        self.assertEqual(len(regard_matches(self.group, self.other_sheet)), 1)
 
     def test_drive_strength_shift_is_clamped(self) -> None:
         prop = PropertyFactory()

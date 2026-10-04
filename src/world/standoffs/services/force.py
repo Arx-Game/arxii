@@ -76,6 +76,5 @@ def evaluate_causes(encounter: CombatEncounter) -> bool:
         "creature_template"
     ):
         if cause_fires(group, config):
-            end_standoff_into_fight(encounter, initiated_by_pc_side=False)
-            return True
+            return end_standoff_into_fight(encounter, initiated_by_pc_side=False)
     return False
