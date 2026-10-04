@@ -159,6 +159,9 @@ def _focus_matches(
     if kind != focus_kind:
         return False
     if kind == RevealKind.DRIVE:
+        if focus_drive_id is None and focus_property_id is None:
+            # "What moves them?": any hidden drive; hidden_things lists them strongest first.
+            return drive is not None
         return drive is not None and (
             drive.pk == focus_drive_id
             or (focus_property_id is not None and drive.property_id == focus_property_id)

@@ -94,6 +94,12 @@ class ReadTests(VerbBase):
             )
         self.assertEqual([r.drive_id for r in result.revealed], [self.drive.pk])
 
+    def test_success_drive_focus_without_an_id_reveals_the_strongest_drive(self) -> None:
+        CreatureDriveFactory(creature_template=self.template, strength=DriveStrength.MINOR)
+        with patch(CHECK, return_value=forced(1)):
+            result = standoff_read(self.participant, self.group, focus_kind=RevealKind.DRIVE)
+        self.assertEqual([r.drive_id for r in result.revealed], [self.drive.pk])
+
     def test_partial_reveals_exactly_one(self) -> None:
         with patch(CHECK, return_value=forced(0)):
             result = standoff_read(self.participant, self.group)
