@@ -19,16 +19,31 @@ HIDDEN_REGARD_LINE = "Something about one of you matters to them."
 
 
 def describe_reveals(
-    group: StandoffGroup, reveals: Iterable[StandoffReveal], reader: CharacterSheet
+    group: StandoffGroup,
+    reveals: Iterable[StandoffReveal],
+    reader: CharacterSheet,
+    *,
+    matching_rule_ids: set[int] | None = None,
+    shared_rule_ids: set[int] | None = None,
 ) -> list[str]:
     """One line per revealed thing, as ``reader`` may know it.
 
     A regard rule's revealed text goes only to a reader it applies to, or once someone
     has shared that spark; otherwise the reader learns only that someone's history matters.
+    A caller that already holds the reader's matched rule ids and the group's shared rule
+    ids passes them in to skip the lookups.
     """
-    matching = {match.rule.pk for match in regard_matches(group, reader)}
-    shared = set(
-        StandoffSparkShare.objects.filter(group=group).values_list("regard_rule_id", flat=True)
+    matching = (
+        matching_rule_ids
+        if matching_rule_ids is not None
+        else {match.rule.pk for match in regard_matches(group, reader)}
+    )
+    shared = (
+        shared_rule_ids
+        if shared_rule_ids is not None
+        else set(
+            StandoffSparkShare.objects.filter(group=group).values_list("regard_rule_id", flat=True)
+        )
     )
     lines: list[str] = []
     for reveal in reveals:

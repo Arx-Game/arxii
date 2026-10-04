@@ -8,12 +8,18 @@ group, matching ``end_standoff_into_fight``.
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 import random
 from typing import TYPE_CHECKING
 
 from django.db import transaction
 
-from world.checks.services import collect_check_modifiers, level_opposition, perform_check
+from world.checks.services import (
+    collect_check_modifiers,
+    compute_resist_increment,
+    level_opposition,
+    perform_check,
+)
 from world.checks.social_target import DriveHit, SocialDifficulty, social_target_difficulty
 from world.combat.constants import (
     DEMORALIZE_MORALE_PER_LEVEL,
@@ -37,7 +43,12 @@ from world.standoffs.models import (
     StandoffTerms,
 )
 from world.standoffs.services.force import evaluate_causes
-from world.standoffs.services.regard import band_shift_toward, drive_strength_toward, regard_matches
+from world.standoffs.services.regard import (
+    MatchedRegard,
+    band_shift_from,
+    drive_strength_from,
+    regard_matches,
+)
 from world.standoffs.services.routing import complete_standoff
 from world.standoffs.services.state import (
     active_members,
@@ -96,10 +107,20 @@ def _revealed_set(group: StandoffGroup) -> set[tuple[str, int | None, int | None
 
 
 def hidden_things(
-    group: StandoffGroup, participants: list[CombatParticipant]
+    group: StandoffGroup,
+    participants: list[CombatParticipant],
+    *,
+    revealed: set[tuple[str, int | None, int | None]] | None = None,
+    known_matches: dict[int, list[MatchedRegard]] | None = None,
 ) -> list[tuple[str, CreatureDrive | None, RegardRule | None]]:
-    """Cause, then drives by strength desc, then regard rules by pk, that are not yet read."""
-    revealed = _revealed_set(group)
+    """Cause, then drives by strength desc, then regard rules by pk, that are not yet read.
+
+    A caller that already holds the reveal set, or some sheets' matched rules (keyed by
+    sheet pk), passes them in so they are not read again.
+    """
+    if revealed is None:
+        revealed = _revealed_set(group)
+    known = known_matches or {}
     template = group.creature_template
     hidden: list[tuple[str, CreatureDrive | None, RegardRule | None]] = []
     if template.cause != CauseKind.NONE and (RevealKind.CAUSE, None, None) not in revealed:
@@ -113,7 +134,11 @@ def hidden_things(
     matching_ids = {
         match.rule.pk
         for participant in participants
-        for match in regard_matches(group, participant.character_sheet, rules)
+        for match in (
+            known[participant.character_sheet.pk]
+            if participant.character_sheet.pk in known
+            else regard_matches(group, participant.character_sheet, rules)
+        )
     }
     hidden.extend(
         (RevealKind.REGARD, None, rule)
@@ -208,65 +233,137 @@ def standoff_read(  # noqa: PLR0913 - the focus kwargs are the read verb's whole
     return StandoffActionResult(True, "You read the group.", success_level=tier, revealed=revealed)
 
 
-def press_grade(
-    group: StandoffGroup, sheet: CharacterSheet, approach: StandoffApproach
-) -> tuple[SocialDifficulty, list[tuple[CreatureDrive, DriveHit]], set[int]]:
-    members = active_members(group)
-    first, level = _roll_inputs(members)
-    drives = list(group.creature_template.drives.select_related("property"))
-    targeted = set(
-        Application.objects.filter(
-            capability_id=approach.capability_id,
-            target_property_id__in=[drive.property_id for drive in drives],
-        ).values_list("target_property_id", flat=True)
+@dataclass(frozen=True)
+class GradingContext:
+    """Everything grading a group for one viewer reads, fetched once.
+
+    The roll paths and the web view both build this, so a shown grade and the roll behind
+    it come from the same inputs.
+    """
+
+    members: list[CombatOpponent]
+    drives: list[CreatureDrive]
+    matches: list[MatchedRegard]
+    mindless_resistance: int
+    resist_increment: int
+
+    @property
+    def first(self) -> CombatOpponent:
+        return self.members[0]
+
+    @property
+    def level(self) -> int:
+        return max(member.level for member in self.members)
+
+    @property
+    def band_shift(self) -> int:
+        return band_shift_from(self.matches)
+
+
+def build_grading_context(
+    group: StandoffGroup,
+    sheet: CharacterSheet,
+    *,
+    members: list[CombatOpponent] | None = None,
+    matches: list[MatchedRegard] | None = None,
+) -> GradingContext:
+    """Read a group's members, drives and the viewer's matched rules once."""
+    members = active_members(group) if members is None else members
+    has_morale = any(tier_has_morale(member) for member in members)
+    first_character = members[0].objectdb
+    resist = (
+        0
+        if first_character is None
+        else compute_resist_increment(
+            first_character, "medium", level_override=max(m.level for m in members)
+        )
     )
+    return GradingContext(
+        members=members,
+        drives=list(group.creature_template.drives.select_related("property")),
+        matches=regard_matches(group, sheet) if matches is None else matches,
+        mindless_resistance=0 if has_morale else MINDLESS_MORALE_RESISTANCE,
+        resist_increment=resist,
+    )
+
+
+def press_grade(
+    group: StandoffGroup,
+    sheet: CharacterSheet,
+    approach: StandoffApproach,
+    ctx: GradingContext | None = None,
+    targeted_by_capability: dict[int, set[int]] | None = None,
+) -> tuple[SocialDifficulty, list[tuple[CreatureDrive, DriveHit]], set[int]]:
+    """Grade a press; ``ctx`` and ``targeted_by_capability`` let a caller read them once."""
+    if ctx is None:
+        ctx = build_grading_context(group, sheet)
+    if targeted_by_capability is None:
+        targeted_by_capability = targeted_properties_by_capability(
+            [approach.capability_id], [drive.property_id for drive in ctx.drives]
+        )
+    targeted = targeted_by_capability.get(approach.capability_id, set())
     hits = []
-    for drive in drives:
+    for drive in ctx.drives:
         if drive.property_id not in targeted:
             continue
-        strength = drive_strength_toward(group, drive, sheet)
+        strength = drive_strength_from(ctx.matches, drive)
         if strength > 0:
             hits.append((drive, DriveHit(label=drive.property.name, strength=strength)))
     difficulty = social_target_difficulty(
         actor_sheet=sheet,
-        target_character=first.objectdb,
+        target_character=ctx.first.objectdb,
         check_type=approach.check_type,
-        target_level=level,
+        target_level=ctx.level,
         drive_hits=[hit for _, hit in hits],
         sway_target=approach.sway_target,
-        mindless_resistance=(
-            0 if any(tier_has_morale(m) for m in members) else MINDLESS_MORALE_RESISTANCE
-        ),
-        extra_bands=band_shift_toward(group, sheet),
+        mindless_resistance=ctx.mindless_resistance,
+        resist_increment=ctx.resist_increment,
+        extra_bands=ctx.band_shift,
     )
     return difficulty, hits, targeted
 
 
+def targeted_properties_by_capability(
+    capability_ids: list[int], property_ids: list[int]
+) -> dict[int, set[int]]:
+    """Which of ``property_ids`` each capability has an Application aimed at, in one query."""
+    targeted: dict[int, set[int]] = {}
+    for capability_id, property_id in Application.objects.filter(
+        capability_id__in=capability_ids, target_property_id__in=property_ids
+    ).values_list("capability_id", "target_property_id"):
+        targeted.setdefault(capability_id, set()).add(property_id)
+    return targeted
+
+
 def press_difficulty(
-    group: StandoffGroup, sheet: CharacterSheet, approach: StandoffApproach
+    group: StandoffGroup,
+    sheet: CharacterSheet,
+    approach: StandoffApproach,
+    ctx: GradingContext | None = None,
 ) -> SocialDifficulty:
     """The graded difficulty of pressing ``group`` with ``approach`` (needs an active member)."""
-    return press_grade(group, sheet, approach)[0]
+    return press_grade(group, sheet, approach, ctx)[0]
 
 
 def terms_difficulty(
-    group: StandoffGroup, sheet: CharacterSheet, terms: StandoffTerms
+    group: StandoffGroup,
+    sheet: CharacterSheet,
+    terms: StandoffTerms,
+    ctx: GradingContext | None = None,
+    config: StandoffConfig | None = None,
 ) -> SocialDifficulty:
     """The graded difficulty of naming ``terms`` to ``group`` (needs an active member)."""
-    config = StandoffConfig.load()
-    members = active_members(group)
-    first, level = _roll_inputs(members)
+    config = config or StandoffConfig.load()
+    if ctx is None:
+        ctx = build_grading_context(group, sheet)
     return social_target_difficulty(
         actor_sheet=sheet,
-        target_character=first.objectdb,
+        target_character=ctx.first.objectdb,
         check_type=config.terms_check_type,
-        target_level=level,
-        mindless_resistance=(
-            0 if any(tier_has_morale(m) for m in members) else MINDLESS_MORALE_RESISTANCE
-        ),
-        extra_bands=terms.difficulty_shift_bands
-        + band_shift_toward(group, sheet)
-        - group.terms_ease,
+        target_level=ctx.level,
+        mindless_resistance=ctx.mindless_resistance,
+        resist_increment=ctx.resist_increment,
+        extra_bands=terms.difficulty_shift_bands + ctx.band_shift - group.terms_ease,
     )
 
 
@@ -306,7 +403,9 @@ def standoff_press(
         return _refuse(_MSG_EMPTY)
     config = StandoffConfig.load()
     sheet = participant.character_sheet
-    graded, hits, targeted = press_grade(group, sheet, approach)
+    graded, hits, targeted = press_grade(
+        group, sheet, approach, build_grading_context(group, sheet, members=members)
+    )
     result = perform_check(
         sheet.character,
         approach.check_type,

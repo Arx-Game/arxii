@@ -58,11 +58,18 @@ def social_target_difficulty(  # noqa: PLR0913
     mindless_resistance: int = 0,
     extra_bands: int = 0,
     perceiver_sheet: CharacterSheet | None = None,
+    resist_increment: int | None = None,
 ) -> SocialDifficulty:
-    """Grade a social check on a character. See the module docstring for the terms."""
+    """Grade a social check on a character. See the module docstring for the terms.
+
+    ``resist_increment`` lets a caller grading many checks against one target compute
+    the defender's resist once (``compute_resist_increment``) and pass it in.
+    """
     eased_bands = sum(hit.strength for hit in drive_hits)
     resist = 0
-    if target_character is not None:
+    if resist_increment is not None:
+        resist = resist_increment
+    elif target_character is not None:
         resist = compute_resist_increment(
             target_character, resist_effort, level_override=target_level
         )

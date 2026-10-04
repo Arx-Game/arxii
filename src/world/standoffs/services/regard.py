@@ -102,16 +102,22 @@ def suppressed_for_all_participants(group: StandoffGroup) -> bool:
     )
 
 
+def drive_strength_from(matches: Sequence[MatchedRegard], drive: CreatureDrive) -> int:
+    """The drive's strength after the given matched rules, clamped 0..3."""
+    shift = sum(m.rule.drive_shift for m in matches if m.rule.drive_id == drive.property_id)
+    return max(DRIVE_MIN, min(DRIVE_MAX, drive.strength + shift))
+
+
+def band_shift_from(matches: Sequence[MatchedRegard]) -> int:
+    """Total difficulty bands the given matched rules add."""
+    return sum(m.rule.difficulty_shift_bands for m in matches)
+
+
 def drive_strength_toward(group: StandoffGroup, drive: CreatureDrive, sheet: CharacterSheet) -> int:
     """The drive's strength toward this character after matched rules, clamped 0..3."""
-    shift = sum(
-        match.rule.drive_shift
-        for match in regard_matches(group, sheet)
-        if match.rule.drive_id == drive.property_id
-    )
-    return max(DRIVE_MIN, min(DRIVE_MAX, drive.strength + shift))
+    return drive_strength_from(regard_matches(group, sheet), drive)
 
 
 def band_shift_toward(group: StandoffGroup, sheet: CharacterSheet) -> int:
     """Total difficulty bands the group's regard rules add for this character."""
-    return sum(match.rule.difficulty_shift_bands for match in regard_matches(group, sheet))
+    return band_shift_from(regard_matches(group, sheet))

@@ -3,10 +3,13 @@
 from types import SimpleNamespace
 from unittest.mock import patch
 
+from django.db import connection
+from django.test.utils import CaptureQueriesContext
 from rest_framework.test import APIClient
 
 from evennia_extensions.factories import CharacterFactory
 from world.character_sheets.factories import CharacterSheetFactory
+from world.checks.factories import CheckTypeFactory
 from world.combat.constants import CauseKind, OpponentTier
 from world.combat.factories import (
     CombatOpponentFactory,
@@ -23,10 +26,17 @@ from world.standoffs.factories import (
     CreatureDriveFactory,
     RegardRuleFactory,
     StandoffApproachFactory,
+    StandoffGroupFactory,
     StandoffRevealFactory,
     StandoffTermsFactory,
 )
-from world.standoffs.models import StandoffConfig, StandoffSparkShare
+from world.standoffs.models import (
+    StandoffApproach,
+    StandoffConfig,
+    StandoffGroup,
+    StandoffSparkShare,
+    StandoffTerms,
+)
 from world.standoffs.services.describe import HIDDEN_REGARD_LINE
 from world.standoffs.services.state import open_standoff
 from world.standoffs.services.view import build_standoff_view
@@ -140,6 +150,55 @@ class HiddenInformationTests(ViewBase):
         with patch(PREVIEW, return_value=0):
             revealed = self.view_for(self.sheet_b).approaches[0]
         self.assertEqual(revealed.levers, [self.drive.property.name])
+
+
+class LeverLeakTests(ViewBase):
+    def test_a_shared_spark_without_a_read_does_not_expose_detail_in_levers(self) -> None:
+        self.rule.difficulty_shift_bands = 1
+        self.rule.save(update_fields=["difficulty_shift_bands"])
+        StandoffApproachFactory()
+        # What a press does after it shifts: share the spark. No REGARD reveal exists.
+        StandoffSparkShare.objects.create(
+            group=self.group, character_sheet=self.sheet_a, regard_rule=self.rule
+        )
+        with patch(PREVIEW, return_value=0):
+            before = self.view_for(self.sheet_a).approaches[0].levers
+        self.assertNotIn("PLACEHOLDER detail A", before)
+        StandoffRevealFactory(group=self.group, kind=RevealKind.REGARD, regard_rule=self.rule)
+        with patch(PREVIEW, return_value=0):
+            after = self.view_for(self.sheet_a).approaches[0].levers
+        self.assertIn("PLACEHOLDER detail A", after)
+
+
+class QueryBoundTests(ViewBase):
+    """Queries follow the number of groups, never the number of approaches or terms."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.check_type = CheckTypeFactory()
+        template2 = CreatureTemplateFactory(tier=OpponentTier.MOOK, cause=CauseKind.NONE)
+        CombatOpponentFactory(encounter=self.encounter, creature_template=template2, level=2)
+        StandoffGroupFactory(encounter=self.encounter, creature_template=template2)
+        self.config.terms_check_type = self.check_type
+        self.config.save()
+        for _ in range(2):
+            StandoffApproachFactory(check_type=self.check_type)
+            StandoffTermsFactory()
+
+    def _count(self) -> int:
+        self.view_for(self.sheet_a)  # warm caches
+        with CaptureQueriesContext(connection) as ctx:
+            view = self.view_for(self.sheet_a)
+        self.assertEqual(len(view.approaches), 2 * StandoffApproach.objects.count())
+        self.assertEqual(len(view.terms), 2 * StandoffTerms.objects.count())
+        return len(ctx)
+
+    def test_more_approaches_and_terms_add_no_queries(self) -> None:
+        self.assertEqual(StandoffGroup.objects.filter(encounter=self.encounter).count(), 2)
+        base = self._count()
+        StandoffApproachFactory(check_type=self.check_type)
+        StandoffTermsFactory()
+        self.assertEqual(self._count(), base)
 
 
 class GradeAndTermsTests(ViewBase):

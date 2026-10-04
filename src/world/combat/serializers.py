@@ -1368,9 +1368,11 @@ class EncounterDetailSerializer(serializers.ModelSerializer):
 
         Built per viewer (sparks, regard detail and unread things are private), so a
         viewer who is not a participant, or an encounter past its standoff, gets None.
+        A user playing two characters in the encounter gets the first one's view.
         """
-        # Prefetched OPEN groups: a fight in progress costs no query. The view rechecks.
-        if not obj.standoff_groups_cached:  # type: ignore[attr-defined]
+        # Round 0 is the only standoff window; a fight in progress costs no query.
+        # build_standoff_view does the authoritative is_in_standoff check.
+        if obj.round_number != 0:
             return None
         viewer_ids = self.context.get("viewer_character_ids", set())
         for participant in obj.participants_cached:  # type: ignore[attr-defined]
