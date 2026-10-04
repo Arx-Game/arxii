@@ -171,5 +171,10 @@ death → retire. Offscreen deaths staff-only. Surfaces: `GiveDeathKudosAction` 
   attacker, not just in the encounter layer but at the death-selection layer.
 - **Abandonment is action-driven** (ADR-0004): the grace window counts `round_number` beats, not
   wall-clock time.
+- **Settled round effects use the clamp, never the pipeline** (#4120, ADR-4120): after combat,
+  `settled_effects_tick` (conditions) damages through `apply_clamped_chronic_damage` only, never
+  `process_damage_consequences`, so a converted ROUNDS effect cannot knock out, wound or kill.
+  The clamp is unconditional (no AFK flag). Acute peril (Bleeding Out, Plummeting) is not part
+  of that lane. Scoped exception to the ADR-0004 rule above.
 - **Plummet is exempt** from the hold/abandonment model: `acute_peril_condition_names()` returns
   BLEED_OUT only; plummet descent always advances regardless of who drove the round.

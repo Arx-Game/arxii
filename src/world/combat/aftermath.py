@@ -32,13 +32,12 @@ def has_acute_peril(character_sheet: CharacterSheet) -> bool:
     """True when the character still holds Bleeding Out or Plummeting (the conditions
     _hand_off_acute_peril_to_scene_round hands to a scene round).
     """
-    from world.areas.positioning.constants import PLUMMETING_CONDITION_NAME  # noqa: PLC0415
-    from world.conditions.constants import BLEED_OUT_CONDITION_NAME  # noqa: PLC0415
     from world.conditions.models import ConditionInstance  # noqa: PLC0415
+    from world.conditions.services import acute_peril_hand_off_condition_names  # noqa: PLC0415
 
     return ConditionInstance.objects.filter(
         target=character_sheet.character,
-        condition__name__in=[BLEED_OUT_CONDITION_NAME, PLUMMETING_CONDITION_NAME],
+        condition__name__in=acute_peril_hand_off_condition_names(),
     ).exists()
 
 

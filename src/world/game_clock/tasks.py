@@ -432,6 +432,7 @@ def batch_condition_expiration_cleanup() -> None:
     """Delete expired time-based conditions."""
     from django.utils import timezone
 
+    from world.conditions.constants import DurationType
     from world.conditions.models import ConditionInstance
 
     count, _ = (
@@ -441,6 +442,10 @@ def batch_condition_expiration_cleanup() -> None:
         # Allegiance holds are owned by combat.lapsed_allegiance_sweep (#4091),
         # which fires the removal event the bulk delete would drop.
         .filter(condition__sets_allegiance="")
+        # Converted ROUNDS rows (#4120) are owned by conditions.settled_effects_tick,
+        # the same way allegiance rows are owned by the lapse sweep: it removes them
+        # through remove_condition so the teardown fires.
+        .exclude(condition__default_duration_type=DurationType.ROUNDS)
         .delete()
     )
     logger.info("Condition expiration cleanup: %d expired conditions deleted", count)
@@ -782,6 +787,7 @@ def register_all_tasks() -> None:
     )
 
     _register_combat_tasks()
+    _register_settled_effects_task()
 
     from world.conditions.services import batch_chronic_effect_tick, decay_all_conditions_tick
     from world.locations.tasks import decayed_modifier_cleanup_task
@@ -1136,6 +1142,25 @@ def _register_combat_tasks() -> None:
             interval=timedelta(minutes=1),
             phase=CronPhase.CLEANUP,
             description="End charms that ran out with nobody acting; close bind windows (#4091).",
+        )
+    )
+
+
+def _register_settled_effects_task() -> None:
+    """Register the settled round-effects tick (#4120).
+
+    Extracted from ``register_all_tasks`` to keep that function under the
+    ruff PLR0915 statement limit.
+    """
+    from world.conditions.services import settled_effects_tick
+
+    register_task(
+        CronDefinition(
+            task_key="conditions.settled_effects",
+            callable=settled_effects_tick,
+            interval=timedelta(minutes=1),
+            phase=CronPhase.CLEANUP,
+            description="Tick and expire round-based effects settled after combat (#4120).",
         )
     )
 

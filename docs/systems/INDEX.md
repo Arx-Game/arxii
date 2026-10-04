@@ -1066,6 +1066,14 @@ Persistent states that modify capabilities, checks, and resistances with stage p
   field, never `alters_behavior` and never the condition's name (`alters_behavior` is the
   PC-consent gate, a separate axis); see combat's Allegiance entries and ADR-4091, amending
   ADR-0058/ADR-0059.
+- **Settled round effects (#4120, ADR-4120) [BUILT & WIRED]:** `SettleConfig` singleton
+  (`get_settle_config()`: `settled_seconds_per_round`, `lapse_warning_seconds`);
+  `ConditionInstance.last_settled_tick_at` / `lapse_warned_at`; `settle_round_effects(targets)`
+  (called by combat's `cleanup_completed_encounter` after `expire_end_of_combat_conditions`)
+  converts ROUNDS rows to a real-time `expires_at`; cron `conditions.settled_effects`
+  (`settled_effects_tick`) applies clamped non-lethal DoT via `apply_clamped_chronic_damage` and
+  removes expired converted rows; `lapsed_allegiance_sweep` warns a PC charmer once and
+  auto-rolls the break check at lapse (no encounter opens). See `docs/systems/conditions.md`.
 - **Integrates with:** combat (DoT, capability blocking, NPC allegiance reads via
   `ConditionTemplate.sets_allegiance`; `select_npc_actions` consults `effective_allegiances`),
   magic (power sources, resonance-environment boon/injury application, behavior-consent gating

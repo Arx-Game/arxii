@@ -307,6 +307,13 @@ the lapse sweep or scene finish rather than kept with nothing to do.
 _Avoid_: bind timer, charm window (the window is about the charmer's presence, not
 a countdown)
 
+**Settled round** (#4120, ADR-4120):
+What a round-counted condition on a combatant becomes when the fight ends:
+`cleanup_completed_encounter` calls `settle_round_effects`, converting the remaining rounds into
+a real-time expiry. Combat owns the trigger; the clock and the non-lethal tick live in
+conditions (see its glossary). A charm or hold converted this way is what the lapse sweep sees.
+_Avoid_: frozen condition, leftover rounds
+
 **Summon**:
 An ALLY `CombatOpponent` conjured during combat by a technique. It has `allegiance=ALLY`,
 `summoned_by` (FK → `CharacterSheet`), and `bond_expires_round`; it attacks ENEMY opponents

@@ -16,10 +16,12 @@ term is chosen and the rest are listed under `_Avoid_`.
 - [covenants](src/world/covenants/AGENT_GLOSSARY.md)
 - [scenes](src/world/scenes/AGENT_GLOSSARY.md)
 - [combat](src/world/combat/AGENT_GLOSSARY.md), also holds the #4091 allegiance terms
-  (ADR-4091): Allegiance (stored vs effective), Turned, Won over, Bind window
+  (ADR-4091): Allegiance (stored vs effective), Turned, Won over, Bind window; and (ADR-4120)
+  Settled round
 - [battles](src/world/battles/AGENT_GLOSSARY.md)
 - [conditions](src/world/conditions/AGENT_GLOSSARY.md), also holds the #4091 settle terms
-  (ADR-4091): Settle, Settle pool, Hold strength
+  (ADR-4091): Settle, Settle pool, Hold strength; and (ADR-4120) Settled round / Settle round
+  effects
 - [vitals](src/world/vitals/AGENT_GLOSSARY.md) - also holds Certain death (deferred) (#4098)
 - [worship](src/world/worship/AGENT_GLOSSARY.md)
 - [ceremonies](src/world/ceremonies/AGENT_GLOSSARY.md)

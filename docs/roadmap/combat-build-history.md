@@ -1039,6 +1039,22 @@ integration test suite.
   dispatch kwargs on the shared `ActionRef` seam from #1454; the write path is unchanged
   (only read-side descriptor enrichment + frontend wiring).
 
+### Settled Round Effects (SHIPPED, 2026-10-04, #4120, ADR-4120)
+- `SettleConfig` (`world/conditions`, admin + REQUIRED dashboard row `settle-config`) holds
+  `settled_seconds_per_round` and `lapse_warning_seconds`. `ConditionInstance` gains
+  `last_settled_tick_at` and `lapse_warned_at`.
+- `settle_round_effects(targets)` runs from `cleanup_completed_encounter` after
+  `expire_end_of_combat_conditions` and before the certain-death backstop and ephemeral NPC
+  deletion, converting ROUNDS rows into `expires_at` (players and persistent NPCs alike).
+- Cron `conditions.settled_effects` (`settled_effects_tick`, one minute, CLEANUP) ticks the
+  template's DoT through `apply_clamped_chronic_damage` (never lethal, unconditional) and removes
+  expired converted rows; allegiance rows are left to the lapse sweep.
+- `lapsed_allegiance_sweep` warns a PC charmer once and auto-rolls `perform_check` at
+  `charm_strength_points` difficulty (PLACEHOLDER) before ending via `end_allegiance_with_pool`.
+  Opens no encounter (ADR-4091 Decision 21; NPC hostility is #4121).
+- Audit: Plummeting cannot kill a present non-declaring character (environmental source); NPC
+  hostile-driven bleed-out terminal and abandonment-grace deaths on a downed victim are unchanged.
+
 ### Shared Future Work (combat-adjacent)
 - **Encounter scaling / GM tooling** — difficulty from story context + party composition, encounter builder
 - **Relationship modifier integration** — romance bonuses, rivalry intensity, party bond effects
