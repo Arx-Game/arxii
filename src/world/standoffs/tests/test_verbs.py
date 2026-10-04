@@ -348,3 +348,63 @@ class ShareSparkTests(VerbBase):
         )
         self.assertFalse(standoff_share_spark(self.participant, self.group, rule).success)
         self.assertFalse(StandoffSparkShare.objects.exists())
+
+
+class ActingOnASparkRevealsItTests(VerbBase):
+    """A press or terms that a regard rule shifted shares that spark with the group."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.approach = StandoffApproachFactory()
+        self.terms = StandoffTermsFactory(effect=TermsEffect.PASS)
+
+    def _shares(self) -> int:
+        return StandoffSparkShare.objects.filter(group=self.group).count()
+
+    def test_press_shifted_by_a_rule_shares_it(self) -> None:
+        rule = RegardRuleFactory(
+            creature_template=self.template, rule={}, difficulty_shift_bands=-1
+        )
+        with patch(CHECK, return_value=forced(1)):
+            standoff_press(self.participant, self.group, self.approach)
+        share = StandoffSparkShare.objects.get(group=self.group)
+        self.assertEqual(share.regard_rule, rule)
+        self.assertEqual(share.character_sheet, self.participant.character_sheet)
+
+    def test_press_with_an_inert_rule_shares_nothing(self) -> None:
+        RegardRuleFactory(creature_template=self.template, rule={})
+        with patch(CHECK, return_value=forced(1)):
+            standoff_press(self.participant, self.group, self.approach)
+        self.assertEqual(self._shares(), 0)
+
+    def test_press_hitting_a_rules_drive_shares_it(self) -> None:
+        drive = CreatureDriveFactory(creature_template=self.template, strength=DriveStrength.MINOR)
+        ApplicationFactory(capability=self.approach.capability, target_property=drive.property)
+        rule = RegardRuleFactory(
+            creature_template=self.template, rule={}, drive=drive.property, drive_shift=1
+        )
+        with patch(CHECK, return_value=forced(1)):
+            standoff_press(self.participant, self.group, self.approach)
+        shared = list(StandoffSparkShare.objects.values_list("regard_rule", flat=True))
+        self.assertEqual(shared, [rule.pk])
+
+    def test_press_missing_a_rules_drive_shares_nothing(self) -> None:
+        drive = CreatureDriveFactory(creature_template=self.template, strength=DriveStrength.MINOR)
+        RegardRuleFactory(
+            creature_template=self.template, rule={}, drive=drive.property, drive_shift=1
+        )
+        with patch(CHECK, return_value=forced(1)):
+            standoff_press(self.participant, self.group, self.approach)
+        self.assertEqual(self._shares(), 0)
+
+    def test_terms_shifted_by_a_rule_shares_it(self) -> None:
+        RegardRuleFactory(creature_template=self.template, rule={}, difficulty_shift_bands=1)
+        with patch(CHECK, return_value=forced(-1)):
+            standoff_terms(self.participant, self.group, self.terms)
+        self.assertEqual(self._shares(), 1)
+
+    def test_a_refused_verb_shares_nothing(self) -> None:
+        RegardRuleFactory(creature_template=self.template, rule={}, difficulty_shift_bands=1)
+        standoff_fight(self.participant, self.encounter)
+        standoff_press(self.participant, self.group, self.approach)
+        self.assertEqual(self._shares(), 0)

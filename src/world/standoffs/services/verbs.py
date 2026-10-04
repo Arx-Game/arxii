@@ -266,6 +266,21 @@ def _embolden_on_botch(group: StandoffGroup, config: StandoffConfig) -> None:
     group.save(update_fields=["emboldened_bands"])
 
 
+def _share_shifting_sparks(
+    group: StandoffGroup, sheet: CharacterSheet, hit_property_ids: set[int]
+) -> None:
+    """Acting on a spark reveals it: share every matched rule that shifted this roll."""
+    for match in regard_matches(group, sheet):
+        rule = match.rule
+        shifted = rule.difficulty_shift_bands != 0 or (
+            rule.drive_id is not None and rule.drive_id in hit_property_ids
+        )
+        if shifted:
+            StandoffSparkShare.objects.get_or_create(
+                group=group, character_sheet=sheet, regard_rule=rule
+            )
+
+
 @transaction.atomic
 def standoff_press(
     participant: CombatParticipant, group: StandoffGroup, approach: StandoffApproach
@@ -289,6 +304,7 @@ def standoff_press(
             sheet, approach.check_type, extra_contributions=graded.contributions
         ).total,
     )
+    _share_shifting_sparks(group, sheet, {drive.property_id for drive, _ in hits})
     tier = result.success_level
     message = "Your words do not move them."
     if tier >= 1:
@@ -360,6 +376,7 @@ def standoff_terms(
             sheet, config.terms_check_type, extra_contributions=graded.contributions
         ).total,
     )
+    _share_shifting_sparks(group, sheet, set())
     tier = result.success_level
     if tier < 0:
         if tier <= BOTCH_LEVEL:

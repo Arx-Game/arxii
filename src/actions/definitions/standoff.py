@@ -1,0 +1,226 @@
+"""Standoff actions on the shared dispatch seam (#4145).
+
+Read, press, name terms, fight and share a spark are registry ``Action`` verbs. Telnet
+(``CmdStandoff``) and the web reach them through ``dispatch_player_action``; each
+``execute()`` resolves the actor's participant in a standoff, scopes the group to that
+encounter and calls the ``world.standoffs.services.verbs`` service. No game logic lives here.
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+from typing import TYPE_CHECKING, Any
+
+from actions.base import Action
+from actions.constants import ActionCategory
+from actions.definitions.combat_maneuvers import _sheet
+from actions.types import ActionContext, ActionResult, TargetType
+
+if TYPE_CHECKING:
+    from evennia.objects.models import ObjectDB
+
+    from world.combat.models import CombatParticipant
+    from world.standoffs.models import StandoffGroup
+    from world.standoffs.types import StandoffActionResult
+
+NOT_IN_STANDOFF_MESSAGE = "You are not in a standoff."
+_NO_SUCH_GROUP_MSG = "No such group in this standoff."
+
+
+def _standoff_participant(actor: ObjectDB) -> CombatParticipant | None:
+    """The actor's ACTIVE participant in an encounter that is in its standoff, newest first."""
+    from world.combat.constants import ParticipantStatus  # noqa: PLC0415
+    from world.combat.models import CombatParticipant  # noqa: PLC0415
+    from world.standoffs.services.state import is_in_standoff  # noqa: PLC0415
+
+    sheet = _sheet(actor)
+    if sheet is None:
+        return None
+    candidates = (
+        CombatParticipant.objects.filter(character_sheet=sheet, status=ParticipantStatus.ACTIVE)
+        .select_related("encounter")
+        .order_by("-encounter__created_at")
+    )
+    return next((p for p in candidates if is_in_standoff(p.encounter)), None)
+
+
+def _resolve_group(participant: CombatParticipant, group_id: int | None) -> StandoffGroup | None:
+    """Resolve a group pk, scoped to the participant's encounter."""
+    if group_id is None:
+        return None
+    from world.standoffs.models import StandoffGroup  # noqa: PLC0415
+
+    return StandoffGroup.objects.filter(pk=group_id, encounter=participant.encounter).first()
+
+
+def _to_result(outcome: StandoffActionResult) -> ActionResult:
+    return ActionResult(success=outcome.success, message=outcome.message)
+
+
+@dataclass
+class StandoffReadAction(Action):
+    """Read a group of opponents for what drives them (wraps ``standoff_read``)."""
+
+    key: str = "standoff_read"
+    name: str = "Read"
+    icon: str = "eye"
+    category: str = "combat"
+    action_category: ActionCategory = ActionCategory.SOCIAL
+    target_type: TargetType = TargetType.SINGLE
+
+    def execute(  # noqa: PLR0913 - the focus kwargs are the read verb's whole payload
+        self,
+        actor: ObjectDB,
+        context: ActionContext | None = None,
+        group_id: int | None = None,
+        focus_kind: str | None = None,
+        focus_drive_id: int | None = None,
+        focus_regard_rule_id: int | None = None,
+        **kwargs: Any,
+    ) -> ActionResult:
+        from world.standoffs.services.verbs import standoff_read  # noqa: PLC0415
+
+        participant = _standoff_participant(actor)
+        if participant is None:
+            return ActionResult(success=False, message=NOT_IN_STANDOFF_MESSAGE)
+        group = _resolve_group(participant, group_id)
+        if group is None:
+            return ActionResult(success=False, message=_NO_SUCH_GROUP_MSG)
+        return _to_result(
+            standoff_read(
+                participant,
+                group,
+                focus_kind=focus_kind,
+                focus_drive_id=focus_drive_id,
+                focus_regard_rule_id=focus_regard_rule_id,
+            )
+        )
+
+
+@dataclass
+class StandoffPressAction(Action):
+    """Press a group with a social approach (wraps ``standoff_press``)."""
+
+    key: str = "standoff_press"
+    name: str = "Press"
+    icon: str = "hand"
+    category: str = "combat"
+    action_category: ActionCategory = ActionCategory.SOCIAL
+    target_type: TargetType = TargetType.SINGLE
+
+    def execute(
+        self,
+        actor: ObjectDB,
+        context: ActionContext | None = None,
+        group_id: int | None = None,
+        approach_id: int | None = None,
+        **kwargs: Any,
+    ) -> ActionResult:
+        from world.standoffs.models import StandoffApproach  # noqa: PLC0415
+        from world.standoffs.services.verbs import standoff_press  # noqa: PLC0415
+
+        participant = _standoff_participant(actor)
+        if participant is None:
+            return ActionResult(success=False, message=NOT_IN_STANDOFF_MESSAGE)
+        group = _resolve_group(participant, group_id)
+        if group is None:
+            return ActionResult(success=False, message=_NO_SUCH_GROUP_MSG)
+        approach = StandoffApproach.objects.filter(pk=approach_id).first()
+        if approach is None:
+            return ActionResult(success=False, message="No such approach.")
+        return _to_result(standoff_press(participant, group, approach))
+
+
+@dataclass
+class StandoffTermsAction(Action):
+    """Name terms to a group (wraps ``standoff_terms``)."""
+
+    key: str = "standoff_terms"
+    name: str = "Name terms"
+    icon: str = "handshake"
+    category: str = "combat"
+    action_category: ActionCategory = ActionCategory.SOCIAL
+    target_type: TargetType = TargetType.SINGLE
+
+    def execute(
+        self,
+        actor: ObjectDB,
+        context: ActionContext | None = None,
+        group_id: int | None = None,
+        terms_id: int | None = None,
+        **kwargs: Any,
+    ) -> ActionResult:
+        from world.standoffs.models import StandoffTerms  # noqa: PLC0415
+        from world.standoffs.services.verbs import standoff_terms  # noqa: PLC0415
+
+        participant = _standoff_participant(actor)
+        if participant is None:
+            return ActionResult(success=False, message=NOT_IN_STANDOFF_MESSAGE)
+        group = _resolve_group(participant, group_id)
+        if group is None:
+            return ActionResult(success=False, message=_NO_SUCH_GROUP_MSG)
+        terms = StandoffTerms.objects.filter(pk=terms_id).first()
+        if terms is None:
+            return ActionResult(success=False, message="No such terms.")
+        return _to_result(standoff_terms(participant, group, terms))
+
+
+@dataclass
+class StandoffFightAction(Action):
+    """Break the standoff and begin the fight (wraps ``standoff_fight``)."""
+
+    key: str = "standoff_fight"
+    name: str = "Fight"
+    icon: str = "swords"
+    category: str = "combat"
+    action_category: ActionCategory = ActionCategory.SOCIAL
+    target_type: TargetType = TargetType.SELF
+
+    def execute(
+        self,
+        actor: ObjectDB,
+        context: ActionContext | None = None,
+        **kwargs: Any,
+    ) -> ActionResult:
+        from world.standoffs.services.verbs import standoff_fight  # noqa: PLC0415
+
+        participant = _standoff_participant(actor)
+        if participant is None:
+            return ActionResult(success=False, message=NOT_IN_STANDOFF_MESSAGE)
+        return _to_result(standoff_fight(participant, participant.encounter))
+
+
+@dataclass
+class StandoffShareSparkAction(Action):
+    """Share what your character feels about a group (wraps ``standoff_share_spark``)."""
+
+    key: str = "standoff_share_spark"
+    name: str = "Share a spark"
+    icon: str = "sparkles"
+    category: str = "combat"
+    action_category: ActionCategory = ActionCategory.SOCIAL
+    target_type: TargetType = TargetType.SINGLE
+
+    def execute(
+        self,
+        actor: ObjectDB,
+        context: ActionContext | None = None,
+        group_id: int | None = None,
+        regard_rule_id: int | None = None,
+        **kwargs: Any,
+    ) -> ActionResult:
+        from world.standoffs.models import RegardRule  # noqa: PLC0415
+        from world.standoffs.services.verbs import standoff_share_spark  # noqa: PLC0415
+
+        participant = _standoff_participant(actor)
+        if participant is None:
+            return ActionResult(success=False, message=NOT_IN_STANDOFF_MESSAGE)
+        group = _resolve_group(participant, group_id)
+        if group is None:
+            return ActionResult(success=False, message=_NO_SUCH_GROUP_MSG)
+        rule = RegardRule.objects.filter(
+            pk=regard_rule_id, creature_template_id=group.creature_template_id
+        ).first()
+        if rule is None:
+            return ActionResult(success=False, message="That does not apply to you.")
+        return _to_result(standoff_share_spark(participant, group, rule))
