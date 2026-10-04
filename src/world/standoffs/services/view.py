@@ -75,6 +75,14 @@ class GroupView:
 
 
 @dataclass(frozen=True)
+class LeverView:
+    """One line saying why an approach may work; ``is_spark`` marks the viewer's own spark."""
+
+    text: str
+    is_spark: bool
+
+
+@dataclass(frozen=True)
 class ApproachView:
     approach_id: int
     group_id: int
@@ -82,7 +90,7 @@ class ApproachView:
     grade: str
     grade_label: str
     check_caption: str
-    levers: list[str]
+    levers: list[LeverView]
     hits_revealed_drive: bool
 
 
@@ -224,7 +232,7 @@ def _group_view(
     )
 
 
-def _levers(facts: _GroupFacts, hits: list, targeted: set[int]) -> tuple[list[str], bool]:
+def _levers(facts: _GroupFacts, hits: list, targeted: set[int]) -> tuple[list[LeverView], bool]:
     """Revealed drives the approach hits, and regard text only once that rule was read.
 
     Returns the lever lines and whether any is a revealed drive hit. Drives read
@@ -236,7 +244,7 @@ def _levers(facts: _GroupFacts, hits: list, targeted: set[int]) -> tuple[list[st
     """
     revealed_props = facts.revealed_drive_property_ids
     hit_levers = [
-        f"hits {hit.label} ({DriveStrength(drive.strength).label})"
+        LeverView(f"hits {hit.label} ({DriveStrength(drive.strength).label})", is_spark=False)
         for drive, hit in hits
         if drive.property_id in revealed_props
     ]
@@ -248,7 +256,7 @@ def _levers(facts: _GroupFacts, hits: list, targeted: set[int]) -> tuple[list[st
             rule.drive_shift != 0 and rule.drive_id in targeted
         )
         if shifts and rule.pk in revealed_rules and rule.revealed_text:
-            levers.append(f"your spark: {rule.revealed_text}")
+            levers.append(LeverView(f"your spark: {rule.revealed_text}", is_spark=True))
     return levers, bool(hit_levers)
 
 

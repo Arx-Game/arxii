@@ -56,7 +56,10 @@ const STANDOFF: StandoffView = {
       grade: 'easy',
       grade_label: 'Easy',
       check_caption: 'Test check + Test sway',
-      levers: ['hits Test drive (Minor)', 'your spark: Test detail'],
+      levers: [
+        { text: 'hits Test drive (Minor)', is_spark: false },
+        { text: 'your spark: Test detail', is_spark: true },
+      ],
       hits_revealed_drive: true,
     },
     {
@@ -186,7 +189,8 @@ describe('StandoffCard', () => {
     const hit = screen.getByTestId('standoff-approach-hit');
     expect(hit).toHaveTextContent('Test approach');
     expect(hit.className).toMatch(/border-accent/);
-    expect(within(hit).getByText('your spark: Test detail')).toBeInTheDocument();
+    expect(within(hit).getByText('your spark: Test detail').className).toMatch(/text-primary/);
+    expect(within(hit).getByText('hits Test drive (Minor)').className).toMatch(/text-foreground/);
     const plain = screen.getByRole('button', { name: /Plain approach/ });
     expect(plain.className).not.toMatch(/border-accent/);
     expect(within(plain).getByText('no known lever')).toBeInTheDocument();

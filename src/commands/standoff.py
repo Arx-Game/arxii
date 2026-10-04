@@ -20,7 +20,7 @@ if TYPE_CHECKING:
     from actions.types import ActionRef
     from world.combat.models import CombatParticipant
     from world.standoffs.models import StandoffGroup
-    from world.standoffs.services.view import StandoffView
+    from world.standoffs.services.view import LeverView, StandoffView
 
 _SUBVERBS: dict[str, str] = {
     "read": "standoff_read",
@@ -31,6 +31,10 @@ _SUBVERBS: dict[str, str] = {
 }
 _NOT_IN_STANDOFF = "You are not in a standoff."
 _CAUSE_WORD = "cause"
+
+
+def _lever_suffix(levers: list[LeverView]) -> str:
+    return f" ({'; '.join(lever.text for lever in levers)})" if levers else ""
 
 
 class AmbiguousNameError(CommandError):
@@ -287,7 +291,11 @@ def _render_view(view: StandoffView) -> list[str]:
         )
         lines.extend(
             f"    press {approach.name}: {approach.grade_label}"
-            + (f" ({'; '.join(approach.levers)})" if approach.levers else "")
+            + (
+                f" ({'; '.join(lever.text for lever in approach.levers)})"
+                if approach.levers
+                else ""
+            )
             for approach in view.approaches
             if approach.group_id == group.group_id
         )

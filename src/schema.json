@@ -41430,7 +41430,7 @@ components:
         levers:
           type: array
           items:
-            type: string
+            $ref: '#/components/schemas/LeverView'
         hits_revealed_drive:
           type: boolean
       required:
@@ -59032,6 +59032,16 @@ components:
         * `gm` - GM
         * `experienced` - Experienced GM
         * `senior` - Senior GM
+    LeverView:
+      type: object
+      properties:
+        text:
+          type: string
+        is_spark:
+          type: boolean
+      required:
+      - is_spark
+      - text
     LibraryEntry:
       type: object
       description: Read-only serializer for library browse cards.

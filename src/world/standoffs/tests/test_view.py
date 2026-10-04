@@ -150,7 +150,10 @@ class HiddenInformationTests(ViewBase):
         StandoffRevealFactory(group=self.group, kind=RevealKind.DRIVE, drive=self.drive)
         with patch(PREVIEW, return_value=0):
             revealed = self.view_for(self.sheet_b).approaches[0]
-        self.assertEqual(revealed.levers, [f"hits {self.drive.property.name} (Major)"])
+        self.assertEqual(
+            [(lever.text, lever.is_spark) for lever in revealed.levers],
+            [(f"hits {self.drive.property.name} (Major)", False)],
+        )
         self.assertTrue(revealed.hits_revealed_drive)
 
 
@@ -165,11 +168,14 @@ class LeverLeakTests(ViewBase):
         )
         with patch(PREVIEW, return_value=0):
             before = self.view_for(self.sheet_a).approaches[0].levers
-        self.assertNotIn("PLACEHOLDER detail A", before)
+        self.assertNotIn("PLACEHOLDER detail A", [lever.text for lever in before])
         StandoffRevealFactory(group=self.group, kind=RevealKind.REGARD, regard_rule=self.rule)
         with patch(PREVIEW, return_value=0):
             after = self.view_for(self.sheet_a).approaches[0].levers
-        self.assertEqual(after, ["your spark: PLACEHOLDER detail A"])
+        self.assertEqual(
+            [(lever.text, lever.is_spark) for lever in after],
+            [("your spark: PLACEHOLDER detail A", True)],
+        )
 
 
 class PresentationTests(ViewBase):

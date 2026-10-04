@@ -24,6 +24,11 @@ class GroupViewSerializer(serializers.Serializer):
     read_grade_label = serializers.CharField()
 
 
+class LeverViewSerializer(serializers.Serializer):
+    text = serializers.CharField()
+    is_spark = serializers.BooleanField()
+
+
 class ApproachViewSerializer(serializers.Serializer):
     approach_id = serializers.IntegerField()
     group_id = serializers.IntegerField()
@@ -31,7 +36,7 @@ class ApproachViewSerializer(serializers.Serializer):
     grade = serializers.CharField()
     grade_label = serializers.CharField()
     check_caption = serializers.CharField()
-    levers = serializers.ListField(child=serializers.CharField())
+    levers = LeverViewSerializer(many=True)
     hits_revealed_drive = serializers.BooleanField()
 
 

@@ -25338,7 +25338,7 @@ export interface components {
       grade: string;
       grade_label: string;
       check_caption: string;
-      levers: string[];
+      levers: components['schemas']['LeverView'][];
       hits_revealed_drive: boolean;
     };
     /**
@@ -33671,6 +33671,10 @@ export interface components {
      * @enum {string}
      */
     LevelE58Enum: 'starting' | 'junior' | 'gm' | 'experienced' | 'senior';
+    LeverView: {
+      text: string;
+      is_spark: boolean;
+    };
     /** @description Read-only serializer for library browse cards. */
     LibraryEntry: {
       readonly id: number;

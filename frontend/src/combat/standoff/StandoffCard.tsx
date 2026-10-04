@@ -353,13 +353,13 @@ function GroupSection({
               ) : (
                 approach.levers.map((lever) => (
                   <span
-                    key={lever}
+                    key={lever.text}
                     className={cn(
                       'text-xs font-normal italic',
-                      lever.startsWith('your spark') ? 'text-primary' : 'text-foreground'
+                      lever.is_spark ? 'text-primary' : 'text-foreground'
                     )}
                   >
-                    {lever}
+                    {lever.text}
                   </span>
                 ))
               )}
