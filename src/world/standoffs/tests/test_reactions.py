@@ -254,7 +254,7 @@ class RoomLineTests(StandoffJourneyBase):
         from world.combat.models import CombatOpponent
 
         self.creature.cause = CauseKind.PREDATION
-        self.creature.cause_margin_percent = 100000
+        self.creature.cause_margin_percent = 30000
         self.creature.save(update_fields=["cause", "cause_margin_percent"])
         self.approach.damages_morale = True
         self.approach.save(update_fields=["damages_morale"])
