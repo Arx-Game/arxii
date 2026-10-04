@@ -835,7 +835,21 @@ class GiftAdminForm(forms.ModelForm):
 
     class Meta:
         model = Gift
-        fields = "__all__"  # noqa: DJ007 - admin form mirrors the model
+        fields = [
+            "name",
+            "description",
+            "kind",
+            "parent",
+            "creator",
+            "codex_entry",
+            "style",
+            "resonances",
+            "ultimate_techniques",
+            "written_by",
+            "written_on",
+            "reviewed_by",
+            "reviewed_on",
+        ]
 
     def clean(self) -> dict:
         cleaned = super().clean()

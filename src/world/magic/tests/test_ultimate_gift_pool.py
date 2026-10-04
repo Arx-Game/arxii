@@ -8,7 +8,7 @@ from world.covenants.constants import RoleArchetype
 from world.magic.admin import GiftAdminForm
 from world.magic.constants import GiftKind, UltimateCardKind, UltimateSource
 from world.magic.factories import CharacterGiftFactory, GiftFactory, UltimateTechniqueFactory
-from world.magic.models import KnownUltimate
+from world.magic.models import Gift, KnownUltimate
 from world.magic.services.ultimates import (
     choose_ultimate,
     clear_readied_ultimate,
@@ -107,6 +107,26 @@ class GiftCleanTests(TestCase):
 
 
 class GiftAdminFormTests(TestCase):
+    def test_form_fields_are_explicit_and_cover_every_editable_model_field(self) -> None:
+        explicit = {
+            "name",
+            "description",
+            "kind",
+            "parent",
+            "creator",
+            "codex_entry",
+            "style",
+            "resonances",
+            "ultimate_techniques",
+            "written_by",
+            "written_on",
+            "reviewed_by",
+            "reviewed_on",
+        }
+        editable = {f.name for f in Gift._meta.get_fields() if not f.auto_created and f.editable}
+        self.assertEqual(set(GiftAdminForm.base_fields), explicit)
+        self.assertEqual(set(GiftAdminForm.base_fields), editable)
+
     def _form(self, gift, techniques, kind=None):
         data = {
             "name": gift.name,
