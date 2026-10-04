@@ -184,3 +184,24 @@ class SocialAffectionDeltaTest(TestCase):
         resolution = result.data["resolution"]
         message = apply_social_disposition_delta(self.pc_character, self.npc_persona.pk, resolution)
         self.assertIsNone(message)
+
+
+class ParleyResultAffectionTest(TestCase):
+    """Combat parley's result shim raises affection like a PendingActionResolution (#4145)."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.pc_sheet = CharacterSheetFactory()
+        cls.npc_persona = PersonaFactory(persona_type=PersonaType.ESTABLISHED)
+
+    def test_parley_result_raises_affection_by_success_level(self) -> None:
+        from world.combat.services import _ParleyResult
+        from world.npc_services.social_disposition import apply_social_disposition_delta
+
+        apply_social_disposition_delta(
+            self.pc_sheet.character, self.npc_persona.pk, _ParleyResult(3)
+        )
+        standing = NPCStanding.objects.get(
+            persona=self.pc_sheet.primary_persona, npc_persona=self.npc_persona
+        )
+        self.assertEqual(standing.affection, 3)

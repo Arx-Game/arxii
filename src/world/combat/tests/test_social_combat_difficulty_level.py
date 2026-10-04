@@ -16,8 +16,9 @@ opponent, never a persona-backed one.
 
 from django.test import TestCase
 
+from world.character_sheets.factories import CharacterSheetFactory
 from world.checks.constants import LEVEL_POINTS_PER_LEVEL
-from world.checks.factories import create_resistance_check_types
+from world.checks.factories import CheckTypeFactory, create_resistance_check_types
 from world.combat.factories import CombatEncounterFactory, CombatOpponentFactory
 from world.combat.services import _social_combat_difficulty
 from world.traits.models import PointConversionRange, TraitType
@@ -35,6 +36,8 @@ class SocialCombatDifficultyLevelTests(TestCase):
             defaults={"max_value": 100, "points_per_level": 1},
         )
         cls.encounter = CombatEncounterFactory()
+        cls.actor = CharacterSheetFactory()
+        cls.check_type = CheckTypeFactory()
 
     def test_high_level_ephemeral_opponent_resists_harder_than_low_level(self):
         """The gap this fix closes: without level_override this used to be a tie."""
@@ -48,12 +51,18 @@ class SocialCombatDifficultyLevelTests(TestCase):
         self.assertIsNotNone(low.objectdb)
         self.assertIsNotNone(high.objectdb)
 
-        low_difficulty = _social_combat_difficulty(low)
-        high_difficulty = _social_combat_difficulty(high)
+        low_difficulty = _social_combat_difficulty(
+            low, actor_sheet=self.actor, check_type=self.check_type
+        ).difficulty
+        high_difficulty = _social_combat_difficulty(
+            high, actor_sheet=self.actor, check_type=self.check_type
+        ).difficulty
 
         self.assertGreater(high_difficulty, low_difficulty)
         self.assertEqual(high_difficulty - low_difficulty, LEVEL_POINTS_PER_LEVEL * (20 - 1))
 
-    def test_no_target_still_returns_zero(self):
+    def test_no_target_still_returns_none(self):
         """Rally targets an ally -- target=None stays a no-op (pre-existing behavior)."""
-        self.assertEqual(_social_combat_difficulty(None), 0)
+        self.assertIsNone(
+            _social_combat_difficulty(None, actor_sheet=self.actor, check_type=self.check_type)
+        )

@@ -14,6 +14,7 @@ from django.utils import timezone
 from actions.services import start_action_resolution
 from world.checks.theater import check_outcome_faces, maybe_emit_resolution_theater
 from world.checks.types import ResolutionContext
+from world.fatigue.constants import EffortLevel
 from world.progression.models import KudosSourceCategory
 from world.progression.models.kudos import KudosDifficultyWeight
 from world.progression.services.engagement import accrue
@@ -642,8 +643,21 @@ def _compute_difficulty_override_for_primary(
             resist_effort,
         )
     else:
-        increment = 0
+        increment = _npc_passive_resist_increment(action_request.target_persona)
     return base + increment
+
+
+def _npc_passive_resist_increment(persona: Persona) -> int:
+    """An NPC target's passive Composure resistance, medium effort (#4145).
+
+    PCs choose a resist effort and pay fatigue for it; an NPC has no one to choose, so it
+    resists at a fixed medium effort with no fatigue and no development award.
+    """
+    if not _persona_is_npc(persona):
+        return 0
+    from world.checks.services import compute_resist_increment  # noqa: PLC0415
+
+    return compute_resist_increment(persona.character_sheet.character, EffortLevel.MEDIUM)
 
 
 def _persona_current_tenure(persona: Persona | None) -> RosterTenure | None:
@@ -1273,7 +1287,7 @@ def _compute_target_difficulty_override(
             resist_effort,
         )
     else:
-        increment = 0
+        increment = _npc_passive_resist_increment(action_target.target_persona)
     return base + increment
 
 

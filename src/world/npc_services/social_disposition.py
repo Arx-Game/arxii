@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Protocol, runtime_checkable
+
 # Per success-tier disposition deltas (ADR-0019: tier-sourced, not hardcoded
 # check difficulty). success_level is a SmallIntegerField on a -10..+10 scale
 # (world/traits/models.py:484; checks/AGENT_GLOSSARY.md:16); >0 = success,
@@ -67,15 +69,31 @@ def apply_social_disposition_delta(actor, target_persona_id, result) -> str | No
     return f"{target_name}'s regard for you warms {disposition_shift_band(delta)}."
 
 
+class _CheckResultLike(Protocol):
+    success_level: int | None
+
+
+class _StepResultLike(Protocol):
+    check_result: _CheckResultLike
+
+
+@runtime_checkable
+class _RolledResolution(Protocol):
+    """Anything that carries a rolled main step: a PendingActionResolution or the combat
+    parley shim (#4145), which has the same ``main_result.check_result`` shape."""
+
+    main_result: _StepResultLike | None
+
+
 def _success_level(result: object) -> int:
     """Success level from a resolution result, 0 when unrolled.
 
-    Only ``PendingActionResolution`` carries ``main_result`` (a ``StepResult``,
-    whose ``check_result`` is non-optional) — type dispatch, not probing (#2386).
+    Structural dispatch on ``main_result`` (a ``StepResult``, whose ``check_result`` is
+    non-optional): ``PendingActionResolution`` and combat's parley shim both qualify, so
+    a parley success warms the target (#4145). Previously only the former did, so parley
+    always read 0.
     """
-    from actions.types import PendingActionResolution  # noqa: PLC0415
-
-    if isinstance(result, PendingActionResolution) and result.main_result is not None:
+    if isinstance(result, _RolledResolution) and result.main_result is not None:
         return result.main_result.check_result.success_level or 0
     return 0
 

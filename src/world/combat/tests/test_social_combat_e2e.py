@@ -249,7 +249,7 @@ class ResolveSocialCheckSituationContextTests(TestCase):
         # module-level name — patch the source, not world.combat.services.
         with patch("world.checks.services.perform_check") as mock_perform:
             mock_perform.return_value = MagicMock(success_level=1)
-            _resolve_social_check(self.participant, "Rally", 0)
+            _resolve_social_check(self.participant, CheckType.objects.get(name="Rally"), 0)
 
         situation_ctx = mock_perform.call_args.kwargs["situation_ctx"]
         self.assertIsInstance(situation_ctx, SituationContext)
