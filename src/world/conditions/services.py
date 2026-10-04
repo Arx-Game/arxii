@@ -1555,6 +1555,49 @@ def expire_end_of_combat_conditions(
 
 
 @transaction.atomic
+def settle_round_effects(
+    targets: Iterable["ObjectDB"],  # noqa: OBJECTDB_PARAM - mirrors expire_end_of_combat_conditions
+) -> list[ConditionInstance]:
+    """Convert round-counted conditions on the targets into wall-clock expiries (#4120).
+
+    Rounds only tick inside combat, so a ROUNDS condition that outlives its fight
+    would otherwise sit frozen forever. On settle, each unresolved ROUNDS instance
+    with a round count becomes ``expires_at = now + rounds * settled_seconds_per_round``
+    and its round counter is cleared. Idempotent: a converted row has no round
+    count, so a second run skips it.
+
+    Args:
+        targets: ObjectDB instances to settle. ``None`` entries are ignored.
+
+    Returns:
+        The converted ConditionInstances.
+    """
+    target_list = [t for t in targets if t is not None]
+    if not target_list:
+        return []
+
+    instances = list(
+        ConditionInstance.objects.filter(
+            target_id__in=[t.pk for t in target_list],
+            condition__default_duration_type=DurationType.ROUNDS,
+            rounds_remaining__isnull=False,
+            resolved_at__isnull=True,
+        )
+    )
+    if not instances:
+        return []
+
+    seconds_per_round = get_settle_config().settled_seconds_per_round
+    now = timezone.now()
+    for instance in instances:
+        instance.expires_at = now + timedelta(seconds=instance.rounds_remaining * seconds_per_round)
+        instance.last_settled_tick_at = now
+        instance.rounds_remaining = None
+        instance.save(update_fields=["expires_at", "last_settled_tick_at", "rounds_remaining"])
+    return instances
+
+
+@transaction.atomic
 def expire_scene_scoped_conditions(
     targets: Iterable["ObjectDB"],  # noqa: OBJECTDB_PARAM
 ) -> list[ConditionTemplate]:

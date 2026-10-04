@@ -9713,6 +9713,14 @@ def cleanup_completed_encounter(encounter: CombatEncounter) -> None:
 
     expire_end_of_combat_conditions(participant_targets + opponent_targets)
 
+    # Settle round-counted effects into wall-clock expiries (#4120). Rounds only
+    # tick in combat, so a ROUNDS condition that outlives the fight would freeze.
+    # Runs before the certain-death backstop and ephemeral NPC deletion: rows on
+    # bodies that outlive combat must be converted while those bodies still exist.
+    from world.conditions.services import settle_round_effects  # noqa: PLC0415
+
+    settle_round_effects(participant_targets + opponent_targets)
+
     # Certain-death backstop (#4098 fix round 1): a deferred certain death
     # normally resolves in conditions.services._resolve_deferred_death_on_expiry
     # when the LAST death_deferred condition (Audere/Audere Majora) is removed
