@@ -104,7 +104,7 @@ describe('StandoffCard', () => {
       kwargs: { group_id: 11, approach_id: 21 },
     });
     await waitFor(() => expect(spy).toHaveBeenCalledWith({ queryKey: combatKeys.encounter(5) }));
-    expect(toastSuccess).toHaveBeenCalledWith('Done.');
+    expect(toastSuccess).toHaveBeenCalledWith('Done.', { className: 'whitespace-pre-line' });
   });
 
   it('names terms', async () => {
@@ -171,7 +171,46 @@ describe('StandoffCard', () => {
     });
     renderCard();
     await user.click(screen.getByRole('button', { name: 'Fight' }));
-    await waitFor(() => expect(toastError).toHaveBeenCalledWith('Too late.'));
+    await waitFor(() =>
+      expect(toastError).toHaveBeenCalledWith('Too late.', {
+        className: 'whitespace-pre-line',
+      })
+    );
     expect(within(document.body).queryByText('Done.')).toBeNull();
+  });
+
+  it('keeps each learned line of a multi-line result on its own line', async () => {
+    const user = userEvent.setup();
+    mutateAsync.mockResolvedValue({
+      backend: 'registry',
+      deferred: false,
+      message: 'First line.\nSecond line.',
+      success: true,
+    });
+    renderCard();
+    await user.click(screen.getByRole('button', { name: 'Fight' }));
+    await waitFor(() => expect(toastSuccess).toHaveBeenCalled());
+    const [message, options] = toastSuccess.mock.calls[0];
+    expect(message).toContain('\n');
+    expect(options).toEqual({ className: 'whitespace-pre-line' });
+  });
+
+  it('disables read, approaches and terms once the group is not open', () => {
+    renderCard({ ...STANDOFF, groups: [{ ...STANDOFF.groups[0], state: 'settled' }] });
+    expect(screen.getByRole('button', { name: 'Read them' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: /Test approach/ })).toBeDisabled();
+    expect(screen.getByRole('button', { name: /Test terms/ })).toBeDisabled();
+  });
+
+  it('disables read when nothing is left hidden', () => {
+    renderCard({ ...STANDOFF, groups: [{ ...STANDOFF.groups[0], hidden_count: 0 }] });
+    expect(screen.getByRole('button', { name: 'Read them' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: /Test approach/ })).toBeEnabled();
+  });
+
+  it('labels the tiles for assistive tech', () => {
+    renderCard();
+    expect(screen.getAllByRole('img', { name: /Hidden/ })).toHaveLength(3);
+    expect(screen.getByRole('group', { name: 'What is known' })).toBeInTheDocument();
   });
 });

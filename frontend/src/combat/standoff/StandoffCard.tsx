@@ -33,6 +33,9 @@ export interface StandoffCardProps {
   characterId: number;
 }
 
+// A read can learn several things at once, one per line.
+const TOAST_OPTIONS = { className: 'whitespace-pre-line' };
+
 const NO_FOCUS = 'none';
 const FOCUS_CAUSE = 'cause';
 const FOCUS_DRIVE = 'drive';
@@ -61,9 +64,9 @@ export function StandoffCard({ standoff, encounterId, characterId }: StandoffCar
       const result = await mutateAsync(registryRef(key, kwargs));
       const message = result.message ?? '';
       if (isDispatchFailure(result)) {
-        toast.error(message || 'That did not work.');
+        toast.error(message || 'That did not work.', TOAST_OPTIONS);
       } else if (message) {
-        toast.success(message);
+        toast.success(message, TOAST_OPTIONS);
       }
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'That did not work.');
@@ -174,6 +177,7 @@ function GroupSection({
   const approaches = standoff.approaches.filter((a) => a.group_id === group.group_id);
   const terms = standoff.terms.filter((t) => t.group_id === group.group_id);
   const sparks = standoff.sparks.filter((s) => s.group_id === group.group_id);
+  const isOpen = group.state === 'open';
   const selectId = `standoff-focus-${group.group_id}`;
 
   return (
@@ -183,7 +187,7 @@ function GroupSection({
         <span className="text-xs text-muted-foreground">x{group.member_count}</span>
       </div>
 
-      <div className="flex flex-wrap gap-2" aria-label="What is known">
+      <div className="flex flex-wrap gap-2" role="group" aria-label="What is known">
         {group.cause !== null && (
           <div className="rounded border border-primary/50 bg-primary/10 px-2 py-1 text-xs">
             <span className="block text-[10px] uppercase text-muted-foreground">cause</span>
@@ -205,7 +209,8 @@ function GroupSection({
           <div
             key={`hidden-${i}`}
             data-testid="standoff-facedown-tile"
-            aria-label="Hidden"
+            role="img"
+            aria-label="Hidden, not yet read"
             className="flex h-10 w-10 items-center justify-center rounded border border-border bg-foreground/80 text-sm text-background"
           >
             ?
@@ -244,7 +249,7 @@ function GroupSection({
         </div>
         <Button
           size="sm"
-          disabled={disabled}
+          disabled={disabled || !isOpen || group.hidden_count === 0}
           onClick={() => fire('standoff_read', readKwargs(group.group_id, focus))}
         >
           Read them
@@ -256,7 +261,7 @@ function GroupSection({
           <Button
             key={approach.approach_id}
             variant="outline"
-            disabled={disabled}
+            disabled={disabled || !isOpen}
             className="h-auto justify-between whitespace-normal py-2 text-left"
             onClick={() =>
               fire('standoff_press', {
@@ -287,7 +292,7 @@ function GroupSection({
             <Button
               key={term.terms_id}
               variant="secondary"
-              disabled={disabled}
+              disabled={disabled || !isOpen}
               className="justify-between"
               onClick={() =>
                 fire('standoff_terms', { group_id: group.group_id, terms_id: term.terms_id })
