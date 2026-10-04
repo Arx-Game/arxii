@@ -2634,26 +2634,33 @@ technique is a limited form, a high-tier option on an ultimate is the full arriv
 | `CharacterManifestation` (`models/manifestation.py`) | [BUILT & WIRED] | Per-character choice: `character` (`CharacterSheet`), `technique`, `option`, nullable `companion` (for an archetype option, the character's own `Companion`). Unique per (character, technique). Keyed by (character, technique) rather than hung on `CharacterTechnique` because an ultimate has no `CharacterTechnique` row. Set by GM or staff in the admin (`CharacterManifestationAdmin`). |
 | `CharacterManifestation.bond_is_active()` | [BUILT & WIRED] | A being option holds while `active_patronage_for(character)` includes that being. An archetype option holds while the companion is the character's own, matches the archetype, and has no `released_at`. |
 | `CharacterManifestation.clean()` | [BUILT & WIRED] | The option must belong to the technique; a being option takes no companion; an archetype option needs one; the bond must be active. |
-| `manifest_bound_entity(participant, technique)` (`services/effect_handlers.py`) | [BUILT & WIRED] | Called from `CombatTechniqueResolver` (`world/combat/services.py`) after conditions apply, past the ward bounce, so a bounced cast manifests nothing. Returns the new ally `CombatOpponent` or None. |
+| `manifest_bound_entity(participant, technique)` (`services/effect_handlers.py`) | [BUILT & WIRED] | Called from `CombatTechniqueResolver` (`world/combat/services.py`) after conditions apply, on a successful, unbounced cast only (check `success_level >= 1`; a failed roll or a ward bounce manifests nothing). Returns the new ally `CombatOpponent` or None. |
 
 `manifest_bound_entity` returns None (manifests nothing) when the caster is no longer
-ACTIVE in the fight, has no `CharacterManifestation` for the technique, the bond has lapsed,
-a being has no avatar sheet, the caster of a being option has no location, a companion has no body (`objectdb`), or that entity already
-has a row in this encounter (one row per objectdb per encounter, so a defeated avatar is
-not re-added). For a being it first moves the being's avatar character into the caster's
-room (`add_opponent` refuses a position in another room; a caster with no location manifests nothing), then calls `add_opponent` with
-the option's `tier`, `existing_objectdb` and the caster's position, and marks the row
-`allegiance=ALLY`, `summoned_by=caster`. For an archetype it calls
-`materialize_companion_as_combat_opponent` (`world/companions/services.py`, unchanged). A
-being option whose tier has no `OpponentTierTemplate` row makes `add_opponent` raise from
-`compute_opponent_stat_block`; that is deliberate, not guarded, and the
-`manifest-tier-templates` dashboard probe flags it.
+ACTIVE in the fight or has no location, has no `CharacterManifestation` for the technique
+(the row's option must belong to that technique), the bond has lapsed, a being has no avatar
+sheet, a companion has no body (`objectdb`) or is Savaged (`companion_is_savaged`, shared
+with `CompanionFitToFightPrerequisite`), the body is still not in the caster's room after
+the move below, a being's avatar still fights undefeated in a different encounter that is
+not completed, or that entity already has a row in this encounter (one row per objectdb per
+encounter, so a defeated avatar is not re-added). The body arrives: a being's avatar or a
+companion's body is first moved into the caster's room with `move_to` (`add_opponent`
+refuses a position in another room) and the location is read back, since a move can be
+vetoed. A being then goes through `add_opponent` with the option's `tier`,
+`existing_objectdb` and the caster's position, and the row is marked `allegiance=ALLY`,
+`summoned_by=caster`. An archetype goes through `materialize_companion_as_combat_opponent`
+(`world/companions/services.py`, unchanged). A being option whose tier has no
+`OpponentTierTemplate` row makes `add_opponent` raise from `compute_opponent_stat_block`.
+That is deliberate, not guarded: the raise rolls back the whole `resolve_round` for every
+participant until staff add the row, and the avatar's move into the caster's room may then
+show in memory while the database has it elsewhere. The `manifest-tier-templates`
+dashboard probe flags it.
 
 **Required-content probes (`web/admin/tuning/required_content.py`, all REQUIRED tier):**
 `manifest-being-avatars` (a being option whose being has no `avatar_sheet`: nobody arrives),
 `manifest-archetype-abilities` (an archetype option whose archetype has no
 `CompanionAbility` rows: it arrives and never acts), `manifest-tier-templates` (a being
-option's tier with no `OpponentTierTemplate`: the cast raises mid-combat).
+option's tier with no `OpponentTierTemplate`: the cast raises and the whole round rolls back).
 
 **Coexists with the flow-payload `summon_ally`.** The threat-pool summon
 (`summon_ally` / `summon_ally_on_condition`, see the effect-handler table below) is

@@ -2002,7 +2002,8 @@ def _declarations() -> tuple[ContentDependency, ...]:
             consumer="world/magic/services/effect_handlers.py manifest_bound_entity()",
             consequence=(
                 "A being manifested at a tier with no OpponentTierTemplate row makes "
-                "the opponent auto-scaling raise: the cast errors mid-combat."
+                "the opponent auto-scaling raise: the cast errors mid-combat and the "
+                "whole round rolls back for every participant until the row exists."
             ),
             probe=CustomProbe(fn=_probe_manifest_tiers_have_templates),
         ),

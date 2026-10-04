@@ -32,5 +32,8 @@ specific one.
 
 The choice is set by GM or staff in the admin; there is no character-creation picker and no
 manifestation outside combat. A being option's tier needs an `OpponentTierTemplate` row or
-the cast raises, flagged by the `manifest-tier-templates` dashboard probe. The flow-payload
+the cast raises, which rolls back the whole `resolve_round` for every participant until
+staff add the row (and the avatar's move into the caster's room can show in memory while
+the database has it elsewhere); the `manifest-tier-templates` dashboard probe flags it.
+We chose the sentinel over a guard on purpose. The flow-payload
 threat-pool `summon_ally` is a separate mechanism and stays.

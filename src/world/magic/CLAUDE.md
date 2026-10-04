@@ -1724,10 +1724,13 @@ only), `WorshippedBeing.ultimate_techniques` / `CompanionArchetype.ultimate_tech
 `CharacterManifestation` (per character and technique: `option`, nullable `companion`;
 `bond_is_active()`; `clean()` enforces option-belongs-to-technique and an active bond).
 `services/effect_handlers.py`'s `manifest_bound_entity(participant, technique)` is called
-from `CombatTechniqueResolver` after conditions apply (past the ward bounce): it moves a
-being's avatar into the caster's room (a caster with no location manifests nothing), then `add_opponent(..., existing_objectdb=avatar)`
-as an ALLY, or materializes the character's own companion. A being option's tier needs an
-`OpponentTierTemplate` row or the cast raises on purpose (probe `manifest-tier-templates`).
+from `CombatTechniqueResolver` after conditions apply, on a successful, unbounced cast: it
+moves a being's avatar (or a companion's body) into the caster's room, then
+`add_opponent(..., existing_objectdb=avatar)` as an ALLY, or materializes the character's
+own companion. It manifests nothing for a failed roll, a caster with no location, a body
+that is not in the caster's room after the move, a Savaged companion, or an avatar in
+another running fight. A being option's tier needs an `OpponentTierTemplate` row or the
+cast raises on purpose and the whole round rolls back (probe `manifest-tier-templates`).
 No CG picker, no out-of-combat manifestation. The flow-payload `summon_ally` is a separate
 threat-pool summon and is untouched. Detail: `docs/systems/magic.md`'s "Manifesting a
 bound entity"; ADR-4118.
