@@ -10,6 +10,7 @@ from commands.exceptions import CommandError
 from commands.standoff import CmdStandoff
 from evennia_extensions.factories import CharacterFactory
 from world.character_sheets.factories import CharacterSheetFactory
+from world.checks.factories import CheckTypeFactory
 from world.combat.constants import CauseKind
 from world.combat.factories import (
     CombatEncounterFactory,
@@ -26,6 +27,7 @@ from world.standoffs.factories import (
     StandoffRevealFactory,
     StandoffTermsFactory,
 )
+from world.standoffs.models import StandoffConfig, StandoffSparkShare
 from world.standoffs.services.state import open_standoff
 
 _DISPATCH = "commands.command.dispatch_player_action"
@@ -141,6 +143,39 @@ class CmdStandoffTests(TestCase):
         self.assertIn("Cause: Predation.", text)
         self.assertIn(f"Drive: {shown.property.name} (Major).", text)
         self.assertNotIn(hidden.property.name, text)
+
+    def test_summary_lists_approach_and_terms_names_and_never_unshared_sparks(self) -> None:
+        config = StandoffConfig.load()
+        config.terms_check_type = CheckTypeFactory()
+        config.save()
+        RegardRuleFactory(creature_template=self.template, rule={}, spark_text="my own pang")
+        RegardRuleFactory(
+            creature_template=self.template,
+            rule={"leaf": "has_species", "params": {"species_id": 999999}},
+            spark_text="SOMEONE ELSES SPARK",
+            revealed_text="SOMEONE ELSES DETAIL",
+        )
+        cmd = self._cmd("")
+        cmd.func()
+        text = cmd.msg.call_args.args[0]
+        self.assertRegex(text, r"press Hard Stare: \w+")
+        self.assertRegex(text, r"terms Let Us Pass: \w+")
+        self.assertIn("my own pang", text)
+        self.assertNotIn("SOMEONE ELSES", text)
+        self.assertIn("unread", text)
+
+    def test_summary_shows_a_spark_another_character_shared(self) -> None:
+        other = CharacterSheetFactory()
+        CombatParticipantFactory(encounter=self.encounter, character_sheet=other)
+        rule = RegardRuleFactory(
+            creature_template=self.template,
+            rule={"leaf": "has_species", "params": {"species_id": 999999}},
+            spark_text="a shared pang",
+        )
+        StandoffSparkShare.objects.create(group=self.group, character_sheet=other, regard_rule=rule)
+        cmd = self._cmd("")
+        cmd.func()
+        self.assertIn("Shared: a shared pang", cmd.msg.call_args.args[0])
 
     def test_summary_outside_a_standoff(self) -> None:
         self.character = CharacterFactory(db_key="bystander")

@@ -20,6 +20,7 @@ if TYPE_CHECKING:
     from actions.types import ActionRef
     from world.combat.models import CombatParticipant
     from world.standoffs.models import StandoffGroup
+    from world.standoffs.services.view import StandoffView
 
 _SUBVERBS: dict[str, str] = {
     "read": "standoff_read",
@@ -219,33 +220,57 @@ class CmdStandoff(DispatchCommand):
     # -- summary ---------------------------------------------------------------
 
     def _show_summary(self) -> None:
-        """Print the groups, the viewer's own sparks and the verbs. Nothing unrevealed."""
+        """Print the standoff as the caller may see it, from the shared view builder."""
         from actions.definitions.standoff import _standoff_participant  # noqa: PLC0415
-        from world.standoffs.services.describe import describe_reveals  # noqa: PLC0415
-        from world.standoffs.services.state import active_members  # noqa: PLC0415
+        from world.standoffs.services.view import build_standoff_view  # noqa: PLC0415
 
         participant = _standoff_participant(self.caller)
-        if participant is None:
+        view = (
+            None
+            if participant is None
+            else build_standoff_view(participant.encounter, participant.character_sheet)
+        )
+        if view is None:
             self.msg(_NOT_IN_STANDOFF)
             return
-        lines = ["Standoff:"]
-        for group in self._groups():
-            count = len(active_members(group))
-            lines.append(
-                f"  {group.creature_template.name} ({count}) - {group.get_state_display()}"
-            )
-            lines.extend(
-                f"    You feel: {match.rule.spark_text}"
-                for match in self._own_matches(group)
-                if match.rule.spark_text
-            )
-            lines.extend(
-                f"    {line}"
-                for line in describe_reveals(
-                    group,
-                    group.reveals.select_related("drive__property", "regard_rule"),
-                    self.caller.sheet_data,
-                )
-            )
-        lines.append(f"You can: {', '.join(_SUBVERBS)}.")
-        self.msg("\n".join(lines))
+        self.msg("\n".join(_render_view(view)))
+
+
+def _render_view(view: StandoffView) -> list[str]:
+    """Text lines for a ``StandoffView``: the web payload's content, as plain text."""
+    from world.standoffs.constants import StandoffGroupState  # noqa: PLC0415
+
+    lines = ["Standoff:"]
+    for group in view.groups:
+        lines.append(
+            f"  {group.name} ({group.member_count}) - {StandoffGroupState(group.state).label}"
+        )
+        if group.hidden_count:
+            lines.append(f"    There is more to read here ({group.hidden_count} unread).")
+        if group.cause is not None:
+            lines.append(f"    Cause: {group.cause}.")
+        lines.extend(f"    Drive: {drive.label} ({drive.strength})." for drive in group.drives)
+        lines.extend(f"    {line}" for line in group.revealed_regard)
+        lines.extend(
+            f"    You feel: {spark.text}{' (shared)' if spark.shared else ''}"
+            for spark in view.sparks
+            if spark.group_id == group.group_id and spark.text
+        )
+        lines.extend(
+            f"    Shared: {spark.text}"
+            for spark in view.shared_sparks
+            if spark.group_id == group.group_id and spark.text
+        )
+        lines.extend(
+            f"    press {approach.name}: {approach.grade}"
+            + (f" ({'; '.join(approach.levers)})" if approach.levers else "")
+            for approach in view.approaches
+            if approach.group_id == group.group_id
+        )
+        lines.extend(
+            f"    terms {terms.name}: {terms.grade}"
+            for terms in view.terms
+            if terms.group_id == group.group_id
+        )
+    lines.append(f"You can: {', '.join(_SUBVERBS)}.")
+    return lines
