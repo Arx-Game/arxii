@@ -3215,7 +3215,12 @@ def begin_declaration_phase(encounter: CombatEncounter) -> None:
     Uses select_for_update to prevent concurrent calls.
     Raises ValueError if the encounter is not BETWEEN_ROUNDS.
     """
+    from world.standoffs.services.state import is_in_standoff  # noqa: PLC0415
+
     enc = CombatEncounter.objects.select_for_update().get(pk=encounter.pk)
+    if is_in_standoff(enc):
+        msg = "The standoff has not broken yet."
+        raise ValueError(msg)
     if enc.status != RoundStatus.BETWEEN_ROUNDS:
         msg = (
             f"Cannot begin declaration phase: encounter status is "

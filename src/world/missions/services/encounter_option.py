@@ -99,6 +99,10 @@ def start_encounter_for_option(
         encounter,
         option.opponent_lines.select_related("creature_template").order_by("order"),
     )
+    if option.opens_as_standoff:
+        from world.standoffs.services.state import open_standoff  # noqa: PLC0415
+
+        open_standoff(encounter)
     instance.is_paused = True
     instance.save(update_fields=["is_paused"])
     return deed
