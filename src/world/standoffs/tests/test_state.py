@@ -23,18 +23,20 @@ from world.standoffs.services.state import (
 
 
 class StandoffStateTests(TestCase):
-    @classmethod
-    def setUpTestData(cls) -> None:
-        cls.encounter = CombatEncounterFactory()
-        CombatParticipantFactory(encounter=cls.encounter)
-        cls.bandit = CreatureTemplateFactory()
-        cls.hound = CreatureTemplateFactory()
-        cls.bandits = [
-            CombatOpponentFactory(encounter=cls.encounter, creature_template=cls.bandit)
+    def setUp(self) -> None:
+        # setUp, not setUpTestData: tests mutate the encounter, groups and opponents.
+        self.encounter = CombatEncounterFactory()
+        CombatParticipantFactory(encounter=self.encounter)
+        self.bandit = CreatureTemplateFactory()
+        self.hound = CreatureTemplateFactory()
+        self.bandits = [
+            CombatOpponentFactory(encounter=self.encounter, creature_template=self.bandit)
             for _ in range(4)
         ]
-        cls.hound_opp = CombatOpponentFactory(encounter=cls.encounter, creature_template=cls.hound)
-        cls.plain = CombatOpponentFactory(encounter=cls.encounter)
+        self.hound_opp = CombatOpponentFactory(
+            encounter=self.encounter, creature_template=self.hound
+        )
+        self.plain = CombatOpponentFactory(encounter=self.encounter)
 
     def test_open_makes_one_group_per_template(self) -> None:
         groups = open_standoff(self.encounter)

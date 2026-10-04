@@ -26,23 +26,23 @@ LEVEL_PATH = "world.standoffs.services.force.effective_combat_level"
 
 
 class ForceTests(TestCase):
-    @classmethod
-    def setUpTestData(cls) -> None:
-        cls.encounter = CombatEncounterFactory()
-        cls.participant = CombatParticipantFactory(encounter=cls.encounter)
-        cls.template = CreatureTemplateFactory(
+    def setUp(self) -> None:
+        # setUp, not setUpTestData: tests mutate the encounter, groups and opponents.
+        self.encounter = CombatEncounterFactory()
+        self.participant = CombatParticipantFactory(encounter=self.encounter)
+        self.template = CreatureTemplateFactory(
             tier=OpponentTier.MOOK, cause=CauseKind.PREDATION, cause_margin_percent=0
         )
-        cls.mooks = [
+        self.mooks = [
             CombatOpponentFactory(
-                encounter=cls.encounter,
-                creature_template=cls.template,
+                encounter=self.encounter,
+                creature_template=self.template,
                 tier=OpponentTier.MOOK,
                 level=4,
             )
             for _ in range(4)
         ]
-        cls.config = StandoffConfig.load()
+        self.config = StandoffConfig.load()
 
     def _group(self):
         from world.standoffs.factories import StandoffGroupFactory
