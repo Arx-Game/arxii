@@ -2361,6 +2361,7 @@
   - pending_selections <- combat.PendingSelection
   - marks <- combat.CombatMark
   - companion_orders <- companions.CompanionOrder
+  - standoff_groups <- standoffs.StandoffGroup
 
 ### CombatMark
 **Foreign Keys:**
@@ -2524,6 +2525,9 @@
   - creaturephasetemplate_set <- combat.CreaturePhaseTemplate
   - phase_templates <- combat.CreaturePhaseTemplate
   - mission_option_opponent_lines <- missions.MissionOptionOpponentLine
+  - drives <- standoffs.CreatureDrive
+  - regard_rules <- standoffs.RegardRule
+  - standoff_groups <- standoffs.StandoffGroup
   - beat_opponent_lines <- stories.BeatOpponentLine
 
 ### DramaticSurgeRecord
@@ -2677,7 +2681,7 @@
 - `classify_source(source: object | None) -> flows.events.payloads.DamageSource - Return a ``DamageSource`` describing *source*'s origin.`
 - `cleanup_completed_encounter(encounter: 'CombatEncounter') -> 'None' - Delete encounter-ephemeral CombatNPC ObjectDBs. Persistent NPCs and PCs`
 - `collect_check_modifiers(character_sheet: 'CharacterSheet', check_type: 'CheckType', *, scene: 'Scene | None' = None, extra_contributions: list[world.checks.types.ModifierContribution] | None = None, skip_fashion: bool = False) -> world.checks.types.ModifierBreakdown - Aggregate all modifier contributions for a check into a ModifierBreakdown.`
-- `combatants_hostile_to(actor: 'CombatParticipant | CombatOpponent', *, allegiances: 'dict[int, Allegiance] | None' = None) -> 'dict[str, list]' - Return the combatants *actor* may attack, grouped by kind (#1584, #4091).`
+- `combatants_hostile_to(actor: 'CombatParticipant | CombatOpponent', *, allegiances: 'dict[int, Allegiance] | None' = None, opponents: 'list[CombatOpponent] | None' = None) -> 'dict[str, list]' - Return the combatants *actor* may attack, grouped by kind (#1584, #4091).`
 - `complete_encounter(encounter: 'CombatEncounter', *, outcome: 'EncounterOutcome') -> 'None' - Single completion seam for round resolution and the GM end endpoint (#876).`
 - `compute_intensity_for_clash(participant: 'CombatParticipant', action: 'CombatRoundAction') -> 'int' - Return technique.intensity + active INTENSITY_BUMP pull bonuses for the clash floor gate.`
 - `declare_action(participant: 'CombatParticipant', *, focused_action: 'Technique | None' = None, focused_category: 'str | None' = None, effort_level: 'str', focused_opponent_target: 'CombatOpponent | None' = None, focused_ally_target: 'CombatParticipant | None' = None, physical_passive: 'Technique | None' = None, social_passive: 'Technique | None' = None, mental_passive: 'Technique | None' = None, confirm_soulfray_risk: 'bool' = False, strain_commitment: 'int' = 0, fury_commitment: 'FuryTier | None' = None, fury_anchor: 'CharacterSheet | None' = None, cast_destination: 'Position | None' = None, cast_position_a: 'Position | None' = None, cast_position_b: 'Position | None' = None) -> 'CombatRoundAction' - Declare a PC's action for the current round.`
@@ -2736,6 +2740,7 @@
 - `roll_sustained_absorption_budget(participant: 'CombatParticipant') -> 'tuple[int, CheckOutcome | None]' - Roll Concentration once to set a sustained action's absorption budget (#2705).`
 - `scan_round_combos(encounter: 'CombatEncounter', round_number: 'int') -> 'list[RoundCombo]' - List every combo taking shape in this round's declared actions (#3553).`
 - `select_npc_actions(encounter: 'CombatEncounter') -> 'list[CombatOpponentAction]' - Select and create NPC actions for the current round.`
+- `social_target_difficulty(*, actor_sheet: 'CharacterSheet', target_character: 'ObjectDB | None', check_type: 'CheckType', base_difficulty: 'int' = 0, target_level: 'int | None' = None, resist_effort: 'str' = 'medium', drive_hits: 'Sequence[DriveHit]' = (), sway_target: 'ModifierTarget | None' = None, mindless_resistance: 'int' = 0, extra_bands: 'int' = 0, perceiver_sheet: 'CharacterSheet | None' = None, resist_increment: 'int | None' = None) -> 'SocialDifficulty' - Grade a social check on a character. See the module docstring for the terms.`
 - `spawn_from_creature_template(encounter: 'CombatEncounter', template: 'CreatureTemplate', *, position: 'Position | None' = None, acting_account: 'AccountDB | None' = None) -> 'CombatOpponent' - Spawn a CombatOpponent from a CreatureTemplate bestiary entry (#2016).`
 - `swarm_attack_count(swarm_count: 'int', bodies_per_attack: 'int', active_pc_count: 'int') -> 'int' - Attacks a swarm makes this round — scales with remaining bodies (#875).`
 - `swarm_kills(raw_damage: 'int', body_toughness: 'int') -> 'int' - Bodies a single landing attack clears from a swarm (#875).`
@@ -6610,6 +6615,7 @@
   - item_template_defaults <- items.ItemTemplateProperty
   - military_units <- military.MilitaryUnit
   - personas <- scenes.Persona
+  - creature_drives <- standoffs.CreatureDrive
 
 ### PropertyCategory
 **Foreign Keys:**
@@ -6675,6 +6681,7 @@
 - `covenant_role_bonus(sheet: 'object', target: 'ModifierTarget', level_override: 'int | None' = None) -> 'int' - Sum covenant-role contributions across equipped items, gated on engagement.`
 - `create_distinction_modifiers(character_distinction: 'CharacterDistinction') -> 'list[CharacterModifier]' - Create ModifierSource + CharacterModifier records for all effects of a distinction.`
 - `delete_distinction_modifiers(character_distinction: 'CharacterDistinction') -> 'int' - Delete all modifier records for a distinction.`
+- `difficulty_indicator_for_rank_difference(rank_diff: 'int') -> 'DifficultyIndicator' - Classify a check's rank difference. IMPOSSIBLE means the chart has no success outcomes.`
 - `end_engagement(character: 'ObjectDB', engagement_type: 'str', *, source: 'object') -> 'None' - Delete the character's engagement iff it matches type AND source.`
 - `equipment_walk_total(character: 'object', target: 'ModifierTarget', level_override: 'int | None' = None) -> 'int' - Sum facet + covenant-role + covenant-level + mantle passive bonuses (Spec D §5.5).`
 - `equipment_walk_total_unblended(sheet: 'object', target: 'ModifierTarget') -> 'int' - ``equipment_walk_total`` with the covenant-role component as its raw base (#1174).`
@@ -9861,6 +9868,60 @@
 - `get_account_submission_history(account_id: 'int') -> 'dict[str, dict[str, Any]]' - Return all submissions related to an account.`
 - `get_staff_inbox(*, categories: 'list[str] | None' = None, include_ignored: 'bool' = False) -> 'list[InboxItem]' - Aggregate open items from all submission sources.`
 - `sender_context(account: 'AccountDB') -> 'dict' - Kudos + standing columns shown beside every submission.`
+
+
+## world.standoffs
+
+### CreatureDrive
+**Foreign Keys:**
+  - creature_template -> combat.CreatureTemplate [FK]
+  - property -> mechanics.Property [FK]
+
+### RegardRule
+**Foreign Keys:**
+  - creature_template -> combat.CreatureTemplate [FK]
+  - deed_archetype -> societies.PhilosophicalArchetype [FK] (nullable)
+  - drive -> mechanics.Property [FK] (nullable)
+
+### StandoffApproach
+**Foreign Keys:**
+  - check_type -> checks.CheckType [FK]
+  - capability -> conditions.CapabilityType [FK]
+  - sway_target -> mechanics.ModifierTarget [FK] (nullable)
+  - archetypes -> societies.PhilosophicalArchetype [M2M]
+
+### StandoffConfig
+**Foreign Keys:**
+  - read_check_type -> checks.CheckType [FK] (nullable)
+  - terms_check_type -> checks.CheckType [FK] (nullable)
+  - pass_condition -> conditions.ConditionTemplate [FK] (nullable)
+  - turn_condition -> conditions.ConditionTemplate [FK] (nullable)
+
+### StandoffGroup
+**Foreign Keys:**
+  - encounter -> combat.CombatEncounter [FK]
+  - creature_template -> combat.CreatureTemplate [FK]
+  - settled_outcome -> traits.CheckOutcome [FK] (nullable)
+**Pointed to by:**
+  - reveals <- standoffs.StandoffReveal
+  - spark_shares <- standoffs.StandoffSparkShare
+
+### StandoffReveal
+**Foreign Keys:**
+  - group -> standoffs.StandoffGroup [FK]
+  - drive -> standoffs.CreatureDrive [FK] (nullable)
+  - regard_rule -> standoffs.RegardRule [FK] (nullable)
+
+### StandoffSparkShare
+**Foreign Keys:**
+  - group -> standoffs.StandoffGroup [FK]
+  - character_sheet -> character_sheets.CharacterSheet [FK]
+  - regard_rule -> standoffs.RegardRule [FK]
+
+### StandoffTerms
+**Foreign Keys:**
+  - required_drive -> mechanics.Property [FK] (nullable)
+  - archetypes -> societies.PhilosophicalArchetype [M2M]
 
 
 ## world.stealth

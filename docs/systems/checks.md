@@ -173,12 +173,15 @@ increment = compute_resist_increment(
 difficulty = level_opposition(check_type, level=defender_level, character=defender_character)
 ```
 
-`_social_combat_difficulty` (`world/combat/services.py`, backing the Demoralize/Taunt/
-Parley combat verbs) is the one caller of `compute_resist_increment` that passes
-`level_override` — it opposes a `CombatOpponent`, whose authored `level` field isn't
-reachable through its `objectdb`'s class-level rows (an ephemeral NPC has none). Without
-the override, a boss's morale defense always floored at level 1 even though the same
-opponent's offense already opposed PC checks at its real level via `level_opposition`.
+`social_target_difficulty` (`world/checks/social_target.py`, #4145) is the one difficulty
+function for a character acting socially on a character. It returns a `SocialDifficulty`
+(difficulty, actor-side contributions, eased bands), not an int. Combat's
+`_social_combat_difficulty` (`world/combat/services.py`, backing Demoralize/Taunt/Parley)
+and the standoff verbs call it with `level_override`, because a `CombatOpponent`'s authored
+`level` isn't reachable through its `objectdb`'s class-level rows (an ephemeral NPC has
+none). Without the override, a boss's morale defense always floored at level 1 even though
+the same opponent's offense already opposed PC checks at its real level via
+`level_opposition`.
 
 **`award_development` (#3066).** `compute_resist_increment` never rolls (ADR-0019
 keeps the one dice roll inside `perform_check`/`resolve_challenge`), so it can't
@@ -189,11 +192,11 @@ defender Composure development points directly via the same
 intent covers both sides of an opposed check. Only the two scene call sites that
 charge the defender real resist fatigue for a player-*declared* effort
 (`_compute_difficulty_override_for_primary` / `_compute_target_difficulty_override`
-in `world/scenes/action_services.py`) pass `True`. `_social_combat_difficulty`
-does not — its `effort_level="medium"` default is a hardcoded passive-resistance
-band standing in for an undeclared resistance, not a real choice, so awarding dp
-there would be phantom accrual for an opponent (sometimes a persona-backed PC
-mirror) who spent nothing.
+in `world/scenes/action_services.py`) pass `True`. Combat, standoffs and the scenes' NPC
+passive resist (`_npc_passive_resist_increment`) do not. Their `"medium"` effort is a hardcoded passive-resistance band standing in
+for an undeclared resistance, not a real choice, so awarding dp there would be phantom
+accrual for an opponent (sometimes a persona-backed PC mirror) or an NPC who spent
+nothing.
 
 `resolve_target_difficulty` (`actions/effects/base.py`) also uses
 `compute_check_rating` directly to get a target's resistance rating for

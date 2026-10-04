@@ -493,6 +493,16 @@ outcome** (a closed issue or a "SHIPPED" line is not proof). See the ledger's go
   blow, bound or taken into service, sent away, or left to lapse quietly. See
   `docs/systems/INDEX.md`'s Combat and Conditions sections and
   `src/world/combat/AGENT_GLOSSARY.md`'s Allegiance entries.
+- **Why NPCs fight / standoffs, slice 1** - SHIPPED (#4145, umbrella #4121, ADR-4145-A and B,
+  2026-10-04): creature templates carry drives, a cause (Predation) and regard rules; a mission
+  ENCOUNTER option can open as a standoff, where the party reads each group, presses it with
+  approaches that hit its drives, and names terms (pass, clear off, turn, toll) that settle it
+  without a round. Settling every group completes the encounter as an ordinary VICTORY routed
+  on the weakest terms. Predation breaks the standoff when the party does not outweigh the
+  group. Scene, combat and standoff social checks now share one difficulty function (parley now
+  warms its target; scene NPCs with no resist effort resist passively). Web `StandoffCard`,
+  telnet `standoff`. Not built: per-placement overrides of drives and cause, reaction narration.
+  See `docs/systems/standoffs.md`.
 - **Negotiate / parley** an NPC down (built pre-#4091, #1590/#1591, ADR-0058); **dispel** a
   condition remains open.
 - **Companions / pets / summons** with breath weapons & ordered abilities.

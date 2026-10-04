@@ -1250,8 +1250,9 @@ def compute_resist_increment(
     opposes checks (``level_opposition``/the three combat sites wired to it).
 
     The ephemeral NPC is the case that was BROKEN, but the override is not scoped to
-    it: ``_social_combat_difficulty`` passes ``level_override`` for EVERY opponent, so
-    a persona-backed opponent's own ``CharacterClassLevel`` rows are inert on this path
+    it: combat's ``_social_combat_difficulty`` (through ``social_target_difficulty``) passes
+    ``level_override`` for EVERY opponent, so a persona-backed
+    opponent's own ``CharacterClassLevel`` rows are inert on this path
     too — ``CombatOpponent.level`` is the single authority for how sturdy an opponent
     is, on offense and defense alike. That is deliberate, and today it is also
     unobservable: the persona-backed constructors (``duels._make_mirror``,
@@ -1272,11 +1273,13 @@ def compute_resist_increment(
     from a call site that also charges the defender real resist fatigue for a
     player-*declared* effort (the two scene call sites,
     ``_compute_difficulty_override_for_primary`` /
-    ``_compute_target_difficulty_override``) — NOT combat's
-    ``_social_combat_difficulty``, whose ``effort_level="medium"`` default is a
-    hardcoded passive-resistance band, not a real choice; awarding DP there would be
-    phantom accrual for an opponent (sometimes a persona-backed PC mirror) who spent
-    nothing.
+    ``_compute_target_difficulty_override``). NOT
+    the no-development callers: combat's ``_social_combat_difficulty``, standoffs (both
+    through ``social_target_difficulty``, which returns a ``SocialDifficulty``, not an
+    int) and the scenes' NPC passive resist (``_npc_passive_resist_increment``). Their
+    ``"medium"`` effort is a hardcoded passive-resistance band, not a real choice;
+    awarding DP there would be phantom accrual for an opponent (sometimes a
+    persona-backed PC mirror) or an NPC who spent nothing.
 
     Args:
         defender_character: The character resisting the social action.
