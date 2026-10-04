@@ -2630,7 +2630,7 @@ technique is a limited form, a high-tier option on an ultimate is the full arriv
 
 | Piece | Status | What it is |
 |-------|--------|------------|
-| `TechniqueManifestOption` (`models/manifestation.py`) | [BUILT & WIRED] | Authored per-technique row: `technique`, then exactly one of `being` (`WorshippedBeing`) or `archetype` (`CompanionArchetype`) (check constraint `manifest_option_exactly_one_entity`), plus `tier` (`OpponentTier`, default MOOK; a being's arrival size, ignored for an archetype). One row per (technique, being) and (technique, archetype). A technique with at least one option is a manifesting technique. Authored in the Technique admin through `TechniqueManifestOptionInline`. |
+| `TechniqueManifestOption` (`models/manifestation.py`) | [BUILT & WIRED] | Authored per-technique row: `technique`, then exactly one of `being` (`WorshippedBeing`) or `archetype` (`CompanionArchetype`) (check constraint `manifest_option_exactly_one_entity`; unique constraints `unique_manifest_option_being` and `unique_manifest_option_archetype`), plus `tier` (`OpponentTier`, default MOOK; a being's arrival size, ignored for an archetype). A technique with at least one option is a manifesting technique. Authored in the Technique admin through `TechniqueManifestOptionInline`. |
 | `CharacterManifestation` (`models/manifestation.py`) | [BUILT & WIRED] | Per-character choice: `character` (`CharacterSheet`), `technique`, `option`, nullable `companion` (for an archetype option, the character's own `Companion`). Unique per (character, technique). Keyed by (character, technique) rather than hung on `CharacterTechnique` because an ultimate has no `CharacterTechnique` row. Set by GM or staff in the admin (`CharacterManifestationAdmin`). |
 | `CharacterManifestation.bond_is_active()` | [BUILT & WIRED] | A being option holds while `active_patronage_for(character)` includes that being. An archetype option holds while the companion is the character's own, matches the archetype, and has no `released_at`. |
 | `CharacterManifestation.clean()` | [BUILT & WIRED] | The option must belong to the technique; a being option takes no companion; an archetype option needs one; the bond must be active. |
@@ -2638,10 +2638,10 @@ technique is a limited form, a high-tier option on an ultimate is the full arriv
 
 `manifest_bound_entity` returns None (manifests nothing) when the caster is no longer
 ACTIVE in the fight, has no `CharacterManifestation` for the technique, the bond has lapsed,
-a being has no avatar sheet, a companion has no body (`objectdb`), or that entity already
+a being has no avatar sheet, the caster of a being option has no location, a companion has no body (`objectdb`), or that entity already
 has a row in this encounter (one row per objectdb per encounter, so a defeated avatar is
 not re-added). For a being it first moves the being's avatar character into the caster's
-room (`add_opponent` refuses a position in another room), then calls `add_opponent` with
+room (`add_opponent` refuses a position in another room; a caster with no location manifests nothing), then calls `add_opponent` with
 the option's `tier`, `existing_objectdb` and the caster's position, and marks the row
 `allegiance=ALLY`, `summoned_by=caster`. For an archetype it calls
 `materialize_companion_as_combat_opponent` (`world/companions/services.py`, unchanged). A

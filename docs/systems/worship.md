@@ -641,7 +641,8 @@ A `WorshippedBeing` can be an option on a manifesting technique
 (`TechniqueManifestOption.being`, `world.magic`), sized by the option's `tier`. A
 character's `CharacterManifestation` for that option holds while
 `active_patronage_for(character)` includes the being. `manifest_bound_entity` moves the
-being's `avatar_sheet` character into the caster's room and adds it to the encounter as an
+being's `avatar_sheet` character into the caster's room (a caster with no location
+manifests nothing) and adds it to the encounter as an
 ALLY `CombatOpponent`. A being with no avatar sheet manifests nothing (probe
 `manifest-being-avatars`); a tier with no `OpponentTierTemplate` makes the cast raise
 (probe `manifest-tier-templates`). This is separate from `WorshippedBeing.ultimate_techniques`

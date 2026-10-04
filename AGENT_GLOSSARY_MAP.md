@@ -12,9 +12,8 @@ term is chosen and the rest are listed under `_Avoid_`.
 - [magic](src/world/magic/AGENT_GLOSSARY.md) - also holds the Ultimates terms (#4098):
   Ultimate, Known ultimate, Readied ultimate, Reveal, Owned ultimate, Bond ultimate, Gift
   ultimate (#4118); the manifestation terms (#4118): Manifestation option, Character
-  manifestation; the
-  creation-personalization terms (#4099): Hold, Price, Early form, Personalized name; and
-  Prepared Text (#4101)
+  manifestation; the creation-personalization terms (#4099): Hold, Price, Early form,
+  Personalized name; and Prepared Text (#4101)
 - [covenants](src/world/covenants/AGENT_GLOSSARY.md)
 - [scenes](src/world/scenes/AGENT_GLOSSARY.md)
 - [combat](src/world/combat/AGENT_GLOSSARY.md), also holds the #4091 allegiance terms
