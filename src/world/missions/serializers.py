@@ -924,6 +924,7 @@ class BeatOptionSerializer(serializers.Serializer):
     kind = serializers.CharField()
     check_type_name = serializers.CharField(allow_null=True)
     base_risk = serializers.IntegerField()
+    reasons = serializers.ListField(child=serializers.CharField(), read_only=True)
 
 
 class TrackViewSerializer(serializers.Serializer):

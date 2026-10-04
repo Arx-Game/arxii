@@ -16,6 +16,7 @@ import { Button } from '@/components/ui/button';
 import { ApiValidationError, flattenErrorMessage } from '../api';
 import { useCastGroupVote, useGroupBeat, useSubmitGroupPick } from '../queries';
 import type { GroupBeatView, ResolvedBeat } from '../types';
+import { OptionLabel } from './BeatCard';
 import { BeatTrack } from './BeatTrack';
 import { InvitePicker } from './InvitePicker';
 
@@ -213,7 +214,7 @@ function GroupOptionButton({
       onClick={phase === 'vote' ? onVote : onPick}
       data-testid={`group-option-${option.option_id}`}
     >
-      <span>{option.label}</span>
+      <OptionLabel option={option} />
       {option.check_type_name ? (
         <span className="ml-2 shrink-0 text-xs text-muted-foreground">
           {option.check_type_name}

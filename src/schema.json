@@ -42735,6 +42735,11 @@ components:
           nullable: true
         base_risk:
           type: integer
+        reasons:
+          type: array
+          items:
+            type: string
+          readOnly: true
       required:
       - approach_id
       - base_risk
@@ -42742,6 +42747,7 @@ components:
       - kind
       - label
       - option_id
+      - reasons
     BeatOutcomeEnum:
       enum:
       - success

@@ -25963,6 +25963,7 @@ export interface components {
       kind: string;
       check_type_name: string | null;
       base_risk: number;
+      readonly reasons: string[];
     };
     /**
      * @description * `success` - Success

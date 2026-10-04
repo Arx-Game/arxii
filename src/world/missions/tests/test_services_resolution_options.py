@@ -25,6 +25,7 @@ from world.missions.factories import (
     MissionTemplateFactory,
 )
 from world.missions.services import build_option_list
+from world.missions.services.play import _beat_option
 
 
 class BuildOptionListTests(TestCase):
@@ -76,6 +77,31 @@ class BuildOptionListTests(TestCase):
         self.assertEqual(len(gated), 1)
         self.assertEqual(gated[0].ic_framing, "The gated way.")
         self.assertEqual(gated[0].owner, self.character)
+
+    def test_gated_option_carries_because_reason(self) -> None:
+        CharacterDistinctionFactory(character=self.sheet, distinction=self.gate_dist)
+        options = build_option_list(self.instance, self.node, self.participant)
+        gated = next(o for o in options if o.option == self.gated_option)
+        self.assertEqual(gated.reasons, (f"you have {self.gate_dist.name}",))
+
+    def test_ungated_option_carries_no_reasons(self) -> None:
+        options = build_option_list(self.instance, self.node, self.participant)
+        ungated = next(o for o in options if o.option == self.ungated_option)
+        self.assertEqual(ungated.reasons, ())
+
+    def test_reasons_reach_only_the_owning_viewer(self) -> None:
+        CharacterDistinctionFactory(character=self.sheet, distinction=self.gate_dist)
+        gated = next(
+            o
+            for o in build_option_list(self.instance, self.node, self.participant)
+            if o.option == self.gated_option
+        )
+        mine = _beat_option(gated, viewer=self.character)
+        other = _beat_option(gated, viewer=CharacterSheetFactory().character)
+        union_view = _beat_option(gated, viewer=None)
+        self.assertEqual(mine.reasons, gated.reasons)
+        self.assertEqual(other.reasons, ())
+        self.assertEqual(union_view.reasons, ())
 
     def test_empty_visibility_rule_authored_option_always_shown(self) -> None:
         options = build_option_list(self.instance, self.node, self.participant)
