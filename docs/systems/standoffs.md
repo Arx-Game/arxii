@@ -110,10 +110,11 @@ standoff.
 
 - Unread cause, drives and rules appear only as `hidden_count`; a hidden drive still shapes
   every grade but is never named.
-- A REGARD reveal's text shows to the matched character, or once a `StandoffSparkShare`
+- A REGARD reveal's text shows to any character the rule matches, or once a `StandoffSparkShare`
   exists for that rule; everyone else sees only that someone's history matters.
 - `sparks` hold the viewer's own matched rules; `shared_sparks` hold what others chose to
   share. A shared spark is not a read: levers show regard text only for a rule that was read.
+- Approaches and terms are listed only for OPEN groups with active members.
 - Approach and terms grades are the viewer's own. Terms with an unread required drive are
   omitted.
 - `owner_options` is reserved and always empty. Group mission ballots still show every
@@ -142,5 +143,16 @@ only fight. Player-facing prose (spark text, names) is authored in admin.
 
 ## Later slices
 
-Per-placement overrides of drives and cause (deviation 2), and authored reaction narration
-with a read-earned level band (deviation 5). Anything beyond those is not specified yet.
+Plan from #4121:
+
+- **Slice 2, GM-run stories:** a GM rail with a "they attack" confirm, opponent lines on
+  beats, per-placement profile edits (the override in deviation 2), and organization and
+  society regard rules with inheritance.
+- **Slice 3, more causes:** Orders, Hunger, Hatred and Territory, plus a cause re-test when
+  a Charmed or Calm hold breaks.
+- **Slice 4:** language barriers (a verbal flag on approaches) and persona NPCs as standoff
+  targets.
+- **Slice 5:** opt-in profiles for player characters.
+- **Separately:** resonance from acts via archetype tags. `StandoffApproach.archetypes` and
+  `StandoffTerms.archetypes` are stored for it and unread today.
+- **Reaction narration** (deviation 5) has no slice yet.

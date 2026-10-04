@@ -501,8 +501,8 @@ outcome** (a closed issue or a "SHIPPED" line is not proof). See the ledger's go
   on the weakest terms. Predation breaks the standoff when the party does not outweigh the
   group. Scene, combat and standoff social checks now share one difficulty function (parley now
   warms its target; scene NPCs with no resist effort resist passively). Web `StandoffCard`,
-  telnet `standoff`. Not built: per-placement overrides of drives and cause, reaction narration.
-  See `docs/systems/standoffs.md`.
+  telnet `standoff`. What is not built yet is listed under "Later slices" in
+  `docs/systems/standoffs.md`.
 - **Negotiate / parley** an NPC down (built pre-#4091, #1590/#1591, ADR-0058); **dispel** a
   condition remains open.
 - **Companions / pets / summons** with breath weapons & ordered abilities.

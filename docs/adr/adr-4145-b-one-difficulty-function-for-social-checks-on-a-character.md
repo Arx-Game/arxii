@@ -1,4 +1,4 @@
-# One difficulty function grades every social check on a character
+# ADR-4145-B: One difficulty function grades every social check on a character
 
 Scene social actions, the combat social verbs (Demoralize, Taunt, Parley) and standoffs all grade a social check against a character through `social_target_difficulty` in `world/checks/social_target.py`, which returns a `SocialDifficulty` (difficulty, actor-side contributions, eased bands): the defender's Composure resist plus level (never combined with `level_opposition`), a caller-supplied base, mindless resistance, drive easing in difficulty bands, and the approach's sway modifier counted once plus once per strength step of each hit drive. We rejected keeping the scene, combat and challenge paths separate, because the same NPC then resisted by different rules depending on which surface the player used (parley never warmed a target, and a scene NPC with no resist effort resisted at nothing), and every new social surface would grow a fourth copy of the arithmetic.
 
