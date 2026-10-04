@@ -164,3 +164,22 @@ class CharacterManifestationAdminFormTests(TestCase):
         )
         self.assertFalse(form.is_valid())
         self.assertIn("option", form.errors)
+
+
+class CharacterManifestationAdminColumnTests(TestCase):
+    def test_bond_active_column_reports_lapsed_bond(self):
+        sheet = CharacterSheetFactory()
+        being = WorshippedBeingFactory()
+        option = TechniqueManifestOptionFactory(being=being)
+        standing = DevotionStandingFactory(
+            character_sheet=sheet, being=being, valence=PatronageValence.DEVOTIONAL
+        )
+        manifestation = CharacterManifestation.objects.create(
+            character=sheet, technique=option.technique, option=option
+        )
+        model_admin = admin.site._registry[CharacterManifestation]
+        self.assertIn("bond_active", model_admin.list_display)
+        self.assertTrue(model_admin.bond_active(manifestation))
+        standing.released_at = timezone.now()
+        standing.save(update_fields=["released_at"])
+        self.assertFalse(model_admin.bond_active(manifestation))

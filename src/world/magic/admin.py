@@ -1036,10 +1036,23 @@ class CharacterManifestationAdmin(admin.ModelAdmin):
     The model's clean() rejects an option the character is not bonded to.
     """
 
-    list_display = ["character", "technique", "option", "companion"]
+    list_display = ["character", "technique", "option", "companion", "bond_active"]
+    list_select_related = [
+        "character__character",
+        "technique",
+        "option__technique",
+        "option__being",
+        "option__archetype",
+        "companion",
+    ]
     search_fields = ["character__character__db_key", "technique__name"]
     autocomplete_fields = ["character", "technique"]
     raw_id_fields = ["option", "companion"]
+
+    @admin.display(boolean=True, description="Bond active")
+    def bond_active(self, obj: CharacterManifestation) -> bool:
+        """False flags a stale row whose bond has lapsed (patronage released, etc.)."""
+        return obj.bond_is_active()
 
 
 @admin.register(CharacterAnima)
