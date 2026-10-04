@@ -85,6 +85,17 @@ class BandingTests(TestCase):
         )
         self.assertEqual(text, "Masked stares down the Wolves.")
 
+    def test_a_name_holding_a_placeholder_is_not_substituted_again(self) -> None:
+        self._line(1, "<actor> faces <group>.")
+        text = reaction_text(
+            self.approach,
+            creature_template_id=self.creature.pk,
+            group_name="Wolves",
+            actor_name="<group> Jr",
+            success_level=1,
+        )
+        self.assertEqual(text, "<group> Jr faces Wolves.")
+
     def test_a_line_needs_exactly_one_parent(self) -> None:
         from django.db import IntegrityError, transaction
 
@@ -237,6 +248,31 @@ class RoomLineTests(StandoffJourneyBase):
         self.assertEqual(lines[0], "PRESS")
         self.assertIn(" shakes the ", lines[1])
         self.assertEqual(len(lines), 2)
+
+    def test_the_attack_line_comes_after_the_press_and_morale_lines(self) -> None:
+        from world.checks.test_helpers import force_check_outcome
+        from world.combat.models import CombatOpponent
+
+        self.creature.cause = CauseKind.PREDATION
+        self.creature.cause_margin_percent = 100000
+        self.creature.save(update_fields=["cause", "cause_margin_percent"])
+        self.approach.damages_morale = True
+        self.approach.save(update_fields=["damages_morale"])
+        for member in CombatOpponent.objects.filter(encounter=self.encounter):
+            member.morale = 55
+            member.save(update_fields=["morale"])
+        crit = CheckOutcomeFactory(name="Journey crit attack", success_level=2)
+        with (
+            patch(ANNOUNCE) as broadcast,
+            self.captureOnCommitCallbacks(execute=True),
+            force_check_outcome(crit),
+        ):
+            self._do("standoff_press", group_id=self.group.pk, approach_id=self.approach.pk)
+        lines = self._lines(broadcast)
+        self.assertEqual(len(lines), 3, lines)
+        self.assertIn(" presses ", lines[0])
+        self.assertIn(" shakes ", lines[1])
+        self.assertTrue(lines[2].endswith(" attack!"), lines[2])
 
     def test_no_line_authored_keeps_the_plain_line(self) -> None:
         with (

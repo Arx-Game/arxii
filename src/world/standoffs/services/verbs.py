@@ -479,13 +479,15 @@ def standoff_press(
     elif tier <= BOTCH_LEVEL:
         _embolden_on_botch(group, config)
         message = "It goes badly; they grow bolder."
-    fight_started = evaluate_causes(encounter)
+    attack_lines: list[str] = []
+    fight_started = evaluate_causes(encounter, attack_lines)
     return StandoffActionResult(
         success=tier >= 1,
         message=f"{_word(tier)}. {message}",
         success_level=tier,
         fight_started=fight_started,
         morale_line=morale_line,
+        attack_line=attack_lines[0] if attack_lines else "",
     )
 
 
@@ -526,9 +528,7 @@ def _apply_terms(
 ) -> None:
     """Apply the terms' effect; a critical applies ``critical_effect`` instead when authored."""
     effect = (
-        terms.critical_effect
-        if tier >= CRITICAL_LEVEL and terms.critical_effect
-        else (terms.effect)
+        terms.critical_effect if tier >= CRITICAL_LEVEL and terms.critical_effect else terms.effect
     )
     condition = config.turn_condition if effect == TermsEffect.TURN else config.pass_condition
     for member in members:
@@ -585,29 +585,33 @@ def standoff_terms(
     if tier < 0:
         if tier <= BOTCH_LEVEL:
             _embolden_on_botch(group, config)
-        fight_started = evaluate_causes(encounter)
+        attack_lines: list[str] = []
+        fight_started = evaluate_causes(encounter, attack_lines)
         return StandoffActionResult(
             False,
             f"{_word(tier)}. They refuse your terms.",
             success_level=tier,
             fight_started=fight_started,
+            attack_line=attack_lines[0] if attack_lines else "",
         )
     _apply_terms(members, terms, config, sheet, tier)
     group.state = StandoffGroupState.SETTLED
     group.settled_outcome = result.outcome
     group.save(update_fields=["state", "settled_outcome"])
     settle_empty_groups(encounter)
+    attack_lines = []
     fight_started = False
     if not encounter.standoff_groups.exclude(state=StandoffGroupState.SETTLED).exists():
         complete_standoff(encounter)
     else:
-        fight_started = evaluate_causes(encounter)
+        fight_started = evaluate_causes(encounter, attack_lines)
     return StandoffActionResult(
         True,
         f"{_word(tier)}. {terms.description or 'They accept.'}",
         success_level=tier,
         settled=True,
         fight_started=fight_started,
+        attack_line=attack_lines[0] if attack_lines else "",
     )
 
 

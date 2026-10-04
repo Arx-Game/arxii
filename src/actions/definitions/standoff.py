@@ -80,6 +80,12 @@ def _announce(participant: CombatParticipant, line: str, outcome: StandoffAction
             narration=outcome.morale_line,
             deliver_telnet=True,
         )
+    if outcome.attack_line:
+        broadcast_action_outcome(
+            encounter=participant.encounter,
+            narration=outcome.attack_line,
+            deliver_telnet=True,
+        )
 
 
 def _reaction_or_plain(

@@ -136,11 +136,12 @@ def cause_fires(group: StandoffGroup, config: StandoffConfig) -> bool:
     return weak and not suppressed_for_all_participants(group)
 
 
-def evaluate_causes(encounter: CombatEncounter) -> bool:
+def evaluate_causes(encounter: CombatEncounter, attack_sink: list[str] | None = None) -> bool:
     """Settle empty groups; if an OPEN group's cause fires, the fight begins.
 
     Settling the last OPEN group (its members fled or were removed) leaves nothing to
     negotiate, so the standoff completes as a victory, as when the last terms are accepted.
+    ``attack_sink`` is handed to ``end_standoff_into_fight`` (see there).
     """
     from world.standoffs.models import StandoffConfig  # noqa: PLC0415
 
@@ -157,5 +158,7 @@ def evaluate_causes(encounter: CombatEncounter) -> bool:
         "creature_template"
     ):
         if cause_fires(group, config):
-            return end_standoff_into_fight(encounter, initiated_by_pc_side=False)
+            return end_standoff_into_fight(
+                encounter, initiated_by_pc_side=False, attack_sink=attack_sink
+            )
     return False

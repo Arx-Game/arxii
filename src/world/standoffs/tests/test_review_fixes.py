@@ -134,6 +134,8 @@ class FightKeywordFlushTests(VerbBase):
         boom = RuntimeError("boom")
         with (
             patch("world.standoffs.services.verbs.end_standoff_into_fight", side_effect=boom),
+            patch("world.standoffs.services.state.flush_standoff_cache") as flush,
             self.assertRaises(RuntimeError),
         ):
             standoff_fight(participant=self.participant, encounter=self.encounter)
+        flush.assert_called_once_with(self.encounter)

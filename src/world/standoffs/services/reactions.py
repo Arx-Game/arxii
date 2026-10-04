@@ -2,10 +2,12 @@
 
 Staff write ``StandoffReactionLine`` rows; no code names a creature or a line. The best line
 is the highest ``min_success_level`` at or below the roll, and at an equal floor a line tied
-to the group's creature kind beats a generic one (the same banding as ``NPCReactionLine``).
+to the group's creature kind beats a generic one (the same highest-floor banding).
 """
 
 from __future__ import annotations
+
+import re
 
 from world.standoffs.models import StandoffApproach, StandoffReactionLine, StandoffTerms
 
@@ -47,4 +49,6 @@ def reaction_text(
     line = best_reaction_line(parent, creature_template_id, success_level)
     if line is None:
         return None
-    return line.text.replace(ACTOR_TOKEN, actor_name).replace(GROUP_TOKEN, group_name)
+    names = {ACTOR_TOKEN: actor_name, GROUP_TOKEN: group_name}
+    # One pass, so a name that itself contains a placeholder is not substituted again.
+    return re.sub("|".join(map(re.escape, names)), lambda m: names[m.group(0)], line.text)

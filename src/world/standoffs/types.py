@@ -20,3 +20,4 @@ class StandoffActionResult:
     fight_started: bool = False
     settled: bool = False
     morale_line: str = ""
+    attack_line: str = ""

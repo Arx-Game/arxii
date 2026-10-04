@@ -110,9 +110,16 @@ def settle_empty_groups(encounter: CombatEncounter) -> bool:
 @flush_cache_on_error(lambda encounter, **_: encounter)
 @transaction.atomic
 def end_standoff_into_fight(
-    encounter: CombatEncounter, *, initiated_by_pc_side: bool | None
+    encounter: CombatEncounter,
+    *,
+    initiated_by_pc_side: bool | None,
+    attack_sink: list[str] | None = None,
 ) -> bool:
     """Every OPEN group goes to FIGHTING and round one begins.
+
+    When the creatures start it, the "attack!" line goes out after commit, unless the caller
+    passes ``attack_sink``: then the line is appended there instead and the caller sends it,
+    so a verb's room lines read press, morale shift, attack.
 
     Locks the encounter row first and rechecks, so when two things break the standoff at
     once only the first writes; the second returns False and changes nothing.
@@ -132,8 +139,15 @@ def end_standoff_into_fight(
     encounter.save(update_fields=["initiated_by_pc_side"])
     begin_declaration_phase(encounter)
     if initiated_by_pc_side is False:
-        transaction.on_commit(partial(_announce_attack, encounter, attackers))
+        if attack_sink is not None:
+            attack_sink.append(attack_line(attackers))
+        else:
+            transaction.on_commit(partial(_announce_attack, encounter, attackers))
     return True
+
+
+def attack_line(attackers: list[str]) -> str:
+    return f"The {' and the '.join(attackers)} attack!"
 
 
 def _announce_attack(encounter: CombatEncounter, attackers: list[str]) -> None:
@@ -142,7 +156,7 @@ def _announce_attack(encounter: CombatEncounter, attackers: list[str]) -> None:
 
     broadcast_action_outcome(
         encounter=encounter,
-        narration=f"The {' and the '.join(attackers)} attack!",
+        narration=attack_line(attackers),
         deliver_telnet=True,
     )
 
