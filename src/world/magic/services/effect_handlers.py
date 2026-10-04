@@ -24,6 +24,9 @@ from world.magic.services.soulfray import accumulate_soulfray
 if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
 
+    from world.combat.models import CombatOpponent, CombatParticipant
+    from world.magic.models import Technique
+
 
 def move_position(*, payload: Any) -> None:
     """Relocate payload.target to payload.destination_position_id (force move).
@@ -400,6 +403,66 @@ def summon_ally(*, payload: Any) -> None:
     pos = position_of(payload.caster)
     if pos is not None:
         force_move_to_position(opp.objectdb, pos)
+
+
+def manifest_bound_entity(
+    *, participant: "CombatParticipant", technique: "Technique"
+) -> "CombatOpponent | None":
+    """Bring the caster's chosen bound entity into the encounter (#4118).
+
+    Returns the new ally ``CombatOpponent``, or None when nothing manifests: the caster
+    is no longer active in the fight, their version of this technique names no entity,
+    the bond has lapsed, a being has no avatar sheet, a companion has no body, or that
+    entity already has a row in this encounter (one row per objectdb per encounter, so
+    a defeated avatar is not re-added either).
+    """
+    from world.combat.constants import CombatAllegiance, ParticipantStatus  # noqa: PLC0415
+    from world.combat.models import CombatOpponent  # noqa: PLC0415
+    from world.combat.services import add_opponent  # noqa: PLC0415
+    from world.companions.services import (  # noqa: PLC0415
+        materialize_companion_as_combat_opponent,
+    )
+    from world.magic.models import CharacterManifestation  # noqa: PLC0415
+
+    if participant.status != ParticipantStatus.ACTIVE:
+        return None
+    manifestation = (
+        CharacterManifestation.objects.filter(
+            character=participant.character_sheet, technique=technique
+        )
+        .select_related("option__being__avatar_sheet__character", "companion")
+        .first()
+    )
+    if manifestation is None or not manifestation.bond_is_active():
+        return None
+    encounter = participant.encounter
+    option = manifestation.option
+    if option.being_id is not None:
+        avatar = option.being.avatar_sheet
+        if avatar is None:
+            return None
+        if CombatOpponent.objects.filter(encounter=encounter, objectdb=avatar.character).exists():
+            return None
+        opponent = add_opponent(
+            encounter,
+            name=option.being.name,
+            tier=option.tier,
+            threat_pool=None,
+            existing_objectdb=avatar.character,
+            position=position_of(participant.character_sheet.character),
+        )
+        opponent.allegiance = CombatAllegiance.ALLY
+        opponent.summoned_by = participant.character_sheet
+        opponent.save(update_fields=["allegiance", "summoned_by"])
+        return opponent
+    companion = manifestation.companion
+    if companion.objectdb_id is None:
+        return None
+    if CombatOpponent.objects.filter(
+        encounter=encounter, objectdb_id=companion.objectdb_id
+    ).exists():
+        return None
+    return materialize_companion_as_combat_opponent(companion, encounter)
 
 
 def _summon_military_unit(*, payload: Any) -> None:

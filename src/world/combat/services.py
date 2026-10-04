@@ -1152,6 +1152,11 @@ class CombatTechniqueResolver:
         applied_conditions, removed_conditions = self._apply_conditions(
             check_result, eff_intensity=eff_intensity
         )
+        # A manifesting technique brings the caster's bound entity into the fight (#4118).
+        # Past the ward bounce above, so a bounced cast manifests nothing.
+        from world.magic.services.effect_handlers import manifest_bound_entity  # noqa: PLC0415
+
+        manifest_bound_entity(participant=self.participant, technique=self.action.focused_action)
         return CombatTechniqueResolution(
             check_result=check_result,
             damage_results=damage_results,
