@@ -1579,6 +1579,19 @@ def expire_end_of_combat_conditions(
     return removed
 
 
+def acute_peril_hand_off_condition_names() -> list[str]:
+    """Names of the acute-peril conditions combat hands to a scene round at its end.
+
+    Bleeding Out and Plummeting. The single source of truth for that set: shared by
+    ``world.combat.aftermath.has_acute_peril`` (which decides the hand-off) and
+    ``settle_round_effects`` (which leaves these rows to the scene round).
+    """
+    from world.areas.positioning.constants import PLUMMETING_CONDITION_NAME  # noqa: PLC0415
+    from world.conditions.constants import BLEED_OUT_CONDITION_NAME  # noqa: PLC0415
+
+    return [BLEED_OUT_CONDITION_NAME, PLUMMETING_CONDITION_NAME]
+
+
 @transaction.atomic
 def settle_round_effects(
     targets: Iterable["ObjectDB"],  # noqa: OBJECTDB_PARAM - mirrors expire_end_of_combat_conditions
@@ -1589,7 +1602,8 @@ def settle_round_effects(
     would otherwise sit frozen forever. On settle, each unresolved ROUNDS instance
     with a round count becomes ``expires_at = now + rounds * settled_seconds_per_round``
     and its round counter is cleared. Idempotent: a converted row has no round
-    count, so a second run skips it.
+    count, so a second run skips it. Acute-peril conditions (Bleeding Out, Plummeting)
+    are skipped: combat hands them to a scene round that keeps counting them in rounds.
 
     Args:
         targets: ObjectDB instances to settle. ``None`` entries are ignored.
@@ -1607,7 +1621,7 @@ def settle_round_effects(
             condition__default_duration_type=DurationType.ROUNDS,
             rounds_remaining__isnull=False,
             resolved_at__isnull=True,
-        )
+        ).exclude(condition__name__in=acute_peril_hand_off_condition_names())
     )
     if not instances:
         return []

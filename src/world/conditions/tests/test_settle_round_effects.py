@@ -5,7 +5,8 @@ from datetime import timedelta
 from django.test import TestCase
 from django.utils import timezone
 
-from world.conditions.constants import DurationType, StackBehavior
+from world.areas.positioning.constants import PLUMMETING_CONDITION_NAME
+from world.conditions.constants import BLEED_OUT_CONDITION_NAME, DurationType, StackBehavior
 from world.conditions.factories import ConditionInstanceFactory, ConditionTemplateFactory
 from world.conditions.models import ConditionInstance
 from world.conditions.services import (
@@ -69,6 +70,28 @@ class SettleRoundEffectsTests(TestCase):
         self.assertEqual(settle_round_effects([inst.target]), [])
         inst.refresh_from_db()
         self.assertEqual(inst.rounds_remaining, 3)
+
+    def test_acute_peril_rows_keep_their_scene_round_count(self):
+        """Bleeding Out and Plummeting stay ROUNDS rows for the scene-round hand-off."""
+        for name in (BLEED_OUT_CONDITION_NAME, PLUMMETING_CONDITION_NAME):
+            with self.subTest(name=name):
+                template = ConditionTemplateFactory(
+                    name=name, default_duration_type=DurationType.ROUNDS
+                )
+                peril = ConditionInstanceFactory(condition=template, rounds_remaining=2)
+                ordinary = ConditionInstanceFactory(
+                    condition=self.rounds_template,
+                    rounds_remaining=2,
+                    target=peril.target,
+                )
+                settled = settle_round_effects([peril.target])
+                self.assertEqual(settled, [ordinary])
+                peril.refresh_from_db()
+                self.assertEqual(peril.rounds_remaining, 2)
+                self.assertIsNone(peril.expires_at)
+                ordinary.refresh_from_db()
+                self.assertIsNone(ordinary.rounds_remaining)
+                self.assertIsNotNone(ordinary.expires_at)
 
 
 class ReapplyConvertedRowTests(TestCase):

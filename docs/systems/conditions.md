@@ -92,11 +92,13 @@ its `expires_at` before the lapse sweep removes it.
 **Settled round effects (#4120, ADR-4120) [BUILT & WIRED].** Rounds tick only inside combat, so a
 `DurationType.ROUNDS` condition that outlived its fight used to freeze (and a ROUNDS charm never
 carried an `expires_at` for the lapse sweep to see). Now `cleanup_completed_encounter` calls
-`settle_round_effects(targets)` right after `expire_end_of_combat_conditions`: every unresolved
+`settle_round_effects(targets)` right after `expire_end_of_combat_conditions`: every other unresolved
 `ROUNDS` instance with a round count on the encounter's participants and opponents (players and
 persistent NPCs alike) gets `expires_at = now + rounds * SettleConfig.settled_seconds_per_round`,
 `last_settled_tick_at = now` and `rounds_remaining = None` (idempotent: a converted row has no
-round count). That is a **settled round**. Then:
+round count), except the acute perils (Bleeding Out, Plummeting; named by
+`acute_peril_hand_off_condition_names`), which keep their scene-round hand-off and stay ROUNDS rows.
+That is a **settled round**. Then:
 
 - **Tick and expiry (`settled_effects_tick`, cron `conditions.settled_effects`, one minute,
   `CronPhase.CLEANUP`).** Converted rows past `expires_at` come off through `remove_condition`
