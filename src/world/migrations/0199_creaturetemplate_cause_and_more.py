@@ -275,6 +275,27 @@ class Migration(migrations.Migration):
                     ),
                 ),
                 (
+                    "over_level_percent_per_tier",
+                    models.PositiveSmallIntegerField(
+                        default=25,
+                        help_text="Percent of party force added for each tier of levels the party average stands above the mission's level band, or taken off for each tier below it.",
+                    ),
+                ),
+                (
+                    "falter_force_percent",
+                    models.PositiveSmallIntegerField(
+                        default=70,
+                        help_text="Percent of its force a faltering opponent still counts for in a standoff.",
+                    ),
+                ),
+                (
+                    "break_force_percent",
+                    models.PositiveSmallIntegerField(
+                        default=40,
+                        help_text="Percent of its force a broken opponent still counts for in a standoff.",
+                    ),
+                ),
+                (
                     "band_force_percent",
                     models.PositiveSmallIntegerField(
                         default=10,

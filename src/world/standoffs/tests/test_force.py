@@ -57,21 +57,21 @@ class ForceTests(TestCase):
         return StandoffGroupFactory(encounter=self.encounter, creature_template=self.template)
 
     def test_group_force_uses_level_and_tier_weight(self) -> None:
-        self.assertEqual(group_force(self._group()), 16)
+        self.assertEqual(group_force(self._group(), self.config), 16)
 
     def test_group_force_reads_the_tier_template_weight(self) -> None:
         self.tier_template.force_weight_percent = 50
         self.tier_template.save(update_fields=["force_weight_percent"])
-        self.assertEqual(group_force(self._group()), 8)
+        self.assertEqual(group_force(self._group(), self.config), 8)
 
     def test_group_force_counts_active_members_only(self) -> None:
         self.mooks[0].status = OpponentStatus.DEFEATED
         self.mooks[0].save(update_fields=["status"])
-        self.assertEqual(group_force(self._group()), 12)
+        self.assertEqual(group_force(self._group(), self.config), 12)
 
     def test_predation_fires_on_weak_party(self) -> None:
         with patch(LEVEL_PATH, return_value=1):
-            self.assertEqual(party_force(self.encounter), 1)
+            self.assertEqual(party_force(self.encounter, self.config), 1)
             self.assertTrue(cause_fires(self._group(), self.config))
 
     def test_predation_does_not_fire_on_strong_party(self) -> None:
@@ -89,7 +89,7 @@ class ForceTests(TestCase):
         with patch(LEVEL_PATH, return_value=17):
             self.assertFalse(cause_fires(group, self.config))
             group.emboldened_bands = 1
-            self.assertEqual(effective_party_force(self.encounter, group, self.config), 15)
+            self.assertAlmostEqual(effective_party_force(self.encounter, group, self.config), 15.3)
             self.assertTrue(cause_fires(group, self.config))
 
     def test_suppressing_rule_prevents_firing(self) -> None:
@@ -110,3 +110,14 @@ class ForceTests(TestCase):
             open_standoff(self.encounter)
             self.assertFalse(evaluate_causes(self.encounter))
         self.assertTrue(is_in_standoff(self.encounter))
+
+    def test_a_wounded_member_counts_for_its_health_fraction(self) -> None:
+        self.mooks[0].health = self.mooks[0].max_health // 2
+        self.mooks[0].save(update_fields=["health"])
+        self.assertAlmostEqual(group_force(self._group(), self.config), 14.0, places=0)
+
+    def test_a_broken_member_counts_for_the_break_percent(self) -> None:
+        self.mooks[0].morale = 0
+        self.mooks[0].save(update_fields=["morale"])
+        # three whole mooks (12) plus one at the break percent (40% of 4 = 1.6)
+        self.assertAlmostEqual(group_force(self._group(), self.config), 13.6)

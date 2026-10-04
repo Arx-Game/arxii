@@ -267,6 +267,21 @@ class StandoffConfig(SharedMemoryModel):
     botch_force_bands = models.PositiveSmallIntegerField(
         default=1, help_text="Bands of group force a botched press adds."
     )
+    over_level_percent_per_tier = models.PositiveSmallIntegerField(
+        default=25,
+        help_text=(
+            "Percent of party force added for each tier of levels the party average stands "
+            "above the mission's level band, or taken off for each tier below it."
+        ),
+    )
+    falter_force_percent = models.PositiveSmallIntegerField(
+        default=70,
+        help_text="Percent of its force a faltering opponent still counts for in a standoff.",
+    )
+    break_force_percent = models.PositiveSmallIntegerField(
+        default=40,
+        help_text="Percent of its force a broken opponent still counts for in a standoff.",
+    )
     band_force_percent = models.PositiveSmallIntegerField(
         default=10, help_text="Percent of party force one band of emboldening takes away."
     )
