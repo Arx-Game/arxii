@@ -432,6 +432,7 @@ def batch_condition_expiration_cleanup() -> None:
     """Delete expired time-based conditions."""
     from django.utils import timezone
 
+    from world.conditions.constants import DurationType
     from world.conditions.models import ConditionInstance
 
     count, _ = (
@@ -441,6 +442,10 @@ def batch_condition_expiration_cleanup() -> None:
         # Allegiance holds are owned by combat.lapsed_allegiance_sweep (#4091),
         # which fires the removal event the bulk delete would drop.
         .filter(condition__sets_allegiance="")
+        # Converted ROUNDS rows (#4120) are owned by conditions.settled_effects_tick,
+        # the same way allegiance rows are owned by the lapse sweep: it removes them
+        # through remove_condition so the teardown fires.
+        .exclude(condition__default_duration_type=DurationType.ROUNDS)
         .delete()
     )
     logger.info("Condition expiration cleanup: %d expired conditions deleted", count)

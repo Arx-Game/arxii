@@ -814,6 +814,27 @@ def _apply_single(
     return apply_result
 
 
+def _return_to_round_accounting(instance: ConditionInstance, template: ConditionTemplate) -> bool:
+    """Undo a post-combat conversion when a condition is applied again (#4120).
+
+    A converted row (ROUNDS template with ``expires_at`` and ``last_settled_tick_at``
+    set, see ``settle_round_effects``) has no live round count, so a re-application
+    treats it like a fresh ROUNDS application: the wall-clock fields are cleared and
+    the caller sets ``rounds_remaining``. ``lapse_warned_at`` is cleared so a
+    reinforced hold can warn again. Returns True when the row was converted.
+    """
+    if not (
+        template.default_duration_type == DurationType.ROUNDS
+        and instance.expires_at is not None
+        and instance.last_settled_tick_at is not None
+    ):
+        return False
+    instance.expires_at = None
+    instance.last_settled_tick_at = None
+    instance.lapse_warned_at = None
+    return True
+
+
 def _handle_stacking(
     existing: ConditionInstance,
     template: ConditionTemplate,
@@ -834,7 +855,9 @@ def _handle_stacking(
         StackBehavior.BOTH,
     ):
         rounds = params.duration_rounds or template.default_duration_value
-        if existing.rounds_remaining is not None:
+        if _return_to_round_accounting(existing, template):
+            existing.rounds_remaining = rounds
+        elif existing.rounds_remaining is not None:
             existing.rounds_remaining += rounds
 
     existing.save()
@@ -868,6 +891,7 @@ def _handle_refresh(
     existing.severity = params.severity
     rounds = params.duration_rounds or template.default_duration_value
     if template.default_duration_type == DurationType.ROUNDS:
+        _return_to_round_accounting(existing, template)
         existing.rounds_remaining = rounds
     elif template.default_duration_type == DurationType.INGAME_TIME:
         existing.expires_at = _compute_ingame_time_expires(template)
