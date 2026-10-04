@@ -95,3 +95,40 @@ class ActorMessageTests(VerbBase):
         self.assertEqual(result.message, "Failure. They attack!")
         fight = _to_result(StandoffActionResult(True, "The fight begins.", fight_started=True))
         self.assertEqual(fight.message, "The fight begins.")
+
+
+class MoraleShiftLineTests(VerbBase):
+    def setUp(self) -> None:
+        super().setUp()
+        self.approach = StandoffApproachFactory(damages_morale=True)
+
+    def _press(self, level: int) -> list:
+        outcome = CheckOutcomeFactory(name=f"Morale tier {level}", success_level=level)
+        with (
+            patch(BROADCAST) as broadcast,
+            self.captureOnCommitCallbacks(execute=True),
+            force_check_outcome(outcome),
+        ):
+            standoff_press(self.participant, self.group, self.approach)
+        return [call.kwargs["narration"] for call in broadcast.call_args_list]
+
+    def test_a_press_that_makes_the_group_falter_credits_the_presented_persona(self) -> None:
+        from world.scenes.services import active_persona_for_sheet
+
+        for member in self.members:
+            member.morale = 55
+            member.save(update_fields=["morale"])
+        lines = self._press(2)  # 30 morale damage: 55 -> 25, down to a break
+        who = active_persona_for_sheet(self.participant.character_sheet).name
+        self.assertEqual(lines, [f"{who} shakes the {self.template.name}: they break."])
+
+    def test_a_press_that_leaves_morale_state_alone_sends_no_line(self) -> None:
+        self.assertEqual(self._press(1), [])
+
+    def test_a_press_that_only_makes_the_group_falter_says_so(self) -> None:
+        for member in self.members:
+            member.morale = 70
+            member.save(update_fields=["morale"])
+        lines = self._press(2)  # 70 -> 40: steady to falter
+        self.assertEqual(len(lines), 1)
+        self.assertTrue(lines[0].endswith(": they falter."), lines[0])

@@ -80,7 +80,10 @@ drive and regard-rule inlines on the creature template.
 - **NPC-initiated fight is delivered live**: `end_standoff_into_fight(initiated_by_pc_side=
   False)` sends, after commit, a Narrator OUTCOME "The <group> attack!" through
   `broadcast_action_outcome(deliver_telnet=True)`, and the actor's result message ends "They
-  attack!". Terms-wheel theater is emitted after commit too. A verb that raises flushes the
+  attack!". Terms-wheel theater is emitted after commit too. A press with `damages_morale` that moves a
+  member's morale state to a worse one (steady to falter, or to break) sends one more line after
+  commit, "<persona> shakes the <group>: they falter." (or "they break."), crediting the persona
+  the actor presents; no line when no state changed. A verb that raises flushes the
   encounter, its groups and its opponents from the identity map (`flush_cache_on_error`) so
   the cache matches the rolled-back database. `begin_round_or_break_standoff` returns whether
   a round began; the GM view answers 409 and the GM action says so when it did not.

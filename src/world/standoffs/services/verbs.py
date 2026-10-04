@@ -30,7 +30,12 @@ from world.combat.constants import (
     OpponentStatus,
     ParticipantStatus,
 )
-from world.combat.morale import apply_morale_damage, tier_has_morale
+from world.combat.morale import (
+    OpponentMoraleState,
+    apply_morale_damage,
+    morale_state_for,
+    tier_has_morale,
+)
 from world.conditions.services import apply_condition
 from world.fatigue.constants import EffortLevel
 from world.mechanics.models import Application
@@ -456,8 +461,12 @@ def standoff_press(
         group.terms_ease += 1
         group.save(update_fields=["terms_ease"])
         if approach.damages_morale:
+            before = [morale_state_for(member) for member in members]
             for member in members:
                 apply_morale_damage(member, tier * DEMORALIZE_MORALE_PER_LEVEL)
+            _announce_morale_shift(
+                encounter, group, sheet, before, [morale_state_for(m) for m in members]
+            )
         revealed_ids = {
             drive_id for kind, drive_id, _ in _revealed_set(group) if kind == RevealKind.DRIVE
         }
@@ -474,6 +483,39 @@ def standoff_press(
         message=f"{_word(tier)}. {message}",
         success_level=tier,
         fight_started=fight_started,
+    )
+
+
+def _announce_morale_shift(
+    encounter: CombatEncounter,
+    group: StandoffGroup,
+    sheet: CharacterSheet,
+    before: list[OpponentMoraleState],
+    after: list[OpponentMoraleState],
+) -> None:
+    """When a press moves the group's morale to a worse state, tell the room who did it.
+
+    One line, crediting the persona the actor presents, sent after commit. Nothing is
+    sent when no member's state changed.
+    """
+    from world.combat.interaction_services import broadcast_action_outcome  # noqa: PLC0415
+    from world.scenes.services import active_persona_for_sheet  # noqa: PLC0415
+
+    changed = [new for old, new in zip(before, after, strict=True) if old != new]
+    if not changed:
+        return
+    word = "break" if OpponentMoraleState.BREAK in changed else "falter"
+    narration = (
+        f"{active_persona_for_sheet(sheet).name} shakes the {group.creature_template.name}: "
+        f"they {word}."
+    )
+    transaction.on_commit(
+        partial(
+            broadcast_action_outcome,
+            encounter=encounter,
+            narration=narration,
+            deliver_telnet=True,
+        )
     )
 
 
