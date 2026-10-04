@@ -95,7 +95,7 @@ def _revealed_set(group: StandoffGroup) -> set[tuple[str, int | None, int | None
     return set(group.reveals.values_list("kind", "drive_id", "regard_rule_id"))
 
 
-def _hidden_things(
+def hidden_things(
     group: StandoffGroup, participants: list[CombatParticipant]
 ) -> list[tuple[str, CreatureDrive | None, RegardRule | None]]:
     """Cause, then drives by strength desc, then regard rules by pk, that are not yet read."""
@@ -175,7 +175,7 @@ def standoff_read(  # noqa: PLR0913 - the focus kwargs are the read verb's whole
     if not members:
         return _refuse(_MSG_EMPTY)
     participants = list(encounter.participants.filter(status=ParticipantStatus.ACTIVE))
-    hidden = _hidden_things(group, participants)
+    hidden = hidden_things(group, participants)
     if not hidden:
         return _refuse("There is nothing more to read in that group.")
 
@@ -208,7 +208,7 @@ def standoff_read(  # noqa: PLR0913 - the focus kwargs are the read verb's whole
     return StandoffActionResult(True, "You read the group.", success_level=tier, revealed=revealed)
 
 
-def _press_grade(
+def press_grade(
     group: StandoffGroup, sheet: CharacterSheet, approach: StandoffApproach
 ) -> tuple[SocialDifficulty, list[tuple[CreatureDrive, DriveHit]], set[int]]:
     members = active_members(group)
@@ -246,7 +246,7 @@ def press_difficulty(
     group: StandoffGroup, sheet: CharacterSheet, approach: StandoffApproach
 ) -> SocialDifficulty:
     """The graded difficulty of pressing ``group`` with ``approach`` (needs an active member)."""
-    return _press_grade(group, sheet, approach)[0]
+    return press_grade(group, sheet, approach)[0]
 
 
 def terms_difficulty(
@@ -306,7 +306,7 @@ def standoff_press(
         return _refuse(_MSG_EMPTY)
     config = StandoffConfig.load()
     sheet = participant.character_sheet
-    graded, hits, targeted = _press_grade(group, sheet, approach)
+    graded, hits, targeted = press_grade(group, sheet, approach)
     result = perform_check(
         sheet.character,
         approach.check_type,
