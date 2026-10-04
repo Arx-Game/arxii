@@ -187,7 +187,7 @@ class SocialAffectionDeltaTest(TestCase):
 
 
 class ParleyResultAffectionTest(TestCase):
-    """Combat parley's result shim raises affection like a PendingActionResolution (#4145)."""
+    """Combat parley raises affection through the int-level path (#4145)."""
 
     @classmethod
     def setUpTestData(cls) -> None:
@@ -195,12 +195,11 @@ class ParleyResultAffectionTest(TestCase):
         cls.npc_persona = PersonaFactory(persona_type=PersonaType.ESTABLISHED)
 
     def test_parley_result_raises_affection_by_success_level(self) -> None:
-        from world.combat.services import _ParleyResult
-        from world.npc_services.social_disposition import apply_social_disposition_delta
-
-        apply_social_disposition_delta(
-            self.pc_sheet.character, self.npc_persona.pk, _ParleyResult(3)
+        from world.npc_services.social_disposition import (
+            apply_social_disposition_delta_for_level,
         )
+
+        apply_social_disposition_delta_for_level(self.pc_sheet.character, self.npc_persona.pk, 3)
         standing = NPCStanding.objects.get(
             persona=self.pc_sheet.primary_persona, npc_persona=self.npc_persona
         )

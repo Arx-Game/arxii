@@ -8116,7 +8116,7 @@ def _resolve_parley(
 
     Rolls the Parley check (charm + Persuasion + Seduction) against the target's
     Composure (+ mindless resistance — a breakthrough grants a fleeting mind). On
-    success, routes through ``apply_social_disposition_delta``. On a decisive
+    success, routes through ``apply_social_disposition_delta_for_level``. On a decisive
     success (SL>=3), calms the opponent. On a critical success (SL>=5) against a
     broken opponent, the NPC yields (FLED).
     """
@@ -8134,7 +8134,7 @@ def _resolve_parley(
     from world.conditions.models import ConditionTemplate  # noqa: PLC0415
     from world.conditions.services import apply_condition  # noqa: PLC0415
     from world.npc_services.social_disposition import (  # noqa: PLC0415
-        apply_social_disposition_delta,
+        apply_social_disposition_delta_for_level,
     )
 
     outcome = ActionOutcome(entity_type=ENTITY_TYPE_PC, entity_label=str(participant))
@@ -8155,7 +8155,7 @@ def _resolve_parley(
     actor = participant.character_sheet.character
     target_persona_id = target.persona_id
     if target_persona_id is not None:
-        apply_social_disposition_delta(actor, target_persona_id, _ParleyResult(success_level))
+        apply_social_disposition_delta_for_level(actor, target_persona_id, success_level)
 
     # Decisive success: calm the opponent (Calm condition -> NEUTRAL allegiance).
     # Boss sway resistance (#2642): a BOSS-tier opponent resists — it requires
@@ -8190,33 +8190,6 @@ def _resolve_parley(
         target.save(update_fields=["status"])
 
     return outcome
-
-
-@dataclass
-class _ParleyResult:
-    """Minimal result shim so apply_social_disposition_delta can read success_level.
-
-    The disposition service reads ``result.main_result.check_result.success_level``;
-    this shim provides that shape without constructing a full PendingResolution.
-    """
-
-    main_result: _ParleyMainResult
-
-    def __init__(self, success_level: int) -> None:
-        self.main_result = _ParleyMainResult(success_level)
-
-
-@dataclass
-class _ParleyMainResult:
-    check_result: _ParleyCheckResult
-
-    def __init__(self, success_level: int) -> None:
-        self.check_result = _ParleyCheckResult(success_level)
-
-
-@dataclass
-class _ParleyCheckResult:
-    success_level: int
 
 
 def _resolve_charge_movement(participant: CombatParticipant, action: CombatRoundAction) -> None:

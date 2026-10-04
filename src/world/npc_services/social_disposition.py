@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from typing import Protocol, runtime_checkable
-
 # Per success-tier disposition deltas (ADR-0019: tier-sourced, not hardcoded
 # check difficulty). success_level is a SmallIntegerField on a -10..+10 scale
 # (world/traits/models.py:484; checks/AGENT_GLOSSARY.md:16); >0 = success,
@@ -27,7 +25,21 @@ def disposition_shift_band(delta: int) -> str:
 
 
 def apply_social_disposition_delta(actor, target_persona_id, result) -> str | None:
-    """Apply a tiered disposition delta after a social action resolves.
+    """Apply a tiered disposition delta after a scene-style social action resolves.
+
+    Reads the success level off a ``PendingActionResolution`` (0 when unrolled) and
+    delegates to ``apply_social_disposition_delta_for_level``. Callers that already hold
+    a success level (combat's parley) call that function directly.
+    """
+    return apply_social_disposition_delta_for_level(
+        actor, target_persona_id, _success_level(result)
+    )
+
+
+def apply_social_disposition_delta_for_level(
+    actor, target_persona_id, success_level: int
+) -> str | None:
+    """Apply a tiered disposition delta for an already-rolled success level.
 
     Persona-bearing NPCs (``target_persona_id`` resolves to a ``Persona``)
     move durable ``NPCStanding.affection``. The persona-less mook path is
@@ -45,7 +57,6 @@ def apply_social_disposition_delta(actor, target_persona_id, result) -> str | No
         persona_for_character,
     )
 
-    success_level = _success_level(result)
     delta = _delta_for_tier(success_level)
     if delta == 0 or target_persona_id is None:
         return None
@@ -69,31 +80,11 @@ def apply_social_disposition_delta(actor, target_persona_id, result) -> str | No
     return f"{target_name}'s regard for you warms {disposition_shift_band(delta)}."
 
 
-class _CheckResultLike(Protocol):
-    success_level: int | None
-
-
-class _StepResultLike(Protocol):
-    check_result: _CheckResultLike
-
-
-@runtime_checkable
-class _RolledResolution(Protocol):
-    """Anything that carries a rolled main step: a PendingActionResolution or the combat
-    parley shim (#4145), which has the same ``main_result.check_result`` shape."""
-
-    main_result: _StepResultLike | None
-
-
 def _success_level(result: object) -> int:
-    """Success level from a resolution result, 0 when unrolled.
+    """Success level from a ``PendingActionResolution``, 0 when unrolled or another shape."""
+    from actions.types import PendingActionResolution  # noqa: PLC0415
 
-    Structural dispatch on ``main_result`` (a ``StepResult``, whose ``check_result`` is
-    non-optional): ``PendingActionResolution`` and combat's parley shim both qualify, so
-    a parley success warms the target (#4145). Previously only the former did, so parley
-    always read 0.
-    """
-    if isinstance(result, _RolledResolution) and result.main_result is not None:
+    if isinstance(result, PendingActionResolution) and result.main_result is not None:
         return result.main_result.check_result.success_level or 0
     return 0
 

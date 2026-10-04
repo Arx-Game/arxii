@@ -83,28 +83,14 @@ def evaluate(rule: dict, ctx: PredicateContext) -> bool:
         ValueError: If a node carries an unknown ``op``, or a ``NOT`` node
             does not have exactly one operand.
     """
-    if not rule:  # {} == no gate
-        return True
-    if KEY_OP in rule:
-        op, of = rule[KEY_OP], rule.get(KEY_OF, [])
-        if op == OP_AND:
-            return all(evaluate(r, ctx) for r in of)  # empty AND == True
-        if op == OP_OR:
-            return any(evaluate(r, ctx) for r in of)  # empty OR == False
-        if op == OP_NOT:
-            if len(of) != 1:
-                msg = f"NOT requires exactly one operand, got {len(of)}"
-                raise ValueError(msg)
-            return not evaluate(of[0], ctx)
-        msg = f"unknown predicate op {op!r}"
-        raise ValueError(msg)
-    return ctx.has_leaf(rule[KEY_LEAF], **rule.get(KEY_PARAMS, {}))
+    return matched_leaves(rule, ctx) is not None
 
 
 def matched_leaves(rule: dict, ctx: PredicateContext) -> list[dict] | None:
     """Report which leaves made ``rule`` pass, or ``None`` if it fails.
 
-    Lets a surface say "because you are Cinderi". Mirrors ``evaluate``:
+    Lets a surface say "because you are Cinderi". It is the one tree walk, and
+    ``evaluate`` is ``matched_leaves(...) is not None``:
     AND returns every child's leaves, OR the first true child's leaves, NOT
     and an empty rule ``[]``. A leaf returns itself.
 
