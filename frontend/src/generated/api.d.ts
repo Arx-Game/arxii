@@ -25336,7 +25336,10 @@ export interface components {
       group_id: number;
       name: string;
       grade: string;
+      grade_label: string;
+      check_caption: string;
       levers: string[];
+      hits_revealed_drive: boolean;
     };
     /**
      * @description * `global` - Global
@@ -32114,9 +32117,13 @@ export interface components {
       state: string;
       terms_ease: number;
       cause: string | null;
+      cause_gloss: string | null;
       hidden_count: number;
       drives: components['schemas']['DriveView'][];
       revealed_regard: string[];
+      read_check: string;
+      read_grade: string;
+      read_grade_label: string;
     };
     /** @description POST body for the #1036 group-vote endpoint. */
     GroupVoteRequestRequest: {
@@ -45999,6 +46006,7 @@ export interface components {
      */
     StandingEnum: 'core' | 'minor';
     StandoffView: {
+      place: string;
       groups: components['schemas']['GroupView'][];
       approaches: components['schemas']['ApproachView'][];
       terms: components['schemas']['TermsView'][];
@@ -47338,7 +47346,9 @@ export interface components {
       terms_id: number;
       name: string;
       group_id: number;
+      description: string;
       grade: string;
+      grade_label: string;
     };
     /**
      * @description * `open` - Open

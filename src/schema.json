@@ -41423,14 +41423,23 @@ components:
           type: string
         grade:
           type: string
+        grade_label:
+          type: string
+        check_caption:
+          type: string
         levers:
           type: array
           items:
             type: string
+        hits_revealed_drive:
+          type: boolean
       required:
       - approach_id
+      - check_caption
       - grade
+      - grade_label
       - group_id
+      - hits_revealed_drive
       - levers
       - name
     ArcScopeEnum:
@@ -55831,6 +55840,9 @@ components:
         cause:
           type: string
           nullable: true
+        cause_gloss:
+          type: string
+          nullable: true
         hidden_count:
           type: integer
         drives:
@@ -55841,13 +55853,23 @@ components:
           type: array
           items:
             type: string
+        read_check:
+          type: string
+        read_grade:
+          type: string
+        read_grade_label:
+          type: string
       required:
       - cause
+      - cause_gloss
       - drives
       - group_id
       - hidden_count
       - member_count
       - name
+      - read_check
+      - read_grade
+      - read_grade_label
       - revealed_regard
       - state
       - terms_ease
@@ -81772,6 +81794,8 @@ components:
     StandoffView:
       type: object
       properties:
+        place:
+          type: string
         groups:
           type: array
           items:
@@ -81795,6 +81819,7 @@ components:
       required:
       - approaches
       - groups
+      - place
       - shared_sparks
       - sparks
       - terms
@@ -84641,10 +84666,16 @@ components:
           type: string
         group_id:
           type: integer
+        description:
+          type: string
         grade:
           type: string
+        grade_label:
+          type: string
       required:
+      - description
       - grade
+      - grade_label
       - group_id
       - name
       - terms_id

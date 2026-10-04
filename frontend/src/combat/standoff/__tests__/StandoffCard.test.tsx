@@ -30,6 +30,7 @@ import { combatKeys } from '@/combat/queries';
 import { StandoffCard } from '../StandoffCard';
 
 const STANDOFF: StandoffView = {
+  place: 'Test Place',
   groups: [
     {
       group_id: 11,
@@ -38,15 +39,47 @@ const STANDOFF: StandoffView = {
       state: 'open',
       terms_ease: 2,
       cause: 'Test cause',
+      cause_gloss: 'Test gloss.',
       hidden_count: 3,
       drives: [{ label: 'Test drive', strength: 'minor' }],
       revealed_regard: [],
+      read_check: 'Test read check',
+      read_grade: 'moderate',
+      read_grade_label: 'Moderate',
     },
   ],
   approaches: [
-    { approach_id: 21, group_id: 11, name: 'Test approach', grade: 'Easy', levers: ['lever one'] },
+    {
+      approach_id: 21,
+      group_id: 11,
+      name: 'Test approach',
+      grade: 'easy',
+      grade_label: 'Easy',
+      check_caption: 'Test check + Test sway',
+      levers: ['hits Test drive (Minor)', 'your spark: Test detail'],
+      hits_revealed_drive: true,
+    },
+    {
+      approach_id: 22,
+      group_id: 11,
+      name: 'Plain approach',
+      grade: 'very_hard',
+      grade_label: 'Very Hard',
+      check_caption: 'Plain check',
+      levers: [],
+      hits_revealed_drive: false,
+    },
   ],
-  terms: [{ terms_id: 31, name: 'Test terms', group_id: 11, grade: 'Hard' }],
+  terms: [
+    {
+      terms_id: 31,
+      name: 'Test terms',
+      group_id: 11,
+      description: 'Test terms outcome.',
+      grade: 'hard',
+      grade_label: 'Hard',
+    },
+  ],
   sparks: [{ group_id: 11, regard_rule_id: 41, text: 'Test spark', shared: false }],
   shared_sparks: [],
 };
@@ -96,7 +129,7 @@ describe('StandoffCard', () => {
     const user = userEvent.setup();
     const spy = vi.spyOn(client, 'invalidateQueries');
     renderCard();
-    expect(screen.getByText('lever one')).toBeInTheDocument();
+    expect(screen.getByText('hits Test drive (Minor)')).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: /Test approach/ }));
     expect(mutateAsync).toHaveBeenCalledWith({
       ref: { backend: 'registry', registry_key: 'standoff_press' },
@@ -106,20 +139,89 @@ describe('StandoffCard', () => {
     expect(toastSuccess).toHaveBeenCalledWith('Done.', { className: 'whitespace-pre-line' });
   });
 
-  it('names terms', async () => {
+  it('opens a confirm step for terms and spins only on the spin button', async () => {
     const user = userEvent.setup();
     renderCard();
     await user.click(screen.getByRole('button', { name: /Test terms/ }));
+    expect(mutateAsync).not.toHaveBeenCalled();
+    const confirm = screen.getByTestId('standoff-terms-confirm');
+    expect(within(confirm).getByText('Test terms outcome.')).toBeInTheDocument();
+    await user.click(within(confirm).getByRole('button', { name: 'Spin for "Test terms"' }));
     expect(mutateAsync).toHaveBeenCalledWith({
       ref: { backend: 'registry', registry_key: 'standoff_terms' },
       kwargs: { group_id: 11, terms_id: 31 },
     });
+    expect(screen.queryByTestId('standoff-terms-confirm')).toBeNull();
+  });
+
+  it('keeps pressing without naming terms', async () => {
+    const user = userEvent.setup();
+    renderCard();
+    await user.click(screen.getByRole('button', { name: /Test terms/ }));
+    await user.click(screen.getByRole('button', { name: 'Keep pressing' }));
+    expect(screen.queryByTestId('standoff-terms-confirm')).toBeNull();
+    expect(mutateAsync).not.toHaveBeenCalled();
+  });
+
+  it('shows grade labels, never the raw enum value', () => {
+    renderCard();
+    const grades = screen.getAllByTestId('standoff-grade').map((g) => g.textContent);
+    expect(grades).toEqual(['Moderate', 'Easy', 'Very Hard', 'Hard']);
+    expect(document.body.textContent).not.toMatch(/very_hard/);
+    const colours = screen.getAllByTestId('standoff-grade').map((g) => g.className);
+    expect(colours[1]).toMatch(/emerald/);
+    expect(colours[0]).toMatch(/amber/);
+    expect(colours[2]).toMatch(/red/);
+  });
+
+  it('shows each approach check caption and the read check', () => {
+    renderCard();
+    expect(screen.getByText('Test check + Test sway')).toBeInTheDocument();
+    expect(screen.getByText('Plain check')).toBeInTheDocument();
+    expect(screen.getByText(/Test read check/)).toBeInTheDocument();
+  });
+
+  it('highlights an approach that hits a revealed drive and says no known lever otherwise', () => {
+    renderCard();
+    const hit = screen.getByTestId('standoff-approach-hit');
+    expect(hit).toHaveTextContent('Test approach');
+    expect(hit.className).toMatch(/border-accent/);
+    expect(within(hit).getByText('your spark: Test detail')).toBeInTheDocument();
+    const plain = screen.getByRole('button', { name: /Plain approach/ });
+    expect(plain.className).not.toMatch(/border-accent/);
+    expect(within(plain).getByText('no known lever')).toBeInTheDocument();
+  });
+
+  it('hints at the spark until a read reveals it', () => {
+    const { unmount } = renderCard();
+    expect(screen.getByText(/How, you don.t know yet/)).toBeInTheDocument();
+    unmount();
+    renderCard({
+      ...STANDOFF,
+      groups: [{ ...STANDOFF.groups[0], revealed_regard: ['Test detail.'] }],
+    });
+    expect(screen.queryByText(/How, you don.t know yet/)).toBeNull();
+  });
+
+  it('glosses the revealed cause and shows the place', () => {
+    renderCard();
+    expect(screen.getByText('Test gloss.')).toBeInTheDocument();
+    expect(screen.getByText(/at Test Place/)).toBeInTheDocument();
+  });
+
+  it('draws the fight row as an outline with its caption and no morale', () => {
+    renderCard();
+    const fight = screen.getByTestId('standoff-fight');
+    expect(fight).toHaveTextContent('starts round one');
+    expect(fight.className).toMatch(/border-destructive/);
+    expect(fight.className).not.toMatch(/bg-destructive/);
+    expect(document.body.textContent).not.toMatch(/morale/i);
   });
 
   it('fights', async () => {
     const user = userEvent.setup();
     renderCard();
-    await user.click(screen.getByRole('button', { name: 'Fight' }));
+    await user.click(screen.getByRole('button', { name: /^Fight/ }));
     expect(mutateAsync).toHaveBeenCalledWith({
       ref: { backend: 'registry', registry_key: 'standoff_fight' },
       kwargs: {},
@@ -129,7 +231,7 @@ describe('StandoffCard', () => {
   it('reads with no focus by default', async () => {
     const user = userEvent.setup();
     renderCard();
-    await user.click(screen.getByRole('button', { name: 'Read them' }));
+    await user.click(screen.getByRole('button', { name: /^Read them/ }));
     expect(mutateAsync).toHaveBeenCalledWith({
       ref: { backend: 'registry', registry_key: 'standoff_read' },
       kwargs: { group_id: 11 },
@@ -141,7 +243,7 @@ describe('StandoffCard', () => {
     renderCard();
     await user.click(screen.getByLabelText('Look for'));
     await user.click(screen.getByRole('option', { name: 'What moves them?' }));
-    await user.click(screen.getByRole('button', { name: 'Read them' }));
+    await user.click(screen.getByRole('button', { name: /^Read them/ }));
     expect(mutateAsync).toHaveBeenLastCalledWith({
       ref: { backend: 'registry', registry_key: 'standoff_read' },
       kwargs: { group_id: 11, focus_kind: 'drive' },
@@ -153,7 +255,7 @@ describe('StandoffCard', () => {
     renderCard();
     await user.click(screen.getByLabelText('Look for'));
     await user.click(screen.getByRole('option', { name: 'Test spark' }));
-    await user.click(screen.getByRole('button', { name: 'Read them' }));
+    await user.click(screen.getByRole('button', { name: /^Read them/ }));
     expect(mutateAsync).toHaveBeenLastCalledWith({
       ref: { backend: 'registry', registry_key: 'standoff_read' },
       kwargs: { group_id: 11, focus_kind: 'regard', focus_regard_rule_id: 41 },
@@ -169,7 +271,7 @@ describe('StandoffCard', () => {
       success: false,
     });
     renderCard();
-    await user.click(screen.getByRole('button', { name: 'Fight' }));
+    await user.click(screen.getByRole('button', { name: /^Fight/ }));
     await waitFor(() =>
       expect(toastError).toHaveBeenCalledWith('Too late.', {
         className: 'whitespace-pre-line',
@@ -187,7 +289,7 @@ describe('StandoffCard', () => {
       success: true,
     });
     renderCard();
-    await user.click(screen.getByRole('button', { name: 'Fight' }));
+    await user.click(screen.getByRole('button', { name: /^Fight/ }));
     await waitFor(() => expect(toastSuccess).toHaveBeenCalled());
     const [message, options] = toastSuccess.mock.calls[0];
     expect(message).toContain('\n');
@@ -196,14 +298,14 @@ describe('StandoffCard', () => {
 
   it('disables read, approaches and terms once the group is not open', () => {
     renderCard({ ...STANDOFF, groups: [{ ...STANDOFF.groups[0], state: 'settled' }] });
-    expect(screen.getByRole('button', { name: 'Read them' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: /^Read them/ })).toBeDisabled();
     expect(screen.getByRole('button', { name: /Test approach/ })).toBeDisabled();
     expect(screen.getByRole('button', { name: /Test terms/ })).toBeDisabled();
   });
 
   it('disables read when nothing is left hidden', () => {
     renderCard({ ...STANDOFF, groups: [{ ...STANDOFF.groups[0], hidden_count: 0 }] });
-    expect(screen.getByRole('button', { name: 'Read them' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: /^Read them/ })).toBeDisabled();
     expect(screen.getByRole('button', { name: /Test approach/ })).toBeEnabled();
   });
 

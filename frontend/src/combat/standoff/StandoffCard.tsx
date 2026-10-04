@@ -23,9 +23,13 @@ import { combatKeys, useDispatchPlayerAction } from '@/combat/queries';
 import { registryRef } from '@/combat/duels/DuelChallengeControls';
 import { isDispatchFailure } from '@/combat/types';
 import type { components } from '@/generated/api';
+import { cn } from '@/lib/utils';
+
+import './standoff.css';
 
 type StandoffView = components['schemas']['StandoffView'];
 type GroupView = components['schemas']['GroupView'];
+type TermsView = components['schemas']['TermsView'];
 
 export interface StandoffCardProps {
   standoff: StandoffView;
@@ -40,6 +44,30 @@ const NO_FOCUS = 'none';
 const FOCUS_CAUSE = 'cause';
 const FOCUS_DRIVE = 'drive';
 const SPARK_PREFIX = 'spark:';
+
+const GRADE_TONES: Record<string, string> = {
+  easy: 'text-emerald-700 dark:text-emerald-300',
+  moderate: 'text-amber-700 dark:text-amber-400',
+  hard: 'text-red-700 dark:text-red-400',
+  very_hard: 'text-red-700 dark:text-red-400',
+};
+const GRADE_FALLBACK_TONE = 'text-muted-foreground';
+
+function Grade({ value, label }: { value: string; label: string }) {
+  if (!label) return null;
+  return (
+    <span
+      data-testid="standoff-grade"
+      className={cn('shrink-0 font-mono text-xs', GRADE_TONES[value] ?? GRADE_FALLBACK_TONE)}
+    >
+      {label}
+    </span>
+  );
+}
+
+function plural(count: number, one: string, many: string): string {
+  return `${count} ${count === 1 ? one : many}`;
+}
 
 function readKwargs(groupId: number, focus: string): Record<string, unknown> {
   if (focus === FOCUS_CAUSE) return { group_id: groupId, focus_kind: 'cause' };
@@ -79,12 +107,19 @@ export function StandoffCard({ standoff, encounterId, characterId }: StandoffCar
     run(key, kwargs).catch(() => {});
   }
 
+  const groupById = new Map(standoff.groups.map((g) => [g.group_id, g]));
+
   return (
     <section
-      className="flex flex-col gap-3 rounded-md border border-border bg-muted/30 p-3"
+      className="standoff-card flex flex-col gap-3 rounded-md border border-border bg-muted/30 p-3"
       data-testid="standoff-card"
     >
-      <h3 className="font-display text-sm font-bold tracking-wide text-foreground">Standoff</h3>
+      <h3 className="font-display text-sm font-bold tracking-wide text-foreground">
+        Standoff
+        {standoff.place ? (
+          <span className="font-normal text-muted-foreground"> at {standoff.place}</span>
+        ) : null}
+      </h3>
 
       {standoff.sparks.length > 0 && (
         <div
@@ -94,31 +129,42 @@ export function StandoffCard({ standoff, encounterId, characterId }: StandoffCar
           <p className="text-[10px] font-semibold uppercase tracking-wide text-primary">
             Your spark here
           </p>
-          {standoff.sparks.map((spark) => (
-            <div
-              key={`${spark.group_id}-${spark.regard_rule_id}`}
-              className="mt-1 flex items-center justify-between gap-2 text-sm"
-            >
-              <span>{spark.text}</span>
-              {spark.shared ? (
-                <Badge variant="secondary">Shared</Badge>
-              ) : (
-                <Button
-                  size="sm"
-                  variant="outline"
-                  disabled={isPending}
-                  onClick={() =>
-                    fire('standoff_share_spark', {
-                      group_id: spark.group_id,
-                      regard_rule_id: spark.regard_rule_id,
-                    })
-                  }
-                >
-                  Share with the party
-                </Button>
-              )}
-            </div>
-          ))}
+          {standoff.sparks.map((spark) => {
+            const unread = (groupById.get(spark.group_id)?.revealed_regard.length ?? 0) === 0;
+            return (
+              <div
+                key={`${spark.group_id}-${spark.regard_rule_id}`}
+                className="mt-1 flex flex-col items-start gap-1.5 text-sm"
+              >
+                <p className="min-w-0">
+                  <b>{spark.text}</b>
+                  {unread ? (
+                    <span className="text-muted-foreground">
+                      {' '}
+                      How, you don&apos;t know yet. A read could tell you.
+                    </span>
+                  ) : null}
+                </p>
+                {spark.shared ? (
+                  <Badge variant="secondary">Shared</Badge>
+                ) : (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={isPending}
+                    onClick={() =>
+                      fire('standoff_share_spark', {
+                        group_id: spark.group_id,
+                        regard_rule_id: spark.regard_rule_id,
+                      })
+                    }
+                  >
+                    Share with the party
+                  </Button>
+                )}
+              </div>
+            );
+          })}
         </div>
       )}
 
@@ -146,12 +192,14 @@ export function StandoffCard({ standoff, encounterId, characterId }: StandoffCar
       ))}
 
       <Button
-        variant="destructive"
+        variant="outline"
         disabled={isPending}
         onClick={() => fire('standoff_fight')}
         data-testid="standoff-fight"
+        className="h-auto w-full justify-between border-destructive py-2 text-destructive hover:text-destructive"
       >
-        Fight
+        <span>Fight</span>
+        <span className="text-xs font-normal">starts round one</span>
       </Button>
     </section>
   );
@@ -177,60 +225,70 @@ function GroupSection({
   const approaches = standoff.approaches.filter((a) => a.group_id === group.group_id);
   const terms = standoff.terms.filter((t) => t.group_id === group.group_id);
   const sparks = standoff.sparks.filter((s) => s.group_id === group.group_id);
+  const [chosenTermsId, setChosenTermsId] = useState<number | null>(null);
+  const chosenTerms = terms.find((t) => t.terms_id === chosenTermsId) ?? null;
   const isOpen = group.state === 'open';
   const selectId = `standoff-focus-${group.group_id}`;
 
   return (
-    <div className="flex flex-col gap-2 rounded-md border border-border bg-card p-3">
-      <div className="flex items-baseline justify-between gap-2">
-        <span className="font-display text-sm font-semibold">{group.name}</span>
-        <span className="text-xs text-muted-foreground">x{group.member_count}</span>
+    <div className="standoff-row" data-testid="standoff-group">
+      <div className="flex min-w-0 flex-col gap-2 rounded-md border border-border bg-card p-3">
+        <div className="flex items-baseline justify-between gap-2">
+          <span className="font-display text-sm font-semibold">{group.name}</span>
+          <span className="text-xs text-muted-foreground">x{group.member_count}</span>
+        </div>
+
+        <div className="flex flex-wrap gap-2" role="group" aria-label="What is known">
+          {group.cause !== null && (
+            <div
+              data-testid="standoff-cause-tile"
+              className="standoff-tile flex flex-col items-center justify-center gap-1 rounded-md border-2 border-dashed border-destructive bg-card p-1.5 text-center text-xs"
+            >
+              <b className="font-display text-[13px]">{group.cause}</b>
+              <span className="font-mono text-[10px] text-muted-foreground">cause</span>
+              {group.cause_gloss ? (
+                <span className="text-[10px] text-muted-foreground">{group.cause_gloss}</span>
+              ) : null}
+            </div>
+          )}
+          {group.drives.map((drive) => (
+            <div
+              key={drive.label}
+              className="standoff-tile flex flex-col items-center justify-center gap-1 rounded-md border-2 border-accent bg-card p-1.5 text-center text-xs"
+            >
+              <b className="font-display text-[13px]">{drive.label}</b>
+              <span className="font-mono text-[10px] text-muted-foreground">{drive.strength}</span>
+            </div>
+          ))}
+          {Array.from({ length: group.hidden_count }, (_, i) => (
+            <div
+              key={`hidden-${i}`}
+              data-testid="standoff-facedown-tile"
+              role="img"
+              aria-label="Hidden, not yet read"
+              className="standoff-facedown flex items-center justify-center rounded-md font-display text-2xl"
+            >
+              ?
+            </div>
+          ))}
+        </div>
+        {group.revealed_regard.map((line) => (
+          <p key={line} className="text-xs text-muted-foreground">
+            {line}
+          </p>
+        ))}
       </div>
 
-      <div className="flex flex-wrap gap-2" role="group" aria-label="What is known">
-        {group.cause !== null && (
-          <div className="rounded border border-primary/50 bg-primary/10 px-2 py-1 text-xs">
-            <span className="block text-[10px] uppercase text-muted-foreground">cause</span>
-            <b>{group.cause}</b>
-          </div>
-        )}
-        {group.drives.map((drive) => (
-          <div
-            key={drive.label}
-            className="rounded border border-border bg-muted px-2 py-1 text-xs"
-          >
-            <span className="block text-[10px] uppercase text-muted-foreground">
-              {drive.strength}
-            </span>
-            <b>{drive.label}</b>
-          </div>
-        ))}
-        {Array.from({ length: group.hidden_count }, (_, i) => (
-          <div
-            key={`hidden-${i}`}
-            data-testid="standoff-facedown-tile"
-            role="img"
-            aria-label="Hidden, not yet read"
-            className="flex h-10 w-10 items-center justify-center rounded border border-border bg-foreground/80 text-sm text-background"
-          >
-            ?
-          </div>
-        ))}
-      </div>
-      {group.revealed_regard.map((line) => (
-        <p key={line} className="text-xs text-muted-foreground">
-          {line}
-        </p>
-      ))}
-
-      <div className="flex items-end gap-2">
-        <div className="flex-1">
+      <div className="flex min-w-0 flex-col gap-1.5">
+        <div className="flex flex-col gap-1.5 rounded-md border border-border bg-card p-2">
           <label htmlFor={selectId} className="text-[10px] uppercase text-muted-foreground">
             Look for
           </label>
           <Select value={focus} onValueChange={onFocusChange}>
-            <SelectTrigger id={selectId} className="h-8">
-              <SelectValue />
+            <SelectTrigger id={selectId} className="h-auto min-h-8 w-full py-1 text-left">
+              <span className="min-w-0 flex-1 truncate">
+                <SelectValue />
+              </span>
             </SelectTrigger>
             <SelectContent>
               <SelectItem value={NO_FOCUS}>Anything</SelectItem>
@@ -246,23 +304,36 @@ function GroupSection({
               ))}
             </SelectContent>
           </Select>
+          <Button
+            size="sm"
+            variant="outline"
+            disabled={disabled || !isOpen || group.hidden_count === 0}
+            className="h-auto w-full justify-between gap-2 whitespace-normal py-2 text-left"
+            onClick={() => fire('standoff_read', readKwargs(group.group_id, focus))}
+          >
+            <span className="flex min-w-0 flex-col">
+              <span>Read them</span>
+              {group.read_check ? (
+                <span className="text-xs font-normal text-muted-foreground">
+                  {group.read_check} · reveals by success level
+                </span>
+              ) : null}
+            </span>
+            <Grade value={group.read_grade} label={group.read_grade_label} />
+          </Button>
         </div>
-        <Button
-          size="sm"
-          disabled={disabled || !isOpen || group.hidden_count === 0}
-          onClick={() => fire('standoff_read', readKwargs(group.group_id, focus))}
-        >
-          Read them
-        </Button>
-      </div>
 
-      <div className="flex flex-col gap-1">
         {approaches.map((approach) => (
           <Button
             key={approach.approach_id}
             variant="outline"
             disabled={disabled || !isOpen}
-            className="h-auto justify-between whitespace-normal py-2 text-left"
+            data-testid={approach.hits_revealed_drive ? 'standoff-approach-hit' : undefined}
+            className={cn(
+              'h-auto w-full justify-between gap-2 whitespace-normal py-2 text-left',
+              approach.hits_revealed_drive &&
+                'border-accent shadow-[inset_3px_0_0_hsl(var(--accent))]'
+            )}
             onClick={() =>
               fire('standoff_press', {
                 group_id: group.group_id,
@@ -270,38 +341,97 @@ function GroupSection({
               })
             }
           >
-            <span className="flex flex-col">
+            <span className="flex min-w-0 flex-col">
               <span>{approach.name}</span>
-              {approach.levers.map((lever) => (
-                <span key={lever} className="text-xs font-normal italic text-muted-foreground">
-                  {lever}
-                </span>
-              ))}
+              <span className="text-xs font-normal text-muted-foreground">
+                {approach.check_caption}
+              </span>
+              {approach.levers.length === 0 ? (
+                <span className="text-xs font-normal text-muted-foreground">no known lever</span>
+              ) : (
+                approach.levers.map((lever) => (
+                  <span
+                    key={lever}
+                    className={cn(
+                      'text-xs font-normal italic',
+                      lever.startsWith('your spark') ? 'text-primary' : 'text-foreground'
+                    )}
+                  >
+                    {lever}
+                  </span>
+                ))
+              )}
             </span>
-            <span className="text-xs text-muted-foreground">{approach.grade}</span>
+            <Grade value={approach.grade} label={approach.grade_label} />
           </Button>
         ))}
-      </div>
 
-      {terms.length > 0 && (
-        <div className="flex flex-col gap-1">
-          <p className="text-xs text-muted-foreground">
-            Name your terms. Each successful press makes this easier (ease {group.terms_ease}).
-          </p>
-          {terms.map((term) => (
-            <Button
-              key={term.terms_id}
-              variant="secondary"
-              disabled={disabled || !isOpen}
-              className="justify-between"
-              onClick={() =>
-                fire('standoff_terms', { group_id: group.group_id, terms_id: term.terms_id })
-              }
-            >
-              <span>{term.name}</span>
-              <span className="text-xs text-muted-foreground">{term.grade}</span>
+        {terms.length > 0 && (
+          <TermsSection
+            terms={terms}
+            ease={group.terms_ease}
+            disabled={disabled || !isOpen}
+            chosen={chosenTerms}
+            onChoose={(id) => setChosenTermsId(id)}
+            onSpin={(t) => {
+              fire('standoff_terms', { group_id: group.group_id, terms_id: t.terms_id });
+              setChosenTermsId(null);
+            }}
+          />
+        )}
+      </div>
+    </div>
+  );
+}
+
+interface TermsSectionProps {
+  terms: TermsView[];
+  ease: number;
+  disabled: boolean;
+  chosen: TermsView | null;
+  onChoose: (termsId: number | null) => void;
+  onSpin: (terms: TermsView) => void;
+}
+
+function TermsSection({ terms, ease, disabled, chosen, onChoose, onSpin }: TermsSectionProps) {
+  return (
+    <div className="flex flex-col gap-1.5">
+      <p className="text-xs text-muted-foreground">
+        Name your terms.{' '}
+        {ease === 0
+          ? 'Each successful press makes this easier.'
+          : `${plural(ease, 'step', 'steps')} easier so far.`}
+      </p>
+      {terms.map((term) => (
+        <Button
+          key={term.terms_id}
+          variant="outline"
+          disabled={disabled}
+          aria-pressed={chosen?.terms_id === term.terms_id}
+          className={cn(
+            'h-auto w-full justify-between gap-2 whitespace-normal py-2 text-left',
+            chosen?.terms_id === term.terms_id && 'border-primary'
+          )}
+          onClick={() => onChoose(term.terms_id)}
+        >
+          <span>{term.name}</span>
+          <Grade value={term.grade} label={term.grade_label} />
+        </Button>
+      ))}
+      {chosen !== null && (
+        <div
+          className="flex flex-col gap-2 rounded-md border border-primary/50 bg-primary/5 p-2"
+          data-testid="standoff-terms-confirm"
+        >
+          {chosen.description ? <p className="text-sm">{chosen.description}</p> : null}
+          <div className="flex flex-wrap gap-2">
+            <Button size="sm" disabled={disabled} onClick={() => onSpin(chosen)}>
+              Spin for &quot;{chosen.name}&quot;
             </Button>
-          ))}
+            <Button size="sm" variant="outline" onClick={() => onChoose(null)}>
+              Keep pressing
+            </Button>
+          </div>
         </div>
       )}
     </div>
