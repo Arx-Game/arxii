@@ -265,6 +265,20 @@ class ChronicTickSummary:
     active_round_skipped: int = 0
 
 
+@dataclass
+class SettledTickSummary:
+    """Summary of a scheduler-driven settled-effects tick (#4120).
+
+    ``ticked`` counts rows that actually lost health; ``removed`` counts expired
+    converted rows taken off; ``active_round_skipped`` counts targets owned by an
+    active round (the round tick advances them instead).
+    """
+
+    ticked: int = 0
+    removed: int = 0
+    active_round_skipped: int = 0
+
+
 @dataclass(frozen=True)
 class TreatmentOutcome:
     """Result returned by perform_treatment.

@@ -782,6 +782,7 @@ def register_all_tasks() -> None:
     )
 
     _register_combat_tasks()
+    _register_settled_effects_task()
 
     from world.conditions.services import batch_chronic_effect_tick, decay_all_conditions_tick
     from world.locations.tasks import decayed_modifier_cleanup_task
@@ -1136,6 +1137,25 @@ def _register_combat_tasks() -> None:
             interval=timedelta(minutes=1),
             phase=CronPhase.CLEANUP,
             description="End charms that ran out with nobody acting; close bind windows (#4091).",
+        )
+    )
+
+
+def _register_settled_effects_task() -> None:
+    """Register the settled round-effects tick (#4120).
+
+    Extracted from ``register_all_tasks`` to keep that function under the
+    ruff PLR0915 statement limit.
+    """
+    from world.conditions.services import settled_effects_tick
+
+    register_task(
+        CronDefinition(
+            task_key="conditions.settled_effects",
+            callable=settled_effects_tick,
+            interval=timedelta(minutes=1),
+            phase=CronPhase.CLEANUP,
+            description="Tick and expire round-based effects settled after combat (#4120).",
         )
     )
 
