@@ -4,6 +4,7 @@ from django.test import TestCase
 
 from world.character_sheets.factories import CharacterSheetFactory
 from world.checks.factories import create_resistance_check_types
+from world.mechanics.models import ModifierTarget
 from world.scenes.action_services import _compute_difficulty_override_for_primary
 from world.scenes.factories import SceneActionRequestFactory
 from world.traits.factories import StatTraitFactory
@@ -13,6 +14,9 @@ from world.traits.models import CharacterTraitValue, PointConversionRange, Trait
 class NpcPassiveResistTests(TestCase):
     @classmethod
     def setUpTestData(cls) -> None:
+        # Earlier suites leave a class-level trait->ModifierTarget map pointing at rows whose
+        # category was rolled back; the stat equipment walk would then chase the dead FK.
+        ModifierTarget.clear_trait_cache()
         Trait.flush_instance_cache()
         PointConversionRange.objects.get_or_create(
             trait_type=TraitType.STAT,
@@ -25,6 +29,9 @@ class NpcPassiveResistTests(TestCase):
         cls.strong = CharacterSheetFactory()
         CharacterTraitValue.objects.create(character=cls.weak, trait=willpower, value=10)
         CharacterTraitValue.objects.create(character=cls.strong, trait=willpower, value=40)
+
+    def setUp(self) -> None:
+        ModifierTarget.clear_trait_cache()
 
     def _override(self, sheet: CharacterSheetFactory) -> int | None:
         request = SceneActionRequestFactory(target_persona=sheet.primary_persona)
