@@ -3,6 +3,7 @@ per-character choice among them."""
 
 from __future__ import annotations
 
+from django.core.exceptions import ValidationError
 from django.db import models
 
 from core.models import ArxSharedMemoryModel as SharedMemoryModel
@@ -76,7 +77,7 @@ class CharacterManifestation(SharedMemoryModel):
 
     Keyed by (character, technique), not hung on CharacterTechnique, because an ultimate
     has no CharacterTechnique row (it is a KnownUltimate). GMs and staff set it; its
-    clean() (Task 3) enforces that the option belongs to the technique and the character
+    clean() enforces that the option belongs to the technique and the character
     is bonded to the entity.
     """
 
@@ -109,3 +110,34 @@ class CharacterManifestation(SharedMemoryModel):
 
     def __str__(self) -> str:
         return f"{self.character} manifests {self.option}"
+
+    def bond_is_active(self) -> bool:
+        """True while the character's bond to the optioned entity still holds."""
+        from world.worship.services import active_patronage_for  # noqa: PLC0415
+
+        option = self.option
+        if option.being_id is not None:
+            return any(s.being_id == option.being_id for s in active_patronage_for(self.character))
+        companion = self.companion
+        return (
+            companion is not None
+            and companion.owner_id == self.character_id
+            and companion.archetype_id == option.archetype_id
+            and companion.released_at is None
+        )
+
+    def clean(self) -> None:
+        super().clean()
+        if self.option_id is None or self.character_id is None:
+            return  # field-level required errors already cover these
+        errors: dict[str, str] = {}
+        if self.option.technique_id != self.technique_id:
+            errors["option"] = "This option belongs to a different technique."
+        elif self.option.being_id is not None and self.companion_id is not None:
+            errors["companion"] = "A being option takes no companion."
+        elif self.option.archetype_id is not None and self.companion_id is None:
+            errors["companion"] = "An archetype option needs the character's own companion."
+        elif not self.bond_is_active():
+            errors["option"] = "The character is not bonded to this entity."
+        if errors:
+            raise ValidationError(errors)

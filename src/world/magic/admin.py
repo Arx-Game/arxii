@@ -34,6 +34,7 @@ from world.magic.models import (
     CharacterCrossingText,
     CharacterGift,
     CharacterGiftUnlock,
+    CharacterManifestation,
     CharacterResonance,
     CharacterSurgeText,
     CharacterTechnique,
@@ -102,6 +103,7 @@ from world.magic.models import (
     TechniqueDamageProfile,
     TechniqueFunctionTag,
     TechniqueGrant,
+    TechniqueManifestOption,
     TechniqueOutcomeModifier,
     TechniqueProgress,
     TechniqueRemovedCondition,
@@ -403,6 +405,14 @@ class TechniqueFunctionTagInline(admin.TabularInline):
     extra = 1
 
 
+class TechniqueManifestOptionInline(admin.TabularInline):
+    """Entities this technique can manifest in a fight (#4118)."""
+
+    model = TechniqueManifestOption
+    extra = 0
+    autocomplete_fields = ["being", "archetype"]
+
+
 #: Query-string values for TechniqueAuthoringGapFilter's three gap kinds.
 _GAP_UNDERSPECIFIED = "underspecified"
 _GAP_AMBIGUOUS = "ambiguous"
@@ -524,6 +534,7 @@ class TechniqueAdmin(admin.ModelAdmin):
         TechniqueRemovedConditionInline,
         TechniqueTreatmentInline,
         TechniqueFunctionTagInline,
+        TechniqueManifestOptionInline,
     ]
 
     def get_queryset(self, request):
@@ -1016,6 +1027,19 @@ class KnownUltimateAdmin(admin.ModelAdmin):
     # Django's admin system checks (admin.E039).
     autocomplete_fields = ["character", "technique"]
     raw_id_fields = ["crossing"]
+
+
+@admin.register(CharacterManifestation)
+class CharacterManifestationAdmin(admin.ModelAdmin):
+    """A character's chosen manifestation per technique (#4118).
+
+    The model's clean() rejects an option the character is not bonded to.
+    """
+
+    list_display = ["character", "technique", "option", "companion"]
+    search_fields = ["character__character__db_key", "technique__name"]
+    autocomplete_fields = ["character", "technique"]
+    raw_id_fields = ["option", "companion"]
 
 
 @admin.register(CharacterAnima)
