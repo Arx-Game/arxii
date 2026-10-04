@@ -4,6 +4,7 @@ Gifts are thematic collections of magical techniques.
 Traditions represent schools of practice or philosophy.
 """
 
+from django.core.exceptions import ValidationError
 from django.db import models
 from django.utils.functional import cached_property
 
@@ -128,6 +129,16 @@ class Gift(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
 
     def __str__(self) -> str:
         return self.name
+
+    def clean(self) -> None:
+        super().clean()
+        if self.kind == GiftKind.MAJOR and self.pk and self.ultimate_techniques.exists():
+            raise ValidationError(
+                {
+                    "kind": "A major gift's ultimates hang on its Path Gift Grants; clear "
+                    "ultimate_techniques first."
+                }
+            )
 
     def get_affinity_breakdown(self) -> dict[str, int]:
         """Derive affinity from resonances' affinities."""

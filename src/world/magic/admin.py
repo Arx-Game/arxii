@@ -819,13 +819,37 @@ class GiftChildInline(admin.TabularInline):
         return False
 
 
+class GiftAdminForm(forms.ModelForm):
+    """Validates a gift's ultimates (#4118): minor gifts only, and its own techniques."""
+
+    class Meta:
+        model = Gift
+        fields = "__all__"  # noqa: DJ007 - admin form mirrors the model
+
+    def clean(self) -> dict:
+        cleaned = super().clean()
+        ultimates = list(cleaned.get("ultimate_techniques") or [])
+        if not ultimates:
+            return cleaned
+        if cleaned.get("kind") != GiftKind.MINOR:
+            raise ValidationError(
+                {"ultimate_techniques": "Only a minor gift carries ultimates here."}
+            )
+        if any(technique.gift_id != self.instance.pk for technique in ultimates):
+            raise ValidationError(
+                {"ultimate_techniques": "Every ultimate must belong to this gift."}
+            )
+        return cleaned
+
+
 @admin.register(Gift)
 class GiftAdmin(admin.ModelAdmin):
+    form = GiftAdminForm
     autocomplete_fields = ["creator", "parent"]
     list_display = ["name", "kind", "parent", "get_technique_count"]
     list_filter = ["kind"]
     search_fields = ["name", "description"]
-    filter_horizontal = ["resonances"]
+    filter_horizontal = ["resonances", "ultimate_techniques"]
     readonly_fields = ["get_grant_sources"]
     inlines = [GiftChildInline]
 

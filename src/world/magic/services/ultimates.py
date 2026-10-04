@@ -210,6 +210,31 @@ def _companion_pools(sheet: CharacterSheet) -> list[_Pool]:
     ]
 
 
+def _gift_pools(sheet: CharacterSheet) -> list[_Pool]:
+    from world.magic.models import CharacterGift, Gift  # noqa: PLC0415
+
+    gifts = sorted(
+        {
+            row.gift
+            for row in CharacterGift.objects.filter(
+                character=sheet, gift__kind=GiftKind.MINOR
+            ).select_related("gift")
+        },
+        key=lambda g: (g.name, g.pk),
+    )
+    links = Gift.ultimate_techniques.through.objects.filter(
+        gift_id__in=[g.pk for g in gifts], technique__is_ultimate=True
+    ).select_related("technique")
+    by_gift: dict[int, list[Technique]] = {}
+    for link in links:
+        by_gift.setdefault(link.gift_id, []).append(link.technique)
+    return [
+        _Pool(UltimateSource.GIFT, g.pk, _ordered(by_gift.get(g.pk, [])), gift=g)
+        for g in gifts
+        if by_gift.get(g.pk)
+    ]
+
+
 def _pools(sheet: CharacterSheet) -> list[_Pool]:
     """Every source pool, a technique appearing in an earlier pool dropped from later ones."""
     seen: set[int] = set()
@@ -219,6 +244,7 @@ def _pools(sheet: CharacterSheet) -> list[_Pool]:
         + _owned_known_pools(sheet)
         + _patron_pools(sheet)
         + _companion_pools(sheet)
+        + _gift_pools(sheet)
     )
     for pool in every_pool:
         fresh = tuple(t for t in pool.techniques if t.pk not in seen)
