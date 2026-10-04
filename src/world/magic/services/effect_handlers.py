@@ -414,7 +414,9 @@ def manifest_bound_entity(
     is no longer active in the fight, their version of this technique names no entity,
     the bond has lapsed, a being has no avatar sheet, a companion has no body, or that
     entity already has a row in this encounter (one row per objectdb per encounter, so
-    a defeated avatar is not re-added either).
+    a defeated avatar is not re-added either). A being option's ``tier`` must have an
+    ``OpponentTierTemplate`` row (flagged on the Required-content dashboard); a missing
+    one raises from the scaling block on purpose.
     """
     from world.combat.constants import CombatAllegiance, ParticipantStatus  # noqa: PLC0415
     from world.combat.models import CombatOpponent  # noqa: PLC0415
@@ -443,6 +445,13 @@ def manifest_bound_entity(
             return None
         if CombatOpponent.objects.filter(encounter=encounter, objectdb=avatar.character).exists():
             return None
+        caster = participant.character_sheet.character
+        if caster.db_location is None:
+            return None
+        # The entity arrives: bring the avatar into the caster's room first, or
+        # add_opponent refuses the caster's position as being in another room.
+        if avatar.character.db_location_id != caster.db_location_id:
+            avatar.character.move_to(caster.db_location, quiet=True, move_type="teleport")
         opponent = add_opponent(
             encounter,
             name=option.being.name,

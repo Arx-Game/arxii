@@ -7,6 +7,8 @@ from django.utils import timezone
 from evennia.utils.create import create_object
 
 from typeclasses.companions import CompanionObject
+from world.areas.positioning.factories import PositionFactory
+from world.areas.positioning.services import place_in_position, position_of
 from world.character_sheets.factories import CharacterSheetFactory
 from world.checks.factories import CheckTypeFactory
 from world.combat.constants import (
@@ -55,6 +57,10 @@ class ManifestResolutionBase(TestCase):
         )
         cls.avatar_sheet = CharacterSheetFactory()
         cls.being = WorshippedBeingFactory(avatar_sheet=cls.avatar_sheet)
+
+    def setUp(self):
+        super().setUp()
+        self.sheet.character.move_to(self.encounter.room, quiet=True)
 
     def _bond_being(self, being=None):
         return DevotionStandingFactory(
@@ -166,6 +172,48 @@ class ManifestBeingTests(ManifestResolutionBase):
         with patch(_ADD_OPPONENT) as add:
             self._cast()
         add.assert_not_called()
+
+
+class ManifestPositionedCasterTests(ManifestResolutionBase):
+    """The caster stands on a real Position, so the arriving avatar must share the room."""
+
+    def setUp(self):
+        super().setUp()
+        self.room = self.encounter.room
+        self.position = PositionFactory(room=self.room)
+        self.caster = self.sheet.character
+        self.caster.move_to(self.room, quiet=True)
+        place_in_position(self.caster, self.position)
+        self.avatar = self.avatar_sheet.character
+        self._bond_being()
+        self._manifest_being()
+
+    def _assert_arrived(self):
+        opponent = self._allies().get()
+        self.assertEqual(opponent.objectdb, self.avatar)
+        self.assertEqual(self.avatar.db_location, self.room)
+        self.assertEqual(position_of(self.avatar), self.position)
+
+    def test_avatar_with_no_location_arrives(self):
+        self.avatar.location = None
+        self._cast()
+        self._assert_arrived()
+
+    def test_avatar_in_other_room_is_moved_in(self):
+        self.avatar.move_to(PositionFactory().room, quiet=True)
+        self._cast()
+        self._assert_arrived()
+
+    def test_avatar_already_in_room_arrives(self):
+        self.avatar.move_to(self.room, quiet=True)
+        self._cast()
+        self._assert_arrived()
+
+    def test_caster_without_location_adds_nothing(self):
+        self.caster.location = None
+        result = manifest_bound_entity(participant=self.participant, technique=self.technique)
+        self.assertIsNone(result)
+        self.assertFalse(self._allies().exists())
 
 
 class ManifestCompanionTests(ManifestResolutionBase):
