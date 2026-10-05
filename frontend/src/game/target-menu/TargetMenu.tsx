@@ -190,7 +190,6 @@ export function TargetMenu({ partition, actorId, target, children }: TargetMenuP
             return (
               <Fragment key={group.key}>
                 {index > 0 ? <ContextMenuSeparator /> : null}
-                <ContextMenuLabel>{group.label}</ContextMenuLabel>
                 <MenuEntries
                   actorId={data.actor_id}
                   entries={entries}
@@ -222,7 +221,7 @@ export function TargetMenu({ partition, actorId, target, children }: TargetMenuP
               <DialogTitle>{authoredEntry.label}</DialogTitle>
               <DialogDescription>
                 {authoredEntry.action?.description ||
-                  'Review the currently published outcome risks before continuing.'}
+                  'Review the possible outcomes before continuing.'}
               </DialogDescription>
               {authoredEntry.action?.difficulty ? (
                 <p className="text-sm">
@@ -231,7 +230,7 @@ export function TargetMenu({ partition, actorId, target, children }: TargetMenuP
               ) : null}
               {authoredEntry.action?.prerequisite_reasons.length ? (
                 <p className="text-sm">
-                  <span className="font-medium">Prerequisite:</span>{' '}
+                  <span className="font-medium">Requirement:</span>{' '}
                   {authoredEntry.action.prerequisite_reasons.join(' · ')}
                 </p>
               ) : null}
@@ -255,7 +254,7 @@ export function TargetMenu({ partition, actorId, target, children }: TargetMenuP
                     </ul>
                   </>
                 ) : (
-                  <p>Outcome risk is not known from the available authored data.</p>
+                  <p>The possible outcomes have not been described.</p>
                 )}
               </div>
             ) : null}
@@ -305,7 +304,7 @@ export function TargetMenu({ partition, actorId, target, children }: TargetMenuP
                     });
                 }}
               >
-                Continue
+                Confirm action
               </Button>
             </DialogFooter>
           </DialogContent>

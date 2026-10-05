@@ -53,7 +53,11 @@ function choiceErrorMessage(error: unknown, more = false): string {
     : 'Could not load current choices. Close and reopen to retry.';
 }
 
-function chooserPresentation(entry: TargetMenuEntry, inputs: TargetMenuEntry['inputs']) {
+function chooserPresentation(
+  entry: TargetMenuEntry,
+  inputs: TargetMenuEntry['inputs'],
+  targetLabel?: string
+) {
   if (entry.key === 'give') {
     return {
       title: 'Give item',
@@ -64,7 +68,9 @@ function chooserPresentation(entry: TargetMenuEntry, inputs: TargetMenuEntry['in
   if (entry.key === 'put_in') {
     return {
       title: 'Put item in…',
-      description: 'Choose a container from your inventory.',
+      description: targetLabel
+        ? `${targetLabel} is already selected.`
+        : 'Choose a container from your inventory.',
       submitLabel: 'Put In',
     };
   }
@@ -73,13 +79,13 @@ function chooserPresentation(entry: TargetMenuEntry, inputs: TargetMenuEntry['in
     const asksForOption = inputs.some((input) => input.name === 'option_id');
     let description: string;
     if (asksForTarget) {
-      description = "Choose the target required by this item's existing use rule.";
+      description = 'Choose a target for this item.';
     } else if (asksForOption) {
-      description = "Choose an option from this item's existing effect.";
+      description = 'Choose an option for this item.';
     } else {
       description = 'Choose an available option before continuing.';
     }
-    return { title: 'Use', description, submitLabel: 'Use' };
+    return { title: targetLabel ? `Use ${targetLabel}` : 'Use', description, submitLabel: 'Use' };
   }
   return {
     title: entry.label,
@@ -211,7 +217,7 @@ export function TargetMenuInputs({
     choiceLabel = `Choose ${requiredInputs.map((input) => inputLabel(input.name).toLowerCase()).join(' and ')}`;
   }
 
-  const presentation = chooserPresentation(effectiveEntry, requiredInputs);
+  const presentation = chooserPresentation(effectiveEntry, requiredInputs, refreshed?.label);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -227,33 +233,58 @@ export function TargetMenuInputs({
         </DialogHeader>
         <div className="space-y-4">
           {requiredInputs.length > 0 ? (
-            <label className="block space-y-1 text-sm">
-              <span className="sr-only">{choiceLabel}</span>
-              <select
-                aria-label={choiceLabel}
-                className="min-h-10 w-full rounded-md border bg-background px-3"
-                value={candidateKey}
-                onChange={(event) => setSelectedKey(event.target.value)}
-              >
-                {eligibleCandidates.map((candidate) => (
-                  <option key={candidate.key} value={candidate.key}>
-                    {candidate.label}
-                  </option>
-                ))}
+            <div className="space-y-2">
+              <fieldset className="max-h-60 space-y-2 overflow-y-auto" aria-label={choiceLabel}>
+                <legend className="sr-only">{choiceLabel}</legend>
                 {candidatePages
-                  .filter((candidate) => !candidate.available)
-                  .map((candidate) => (
-                    <option key={candidate.key} value={candidate.key} disabled>
-                      {candidate.label}
-                      {candidate.reasons.length ? ` — ${candidate.reasons.join('; ')}` : ''}
-                    </option>
-                  ))}
-              </select>
+                  .filter(
+                    (candidate) =>
+                      !candidate.available ||
+                      eligibleCandidates.some((eligible) => eligible.key === candidate.key)
+                  )
+                  .map((candidate) => {
+                    const isEligible = eligibleCandidates.some(
+                      (eligible) => eligible.key === candidate.key
+                    );
+                    const isSelected = isEligible && candidate.key === candidateKey;
+                    return (
+                      <label
+                        key={candidate.key}
+                        className={[
+                          'flex w-full items-start gap-3 rounded-md border px-3 py-2 text-sm',
+                          isEligible ? 'cursor-pointer' : 'cursor-not-allowed opacity-60',
+                          isSelected ? 'border-primary bg-primary/5' : '',
+                          isEligible && !isSelected ? 'hover:bg-muted/50' : '',
+                        ]
+                          .filter(Boolean)
+                          .join(' ')}
+                      >
+                        <input
+                          type="radio"
+                          name={`target-menu-${entry.key}`}
+                          value={candidate.key}
+                          checked={isSelected}
+                          disabled={!isEligible}
+                          onChange={() => setSelectedKey(candidate.key)}
+                          className="mt-0.5"
+                        />
+                        <span className="min-w-0">
+                          <span className="block">{candidate.label}</span>
+                          {!isEligible && candidate.reasons.length > 0 ? (
+                            <span className="block text-xs text-muted-foreground">
+                              {candidate.reasons.join('; ')}
+                            </span>
+                          ) : null}
+                        </span>
+                      </label>
+                    );
+                  })}
+              </fieldset>
               {nextCandidateCursor !== null ? (
                 <Button
                   type="button"
                   variant="outline"
-                  className="mt-2 w-full"
+                  className="w-full"
                   onClick={() => void loadMoreCandidates()}
                   disabled={loadingMore}
                 >
@@ -265,7 +296,7 @@ export function TargetMenuInputs({
                   {loadMoreError}
                 </p>
               ) : null}
-            </label>
+            </div>
           ) : null}
           {optionalInputs.some((input) => input.name === 'descriptor') ? (
             <label className="block space-y-1 text-sm">

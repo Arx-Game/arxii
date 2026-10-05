@@ -479,6 +479,7 @@ test.describe('approved target-menu states (#4032)', () => {
     await itemRow.click({ button: 'right' });
     await expect(page.getByRole('menuitem', { name: 'Look' })).toBeVisible();
     await expect(page.getByRole('menuitem', { name: 'Get' })).toBeVisible();
+    await page.getByRole('menu').screenshot({ path: 'test-results/fidelity/loose-item-menu.png' });
     await page.waitForTimeout(250);
     await page.screenshot({ path: 'test-results/target-menu-loose-item-get.png', fullPage: false });
   });
@@ -517,7 +518,8 @@ test.describe('approved target-menu states (#4032)', () => {
     await source.click({ button: 'right' });
     await page.getByRole('menuitem', { name: 'Give…' }).click();
     await expect(page.getByRole('dialog')).toBeVisible();
-    await expect(page.getByRole('option', { name: 'Nyx' })).toBeEnabled();
+    await expect(page.getByRole('radio', { name: 'Nyx' })).toBeEnabled();
+    await page.getByRole('dialog').screenshot({ path: 'test-results/fidelity/give-chooser.png' });
     await page.waitForTimeout(250);
     await page.screenshot({ path: 'test-results/target-menu-give-chooser.png', fullPage: false });
     const request = page.waitForRequest(
@@ -645,11 +647,13 @@ test.describe('approved target-menu states (#4032)', () => {
     await source.click({ button: 'right' });
     await page.getByRole('menuitem', { name: 'Put in…' }).click();
     await expect(page.getByRole('dialog')).toBeVisible();
-    const select = page.getByLabel('Put in');
-    await expect(select.getByRole('option', { name: 'Open wicker basket' })).toBeEnabled();
-    await expect(
-      select.getByRole('option', { name: /Locked iron coffer.*locked/i })
-    ).toHaveAttribute('disabled', '');
+    await expect(page.getByText('Plain cloak is already selected.')).toBeVisible();
+    await expect(page.getByRole('radio', { name: 'Open wicker basket' })).toBeEnabled();
+    await expect(page.getByRole('radio', { name: /Locked iron coffer.*locked/i })).toHaveAttribute(
+      'disabled',
+      ''
+    );
+    await page.getByRole('dialog').screenshot({ path: 'test-results/fidelity/put-in-chooser.png' });
     await page.waitForTimeout(250);
     await page.screenshot({ path: 'test-results/target-menu-put-in-chooser.png', fullPage: false });
     const request = page.waitForRequest(
@@ -744,10 +748,10 @@ test.describe('approved target-menu states (#4032)', () => {
     );
     await source.click({ button: 'right' });
     await page.getByRole('menuitem', { name: 'Put in…' }).click();
-    await expect(page.getByRole('option', { name: 'First page basket' })).toHaveCount(1);
+    await expect(page.getByRole('radio', { name: 'First page basket' })).toHaveCount(1);
     await page.getByRole('button', { name: 'Load more choices' }).click();
-    await expect(page.getByRole('option', { name: 'Second page trunk' })).toHaveCount(1);
-    await page.getByRole('combobox').selectOption('503');
+    await expect(page.getByRole('radio', { name: 'Second page trunk' })).toHaveCount(1);
+    await page.getByRole('radio', { name: 'Second page trunk' }).check();
     const request = page.waitForRequest(
       (r) => r.url().includes('/dispatch/') && r.method() === 'POST'
     );
@@ -846,12 +850,15 @@ test.describe('approved target-menu states (#4032)', () => {
       fullPage: false,
     });
     await page.getByRole('menuitem', { name: 'Use…', exact: true }).click();
-    await expect(page.getByRole('dialog')).toBeVisible();
-    const select = page.getByLabel('Use on');
-    await expect(select.getByRole('option', { name: 'Nyx' })).toBeEnabled();
-    await expect(
-      select.getByRole('option', { name: /Stone statue.*Out of reach/i })
-    ).toHaveAttribute('disabled', '');
+    await expect(page.getByRole('dialog', { name: 'Use Healing draught' })).toBeVisible();
+    await expect(page.getByRole('radio', { name: 'Nyx' })).toBeEnabled();
+    await expect(page.getByRole('radio', { name: /Stone statue.*Out of reach/i })).toHaveAttribute(
+      'disabled',
+      ''
+    );
+    await page
+      .getByRole('dialog')
+      .screenshot({ path: 'test-results/fidelity/use-target-chooser.png' });
     await page.waitForTimeout(250);
     await page.screenshot({
       path: 'test-results/target-menu-use-target-chooser.png',
@@ -911,14 +918,17 @@ test.describe('approved target-menu states (#4032)', () => {
     );
     await source.click({ button: 'right' });
     await page.getByRole('menuitem', { name: 'Use…', exact: true }).click();
-    await expect(page.getByRole('dialog')).toBeVisible();
-    await expect(page.getByRole('option', { name: 'Midnight blue' })).toHaveCount(1);
+    await expect(page.getByRole('dialog', { name: 'Use Cosmetic kit' })).toBeVisible();
+    await expect(page.getByRole('radio', { name: 'Midnight blue' })).toHaveCount(1);
     await expect(
-      page.getByRole('option', { name: /Unlearned silver.*not learned/i })
+      page.getByRole('radio', { name: /Unlearned silver.*not learned/i })
     ).toHaveAttribute('disabled', '');
-    await expect(page.getByRole('combobox')).toHaveValue('601');
+    await expect(page.getByRole('radio', { name: 'Midnight blue' })).toBeChecked();
     await expect(page.getByLabel('Appearance description (optional)')).toBeVisible();
     await expect(page.getByLabel('Blend with existing appearance')).toBeVisible();
+    await page
+      .getByRole('dialog')
+      .screenshot({ path: 'test-results/fidelity/cosmetic-use-chooser.png' });
     await page.getByLabel('Appearance description (optional)').fill('A faint silvery sheen');
     await page.getByLabel('Blend with existing appearance').check();
     await page.waitForTimeout(250);
@@ -974,8 +984,29 @@ test.describe('approved target-menu states (#4032)', () => {
     await expect(page.getByRole('dialog', { name: 'Nyx' })).toBeVisible();
     const wornRow = page.getByRole('button', { name: 'Plain cloak (neck)' });
     await expect(wornRow).toBeVisible();
+    await page
+      .getByRole('dialog', { name: 'Nyx' })
+      .screenshot({ path: 'test-results/fidelity/look-dialog.png' });
     await wornRow.click({ button: 'right' });
     await expect(page.getByRole('menuitem', { name: 'Look' })).toBeVisible();
+    await page.getByRole('menu').screenshot({ path: 'test-results/fidelity/worn-item-menu.png' });
+    const lookDialogBox = await page.locator('[role="dialog"]').first().boundingBox();
+    const itemMenuBox = await page.getByRole('menu').boundingBox();
+    if (lookDialogBox === null || itemMenuBox === null) {
+      throw new Error('The worn-item menu and LookDialog must both remain visible.');
+    }
+    const clipX = Math.max(0, Math.floor(Math.min(lookDialogBox.x, itemMenuBox.x) - 12));
+    const clipY = Math.max(0, Math.floor(Math.min(lookDialogBox.y, itemMenuBox.y) - 12));
+    const clipRight = Math.ceil(
+      Math.max(lookDialogBox.x + lookDialogBox.width, itemMenuBox.x + itemMenuBox.width) + 12
+    );
+    const clipBottom = Math.ceil(
+      Math.max(lookDialogBox.y + lookDialogBox.height, itemMenuBox.y + itemMenuBox.height) + 12
+    );
+    await page.screenshot({
+      path: 'test-results/fidelity/look-dialog-with-item-menu.png',
+      clip: { x: clipX, y: clipY, width: clipRight - clipX, height: clipBottom - clipY },
+    });
     await page.waitForTimeout(250);
     await page.screenshot({
       path: 'test-results/target-menu-look-dialog-worn-row.png',
@@ -996,13 +1027,16 @@ test.describe('approved target-menu states (#4032)', () => {
     await page.getByRole('menuitem', { name: 'Ignite' }).click();
     await expect(page.getByText('Character loss is possible.')).toBeVisible();
     await expect(page.getByText(/Finale: critical failure \(character loss\)/i)).toBeVisible();
+    await page
+      .getByRole('dialog')
+      .screenshot({ path: 'test-results/fidelity/authored-risk-dialog.png' });
     await page.waitForTimeout(250);
     await page.screenshot({ path: 'test-results/target-menu-authored-risk.png', fullPage: false });
     expect(dispatched()).toBeNull();
     const request = page.waitForRequest(
       (r) => r.url().includes('/dispatch/') && r.method() === 'POST'
     );
-    await page.getByRole('button', { name: 'Continue' }).click();
+    await page.getByRole('button', { name: 'Confirm action' }).click();
     await request;
     await expect.poll(dispatched).toMatchObject({
       ref: {

@@ -231,7 +231,11 @@ describe('TargetMenu', () => {
       clientX: 20,
       clientY: 20,
     });
-    await user.click(await screen.findByRole('menuitem', { name: 'Ignite' }));
+    expect(await screen.findByRole('menuitem', { name: 'Ignite' })).toBeInTheDocument();
+    expect(screen.queryByText('Authored actions')).not.toBeInTheDocument();
+    expect(screen.queryByText('Perception')).not.toBeInTheDocument();
+    expect(screen.queryByText('Item handling')).not.toBeInTheDocument();
+    await user.click(screen.getByRole('menuitem', { name: 'Ignite' }));
     expect(await screen.findByText('Character loss is possible.')).toBeInTheDocument();
     expect(screen.getByText('main: deadly (character loss)')).toBeInTheDocument();
     expect(mutateAsync).not.toHaveBeenCalled();
@@ -283,7 +287,7 @@ describe('TargetMenu', () => {
     expect(screen.getByText('Difficulty:')).toBeInTheDocument();
     expect(screen.getByText('moderate')).toBeInTheDocument();
     expect(await screen.findByText('No character-loss outcome is listed.')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Continue' })).toBeEnabled();
+    expect(screen.getByRole('button', { name: 'Confirm action' })).toBeEnabled();
     expect(mutateAsync).not.toHaveBeenCalled();
 
     const choiceRefresh = {
@@ -304,9 +308,9 @@ describe('TargetMenu', () => {
       ],
     };
     mockFetch.mockResolvedValueOnce(choiceRefresh);
-    await user.click(screen.getByRole('button', { name: 'Continue' }));
+    await user.click(screen.getByRole('button', { name: 'Confirm action' }));
     expect(await screen.findByRole('dialog', { name: 'Use the charm' })).toBeInTheDocument();
-    expect(await screen.findByRole('option', { name: 'Known option' })).toBeInTheDocument();
+    expect(await screen.findByRole('radio', { name: 'Known option' })).toBeInTheDocument();
     expect(mutateAsync).not.toHaveBeenCalled();
     await user.click(screen.getByRole('button', { name: 'Cancel' }));
     expect(mutateAsync).not.toHaveBeenCalled();
