@@ -7516,8 +7516,9 @@ caster and move, and allied NPCs take heart. Ultimates never fail (ADR-4147).
 - **Key functions:** `apply_spectacle`, `classify_cast`, `is_devastating`, `spectacle_hit`,
   `encounter_for_character`, `deliver_spectacle` (`combat/spectacle.py`);
   `audere_check_level_bonus`, `shake_witnesses` (`magic/audere.py`); `floor_ultimate_check`
-  (`magic/services/ultimates.py`). The combat action rider is unguarded; Audere entry and a
-  Crossing defer to commit with `robust=True`.
+  (`magic/services/ultimates.py`). The combat action rider is unguarded, but every spectacle
+  line posts after commit (`deliver_spectacle`, `robust=True`); Audere entry and a Crossing
+  also defer the morale write itself.
 - **Surfaces:** admin for the three models; Required content entry
   `spectacle-reaction-lines`; the standoff display press and a public `morale_state` on each
   opponent and standoff group.

@@ -1,7 +1,8 @@
 """Spectacle: earned displays shake enemy witnesses' morale (#4147).
 
-Pure arithmetic plus ``apply_spectacle``. Never broadcasts: the caller delivers
-``SpectacleResult.lines`` on its own channel.
+Pure arithmetic plus ``apply_spectacle``, which never broadcasts. ``deliver_spectacle``
+posts ``SpectacleResult.lines`` on ``transaction.on_commit(robust=True)``, so every
+spectacle line posts after commit.
 """
 
 from __future__ import annotations
