@@ -623,7 +623,7 @@ class CombatTechniqueResolver:
         from world.combat.stat_mapping import weapon_stat_override  # noqa: PLC0415
 
         stat_override = weapon_stat_override(character)
-        return check_fn(
+        result = check_fn(
             character,
             self.offense_check_type,
             target_difficulty=target_difficulty,
@@ -633,6 +633,9 @@ class CombatTechniqueResolver:
             situation_ctx=situation_ctx,
             stat_override=stat_override,
         )
+        from world.magic.services.ultimates import floor_ultimate_check  # noqa: PLC0415
+
+        return floor_ultimate_check(result, self.action.focused_action)
 
     def _sum_intensity_bump_pulls(self) -> int:
         """Sum INTENSITY_BUMP scaled_values from active CombatPulls."""

@@ -1266,8 +1266,13 @@ def _complete_technique_cast(  # noqa: PLR0913
         lethal=lethal,
         defer_reveal=defer_soulfray_reveal,
     )
-    mishap = _resolve_control_mishap(
-        character=character, stats=stats, check_result=effective_check_result
+    # An ultimate never mishaps (#4147): it may vary good to spectacular, never go wrong.
+    mishap = (
+        None
+        if technique.is_ultimate
+        else _resolve_control_mishap(
+            character=character, stats=stats, check_result=effective_check_result
+        )
     )
     sheet = _get_character_sheet(character)
     _apply_technique_fatigue_step(
