@@ -9,6 +9,7 @@ import type { components } from '@/generated/api';
 import { apiFetch } from '@/evennia_replacements/api';
 import { readErrorDetail } from '@/lib/errors';
 import { fetchAllPages } from '@/lib/pagination';
+import { setEntryProfilePicture } from './api';
 
 export type GalleryPicture = components['schemas']['GalleryPicture'];
 export type MoodOption = components['schemas']['MoodOption'];
@@ -197,5 +198,15 @@ export function useSetPictureHidden(entryId: number, sheetId: number) {
     mutationFn: ({ id, hidden }: { id: number; hidden: boolean }) => setPictureHidden(id, hidden),
     onSuccess: () => refresh(),
     onError: (err) => showError(err, 'That could not be changed.'),
+  });
+}
+
+/** Make a look the one this character wears everywhere. */
+export function useWearPicture(entryId: number, sheetId: number) {
+  const refresh = useGalleryInvalidation(entryId, sheetId);
+  return useMutation({
+    mutationFn: (id: number) => setEntryProfilePicture(entryId, id),
+    onSuccess: () => refresh(),
+    onError: (err) => showError(err, 'That look could not be worn.'),
   });
 }

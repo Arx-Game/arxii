@@ -262,23 +262,24 @@ describe('CharacterSheetPage', () => {
     expect(heading).toHaveTextContent('Warden of the Lower Stair');
   });
 
-  it('offers a stranger the five public sections and none of the private ones', () => {
+  it('offers a stranger the six public sections and none of the private ones', () => {
     setEntry(ENTRY);
     mountSheet();
     const nav = screen.getByRole('navigation', { name: /sections/i });
-    expect(within(nav).getAllByRole('button')).toHaveLength(5);
+    expect(within(nav).getAllByRole('button')).toHaveLength(6);
+    expect(within(nav).getByRole('button', { name: 'Gallery' })).toBeInTheDocument();
     expect(within(nav).queryByRole('button', { name: 'Knowledge' })).not.toBeInTheDocument();
     expect(within(nav).queryByRole('button', { name: 'Estate' })).not.toBeInTheDocument();
     expect(within(nav).queryByRole('button', { name: 'Growth' })).not.toBeInTheDocument();
     expect(within(nav).queryByText(/Yours only/i)).not.toBeInTheDocument();
   });
 
-  it('offers the owner all eight sections, set apart by the yours-only break', () => {
+  it('offers the owner all nine sections, set apart by the yours-only break', () => {
     setEntry(ENTRY);
     setOwnership(true);
     mountSheet();
     const nav = screen.getByRole('navigation', { name: /sections/i });
-    expect(within(nav).getAllByRole('button')).toHaveLength(8);
+    expect(within(nav).getAllByRole('button')).toHaveLength(9);
     expect(within(nav).getByText(/Yours only/i)).toBeInTheDocument();
   });
 

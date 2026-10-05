@@ -21,7 +21,9 @@ const AvatarImage = React.forwardRef<
 >(({ className, ...props }, ref) => (
   <AvatarPrimitive.Image
     ref={ref}
-    className={cn('aspect-square h-full w-full', className)}
+    // Portraits are 4:5 looks (#4151): cover the circle without squashing, and keep the
+    // top of the frame, where the face is.
+    className={cn('aspect-square h-full w-full object-cover object-top', className)}
     {...props}
   />
 ));

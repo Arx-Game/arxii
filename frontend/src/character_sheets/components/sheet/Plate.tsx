@@ -14,7 +14,6 @@
 
 import { useState } from 'react';
 import type { ReactNode } from 'react';
-import { Link } from 'react-router-dom';
 import type { CharacterSheetLook } from '@/character_sheets/api';
 import { LooksStrip } from './LooksStrip';
 
@@ -31,8 +30,8 @@ interface PlateProps {
   canWear: boolean;
   onWear: (look: CharacterSheetLook) => void;
   isSaving: boolean;
-  /** Where 'All galleries' points for THIS viewer; null for no link. */
-  galleriesTo: string | null;
+  /** Owner only (#4151): open the Add a look flow (pick or upload a picture, crop it). */
+  onAddLook?: () => void;
   /** Doors beside the plate: a Journal link for every viewer, plus friend/rival buttons on a foreign sheet. */
   actions?: ReactNode;
 }
@@ -47,7 +46,7 @@ export function Plate({
   canWear,
   onWear,
   isSaving,
-  galleriesTo,
+  onAddLook,
   actions,
 }: PlateProps) {
   // Which look the frame is showing. Null means "whatever is worn", which is the entry
@@ -77,37 +76,17 @@ export function Plate({
                 <PortraitGlyph />
               </span>
               {canWear && (
-                <>
-                  <span className="refsheet-frame-note refsheet-plate-soft text-sm">
-                    {/* Naming the look says WHICH image is missing, so the sentence
-                        changes as the strip is clicked rather than reading as a single
-                        permanent state. */}
-                    {shownLookName ? `No art yet for ${shownLookName}. ` : 'No art yet. '}
-                    The frame waits.
-                  </span>
-                  {galleriesTo && (
-                    <Link to={galleriesTo} className="refsheet-frame-note text-sm">
-                      Choose from your galleries
-                    </Link>
-                  )}
-                </>
+                <span className="refsheet-frame-note refsheet-plate-soft text-sm">
+                  {/* Naming the look says WHICH image is missing, so the sentence
+                      changes as the strip is clicked rather than reading as a single
+                      permanent state. */}
+                  {shownLookName ? `No art yet for ${shownLookName}. ` : 'No art yet. '}
+                  The frame waits.
+                </span>
               )}
             </>
           )}
         </div>
-        {/* The caption says only what the page actually does. An earlier draft promised
-            "a scene can change it with their mood", which nothing delivers: the worn
-            look is whichever image the owner last clicked, and the character's declared
-            mood is inward and owner-only (#2994), so driving a public portrait from it
-            would publish the one thing that ruling keeps private. Whether a look should
-            follow a mood at all is an open question, recorded in the roadmap. */}
-        {canWear && looks.length > 0 && (
-          <p className="refsheet-plate-soft text-sm">
-            {shown?.is_current
-              ? `Wearing ${shown.look || shown.title || 'this look'}.`
-              : 'Click a look to wear it.'}
-          </p>
-        )}
       </div>
 
       <div className="refsheet-plate-body">
@@ -131,7 +110,7 @@ export function Plate({
           </>
         )}
 
-        {looks.length > 0 && (
+        {(looks.length > 0 || onAddLook) && (
           <div className="refsheet-plate-foot flex flex-col gap-3">
             <hr />
             <LooksStrip
@@ -139,7 +118,7 @@ export function Plate({
               shownId={shown?.tenure_media_id ?? null}
               onShow={handleShow}
               canWear={canWear}
-              galleriesTo={galleriesTo}
+              onAdd={onAddLook}
               isSaving={isSaving}
             />
           </div>
