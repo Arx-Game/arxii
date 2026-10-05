@@ -12,6 +12,8 @@ import {
 import { actingPersonaId } from '@/roster/persona';
 import type { MyRosterEntry } from '@/roster/types';
 import { queryClient } from '@/queryClient';
+import { combatKeys } from '@/combat/queries';
+import type { EncounterDetail } from '@/combat/types';
 import { getThreadKey } from '@/scenes/hooks/useThreading';
 import { wsPayloadToInteraction } from '@/scenes/hooks/useSceneInteractions';
 import { narrativeBodyCache } from '@/game/narrativeRetention';
@@ -30,6 +32,24 @@ export function handleInteractionPayload(
     dispatch(addSceneInteraction({ character, interaction: payload }));
   }
   maybeToastWhisperAttention(character, payload, dispatch, navigate);
+  refreshEncounterOnOutcome(payload);
+}
+
+/**
+ * An outcome line for a scene means a round or standoff step just resolved (#4147), so
+ * the combat encounter for that scene is stale. The encounter queries already live in
+ * the React Query cache with their `scene` id, so no separate "open encounter"
+ * registry is needed; invalidating refetches only the ones with a mounted observer.
+ */
+function refreshEncounterOnOutcome(payload: InteractionWsPayload) {
+  if (payload.mode !== 'outcome' || payload.scene_id == null) return;
+  const cached = queryClient.getQueriesData<EncounterDetail>({
+    queryKey: [...combatKeys.all, 'encounter'],
+  });
+  for (const [queryKey, encounter] of cached) {
+    if (encounter?.scene !== payload.scene_id) continue;
+    queryClient.invalidateQueries({ queryKey }).catch(() => {});
+  }
 }
 
 /**

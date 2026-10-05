@@ -2399,7 +2399,7 @@ function makeOpponentFixture(overrides: Partial<Opponent> = {}): Opponent {
     vulnerability_rounds_remaining: null,
     morale: null,
     max_morale: null,
-    morale_state: null,
+    morale_state: 'steady',
     is_enraged: false,
     is_wall_broken: false,
     active_conditions: [],

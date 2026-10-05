@@ -46,6 +46,7 @@ const STANDOFF: StandoffView = {
       read_check: 'Test read check',
       read_grade: 'moderate',
       read_grade_label: 'Moderate',
+      morale_state: 'steady',
     },
   ],
   approaches: [
@@ -61,6 +62,7 @@ const STANDOFF: StandoffView = {
         { text: 'your spark: Test detail', is_spark: true },
       ],
       hits_revealed_drive: true,
+      casts_technique: false,
     },
     {
       approach_id: 22,
@@ -71,6 +73,7 @@ const STANDOFF: StandoffView = {
       check_caption: 'Plain check',
       levers: [],
       hits_revealed_drive: false,
+      casts_technique: false,
     },
   ],
   terms: [
@@ -86,7 +89,20 @@ const STANDOFF: StandoffView = {
   ],
   sparks: [{ group_id: 11, regard_rule_id: 41, text: 'Test spark', shared: false }],
   shared_sparks: [],
+  display_techniques: [],
 };
+
+function withGroup(patch: Partial<StandoffView['groups'][number]>): StandoffView {
+  return { ...STANDOFF, groups: [{ ...STANDOFF.groups[0], ...patch }] };
+}
+
+function withDisplay(techniques: StandoffView['display_techniques']): StandoffView {
+  return {
+    ...STANDOFF,
+    approaches: [{ ...STANDOFF.approaches[1], casts_technique: true }],
+    display_techniques: techniques,
+  };
+}
 
 let client: QueryClient;
 function wrapper({ children }: { children: ReactNode }) {
@@ -240,7 +256,8 @@ describe('StandoffCard', () => {
   });
 
   it('draws the fight row as an outline with its caption and no morale', () => {
-    renderCard();
+    renderCard(withGroup({ morale_state: 'falter' }));
+    expect(screen.getByTestId('morale-state-chip')).toHaveTextContent('Faltering');
     const fight = screen.getByTestId('standoff-fight');
     expect(fight).toHaveTextContent('starts round one');
     expect(fight.className).toMatch(/border-destructive/);
@@ -343,5 +360,32 @@ describe('StandoffCard', () => {
     renderCard();
     expect(screen.getAllByRole('img', { name: /Hidden/ })).toHaveLength(3);
     expect(screen.getByRole('group', { name: 'What is known' })).toBeInTheDocument();
+  });
+
+  it('shows no chip for a steady group and Broken for a broken one', () => {
+    const { unmount } = renderCard();
+    expect(screen.queryByTestId('morale-state-chip')).toBeNull();
+    unmount();
+    renderCard(withGroup({ morale_state: 'break' }));
+    expect(screen.getByTestId('morale-state-chip')).toHaveTextContent('Broken');
+  });
+
+  it('disables a display approach with a caption when there is no technique', () => {
+    renderCard(withDisplay([]));
+    expect(screen.getByRole('button', { name: /Plain approach/ })).toBeDisabled();
+    expect(screen.getByText('No technique to display')).toBeInTheDocument();
+  });
+
+  it('presses a display approach with the chosen technique', async () => {
+    const user = userEvent.setup();
+    renderCard(withDisplay([{ technique_id: 77, name: 'Test technique' }]));
+    await user.click(screen.getByRole('button', { name: /Plain approach/ }));
+    await user.click(screen.getByRole('combobox', { name: 'Technique to display' }));
+    await user.click(await screen.findByRole('option', { name: 'Test technique' }));
+    await user.click(screen.getByRole('button', { name: 'Display' }));
+    expect(mutateAsync).toHaveBeenCalledWith({
+      ref: { backend: 'registry', registry_key: 'standoff_press' },
+      kwargs: { group_id: 11, approach_id: 22, technique_id: 77 },
+    });
   });
 });

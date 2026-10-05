@@ -25,11 +25,14 @@ import { isDispatchFailure } from '@/combat/types';
 import type { components } from '@/generated/api';
 import { cn } from '@/lib/utils';
 
+import { MoraleStateChip } from './MoraleStateChip';
 import './standoff.css';
 
 type StandoffView = components['schemas']['StandoffView'];
+type ApproachView = components['schemas']['ApproachView'];
 type GroupView = components['schemas']['GroupView'];
 type TermsView = components['schemas']['TermsView'];
+type DisplayTechnique = components['schemas']['DisplayTechnique'];
 
 export interface StandoffCardProps {
   standoff: StandoffView;
@@ -239,6 +242,11 @@ function GroupSection({
           <span className="font-display text-sm font-semibold">{group.name}</span>
           <span className="text-xs text-muted-foreground">x{group.member_count}</span>
         </div>
+        {group.morale_state !== 'steady' && (
+          <div>
+            <MoraleStateChip state={group.morale_state} />
+          </div>
+        )}
 
         <div className="flex flex-wrap gap-2" role="group" aria-label="What is known">
           {group.cause !== null && (
@@ -326,46 +334,14 @@ function GroupSection({
         </div>
 
         {approaches.map((approach) => (
-          <Button
+          <ApproachButton
             key={approach.approach_id}
-            variant="outline"
+            approach={approach}
+            groupId={group.group_id}
+            techniques={standoff.display_techniques}
             disabled={disabled || !isOpen}
-            data-testid={approach.hits_revealed_drive ? 'standoff-approach-hit' : undefined}
-            className={cn(
-              'h-auto w-full justify-between gap-2 whitespace-normal py-2 text-left hover:bg-muted hover:text-foreground focus-visible:ring-2',
-              approach.hits_revealed_drive &&
-                'border-accent shadow-[inset_3px_0_0_hsl(var(--accent))]'
-            )}
-            onClick={() =>
-              fire('standoff_press', {
-                group_id: group.group_id,
-                approach_id: approach.approach_id,
-              })
-            }
-          >
-            <span className="flex min-w-0 flex-col">
-              <span>{approach.name}</span>
-              <span className="text-xs font-normal text-muted-foreground">
-                {approach.check_caption}
-              </span>
-              {approach.levers.length === 0 ? (
-                <span className="text-xs font-normal text-muted-foreground">no known lever</span>
-              ) : (
-                approach.levers.map((lever) => (
-                  <span
-                    key={lever.text}
-                    className={cn(
-                      'text-xs font-normal italic',
-                      lever.is_spark ? 'text-primary' : 'text-foreground'
-                    )}
-                  >
-                    {lever.text}
-                  </span>
-                ))
-              )}
-            </span>
-            <Grade value={approach.grade} label={approach.grade_label} />
-          </Button>
+            fire={fire}
+          />
         ))}
 
         {terms.length > 0 && (
@@ -382,6 +358,100 @@ function GroupSection({
           />
         )}
       </div>
+    </div>
+  );
+}
+
+interface ApproachButtonProps {
+  approach: ApproachView;
+  groupId: number;
+  techniques: DisplayTechnique[];
+  disabled: boolean;
+  fire: (key: string, kwargs?: Record<string, unknown>) => void;
+}
+
+function ApproachButton({ approach, groupId, techniques, disabled, fire }: ApproachButtonProps) {
+  const [picking, setPicking] = useState(false);
+  const [techniqueId, setTechniqueId] = useState<string>('');
+  const needsTechnique = approach.casts_technique;
+  const noTechnique = needsTechnique && techniques.length === 0;
+  const pressKwargs = { group_id: groupId, approach_id: approach.approach_id };
+
+  function onPress() {
+    if (needsTechnique) {
+      setPicking((open) => !open);
+      return;
+    }
+    fire('standoff_press', pressKwargs);
+  }
+
+  return (
+    <div className="flex flex-col gap-1.5">
+      <Button
+        variant="outline"
+        disabled={disabled || noTechnique}
+        data-testid={approach.hits_revealed_drive ? 'standoff-approach-hit' : undefined}
+        className={cn(
+          'h-auto w-full justify-between gap-2 whitespace-normal py-2 text-left hover:bg-muted hover:text-foreground focus-visible:ring-2',
+          approach.hits_revealed_drive && 'border-accent shadow-[inset_3px_0_0_hsl(var(--accent))]'
+        )}
+        onClick={onPress}
+      >
+        <span className="flex min-w-0 flex-col">
+          <span>{approach.name}</span>
+          <span className="text-xs font-normal text-muted-foreground">
+            {approach.check_caption}
+          </span>
+          {approach.levers.length === 0 ? (
+            <span className="text-xs font-normal text-muted-foreground">no known lever</span>
+          ) : (
+            approach.levers.map((lever) => (
+              <span
+                key={lever.text}
+                className={cn(
+                  'text-xs font-normal italic',
+                  lever.is_spark ? 'text-primary' : 'text-foreground'
+                )}
+              >
+                {lever.text}
+              </span>
+            ))
+          )}
+        </span>
+        <Grade value={approach.grade} label={approach.grade_label} />
+      </Button>
+      {noTechnique && (
+        <span className="text-xs text-muted-foreground">No technique to display</span>
+      )}
+      {picking && needsTechnique && !noTechnique && (
+        <div
+          className="flex flex-col gap-1.5 rounded-md border border-primary/50 bg-primary/5 p-2"
+          data-testid="standoff-technique-picker"
+        >
+          <Select value={techniqueId} onValueChange={setTechniqueId}>
+            <SelectTrigger aria-label="Technique to display" className="h-auto min-h-8 w-full">
+              <SelectValue placeholder="Choose a technique" />
+            </SelectTrigger>
+            <SelectContent>
+              {techniques.map((t) => (
+                <SelectItem key={t.technique_id} value={String(t.technique_id)}>
+                  {t.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Button
+            size="sm"
+            disabled={disabled || techniqueId === ''}
+            onClick={() => {
+              fire('standoff_press', { ...pressKwargs, technique_id: Number(techniqueId) });
+              setPicking(false);
+            }}
+          >
+            Display
+          </Button>
+        </div>
+      )}
     </div>
   );
 }

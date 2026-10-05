@@ -41601,8 +41601,11 @@ components:
             $ref: '#/components/schemas/LeverView'
         hits_revealed_drive:
           type: boolean
+        casts_technique:
+          type: boolean
       required:
       - approach_id
+      - casts_technique
       - check_caption
       - grade
       - grade_label
@@ -50225,6 +50228,16 @@ components:
       description: |-
         * `obvious` - Obvious (visible if capability met)
         * `discoverable` - Discoverable (must be learned)
+    DisplayTechnique:
+      type: object
+      properties:
+        technique_id:
+          type: integer
+        name:
+          type: string
+      required:
+      - name
+      - technique_id
     DissolveRequest:
       type: object
       description: |-
@@ -56154,6 +56167,8 @@ components:
           type: string
         read_grade_label:
           type: string
+        morale_state:
+          type: string
       required:
       - cause
       - cause_gloss
@@ -56161,6 +56176,7 @@ components:
       - group_id
       - hidden_count
       - member_count
+      - morale_state
       - name
       - read_check
       - read_grade
@@ -63362,7 +63378,11 @@ components:
           readOnly: true
         morale_state:
           type: string
-          nullable: true
+          description: |-
+            Derived STEADY/FALTER/BREAK - pure arithmetic, no query.
+
+            Public: the derived state is observable behaviour; the number stays
+            GM-only (#4147).
           readOnly: true
         is_enraged:
           type: boolean
@@ -82203,8 +82223,13 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/SparkView'
+        display_techniques:
+          type: array
+          items:
+            $ref: '#/components/schemas/DisplayTechnique'
       required:
       - approaches
+      - display_techniques
       - groups
       - place
       - shared_sparks

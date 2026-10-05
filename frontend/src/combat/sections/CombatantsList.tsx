@@ -39,6 +39,7 @@
  * Phase 8, Task 8.3 — unified-combat-ui plan.
  */
 
+import { MoraleStateChip } from '@/combat/standoff/MoraleStateChip';
 import { MoreVertical } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
@@ -335,6 +336,7 @@ function OpponentRow({
               Enraged
             </span>
           )}
+          <MoraleStateChip state={opponent.morale_state} />
           {opponent.is_wall_broken && (
             <span
               data-testid="wall-broken-badge"

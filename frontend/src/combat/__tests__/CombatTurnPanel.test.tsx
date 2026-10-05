@@ -361,7 +361,15 @@ describe('CombatTurnPanel — Phase 8 rail sections', () => {
     mockEncounter({
       round_number: 0,
       is_participant: true,
-      standoff: { place: '', groups: [], approaches: [], terms: [], sparks: [], shared_sparks: [] },
+      standoff: {
+        place: '',
+        groups: [],
+        approaches: [],
+        terms: [],
+        sparks: [],
+        shared_sparks: [],
+        display_techniques: [],
+      },
     });
 
     render(<CombatTurnPanel encounterId={1} characterId={10} characterSheetId={100} />, {
