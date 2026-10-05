@@ -247,12 +247,15 @@ class OpponentSerializer(serializers.ModelSerializer):
     def get_max_morale(self, obj: CombatOpponent) -> int | None:
         return obj.max_morale if self._is_gm_or_staff() else None
 
-    @extend_schema_field(serializers.CharField(allow_null=True))
-    def get_morale_state(self, obj: CombatOpponent) -> str | None:
-        """Derived STEADY/FALTER/BREAK - pure arithmetic, no query."""
+    def get_morale_state(self, obj: CombatOpponent) -> str:
+        """Derived STEADY/FALTER/BREAK - pure arithmetic, no query.
+
+        Public: the derived state is observable behaviour; the number stays
+        GM-only (#4147).
+        """
         from world.combat.morale import morale_state_for  # noqa: PLC0415
 
-        return morale_state_for(obj).value if self._is_gm_or_staff() else None
+        return morale_state_for(obj).value
 
     def get_is_enraged(self, obj: CombatOpponent) -> bool:
         """Public: the enrage line has fired (a transition raised the multiplier)."""

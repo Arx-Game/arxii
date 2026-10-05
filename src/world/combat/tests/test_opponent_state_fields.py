@@ -25,7 +25,6 @@ GM_ONLY_FIELDS = (
     "vulnerability_rounds_remaining",
     "morale",
     "max_morale",
-    "morale_state",
 )
 
 
@@ -58,6 +57,12 @@ class OpponentStateFieldTests(TestCase):
         self.assertTrue(data["is_enraged"])
         self.assertTrue(data["is_wall_broken"])
         self.assertEqual(data["current_phase"], 2)
+
+    def test_player_sees_derived_morale_state_but_not_the_number(self) -> None:
+        data = OpponentSerializer(self.boss, context={"request": self.player_request}).data
+        self.assertEqual(data["morale_state"], "falter")
+        self.assertIsNone(data["morale"])
+        self.assertIsNone(data["max_morale"])
 
     def test_staff_sees_gm_fields(self) -> None:
         data = OpponentSerializer(self.boss, context={"request": self.staff_request}).data
