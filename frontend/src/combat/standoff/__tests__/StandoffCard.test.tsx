@@ -47,6 +47,7 @@ const STANDOFF: StandoffView = {
       read_grade: 'moderate',
       read_grade_label: 'Moderate',
       morale_state: 'steady',
+      terms_morale_ease: 0,
     },
   ],
   approaches: [
@@ -368,6 +369,23 @@ describe('StandoffCard', () => {
     unmount();
     renderCard(withGroup({ morale_state: 'break' }));
     expect(screen.getByTestId('morale-state-chip')).toHaveTextContent('Broken');
+  });
+
+  it('notes the extra terms ease a shaken group gives, and nothing when steady', () => {
+    const { unmount } = renderCard();
+    expect(screen.queryByTestId('standoff-terms-morale-ease')).toBeNull();
+    unmount();
+    const { unmount: unmountFalter } = renderCard(
+      withGroup({ morale_state: 'falter', terms_morale_ease: 1 })
+    );
+    expect(screen.getByTestId('standoff-terms-morale-ease')).toHaveTextContent(
+      'Faltering: 1 more step easier'
+    );
+    unmountFalter();
+    renderCard(withGroup({ morale_state: 'break', terms_morale_ease: 2 }));
+    expect(screen.getByTestId('standoff-terms-morale-ease')).toHaveTextContent(
+      'Broken: 2 more steps easier'
+    );
   });
 
   it('disables a display approach with a caption when there is no technique', () => {

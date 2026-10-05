@@ -393,7 +393,7 @@ def press_difficulty(
     return press_grade(group, sheet, approach, ctx)[0]
 
 
-def _morale_terms_ease(members: list[CombatOpponent], config: StandoffConfig) -> int:
+def morale_terms_ease(members: list[CombatOpponent], config: StandoffConfig) -> int:
     """Bands terms ease because the group's worst member is shaken (broken beats faltering)."""
     states = {morale_state_for(member) for member in members}
     if OpponentMoraleState.BREAK in states:
@@ -425,7 +425,7 @@ def terms_difficulty(
             terms.difficulty_shift_bands
             + ctx.band_shift
             - group.terms_ease
-            - _morale_terms_ease(ctx.members, config)
+            - morale_terms_ease(ctx.members, config)
         ),
     )
 

@@ -56169,6 +56169,8 @@ components:
           type: string
         morale_state:
           type: string
+        terms_morale_ease:
+          type: integer
       required:
       - cause
       - cause_gloss
@@ -56184,6 +56186,7 @@ components:
       - revealed_regard
       - state
       - terms_ease
+      - terms_morale_ease
     GroupVoteRequestRequest:
       type: object
       description: 'POST body for the #1036 group-vote endpoint.'

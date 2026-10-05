@@ -32268,6 +32268,7 @@ export interface components {
       read_grade: string;
       read_grade_label: string;
       morale_state: string;
+      terms_morale_ease: number;
     };
     /** @description POST body for the #1036 group-vote endpoint. */
     GroupVoteRequestRequest: {

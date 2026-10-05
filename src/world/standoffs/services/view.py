@@ -40,6 +40,7 @@ from world.standoffs.services.state import active_members, is_in_standoff
 from world.standoffs.services.verbs import (
     build_grading_context,
     hidden_things,
+    morale_terms_ease,
     press_grade,
     targeted_properties_by_capability,
     terms_difficulty,
@@ -74,6 +75,7 @@ class GroupView:
     read_grade: str
     read_grade_label: str
     morale_state: str = OpponentMoraleState.STEADY
+    terms_morale_ease: int = 0
 
 
 @dataclass(frozen=True)
@@ -211,6 +213,7 @@ def _group_view(  # noqa: PLR0913 - one viewer-and-group context, built once per
     hidden_count: int,
     read: tuple[str, str] = ("", ""),
     morale_state: str = OpponentMoraleState.STEADY,
+    terms_morale_ease: int = 0,
 ) -> GroupView:
     group = facts.group
     template = group.creature_template
@@ -244,6 +247,7 @@ def _group_view(  # noqa: PLR0913 - one viewer-and-group context, built once per
         read_grade=read[1],
         read_grade_label=grade_label(read[1]),
         morale_state=morale_state,
+        terms_morale_ease=terms_morale_ease,
     )
 
 
@@ -391,6 +395,7 @@ def build_standoff_view(
                 len(hidden),
                 read=read,
                 morale_state=_worst_morale_state(members),
+                terms_morale_ease=morale_terms_ease(members, config),
             )
         )
         own, others = _sparks(facts, viewer_sheet)

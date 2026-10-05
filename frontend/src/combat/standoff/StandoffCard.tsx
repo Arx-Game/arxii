@@ -370,6 +370,8 @@ function GroupSection({
           <TermsSection
             terms={terms}
             ease={group.terms_ease}
+            moraleState={group.morale_state}
+            moraleEase={group.terms_morale_ease}
             disabled={disabled || !isOpen}
             chosen={chosenTerms}
             onChoose={(id) => setChosenTermsId(id)}
@@ -540,13 +542,24 @@ function ApproachButton({
 interface TermsSectionProps {
   terms: TermsView[];
   ease: number;
+  moraleState: string;
+  moraleEase: number;
   disabled: boolean;
   chosen: TermsView | null;
   onChoose: (termsId: number | null) => void;
   onSpin: (terms: TermsView) => void;
 }
 
-function TermsSection({ terms, ease, disabled, chosen, onChoose, onSpin }: TermsSectionProps) {
+function TermsSection({
+  terms,
+  ease,
+  moraleState,
+  moraleEase,
+  disabled,
+  chosen,
+  onChoose,
+  onSpin,
+}: TermsSectionProps) {
   return (
     <div className="flex flex-col gap-1.5">
       <p className="text-xs text-muted-foreground">
@@ -555,6 +568,12 @@ function TermsSection({ terms, ease, disabled, chosen, onChoose, onSpin }: Terms
           ? 'Each successful press makes this easier.'
           : `${plural(ease, 'step', 'steps')} easier so far.`}
       </p>
+      {moraleEase > 0 && (
+        <p className="text-xs text-muted-foreground" data-testid="standoff-terms-morale-ease">
+          {moraleState === 'break' ? 'Broken' : 'Faltering'}: {moraleEase} more{' '}
+          {moraleEase === 1 ? 'step' : 'steps'} easier
+        </p>
+      )}
       {terms.map((term) => (
         <Button
           key={term.terms_id}

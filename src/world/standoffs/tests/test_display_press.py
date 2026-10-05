@@ -23,6 +23,7 @@ from world.magic.factories import (
 from world.magic.models import CharacterAnima
 from world.magic.types.techniques import SoulfrayWarning
 from world.standoffs.factories import StandoffApproachFactory, StandoffTermsFactory
+from world.standoffs.models import StandoffConfig
 from world.standoffs.services.verbs import standoff_press, terms_difficulty
 from world.standoffs.services.view import build_standoff_view
 from world.standoffs.tests.test_verbs import CHECK, SOCIAL, VerbBase, forced
@@ -218,6 +219,15 @@ class DisplayViewTests(DisplayPressBase):
     def test_a_steady_group_reads_steady(self) -> None:
         view = build_standoff_view(self.encounter, self.sheet)
         self.assertEqual(view.groups[0].morale_state, OpponentMoraleState.STEADY)
+        self.assertEqual(view.groups[0].terms_morale_ease, 0)
+
+    def test_terms_morale_ease_follows_the_worst_member_state(self) -> None:
+        config = StandoffConfig.load()
+        for member in self.members:
+            member.morale = 0
+            member.save(update_fields=["morale"])
+        view = build_standoff_view(self.encounter, self.sheet)
+        self.assertEqual(view.groups[0].terms_morale_ease, config.terms_ease_broken)
 
 
 class NoDisplayApproachViewTests(VerbBase):

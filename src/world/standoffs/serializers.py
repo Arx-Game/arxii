@@ -23,6 +23,7 @@ class GroupViewSerializer(serializers.Serializer):
     read_grade = serializers.CharField()
     read_grade_label = serializers.CharField()
     morale_state = serializers.CharField()
+    terms_morale_ease = serializers.IntegerField()
 
 
 class LeverViewSerializer(serializers.Serializer):
