@@ -160,9 +160,12 @@ drive and regard-rule inlines on the creature template.
   `services/verbs.py`, through `use_technique` with `lethal=False`, so nobody is harmed and
   anima is spent as for any cast). The roll runs through `floor_ultimate_check`, so an
   ultimate never fails. `_technique_refusal` refuses a non-casting approach given a
-  technique, and a casting approach given none or one the actor cannot cast. If the cast
-  never resolves (the soulfray gate declines) the press is refused with "The display
-  falters before it begins." A success eases terms exactly as any press does.
+  technique, and a casting approach given none, one the actor neither knows
+  (`CharacterTechnique` row) nor holds as this Audere's readied ultimate (compared by
+  technique row, never by name), or one that fails `technique_performable` right now.
+  A caster carrying Soulfray is refused with the stage's warning and spends nothing
+  (`StandoffActionResult.soulfray_warning`) until the press is re-sent with
+  `confirm_soulfray_risk=True`. A success eases terms exactly as any press does.
 - **A cast that earns a display shakes the group.** `_display_morale_line` runs
   `classify_cast` on the technique, its runtime intensity and the success level. When it
   returns a kind (an ultimate, or a critical technique), `apply_spectacle` runs against
@@ -176,12 +179,16 @@ drive and regard-rule inlines on the creature template.
 - **View fields.** Each group in the payload carries `morale_state` (`steady`, `falter` or
   `break`, the worst among active members; the numbers stay GM-only). Each approach carries
   `casts_technique`. The view carries `display_techniques` (`technique_id`, `name`): the
-  viewer's known techniques plus a readied ultimate that pass `technique_performable`.
-- **Surfaces.** The `standoff_press` action takes an optional `technique_id`. Telnet:
-  `standoff display <technique> <group>` picks the first approach with
-  `casts_technique=True` and presses with the named technique (`castable_technique_named`).
-  The web `StandoffCard` shows a morale chip on each group and a technique picker for
-  casting approaches.
+  viewer's known techniques plus a readied ultimate that pass `performable_techniques`,
+  computed only when some approach casts a technique (empty otherwise).
+- **Surfaces.** The `standoff_press` action takes an optional `technique_id` and
+  `confirm_soulfray_risk`; a Soulfray refusal returns the warning in the result's
+  `data["soulfray_warning"]`. Telnet: `standoff display <technique> <group> [soulfray]` picks
+  the first approach with `casts_technique=True` and presses with the named technique
+  (`castable_technique_named` parses the typed name); a trailing `soulfray` accepts the risk,
+  and a Soulfray refusal prints the command to accept it. The web `StandoffCard` shows a
+  morale chip on each group and a technique picker for casting approaches; a Soulfray refusal
+  shows the warning in the picker with an "Accept the risk" button that re-presses.
 
 ## Payload privacy (`services/view.py`, `services/describe.py`)
 

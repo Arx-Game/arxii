@@ -2396,7 +2396,8 @@ extra effective levels every check the character makes counts while in Audere or
 Majora (each level is 5 points, ADR-0166). `audere_check_level_bonus(character)`
 (`world/magic/audere.py`) reads it: Audere Majora's own bonus replaces Audere's while the
 Majora condition holds, using the threshold with the highest `boundary_level` at or below
-the character's path level; zero when neither condition is held. `perform_check`
+the character's path level; with Majora held but no threshold at or below that level, it
+falls back to Audere's bonus; zero when neither condition is held. `perform_check`
 (`world/checks/services.py`) adds it to the resolved path level only when no
 `level_override` is given; an override is used as given. Spectacle's level comparison adds
 the same bonus to the caster's level.
