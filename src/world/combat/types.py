@@ -573,9 +573,11 @@ class SpectacleResult:
 
     credit_line: str = ""
     flavour_line: str = ""
+    heartened_line: str = ""  # authored Heartened flavour, GM-less scenes only
     shifts: tuple[SpectacleShift, ...] = ()
     heartened_ids: tuple[int, ...] = ()
 
     @property
     def lines(self) -> list[str]:
-        return [line for line in (self.credit_line, self.flavour_line) if line]
+        lines = (self.credit_line, self.flavour_line, self.heartened_line)
+        return [line for line in lines if line]

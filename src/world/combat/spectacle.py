@@ -14,12 +14,16 @@ from world.combat.constants import (
     SpectacleKind,
     SpectacleReaction,
 )
-from world.combat.models import SpectacleConfig, SpectacleReactionLine, SpectacleRecord
+from world.combat.models import (
+    OpponentTierTemplate,
+    SpectacleConfig,
+    SpectacleReactionLine,
+    SpectacleRecord,
+)
 from world.combat.morale import (
     OpponentMoraleState,
     apply_morale_damage,
     morale_state_for,
-    tier_has_morale,
 )
 from world.combat.types import SpectacleResult, SpectacleShift
 from world.gm.prompt_services import scene_gm_accounts
@@ -122,18 +126,23 @@ def _already_shaken_ids(
 
 def _hearten_allies(
     encounter: CombatEncounter, config: SpectacleConfig, kind: str, success_level: int
-) -> tuple[int, ...]:
+) -> list[CombatOpponent]:
+    """Raise each active ally's morale; return only the allies whose morale rose."""
     gain = raw_hit(config=config, kind=kind, success_level=success_level)
     gain = gain * config.ally_gain_percent // 100
-    healed: list[int] = []
+    if gain <= 0:
+        return []
+    heartened: list[CombatOpponent] = []
     allies = encounter.opponents.filter(
         status=OpponentStatus.ACTIVE, allegiance=CombatAllegiance.ALLY
     )
     for ally in allies:
+        if ally.morale >= ally.max_morale:
+            continue
         ally.morale = min(ally.max_morale, ally.morale + gain)
         ally.save(update_fields=["morale"])
-        healed.append(ally.pk)
-    return tuple(healed)
+        heartened.append(ally)
+    return heartened
 
 
 def _group_name(opponent: CombatOpponent) -> str:
@@ -146,60 +155,85 @@ def _group_names(opponents: list[CombatOpponent]) -> str:
     return " and ".join(names)
 
 
-def _shaken_opponents(
+def _verb(opponents: list[CombatOpponent], plural: str, singular: str) -> str:
+    """Singular verb only when the sentence names one opponent ("the captain falters")."""
+    return singular if len(opponents) == 1 else plural
+
+
+def _sentence(opponents: list[CombatOpponent], verbs: tuple[str, str], tail: str = "") -> str:
+    return f"The {_group_names(opponents)} {_verb(opponents, *verbs)}{tail}."
+
+
+_BREAK = ("break", "breaks")
+_FALTER = ("falter", "falters")
+_HOLD = ("hold", "holds")
+_SHAKEN = ("are shaken", "is shaken")
+_HEARTEN = ("take heart", "takes heart")
+
+
+def _by_outcome(
     witnesses: list[CombatOpponent], shifts: list[SpectacleShift]
-) -> list[CombatOpponent]:
-    ids = {shift.opponent_id for shift in shifts}
-    return [w for w in witnesses if w.pk in ids]
+) -> tuple[list[CombatOpponent], list[CombatOpponent], list[CombatOpponent]]:
+    """Split the shaken witnesses into those that broke, faltered, and held (state unchanged)."""
+    by_id = {w.pk: w for w in witnesses}
+    broke: list[CombatOpponent] = []
+    faltered: list[CombatOpponent] = []
+    held: list[CombatOpponent] = []
+    for shift in shifts:
+        opponent = by_id[shift.opponent_id]
+        if shift.after == shift.before:
+            held.append(opponent)
+        elif shift.after == OpponentMoraleState.BREAK:
+            broke.append(opponent)
+        else:
+            faltered.append(opponent)
+    return broke, faltered, held
 
 
-def _credit_line(  # noqa: PLR0913 - private helper, one arg per line input
-    caster_sheet: CharacterSheet,
+def _credit_line(
+    persona: str,
     display_name: str,
-    witnesses: list[CombatOpponent],
-    shifts: list[SpectacleShift],
-    heartened: tuple[int, ...],
-    allies: list[CombatOpponent],
+    outcome: tuple[list[CombatOpponent], list[CombatOpponent], list[CombatOpponent]],
+    heartened: list[CombatOpponent],
 ) -> str:
-    persona = active_persona_for_sheet(caster_sheet).name
-    names = _group_names(_shaken_opponents(witnesses, shifts))
-    broke = any(s.after == OpponentMoraleState.BREAK for s in shifts)
-    faltered = any(
-        s.after == OpponentMoraleState.FALTER and s.before == OpponentMoraleState.STEADY
-        for s in shifts
-    )
+    """One sentence per resulting state, so no witness is credited a state it never reached.
+
+    The first sentence names the caster and the display; a witness that held is named as
+    holding, never folded into a group that broke or faltered (#4147 demo Screens 1-2).
+    """
+    broke, faltered, held = outcome
+    credit = f" before {persona}'s {display_name}"
+    sentences: list[str] = []
     if broke:
-        line = f"The {names} break before {persona}'s {display_name}."
-    elif faltered:
-        line = f"The {names} falter before {persona}'s {display_name}."
-    else:
-        line = f"The {names} are shaken by {persona}'s {display_name}."
+        sentences.append(_sentence(broke, _BREAK, credit))
+        credit = ""
+    if faltered:
+        sentences.append(_sentence(faltered, _FALTER, credit))
+        credit = ""
+    if held:
+        if sentences:
+            sentences.append(_sentence(held, _HOLD))
+        else:
+            sentences.append(_sentence(held, _SHAKEN, f" by {persona}'s {display_name}"))
     if heartened:
-        ally_names = _group_names([a for a in allies if a.pk in heartened])
-        line += f" The {ally_names} take heart."
-    return line
+        sentences.append(_sentence(heartened, _HEARTEN))
+    return " ".join(sentences)
 
 
 def _flavour_line(  # noqa: PLR0913 - private helper, one arg per line input
-    encounter: CombatEncounter,
-    caster_sheet: CharacterSheet,
-    display_name: str,
+    lines: list[SpectacleReactionLine],
+    reaction: str,
     kind: str,
-    witnesses: list[CombatOpponent],
-    shifts: list[SpectacleShift],
+    group: list[CombatOpponent],
+    persona: str,
+    display_name: str,
 ) -> str:
-    if scene_gm_accounts(encounter.scene):
-        return ""
-    if any(s.after == OpponentMoraleState.BREAK for s in shifts):
-        reaction = SpectacleReaction.BROKEN
-    elif any(s.after != s.before for s in shifts):
-        reaction = SpectacleReaction.FALTERING
-    else:
-        reaction = SpectacleReaction.SHAKEN
-    shaken = _shaken_opponents(witnesses, shifts)
-    template_id = shaken[0].creature_template_id if shaken else None
+    """The most specific authored line for a reaction: creature beats kind beats generic."""
+    template_id = group[0].creature_template_id
     best: tuple[tuple[bool, bool], str] | None = None
-    for row in SpectacleReactionLine.objects.filter(reaction=reaction):
+    for row in lines:
+        if row.reaction != reaction:
+            continue
         if row.creature_template_id is not None and row.creature_template_id != template_id:
             continue
         if row.kind and row.kind != kind:
@@ -211,10 +245,27 @@ def _flavour_line(  # noqa: PLR0913 - private helper, one arg per line input
         return ""
     return (
         best[1]
-        .replace("<actor>", active_persona_for_sheet(caster_sheet).name)
-        .replace("<group>", _group_names(shaken))
+        .replace("<actor>", persona)
+        .replace("<group>", _group_names(group))
         .replace("<display>", display_name)
     )
+
+
+def _enemy_reaction(
+    outcome: tuple[list[CombatOpponent], list[CombatOpponent], list[CombatOpponent]],
+) -> tuple[str, list[CombatOpponent]]:
+    """The strongest reaction among the witnesses, and the witnesses who showed it."""
+    broke, faltered, held = outcome
+    if broke:
+        return SpectacleReaction.BROKEN, broke
+    if faltered:
+        return SpectacleReaction.FALTERING, faltered
+    return SpectacleReaction.SHAKEN, held
+
+
+def _tier_morale_map() -> dict[str, bool]:
+    """``{tier: has_morale}`` in one query; a tier with no template keeps its morale."""
+    return dict(OpponentTierTemplate.objects.values_list("tier", "has_morale"))
 
 
 def apply_spectacle(  # noqa: PLR0913 - keyword-only public contract
@@ -243,7 +294,9 @@ def apply_spectacle(  # noqa: PLR0913 - keyword-only public contract
         )
     witnesses = [w for w in witnesses if w.status == OpponentStatus.ACTIVE]
     already = _already_shaken_ids(caster_sheet, kind, technique, [w.pk for w in witnesses])
+    has_morale = _tier_morale_map()
     shifts: list[SpectacleShift] = []
+    records: list[SpectacleRecord] = []
     for opponent in witnesses:
         if opponent.pk in already:
             continue
@@ -254,26 +307,40 @@ def apply_spectacle(  # noqa: PLR0913 - keyword-only public contract
             success_level=success_level,
             caster_level=caster_level,
             opponent_level=opponent.level,
-            has_morale=tier_has_morale(opponent),
+            has_morale=has_morale.get(opponent.tier, True),
         )
         apply_morale_damage(opponent, hit)
-        SpectacleRecord.objects.create(
-            encounter=encounter,
-            opponent=opponent,
-            caster=caster_sheet,
-            kind=kind,
-            technique=technique,
+        records.append(
+            SpectacleRecord(
+                encounter=encounter,
+                opponent=opponent,
+                caster=caster_sheet,
+                kind=kind,
+                technique=technique,
+            )
         )
         shifts.append(SpectacleShift(opponent.pk, before.value, morale_state_for(opponent).value))
     if not shifts:
         return SpectacleResult()
+    SpectacleRecord.objects.bulk_create(records)
     heartened = _hearten_allies(encounter, config, kind, success_level)
-    allies = list(encounter.opponents.filter(pk__in=heartened))
+    persona = active_persona_for_sheet(caster_sheet).name
+    outcome = _by_outcome(witnesses, shifts)
+    flavour = heartened_line = ""
+    if not scene_gm_accounts(encounter.scene):
+        lines = list(SpectacleReactionLine.objects.all())
+        reaction, group = _enemy_reaction(outcome)
+        flavour = _flavour_line(lines, reaction, kind, group, persona, display_name)
+        if heartened:
+            heartened_line = _flavour_line(
+                lines, SpectacleReaction.HEARTENED, kind, heartened, persona, display_name
+            )
     return SpectacleResult(
-        credit_line=_credit_line(caster_sheet, display_name, witnesses, shifts, heartened, allies),
-        flavour_line=_flavour_line(encounter, caster_sheet, display_name, kind, witnesses, shifts),
+        credit_line=_credit_line(persona, display_name, outcome, heartened),
+        flavour_line=flavour,
+        heartened_line=heartened_line,
         shifts=tuple(shifts),
-        heartened_ids=heartened,
+        heartened_ids=tuple(ally.pk for ally in heartened),
     )
 
 
