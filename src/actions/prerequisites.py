@@ -1101,10 +1101,8 @@ class CompanionFitToFightPrerequisite(Prerequisite):
     """
 
     def is_met(self, actor, target=None, context=None) -> tuple[bool, str]:
-        from world.companions.defeat_content import SAVAGED_CONDITION_NAME  # noqa: PLC0415
         from world.companions.models import Companion  # noqa: PLC0415
-        from world.conditions.models import ConditionTemplate  # noqa: PLC0415
-        from world.conditions.services import has_condition  # noqa: PLC0415
+        from world.companions.services import companion_is_savaged  # noqa: PLC0415
 
         kwargs = (context or {}).get("kwargs", {})
         companion_id = kwargs.get("companion_id")
@@ -1115,12 +1113,7 @@ class CompanionFitToFightPrerequisite(Prerequisite):
         if companion is None or companion.objectdb is None:
             return True, ""  # likewise not this prerequisite's failure to report
 
-        try:
-            savaged = ConditionTemplate.get_by_name(SAVAGED_CONDITION_NAME)
-        except ConditionTemplate.DoesNotExist:
-            return True, ""
-
-        if has_condition(companion.objectdb, savaged):
+        if companion_is_savaged(companion):
             return False, f"{companion.name} is in no shape to fight."
         return True, ""
 

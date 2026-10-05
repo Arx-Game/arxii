@@ -24,6 +24,10 @@ from world.magic.services.soulfray import accumulate_soulfray
 if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
 
+    from world.combat.models import CombatEncounter, CombatOpponent, CombatParticipant
+    from world.companions.models import Companion
+    from world.magic.models import Technique, TechniqueManifestOption
+
 
 def move_position(*, payload: Any) -> None:
     """Relocate payload.target to payload.destination_position_id (force move).
@@ -400,6 +404,130 @@ def summon_ally(*, payload: Any) -> None:
     pos = position_of(payload.caster)
     if pos is not None:
         force_move_to_position(opp.objectdb, pos)
+
+
+def _bring_body_into_room(body: "ObjectDB", room: "ObjectDB") -> bool:
+    """Move a manifesting entity's body into the caster's room; True when it is there.
+
+    ``move_to`` can be vetoed (MOVE_PRE_DEPART) or have its destination rewritten by a
+    flow, so the result is read back from the body's location, not trusted.
+    """
+    if body.db_location_id != room.pk:
+        body.move_to(room, quiet=True, move_type="teleport")
+    return body.db_location_id == room.pk
+
+
+def _in_another_running_fight(body: "ObjectDB", encounter: "CombatEncounter") -> bool:
+    """True when ``body`` still fights, undefeated, in a different encounter."""
+    from world.combat.constants import OpponentStatus  # noqa: PLC0415
+    from world.combat.models import CombatOpponent  # noqa: PLC0415
+    from world.scenes.constants import RoundStatus  # noqa: PLC0415
+
+    return (
+        CombatOpponent.objects.filter(objectdb=body, status=OpponentStatus.ACTIVE)
+        .exclude(encounter=encounter)
+        .exclude(encounter__status=RoundStatus.COMPLETED)
+        .exists()
+    )
+
+
+def manifest_bound_entity(
+    *, participant: "CombatParticipant", technique: "Technique"
+) -> "CombatOpponent | None":
+    """Bring the caster's chosen bound entity into the encounter (#4118).
+
+    Called on a successful, unbounced cast only. Returns the new ally ``CombatOpponent``,
+    or None when nothing manifests: the caster is no longer active in the fight or has no
+    location, their version of this technique names no entity, the bond has lapsed, a
+    being has no avatar sheet, a companion has no body or is Savaged, the body cannot be
+    brought into the caster's room, a being's avatar still fights in another running
+    encounter, or that entity already has a row in this encounter (one row per objectdb
+    per encounter, so a defeated avatar is not re-added either). A being option's
+    ``tier`` must have an ``OpponentTierTemplate`` row (flagged on the Required-content
+    dashboard): a missing one raises from the scaling block on purpose, which rolls back
+    the whole ``resolve_round`` for every participant until staff add the row, and the
+    avatar's move into the caster's room may then show in memory while the database has
+    it elsewhere.
+    """
+    from world.combat.constants import ParticipantStatus  # noqa: PLC0415
+    from world.magic.models import CharacterManifestation  # noqa: PLC0415
+
+    if participant.status != ParticipantStatus.ACTIVE:
+        return None
+    caster = participant.character_sheet.character
+    if caster.db_location is None:
+        return None
+    manifestation = (
+        CharacterManifestation.objects.filter(
+            character=participant.character_sheet,
+            technique=technique,
+            option__technique=technique,
+        )
+        .select_related("option__being__avatar_sheet__character", "companion")
+        .first()
+    )
+    if manifestation is None or not manifestation.bond_is_active():
+        return None
+    if manifestation.option.being_id is not None:
+        return _manifest_being_avatar(participant, manifestation.option, caster)
+    return _manifest_companion(participant, manifestation.companion, caster)
+
+
+def _manifest_being_avatar(
+    participant: "CombatParticipant", option: "TechniqueManifestOption", caster: "ObjectDB"
+) -> "CombatOpponent | None":
+    """A being option: the avatar arrives in the caster's room as an ALLY opponent."""
+    from world.combat.constants import CombatAllegiance  # noqa: PLC0415
+    from world.combat.models import CombatOpponent  # noqa: PLC0415
+    from world.combat.services import add_opponent  # noqa: PLC0415
+
+    encounter = participant.encounter
+    avatar = option.being.avatar_sheet
+    if avatar is None:
+        return None
+    body = avatar.character
+    if CombatOpponent.objects.filter(encounter=encounter, objectdb=body).exists():
+        return None
+    if _in_another_running_fight(body, encounter):
+        return None
+    # The entity arrives: bring the avatar into the caster's room first, or
+    # add_opponent refuses the caster's position as being in another room.
+    if not _bring_body_into_room(body, caster.db_location):
+        return None
+    opponent = add_opponent(
+        encounter,
+        name=option.being.name,
+        tier=option.tier,
+        threat_pool=None,
+        existing_objectdb=body,
+        position=position_of(caster),
+    )
+    opponent.allegiance = CombatAllegiance.ALLY
+    opponent.summoned_by = participant.character_sheet
+    opponent.save(update_fields=["allegiance", "summoned_by"])
+    return opponent
+
+
+def _manifest_companion(
+    participant: "CombatParticipant", companion: "Companion", caster: "ObjectDB"
+) -> "CombatOpponent | None":
+    """An archetype option: the character's own companion joins the fight."""
+    from world.combat.models import CombatOpponent  # noqa: PLC0415
+    from world.companions.services import (  # noqa: PLC0415
+        companion_is_savaged,
+        materialize_companion_as_combat_opponent,
+    )
+
+    if companion.objectdb_id is None or companion_is_savaged(companion):
+        return None
+    already = CombatOpponent.objects.filter(
+        encounter=participant.encounter, objectdb_id=companion.objectdb_id
+    )
+    if already.exists():
+        return None
+    if not _bring_body_into_room(companion.objectdb, caster.db_location):
+        return None
+    return materialize_companion_as_combat_opponent(companion, participant.encounter)
 
 
 def _summon_military_unit(*, payload: Any) -> None:

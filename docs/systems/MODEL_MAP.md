@@ -1664,6 +1664,7 @@
   - ghost_tutelages <- magic.GhostTutelage
   - gift_unlocks <- magic.CharacterGiftUnlock
   - resonance_grants <- magic.ResonanceGrant
+  - manifestations <- magic.CharacterManifestation
   - motif <- magic.Motif
   - prepared_crossing_texts <- magic.CharacterCrossingText
   - prepared_surge_text <- magic.CharacterSurgeText
@@ -2762,6 +2763,7 @@
   - objectdb -> evennia.ObjectDB [FK] (nullable)
   - ridden_by -> character_sheets.CharacterSheet [FK] (nullable)
 **Pointed to by:**
+  - manifestations <- magic.CharacterManifestation
   - deployments <- companions.CompanionDeployment
   - orders <- companions.CompanionOrder
   - relationships_as_companion_target <- relationships.CharacterRelationship
@@ -2786,6 +2788,7 @@
 **Foreign Keys:**
   - ultimate_techniques -> magic.Technique [M2M]
 **Pointed to by:**
+  - manifest_options <- magic.TechniqueManifestOption
   - abilities <- companions.CompanionAbility
   - companions <- companions.Companion
 
@@ -5375,6 +5378,13 @@
   - aura -> magic.CharacterAura [FK]
   - tag -> magic.GlimpseTag [FK]
 
+### CharacterManifestation
+**Foreign Keys:**
+  - character -> character_sheets.CharacterSheet [FK]
+  - technique -> magic.Technique [FK]
+  - option -> magic.TechniqueManifestOption [FK]
+  - companion -> companions.Companion [FK] (nullable)
+
 ### CharacterResonance
 **Foreign Keys:**
   - character_sheet -> character_sheets.CharacterSheet [FK]
@@ -5542,6 +5552,7 @@
   - codex_entry -> codex.CodexEntry [FK] (nullable)
   - style -> magic.TechniqueStyle [FK] (nullable)
   - resonances -> magic.Resonance [M2M]
+  - ultimate_techniques -> magic.Technique [M2M]
 **Pointed to by:**
   - organization_grants <- societies.OrganizationGiftGrant
   - children <- magic.Gift
@@ -6067,6 +6078,7 @@
   - conditions_caused <- conditions.ConditionInstance
   - battle_declarations <- battles.BattleActionDeclaration
   - battle_property_affinities <- battles.TechniquePropertyAffinity
+  - ultimate_for_gifts <- magic.Gift
   - function_tags <- magic.TechniqueFunctionTag
   - capability_grants <- magic.TechniqueCapabilityGrant
   - capability_requirements <- magic.TechniqueCapabilityRequirement
@@ -6095,6 +6107,8 @@
   - granted_by_path_gifts <- magic.PathGiftGrant
   - ultimate_for_path_gifts <- magic.PathGiftGrant
   - granted_by_tradition_gifts <- magic.TraditionGiftGrant
+  - manifest_options <- magic.TechniqueManifestOption
+  - character_manifestations <- magic.CharacterManifestation
   - variants <- magic.TechniqueVariant
   - grants <- magic.TechniqueGrant
   - progress_records <- magic.TechniqueProgress
@@ -6180,6 +6194,14 @@
   - technique -> magic.Technique [FK]
   - item_template -> items.ItemTemplate [FK] (nullable)
   - ritual -> magic.Ritual [FK] (nullable)
+
+### TechniqueManifestOption
+**Foreign Keys:**
+  - technique -> magic.Technique [FK]
+  - being -> worship.WorshippedBeing [FK] (nullable)
+  - archetype -> companions.CompanionArchetype [FK] (nullable)
+**Pointed to by:**
+  - character_choices <- magic.CharacterManifestation
 
 ### TechniqueOutcomeModifier
 **Foreign Keys:**
@@ -10889,6 +10911,7 @@
 **Pointed to by:**
   - ceremonies <- ceremonies.Ceremony
   - audere_majora_faith_variants <- magic.AudereMajoraFaithVariant
+  - manifest_options <- magic.TechniqueManifestOption
   - feast_days <- worship.WorshipFeastDay
   - being_facets <- worship.BeingFacet
   - resonances <- worship.BeingResonance

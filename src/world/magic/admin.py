@@ -34,6 +34,7 @@ from world.magic.models import (
     CharacterCrossingText,
     CharacterGift,
     CharacterGiftUnlock,
+    CharacterManifestation,
     CharacterResonance,
     CharacterSurgeText,
     CharacterTechnique,
@@ -102,6 +103,7 @@ from world.magic.models import (
     TechniqueDamageProfile,
     TechniqueFunctionTag,
     TechniqueGrant,
+    TechniqueManifestOption,
     TechniqueOutcomeModifier,
     TechniqueProgress,
     TechniqueRemovedCondition,
@@ -403,6 +405,14 @@ class TechniqueFunctionTagInline(admin.TabularInline):
     extra = 1
 
 
+class TechniqueManifestOptionInline(admin.TabularInline):
+    """Entities this technique can manifest in a fight (#4118)."""
+
+    model = TechniqueManifestOption
+    extra = 0
+    autocomplete_fields = ["being", "archetype"]
+
+
 #: Query-string values for TechniqueAuthoringGapFilter's three gap kinds.
 _GAP_UNDERSPECIFIED = "underspecified"
 _GAP_AMBIGUOUS = "ambiguous"
@@ -524,6 +534,7 @@ class TechniqueAdmin(admin.ModelAdmin):
         TechniqueRemovedConditionInline,
         TechniqueTreatmentInline,
         TechniqueFunctionTagInline,
+        TechniqueManifestOptionInline,
     ]
 
     def get_queryset(self, request):
@@ -819,13 +830,51 @@ class GiftChildInline(admin.TabularInline):
         return False
 
 
+class GiftAdminForm(forms.ModelForm):
+    """Validates a gift's ultimates (#4118): minor gifts only, and its own techniques."""
+
+    class Meta:
+        model = Gift
+        fields = [
+            "name",
+            "description",
+            "kind",
+            "parent",
+            "creator",
+            "codex_entry",
+            "style",
+            "resonances",
+            "ultimate_techniques",
+            "written_by",
+            "written_on",
+            "reviewed_by",
+            "reviewed_on",
+        ]
+
+    def clean(self) -> dict:
+        cleaned = super().clean()
+        ultimates = list(cleaned.get("ultimate_techniques") or [])
+        if not ultimates:
+            return cleaned
+        if cleaned.get("kind") != GiftKind.MINOR:
+            raise ValidationError(
+                {"ultimate_techniques": "Only a minor gift carries ultimates here."}
+            )
+        if any(technique.gift_id != self.instance.pk for technique in ultimates):
+            raise ValidationError(
+                {"ultimate_techniques": "Every ultimate must belong to this gift."}
+            )
+        return cleaned
+
+
 @admin.register(Gift)
 class GiftAdmin(admin.ModelAdmin):
+    form = GiftAdminForm
     autocomplete_fields = ["creator", "parent"]
     list_display = ["name", "kind", "parent", "get_technique_count"]
     list_filter = ["kind"]
     search_fields = ["name", "description"]
-    filter_horizontal = ["resonances"]
+    filter_horizontal = ["resonances", "ultimate_techniques"]
     readonly_fields = ["get_grant_sources"]
     inlines = [GiftChildInline]
 
@@ -992,6 +1041,32 @@ class KnownUltimateAdmin(admin.ModelAdmin):
     # Django's admin system checks (admin.E039).
     autocomplete_fields = ["character", "technique"]
     raw_id_fields = ["crossing"]
+
+
+@admin.register(CharacterManifestation)
+class CharacterManifestationAdmin(admin.ModelAdmin):
+    """A character's chosen manifestation per technique (#4118).
+
+    The model's clean() rejects an option the character is not bonded to.
+    """
+
+    list_display = ["character", "technique", "option", "companion", "bond_active"]
+    list_select_related = [
+        "character__character",
+        "technique",
+        "option__technique",
+        "option__being",
+        "option__archetype",
+        "companion",
+    ]
+    search_fields = ["character__character__db_key", "technique__name"]
+    autocomplete_fields = ["character", "technique"]
+    raw_id_fields = ["option", "companion"]
+
+    @admin.display(boolean=True, description="Bond active")
+    def bond_active(self, obj: CharacterManifestation) -> bool:
+        """False flags a stale row whose bond has lapsed (patronage released, etc.)."""
+        return obj.bond_is_active()
 
 
 @admin.register(CharacterAnima)

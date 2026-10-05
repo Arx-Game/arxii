@@ -418,6 +418,12 @@ pact enhances qualifying ultimates the same way it enhances qualifying technique
 never grants ultimates of its own.
 _Avoid_: super move, limit break, unlocked technique.
 
+**Gift ultimate** (#4118):
+An ultimate attached to a MINOR gift through `Gift.ultimate_techniques` and revealed at
+Audere to any character holding that gift, whatever their Path (`UltimateSource.GIFT`). A
+major gift's ultimates stay on its Path Gift Grants (owned).
+_Avoid_: minor ultimate, gift power.
+
 **Known ultimate** (#4098):
 A character's discovery of an ultimate: a `KnownUltimate` row (`character`,
 `technique`, nullable `crossing`, `readied`), never a `CharacterTechnique`. Once
@@ -456,3 +462,19 @@ bond *sources*, not a third kind alongside owned and bond).
 
 **Certain death (deferred)** (#4098):
 See `vitals/AGENT_GLOSSARY.md`.
+
+**Manifestation option** (#4118):
+A `TechniqueManifestOption` row: one entity (a `WorshippedBeing` or a `CompanionArchetype`,
+exactly one) a technique can bring into a fight, with a `tier` that sizes a being's
+arrival. A technique with any option is a manifesting technique. Authored per technique;
+it is a menu, not a choice.
+_Avoid_: summon option, entity FK, summon (the flow-payload `summon_ally` threat-pool
+summon is a different, reactive mechanism).
+
+**Character manifestation** (#4118):
+A `CharacterManifestation` row: which manifestation option one character brings when they
+cast a manifesting technique, keyed by (character, technique) so it covers an ultimate
+that has no `CharacterTechnique`. It holds only while the character's bond to the entity
+(active patronage, or their own unreleased companion of the archetype) holds. Set by GM or
+staff.
+_Avoid_: manifest choice, summon binding, bonded summon.

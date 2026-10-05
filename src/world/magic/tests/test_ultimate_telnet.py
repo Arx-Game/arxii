@@ -91,6 +91,15 @@ class UltimateTelnetTests(TestCase):
         self.assertNotIn("Cinder Crown", text)
         self.assertNotIn("Sword", text)
 
+    def test_listing_names_minor_gift_source(self) -> None:
+        minor = GiftFactory(kind=GiftKind.MINOR, name="Ember Gift")
+        CharacterGiftFactory(character=self.sheet, gift=minor)
+        minor.ultimate_techniques.add(
+            UltimateTechniqueFactory(gift=minor, archetype_alignment=RoleArchetype.CROWN)
+        )
+        text = self._bare_accept()
+        self.assertIn("; gift: Ember Gift)", text)
+
     def test_accept_number_reveals_and_readies(self) -> None:
         self._bare_accept()
         text = self._accept("ultimate 2")
