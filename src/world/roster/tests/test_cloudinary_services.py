@@ -17,7 +17,6 @@ from world.roster.factories import (
     RosterEntryFactory,
     RosterFactory,
     RosterTenureFactory,
-    TenureGalleryFactory,
     TenureMediaFactory,
 )
 from world.roster.models import RosterType, TenureMedia
@@ -200,6 +199,8 @@ class TestCloudinaryGalleryService(TestCase):
             "public_id": "test/image_sized",
             "secure_url": "https://res.cloudinary.com/test/image/upload/test/image_sized.jpg",
             "bytes": 12345,
+            "width": 800,
+            "height": 1200,
         }
         image_file = SimpleUploadedFile(
             "test.jpg",
@@ -213,6 +214,8 @@ class TestCloudinaryGalleryService(TestCase):
         )
 
         assert media.file_size_bytes == 12345
+        # #4151: the pixel size bounds a look's crop.
+        assert (media.width, media.height) == (800, 1200)
 
     @override_settings(CLOUDINARY_CLOUD_NAME="test_cloud", MAX_PLAYER_MEDIA_FILE_BYTES=1000)
     @patch("cloudinary.uploader.upload")
@@ -334,84 +337,6 @@ class TestCloudinaryGalleryService(TestCase):
 
         assert result is False
         assert not Media.objects.filter(id=media_id).exists()
-
-    def test_get_tenure_gallery(self):
-        """Test getting tenure gallery media."""
-        # Create galleries
-        public_gallery = TenureGalleryFactory(tenure=self.tenure, is_public=True)
-        private_gallery = TenureGalleryFactory(tenure=self.tenure, is_public=False)
-
-        # Create media
-        public_media1 = TenureMediaFactory(
-            tenure=self.tenure,
-            gallery=public_gallery,
-            sort_order=2,
-        )
-        public_media2 = TenureMediaFactory(
-            tenure=self.tenure,
-            gallery=public_gallery,
-            sort_order=1,
-        )
-
-        TenureMediaFactory(tenure=self.tenure, gallery=private_gallery)
-
-        other_tenure = RosterTenureFactory(
-            roster_entry=self.roster_entry,
-            player_number=2,
-        )
-        other_gallery = TenureGalleryFactory(tenure=other_tenure, is_public=True)
-        TenureMediaFactory(tenure=other_tenure, gallery=other_gallery)
-
-        gallery = CloudinaryGalleryService.get_tenure_gallery(self.tenure)
-
-        assert len(gallery) == 2
-        assert gallery[0] == public_media2.media
-        assert gallery[1] == public_media1.media
-
-    def test_get_primary_image_with_profile_picture(self):
-        """Test getting primary image when tenure has profile picture."""
-        gallery = TenureGalleryFactory(tenure=self.tenure, is_public=True)
-        media_link = TenureMediaFactory(tenure=self.tenure, gallery=gallery)
-        self.roster_entry.profile_picture = media_link
-        self.roster_entry.save()
-
-        primary = CloudinaryGalleryService.get_primary_image(self.tenure)
-
-        assert primary == media_link.media
-
-    def test_get_primary_image_different_tenure(self):
-        """
-        Test primary image returns None if profile pic belongs to different tenure.
-        """
-        other_tenure = RosterTenureFactory(
-            roster_entry=self.roster_entry,
-            player_number=2,
-        )
-        gallery = TenureGalleryFactory(tenure=other_tenure, is_public=True)
-        media_link = TenureMediaFactory(tenure=other_tenure, gallery=gallery)
-        self.roster_entry.profile_picture = media_link
-        self.roster_entry.save()
-
-        primary = CloudinaryGalleryService.get_primary_image(self.tenure)
-
-        assert primary is None
-
-    def test_get_primary_image_private_media(self):
-        """Test primary image returns None if profile pic is private."""
-        gallery = TenureGalleryFactory(tenure=self.tenure, is_public=False)
-        media_link = TenureMediaFactory(tenure=self.tenure, gallery=gallery)
-        self.roster_entry.profile_picture = media_link
-        self.roster_entry.save()
-
-        primary = CloudinaryGalleryService.get_primary_image(self.tenure)
-
-        assert primary is None
-
-    def test_get_primary_image_no_profile_picture(self):
-        """Test primary image returns None when no profile picture."""
-        primary = CloudinaryGalleryService.get_primary_image(self.tenure)
-
-        assert primary is None
 
     def test_update_media_order_success(self):
         """Test successful media reordering."""

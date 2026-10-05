@@ -22,6 +22,20 @@ from world.roster.services.media_scan import MediaScanService
 logger = logging.getLogger(__name__)
 
 
+def media_bytes_used(player_data: PlayerData) -> int:
+    """Bytes the player's own files take.
+
+    The quota counts the files the player uploaded (``Media.player_data``), wherever
+    they are used: character art a staff member uploaded costs whoever plays the
+    character nothing (#4151). The upload check and the Gallery's storage line both
+    read this, so the two cannot disagree.
+    """
+    total = Media.objects.filter(player_data=player_data).aggregate(
+        total=Sum("file_size_bytes"),
+    )["total"]
+    return total or 0
+
+
 class CloudinaryGalleryService:
     """Service for managing Cloudinary uploads and tenure media."""
 
@@ -89,12 +103,7 @@ class CloudinaryGalleryService:
         MediaScanService.scan_image(image_file)
 
         if not player_data.account.is_staff:
-            used = (
-                Media.objects.filter(player_data=player_data).aggregate(
-                    total=Sum("file_size_bytes"),
-                )["total"]
-                or 0
-            )
+            used = media_bytes_used(player_data)
             if used + incoming > player_data.media_quota_bytes:
                 msg = "This upload would exceed your media quota."
                 raise ValidationError(msg)
