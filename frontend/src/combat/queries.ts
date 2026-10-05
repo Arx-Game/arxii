@@ -15,6 +15,8 @@ import type {
 } from './types';
 import { availableActionsKeys, useAvailableActionsQuery } from '@/scenes/actionQueries';
 import type { PlayerAction } from '@/scenes/actionTypes';
+import { useAppSelector } from '@/store/hooks';
+import { markTargetMenusStale } from '@/game/target-menu/targetMenuApi';
 
 // ---------------------------------------------------------------------------
 // Query key factory
@@ -298,8 +300,15 @@ export function useOutcomeDetails(actionInteractionIds: number[]) {
  * when to refetch the encounter.
  */
 export function useDispatchPlayerAction(characterId: number) {
+  const queryClient = useQueryClient();
+  const accountId = useAppSelector((state) => state.auth.account?.id ?? null);
   return useMutation({
     mutationFn: (body: DispatchActionRequest) => api.postDispatchAction(characterId, body),
+    onSettled: () => {
+      if (accountId !== null && characterId > 0) {
+        void markTargetMenusStale(queryClient, `account-${accountId}`, characterId);
+      }
+    },
   });
 }
 

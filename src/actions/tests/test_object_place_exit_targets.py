@@ -56,7 +56,8 @@ class ObjectPlaceExitTargetTests(TestCase):
         self.remote = ObjectDBFactory(db_typeclass_path="typeclasses.rooms.Room")
         self.profile = RoomProfileFactory(objectdb=self.room, published_at=timezone.now())
         self.remote_profile = RoomProfileFactory(
-            objectdb=self.remote, published_at=timezone.now(),
+            objectdb=self.remote,
+            published_at=timezone.now(),
         )
         self.actor = CharacterFactory(location=self.room)
         self.sheet = CharacterSheetFactory(character=self.actor)
@@ -67,7 +68,8 @@ class ObjectPlaceExitTargetTests(TestCase):
         self.obj = ObjectDBFactory(location=self.room)
         self.exit = ObjectDBFactory(
             db_typeclass_path="typeclasses.exits.Exit",
-            location=self.room, destination=self.remote,
+            location=self.room,
+            destination=self.remote,
         )
         self.place = PlaceFactory(room=self.profile, name="The hearth")
 
@@ -97,7 +99,9 @@ class ObjectPlaceExitTargetTests(TestCase):
         exit_state = self.exit.get_object_state(context)
         caller_state = actor.get_object_state(context)
         return RoomStatePayloadSerializer()._exit_hidden_from_looker(
-            exit_state, caller_state, instances,
+            exit_state,
+            caller_state,
+            instances,
         )
 
     def test_plain_object_and_actual_item_relation(self):
@@ -110,7 +114,9 @@ class ObjectPlaceExitTargetTests(TestCase):
         assert result.label == self.obj.key
         # Force a different ItemInstance PK and visible name from ObjectDB.
         item = ItemInstanceFactory(
-            pk=self.obj.pk + 100000, game_object=self.obj, custom_name="A silver cup",
+            pk=self.obj.pk + 100000,
+            game_object=self.obj,
+            custom_name="A silver cup",
         )
         assert item.pk != self.obj.pk
         result = self._resolve(MenuTargetKind.OBJECTS, self.obj)
@@ -143,7 +149,8 @@ class ObjectPlaceExitTargetTests(TestCase):
 
     def test_object_and_exit_concealment_is_current_and_per_observer(self):
         for kind, target in (
-            (MenuTargetKind.OBJECTS, self.obj), (MenuTargetKind.EXITS, self.exit),
+            (MenuTargetKind.OBJECTS, self.obj),
+            (MenuTargetKind.EXITS, self.exit),
         ):
             with self.subTest(kind=kind):
                 assert self._resolve(kind, target) is not None
@@ -191,7 +198,9 @@ class ObjectPlaceExitTargetTests(TestCase):
     def test_instance_owner_participant_gm_and_staff_match_payload(self):
         gm = GMProfileFactory()
         instance = InstancedRoom.objects.create(
-            room=self.remote_profile, owner=self.other_sheet, gm_owner=gm,
+            room=self.remote_profile,
+            owner=self.other_sheet,
+            gm_owner=gm,
         )
         instances = {self.remote.pk: instance}
         staff = StaffCharacterFactory(location=self.room)
@@ -201,8 +210,10 @@ class ObjectPlaceExitTargetTests(TestCase):
         gm_character.db_account = gm.account
         gm_character.save(update_fields=["db_account"])
         for actor, visible in (
-            (self.actor, False), (self.other, True),
-            (gm_character, True), (staff, False),
+            (self.actor, False),
+            (self.other, True),
+            (gm_character, True),
+            (staff, False),
         ):
             with self.subTest(actor=actor):
                 assert self._payload_hidden(actor, instances=instances) is (not visible)
@@ -296,9 +307,13 @@ class ObjectPlaceExitTargetTests(TestCase):
             request = self._request(kind, target)
             for value in (True, "1", 0, -1, None, 999999999):
                 with self.subTest(kind=kind, value=value):
-                    assert resolve_menu_target(
-                        self.actor, replace(request, target_id=value),
-                    ) is None
+                    assert (
+                        resolve_menu_target(
+                            self.actor,
+                            replace(request, target_id=value),
+                        )
+                        is None
+                    )
             for context in (
                 {"owner_persona_id": self.sheet.primary_persona.pk},
                 {"container_item_id": ItemInstanceFactory(game_object=None).pk},
@@ -307,12 +322,20 @@ class ObjectPlaceExitTargetTests(TestCase):
                 {"owner_persona_id": 0, "container_item_id": -1},
             ):
                 assert resolve_menu_target(self.actor, replace(request, **context)) is None
-        assert resolve_menu_target(
-            self.actor, MenuTargetRequest("objects", self.obj.pk),
-        ) is None
-        assert resolve_menu_target(
-            self.actor, MenuTargetRequest("unknown", self.obj.pk),
-        ) is None
+        assert (
+            resolve_menu_target(
+                self.actor,
+                MenuTargetRequest("objects", self.obj.pk),
+            )
+            is None
+        )
+        assert (
+            resolve_menu_target(
+                self.actor,
+                MenuTargetRequest("unknown", self.obj.pk),
+            )
+            is None
+        )
 
     def test_labels_preserve_existing_viewer_specific_payload_names(self):
         context = SceneDataManager()
@@ -320,7 +343,8 @@ class ObjectPlaceExitTargetTests(TestCase):
         actor_state = context.initialize_state_for_object(self.actor)
         other_state = context.initialize_state_for_object(self.other)
         for kind, target in (
-            (MenuTargetKind.OBJECTS, self.obj), (MenuTargetKind.EXITS, self.exit),
+            (MenuTargetKind.OBJECTS, self.obj),
+            (MenuTargetKind.EXITS, self.exit),
         ):
             state = context.initialize_state_for_object(target)
             state.name = "A carved arch"
@@ -340,7 +364,8 @@ class ObjectPlaceExitTargetTests(TestCase):
                     ).to_representation(state)
                     assert payload["name"] == expected
                     with patch.object(
-                        SceneDataManager, "get_state_by_pk",
+                        SceneDataManager,
+                        "get_state_by_pk",
                         side_effect=AssertionError("label must not lazily initialize"),
                     ):
                         assert self._resolve(kind, target, actor=actor).label == expected
@@ -369,8 +394,8 @@ class ObjectPlaceExitTargetTests(TestCase):
         )
         for base, fake, viewer_id, viewers, selected in cases:
             with self.subTest(base=base, fake=fake, viewer_id=viewer_id):
-                looker = None if viewer_id is None else (
-                    state if viewer_id == self.obj.pk else viewer
+                looker = (
+                    None if viewer_id is None else (state if viewer_id == self.obj.pk else viewer)
                 )
                 state.name = base
                 state.fake_name = fake
@@ -380,10 +405,16 @@ class ObjectPlaceExitTargetTests(TestCase):
                 state.name_prefix_map = {self.actor.pk: ""}
                 state.name_suffix_map = {self.actor.pk: "!"}
                 expected = f"{selected}!" if viewer_id == self.actor.pk else f"[{selected}]"
-                assert select_display_name(
-                    base, object_id=self.obj.pk, viewer_id=viewer_id,
-                    fake_name=fake, real_name_viewers=viewers,
-                ) == selected
+                assert (
+                    select_display_name(
+                        base,
+                        object_id=self.obj.pk,
+                        viewer_id=viewer_id,
+                        fake_name=fake,
+                        real_name_viewers=viewers,
+                    )
+                    == selected
+                )
                 assert state._base_display_name(looker) == selected
                 with patch(
                     "flows.object_states.base_state.project_display_name",
@@ -391,22 +422,33 @@ class ObjectPlaceExitTargetTests(TestCase):
                 ) as projection:
                     assert state.get_display_name(looker) == expected
                     projection.assert_called_once()
-                assert project_display_name(
-                    base, object_id=self.obj.pk, viewer_id=viewer_id,
-                    fake_name=fake, real_name_viewers=viewers,
-                    name_prefix="[", name_suffix="]",
-                    name_prefix_map={self.actor.pk: ""},
-                    name_suffix_map={self.actor.pk: "!"},
-                ) == expected
+                assert (
+                    project_display_name(
+                        base,
+                        object_id=self.obj.pk,
+                        viewer_id=viewer_id,
+                        fake_name=fake,
+                        real_name_viewers=viewers,
+                        name_prefix="[",
+                        name_suffix="]",
+                        name_prefix_map={self.actor.pk: ""},
+                        name_suffix_map={self.actor.pk: "!"},
+                    )
+                    == expected
+                )
                 # Resolver and state share the projection; no viewer state load.
                 if viewer_id == self.actor.pk:
-                    with patch.object(
-                        SceneDataManager, "get_state_by_pk",
-                        side_effect=AssertionError("projection must not load state"),
-                    ), patch(
-                        "actions.target_resolution.project_display_name",
-                        wraps=project_display_name,
-                    ) as projection:
+                    with (
+                        patch.object(
+                            SceneDataManager,
+                            "get_state_by_pk",
+                            side_effect=AssertionError("projection must not load state"),
+                        ),
+                        patch(
+                            "actions.target_resolution.project_display_name",
+                            wraps=project_display_name,
+                        ) as projection,
+                    ):
                         assert self._resolve(MenuTargetKind.OBJECTS, self.obj).label == expected
                         projection.assert_called_once()
 
@@ -426,7 +468,8 @@ class ObjectPlaceExitTargetTests(TestCase):
         self.room.scene_data = context
         actor_state = context.initialize_state_for_object(self.actor)
         for kind, target in (
-            (MenuTargetKind.OBJECTS, self.obj), (MenuTargetKind.EXITS, self.exit),
+            (MenuTargetKind.OBJECTS, self.obj),
+            (MenuTargetKind.EXITS, self.exit),
         ):
             state = context.initialize_state_for_object(target)
             state.name = "A carved arch"
@@ -437,13 +480,17 @@ class ObjectPlaceExitTargetTests(TestCase):
             context.remove_from_context_list(target.pk, "real_name_viewers", self.actor.pk)
             assert self.actor.pk not in state.real_name_viewers
             with patch.object(
-                SceneDataManager, "get_state_by_pk",
+                SceneDataManager,
+                "get_state_by_pk",
                 side_effect=AssertionError("read must not load state"),
             ):
                 assert self._resolve(kind, target).label == "A shadowed arch"
-                assert ObjectStateSerializer(
-                    context={"looker": actor_state},
-                ).to_representation(state)["name"] == "A shadowed arch"
+                assert (
+                    ObjectStateSerializer(
+                        context={"looker": actor_state},
+                    ).to_representation(state)["name"]
+                    == "A shadowed arch"
+                )
         # Even an initialized character with naming exceptions is never eligible.
         other_state = context.initialize_state_for_object(self.other)
         other_state.name = "Protected character name"
@@ -482,7 +529,9 @@ class ObjectPlaceExitTargetTests(TestCase):
         targets = (self.room, self.actor, self.obj, self.exit, self.remote)
         packages = [
             BehaviorPackageInstance.objects.create(
-                definition=definition, obj=target, hook="initialize_state",
+                definition=definition,
+                obj=target,
+                hook="initialize_state",
             )
             for target in targets
         ]
@@ -497,7 +546,8 @@ class ObjectPlaceExitTargetTests(TestCase):
         self.room.__dict__.pop("scene_data", None)
         item = ItemInstanceFactory(game_object=self.obj, custom_name="A silver cup")
         with patch(
-            f"{__name__}.initialize_with_place_write", wraps=initialize_with_place_write,
+            f"{__name__}.initialize_with_place_write",
+            wraps=initialize_with_place_write,
         ) as hook:
             for cached in (False, True):
                 if cached:
@@ -509,10 +559,14 @@ class ObjectPlaceExitTargetTests(TestCase):
                     context.states[self.exit.pk] = self.exit.get_object_state(context)
                 scenes = Scene.objects.count()
                 presences = PlacePresence.objects.count()
-                with patch.object(
-                    SceneDataManager, "initialize_state_for_object",
-                    side_effect=AssertionError("menu read must not initialize state"),
-                ), CaptureQueriesContext(connection) as queries:
+                with (
+                    patch.object(
+                        SceneDataManager,
+                        "initialize_state_for_object",
+                        side_effect=AssertionError("menu read must not initialize state"),
+                    ),
+                    CaptureQueriesContext(connection) as queries,
+                ):
                     obj_result = self._resolve(MenuTargetKind.OBJECTS, self.obj)
                     # Cached state.name never supplants the attached item's public base.
                     assert obj_result.label == item.display_name
@@ -525,8 +579,12 @@ class ObjectPlaceExitTargetTests(TestCase):
                         assert set(context.states) == {self.exit.pk}
                 hook.assert_not_called()
                 writes = [
-                    query["sql"] for query in queries.captured_queries
-                    if query["sql"].lstrip().upper().startswith(
+                    query["sql"]
+                    for query in queries.captured_queries
+                    if query["sql"]
+                    .lstrip()
+                    .upper()
+                    .startswith(
                         ("INSERT", "UPDATE", "DELETE", "REPLACE", "CREATE", "ALTER", "DROP"),
                     )
                 ]
@@ -543,16 +601,22 @@ class ObjectPlaceExitTargetTests(TestCase):
         from behaviors.instance_entrance_package import entrance_refuses, instance_refuses
 
         instance = InstancedRoom.objects.create(
-            room=self.remote_profile, owner=self.other_sheet,
+            room=self.remote_profile,
+            owner=self.other_sheet,
         )
         # Actor is not admitted; published destination isolates the instance policy.
         assert entrance_refuses(self.remote, self.actor) is True
         assert instance_refuses(instance, self.actor) is True
-        with patch(
-            "behaviors.instance_entrance_package.entrance_refuses", wraps=entrance_refuses,
-        ) as single, patch(
-            "behaviors.instance_entrance_package.instance_refuses", wraps=instance_refuses,
-        ) as batched:
+        with (
+            patch(
+                "behaviors.instance_entrance_package.entrance_refuses",
+                wraps=entrance_refuses,
+            ) as single,
+            patch(
+                "behaviors.instance_entrance_package.instance_refuses",
+                wraps=instance_refuses,
+            ) as batched,
+        ):
             assert exit_hidden_from_viewer(self.exit, self.actor, {}) is False
             assert self._payload_hidden(self.actor, instances={}) is False
             single.assert_not_called()
@@ -580,8 +644,12 @@ class ObjectPlaceExitTargetTests(TestCase):
             ):
                 assert self._resolve(kind, target) is not None
         writes = [
-            query["sql"] for query in queries.captured_queries
-            if query["sql"].lstrip().upper().startswith(
+            query["sql"]
+            for query in queries.captured_queries
+            if query["sql"]
+            .lstrip()
+            .upper()
+            .startswith(
                 ("INSERT", "UPDATE", "DELETE", "REPLACE", "CREATE", "ALTER", "DROP"),
             )
         ]

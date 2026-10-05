@@ -194,12 +194,20 @@ function speakingAsProps(
 function placeWidgets(
   placesRoomId: string | null | undefined,
   character: string | null,
-  currentPlaceId: number | null
+  currentPlaceId: number | null,
+  actorId: number | null,
+  accountId: number
 ) {
   if (!placesRoomId || !character) return {};
   return {
     placeBar: (
-      <PlaceBar sceneId={placesRoomId} character={character} currentPlaceId={currentPlaceId} />
+      <PlaceBar
+        sceneId={placesRoomId}
+        character={character}
+        currentPlaceId={currentPlaceId}
+        actorId={actorId}
+        accountId={accountId}
+      />
     ),
     tavernGameWidget: <TavernGameWidget roomId={placesRoomId} />,
     speakerQueueBar: <SpeakerQueueBar roomId={placesRoomId} />,
@@ -207,6 +215,7 @@ function placeWidgets(
 }
 
 interface GameRightSidebarProps {
+  accountId: number;
   roomTabLabel: string;
   isDreaming: boolean;
   activeCharacterId: number | null;
@@ -226,6 +235,7 @@ interface GameRightSidebarProps {
 
 /** The right-hand tab rail: room/focus, stories, events, presence, sheet panels. */
 function GameRightSidebar({
+  accountId,
   roomTabLabel,
   isDreaming,
   activeCharacterId,
@@ -254,6 +264,7 @@ function GameRightSidebar({
           <>
             <FocusPanel
               focus={focus}
+              accountId={accountId}
               roomCharacter={active}
               roomData={roomData}
               sceneData={sceneData}
@@ -1000,7 +1011,7 @@ export function GamePage() {
     referenceLoading: Boolean(reference && referenceLoading),
     referenceRetryable: Boolean(reference && referenceRetryable),
     onRetryReference: () => refetchReference(),
-    ...placeWidgets(placesRoomId, active, currentPlaceId),
+    ...placeWidgets(placesRoomId, active, currentPlaceId, activeCharacterId, account.id),
     pendingAttachments: sceneId ? (
       <PendingActionAttachments
         sceneId={sceneId}
@@ -1041,6 +1052,7 @@ export function GamePage() {
             onJumpToCombat={jumpToCombat}
             here={
               <GameRightSidebar
+                accountId={account.id}
                 roomTabLabel={roomTabLabel}
                 isDreaming={isDreaming}
                 activeCharacterId={activeCharacterId}

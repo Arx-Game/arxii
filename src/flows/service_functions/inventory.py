@@ -738,7 +738,6 @@ def steal_permitted(taker_sheet: CharacterSheet | None, item_instance: ItemInsta
     return not _theft_consent_blocks(owner_tenure, taker_tenure)
 
 
-@transaction.atomic
 def _unconscious_holder_reachable(character: CharacterState, item: ItemState) -> bool:
     """Steal-path-only reach widening (#2852): rob a downed body.
 
@@ -780,6 +779,7 @@ def validate_steal(character: CharacterState, item: ItemState) -> None:
         raise TheftNotPermitted
 
 
+@transaction.atomic
 def steal(character: CharacterState, item: ItemState) -> None:
     """Take an item that plain take refuses (#1909) — with consequences.
 

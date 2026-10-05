@@ -113,6 +113,16 @@ theft tracking, and provenance queries for items that matter.
 
 ---
 
+## Context menus for items and targets (#4032)
+
+The web game wraps inventory-item cards/details, room objects, exits, places, and safe visible worn-item rows in the shared `frontend/src/game/target-menu/TargetMenu.tsx` context menu. Right-click and the context-menu keyboard gesture request server-composed actions; ordinary left-click behavior remains unchanged. The read endpoint is `GET /api/actions/characters/<actor_id>/<items|objects|exits|places>/<target_id>/menu/` (`src/actions/target_menu_views.py`). It resolves a typed target inside the viewer's current scope and uses shared action availability checks; it does not execute actions. Dispatch rechecks current rules.
+
+The client cache is partitioned by account, actor, target kind/ID, and owner/container assertions. Reads stay fresh for 30 seconds, and an open menu keeps its opening snapshot; accepted room snapshots and settled dispatch results mark only that actor's entries stale without immediate refetch. Closing and reopening performs the deliberate refresh. Throttled responses are not retried automatically; a `Retry-After` delay is shown where supplied.
+
+Only structured visible worn rows may carry a wearer assertion. Use the visible-worn response's `owner_persona_id` when present; otherwise a menu may use the server-provided room-state `persona_id`. Do not infer wearer identity from a displayed name or enumerate private carried inventory. Authored actions show their projected known consequence risk before the player confirms dispatch; unknown risk is stated as unknown, never as safe.
+
+Give/Put in/Use choices come from the server's typed, viewer-scoped candidate responses and are revalidated before dispatch. Existing specialized item controls remain on their existing routes. LocMemCache throttling is process-local best effort; deployments requiring a worker-wide limit need a shared Django cache backend.
+
 ## Destruction & soft-delete lifecycle
 
 Items move through three states:

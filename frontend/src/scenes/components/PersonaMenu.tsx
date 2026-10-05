@@ -82,6 +82,7 @@ import {
 } from '@/game/persona-menu/personaMenuApi';
 import { usePersonaCard } from '@/game/persona-menu/PersonaCardContext';
 import { LookDialog } from '@/game/persona-menu/LookDialog';
+import type { VisibleWornItem } from '@/inventory/api';
 import { createActionRequest } from '../actionQueries';
 import type { ActionAttachmentInfo, PlayerAction } from '../actionTypes';
 import type { SceneDetail } from '../types';
@@ -232,6 +233,7 @@ export function PersonaMenu({
   // Resolve the active character name to its numeric ObjectDB pk (mirrors the
   // pre-#4030 component) — the character whose menu this is.
   const activeCharacterName = useAppSelector((state) => state.game.active);
+  const accountId = useAppSelector((state) => state.auth.account?.id ?? null);
   const { data: myRosterEntries = [] } = useMyRosterEntriesQuery();
   const characterId = useMemo(
     () => myRosterEntries.find((e) => e.name === activeCharacterName)?.character_id ?? null,
@@ -275,6 +277,7 @@ export function PersonaMenu({
   const [lookOpen, setLookOpen] = useState(false);
   const [lookText, setLookText] = useState('');
   const [lookLoading, setLookLoading] = useState(false);
+  const [visibleWornItems, setVisibleWornItems] = useState<VisibleWornItem[]>([]);
 
   const personaCard = usePersonaCard();
   const createMute = useCreateMute();
@@ -329,6 +332,8 @@ export function PersonaMenu({
           return;
         }
         setLookText(result.message ?? '');
+        const worn = result.data?.visible_worn_items;
+        setVisibleWornItems(Array.isArray(worn) ? (worn as VisibleWornItem[]) : []);
       })
       .catch(() => {
         setLookOpen(false);
@@ -876,12 +881,15 @@ export function PersonaMenu({
         targetPersonaName={personaName}
       />
       <LookDialog
+        partition={accountId === null ? '' : `account-${accountId}`}
+        actorId={characterId}
         open={lookOpen}
         onOpenChange={setLookOpen}
         personaName={personaName}
         thumbnailUrl={thumbnailUrl}
         text={lookText}
         isLoading={lookLoading}
+        visibleWornItems={visibleWornItems}
         onViewSheet={handleViewSheet}
       />
     </>

@@ -21,7 +21,7 @@ export type FocusEntry =
       room: RoomStatePayload['room'] | null;
       sceneSummary: SceneSummary | null;
     }
-  | { kind: 'character'; character: { id: number; name: string } }
+  | { kind: 'character'; character: { id: number; name: string; personaId?: number | null } }
   | { kind: 'item'; item: { id: number; name: string } };
 
 export interface FocusStackApi {

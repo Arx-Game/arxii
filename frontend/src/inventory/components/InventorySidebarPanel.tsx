@@ -12,6 +12,7 @@ import { useCallback, useMemo } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import { Badge } from '@/components/ui/badge';
+import { useAppSelector } from '@/store/hooks';
 import { useActionResult } from '@/hooks/actionResultBus';
 import type { ActionResultPayload } from '@/hooks/types';
 import { ItemCard } from './ItemCard';
@@ -25,6 +26,7 @@ export function InventorySidebarPanel({ characterId }: InventorySidebarPanelProp
   const { data: inventory = [] } = useInventory(characterId);
   const { data: equipped = [] } = useEquippedItems(characterId);
   const queryClient = useQueryClient();
+  const account = useAppSelector((state) => state.auth.account);
 
   // Equip/unequip and other item-affecting actions travel through the
   // websocket dispatcher (see WardrobePage). Invalidate the same query keys
@@ -67,7 +69,7 @@ export function InventorySidebarPanel({ characterId }: InventorySidebarPanelProp
         <ul className="space-y-2">
           {inventory.map((item) => (
             <li key={item.id} className="relative">
-              <ItemCard item={item} />
+              <ItemCard item={item} actorId={characterId} accountId={account?.id ?? null} />
               {equippedItemIds.has(item.id) && (
                 <Badge
                   variant="outline"

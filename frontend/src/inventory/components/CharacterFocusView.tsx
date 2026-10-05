@@ -20,9 +20,10 @@ import { cn } from '@/lib/utils';
 import { humanizeRegion, humanizeRegionLayer } from '../humanizeRegionLayer';
 import { useVisibleMarkings } from '../hooks/useVisibleMarkings';
 import { useVisibleWornItems } from '../hooks/useVisibleWornItems';
+import { TargetMenu } from '@/game/target-menu/TargetMenu';
 
 interface CharacterFocusViewProps {
-  character: { id: number; name: string };
+  character: { id: number; name: string; personaId?: number | null };
   /**
    * The id of the requester's currently active character — passed to the
    * backend as the ``observer`` query parameter so visibility rules
@@ -31,6 +32,7 @@ interface CharacterFocusViewProps {
    */
   observerId: number | null;
   onItemClick: (item: { id: number; name: string }) => void;
+  accountId?: number | null;
   className?: string;
 }
 
@@ -38,6 +40,7 @@ export function CharacterFocusView({
   character,
   observerId,
   onItemClick,
+  accountId = null,
   className,
 }: CharacterFocusViewProps) {
   const { data: visibleItems = [], isLoading } = useVisibleWornItems(
@@ -61,8 +64,9 @@ export function CharacterFocusView({
     }
     return (
       <ul className="space-y-1">
-        {visibleItems.map((item) => (
-          <li key={item.id}>
+        {visibleItems.map((item) => {
+          const ownerPersonaId = item.owner_persona_id ?? character.personaId;
+          const row = (
             <button
               type="button"
               onClick={() => onItemClick({ id: item.id, name: item.display_name })}
@@ -73,8 +77,27 @@ export function CharacterFocusView({
                 {humanizeRegionLayer(item.body_region, item.equipment_layer)}
               </span>
             </button>
-          </li>
-        ))}
+          );
+          return (
+            <li key={item.id}>
+              {accountId !== null && ownerPersonaId != null ? (
+                <TargetMenu
+                  partition={`account-${accountId}`}
+                  actorId={observerId}
+                  target={{
+                    kind: 'items',
+                    target_id: item.id,
+                    owner_persona_id: ownerPersonaId,
+                  }}
+                >
+                  {row}
+                </TargetMenu>
+              ) : (
+                row
+              )}
+            </li>
+          );
+        })}
       </ul>
     );
   };

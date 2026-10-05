@@ -3,6 +3,9 @@
  */
 
 import { fireEvent, render, screen } from '@testing-library/react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { Provider } from 'react-redux';
+import { store } from '@/store/store';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { ItemDetailPanel } from '../ItemDetailPanel';
 import type { ItemInstance } from '../../types';
@@ -112,6 +115,15 @@ function setupDefaultMocks() {
 // Fixtures
 // ---------------------------------------------------------------------------
 
+function renderWithQueryClient(ui: React.ReactElement) {
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  return render(
+    <Provider store={store}>
+      <QueryClientProvider client={client}>{ui}</QueryClientProvider>
+    </Provider>
+  );
+}
+
 function makeItem(overrides: Partial<ItemInstance> = {}): ItemInstance {
   return {
     id: 7,
@@ -173,9 +185,20 @@ describe('ItemDetailPanel', () => {
   });
 
   it('renders the item name and quality tier when open', () => {
-    render(<ItemDetailPanel item={makeItem()} open={true} onOpenChange={vi.fn()} />);
-    expect(screen.getByText('Silver Brooch')).toBeInTheDocument();
+    renderWithQueryClient(
+      <ItemDetailPanel
+        item={makeItem()}
+        open
+        onOpenChange={vi.fn()}
+        accountId={6}
+        characterId={42}
+      />
+    );
+    expect(screen.getByRole('heading', { name: 'Silver Brooch' })).toBeInTheDocument();
     expect(screen.getByText('Exquisite')).toBeInTheDocument();
+    expect(
+      screen.getByText('Silver Brooch', { selector: '[data-radix-collection-item],h2' })
+    ).toBeInTheDocument();
   });
 
   it('renders markdown description with bold and list', () => {

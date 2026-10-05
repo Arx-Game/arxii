@@ -980,7 +980,7 @@ class PlaceExitMenuActionTests(TestCase):
         assert self.go.run(self.actor, target=self.exit).success
         assert Place.objects.count() == before + 1 and self.actor.location == self.remote
 
-    def test_no_arrival_outcomes_output_effects_and_actual_location(self):
+    def test_no_arrival_outcomes_output_effects_and_actual_location(self):  # noqa: C901
         from actions.definitions import movement
 
         self.load(carry_capacity(self.actor) + 1)
@@ -1045,6 +1045,9 @@ class PlaceExitMenuActionTests(TestCase):
                     ) as after,
                     patch("flows.emit.emit_event", side_effect=observe),
                     patch(
+                        "flows.service_functions.movement.logger.exception"
+                    ) as traversal_error_log,
+                    patch(
                         "world.items.services.encumbrance.charge_move_fatigue",
                         wraps=charge_move_fatigue,
                     ) as fatigue,
@@ -1079,6 +1082,12 @@ class PlaceExitMenuActionTests(TestCase):
                         ), (mode, path, result)
                         assert post_results == [False]
                 hook.assert_called_once_with(self.actor, self.remote)
+                if mode == "exception":
+                    traversal_error_log.assert_called_once_with(
+                        "at_traverse failed for exit %s", self.exit.pk
+                    )
+                else:
+                    traversal_error_log.assert_not_called()
                 assert self.actor.location == third
                 fatigue.assert_not_called()
                 wards.assert_not_called()

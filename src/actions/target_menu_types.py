@@ -13,6 +13,13 @@ if TYPE_CHECKING:
     from world.scenes.place_models import Place
 
 
+# Internal serializer context only; never a response key or dispatch selector.
+AUTHOR_ENTRY_CONTEXT = "__author_entry_context__"
+INPUT_USE_TARGET = "use_target"
+INPUT_OWNER_PERSONA = "owner_persona_id"
+INPUT_CONTAINER_ITEM = "container_item_id"
+
+
 class MenuTargetKind(StrEnum):
     """The database ID domain named by a menu request."""
 

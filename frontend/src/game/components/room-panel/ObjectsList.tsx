@@ -9,11 +9,13 @@ import { useDispatchPlayerAction } from '@/combat/queries';
 import { isDispatchFailure } from '@/combat/types';
 import { dbrefToId } from '@/lib/dbref';
 import { MissionBoardDialog } from '@/missions/components/MissionBoardDialog';
+import { TargetMenu } from '@/game/target-menu/TargetMenu';
 
 interface ObjectsListProps {
   objects: RoomStateObject[];
   /** The active puppet's ObjectDB pk — required to dispatch examine (#3044). */
   characterId?: number | null;
+  accountId?: number | null;
 }
 
 /**
@@ -32,7 +34,7 @@ function examineBody(text: string | undefined, isPending: boolean) {
   return isPending ? 'Looking…' : 'Cannot examine right now.';
 }
 
-export function ObjectsList({ objects, characterId }: ObjectsListProps) {
+export function ObjectsList({ objects, characterId, accountId = null }: ObjectsListProps) {
   const [expandedDbref, setExpandedDbref] = useState<string | null>(null);
   const [examineText, setExamineText] = useState<Record<string, string>>({});
   const [boardDbref, setBoardDbref] = useState<string | null>(null);
@@ -78,28 +80,34 @@ export function ObjectsList({ objects, characterId }: ObjectsListProps) {
           return (
             <li key={obj.dbref} className="flex flex-col gap-1">
               <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  className="flex min-h-11 flex-1 items-center gap-2 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                  onClick={() => handleToggle(obj)}
-                  data-testid={`examine-toggle-${obj.dbref}`}
+                <TargetMenu
+                  partition={accountId === null ? '' : `account-${accountId}`}
+                  actorId={characterId ?? null}
+                  target={{ kind: 'objects', target_id: dbrefToId(obj.dbref) }}
                 >
-                  {isExpanded ? (
-                    <ChevronDown className="h-3 w-3 shrink-0" />
-                  ) : (
-                    <ChevronRight className="h-3 w-3 shrink-0" />
-                  )}
-                  {obj.thumbnail_url ? (
-                    <img
-                      src={obj.thumbnail_url}
-                      alt={obj.name}
-                      className="h-5 w-5 rounded object-cover"
-                    />
-                  ) : (
-                    <div className="h-5 w-5 shrink-0 rounded bg-muted" />
-                  )}
-                  <span className="text-xs">{obj.name}</span>
-                </button>
+                  <button
+                    type="button"
+                    className="flex min-h-11 flex-1 items-center gap-2 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    onClick={() => handleToggle(obj)}
+                    data-testid={`examine-toggle-${obj.dbref}`}
+                  >
+                    {isExpanded ? (
+                      <ChevronDown className="h-3 w-3 shrink-0" />
+                    ) : (
+                      <ChevronRight className="h-3 w-3 shrink-0" />
+                    )}
+                    {obj.thumbnail_url ? (
+                      <img
+                        src={obj.thumbnail_url}
+                        alt={obj.name}
+                        className="h-5 w-5 rounded object-cover"
+                      />
+                    ) : (
+                      <div className="h-5 w-5 shrink-0 rounded bg-muted" />
+                    )}
+                    <span className="text-xs">{obj.name}</span>
+                  </button>
+                </TargetMenu>
                 {obj.is_mission_board ? (
                   <Button
                     type="button"

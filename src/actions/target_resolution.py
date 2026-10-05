@@ -174,7 +174,8 @@ def _resolve_room_menu_object(  # noqa: C901, PLR0912
     if room is None or not room.is_typeclass("typeclasses.rooms.Room", exact=False):
         return None
     game_object = ObjectDB.objects.filter(
-        pk=request.target_id, db_location=room,
+        pk=request.target_id,
+        db_location=room,
     ).first()
     if game_object is None:
         return None
@@ -208,9 +209,15 @@ def _resolve_room_menu_object(  # noqa: C901, PLR0912
             attached_item = None
         item = None
         if attached_item is not None:
-            item = ItemInstance.objects.in_play().filter(
-                pk=attached_item.pk, game_object=game_object, contained_in__isnull=True,
-            ).first()
+            item = (
+                ItemInstance.objects.in_play()
+                .filter(
+                    pk=attached_item.pk,
+                    game_object=game_object,
+                    contained_in__isnull=True,
+                )
+                .first()
+            )
             if item is None:
                 return None
     return ResolvedMenuTarget(
@@ -245,13 +252,17 @@ def _room_menu_label(
     base = item.display_name if item is not None else game_object.key
     if state is None:
         return project_display_name(
-            base, object_id=game_object.pk, viewer_id=viewer.pk,
+            base,
+            object_id=game_object.pk,
+            viewer_id=viewer.pk,
         )
     if item is None:
         # Do not evaluate BaseState.name; explicit empty/null names are retained.
         base = state.__dict__.get("name", game_object.key)
     return project_display_name(
-        base, object_id=game_object.pk, viewer_id=viewer.pk,
+        base,
+        object_id=game_object.pk,
+        viewer_id=viewer.pk,
         fake_name=state.fake_name,
         real_name_viewers=state.real_name_viewers,
         name_prefix=state.name_prefix,

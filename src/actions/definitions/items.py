@@ -30,6 +30,7 @@ from actions.definitions.use_item_helpers import (
     candidate_targets,
     scalar_values,
     source_values,
+    target_label,
     use_source,
     use_target,
 )
@@ -368,24 +369,30 @@ class PutInAction(Action):
         context.kwargs[MENU_TARGET_KEY] = source_context.kwargs.get(MENU_TARGET_KEY)
         return cancelled
 
-    def container_candidates(
-        self, actor: ObjectDB, *, kwargs: dict[str, Any]
-    ) -> tuple[dict[str, Any], ...]:
-        """Read visible root containers with this action's complete pair checks."""
+    def container_candidate_page(
+        self, actor: ObjectDB, *, kwargs: dict[str, Any], after_pk: int | None, page_size: int
+    ) -> tuple[tuple[dict[str, Any], ...], int | None]:
+        """Read one stable page of visible carried containers."""
         if MENU_TARGET_KEY not in kwargs or not self.is_applicable(actor, kwargs=kwargs):
-            return ()
+            return (), None
         from django.db.models import Q  # noqa: PLC0415
 
         scope = Q(game_object__db_location=actor)
         if actor.location is not None:
             scope |= Q(game_object__db_location=actor.location)
-        rows = []
-        item = _put_item(actor, kwargs)
-        for container in (
+        base = (
             ItemInstance.objects.in_play()
             .filter(scope, contained_in__isnull=True, template__is_container=True)
             .order_by("pk")
-        ):
+        )
+        if after_pk is not None:
+            base = base.filter(pk__gt=after_pk)
+        page = list(base[: page_size + 1])
+        has_more = len(page) > page_size
+        containers = page[:page_size]
+        rows = []
+        item = _put_item(actor, kwargs)
+        for container in containers:
             values = {**kwargs, _PUT_CONTAINER: container.pk}
             if _put_container(actor, values, item) is None:
                 continue
@@ -405,7 +412,24 @@ class PutInAction(Action):
                     "reasons": list(checked.reasons),
                 }
             )
-        return tuple(rows)
+        next_pk = containers[-1].pk if has_more and containers else None
+        return tuple(rows), next_pk
+
+    def container_candidates(
+        self, actor: ObjectDB, *, kwargs: dict[str, Any]
+    ) -> tuple[dict[str, Any], ...]:
+        """Read visible root containers with this action's complete pair checks."""
+
+        rows = []
+        after_pk = None
+        while True:
+            page, next_pk = self.container_candidate_page(
+                actor, kwargs=kwargs, after_pk=after_pk, page_size=25
+            )
+            rows.extend(page)
+            if next_pk is None:
+                return tuple(rows)
+            after_pk = next_pk
 
     def execute(
         self, actor: ObjectDB, context: ActionContext | None = None, **kwargs: Any
@@ -754,6 +778,59 @@ class ActivatePermitAction(Action):
         )
 
 
+def _technique_grant_for_item(item_instance: ItemInstance) -> Any:
+    """Find the optional technique grant associated with a used item template."""
+    from world.magic.models import TechniqueGrant  # noqa: PLC0415
+
+    return (
+        TechniqueGrant.objects.filter(item_template=item_instance.template)
+        .select_related("technique")
+        .first()
+    )
+
+
+def _learn_use_grant(actor: ObjectDB, grant: Any, result: Any) -> None:
+    """Learn an item's granted technique after a successful use check."""
+    if grant is None or (
+        result.check_result is not None and result.check_result.success_level <= 0
+    ):
+        return
+    import contextlib  # noqa: PLC0415
+
+    from world.achievements.constants import AccessChangeSource  # noqa: PLC0415
+    from world.magic.exceptions import MagicError  # noqa: PLC0415
+    from world.magic.services.technique_acquisition import learn_technique  # noqa: PLC0415
+
+    # The item use already committed; learning failure must not undo the use.
+    with contextlib.suppress(MagicError):
+        learn_technique(
+            actor.sheet_data,
+            grant.technique,
+            source=AccessChangeSource.TECHNIQUE_GRANT,
+            ap_cost=grant.acquisition_ap_cost,
+        )
+
+
+def _technique_grant_use_error(actor: ObjectDB, grant: Any) -> str | None:
+    """Return a safe refusal before a granted technique can spend an item charge."""
+    if grant is None:
+        return None
+    from world.magic.exceptions import UltimateNotLearnable  # noqa: PLC0415
+    from world.magic.services.gift_acquisition import enforce_not_ultimate  # noqa: PLC0415
+    from world.progression.services.spends import check_requirements_for_technique  # noqa: PLC0415
+
+    try:
+        enforce_not_ultimate(grant.technique)
+    except UltimateNotLearnable as exc:
+        return exc.user_message
+    met, failed = check_requirements_for_technique(actor, grant.technique)
+    if met:
+        return None
+    from world.magic.exceptions import TechniqueRequirementsNotMet  # noqa: PLC0415
+
+    return TechniqueRequirementsNotMet(failed).user_message
+
+
 @dataclass
 class UseItemAction(Action):
     """Use a held consumable item, applying its on-use pool's effects."""
@@ -813,6 +890,163 @@ class UseItemAction(Action):
             "descriptor": cosmetic,
             "blend": blend,
         }
+
+    def use_candidate_page(  # noqa: C901, PLR0912, PLR0915
+        self,
+        actor: ObjectDB,
+        *,
+        kwargs: dict[str, Any],
+        after: tuple[int, int, int] | None,
+        page_size: int,
+    ) -> tuple[tuple[dict[str, Any], ...], tuple[int, int, int] | None]:
+        """Read a bounded target/option product page in lexicographic ID order."""
+        from django.db.models import Q  # noqa: PLC0415
+
+        from world.forms.models import FormTraitOption  # noqa: PLC0415
+
+        if MENU_TARGET_KEY not in kwargs:
+            return (), None
+        item = use_source(actor, kwargs)
+        if item is None or not self.is_applicable(actor, kwargs=kwargs):
+            return (), None
+        kind = item.template.on_use_target_kind
+        if kind is not None and kind not in SUPPORTED_KINDS:
+            return (), None
+
+        effect = item.template.appearance_effects.filter(target_option__isnull=True).first()
+        if effect is None:
+            option_ids = None
+        elif OPTION_ID_KEY in kwargs:
+            option_id = kwargs[OPTION_ID_KEY]
+            if type(option_id) is not int or option_id <= 0:
+                return (), None
+            if not FormTraitOption.objects.filter(pk=option_id, trait_id=effect.trait_id).exists():
+                return (), None
+            option = (
+                FormTraitOption.objects.filter(pk=option_id, trait_id=effect.trait_id)
+                .values_list("pk", "sort_order")
+                .first()
+            )
+            if option is None:
+                return (), None
+            option_ids = (option,)
+        else:
+            option_ids = (
+                FormTraitOption.objects.filter(trait_id=effect.trait_id)
+                .order_by("sort_order", "pk")
+                .values_list("pk", "sort_order")
+            )
+
+        if option_ids is not None and not isinstance(option_ids, tuple) and not option_ids.exists():
+            return (), None
+
+        fixed_target = USE_TARGET_KEY in kwargs or kind is None
+        target_kind = kind
+        if fixed_target:
+            wire = kwargs.get(USE_TARGET_KEY)
+            target_id = wire.get("target_id", 0) if isinstance(wire, dict) else 0
+            target_ids = (target_id,)
+        elif kind == TargetKind.ITEM:
+            scope = Q(game_object__db_location=actor)
+            if actor.location is not None:
+                scope |= Q(game_object__db_location=actor.location)
+            target_ids = (
+                ItemInstance.objects.in_play()
+                .filter(scope, contained_in__isnull=True, game_object__isnull=False)
+                .order_by("pk")
+                .values_list("pk", flat=True)
+            )
+        elif actor.location is not None:
+            scope = Q(db_location=actor.location)
+            if kind == TargetKind.ROOM:
+                scope |= Q(pk=actor.location.pk)
+            target_ids = ObjectDB.objects.filter(scope).order_by("pk").values_list("pk", flat=True)
+        else:
+            return (), None
+
+        if fixed_target:
+            target_iterator = iter(target_ids)
+        else:
+            if after is not None and after[0] > 0:
+                target_ids = target_ids.filter(pk__gte=after[0])
+            target_iterator = target_ids.iterator(chunk_size=page_size)
+
+        rows = []
+        raw_count = 0
+        last_pair = after
+        has_more = False
+        for raw_target_id in target_iterator:
+            target_id = int(raw_target_id)
+            if option_ids is None:
+                if after is not None and after[0] == target_id:
+                    continue
+                page_options = ((None, 0),)
+            elif isinstance(option_ids, tuple):
+                page_options = tuple(
+                    option
+                    for option in option_ids
+                    if after is None
+                    or target_id != after[0]
+                    or (option[1], option[0]) > (after[1], after[2])
+                )
+            else:
+                options = option_ids
+                if after is not None and target_id == after[0]:
+                    options = options.filter(
+                        Q(sort_order__gt=after[1]) | Q(sort_order=after[1], pk__gt=after[2])
+                    )
+                remaining = page_size - raw_count
+                page_options = tuple(options[: remaining + 1])
+            if not page_options:
+                continue
+            for option_id, option_sort_order in page_options:
+                if raw_count >= page_size:
+                    has_more = True
+                    break
+                raw_count += 1
+                last_pair = (target_id, option_sort_order, option_id or 0)
+                if fixed_target:
+                    wire = kwargs.get(USE_TARGET_KEY)
+                elif target_kind == TargetKind.ITEM:
+                    wire = {"kind": "items", "target_id": target_id}
+                else:
+                    wire = {"kind": "objects", "target_id": target_id}
+                values = dict(kwargs)
+                if wire is not None:
+                    values[USE_TARGET_KEY] = dict(wire)
+                if option_id is not None:
+                    values[OPTION_ID_KEY] = option_id
+                target, reason = use_target(actor, values, item)
+                if reason:
+                    continue
+                option_name = ""
+                if option_id is not None:
+                    option_name = (
+                        FormTraitOption.objects.filter(pk=option_id)
+                        .values_list("display_name", flat=True)
+                        .first()
+                        or ""
+                    )
+                checked = self.check_availability(
+                    actor, context={"kwargs": values}, pending_inputs=frozenset()
+                )
+                rows.append(
+                    {
+                        "use_target": wire,
+                        "target_name": (
+                            "Yourself" if target is None else target_label(actor, target)
+                        ),
+                        "option_id": option_id,
+                        "option_name": option_name,
+                        "available": checked.available,
+                        "reasons": list(checked.reasons),
+                    }
+                )
+            if has_more:
+                break
+            if fixed_target:
+                break
+        return tuple(rows), last_pair if has_more else None
 
     def use_candidates(
         self, actor: ObjectDB, *, kwargs: dict[str, Any]
@@ -947,39 +1181,15 @@ class UseItemAction(Action):
         if reason:
             return ActionResult(success=False, message=reason)
         try:
-        try:
             option_id, descriptor, blend = scalar_values(kwargs)
         except ValueError as exc:
             return ActionResult(success=False, message=str(exc))
 
         # TechniqueGrant hook: if the item template has a grant, learn the technique.
-        from world.magic.models import TechniqueGrant  # noqa: PLC0415
-
-        grant = (
-            TechniqueGrant.objects.filter(item_template=item_instance.template)
-            .select_related("technique")
-            .first()
-        )
-        # Check every grant prerequisite before the atomic use service can spend a charge.
-        if grant is not None:
-            from world.magic.exceptions import UltimateNotLearnable  # noqa: PLC0415
-            from world.magic.services.gift_acquisition import enforce_not_ultimate  # noqa: PLC0415
-            from world.progression.services.spends import (  # noqa: PLC0415
-                check_requirements_for_technique,
-            )
-
-            try:
-                enforce_not_ultimate(grant.technique)
-            except UltimateNotLearnable as exc:
-                return ActionResult(success=False, message=exc.user_message)
-
-            met, failed = check_requirements_for_technique(actor, grant.technique)
-            if not met:
-                from world.magic.exceptions import TechniqueRequirementsNotMet  # noqa: PLC0415
-
-                return ActionResult(
-                    success=False, message=TechniqueRequirementsNotMet(failed).user_message
-                )
+        grant = _technique_grant_for_item(item_instance)
+        grant_error = _technique_grant_use_error(actor, grant)
+        if grant_error is not None:
+            return ActionResult(success=False, message=grant_error)
 
         try:
             result = use_item(
@@ -993,28 +1203,7 @@ class UseItemAction(Action):
         except ItemError as exc:
             return ActionResult(success=False, message=exc.user_message)
 
-        if grant is not None:
-            # Success predicate: check_result is None (no check) or success_level > 0.
-            check_ok = result.check_result is None or result.check_result.success_level > 0
-            if check_ok:
-                import contextlib  # noqa: PLC0415
-
-                from world.achievements.constants import AccessChangeSource  # noqa: PLC0415
-                from world.magic.exceptions import MagicError  # noqa: PLC0415
-                from world.magic.services.technique_acquisition import (  # noqa: PLC0415
-                    learn_technique,
-                )
-
-                # Partial-failure policy: item consumed, technique didn't take.
-                # The use still succeeded; the user_message is not surfaced here
-                # because the item's on-use effects already happened.
-                with contextlib.suppress(MagicError):
-                    learn_technique(
-                        actor.sheet_data,
-                        grant.technique,
-                        source=AccessChangeSource.TECHNIQUE_GRANT,
-                        ap_cost=grant.acquisition_ap_cost,
-                    )
+        _learn_use_grant(actor, grant, result)
 
         sdm = context.scene_data if context else SceneDataManager()
         actor_state = sdm.initialize_state_for_object(actor)

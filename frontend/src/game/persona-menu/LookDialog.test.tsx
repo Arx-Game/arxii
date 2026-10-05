@@ -1,5 +1,8 @@
 import { render, screen, fireEvent } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { Provider } from 'react-redux';
+import { store } from '@/store/store';
 import { vi } from 'vitest';
 import { LookDialog } from './LookDialog';
 
@@ -14,7 +17,14 @@ function renderDialog(overrides = {}) {
     onViewSheet: vi.fn(),
     ...overrides,
   };
-  render(<LookDialog {...props} />);
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  render(
+    <Provider store={store}>
+      <QueryClientProvider client={client}>
+        <LookDialog {...props} />
+      </QueryClientProvider>
+    </Provider>
+  );
   return props;
 }
 
@@ -33,6 +43,27 @@ describe('LookDialog', () => {
     const wrapper = screen.getByText(/Status: Healthy/).closest('.whitespace-pre-wrap');
     expect(wrapper).not.toBeNull();
     expect(wrapper).toHaveTextContent(/Wearing: A grey cloak/);
+  });
+
+  it('renders only server-returned visible worn rows alongside the Look result', () => {
+    renderDialog({
+      partition: 'account-1',
+      actorId: 42,
+      visibleWornItems: [
+        {
+          id: 81,
+          display_name: 'A copper gorget',
+          body_region: 'neck',
+          equipment_layer: 'outer',
+          owner_persona_id: 19,
+        },
+      ],
+    });
+    expect(screen.getByRole('region', { name: 'Visible worn items' })).toHaveTextContent(
+      'A copper gorget'
+    );
+    expect(screen.getByRole('button', { name: /A copper gorget/ })).toBeInTheDocument();
+    expect(screen.queryByText('private inventory')).not.toBeInTheDocument();
   });
 
   it('closes on Escape', async () => {

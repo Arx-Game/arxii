@@ -394,18 +394,24 @@ class GiveAction(Action):
 
         return emit_typed_item_intent(context, actor, emit_give_intent)
 
-    def recipient_candidates(
-        self, actor: ObjectDB, *, kwargs: dict[str, Any]
-    ) -> tuple[dict[str, Any], ...]:
-        """Read current public recipients with this action's complete availability."""
+    def recipient_candidate_page(
+        self, actor: ObjectDB, *, kwargs: dict[str, Any], after_pk: int | None, page_size: int
+    ) -> tuple[tuple[dict[str, Any], ...], int | None]:
+        """Read one stable recipient page, checking availability only for that page."""
         if MENU_TARGET_KEY not in kwargs or not self.is_applicable(actor, kwargs=kwargs):
-            return ()
+            return (), None
         if actor.location is None:
-            return ()
-        rows = []
-        for persona in Persona.objects.filter(
+            return (), None
+        base = Persona.objects.filter(
             character_sheet__character__db_location=actor.location
-        ).order_by("pk"):
+        ).order_by("pk")
+        if after_pk is not None:
+            base = base.filter(pk__gt=after_pk)
+        page = list(base[: page_size + 1])
+        has_more = len(page) > page_size
+        personas = page[:page_size]
+        rows = []
+        for persona in personas:
             candidate_kwargs = {**kwargs, _GIVE_RECIPIENT: persona.pk}
             if _give_recipient(actor, candidate_kwargs) is None:
                 continue
@@ -420,7 +426,24 @@ class GiveAction(Action):
                     "reasons": list(checked.reasons),
                 }
             )
-        return tuple(rows)
+        next_pk = personas[-1].pk if has_more and personas else None
+        return tuple(rows), next_pk
+
+    def recipient_candidates(
+        self, actor: ObjectDB, *, kwargs: dict[str, Any]
+    ) -> tuple[dict[str, Any], ...]:
+        """Read current public recipients with this action's complete availability."""
+
+        rows = []
+        after_pk = None
+        while True:
+            page, next_pk = self.recipient_candidate_page(
+                actor, kwargs=kwargs, after_pk=after_pk, page_size=25
+            )
+            rows.extend(page)
+            if next_pk is None:
+                return tuple(rows)
+            after_pk = next_pk
 
     def execute(
         self, actor: ObjectDB, context: ActionContext | None = None, **kwargs: Any

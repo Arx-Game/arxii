@@ -1,4 +1,4 @@
-/**
+/*
  * ItemCard — compact horizontal row representing one ItemInstance.
  *
  * - Quality tier color appears as a 2px left-border accent.
@@ -9,6 +9,7 @@
 import { Shirt } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
+import { TargetMenu } from '@/game/target-menu/TargetMenu';
 import type { ItemInstance } from '../types';
 
 interface ItemCardProps {
@@ -17,19 +18,27 @@ interface ItemCardProps {
   facetLabels?: string[];
   onClick?: (itemId: number) => void;
   className?: string;
+  actorId?: number | null;
+  accountId?: number | null;
 }
 
 const MAX_FACET_CHIPS = 3;
 
-export function ItemCard({ item, facetLabels = [], onClick, className }: ItemCardProps) {
+export function ItemCard({
+  item,
+  facetLabels = [],
+  onClick,
+  className,
+  actorId = null,
+  accountId = null,
+}: ItemCardProps) {
   const tier = item.quality_tier;
   const tierColor = tier?.color_hex || '';
   const tintedBackground = tierColor ? `${tierColor}20` : undefined;
 
   const visibleFacets = facetLabels.slice(0, MAX_FACET_CHIPS);
   const overflow = Math.max(0, facetLabels.length - MAX_FACET_CHIPS);
-
-  return (
+  const card = (
     <button
       type="button"
       onClick={() => onClick?.(item.id)}
@@ -72,6 +81,17 @@ export function ItemCard({ item, facetLabels = [], onClick, className }: ItemCar
         )}
       </div>
     </button>
+  );
+
+  if (actorId === null || accountId === null) return card;
+  return (
+    <TargetMenu
+      partition={`account-${accountId}`}
+      actorId={actorId}
+      target={{ kind: 'items', target_id: item.id }}
+    >
+      {card}
+    </TargetMenu>
   );
 }
 

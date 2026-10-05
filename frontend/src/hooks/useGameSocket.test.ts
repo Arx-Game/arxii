@@ -18,7 +18,15 @@ const { mockDispatch, mockNavigate } = vi.hoisted(() => ({
 vi.mock('@/store/hooks', () => ({
   useAppDispatch: () => mockDispatch,
   useAppSelector: (selector: (state: unknown) => unknown) =>
-    selector({ auth: { account: { id: 1, username: 'tester' } } }),
+    selector({
+      auth: {
+        account: {
+          id: 1,
+          username: 'tester',
+          available_characters: [{ id: 42, name: 'Reconcile-One' }],
+        },
+      },
+    }),
 }));
 
 vi.mock('react-router-dom', () => ({
@@ -361,6 +369,25 @@ describe('useGameSocket reconnect reconciliation ordering (#3760 Task 12)', () =
     vi.unstubAllGlobals();
   });
 
+  it('marks only the socket actor target menus stale when an action result arrives', async () => {
+    const { result } = renderHook(() => useGameSocket());
+    await act(async () => {
+      await result.current.connect('Reconcile-One');
+    });
+    const socket = MockWebSocket.instances[0];
+
+    act(() => {
+      socket.dispatch('message', {
+        data: JSON.stringify(['action_result', [], { success: false, message: 'No.' }]),
+      });
+    });
+
+    expect(queryClient.invalidateQueries).toHaveBeenCalledWith({
+      queryKey: ['target-menu', 'account-1', 42],
+      refetchType: 'none',
+    });
+  });
+
   it('reauthorizes (re-puppets) immediately, then reconciles a stranded draft, and only then flips ready / invalidates the room-snapshot query', async () => {
     const { result } = renderHook(() => useGameSocket());
     const character = 'Reconcile-One';
@@ -383,13 +410,22 @@ describe('useGameSocket reconnect reconciliation ordering (#3760 Task 12)', () =
     expect(socket.sent).toHaveLength(1);
     expect(JSON.parse(socket.sent[0])).toEqual(['puppet', [], { character }]);
     dispatchReadiness(socket, character);
+    expect(queryClient.invalidateQueries).toHaveBeenCalledWith({
+      queryKey: ['target-menu', 'account-1', 42],
+      refetchType: 'none',
+    });
 
     // Reconcile: the lookup for the stranded draft has been dispatched...
     expect(mockFetchPoseSubmission).toHaveBeenCalledWith('req-1');
     // ...but it hasn't resolved yet, so readiness must not have flipped and
-    // the room-snapshot query must not have been invalidated.
+    // the feed query must not have been invalidated. The accepted room snapshot
+    // already marked this actor's target menu stale without refetching it.
     expect(readyDispatchCount()).toBe(0);
-    expect(queryClient.invalidateQueries).not.toHaveBeenCalled();
+    expect(queryClient.invalidateQueries).toHaveBeenCalledTimes(1);
+    expect(queryClient.invalidateQueries).toHaveBeenCalledWith({
+      queryKey: ['target-menu', 'account-1', 42],
+      refetchType: 'none',
+    });
 
     // The lookup resolves: the send had actually landed.
     await act(async () => {

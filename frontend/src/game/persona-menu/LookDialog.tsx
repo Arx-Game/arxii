@@ -5,17 +5,22 @@ import { GripVertical } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { PersonaAvatar } from '@/components/PersonaAvatar';
 import { FormattedContent } from '@/components/FormattedContent';
+import { TargetMenu } from '@/game/target-menu/TargetMenu';
+import type { VisibleWornItem } from '@/inventory/api';
 import { cn } from '@/lib/utils';
 
 import { useDraggable } from './useDraggable';
 
 export interface LookDialogProps {
+  partition?: string;
+  actorId?: number | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   personaName: string;
   thumbnailUrl?: string | null;
   text: string;
   isLoading: boolean;
+  visibleWornItems?: VisibleWornItem[];
   onViewSheet: () => void;
 }
 
@@ -26,12 +31,15 @@ export interface LookDialogProps {
  * without dimming it, so the reader stays readable while the dialog is open.
  */
 export function LookDialog({
+  partition = '',
+  actorId = null,
   open,
   onOpenChange,
   personaName,
   thumbnailUrl,
   text,
   isLoading,
+  visibleWornItems = [],
   onViewSheet,
 }: LookDialogProps) {
   const { offset, handleProps, reset } = useDraggable();
@@ -80,10 +88,37 @@ export function LookDialog({
             {isLoading ? (
               'Looking…'
             ) : (
-              // Status / Wearing / Markings lines break like every other
-              // prose reader (ExplorationReader.tsx:138, ObjectsList.tsx:118).
               <FormattedContent content={text} className="whitespace-pre-wrap" />
             )}
+            {!isLoading && visibleWornItems.length > 0 ? (
+              <section className="mt-3 border-t pt-3" aria-label="Visible worn items">
+                <h3 className="mb-2 text-xs font-semibold uppercase text-muted-foreground">
+                  Wearing
+                </h3>
+                <ul className="space-y-1">
+                  {visibleWornItems.map((item) => (
+                    <li key={`${item.id}-${item.body_region}-${item.equipment_layer}`}>
+                      <TargetMenu
+                        partition={partition}
+                        actorId={actorId}
+                        target={{
+                          kind: 'items',
+                          target_id: item.id,
+                          ...(item.owner_persona_id !== undefined
+                            ? { owner_persona_id: item.owner_persona_id }
+                            : {}),
+                        }}
+                      >
+                        <button type="button" className="text-left hover:underline">
+                          {item.display_name}{' '}
+                          <span className="text-muted-foreground">({item.body_region})</span>
+                        </button>
+                      </TargetMenu>
+                    </li>
+                  ))}
+                </ul>
+              </section>
+            ) : null}
           </div>
           <div className="flex justify-end border-t px-3 py-2">
             <Button variant="outline" size="sm" onClick={onViewSheet}>
