@@ -53,25 +53,16 @@ def technique_performable(character_sheet: CharacterSheet | None, technique: Tec
     both the technique and their own Path style (effective value >= minimum_value).
 
     A None character_sheet (NPC without sheet, etc.) is treated as not-performable.
+    One rule: this is ``performable_techniques`` asked about a single technique.
     """
-    from world.vitals.services import is_dead  # noqa: PLC0415
-
-    if character_sheet is None or is_dead(character_sheet):
-        return False
-    requirements = [
-        *technique.capability_requirements.select_related("capability"),
-        *style_capability_requirements(character_sheet),
-    ]
-    for req in requirements:
-        if get_effective_capability_value(character_sheet, req.capability) < req.minimum_value:
-            return False
-    return True
+    return bool(performable_techniques(character_sheet, [technique]))
 
 
 def performable_techniques(
     character_sheet: CharacterSheet | None, techniques: list[Technique]
 ) -> list[Technique]:
-    """The ``techniques`` the character can perform, judged by ``technique_performable``'s rule.
+    """The ``techniques`` the character can perform: alive, and every technique and style
+    capability requirement met (effective value >= minimum_value).
 
     A batched variant for a caller listing many techniques: the death check and the style
     requirements are read once, every technique's requirements in one query, and each
