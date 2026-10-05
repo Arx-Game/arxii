@@ -8786,10 +8786,9 @@ def _maybe_apply_spectacle_for_action(
     outcome: ActionOutcome,
     health_before: dict[int, int],
 ) -> None:
-    """Earned displays shake the witnesses (#4147). Best-effort: never breaks the round.
+    """Earned displays shake the witnesses (#4147).
 
-    Mirrors ``_maybe_produce_insight_for_cast``'s isolation: a spectacle failure
-    (e.g. a caster with no persona) must never break round resolution.
+    Deliberately unguarded: a failure here is a bug and should fail loudly.
     """
     from world.combat.models import SpectacleConfig  # noqa: PLC0415
     from world.combat.spectacle import (  # noqa: PLC0415
@@ -8799,50 +8798,40 @@ def _maybe_apply_spectacle_for_action(
         is_devastating,
     )
 
-    try:
-        config = SpectacleConfig.load()
-        kind = None
-        success_level = 0
-        cast_technique = None
-        if isinstance(combat_result, CombatTechniqueResult):
-            use = combat_result.technique_use_result
-            check = use.resolution_result.check_result if use.resolution_result else None
-            success_level = check.success_level if check is not None else 0
-            if success_level >= 1:
-                kind = classify_cast(
-                    technique=technique,
-                    runtime_intensity=use.runtime_intensity,
-                    success_level=success_level,
-                    config=config,
-                )
-                cast_technique = technique
-        if kind is None:
-            damage: dict[int, int] = {}
-            for dealt in outcome.damage_results:
-                if isinstance(dealt, OpponentDamageResult) and dealt.opponent_id is not None:
-                    damage[dealt.opponent_id] = damage.get(dealt.opponent_id, 0) + (
-                        dealt.damage_dealt
-                    )
-            if is_devastating(
-                damage_by_opponent=damage, health_before=health_before, config=config
-            ):
-                kind = SpectacleKind.DEVASTATING_ACTION
-        if kind is None:
-            return
-        result = apply_spectacle(
-            encounter=participant.encounter,
-            caster_sheet=participant.character_sheet,
-            kind=kind,
-            display_name=technique.name,
-            success_level=success_level,
-            technique=cast_technique,
-        )
-        deliver_spectacle(participant.encounter, result)
-    except Exception:
-        logger.exception(
-            "Failed to apply spectacle for a combat action (participant_id=%s)",
-            participant.pk,
-        )
+    config = SpectacleConfig.load()
+    kind = None
+    success_level = 0
+    cast_technique = None
+    if isinstance(combat_result, CombatTechniqueResult):
+        use = combat_result.technique_use_result
+        check = use.resolution_result.check_result if use.resolution_result else None
+        success_level = check.success_level if check is not None else 0
+        if success_level >= 1:
+            kind = classify_cast(
+                technique=technique,
+                runtime_intensity=use.runtime_intensity,
+                success_level=success_level,
+                config=config,
+            )
+            cast_technique = technique
+    if kind is None:
+        damage: dict[int, int] = {}
+        for dealt in outcome.damage_results:
+            if isinstance(dealt, OpponentDamageResult) and dealt.opponent_id is not None:
+                damage[dealt.opponent_id] = damage.get(dealt.opponent_id, 0) + (dealt.damage_dealt)
+        if is_devastating(damage_by_opponent=damage, health_before=health_before, config=config):
+            kind = SpectacleKind.DEVASTATING_ACTION
+    if kind is None:
+        return
+    result = apply_spectacle(
+        encounter=participant.encounter,
+        caster_sheet=participant.character_sheet,
+        kind=kind,
+        display_name=technique.name,
+        success_level=success_level,
+        technique=cast_technique,
+    )
+    deliver_spectacle(participant.encounter, result)
 
 
 def _maybe_create_weakness_selection_for_cast(

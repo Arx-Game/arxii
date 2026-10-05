@@ -13,7 +13,6 @@ from evennia.objects.models import ObjectDB
 from core.models import ArxSharedMemoryModel as SharedMemoryModel
 from world.areas.services import area_for_scene
 from world.classes.models import PathStage
-from world.combat.constants import SpectacleKind
 from world.magic.audere import (
     AUDERE_CONDITION_NAME,
     AUDERE_MAJORA_CONDITION_NAME,
@@ -783,6 +782,7 @@ def cross_threshold(
     Assumes the caller has validated eligibility and holds the offer lock.
     Does not delete the offer row — caller is responsible for that.
     """
+    from world.combat.constants import SpectacleKind  # noqa: PLC0415
     from world.conditions.models import ConditionTemplate  # noqa: PLC0415
     from world.conditions.services import apply_condition  # noqa: PLC0415
     from world.magic.audere import corruption_advisory_for_character  # noqa: PLC0415
@@ -851,9 +851,7 @@ def cross_threshold(
 
     # The crossing shakes the enemy witnesses after its own broadcast (#4147); on_commit
     # callbacks run in registration order, so this follows _route_crossing's line.
-    transaction.on_commit(
-        lambda: shake_witnesses(character, SpectacleKind.CROSSING, display_name="Crossing")
-    )
+    shake_witnesses(character, SpectacleKind.CROSSING, display_name="Crossing")
 
     majora_template = ConditionTemplate.get_by_name(AUDERE_MAJORA_CONDITION_NAME)
     # Result deliberately unchecked, mirroring offer_audere: no authored trigger

@@ -30,13 +30,17 @@ from world.combat.models import (
 from world.combat.services import resolve_round
 from world.combat.spectacle import encounter_for_character
 from world.conditions.factories import DamageSuccessLevelMultiplierFactory
-from world.magic.audere import offer_audere
+from world.conditions.models import ConditionInstance
+from world.magic.audere import AUDERE_CONDITION_NAME, offer_audere
+from world.magic.audere_majora import cross_threshold
 from world.magic.factories import (
     CharacterAnimaFactory,
     EffectTypeFactory,
     GiftFactory,
     TechniqueFactory,
+    wire_audere_power_multipliers,
 )
+from world.magic.tests.majora_fixtures import build_crossing_world
 from world.magic.tests.test_audere_surge_broadcast import (
     _make_lifecycle_character,
     _make_threshold,
@@ -188,20 +192,6 @@ class SpectacleWiringTests(TestCase):
         self.assertEqual(len(defeated), 1)
         self.assertFalse(records.filter(opponent_id__in=defeated).exists())
 
-    def test_missing_persona_does_not_break_the_round(self) -> None:
-        encounter, _, _, _ = self._encounter(ultimate=True)
-        with (
-            mock.patch(
-                "world.combat.spectacle.active_persona_for_sheet",
-                side_effect=Persona.DoesNotExist,
-            ),
-            self.assertLogs("world.combat.services", level="ERROR") as logs,
-        ):
-            self._resolve(encounter)
-        self.assertTrue(any("spectacle" in line.lower() for line in logs.output))
-        encounter.refresh_from_db()
-        self.assertGreaterEqual(encounter.round_number, 1)
-
 
 class AudereEntryWiringTests(TestCase):
     @classmethod
@@ -233,7 +223,8 @@ class AudereEntryWiringTests(TestCase):
     def test_audere_entry_shakes_enemies_and_posts_credit(self) -> None:
         character, encounter, _opponents = self._fighter()
         self.assertEqual(encounter_for_character(character), encounter)
-        offer_audere(character, accept=True)
+        with self.captureOnCommitCallbacks(execute=True):
+            offer_audere(character, accept=True)
         self.assertTrue(
             SpectacleRecord.objects.filter(
                 encounter=encounter, kind=SpectacleKind.AUDERE_ENTRY
@@ -246,5 +237,78 @@ class AudereEntryWiringTests(TestCase):
     def test_no_encounter_is_a_quiet_no_op(self) -> None:
         character = _make_lifecycle_character("SpectacleLoner")
         self.assertIsNone(encounter_for_character(character))
-        offer_audere(character, accept=True)
+        with self.captureOnCommitCallbacks(execute=True):
+            offer_audere(character, accept=True)
         self.assertFalse(SpectacleRecord.objects.exists())
+
+    def test_failing_spectacle_never_undoes_the_acceptance(self) -> None:
+        character, _encounter, _opponents = self._fighter()
+        # robust=True: the callback's failure is logged, never raised into the acceptance.
+        with (
+            mock.patch(
+                "world.combat.spectacle.active_persona_for_sheet",
+                side_effect=Persona.DoesNotExist,
+            ),
+            self.assertLogs("django.test", level="ERROR"),
+            self.captureOnCommitCallbacks(execute=True),
+        ):
+            result = offer_audere(character, accept=True)
+        self.assertTrue(result.accepted)
+        self.assertTrue(
+            ConditionInstance.objects.filter(
+                target=character, condition__name=AUDERE_CONDITION_NAME
+            ).exists()
+        )
+        self.assertFalse(SpectacleRecord.objects.exists())
+
+    def test_rolled_back_acceptance_posts_nothing(self) -> None:
+        character, _encounter, _opponents = self._fighter()
+        with self.captureOnCommitCallbacks(execute=False) as callbacks:
+            offer_audere(character, accept=True)
+        # Nothing ran before commit: a rolled-back acceptance never reaches the room.
+        self.assertFalse(SpectacleRecord.objects.exists())
+        self.assertTrue(callbacks)
+
+
+class CrossingWiringTests(TestCase):
+    @classmethod
+    def setUpTestData(cls) -> None:
+        SpectacleConfig.objects.get_or_create(pk=1)
+        wire_audere_power_multipliers()
+        (
+            cls.character,
+            cls.sheet,
+            cls.threshold,
+            _prospect,
+            cls.puissant_path,
+            _offer,
+        ) = build_crossing_world(boundary_level=30, suffix="_spectacle")
+
+    def setUp(self) -> None:
+        patcher = mock.patch(PATH_LEVEL, return_value=6)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def test_crossing_shakes_witnesses_and_posts_credit(self) -> None:
+        encounter = CombatEncounterFactory(scene=SceneFactory())
+        CombatOpponentFactory(encounter=encounter, level=3, morale=70, max_morale=70)
+        engagement = CharacterEngagement.objects.get(character_id=self.character.pk)
+        engagement.engagement_type = EngagementType.COMBAT
+        engagement.source_content_type = ContentType.objects.get_for_model(CombatEncounter)
+        engagement.source_id = encounter.pk
+        engagement.save()
+        with self.captureOnCommitCallbacks(execute=True):
+            cross_threshold(
+                self.sheet,
+                self.threshold,
+                self.puissant_path,
+                declaration_text="I cross the threshold.",
+            )
+        self.assertTrue(
+            SpectacleRecord.objects.filter(
+                encounter=encounter, kind=SpectacleKind.CROSSING
+            ).exists()
+        )
+        self.assertTrue(
+            Interaction.objects.filter(scene=encounter.scene, mode=InteractionMode.OUTCOME).exists()
+        )

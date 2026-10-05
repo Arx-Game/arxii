@@ -11,7 +11,6 @@ from evennia.objects.models import ObjectDB
 
 from core.managers import ArxSharedMemoryManager
 from core.models import ArxSharedMemoryModel as SharedMemoryModel
-from world.combat.constants import SpectacleKind
 
 if TYPE_CHECKING:
     from world.character_sheets.models import CharacterSheet
@@ -347,6 +346,7 @@ def offer_audere(character: ObjectDB, *, accept: bool) -> AudereOfferResult:
     If declined, returns immediately. If accepted, applies the Audere condition
     and grants intensity/anima bonuses within a transaction.
     """
+    from world.combat.constants import SpectacleKind
     from world.conditions.models import ConditionTemplate
     from world.conditions.services import apply_condition
     from world.magic.models import CharacterAnima
@@ -402,7 +402,7 @@ def offer_audere(character: ObjectDB, *, accept: bool) -> AudereOfferResult:
 def shake_witnesses(character: ObjectDB, kind: str, *, display_name: str) -> None:
     """Shake the enemy witnesses of a display in the character's encounter (#4147).
 
-    A no-op for a character with no sheet or no combat engagement.
+    Deferred to commit. A no-op for a character with no sheet or no combat engagement.
     """
     from world.combat.spectacle import (
         apply_spectacle,
@@ -414,12 +414,20 @@ def shake_witnesses(character: ObjectDB, kind: str, *, display_name: str) -> Non
     encounter = encounter_for_character(character)
     if sheet is None or encounter is None:
         return
-    deliver_spectacle(
-        encounter,
-        apply_spectacle(
-            encounter=encounter, caster_sheet=sheet, kind=kind, display_name=display_name
-        ),
-    )
+
+    def _shake() -> None:
+        # Atomic so a failure part-way leaves no half-applied morale or records behind.
+        with transaction.atomic():
+            deliver_spectacle(
+                encounter,
+                apply_spectacle(
+                    encounter=encounter, caster_sheet=sheet, kind=kind, display_name=display_name
+                ),
+            )
+
+    # Only once the acceptance/crossing has committed, so a rolled-back one posts nothing;
+    # robust=True logs a failure here without undoing what already committed.
+    transaction.on_commit(_shake, robust=True)
 
 
 def _announce_surge(character: ObjectDB, threshold: AudereThreshold) -> None:
