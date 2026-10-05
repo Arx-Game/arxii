@@ -99,6 +99,24 @@ export function BeatCard({ instanceId, roomKey }: BeatCardProps) {
   );
 }
 
+/** The option's label with its "because ..." lines (why this character qualifies). */
+export function OptionLabel({ option }: { option: BeatOption }) {
+  return (
+    <span>
+      {option.label}
+      {option.reasons.map((reason) => (
+        <span
+          key={reason}
+          className="block text-xs italic text-muted-foreground"
+          data-testid="option-reason"
+        >
+          because {reason}
+        </span>
+      ))}
+    </span>
+  );
+}
+
 function OptionButton({
   option,
   pending,
@@ -116,7 +134,7 @@ function OptionButton({
       disabled={pending}
       onClick={onPick}
     >
-      <span>{option.label}</span>
+      <OptionLabel option={option} />
       {option.check_type_name ? (
         <span className="ml-2 shrink-0 text-xs text-muted-foreground">
           {option.check_type_name}

@@ -6,7 +6,7 @@ import django.db.models.deletion
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("arxii", "0198_backfill_sets_allegiance"),
+        ("arxii", "0200_creaturetemplate_cause_and_more"),
     ]
 
     operations = [

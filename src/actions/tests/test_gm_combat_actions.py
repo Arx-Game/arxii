@@ -142,6 +142,19 @@ class BeginEncounterRoundActionTests(GMCombatActionTestBase):
         self.assertEqual(self.encounter.status, RoundStatus.DECLARING)
         self.assertEqual(self.encounter.round_number, 1)
 
+    def test_gm_begin_round_during_standoff_breaks_it(self) -> None:
+        from world.standoffs.constants import StandoffGroupState
+        from world.standoffs.factories import StandoffGroupFactory
+
+        group = StandoffGroupFactory(encounter=self.encounter)
+        self._add_opponent()
+        result = BeginEncounterRoundAction().run(self.gm_actor)
+        self.assertTrue(result.success, result.message)
+        self.encounter.refresh_from_db()
+        group.refresh_from_db()
+        self.assertEqual(self.encounter.round_number, 1)
+        self.assertEqual(group.state, StandoffGroupState.FIGHTING)
+
     def test_non_gm_denied(self) -> None:
         self._add_opponent()
         result = BeginEncounterRoundAction().run(self.player_actor)

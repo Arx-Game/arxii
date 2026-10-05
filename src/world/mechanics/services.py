@@ -1927,19 +1927,8 @@ _RANK_DIFF_MODERATE = 1
 _RANK_DIFF_HARD = -1
 
 
-def _get_difficulty_indicator_for_check(
-    character: ObjectDB,
-    check_type: CheckType,
-    target_difficulty: int,
-) -> DifficultyIndicator:
-    """
-    Determine difficulty indicator using the real check pipeline.
-
-    Calculates the rank difference that would result from a check,
-    then classifies it. IMPOSSIBLE means the ResultChart has no success outcomes.
-    """
-    rank_diff = preview_check_difficulty(character, check_type, target_difficulty)
-
+def difficulty_indicator_for_rank_difference(rank_diff: int) -> DifficultyIndicator:
+    """Classify a check's rank difference. IMPOSSIBLE means the chart has no success outcomes."""
     if not chart_has_success_outcomes(rank_diff):
         return DifficultyIndicator.IMPOSSIBLE
     if rank_diff >= _RANK_DIFF_EASY:
@@ -1949,6 +1938,17 @@ def _get_difficulty_indicator_for_check(
     if rank_diff >= _RANK_DIFF_HARD:
         return DifficultyIndicator.HARD
     return DifficultyIndicator.VERY_HARD
+
+
+def _get_difficulty_indicator_for_check(
+    character: ObjectDB,
+    check_type: CheckType,
+    target_difficulty: int,
+) -> DifficultyIndicator:
+    """Determine difficulty indicator using the real check pipeline."""
+    return difficulty_indicator_for_rank_difference(
+        preview_check_difficulty(character, check_type, target_difficulty)
+    )
 
 
 # =============================================================================

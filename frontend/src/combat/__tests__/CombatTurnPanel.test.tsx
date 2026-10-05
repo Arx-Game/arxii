@@ -159,6 +159,7 @@ function mockEncounter(overrides?: Partial<EncounterDetail>) {
     is_participant: true,
     is_gm: false,
     objective: null,
+    standoff: null,
     participants: [],
     opponents: [],
     current_round_actions: [],
@@ -356,6 +357,27 @@ describe('CombatTurnPanel — render smoke', () => {
 });
 
 describe('CombatTurnPanel — Phase 8 rail sections', () => {
+  it('shows only the standoff card, no round sections, while a standoff is open', () => {
+    mockEncounter({
+      round_number: 0,
+      is_participant: true,
+      standoff: { place: '', groups: [], approaches: [], terms: [], sparks: [], shared_sparks: [] },
+    });
+
+    render(<CombatTurnPanel encounterId={1} characterId={10} characterSheetId={100} />, {
+      wrapper: createWrapper(),
+    });
+
+    const panel = screen.getByTestId('combat-turn-panel');
+    expect(within(panel).getByTestId('standoff-card')).toBeInTheDocument();
+    expect(within(panel).queryByText(/Round 0/)).toBeNull();
+    expect(within(panel).getAllByText('Standoff').length).toBeGreaterThan(0);
+    expect(within(panel).queryByTestId('your-turn-stub')).toBeNull();
+    expect(within(panel).queryByTestId('vital-pools-section')).toBeNull();
+    expect(within(panel).queryByTestId('combatants-list-section')).toBeNull();
+    expect(within(panel).queryByTestId('round-flow-section')).toBeNull();
+  });
+
   it('renders all six sections in spec order', () => {
     mockEncounter({ is_participant: true });
 

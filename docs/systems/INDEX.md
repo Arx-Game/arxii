@@ -1080,6 +1080,14 @@ Persistent states that modify capabilities, checks, and resistances with stage p
   field, never `alters_behavior` and never the condition's name (`alters_behavior` is the
   PC-consent gate, a separate axis); see combat's Allegiance entries and ADR-4091, amending
   ADR-0058/ADR-0059.
+- **Settled round effects (#4120, ADR-4120) [BUILT & WIRED]:** `SettleConfig` singleton
+  (`get_settle_config()`: `settled_seconds_per_round`, `lapse_warning_seconds`);
+  `ConditionInstance.last_settled_tick_at` / `lapse_warned_at`; `settle_round_effects(targets)`
+  (called by combat's `cleanup_completed_encounter` after `expire_end_of_combat_conditions`)
+  converts ROUNDS rows to a real-time `expires_at`; cron `conditions.settled_effects`
+  (`settled_effects_tick`) applies clamped non-lethal DoT via `apply_clamped_chronic_damage` and
+  removes expired converted rows; `lapsed_allegiance_sweep` warns a PC charmer once and
+  auto-rolls the break check at lapse (no encounter opens). See `docs/systems/conditions.md`.
 - **Integrates with:** combat (DoT, capability blocking, NPC allegiance reads via
   `ConditionTemplate.sets_allegiance`; `select_npc_actions` consults `effective_allegiances`),
   magic (power sources, resonance-environment boon/injury application, behavior-consent gating
@@ -7473,6 +7481,24 @@ weights, speed_rank, Thread pulls). `CovenantRank` = administrative authority
   `transfer` back the Covenant Treasury, #2992)
 - **Source:** `src/world/covenants/`
 - **Details:** [covenants.md](covenants.md)
+
+### Standoffs (#4145)
+The moment before a fight: round zero of a `CombatEncounter`, where a party reads groups of
+creatures, presses them with social approaches and names terms that settle them. Derived
+from OPEN `StandoffGroup` rows, never a stored flag (ADR-4145-A).
+
+- **Models:** `CreatureDrive`, `RegardRule`, `StandoffApproach`, `StandoffTerms`,
+  `StandoffConfig` (singleton), `StandoffGroup`, `StandoffReveal`, `StandoffSparkShare`;
+  `CreatureTemplate.cause` / `cause_margin_percent`; `OpponentTierTemplate.force_weight_percent`; `MissionOption.opens_as_standoff`.
+- **Key functions:** `open_standoff`, `end_standoff_into_fight`,
+  `begin_round_or_break_standoff` (`services/state.py`); `evaluate_causes`, `cause_fires`
+  (`services/force.py`); `standoff_read`, `standoff_press`, `standoff_terms`,
+  `standoff_fight`, `standoff_share_spark` (`services/verbs.py`); `build_standoff_view`
+  (`services/view.py`); `social_target_difficulty` (`world/checks/social_target.py`, one
+  grade for every social check on a character, ADR-4145-B).
+- **Surfaces:** actions `standoff_*`, telnet `standoff`, `StandoffCard` on the encounter
+  detail's per-viewer `standoff` block.
+- **Details:** [standoffs.md](standoffs.md)
 
 ### Combat
 Turn-based combat engine: encounter lifecycle, NPC threat patterns, damage resolution,

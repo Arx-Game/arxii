@@ -142,3 +142,30 @@ describe('OptionPage CONTEST fields', () => {
     expect(screen.queryByLabelText('Opposition check type')).not.toBeInTheDocument();
   });
 });
+
+describe('OptionPage opens_as_standoff', () => {
+  it('shows the toggle for an ENCOUNTER option and saves it', async () => {
+    const user = userEvent.setup();
+    vi.mocked(api.getMissionOption).mockResolvedValue({
+      ...CONTEST_OPTION,
+      option_kind: 'encounter',
+      opens_as_standoff: false,
+    } as MissionOption);
+    render(<OptionPage />, { wrapper: makeWrapper('/staff/missions/1/nodes/5/options/9') });
+
+    await user.click(await screen.findByLabelText('Opens as a standoff'));
+    await user.click(screen.getByRole('button', { name: /^save$/i }));
+
+    expect(api.patchMissionOption).toHaveBeenCalledWith(
+      9,
+      expect.objectContaining({ opens_as_standoff: true })
+    );
+  });
+
+  it('hides the toggle for a non-ENCOUNTER option', async () => {
+    render(<OptionPage />, { wrapper: makeWrapper('/staff/missions/1/nodes/5/options/9') });
+
+    await screen.findByText('Option settings');
+    expect(screen.queryByLabelText('Opens as a standoff')).toBeNull();
+  });
+});

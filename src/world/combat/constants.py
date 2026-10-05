@@ -35,6 +35,13 @@ AFTERMATH_ATTRIBUTION_WINDOW = timedelta(minutes=1)
 # ---------------------------------------------------------------------------
 
 
+class CauseKind(models.TextChoices):
+    """Why a kind of creature picks a fight when nothing else moves it."""
+
+    NONE = "none", "None"
+    PREDATION = "predation", "Predation"
+
+
 class EncounterType(models.TextChoices):
     """The type of combat encounter."""
 

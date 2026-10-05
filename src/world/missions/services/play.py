@@ -266,7 +266,7 @@ def beat_for(instance: MissionInstance, character: ObjectDB) -> BeatView | None:
         template_name=instance.template.name,
         node_key=node.key,
         flavor_text=node.flavor_text,
-        options=tuple(_beat_option(p) for p in presented),
+        options=tuple(_beat_option(p, viewer=character) for p in presented),
         is_paused=instance.is_paused,
         track=_track_view(instance, node),
     )
@@ -292,7 +292,14 @@ def _track_view(instance: MissionInstance, node: MissionNode) -> TrackView | Non
     )
 
 
-def _beat_option(presented: PresentedOption) -> BeatOption:
+def _beat_option(presented: PresentedOption, viewer: ObjectDB | None = None) -> BeatOption:
+    """Flatten ``presented`` for the player API.
+
+    "Because" reasons describe the owner's own traits, so they ride along only
+    when ``viewer`` is that owner. A group union (no viewer, or another
+    participant's option) never carries them.
+    """
+    own = viewer is not None and presented.owner.pk == viewer.pk
     return BeatOption(
         option_id=presented.option.pk,
         approach_id=presented.approach.pk if presented.approach is not None else None,
@@ -300,6 +307,7 @@ def _beat_option(presented: PresentedOption) -> BeatOption:
         kind=presented.kind,
         check_type_name=presented.check_type.name if presented.check_type else None,
         base_risk=presented.base_risk,
+        reasons=presented.reasons if own else (),
     )
 
 
@@ -591,7 +599,9 @@ def _group_beat_view(
         flavor_text=node.flavor_text,
         conflict_mode=node.conflict_mode,
         phase=phase,
-        options=tuple(_beat_option(presented_option) for presented_option in presented),
+        options=tuple(
+            _beat_option(presented_option, viewer=character) for presented_option in presented
+        ),
         ballots=ballot_states,
         expires_at=deadline.isoformat() if deadline is not None else None,
         is_paused=instance.is_paused,

@@ -25,7 +25,21 @@ def disposition_shift_band(delta: int) -> str:
 
 
 def apply_social_disposition_delta(actor, target_persona_id, result) -> str | None:
-    """Apply a tiered disposition delta after a social action resolves.
+    """Apply a tiered disposition delta after a scene-style social action resolves.
+
+    Reads the success level off a ``PendingActionResolution`` (0 when unrolled) and
+    delegates to ``apply_social_disposition_delta_for_level``. Callers that already hold
+    a success level (combat's parley) call that function directly.
+    """
+    return apply_social_disposition_delta_for_level(
+        actor, target_persona_id, _success_level(result)
+    )
+
+
+def apply_social_disposition_delta_for_level(
+    actor, target_persona_id, success_level: int
+) -> str | None:
+    """Apply a tiered disposition delta for an already-rolled success level.
 
     Persona-bearing NPCs (``target_persona_id`` resolves to a ``Persona``)
     move durable ``NPCStanding.affection``. The persona-less mook path is
@@ -43,7 +57,6 @@ def apply_social_disposition_delta(actor, target_persona_id, result) -> str | No
         persona_for_character,
     )
 
-    success_level = _success_level(result)
     delta = _delta_for_tier(success_level)
     if delta == 0 or target_persona_id is None:
         return None
@@ -68,11 +81,7 @@ def apply_social_disposition_delta(actor, target_persona_id, result) -> str | No
 
 
 def _success_level(result: object) -> int:
-    """Success level from a resolution result, 0 when unrolled.
-
-    Only ``PendingActionResolution`` carries ``main_result`` (a ``StepResult``,
-    whose ``check_result`` is non-optional) — type dispatch, not probing (#2386).
-    """
+    """Success level from a ``PendingActionResolution``, 0 when unrolled or another shape."""
     from actions.types import PendingActionResolution  # noqa: PLC0415
 
     if isinstance(result, PendingActionResolution) and result.main_result is not None:

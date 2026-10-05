@@ -3,7 +3,9 @@
 Settle (Decision 17) and break (Decision 16) both end the hold through the
 condition's settle pool at the acting PC's roll tier, then remove the condition
 through ``remove_condition`` so the removal event fires. No result ever starts a
-fight (Decision 21). A hold that runs out with nobody acting simply ends (sweep).
+fight (Decision 21). A hold that runs out with nobody acting ends in the sweep:
+plainly, or (#4120, a hold with a PC charmer) after one warning and an auto-rolled
+break check at the charmer's tier.
 
 Break's difficulty (``attempt_allegiance_break``) is::
 
@@ -259,11 +261,78 @@ def attempt_allegiance_break(
     )
 
 
-def lapsed_allegiance_sweep() -> None:
-    """Remove expired allegiance holds with no roll and no pool (Decisions 17, 18, 21).
+def _charmer_with_account(instance: ConditionInstance) -> ObjectDB | None:
+    """The hold's charmer when it is a played character (has an account), else None."""
+    charmer = instance.source_character
+    if charmer is None or charmer.db_account is None:
+        return None
+    return charmer
 
-    The NPC returns to its old stance; nothing attacks, and no encounter opens
-    (#4121 decides when a lapsed NPC turns hostile; a GM can start a fight by hand).
+
+def _target_name(instance: ConditionInstance) -> str:
+    from world.scenes.services import persona_names_for_sheets  # noqa: PLC0415
+
+    target = instance.target
+    return persona_names_for_sheets([target.pk]).get(target.pk, target.key)
+
+
+def warn_fading_allegiance(instance: ConditionInstance) -> None:
+    """Tell the charmer, once, that their hold is about to run out (#4120).
+
+    Only the charmer's own character hears it; the stamp keeps the sweep from
+    repeating it every minute.
+    """
+    from django.utils import timezone  # noqa: PLC0415
+
+    charmer = _charmer_with_account(instance)
+    if charmer is None:
+        return
+    # PLACEHOLDER player prose (#4120), like the R6 system lines.
+    charmer.msg(f"The {instance.condition.name} on {_target_name(instance)} is fading.")
+    instance.lapse_warned_at = timezone.now()
+    instance.save(update_fields=["lapse_warned_at"])
+
+
+def auto_settle_lapsed_allegiance(instance: ConditionInstance) -> bool:
+    """End a lapsed hold through an auto-rolled check by its PC charmer (#4120).
+
+    Returns False when the hold has no played charmer or its condition has no
+    ``allegiance_break_check_type`` (missing content: one warning, the caller falls
+    back to plain removal). Never opens an encounter or any hostility (Decision 21).
+    The check difficulty (the hold's strength points) is PLACEHOLDER tuning (#4120).
+    """
+    from world.checks.services import perform_check  # noqa: PLC0415
+
+    charmer = _charmer_with_account(instance)
+    if charmer is None:
+        return False
+    check_type = instance.condition.allegiance_break_check_type
+    if check_type is None:
+        logger.warning(
+            "Allegiance condition %r (pk=%s) has no allegiance_break_check_type; "
+            "skipping the lapse roll, the hold is removed plainly.",
+            instance.condition.name,
+            instance.condition_id,
+        )
+        return False
+    # PLACEHOLDER tuning (#4120): difficulty is just the hold's strength points.
+    check_result = perform_check(
+        charmer, check_type, target_difficulty=max(0, charm_strength_points(instance))
+    )
+    end_allegiance_with_pool(instance, actor=charmer, check_result=check_result)
+    return True
+
+
+def lapsed_allegiance_sweep() -> None:
+    """Warn on fading allegiance holds and settle lapsed ones (Decisions 17, 18, 21).
+
+    The "no roll and no pool" clause of Decisions 17 and 18 is superseded by #4120
+    for holds with a PC charmer: that charmer is warned once in the
+    ``lapse_warning_seconds`` window before expiry, and at lapse an auto-rolled
+    check settles the hold through its pool. A hold with no PC charmer (or no check
+    type) is removed plainly. The no-fight rule (Decision 21) stands: the NPC
+    returns to its old stance, nothing attacks, and no encounter opens (#4121
+    decides when a lapsed NPC turns hostile; a GM can start a fight by hand).
     Removal goes through ``remove_condition`` so CONDITION_REMOVED fires. Also closes
     bind windows whose charmer has left (Decision 19) -- this is also how a kept
     nameless charmed NPC gets deleted once its window closes (#4091 task 7).
@@ -274,16 +343,30 @@ def lapsed_allegiance_sweep() -> None:
     rows so its bulk ``.delete()`` never silently drops the removal event this sweep
     fires per row.
     """
+    from datetime import timedelta  # noqa: PLC0415
+
     from django.utils import timezone  # noqa: PLC0415
 
     from world.combat.won_over import release_closed_bind_windows  # noqa: PLC0415
     from world.conditions.models import ConditionInstance  # noqa: PLC0415
-    from world.conditions.services import remove_condition  # noqa: PLC0415
+    from world.conditions.services import get_settle_config, remove_condition  # noqa: PLC0415
     from world.scenes.narrator import narrate_room_outcome  # noqa: PLC0415
     from world.scenes.services import persona_names_for_sheets  # noqa: PLC0415
 
+    now = timezone.now()
+    window = timedelta(seconds=get_settle_config().lapse_warning_seconds)
+    fading = (
+        ConditionInstance.objects.filter(
+            expires_at__gt=now, expires_at__lte=now + window, lapse_warned_at__isnull=True
+        )
+        .exclude(condition__sets_allegiance="")
+        .select_related("condition", "target")
+    )
+    for instance in list(fading):
+        warn_fading_allegiance(instance)
+
     expired = list(
-        ConditionInstance.objects.filter(expires_at__lt=timezone.now())
+        ConditionInstance.objects.filter(expires_at__lt=now)
         .exclude(condition__sets_allegiance="")
         .select_related("condition", "target")
     )
@@ -294,6 +377,8 @@ def lapsed_allegiance_sweep() -> None:
     # that mook's CombatOpponent.name.
     persona_names = persona_names_for_sheets(instance.target_id for instance in expired)
     for instance in expired:
+        if auto_settle_lapsed_allegiance(instance):
+            continue
         target = instance.target
         condition = instance.condition
         room = target.location

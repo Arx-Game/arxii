@@ -67,6 +67,7 @@ from world.conditions.models import (
     DamageSuccessLevelMultiplier,
     DamageType,
     PenetrationOutcomeFactor,
+    SettleConfig,
     TreatmentAttempt,
     TreatmentTemplate,
 )
@@ -86,6 +87,7 @@ from world.conditions.types import (
     InteractionResult,
     ResistanceModifierResult,
     RoundTickResult,
+    SettledTickSummary,
     SeverityAdvanceResult,
     SeverityDecayResult,
     TreatmentOutcome,
@@ -165,6 +167,18 @@ def resolve_damage_type_resistance(
     resistance = character.conditions.resistance_modifier(damage_type)
     resistance += gift_thread_resistance(character, damage_type)
     return max(0, damage_amount - resistance)
+
+
+def get_settle_config() -> SettleConfig:
+    """Return the SettleConfig singleton (pk=1), creating it lazily on first call.
+
+    Holds how out-of-combat time settles round-based effects (#4120). Configure via
+    the Django admin.
+    """
+    cfg = SettleConfig.objects.cached_singleton()
+    if cfg is None:
+        cfg, _ = SettleConfig.objects.get_or_create(pk=1)
+    return cfg
 
 
 def get_active_conditions(
@@ -800,6 +814,27 @@ def _apply_single(
     return apply_result
 
 
+def _return_to_round_accounting(instance: ConditionInstance, template: ConditionTemplate) -> bool:
+    """Undo a post-combat conversion when a condition is applied again (#4120).
+
+    A converted row (ROUNDS template with ``expires_at`` and ``last_settled_tick_at``
+    set, see ``settle_round_effects``) has no live round count, so a re-application
+    treats it like a fresh ROUNDS application: the wall-clock fields are cleared and
+    the caller sets ``rounds_remaining``. ``lapse_warned_at`` is cleared so a
+    reinforced hold can warn again. Returns True when the row was converted.
+    """
+    if not (
+        template.default_duration_type == DurationType.ROUNDS
+        and instance.expires_at is not None
+        and instance.last_settled_tick_at is not None
+    ):
+        return False
+    instance.expires_at = None
+    instance.last_settled_tick_at = None
+    instance.lapse_warned_at = None
+    return True
+
+
 def _handle_stacking(
     existing: ConditionInstance,
     template: ConditionTemplate,
@@ -820,7 +855,9 @@ def _handle_stacking(
         StackBehavior.BOTH,
     ):
         rounds = params.duration_rounds or template.default_duration_value
-        if existing.rounds_remaining is not None:
+        if _return_to_round_accounting(existing, template):
+            existing.rounds_remaining = rounds
+        elif existing.rounds_remaining is not None:
             existing.rounds_remaining += rounds
 
     existing.save()
@@ -854,6 +891,7 @@ def _handle_refresh(
     existing.severity = params.severity
     rounds = params.duration_rounds or template.default_duration_value
     if template.default_duration_type == DurationType.ROUNDS:
+        _return_to_round_accounting(existing, template)
         existing.rounds_remaining = rounds
     elif template.default_duration_type == DurationType.INGAME_TIME:
         existing.expires_at = _compute_ingame_time_expires(template)
@@ -1539,6 +1577,63 @@ def expire_end_of_combat_conditions(
         if was_removed:
             removed.append(instance.condition)
     return removed
+
+
+def acute_peril_hand_off_condition_names() -> list[str]:
+    """Names of the acute-peril conditions combat hands to a scene round at its end.
+
+    Bleeding Out and Plummeting. The single source of truth for that set: shared by
+    ``world.combat.aftermath.has_acute_peril`` (which decides the hand-off) and
+    ``settle_round_effects`` (which leaves these rows to the scene round).
+    """
+    from world.areas.positioning.constants import PLUMMETING_CONDITION_NAME  # noqa: PLC0415
+    from world.conditions.constants import BLEED_OUT_CONDITION_NAME  # noqa: PLC0415
+
+    return [BLEED_OUT_CONDITION_NAME, PLUMMETING_CONDITION_NAME]
+
+
+@transaction.atomic
+def settle_round_effects(
+    targets: Iterable["ObjectDB"],  # noqa: OBJECTDB_PARAM - mirrors expire_end_of_combat_conditions
+) -> list[ConditionInstance]:
+    """Convert round-counted conditions on the targets into wall-clock expiries (#4120).
+
+    Rounds only tick inside combat, so a ROUNDS condition that outlives its fight
+    would otherwise sit frozen forever. On settle, each unresolved ROUNDS instance
+    with a round count becomes ``expires_at = now + rounds * settled_seconds_per_round``
+    and its round counter is cleared. Idempotent: a converted row has no round
+    count, so a second run skips it. Acute-peril conditions (Bleeding Out, Plummeting)
+    are skipped: combat hands them to a scene round that keeps counting them in rounds.
+
+    Args:
+        targets: ObjectDB instances to settle. ``None`` entries are ignored.
+
+    Returns:
+        The converted ConditionInstances.
+    """
+    target_list = [t for t in targets if t is not None]
+    if not target_list:
+        return []
+
+    instances = list(
+        ConditionInstance.objects.filter(
+            target_id__in=[t.pk for t in target_list],
+            condition__default_duration_type=DurationType.ROUNDS,
+            rounds_remaining__isnull=False,
+            resolved_at__isnull=True,
+        ).exclude(condition__name__in=acute_peril_hand_off_condition_names())
+    )
+    if not instances:
+        return []
+
+    seconds_per_round = get_settle_config().settled_seconds_per_round
+    now = timezone.now()
+    for instance in instances:
+        instance.expires_at = now + timedelta(seconds=instance.rounds_remaining * seconds_per_round)
+        instance.last_settled_tick_at = now
+        instance.rounds_remaining = None
+        instance.save(update_fields=["expires_at", "last_settled_tick_at", "rounds_remaining"])
+    return instances
 
 
 @transaction.atomic
@@ -2672,6 +2767,29 @@ def process_action_tick(target: "ObjectDB") -> RoundTickResult:  # noqa: OBJECTD
     return result
 
 
+def _round_dot_damage(dot: ConditionDamageOverTime, instance: ConditionInstance) -> int:
+    """Damage one acute DoT row deals to one instance in one tick.
+
+    Shared by the combat round tick and the settled-effects tick (#4120).
+    """
+    damage = dot.base_damage
+
+    # effective_severity already folds in the stage multiplier, so scaling
+    # by severity and by the stage are mutually exclusive - if/elif, not two
+    # ifs, mirroring get_check_modifier / get_condition_modifier_total. (Two
+    # ifs double-applied the stage multiplier for a staged severity-scaled DoT.)
+    if dot.scales_with_severity:
+        damage = damage * instance.effective_severity
+    elif instance.current_stage:
+        damage = damage * instance.current_stage.severity_multiplier
+
+    # Scale by stacks
+    if dot.scales_with_stacks:
+        damage = damage * instance.stacks
+
+    return int(damage)
+
+
 def _process_round_tick(
     target: "ObjectDB",  # noqa: OBJECTDB_PARAM
     timing: DamageTickTiming,
@@ -2698,22 +2816,7 @@ def _process_round_tick(
         )
 
         for dot in dot_effects:
-            damage = dot.base_damage
-
-            # effective_severity already folds in the stage multiplier, so scaling
-            # by severity and by the stage are mutually exclusive — if/elif, not two
-            # ifs, mirroring get_check_modifier / get_condition_modifier_total. (Two
-            # ifs double-applied the stage multiplier for a staged severity-scaled DoT.)
-            if dot.scales_with_severity:
-                damage = damage * instance.effective_severity
-            elif instance.current_stage:
-                damage = damage * instance.current_stage.severity_multiplier
-
-            # Scale by stacks
-            if dot.scales_with_stacks:
-                damage = damage * instance.stacks
-
-            damage = int(damage)
+            damage = _round_dot_damage(dot, instance)
 
             if damage > 0:
                 result.damage_dealt.append((dot.damage_type, damage))
@@ -3748,6 +3851,84 @@ def batch_chronic_effect_tick() -> ChronicTickSummary:
             removed = apply_clamped_chronic_damage(sheet, total)
             if removed > 0:
                 summary.ticked += 1
+
+    return summary
+
+
+def settled_effects_tick() -> SettledTickSummary:
+    """Scheduler entry point. Run out and tick round-based effects settled after combat (#4120).
+
+    Works on converted rows only (see ``settle_round_effects``): a ROUNDS-template
+    instance with ``expires_at`` and ``last_settled_tick_at`` set. Nothing else
+    removes an expired converted row, so this does:
+
+    1. Rows past ``expires_at`` are removed through ``remove_condition`` so the full
+       teardown fires. Allegiance rows are left to ``lapsed_allegiance_sweep``.
+    2. Surviving rows with a full ``settled_seconds_per_round`` elapsed deal one
+       tick of their template's acute DoT, through ``apply_clamped_chronic_damage``
+       only (never ``process_damage_consequences``): health stays strictly above
+       the knockout floor, so a settled poison can never wound, down or kill.
+       One tick per run; later runs catch up.
+
+    Targets owned by an active round are skipped: the round tick advances them.
+    """
+    from actions.round_context import get_active_round_context  # noqa: PLC0415
+    from world.vitals.services import apply_clamped_chronic_damage  # noqa: PLC0415
+
+    summary = SettledTickSummary()
+    now = timezone.now()
+    period = timedelta(seconds=get_settle_config().settled_seconds_per_round)
+
+    instances = list(
+        ConditionInstance.objects.filter(
+            resolved_at__isnull=True,
+            condition__default_duration_type=DurationType.ROUNDS,
+            expires_at__isnull=False,
+            last_settled_tick_at__isnull=False,
+        )
+        .filter(
+            Q(is_suppressed=False) | Q(suppressed_until__isnull=False, suppressed_until__lt=now)
+        )
+        .select_related("condition", "current_stage", "target")
+    )
+
+    live: list[ConditionInstance] = []
+    for instance in instances:
+        if instance.expires_at > now:
+            live.append(instance)
+        elif not instance.condition.sets_allegiance and remove_condition(
+            instance.target, instance.condition, include_suppressed=True
+        ):
+            summary.removed += 1
+
+    # DoT rows hang off the template or its stage; load them once for every survivor.
+    rows: list[ConditionDamageOverTime] = list(
+        ConditionDamageOverTime.objects.filter(
+            Q(condition_id__in={i.condition_id for i in live})
+            | Q(stage_id__in={i.current_stage_id for i in live if i.current_stage_id}),
+            is_long_term=False,
+        )
+    )
+
+    for instance in live:
+        if now - instance.last_settled_tick_at < period:
+            continue
+        sheet = _chronic_tick_sheet(instance)
+        if sheet is None:
+            continue
+        if get_active_round_context(sheet) is not None:
+            summary.active_round_skipped += 1
+            continue
+        total = sum(
+            _round_dot_damage(dot, instance)
+            for dot in rows
+            if dot.condition_id == instance.condition_id
+            or (instance.current_stage_id and dot.stage_id == instance.current_stage_id)
+        )
+        if total > 0 and apply_clamped_chronic_damage(sheet, total) > 0:
+            summary.ticked += 1
+        instance.last_settled_tick_at += period
+        instance.save(update_fields=["last_settled_tick_at"])
 
     return summary
 
