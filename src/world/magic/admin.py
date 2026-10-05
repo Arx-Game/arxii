@@ -1169,6 +1169,7 @@ class AudereThresholdAdmin(admin.ModelAdmin):
                     "intensity_bonus",
                     "anima_pool_bonus",
                     "warp_multiplier",
+                    "check_level_bonus",
                     "surge_manifestation_text",
                 )
             },
@@ -2318,6 +2319,7 @@ class AudereMajoraThresholdAdmin(admin.ModelAdmin):
                     "minimum_intensity_tier",
                     "minimum_warp_stage",
                     "requires_active_audere",
+                    "check_level_bonus",
                 )
             },
         ),

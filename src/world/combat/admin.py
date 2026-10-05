@@ -34,6 +34,9 @@ from world.combat.models import (
     OpponentTierTemplate,
     PendingSelection,
     RiskScalingModifier,
+    SpectacleConfig,
+    SpectacleReactionLine,
+    SpectacleRecord,
     StakesEscalationModifier,
     StakesLevelRequirement,
     StrainConfig,
@@ -571,3 +574,77 @@ class StakesEscalationModifierAdmin(admin.ModelAdmin):
     list_filter = ["stakes_level"]
     list_select_related = ["default_curve"]
     autocomplete_fields = ["default_curve"]
+
+
+@admin.register(SpectacleConfig)
+class SpectacleConfigAdmin(admin.ModelAdmin):
+    """The singleton spectacle tuning row (#4147)."""
+
+    fieldsets = (
+        (
+            "Base hit per display",
+            {
+                "fields": (
+                    "audere_entry_hit",
+                    "ultimate_hit",
+                    "ultimate_hit_per_success_level",
+                    "crossing_hit",
+                    "critical_technique_hit",
+                    "critical_technique_hit_per_success_level",
+                    "devastating_action_hit",
+                )
+            },
+        ),
+        (
+            "What counts as a display",
+            {
+                "fields": (
+                    "critical_technique_min_intensity",
+                    "critical_technique_min_success_level",
+                    "devastating_action_force_percent",
+                )
+            },
+        ),
+        (
+            "Scaling",
+            {
+                "fields": (
+                    "levels_per_step",
+                    "percent_per_step",
+                    "minimum_percent",
+                    "mindless_percent",
+                    "ally_gain_percent",
+                )
+            },
+        ),
+    )
+
+    def has_add_permission(self, request: object) -> bool:  # noqa: ARG002
+        """Prevent adding a second row; this is a pk=1 singleton."""
+        return not SpectacleConfig.objects.exists()
+
+    def has_delete_permission(
+        self,
+        request: object,  # noqa: ARG002
+        obj: object = None,  # noqa: ARG002
+    ) -> bool:
+        """The singleton cannot be deleted."""
+        return False
+
+
+@admin.register(SpectacleReactionLine)
+class SpectacleReactionLineAdmin(admin.ModelAdmin):
+    list_display = ("reaction", "creature_template", "kind", "text")
+    list_filter = ("reaction", "kind")
+    autocomplete_fields = ("creature_template",)
+
+
+@admin.register(SpectacleRecord)
+class SpectacleRecordAdmin(admin.ModelAdmin):
+    """Read-only play state: who already shook whom (#4147)."""
+
+    list_display = ("encounter", "opponent", "caster", "kind", "technique")
+    raw_id_fields = ("encounter", "opponent", "caster", "technique")
+
+    def has_add_permission(self, request: object) -> bool:  # noqa: ARG002
+        return False

@@ -59,6 +59,14 @@ class AudereMajoraThreshold(RenownAwardConfig):
         on_delete=models.PROTECT,
         related_name="+",
     )
+    check_level_bonus = models.PositiveSmallIntegerField(
+        default=0,
+        help_text=(
+            "While in this state, every check the character makes counts this many "
+            "extra levels (5 points each, ADR-0166). "
+            "Replaces the Audere bonus while in Audere Majora."
+        ),
+    )
     requires_active_audere = models.BooleanField(
         default=True,
         help_text="When False, an active Audere condition is not required for the gate to open.",

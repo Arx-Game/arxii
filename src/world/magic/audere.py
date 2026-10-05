@@ -46,6 +46,13 @@ class AudereThreshold(SharedMemoryModel):
         on_delete=models.PROTECT,
         help_text="Soulfray must be at this stage or higher.",
     )
+    check_level_bonus = models.PositiveSmallIntegerField(
+        default=0,
+        help_text=(
+            "While in this state, every check the character makes counts this many "
+            "extra levels (5 points each, ADR-0166)."
+        ),
+    )
     intensity_bonus = models.IntegerField(
         help_text="Added to engagement.intensity_modifier when Audere activates.",
     )
