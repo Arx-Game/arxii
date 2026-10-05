@@ -41,15 +41,17 @@ _CATEGORY_ORDER = (RoleArchetype.SWORD, RoleArchetype.SHIELD, RoleArchetype.CROW
 _KEY_SEP = ":"
 
 
-def floor_ultimate_check(result: CheckResult, technique: Technique) -> CheckResult:
+def floor_ultimate_check(result: CheckResult, technique: Technique | None) -> CheckResult:
     """An ultimate never fails (#4147): raise a failed outcome to the lowest success.
+
+    A roll with no technique behind it (a joust, a passive declaration) is never floored.
 
     Only the outcome changes; the points stay as rolled. Damage, conditions and success
     bands all read ``outcome``, so they all see the floored result.
     """
     from world.traits.models import CheckOutcome  # noqa: PLC0415
 
-    if not technique.is_ultimate:
+    if technique is None or not technique.is_ultimate:
         return result
     if result.outcome is not None and result.outcome.success_level >= 1:
         return result

@@ -67,6 +67,15 @@ class CombatUltimateNeverFailsTests(TestCase):
         resolver = dataclasses.replace(resolver, offense_check_fn=MagicMock(return_value=forced))
         assert resolver._roll_check().outcome == low
 
+    def test_roll_without_a_technique_is_not_floored(self) -> None:
+        fail = CheckOutcomeFactory(name="UNF nfail", success_level=-1)
+        CheckOutcomeFactory(name="UNF nlow", success_level=1)
+        resolver = _build_resolver()
+        resolver.action.focused_action = None
+        raw = _result(fail)
+        resolver = dataclasses.replace(resolver, offense_check_fn=MagicMock(return_value=raw))
+        assert resolver._roll_check() is raw
+
 
 class UltimateNeverMishapsTests(TestCase):
     def _cast(self, technique):
