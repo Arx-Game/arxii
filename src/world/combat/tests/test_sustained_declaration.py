@@ -222,7 +222,9 @@ class SustainedTechniqueDeclarationTests(_SustainedTestBase):
         mock_pipeline.return_value = CombatTechniqueResult(
             damage_results=[],
             applied_conditions=[],
-            technique_use_result=mock.MagicMock(spec=TechniqueUseResult),
+            technique_use_result=mock.MagicMock(
+                spec=TechniqueUseResult, resolution_result=None, runtime_intensity=0
+            ),
         )
 
         # An ACTIVE ENEMY opponent with no threat_pool keeps
