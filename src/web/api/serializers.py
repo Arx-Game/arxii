@@ -9,6 +9,7 @@ from evennia_extensions.models import PageBackground
 from web.api.character_type import derive_character_type
 from world.roster.models import RosterApplication, RosterEntry
 from world.roster.serializers import CharacterSlotsSerializer, MyRosterEntrySerializer
+from world.roster.services.gallery import portrait_url
 from world.roster.services.slots import character_slots
 from world.roster.types import CharacterSlots
 from world.scenes.models import Persona
@@ -63,10 +64,8 @@ class AvailableCharacterSerializer(serializers.Serializer):
         return obj.character_sheet.character.key
 
     def get_portrait_url(self, obj: RosterEntry) -> str | None:
-        if obj.profile_picture is None:
-            return None
-        # profile_picture is a TenureMedia; the underlying Media carries the URL.
-        return obj.profile_picture.media.cloudinary_url
+        """The worn look's cropped URL (#4151), or None."""
+        return portrait_url(obj)
 
     def get_character_type(self, obj: RosterEntry) -> str:
         return derive_character_type(obj.character_sheet.character)

@@ -9,7 +9,6 @@ from django.core.validators import FileExtensionValidator
 from rest_framework import serializers
 
 from evennia_extensions.models import Artist, Media, MediaType
-from world.roster.models import TenureMedia
 from world.roster.services import CloudinaryGalleryService
 
 # Extensions matching the content types CloudinaryGalleryService.upload_image accepts
@@ -114,14 +113,3 @@ class MediaUploadSerializer(serializers.Serializer):
     def update(self, instance: Media, validated_data: dict) -> Media:
         """Not used: media uploads are create-only through this serializer."""
         raise NotImplementedError
-
-
-class TenureMediaSerializer(serializers.ModelSerializer):
-    """Serialize media associated with a roster tenure."""
-
-    media = MediaSerializer(read_only=True)
-
-    class Meta:
-        model = TenureMedia
-        fields = ("id", "media", "sort_order")
-        read_only_fields = ("id", "media")

@@ -38,18 +38,21 @@ class MediaPermissionsTestCase(APITestCase):
         self.owner_media = MediaFactory(player_data=self.owner_player_data)
         self.other_media = MediaFactory(player_data=self.other_player_data)
 
-    def test_media_list_public_access(self):
-        """Anyone can list media (read-only access)."""
-        # Unauthenticated user
+    @suppress_permission_errors
+    def test_media_list_needs_an_account(self):
+        """No art is shown to anyone without an account (#3904 item 0, #4151)."""
         url = reverse("roster:media-list")
-        response = self.client.get(url)
-        assert response.status_code == status.HTTP_200_OK
+        assert self.client.get(url).status_code == status.HTTP_403_FORBIDDEN
+        self.client.force_authenticate(user=self.other_user)
+        assert self.client.get(url).status_code == status.HTTP_200_OK
 
-    def test_media_detail_public_access(self):
-        """Anyone can view media details."""
+    @suppress_permission_errors
+    def test_media_detail_needs_an_account(self):
+        """Any account may view a file's details; nobody without one may (#4151)."""
         url = reverse("roster:media-detail", kwargs={"pk": self.owner_media.pk})
-        response = self.client.get(url)
-        assert response.status_code == status.HTTP_200_OK
+        assert self.client.get(url).status_code == status.HTTP_403_FORBIDDEN
+        self.client.force_authenticate(user=self.other_user)
+        assert self.client.get(url).status_code == status.HTTP_200_OK
 
     @suppress_permission_errors
     def test_media_create_requires_authentication(self):
@@ -188,7 +191,10 @@ class RosterEntryPermissionsTestCase(APITestCase):
         )
 
         # Create tenure media for profile picture test
-        self.tenure_media = TenureMediaFactory(tenure=self.tenure)
+        # A look (#4151): only a cropped picture can be worn.
+        self.tenure_media = TenureMediaFactory(
+            tenure=self.tenure, crop_x=0, crop_y=0, crop_width=200
+        )
 
     def test_roster_entry_list_public_access(self):
         """Anyone can list roster entries."""
@@ -355,10 +361,10 @@ class QuerysetPermissionsTestCase(APITestCase):
         assert response.status_code == status.HTTP_200_OK
         assert len(response.data["results"]) == 2  # Both users' media
 
+    @suppress_permission_errors
     def test_unauthenticated_sees_no_media(self):
-        """Unauthenticated users should see no media in list (no player_data)."""
+        """Without an account the media list is refused outright (#4151)."""
         url = reverse("roster:media-list")
 
         response = self.client.get(url)
-        assert response.status_code == status.HTTP_200_OK
-        assert len(response.data["results"]) == 0  # No media for unauthenticated users
+        assert response.status_code == status.HTTP_403_FORBIDDEN

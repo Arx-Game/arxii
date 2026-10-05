@@ -75,17 +75,17 @@ class DeleteOutcome(models.TextChoices):
     UNLINKED = "unlinked", "Removed from this character"
 
 
-class _Unset:
+class Unset:
     """Marks an argument the caller did not pass, where ``None`` is a real value."""
 
 
-UNSET = _Unset()
+UNSET = Unset()
 
 
 # ---------------------------------------------------------------- reading the gallery
 
 
-def _owned_by(entry: RosterEntry) -> Q:
+def gallery_q(entry: RosterEntry) -> Q:
     """The links that belong in this character's gallery right now."""
     current = entry.current_tenure
     in_art = Q(roster_entry=entry)
@@ -108,7 +108,7 @@ def gallery_for(entry: RosterEntry, *, include_hidden: bool) -> list[TenureMedia
     Hidden character art is left out unless ``include_hidden``, which only the current
     player's own view asks for (they see it dimmed, to show it again).
     """
-    links = list(TenureMedia.objects.filter(_owned_by(entry)).select_related("media", "look"))
+    links = list(TenureMedia.objects.filter(gallery_q(entry)).select_related("media", "look"))
     if include_hidden:
         return links
     hidden = hidden_ids(entry)
@@ -151,6 +151,23 @@ def look_url(link: TenureMedia | None) -> str | None:
     head, tail = url.split(_UPLOAD_SEGMENT, 1)
     crop = f"c_crop,x_{link.crop_x},y_{link.crop_y},w_{link.crop_width},h_{link.crop_height}"
     return f"{head}{_UPLOAD_SEGMENT}{crop}/{tail}"
+
+
+def portrait_url(entry: RosterEntry) -> str | None:
+    """The worn look's cropped URL for surfaces that list many characters.
+
+    Query-free given ``profile_picture__media`` and ``profile_picture__tenure`` are
+    selected: it skips the hides lookup ``worn_look`` makes, which is safe because hiding
+    the worn look always re-picks it. What it still refuses is a look the last player
+    uploaded (their tenure has ended), so a handed-over character shows no face rather
+    than someone else's.
+    """
+    link = entry.profile_picture
+    if link is None or not link.is_look or link.media.is_nsfw:
+        return None
+    if link.tenure_id is not None and link.tenure.end_date is not None:
+        return None
+    return look_url(link)
 
 
 def media_usage(player_data: PlayerData) -> MediaUsage:
@@ -250,7 +267,7 @@ def update_picture(
     title: str | None = None,
     caption: str | None = None,
     is_nsfw: bool | None = None,
-    mood: MoodOption | None | _Unset = UNSET,
+    mood: MoodOption | None | Unset = UNSET,
 ) -> TenureMedia:
     """Change what a picture says about itself. Flagging a look NSFW un-crops it."""
     media = link.media
@@ -266,7 +283,7 @@ def update_picture(
         changed.append("is_nsfw")
     if changed:
         media.save(update_fields=changed)
-    if not isinstance(mood, _Unset):
+    if not isinstance(mood, Unset):
         link.look = mood
         link.save(update_fields=["look"])
     if media.is_nsfw and link.is_look:
@@ -308,7 +325,7 @@ def add_pictures(
     if not as_art and current is None:
         msg = f"entry {entry.pk} has no current tenure"
         raise PictureNotYoursError(msg, user_message="Nobody is playing this character.")
-    last = TenureMedia.objects.filter(_owned_by(entry)).aggregate(top=Max("sort_order"))["top"]
+    last = TenureMedia.objects.filter(gallery_q(entry)).aggregate(top=Max("sort_order"))["top"]
     next_order = 0 if last is None else last + 1
     links: list[TenureMedia] = []
     for image_file in files:
@@ -332,7 +349,23 @@ def add_pictures(
     return links
 
 
-def _may_delete(link: TenureMedia, by: AccountDB) -> bool:
+def can_manage_gallery(account: AccountDB, entry: RosterEntry) -> bool:
+    """May this account change this character's gallery: its current player, or staff."""
+    if not account.is_authenticated:
+        return False
+    if account.is_staff:
+        return True
+    current = entry.current_tenure
+    return current is not None and current.player_data.account_id == account.pk
+
+
+def entry_of(link: TenureMedia) -> RosterEntry:
+    """The character a picture belongs to, whichever owner it hangs off."""
+    return _entry_of(link)
+
+
+def may_delete_picture(link: TenureMedia, by: AccountDB) -> bool:
+    """Players delete their own files; staff delete anything, character art included."""
     if by.is_staff:
         return True
     if link.is_character_art:
@@ -347,7 +380,7 @@ def delete_picture(link: TenureMedia, *, by: AccountDB) -> DeleteOutcome:
     holds it; then it only comes off this one. Players may delete only their own files;
     character art is staff's to delete (a player hides it instead).
     """
-    if not _may_delete(link, by):
+    if not may_delete_picture(link, by):
         msg = f"account {by.pk} may not delete TenureMedia {link.pk}"
         raise PictureNotYoursError(msg, user_message="You can't delete that picture.")
     entry = _entry_of(link)

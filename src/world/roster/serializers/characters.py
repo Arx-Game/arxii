@@ -10,13 +10,6 @@ from world.covenants.constants import CovenantType
 from world.covenants.models import CharacterCovenantRole
 
 
-class CharacterGallerySerializer(serializers.Serializer):
-    """Serialize a single gallery entry for a character."""
-
-    name = serializers.CharField()
-    url = serializers.CharField()
-
-
 class CharacterSerializer(serializers.ModelSerializer):
     """Serialize character data for roster entry views."""
 
@@ -67,7 +60,6 @@ class CharacterSerializer(serializers.ModelSerializer):
         default="",
     )
     relationships = serializers.ListField(child=serializers.CharField(), default=list)
-    galleries = CharacterGallerySerializer(many=True, default=list)
     covenant = serializers.SerializerMethodField()
 
     class Meta:
@@ -87,7 +79,6 @@ class CharacterSerializer(serializers.ModelSerializer):
             "social_rank",
             "background",
             "relationships",
-            "galleries",
             "covenant",
         )
         read_only_fields = fields

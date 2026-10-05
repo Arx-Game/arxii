@@ -1,5 +1,8 @@
+from typing import cast
+
 from django.db.models import Q, QuerySet
 import django_filters
+from evennia.accounts.models import AccountDB
 
 from world.roster.models import (
     Family,
@@ -7,8 +10,10 @@ from world.roster.models import (
     RosterApplication,
     RosterEntry,
     RosterTenure,
+    TenureMedia,
 )
 from world.roster.models.choices import ApplicationStatus
+from world.roster.services.gallery import can_manage_gallery, gallery_q, hidden_ids
 
 
 class RosterEntryFilterSet(django_filters.FilterSet):
@@ -135,4 +140,29 @@ class RosterApplicationFilterSet(django_filters.FilterSet):
         queryset = super().qs
         if self.data.get("status") is None:
             queryset = queryset.filter(status=ApplicationStatus.PENDING)
+        return queryset
+
+
+class GalleryPictureFilterSet(django_filters.FilterSet):
+    """A character's gallery (#4151): the current player's uploads and the character's art.
+
+    ``roster_entry`` is required; there is no "whose gallery" default. Character art the
+    current player hid is left out for everyone but that player and staff.
+    """
+
+    roster_entry = django_filters.NumberFilter(method="filter_roster_entry", required=True)
+
+    class Meta:
+        model = TenureMedia
+        fields = ["roster_entry"]
+
+    def filter_roster_entry(
+        self, queryset: QuerySet[TenureMedia], name: str, value: int
+    ) -> QuerySet[TenureMedia]:
+        entry = RosterEntry.objects.filter(pk=value).first()
+        if entry is None:
+            return queryset.none()
+        queryset = queryset.filter(gallery_q(entry))
+        if not can_manage_gallery(cast(AccountDB, self.request.user), entry):
+            queryset = queryset.exclude(pk__in=hidden_ids(entry))
         return queryset

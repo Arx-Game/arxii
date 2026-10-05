@@ -96,9 +96,9 @@ from world.roster.factories import (
     PlayerDataFactory,
     RosterEntryFactory,
     RosterTenureFactory,
-    TenureGalleryFactory,
     TenureMediaFactory,
 )
+from world.roster.models import HiddenCharacterArt
 from world.scenes.factories import PersonaFactory
 from world.secrets.factories import SecretFactory
 from world.skills.factories import (
@@ -1971,9 +1971,13 @@ class TestProfilePictureSection(TestCase):
             player_number=1,
         )
 
+        # The worn look (#4151): a picture with its 4:5 crop.
         cls.tenure_media = TenureMediaFactory(
             tenure=cls.tenure,
             media__cloudinary_url="https://res.cloudinary.com/test/image/upload/profile.jpg",
+            crop_x=40,
+            crop_y=0,
+            crop_width=320,
         )
         cls.roster_entry.profile_picture = cls.tenure_media
         cls.roster_entry.save(update_fields=["profile_picture"])
@@ -1983,29 +1987,30 @@ class TestProfilePictureSection(TestCase):
         self.client.force_authenticate(user=self.player.account)
 
     def test_profile_picture_url(self) -> None:
-        """profile_picture returns the cloudinary URL string."""
+        """profile_picture is the worn look's cropped URL."""
         url = f"/api/character-sheets/{self.character.pk}/"
         response = self.client.get(url)
         assert response.status_code == 200
         assert response.data["profile_picture"] == (
-            "https://res.cloudinary.com/test/image/upload/profile.jpg"
+            "https://res.cloudinary.com/test/image/upload/c_crop,x_40,y_0,w_320,h_400/profile.jpg"
         )
 
 
 class TestLooksSection(TestCase):
-    """The plate's looks strip (#3898): the character's images and the mood each shows.
+    """The plate's looks strip (#3898, #4151): every look the character may show.
 
-    The interesting behaviour is the visibility split. The owner sees every image on
-    their tenures; anyone else sees only what is already public of the character —
-    images in a public gallery, plus the worn one, which the roster has always shown.
-    A private gallery must not reach the strip, because the sheet is a page anyone can
-    open.
+    A look is a picture with a saved 4:5 crop. The strip is the same for every viewer
+    with an account: the current player's looks and the character's art, worn first,
+    each at its cropped URL. A plain picture is not a look, an NSFW picture never is,
+    and character art the player hid is gone from it.
     """
 
     @classmethod
     def setUpTestData(cls) -> None:
         cls.player = PlayerDataFactory()
         cls.stranger = PlayerDataFactory()
+        cls.friend = PlayerDataFactory()
+        PlayerAllowList.objects.create(owner=cls.player, allowed_player=cls.friend)
         cls.character = CharacterFactory(db_key="LooksChar")
         CharacterSheetFactory(character=cls.character)
         cls.roster_entry = RosterEntryFactory(character_sheet__character=cls.character)
@@ -2014,79 +2019,73 @@ class TestLooksSection(TestCase):
             roster_entry=cls.roster_entry,
             player_number=1,
         )
-
-        cls.public_gallery = TenureGalleryFactory(tenure=cls.tenure, is_public=True)
-        cls.private_gallery = TenureGalleryFactory(tenure=cls.tenure, is_public=False)
         cls.guarded_mood = MoodOptionFactory(name="Guarded")
+        upload = "https://res.cloudinary.com/test/image/upload/"
 
-        # The worn look: tagged, and the entry's profile picture.
         cls.worn = TenureMediaFactory(
             tenure=cls.tenure,
-            gallery=cls.public_gallery,
             look=cls.guarded_mood,
-            media__cloudinary_url="https://example.test/worn.jpg",
+            media__cloudinary_url=f"{upload}worn.jpg",
+            crop_x=0,
+            crop_y=0,
+            crop_width=200,
+            sort_order=1,
         )
-        # A second public image, untagged — an artist's sheet is worth having before
-        # anyone has tagged a mood.
-        cls.public_untagged = TenureMediaFactory(
+        # A second look, untagged: worth having before anyone names a mood.
+        cls.untagged = TenureMediaFactory(
             tenure=cls.tenure,
-            gallery=cls.public_gallery,
-            media__cloudinary_url="https://example.test/public.jpg",
+            media__cloudinary_url=f"{upload}untagged.jpg",
+            crop_x=0,
+            crop_y=0,
+            crop_width=200,
+            sort_order=0,
         )
-        # One the player keeps private.
-        cls.private = TenureMediaFactory(
-            tenure=cls.tenure,
-            gallery=cls.private_gallery,
-            media__cloudinary_url="https://example.test/private.jpg",
+        # A plain picture: in the gallery, not on the strip.
+        TenureMediaFactory(tenure=cls.tenure, media__cloudinary_url=f"{upload}plain.jpg")
+        # Character art the player hid.
+        cls.hidden_art = TenureMediaFactory(
+            tenure=None,
+            roster_entry=cls.roster_entry,
+            media__cloudinary_url=f"{upload}hidden.jpg",
+            crop_x=0,
+            crop_y=0,
+            crop_width=200,
         )
+        HiddenCharacterArt.objects.create(tenure=cls.tenure, picture=cls.hidden_art)
         cls.roster_entry.profile_picture = cls.worn
         cls.roster_entry.save(update_fields=["profile_picture"])
 
     def setUp(self) -> None:
         self.client = APIClient()
 
-    def _looks(self, player) -> list[dict]:
+    def _sheet(self, player) -> dict:
         self.client.force_authenticate(user=player.account)
         response = self.client.get(f"/api/character-sheets/{self.character.pk}/")
         assert response.status_code == 200
-        return response.data["looks"]
+        return response.data
 
-    def test_owner_sees_every_image_with_the_worn_one_first(self) -> None:
-        looks = self._looks(self.player)
-        # The worn look leads, so the strip reads as "this one, and the others". The
-        # rest follow the gallery's own order, which this does not pin.
-        assert looks[0]["is_current"] is True
-        assert looks[0]["url"] == "https://example.test/worn.jpg"
-        assert looks[0]["look"] == "Guarded"
+    def test_the_worn_look_leads_at_its_crop(self) -> None:
+        looks = self._sheet(self.player)["looks"]
         assert looks[0]["tenure_media_id"] == self.worn.pk
-        assert {row["url"] for row in looks} == {
-            "https://example.test/worn.jpg",
-            "https://example.test/public.jpg",
-            "https://example.test/private.jpg",
-        }
+        assert looks[0]["is_current"] is True
+        assert looks[0]["look"] == "Guarded"
+        assert looks[0]["url"].endswith("/upload/c_crop,x_0,y_0,w_200,h_250/worn.jpg")
         assert [row["is_current"] for row in looks].count(True) == 1
 
-    def test_untagged_image_carries_a_blank_look_rather_than_being_dropped(self) -> None:
-        looks = self._looks(self.player)
-        untagged = next(row for row in looks if row["url"] == "https://example.test/public.jpg")
+    def test_only_looks_reach_the_strip(self) -> None:
+        for viewer in (self.player, self.stranger):
+            ids = {row["tenure_media_id"] for row in self._sheet(viewer)["looks"]}
+            assert ids == {self.worn.pk, self.untagged.pk}
+
+    def test_untagged_look_carries_a_blank_mood(self) -> None:
+        looks = self._sheet(self.player)["looks"]
+        untagged = next(row for row in looks if row["tenure_media_id"] == self.untagged.pk)
         assert untagged["look"] == ""
 
-    def test_stranger_sees_public_images_only(self) -> None:
-        looks = self._looks(self.stranger)
-        urls = {row["url"] for row in looks}
-        assert "https://example.test/private.jpg" not in urls
-        assert urls == {"https://example.test/worn.jpg", "https://example.test/public.jpg"}
-
-    def test_stranger_sees_the_worn_image_even_from_a_private_gallery(self) -> None:
-        """The profile picture is already public on the roster, wherever it is filed."""
-        self.roster_entry.profile_picture = self.private
-        self.roster_entry.save(update_fields=["profile_picture"])
-        try:
-            urls = [row["url"] for row in self._looks(self.stranger)]
-            assert "https://example.test/private.jpg" in urls
-        finally:
-            self.roster_entry.profile_picture = self.worn
-            self.roster_entry.save(update_fields=["profile_picture"])
+    def test_who_counts_as_a_friend_for_the_nsfw_veil(self) -> None:
+        assert self._sheet(self.player)["viewer_is_friend"] is True
+        assert self._sheet(self.friend)["viewer_is_friend"] is True
+        assert self._sheet(self.stranger)["viewer_is_friend"] is False
 
     def test_plate_ink_defaults_to_ember_and_is_ungated(self) -> None:
         """The ink is OOC chrome — it says nothing about the character, so nobody is gated."""
@@ -2796,14 +2795,10 @@ class TestCharacterSheetQueryCount(TestCase):
         43.    identity beginnings prefetch, #3898 (the Beginnings the presented profile
                holds — what the sheet means by "Beginning", as distinct from the realm
                the character is from). One query however many origins they hold.
-        44-45. looks prefetch, #3898 (the character's images and the mood each shows,
-               for the plate's strip). Two queries rather than one because the chain is
-               ``roster_entry__tenures__media``: 44 re-fetches the tenures and 45 fetches
-               their media. The tenures ARE already prefetched for ``can_edit`` (#21),
-               but into ``cached_tenures`` via ``to_attr``, and Django cannot chain a
-               deeper prefetch through a ``to_attr`` parent — so the second declaration
-               pays for its own tenure row. Both are fixed: one pair for the whole strip,
-               not one per image.
+        44-45. the looks strip, #3898/#4151 (every look the character may show): 44 is
+               the gallery (the current player's pictures and the character's art,
+               with each file and mood selected along), 45 the current player's hides.
+               Fixed however many pictures the character has.
         46.    worn prefetch, #3898 (what the character has on, for Physical's Wearing
                block). One query for every piece, with the template and both silhouettes
                selected along with it so the layer walk that decides what shows costs
