@@ -451,6 +451,13 @@ test.describe('The Gallery (#4151) on the production bundle', () => {
     await expect(page.getByRole('heading', { name: 'Add a look' })).toBeVisible();
     await settled(page);
     await page.screenshot({ path: shot('09-add-a-look-1280.png') });
+
+    // Picking a picture opens the cropper for a new look, with "Show it on the sheet now".
+    await page.locator('.gallery-pick button').first().click();
+    await expect(page.getByLabel('Show it on the sheet now')).toBeChecked();
+    await expect(page.getByRole('button', { name: 'Save profile picture' })).toBeVisible();
+    await settled(page);
+    await page.screenshot({ path: shot('09b-new-look-cropper-1280.png') });
   });
 
   test('a stranger: no tools, the NSFW picture veiled until clicked', async ({ page }) => {

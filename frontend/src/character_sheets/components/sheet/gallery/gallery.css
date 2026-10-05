@@ -688,8 +688,13 @@
   max-width: 44rem;
   text-align: center;
 }
+/* The lightbox is portalled outside .refsheet, so it names its faces itself. */
+.gallery-lightbox-cap {
+  font-family: 'EB Garamond', Georgia, 'Times New Roman', serif;
+  font-size: 1.1rem;
+}
 .gallery-lightbox-cap b {
-  font-family: var(--sheet-caps);
+  font-family: 'Cinzel', Georgia, serif;
   font-weight: 600;
   letter-spacing: 0.05em;
 }
@@ -714,7 +719,8 @@
     padding: 0.9rem;
   }
 }
-@media (hover: none), (max-width: 52rem) {
+/* Without hover (a touch screen) the tools would be unreachable, so they stay shown. */
+@media (hover: none) {
   .gallery-tools {
     opacity: 1;
   }

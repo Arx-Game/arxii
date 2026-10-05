@@ -178,7 +178,7 @@ export function LookCropper({ picture, moods, ink, isSaving, onSave, onClose }: 
 
   return (
     <Dialog open={picture !== null} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="max-w-5xl border-0 bg-transparent p-0 shadow-none">
+      <DialogContent className="max-w-5xl border-0 bg-transparent p-0 text-[#f1e6d6] shadow-none">
         <div className="refsheet gallery-cropper" data-ink={ink} onKeyDown={onKeyDown}>
           <DialogTitle className="sr-only">Frame this look</DialogTitle>
           <div className="gallery-cropper-stage-wrap">
