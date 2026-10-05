@@ -72,6 +72,7 @@ function stubNetwork(pictures: GalleryPicture[], owner: boolean) {
     if (url.startsWith('/api/character-sheets/mood-options/')) {
       return respond({ next: null, results: [{ id: 3, name: 'At rest' }] });
     }
+    if (url === '/api/roster/tenure-media/2/') return respond({ outcome: 'deleted' });
     return respond({});
   });
 }
@@ -143,7 +144,13 @@ describe('GalleryPanel', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Delete' }));
     const dialog = await screen.findByRole('alertdialog');
     expect(within(dialog).getByText('This frees 2.0 MB.')).toBeInTheDocument();
-    expect(within(dialog).getByRole('button', { name: 'Delete' })).toBeInTheDocument();
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Delete' }));
+    await waitFor(() =>
+      expect(apiFetch).toHaveBeenCalledWith(
+        '/api/roster/tenure-media/2/',
+        expect.objectContaining({ method: 'DELETE' })
+      )
+    );
   });
 
   it('offers to hide character art, never to delete it', async () => {

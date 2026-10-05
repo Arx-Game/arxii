@@ -106,7 +106,7 @@ class RosterEntry(SharedMemoryModel):
         if self.profile_picture and self.profile_picture.owning_entry_id() != self.pk:
             raise ValidationError(
                 {
-                    "profile_picture": "Profile picture must belong to this character's tenure.",
+                    "profile_picture": "The worn look must be this character's own picture.",
                 },
             )
 
