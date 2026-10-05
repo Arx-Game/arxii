@@ -425,12 +425,17 @@ def _compute_check_breakdown(  # noqa: PLR0913 - keyword-only check params mirro
     level isn't reachable through ``character``'s own ``CharacterClassLevel`` rows, e.g. a
     ``CombatOpponent`` (an ephemeral NPC with no class-level rows behind its objectdb,
     which would otherwise floor at 1 regardless of its authored level).
+
+    The Audere / Audere Majora ``check_level_bonus`` (#4147) is added only on the
+    resolved-level path (``level_override is None``); an override is used as given.
     """
     handler: TraitHandler = character.traits  # type: ignore[attr-defined] — ObjectDB typeclass extension
     if level_override is not None:
         level = level_override
     else:
-        level = get_character_path_level(character)
+        from world.magic.audere import audere_check_level_bonus  # noqa: PLC0415
+
+        level = get_character_path_level(character) + audere_check_level_bonus(character)
     effort_modifier = EFFORT_CHECK_MODIFIER.get(effort_level, 0) if effort_level else 0
 
     trait_points = _calculate_trait_points(handler, check_type, stat_override=stat_override)

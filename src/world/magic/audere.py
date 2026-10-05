@@ -304,6 +304,42 @@ def corruption_advisory_for_character(character: ObjectDB) -> str:
     )
 
 
+def audere_check_level_bonus(character: ObjectDB) -> int:
+    """Extra effective levels this character's checks count while in Audere (#4147).
+
+    Audere Majora's own bonus replaces Audere's while the Majora condition holds. The
+    Majora threshold is the one whose ``boundary_level`` the character crossed at, i.e.
+    the highest ``boundary_level`` at or below their current level. Zero outside both.
+    """
+    from world.conditions.models import ConditionInstance
+    from world.magic.audere_majora import AudereMajoraThreshold
+
+    held = set(
+        ConditionInstance.objects.filter(
+            target=character,
+            condition__name__in=[AUDERE_CONDITION_NAME, AUDERE_MAJORA_CONDITION_NAME],
+        ).values_list("condition__name", flat=True)
+    )
+    if not held:
+        return 0
+    if AUDERE_MAJORA_CONDITION_NAME in held:
+        from world.progression.services.skill_development import (
+            get_character_path_level,
+        )
+
+        majora = (
+            AudereMajoraThreshold.objects.filter(
+                boundary_level__lte=get_character_path_level(character)
+            )
+            .order_by("-boundary_level")
+            .first()
+        )
+        if majora is not None:
+            return majora.check_level_bonus
+    threshold = AudereThreshold.objects.cached_singleton()
+    return threshold.check_level_bonus if threshold is not None else 0
+
+
 def offer_audere(character: ObjectDB, *, accept: bool) -> AudereOfferResult:
     """Process a player's Audere offer decision.
 
