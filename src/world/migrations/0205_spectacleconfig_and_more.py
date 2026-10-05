@@ -178,7 +178,7 @@ class Migration(migrations.Migration):
                 (
                     "text",
                     models.TextField(
-                        help_text="Shown to the room when no GM runs the scene. <actor> <group> <display>."
+                        help_text="Shown to the room when no GM runs the scene. &lt;actor&gt; &lt;group&gt; &lt;display&gt;."
                     ),
                 ),
                 (

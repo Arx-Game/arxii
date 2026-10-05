@@ -10,6 +10,7 @@ from django.db import models
 from django.db.models import F, Q
 from django.utils import timezone
 from django.utils.functional import cached_property
+from django.utils.html import escape
 
 from core.managers import ArxSharedMemoryManager
 from core.models import ArxSharedMemoryModel as SharedMemoryModel
@@ -4283,7 +4284,7 @@ class SpectacleReactionLine(SharedMemoryModel):
         help_text="Blank applies to any display.",
     )
     text = models.TextField(
-        help_text="Shown to the room when no GM runs the scene. <actor> <group> <display>.",
+        help_text=escape("Shown to the room when no GM runs the scene. <actor> <group> <display>."),
     )
 
     class Meta:

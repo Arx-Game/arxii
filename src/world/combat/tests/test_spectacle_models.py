@@ -3,6 +3,7 @@ from django.test import TestCase
 
 from world.combat.constants import SpectacleKind
 from world.combat.factories import CombatOpponentFactory, SpectacleRecordFactory
+from world.combat.models import SpectacleReactionLine
 from world.magic.factories import TechniqueFactory
 
 
@@ -38,3 +39,10 @@ class SpectacleRecordConstraintTests(TestCase):
     def test_other_opponent_is_allowed(self):
         other = CombatOpponentFactory(encounter=self.record.opponent.encounter)
         SpectacleRecordFactory(opponent=other, caster=self.record.caster)
+
+
+class SpectacleReactionLineHelpTextTests(TestCase):
+    def test_text_help_escapes_placeholders_so_admin_shows_them(self):
+        help_text = SpectacleReactionLine._meta.get_field("text").help_text
+        self.assertIn("&lt;actor&gt; &lt;group&gt; &lt;display&gt;", help_text)
+        self.assertNotIn("<actor>", help_text)
