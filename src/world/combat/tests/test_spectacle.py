@@ -370,6 +370,42 @@ class SpectacleCreditLineTests(TestCase):
             "The village militia take heart.",
         )
 
+    def _set(self, opponent, morale):
+        opponent.morale = morale
+        opponent.save(update_fields=["morale"])
+
+    def test_already_faltering_witness_that_stays_faltering_gets_no_clause(self):
+        self._set(self.captain, 50)  # Faltering; the Audere hit leaves it Faltering
+        result = self.run_spectacle()
+        states = {s.opponent_id: (s.before, s.after) for s in result.shifts}
+        self.assertEqual(
+            states[self.captain.pk], (OpponentMoraleState.FALTER, OpponentMoraleState.FALTER)
+        )
+        self.assertEqual(
+            result.credit_line,
+            f"The bridge bandits falter before {self.persona.name}'s surge into Audere. "
+            "The village militia take heart.",
+        )
+
+    def test_no_change_and_none_steady_is_shaken(self):
+        self._set(self.captain, 50)
+        result = self.run_spectacle(witnesses=[self.captain])
+        self.assertEqual(
+            result.credit_line,
+            f"The bandit captain is shaken by {self.persona.name}'s surge into Audere. "
+            "The village militia take heart.",
+        )
+
+    def test_verb_agrees_with_the_group_not_the_sentence(self):
+        self._set(self.bandits[1], 40)  # breaks, while the other bandit only falters
+        result = self.run_spectacle()
+        self.assertEqual(
+            result.credit_line,
+            f"The bridge bandits break before {self.persona.name}'s surge into Audere. "
+            "The bridge bandits falter. The bandit captain holds. "
+            "The village militia take heart.",
+        )
+
     def test_ally_at_full_morale_is_not_heartened(self):
         full, rising = self.militia
         full.morale = 70
@@ -382,7 +418,8 @@ class SpectacleCreditLineTests(TestCase):
         self.assertEqual(full.morale, 70)
         self.assertEqual(rising.morale, 70)  # clamped at max_morale
         self.assertEqual(result.heartened_ids, (rising.pk,))
-        self.assertTrue(result.credit_line.endswith("The village militia takes heart."))
+        # Plural: the militia group has two active members, though only one rose.
+        self.assertTrue(result.credit_line.endswith("The village militia take heart."))
 
     def test_no_ally_rose_no_take_heart(self):
         for ally in self.militia:

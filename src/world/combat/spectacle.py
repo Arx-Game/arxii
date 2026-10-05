@@ -6,6 +6,7 @@ Pure arithmetic plus ``apply_spectacle``. Never broadcasts: the caller delivers
 
 from __future__ import annotations
 
+from collections import Counter
 from typing import TYPE_CHECKING
 
 from world.combat.constants import (
@@ -125,7 +126,7 @@ def _already_shaken_ids(
 
 
 def _hearten_allies(
-    encounter: CombatEncounter, config: SpectacleConfig, kind: str, success_level: int
+    allies: list[CombatOpponent], config: SpectacleConfig, kind: str, success_level: int
 ) -> list[CombatOpponent]:
     """Raise each active ally's morale; return only the allies whose morale rose."""
     gain = raw_hit(config=config, kind=kind, success_level=success_level)
@@ -133,9 +134,6 @@ def _hearten_allies(
     if gain <= 0:
         return []
     heartened: list[CombatOpponent] = []
-    allies = encounter.opponents.filter(
-        status=OpponentStatus.ACTIVE, allegiance=CombatAllegiance.ALLY
-    )
     for ally in allies:
         if ally.morale >= ally.max_morale:
             continue
@@ -155,13 +153,22 @@ def _group_names(opponents: list[CombatOpponent]) -> str:
     return " and ".join(names)
 
 
-def _verb(opponents: list[CombatOpponent], plural: str, singular: str) -> str:
-    """Singular verb only when the sentence names one opponent ("the captain falters")."""
-    return singular if len(opponents) == 1 else plural
+def _group_sizes(opponents: list[CombatOpponent]) -> Counter[str]:
+    """Active members per group name, so a verb agrees with the group, not the sentence."""
+    return Counter(_group_name(opponent) for opponent in opponents)
 
 
-def _sentence(opponents: list[CombatOpponent], verbs: tuple[str, str], tail: str = "") -> str:
-    return f"The {_group_names(opponents)} {_verb(opponents, *verbs)}{tail}."
+def _sentence(
+    opponents: list[CombatOpponent],
+    verbs: tuple[str, str],
+    sizes: Counter[str],
+    tail: str = "",
+) -> str:
+    """One sentence naming ``opponents``' groups; singular only for a lone active member."""
+    names = dict.fromkeys(_group_name(opponent) for opponent in opponents)
+    plural, singular = verbs
+    verb = singular if sum(sizes[name] for name in names) == 1 else plural
+    return f"The {' and '.join(names)} {verb}{tail}."
 
 
 _BREAK = ("break", "breaks")
@@ -195,28 +202,32 @@ def _credit_line(
     display_name: str,
     outcome: tuple[list[CombatOpponent], list[CombatOpponent], list[CombatOpponent]],
     heartened: list[CombatOpponent],
+    sizes: Counter[str],
 ) -> str:
     """One sentence per resulting state, so no witness is credited a state it never reached.
 
-    The first sentence names the caster and the display; a witness that held is named as
-    holding, never folded into a group that broke or faltered (#4147 demo Screens 1-2).
+    The first sentence names the caster and the display. When some group changed state, a
+    steady group that held is named as holding; a group already faltering that stays so gets
+    no clause (its chip already says it). With no change at all, every witness is "shaken by"
+    the display (#4147 demo Screens 1-2).
     """
     broke, faltered, held = outcome
     credit = f" before {persona}'s {display_name}"
     sentences: list[str] = []
     if broke:
-        sentences.append(_sentence(broke, _BREAK, credit))
+        sentences.append(_sentence(broke, _BREAK, sizes, credit))
         credit = ""
     if faltered:
-        sentences.append(_sentence(faltered, _FALTER, credit))
+        sentences.append(_sentence(faltered, _FALTER, sizes, credit))
         credit = ""
-    if held:
-        if sentences:
-            sentences.append(_sentence(held, _HOLD))
-        else:
-            sentences.append(_sentence(held, _SHAKEN, f" by {persona}'s {display_name}"))
+    if not sentences:
+        sentences.append(_sentence(held, _SHAKEN, sizes, f" by {persona}'s {display_name}"))
+    else:
+        steady = [o for o in held if morale_state_for(o) == OpponentMoraleState.STEADY]
+        if steady:
+            sentences.append(_sentence(steady, _HOLD, sizes))
     if heartened:
-        sentences.append(_sentence(heartened, _HEARTEN))
+        sentences.append(_sentence(heartened, _HEARTEN, sizes))
     return " ".join(sentences)
 
 
@@ -323,7 +334,10 @@ def apply_spectacle(  # noqa: PLR0913 - keyword-only public contract
     if not shifts:
         return SpectacleResult()
     SpectacleRecord.objects.bulk_create(records)
-    heartened = _hearten_allies(encounter, config, kind, success_level)
+    allies = list(
+        encounter.opponents.filter(status=OpponentStatus.ACTIVE, allegiance=CombatAllegiance.ALLY)
+    )
+    heartened = _hearten_allies(allies, config, kind, success_level)
     persona = active_persona_for_sheet(caster_sheet).name
     outcome = _by_outcome(witnesses, shifts)
     flavour = heartened_line = ""
@@ -336,7 +350,9 @@ def apply_spectacle(  # noqa: PLR0913 - keyword-only public contract
                 lines, SpectacleReaction.HEARTENED, kind, heartened, persona, display_name
             )
     return SpectacleResult(
-        credit_line=_credit_line(persona, display_name, outcome, heartened),
+        credit_line=_credit_line(
+            persona, display_name, outcome, heartened, _group_sizes(witnesses + allies)
+        ),
         flavour_line=flavour,
         heartened_line=heartened_line,
         shifts=tuple(shifts),

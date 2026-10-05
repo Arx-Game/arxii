@@ -7523,9 +7523,11 @@ caster and move, and allied NPCs take heart. Ultimates never fail (ADR-4147).
   opponent and standoff group.
 - **Lines:** the credit line has one sentence per resulting state, so no witness is
   credited a state it did not reach: "The <groups> break before <persona>'s <display>. The
-  <groups> falter. The <groups> hold." (the first sentence present carries the credit; with
-  no state change, "The <groups> are shaken by <persona>'s <display>."), then "The <allies>
-  take heart." naming only allies whose morale rose. With no GM running the scene, the most
+  <groups> falter. The <groups> hold." (the first sentence present carries the credit; "hold"
+  names only groups still Steady, and a group already Faltering that stays so gets no clause;
+  with no state change at all, "The <groups> are shaken by <persona>'s <display>."), then
+  "The <allies> take heart." naming only allies whose morale rose. A verb is singular only
+  when the named group has one active member. With no GM running the scene, the most
   specific authored line for the strongest enemy reaction (`<group>` = the groups that
   showed it) and, when allies rose, a Heartened line (`<group>` = those allies) follow.
 - **Details:** [standoffs.md](standoffs.md), [magic.md](magic.md), ADR-4147.
