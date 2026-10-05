@@ -643,7 +643,7 @@ class CombatTechniqueResolver:
         gated on ``success_level >= 1``, such as manifesting a bound entity.
         """
         technique = self.action.focused_action
-        if not technique.is_ultimate or (result.success_level or 0) >= 1:
+        if technique is None or not technique.is_ultimate or (result.success_level or 0) >= 1:
             return result
         from world.traits.models import CheckOutcome  # noqa: PLC0415
 
