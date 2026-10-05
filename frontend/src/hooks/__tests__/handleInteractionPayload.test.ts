@@ -7,11 +7,14 @@
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-const { toastMock, getStateMock, getQueryDataMock } = vi.hoisted(() => ({
-  toastMock: vi.fn(),
-  getStateMock: vi.fn(),
-  getQueryDataMock: vi.fn(),
-}));
+const { toastMock, getStateMock, getQueryDataMock, getQueriesDataMock, invalidateMock } =
+  vi.hoisted(() => ({
+    toastMock: vi.fn(),
+    getStateMock: vi.fn(),
+    getQueryDataMock: vi.fn(),
+    getQueriesDataMock: vi.fn(),
+    invalidateMock: vi.fn(),
+  }));
 
 vi.mock('sonner', () => ({
   toast: Object.assign(toastMock, { error: vi.fn(), success: vi.fn() }),
@@ -22,7 +25,11 @@ vi.mock('@/store/store', () => ({
 }));
 
 vi.mock('@/queryClient', () => ({
-  queryClient: { getQueryData: getQueryDataMock },
+  queryClient: {
+    getQueryData: getQueryDataMock,
+    getQueriesData: getQueriesDataMock,
+    invalidateQueries: invalidateMock,
+  },
 }));
 
 import { handleInteractionPayload } from '../handleInteractionPayload';
@@ -101,6 +108,8 @@ describe('handleInteractionPayload', () => {
     navigate = vi.fn() as unknown as NavigateFunction;
     getStateMock.mockReturnValue({ game: { active: 'Alice' } });
     getQueryDataMock.mockReturnValue(makeRosterEntries());
+    getQueriesDataMock.mockReturnValue([]);
+    invalidateMock.mockResolvedValue(undefined);
   });
 
   it('always dispatches addSceneInteraction regardless of toast outcome', () => {
@@ -229,6 +238,35 @@ describe('handleInteractionPayload', () => {
     Object.defineProperty(window, 'location', {
       configurable: true,
       value: originalLocation,
+    });
+  });
+
+  describe('live combat refresh (#4147)', () => {
+    const encounterKey = ['combat', 'encounter', 5];
+
+    beforeEach(() => {
+      getQueriesDataMock.mockReturnValue([[encounterKey, { id: 5, scene: 9 }]]);
+    });
+
+    it('invalidates the open encounter when an outcome for its scene arrives', () => {
+      const payload = makeWhisperPayload({ id: 600, mode: 'outcome', scene_id: 9 });
+      handleInteractionPayload('Bob', payload, dispatch, navigate);
+
+      expect(invalidateMock).toHaveBeenCalledWith({ queryKey: encounterKey });
+    });
+
+    it('ignores an outcome for a different scene', () => {
+      const payload = makeWhisperPayload({ id: 601, mode: 'outcome', scene_id: 10 });
+      handleInteractionPayload('Bob', payload, dispatch, navigate);
+
+      expect(invalidateMock).not.toHaveBeenCalled();
+    });
+
+    it('ignores a non-outcome line for the open scene', () => {
+      const payload = makeWhisperPayload({ id: 602, mode: 'pose', scene_id: 9 });
+      handleInteractionPayload('Bob', payload, dispatch, navigate);
+
+      expect(invalidateMock).not.toHaveBeenCalled();
     });
   });
 });

@@ -503,6 +503,18 @@ outcome** (a closed issue or a "SHIPPED" line is not proof). See the ledger's go
   warms its target; scene NPCs with no resist effort resist passively). Web `StandoffCard`,
   telnet `standoff`. What is not built yet is listed under "Later slices" in
   `docs/systems/standoffs.md`.
+- **Spectacle breaks morale** - SHIPPED (#4147, ADR-4147, 2026-10-05): an earned display
+  shakes the enemies who witness it. Audere entry, an ultimate, a Crossing, a critical
+  technique (intensity and success level thresholds) and a devastating action (one action
+  removing a share of the enemy side's health) each take a hit off every witness's morale,
+  scaled by the caster's level against the opponent's (Audere adds its check level bonus),
+  once per caster and move, with allied NPCs regaining a share. Ultimates never fail their
+  roll or mishap. Audere and Audere Majora add effective levels to every check. A faltering
+  or broken group is easier to bargain with, and a standoff gains a display of power press
+  that casts a technique as its check. Opponent morale state (not the numbers) is public in
+  the combat view and the web cards. Staff tune `SpectacleConfig` and author
+  `SpectacleReactionLine` rows (a REQUIRED content entry). The scene-cast path does not floor
+  ultimates (see `docs/systems/magic.md`). Boss morale reuses the existing morale model.
 - **Settle round-based effects after combat** - SHIPPED (#4120, ADR-4120, 2026-10-04): ROUNDS
   conditions that outlive a fight convert to a real-time expiry at cleanup, tick as slow
   non-lethal clamped damage (minutes per round), and a lapsing charm warns its PC charmer then

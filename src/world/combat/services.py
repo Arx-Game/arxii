@@ -135,6 +135,7 @@ from world.combat.constants import (
     OpponentTier,
     PaceMode,
     ParticipantStatus,
+    SpectacleKind,
     StrikeDelivery,
     SustainedKind,
     TargetingMode,
@@ -623,7 +624,7 @@ class CombatTechniqueResolver:
         from world.combat.stat_mapping import weapon_stat_override  # noqa: PLC0415
 
         stat_override = weapon_stat_override(character)
-        return check_fn(
+        result = check_fn(
             character,
             self.offense_check_type,
             target_difficulty=target_difficulty,
@@ -633,6 +634,9 @@ class CombatTechniqueResolver:
             situation_ctx=situation_ctx,
             stat_override=stat_override,
         )
+        from world.magic.services.ultimates import floor_ultimate_check  # noqa: PLC0415
+
+        return floor_ultimate_check(result, self.action.focused_action)
 
     def _sum_intensity_bump_pulls(self) -> int:
         """Sum INTENSITY_BUMP scaled_values from active CombatPulls."""
@@ -8775,6 +8779,61 @@ def _maybe_produce_insight_for_cast(
         )
 
 
+def _maybe_apply_spectacle_for_action(
+    participant: CombatParticipant,
+    technique: Technique,
+    combat_result: CombatTechniqueResult | None,
+    outcome: ActionOutcome,
+    health_before: dict[int, int],
+) -> None:
+    """Earned displays shake the witnesses (#4147).
+
+    Deliberately unguarded: a failure here is a bug and should fail loudly.
+    """
+    from world.combat.models import SpectacleConfig  # noqa: PLC0415
+    from world.combat.spectacle import (  # noqa: PLC0415
+        apply_spectacle,
+        classify_cast,
+        deliver_spectacle,
+        is_devastating,
+    )
+
+    config = SpectacleConfig.load()
+    kind = None
+    success_level = 0
+    cast_technique = None
+    if isinstance(combat_result, CombatTechniqueResult):
+        use = combat_result.technique_use_result
+        check = use.resolution_result.check_result if use.resolution_result else None
+        success_level = check.success_level if check is not None else 0
+        if success_level >= 1:
+            kind = classify_cast(
+                technique=technique,
+                runtime_intensity=use.runtime_intensity,
+                success_level=success_level,
+                config=config,
+            )
+            cast_technique = technique
+    if kind is None:
+        damage: dict[int, int] = {}
+        for dealt in outcome.damage_results:
+            if isinstance(dealt, OpponentDamageResult) and dealt.opponent_id is not None:
+                damage[dealt.opponent_id] = damage.get(dealt.opponent_id, 0) + (dealt.damage_dealt)
+        if is_devastating(damage_by_opponent=damage, health_before=health_before, config=config):
+            kind = SpectacleKind.DEVASTATING_ACTION
+    if kind is None:
+        return
+    result = apply_spectacle(
+        encounter=participant.encounter,
+        caster_sheet=participant.character_sheet,
+        kind=kind,
+        display_name=technique.name,
+        success_level=success_level,
+        technique=cast_technique,
+    )
+    deliver_spectacle(participant.encounter, result)
+
+
 def _maybe_create_weakness_selection_for_cast(
     participant: CombatParticipant,
     combat_result: CombatTechniqueResult,
@@ -9056,6 +9115,12 @@ def _resolve_pc_action(
     run_pipeline = (
         not action.combo_upgrade or target is not None or action.focused_ally_target is not None
     )
+    # #4147: health before the blow, so a devastating action can be judged afterwards.
+    health_before = dict(
+        participant.encounter.opponents.filter(
+            status=OpponentStatus.ACTIVE, allegiance=CombatAllegiance.ENEMY
+        ).values_list("pk", "health")
+    )
     if run_pipeline:
         combat_result = _run_combat_technique_pipeline(
             participant, action, technique, fatigue_category, offense_check_fn
@@ -9099,6 +9164,10 @@ def _resolve_pc_action(
         outcome=outcome,
         combat_result=combat_result,
     )
+
+    # Earned displays shake the enemy witnesses (#4147); the credit line follows the
+    # action's own outcome line.
+    _maybe_apply_spectacle_for_action(participant, technique, combat_result, outcome, health_before)
 
     # Nemesis/toxic-NPC-bond regard hook (#2039): a PC defeating a notable
     # (persona-backed) NPC opponent records a PC_FOILED_NPC_PLAN regard event.

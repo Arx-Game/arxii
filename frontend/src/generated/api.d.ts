@@ -25441,6 +25441,7 @@ export interface components {
       check_caption: string;
       levers: components['schemas']['LeverView'][];
       hits_revealed_drive: boolean;
+      casts_technique: boolean;
     };
     /**
      * @description * `global` - Global
@@ -29476,6 +29477,10 @@ export interface components {
      * @enum {string}
      */
     DiscoveryTypeEnum: 'obvious' | 'discoverable';
+    DisplayTechnique: {
+      technique_id: number;
+      name: string;
+    };
     /**
      * @description Write serializer for dissolving a Soul Tether (Spec B §13).
      *
@@ -32262,6 +32267,8 @@ export interface components {
       read_check: string;
       read_grade: string;
       read_grade_label: string;
+      morale_state: string;
+      terms_morale_ease: number;
     };
     /** @description POST body for the #1036 group-vote endpoint. */
     GroupVoteRequestRequest: {
@@ -35972,7 +35979,13 @@ export interface components {
       readonly vulnerability_rounds_remaining: number | null;
       readonly morale: number | null;
       readonly max_morale: number | null;
-      readonly morale_state: string | null;
+      /**
+       * @description Derived STEADY/FALTER/BREAK - pure arithmetic, no query.
+       *
+       *     Public: the derived state is observable behaviour; the number stays
+       *     GM-only (#4147).
+       */
+      readonly morale_state: string;
       /** @description Public: the enrage line has fired (a transition raised the multiplier). */
       readonly is_enraged: boolean;
       /** @description Public: the break celebration named this boss and the window is open. */
@@ -46207,6 +46220,7 @@ export interface components {
       terms: components['schemas']['TermsView'][];
       sparks: components['schemas']['SparkView'][];
       shared_sparks: components['schemas']['SparkView'][];
+      display_techniques: components['schemas']['DisplayTechnique'][];
     };
     /**
      * @description Serializer for starting areas.

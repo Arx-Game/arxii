@@ -164,6 +164,12 @@ class StandoffApproach(NaturalKeyMixin, SharedMemoryModel):
         default=False,
         help_text="When true, a success also wears down the group's morale.",
     )
+    casts_technique = models.BooleanField(
+        default=False,
+        help_text=(
+            "The player picks one of their techniques; its cast is the check, and nobody is harmed."
+        ),
+    )
     archetypes = models.ManyToManyField(
         "arxii.PhilosophicalArchetype",
         blank=True,
@@ -301,6 +307,13 @@ class StandoffConfig(SharedMemoryModel):
     )
     band_force_percent = models.PositiveSmallIntegerField(
         default=10, help_text="Percent of party force one band of emboldening takes away."
+    )
+
+    terms_ease_faltering = models.PositiveSmallIntegerField(
+        default=1, help_text="Terms steps eased when the group is faltering."
+    )
+    terms_ease_broken = models.PositiveSmallIntegerField(
+        default=2, help_text="Terms steps eased when the group is broken."
     )
 
     objects = ArxSharedMemoryManager()

@@ -18,6 +18,7 @@ from world.combat.factories import (
     CombatParticipantFactory,
     CreatureTemplateFactory,
 )
+from world.magic.factories import CharacterTechniqueFactory, TechniqueFactory
 from world.mechanics.factories import PropertyFactory
 from world.standoffs.constants import DriveStrength, RevealKind
 from world.standoffs.factories import (
@@ -75,6 +76,59 @@ class CmdStandoffTests(TestCase):
         key, kwargs = self._dispatched("press hard stare road bandits")
         self.assertEqual(key, "standoff_press")
         self.assertEqual(kwargs, {"group_id": self.group.pk, "approach_id": self.approach.pk})
+
+    def test_display_dispatches_the_casting_approach_with_the_technique(self) -> None:
+        casting = StandoffApproachFactory(name="Show of Power", casts_technique=True)
+        technique = TechniqueFactory(name="Thunderclap")
+        CharacterTechniqueFactory(character=self.sheet, technique=technique)
+        key, kwargs = self._dispatched("display thunderclap road bandits")
+        self.assertEqual(key, "standoff_press")
+        self.assertEqual(
+            kwargs,
+            {
+                "group_id": self.group.pk,
+                "approach_id": casting.pk,
+                "technique_id": technique.pk,
+            },
+        )
+
+    def test_display_with_soulfray_accepts_the_risk(self) -> None:
+        StandoffApproachFactory(name="Show of Power", casts_technique=True)
+        technique = TechniqueFactory(name="Thunderclap")
+        CharacterTechniqueFactory(character=self.sheet, technique=technique)
+        _, kwargs = self._dispatched("display thunderclap road bandits soulfray")
+        self.assertEqual(kwargs["technique_id"], technique.pk)
+        self.assertEqual(kwargs["group_id"], self.group.pk)
+        self.assertIs(kwargs["confirm_soulfray_risk"], True)
+        _, plain = self._dispatched("display thunderclap road bandits")
+        self.assertNotIn("confirm_soulfray_risk", plain)
+
+    def test_a_soulfray_refusal_says_how_to_accept(self) -> None:
+        StandoffApproachFactory(name="Show of Power", casts_technique=True)
+        technique = TechniqueFactory(name="Thunderclap")
+        CharacterTechniqueFactory(character=self.sheet, technique=technique)
+        cmd = self._cmd("display thunderclap road bandits")
+        refused = DispatchResult(
+            backend=ActionBackend.REGISTRY,
+            deferred=False,
+            detail=ActionResult(
+                success=False,
+                message="Your soul is fraying.",
+                data={"soulfray_warning": {"stage_name": "Fraying"}},
+            ),
+        )
+        with patch(_DISPATCH, return_value=refused):
+            cmd.func()
+        sent = [call.args[0] for call in cmd.msg.call_args_list if call.args]
+        self.assertEqual(sent[0], "Your soul is fraying.")
+        self.assertIn("standoff display thunderclap road bandits soulfray", sent[1])
+
+    def test_display_of_an_unknown_technique_is_a_command_error(self) -> None:
+        StandoffApproachFactory(name="Show of Power", casts_technique=True)
+        cmd = self._cmd("display nothing road bandits")
+        cmd._subverb, cmd._rest = "display", "nothing road bandits"
+        with self.assertRaises(CommandError):
+            cmd.resolve_action_args()
 
     def test_terms_resolves_names(self) -> None:
         key, kwargs = self._dispatched("terms Let Us Pass Road Bandits")

@@ -46,6 +46,13 @@ class AudereThreshold(SharedMemoryModel):
         on_delete=models.PROTECT,
         help_text="Soulfray must be at this stage or higher.",
     )
+    check_level_bonus = models.PositiveSmallIntegerField(
+        default=0,
+        help_text=(
+            "While in this state, every check the character makes counts this many "
+            "extra levels (5 points each, ADR-0166)."
+        ),
+    )
     intensity_bonus = models.IntegerField(
         help_text="Added to engagement.intensity_modifier when Audere activates.",
     )
@@ -297,12 +304,49 @@ def corruption_advisory_for_character(character: ObjectDB) -> str:
     )
 
 
+def audere_check_level_bonus(character: ObjectDB) -> int:
+    """Extra effective levels this character's checks count while in Audere (#4147).
+
+    Audere Majora's own bonus replaces Audere's while the Majora condition holds. The
+    Majora threshold is the one whose ``boundary_level`` the character crossed at, i.e.
+    the highest ``boundary_level`` at or below their current level. Zero outside both.
+    """
+    from world.conditions.models import ConditionInstance
+    from world.magic.audere_majora import AudereMajoraThreshold
+
+    held = set(
+        ConditionInstance.objects.filter(
+            target=character,
+            condition__name__in=[AUDERE_CONDITION_NAME, AUDERE_MAJORA_CONDITION_NAME],
+        ).values_list("condition__name", flat=True)
+    )
+    if not held:
+        return 0
+    if AUDERE_MAJORA_CONDITION_NAME in held:
+        from world.progression.services.skill_development import (
+            get_character_path_level,
+        )
+
+        majora = (
+            AudereMajoraThreshold.objects.filter(
+                boundary_level__lte=get_character_path_level(character)
+            )
+            .order_by("-boundary_level")
+            .first()
+        )
+        if majora is not None:
+            return majora.check_level_bonus
+    threshold = AudereThreshold.objects.cached_singleton()
+    return threshold.check_level_bonus if threshold is not None else 0
+
+
 def offer_audere(character: ObjectDB, *, accept: bool) -> AudereOfferResult:
     """Process a player's Audere offer decision.
 
     If declined, returns immediately. If accepted, applies the Audere condition
     and grants intensity/anima bonuses within a transaction.
     """
+    from world.combat.constants import SpectacleKind
     from world.conditions.models import ConditionTemplate
     from world.conditions.services import apply_condition
     from world.magic.models import CharacterAnima
@@ -345,6 +389,7 @@ def offer_audere(character: ObjectDB, *, accept: bool) -> AudereOfferResult:
         anima.save(update_fields=["pre_audere_maximum", "maximum"])
 
     _announce_surge(character, threshold)
+    shake_witnesses(character, SpectacleKind.AUDERE_ENTRY, display_name="surge into Audere")
 
     return AudereOfferResult(
         accepted=True,
@@ -352,6 +397,37 @@ def offer_audere(character: ObjectDB, *, accept: bool) -> AudereOfferResult:
         anima_pool_expanded_by=threshold.anima_pool_bonus,
         advisory_text=advisory,
     )
+
+
+def shake_witnesses(character: ObjectDB, kind: str, *, display_name: str) -> None:
+    """Shake the enemy witnesses of a display in the character's encounter (#4147).
+
+    Deferred to commit. A no-op for a character with no sheet or no combat engagement.
+    """
+    from world.combat.spectacle import (
+        apply_spectacle,
+        deliver_spectacle,
+        encounter_for_character,
+    )
+
+    sheet = character.character_sheet
+    encounter = encounter_for_character(character)
+    if sheet is None or encounter is None:
+        return
+
+    def _shake() -> None:
+        # Atomic so a failure part-way leaves no half-applied morale or records behind.
+        with transaction.atomic():
+            deliver_spectacle(
+                encounter,
+                apply_spectacle(
+                    encounter=encounter, caster_sheet=sheet, kind=kind, display_name=display_name
+                ),
+            )
+
+    # Only once the acceptance/crossing has committed, so a rolled-back one posts nothing;
+    # robust=True logs a failure here without undoing what already committed.
+    transaction.on_commit(_shake, robust=True)
 
 
 def _announce_surge(character: ObjectDB, threshold: AudereThreshold) -> None:

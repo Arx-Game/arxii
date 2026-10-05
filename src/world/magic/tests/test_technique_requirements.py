@@ -16,7 +16,10 @@ from world.magic.factories import (
     TechniqueFactory,
 )
 from world.magic.models.techniques import TechniqueCapabilityRequirement
-from world.magic.services.capability_requirements import technique_performable
+from world.magic.services.capability_requirements import (
+    performable_techniques,
+    technique_performable,
+)
 
 
 class TechniqueCapabilityRequirementModelTests(TestCase):
@@ -49,6 +52,21 @@ class TechniquePerformableTests(TestCase):
         apply_condition(self.character, immob)
         self.assertTrue(technique_performable(self.character.sheet_data, self.spell))
         self.assertFalse(technique_performable(self.character.sheet_data, self.charge))
+
+    def test_single_and_batched_rule_agree(self) -> None:
+        """``technique_performable`` and ``performable_techniques`` answer as one rule."""
+        immob = ConditionTemplateFactory(name="Immobilized")
+        ConditionCapabilityEffectFactory(condition=immob, capability=self.movement, value=-100)
+        apply_condition(self.character, immob)
+        sheet = self.character.sheet_data
+        batched = performable_techniques(sheet, [self.spell, self.charge])
+        self.assertEqual(batched, [self.spell])
+        for technique in (self.spell, self.charge):
+            self.assertEqual(technique_performable(sheet, technique), technique in batched)
+
+    def test_no_sheet_is_not_performable(self) -> None:
+        self.assertFalse(technique_performable(None, self.spell))
+        self.assertEqual(performable_techniques(None, [self.spell]), [])
 
     def test_unconscious_blocks_awareness_technique(self) -> None:
         ko = ConditionTemplateFactory(name="Unconscious")

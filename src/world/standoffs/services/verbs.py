@@ -30,14 +30,19 @@ from world.combat.constants import (
     OpponentStatus,
     ParticipantStatus,
 )
+from world.combat.models import SpectacleConfig
 from world.combat.morale import (
     OpponentMoraleState,
     apply_morale_damage,
     morale_state_for,
     tier_has_morale,
 )
+from world.combat.spectacle import apply_spectacle, classify_cast
 from world.conditions.services import apply_condition
 from world.fatigue.constants import EffortLevel
+from world.magic.services.capability_requirements import technique_performable
+from world.magic.services.techniques import use_technique
+from world.magic.services.ultimates import floor_ultimate_check, readied_ultimate
 from world.mechanics.models import Application
 from world.standoffs.constants import (
     FIGHT_BEGINS_MESSAGE,
@@ -71,11 +76,14 @@ from world.standoffs.services.state import (
     is_in_standoff,
     settle_empty_groups,
 )
-from world.standoffs.types import StandoffActionResult
+from world.standoffs.types import DisplayCast, StandoffActionResult
 
 if TYPE_CHECKING:
     from world.character_sheets.models import CharacterSheet
+    from world.checks.types import CheckResult
     from world.combat.models import CombatEncounter, CombatOpponent, CombatParticipant
+    from world.magic.models import Technique
+    from world.magic.types.techniques import SoulfrayWarning, TechniqueUseResult
 
 BOTCH_LEVEL = -2
 CRITICAL_LEVEL = 2
@@ -385,6 +393,16 @@ def press_difficulty(
     return press_grade(group, sheet, approach, ctx)[0]
 
 
+def morale_terms_ease(members: list[CombatOpponent], config: StandoffConfig) -> int:
+    """Bands terms ease because the group's worst member is shaken (broken beats faltering)."""
+    states = {morale_state_for(member) for member in members}
+    if OpponentMoraleState.BREAK in states:
+        return config.terms_ease_broken
+    if OpponentMoraleState.FALTER in states:
+        return config.terms_ease_faltering
+    return 0
+
+
 def terms_difficulty(
     group: StandoffGroup,
     sheet: CharacterSheet,
@@ -403,7 +421,12 @@ def terms_difficulty(
         target_level=ctx.level,
         mindless_resistance=ctx.mindless_resistance,
         resist_increment=ctx.resist_increment,
-        extra_bands=terms.difficulty_shift_bands + ctx.band_shift - group.terms_ease,
+        extra_bands=(
+            terms.difficulty_shift_bands
+            + ctx.band_shift
+            - group.terms_ease
+            - morale_terms_ease(ctx.members, config)
+        ),
     )
 
 
@@ -429,12 +452,138 @@ def _share_shifting_sparks(
             )
 
 
+def _press_check(
+    sheet: CharacterSheet,
+    approach: StandoffApproach,
+    graded: SocialDifficulty,
+    technique: Technique | None,
+    *,
+    confirm_soulfray_risk: bool = False,
+) -> tuple[CheckResult | None, TechniqueUseResult | None]:
+    """Roll the press. A casting approach casts ``technique`` as the check, harmless.
+
+    Returns ``(None, use)`` when the cast never resolved: the caster carries Soulfray and
+    has not accepted the risk (``use.soulfray_warning``), and nothing was spent.
+    """
+    if technique is None:
+        return (
+            perform_check(
+                sheet.character,
+                approach.check_type,
+                target_difficulty=graded.difficulty,
+                extra_modifiers=collect_check_modifiers(
+                    sheet, approach.check_type, extra_contributions=graded.contributions
+                ).total,
+            ),
+            None,
+        )
+    captured: dict[str, CheckResult] = {}
+
+    def _resolve_fn(*, power: int, ledger: object, extra_modifiers: int = 0) -> DisplayCast:  # noqa: ARG001
+        check = perform_check(
+            sheet.character,
+            approach.check_type,
+            target_difficulty=graded.difficulty,
+            extra_modifiers=extra_modifiers
+            + collect_check_modifiers(
+                sheet, approach.check_type, extra_contributions=graded.contributions
+            ).total,
+        )
+        captured["check"] = floor_ultimate_check(check, technique)
+        return DisplayCast(check_result=captured["check"])
+
+    use = use_technique(
+        character=sheet.character,
+        technique=technique,
+        resolve_fn=_resolve_fn,
+        confirm_soulfray_risk=confirm_soulfray_risk,
+        lethal=False,
+    )
+    return captured.get("check"), use
+
+
+def _display_morale_line(  # noqa: PLR0913 - the display's full context
+    encounter: CombatEncounter,
+    sheet: CharacterSheet,
+    technique: Technique,
+    use: TechniqueUseResult,
+    tier: int,
+    members: list[CombatOpponent],
+) -> str | None:
+    """The spectacle credit line for a display; ``None`` when the cast is not a display.
+
+    A display already spent on every witness (the repeat rule) returns ``""``, not ``None``,
+    so the caller never substitutes ordinary morale damage for it.
+    """
+    kind = classify_cast(
+        technique=technique,
+        runtime_intensity=use.runtime_intensity,
+        success_level=tier,
+        config=SpectacleConfig.load(),
+    )
+    if kind is None:
+        return None
+    spectacle = apply_spectacle(
+        encounter=encounter,
+        caster_sheet=sheet,
+        kind=kind,
+        display_name=technique.name,
+        success_level=tier,
+        technique=technique,
+        witnesses=members,
+    )
+    return " ".join(spectacle.lines)
+
+
+def _technique_refusal(
+    sheet: CharacterSheet, approach: StandoffApproach, technique: Technique | None
+) -> str | None:
+    """Why the technique does not fit this approach: a display needs one the actor can cast.
+
+    Castable means known (or this Audere's readied ultimate) and performable right now.
+    """
+    from world.magic.models import CharacterTechnique  # noqa: PLC0415
+
+    if not approach.casts_technique:
+        return None if technique is None else "That approach does not cast a technique."
+    if technique is None:
+        return "Choose one of your techniques to display."
+    known = CharacterTechnique.objects.filter(character=sheet, technique=technique).exists()
+    if not known:
+        readied = readied_ultimate(sheet)
+        known = readied is not None and readied.technique_id == technique.pk
+    if not known:
+        return "Choose one of your techniques to display."
+    if not technique_performable(sheet, technique):
+        return "You cannot perform that technique right now."
+    return None
+
+
+def _soulfray_refusal(warning: SoulfrayWarning) -> StandoffActionResult:
+    """The cast stopped at the Soulfray checkpoint: warn, spend nothing, offer to accept."""
+    return StandoffActionResult(
+        success=False,
+        message=f"{warning.stage_description} Accept the Soulfray risk to display anyway.",
+        soulfray_warning=warning,
+    )
+
+
 @flush_cache_on_error(lambda participant, *_, **__: participant.encounter)
 @transaction.atomic
 def standoff_press(
-    participant: CombatParticipant, group: StandoffGroup, approach: StandoffApproach
+    participant: CombatParticipant,
+    group: StandoffGroup,
+    approach: StandoffApproach,
+    technique: Technique | None = None,
+    *,
+    confirm_soulfray_risk: bool = False,
 ) -> StandoffActionResult:
-    """Press a group with a social approach: a success eases terms, a botch emboldens them."""
+    """Press a group with a social approach: a success eases terms, a botch emboldens them.
+
+    A casting approach (a display of power) casts ``technique`` as its check; a cast that
+    earns a display shakes the group through the spectacle service. A caster carrying
+    Soulfray is refused with the warning, spending nothing, until ``confirm_soulfray_risk``.
+    """
     encounter, group = _lock(participant.encounter, group)
     refusal = _refusal(encounter, group)
     if refusal:
@@ -442,19 +591,21 @@ def standoff_press(
     members = active_members(group)
     if not members:
         return _refuse(_MSG_EMPTY)
-    config = StandoffConfig.load()
     sheet = participant.character_sheet
+    technique_refusal = _technique_refusal(sheet, approach, technique)
+    if technique_refusal:
+        return _refuse(technique_refusal)
+    config = StandoffConfig.load()
     graded, hits, targeted = press_grade(
         group, sheet, approach, build_grading_context(group, sheet, members=members)
     )
-    result = perform_check(
-        sheet.character,
-        approach.check_type,
-        target_difficulty=graded.difficulty,
-        extra_modifiers=collect_check_modifiers(
-            sheet, approach.check_type, extra_contributions=graded.contributions
-        ).total,
+    result, use = _press_check(
+        sheet, approach, graded, technique, confirm_soulfray_risk=confirm_soulfray_risk
     )
+    if result is None:
+        if use is not None and use.soulfray_warning is not None:
+            return _soulfray_refusal(use.soulfray_warning)
+        return _refuse("The display falters before it begins.")
     _share_shifting_sparks(group, sheet, targeted)
     tier = result.success_level
     message = "Your words do not move them."
@@ -462,7 +613,13 @@ def standoff_press(
     if tier >= 1:
         group.terms_ease += 1
         group.save(update_fields=["terms_ease"])
-        if approach.damages_morale:
+        display_line = (
+            None
+            if use is None or technique is None
+            else _display_morale_line(encounter, sheet, technique, use, tier, members)
+        )
+        morale_line = display_line or ""
+        if approach.damages_morale and display_line is None:
             before = [morale_state_for(member) for member in members]
             for member in members:
                 apply_morale_damage(member, tier * DEMORALIZE_MORALE_PER_LEVEL)

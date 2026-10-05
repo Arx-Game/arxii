@@ -11,13 +11,14 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 from actions.constants import ActionBackend
+from actions.types import ActionResult
 from commands.command import DispatchCommand
 from commands.exceptions import CommandError
 
 if TYPE_CHECKING:
     from collections.abc import Callable
 
-    from actions.types import ActionRef
+    from actions.types import ActionRef, DispatchResult
     from world.combat.models import CombatParticipant
     from world.standoffs.models import StandoffGroup
     from world.standoffs.services.view import LeverView, StandoffView
@@ -25,12 +26,15 @@ if TYPE_CHECKING:
 _SUBVERBS: dict[str, str] = {
     "read": "standoff_read",
     "press": "standoff_press",
+    "display": "standoff_press",
     "terms": "standoff_terms",
     "fight": "standoff_fight",
     "share": "standoff_share_spark",
 }
 _NOT_IN_STANDOFF = "You are not in a standoff."
 _CAUSE_WORD = "cause"
+# Trailing consent keyword on `standoff display`: accept the Soulfray risk, as on `cast`.
+_SOULFRAY_KEYWORD = "soulfray"
 
 
 def _lever_suffix(levers: list[LeverView]) -> str:
@@ -54,6 +58,8 @@ class CmdStandoff(DispatchCommand):
         standoff                         - the groups here, your sparks and what you can do
         standoff read <group> [cause|<drive>|<spark>] - read a group for what moves it
         standoff press <approach> <group> - press a group with an approach
+        standoff display <technique> <group> [soulfray] - cast a technique as a display
+                                           of power; 'soulfray' accepts the Soulfray risk
         standoff terms <terms> <group>   - name terms to a group
         standoff share <group> <spark>   - share what you feel about a group
         standoff fight                   - break the standoff and begin the fight
@@ -94,6 +100,8 @@ class CmdStandoff(DispatchCommand):
             return self._read_args(text)
         if self._subverb == "press":  # noqa: STRING_LITERAL
             return self._press_args(text)
+        if self._subverb == "display":  # noqa: STRING_LITERAL
+            return self._display_args(text)
         if self._subverb == "terms":  # noqa: STRING_LITERAL
             return self._terms_args(text)
         return self._share_args(text)
@@ -215,6 +223,45 @@ class CmdStandoff(DispatchCommand):
     def _press_args(self, text: str) -> dict[str, Any]:
         approach, group = self._split(text, self._approach, self._group)
         return {"group_id": group.pk, "approach_id": approach.pk}
+
+    def _technique(self, name: str) -> Any:
+        from world.magic.services.ultimates import castable_technique_named  # noqa: PLC0415
+
+        technique = castable_technique_named(self._participant().character_sheet, name)
+        if technique is None:
+            msg = f"You do not know a technique named '{name}'."
+            raise CommandError(msg)
+        return technique
+
+    def _display_args(self, text: str) -> dict[str, Any]:
+        from world.standoffs.models import StandoffApproach  # noqa: PLC0415
+
+        words = text.split()
+        confirm = len(words) > 1 and words[-1].lower() == _SOULFRAY_KEYWORD
+        if confirm:
+            text = " ".join(words[:-1])
+        technique, group = self._split(text, self._technique, self._group)
+        approach = StandoffApproach.objects.filter(casts_technique=True).order_by("pk").first()
+        if approach is None:
+            msg = "There is no display of power available here."
+            raise CommandError(msg)
+        kwargs: dict[str, Any] = {
+            "group_id": group.pk,
+            "approach_id": approach.pk,
+            "technique_id": technique.pk,
+        }
+        if confirm:
+            kwargs["confirm_soulfray_risk"] = True
+        return kwargs
+
+    def _report_dispatch_result(self, result: DispatchResult) -> None:
+        """The action's message; a display stopped at Soulfray also says how to accept."""
+        super()._report_dispatch_result(result)
+        detail = result.detail
+        if isinstance(detail, ActionResult) and detail.data.get("soulfray_warning"):
+            self.msg(
+                f"Type |wstandoff display {self._rest} {_SOULFRAY_KEYWORD}|n to accept the risk."
+            )
 
     def _terms_args(self, text: str) -> dict[str, Any]:
         terms, group = self._split(text, self._terms, self._group)
