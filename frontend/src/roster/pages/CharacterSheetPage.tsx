@@ -182,7 +182,6 @@ export function CharacterSheetPage() {
             isPrivileged={isMyCharacter || Boolean(account?.is_staff)}
             onOpenEstate={isMyCharacter ? () => setSection('estate') : undefined}
             worn={worn}
-            galleries={entry.character.galleries ?? []}
           />
         )}
 

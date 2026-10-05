@@ -278,7 +278,7 @@ export function RealmPage() {
                   <CharacterAvatarLink
                     id={entry.id}
                     name={entry.character.name}
-                    avatarUrl={entry.profile_picture?.media.cloudinary_url}
+                    avatarUrl={entry.profile_picture_url ?? undefined}
                     className="h-10 w-10"
                     fallback=""
                   />

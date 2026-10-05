@@ -119,8 +119,8 @@ const mockUseCharacterSheetQuery = vi.mocked(useCharacterSheetQuery);
 
 const ENTRY: RosterEntryData = {
   id: 1,
-  character: { id: 42, name: 'Ilsavet du Verane', galleries: [] },
-  profile_picture: null,
+  character: { id: 42, name: 'Ilsavet du Verane' },
+  profile_picture_url: null,
   tenures: [],
   can_apply: false,
   fullname: 'Ilsavet du Verane',
@@ -186,6 +186,7 @@ function makeSheet(overrides: Partial<CharacterSheetPayload> = {}): CharacterShe
     personas: [],
     theming: {},
     profile_picture: null,
+    viewer_is_friend: true,
     current_residence: null,
     looks: [],
     plate_ink: 'ember',

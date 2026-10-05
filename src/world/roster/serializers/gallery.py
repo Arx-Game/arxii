@@ -12,6 +12,7 @@ from __future__ import annotations
 from typing import ClassVar
 
 from django.core.validators import FileExtensionValidator
+from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
 
 from world.character_sheets.models import MoodOption
@@ -46,6 +47,7 @@ class GalleryPictureSerializer(serializers.ModelSerializer):
         source="media.file_size_bytes", read_only=True, allow_null=True
     )
     mood = serializers.SerializerMethodField()
+    mood_id = serializers.IntegerField(source="look_id", read_only=True, allow_null=True)
     crop = serializers.SerializerMethodField()
     is_look = serializers.BooleanField(read_only=True)
     is_character_art = serializers.BooleanField(read_only=True)
@@ -67,6 +69,7 @@ class GalleryPictureSerializer(serializers.ModelSerializer):
             "height",
             "file_size_bytes",
             "mood",
+            "mood_id",
             "crop",
             "sort_order",
             "is_look",
@@ -84,6 +87,7 @@ class GalleryPictureSerializer(serializers.ModelSerializer):
     def get_mood(self, obj: TenureMedia) -> str:
         return obj.look.name if obj.look is not None else ""
 
+    @extend_schema_field(CropSerializer(allow_null=True))
     def get_crop(self, obj: TenureMedia) -> dict[str, int] | None:
         if not obj.is_look:
             return None
