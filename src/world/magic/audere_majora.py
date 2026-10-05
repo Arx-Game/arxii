@@ -13,12 +13,14 @@ from evennia.objects.models import ObjectDB
 from core.models import ArxSharedMemoryModel as SharedMemoryModel
 from world.areas.services import area_for_scene
 from world.classes.models import PathStage
+from world.combat.constants import SpectacleKind
 from world.magic.audere import (
     AUDERE_CONDITION_NAME,
     AUDERE_MAJORA_CONDITION_NAME,
     SOULFRAY_CONDITION_NAME,
     AbstractPendingOffer,
     _check_intensity_gate,
+    shake_witnesses,
 )
 from world.magic.models.techniques import (
     AbstractAppliedCondition,
@@ -845,6 +847,12 @@ def cross_threshold(
         lambda: _route_crossing(
             character, sheet, scene, texts, withheld=withheld, fallback_scene=offer_scene
         )
+    )
+
+    # The crossing shakes the enemy witnesses after its own broadcast (#4147); on_commit
+    # callbacks run in registration order, so this follows _route_crossing's line.
+    transaction.on_commit(
+        lambda: shake_witnesses(character, SpectacleKind.CROSSING, display_name="Crossing")
     )
 
     majora_template = ConditionTemplate.get_by_name(AUDERE_MAJORA_CONDITION_NAME)

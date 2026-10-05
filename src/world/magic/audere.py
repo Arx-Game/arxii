@@ -11,6 +11,7 @@ from evennia.objects.models import ObjectDB
 
 from core.managers import ArxSharedMemoryManager
 from core.models import ArxSharedMemoryModel as SharedMemoryModel
+from world.combat.constants import SpectacleKind
 
 if TYPE_CHECKING:
     from world.character_sheets.models import CharacterSheet
@@ -388,12 +389,36 @@ def offer_audere(character: ObjectDB, *, accept: bool) -> AudereOfferResult:
         anima.save(update_fields=["pre_audere_maximum", "maximum"])
 
     _announce_surge(character, threshold)
+    shake_witnesses(character, SpectacleKind.AUDERE_ENTRY, display_name="surge into Audere")
 
     return AudereOfferResult(
         accepted=True,
         intensity_bonus_applied=threshold.intensity_bonus,
         anima_pool_expanded_by=threshold.anima_pool_bonus,
         advisory_text=advisory,
+    )
+
+
+def shake_witnesses(character: ObjectDB, kind: str, *, display_name: str) -> None:
+    """Shake the enemy witnesses of a display in the character's encounter (#4147).
+
+    A no-op for a character with no sheet or no combat engagement.
+    """
+    from world.combat.spectacle import (
+        apply_spectacle,
+        deliver_spectacle,
+        encounter_for_character,
+    )
+
+    sheet = character.character_sheet
+    encounter = encounter_for_character(character)
+    if sheet is None or encounter is None:
+        return
+    deliver_spectacle(
+        encounter,
+        apply_spectacle(
+            encounter=encounter, caster_sheet=sheet, kind=kind, display_name=display_name
+        ),
     )
 
 

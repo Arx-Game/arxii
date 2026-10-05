@@ -28,6 +28,8 @@ from world.progression.services.skill_development import get_character_path_leve
 from world.scenes.services import active_persona_for_sheet
 
 if TYPE_CHECKING:
+    from evennia.objects.models import ObjectDB
+
     from world.character_sheets.models import CharacterSheet
     from world.combat.models import CombatEncounter, CombatOpponent
     from world.magic.models.techniques import Technique
@@ -273,3 +275,26 @@ def apply_spectacle(  # noqa: PLR0913 - keyword-only public contract
         shifts=tuple(shifts),
         heartened_ids=heartened,
     )
+
+
+def encounter_for_character(character: ObjectDB) -> CombatEncounter | None:  # noqa: OBJECTDB_PARAM - callers hold the puppeted body
+    """The encounter a character is fighting in, via its COMBAT engagement (#4147)."""
+    from world.combat.models import CombatEncounter  # noqa: PLC0415
+    from world.mechanics.constants import EngagementType  # noqa: PLC0415
+    from world.mechanics.engagement import CharacterEngagement  # noqa: PLC0415
+
+    engagement = CharacterEngagement.objects.filter(
+        character_id=character.pk, engagement_type=EngagementType.COMBAT
+    ).first()
+    if engagement is None:
+        return None
+    source = engagement.source
+    return source if isinstance(source, CombatEncounter) else None
+
+
+def deliver_spectacle(encounter: CombatEncounter, result: SpectacleResult) -> None:
+    """Post a spectacle's lines to the encounter room, web and telnet."""
+    from world.combat.interaction_services import broadcast_action_outcome  # noqa: PLC0415
+
+    for line in result.lines:
+        broadcast_action_outcome(encounter=encounter, narration=line, deliver_telnet=True)

@@ -1306,6 +1306,7 @@ def _complete_technique_cast(  # noqa: PLR0913
         effective_strain_commitment=effective_strain,
         strain_power_bonus=preparation.strain_power_bonus,
         price_paid=price_payment.price if price_payment is not None else None,
+        runtime_intensity=stats.intensity,
     )
     from world.magic.audere import maybe_create_audere_offer  # noqa: PLC0415
 

@@ -153,3 +153,5 @@ class TechniqueUseResult:
     #: the hold, or a consumed component the caster did not carry. Every narration
     #: seam reads this, never the hold, so a clause appears only for a paid price.
     price_paid: Restriction | None = None
+    #: The cast's runtime intensity, so a combat rider can judge an impressive cast (#4147).
+    runtime_intensity: int = 0
