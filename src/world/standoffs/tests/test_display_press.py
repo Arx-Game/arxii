@@ -220,6 +220,16 @@ class DisplayViewTests(DisplayPressBase):
         self.assertEqual(view.groups[0].morale_state, OpponentMoraleState.STEADY)
 
 
+class NoDisplayApproachViewTests(VerbBase):
+    def test_no_casting_approach_lists_no_techniques(self) -> None:
+        sheet = self.participant.character_sheet
+        CharacterTechniqueFactory(character=sheet, technique=TechniqueFactory())
+        with patch("world.standoffs.services.view._display_techniques") as listed:
+            view = build_standoff_view(self.encounter, sheet)
+        listed.assert_not_called()
+        self.assertEqual(view.display_techniques, [])
+
+
 class DisplayRepeatRuleTests(DisplayPressBase):
     def test_a_repeated_display_never_falls_back_to_ordinary_morale_damage(self) -> None:
         self.approach.damages_morale = True

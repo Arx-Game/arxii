@@ -350,7 +350,12 @@ def build_standoff_view(
     grader = _Grader(viewer_sheet)
     view = StandoffView(
         place=encounter.room.db_key if encounter.room is not None else "",
-        display_techniques=_display_techniques(viewer_sheet),
+        # Only a casting approach (a display of power) offers the technique picker.
+        display_techniques=(
+            _display_techniques(viewer_sheet)
+            if any(approach.casts_technique for approach in approaches)
+            else []
+        ),
     )
     for group in encounter.standoff_groups.select_related("creature_template"):
         reveals = list(group.reveals.select_related("drive__property", "regard_rule"))
