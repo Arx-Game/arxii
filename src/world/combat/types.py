@@ -556,3 +556,26 @@ class AftermathDigest:
     # Existing story/scenario objective and authored branch selected for this fight.
     objective: dict[str, object] | None = None
     won_over: list[WonOverRow] = field(default_factory=list)
+
+
+@dataclass(frozen=True)
+class SpectacleShift:
+    """One witness's morale state before and after a display (#4147)."""
+
+    opponent_id: int
+    before: str  # OpponentMoraleState value
+    after: str
+
+
+@dataclass(frozen=True)
+class SpectacleResult:
+    """What a display did: the lines to deliver and who moved (#4147)."""
+
+    credit_line: str = ""
+    flavour_line: str = ""
+    shifts: tuple[SpectacleShift, ...] = ()
+    heartened_ids: tuple[int, ...] = ()
+
+    @property
+    def lines(self) -> list[str]:
+        return [line for line in (self.credit_line, self.flavour_line) if line]
