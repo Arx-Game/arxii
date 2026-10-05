@@ -35,11 +35,6 @@ export type SelectedEntryResult = components['schemas']['SelectedEntryResult'];
 /** Result of giving up a roster character (#3996): its id and new shelf. */
 export type ReleasedEntryResult = components['schemas']['ReleasedEntryResult'];
 
-export interface CharacterGallery {
-  name: string;
-  url: string;
-}
-
 export interface RaceData {
   id: number;
   name: string;
@@ -74,7 +69,6 @@ export interface CharacterData {
   social_rank?: number | null;
   background?: string;
   relationships?: string[];
-  galleries: CharacterGallery[];
   /** Core-identity covenant: the active DURANCE-type covenant role, if any (#1446). */
   covenant?: { id: number; name: string; role: string } | null;
 }
@@ -84,7 +78,8 @@ export type CreationProvenance = 'staff' | 'gm_table' | 'player';
 export interface RosterEntryData {
   id: number;
   character: CharacterData;
-  profile_picture: TenureMedia | null;
+  /** The worn look's cropped URL (#4151); null without an account or a look. */
+  profile_picture_url: string | null;
   tenures: RosterTenure[];
   can_apply: boolean;
   fullname: string;
@@ -130,21 +125,6 @@ export interface PlayerData {
   media: PlayerMedia[];
 }
 
-export interface TenureMedia {
-  id: number;
-  media: PlayerMedia;
-  sort_order: number;
-  is_public: boolean;
-}
-
-export interface TenureGallery {
-  id: number;
-  tenure: number;
-  name: string;
-  is_public: boolean;
-  allowed_viewers: number[];
-}
-
 export interface RosterTenure {
   id: number;
   player_number: number;
@@ -155,5 +135,4 @@ export interface RosterTenure {
   approved_by: PlayerData['id'] | null;
   tenure_notes: string;
   photo_folder: string;
-  media: TenureMedia[];
 }

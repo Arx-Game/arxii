@@ -6,6 +6,7 @@ from http import HTTPMethod
 
 from django.db.models import QuerySet
 from django.http import Http404
+from django_filters.rest_framework import DjangoFilterBackend
 from drf_spectacular.utils import extend_schema
 from rest_framework import status
 from rest_framework.decorators import action
@@ -13,18 +14,20 @@ from rest_framework.mixins import RetrieveModelMixin
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.request import Request
 from rest_framework.response import Response
-from rest_framework.viewsets import GenericViewSet
+from rest_framework.viewsets import GenericViewSet, ReadOnlyModelViewSet
 
 from world.character_creation.services import (
     clear_origin_slot,
     set_origin_slot,
 )
-from world.character_sheets.models import CharacterSheet
+from world.character_sheets.filters import MoodOptionFilterSet
+from world.character_sheets.models import CharacterSheet, MoodOption
 from world.character_sheets.serializers import (
     CharacterSheetSerializer,
     CharacterXPLedgerSerializer,
     MaturationSpendInputSerializer,
     MaturationStateSerializer,
+    MoodOptionSerializer,
     OriginSlotClearSerializer,
     OriginSlotInputSerializer,
     ProfileTextVersionSerializer,
@@ -315,3 +318,15 @@ class CharacterSheetViewSet(RetrieveModelMixin, GenericViewSet):
             context={"reasoning_by_version": reasoning_by_version},
         )
         return Response(serializer.data)
+
+
+class MoodOptionViewSet(ReadOnlyModelViewSet):
+    """The moods a look can be tagged with (#4151), for the Gallery's mood picker."""
+
+    serializer_class = MoodOptionSerializer
+    permission_classes = [IsAuthenticated]
+    filter_backends = [DjangoFilterBackend]
+    filterset_class = MoodOptionFilterSet
+
+    def get_queryset(self) -> QuerySet[MoodOption]:
+        return MoodOption.objects.filter(is_active=True).order_by("sort_order", "name")

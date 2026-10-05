@@ -1,5 +1,5 @@
 /**
- * The section row (#3898) — the sheet's eight sections, with the player's own three
+ * The section row (#3898) — the sheet's nine sections (#4151 added the Gallery), with the player's own three
  * set apart on the line.
  *
  * Replaces the sixteen-tab strip. The break and the "Yours only" label are the point:
@@ -16,17 +16,19 @@ export type SheetSection =
   | 'ties'
   | 'distinctions'
   | 'magic'
+  | 'gallery'
   | 'knowledge'
   | 'estate'
   | 'growth';
 
-/** The five anyone may open. */
+/** The six anyone may open (#4151 added the Gallery). */
 const PUBLIC_SECTIONS: { id: SheetSection; label: string }[] = [
   { id: 'sheet', label: 'Sheet' },
   { id: 'physical', label: 'Physical' },
   { id: 'ties', label: 'Ties' },
   { id: 'distinctions', label: 'Distinctions' },
   { id: 'magic', label: 'Magic' },
+  { id: 'gallery', label: 'Gallery' },
 ];
 
 /** The three only the character's own player opens. */

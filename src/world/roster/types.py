@@ -57,3 +57,11 @@ class PolicyInfo(TypedDict):
     auto_approvable: bool
     player_current_characters: list[str]
     character_previous_players: int
+
+
+@dataclass(frozen=True)
+class MediaUsage:
+    """A player's storage: bytes their own files take, and their quota (#4151)."""
+
+    used_bytes: int
+    quota_bytes: int

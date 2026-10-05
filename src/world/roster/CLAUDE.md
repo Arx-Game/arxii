@@ -50,7 +50,8 @@ This file provides specific guidance for working with the roster system in Arx I
 - **RosterTenure**: Player↔Character history with anonymity system
 - **RosterApplication**: Application workflow before tenures are created
 - **TenureDisplaySettings**: Character-specific UI settings tied to tenures
-- **TenureMedia**: Photo galleries tied to tenures (prevents loss on character handoff)
+- **TenureMedia**: One picture in a character's Gallery (#4151): a player's upload (tied to their tenure, leaves with them) or character art (tied to the roster entry, survives handoff). A picture with a 4:5 crop is a look; `world.roster.services.gallery` owns every change to it
+- **HiddenCharacterArt**: A tenure has hidden one piece of character art; the next player starts with it visible
 
 ### Extended Models (evennia_extensions/models.py)
 - **PlayerData**: Extends AccountDB with player preferences and session tracking
@@ -121,7 +122,9 @@ AccountDB (Evennia) → PlayerData (evennia_extensions)
 ObjectDB (Evennia) → RosterEntry → Roster
 ObjectDB → RosterTenure ← PlayerData
 RosterTenure → TenureDisplaySettings
-RosterTenure → TenureMedia
+RosterTenure → TenureMedia (a player's upload)
+RosterEntry → TenureMedia (character art)
+RosterTenure → HiddenCharacterArt → TenureMedia
 RosterTenure → PlayerMail.recipient_tenure
 ```
 

@@ -1,26 +1,20 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import {
-  associateMedia,
-  createTenureGallery,
   fetchMyRosterEntries,
   fetchMyTenures,
-  fetchPlayerMedia,
   fetchRosterEntries,
   fetchRosterEntry,
   fetchRosters,
-  fetchTenureGalleries,
   postFreezeEntry,
   postGiveUpEntry,
   postRosterApplication,
   postSelectEntry,
   postThawEntry,
   setEntryProfilePicture,
-  updateTenureGallery,
-  uploadPlayerMedia,
 } from './api';
 import type { RosterEntryFilters } from './api';
-import type { RosterEntryData, RosterData, PlayerMedia, TenureGallery } from './types';
+import type { RosterEntryData, RosterData } from './types';
 import type { PaginatedResponse } from '@/shared/types';
 import { useAccount } from '@/store/hooks';
 
@@ -197,61 +191,4 @@ export function useThawEntryMutation() {
 
 export function useGiveUpEntryMutation() {
   return useSlotActionMutation(postGiveUpEntry);
-}
-
-export function usePlayerMediaQuery(enabled = true) {
-  return useQuery({
-    queryKey: ['player-media'],
-    queryFn: fetchPlayerMedia,
-    enabled,
-    throwOnError: true,
-  });
-}
-
-export function useUploadPlayerMedia() {
-  return useMutation({
-    mutationFn: uploadPlayerMedia,
-  });
-}
-
-export function useAssociateMedia() {
-  return useMutation({
-    mutationFn: ({
-      mediaId,
-      tenureId,
-      galleryId,
-    }: {
-      mediaId: PlayerMedia['id'];
-      tenureId: number;
-      galleryId?: number;
-    }) => associateMedia(mediaId, tenureId, galleryId),
-  });
-}
-
-export function useTenureGalleriesQuery(tenureId: number | undefined) {
-  return useQuery<TenureGallery[]>({
-    queryKey: ['tenure-galleries', tenureId],
-    queryFn: () => fetchTenureGalleries(tenureId!),
-    enabled: !!tenureId,
-    throwOnError: true,
-  });
-}
-
-export function useUpdateGallery() {
-  return useMutation({
-    mutationFn: ({ galleryId, data }: { galleryId: number; data: Partial<TenureGallery> }) =>
-      updateTenureGallery(galleryId, data),
-  });
-}
-
-export function useCreateGallery() {
-  return useMutation({
-    mutationFn: ({
-      tenureId,
-      data,
-    }: {
-      tenureId: number;
-      data: Pick<TenureGallery, 'name' | 'is_public' | 'allowed_viewers'>;
-    }) => createTenureGallery(tenureId, data),
-  });
 }

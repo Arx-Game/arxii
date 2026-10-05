@@ -40,6 +40,8 @@ import {
   TiesPanel,
 } from '@/character_sheets/components/sheet/panels';
 import { Heading, Stack } from '@/character_sheets/components/sheet/primitives';
+import { GalleryPanel } from '@/character_sheets/components/sheet/gallery/GalleryPanel';
+import { AddLookFlow } from '@/character_sheets/components/sheet/gallery/AddLookFlow';
 
 export function CharacterSheetPage() {
   const { id } = useParams();
@@ -48,6 +50,7 @@ export function CharacterSheetPage() {
   const { data: myEntries } = useMyRosterEntriesQuery();
   const account = useAccount();
   const [section, setSection] = useState<SheetSection>('sheet');
+  const [addingLook, setAddingLook] = useState(false);
 
   const isMyCharacter = myEntries?.some((e) => e.id === entryId) ?? false;
   const sheetId = entry?.character.id ?? 0;
@@ -118,7 +121,7 @@ export function CharacterSheetPage() {
         canWear={isMyCharacter}
         onWear={(look) => wearLook.mutate(look.tenure_media_id)}
         isSaving={wearLook.isPending}
-        galleriesTo={isMyCharacter ? '/profile/media' : null}
+        onAddLook={isMyCharacter ? () => setAddingLook(true) : undefined}
         actions={
           <>
             <Link
@@ -141,6 +144,15 @@ export function CharacterSheetPage() {
         }
       />
 
+      {isMyCharacter && (
+        <AddLookFlow
+          open={addingLook}
+          entryId={entryId}
+          sheetId={sheetId}
+          ink={sheet?.plate_ink ?? 'ember'}
+          onClose={() => setAddingLook(false)}
+        />
+      )}
       <SectionRow current={shown} onSelect={setSection} isMyCharacter={isMyCharacter} />
 
       <div className="refsheet-leaf">
@@ -182,7 +194,6 @@ export function CharacterSheetPage() {
             isPrivileged={isMyCharacter || Boolean(account?.is_staff)}
             onOpenEstate={isMyCharacter ? () => setSection('estate') : undefined}
             worn={worn}
-            galleries={entry.character.galleries ?? []}
           />
         )}
 
@@ -204,6 +215,17 @@ export function CharacterSheetPage() {
         {shown === 'distinctions' && <DistinctionsPanel sheetId={sheetId} />}
 
         {shown === 'magic' && <MagicPanel sheetId={sheetId} isMyCharacter={isMyCharacter} />}
+        {shown === 'gallery' && sheet && (
+          <GalleryPanel
+            entryId={entryId}
+            sheetId={sheetId}
+            characterName={entry.character.name}
+            canManage={isMyCharacter || Boolean(account?.is_staff)}
+            isOwner={isMyCharacter}
+            viewerIsFriend={sheet.viewer_is_friend}
+            ink={sheet.plate_ink}
+          />
+        )}
 
         {shown === 'knowledge' && isMyCharacter && (
           <KnowledgePanel

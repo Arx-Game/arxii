@@ -1,9 +1,13 @@
+from typing import cast
+
 from django.core.exceptions import ObjectDoesNotExist
+from evennia.accounts.models import AccountDB
 from rest_framework import permissions
 from rest_framework.request import Request
 from rest_framework.views import APIView
 
-from world.roster.models import RosterTenure
+from world.roster.models import RosterTenure, TenureMedia
+from world.roster.services.gallery import can_manage_gallery, entry_of
 
 
 class IsOwnerOrStaff(permissions.BasePermission):
@@ -113,3 +117,20 @@ class CanApproveApplications(permissions.BasePermission):
         except ObjectDoesNotExist:
             return False
         return player_data.can_approve_applications()
+
+
+class CanManageGallery(permissions.BasePermission):
+    """Anyone with an account reads a gallery; its character's player or staff change it.
+
+    Reads need an account because no art is shown to anyone without one (#3904, #4151).
+    """
+
+    def has_permission(self, request: Request, view: APIView) -> bool:
+        return bool(request.user and request.user.is_authenticated)
+
+    def has_object_permission(self, request: Request, view: APIView, obj: object) -> bool:
+        if request.method in permissions.SAFE_METHODS:
+            return True
+        if not isinstance(obj, TenureMedia):
+            return False
+        return can_manage_gallery(cast(AccountDB, request.user), entry_of(obj))

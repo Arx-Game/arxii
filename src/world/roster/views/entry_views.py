@@ -11,6 +11,7 @@ from drf_spectacular.utils import extend_schema
 from evennia.accounts.models import AccountDB
 from rest_framework import serializers, status, viewsets
 from rest_framework.decorators import action
+from rest_framework.exceptions import PermissionDenied
 from rest_framework.pagination import PageNumberPagination
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.request import Request
@@ -37,6 +38,7 @@ from world.roster.services.activity import (
     release_tenure,
     unfreeze_character,
 )
+from world.roster.services.gallery import GalleryError, can_manage_gallery, wear_look
 from world.roster.services.selection import SelectionError, set_selected_entry
 
 
@@ -75,17 +77,13 @@ class RosterEntryViewSet(viewsets.ReadOnlyModelViewSet):
                 "character_sheet",
                 "character_sheet__character",
                 "roster",
+                "profile_picture__media",
+                "profile_picture__tenure",
             )
             .prefetch_related(
                 Prefetch(
                     "tenures",
-                    queryset=RosterTenure.objects.all().prefetch_related(
-                        Prefetch(
-                            "media",
-                            queryset=TenureMedia.objects.select_related("media"),
-                            to_attr="cached_media",
-                        ),
-                    ),
+                    queryset=RosterTenure.objects.all(),
                     to_attr="cached_tenures",
                 ),
             )
@@ -146,7 +144,12 @@ class RosterEntryViewSet(viewsets.ReadOnlyModelViewSet):
             RosterEntry.objects.filter(
                 character_sheet__character__in=available_characters,
             )
-            .select_related("roster", "character_sheet__character")
+            .select_related(
+                "roster",
+                "character_sheet__character",
+                "profile_picture__media",
+                "profile_picture__tenure",
+            )
             .annotate(
                 unread_narrative_count=Count(
                     "character_sheet__narrative_message_deliveries",
@@ -277,24 +280,17 @@ class RosterEntryViewSet(viewsets.ReadOnlyModelViewSet):
     def set_profile_picture(self, request: Request, pk: int | None = None) -> Response:
         """Set the profile picture for this roster entry."""
         roster_entry = self.get_object()
-        media_id = request.data.get("tenure_media_id")
-
-        # Staff can access any tenure media, non-staff only their own
-        if request.user.is_staff:
-            media = TenureMedia.objects.get(
-                pk=media_id,
-                tenure__roster_entry=roster_entry,
-            )
-        else:
-            media = TenureMedia.objects.get(
-                pk=media_id,
-                tenure__roster_entry=roster_entry,
-                tenure__player_data=request.user.player_data,
-            )
-
-        roster_entry.profile_picture = media
-        roster_entry.full_clean()
-        roster_entry.save()
+        if not can_manage_gallery(cast(AccountDB, request.user), roster_entry):
+            msg = "You can't change this character's look."
+            raise PermissionDenied(msg)
+        link = TenureMedia.objects.filter(pk=request.data.get("tenure_media_id")).first()
+        if link is None:
+            raise serializers.ValidationError({"tenure_media_id": "No such picture."})
+        # #4151: only a showable look of this character may be worn (see wear_look).
+        try:
+            wear_look(roster_entry, link)
+        except GalleryError as exc:
+            raise serializers.ValidationError({"tenure_media_id": exc.user_message}) from exc
         return Response(status=status.HTTP_204_NO_CONTENT)
 
     @action(
