@@ -198,8 +198,10 @@ class StandoffPressAction(Action):
         context: ActionContext | None = None,
         group_id: int | None = None,
         approach_id: int | None = None,
+        technique_id: int | None = None,
         **kwargs: Any,
     ) -> ActionResult:
+        from world.magic.models import Technique  # noqa: PLC0415
         from world.standoffs.models import StandoffApproach  # noqa: PLC0415
         from world.standoffs.services.verbs import standoff_press  # noqa: PLC0415
 
@@ -212,7 +214,12 @@ class StandoffPressAction(Action):
         approach = StandoffApproach.objects.filter(pk=approach_id).first()
         if approach is None:
             return ActionResult(success=False, message="No such approach.")
-        outcome = standoff_press(participant, group, approach)
+        technique = (
+            None if technique_id is None else Technique.objects.filter(pk=technique_id).first()
+        )
+        if technique_id is not None and technique is None:
+            return ActionResult(success=False, message="No such technique.")
+        outcome = standoff_press(participant, group, approach, technique)
         plain = (
             f"{_actor_label(participant)} presses the {group.creature_template.name} "
             f"with {approach.name}: {_outcome_word(outcome)}."

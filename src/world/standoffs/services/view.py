@@ -17,6 +17,7 @@ from world.checks.services import (
     preview_check_difficulty,
 )
 from world.combat.constants import CauseKind, ParticipantStatus
+from world.combat.morale import OpponentMoraleState, morale_state_for
 from world.mechanics.constants import DifficultyIndicator
 from world.mechanics.services import difficulty_indicator_for_rank_difference
 from world.standoffs.constants import (
@@ -72,6 +73,7 @@ class GroupView:
     read_check: str
     read_grade: str
     read_grade_label: str
+    morale_state: str = OpponentMoraleState.STEADY
 
 
 @dataclass(frozen=True)
@@ -92,6 +94,7 @@ class ApproachView:
     check_caption: str
     levers: list[LeverView]
     hits_revealed_drive: bool
+    casts_technique: bool = False
 
 
 @dataclass(frozen=True)
@@ -114,6 +117,14 @@ class TermsView:
 
 
 @dataclass(frozen=True)
+class DisplayTechniqueView:
+    """A technique the viewer may cast as a display of power."""
+
+    technique_id: int
+    name: str
+
+
+@dataclass(frozen=True)
 class StandoffView:
     place: str = ""
     groups: list[GroupView] = field(default_factory=list)
@@ -121,6 +132,7 @@ class StandoffView:
     terms: list[TermsView] = field(default_factory=list)
     sparks: list[SparkView] = field(default_factory=list)
     shared_sparks: list[SparkView] = field(default_factory=list)
+    display_techniques: list[DisplayTechniqueView] = field(default_factory=list)
 
 
 def grade_label(grade: str) -> str:
@@ -192,12 +204,13 @@ class _GroupFacts:
         }
 
 
-def _group_view(
+def _group_view(  # noqa: PLR0913 - one viewer-and-group context, built once per group
     facts: _GroupFacts,
     viewer: CharacterSheet,
     member_count: int,
     hidden_count: int,
     read: tuple[str, str] = ("", ""),
+    morale_state: str = OpponentMoraleState.STEADY,
 ) -> GroupView:
     group = facts.group
     template = group.creature_template
@@ -230,6 +243,7 @@ def _group_view(
         read_check=read[0],
         read_grade=read[1],
         read_grade_label=grade_label(read[1]),
+        morale_state=morale_state,
     )
 
 
@@ -287,6 +301,37 @@ def _sparks(facts: _GroupFacts, viewer: CharacterSheet) -> tuple[list[SparkView]
     return own, others
 
 
+def _worst_morale_state(members: list) -> str:
+    """The worst morale state among the group's active members (break, then falter)."""
+    states = {morale_state_for(member) for member in members}
+    for worst in (OpponentMoraleState.BREAK, OpponentMoraleState.FALTER):
+        if worst in states:
+            return worst
+    return OpponentMoraleState.STEADY
+
+
+def _display_techniques(viewer: CharacterSheet) -> list[DisplayTechniqueView]:
+    """The viewer's castable techniques: known ones plus a readied ultimate, performable."""
+    from world.magic.models import CharacterTechnique  # noqa: PLC0415
+    from world.magic.services.capability_requirements import (  # noqa: PLC0415
+        technique_performable,
+    )
+    from world.magic.services.ultimates import readied_ultimate  # noqa: PLC0415
+
+    techniques = [
+        link.technique
+        for link in CharacterTechnique.objects.filter(character=viewer).select_related("technique")
+    ]
+    readied = readied_ultimate(viewer)
+    if readied is not None:
+        techniques.append(readied.technique)
+    return [
+        DisplayTechniqueView(technique.pk, technique.name)
+        for technique in techniques
+        if technique_performable(viewer, technique)
+    ]
+
+
 def build_standoff_view(
     encounter: CombatEncounter, viewer_sheet: CharacterSheet
 ) -> StandoffView | None:
@@ -304,7 +349,10 @@ def build_standoff_view(
     all_terms = list(StandoffTerms.objects.all())
     capability_ids = [a.capability_id for a in approaches]
     grader = _Grader(viewer_sheet)
-    view = StandoffView(place=encounter.room.db_key if encounter.room is not None else "")
+    view = StandoffView(
+        place=encounter.room.db_key if encounter.room is not None else "",
+        display_techniques=_display_techniques(viewer_sheet),
+    )
     for group in encounter.standoff_groups.select_related("creature_template"):
         reveals = list(group.reveals.select_related("drive__property", "regard_rule"))
         shares = list(group.spark_shares.select_related("regard_rule"))
@@ -338,6 +386,7 @@ def build_standoff_view(
                 len(members),
                 len(hidden),
                 read=read,
+                morale_state=_worst_morale_state(members),
             )
         )
         own, others = _sparks(facts, viewer_sheet)
@@ -364,6 +413,7 @@ def build_standoff_view(
                     check_caption=_approach_caption(approach),
                     levers=levers,
                     hits_revealed_drive=hits_drive,
+                    casts_technique=approach.casts_technique,
                 )
             )
         if config.terms_check_type is None:

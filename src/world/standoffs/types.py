@@ -6,6 +6,7 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
+    from world.checks.types import CheckResult
     from world.standoffs.models import StandoffReveal
 
 
@@ -21,3 +22,10 @@ class StandoffActionResult:
     settled: bool = False
     morale_line: str = ""
     attack_line: str = ""
+
+
+@dataclass(frozen=True)
+class DisplayCast:
+    """What a display-of-power cast resolved to; ``use_technique`` reads ``check_result``."""
+
+    check_result: CheckResult

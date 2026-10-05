@@ -22,6 +22,7 @@ class GroupViewSerializer(serializers.Serializer):
     read_check = serializers.CharField()
     read_grade = serializers.CharField()
     read_grade_label = serializers.CharField()
+    morale_state = serializers.CharField()
 
 
 class LeverViewSerializer(serializers.Serializer):
@@ -38,6 +39,7 @@ class ApproachViewSerializer(serializers.Serializer):
     check_caption = serializers.CharField()
     levers = LeverViewSerializer(many=True)
     hits_revealed_drive = serializers.BooleanField()
+    casts_technique = serializers.BooleanField()
 
 
 class SparkViewSerializer(serializers.Serializer):
@@ -57,6 +59,11 @@ class TermsViewSerializer(serializers.Serializer):
     critical_label = serializers.CharField(allow_blank=True)
 
 
+class DisplayTechniqueSerializer(serializers.Serializer):
+    technique_id = serializers.IntegerField()
+    name = serializers.CharField()
+
+
 class StandoffViewSerializer(serializers.Serializer):
     place = serializers.CharField(allow_blank=True)
     groups = GroupViewSerializer(many=True)
@@ -64,3 +71,4 @@ class StandoffViewSerializer(serializers.Serializer):
     terms = TermsViewSerializer(many=True)
     sparks = SparkViewSerializer(many=True)
     shared_sparks = SparkViewSerializer(many=True)
+    display_techniques = DisplayTechniqueSerializer(many=True)
