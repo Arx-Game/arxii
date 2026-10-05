@@ -388,4 +388,36 @@ describe('StandoffCard', () => {
       kwargs: { group_id: 11, approach_id: 22, technique_id: 77 },
     });
   });
+
+  it('shows a Soulfray refusal in the picker and re-presses accepting the risk', async () => {
+    const user = userEvent.setup();
+    mutateAsync.mockResolvedValueOnce({
+      backend: 'registry',
+      deferred: false,
+      message: 'Your soul is fraying. Accept the Soulfray risk to display anyway.',
+      success: false,
+      data: {
+        soulfray_warning: {
+          stage_name: 'Fraying',
+          stage_description: 'Your soul is fraying.',
+          has_death_risk: false,
+        },
+      },
+    });
+    renderCard(withDisplay([{ technique_id: 77, name: 'Test technique' }]));
+    await user.click(screen.getByRole('button', { name: /Plain approach/ }));
+    await user.click(screen.getByRole('combobox', { name: 'Technique to display' }));
+    await user.click(await screen.findByRole('option', { name: 'Test technique' }));
+    await user.click(screen.getByRole('button', { name: 'Display' }));
+    const gate = await screen.findByTestId('standoff-soulfray-gate');
+    expect(gate).toHaveTextContent('Soulfray Warning: Fraying');
+    expect(gate).toHaveTextContent('Your soul is fraying.');
+    expect(toastError).not.toHaveBeenCalled();
+    await user.click(within(gate).getByRole('button', { name: 'Accept the risk' }));
+    expect(mutateAsync).toHaveBeenLastCalledWith({
+      ref: { backend: 'registry', registry_key: 'standoff_press' },
+      kwargs: { group_id: 11, approach_id: 22, technique_id: 77, confirm_soulfray_risk: true },
+    });
+    await waitFor(() => expect(screen.queryByTestId('standoff-soulfray-gate')).toBeNull());
+  });
 });

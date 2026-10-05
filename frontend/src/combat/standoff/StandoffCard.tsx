@@ -22,6 +22,8 @@ import {
 import { combatKeys, useDispatchPlayerAction } from '@/combat/queries';
 import { registryRef } from '@/combat/duels/DuelChallengeControls';
 import { isDispatchFailure } from '@/combat/types';
+import type { DispatchResult } from '@/combat/types';
+import type { SoulfrayWarningData } from '@/scenes/actionTypes';
 import type { components } from '@/generated/api';
 import { cn } from '@/lib/utils';
 
@@ -33,6 +35,15 @@ type ApproachView = components['schemas']['ApproachView'];
 type GroupView = components['schemas']['GroupView'];
 type TermsView = components['schemas']['TermsView'];
 type DisplayTechnique = components['schemas']['DisplayTechnique'];
+
+type Fire = (key: string, kwargs?: Record<string, unknown>) => void;
+type Display = (kwargs: Record<string, unknown>) => Promise<DispatchResult | null>;
+
+/** The Soulfray warning a refused display carries; the press may be re-sent accepting it. */
+function soulfrayWarningOf(result: DispatchResult | null): SoulfrayWarningData | null {
+  const warning = result?.data?.soulfray_warning;
+  return warning ? (warning as SoulfrayWarningData) : null;
+}
 
 export interface StandoffCardProps {
   standoff: StandoffView;
@@ -90,17 +101,24 @@ export function StandoffCard({ standoff, encounterId, characterId }: StandoffCar
   const { mutateAsync, isPending } = useDispatchPlayerAction(characterId);
   const [focusByGroup, setFocusByGroup] = useState<Record<number, string>>({});
 
-  async function run(key: string, kwargs: Record<string, unknown> = {}) {
+  async function run(
+    key: string,
+    kwargs: Record<string, unknown> = {}
+  ): Promise<DispatchResult | null> {
     try {
       const result = await mutateAsync(registryRef(key, kwargs));
       const message = result.message ?? '';
+      // A Soulfray refusal is shown by the display picker, with its accept control.
+      const warned = soulfrayWarningOf(result) !== null;
       if (isDispatchFailure(result)) {
-        toast.error(message || 'That did not work.', TOAST_OPTIONS);
+        if (!warned) toast.error(message || 'That did not work.', TOAST_OPTIONS);
       } else if (message) {
         toast.success(message, TOAST_OPTIONS);
       }
+      return result;
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'That did not work.');
+      return null;
     } finally {
       await queryClient.invalidateQueries({ queryKey: combatKeys.encounter(encounterId) });
     }
@@ -191,6 +209,7 @@ export function StandoffCard({ standoff, encounterId, characterId }: StandoffCar
           }
           disabled={isPending}
           fire={fire}
+          display={(kwargs) => run('standoff_press', kwargs)}
         />
       ))}
 
@@ -214,7 +233,8 @@ interface GroupSectionProps {
   focus: string;
   onFocusChange: (value: string) => void;
   disabled: boolean;
-  fire: (key: string, kwargs?: Record<string, unknown>) => void;
+  fire: Fire;
+  display: Display;
 }
 
 function GroupSection({
@@ -224,6 +244,7 @@ function GroupSection({
   onFocusChange,
   disabled,
   fire,
+  display,
 }: GroupSectionProps) {
   const approaches = standoff.approaches.filter((a) => a.group_id === group.group_id);
   const terms = standoff.terms.filter((t) => t.group_id === group.group_id);
@@ -341,6 +362,7 @@ function GroupSection({
             techniques={standoff.display_techniques}
             disabled={disabled || !isOpen}
             fire={fire}
+            display={display}
           />
         ))}
 
@@ -367,12 +389,21 @@ interface ApproachButtonProps {
   groupId: number;
   techniques: DisplayTechnique[];
   disabled: boolean;
-  fire: (key: string, kwargs?: Record<string, unknown>) => void;
+  fire: Fire;
+  display: Display;
 }
 
-function ApproachButton({ approach, groupId, techniques, disabled, fire }: ApproachButtonProps) {
+function ApproachButton({
+  approach,
+  groupId,
+  techniques,
+  disabled,
+  fire,
+  display,
+}: ApproachButtonProps) {
   const [picking, setPicking] = useState(false);
   const [techniqueId, setTechniqueId] = useState<string>('');
+  const [soulfray, setSoulfray] = useState<SoulfrayWarningData | null>(null);
   const needsTechnique = approach.casts_technique;
   const noTechnique = needsTechnique && techniques.length === 0;
   const pressKwargs = { group_id: groupId, approach_id: approach.approach_id };
@@ -440,16 +471,66 @@ function ApproachButton({ approach, groupId, techniques, disabled, fire }: Appro
               ))}
             </SelectContent>
           </Select>
-          <Button
-            size="sm"
-            disabled={disabled || techniqueId === ''}
-            onClick={() => {
-              fire('standoff_press', { ...pressKwargs, technique_id: Number(techniqueId) });
-              setPicking(false);
-            }}
-          >
-            Display
-          </Button>
+          {soulfray ? (
+            <div
+              data-testid="standoff-soulfray-gate"
+              className={cn(
+                'rounded-md border p-2',
+                soulfray.has_death_risk
+                  ? 'border-red-500 bg-red-950/50'
+                  : 'border-amber-500 bg-amber-950/50'
+              )}
+            >
+              <p
+                className={cn(
+                  'text-xs font-bold',
+                  soulfray.has_death_risk ? 'text-red-400' : 'text-amber-400'
+                )}
+              >
+                {soulfray.has_death_risk ? 'DANGER: ' : ''}Soulfray Warning: {soulfray.stage_name}
+              </p>
+              <p className="mb-2 text-xs text-gray-300">{soulfray.stage_description}</p>
+              <div className="flex gap-2">
+                <Button size="sm" variant="outline" onClick={() => setSoulfray(null)}>
+                  Cancel
+                </Button>
+                <Button
+                  size="sm"
+                  disabled={disabled}
+                  onClick={() => {
+                    fire('standoff_press', {
+                      ...pressKwargs,
+                      technique_id: Number(techniqueId),
+                      confirm_soulfray_risk: true,
+                    });
+                    setSoulfray(null);
+                    setPicking(false);
+                  }}
+                >
+                  Accept the risk
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <Button
+              size="sm"
+              disabled={disabled || techniqueId === ''}
+              onClick={async () => {
+                const result = await display({
+                  ...pressKwargs,
+                  technique_id: Number(techniqueId),
+                });
+                const warning = soulfrayWarningOf(result);
+                if (warning) {
+                  setSoulfray(warning);
+                } else {
+                  setPicking(false);
+                }
+              }}
+            >
+              Display
+            </Button>
+          )}
         </div>
       )}
     </div>
