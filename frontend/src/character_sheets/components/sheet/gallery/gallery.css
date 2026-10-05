@@ -742,3 +742,17 @@
   letter-spacing: 0.08em;
   color: hsl(var(--primary));
 }
+
+/* The cropper's keys, as the demo lists them: the keyboard controls are otherwise unseen. */
+.gallery-cropper-keys {
+  font-family: var(--sheet-sans);
+  font-size: 0.75rem;
+  line-height: 1.6;
+  color: #c4b8a6;
+}
+.gallery-cropper-keys kbd {
+  font-family: var(--sheet-sans);
+  font-size: 0.6875rem;
+  padding: 0 4px;
+  border: 1px solid rgb(255 255 255 / 16%);
+}

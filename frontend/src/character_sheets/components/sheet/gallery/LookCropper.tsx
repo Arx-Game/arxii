@@ -276,6 +276,13 @@ export function LookCropper({ picture, moods, ink, isSaving, onSave, onClose }: 
                 <span>Show it on the sheet now</span>
               </label>
             )}
+            <p className="gallery-cropper-keys">
+              <kbd>←</kbd>
+              <kbd>→</kbd>
+              <kbd>↑</kbd>
+              <kbd>↓</kbd> move, <kbd>Shift</kbd> for further. <kbd>+</kbd>
+              <kbd>-</kbd> resize. <kbd>Enter</kbd> saves, <kbd>Esc</kbd> cancels.
+            </p>
             <div className="gallery-cropper-actions">
               <button type="button" className="gallery-btn" onClick={onClose}>
                 Cancel
