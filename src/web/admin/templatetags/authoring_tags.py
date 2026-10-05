@@ -18,17 +18,18 @@ register = template.Library()
 
 @register.filter
 def workbench_url(obj) -> str:
-    """Return the workbench editor deep-link for this row, or ``""`` when it has none."""
+    """Return the workbench page link that opens this row, or ``""`` when it has none."""
     if obj is None or not obj.pk:
         return ""
     from core.app_domains import credited_content_models, domain_of  # noqa: PLC0415
     from core_management.prose_fields import prose_fields_for  # noqa: PLC0415
-    from web.admin.authoring.links import workbench_editor_url  # noqa: PLC0415
+    from web.admin.authoring.links import workbench_page_url  # noqa: PLC0415
 
     model = type(obj)
     if model not in credited_content_models() or not prose_fields_for(model):
         return ""
-    return workbench_editor_url(f"{domain_of(model)}.{model.__name__}", obj.pk)
+    # The page, with the row open, never the bare editor fragment (#4155).
+    return workbench_page_url(f"{domain_of(model)}.{model.__name__}", obj.pk)
 
 
 @register.simple_tag

@@ -100,7 +100,7 @@ from core.identifier_dashes import contains_dash
 from core_management.prose_fields import prose_fields_for
 from web.admin.authoring.backlog import BacklogRow, build_backlog
 from web.admin.authoring.contributors import current_contributor, link_contributor
-from web.admin.authoring.links import admin_change_url
+from web.admin.authoring.links import admin_change_url, workbench_page_url
 from web.admin.authoring.reference import db_search, file_search, reference_roots
 from web.admin.authoring.relations import RelatedEntry, prose_mentions, related_entries
 from web.admin.constants import DEFAULT_BACKLOG_STATUS, BacklogStatusFilter
@@ -343,6 +343,20 @@ def authoring_dashboard(request: HttpRequest) -> HttpResponse:
         context["suggested_name"] = request.user.username
     else:
         context["builders"] = _builders_context()
+        # `?model=&pk=` opens that row's editor on load (#4155): the change form's
+        # object tool and any bookmark land here, never on the bare fragment.
+        # `model` doubles as the queue filter, so the queue shows that model's rows.
+        model_label = request.GET.get("model", "")
+        pk = request.GET.get("pk", "")
+        if model_label and pk:
+            query = urlencode(
+                {
+                    "model": model_label,
+                    "pk": pk,
+                    "queue": QueueFilters.from_params(request.GET).as_query(),
+                }
+            )
+            context["open_editor_url"] = f"{reverse('admin_authoring_editor')}?{query}"
     return render(request, "admin/authoring/dashboard.html", context)
 
 
@@ -706,10 +720,26 @@ def _apply_edits(
     return None, name_changed
 
 
+#: A browser navigation announces itself with this fetch-metadata header; an htmx
+#: request carries `Sec-Fetch-Dest: empty`, and the test client sends none (#4155).
+_FETCH_DEST_HEADER = "Sec-Fetch-Dest"
+_FETCH_DEST_DOCUMENT = "document"
+
+
 @superuser_required
 def authoring_editor(request: HttpRequest) -> HttpResponse:
-    """GET the row editor fragment for `?model=<label>&pk=` (#3019 Task 5)."""
-    target = _resolve_target(request.GET.get("model", ""), request.GET.get("pk", ""))
+    """GET the row editor fragment for `?model=<label>&pk=` (#3019 Task 5).
+
+    A browser navigating here as a document (`Sec-Fetch-Dest: document`, which
+    every htmx request lacks) is sent to the workbench page with the row open
+    (#4155): the fragment on its own has no htmx, and its action buttons then
+    fall back to a plain form POST this view never reads, so the edit is lost.
+    """
+    model_label = request.GET.get("model", "")
+    pk = request.GET.get("pk", "")
+    if request.headers.get(_FETCH_DEST_HEADER) == _FETCH_DEST_DOCUMENT:
+        return redirect(workbench_page_url(model_label, pk))
+    target = _resolve_target(model_label, pk)
     return _render_editor_fragment(request, target)
 
 
