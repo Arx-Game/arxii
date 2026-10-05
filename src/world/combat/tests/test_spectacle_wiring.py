@@ -239,7 +239,7 @@ class AudereEntryWiringTests(TestCase):
             offer_audere(character, accept=True)
         self.assertTrue(
             SpectacleRecord.objects.filter(
-                encounter=encounter, kind=SpectacleKind.AUDERE_ENTRY
+                opponent__encounter=encounter, kind=SpectacleKind.AUDERE_ENTRY
             ).exists()
         )
         self.assertTrue(
@@ -318,7 +318,7 @@ class CrossingWiringTests(TestCase):
             )
         self.assertTrue(
             SpectacleRecord.objects.filter(
-                encounter=encounter, kind=SpectacleKind.CROSSING
+                opponent__encounter=encounter, kind=SpectacleKind.CROSSING
             ).exists()
         )
         self.assertTrue(

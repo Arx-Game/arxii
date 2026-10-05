@@ -325,7 +325,6 @@ def apply_spectacle(  # noqa: PLR0913 - keyword-only public contract
         apply_morale_damage(opponent, hit)
         records.append(
             SpectacleRecord(
-                encounter=encounter,
                 opponent=opponent,
                 caster=caster_sheet,
                 kind=kind,

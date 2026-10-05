@@ -36,5 +36,5 @@ class SpectacleRecordConstraintTests(TestCase):
             )
 
     def test_other_opponent_is_allowed(self):
-        other = CombatOpponentFactory(encounter=self.record.encounter)
+        other = CombatOpponentFactory(encounter=self.record.opponent.encounter)
         SpectacleRecordFactory(opponent=other, caster=self.record.caster)

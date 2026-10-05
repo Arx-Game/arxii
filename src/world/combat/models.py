@@ -4218,11 +4218,6 @@ class SpectacleRecord(SharedMemoryModel):
     it goes with the encounter.
     """
 
-    encounter = models.ForeignKey(
-        "arxii.CombatEncounter",
-        on_delete=models.CASCADE,
-        related_name="spectacle_records",
-    )
     opponent = models.ForeignKey(
         "arxii.CombatOpponent",
         on_delete=models.CASCADE,

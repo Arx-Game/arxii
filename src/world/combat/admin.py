@@ -643,8 +643,9 @@ class SpectacleReactionLineAdmin(admin.ModelAdmin):
 class SpectacleRecordAdmin(admin.ModelAdmin):
     """Read-only play state: who already shook whom (#4147)."""
 
-    list_display = ("encounter", "opponent", "caster", "kind", "technique")
-    raw_id_fields = ("encounter", "opponent", "caster", "technique")
+    list_display = ("opponent", "caster", "kind", "technique")
+    list_select_related = ("opponent", "caster", "technique")
+    raw_id_fields = ("opponent", "caster", "technique")
 
     def has_add_permission(self, request: object) -> bool:  # noqa: ARG002
         return False

@@ -1996,7 +1996,6 @@ class SpectacleRecordFactory(factory_django.DjangoModelFactory):
     class Meta:
         model = SpectacleRecord
 
-    encounter = factory.SelfAttribute("opponent.encounter")
     opponent = factory.SubFactory(CombatOpponentFactory)
     caster = factory.SubFactory(_CHARACTER_SHEET_FACTORY)
     kind = SpectacleKind.AUDERE_ENTRY

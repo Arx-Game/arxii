@@ -232,14 +232,6 @@ class Migration(migrations.Migration):
                     ),
                 ),
                 (
-                    "encounter",
-                    models.ForeignKey(
-                        on_delete=django.db.models.deletion.CASCADE,
-                        related_name="spectacle_records",
-                        to="arxii.combatencounter",
-                    ),
-                ),
-                (
                     "opponent",
                     models.ForeignKey(
                         on_delete=django.db.models.deletion.CASCADE,

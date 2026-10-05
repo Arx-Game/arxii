@@ -2361,7 +2361,6 @@
   - engagement_locks <- combat.EngagementLock
   - pending_selections <- combat.PendingSelection
   - marks <- combat.CombatMark
-  - spectacle_records <- combat.SpectacleRecord
   - companion_orders <- companions.CompanionOrder
   - standoff_groups <- standoffs.StandoffGroup
 
@@ -2622,7 +2621,6 @@
 
 ### SpectacleRecord
 **Foreign Keys:**
-  - encounter -> combat.CombatEncounter [FK]
   - opponent -> combat.CombatOpponent [FK]
   - caster -> character_sheets.CharacterSheet [FK]
   - technique -> magic.Technique [FK] (nullable)
