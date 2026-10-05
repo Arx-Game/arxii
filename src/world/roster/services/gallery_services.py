@@ -4,7 +4,7 @@ Handles Cloudinary integration for tenure media storage."""
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING, cast
+from typing import cast
 import uuid
 
 import cloudinary
@@ -20,9 +20,6 @@ from world.roster.models import RosterTenure, TenureMedia
 from world.roster.services.media_scan import MediaScanService
 
 logger = logging.getLogger(__name__)
-
-if TYPE_CHECKING:  # pragma: no cover - for type hints only
-    from world.roster.models import TenureGallery
 
 
 class CloudinaryGalleryService:
@@ -52,7 +49,6 @@ class CloudinaryGalleryService:
         title: str = "",
         description: str = "",
         tenure: RosterTenure | None = None,
-        gallery: TenureGallery | None = None,
         created_by: Artist | None = None,
     ) -> Media:
         """Upload an image to Cloudinary and create media records.
@@ -64,7 +60,6 @@ class CloudinaryGalleryService:
             title: Optional title for the media
             description: Optional description
             tenure: Optional tenure to associate with the media
-            gallery: Optional gallery to associate with the tenure media
             created_by: Optional artist who created the media
 
         Returns:
@@ -129,6 +124,8 @@ class CloudinaryGalleryService:
                 cloudinary_public_id=result["public_id"],
                 cloudinary_url=result["secure_url"],
                 file_size_bytes=result.get("bytes"),
+                width=result.get("width"),
+                height=result.get("height"),
                 media_type=media_type,
                 title=title,
                 description=description,
@@ -136,7 +133,7 @@ class CloudinaryGalleryService:
             )
 
             if tenure:
-                TenureMedia.objects.create(tenure=tenure, media=media, gallery=gallery)
+                TenureMedia.objects.create(tenure=tenure, media=media)
 
             return cast(Media, media)
 
@@ -166,29 +163,6 @@ class CloudinaryGalleryService:
             )
             media.delete()
             return False
-
-    @classmethod
-    def get_tenure_gallery(cls, tenure: RosterTenure) -> list[Media]:
-        """Get all media for a tenure, ordered by sort order and upload date."""
-        return list(
-            Media.objects.filter(
-                tenure_links__tenure=tenure,
-                tenure_links__gallery__is_public=True,
-            ).order_by("tenure_links__sort_order", "-uploaded_date"),
-        )
-
-    @classmethod
-    def get_primary_image(cls, tenure: RosterTenure) -> Media | None:
-        """Get the primary image for a tenure from the character's roster entry."""
-        if tenure.roster_entry.profile_picture:
-            profile_pic = tenure.roster_entry.profile_picture
-            if (
-                profile_pic.tenure == tenure
-                and profile_pic.gallery
-                and profile_pic.gallery.is_public
-            ):
-                return cast(Media, profile_pic.media)
-        return None
 
     @classmethod
     def update_media_order(cls, tenure: RosterTenure, media_ids: list[int]) -> bool:

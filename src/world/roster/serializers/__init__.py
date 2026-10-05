@@ -42,7 +42,6 @@ from world.roster.serializers.media import (
     ArtistSerializer,
     MediaSerializer,
     MediaUploadSerializer,
-    TenureGallerySerializer,
     TenureMediaSerializer,
 )
 from world.roster.serializers.npc_presets import (
@@ -109,7 +108,6 @@ __all__ = [
     "SelectEntryRequestSerializer",
     "SelectedEntryResultSerializer",
     "SlotHolderSerializer",
-    "TenureGallerySerializer",
     "TenureMediaSerializer",
     "UnreadMailCountSerializer",
 ]

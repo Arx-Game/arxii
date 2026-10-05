@@ -7,7 +7,6 @@ from world.roster.models import (
     RosterApplication,
     RosterEntry,
     RosterTenure,
-    TenureGallery,
 )
 from world.roster.models.choices import ApplicationStatus
 
@@ -96,16 +95,6 @@ class FamilyFilterSet(django_filters.FilterSet):
         if area.realm:
             return queryset.filter(Q(origin_realm__isnull=True) | Q(origin_realm=area.realm))
         return queryset
-
-
-class TenureGalleryFilterSet(django_filters.FilterSet):
-    """Filter tenure galleries by tenure."""
-
-    tenure = django_filters.NumberFilter(field_name="tenure_id")
-
-    class Meta:
-        model = TenureGallery
-        fields = ["tenure"]
 
 
 class RosterTenureFilterSet(django_filters.FilterSet):

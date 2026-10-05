@@ -379,6 +379,16 @@ class Media(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
     )
     title = models.CharField(max_length=200, blank=True)
     description = models.TextField(blank=True)
+    # #4151: set by the owner. Veils the picture for viewers who are not their friend, and
+    # keeps it from ever being a look. MediaScanService is the hook that will also set it.
+    is_nsfw = models.BooleanField(
+        default=False,
+        help_text="Blurred for non-friends until clicked; never a look (#4151).",
+    )
+    # #4151: the file's pixel size, from Cloudinary's upload response, so a look's crop can
+    # be checked against the image. Null for rows uploaded before this was recorded.
+    width = models.PositiveIntegerField(null=True, blank=True)
+    height = models.PositiveIntegerField(null=True, blank=True)
     created_by = models.ForeignKey(
         Artist,
         null=True,

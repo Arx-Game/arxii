@@ -9,7 +9,7 @@ from django.core.validators import FileExtensionValidator
 from rest_framework import serializers
 
 from evennia_extensions.models import Artist, Media, MediaType
-from world.roster.models import TenureGallery, TenureMedia
+from world.roster.models import TenureMedia
 from world.roster.services import CloudinaryGalleryService
 
 # Extensions matching the content types CloudinaryGalleryService.upload_image accepts
@@ -123,14 +123,5 @@ class TenureMediaSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = TenureMedia
-        fields = ("id", "media", "gallery", "sort_order")
-        read_only_fields = ("id", "media", "gallery")
-
-
-class TenureGallerySerializer(serializers.ModelSerializer):
-    """Serialize tenure galleries."""
-
-    class Meta:
-        model = TenureGallery
-        fields = ("id", "tenure", "name", "is_public", "allowed_viewers")
-        read_only_fields = ("id", "tenure")
+        fields = ("id", "media", "sort_order")
+        read_only_fields = ("id", "media")

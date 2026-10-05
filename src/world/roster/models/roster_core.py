@@ -101,9 +101,9 @@ class RosterEntry(SharedMemoryModel):
     )
 
     def clean(self) -> None:
-        """Validate that profile picture belongs to this character's tenure."""
+        """Validate that the worn picture is this character's: a tenure's or its own art."""
         super().clean()
-        if self.profile_picture and self.profile_picture.tenure.roster_entry != self:
+        if self.profile_picture and self.profile_picture.owning_entry_id() != self.pk:
             raise ValidationError(
                 {
                     "profile_picture": "Profile picture must belong to this character's tenure.",

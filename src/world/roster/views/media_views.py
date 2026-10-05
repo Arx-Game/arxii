@@ -1,25 +1,28 @@
 """
-Media and gallery views.
+Player media views: a player's uploaded files.
+
+Picture management for a character (its gallery, looks, hiding) lives on
+``TenureMediaViewSet`` (#4151); this viewset is the account's own file store, which the
+world-builder's art dialog also reads.
 """
 
 from http import HTTPMethod
 from typing import Any
 
 from django.db.models import QuerySet
-from django_filters.rest_framework import DjangoFilterBackend
 from drf_spectacular.utils import extend_schema
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
 from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
-from rest_framework.permissions import BasePermission
+from rest_framework.permissions import BasePermission, IsAuthenticated
 from rest_framework.request import Request
 from rest_framework.response import Response
 
 from evennia_extensions.models import Media
-from world.roster.filters import TenureGalleryFilterSet
-from world.roster.models import RosterTenure, TenureGallery, TenureMedia
-from world.roster.permissions import IsOwnerOrStaff, ReadOnlyOrOwner
-from world.roster.serializers import MediaSerializer, MediaUploadSerializer, TenureGallerySerializer
+from world.roster.models import RosterTenure, TenureMedia
+from world.roster.permissions import IsOwnerOrStaff
+from world.roster.serializers import MediaSerializer, MediaUploadSerializer
+from world.roster.services.gallery_services import CloudinaryGalleryService
 
 
 class MediaViewSet(viewsets.ModelViewSet):
@@ -30,7 +33,9 @@ class MediaViewSet(viewsets.ModelViewSet):
     # gives stable page boundaries; the frontend gallery loads every page via
     # fetchAllPages since the grid shows the full set.
     serializer_class = MediaSerializer
-    permission_classes = [ReadOnlyOrOwner]
+    # #4151 (#3904 item 0): no art is shown to anyone without an account, so even a read
+    # needs one. Writes are narrowed further in get_permissions.
+    permission_classes = [IsAuthenticated]
     # The project default is JSON-only (see REST_FRAMEWORK settings); create's
     # image_file goes over the wire as a real upload, so this viewset also
     # accepts multipart/form-data (#3164). Content-Type on the request picks
@@ -67,6 +72,14 @@ class MediaViewSet(viewsets.ModelViewSet):
 
         return [permission() for permission in permission_classes]
 
+    def perform_destroy(self, instance: Media) -> None:
+        """Delete the file from Cloudinary as well as the row.
+
+        The stock destroy dropped only the row and left the asset on Cloudinary, still
+        stored and still reachable by its URL (#4151).
+        """
+        CloudinaryGalleryService.delete_media(instance)
+
     @extend_schema(request=MediaUploadSerializer, responses={201: MediaSerializer})
     def create(self, request: Request, *args: Any, **kwargs: Any) -> Response:
         upload_serializer = MediaUploadSerializer(
@@ -81,7 +94,6 @@ class MediaViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=[HTTPMethod.POST], permission_classes=[IsOwnerOrStaff])
     def associate_tenure(self, request: Request, pk: int | None = None) -> Response:
         tenure_id = request.data.get("tenure_id")
-        gallery_id = request.data.get("gallery_id")
 
         # Staff can associate with any tenure, non-staff only their own
         if request.user.is_staff:
@@ -92,12 +104,8 @@ class MediaViewSet(viewsets.ModelViewSet):
                 player_data=request.user.player_data,
             )
 
-        gallery = None
-        if gallery_id:
-            gallery = TenureGallery.objects.get(pk=gallery_id, tenure=tenure)
-
         media = self.get_object()
-        TenureMedia.objects.create(tenure=tenure, media=media, gallery=gallery)
+        TenureMedia.objects.create(tenure=tenure, media=media)
         return Response(status=status.HTTP_201_CREATED)
 
     @action(detail=True, methods=[HTTPMethod.POST], permission_classes=[IsOwnerOrStaff])
@@ -115,43 +123,3 @@ class MediaViewSet(viewsets.ModelViewSet):
         player_data.profile_picture = media
         player_data.save()
         return Response(status=status.HTTP_204_NO_CONTENT)
-
-
-class TenureGalleryViewSet(viewsets.ModelViewSet):
-    """API viewset for managing tenure galleries."""
-
-    pagination_class = None  # 2026-07 audit: opt out of default paginator (ADR-0138)
-
-    serializer_class = TenureGallerySerializer
-    permission_classes = [ReadOnlyOrOwner]
-    filter_backends = [DjangoFilterBackend]
-    filterset_class = TenureGalleryFilterSet
-
-    def get_queryset(self) -> QuerySet[TenureGallery]:
-        if self.request.user.is_staff:
-            return TenureGallery.objects.all()
-        return TenureGallery.objects.filter(
-            tenure__player_data=self.request.user.player_data,
-        )
-
-    def get_permissions(self) -> list[BasePermission]:
-        if self.action in ["update", "partial_update", "destroy"]:
-            permission_classes = [IsOwnerOrStaff]
-        else:
-            permission_classes = self.permission_classes
-        return [permission() for permission in permission_classes]
-
-    def create(self, request: Request, *args: Any, **kwargs: Any) -> Response:
-        tenure_id = request.data.get("tenure_id")
-        if request.user.is_staff:
-            tenure = RosterTenure.objects.get(pk=tenure_id)
-        else:
-            tenure = RosterTenure.objects.get(
-                pk=tenure_id,
-                player_data=request.user.player_data,
-            )
-        serializer = self.get_serializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
-        gallery = serializer.save(tenure=tenure)
-        read_serializer = self.get_serializer(gallery)
-        return Response(read_serializer.data, status=status.HTTP_201_CREATED)
