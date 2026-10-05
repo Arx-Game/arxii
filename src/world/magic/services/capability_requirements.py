@@ -66,3 +66,39 @@ def technique_performable(character_sheet: CharacterSheet | None, technique: Tec
         if get_effective_capability_value(character_sheet, req.capability) < req.minimum_value:
             return False
     return True
+
+
+def performable_techniques(
+    character_sheet: CharacterSheet | None, techniques: list[Technique]
+) -> list[Technique]:
+    """The ``techniques`` the character can perform, judged by ``technique_performable``'s rule.
+
+    A batched variant for a caller listing many techniques: the death check and the style
+    requirements are read once, every technique's requirements in one query, and each
+    capability's effective value once, so the query count does not grow per technique.
+    """
+    from world.magic.models import TechniqueCapabilityRequirement  # noqa: PLC0415
+    from world.vitals.services import is_dead  # noqa: PLC0415
+
+    if character_sheet is None or is_dead(character_sheet) or not techniques:
+        return []
+    style_requirements = style_capability_requirements(character_sheet)
+    by_technique: dict[int, list] = {}
+    for req in TechniqueCapabilityRequirement.objects.filter(
+        technique__in=techniques
+    ).select_related("capability"):
+        by_technique.setdefault(req.technique_id, []).append(req)
+    values: dict[int, int] = {}
+
+    def meets(req) -> bool:
+        if req.capability_id not in values:
+            values[req.capability_id] = get_effective_capability_value(
+                character_sheet, req.capability
+            )
+        return values[req.capability_id] >= req.minimum_value
+
+    return [
+        technique
+        for technique in techniques
+        if all(meets(req) for req in [*by_technique.get(technique.pk, []), *style_requirements])
+    ]

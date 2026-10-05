@@ -314,21 +314,20 @@ def _display_techniques(viewer: CharacterSheet) -> list[DisplayTechniqueView]:
     """The viewer's castable techniques: known ones plus a readied ultimate, performable."""
     from world.magic.models import CharacterTechnique  # noqa: PLC0415
     from world.magic.services.capability_requirements import (  # noqa: PLC0415
-        technique_performable,
+        performable_techniques,
     )
     from world.magic.services.ultimates import readied_ultimate  # noqa: PLC0415
 
-    techniques = [
-        link.technique
+    techniques = {
+        link.technique_id: link.technique
         for link in CharacterTechnique.objects.filter(character=viewer).select_related("technique")
-    ]
+    }
     readied = readied_ultimate(viewer)
     if readied is not None:
-        techniques.append(readied.technique)
+        techniques.setdefault(readied.technique.pk, readied.technique)
     return [
         DisplayTechniqueView(technique.pk, technique.name)
-        for technique in techniques
-        if technique_performable(viewer, technique)
+        for technique in performable_techniques(viewer, list(techniques.values()))
     ]
 
 

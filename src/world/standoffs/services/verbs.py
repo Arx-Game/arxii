@@ -505,8 +505,12 @@ def _display_morale_line(  # noqa: PLR0913 - the display's full context
     use: TechniqueUseResult,
     tier: int,
     members: list[CombatOpponent],
-) -> str:
-    """The spectacle credit line when the cast earned a display, else empty."""
+) -> str | None:
+    """The spectacle credit line for a display; ``None`` when the cast is not a display.
+
+    A display already spent on every witness (the repeat rule) returns ``""``, not ``None``,
+    so the caller never substitutes ordinary morale damage for it.
+    """
     kind = classify_cast(
         technique=technique,
         runtime_intensity=use.runtime_intensity,
@@ -514,7 +518,7 @@ def _display_morale_line(  # noqa: PLR0913 - the display's full context
         config=SpectacleConfig.load(),
     )
     if kind is None:
-        return ""
+        return None
     spectacle = apply_spectacle(
         encounter=encounter,
         caster_sheet=sheet,
@@ -577,9 +581,13 @@ def standoff_press(
     if tier >= 1:
         group.terms_ease += 1
         group.save(update_fields=["terms_ease"])
-        if use is not None and technique is not None:
-            morale_line = _display_morale_line(encounter, sheet, technique, use, tier, members)
-        if approach.damages_morale and not morale_line:
+        display_line = (
+            None
+            if use is None or technique is None
+            else _display_morale_line(encounter, sheet, technique, use, tier, members)
+        )
+        morale_line = display_line or ""
+        if approach.damages_morale and display_line is None:
             before = [morale_state_for(member) for member in members]
             for member in members:
                 apply_morale_damage(member, tier * DEMORALIZE_MORALE_PER_LEVEL)

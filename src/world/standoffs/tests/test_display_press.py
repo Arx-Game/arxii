@@ -2,6 +2,12 @@
 
 from unittest.mock import patch
 
+from django.db import connection
+from django.test.utils import CaptureQueriesContext
+
+from actions.constants import ActionBackend
+from actions.player_interface import dispatch_player_action
+from actions.types import ActionRef
 from world.checks.social_target import SocialDifficulty
 from world.combat.constants import FALTER_MORALE_THRESHOLD, SpectacleKind
 from world.combat.models import SpectacleRecord
@@ -152,3 +158,64 @@ class DisplayViewTests(DisplayPressBase):
     def test_a_steady_group_reads_steady(self) -> None:
         view = build_standoff_view(self.encounter, self.sheet)
         self.assertEqual(view.groups[0].morale_state, OpponentMoraleState.STEADY)
+
+
+class DisplayRepeatRuleTests(DisplayPressBase):
+    def test_a_repeated_display_never_falls_back_to_ordinary_morale_damage(self) -> None:
+        self.approach.damages_morale = True
+        self.approach.save(update_fields=["damages_morale"])
+        ultimate = UltimateTechniqueFactory(anima_cost=CAST_ANIMA, intensity=1, control=1)
+        CharacterTechniqueFactory(character=self.sheet, technique=ultimate)
+        with patch(CHECK, return_value=forced(1)):
+            standoff_press(self.participant, self.group, self.approach, ultimate)
+        records = SpectacleRecord.objects.count()
+        morale = [m.morale for m in self.members]
+        with patch(CHECK, return_value=forced(1)):
+            result = standoff_press(self.participant, self.group, self.approach, ultimate)
+        self.assertEqual(result.morale_line, "")
+        self.assertEqual(SpectacleRecord.objects.count(), records)
+        for member, old in zip(self.members, morale, strict=True):
+            member.refresh_from_db()
+            self.assertEqual(member.morale, old)
+
+
+class DisplayTechniqueQueryTests(DisplayPressBase):
+    def _count(self) -> int:
+        with CaptureQueriesContext(connection) as ctx:
+            build_standoff_view(self.encounter, self.sheet)
+        return len(ctx)
+
+    def test_query_count_does_not_grow_with_technique_count(self) -> None:
+        self._count()
+        one = self._count()
+        for _ in range(3):
+            CharacterTechniqueFactory(character=self.sheet, technique=TechniqueFactory())
+        self.assertEqual(len(build_standoff_view(self.encounter, self.sheet).display_techniques), 4)
+        self.assertEqual(self._count(), one)
+
+    def test_a_technique_listed_twice_appears_once(self) -> None:
+        with patch(
+            "world.magic.services.ultimates.readied_ultimate",
+            return_value=type("K", (), {"technique": self.technique})(),
+        ):
+            view = build_standoff_view(self.encounter, self.sheet)
+        self.assertEqual([t.technique_id for t in view.display_techniques], [self.technique.pk])
+
+
+class DisplayActionDispatchTests(DisplayPressBase):
+    def _press(self, **kwargs: int) -> object:
+        ref = ActionRef(backend=ActionBackend.REGISTRY, registry_key="standoff_press")
+        payload = {"group_id": self.group.pk, "approach_id": self.approach.pk, **kwargs}
+        return dispatch_player_action(self.sheet.character, ref, payload).detail
+
+    def test_a_known_technique_is_cast(self) -> None:
+        with patch(CHECK, return_value=forced(1)):
+            detail = self._press(technique_id=self.technique.pk)
+        self.assertTrue(detail.success)
+        self.assertGreater(self._spent(), 0)
+
+    def test_an_unknown_technique_id_is_refused(self) -> None:
+        detail = self._press(technique_id=999999)
+        self.assertFalse(detail.success)
+        self.assertEqual(detail.message, "No such technique.")
+        self.assertEqual(self._spent(), 0)
