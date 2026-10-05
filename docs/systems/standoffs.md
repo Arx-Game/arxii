@@ -38,6 +38,7 @@ umbrella #4121. Slice 1 shipped; later slices are listed at the end.
 | `StandoffApproach` (:133) | A press: `check_type`, `capability` (aims at drives through `Application`), `sway_target` modifier target, `damages_morale`, `archetypes`, `display_order`. |
 | `StandoffTerms` (:181) | `effect` (`TermsEffect`: PASS, FLEE, TURN, TOLL), `critical_effect` (applied instead on a critical), `required_drive`, `difficulty_shift_bands`, `archetypes`, `display_order`. |
 | `StandoffConfig` (:222) | Singleton: `read_check_type`, `terms_check_type`, `pass_condition`, `turn_condition`, `botch_force_bands`, `band_force_percent`, `over_level_percent_per_tier`, `falter_force_percent`, `break_force_percent`. `load()` returns it. |
+| `StandoffApproach.casts_technique` / `StandoffConfig.terms_ease_faltering`, `terms_ease_broken` | #4147: a casting approach (the display of power) and the bands terms ease by morale (see "Display of power and morale"). |
 | `StandoffGroup` (:296) | One band in one encounter: `creature_template`, `state` (OPEN, SETTLED, FIGHTING), `terms_ease`, `emboldened_bands`, `settled_outcome`. Unique per encounter and template. Deleting its `creature_template` deletes the group (CASCADE). |
 | `StandoffReveal` (:345) | A thing a read uncovered: `kind` (CAUSE, DRIVE, REGARD) plus the drive or rule. Group-wide, shared knowledge. |
 | `StandoffSparkShare` (:398) | A character choosing to share a spark for a group. Unique per group, sheet and rule. |
@@ -135,7 +136,7 @@ drive and regard-rule inlines on the creature template.
   `standoff_read`, `standoff_press`, `standoff_terms`, `standoff_fight`,
   `standoff_share_spark`.
 - Telnet: `CmdStandoff` (`commands/standoff.py`, key `standoff`): bare summary, `read`,
-  `press`, `terms`, `share`, `fight`. Thin dispatch only. The bare summary renders
+  `press`, `terms`, `display`, `share`, `fight`. Thin dispatch only. The bare summary renders
   `build_standoff_view` as text (groups, hidden count, revealed cause and drives, visible
   regard, the viewer's sparks and shared sparks, approaches with grades and lever lines,
   terms with grades), so it carries exactly what the web payload does.
@@ -151,6 +152,36 @@ drive and regard-rule inlines on the creature template.
   in the BeatCard; `OptionPage` carries the `opens_as_standoff` control. Predicate additions:
   `matched_leaves` (`predicates/predicates.py:104`), leaves `has_species` (by id) and
   `has_upbringing` (by origin template id), `predicates/describe.py`.
+
+## Display of power and morale (#4147)
+
+- **Display of power press.** A `StandoffApproach` with `casts_technique=True` has the
+  player pick one of their own techniques, and that cast is the check (`_press_check` in
+  `services/verbs.py`, through `use_technique` with `lethal=False`, so nobody is harmed and
+  anima is spent as for any cast). The roll runs through `floor_ultimate_check`, so an
+  ultimate never fails. `_technique_refusal` refuses a non-casting approach given a
+  technique, and a casting approach given none or one the actor cannot cast. If the cast
+  never resolves (the soulfray gate declines) the press is refused with "The display
+  falters before it begins." A success eases terms exactly as any press does.
+- **A cast that earns a display shakes the group.** `_display_morale_line` runs
+  `classify_cast` on the technique, its runtime intensity and the success level. When it
+  returns a kind (an ultimate, or a critical technique), `apply_spectacle` runs against
+  the group's members and its credit and flavour lines are appended to the press result.
+  An approach with `damages_morale` still lowers morale as before, but only when the cast
+  earned no display, so one press never shakes twice.
+- **Terms ease by morale.** `terms_difficulty` subtracts `_morale_terms_ease` from the
+  extra bands: the group's worst member decides, `StandoffConfig.terms_ease_broken`
+  (default 2) for a broken member, `terms_ease_faltering` (default 1) for a faltering one,
+  none when steady. It stacks with the group's own `terms_ease` and the regard shifts.
+- **View fields.** Each group in the payload carries `morale_state` (`steady`, `falter` or
+  `break`, the worst among active members; the numbers stay GM-only). Each approach carries
+  `casts_technique`. The view carries `display_techniques` (`technique_id`, `name`): the
+  viewer's known techniques plus a readied ultimate that pass `technique_performable`.
+- **Surfaces.** The `standoff_press` action takes an optional `technique_id`. Telnet:
+  `standoff display <technique> <group>` picks the first approach with
+  `casts_technique=True` and presses with the named technique (`castable_technique_named`).
+  The web `StandoffCard` shows a morale chip on each group and a technique picker for
+  casting approaches.
 
 ## Payload privacy (`services/view.py`, `services/describe.py`)
 

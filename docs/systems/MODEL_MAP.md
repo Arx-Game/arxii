@@ -2361,6 +2361,7 @@
   - engagement_locks <- combat.EngagementLock
   - pending_selections <- combat.PendingSelection
   - marks <- combat.CombatMark
+  - spectacle_records <- combat.SpectacleRecord
   - companion_orders <- companions.CompanionOrder
   - standoff_groups <- standoffs.StandoffGroup
 
@@ -2399,6 +2400,7 @@
   - pending_selections <- combat.PendingSelection
   - marks <- combat.CombatMark
   - consider_readings <- combat.ConsiderReading
+  - spectacle_records <- combat.SpectacleRecord
 
 ### CombatOpponentAction
 **Foreign Keys:**
@@ -2611,6 +2613,19 @@
   - participant -> combat.CombatParticipant [FK]
   - challenge_instance -> mechanics.ChallengeInstance [FK]
   - challenge_approach -> mechanics.ChallengeApproach [FK]
+
+### SpectacleConfig
+
+### SpectacleReactionLine
+**Foreign Keys:**
+  - creature_template -> combat.CreatureTemplate [FK] (nullable)
+
+### SpectacleRecord
+**Foreign Keys:**
+  - encounter -> combat.CombatEncounter [FK]
+  - opponent -> combat.CombatOpponent [FK]
+  - caster -> character_sheets.CharacterSheet [FK]
+  - technique -> magic.Technique [FK] (nullable)
 
 ### StakesEscalationModifier
 **Foreign Keys:**

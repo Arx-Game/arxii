@@ -7500,6 +7500,29 @@ from OPEN `StandoffGroup` rows, never a stored flag (ADR-4145-A).
   detail's per-viewer `standoff` block.
 - **Details:** [standoffs.md](standoffs.md)
 
+### Spectacle (#4147)
+An earned display of power shakes the enemies who witness it: their morale falls once per
+caster and move, and allied NPCs take heart. Ultimates never fail (ADR-4147).
+
+- **Models (`world/combat/models.py`):** `SpectacleConfig` (singleton, `load()` creates it
+  with working defaults; hits per kind, level-gap scaling, thresholds, mindless and ally
+  shares), `SpectacleRecord` (one row per opponent, caster and move, which is the technique
+  when there is one, else the kind; play state), `SpectacleReactionLine` (authored flavour
+  by reaction, optional creature and kind). Choices in `combat/constants.py`:
+  `SpectacleKind` (audere_entry, ultimate, crossing, critical_technique,
+  devastating_action), `SpectacleReaction` (shaken, faltering, broken, heartened). Also
+  `AudereThreshold.check_level_bonus`, `AudereMajoraThreshold.check_level_bonus`,
+  `StandoffApproach.casts_technique`, `StandoffConfig.terms_ease_faltering` / `terms_ease_broken`.
+- **Key functions:** `apply_spectacle`, `classify_cast`, `is_devastating`, `spectacle_hit`,
+  `encounter_for_character`, `deliver_spectacle` (`combat/spectacle.py`);
+  `audere_check_level_bonus`, `shake_witnesses` (`magic/audere.py`); `floor_ultimate_check`
+  (`magic/services/ultimates.py`). The combat action rider is unguarded; Audere entry and a
+  Crossing defer to commit with `robust=True`.
+- **Surfaces:** admin for the three models; Required content entry
+  `spectacle-reaction-lines`; the standoff display press and a public `morale_state` on each
+  opponent and standoff group.
+- **Details:** [standoffs.md](standoffs.md), [magic.md](magic.md), ADR-4147.
+
 ### Combat
 Turn-based combat engine: encounter lifecycle, NPC threat patterns, damage resolution,
 reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
