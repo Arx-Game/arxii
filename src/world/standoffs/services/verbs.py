@@ -40,8 +40,9 @@ from world.combat.morale import (
 from world.combat.spectacle import apply_spectacle, classify_cast
 from world.conditions.services import apply_condition
 from world.fatigue.constants import EffortLevel
+from world.magic.services.capability_requirements import technique_performable
 from world.magic.services.techniques import use_technique
-from world.magic.services.ultimates import castable_technique_named, floor_ultimate_check
+from world.magic.services.ultimates import floor_ultimate_check, readied_ultimate
 from world.mechanics.models import Application
 from world.standoffs.constants import (
     FIGHT_BEGINS_MESSAGE,
@@ -82,7 +83,7 @@ if TYPE_CHECKING:
     from world.checks.types import CheckResult
     from world.combat.models import CombatEncounter, CombatOpponent, CombatParticipant
     from world.magic.models import Technique
-    from world.magic.types.techniques import TechniqueUseResult
+    from world.magic.types.techniques import SoulfrayWarning, TechniqueUseResult
 
 BOTCH_LEVEL = -2
 CRITICAL_LEVEL = 2
@@ -456,10 +457,13 @@ def _press_check(
     approach: StandoffApproach,
     graded: SocialDifficulty,
     technique: Technique | None,
+    *,
+    confirm_soulfray_risk: bool = False,
 ) -> tuple[CheckResult | None, TechniqueUseResult | None]:
     """Roll the press. A casting approach casts ``technique`` as the check, harmless.
 
-    Returns ``(None, use)`` when the cast never resolved (the soulfray gate declined).
+    Returns ``(None, use)`` when the cast never resolved: the caster carries Soulfray and
+    has not accepted the risk (``use.soulfray_warning``), and nothing was spent.
     """
     if technique is None:
         return (
@@ -492,7 +496,7 @@ def _press_check(
         character=sheet.character,
         technique=technique,
         resolve_fn=_resolve_fn,
-        confirm_soulfray_risk=True,
+        confirm_soulfray_risk=confirm_soulfray_risk,
         lethal=False,
     )
     return captured.get("check"), use
@@ -534,13 +538,34 @@ def _display_morale_line(  # noqa: PLR0913 - the display's full context
 def _technique_refusal(
     sheet: CharacterSheet, approach: StandoffApproach, technique: Technique | None
 ) -> str | None:
-    """Why the technique does not fit this approach: a display needs one the actor knows."""
+    """Why the technique does not fit this approach: a display needs one the actor can cast.
+
+    Castable means known (or this Audere's readied ultimate) and performable right now.
+    """
+    from world.magic.models import CharacterTechnique  # noqa: PLC0415
+
     if not approach.casts_technique:
         return None if technique is None else "That approach does not cast a technique."
-    known = None if technique is None else castable_technique_named(sheet, technique.name)
-    if known is None or known.pk != technique.pk:
+    if technique is None:
         return "Choose one of your techniques to display."
+    known = CharacterTechnique.objects.filter(character=sheet, technique=technique).exists()
+    if not known:
+        readied = readied_ultimate(sheet)
+        known = readied is not None and readied.technique_id == technique.pk
+    if not known:
+        return "Choose one of your techniques to display."
+    if not technique_performable(sheet, technique):
+        return "You cannot perform that technique right now."
     return None
+
+
+def _soulfray_refusal(warning: SoulfrayWarning) -> StandoffActionResult:
+    """The cast stopped at the Soulfray checkpoint: warn, spend nothing, offer to accept."""
+    return StandoffActionResult(
+        success=False,
+        message=f"{warning.stage_description} Accept the Soulfray risk to display anyway.",
+        soulfray_warning=warning,
+    )
 
 
 @flush_cache_on_error(lambda participant, *_, **__: participant.encounter)
@@ -550,11 +575,14 @@ def standoff_press(
     group: StandoffGroup,
     approach: StandoffApproach,
     technique: Technique | None = None,
+    *,
+    confirm_soulfray_risk: bool = False,
 ) -> StandoffActionResult:
     """Press a group with a social approach: a success eases terms, a botch emboldens them.
 
     A casting approach (a display of power) casts ``technique`` as its check; a cast that
-    earns a display shakes the group through the spectacle service.
+    earns a display shakes the group through the spectacle service. A caster carrying
+    Soulfray is refused with the warning, spending nothing, until ``confirm_soulfray_risk``.
     """
     encounter, group = _lock(participant.encounter, group)
     refusal = _refusal(encounter, group)
@@ -571,8 +599,12 @@ def standoff_press(
     graded, hits, targeted = press_grade(
         group, sheet, approach, build_grading_context(group, sheet, members=members)
     )
-    result, use = _press_check(sheet, approach, graded, technique)
+    result, use = _press_check(
+        sheet, approach, graded, technique, confirm_soulfray_risk=confirm_soulfray_risk
+    )
     if result is None:
+        if use is not None and use.soulfray_warning is not None:
+            return _soulfray_refusal(use.soulfray_warning)
         return _refuse("The display falters before it begins.")
     _share_shifting_sparks(group, sheet, targeted)
     tier = result.success_level

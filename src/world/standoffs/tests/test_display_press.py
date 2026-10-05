@@ -1,5 +1,6 @@
 """Display of power: a casting press, terms eased by morale, and the view fields (#4147)."""
 
+from types import SimpleNamespace
 from unittest.mock import patch
 
 from django.db import connection
@@ -15,10 +16,12 @@ from world.combat.morale import OpponentMoraleState, morale_state_for
 from world.magic.factories import (
     CharacterAnimaFactory,
     CharacterTechniqueFactory,
+    TechniqueCapabilityRequirementFactory,
     TechniqueFactory,
     UltimateTechniqueFactory,
 )
 from world.magic.models import CharacterAnima
+from world.magic.types.techniques import SoulfrayWarning
 from world.standoffs.factories import StandoffApproachFactory, StandoffTermsFactory
 from world.standoffs.services.verbs import standoff_press, terms_difficulty
 from world.standoffs.services.view import build_standoff_view
@@ -140,6 +143,63 @@ class DisplayRefusalTests(DisplayPressBase):
         self.assertEqual(result.message, "That approach does not cast a technique.")
         self.assertEqual(self._spent(), 0)
 
+    def test_a_known_technique_that_cannot_be_performed_is_refused(self) -> None:
+        TechniqueCapabilityRequirementFactory(technique=self.technique, minimum_value=1)
+        result = standoff_press(self.participant, self.group, self.approach, self.technique)
+        self.assertFalse(result.success)
+        self.assertEqual(result.message, "You cannot perform that technique right now.")
+        self.assertIsNone(result.success_level)
+        self.assertEqual(self._spent(), 0)
+
+    def test_a_namesake_of_a_known_technique_is_refused(self) -> None:
+        namesake = TechniqueFactory(name=self.technique.name.upper(), anima_cost=CAST_ANIMA * 5)
+        result = standoff_press(self.participant, self.group, self.approach, namesake)
+        self.assertEqual(result.message, "Choose one of your techniques to display.")
+        self.assertEqual(self._spent(), 0)
+
+    def test_the_readied_ultimate_may_be_displayed_without_being_known(self) -> None:
+        ultimate = UltimateTechniqueFactory(anima_cost=CAST_ANIMA * 5, intensity=1, control=1)
+        readied = SimpleNamespace(technique_id=ultimate.pk, technique=ultimate)
+        with (
+            patch("world.standoffs.services.verbs.readied_ultimate", return_value=readied),
+            patch(CHECK, return_value=forced(1)),
+        ):
+            result = standoff_press(self.participant, self.group, self.approach, ultimate)
+        self.assertTrue(result.success)
+        self.assertGreater(self._spent(), 0)
+
+
+WARNING = SoulfrayWarning(
+    stage_name="Fraying", stage_description="Your soul is fraying.", has_death_risk=False
+)
+SOULFRAY_GATE = "world.magic.services.techniques.get_soulfray_warning"
+
+
+class DisplaySoulfrayTests(DisplayPressBase):
+    def test_soulfray_refuses_with_the_warning_and_spends_nothing(self) -> None:
+        with patch(SOULFRAY_GATE, return_value=WARNING), patch(CHECK, return_value=forced(1)):
+            result = standoff_press(self.participant, self.group, self.approach, self.technique)
+        self.group.refresh_from_db()
+        self.assertFalse(result.success)
+        self.assertIsNone(result.success_level)
+        self.assertEqual(result.soulfray_warning, WARNING)
+        self.assertIn("Your soul is fraying.", result.message)
+        self.assertEqual(self.group.terms_ease, 0)
+        self.assertEqual(self._spent(), 0)
+
+    def test_accepting_the_risk_casts(self) -> None:
+        with patch(SOULFRAY_GATE, return_value=WARNING), patch(CHECK, return_value=forced(1)):
+            result = standoff_press(
+                self.participant,
+                self.group,
+                self.approach,
+                self.technique,
+                confirm_soulfray_risk=True,
+            )
+        self.assertTrue(result.success)
+        self.assertIsNone(result.soulfray_warning)
+        self.assertGreater(self._spent(), 0)
+
 
 class DisplayViewTests(DisplayPressBase):
     def test_the_view_exposes_morale_casting_and_display_techniques(self) -> None:
@@ -212,6 +272,23 @@ class DisplayActionDispatchTests(DisplayPressBase):
         with patch(CHECK, return_value=forced(1)):
             detail = self._press(technique_id=self.technique.pk)
         self.assertTrue(detail.success)
+        self.assertGreater(self._spent(), 0)
+
+    def test_soulfray_refusal_carries_the_warning_and_confirm_passes_through(self) -> None:
+        with patch(SOULFRAY_GATE, return_value=WARNING), patch(CHECK, return_value=forced(1)):
+            refused = self._press(technique_id=self.technique.pk)
+            self.assertFalse(refused.success)
+            self.assertEqual(
+                refused.data["soulfray_warning"],
+                {
+                    "stage_name": "Fraying",
+                    "stage_description": "Your soul is fraying.",
+                    "has_death_risk": False,
+                },
+            )
+            self.assertEqual(self._spent(), 0)
+            accepted = self._press(technique_id=self.technique.pk, confirm_soulfray_risk=True)
+        self.assertTrue(accepted.success)
         self.assertGreater(self._spent(), 0)
 
     def test_an_unknown_technique_id_is_refused(self) -> None:
