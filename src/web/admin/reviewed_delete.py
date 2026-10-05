@@ -198,11 +198,10 @@ def choices_from(post) -> dict[str, str]:
     }
 
 
-def build_delete_plan(root: Model, choices: dict[str, str], admin_site) -> DeletePlan:
-    """Collect the root, then each row chosen for delete, round by round, to a fixpoint."""
-    collector = NestedObjects(using=router.db_for_write(root._meta.model))
-    collector.collect([root])
-    plan = DeletePlan(root=root, collector=collector)
+def _collect_delete_choices(
+    root: Model, choices: dict[str, str], collector: NestedObjects
+) -> tuple[set[str], dict[str, int], int]:
+    """Collect explicitly chosen deletes until no new protected rows remain."""
     seen_rounds: dict[str, int] = {}
     collected: set[str] = {row_key(root)}
     round_no = 1
@@ -223,7 +222,11 @@ def build_delete_plan(root: Model, choices: dict[str, str], admin_site) -> Delet
             collector.collect([obj])
             collected.add(row_key(obj))
         round_no += 1
+    return collected, seen_rounds, round_no
 
+
+def _build_blocking_rows(collector, choices, collected, seen_rounds, round_no, admin_site):  # noqa: PLR0913
+    """Build display rows from the finalized deletion collection."""
     removed = {model: {obj.pk for obj in objs} for model, objs in collector.model_objs.items()}
     rows = []
     for obj in collector.protected:
@@ -252,7 +255,18 @@ def build_delete_plan(root: Model, choices: dict[str, str], admin_site) -> Delet
                 round=seen_rounds.get(key, round_no),
             )
         )
-    plan.blocking = sorted(rows, key=lambda row: (row.round, row.kind, row.label))
+    return sorted(rows, key=lambda row: (row.round, row.kind, row.label))
+
+
+def build_delete_plan(root: Model, choices: dict[str, str], admin_site) -> DeletePlan:
+    """Collect the root, then each row chosen for delete, round by round, to a fixpoint."""
+    collector = NestedObjects(using=router.db_for_write(root._meta.model))
+    collector.collect([root])
+    plan = DeletePlan(root=root, collector=collector)
+    collected, seen_rounds, round_no = _collect_delete_choices(root, choices, collector)
+    plan.blocking = _build_blocking_rows(
+        collector, choices, collected, seen_rounds, round_no, admin_site
+    )
     return plan
 
 

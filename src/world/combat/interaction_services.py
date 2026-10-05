@@ -36,6 +36,7 @@ if TYPE_CHECKING:
         CombatRoundAction,
     )
     from world.combat.types import ActionOutcome
+    from world.conditions.models import ConditionDamageInteraction
     from world.conditions.types import DamageInteractionResult
     from world.magic.models import FuryTier
     from world.magic.services.cast_observation import CastAudience
@@ -279,6 +280,17 @@ def _assemble_hit_line(head: str, tail_clauses: list[str], power_clause: str) ->
     return f"{body} {power_clause}." if power_clause else f"{body}."
 
 
+def _interaction_transition_text(interaction: ConditionDamageInteraction) -> str:
+    """Describe one condition transition for damage narration."""
+    if interaction.narration_snippet:
+        return interaction.narration_snippet
+    if interaction.removes_condition:
+        return f"{interaction.condition.name} shatters"
+    if interaction.applies_condition is not None:
+        return f"{interaction.condition.name} transforms into {interaction.applies_condition.name}"
+    return ""
+
+
 def synergy_clause(interaction_result: DamageInteractionResult | None) -> str | None:
     """Compose a suffix clause for condition-damage interactions that fired.
 
@@ -307,18 +319,7 @@ def synergy_clause(interaction_result: DamageInteractionResult | None) -> str | 
     if not transition_interactions:
         return None
 
-    parts: list[str] = []
-    for interaction in transition_interactions:
-        if interaction.narration_snippet:
-            parts.append(interaction.narration_snippet)
-        elif interaction.removes_condition:
-            parts.append(f"{interaction.condition.name} shatters")
-        elif interaction.applies_condition is not None:
-            parts.append(
-                f"{interaction.condition.name} transforms into {interaction.applies_condition.name}"
-            )
-
-    clause = " — ".join(parts)
+    clause = " — ".join(_interaction_transition_text(i) for i in transition_interactions)
 
     # Append the modifier if non-zero.
     if interaction_result.damage_modifier_percent != 0:
@@ -598,24 +599,35 @@ def render_encounter_outcome_narration(
     # Fail-loud on unknown outcomes: values are the closed EncounterOutcome enum.
     clauses: list[str] = [_ENCOUNTER_OUTCOME_HEADLINES[outcome]]
     if outcome == EncounterOutcome.VICTORY:
-        if defeated_opponent_labels:
-            clauses.append(f"{join_labels(defeated_opponent_labels)} will trouble no one further.")
-        if won_over:
-            by_verb: dict[str, list[str]] = {}
-            for name, verb in won_over:
-                by_verb.setdefault(verb, []).append(name)
-            parts = [
-                f"{join_labels(names)} {'is' if len(names) == 1 else 'are'} {verb}"
-                for verb, names in by_verb.items()
-            ]
-            clauses.append(f"{join_labels(parts)}.")
-        if active_labels:
-            clauses.append(f"{join_labels(active_labels)} stand victorious.")
+        clauses.extend(_victory_outcome_clauses(defeated_opponent_labels, won_over, active_labels))
     elif outcome == EncounterOutcome.DEFEAT and active_labels:
         clauses.append(f"{join_labels(active_labels)} can fight no longer.")
     if fled_labels:
         clauses.append(f"{join_labels(fled_labels)} fled the field.")
     return " ".join(clauses)
+
+
+def _victory_outcome_clauses(
+    defeated_opponent_labels: list[str],
+    won_over: list[tuple[str, str]] | None,
+    active_labels: list[str],
+) -> list[str]:
+    """Build the clauses specific to a victory outcome."""
+    clauses: list[str] = []
+    if defeated_opponent_labels:
+        clauses.append(f"{join_labels(defeated_opponent_labels)} will trouble no one further.")
+    if won_over:
+        by_verb: dict[str, list[str]] = {}
+        for name, verb in won_over:
+            by_verb.setdefault(verb, []).append(name)
+        parts = [
+            f"{join_labels(names)} {'is' if len(names) == 1 else 'are'} {verb}"
+            for verb, names in by_verb.items()
+        ]
+        clauses.append(f"{join_labels(parts)}.")
+    if active_labels:
+        clauses.append(f"{join_labels(active_labels)} stand victorious.")
+    return clauses
 
 
 def broadcast_action_outcome(  # noqa: PLR0913 - all keyword-only, one per outcome-broadcast facet

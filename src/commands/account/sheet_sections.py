@@ -21,7 +21,13 @@ if TYPE_CHECKING:
     from evennia import Command
 
     from world.character_sheets.models import CharacterSheet
-    from world.character_sheets.types import TechniqueEntry
+    from world.character_sheets.types import (
+        AuraData,
+        GiftEntry,
+        MotifSection,
+        ResonanceBalanceEntry,
+        TechniqueEntry,
+    )
     from world.magic.types.technique_effects import (
         TechniqueFormPayload,
         TechniquePricePayload,
@@ -475,40 +481,58 @@ def _render_magic_section(command: Command) -> list[str]:
         return ["Nothing is known of your magic."]
     lines = ["|wYour spellbook:|n"]
     for gift in magic["gifts"]:
-        lines.append(f"  |w{gift['name']}|n")
-        for technique in gift["techniques"]:
-            # #2898: the list used to stop at name + level, so a player could read
-            # their own spellbook without learning what a single technique did.
-            # #4099: when the owner's own name differs from the catalog's, show
-            # both so the player can tell them apart.
-            if technique["name"] == technique["catalog_name"]:
-                lines.append(f"    {technique['name']} (level {technique['level']})")
-            else:
-                lines.append(
-                    f"    {technique['name']} ({technique['catalog_name']}, "
-                    f"level {technique['level']})"
-                )
-            lines.append(f"      {technique['effect_summary']['summary']}")
-            lines.extend(_render_technique_forms(technique))
-        if gift["resonances"]:
-            lines.append(f"    resonances: {', '.join(gift['resonances'])}")
-    motif = magic["motif"]
-    if motif:
-        resonances = ", ".join(entry["name"] for entry in motif["resonances"])
-        lines.append(f"  Motif: {motif['description'] or resonances}")
-        if motif["description"] and resonances:
-            lines.append(f"    resonances: {resonances}")
-    aura = magic["aura"]
+        lines.extend(_render_magic_gift(gift))
+    lines.extend(_render_magic_motif(magic["motif"]))
+    lines.extend(_render_magic_aura(magic["aura"]))
+    lines.extend(_render_magic_resonances(magic["resonances"]))
+    return lines
+
+
+def _render_magic_gift(gift: GiftEntry) -> list[str]:
+    """Render a gift and its techniques for the spellbook."""
+    lines = [f"  |w{gift['name']}|n"]
+    for technique in gift["techniques"]:
+        if technique["name"] == technique["catalog_name"]:
+            label = f"{technique['name']} (level {technique['level']})"
+        else:
+            label = f"{technique['name']} ({technique['catalog_name']}, level {technique['level']})"
+        lines.append(f"    {label}")
+        lines.append(f"      {technique['effect_summary']['summary']}")
+        lines.extend(_render_technique_forms(technique))
+    if gift["resonances"]:
+        lines.append(f"    resonances: {', '.join(gift['resonances'])}")
+    return lines
+
+
+def _render_magic_motif(motif: MotifSection | None) -> list[str]:
+    """Render an optional motif and its resonance details."""
+    if not motif:
+        return []
+    resonances = ", ".join(entry["name"] for entry in motif["resonances"])
+    lines = [f"  Motif: {motif['description'] or resonances}"]
+    if motif["description"] and resonances:
+        lines.append(f"    resonances: {resonances}")
+    return lines
+
+
+def _render_magic_aura(aura: AuraData | None) -> list[str]:
+    """Render the aura glimpse when the character has one."""
     if aura and aura["glimpse_story"]:
-        lines.append(f"  Aura: {aura['glimpse_story']}")
-    resonances = magic["resonances"]
-    if resonances:
-        lines.append("  Resonance:")
-        lines.extend(
+        return [f"  Aura: {aura['glimpse_story']}"]
+    return []
+
+
+def _render_magic_resonances(resonances: list[ResonanceBalanceEntry]) -> list[str]:
+    """Render resonance balances when present."""
+    if not resonances:
+        return []
+    return [
+        "  Resonance:",
+        *(
             f"    {entry['name']}: {entry['balance']} (lifetime {entry['lifetime_earned']})"
             for entry in resonances
-        )
-    return lines
+        ),
+    ]
 
 
 def _render_status_section(command: Command) -> list[str]:

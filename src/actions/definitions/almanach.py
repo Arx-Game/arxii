@@ -663,7 +663,29 @@ def _resolve_anchored_kin(relation: str, kwargs: dict[str, Any]) -> dict[str, An
 
 def _resolve_kin_relation(relation: str, kwargs: dict[str, Any]) -> dict[str, Any] | ActionResult:
     """Resolve relation-specific objects before creating any kin rows."""
-    from world.roster.models import Family, Kinsperson, UnionKind  # noqa: PLC0415
+    from world.roster.models import Family  # noqa: PLC0415
+
+    values = _resolve_relation_anchor(relation, kwargs)
+    if isinstance(values, ActionResult):
+        return values
+    if relation in _anchored_relations():
+        anchored = _resolve_anchored_kin(relation, kwargs)
+        if isinstance(anchored, ActionResult):
+            return anchored
+        values.update(anchored)
+    family_id = kwargs.get("born_into_family_id")
+    if family_id:
+        values["born_into"] = Family.objects.filter(pk=family_id).first()
+        if values["born_into"] is None:
+            return ActionResult(success=False, message="No such family.")
+    return values
+
+
+def _resolve_relation_anchor(
+    relation: str, kwargs: dict[str, Any]
+) -> dict[str, Any] | ActionResult:
+    """Resolve child or spouse relation fields, leaving unrelated fields empty."""
+    from world.roster.models import Kinsperson, UnionKind  # noqa: PLC0415
     from world.seeds.kinship import MARRIAGE_KIND_NAME  # noqa: PLC0415
     from world.societies.houses.constants import ClaimKinRelation  # noqa: PLC0415
 
@@ -689,16 +711,6 @@ def _resolve_kin_relation(relation: str, kwargs: dict[str, Any]) -> dict[str, An
         values["marriage_kind"] = UnionKind.objects.filter(name=MARRIAGE_KIND_NAME).first()
         if values["marriage_kind"] is None:
             return ActionResult(success=False, message="Marriage is not configured for this realm.")
-    elif relation in _anchored_relations():
-        anchored = _resolve_anchored_kin(relation, kwargs)
-        if isinstance(anchored, ActionResult):
-            return anchored
-        values.update(anchored)
-    family_id = kwargs.get("born_into_family_id")
-    if family_id:
-        values["born_into"] = Family.objects.filter(pk=family_id).first()
-        if values["born_into"] is None:
-            return ActionResult(success=False, message="No such family.")
     return values
 
 

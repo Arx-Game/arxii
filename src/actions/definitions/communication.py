@@ -448,6 +448,27 @@ def _record_say_submission(  # noqa: PLR0913
     return None
 
 
+def _broadcast_pose(actor: ObjectDB, caller_state: Any, text: str, place: Place | None) -> None:
+    """Render and broadcast a pose using the actor's currently visible name."""
+    from world.scenes.services import active_persona_for_sheet  # noqa: PLC0415
+
+    sheet = actor.character_sheet
+    actor_name = active_persona_for_sheet(sheet).name if sheet is not None else actor.key
+    # Place-scoped interactions are receiver-scoped while this room line is not,
+    # so it stays untagged there until room delivery is place-aware (#3933).
+    message_location(
+        caller_state,
+        render_line(
+            "{caller}",
+            InteractionMode.POSE,
+            text,
+            place_name=place.name if place is not None else None,
+            actor_name=actor_name,
+        ),
+        echo_of=InteractionMode.POSE if place is None else None,
+    )
+
+
 def _record_pose_submission(  # noqa: PLR0913
     actor: ObjectDB,
     *,
@@ -619,33 +640,6 @@ class PoseAction(Action):
         caller_state = sdm.initialize_state_for_object(actor)
         target_personas = _characters_to_active_personas(targets) if targets else None
 
-        def _broadcast() -> None:
-            # The actor is in the line on telnet too (#3858): ``{caller}`` is
-            # resolved per looker by message_location's mapping, so a disguise
-            # reads as whatever that looker sees. The persona's own name is what
-            # an already-named pose opens with (#4128), the same check the web
-            # line makes, so the two never disagree on ``Bram deals.``. An actor
-            # with no sheet (a sheetless object posing on telnet) has no persona
-            # and no web line; its key is the name its pose would open with.
-            from world.scenes.services import active_persona_for_sheet  # noqa: PLC0415
-
-            sheet = actor.character_sheet
-            actor_name = active_persona_for_sheet(sheet).name if sheet is not None else actor.key
-            # A place-scoped row is receiver-scoped (record_interaction fills its
-            # receivers from PlacePresence) while this room line is not, so the
-            # line stays untagged there until room delivery is place-aware (#3933).
-            message_location(
-                caller_state,
-                render_line(
-                    "{caller}",
-                    InteractionMode.POSE,
-                    text,
-                    place_name=place.name if place is not None else None,
-                    actor_name=actor_name,
-                ),
-                echo_of=InteractionMode.POSE if place is None else None,
-            )
-
         client_request_id = kwargs.get("client_request_id")
         if client_request_id is not None:
             failure = _record_pose_submission(
@@ -654,13 +648,13 @@ class PoseAction(Action):
                 place=place,
                 target_personas=target_personas,
                 reply_to=reply_to,
-                broadcast=_broadcast,
+                broadcast=lambda: _broadcast_pose(actor, caller_state, text, place),
                 client_request_id=client_request_id,
             )
             if failure is not None:
                 return failure
         else:
-            _broadcast()
+            _broadcast_pose(actor, caller_state, text, place)
             record_interaction(
                 character=actor,
                 content=text,

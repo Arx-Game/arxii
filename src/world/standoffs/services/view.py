@@ -362,89 +362,137 @@ def build_standoff_view(
         ),
     )
     for group in encounter.standoff_groups.select_related("creature_template"):
-        reveals = list(group.reveals.select_related("drive__property", "regard_rule"))
-        shares = list(group.spark_shares.select_related("regard_rule"))
-        matches = regard_matches(group, viewer_sheet)
-        facts = _GroupFacts(group, reveals, matches, shares)
-        members = active_members(group)
-        hidden = hidden_things(
+        _append_group_views(
+            view,
             group,
+            viewer_sheet,
             participants,
-            revealed=facts.revealed_set,
-            known_matches={viewer_sheet.pk: matches},
+            capability_ids,
+            approaches,
+            all_terms,
+            config,
+            grader,
         )
-        is_open = group.state == StandoffGroupState.OPEN and bool(members)
-        ctx = (
-            build_grading_context(group, viewer_sheet, members=members, matches=matches)
-            if is_open
-            else None
-        )
-        read = ("", "")
-        if config.read_check_type is not None:
-            read = (config.read_check_type.name, "")
-            if ctx is not None:
-                difficulty = level_opposition(
-                    config.read_check_type, level=ctx.level, character=ctx.first.objectdb
-                )
-                read = (read[0], grader.grade(config.read_check_type, difficulty, []))
-        view.groups.append(
-            _group_view(
-                facts,
-                viewer_sheet,
-                len(members),
-                len(hidden),
-                read=read,
-                morale_state=_worst_morale_state(members),
-                terms_morale_ease=morale_terms_ease(members, config),
-            )
-        )
-        own, others = _sparks(facts, viewer_sheet)
-        view.sparks.extend(own)
-        view.shared_sparks.extend(others)
-        if ctx is None:
-            continue
-        targeted_by_capability = targeted_properties_by_capability(
-            capability_ids, [drive.property_id for drive in ctx.drives]
-        )
-        for approach in approaches:
-            graded, hits, targeted = press_grade(
-                group, viewer_sheet, approach, ctx, targeted_by_capability
-            )
-            grade = grader.grade(approach.check_type, graded.difficulty, graded.contributions)
-            levers, hits_drive = _levers(facts, hits, targeted)
-            view.approaches.append(
-                ApproachView(
-                    approach_id=approach.pk,
-                    group_id=group.pk,
-                    name=approach.name,
-                    grade=grade,
-                    grade_label=grade_label(grade),
-                    check_caption=_approach_caption(approach),
-                    levers=levers,
-                    hits_revealed_drive=hits_drive,
-                    casts_technique=approach.casts_technique,
-                )
-            )
-        if config.terms_check_type is None:
-            continue
-        revealed_props = facts.revealed_drive_property_ids
-        for terms in all_terms:
-            if (
-                terms.required_drive_id is not None
-                and terms.required_drive_id not in revealed_props
-            ):
-                continue
-            graded = terms_difficulty(group, viewer_sheet, terms, ctx, config)
-            grade = grader.grade(config.terms_check_type, graded.difficulty, graded.contributions)
-            view.terms.append(
-                TermsView(
-                    terms_id=terms.pk,
-                    name=terms.name,
-                    group_id=group.pk,
-                    description=terms.description,
-                    grade=grade,
-                    grade_label=grade_label(grade),
-                    critical_label=terms.get_critical_effect_display(),
-                )
-            )
     return view
+
+
+def _append_group_views(  # noqa: PLR0913 - inputs are the per-view and per-group processing context
+    view: StandoffView,
+    group: StandoffGroup,
+    viewer: CharacterSheet,
+    participants: list,
+    capability_ids: list[int],
+    approaches: list[StandoffApproach],
+    all_terms: list[StandoffTerms],
+    config: StandoffConfig,
+    grader: _Grader,
+) -> None:
+    """Add one group's summary, approaches, and terms to the viewer's view."""
+    reveals = list(group.reveals.select_related("drive__property", "regard_rule"))
+    shares = list(group.spark_shares.select_related("regard_rule"))
+    matches = regard_matches(group, viewer)
+    facts = _GroupFacts(group, reveals, matches, shares)
+    members = active_members(group)
+    hidden = hidden_things(
+        group, participants, revealed=facts.revealed_set, known_matches={viewer.pk: matches}
+    )
+    is_open = group.state == StandoffGroupState.OPEN and bool(members)
+    ctx = (
+        build_grading_context(group, viewer, members=members, matches=matches) if is_open else None
+    )
+    read = _read_grade(config, ctx, grader)
+    view.groups.append(
+        _group_view(
+            facts,
+            viewer,
+            len(members),
+            len(hidden),
+            read=read,
+            morale_state=_worst_morale_state(members),
+            terms_morale_ease=morale_terms_ease(members, config),
+        )
+    )
+    own, others = _sparks(facts, viewer)
+    view.sparks.extend(own)
+    view.shared_sparks.extend(others)
+    if ctx is None:
+        return
+    targeted = targeted_properties_by_capability(
+        capability_ids, [drive.property_id for drive in ctx.drives]
+    )
+    _append_approaches(view, facts, group, viewer, ctx, approaches, targeted, grader)
+    _append_terms(view, facts, group, viewer, ctx, all_terms, config, grader)
+
+
+def _read_grade(config: StandoffConfig, ctx, grader: _Grader) -> tuple[str, str]:
+    """Return the configured read check and its grade when a group can be read."""
+    check_type = config.read_check_type
+    if check_type is None:
+        return "", ""
+    if ctx is None:
+        return check_type.name, ""
+    difficulty = level_opposition(check_type, level=ctx.level, character=ctx.first.objectdb)
+    return check_type.name, grader.grade(check_type, difficulty, [])
+
+
+def _append_approaches(  # noqa: PLR0913 - one approach-list build context
+    view: StandoffView,
+    facts: _GroupFacts,
+    group: StandoffGroup,
+    viewer: CharacterSheet,
+    ctx,
+    approaches: list[StandoffApproach],
+    targeted_by_capability: dict,
+    grader: _Grader,
+) -> None:
+    """Add all available approach grades for one group."""
+    for approach in approaches:
+        graded, hits, targeted = press_grade(group, viewer, approach, ctx, targeted_by_capability)
+        grade = grader.grade(approach.check_type, graded.difficulty, graded.contributions)
+        levers, hits_drive = _levers(facts, hits, targeted)
+        view.approaches.append(
+            ApproachView(
+                approach_id=approach.pk,
+                group_id=group.pk,
+                name=approach.name,
+                grade=grade,
+                grade_label=grade_label(grade),
+                check_caption=_approach_caption(approach),
+                levers=levers,
+                hits_revealed_drive=hits_drive,
+                casts_technique=approach.casts_technique,
+            )
+        )
+
+
+def _append_terms(  # noqa: PLR0913 - one terms-list build context
+    view: StandoffView,
+    facts: _GroupFacts,
+    group: StandoffGroup,
+    viewer: CharacterSheet,
+    ctx,
+    all_terms: list[StandoffTerms],
+    config: StandoffConfig,
+    grader: _Grader,
+) -> None:
+    """Add visible terms grades for one group."""
+    check_type = config.terms_check_type
+    if check_type is None:
+        return
+    revealed_props = facts.revealed_drive_property_ids
+    for terms in all_terms:
+        if terms.required_drive_id is not None and terms.required_drive_id not in revealed_props:
+            continue
+        graded = terms_difficulty(group, viewer, terms, ctx, config)
+        grade = grader.grade(check_type, graded.difficulty, graded.contributions)
+        view.terms.append(
+            TermsView(
+                terms_id=terms.pk,
+                name=terms.name,
+                group_id=group.pk,
+                description=terms.description,
+                grade=grade,
+                grade_label=grade_label(grade),
+                critical_label=terms.get_critical_effect_display(),
+            )
+        )

@@ -9,11 +9,15 @@ from datetime import datetime
 from typing import TYPE_CHECKING, cast
 
 from world.combat.constants import AFTERMATH_ATTRIBUTION_WINDOW, EncounterOutcome, ParticipantStatus
-from world.combat.types import AftermathDigest, WonOverSnapshot
+from world.combat.types import AftermathDigest, WonOverRow, WonOverSnapshot
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
+
     from world.character_sheets.models import CharacterSheet
     from world.combat.models import CombatEncounter, CombatParticipant
+    from world.stories.constants import BeatOutcome
+    from world.stories.models import BeatCompletion
 
 
 def aftermath_window(encounter: CombatEncounter) -> tuple[datetime, datetime]:
@@ -184,6 +188,26 @@ def _objective_branch_lines(digest: AftermathDigest) -> list[str]:
     return lines
 
 
+def _won_over_digest_line(rows: list[WonOverRow], join_labels: Callable[[list[str]], str]) -> str:
+    """Render all won-over rows as one digest line."""
+    entries = []
+    for row in rows:
+        detail = row.verb if not row.source_label else f"{row.verb}, by {row.source_label}"
+        if row.holds_until_settled:
+            detail = f"{detail}; holds until settled"
+        entries.append(f"{row.name} ({detail})")
+    return f"Won over: {join_labels(entries)}."
+
+
+def _story_digest_line(completion: BeatCompletion, beat_outcome: type[BeatOutcome]) -> str:
+    """Render the visible story beat completion line."""
+    beat = completion.beat
+    text = beat.player_resolution_text or "the beat is resolved"
+    tier = completion.outcome_tier.name if completion.outcome_tier_id else "ungraded"
+    outcome_label = beat_outcome(completion.outcome).label
+    return f"Story: {text} ({tier}, {outcome_label})."
+
+
 def render_aftermath_digest(digest: AftermathDigest, *, include_secret_beat: bool) -> str:
     """Render a digest to player-facing text, omitting sections with nothing to say."""
     from world.combat.interaction_services import join_labels  # noqa: PLC0415
@@ -200,13 +224,7 @@ def render_aftermath_digest(digest: AftermathDigest, *, include_secret_beat: boo
         lines.append(f"You carry out of the fight: {join_labels(condition_labels)}.")
 
     if digest.won_over:
-        entries = []
-        for row in digest.won_over:
-            detail = row.verb if not row.source_label else f"{row.verb}, by {row.source_label}"
-            if row.holds_until_settled:
-                detail = f"{detail}; holds until settled"
-            entries.append(f"{row.name} ({detail})")
-        lines.append(f"Won over: {join_labels(entries)}.")
+        lines.append(_won_over_digest_line(digest.won_over, join_labels))
 
     if digest.companions_lost:
         lines.append(f"You lost {join_labels(digest.companions_lost)}.")
@@ -223,12 +241,7 @@ def render_aftermath_digest(digest: AftermathDigest, *, include_secret_beat: boo
     if digest.beat_completion is not None and (
         include_secret_beat or digest.beat_visible_to_player
     ):
-        completion = digest.beat_completion
-        beat = completion.beat
-        text = beat.player_resolution_text or "the beat is resolved"
-        tier = completion.outcome_tier.name if completion.outcome_tier_id else "ungraded"
-        outcome_label = BeatOutcome(completion.outcome).label
-        lines.append(f"Story: {text} ({tier}, {outcome_label}).")
+        lines.append(_story_digest_line(digest.beat_completion, BeatOutcome))
 
     if digest.peril_round_active:
         lines.append("Your peril is not over: a scene round now tracks it.")
