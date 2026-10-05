@@ -9,6 +9,8 @@ from __future__ import annotations
 from collections import Counter
 from typing import TYPE_CHECKING
 
+from django.db import transaction
+
 from world.combat.constants import (
     CombatAllegiance,
     OpponentStatus,
@@ -376,8 +378,16 @@ def encounter_for_character(character: ObjectDB) -> CombatEncounter | None:  # n
 
 
 def deliver_spectacle(encounter: CombatEncounter, result: SpectacleResult) -> None:
-    """Post a spectacle's lines to the encounter room, web and telnet."""
+    """Post a spectacle's lines to the encounter room, web and telnet, once committed.
+
+    The post waits for the surrounding transaction: the client refetches the encounter on
+    the payload and would read pre-commit morale, and a rolled-back round must not have
+    announced a shift that never happened.
+    """
     from world.combat.interaction_services import broadcast_action_outcome  # noqa: PLC0415
 
-    for line in result.lines:
-        broadcast_action_outcome(encounter=encounter, narration=line, deliver_telnet=True)
+    def _post() -> None:
+        for line in result.lines:
+            broadcast_action_outcome(encounter=encounter, narration=line, deliver_telnet=True)
+
+    transaction.on_commit(_post, robust=True)

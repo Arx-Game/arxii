@@ -144,8 +144,11 @@ class SpectacleWiringTests(TestCase):
             npc_action.targets.add(participant)
         return encounter, opponents, sheet, technique
 
-    def _resolve(self, encounter, success_level=2):
-        resolve_round(encounter, offense_check_fn=lambda *_args, **_kwargs: _check(success_level))
+    def _resolve(self, encounter, success_level=2, *, execute_commit=True):
+        with self.captureOnCommitCallbacks(execute=execute_commit):
+            resolve_round(
+                encounter, offense_check_fn=lambda *_args, **_kwargs: _check(success_level)
+            )
 
     def _morale(self, opponents):
         return [type(o).objects.get(pk=o.pk).morale for o in opponents]
@@ -162,6 +165,15 @@ class SpectacleWiringTests(TestCase):
         self.assertTrue(any(m < 70 for m in self._morale(opponents)))
         name = sheet.primary_persona.name
         self.assertTrue(any(name in o.content for o in self._spectacle_outcomes(encounter)))
+
+    def test_credit_line_is_not_posted_before_the_round_commits(self) -> None:
+        encounter, _, _, _ = self._encounter(ultimate=True)
+        with self.captureOnCommitCallbacks(execute=False) as callbacks:
+            resolve_round(encounter, offense_check_fn=lambda *_args, **_kwargs: _check(2))
+        before = self._spectacle_outcomes(encounter).count()
+        for callback in callbacks:
+            callback()
+        self.assertGreater(self._spectacle_outcomes(encounter).count(), before)
 
     def test_ordinary_success_earns_nothing(self) -> None:
         encounter, opponents, _, _ = self._encounter(bandit_health=500)
