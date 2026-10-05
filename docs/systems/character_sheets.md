@@ -54,8 +54,8 @@ painted in night literals in both themes — it is the cover, and a cover does n
 with the reader's lights. Nothing mechanical appears on it: no health, no fatigue, no
 attributes.
 
-**Eight sections** replace the old sixteen tabs. Five are public — Sheet, Physical,
-Ties, Distinctions, Magic — then a visible break labelled "Yours only" and three the
+**Nine sections** replace the old sixteen tabs. Six are public — Sheet, Physical,
+Ties, Distinctions, Magic, Gallery (#4151) — then a visible break labelled "Yours only" and three the
 character's own player reads: Knowledge (secrets, clues, gossip), Estate (purse,
 carried, property, the land their organizations hold, agreements, the law) and Growth
 (advancement, sheet-change requests, languages, origin story). Estate is named for what
@@ -81,15 +81,29 @@ tier. A viewer who gets neither band is offered a rumor about the character in t
 place. Condition on Physical reads as sentences for the owner and staff, and as one
 observational line for everyone else.
 
-**`looks` and `plate_ink`** are the payload's contribution. `_build_looks` returns the
-character's tenure media with the `MoodOption` each is tagged with (`TenureMedia.look`),
-the worn one first, so the plate can wear one and offer the rest beside it; the owner
-clicking a look calls `POST /api/roster/entries/{pk}/set_profile_picture/`. A
-non-privileged viewer receives only public-gallery images plus the worn one — a private
-gallery's `allowed_viewers` sharing is honoured on the gallery pages and deliberately not
-here, so the strip under-shows rather than risking a private image on a page anyone can
-open. `plate_ink` (`PlateInk`: ember / verdigris / rose / night) is OOC chrome, ungated,
+**`looks`, `profile_picture`, `viewer_is_friend` and `plate_ink`** are the payload's
+contribution. A **look** is a picture with a saved 4:5 crop (#4151). `_build_looks`
+returns every look the character may show (the current tenure's and the character's
+art, through `gallery_for`; hidden art and NSFW pictures never), each at its cropped URL
+(`look_url`) with the `MoodOption` it shows, the worn one first, in two queries;
+`profile_picture` is the worn look's crop via the query-free `portrait_url`. The strip
+labels each look by its mood and numbers a repeat ("Furious 2"); the owner clicking one
+calls `POST /api/roster/entries/{pk}/set_profile_picture/`, and the owner's **Add** tile
+opens the Add a look flow (pick or upload a picture, crop it). There is no instruction
+line on the plate. `viewer_is_friend` (owner, staff, or the owner's allow list) decides
+whether the Gallery veils NSFW pictures. `plate_ink` (`PlateInk`: ember / verdigris / rose / night) is OOC chrome, ungated,
 and picked in settings rather than on the sheet.
+
+**The Gallery (#4151)** is a public section laid out after its approved demo: looks as a
+4:5 grid on the left, every other picture one at a time in a tall frame with thumbnails
+on the right, full size on click (`character_sheets/components/sheet/gallery/`). Words
+appear on hover only when written, tools on hover only for the character's player or
+staff; a stranger sees NSFW pictures veiled until clicked, a friend sees them plain, and
+a signed-out visitor sees no art anywhere (the sheet already needs an account). The
+cropper locks the frame to 4:5 (`cropMath.ts`: corners resize from the opposite corner,
+edges from the opposite edge staying centred). It reads and writes
+`/api/roster/tenure-media/` (see `roster.md`), which replaced the Profile Media page and
+named galleries.
 
 **`worn` and `mentors`** are the payload's other two contributions. `_build_worn` lists
 what the character has on, and what separates viewers is the #2985 layer walk rather than

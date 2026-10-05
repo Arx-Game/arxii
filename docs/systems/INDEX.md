@@ -2580,12 +2580,12 @@ Character identity, appearance, demographics, and guise system.
   `POST …/spend-maturation-point/`.
 - **The Reference Sheet (#3898):** the web sheet is an artist's reference sheet on the
   Folio system — a night plate (art, name + titles, concept, quote, two glance lines,
-  the looks strip) over eight sections, five public and three the owner alone reads
-  (Knowledge, Estate, Growth). Friends moved to `/profile/friends`. Gating is
+  the looks strip) over nine sections, six public (Gallery added by #4151) and three
+  the owner alone reads (Knowledge, Estate, Growth). Friends moved to `/profile/friends`. Gating is
   render-or-vanish: a band a viewer may not read is absent, never an empty state.
-  Payload additions: `looks` (tenure media tagged with the `MoodOption` each shows, via
-  `TenureMedia.look`; public-gallery images plus the worn one for a non-privileged
-  viewer), `plate_ink` (`PlateInk`, OOC chrome), `worn` (what the character has on,
+  Payload additions: `looks` (#4151: every look the character may show, a picture
+  with a saved 4:5 crop, at its cropped URL, with the `MoodOption` it shows),
+  `viewer_is_friend` (the Gallery's NSFW veil), `plate_ink` (`PlateInk`, OOC chrome), `worn` (what the character has on,
   gated by the #2985 layer walk rather than a visibility tier), `mentors` (#1165
   Mentor's Vow bonds, owner and staff only), `domains` (#3901 — land the character's
   organizations hold, gated on active membership; owner and staff only), and `standing` +
