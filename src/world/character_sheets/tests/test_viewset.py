@@ -2615,9 +2615,13 @@ class TestCharacterSheetQueryCount(TestCase):
         )
 
         # --- Profile picture ---
+        # Worn, so a look (#4151): only a cropped picture is a profile picture.
         cls.tenure_media = TenureMediaFactory(
             tenure=cls.tenure,
             media__cloudinary_url="https://res.cloudinary.com/test/image/upload/full.jpg",
+            crop_x=0,
+            crop_y=0,
+            crop_width=200,
         )
         cls.roster_entry.profile_picture = cls.tenure_media
         cls.roster_entry.save(update_fields=["profile_picture"])
@@ -2927,9 +2931,13 @@ class TestPrefetchCompleteness(TestCase):
         )
 
         # Profile picture
+        # Worn, so a look (#4151): only a cropped picture is a profile picture.
         cls.tenure_media = TenureMediaFactory(
             tenure=cls.tenure,
             media__cloudinary_url="https://res.cloudinary.com/test/pf.jpg",
+            crop_x=0,
+            crop_y=0,
+            crop_width=200,
         )
         cls.roster_entry.profile_picture = cls.tenure_media
         cls.roster_entry.save(update_fields=["profile_picture"])
