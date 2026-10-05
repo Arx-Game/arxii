@@ -123,9 +123,12 @@ class LevelOpposedSocialJourneyTests(TestCase):
 
     def setUp(self) -> None:
         from world.checks.models import CheckType
+        from world.mechanics.models import ModifierTarget
 
         CharacterTraitValue.flush_instance_cache()
         CheckType.flush_instance_cache()
+        # Class-level trait->target map left dangling by earlier suites' rolled-back rows.
+        ModifierTarget.clear_trait_cache()
 
         self.accrue_patcher = patch("world.scenes.action_services.accrue")
         self.accrue_patcher.start()

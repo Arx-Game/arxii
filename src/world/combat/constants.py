@@ -35,6 +35,13 @@ AFTERMATH_ATTRIBUTION_WINDOW = timedelta(minutes=1)
 # ---------------------------------------------------------------------------
 
 
+class CauseKind(models.TextChoices):
+    """Why a kind of creature picks a fight when nothing else moves it."""
+
+    NONE = "none", "None"
+    PREDATION = "predation", "Predation"
+
+
 class EncounterType(models.TextChoices):
     """The type of combat encounter."""
 
@@ -544,6 +551,29 @@ MINDLESS_MORALE_RESISTANCE: int = 30
 RALLY_GREAT_SUCCESS_LEVEL: int = 3  # great success: restore ally morale
 PARLEY_DECISIVE_SUCCESS_LEVEL: int = 3  # decisive: calm the opponent
 PARLEY_CRITICAL_SUCCESS_LEVEL: int = 5  # critical + broken: NPC yields
+
+
+class SpectacleKind(models.TextChoices):
+    """What kind of earned display shook the witnesses (#4147)."""
+
+    AUDERE_ENTRY = "audere_entry", "Audere entry"
+    ULTIMATE = "ultimate", "Ultimate"
+    CROSSING = "crossing", "Crossing"
+    CRITICAL_TECHNIQUE = "critical_technique", "Critical technique"
+    DEVASTATING_ACTION = "devastating_action", "Devastating action"
+
+
+class SpectacleReaction(models.TextChoices):
+    """How a witness group reacted, for picking an authored flavour line (#4147).
+
+    SHAKEN: morale fell but the state did not change. HEARTENED: allies gained morale.
+    """
+
+    SHAKEN = "shaken", "Shaken"
+    FALTERING = "faltering", "Faltering"
+    BROKEN = "broken", "Broken"
+    HEARTENED = "heartened", "Heartened"
+
 
 # ---------------------------------------------------------------------------
 # Clash enums

@@ -98,13 +98,23 @@ Domain-local vocabulary. Cross-cutting terms live in the root
   titles, the concept, the quote, two glance lines and the looks strip. Painted
   in night literals in both themes because it is the cover of the page. Nothing
   mechanical belongs on it. _Avoid_: header, hero, banner.
-- **Look** — one image of a character, tagged with the `MoodOption` it shows
-  (`TenureMedia.look`). The character WEARS one, which is the roster entry's
-  profile picture; the rest sit beside it in the strip. Tagging an image says
-  what the picture shows, never what the character feels — a look is outward and
-  public, [Mood](#mood) is inward and silent, and they share `MoodOption` only so
-  that "which mood" has one vocabulary. _Avoid_: expression, pose, portrait
-  (a portrait is any image; a look is a tagged one).
+- **Look** — a picture of a character with a saved 4:5 crop (`TenureMedia.crop_*`,
+  #4151), optionally tagged with the `MoodOption` it shows (`TenureMedia.look`).
+  The character WEARS one, which is the roster entry's profile picture and the
+  face every surface shows, at its crop; the rest sit beside it in the strip.
+  Tagging a look says what the picture shows, never what the character feels — a
+  look is outward and public, [Mood](#mood) is inward and silent, and they share
+  `MoodOption` only so that "which mood" has one vocabulary. "Profile picture" is
+  the UI's word for a look. _Avoid_: expression, pose, portrait (a portrait is any
+  image; a look is a framed one).
+- **Gallery** — a character's whole pool of pictures (#4151): the current
+  player's uploads plus the character's art. Its looks are a grid; every other
+  picture shows one at a time in a tall frame. _Avoid_: album, media page.
+- **Character art** — a picture that belongs to the character rather than to one
+  player's tenure (`TenureMedia.roster_entry`): staff-commissioned art every
+  player of the character starts with, counting against nobody's storage. A
+  player may hide it for their own time on the character, never delete it.
+  _Avoid_: house art, roster art.
 - **Plate ink** — which of four grounds a player's plate is printed on
   (`CharacterSheet.plate_ink`, `PlateInk`). OOC chrome, set in settings, and the
   only part of the sheet's appearance a player chooses. The page below the plate

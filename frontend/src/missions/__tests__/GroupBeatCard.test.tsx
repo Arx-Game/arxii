@@ -31,6 +31,7 @@ const PICK_BEAT: GroupBeatResult = {
         kind: 'branch',
         check_type_name: null,
         base_risk: 0,
+        reasons: [],
       },
     ],
     ballots: [

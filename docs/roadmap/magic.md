@@ -737,7 +737,8 @@ Audere into the moment a character's magic reaches powers otherwise out of reach
   character's single `readied` pick enforced by a DB constraint. Attaches via
   `PathGiftGrant.ultimate_techniques` (owned: Path x major Gift),
   `WorshippedBeing.ultimate_techniques` (bond: patron), and
-  `CompanionArchetype.ultimate_techniques` (bond: companion).
+  `CompanionArchetype.ultimate_techniques` (bond: companion), and (#4118)
+  `Gift.ultimate_techniques` (minor gifts).
 - Every ordinary acquisition surface (CG catalog, covenant role grants, the Sphinx's
   shopping list, the ORGANIZATION thread weave, alternate-self grants, item
   `TechniqueGrant`, GM award, ritual SERVICE dispatch) excludes `is_ultimate=True`
@@ -782,6 +783,39 @@ Audere into the moment a character's magic reaches powers otherwise out of reach
 - Authoring the ultimates themselves, and the category display labels, is staff work
   tracked under #4089 - production has 76 Path x Gift grants and 0 authored ultimates
   today, which is exactly what the Required-content sentinel above is for.
+
+---
+
+## Minor-gift ultimates and technique manifestation (#4118, BUILT 2026-10-04)
+
+The Arx 1 GM rulings for ultimates from minor gifts, and for bringing a bound being or
+companion into a fight, built as two additions to the #4098 ultimates work.
+
+**Built:**
+- `Gift.ultimate_techniques` (M2M to ultimate techniques): a MINOR gift's ultimates are
+  revealed at Audere to any character holding the gift, as a Gift group
+  (`UltimateSource.GIFT`, `_gift_pools`). A technique reachable through a patron pool and a
+  gift pool shows only in the earlier (patron) group. Admin form: minor gifts only, and
+  each ultimate must belong to the gift; `Gift.clean()` rejects flipping a gift with
+  ultimates to MAJOR.
+- `TechniqueManifestOption` (authored per technique: a `WorshippedBeing` or a
+  `CompanionArchetype`, plus a tier) and `CharacterManifestation` (the character's chosen
+  option, constrained to an active bond). `manifest_bound_entity` runs when a manifesting
+  technique resolves in combat: a being's avatar is moved into the caster's room and added
+  as an ALLY `CombatOpponent` at the option's tier; an archetype option materializes the
+  character's own companion. Works on ordinary techniques (low tier, a limited form) and on
+  ultimates (high tier, the full arrival).
+- Three REQUIRED-tier probes: `manifest-being-avatars`, `manifest-archetype-abilities`,
+  `manifest-tier-templates`.
+- The flow-payload `summon_ally` threat-pool summon is unchanged.
+- Full record: `docs/systems/magic.md`'s "Ultimates" and "Manifesting a bound entity"
+  sections; ADR-4118.
+
+**Not built:**
+- A character-creation picker for the manifested entity (GM or staff set it in the admin).
+- Manifestation outside combat.
+- A persistent bonded Companion made by a cast.
+- Authoring the options and the minor-gift ultimates is staff work.
 
 ---
 

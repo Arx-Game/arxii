@@ -1,0 +1,41 @@
+/*
+ * StandoffCard layout (#4145). The card is a size container, so its columns follow the
+ * card's own width (the 280px play sidebar stacks, a wide panel puts the group beside its
+ * hand) and never the viewport's. Colours come from the realm tokens.
+ */
+.standoff-card {
+  container-type: inline-size;
+  container-name: standoff;
+}
+
+.standoff-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0.75rem;
+}
+
+@container standoff (min-width: 36rem) {
+  .standoff-row {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    align-items: start;
+  }
+}
+
+/* A face-down card: the demo's diagonal stripe, card-shaped. */
+.standoff-facedown {
+  width: 92px;
+  height: 118px;
+  background: repeating-linear-gradient(
+    45deg,
+    hsl(var(--foreground) / 0.82),
+    hsl(var(--foreground) / 0.82) 6px,
+    hsl(var(--foreground) / 0.7) 6px,
+    hsl(var(--foreground) / 0.7) 12px
+  );
+  color: hsl(var(--background));
+}
+
+.standoff-tile {
+  width: 92px;
+  height: 118px;
+}

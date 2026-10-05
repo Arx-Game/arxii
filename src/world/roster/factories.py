@@ -3,6 +3,7 @@ Factories for roster models.
 """
 
 from django.utils import timezone
+from evennia.accounts.models import AccountDB
 import factory
 import factory.django as factory_django
 
@@ -27,7 +28,6 @@ from world.roster.models import (
     RosterTenure,
     RosterType,
     TenureDisplaySettings,
-    TenureGallery,
     TenureMedia,
 )
 
@@ -230,10 +230,17 @@ class TenureMediaFactory(factory_django.DjangoModelFactory):
         model = TenureMedia
 
     tenure = factory.SubFactory(RosterTenureFactory)
+    roster_entry = None
+    # A player's upload is owned by that tenure's player; character art (no tenure) by
+    # a fresh account standing in for the staff member who uploaded it.
     media = factory.SubFactory(
         MediaFactory,
         player_data=factory.LazyAttribute(
-            lambda obj: obj.factory_parent.tenure.player_data,
+            lambda obj: (
+                obj.factory_parent.tenure.player_data
+                if obj.factory_parent.tenure is not None
+                else PlayerDataFactory()
+            ),
         ),
     )
     sort_order = 0
@@ -249,17 +256,6 @@ class PlayerMailFactory(factory_django.DjangoModelFactory):
     recipient_tenure = factory.SubFactory(RosterTenureFactory)
     subject = factory.Sequence(lambda n: f"Subject {n}")
     message = factory.Sequence(lambda n: f"Message body {n}")
-
-
-class TenureGalleryFactory(factory_django.DjangoModelFactory):
-    """Factory for TenureGallery instances."""
-
-    class Meta:
-        model = TenureGallery
-
-    tenure = factory.SubFactory(RosterTenureFactory)
-    name = factory.Sequence(lambda n: f"Gallery {n}")
-    is_public = True
 
 
 class ArtistFactory(factory_django.DjangoModelFactory):
@@ -320,8 +316,13 @@ class NPCPresetSkillLineFactory(factory_django.DjangoModelFactory):
     value = 25
 
 
-def grant_test_tenure(character_sheet: CharacterSheet) -> RosterTenure:
+def grant_test_tenure(
+    character_sheet: CharacterSheet, account: AccountDB | None = None
+) -> RosterTenure:
     """Give ``character_sheet`` a live, non-staff tenure (achievement-eligible, #3024).
+
+    ``account`` makes that account the player, with no puppet: the state of a player who is
+    offline or on the web, which is when ``character.account`` is None (#4132).
 
     Reuses the sheet's existing RosterEntry when one exists (a second would
     violate the OneToOne); otherwise creates one.
@@ -329,4 +330,8 @@ def grant_test_tenure(character_sheet: CharacterSheet) -> RosterTenure:
     entry = character_sheet.roster_entry_or_none
     if entry is None:
         entry = RosterEntryFactory(character_sheet=character_sheet)
-    return RosterTenureFactory(roster_entry=entry, end_date=None)
+    if account is None:
+        return RosterTenureFactory(roster_entry=entry, end_date=None)
+    return RosterTenureFactory(
+        roster_entry=entry, player_data=PlayerDataFactory(account=account), end_date=None
+    )

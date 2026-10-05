@@ -505,7 +505,7 @@ class Technique(NaturalKeyMixin, DiscoverableContent, CreditedContent, SharedMem
             "#4098: an ultimate, a tide-turning power reachable only at Audere. Never "
             "learned as an ordinary technique (no CharacterTechnique row) and castable "
             "only while Audere or Audere Majora holds and it is the pick readied there. "
-            "Attach it to its source: a Path Gift Grant, a Worshipped Being or a "
+            "Attach it to its source: a Path Gift Grant, a Gift, a Worshipped Being or a "
             "Companion Archetype. Its archetype_alignment is its reveal category."
         ),
     )

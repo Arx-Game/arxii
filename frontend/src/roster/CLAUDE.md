@@ -1,19 +1,15 @@
 # Roster - Character Management Interface
 
-Character roster management system with character sheets, applications, and media galleries.
+Character roster management system with character sheets and applications. A
+character's pictures live in its sheet's Gallery tab (#4151); the data layer for it is
+`gallery.ts` here, the components are `character_sheets/components/sheet/gallery/`.
 
 ## Key Directories
-
-### `components/`
-
-- **`GalleryManagement.tsx`**: Image/file gallery management interface
-- **`MediaUploadForm.tsx`**: File upload component with privacy controls
 
 ### `pages/`
 
 - **`RosterListPage.tsx`**: Browsable character roster with filtering
 - **`CharacterSheetPage.tsx`**: Detailed character information display
-- **`PlayerMediaPage.tsx`**: Media gallery management for players
 
 ## Key Files
 
@@ -22,12 +18,15 @@ Character roster management system with character sheets, applications, and medi
 - **`api.ts`**: REST API functions for roster operations
 - **`queries.ts`**: React Query hooks for roster data
 - **`types.ts`**: TypeScript definitions for roster data structures
+- **`gallery.ts`**: The Gallery's calls and hooks (#4151): list, upload, change, delete,
+  reorder, hide/show, wear, storage, moods. Every change refreshes the gallery, the
+  sheet, the roster entry and the portrait chips
 
 ## Key Features
 
 - **Character Applications**: Apply for available roster characters
 - **Character Sheets**: Detailed character information and demographics
-- **Media Galleries**: Upload and manage character images with privacy controls
+- **Gallery**: a character's pictures and looks, on the sheet (#4151)
 - **Tenure System**: Character ownership history tracking
 - **Search and Filtering**: Advanced roster browsing capabilities
 
@@ -36,7 +35,7 @@ Character roster management system with character sheets, applications, and medi
 - **REST API**: Full CRUD operations via `/api/roster/` endpoints
 - **Pagination**: Large roster sets with efficient pagination
 - **File Upload**: Direct integration with Cloudinary for media storage
-- **Privacy Controls**: Gallery visibility and access management
+- **NSFW veil**: flagged pictures are blurred for non-friends; no per-picture privacy
 
 ## Integration Points
 

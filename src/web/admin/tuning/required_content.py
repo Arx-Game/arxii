@@ -403,6 +403,32 @@ def _probe_audere_majora_thresholds() -> ProbeResult:
     return ProbeResult(present=not missing, missing=missing, detail=detail)
 
 
+def _probe_spectacle_reaction_lines() -> ProbeResult:
+    """A generic witness line exists for every reaction a display can draw (#4147).
+
+    Consumer: `world/combat/spectacle.py` `_flavour_line`. With no GM running the scene,
+    a display's room line is the authored reaction line; a reaction with no generic row
+    (creature and kind both blank) and no more specific match posts no flavour at all.
+    A generic row with blank text counts as missing.
+    """
+    from world.combat.constants import SpectacleReaction  # noqa: PLC0415
+    from world.combat.models import SpectacleReactionLine  # noqa: PLC0415
+
+    covered = set(
+        SpectacleReactionLine.objects.filter(creature_template__isnull=True, kind="")
+        .exclude(text__regex=r"^\s*$")
+        .values_list("reaction", flat=True)
+    )
+    missing = tuple(label for value, label in SpectacleReaction.choices if value not in covered)
+    if not missing:
+        return ProbeResult(present=True)
+    detail = (
+        "No generic spectacle reaction line for: "
+        f"{', '.join(missing)}. Displays in GM-less scenes post no flavour for them."
+    )
+    return ProbeResult(present=False, missing=missing, detail=detail)
+
+
 def _probe_path_major_gift_ultimates() -> ProbeResult:
     """Every Path x MAJOR-gift grant carries at least one ultimate (#4098 decision 15).
 
@@ -424,6 +450,81 @@ def _probe_path_major_gift_ultimates() -> ProbeResult:
         return ProbeResult(present=True)
     detail = f"{len(missing)} Path / major-gift grant(s) have no ultimate: unfinished Paths."
     return ProbeResult(present=False, missing=missing, detail=detail)
+
+
+def _probe_manifest_beings_have_avatars() -> ProbeResult:
+    """Every being a technique can manifest has an avatar sheet (#4118).
+
+    Consumer: `world/magic/services/effect_handlers.py` `manifest_bound_entity`. A being
+    with no avatar sheet has nobody to arrive: the cast silently manifests nothing.
+    """
+    from world.magic.models import TechniqueManifestOption  # noqa: PLC0415
+
+    missing = tuple(
+        f"{technique_name} / {being_name}"
+        for technique_name, being_name in TechniqueManifestOption.objects.filter(
+            being__isnull=False, being__avatar_sheet__isnull=True
+        )
+        .order_by("technique__name", "being__name")
+        .values_list("technique__name", "being__name")
+    )
+    if not missing:
+        return ProbeResult(present=True)
+    detail = f"{len(missing)} manifest option(s) name a being with no avatar sheet."
+    return ProbeResult(present=False, missing=missing, detail=detail)
+
+
+def _probe_manifest_archetypes_have_abilities() -> ProbeResult:
+    """Every companion archetype a technique can manifest has abilities (#4118).
+
+    Consumer: `world/magic/services/effect_handlers.py` `manifest_bound_entity`. An
+    archetype with no `CompanionAbility` rows arrives and never acts.
+    """
+    from world.magic.models import TechniqueManifestOption  # noqa: PLC0415
+
+    missing = tuple(
+        f"{technique_name} / {archetype_name}"
+        for technique_name, archetype_name in TechniqueManifestOption.objects.filter(
+            archetype__isnull=False, archetype__abilities__isnull=True
+        )
+        .order_by("technique__name", "archetype__name")
+        .values_list("technique__name", "archetype__name")
+    )
+    if not missing:
+        return ProbeResult(present=True)
+    detail = (
+        f"{len(missing)} manifest option(s) name a companion archetype with no abilities: "
+        "it would arrive and never act."
+    )
+    return ProbeResult(present=False, missing=missing, detail=detail)
+
+
+def _probe_manifest_tiers_have_templates() -> ProbeResult:
+    """Every tier a being manifest option uses has an `OpponentTierTemplate` (#4118).
+
+    Consumer: `world/magic/services/effect_handlers.py` `manifest_bound_entity`, whose
+    `add_opponent` auto-scaling reads the tier's template through
+    `compute_opponent_stat_block` and raises when the row is absent: the cast errors
+    mid-combat instead of manifesting. `missing` lists the tiers; `detail` names the
+    techniques that use them.
+    """
+    from world.combat.models import OpponentTierTemplate  # noqa: PLC0415
+    from world.magic.models import TechniqueManifestOption  # noqa: PLC0415
+
+    rows = (
+        TechniqueManifestOption.objects.filter(being__isnull=False)
+        .exclude(tier__in=OpponentTierTemplate.objects.values("tier"))
+        .order_by("tier", "technique__name")
+        .values_list("tier", "technique__name")
+    )
+    tiers: dict[str, list[str]] = {}
+    for tier, technique_name in rows:
+        tiers.setdefault(tier, []).append(technique_name)
+    if not tiers:
+        return ProbeResult(present=True)
+    names = "; ".join(f"{tier}: {', '.join(sorted(set(t)))}" for tier, t in tiers.items())
+    detail = f"Manifest options use tier(s) with no OpponentTierTemplate row ({names})."
+    return ProbeResult(present=False, missing=tuple(tiers), detail=detail)
 
 
 def _probe_price_components_active() -> ProbeResult:
@@ -1787,6 +1888,19 @@ def _declarations() -> tuple[ContentDependency, ...]:
             admin_model="AudereMajoraThreshold",
         ),
         ContentDependency(
+            key="spectacle-reaction-lines",
+            label="Spectacle reaction lines",
+            tier=DependencyTier.REQUIRED,
+            consumer="world/combat/spectacle.py _flavour_line() (GM-less display narration)",
+            consequence=(
+                "An earned display in a scene with no GM shakes the witnesses and posts "
+                "the credit line, but a reaction (shaken, faltering, broken, heartened) "
+                "with no generic authored line gets no flavour."
+            ),
+            probe=CustomProbe(fn=_probe_spectacle_reaction_lines),
+            admin_model="SpectacleReactionLine",
+        ),
+        ContentDependency(
             key="path-major-gift-ultimates",
             label="Ultimates for every Path and major gift",
             tier=DependencyTier.REQUIRED,
@@ -1899,6 +2013,40 @@ def _declarations() -> tuple[ContentDependency, ...]:
             probe=CustomProbe(fn=_probe_companion_defeat_pool),
         ),
         ContentDependency(
+            key="manifest-being-avatars",
+            label="Manifestable beings have avatar sheets",
+            tier=DependencyTier.REQUIRED,
+            consumer="world/magic/services/effect_handlers.py manifest_bound_entity()",
+            consequence=(
+                "A technique that manifests a being with no avatar sheet has nobody "
+                "to arrive: the cast silently manifests nothing."
+            ),
+            probe=CustomProbe(fn=_probe_manifest_beings_have_avatars),
+        ),
+        ContentDependency(
+            key="manifest-archetype-abilities",
+            label="Manifestable companion archetypes have abilities",
+            tier=DependencyTier.REQUIRED,
+            consumer="world/magic/services/effect_handlers.py manifest_bound_entity()",
+            consequence=(
+                "A technique that manifests an archetype with no abilities brings a "
+                "companion that arrives and never acts."
+            ),
+            probe=CustomProbe(fn=_probe_manifest_archetypes_have_abilities),
+        ),
+        ContentDependency(
+            key="manifest-tier-templates",
+            label="Manifestable being tiers have opponent tier templates",
+            tier=DependencyTier.REQUIRED,
+            consumer="world/magic/services/effect_handlers.py manifest_bound_entity()",
+            consequence=(
+                "A being manifested at a tier with no OpponentTierTemplate row makes "
+                "the opponent auto-scaling raise: the cast errors mid-combat and the "
+                "whole round rolls back for every participant until the row exists."
+            ),
+            probe=CustomProbe(fn=_probe_manifest_tiers_have_templates),
+        ),
+        ContentDependency(
             key="capability-power-bridges",
             label="Capability combat-power bridges",
             tier=DependencyTier.REQUIRED,
@@ -1938,6 +2086,17 @@ def _declarations() -> tuple[ContentDependency, ...]:
             consequence="Players see PLACEHOLDER headings on the Audere and crossing offers.",
             probe=CustomProbe(fn=_probe_audere_offer_copy),
             admin_model="AudereThreshold",
+        ),
+        ContentDependency(
+            key="standoff-reaction-lines",
+            label="Standoff reaction lines",
+            tier=DependencyTier.TUNING,
+            consumer="world/standoffs/services/reactions.py reaction_line_for()",
+            consequence=(
+                "Standoff presses and terms show only the plain outcome line; a "
+                "critical roll gets no bigger authored reaction."
+            ),
+            probe=AnyRowProbe(label="StandoffReactionLine"),
         ),
         ContentDependency(
             key="capability-power-config",
@@ -2251,6 +2410,17 @@ def _declarations() -> tuple[ContentDependency, ...]:
                 "errors."
             ),
             probe=AnyRowProbe(label="FleeConfig"),
+        ),
+        ContentDependency(
+            key="settle-config",
+            label="Settle rules",
+            tier=DependencyTier.REQUIRED,
+            consumer="world/conditions/services.py get_settle_config()",
+            consequence=(
+                "get_settle_config creates the row lazily with its defaults, so out-of-combat "
+                "settling of round-based effects runs on untuned values until staff author it."
+            ),
+            probe=AnyRowProbe(label="SettleConfig"),
         ),
         ContentDependency(
             key="class-stage-health-rates",
@@ -3432,6 +3602,43 @@ def _declarations() -> tuple[ContentDependency, ...]:
             consequence="Players see PLACEHOLDER text on the Gift stage's make-it-yours panel.",
             probe=CustomProbe(fn=_probe_personalization_copy),
             admin_model="CGExplanation",
+        ),
+        ContentDependency(
+            key="standoff-config",
+            label="Standoff settings singleton",
+            tier=DependencyTier.REQUIRED,
+            consumer="world/standoffs/models.py StandoffConfig.load()",
+            consequence=(
+                "The standoff settings row is missing or incomplete (read check, terms "
+                "check, pass condition and turn condition must all be set); players "
+                "can only fight."
+            ),
+            probe=FilteredRowProbe(
+                label="StandoffConfig",
+                filters=(
+                    ("read_check_type__isnull", False),
+                    ("terms_check_type__isnull", False),
+                    ("pass_condition__isnull", False),
+                    ("turn_condition__isnull", False),
+                ),
+                absent_detail="No StandoffConfig row has all four of its links set.",
+            ),
+        ),
+        ContentDependency(
+            key="standoff-approaches",
+            label="Standoff approaches",
+            tier=DependencyTier.REQUIRED,
+            consumer="world/standoffs/models.py StandoffApproach",
+            consequence="Standoffs offer no approaches; players can only fight.",
+            probe=AnyRowProbe(label="StandoffApproach"),
+        ),
+        ContentDependency(
+            key="standoff-terms",
+            label="Standoff terms",
+            tier=DependencyTier.REQUIRED,
+            consumer="world/standoffs/models.py StandoffTerms",
+            consequence="Standoffs offer no terms; players can only fight.",
+            probe=AnyRowProbe(label="StandoffTerms"),
         ),
     )
 

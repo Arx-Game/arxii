@@ -29,6 +29,8 @@ from world.combat.constants import (
     ParticipantStatus,
     RiskLevel,
     SelectionType,
+    SpectacleKind,
+    SpectacleReaction,
     StakesLevel,
     SustainedKind,
     TargetingMode,
@@ -63,6 +65,9 @@ from world.combat.models import (
     PendingOpponentAttack,
     PendingSelection,
     RiskScalingModifier,
+    SpectacleConfig,
+    SpectacleReactionLine,
+    SpectacleRecord,
     StakesLevelRequirement,
     StrainConfig,
     SustainedAction,
@@ -1977,3 +1982,28 @@ class PendingSelectionFactory(factory_django.DjangoModelFactory):
     target_opponent = factory.SubFactory(
         CombatOpponentFactory, encounter=factory.SelfAttribute(_PARENT_ENCOUNTER_ATTR)
     )
+
+
+class SpectacleConfigFactory(factory_django.DjangoModelFactory):
+    class Meta:
+        model = SpectacleConfig
+        django_get_or_create = ("id",)
+
+    id = 1
+
+
+class SpectacleRecordFactory(factory_django.DjangoModelFactory):
+    class Meta:
+        model = SpectacleRecord
+
+    opponent = factory.SubFactory(CombatOpponentFactory)
+    caster = factory.SubFactory(_CHARACTER_SHEET_FACTORY)
+    kind = SpectacleKind.AUDERE_ENTRY
+
+
+class SpectacleReactionLineFactory(factory_django.DjangoModelFactory):
+    class Meta:
+        model = SpectacleReactionLine
+
+    reaction = SpectacleReaction.FALTERING
+    text = "The <group> give ground before <actor>'s <display>."

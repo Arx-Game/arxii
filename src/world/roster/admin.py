@@ -8,6 +8,7 @@ from world.roster.models import (
     Family,
     FamilyKind,
     FamilyMembership,
+    HiddenCharacterArt,
     KinSlotPool,
     Kinsperson,
     KinspersonTraitValue,
@@ -23,7 +24,6 @@ from world.roster.models import (
     Soul,
     SoulIncarnation,
     TenureDisplaySettings,
-    TenureGallery,
     TenureMedia,
     UnionKind,
 )
@@ -329,31 +329,29 @@ class TenureDisplaySettingsAdmin(admin.ModelAdmin):
     )
 
 
-@admin.register(TenureGallery)
-class TenureGalleryAdmin(admin.ModelAdmin):
-    list_display = ["tenure", "name", "is_public"]
-    list_filter = ["is_public"]
-    search_fields = ["name", "tenure__roster_entry__character_sheet__character__db_key"]
-
-    autocomplete_fields = ["tenure", "allowed_viewers"]
-
-    fieldsets = (
-        ("Details", {"fields": ("tenure", "name", "is_public")}),
-        ("Permissions", {"fields": ("allowed_viewers",)}),
-    )
-
-
 @admin.register(TenureMedia)
 class TenureMediaAdmin(admin.ModelAdmin):
-    list_display = ["tenure", "media", "gallery", "sort_order"]
-    search_fields = ["tenure__roster_entry__character_sheet__character__db_key", "media__title"]
+    list_display = ["media", "tenure", "roster_entry", "crop_width", "sort_order"]
+    search_fields = [
+        "tenure__roster_entry__character_sheet__character__db_key",
+        "roster_entry__character_sheet__character__db_key",
+        "media__title",
+    ]
 
-    autocomplete_fields = ["tenure", "media", "gallery"]
+    autocomplete_fields = ["tenure", "roster_entry", "media", "look"]
 
     fieldsets = (
-        ("Link", {"fields": ("tenure", "media", "gallery")}),
+        # Exactly one of tenure (a player's upload) or roster entry (character art, #4151).
+        ("Link", {"fields": ("tenure", "roster_entry", "media")}),
+        ("Look", {"fields": ("crop_x", "crop_y", "crop_width", "look")}),
         ("Settings", {"fields": ("sort_order",)}),
     )
+
+
+@admin.register(HiddenCharacterArt)
+class HiddenCharacterArtAdmin(admin.ModelAdmin):
+    list_display = ["tenure", "picture"]
+    autocomplete_fields = ["tenure", "picture"]
 
 
 @admin.register(PlayerMail)

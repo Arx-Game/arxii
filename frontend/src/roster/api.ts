@@ -6,7 +6,6 @@ import type {
   RosterData,
   RosterEntryData,
   SelectedEntryResult,
-  TenureGallery,
 } from './types';
 import type { PaginatedResponse } from '@/shared/types';
 import { apiFetch } from '@/evennia_replacements/api';
@@ -134,56 +133,6 @@ export async function uploadPlayerMedia(form: FormData): Promise<PlayerMedia> {
   const res = await apiFetch('/api/roster/media/', { method: 'POST', body: form });
   if (!res.ok) {
     await readErrorDetail(res, 'Failed to upload media');
-  }
-  return res.json();
-}
-
-export async function associateMedia(
-  mediaId: PlayerMedia['id'],
-  tenureId: number,
-  galleryId?: number
-): Promise<void> {
-  const res = await apiFetch(`/api/roster/media/${mediaId}/associate_tenure/`, {
-    method: 'POST',
-    body: JSON.stringify({ tenure_id: tenureId, gallery_id: galleryId }),
-  });
-  if (!res.ok) {
-    throw new Error('Failed to associate media');
-  }
-}
-
-export async function fetchTenureGalleries(tenureId: number): Promise<TenureGallery[]> {
-  const res = await apiFetch(`/api/roster/galleries/?tenure=${tenureId}`);
-  if (!res.ok) {
-    throw new Error('Failed to load galleries');
-  }
-  return res.json();
-}
-
-export async function createTenureGallery(
-  tenureId: number,
-  data: Pick<TenureGallery, 'name' | 'is_public' | 'allowed_viewers'>
-): Promise<TenureGallery> {
-  const res = await apiFetch(`/api/roster/galleries/`, {
-    method: 'POST',
-    body: JSON.stringify({ ...data, tenure_id: tenureId }),
-  });
-  if (!res.ok) {
-    throw new Error('Failed to create gallery');
-  }
-  return res.json();
-}
-
-export async function updateTenureGallery(
-  galleryId: TenureGallery['id'],
-  data: Partial<Pick<TenureGallery, 'is_public' | 'allowed_viewers' | 'name'>>
-): Promise<TenureGallery> {
-  const res = await apiFetch(`/api/roster/galleries/${galleryId}/`, {
-    method: 'PATCH',
-    body: JSON.stringify(data),
-  });
-  if (!res.ok) {
-    throw new Error('Failed to update gallery');
   }
   return res.json();
 }

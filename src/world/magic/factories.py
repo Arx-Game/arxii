@@ -113,6 +113,7 @@ from world.magic.models import (
 )
 from world.magic.models.anima import AnimaConfig
 from world.magic.models.knowledge import CharacterRitualKnowledge
+from world.magic.models.manifestation import CharacterManifestation, TechniqueManifestOption
 from world.magic.types.ritual import SoulfrayContent
 from world.mechanics.factories import (
     DeathDeferredPropertyFactory,
@@ -882,6 +883,29 @@ class KnownUltimateFactory(factory.django.DjangoModelFactory):
     character = factory.SubFactory(_CHARACTER_SHEET_FACTORY)
     technique = factory.SubFactory(UltimateTechniqueFactory)
     readied = False
+
+
+class TechniqueManifestOptionFactory(factory.django.DjangoModelFactory):
+    """Factory for TechniqueManifestOption: a being option by default (#4118)."""
+
+    class Meta:
+        model = TechniqueManifestOption
+
+    technique = factory.SubFactory(TechniqueFactory)
+    being = factory.SubFactory("world.worship.factories.WorshippedBeingFactory")
+    archetype = None
+
+
+class CharacterManifestationFactory(factory.django.DjangoModelFactory):
+    """Factory for CharacterManifestation (#4118)."""
+
+    class Meta:
+        model = CharacterManifestation
+
+    character = factory.SubFactory(_CHARACTER_SHEET_FACTORY)
+    option = factory.SubFactory(TechniqueManifestOptionFactory)
+    technique = factory.SelfAttribute("option.technique")
+    companion = None
 
 
 # =============================================================================

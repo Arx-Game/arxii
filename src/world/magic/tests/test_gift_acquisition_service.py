@@ -17,6 +17,7 @@ from world.magic.services.gift_acquisition import (
     get_technique_cap_for_gift,
     spend_xp_on_gift_unlock,
 )
+from world.roster.factories import grant_test_tenure
 
 
 class ComputeGiftUnlockXpCostTest(TestCase):
@@ -58,8 +59,7 @@ class SpendXpOnGiftUnlockTest(TestCase):
         self.unlock = GiftUnlock.objects.create(gift=self.gift, xp_cost=10)
         self.sheet = CharacterSheetFactory()
         self.account = AccountFactory()
-        self.sheet.character.account = self.account
-        self.sheet.character.save()
+        grant_test_tenure(self.sheet, self.account)
         self.xp_tracker, _ = ExperiencePointsData.objects.get_or_create(
             account=self.account,
             defaults={"total_earned": 100, "total_spent": 0},
@@ -222,8 +222,7 @@ class AcceptTechniqueOfferTest(TestCase):
         self.technique = TechniqueFactory(gift=self.gift)
         self.sheet = CharacterSheetFactory()
         self.account = AccountFactory()
-        self.sheet.character.account = self.account
-        self.sheet.character.save()
+        grant_test_tenure(self.sheet, self.account)
         self.teacher_tenure = RosterTenureFactory()
         self.unlock = GiftUnlock.objects.create(gift=self.gift, xp_cost=10)
 
@@ -519,8 +518,7 @@ class ChargeAndLearnGoldCostTest(TestCase):
         self.gift = GiftFactory(kind=GiftKind.MINOR)
         self.sheet = CharacterSheetFactory()
         self.account = AccountFactory()
-        self.sheet.character.account = self.account
-        self.sheet.character.save()
+        grant_test_tenure(self.sheet, self.account)
         # Already-owned gift + provisioned thread — sidesteps the XP-unlock
         # gate and the technique cap so this test stays focused on gold.
         CharacterGiftFactory(character=self.sheet, gift=self.gift)
@@ -596,8 +594,7 @@ class UnboundMagicLearningApSurchargeTest(TestCase):
         self.gift = GiftFactory(kind=GiftKind.MINOR)
         self.sheet = CharacterSheetFactory()
         self.account = AccountFactory()
-        self.sheet.character.account = self.account
-        self.sheet.character.save()
+        grant_test_tenure(self.sheet, self.account)
         # Already-owned gift + provisioned thread — sidesteps the XP-unlock gate
         # and the technique cap so these tests stay focused on the surcharge.
         CharacterGiftFactory(character=self.sheet, gift=self.gift)

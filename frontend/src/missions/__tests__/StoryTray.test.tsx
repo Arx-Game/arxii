@@ -59,6 +59,7 @@ const LIVE_BEAT: BeatView = {
       kind: 'branch',
       check_type_name: null,
       base_risk: 0,
+      reasons: [],
     },
   ],
   is_paused: false,

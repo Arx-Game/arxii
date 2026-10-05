@@ -19,6 +19,7 @@ from world.magic.audere import (
     SOULFRAY_CONDITION_NAME,
     AbstractPendingOffer,
     _check_intensity_gate,
+    shake_witnesses,
 )
 from world.magic.models.techniques import (
     AbstractAppliedCondition,
@@ -58,6 +59,14 @@ class AudereMajoraThreshold(RenownAwardConfig):
         "arxii.ConditionStage",
         on_delete=models.PROTECT,
         related_name="+",
+    )
+    check_level_bonus = models.PositiveSmallIntegerField(
+        default=0,
+        help_text=(
+            "While in this state, every check the character makes counts this many "
+            "extra levels (5 points each, ADR-0166). "
+            "Replaces the Audere bonus while in Audere Majora."
+        ),
     )
     requires_active_audere = models.BooleanField(
         default=True,
@@ -773,6 +782,7 @@ def cross_threshold(
     Assumes the caller has validated eligibility and holds the offer lock.
     Does not delete the offer row — caller is responsible for that.
     """
+    from world.combat.constants import SpectacleKind  # noqa: PLC0415
     from world.conditions.models import ConditionTemplate  # noqa: PLC0415
     from world.conditions.services import apply_condition  # noqa: PLC0415
     from world.magic.audere import corruption_advisory_for_character  # noqa: PLC0415
@@ -838,6 +848,10 @@ def cross_threshold(
             character, sheet, scene, texts, withheld=withheld, fallback_scene=offer_scene
         )
     )
+
+    # The crossing shakes the enemy witnesses after its own broadcast (#4147); on_commit
+    # callbacks run in registration order, so this follows _route_crossing's line.
+    shake_witnesses(character, SpectacleKind.CROSSING, display_name="Crossing")
 
     majora_template = ConditionTemplate.get_by_name(AUDERE_MAJORA_CONDITION_NAME)
     # Result deliberately unchecked, mirroring offer_audere: no authored trigger

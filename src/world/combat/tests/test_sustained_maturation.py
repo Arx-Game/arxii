@@ -762,7 +762,9 @@ class SustainedDeclaringRoundSkipTests(TestCase):
         return CombatTechniqueResult(
             damage_results=[],
             applied_conditions=[],
-            technique_use_result=mock.MagicMock(spec=TechniqueUseResult),
+            technique_use_result=mock.MagicMock(
+                spec=TechniqueUseResult, resolution_result=None, runtime_intensity=0
+            ),
         )
 
     @mock.patch("world.scenes.interaction_services._broadcast_to_location")

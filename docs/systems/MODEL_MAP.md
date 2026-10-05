@@ -1664,6 +1664,7 @@
   - ghost_tutelages <- magic.GhostTutelage
   - gift_unlocks <- magic.CharacterGiftUnlock
   - resonance_grants <- magic.ResonanceGrant
+  - manifestations <- magic.CharacterManifestation
   - motif <- magic.Motif
   - prepared_crossing_texts <- magic.CharacterCrossingText
   - prepared_surge_text <- magic.CharacterSurgeText
@@ -2361,6 +2362,7 @@
   - pending_selections <- combat.PendingSelection
   - marks <- combat.CombatMark
   - companion_orders <- companions.CompanionOrder
+  - standoff_groups <- standoffs.StandoffGroup
 
 ### CombatMark
 **Foreign Keys:**
@@ -2397,6 +2399,7 @@
   - pending_selections <- combat.PendingSelection
   - marks <- combat.CombatMark
   - consider_readings <- combat.ConsiderReading
+  - spectacle_records <- combat.SpectacleRecord
 
 ### CombatOpponentAction
 **Foreign Keys:**
@@ -2524,6 +2527,9 @@
   - creaturephasetemplate_set <- combat.CreaturePhaseTemplate
   - phase_templates <- combat.CreaturePhaseTemplate
   - mission_option_opponent_lines <- missions.MissionOptionOpponentLine
+  - drives <- standoffs.CreatureDrive
+  - regard_rules <- standoffs.RegardRule
+  - standoff_groups <- standoffs.StandoffGroup
   - beat_opponent_lines <- stories.BeatOpponentLine
 
 ### DramaticSurgeRecord
@@ -2607,6 +2613,18 @@
   - challenge_instance -> mechanics.ChallengeInstance [FK]
   - challenge_approach -> mechanics.ChallengeApproach [FK]
 
+### SpectacleConfig
+
+### SpectacleReactionLine
+**Foreign Keys:**
+  - creature_template -> combat.CreatureTemplate [FK] (nullable)
+
+### SpectacleRecord
+**Foreign Keys:**
+  - opponent -> combat.CombatOpponent [FK]
+  - caster -> character_sheets.CharacterSheet [FK]
+  - technique -> magic.Technique [FK] (nullable)
+
 ### StakesEscalationModifier
 **Foreign Keys:**
   - default_curve -> combat.EscalationCurve [FK] (nullable)
@@ -2677,7 +2695,7 @@
 - `classify_source(source: object | None) -> flows.events.payloads.DamageSource - Return a ``DamageSource`` describing *source*'s origin.`
 - `cleanup_completed_encounter(encounter: 'CombatEncounter') -> 'None' - Delete encounter-ephemeral CombatNPC ObjectDBs. Persistent NPCs and PCs`
 - `collect_check_modifiers(character_sheet: 'CharacterSheet', check_type: 'CheckType', *, scene: 'Scene | None' = None, extra_contributions: list[world.checks.types.ModifierContribution] | None = None, skip_fashion: bool = False) -> world.checks.types.ModifierBreakdown - Aggregate all modifier contributions for a check into a ModifierBreakdown.`
-- `combatants_hostile_to(actor: 'CombatParticipant | CombatOpponent', *, allegiances: 'dict[int, Allegiance] | None' = None) -> 'dict[str, list]' - Return the combatants *actor* may attack, grouped by kind (#1584, #4091).`
+- `combatants_hostile_to(actor: 'CombatParticipant | CombatOpponent', *, allegiances: 'dict[int, Allegiance] | None' = None, opponents: 'list[CombatOpponent] | None' = None) -> 'dict[str, list]' - Return the combatants *actor* may attack, grouped by kind (#1584, #4091).`
 - `complete_encounter(encounter: 'CombatEncounter', *, outcome: 'EncounterOutcome') -> 'None' - Single completion seam for round resolution and the GM end endpoint (#876).`
 - `compute_intensity_for_clash(participant: 'CombatParticipant', action: 'CombatRoundAction') -> 'int' - Return technique.intensity + active INTENSITY_BUMP pull bonuses for the clash floor gate.`
 - `declare_action(participant: 'CombatParticipant', *, focused_action: 'Technique | None' = None, focused_category: 'str | None' = None, effort_level: 'str', focused_opponent_target: 'CombatOpponent | None' = None, focused_ally_target: 'CombatParticipant | None' = None, physical_passive: 'Technique | None' = None, social_passive: 'Technique | None' = None, mental_passive: 'Technique | None' = None, confirm_soulfray_risk: 'bool' = False, strain_commitment: 'int' = 0, fury_commitment: 'FuryTier | None' = None, fury_anchor: 'CharacterSheet | None' = None, cast_destination: 'Position | None' = None, cast_position_a: 'Position | None' = None, cast_position_b: 'Position | None' = None) -> 'CombatRoundAction' - Declare a PC's action for the current round.`
@@ -2736,6 +2754,7 @@
 - `roll_sustained_absorption_budget(participant: 'CombatParticipant') -> 'tuple[int, CheckOutcome | None]' - Roll Concentration once to set a sustained action's absorption budget (#2705).`
 - `scan_round_combos(encounter: 'CombatEncounter', round_number: 'int') -> 'list[RoundCombo]' - List every combo taking shape in this round's declared actions (#3553).`
 - `select_npc_actions(encounter: 'CombatEncounter') -> 'list[CombatOpponentAction]' - Select and create NPC actions for the current round.`
+- `social_target_difficulty(*, actor_sheet: 'CharacterSheet', target_character: 'ObjectDB | None', check_type: 'CheckType | None', base_difficulty: 'int' = 0, target_level: 'int | None' = None, resist_effort: 'str' = EffortLevel.MEDIUM, drive_hits: 'Sequence[DriveHit]' = (), sway_target: 'ModifierTarget | None' = None, mindless_resistance: 'int' = 0, extra_bands: 'int' = 0, perceiver_sheet: 'CharacterSheet | None' = None, resist_increment: 'int | None' = None) -> 'SocialDifficulty' - Grade a social check on a character. See the module docstring for the terms.`
 - `spawn_from_creature_template(encounter: 'CombatEncounter', template: 'CreatureTemplate', *, position: 'Position | None' = None, acting_account: 'AccountDB | None' = None) -> 'CombatOpponent' - Spawn a CombatOpponent from a CreatureTemplate bestiary entry (#2016).`
 - `swarm_attack_count(swarm_count: 'int', bodies_per_attack: 'int', active_pc_count: 'int') -> 'int' - Attacks a swarm makes this round — scales with remaining bodies (#875).`
 - `swarm_kills(raw_damage: 'int', body_toughness: 'int') -> 'int' - Bodies a single landing attack clears from a swarm (#875).`
@@ -2757,6 +2776,7 @@
   - objectdb -> evennia.ObjectDB [FK] (nullable)
   - ridden_by -> character_sheets.CharacterSheet [FK] (nullable)
 **Pointed to by:**
+  - manifestations <- magic.CharacterManifestation
   - deployments <- companions.CompanionDeployment
   - orders <- companions.CompanionOrder
   - relationships_as_companion_target <- relationships.CharacterRelationship
@@ -2781,6 +2801,7 @@
 **Foreign Keys:**
   - ultimate_techniques -> magic.Technique [M2M]
 **Pointed to by:**
+  - manifest_options <- magic.TechniqueManifestOption
   - abilities <- companions.CompanionAbility
   - companions <- companions.Companion
 
@@ -2808,6 +2829,7 @@
 ### Service Functions
 - `bind_companion(*, owner: 'CharacterSheet', archetype: 'CompanionArchetype', granting_gift: 'Gift', name: 'str') -> 'Companion' - Create a bonded Companion + its live CompanionObject in owner's current room.`
 - `companion_capacity(character_sheet: 'CharacterSheet', gift: 'Gift') -> 'int' - Total Companion Capacity character_sheet has via gift's Thread level.`
+- `companion_is_savaged(companion: 'Companion') -> 'bool' - True when the companion's body carries the Savaged injury (#3652).`
 - `dismount_companion(sheet: 'CharacterSheet') -> 'Companion' - Dismount *sheet* from whichever companion it is currently riding.`
 - `get_pull_effects_for_thread(thread: 'Thread', **filters: 'object') -> 'list[ThreadPullEffect]' - Return ThreadPullEffect rows for ``thread`` with gift-specific preference.`
 - `handle_stables_progression(project: 'Project', target_level: 'int', outcome_tier: 'CheckOutcome | None' = None) -> 'None' - STABLES strategy: row-only install/level + create StablesDetails (#1863).`
@@ -3053,6 +3075,8 @@
 
 ### PenetrationOutcomeFactor
 
+### SettleConfig
+
 ### TreatmentAttempt
 **Foreign Keys:**
   - helper -> character_sheets.CharacterSheet [FK]
@@ -3078,6 +3102,7 @@
 ### Service Functions
 - `active_concealments(target: 'ObjectDB') -> django.db.models.query.QuerySet`
 - `active_condition_instances_by_sheet(sheet_ids: collections.abc.Iterable[int]) -> list[world.conditions.models.ConditionInstance] - Active condition instances on many sheets, in one query and with no teardown (#4090).`
+- `acute_peril_hand_off_condition_names() -> list[str] - Names of the acute-peril conditions combat hands to a scene round at its end.`
 - `advance_condition_severity(instance: world.conditions.models.ConditionInstance, amount: int) -> world.conditions.types.SeverityAdvanceResult - Increment a condition's severity and advance stage if threshold crossed.`
 - `advance_condition_stage(*, payload: object, condition_name: str) -> int | None - Advance the bearer's condition by one stage *now*, on this event (#3416).`
 - `apply_condition(target: 'ObjectDB', condition: world.conditions.models.ConditionTemplate, *, severity: int = 1, duration_rounds: int | None = None, source_character: 'ObjectDB | None' = None, source_technique: 'Technique | None' = None, source_description: str = '') -> world.conditions.types.ApplyConditionResult - Apply a condition to a target, handling stacking and interactions.`
@@ -3115,6 +3140,7 @@
 - `get_ic_now(*, real_now: datetime.datetime | None = None) -> datetime.datetime | None - Return the current IC datetime, or None if no clock exists.`
 - `get_penetration_factor(success_level: int) -> decimal.Decimal - Look up the penetration power factor for a given success level (#639).`
 - `get_resistance_modifier(character_sheet: 'CharacterSheet', damage_type: world.conditions.models.DamageType | None = None) -> world.conditions.types.ResistanceModifierResult - Get the total resistance modifier for a damage type from active conditions.`
+- `get_settle_config() -> world.conditions.models.SettleConfig - Return the SettleConfig singleton (pk=1), creating it lazily on first call.`
 - `get_treatment_candidates(helper_sheet: 'CharacterSheet', target_sheet: 'CharacterSheet', scene: 'Scene') -> list[dict[str, typing.Any]] - Return valid (treatment, target_effect) pairs for helper to attempt on target.`
 - `get_turn_order_modifier(character_sheet: 'CharacterSheet') -> int - Get the total turn order modifier from all conditions.`
 - `has_condition(target: 'ObjectDB', condition: world.conditions.models.ConditionTemplate, *, include_suppressed: bool = False) -> bool - Check if target has a specific condition.`
@@ -3136,6 +3162,8 @@
 - `remove_conditions_by_category(target: 'ObjectDB', category: 'ConditionCategory') -> list[world.conditions.models.ConditionTemplate] - Remove all conditions in a category from a target.`
 - `resolve_damage_type_resistance(character: 'ObjectDB', damage_amount: int, damage_type: 'DamageType | None') -> int - Net damage-type resistance (condition + gift-thread) and return reduced damage (>=0).`
 - `scaled_condition_effect_value(effect: world.conditions.models.ConditionModifierEffect, instance: world.conditions.models.ConditionInstance) -> int - One ConditionModifierEffect's contribution on one active instance (#4090).`
+- `settle_round_effects(targets: collections.abc.Iterable['ObjectDB']) -> list[world.conditions.models.ConditionInstance] - Convert round-counted conditions on the targets into wall-clock expiries (#4120).`
+- `settled_effects_tick() -> world.conditions.types.SettledTickSummary - Scheduler entry point. Run out and tick round-based effects settled after combat (#4120).`
 - `suppress_condition(target: 'ObjectDB', condition: world.conditions.models.ConditionTemplate, *, duration_rounds: int | None = None) -> bool - Temporarily suppress a condition's effects.`
 - `unsuppress_condition(target: 'ObjectDB', condition: world.conditions.models.ConditionTemplate) -> bool - Remove suppression from a condition.`
 
@@ -5365,6 +5393,13 @@
   - aura -> magic.CharacterAura [FK]
   - tag -> magic.GlimpseTag [FK]
 
+### CharacterManifestation
+**Foreign Keys:**
+  - character -> character_sheets.CharacterSheet [FK]
+  - technique -> magic.Technique [FK]
+  - option -> magic.TechniqueManifestOption [FK]
+  - companion -> companions.Companion [FK] (nullable)
+
 ### CharacterResonance
 **Foreign Keys:**
   - character_sheet -> character_sheets.CharacterSheet [FK]
@@ -5532,6 +5567,7 @@
   - codex_entry -> codex.CodexEntry [FK] (nullable)
   - style -> magic.TechniqueStyle [FK] (nullable)
   - resonances -> magic.Resonance [M2M]
+  - ultimate_techniques -> magic.Technique [M2M]
 **Pointed to by:**
   - organization_grants <- societies.OrganizationGiftGrant
   - children <- magic.Gift
@@ -6057,6 +6093,7 @@
   - conditions_caused <- conditions.ConditionInstance
   - battle_declarations <- battles.BattleActionDeclaration
   - battle_property_affinities <- battles.TechniquePropertyAffinity
+  - ultimate_for_gifts <- magic.Gift
   - function_tags <- magic.TechniqueFunctionTag
   - capability_grants <- magic.TechniqueCapabilityGrant
   - capability_requirements <- magic.TechniqueCapabilityRequirement
@@ -6085,6 +6122,8 @@
   - granted_by_path_gifts <- magic.PathGiftGrant
   - ultimate_for_path_gifts <- magic.PathGiftGrant
   - granted_by_tradition_gifts <- magic.TraditionGiftGrant
+  - manifest_options <- magic.TechniqueManifestOption
+  - character_manifestations <- magic.CharacterManifestation
   - variants <- magic.TechniqueVariant
   - grants <- magic.TechniqueGrant
   - progress_records <- magic.TechniqueProgress
@@ -6170,6 +6209,14 @@
   - technique -> magic.Technique [FK]
   - item_template -> items.ItemTemplate [FK] (nullable)
   - ritual -> magic.Ritual [FK] (nullable)
+
+### TechniqueManifestOption
+**Foreign Keys:**
+  - technique -> magic.Technique [FK]
+  - being -> worship.WorshippedBeing [FK] (nullable)
+  - archetype -> companions.CompanionArchetype [FK] (nullable)
+**Pointed to by:**
+  - character_choices <- magic.CharacterManifestation
 
 ### TechniqueOutcomeModifier
 **Foreign Keys:**
@@ -6610,6 +6657,7 @@
   - item_template_defaults <- items.ItemTemplateProperty
   - military_units <- military.MilitaryUnit
   - personas <- scenes.Persona
+  - creature_drives <- standoffs.CreatureDrive
 
 ### PropertyCategory
 **Foreign Keys:**
@@ -6675,6 +6723,7 @@
 - `covenant_role_bonus(sheet: 'object', target: 'ModifierTarget', level_override: 'int | None' = None) -> 'int' - Sum covenant-role contributions across equipped items, gated on engagement.`
 - `create_distinction_modifiers(character_distinction: 'CharacterDistinction') -> 'list[CharacterModifier]' - Create ModifierSource + CharacterModifier records for all effects of a distinction.`
 - `delete_distinction_modifiers(character_distinction: 'CharacterDistinction') -> 'int' - Delete all modifier records for a distinction.`
+- `difficulty_indicator_for_rank_difference(rank_diff: 'int') -> 'DifficultyIndicator' - Classify a check's rank difference. IMPOSSIBLE means the chart has no success outcomes.`
 - `end_engagement(character: 'ObjectDB', engagement_type: 'str', *, source: 'object') -> 'None' - Delete the character's engagement iff it matches type AND source.`
 - `equipment_walk_total(character: 'object', target: 'ModifierTarget', level_override: 'int | None' = None) -> 'int' - Sum facet + covenant-role + covenant-level + mantle passive bonuses (Spec D §5.5).`
 - `equipment_walk_total_unblended(sheet: 'object', target: 'ModifierTarget') -> 'int' - ``equipment_walk_total`` with the covenant-role component as its raw base (#1174).`
@@ -8125,6 +8174,11 @@
 **Pointed to by:**
   - applications <- character_creation.DraftApplication
 
+### HiddenCharacterArt
+**Foreign Keys:**
+  - tenure -> roster.RosterTenure [FK]
+  - picture -> roster.TenureMedia [FK]
+
 ### KinSlotPool
 **Foreign Keys:**
   - family -> roster.Family [FK]
@@ -8219,6 +8273,7 @@
   - created_by_account -> evennia.AccountDB [FK] (nullable)
   - created_for_table -> gm.GMTable [FK] (nullable)
 **Pointed to by:**
+  - character_art <- roster.TenureMedia
   - tenures <- roster.RosterTenure
   - clues_held <- clues.CharacterClue
   - codex_knowledge <- codex.CharacterCodexKnowledge
@@ -8239,9 +8294,8 @@
   - sent_mail <- roster.PlayerMail
   - received_mail <- roster.PlayerMail
   - display_settings <- roster.TenureDisplaySettings
-  - galleries <- roster.TenureGallery
-  - shared_galleries <- roster.TenureGallery
   - media <- roster.TenureMedia
+  - hidden_character_art <- roster.HiddenCharacterArt
   - discoveries <- achievements.Discovery
   - shared_discoveries <- achievements.Discovery
   - earned_achievements <- achievements.CharacterAchievement
@@ -8285,21 +8339,15 @@
 **Foreign Keys:**
   - tenure -> roster.RosterTenure [OneToOne]
 
-### TenureGallery
-**Foreign Keys:**
-  - tenure -> roster.RosterTenure [FK]
-  - allowed_viewers -> roster.RosterTenure [M2M]
-**Pointed to by:**
-  - media <- roster.TenureMedia
-
 ### TenureMedia
 **Foreign Keys:**
-  - tenure -> roster.RosterTenure [FK]
+  - tenure -> roster.RosterTenure [FK] (nullable)
+  - roster_entry -> roster.RosterEntry [FK] (nullable)
   - media -> evennia_extensions.Media [FK]
-  - gallery -> roster.TenureGallery [FK] (nullable)
   - look -> character_sheets.MoodOption [FK] (nullable)
 **Pointed to by:**
   - profile_for_entries <- roster.RosterEntry
+  - hidden_by <- roster.HiddenCharacterArt
 
 ### Union
 **Foreign Keys:**
@@ -9863,6 +9911,70 @@
 - `sender_context(account: 'AccountDB') -> 'dict' - Kudos + standing columns shown beside every submission.`
 
 
+## world.standoffs
+
+### CreatureDrive
+**Foreign Keys:**
+  - creature_template -> combat.CreatureTemplate [FK]
+  - property -> mechanics.Property [FK]
+
+### RegardRule
+**Foreign Keys:**
+  - creature_template -> combat.CreatureTemplate [FK]
+  - deed_archetype -> societies.PhilosophicalArchetype [FK] (nullable)
+  - drive -> mechanics.Property [FK] (nullable)
+
+### StandoffApproach
+**Foreign Keys:**
+  - check_type -> checks.CheckType [FK]
+  - capability -> conditions.CapabilityType [FK]
+  - sway_target -> mechanics.ModifierTarget [FK] (nullable)
+  - archetypes -> societies.PhilosophicalArchetype [M2M]
+**Pointed to by:**
+  - reaction_lines <- standoffs.StandoffReactionLine
+
+### StandoffConfig
+**Foreign Keys:**
+  - read_check_type -> checks.CheckType [FK] (nullable)
+  - terms_check_type -> checks.CheckType [FK] (nullable)
+  - pass_condition -> conditions.ConditionTemplate [FK] (nullable)
+  - turn_condition -> conditions.ConditionTemplate [FK] (nullable)
+
+### StandoffGroup
+**Foreign Keys:**
+  - encounter -> combat.CombatEncounter [FK]
+  - creature_template -> combat.CreatureTemplate [FK]
+  - settled_outcome -> traits.CheckOutcome [FK] (nullable)
+**Pointed to by:**
+  - reveals <- standoffs.StandoffReveal
+  - spark_shares <- standoffs.StandoffSparkShare
+
+### StandoffReactionLine
+**Foreign Keys:**
+  - approach -> standoffs.StandoffApproach [FK] (nullable)
+  - terms -> standoffs.StandoffTerms [FK] (nullable)
+  - creature_template -> combat.CreatureTemplate [FK] (nullable)
+
+### StandoffReveal
+**Foreign Keys:**
+  - group -> standoffs.StandoffGroup [FK]
+  - drive -> standoffs.CreatureDrive [FK] (nullable)
+  - regard_rule -> standoffs.RegardRule [FK] (nullable)
+
+### StandoffSparkShare
+**Foreign Keys:**
+  - group -> standoffs.StandoffGroup [FK]
+  - character_sheet -> character_sheets.CharacterSheet [FK]
+  - regard_rule -> standoffs.RegardRule [FK]
+
+### StandoffTerms
+**Foreign Keys:**
+  - required_drive -> mechanics.Property [FK] (nullable)
+  - archetypes -> societies.PhilosophicalArchetype [M2M]
+**Pointed to by:**
+  - reaction_lines <- standoffs.StandoffReactionLine
+
+
 ## world.stealth
 
 ### Service Functions
@@ -10823,6 +10935,7 @@
 **Pointed to by:**
   - ceremonies <- ceremonies.Ceremony
   - audere_majora_faith_variants <- magic.AudereMajoraFaithVariant
+  - manifest_options <- magic.TechniqueManifestOption
   - feast_days <- worship.WorshipFeastDay
   - being_facets <- worship.BeingFacet
   - resonances <- worship.BeingResonance

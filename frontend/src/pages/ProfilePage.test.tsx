@@ -17,14 +17,9 @@ function renderAt(path: string) {
 }
 
 describe('ProfilePage', () => {
-  it('defaults to mail tab when not on media path', () => {
+  it('defaults to the mail tab', () => {
     renderAt('/profile');
     expect(screen.getByRole('tab', { name: /mail/i })).toHaveAttribute('data-state', 'active');
-  });
-
-  it('selects media tab when on media path', () => {
-    renderAt('/profile/media');
-    expect(screen.getByRole('tab', { name: /media/i })).toHaveAttribute('data-state', 'active');
   });
 
   it('selects the account tab on /profile/account and links it absolutely', () => {
@@ -38,10 +33,13 @@ describe('ProfilePage', () => {
 
   it('tab links stay anchored at /profile from inside a tab', () => {
     // React Router 7 resolves a relative link inside a splat route against the
-    // full matched path, so `to="media"` at /profile/mail became /profile/mail/media
+    // full matched path, so `to="friends"` at /profile/mail became /profile/mail/friends
     // and every click appended another segment.
     renderAt('/profile/mail');
-    expect(screen.getByRole('tab', { name: /media/i })).toHaveAttribute('href', '/profile/media');
+    expect(screen.getByRole('tab', { name: /friends/i })).toHaveAttribute(
+      'href',
+      '/profile/friends'
+    );
     expect(screen.getByRole('tab', { name: /mail/i })).toHaveAttribute('href', '/profile/mail');
     expect(screen.getByRole('tab', { name: /muted/i })).toHaveAttribute('href', '/profile/mutes');
   });

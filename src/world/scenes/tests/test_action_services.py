@@ -1410,8 +1410,9 @@ class TestActiveResistanceRaisesDifficultyAndChargesFatigue(TestCase):
     def test_primary_no_resist_uses_base_difficulty_no_fatigue(
         self, mock_resolve: MagicMock
     ) -> None:
-        """Primary target with no resist_effort → resolved_difficulty == base,
-        defender social fatigue unchanged."""
+        """Primary NPC target with no resist_effort → resolved_difficulty == base plus its
+        passive medium Composure resistance (#4145); defender social fatigue unchanged."""
+        from world.checks.services import compute_resist_increment
         from world.fatigue.services import get_or_create_fatigue_pool
 
         mock_resolve.return_value = _make_pending_resolution(success=True)
@@ -1430,7 +1431,9 @@ class TestActiveResistanceRaisesDifficultyAndChargesFatigue(TestCase):
         )
 
         request.refresh_from_db()
-        self.assertEqual(request.resolved_difficulty, base)
+        passive = compute_resist_increment(self.primary_target.character_sheet.character, "medium")
+        self.assertGreater(passive, 0)
+        self.assertEqual(request.resolved_difficulty, base + passive)
 
         pool_before.refresh_from_db()
         self.assertEqual(pool_before.social_current, social_before)
@@ -1481,8 +1484,9 @@ class TestActiveResistanceRaisesDifficultyAndChargesFatigue(TestCase):
     def test_additional_target_no_resist_uses_base_difficulty_no_fatigue(
         self, mock_resolve: MagicMock
     ) -> None:
-        """Additional target with no resist_effort → resolved_difficulty == base,
-        defender social fatigue unchanged."""
+        """Additional NPC target with no resist_effort → resolved_difficulty == base plus its
+        passive medium Composure resistance (#4145); defender social fatigue unchanged."""
+        from world.checks.services import compute_resist_increment
         from world.fatigue.services import get_or_create_fatigue_pool
 
         mock_resolve.return_value = _make_pending_resolution(success=True)
@@ -1512,7 +1516,11 @@ class TestActiveResistanceRaisesDifficultyAndChargesFatigue(TestCase):
         )
 
         row.refresh_from_db()
-        self.assertEqual(row.resolved_difficulty, base)
+        passive = compute_resist_increment(
+            self.additional_target.character_sheet.character, "medium"
+        )
+        self.assertGreater(passive, 0)
+        self.assertEqual(row.resolved_difficulty, base + passive)
 
         pool_before.refresh_from_db()
         self.assertEqual(pool_before.social_current, social_before)

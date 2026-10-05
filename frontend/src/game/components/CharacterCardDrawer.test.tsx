@@ -44,9 +44,8 @@ function matchedEntry(tenures: RosterEntryData['tenures'] = []): RosterEntryData
       name: 'Alice',
       background: 'Once upon a time in the Vale.',
       age: 30,
-      galleries: [],
     },
-    profile_picture: null,
+    profile_picture_url: null,
     tenures,
     can_apply: false,
     fullname: 'Alice',
@@ -69,7 +68,6 @@ function liveTenure(): RosterEntryData['tenures'][number] {
     approved_by: null,
     tenure_notes: '',
     photo_folder: '',
-    media: [],
   };
 }
 

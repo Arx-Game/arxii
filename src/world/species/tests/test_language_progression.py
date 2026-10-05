@@ -17,6 +17,7 @@ from world.progression.models.rewards import (
     ExperiencePointsData,
     cumulative_dp_for_level,
 )
+from world.roster.factories import grant_test_tenure
 from world.species.factories import LanguageFactory
 from world.species.language_progression import (
     get_language_training_config,
@@ -127,8 +128,7 @@ class PurchaseLanguageBreakthroughTests(TestCase):
         CharacterTraitValue.flush_instance_cache()
         self.account = AccountFactory(username="langlocktester")
         self.sheet = CharacterSheetFactory()
-        self.sheet.character.db_account = self.account
-        self.sheet.character.save()
+        grant_test_tenure(self.sheet, self.account)
         self.trait = TraitFactory(name="BuyTestTongue", trait_type=TraitType.LANGUAGE)
         self.language = LanguageFactory(name="BuyTestTongue", trait=self.trait)
         chart = XPCostChart.objects.create(name="BuyTestTongue chart")

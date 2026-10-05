@@ -13,6 +13,7 @@ from world.character_sheets.factories import CharacterSheetFactory
 from world.progression.factories import ExperiencePointsDataFactory
 from world.progression.models import TraitRatingUnlock, TraitXPCost, XPCostChart, XPCostEntry
 from world.progression.models.rewards import ExperiencePointsData
+from world.roster.factories import grant_test_tenure
 from world.skills.factories import CharacterSkillValueFactory, SkillFactory
 from world.skills.services import (
     _apply_development_to_skill,
@@ -154,8 +155,7 @@ class PurchaseSkillBreakthroughTests(TestCase):
         self.account = AccountDB.objects.create(username="breakthrutester", email="a@a.com")
         self.identity = CharacterSheetFactory()
         self.character = self.identity.character
-        self.character.db_account = self.account
-        self.character.save()
+        grant_test_tenure(self.identity, self.account)
         self.skill = SkillFactory()
 
     def _authored_unlock(self, *, target_rating: int, xp_cost: int) -> TraitRatingUnlock:

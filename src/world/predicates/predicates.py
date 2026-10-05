@@ -83,22 +83,58 @@ def evaluate(rule: dict, ctx: PredicateContext) -> bool:
         ValueError: If a node carries an unknown ``op``, or a ``NOT`` node
             does not have exactly one operand.
     """
-    if not rule:  # {} == no gate
-        return True
+    return matched_leaves(rule, ctx) is not None
+
+
+def matched_leaves(rule: dict, ctx: PredicateContext) -> list[dict] | None:
+    """Report which leaves made ``rule`` pass, or ``None`` if it fails.
+
+    Lets a surface say "because you are Cinderi". It is the one tree walk, and
+    ``evaluate`` is ``matched_leaves(...) is not None``:
+    AND returns every child's leaves, OR the first true child's leaves, NOT
+    and an empty rule ``[]``. A leaf returns itself.
+
+    Raises:
+        ValueError: Same malformed-tree cases as ``evaluate``.
+    """
+    if not rule:
+        return []
     if KEY_OP in rule:
         op, of = rule[KEY_OP], rule.get(KEY_OF, [])
         if op == OP_AND:
-            return all(evaluate(r, ctx) for r in of)  # empty AND == True
+            return _matched_all(of, ctx)
         if op == OP_OR:
-            return any(evaluate(r, ctx) for r in of)  # empty OR == False
+            return _matched_first(of, ctx)
         if op == OP_NOT:
             if len(of) != 1:
                 msg = f"NOT requires exactly one operand, got {len(of)}"
                 raise ValueError(msg)
-            return not evaluate(of[0], ctx)
+            return [] if matched_leaves(of[0], ctx) is None else None
         msg = f"unknown predicate op {op!r}"
         raise ValueError(msg)
-    return ctx.has_leaf(rule[KEY_LEAF], **rule.get(KEY_PARAMS, {}))
+    if ctx.has_leaf(rule[KEY_LEAF], **rule.get(KEY_PARAMS, {})):
+        return [rule]
+    return None
+
+
+def _matched_all(children: list[dict], ctx: PredicateContext) -> list[dict] | None:
+    """AND: every child's matched leaves, or None if any child fails."""
+    found: list[dict] = []
+    for child in children:
+        child_leaves = matched_leaves(child, ctx)
+        if child_leaves is None:
+            return None
+        found.extend(child_leaves)
+    return found
+
+
+def _matched_first(children: list[dict], ctx: PredicateContext) -> list[dict] | None:
+    """OR: the first true child's matched leaves, or None if none are true."""
+    for child in children:
+        child_leaves = matched_leaves(child, ctx)
+        if child_leaves is not None:
+            return child_leaves
+    return None
 
 
 # ---------------------------------------------------------------------------
@@ -520,6 +556,20 @@ def _resolve_is_member_of_society(ctx: ResolverContext, *, society: str) -> bool
     ).exists()
 
 
+def _resolve_has_species(ctx: ResolverContext, *, species_id: int) -> bool:
+    """True if the character's species is the species with this id (#4145)."""
+    return ctx.sheet.species_id == species_id
+
+
+def _resolve_has_upbringing(ctx: ResolverContext, *, origin_template_id: int) -> bool:
+    """True if the character answered a slot of this origin template (#4145)."""
+    from world.character_creation.models import CharacterOriginSlot  # noqa: PLC0415
+
+    return CharacterOriginSlot.objects.filter(
+        sheet=ctx.sheet, slot__template_id=origin_template_id
+    ).exists()
+
+
 # Leaf-name -> resolver. The structural evaluator never reads this; only
 # CharacterPredicateContext dispatches through it.
 LEAF_RESOLVERS: LeafRegistry = {
@@ -543,6 +593,8 @@ LEAF_RESOLVERS: LeafRegistry = {
     "min_org_reputation": _resolve_min_org_reputation,
     "min_resonance_level": _resolve_min_resonance_level,
     "min_society_standing": _resolve_min_society_standing,
+    "has_species": _resolve_has_species,
+    "has_upbringing": _resolve_has_upbringing,
 }
 
 

@@ -29,6 +29,7 @@ if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
 
     from world.character_sheets.models import CharacterSheet
+    from world.checks.types import CheckResult
     from world.classes.models import Path
     from world.companions.models import Companion
     from world.magic.models import Gift, KnownUltimate, Technique
@@ -38,6 +39,26 @@ logger = logging.getLogger(__name__)
 
 _CATEGORY_ORDER = (RoleArchetype.SWORD, RoleArchetype.SHIELD, RoleArchetype.CROWN)
 _KEY_SEP = ":"
+
+
+def floor_ultimate_check(result: CheckResult, technique: Technique | None) -> CheckResult:
+    """An ultimate never fails (#4147): raise a failed outcome to the lowest success.
+
+    A roll with no technique behind it (a joust, a passive declaration) is never floored.
+
+    Only the outcome changes; the points stay as rolled. Damage, conditions and success
+    bands all read ``outcome``, so they all see the floored result.
+    """
+    from world.traits.models import CheckOutcome  # noqa: PLC0415
+
+    if technique is None or not technique.is_ultimate:
+        return result
+    if result.outcome is not None and result.outcome.success_level >= 1:
+        return result
+    floor = CheckOutcome.objects.filter(success_level__gte=1).order_by("success_level").first()
+    if floor is None:
+        return result
+    return dataclasses.replace(result, outcome=floor)
 
 
 @dataclass(frozen=True)
@@ -210,6 +231,31 @@ def _companion_pools(sheet: CharacterSheet) -> list[_Pool]:
     ]
 
 
+def _gift_pools(sheet: CharacterSheet) -> list[_Pool]:
+    from world.magic.models import CharacterGift, Gift  # noqa: PLC0415
+
+    gifts = sorted(
+        {
+            row.gift
+            for row in CharacterGift.objects.filter(
+                character=sheet, gift__kind=GiftKind.MINOR
+            ).select_related("gift")
+        },
+        key=lambda g: (g.name, g.pk),
+    )
+    links = Gift.ultimate_techniques.through.objects.filter(
+        gift_id__in=[g.pk for g in gifts], technique__is_ultimate=True
+    ).select_related("technique")
+    by_gift: dict[int, list[Technique]] = {}
+    for link in links:
+        by_gift.setdefault(link.gift_id, []).append(link.technique)
+    return [
+        _Pool(UltimateSource.GIFT, g.pk, _ordered(by_gift.get(g.pk, [])), gift=g)
+        for g in gifts
+        if by_gift.get(g.pk)
+    ]
+
+
 def _pools(sheet: CharacterSheet) -> list[_Pool]:
     """Every source pool, a technique appearing in an earlier pool dropped from later ones."""
     seen: set[int] = set()
@@ -219,6 +265,7 @@ def _pools(sheet: CharacterSheet) -> list[_Pool]:
         + _owned_known_pools(sheet)
         + _patron_pools(sheet)
         + _companion_pools(sheet)
+        + _gift_pools(sheet)
     )
     for pool in every_pool:
         fresh = tuple(t for t in pool.techniques if t.pk not in seen)

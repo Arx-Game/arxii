@@ -10,16 +10,22 @@ term is chosen and the rest are listed under `_Avoid_`.
 
 - [character_sheets](src/world/character_sheets/AGENT_GLOSSARY.md)
 - [magic](src/world/magic/AGENT_GLOSSARY.md) - also holds the Ultimates terms (#4098):
-  Ultimate, Known ultimate, Readied ultimate, Reveal, Owned ultimate, Bond ultimate; the
-  creation-personalization terms (#4099): Hold, Price, Early form, Personalized name; and
-  Prepared Text (#4101)
+  Ultimate, Known ultimate, Readied ultimate, Reveal, Owned ultimate, Bond ultimate, Gift
+  ultimate (#4118); the manifestation terms (#4118): Manifestation option, Character
+  manifestation; the creation-personalization terms (#4099): Hold, Price, Early form,
+  Personalized name; and Prepared Text (#4101)
 - [covenants](src/world/covenants/AGENT_GLOSSARY.md)
 - [scenes](src/world/scenes/AGENT_GLOSSARY.md)
 - [combat](src/world/combat/AGENT_GLOSSARY.md), also holds the #4091 allegiance terms
-  (ADR-4091): Allegiance (stored vs effective), Turned, Won over, Bind window
+  (ADR-4091): Allegiance (stored vs effective), Turned, Won over, Bind window; (ADR-4120)
+  Settled round; and (ADR-4147) Spectacle, Spectacle kind
+- [standoffs](src/world/standoffs/AGENT_GLOSSARY.md) (#4145, ADR-4145-A): Standoff, Group,
+  Drive, Cause, Regard rule, Spark, Terms, Approach, Read/Press (_Avoid_: motive, reaction,
+  ask, hook, aura, sway)
 - [battles](src/world/battles/AGENT_GLOSSARY.md)
 - [conditions](src/world/conditions/AGENT_GLOSSARY.md), also holds the #4091 settle terms
-  (ADR-4091): Settle, Settle pool, Hold strength
+  (ADR-4091): Settle, Settle pool, Hold strength; and (ADR-4120) Settled round / Settle round
+  effects
 - [vitals](src/world/vitals/AGENT_GLOSSARY.md) - also holds Certain death (deferred) (#4098)
 - [worship](src/world/worship/AGENT_GLOSSARY.md)
 - [ceremonies](src/world/ceremonies/AGENT_GLOSSARY.md)

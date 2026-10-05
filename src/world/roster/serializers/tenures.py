@@ -7,13 +7,14 @@ from typing import ClassVar
 from rest_framework import serializers
 
 from world.roster.models import RosterTenure
-from world.roster.serializers.media import TenureMediaSerializer
 
 
 class RosterTenureSerializer(serializers.ModelSerializer):
-    """Serialize roster tenure information with nested media."""
+    """Serialize roster tenure information.
 
-    media = TenureMediaSerializer(many=True, read_only=True, source="cached_media")
+    No nested media (#4151): this is served to anyone by the roster list, and art is
+    shown only to accounts. A character's pictures come from its Gallery endpoint.
+    """
 
     class Meta:
         model = RosterTenure
@@ -27,7 +28,6 @@ class RosterTenureSerializer(serializers.ModelSerializer):
             "approved_by",
             "tenure_notes",
             "photo_folder",
-            "media",
         )
         read_only_fields: ClassVar[tuple[str, ...]] = fields
 

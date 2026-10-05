@@ -5892,6 +5892,62 @@ paths:
               schema:
                 $ref: '#/components/schemas/CharacterXPLedger'
           description: ''
+  /api/character-sheets/mood-options/:
+    get:
+      operationId: character_sheets_mood_options_list
+      description: The moods a look can be tagged with (#4151), for the Gallery's
+        mood picker.
+      parameters:
+      - in: query
+        name: name
+        schema:
+          type: string
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      tags:
+      - character-sheets
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedMoodOptionList'
+          description: ''
+  /api/character-sheets/mood-options/{id}/:
+    get:
+      operationId: character_sheets_mood_options_retrieve
+      description: The moods a look can be tagged with (#4151), for the Gallery's
+        mood picker.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this Mood Option.
+        required: true
+      tags:
+      - character-sheets
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MoodOption'
+          description: ''
   /api/characters/online/:
     get:
       operationId: characters_online_retrieve
@@ -31705,131 +31761,6 @@ paths:
               schema:
                 $ref: '#/components/schemas/Family'
           description: ''
-  /api/roster/galleries/:
-    get:
-      operationId: roster_galleries_list
-      description: API viewset for managing tenure galleries.
-      tags:
-      - roster
-      security:
-      - cookieAuth: []
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/TenureGallery'
-          description: ''
-    post:
-      operationId: roster_galleries_create
-      description: API viewset for managing tenure galleries.
-      tags:
-      - roster
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/TenureGalleryRequest'
-        required: true
-      security:
-      - cookieAuth: []
-      responses:
-        '201':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/TenureGallery'
-          description: ''
-  /api/roster/galleries/{id}/:
-    get:
-      operationId: roster_galleries_retrieve
-      description: API viewset for managing tenure galleries.
-      parameters:
-      - in: path
-        name: id
-        schema:
-          type: string
-        required: true
-      tags:
-      - roster
-      security:
-      - cookieAuth: []
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/TenureGallery'
-          description: ''
-    put:
-      operationId: roster_galleries_update
-      description: API viewset for managing tenure galleries.
-      parameters:
-      - in: path
-        name: id
-        schema:
-          type: string
-        required: true
-      tags:
-      - roster
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/TenureGalleryRequest'
-        required: true
-      security:
-      - cookieAuth: []
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/TenureGallery'
-          description: ''
-    patch:
-      operationId: roster_galleries_partial_update
-      description: API viewset for managing tenure galleries.
-      parameters:
-      - in: path
-        name: id
-        schema:
-          type: string
-        required: true
-      tags:
-      - roster
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/PatchedTenureGalleryRequest'
-      security:
-      - cookieAuth: []
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/TenureGallery'
-          description: ''
-    delete:
-      operationId: roster_galleries_destroy
-      description: API viewset for managing tenure galleries.
-      parameters:
-      - in: path
-        name: id
-        schema:
-          type: string
-        required: true
-      tags:
-      - roster
-      security:
-      - cookieAuth: []
-      responses:
-        '204':
-          description: No response body
   /api/roster/invites/:
     get:
       operationId: roster_invites_list
@@ -32425,6 +32356,243 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/RosterList'
+          description: ''
+  /api/roster/tenure-media/:
+    get:
+      operationId: roster_tenure_media_list
+      description: The pictures in one character's Gallery. ``?roster_entry=<id>``
+        is required.
+      parameters:
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      - in: query
+        name: roster_entry
+        schema:
+          type: integer
+        required: true
+      tags:
+      - roster
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedGalleryPictureList'
+          description: ''
+    post:
+      operationId: roster_tenure_media_create
+      description: Upload files into the Gallery (the player's own, or staff's character
+        art).
+      parameters:
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      - in: query
+        name: roster_entry
+        schema:
+          type: integer
+        required: true
+      tags:
+      - roster
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GalleryUploadRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/GalleryUploadRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/GalleryUploadRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedGalleryPictureList'
+          description: ''
+  /api/roster/tenure-media/{id}/:
+    get:
+      operationId: roster_tenure_media_retrieve
+      description: The pictures in one character's Gallery. ``?roster_entry=<id>``
+        is required.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this Tenure Media.
+        required: true
+      tags:
+      - roster
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GalleryPicture'
+          description: ''
+    patch:
+      operationId: roster_tenure_media_partial_update
+      description: 'Change a picture''s words, NSFW flag, mood or crop (``crop: null``
+        un-looks it).'
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this Tenure Media.
+        required: true
+      tags:
+      - roster
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedGalleryPictureUpdateRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedGalleryPictureUpdateRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedGalleryPictureUpdateRequest'
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GalleryPicture'
+          description: ''
+    delete:
+      operationId: roster_tenure_media_destroy
+      description: 'The one Delete: the file goes, unless another character''s gallery
+        holds it.'
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this Tenure Media.
+        required: true
+      tags:
+      - roster
+      security:
+      - cookieAuth: []
+      responses:
+        '204':
+          description: No response body
+  /api/roster/tenure-media/{id}/hide/:
+    post:
+      operationId: roster_tenure_media_hide_create
+      description: Stop showing a piece of character art, for this player's time on
+        the character.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this Tenure Media.
+        required: true
+      tags:
+      - roster
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GalleryPicture'
+          description: ''
+  /api/roster/tenure-media/{id}/show/:
+    post:
+      operationId: roster_tenure_media_show_create
+      description: Show hidden character art again.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this Tenure Media.
+        required: true
+      tags:
+      - roster
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GalleryPicture'
+          description: ''
+  /api/roster/tenure-media/reorder/:
+    post:
+      operationId: roster_tenure_media_reorder_create
+      description: Put the whole Gallery in a new order.
+      tags:
+      - roster
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GalleryReorderRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/GalleryReorderRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/GalleryReorderRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '204':
+          description: No response body
+  /api/roster/tenure-media/usage/:
+    get:
+      operationId: roster_tenure_media_usage_retrieve
+      description: 'The requester''s storage: what their own files take, and their
+        quota.'
+      tags:
+      - roster
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MediaUsage'
           description: ''
   /api/roster/tenures/:
     get:
@@ -41412,6 +41580,39 @@ components:
         * `claimed` - Claim a staff-authored family
         * `named` - Name your own family
         * `none` - No family
+    ApproachView:
+      type: object
+      properties:
+        approach_id:
+          type: integer
+        group_id:
+          type: integer
+        name:
+          type: string
+        grade:
+          type: string
+        grade_label:
+          type: string
+        check_caption:
+          type: string
+        levers:
+          type: array
+          items:
+            $ref: '#/components/schemas/LeverView'
+        hits_revealed_drive:
+          type: boolean
+        casts_technique:
+          type: boolean
+      required:
+      - approach_id
+      - casts_technique
+      - check_caption
+      - grade
+      - grade_label
+      - group_id
+      - hits_revealed_drive
+      - levers
+      - name
     ArcScopeEnum:
       enum:
       - global
@@ -42714,6 +42915,11 @@ components:
           nullable: true
         base_risk:
           type: integer
+        reasons:
+          type: array
+          items:
+            type: string
+          readOnly: true
       required:
       - approach_id
       - base_risk
@@ -42721,6 +42927,7 @@ components:
       - kind
       - label
       - option_id
+      - reasons
     BeatOutcomeEnum:
       enum:
       - success
@@ -45420,10 +45627,6 @@ components:
           type: array
           items:
             type: string
-        galleries:
-          type: array
-          items:
-            $ref: '#/components/schemas/CharacterGallery'
         covenant:
           type: object
           additionalProperties: {}
@@ -46238,30 +46441,6 @@ components:
       - id
       - option
       - trait
-    CharacterGallery:
-      type: object
-      description: Serialize a single gallery entry for a character.
-      properties:
-        name:
-          type: string
-        url:
-          type: string
-      required:
-      - name
-      - url
-    CharacterGalleryRequest:
-      type: object
-      description: Serialize a single gallery entry for a character.
-      properties:
-        name:
-          type: string
-          minLength: 1
-        url:
-          type: string
-          minLength: 1
-      required:
-      - name
-      - url
     CharacterGift:
       type: object
       description: Serializer for CharacterGift records.
@@ -46379,10 +46558,6 @@ components:
           items:
             type: string
             minLength: 1
-        galleries:
-          type: array
-          items:
-            $ref: '#/components/schemas/CharacterGalleryRequest'
       required:
       - name
     CharacterResonance:
@@ -49077,6 +49252,42 @@ components:
       - name
       - threat_pool_name
       - tier
+    Crop:
+      type: object
+      description: A look's 4:5 frame in the file's own pixels; height is width x
+        5/4.
+      properties:
+        x:
+          type: integer
+          minimum: 0
+        y:
+          type: integer
+          minimum: 0
+        width:
+          type: integer
+          minimum: 1
+      required:
+      - width
+      - x
+      - y
+    CropRequest:
+      type: object
+      description: A look's 4:5 frame in the file's own pixels; height is width x
+        5/4.
+      properties:
+        x:
+          type: integer
+          minimum: 0
+        y:
+          type: integer
+          minimum: 0
+        width:
+          type: integer
+          minimum: 1
+      required:
+      - width
+      - x
+      - y
     CrossXPLockRequest:
       type: object
       description: Input + dispatch for ThreadViewSet.cross_xp_lock action (Spec A
@@ -50017,6 +50228,16 @@ components:
       description: |-
         * `obvious` - Obvious (visible if capability met)
         * `discoverable` - Discoverable (must be learned)
+    DisplayTechnique:
+      type: object
+      properties:
+        technique_id:
+          type: integer
+        name:
+          type: string
+      required:
+      - name
+      - technique_id
     DissolveRequest:
       type: object
       description: |-
@@ -50961,6 +51182,16 @@ components:
       - dreamwalk_host
       - is_dreamside
       - wake_blocked
+    DriveView:
+      type: object
+      properties:
+        label:
+          type: string
+        strength:
+          type: string
+      required:
+      - label
+      - strength
     DuelChallenge:
       type: object
       description: |-
@@ -51486,6 +51717,11 @@ components:
           items:
             $ref: '#/components/schemas/ProtectionCommitment'
           readOnly: true
+        standoff:
+          allOf:
+          - $ref: '#/components/schemas/StandoffView'
+          nullable: true
+          readOnly: true
         is_lethal:
           type: boolean
           readOnly: true
@@ -51522,6 +51758,7 @@ components:
       - protection_commitments
       - resolution_order
       - scene
+      - standoff
       - surge_beats
       - sustained_actions
       - volatile_objects
@@ -54777,6 +55014,129 @@ components:
       description: |-
         * `active` - Active
         * `archived` - Archived
+    GalleryPicture:
+      type: object
+      description: |-
+        One picture as a viewer's Gallery shows it.
+
+        Context: ``account`` (the requester), ``hidden_ids`` and ``also_on`` (filled only
+        for the character's own player or staff), ``worn_id``.
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        url:
+          type: string
+          readOnly: true
+        look_url:
+          type: string
+          nullable: true
+          readOnly: true
+        title:
+          type: string
+          readOnly: true
+        caption:
+          type: string
+          readOnly: true
+        is_nsfw:
+          type: boolean
+          readOnly: true
+        width:
+          type: integer
+          readOnly: true
+          nullable: true
+        height:
+          type: integer
+          readOnly: true
+          nullable: true
+        file_size_bytes:
+          type: integer
+          readOnly: true
+          nullable: true
+        mood:
+          type: string
+          readOnly: true
+        mood_id:
+          type: integer
+          readOnly: true
+          nullable: true
+        crop:
+          allOf:
+          - $ref: '#/components/schemas/Crop'
+          nullable: true
+          readOnly: true
+        sort_order:
+          type: integer
+          readOnly: true
+        is_look:
+          type: boolean
+          readOnly: true
+        is_character_art:
+          type: boolean
+          readOnly: true
+        is_worn:
+          type: boolean
+          readOnly: true
+        is_hidden:
+          type: boolean
+          readOnly: true
+        can_delete:
+          type: boolean
+          readOnly: true
+        also_on:
+          type: array
+          items:
+            type: string
+          readOnly: true
+      required:
+      - also_on
+      - can_delete
+      - caption
+      - crop
+      - file_size_bytes
+      - height
+      - id
+      - is_character_art
+      - is_hidden
+      - is_look
+      - is_nsfw
+      - is_worn
+      - look_url
+      - mood
+      - mood_id
+      - sort_order
+      - title
+      - url
+      - width
+    GalleryReorderRequest:
+      type: object
+      description: The gallery's pictures, in their new order.
+      properties:
+        roster_entry:
+          type: integer
+        ids:
+          type: array
+          items:
+            type: integer
+      required:
+      - ids
+      - roster_entry
+    GalleryUploadRequest:
+      type: object
+      description: Files dropped onto a character's Gallery.
+      properties:
+        roster_entry:
+          type: integer
+        images:
+          type: array
+          items:
+            type: string
+            format: binary
+            pattern: (?:jpg|jpeg|png|gif|webp)$
+          maxItems: 50
+      required:
+      - images
+      - roster_entry
     GameInvite:
       type: object
       description: |-
@@ -55772,6 +56132,61 @@ components:
         * `pending` - Pending
         * `accepted` - Accepted
         * `withdrawn` - Withdrawn
+    GroupView:
+      type: object
+      properties:
+        group_id:
+          type: integer
+        name:
+          type: string
+        member_count:
+          type: integer
+        state:
+          type: string
+        terms_ease:
+          type: integer
+        cause:
+          type: string
+          nullable: true
+        cause_gloss:
+          type: string
+          nullable: true
+        hidden_count:
+          type: integer
+        drives:
+          type: array
+          items:
+            $ref: '#/components/schemas/DriveView'
+        revealed_regard:
+          type: array
+          items:
+            type: string
+        read_check:
+          type: string
+        read_grade:
+          type: string
+        read_grade_label:
+          type: string
+        morale_state:
+          type: string
+        terms_morale_ease:
+          type: integer
+      required:
+      - cause
+      - cause_gloss
+      - drives
+      - group_id
+      - hidden_count
+      - member_count
+      - morale_state
+      - name
+      - read_check
+      - read_grade
+      - read_grade_label
+      - revealed_regard
+      - state
+      - terms_ease
+      - terms_morale_ease
     GroupVoteRequestRequest:
       type: object
       description: 'POST body for the #1036 group-vote endpoint.'
@@ -58931,6 +59346,16 @@ components:
         * `gm` - GM
         * `experienced` - Experienced GM
         * `senior` - Senior GM
+    LeverView:
+      type: object
+      properties:
+        text:
+          type: string
+        is_spark:
+          type: boolean
+      required:
+      - is_spark
+      - text
     LibraryEntry:
       type: object
       description: Read-only serializer for library browse cards.
@@ -59508,6 +59933,18 @@ components:
           nullable: true
       required:
       - image_file
+    MediaUsage:
+      type: object
+      description: 'The requester''s storage: bytes their own files take, and their
+        quota.'
+      properties:
+        used_bytes:
+          type: integer
+        quota_bytes:
+          type: integer
+      required:
+      - quota_bytes
+      - used_bytes
     MentorPersona:
       type: object
       description: Minimal read-only representation of a mentor persona.
@@ -60351,6 +60788,9 @@ components:
           oneOf:
           - $ref: '#/components/schemas/EncounterRiskLevelEnum'
           - $ref: '#/components/schemas/BlankEnum'
+        opens_as_standoff:
+          type: boolean
+          description: 'ENCOUNTER options only: the spawned encounter opens as a standoff.'
         visibility_rule:
           description: Phase 0 predicate tree gating this option's visibility.
         authored_check_type:
@@ -60504,6 +60944,9 @@ components:
           oneOf:
           - $ref: '#/components/schemas/EncounterRiskLevelEnum'
           - $ref: '#/components/schemas/BlankEnum'
+        opens_as_standoff:
+          type: boolean
+          description: 'ENCOUNTER options only: the spawned encounter opens as a standoff.'
         visibility_rule:
           description: Phase 0 predicate tree gating this option's visibility.
         authored_check_type:
@@ -61457,6 +61900,21 @@ components:
       - codex_entry_id
       - id
       - name
+    MoodOption:
+      type: object
+      description: 'A mood a look can be tagged with (#4151): what the picture shows,
+        not a feeling.'
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        name:
+          type: string
+          readOnly: true
+          description: Mood name (e.g., 'Angry', 'Content', 'Flirty')
+      required:
+      - id
+      - name
     Mute:
       type: object
       description: A mute the requesting player owns.
@@ -61619,8 +62077,7 @@ components:
         profile_picture_url:
           type: string
           nullable: true
-          description: Return the cloudinary URL for the entry's profile picture,
-            or None.
+          description: The worn look's cropped URL, or None (#4151).
           readOnly: true
         primary_persona_id:
           type: integer
@@ -62924,7 +63381,11 @@ components:
           readOnly: true
         morale_state:
           type: string
-          nullable: true
+          description: |-
+            Derived STEADY/FALTER/BREAK - pure arithmetic, no query.
+
+            Public: the derived state is observable behaviour; the number stays
+            GM-only (#4147).
           readOnly: true
         is_enraged:
           type: boolean
@@ -66169,6 +66630,29 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/GMTableMembership'
+    PaginatedGalleryPictureList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/GalleryPicture'
     PaginatedGameInviteList:
       type: object
       required:
@@ -66875,6 +67359,29 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/MissionTemplate'
+    PaginatedMoodOptionList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/MoodOption'
     PaginatedMuteList:
       type: object
       required:
@@ -70647,6 +71154,32 @@ components:
           maxLength: 200
         description:
           type: string
+    PatchedGalleryPictureUpdateRequest:
+      type: object
+      description: |-
+        What the owner changes on one picture. Every field is optional.
+
+        ``crop`` set makes (or re-frames) a look; ``crop`` null makes it a plain picture.
+        ``mood`` is a ``MoodOption`` id, or null for none.
+      properties:
+        title:
+          type: string
+          maxLength: 200
+        caption:
+          type: string
+          maxLength: 2000
+        is_nsfw:
+          type: boolean
+        mood:
+          type: integer
+          nullable: true
+        crop:
+          allOf:
+          - $ref: '#/components/schemas/CropRequest'
+          nullable: true
+        wear:
+          type: boolean
+          description: 'With a crop: also make this the worn look.'
     PatchedGiftCreateRequest:
       type: object
       description: Serializer for creating Gift records.
@@ -70983,6 +71516,9 @@ components:
           oneOf:
           - $ref: '#/components/schemas/EncounterRiskLevelEnum'
           - $ref: '#/components/schemas/BlankEnum'
+        opens_as_standoff:
+          type: boolean
+          description: 'ENCOUNTER options only: the spawned encounter opens as a standoff.'
         visibility_rule:
           description: Phase 0 predicate tree gating this option's visibility.
         authored_check_type:
@@ -72420,22 +72956,6 @@ components:
             at all (a silent binding, a curse laid at a distance): a concealed cast
             of one of those is hidden outright from anyone who fails detection, rather
             than narrated without attribution.'
-    PatchedTenureGalleryRequest:
-      type: object
-      description: Serialize tenure galleries.
-      properties:
-        name:
-          type: string
-          minLength: 1
-          maxLength: 100
-        is_public:
-          type: boolean
-          description: Visible to other players
-        allowed_viewers:
-          type: array
-          items:
-            type: integer
-          description: Tenures allowed to view this private gallery
     PatchedThreadRequest:
       type: object
       description: |-
@@ -77898,9 +78418,11 @@ components:
           allOf:
           - $ref: '#/components/schemas/Character'
           readOnly: true
-        profile_picture:
-          allOf:
-          - $ref: '#/components/schemas/TenureMedia'
+        profile_picture_url:
+          type: string
+          nullable: true
+          description: 'The worn look''s crop; None for a visitor without an account
+            (#3904, #4151).'
           readOnly: true
         tenures:
           type: array
@@ -77945,7 +78467,7 @@ components:
       - description
       - fullname
       - id
-      - profile_picture
+      - profile_picture_url
       - quote
       - tenures
     RosterList:
@@ -77977,7 +78499,11 @@ components:
       - name
     RosterTenure:
       type: object
-      description: Serialize roster tenure information with nested media.
+      description: |-
+        Serialize roster tenure information.
+
+        No nested media (#4151): this is served to anyone by the roster list, and art is
+        shown only to accounts. A character's pictures come from its Gallery endpoint.
       properties:
         id:
           type: integer
@@ -78019,18 +78545,12 @@ components:
           type: string
           readOnly: true
           description: Cloudinary folder for this tenure's photos
-        media:
-          type: array
-          items:
-            $ref: '#/components/schemas/TenureMedia'
-          readOnly: true
       required:
       - applied_date
       - approved_by
       - approved_date
       - end_date
       - id
-      - media
       - photo_folder
       - player_number
       - start_date
@@ -80283,6 +80803,22 @@ components:
       - has_death_risk
       - stage_description
       - stage_name
+    SparkView:
+      type: object
+      properties:
+        group_id:
+          type: integer
+        regard_rule_id:
+          type: integer
+        text:
+          type: string
+        shared:
+          type: boolean
+      required:
+      - group_id
+      - regard_rule_id
+      - shared
+      - text
     SpeakerQueue:
       type: object
       properties:
@@ -81665,6 +82201,43 @@ components:
       description: |-
         * `core` - Core Member
         * `minor` - Minor Member
+    StandoffView:
+      type: object
+      properties:
+        place:
+          type: string
+        groups:
+          type: array
+          items:
+            $ref: '#/components/schemas/GroupView'
+        approaches:
+          type: array
+          items:
+            $ref: '#/components/schemas/ApproachView'
+        terms:
+          type: array
+          items:
+            $ref: '#/components/schemas/TermsView'
+        sparks:
+          type: array
+          items:
+            $ref: '#/components/schemas/SparkView'
+        shared_sparks:
+          type: array
+          items:
+            $ref: '#/components/schemas/SparkView'
+        display_techniques:
+          type: array
+          items:
+            $ref: '#/components/schemas/DisplayTechnique'
+      required:
+      - approaches
+      - display_techniques
+      - groups
+      - place
+      - shared_sparks
+      - sparks
+      - terms
     StartingArea:
       type: object
       description: |-
@@ -84425,80 +84998,31 @@ components:
       - body_region_display
       - equipment_layer
       - equipment_layer_display
-    TenureGallery:
+    TermsView:
       type: object
-      description: Serialize tenure galleries.
       properties:
-        id:
+        terms_id:
           type: integer
-          readOnly: true
-        tenure:
-          type: integer
-          readOnly: true
         name:
           type: string
-          maxLength: 100
-        is_public:
-          type: boolean
-          description: Visible to other players
-        allowed_viewers:
-          type: array
-          items:
-            type: integer
-          description: Tenures allowed to view this private gallery
-      required:
-      - id
-      - name
-      - tenure
-    TenureGalleryRequest:
-      type: object
-      description: Serialize tenure galleries.
-      properties:
-        name:
+        group_id:
+          type: integer
+        description:
           type: string
-          minLength: 1
-          maxLength: 100
-        is_public:
-          type: boolean
-          description: Visible to other players
-        allowed_viewers:
-          type: array
-          items:
-            type: integer
-          description: Tenures allowed to view this private gallery
+        grade:
+          type: string
+        grade_label:
+          type: string
+        critical_label:
+          type: string
       required:
+      - critical_label
+      - description
+      - grade
+      - grade_label
+      - group_id
       - name
-    TenureMedia:
-      type: object
-      description: Serialize media associated with a roster tenure.
-      properties:
-        id:
-          type: integer
-          readOnly: true
-        media:
-          allOf:
-          - $ref: '#/components/schemas/Media'
-          readOnly: true
-        gallery:
-          type: integer
-          readOnly: true
-          nullable: true
-        sort_order:
-          type: integer
-          maximum: 2147483647
-          minimum: 0
-      required:
-      - gallery
-      - id
-      - media
-    TenureMediaRequest:
-      type: object
-      description: Serialize media associated with a roster tenure.
-      properties:
-        sort_order:
-          type: integer
-          maximum: 2147483647
-          minimum: 0
+      - terms_id
     TerrainTypeEnum:
       enum:
       - open

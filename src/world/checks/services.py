@@ -425,12 +425,17 @@ def _compute_check_breakdown(  # noqa: PLR0913 - keyword-only check params mirro
     level isn't reachable through ``character``'s own ``CharacterClassLevel`` rows, e.g. a
     ``CombatOpponent`` (an ephemeral NPC with no class-level rows behind its objectdb,
     which would otherwise floor at 1 regardless of its authored level).
+
+    The Audere / Audere Majora ``check_level_bonus`` (#4147) is added only on the
+    resolved-level path (``level_override is None``); an override is used as given.
     """
     handler: TraitHandler = character.traits  # type: ignore[attr-defined] — ObjectDB typeclass extension
     if level_override is not None:
         level = level_override
     else:
-        level = get_character_path_level(character)
+        from world.magic.audere import audere_check_level_bonus  # noqa: PLC0415
+
+        level = get_character_path_level(character) + audere_check_level_bonus(character)
     effort_modifier = EFFORT_CHECK_MODIFIER.get(effort_level, 0) if effort_level else 0
 
     trait_points = _calculate_trait_points(handler, check_type, stat_override=stat_override)
@@ -1250,8 +1255,9 @@ def compute_resist_increment(
     opposes checks (``level_opposition``/the three combat sites wired to it).
 
     The ephemeral NPC is the case that was BROKEN, but the override is not scoped to
-    it: ``_social_combat_difficulty`` passes ``level_override`` for EVERY opponent, so
-    a persona-backed opponent's own ``CharacterClassLevel`` rows are inert on this path
+    it: combat's ``_social_combat_difficulty`` (through ``social_target_difficulty``) passes
+    ``level_override`` for EVERY opponent, so a persona-backed
+    opponent's own ``CharacterClassLevel`` rows are inert on this path
     too — ``CombatOpponent.level`` is the single authority for how sturdy an opponent
     is, on offense and defense alike. That is deliberate, and today it is also
     unobservable: the persona-backed constructors (``duels._make_mirror``,
@@ -1272,11 +1278,13 @@ def compute_resist_increment(
     from a call site that also charges the defender real resist fatigue for a
     player-*declared* effort (the two scene call sites,
     ``_compute_difficulty_override_for_primary`` /
-    ``_compute_target_difficulty_override``) — NOT combat's
-    ``_social_combat_difficulty``, whose ``effort_level="medium"`` default is a
-    hardcoded passive-resistance band, not a real choice; awarding DP there would be
-    phantom accrual for an opponent (sometimes a persona-backed PC mirror) who spent
-    nothing.
+    ``_compute_target_difficulty_override``). NOT
+    the no-development callers: combat's ``_social_combat_difficulty``, standoffs (both
+    through ``social_target_difficulty``, which returns a ``SocialDifficulty``, not an
+    int) and the scenes' NPC passive resist (``_npc_passive_resist_increment``). Their
+    ``"medium"`` effort is a hardcoded passive-resistance band, not a real choice;
+    awarding DP there would be phantom accrual for an opponent (sometimes a
+    persona-backed PC mirror) or an NPC who spent nothing.
 
     Args:
         defender_character: The character resisting the social action.

@@ -265,6 +265,20 @@ work), so no code exists for this yet — `SceneActionRequest` only supports
 target == consenter today. Build this alongside the combat-participation
 follow-up, not before there's a real consumer.
 
+## Manifested by a technique (#4118) [BUILT & WIRED]
+
+A `CompanionArchetype` can be an option on a manifesting technique
+(`TechniqueManifestOption.archetype`, `world.magic`). A character's
+`CharacterManifestation.companion` names their own `Companion` of that archetype; the
+manifest bond holds while the companion is theirs, matches the archetype and has no
+`released_at`. `manifest_bound_entity`, on a successful, unbounced cast, moves the companion's body into
+the caster's room, then calls `materialize_companion_as_combat_opponent` (unchanged) to put
+it in the encounter. A Savaged companion (`companion_is_savaged`, the check
+`CompanionFitToFightPrerequisite` also uses), a companion with no body, a caster with no
+location, or a body that does not land in the caster's room manifests nothing. An archetype with no `CompanionAbility` rows would
+arrive and never act; the `manifest-archetype-abilities` probe flags it. A cast creates no
+new `Companion` row ([ABSENT]). See `docs/systems/magic.md`'s "Manifesting a bound entity".
+
 ## Deferred (see #672 issue body for the full list)
 
 - NPCAsset informant/contact promotion mechanic (separate follow-up issue).

@@ -130,7 +130,7 @@ describe('RealmPage (#3725)', () => {
           {
             id: 3,
             character: { id: 3, name: 'Isolde Veyle', char_class: 'Duelist' },
-            profile_picture: null,
+            profile_picture_url: null,
           },
         ],
       },

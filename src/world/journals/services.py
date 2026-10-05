@@ -60,6 +60,16 @@ def player_for_sheet(sheet: CharacterSheet) -> PlayerData | None:
     return current.player_data if current is not None else None
 
 
+def _paying_account(sheet: CharacterSheet) -> AccountDB | None:
+    """The account playing ``sheet`` right now, or None between players (#4132).
+
+    Not ``sheet.character.db_account``: Evennia clears that when the last session unpuppets,
+    so a player posting from the web without a puppet would earn no XP.
+    """
+    player = player_for_sheet(sheet)
+    return player.account if player is not None else None
+
+
 def exclude_blocked_and_muted_authors(
     queryset: QuerySet[JournalEntry], *, viewer_account: Any
 ) -> QuerySet[JournalEntry]:
@@ -276,13 +286,14 @@ def create_journal_entry(  # noqa: PLR0913 - explicit content/visibility/tag/ove
             post_index = tracker.posts_this_week - 1
             if post_index < len(JOURNAL_POST_XP):
                 xp_amount = JOURNAL_POST_XP[post_index]
-                account = author.character.db_account
-                award_xp(
-                    account=account,
-                    amount=xp_amount,
-                    description=f"Journal post: {title}",
-                    character=author,
-                )
+                account = _paying_account(author)
+                if account is not None:
+                    award_xp(
+                        account=account,
+                        amount=xp_amount,
+                        description=f"Journal post: {title}",
+                        character=author,
+                    )
 
         stat_keys = ["journals.total_written"]
         if is_public:
@@ -295,13 +306,13 @@ def create_journal_entry(  # noqa: PLR0913 - explicit content/visibility/tag/ove
 def _award_response_xp(  # noqa: PLR0913 - the character is a required attribution, not an option
     tracker: WeeklyJournalXP,
     flag_field: str,
-    account: AccountDB,
+    account: AccountDB | None,
     amount: int,
     description: str,
     character: CharacterSheet,
 ) -> None:
-    """Award response XP if not already awarded this week."""
-    if not getattr(tracker, flag_field):
+    """Award response XP if not already awarded this week (nothing when no one plays it)."""
+    if account is not None and not getattr(tracker, flag_field):
         setattr(tracker, flag_field, True)
         tracker.save(update_fields=[flag_field])
         award_xp(account=account, amount=amount, description=description, character=character)
@@ -375,8 +386,8 @@ def create_journal_response(
         author_tracker = _get_or_reset_weekly_tracker(author)
         receiver_tracker = _get_or_reset_weekly_tracker(parent.author)
 
-        author_account = author.character.db_account
-        receiver_account = parent.author.character.db_account
+        author_account = _paying_account(author)
+        receiver_account = _paying_account(parent.author)
 
         if response_type == ResponseType.PRAISE:
             _award_response_xp(

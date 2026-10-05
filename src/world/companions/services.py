@@ -249,6 +249,27 @@ def dismount_companion(sheet: CharacterSheet) -> Companion:
     return companion
 
 
+def companion_is_savaged(companion: Companion) -> bool:
+    """True when the companion's body carries the Savaged injury (#3652).
+
+    A Savaged companion may not be committed to violence, whether by the ``companion
+    fight`` and ``companion deploy`` verbs (``CompanionFitToFightPrerequisite``) or by
+    being manifested through a cast (#4118). A companion with no body, or a database
+    without the Savaged template, is not Savaged.
+    """
+    from world.companions.defeat_content import SAVAGED_CONDITION_NAME  # noqa: PLC0415
+    from world.conditions.models import ConditionTemplate  # noqa: PLC0415
+    from world.conditions.services import has_condition  # noqa: PLC0415
+
+    if companion.objectdb is None:
+        return False
+    try:
+        savaged = ConditionTemplate.get_by_name(SAVAGED_CONDITION_NAME)
+    except ConditionTemplate.DoesNotExist:
+        return False
+    return has_condition(companion.objectdb, savaged)
+
+
 def materialize_companion_as_combat_opponent(
     companion: Companion,
     encounter: CombatEncounter,

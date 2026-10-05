@@ -32,6 +32,7 @@ from evennia_extensions.factories import AccountFactory, CharacterFactory
 from world.character_sheets.factories import CharacterSheetFactory
 from world.character_sheets.types import LifecycleState
 from world.conditions.factories import ConditionInstanceFactory, UnconsciousConditionFactory
+from world.roster.factories import PlayerDataFactory, RosterEntryFactory, RosterTenureFactory
 from world.roster.services.activity import set_lifecycle_state
 
 
@@ -47,9 +48,12 @@ class JournalCreateOffscreenGateTests(TestCase):
     def setUp(self) -> None:
         self.user = AccountFactory()
         self.character = CharacterFactory()
-        self.character.db_account = self.user
-        self.character.save()
         self.sheet = CharacterSheetFactory(character=self.character)
+        RosterTenureFactory(
+            roster_entry=RosterEntryFactory(character_sheet=self.sheet),
+            player_data=PlayerDataFactory(account=self.user),
+            end_date=None,
+        )
         self.client = APIClient()
         self.client.force_authenticate(user=self.user)
 

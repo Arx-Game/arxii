@@ -130,7 +130,7 @@ function makeOpponent(overrides: Partial<Opponent> = {}): Opponent {
     vulnerability_rounds_remaining: null,
     morale: null,
     max_morale: null,
-    morale_state: null,
+    morale_state: 'steady',
     is_enraged: false,
     is_wall_broken: false,
     active_conditions: [],
@@ -153,6 +153,7 @@ function makeEncounter(
     is_participant: true,
     is_gm: false,
     objective: null,
+    standoff: null,
     participants,
     opponents,
     current_round_actions: [],
@@ -787,5 +788,33 @@ describe('opponent state badges (#3552)', () => {
     expect(chips).toHaveTextContent('Morale 40/100');
     expect(chips).toHaveTextContent('Falter');
     expect(chips).toHaveTextContent('x1.50');
+  });
+});
+
+describe('opponent morale state chips (#4147)', () => {
+  it('shows Faltering to a player with no morale number', () => {
+    const encounter = makeEncounter([], [makeOpponent({ morale_state: 'falter' })]);
+
+    render(<CombatantsList encounter={encounter} />, { wrapper: createWrapper() });
+
+    expect(screen.getByTestId('morale-state-chip')).toHaveTextContent('Faltering');
+    expect(screen.queryByTestId('gm-boss-state')).toBeNull();
+    expect(document.body.textContent).not.toMatch(/morale/i);
+  });
+
+  it('shows Broken for a broken opponent', () => {
+    const encounter = makeEncounter([], [makeOpponent({ morale_state: 'break' })]);
+
+    render(<CombatantsList encounter={encounter} />, { wrapper: createWrapper() });
+
+    expect(screen.getByTestId('morale-state-chip')).toHaveTextContent('Broken');
+  });
+
+  it('shows no chip for a steady opponent', () => {
+    const encounter = makeEncounter([], [makeOpponent({ morale_state: 'steady' })]);
+
+    render(<CombatantsList encounter={encounter} />, { wrapper: createWrapper() });
+
+    expect(screen.queryByTestId('morale-state-chip')).toBeNull();
   });
 });

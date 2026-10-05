@@ -164,6 +164,41 @@ class CleanupCompletedEncounterTests(EvenniaTestCase):
         self.assertFalse(ConditionInstance.objects.filter(pk=end_combat_inst.pk).exists())
         self.assertTrue(ConditionInstance.objects.filter(pk=rounds_inst.pk).exists())
 
+    def test_cleanup_settles_rounds_conditions_into_expiry(self):
+        """#4120: a ROUNDS condition outliving combat gets a wall-clock expiry and
+        loses its round counter, while an UNTIL_END_OF_COMBAT row is still removed."""
+        from world.combat.factories import CombatEncounterFactory, CombatParticipantFactory
+        from world.combat.services import cleanup_completed_encounter
+        from world.conditions.constants import DurationType
+        from world.conditions.factories import ConditionInstanceFactory, ConditionTemplateFactory
+        from world.conditions.models import ConditionInstance
+
+        encounter = CombatEncounterFactory()
+        participant = CombatParticipantFactory(encounter=encounter)
+        target = participant.character_sheet.character
+        poison = ConditionInstanceFactory(
+            target=target,
+            condition=ConditionTemplateFactory(
+                name="Settle Journey Poison", default_duration_type=DurationType.ROUNDS
+            ),
+            rounds_remaining=4,
+        )
+        fury = ConditionInstanceFactory(
+            target=target,
+            condition=ConditionTemplateFactory(
+                name="Settle Journey Fury",
+                default_duration_type=DurationType.UNTIL_END_OF_COMBAT,
+            ),
+            rounds_remaining=None,
+        )
+
+        cleanup_completed_encounter(encounter)
+
+        poison.refresh_from_db()
+        self.assertIsNone(poison.rounds_remaining)
+        self.assertIsNotNone(poison.expires_at)
+        self.assertFalse(ConditionInstance.objects.filter(pk=fury.pk).exists())
+
     def test_cleanup_expires_until_end_of_combat_on_persistent_opponent(self):
         """Generic gap (#763): a persistent (non-ephemeral) NPC opponent that
         survives cleanup still has its UNTIL_END_OF_COMBAT conditions swept —

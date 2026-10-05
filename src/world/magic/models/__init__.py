@@ -18,6 +18,7 @@ Submodules (see Scope 6 §4.4):
 - specialization: TechniqueVariant, TechniqueVariantCapabilityGrant,
   TechniqueVariantDamageProfile, TechniqueVariantAppliedCondition
   (gift-technique specialization variants, #1578)
+- manifestation: TechniqueManifestOption, CharacterManifestation (#4118)
 - motifs: Facet, Motif, MotifResonance, MotifResonanceAssociation
 - soulfray: SoulfrayConfig, MishapPoolTier, AnimaRitualBudgetAward
 - alterations: MagicalAlterationTemplate, PendingAlteration, MagicalAlterationEvent
@@ -143,6 +144,7 @@ from world.magic.models.grants import (
 )
 from world.magic.models.knowledge import CharacterRitualKnowledge
 from world.magic.models.liturgy import RitualLiturgy
+from world.magic.models.manifestation import CharacterManifestation, TechniqueManifestOption
 from world.magic.models.motifs import (
     Facet,
     FacetManager,
@@ -301,6 +303,7 @@ __all__ = [
     "CharacterGiftUnlock",
     # Glimpse guided flow (#2427)
     "CharacterGlimpseTag",
+    "CharacterManifestation",
     "CharacterResonance",
     # knowledge layer (Anima Ritual UI spec §Decision 6)
     "CharacterRitualKnowledge",
@@ -462,6 +465,7 @@ __all__ = [
     "TechniqueFunctionTag",
     "TechniqueFunctionTagManager",
     "TechniqueGrant",
+    "TechniqueManifestOption",
     "TechniqueOutcomeModifier",
     "TechniqueProgress",
     "TechniqueProgressWeekly",

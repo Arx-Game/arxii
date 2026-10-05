@@ -307,6 +307,13 @@ the lapse sweep or scene finish rather than kept with nothing to do.
 _Avoid_: bind timer, charm window (the window is about the charmer's presence, not
 a countdown)
 
+**Settled round** (#4120, ADR-4120):
+What a round-counted condition on a combatant becomes when the fight ends:
+`cleanup_completed_encounter` calls `settle_round_effects`, converting the remaining rounds into
+a real-time expiry. Combat owns the trigger; the clock and the non-lethal tick live in
+conditions (see its glossary). A charm or hold converted this way is what the lapse sweep sees.
+_Avoid_: frozen condition, leftover rounds
+
 **Summon**:
 An ALLY `CombatOpponent` conjured during combat by a technique. It has `allegiance=ALLY`,
 `summoned_by` (FK → `CharacterSheet`), and `bond_expires_round`; it attacks ENEMY opponents
@@ -392,3 +399,15 @@ them); only conditions still held that were applied during the encounter show. T
 line ("Deed remembered") only ever reports an authored deed row, since legend settles at
 the end of a story from its outcomes, never per fight.
 _Avoid_: aftermath report, post-combat summary, combat recap
+
+**Spectacle** (#4147, ADR-4147):
+An earned display of power that shakes the enemies who witness it: each witness loses morale once per caster and move, and allied NPCs regain some. Earned, never declared: nothing authors a "clever play" tag.
+_Avoid_: awe, dread, intimidation (that is the CheckType), scare, fear effect
+
+**Spectacle kind** (#4147):
+What kind of display shook the witnesses: Audere entry, Ultimate, Crossing, Critical technique, Devastating action (`SpectacleKind`). Each has its own base hit in `SpectacleConfig`. Distinct from **Spectacle reaction** (`SpectacleReaction`: shaken, faltering, broken, heartened), which only picks the authored flavour line.
+_Avoid_: display type, fear source
+
+**Standoff** (#4145):
+The pre-round state of a `CombatEncounter` in which the party reads and talks down groups of opponents before the first round. Its terms (Group, Drive, Cause, Regard rule, Spark, Terms, Approach) live in `src/world/standoffs/AGENT_GLOSSARY.md`.
+_Avoid_: parley phase

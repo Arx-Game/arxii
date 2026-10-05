@@ -51,6 +51,8 @@ from world.conditions.services import get_active_conditions
 from world.fatigue.services import get_fatigue_capacity
 from world.magic.models import CharacterTechnique, Technique
 from world.scenes.constants import PersonaType, RoundStatus
+from world.standoffs.serializers import StandoffViewSerializer
+from world.standoffs.services.view import build_standoff_view
 
 if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
@@ -245,12 +247,15 @@ class OpponentSerializer(serializers.ModelSerializer):
     def get_max_morale(self, obj: CombatOpponent) -> int | None:
         return obj.max_morale if self._is_gm_or_staff() else None
 
-    @extend_schema_field(serializers.CharField(allow_null=True))
-    def get_morale_state(self, obj: CombatOpponent) -> str | None:
-        """Derived STEADY/FALTER/BREAK - pure arithmetic, no query."""
+    def get_morale_state(self, obj: CombatOpponent) -> str:
+        """Derived STEADY/FALTER/BREAK - pure arithmetic, no query.
+
+        Public: the derived state is observable behaviour; the number stays
+        GM-only (#4147).
+        """
         from world.combat.morale import morale_state_for  # noqa: PLC0415
 
-        return morale_state_for(obj).value if self._is_gm_or_staff() else None
+        return morale_state_for(obj).value
 
     def get_is_enraged(self, obj: CombatOpponent) -> bool:
         """Public: the enrage line has fired (a transition raised the multiplier)."""
@@ -1262,6 +1267,7 @@ class EncounterDetailSerializer(serializers.ModelSerializer):
     pending_selections = serializers.SerializerMethodField(required=False)
     sustained_actions = serializers.SerializerMethodField(required=False)
     protection_commitments = serializers.SerializerMethodField(required=False)
+    standoff = serializers.SerializerMethodField()
     escalation_curve = serializers.PrimaryKeyRelatedField(
         queryset=EscalationCurve.objects.all(),
         required=False,
@@ -1330,6 +1336,7 @@ class EncounterDetailSerializer(serializers.ModelSerializer):
             "pending_selections",
             "sustained_actions",
             "protection_commitments",
+            "standoff",
             "is_lethal",
             "duel_winner",
         ]
@@ -1357,6 +1364,25 @@ class EncounterDetailSerializer(serializers.ModelSerializer):
             p.character_sheet.character_id in character_ids
             for p in obj.participants_cached  # type: ignore[attr-defined]
         )
+
+    @extend_schema_field(StandoffViewSerializer(allow_null=True))
+    def get_standoff(self, obj: CombatEncounter) -> dict[str, Any] | None:
+        """The standoff as the viewer's own participant sees it; None for anyone else.
+
+        Built per viewer (sparks, regard detail and unread things are private), so a
+        viewer who is not a participant, or an encounter past its standoff, gets None.
+        A user playing two characters in the encounter gets the first one's view.
+        """
+        # Round 0 is the only standoff window; a fight in progress costs no query.
+        # build_standoff_view does the authoritative is_in_standoff check.
+        if obj.round_number != 0:
+            return None
+        viewer_ids = self.context.get("viewer_character_ids", set())
+        for participant in obj.participants_cached:  # type: ignore[attr-defined]
+            if participant.character_sheet.character_id in viewer_ids:
+                view = build_standoff_view(obj, participant.character_sheet)
+                return None if view is None else StandoffViewSerializer(view).data
+        return None
 
     @extend_schema_field(PendingSelectionSerializer(many=True))
     def get_pending_selections(self, obj: CombatEncounter) -> list[dict[str, Any]]:

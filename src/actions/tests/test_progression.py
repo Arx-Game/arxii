@@ -20,6 +20,7 @@ from world.progression.models import (
     XPCostChart,
     XPCostEntry,
 )
+from world.roster.factories import grant_test_tenure
 from world.scenes.factories import PersonaFactory
 from world.skills.factories import (
     CharacterSkillValueFactory,
@@ -261,6 +262,7 @@ class PurchaseUnlockActionTests(TestCase):
         character = sheet.character
         character.db_account = account
         character.save()
+        grant_test_tenure(sheet, account)
         return character, sheet, account
 
     def _create_class_level_unlock(self, character, *, xp_cost: int):
@@ -509,6 +511,7 @@ class PurchaseLanguageBreakthroughActionTests(TestCase):
         self.character = self.sheet.character
         self.character.db_account = self.account
         self.character.save()
+        grant_test_tenure(self.sheet, self.account)
         self.trait = TraitFactory(name="ActionBuyTongue", trait_type=TraitType.LANGUAGE)
         self.language = LanguageFactory(name="ActionBuyTongue", trait=self.trait)
         TraitRatingUnlock.objects.create(trait=self.trait, target_rating=30)

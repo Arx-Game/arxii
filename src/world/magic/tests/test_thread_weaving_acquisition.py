@@ -27,15 +27,13 @@ from world.magic.services import accept_thread_weaving_unlock, compute_thread_we
 from world.magic.types import AlterationGateError
 from world.progression.factories import CharacterPathHistoryFactory
 from world.progression.models import ExperiencePointsData, XPTransaction
-from world.roster.factories import RosterTenureFactory
+from world.roster.factories import RosterTenureFactory, grant_test_tenure
 
 
 def _seed_xp(learner: CharacterSheet, amount: int) -> ExperiencePointsData:
     """Attach an AccountDB to learner.character and seed its XP tracker."""
     account = AccountFactory()
-    character = learner.character
-    character.account = account
-    account.characters.add(character)
+    grant_test_tenure(learner, account)
     xp_tracker, _ = ExperiencePointsData.objects.get_or_create(
         account=account,
         defaults={"total_earned": amount, "total_spent": 0},

@@ -174,6 +174,7 @@ from commands.social.tidings import CmdTidings
 from commands.speaker_queue import CmdLine  # #2356
 from commands.species_gm import CmdMakeShade  # #2862 gap close
 from commands.sphinx import CmdSphinx  # #2640
+from commands.standoff import CmdStandoff
 from commands.stealth import CmdSneak
 from commands.story import CmdStory
 from commands.story_rooms import CmdJoinRoom, CmdLeaveRoom, CmdSceneRoom  # #2450
@@ -412,6 +413,8 @@ class CharacterCmdSet(default_cmds.CharacterCmdSet):
             CmdClashCommit,
             # Shared combat verbs: combat <subverb> (#1453, #1452)
             CmdCombat,
+            # Standoff before a fight: standoff <subverb> (#4145)
+            CmdStandoff,
             # PC-vs-PC duel lifecycle: duel <subverb> (#1492)
             CmdDuel,
             # Scene lifecycle telnet command (#1445)

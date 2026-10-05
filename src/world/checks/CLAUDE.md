@@ -135,11 +135,17 @@ set, it **substitutes** for that resolved level in both places level is read ins
 breakdown (the `level_points` term and the `_calculate_aspect_bonus` call) — it never
 adds to the character's own resolved level, which would double-count exactly like
 combining `compute_resist_increment` with `level_opposition` would. This exists because
-`_social_combat_difficulty` (`world/combat/services.py`, backing Demoralize/Taunt/Parley)
-opposes a `CombatOpponent`, whose authored `level` field isn't reachable through its
-`objectdb`'s `CharacterClassLevel` rows (an ephemeral NPC has none, so it floored at 1
-regardless of the opponent's real level) — it passes
-`compute_resist_increment(target.objectdb, effort_level, level_override=target.level)`.
+the combat social verbs (Demoralize/Taunt/Parley) and standoffs oppose a `CombatOpponent`,
+whose authored `level` field isn't reachable through its `objectdb`'s `CharacterClassLevel`
+rows (an ephemeral NPC has none, so it floored at 1 regardless of the opponent's real
+level). They reach `compute_resist_increment` through `social_target_difficulty`
+(`world/checks/social_target.py`, #4145), the one difficulty function for a character acting
+socially on a character, which returns a `SocialDifficulty` (difficulty, actor-side
+contributions, eased bands) rather than an int. Combat's `_social_combat_difficulty`
+(`world/combat/services.py`) is a thin wrapper that passes `target_level=target.level`;
+the standoff verbs pass the group's highest active level. Callers that do not award
+development: combat, standoffs, and the scenes' NPC passive resist
+(`_npc_passive_resist_increment`, `world/scenes/action_services.py`).
 
 ## The modifier seam — `collect_check_modifiers(sheet, check_type, *, scene=None, extra_contributions=None, skip_fashion=False)`
 

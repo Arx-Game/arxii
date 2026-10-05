@@ -170,6 +170,40 @@ class SeedOrFeedEncounterFromCastTests(EvenniaTestCase):
         encounter.refresh_from_db()
         self.assertEqual(encounter.status, RoundStatus.DECLARING)
 
+    def test_cast_during_standoff_breaks_it_and_begins_round_one(self):
+        from world.combat.cast_seed import seed_or_feed_encounter_from_cast
+        from world.combat.constants import EncounterType, RiskLevel
+        from world.combat.models import CombatEncounter
+        from world.scenes.constants import RoundStatus
+        from world.standoffs.constants import StandoffGroupState
+        from world.standoffs.factories import StandoffGroupFactory
+
+        caster, target = self._make_caster_and_target()
+        technique = self._make_damage_technique()
+        scene, room = self._make_scene_with_room()
+        existing = CombatEncounter.objects.create(
+            room=room,
+            scene=scene,
+            status=RoundStatus.BETWEEN_ROUNDS,
+            risk_level=RiskLevel.MODERATE,
+            encounter_type=EncounterType.PARTY_COMBAT,
+        )
+        group = StandoffGroupFactory(encounter=existing)
+
+        encounter = seed_or_feed_encounter_from_cast(
+            caster_sheet=caster,
+            target_sheet=target,
+            technique=technique,
+            scene=scene,
+            room=room,
+        )
+
+        encounter.refresh_from_db()
+        group.refresh_from_db()
+        self.assertEqual(encounter.round_number, 1)
+        self.assertEqual(group.state, StandoffGroupState.FIGHTING)
+        self.assertIs(encounter.initiated_by_pc_side, True)
+
     def test_declaring_feed_reuses_existing_active_opponent(self):
         from world.combat.models import CombatOpponent, CombatRoundAction
 

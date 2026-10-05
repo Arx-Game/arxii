@@ -80,7 +80,7 @@ class MissionOptionAdmin(admin.ModelAdmin):
     """#3831 - one choice available at a MissionNode."""
 
     list_display = ["node", "order", "key", "option_kind", "source_kind"]
-    list_filter = ["option_kind", "source_kind", "encounter_risk_level"]
+    list_filter = ["option_kind", "source_kind", "encounter_risk_level", "opens_as_standoff"]
     search_fields = ["key", "node__key", "authored_ic_framing"]
     list_select_related = ["node", "authored_check_type", "branch_target", "challenge"]
     autocomplete_fields = [

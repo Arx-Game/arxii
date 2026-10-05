@@ -74,7 +74,7 @@ class RosterEntryViewSetTestCase(TestCase):
 
         # Should include character data and nested structures
         assert "character" in response.data
-        assert "profile_picture" in response.data
+        assert "profile_picture_url" in response.data
         assert "tenures" in response.data
         character = response.data["character"]
         assert character["name"] == self.roster_entry.character_sheet.character.name

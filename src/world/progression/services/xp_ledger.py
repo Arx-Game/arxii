@@ -135,14 +135,19 @@ def spend_xp_for_character(
     authoring zero-cost unlocks without a phantom transaction.
 
     Raises:
-        NoAccountForCharacterError: The sheet has no linked account.
+        NoAccountForCharacterError: The sheet has no current tenure, so no paying account.
         InsufficientXPError: The pool cannot cover ``amount``; carries
             ``required``/``available`` so callers can phrase their own refusal.
     """
     if amount <= 0:
         return None
 
-    account = sheet.character.account
+    # The playing account comes from the current roster tenure, not ``character.account``:
+    # Evennia clears that attribute when the last session unpuppets, so it is None for any
+    # character whose player is offline or on the web without a puppet (#4132).
+    from world.magic.services.gain import account_for_sheet
+
+    account = account_for_sheet(sheet)
     if account is None:
         raise NoAccountForCharacterError
 

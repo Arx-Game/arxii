@@ -10,6 +10,7 @@ from django.db import models
 from django.db.models import F, Q
 from django.utils import timezone
 from django.utils.functional import cached_property
+from django.utils.html import escape
 
 from core.managers import ArxSharedMemoryManager
 from core.models import ArxSharedMemoryModel as SharedMemoryModel
@@ -35,6 +36,7 @@ from world.combat.constants import (
     SCALING_CONFIG_PER_EXTRA_MEMBER_PCT,
     ActionCategory,
     BreakContributionKind,
+    CauseKind,
     ClashActionSlot,
     ClashFlavor,
     ClashResolution,
@@ -55,6 +57,8 @@ from world.combat.constants import (
     ParticipantStatus,
     RiskLevel,
     SelectionType,
+    SpectacleKind,
+    SpectacleReaction,
     StakesLevel,
     StrikeDelivery,
     SurgeTriggerKind,
@@ -201,8 +205,8 @@ class CombatEncounter(AbstractRound):
             "Who sprang this fight (#2623): True = a PC participant's action "
             "opened it, False = the opposing side did, NULL = unknown/undirected "
             "(duels, battles, staff-opened). Read by origin_side-parameterized "
-            "situations. No NPC-initiated creation path exists yet — False is "
-            "staff/admin-stampable until one lands."
+            "situations. False is stamped when a creature's cause (Predation) "
+            "breaks a standoff; staff/admin can also stamp it."
         ),
     )
     story_beat = models.ForeignKey(
@@ -2672,6 +2676,13 @@ class OpponentTierTemplate(SharedMemoryModel):
         default=1,
         help_text="Tier-level action economy. MOOK/ELITE=1; BOSS=2 or 3.",
     )
+    force_weight_percent = models.PositiveSmallIntegerField(
+        default=100,
+        help_text=(
+            "Percent weight of one opponent of this tier when a standoff compares the "
+            "group's force with the party's (100 = counts as its level once)."
+        ),
+    )
     assess_prose = models.TextField(
         blank=True,
         default="",
@@ -2723,6 +2734,21 @@ class CreatureTemplate(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
         null=True,
         blank=True,
         help_text="Override probing threshold; null = use tier template scaling.",
+    )
+
+    cause = models.CharField(
+        max_length=20,
+        choices=CauseKind.choices,
+        default=CauseKind.NONE,
+        help_text="Why this creature picks a fight on its own (Predation: it hunts the weak).",
+    )
+    cause_margin_percent = models.SmallIntegerField(
+        default=0,
+        validators=[MinValueValidator(-99)],
+        help_text=(
+            "How far, as a percent of its own force, the party must outweigh the creature "
+            "before its cause stops firing."
+        ),
     )
 
     objects = CreatureTemplateManager()
@@ -4121,3 +4147,148 @@ class ConsiderReading(SharedMemoryModel):
 
     def __str__(self) -> str:
         return f"ConsiderReading({self.participant} → {self.opponent})"
+
+
+class SpectacleConfig(SharedMemoryModel):
+    """Staff tuning for how hard earned displays shake witnesses (#4147). One row."""
+
+    audere_entry_hit = models.PositiveSmallIntegerField(
+        default=25,
+        help_text="Morale removed from each witness when a character enters Audere.",
+    )
+    ultimate_hit = models.PositiveSmallIntegerField(
+        default=30,
+        help_text="Base hit for an ultimate. An ultimate never fails.",
+    )
+    ultimate_hit_per_success_level = models.PositiveSmallIntegerField(default=8)
+    crossing_hit = models.PositiveSmallIntegerField(default=60)
+    critical_technique_hit = models.PositiveSmallIntegerField(default=10)
+    critical_technique_hit_per_success_level = models.PositiveSmallIntegerField(default=4)
+    devastating_action_hit = models.PositiveSmallIntegerField(default=20)
+    critical_technique_min_intensity = models.PositiveSmallIntegerField(
+        default=6,
+        help_text="Runtime intensity a technique must reach to count.",
+    )
+    critical_technique_min_success_level = models.PositiveSmallIntegerField(default=5)
+    devastating_action_force_percent = models.PositiveSmallIntegerField(
+        default=40,
+        help_text=(
+            "One action that removes this share of the enemy side's current health "
+            "counts, however it was done."
+        ),
+    )
+    levels_per_step = models.PositiveSmallIntegerField(default=2)
+    percent_per_step = models.PositiveSmallIntegerField(
+        default=25,
+        help_text=(
+            "Hit changes by this much for every full step the caster sits above or "
+            "below the opponent's level."
+        ),
+    )
+    minimum_percent = models.PositiveSmallIntegerField(default=25)
+    mindless_percent = models.PositiveSmallIntegerField(
+        default=50,
+        help_text="Share of the hit a tier without morale still takes. Never zero.",
+    )
+    ally_gain_percent = models.PositiveSmallIntegerField(
+        default=50,
+        help_text="Allied NPCs regain this share of the hit.",
+    )
+
+    objects = ArxSharedMemoryManager()
+
+    class Meta:
+        verbose_name = "spectacle config"
+
+    @classmethod
+    def load(cls) -> "SpectacleConfig":
+        """Fetch (or lazily create) the singleton row."""
+        obj = cls.objects.cached_singleton()
+        if obj is None:
+            obj, _ = cls.objects.get_or_create(pk=1)
+        return obj
+
+    def __str__(self) -> str:
+        return "Spectacle settings"
+
+
+class SpectacleRecord(SharedMemoryModel):
+    """One caster's move already shook this opponent in this encounter (#4147).
+
+    The move is the technique when there is one, else the display kind. Play state:
+    it goes with the encounter.
+    """
+
+    opponent = models.ForeignKey(
+        "arxii.CombatOpponent",
+        on_delete=models.CASCADE,
+        related_name="spectacle_records",
+    )
+    caster = models.ForeignKey(
+        "arxii.CharacterSheet",
+        on_delete=models.CASCADE,
+        related_name="+",
+    )
+    kind = models.CharField(max_length=24, choices=SpectacleKind.choices)
+    technique = models.ForeignKey(
+        "arxii.Technique",
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="+",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["pk"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["opponent", "caster", "technique"],
+                condition=models.Q(technique__isnull=False),
+                name="spectacle_once_per_technique",
+            ),
+            models.UniqueConstraint(
+                fields=["opponent", "caster", "kind"],
+                condition=models.Q(technique__isnull=True),
+                name="spectacle_once_per_kind",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"Spectacle {self.kind} on opponent {self.opponent_id}"
+
+
+class SpectacleReactionLine(SharedMemoryModel):
+    """Authored flavour for how witnesses react to a display (#4147).
+
+    Plays only when no GM runs the scene. The most specific row wins: a creature
+    match beats a kind match, which beats a generic row. ``<actor>`` is the presented
+    name, ``<group>`` the creature kind, ``<display>`` the display's name (the same
+    placeholder style as ``StandoffReactionLine``).
+    """
+
+    reaction = models.CharField(max_length=12, choices=SpectacleReaction.choices)
+    creature_template = models.ForeignKey(
+        "arxii.CreatureTemplate",
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="+",
+        help_text="Blank applies to any creature without its own line.",
+    )
+    kind = models.CharField(
+        max_length=24,
+        choices=SpectacleKind.choices,
+        blank=True,
+        default="",
+        help_text="Blank applies to any display.",
+    )
+    text = models.TextField(
+        help_text=escape("Shown to the room when no GM runs the scene. <actor> <group> <display>."),
+    )
+
+    class Meta:
+        ordering = ["reaction", "pk"]
+
+    def __str__(self) -> str:
+        return f"{self.get_reaction_display()} line #{self.pk}"

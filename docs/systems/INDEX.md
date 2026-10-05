@@ -632,12 +632,13 @@ Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Sc
   `docs/systems/progression.md`'s "Path and Technique Requirements" section;
   `docs/adr/adr-4097-threads-carry-through-technique-prerequisites.md`.
 - **Ultimates (#4098):** `Technique.is_ultimate` flags a technique as a Path x
-  major-Gift / patron / companion ultimate, discovered through `KnownUltimate`
+  major-Gift / patron / companion / minor-gift ultimate, discovered through `KnownUltimate`
   (`character`, `technique`, nullable `crossing`, `readied` - constrained to one row
   per `(character, technique)` and at most one `readied=True` row per character),
   never a `CharacterTechnique`. Attachment M2Ms: `PathGiftGrant.ultimate_techniques`,
   `WorshippedBeing.ultimate_techniques` (`world.worship`), `CompanionArchetype
-  .ultimate_techniques` (`world.companions`). Services
+  .ultimate_techniques` (`world.companions`), and (#4118) `Gift.ultimate_techniques`
+  (minor gifts only, revealed as `UltimateSource.GIFT` through `_gift_pools`). Services
   (`world.magic.services.ultimates`): `ultimate_reveal_for(sheet)` (derives
   the reveal on read - owned/owned-known/bond pools, grouped by category, filtered by
   #4097's prerequisite gate), `has_reveal_cards`, `choose_ultimate` (readies a pick
@@ -662,6 +663,19 @@ Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Sc
   major-Gift grant with no ultimates and an `AudereThreshold` copy field still
   carrying PLACEHOLDER text. Full detail: `docs/systems/magic.md`'s "Ultimates"
   section; `docs/adr/adr-4098-ultimates-are-flagged-techniques-revealed-at-audere.md`.
+- **Manifesting a bound entity (#4118):** `TechniqueManifestOption` (`technique`, one of
+  `being` -> `WorshippedBeing` / `archetype` -> `CompanionArchetype`, `tier`; authored
+  inline on the Technique admin) and `CharacterManifestation` (`character`, `technique`,
+  `option`, nullable `companion`; unique per character and technique; `bond_is_active()`,
+  `clean()` enforces option-belongs-to-technique and an active bond), both in
+  `world/magic/models/manifestation.py`. Service `manifest_bound_entity(participant,
+  technique)` (`world/magic/services/effect_handlers.py`) is called from
+  `CombatTechniqueResolver`; it moves a being's avatar into the caster's room and adds it
+  as an ALLY `CombatOpponent`, or materializes the character's own companion. Probes
+  `manifest-being-avatars`, `manifest-archetype-abilities`, `manifest-tier-templates`.
+  Not built: a CG picker, manifestation outside combat, a persistent Companion made by a
+  cast. Coexists with the flow-payload `summon_ally`. Detail: `docs/systems/magic.md`'s
+  "Manifesting a bound entity"; ADR-4118.
 - **Integrates with:** traits (thread anchor kind TRAIT), progression (XP
   spend for ThreadWeaving and XP-lock crossings), relationships (soul tether,
   magical_flavor; thread anchors RELATIONSHIP_TRACK / RELATIONSHIP_CAPSTONE),
@@ -1066,6 +1080,14 @@ Persistent states that modify capabilities, checks, and resistances with stage p
   field, never `alters_behavior` and never the condition's name (`alters_behavior` is the
   PC-consent gate, a separate axis); see combat's Allegiance entries and ADR-4091, amending
   ADR-0058/ADR-0059.
+- **Settled round effects (#4120, ADR-4120) [BUILT & WIRED]:** `SettleConfig` singleton
+  (`get_settle_config()`: `settled_seconds_per_round`, `lapse_warning_seconds`);
+  `ConditionInstance.last_settled_tick_at` / `lapse_warned_at`; `settle_round_effects(targets)`
+  (called by combat's `cleanup_completed_encounter` after `expire_end_of_combat_conditions`)
+  converts ROUNDS rows to a real-time `expires_at`; cron `conditions.settled_effects`
+  (`settled_effects_tick`) applies clamped non-lethal DoT via `apply_clamped_chronic_damage` and
+  removes expired converted rows; `lapsed_allegiance_sweep` warns a PC charmer once and
+  auto-rolls the break check at lapse (no encounter opens). See `docs/systems/conditions.md`.
 - **Integrates with:** combat (DoT, capability blocking, NPC allegiance reads via
   `ConditionTemplate.sets_allegiance`; `select_npc_actions` consults `effective_allegiances`),
   magic (power sources, resonance-environment boon/injury application, behavior-consent gating
@@ -2558,12 +2580,12 @@ Character identity, appearance, demographics, and guise system.
   `POST …/spend-maturation-point/`.
 - **The Reference Sheet (#3898):** the web sheet is an artist's reference sheet on the
   Folio system — a night plate (art, name + titles, concept, quote, two glance lines,
-  the looks strip) over eight sections, five public and three the owner alone reads
-  (Knowledge, Estate, Growth). Friends moved to `/profile/friends`. Gating is
+  the looks strip) over nine sections, six public (Gallery added by #4151) and three
+  the owner alone reads (Knowledge, Estate, Growth). Friends moved to `/profile/friends`. Gating is
   render-or-vanish: a band a viewer may not read is absent, never an empty state.
-  Payload additions: `looks` (tenure media tagged with the `MoodOption` each shows, via
-  `TenureMedia.look`; public-gallery images plus the worn one for a non-privileged
-  viewer), `plate_ink` (`PlateInk`, OOC chrome), `worn` (what the character has on,
+  Payload additions: `looks` (#4151: every look the character may show, a picture
+  with a saved 4:5 crop, at its cropped URL, with the `MoodOption` it shows),
+  `viewer_is_friend` (the Gallery's NSFW veil), `plate_ink` (`PlateInk`, OOC chrome), `worn` (what the character has on,
   gated by the #2985 layer walk rather than a visibility tier), `mentors` (#1165
   Mentor's Vow bonds, owner and staff only), `domains` (#3901 — land the character's
   organizations hold, gated on active membership; owner and staff only), and `standing` +
@@ -7459,6 +7481,57 @@ weights, speed_rank, Thread pulls). `CovenantRank` = administrative authority
   `transfer` back the Covenant Treasury, #2992)
 - **Source:** `src/world/covenants/`
 - **Details:** [covenants.md](covenants.md)
+
+### Standoffs (#4145)
+The moment before a fight: round zero of a `CombatEncounter`, where a party reads groups of
+creatures, presses them with social approaches and names terms that settle them. Derived
+from OPEN `StandoffGroup` rows, never a stored flag (ADR-4145-A).
+
+- **Models:** `CreatureDrive`, `RegardRule`, `StandoffApproach`, `StandoffTerms`,
+  `StandoffConfig` (singleton), `StandoffGroup`, `StandoffReveal`, `StandoffSparkShare`;
+  `CreatureTemplate.cause` / `cause_margin_percent`; `OpponentTierTemplate.force_weight_percent`; `MissionOption.opens_as_standoff`.
+- **Key functions:** `open_standoff`, `end_standoff_into_fight`,
+  `begin_round_or_break_standoff` (`services/state.py`); `evaluate_causes`, `cause_fires`
+  (`services/force.py`); `standoff_read`, `standoff_press`, `standoff_terms`,
+  `standoff_fight`, `standoff_share_spark` (`services/verbs.py`); `build_standoff_view`
+  (`services/view.py`); `social_target_difficulty` (`world/checks/social_target.py`, one
+  grade for every social check on a character, ADR-4145-B).
+- **Surfaces:** actions `standoff_*`, telnet `standoff`, `StandoffCard` on the encounter
+  detail's per-viewer `standoff` block.
+- **Details:** [standoffs.md](standoffs.md)
+
+### Spectacle (#4147)
+An earned display of power shakes the enemies who witness it: their morale falls once per
+caster and move, and allied NPCs take heart. Ultimates never fail (ADR-4147).
+
+- **Models (`world/combat/models.py`):** `SpectacleConfig` (singleton, `load()` creates it
+  with working defaults; hits per kind, level-gap scaling, thresholds, mindless and ally
+  shares), `SpectacleRecord` (one row per opponent, caster and move, which is the technique
+  when there is one, else the kind; play state), `SpectacleReactionLine` (authored flavour
+  by reaction, optional creature and kind). Choices in `combat/constants.py`:
+  `SpectacleKind` (audere_entry, ultimate, crossing, critical_technique,
+  devastating_action), `SpectacleReaction` (shaken, faltering, broken, heartened). Also
+  `AudereThreshold.check_level_bonus`, `AudereMajoraThreshold.check_level_bonus`,
+  `StandoffApproach.casts_technique`, `StandoffConfig.terms_ease_faltering` / `terms_ease_broken`.
+- **Key functions:** `apply_spectacle`, `classify_cast`, `is_devastating`, `spectacle_hit`,
+  `encounter_for_character`, `deliver_spectacle` (`combat/spectacle.py`);
+  `audere_check_level_bonus`, `shake_witnesses` (`magic/audere.py`); `floor_ultimate_check`
+  (`magic/services/ultimates.py`). The combat action rider is unguarded, but every spectacle
+  line posts after commit (`deliver_spectacle`, `robust=True`); Audere entry and a Crossing
+  also defer the morale write itself.
+- **Surfaces:** admin for the three models; Required content entry
+  `spectacle-reaction-lines`; the standoff display press and a public `morale_state` on each
+  opponent and standoff group.
+- **Lines:** the credit line has one sentence per resulting state, so no witness is
+  credited a state it did not reach: "The <groups> break before <persona>'s <display>. The
+  <groups> falter. The <groups> hold." (the first sentence present carries the credit; "hold"
+  names only groups still Steady, and a group already Faltering that stays so gets no clause;
+  with no state change at all, "The <groups> are shaken by <persona>'s <display>."), then
+  "The <allies> take heart." naming only allies whose morale rose. A verb is singular only
+  when the named group has one active member. With no GM running the scene, the most
+  specific authored line for the strongest enemy reaction (`<group>` = the groups that
+  showed it) and, when allies rose, a Heartened line (`<group>` = those allies) follow.
+- **Details:** [standoffs.md](standoffs.md), [magic.md](magic.md), ADR-4147.
 
 ### Combat
 Turn-based combat engine: encounter lifecycle, NPC threat patterns, damage resolution,

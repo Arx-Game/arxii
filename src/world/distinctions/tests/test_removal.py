@@ -175,11 +175,22 @@ class ApproveSheetUpdateRequestTests(TestCase):
 
         from evennia_extensions.factories import AccountFactory
         from world.progression.models.rewards import ExperiencePointsData
+        from world.roster.factories import (
+            PlayerDataFactory,
+            RosterEntryFactory,
+            RosterTenureFactory,
+        )
 
         self.sheet = CharacterSheetFactory()
         self.account = AccountFactory()
-        self.sheet.character.account = self.account
-        self.sheet.character.save()
+        # The player is offline: a live tenure and no puppet, so ``character.account`` is
+        # None. Approval must still bill the tenure's account (#4132).
+        RosterTenureFactory(
+            roster_entry=RosterEntryFactory(character_sheet=self.sheet),
+            player_data=PlayerDataFactory(account=self.account),
+            end_date=None,
+        )
+        assert self.sheet.character.account is None
         self.gm_account = AccountFactory()
         self.xp_tracker, _ = ExperiencePointsData.objects.get_or_create(
             account=self.account,

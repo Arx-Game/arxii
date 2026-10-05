@@ -14,6 +14,7 @@ from django.utils import timezone
 from actions.services import start_action_resolution
 from world.checks.theater import check_outcome_faces, maybe_emit_resolution_theater
 from world.checks.types import ResolutionContext
+from world.fatigue.constants import EffortLevel
 from world.progression.models import KudosSourceCategory
 from world.progression.models.kudos import KudosDifficultyWeight
 from world.progression.services.engagement import accrue
@@ -642,8 +643,52 @@ def _compute_difficulty_override_for_primary(
             resist_effort,
         )
     else:
-        increment = 0
-    return base + increment
+        increment = _npc_passive_resist_increment(action_request.target_persona)
+    return _graded_scene_difficulty(
+        action_request=action_request,
+        target_persona=action_request.target_persona,
+        base=base,
+        increment=increment,
+    )
+
+
+def _graded_scene_difficulty(
+    *,
+    action_request: SceneActionRequest,
+    target_persona: Persona,
+    base: int,
+    increment: int,
+) -> int:
+    """Final scene difficulty for one target, through the shared social function (#4145).
+
+    The defender's resist ``increment`` is computed by the caller (it carries the PC's
+    development award and fatigue, or the NPC's passive medium effort) and passed in so the
+    shared function does not recompute it. ``perceiver_sheet`` is deliberately not passed:
+    scenes add the relationship-gated contributions at check-modifier time already.
+    """
+    from world.checks.social_target import social_target_difficulty  # noqa: PLC0415
+
+    template = action_request.action_template
+    return social_target_difficulty(
+        actor_sheet=action_request.initiator_persona.character_sheet,
+        target_character=target_persona.character_sheet.character,
+        check_type=template.check_type if template is not None else None,
+        base_difficulty=base,
+        resist_increment=increment,
+    ).difficulty
+
+
+def _npc_passive_resist_increment(persona: Persona) -> int:
+    """An NPC target's passive Composure resistance, medium effort (#4145).
+
+    PCs choose a resist effort and pay fatigue for it; an NPC has no one to choose, so it
+    resists at a fixed medium effort with no fatigue and no development award.
+    """
+    if not _persona_is_npc(persona):
+        return 0
+    from world.checks.services import compute_resist_increment  # noqa: PLC0415
+
+    return compute_resist_increment(persona.character_sheet.character, EffortLevel.MEDIUM)
 
 
 def _persona_current_tenure(persona: Persona | None) -> RosterTenure | None:
@@ -1273,8 +1318,13 @@ def _compute_target_difficulty_override(
             resist_effort,
         )
     else:
-        increment = 0
-    return base + increment
+        increment = _npc_passive_resist_increment(action_target.target_persona)
+    return _graded_scene_difficulty(
+        action_request=action_request,
+        target_persona=action_target.target_persona,
+        base=base,
+        increment=increment,
+    )
 
 
 def _charge_target_pull_flat_bonus(action_request: SceneActionRequest) -> int:

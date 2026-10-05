@@ -85,6 +85,7 @@ import world.ships.models
 import world.skills.models
 import world.societies.models
 import world.species.models
+import world.standoffs.models
 import world.stories.models
 import world.tarot.models
 import world.tasking.models
