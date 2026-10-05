@@ -805,8 +805,14 @@ companion into a fight, built as two additions to the #4098 ultimates work.
   as an ALLY `CombatOpponent` at the option's tier; an archetype option materializes the
   character's own companion. Works on ordinary techniques (low tier, a limited form) and on
   ultimates (high tier, the full arrival).
-- Three REQUIRED-tier probes: `manifest-being-avatars`, `manifest-archetype-abilities`,
-  `manifest-tier-templates`.
+- Four REQUIRED-tier probes: `manifest-being-avatars`, `manifest-archetype-abilities`,
+  `manifest-tier-templates`, and (#4076) `manifest-being-threat-pools`.
+- (#4076, 2026-10-05) The pilot replay: `BoundBeingTurnsBattleTests` in
+  `integration_tests/pipeline/test_audere_ultimates_e2e.py` drives Audere, a patron's
+  ultimate, the being's arrival and action, the deferred death and the GM prompts as one
+  scenario. It found two gaps, both fixed: an ultimate's roll could fail (now floored at
+  the lowest authored success, `_floor_ultimate_at_success`), and a manifested being had
+  no way to act (`TechniqueManifestOption.threat_pool`).
 - The flow-payload `summon_ally` threat-pool summon is unchanged.
 - Full record: `docs/systems/magic.md`'s "Ultimates" and "Manifesting a bound entity"
   sections; ADR-4118.

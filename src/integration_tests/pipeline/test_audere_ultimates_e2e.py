@@ -1,4 +1,4 @@
-"""E2E (#4098): Audere unlocks ultimates, and Soulfray death waits for the encounter's end.
+"""E2E (#4098, #4076): Audere unlocks ultimates, and Soulfray death waits for the encounter's end.
 
 Seam 1 (the journey #4076 asks for), all through real services and actions:
 
@@ -19,6 +19,12 @@ Seam 2: in a LETHAL encounter under Audere, a cast that overdraws anima advances
 Soulfray into a stage whose pool holds only a ``character_loss`` consequence. The
 death is made certain but deferred; the character keeps declaring and resolving
 actions in a later round; ``complete_encounter`` applies the death.
+
+Seam 3 (the #4076 replay): in a lethal encounter, a patron's bound being turns the
+battle. Audere, the reveal and the choice open the ultimate; casting it manifests the
+being as an ally even on a rolled failure (an ultimate never fails); the being acts from
+its threat pool in the next round; the martyr's death lands only at the encounter's
+end; and the scene's GM is prompted for the surge, the chosen ultimate and the death.
 
 Only randomness is forced: ``world.combat.services.perform_check`` (the combat
 offense roll, as in test_combat_cast_telnet_e2e) and
@@ -45,16 +51,30 @@ from actions.constants import ActionBackend
 from actions.factories import ConsequencePoolEntryFactory, ConsequencePoolFactory
 from actions.player_interface import get_player_actions
 from commands.combat import CmdDeclareTechnique
-from evennia_extensions.factories import ObjectDBFactory
+from evennia_extensions.factories import AccountFactory, ObjectDBFactory
+from world.character_sheets.factories import CharacterSheetFactory
 from world.checks.factories import CheckTypeFactory, ConsequenceFactory
-from world.combat.constants import ActionCategory, EncounterOutcome, OpponentTier, RiskLevel
+from world.checks.types import CheckResult
+from world.combat.constants import (
+    ActionCategory,
+    CombatAllegiance,
+    EncounterOutcome,
+    OpponentTier,
+    RiskLevel,
+)
 from world.combat.factories import (
     CombatEncounterFactory,
     CombatOpponentFactory,
+    OpponentTierTemplateFactory,
     ThreatPoolEntryFactory,
     ThreatPoolFactory,
 )
-from world.combat.models import CombatEncounter, CombatOpponent, CombatRoundAction
+from world.combat.models import (
+    CombatEncounter,
+    CombatOpponent,
+    CombatOpponentAction,
+    CombatRoundAction,
+)
 from world.combat.services import (
     add_participant,
     begin_declaration_phase,
@@ -67,16 +87,20 @@ from world.conditions.factories import (
 )
 from world.conditions.models import ConditionInstance
 from world.covenants.constants import RoleArchetype
+from world.gm.constants import GMPromptKind
+from world.gm.models import GMPrompt
 from world.magic.audere import AUDERE_CONDITION_NAME, PendingAudereOffer
 from world.magic.constants import GiftKind, UltimateCardKind
 from world.magic.factories import (
     CharacterAnimaFactory,
     CharacterGiftFactory,
+    CharacterManifestationFactory,
     EffectTypeFactory,
     GiftFactory,
     PathGiftGrantFactory,
     SoulfrayConfigFactory,
     TechniqueFactory,
+    TechniqueManifestOptionFactory,
     UltimateTechniqueFactory,
 )
 from world.magic.models import CharacterTechnique, KnownUltimate
@@ -87,10 +111,13 @@ from world.mechanics.engagement import CharacterEngagement
 from world.progression.factories import CharacterPathHistoryFactory
 from world.roster.factories import RosterTenureFactory
 from world.scenes.constants import RoundStatus
+from world.scenes.factories import SceneFactory, SceneGMParticipationFactory
 from world.traits.factories import CheckOutcomeFactory
 from world.vitals.constants import CharacterLifeState
 from world.vitals.models import CharacterVitals
 from world.vitals.services import can_act
+from world.worship.factories import DevotionStandingFactory, WorshippedBeingFactory
+from world.worship.models import PatronageValence
 
 _RESPOND_URL = "/api/magic/audere/respond/"
 _ULTIMATES_URL = "/api/magic/audere/ultimates/"
@@ -336,8 +363,8 @@ class AudereUltimateJourneyTests(_AudereCombatFixture):
         self.assertEqual(cards[0]["description"], self.ultimate.description)
 
 
-class DeferredDeathJourneyTests(_AudereCombatFixture):
-    """A certain Soulfray death under Audere waits for the lethal encounter's end."""
+class _LethalAudereFixture(_AudereCombatFixture):
+    """A lethal encounter whose gate-stage Soulfray pool holds only ``character_loss``."""
 
     tier_suffix = "ult_e2e_death"
     risk_level = RiskLevel.LETHAL
@@ -382,6 +409,10 @@ class DeferredDeathJourneyTests(_AudereCombatFixture):
 
     def _vitals(self) -> CharacterVitals:
         return CharacterVitals.objects.get(character_sheet=self.sheet)
+
+
+class DeferredDeathJourneyTests(_LethalAudereFixture):
+    """A certain Soulfray death under Audere waits for the lethal encounter's end."""
 
     def test_lethal_soulfray_in_audere_waits_for_encounter_end(self) -> None:
         self.assertTrue(self.encounter.is_lethal)
@@ -428,3 +459,136 @@ class DeferredDeathJourneyTests(_AudereCombatFixture):
         vitals = self._vitals()
         self.assertEqual(vitals.life_state, CharacterLifeState.DEAD)
         self.assertFalse(vitals.death_certain_pending)
+
+
+class BoundBeingTurnsBattleTests(_LethalAudereFixture):
+    """The #4076 replay: Audere, a patron's ultimate, the being arrives and fights, the
+    martyr dies at the end, and the scene's GM is prompted for each moment."""
+
+    tier_suffix = "ult_e2e_being"
+
+    def setUp(self) -> None:
+        super().setUp()
+        # The scene at the character's room, run by a GM who is not the player.
+        self.gm = AccountFactory()
+        scene = SceneFactory(location=self.character.location)
+        SceneGMParticipationFactory(scene=scene, account=self.gm)
+
+        # A being the character is devoted to: its avatar body, an ultimate it grants,
+        # and what the avatar does each round once it has arrived.
+        self.avatar_sheet = CharacterSheetFactory()
+        self.being = WorshippedBeingFactory(avatar_sheet=self.avatar_sheet)
+        DevotionStandingFactory(
+            character_sheet=self.sheet, being=self.being, valence=PatronageValence.DEVOTIONAL
+        )
+        self.ultimate = UltimateTechniqueFactory(
+            gift=self.gift,
+            name="Descent Of The Patron",
+            archetype_alignment=RoleArchetype.CROWN,
+            effect_type=EffectTypeFactory(name="Descent E2E", base_power=20),
+            intensity=20,
+            control=30,
+            anima_cost=3,
+            action_category=ActionCategory.PHYSICAL,
+            action_template=self.action_template,
+        )
+        self.being.ultimate_techniques.add(self.ultimate)
+        self.avatar_pool = ThreatPoolFactory()
+        ThreatPoolEntryFactory(pool=self.avatar_pool, name="Avatar strike", base_damage=40)
+        option = TechniqueManifestOptionFactory(
+            technique=self.ultimate,
+            being=self.being,
+            tier=OpponentTier.BOSS,
+            threat_pool=self.avatar_pool,
+        )
+        CharacterManifestationFactory(character=self.sheet, technique=self.ultimate, option=option)
+        OpponentTierTemplateFactory(tier=OpponentTier.BOSS, base_health=200)
+
+        # The roll that would sink an ordinary cast: an ultimate must not fail on it.
+        self.fumble = CheckOutcomeFactory(name="Fumble E2E", success_level=-2)
+
+    def _resolve_rolling(self, encounter: CombatEncounter, outcome) -> None:
+        """Resolve a round with the offense roll fixed to ``outcome`` (a real result, so
+        the resolver's own handling of it runs) and the Soulfray roll fixed to the loss."""
+        result = CheckResult(
+            check_type=CheckTypeFactory(),
+            outcome=outcome,
+            chart=None,
+            roller_rank=None,
+            target_rank=None,
+            rank_difference=0,
+            trait_points=0,
+            aspect_bonus=0,
+            total_points=0,
+        )
+        with (
+            patch("world.combat.services.perform_check", return_value=result),
+            patch(
+                "world.checks.services.perform_check_with_modifiers",
+                return_value=MagicMock(outcome=self.loss_tier),
+            ),
+        ):
+            resolve_round(encounter)
+        encounter.refresh_from_db()
+
+    def _prompt_kinds(self) -> set[str]:
+        return set(GMPrompt.objects.filter(addressed_to=self.gm).values_list("kind", flat=True))
+
+    def test_patron_ultimate_brings_the_being_who_fights_and_the_death_lands_last(self) -> None:
+        # Round 1: the ordinary cast opens the gate; accepting Audere prompts the GM.
+        _cast(self.character, f"{self.ordinary.name} at {self.opponent.name} soulfray")
+        self._resolve(self.encounter)
+        self._accept_offer()
+        self.assertTrue(self._in_audere())
+        self.assertEqual(self._prompt_kinds(), {GMPromptKind.AUDERE_SURGE})
+
+        # The reveal offers the patron's ultimate; choosing it prompts the GM again.
+        cards = [c for g in self._state()["reveal"]["groups"] for c in g["cards"]]
+        self.assertEqual(len(cards), 1)
+        with self.captureOnCommitCallbacks(execute=True):
+            response = self.client.post(
+                _CHOOSE_URL,
+                {"character_sheet_id": self.sheet.pk, "choice_key": cards[0]["choice_key"]},
+                format="json",
+            )
+        self.assertEqual(response.status_code, 200, response.content)
+        self.assertEqual(response.data["name"], self.ultimate.name)
+        self.assertEqual(
+            self._prompt_kinds(), {GMPromptKind.AUDERE_SURGE, GMPromptKind.AUDERE_ULTIMATE}
+        )
+
+        # Round 2: the ultimate is cast on a roll that would be a failure. It still
+        # succeeds, and the being arrives as an ally of the caster's side.
+        begin_declaration_phase(self.encounter)
+        self.encounter.refresh_from_db()
+        _cast(self.character, f"{self.ultimate.name} at {self.opponent.name} soulfray")
+        self.assertEqual(self._focused(self.encounter).focused_action, self.ultimate)
+        self._resolve_rolling(self.encounter, self.fumble)
+        avatar = CombatOpponent.objects.get(
+            encounter=self.encounter, objectdb=self.avatar_sheet.character
+        )
+        self.assertEqual(avatar.allegiance, CombatAllegiance.ALLY)
+        self.assertEqual(avatar.tier, OpponentTier.BOSS)
+        self.assertEqual(avatar.summoned_by, self.sheet)
+        self.assertFalse(CombatOpponentAction.objects.filter(opponent=avatar).exists())
+
+        # Round 3: the overdraw makes the death certain but deferred; the being acts
+        # from its pool against the enemy, which is what turns the fight.
+        begin_declaration_phase(self.encounter)
+        self.encounter.refresh_from_db()
+        _cast(self.character, f"{self.overdraw.name} at {self.opponent.name} soulfray")
+        self._resolve_rolling(self.encounter, self.combat_outcome)
+        self.assertTrue(self._vitals().death_certain_pending)
+        self.assertEqual(self._vitals().life_state, CharacterLifeState.ALIVE)
+        strike = CombatOpponentAction.objects.get(opponent=avatar)
+        self.assertEqual(strike.round_number, self.encounter.round_number)
+        self.assertEqual(list(strike.opponent_targets.all()), [self.opponent])
+        self.assertNotIn(GMPromptKind.DEATH, self._prompt_kinds())
+
+        # The encounter ends: the death lands then, and the GM is prompted for it.
+        complete_encounter(self.encounter, outcome=EncounterOutcome.VICTORY)
+        self.assertEqual(self._vitals().life_state, CharacterLifeState.DEAD)
+        self.assertEqual(
+            self._prompt_kinds(),
+            {GMPromptKind.AUDERE_SURGE, GMPromptKind.AUDERE_ULTIMATE, GMPromptKind.DEATH},
+        )

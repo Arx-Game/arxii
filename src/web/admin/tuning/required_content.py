@@ -473,6 +473,32 @@ def _probe_manifest_archetypes_have_abilities() -> ProbeResult:
     return ProbeResult(present=False, missing=missing, detail=detail)
 
 
+def _probe_manifest_beings_have_threat_pools() -> ProbeResult:
+    """Every being a technique can manifest has a threat pool to act from (#4076).
+
+    Consumer: `world/magic/services/effect_handlers.py` `manifest_bound_entity`. A being
+    option with no `threat_pool` arrives as an ally opponent and never acts: nothing
+    else drives a being's avatar, and no GM action does.
+    """
+    from world.magic.models import TechniqueManifestOption  # noqa: PLC0415
+
+    missing = tuple(
+        f"{technique_name} / {being_name}"
+        for technique_name, being_name in TechniqueManifestOption.objects.filter(
+            being__isnull=False, threat_pool__isnull=True
+        )
+        .order_by("technique__name", "being__name")
+        .values_list("technique__name", "being__name")
+    )
+    if not missing:
+        return ProbeResult(present=True)
+    detail = (
+        f"{len(missing)} manifest option(s) name a being with no threat pool: "
+        "it would arrive and never act."
+    )
+    return ProbeResult(present=False, missing=missing, detail=detail)
+
+
 def _probe_manifest_tiers_have_templates() -> ProbeResult:
     """Every tier a being manifest option uses has an `OpponentTierTemplate` (#4118).
 
@@ -1994,6 +2020,17 @@ def _declarations() -> tuple[ContentDependency, ...]:
                 "companion that arrives and never acts."
             ),
             probe=CustomProbe(fn=_probe_manifest_archetypes_have_abilities),
+        ),
+        ContentDependency(
+            key="manifest-being-threat-pools",
+            label="Manifestable beings have a threat pool",
+            tier=DependencyTier.REQUIRED,
+            consumer="world/magic/services/effect_handlers.py manifest_bound_entity()",
+            consequence=(
+                "A technique that manifests a being with no threat pool brings an ally "
+                "that arrives and never acts, so the arrival does not turn the fight."
+            ),
+            probe=CustomProbe(fn=_probe_manifest_beings_have_threat_pools),
         ),
         ContentDependency(
             key="manifest-tier-templates",

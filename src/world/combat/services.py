@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections import defaultdict
 from collections.abc import Callable, Iterator
 import contextlib
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from decimal import Decimal
 import logging
 import math
@@ -623,7 +623,7 @@ class CombatTechniqueResolver:
         from world.combat.stat_mapping import weapon_stat_override  # noqa: PLC0415
 
         stat_override = weapon_stat_override(character)
-        return check_fn(
+        result = check_fn(
             character,
             self.offense_check_type,
             target_difficulty=target_difficulty,
@@ -633,6 +633,24 @@ class CombatTechniqueResolver:
             situation_ctx=situation_ctx,
             stat_override=stat_override,
         )
+        return self._floor_ultimate_at_success(result)
+
+    def _floor_ultimate_at_success(self, result: CheckResult) -> CheckResult:
+        """An ultimate never fails: lift a failed roll to the lowest authored success.
+
+        Reaching Audere is the earned moment; the roll after it only grades how
+        spectacular the success is. Without this a failed roll skips every effect
+        gated on ``success_level >= 1``, such as manifesting a bound entity.
+        """
+        technique = self.action.focused_action
+        if not technique.is_ultimate or (result.success_level or 0) >= 1:
+            return result
+        from world.traits.models import CheckOutcome  # noqa: PLC0415
+
+        floor = CheckOutcome.objects.filter(success_level__gte=1).order_by("success_level").first()
+        if floor is None:
+            return result
+        return replace(result, outcome=floor)
 
     def _sum_intensity_bump_pulls(self) -> int:
         """Sum INTENSITY_BUMP scaled_values from active CombatPulls."""
