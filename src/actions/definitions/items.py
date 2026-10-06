@@ -427,6 +427,43 @@ class ActivatePermitAction(Action):
         )
 
 
+def _check_technique_grant(actor: ObjectDB, grant) -> ActionResult | None:
+    """Refuse a gated item grant before the item can be consumed."""
+    from world.magic.exceptions import UltimateNotLearnable  # noqa: PLC0415
+    from world.magic.services.gift_acquisition import enforce_not_ultimate  # noqa: PLC0415
+    from world.progression.services.spends import check_requirements_for_technique  # noqa: PLC0415
+
+    try:
+        enforce_not_ultimate(grant.technique)
+    except UltimateNotLearnable as exc:
+        return ActionResult(success=False, message=exc.user_message)
+    met, failed = check_requirements_for_technique(actor, grant.technique)
+    if not met:
+        from world.magic.exceptions import TechniqueRequirementsNotMet  # noqa: PLC0415
+
+        return ActionResult(success=False, message=TechniqueRequirementsNotMet(failed).user_message)
+    return None
+
+
+def _learn_technique_grant(actor: ObjectDB, grant, result) -> None:
+    """Learn an item-granted technique after successful item effects."""
+    if result.check_result is not None and result.check_result.success_level <= 0:
+        return
+    import contextlib  # noqa: PLC0415
+
+    from world.achievements.constants import AccessChangeSource  # noqa: PLC0415
+    from world.magic.exceptions import MagicError  # noqa: PLC0415
+    from world.magic.services.technique_acquisition import learn_technique  # noqa: PLC0415
+
+    with contextlib.suppress(MagicError):
+        learn_technique(
+            actor.sheet_data,
+            grant.technique,
+            source=AccessChangeSource.TECHNIQUE_GRANT,
+            ap_cost=grant.acquisition_ap_cost,
+        )
+
+
 @dataclass
 class UseItemAction(Action):
     """Use a held consumable item, applying its on-use pool's effects."""
@@ -487,31 +524,9 @@ class UseItemAction(Action):
         # it returns, so a post-use raise can't be rolled back to un-consume the
         # item — the check has to happen before the charge, not after.
         if grant is not None:
-            from world.magic.exceptions import UltimateNotLearnable  # noqa: PLC0415
-            from world.magic.services.gift_acquisition import (  # noqa: PLC0415
-                enforce_not_ultimate,
-            )
-            from world.progression.services.spends import (  # noqa: PLC0415
-                check_requirements_for_technique,
-            )
-
-            # Ultimate pre-check (#4098 fix round 1): a TechniqueGrant naming an
-            # ultimate must refuse before the item is consumed — without this the
-            # post-use learn_technique() call below raises UltimateNotLearnable
-            # (a MagicError) and is silently swallowed, so the item would still
-            # be used up for nothing instead of cleanly refusing.
-            try:
-                enforce_not_ultimate(grant.technique)
-            except UltimateNotLearnable as exc:
-                return ActionResult(success=False, message=exc.user_message)
-
-            met, failed = check_requirements_for_technique(actor, grant.technique)
-            if not met:
-                from world.magic.exceptions import TechniqueRequirementsNotMet  # noqa: PLC0415
-
-                return ActionResult(
-                    success=False, message=TechniqueRequirementsNotMet(failed).user_message
-                )
+            refusal = _check_technique_grant(actor, grant)
+            if refusal is not None:
+                return refusal
 
         try:
             result = use_item(
@@ -526,27 +541,7 @@ class UseItemAction(Action):
             return ActionResult(success=False, message=exc.user_message)
 
         if grant is not None:
-            # Success predicate: check_result is None (no check) or success_level > 0.
-            check_ok = result.check_result is None or result.check_result.success_level > 0
-            if check_ok:
-                import contextlib  # noqa: PLC0415
-
-                from world.achievements.constants import AccessChangeSource  # noqa: PLC0415
-                from world.magic.exceptions import MagicError  # noqa: PLC0415
-                from world.magic.services.technique_acquisition import (  # noqa: PLC0415
-                    learn_technique,
-                )
-
-                # Partial-failure policy: item consumed, technique didn't take.
-                # The use still succeeded; the user_message is not surfaced here
-                # because the item's on-use effects already happened.
-                with contextlib.suppress(MagicError):
-                    learn_technique(
-                        actor.sheet_data,
-                        grant.technique,
-                        source=AccessChangeSource.TECHNIQUE_GRANT,
-                        ap_cost=grant.acquisition_ap_cost,
-                    )
+            _learn_technique_grant(actor, grant, result)
 
         sdm = context.scene_data if context else SceneDataManager()
         actor_state = sdm.initialize_state_for_object(actor)

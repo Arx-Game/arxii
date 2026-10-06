@@ -71,41 +71,68 @@ export function resizeFromHandle(
   pointer: { x: number; y: number },
   image: ImageSize
 ): CropRect {
-  const startHeight = cropHeight(start.width);
   const east = handle.includes('e');
   const west = handle.includes('w');
   const south = handle.includes('s');
   const north = handle.includes('n');
-  // The anchor: the corner or edge opposite the one grabbed.
+  const startHeight = cropHeight(start.width);
   const ax = west ? start.x + start.width : start.x;
   const ay = north ? start.y + startHeight : start.y;
-  const cx = start.x + start.width / 2;
-  const cy = start.y + startHeight / 2;
 
   if ((east || west) && (north || south)) {
-    const room = Math.min(
-      east ? image.width - ax : ax,
-      (south ? image.height - ay : ay) * LOOK_RATIO
-    );
-    const wanted = Math.max(Math.abs(pointer.x - ax), Math.abs(pointer.y - ay) * LOOK_RATIO);
-    const width = bounded(wanted, room);
-    return {
-      x: east ? ax : ax - width,
-      y: south ? ay : ay - cropHeight(width),
-      width,
-    };
+    return resizeCorner(east, south, ax, ay, pointer, image);
   }
   if (east || west) {
-    const room = Math.min(
-      east ? image.width - ax : ax,
-      2 * Math.min(cy, image.height - cy) * LOOK_RATIO
-    );
-    const width = bounded(Math.abs(pointer.x - ax), room);
-    return clampPosition(
-      { x: east ? ax : ax - width, y: cy - cropHeight(width) / 2, width },
-      image
-    );
+    return resizeHorizontal(east, ax, start, pointer, image);
   }
+  return resizeVertical(south, ay, start, pointer, image);
+}
+
+function resizeCorner(
+  east: boolean,
+  south: boolean,
+  ax: number,
+  ay: number,
+  pointer: { x: number; y: number },
+  image: ImageSize
+): CropRect {
+  const room = Math.min(
+    east ? image.width - ax : ax,
+    (south ? image.height - ay : ay) * LOOK_RATIO
+  );
+  const wanted = Math.max(Math.abs(pointer.x - ax), Math.abs(pointer.y - ay) * LOOK_RATIO);
+  const width = bounded(wanted, room);
+  return {
+    x: east ? ax : ax - width,
+    y: south ? ay : ay - cropHeight(width),
+    width,
+  };
+}
+
+function resizeHorizontal(
+  east: boolean,
+  ax: number,
+  start: CropRect,
+  pointer: { x: number; y: number },
+  image: ImageSize
+): CropRect {
+  const cy = start.y + cropHeight(start.width) / 2;
+  const room = Math.min(
+    east ? image.width - ax : ax,
+    2 * Math.min(cy, image.height - cy) * LOOK_RATIO
+  );
+  const width = bounded(Math.abs(pointer.x - ax), room);
+  return clampPosition({ x: east ? ax : ax - width, y: cy - cropHeight(width) / 2, width }, image);
+}
+
+function resizeVertical(
+  south: boolean,
+  ay: number,
+  start: CropRect,
+  pointer: { x: number; y: number },
+  image: ImageSize
+): CropRect {
+  const cx = start.x + start.width / 2;
   const room = Math.min(
     (south ? image.height - ay : ay) * LOOK_RATIO,
     2 * Math.min(cx, image.width - cx)

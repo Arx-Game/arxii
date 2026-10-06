@@ -3579,24 +3579,37 @@ def assemble_origin_prose(sheet: CharacterSheet) -> str:
     template: OriginTemplate | None = slots[0].slot.template if slots else None
     if template is not None:
         lines += [template.frame_narrative, ""]
+    lines.extend(_origin_slot_lines(slots))
+    lines.extend(_origin_beat_lines(beats))
+    return "\n".join(lines).strip()
+
+
+def _origin_slot_lines(slots: list[CharacterOriginSlot]) -> list[str]:
+    """Render the selected answers for an origin template."""
+    lines: list[str] = []
     for row in slots:
         lines.append(row.slot.prompt)
         answer = row.choice.name if row.choice is not None else ""
         if row.value:
             answer = f"{answer}: {row.value}" if answer else row.value
-        lines.append(answer)
-        lines.append("")
+        lines.extend((answer, ""))
+    return lines
+
+
+def _origin_beat_lines(beats: list[CharacterOriginSlot]) -> list[str]:
+    """Render non-unknown life beats in chronological order."""
     # The beats, in the order of a life (#4124): the stage, the beat, the line the
     # player wrote under it. An unknown beat says nothing here.
     from world.character_creation.offers import LIFE_STAGE_ORDER  # noqa: PLC0415
 
     beats.sort(key=lambda r: (LIFE_STAGE_ORDER.get(r.beat.life_stage, 99), r.beat.sort_order))
+    lines: list[str] = []
     for row in beats:
         lines.append(f"{row.beat.get_life_stage_display()}: {row.beat.name}")
         if row.value:
             lines.append(row.value)
         lines.append("")
-    return "\n".join(lines).strip()
+    return lines
 
 
 # =============================================================================

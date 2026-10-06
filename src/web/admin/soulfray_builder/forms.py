@@ -274,40 +274,61 @@ class PoolForm(forms.Form):
         if not self.has_error(_PARENT_FIELD):
             cleaned["parent"] = self._effective_parent(pool)
         parent = cleaned.get("parent")
-        if pool is not None and self._parents_another_stage(pool):
+        self._validate_pool_selection(pool, parent)
+        self._validate_new_pool_name(pool, cleaned)
+        return cleaned
+
+    def _validate_pool_selection(
+        self, pool: ConsequencePool | None, parent: ConsequencePool | None
+    ) -> None:
+        """Validate ownership and one-level inheritance rules for the selection."""
+        if pool is not None:
+            self._validate_own_pool(pool, parent)
+        if parent is not None:
+            self._validate_parent_pool(pool, parent)
+
+    def _validate_own_pool(self, pool: ConsequencePool, parent: ConsequencePool | None) -> None:
+        """Validate that a pool can be used as this stage's own pool."""
+        if self._parents_another_stage(pool):
             self.add_error(
                 "pool",
                 f"{pool.name} is another Soulfray stage's shared parent, so it cannot be this "
                 "stage's own pool. Pick or create a pool of this stage's own.",
             )
         parent_id = parent.pk if parent is not None else None
-        if pool is not None and pool.parent_id != parent_id and self._held_elsewhere(pool):
+        if pool.parent_id != parent_id and self._held_elsewhere(pool):
             self.add_error(
                 "parent",
                 f"{pool.name} is also used elsewhere, so this page cannot change what it "
                 "inherits. Pick a pool of this stage's own to change its shared parent.",
             )
-        if parent is not None:
-            if pool is not None and parent.pk == pool.pk:
-                self.add_error("parent", "A pool cannot inherit from itself.")
-            elif soulfray_stages().filter(consequence_pool=parent).exists():
-                self.add_error(
-                    "parent",
-                    f"{parent.name} is a Soulfray stage's own pool, so it cannot be another "
-                    "stage's shared parent. Pick or create a shared pool that no stage uses.",
-                )
-            elif pool is not None and pool.children.exists():
-                self.add_error(
-                    "pool",
-                    f"{pool.name} is already a parent pool, so it cannot inherit from another: "
-                    "inheritance is one level deep.",
-                )
+        if parent is not None and pool.children.exists():
+            self.add_error(
+                "pool",
+                f"{pool.name} is already a parent pool, so it cannot inherit from another: "
+                "inheritance is one level deep.",
+            )
+
+    def _validate_parent_pool(self, pool: ConsequencePool | None, parent: ConsequencePool) -> None:
+        """Validate that the selected parent is distinct and not stage-owned."""
+        if pool is not None and parent.pk == pool.pk:
+            self.add_error("parent", "A pool cannot inherit from itself.")
+        elif soulfray_stages().filter(consequence_pool=parent).exists():
+            self.add_error(
+                "parent",
+                f"{parent.name} is a Soulfray stage's own pool, so it cannot be another "
+                "stage's shared parent. Pick or create a shared pool that no stage uses.",
+            )
+
+    def _validate_new_pool_name(
+        self, pool: ConsequencePool | None, cleaned: dict[str, object]
+    ) -> None:
+        """Reject duplicate names when the form creates a new pool."""
         new_name = (cleaned.get("new_name") or "").strip()
         if pool is None and new_name and ConsequencePool.objects.filter(name=new_name).exists():
             self.add_error(
                 "new_name", "A pool with this name exists. Pick it above or choose another name."
             )
-        return cleaned
 
 
 #: What a shared row's own pool owns; this page shows them read-only (ruling RF-1).

@@ -188,6 +188,31 @@ def _flourish_pick_error(
     return None
 
 
+def _personalization_pick_errors(pick, option, catalog_names_by_id, names):
+    """Return validation errors for one offered personalization pick."""
+    errors: list[str] = []
+    flourish_error = _flourish_pick_error(pick, option)
+    if flourish_error is not None:
+        errors.append(flourish_error)
+    if pick.early_form_id is not None and pick.early_form_id not in {f.pk for f in option.forms}:
+        errors.append("A chosen specialized form is no longer available.")
+    if pick.price_id is not None and pick.price_id not in {price.pk for price in option.prices}:
+        errors.append("A chosen price is no longer available.")
+    if pick.custom_name:
+        folded = pick.custom_name.casefold()
+        other_catalog_names = {
+            name
+            for technique_id, name in catalog_names_by_id.items()
+            if technique_id != pick.technique_id
+        }
+        if folded in names:
+            errors.append("Give each technique its own name.")
+        elif folded in other_catalog_names:
+            errors.append("That name already belongs to a technique you know.")
+        names.add(folded)
+    return errors
+
+
 def personalization_pick_errors(
     picks: Sequence[TechniquePersonalizationPick],
     *,
@@ -199,40 +224,13 @@ def personalization_pick_errors(
         o.technique.pk: o
         for o in creation_personalization_options(techniques, resonance_id=resonance_id)
     }
-    # Catalog names of every selected technique, keyed by id (#4099 final fix): a
-    # custom name that equals ANOTHER selected technique's catalog name,
-    # case-insensitively, would collide at cast time (telnet `cast <name>` fires
-    # the wrong technique) and in the web key the Spellbook keys technique rows
-    # by. Renaming a technique to its OWN catalog name is a no-op, not a
-    # collision, so each pick's comparison excludes its own technique.
     catalog_names_by_id = {t.pk: t.name.casefold() for t in techniques}
     errors: list[str] = []
     names: set[str] = set()
     for pick in picks:
         option = options.get(pick.technique_id)
-        if option is None:
-            continue
-        flourish_error = _flourish_pick_error(pick, option)
-        if flourish_error is not None:
-            errors.append(flourish_error)
-        if pick.early_form_id is not None and pick.early_form_id not in {
-            f.pk for f in option.forms
-        }:
-            errors.append("A chosen specialized form is no longer available.")
-        if pick.price_id is not None and pick.price_id not in {p.pk for p in option.prices}:
-            errors.append("A chosen price is no longer available.")
-        if pick.custom_name:
-            folded = pick.custom_name.casefold()
-            other_catalog_names = {
-                name
-                for technique_id, name in catalog_names_by_id.items()
-                if technique_id != pick.technique_id
-            }
-            if folded in names:
-                errors.append("Give each technique its own name.")
-            elif folded in other_catalog_names:
-                errors.append("That name already belongs to a technique you know.")
-            names.add(folded)
+        if option is not None:
+            errors.extend(_personalization_pick_errors(pick, option, catalog_names_by_id, names))
     return errors
 
 

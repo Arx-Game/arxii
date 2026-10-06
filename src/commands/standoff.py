@@ -21,7 +21,7 @@ if TYPE_CHECKING:
     from actions.types import ActionRef, DispatchResult
     from world.combat.models import CombatParticipant
     from world.standoffs.models import StandoffGroup
-    from world.standoffs.services.view import LeverView, StandoffView
+    from world.standoffs.services.view import GroupView, LeverView, StandoffView
 
 _SUBVERBS: dict[str, str] = {
     "read": "standoff_read",
@@ -310,42 +310,46 @@ class CmdStandoff(DispatchCommand):
 
 def _render_view(view: StandoffView) -> list[str]:
     """Text lines for a ``StandoffView``: the web payload's content, as plain text."""
-    from world.standoffs.constants import StandoffGroupState  # noqa: PLC0415
-
     lines = [f"Standoff at {view.place}:" if view.place else "Standoff:"]
     for group in view.groups:
-        lines.append(
-            f"  {group.name} ({group.member_count}) - {StandoffGroupState(group.state).label}"
-        )
-        if group.read_grade_label:
-            lines.append(f"    read ({group.read_check}): {group.read_grade_label}")
-        if group.hidden_count:
-            lines.append(f"    There is more to read here ({group.hidden_count} unread).")
-        if group.cause is not None:
-            gloss = f" {group.cause_gloss}" if group.cause_gloss else ""
-            lines.append(f"    Cause: {group.cause}.{gloss}")
-        lines.extend(f"    Drive: {drive.label} ({drive.strength})." for drive in group.drives)
-        lines.extend(f"    {line}" for line in group.revealed_regard)
-        lines.extend(
-            f"    You feel: {spark.text}{' (shared)' if spark.shared else ''}"
-            for spark in view.sparks
-            if spark.group_id == group.group_id and spark.text
-        )
-        lines.extend(
-            f"    Shared: {spark.text}"
-            for spark in view.shared_sparks
-            if spark.group_id == group.group_id and spark.text
-        )
-        lines.extend(
-            f"    press {approach.name}: {approach.grade_label}" + _lever_suffix(approach.levers)
-            for approach in view.approaches
-            if approach.group_id == group.group_id
-        )
-        lines.extend(
-            f"    terms {terms.name}: {terms.grade_label}"
-            + (f" (on a critical: {terms.critical_label})" if terms.critical_label else "")
-            for terms in view.terms
-            if terms.group_id == group.group_id
-        )
+        lines.extend(_render_group(view, group))
     lines.append(f"You can: {', '.join(_SUBVERBS)}.")
+    return lines
+
+
+def _render_group(view: StandoffView, group: GroupView) -> list[str]:
+    """Render one group's visible lines in the summary."""
+    from world.standoffs.constants import StandoffGroupState  # noqa: PLC0415
+
+    lines = [f"  {group.name} ({group.member_count}) - {StandoffGroupState(group.state).label}"]
+    if group.read_grade_label:
+        lines.append(f"    read ({group.read_check}): {group.read_grade_label}")
+    if group.hidden_count:
+        lines.append(f"    There is more to read here ({group.hidden_count} unread).")
+    if group.cause is not None:
+        gloss = f" {group.cause_gloss}" if group.cause_gloss else ""
+        lines.append(f"    Cause: {group.cause}.{gloss}")
+    lines.extend(f"    Drive: {drive.label} ({drive.strength})." for drive in group.drives)
+    lines.extend(f"    {line}" for line in group.revealed_regard)
+    lines.extend(
+        f"    You feel: {spark.text}{' (shared)' if spark.shared else ''}"
+        for spark in view.sparks
+        if spark.group_id == group.group_id and spark.text
+    )
+    lines.extend(
+        f"    Shared: {spark.text}"
+        for spark in view.shared_sparks
+        if spark.group_id == group.group_id and spark.text
+    )
+    lines.extend(
+        f"    press {approach.name}: {approach.grade_label}" + _lever_suffix(approach.levers)
+        for approach in view.approaches
+        if approach.group_id == group.group_id
+    )
+    lines.extend(
+        f"    terms {terms.name}: {terms.grade_label}"
+        + (f" (on a critical: {terms.critical_label})" if terms.critical_label else "")
+        for terms in view.terms
+        if terms.group_id == group.group_id
+    )
     return lines

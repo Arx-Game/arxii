@@ -1750,12 +1750,6 @@ class CharacterDraftSerializer(serializers.ModelSerializer):
 
     def _validate_technique_personalizations(self, data: dict) -> None:
         """Shape + hygiene for ``technique_personalizations`` (#4099); cleans text in place."""
-        from world.magic.exceptions import InvalidPersonalText  # noqa: PLC0415
-        from world.magic.services.technique_personalization import (  # noqa: PLC0415
-            clean_custom_technique_description,
-            clean_custom_technique_name,
-        )
-
         raw = data.get(TECHNIQUE_PERSONALIZATIONS_KEY)
         if raw is None:
             return
@@ -1770,25 +1764,37 @@ class CharacterDraftSerializer(serializers.ModelSerializer):
             "price_id",
         }
         for key, entry in raw.items():
-            if not self._personalization_key_is_valid(
-                key
-            ) or not self._personalization_entry_is_well_shaped(entry, allowed):
+            self._validate_technique_personalization_entry(key, entry, allowed, msg)
+
+    def _validate_technique_personalization_entry(
+        self, key: object, entry: object, allowed: set[str], msg: str
+    ) -> None:
+        """Validate one technique's picks and clean its custom text."""
+        from world.magic.exceptions import InvalidPersonalText  # noqa: PLC0415
+        from world.magic.services.technique_personalization import (  # noqa: PLC0415
+            clean_custom_technique_description,
+            clean_custom_technique_name,
+        )
+
+        if not self._personalization_key_is_valid(
+            key
+        ) or not self._personalization_entry_is_well_shaped(entry, allowed):
+            raise serializers.ValidationError({TECHNIQUE_PERSONALIZATIONS_KEY: msg})
+        for text_field in ("custom_name", "custom_description"):
+            value = entry.get(text_field)
+            if value is None:
+                entry[text_field] = ""
+            elif not isinstance(value, str):
                 raise serializers.ValidationError({TECHNIQUE_PERSONALIZATIONS_KEY: msg})
-            for text_field in ("custom_name", "custom_description"):
-                value = entry.get(text_field)
-                if value is None:
-                    entry[text_field] = ""
-                elif not isinstance(value, str):
-                    raise serializers.ValidationError({TECHNIQUE_PERSONALIZATIONS_KEY: msg})
-            try:
-                entry["custom_name"] = clean_custom_technique_name(entry["custom_name"])
-                entry["custom_description"] = clean_custom_technique_description(
-                    entry["custom_description"]
-                )
-            except InvalidPersonalText as exc:
-                raise serializers.ValidationError(
-                    {TECHNIQUE_PERSONALIZATIONS_KEY: exc.user_message}
-                ) from exc
+        try:
+            entry["custom_name"] = clean_custom_technique_name(entry["custom_name"])
+            entry["custom_description"] = clean_custom_technique_description(
+                entry["custom_description"]
+            )
+        except InvalidPersonalText as exc:
+            raise serializers.ValidationError(
+                {TECHNIQUE_PERSONALIZATIONS_KEY: exc.user_message}
+            ) from exc
 
     def _validate_actor_sheet(self, data: dict) -> None:
         """The Actor's Sheet keys (#3621): three answers, the enemy pick, the Introductions."""
