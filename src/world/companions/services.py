@@ -19,6 +19,7 @@ if TYPE_CHECKING:
     from world.companions.models import Companion, CompanionArchetype
     from world.magic.models.gifts import Gift
     from world.projects.models import Project
+    from world.scenes.models import Persona
 
 
 class NoCompanionThreadError(Exception):
@@ -61,9 +62,6 @@ def stables_capacity_bonus_for_sheet(character_sheet: CharacterSheet) -> int:
     Recorded rather than invented -- adding a multi-residence flag is its own design
     question, and guessing at one here would be the reinvention the repo warns about.
     """
-    from world.companions.models import StablesDetails  # noqa: PLC0415
-    from world.locations.constants import LocationRole  # noqa: PLC0415
-    from world.locations.services import has_standing  # noqa: PLC0415
     from world.room_features.constants import RoomFeatureServiceStrategy  # noqa: PLC0415
     from world.room_features.models import RoomFeatureInstance  # noqa: PLC0415
     from world.scenes.models import Persona  # noqa: PLC0415
@@ -79,18 +77,23 @@ def stables_capacity_bonus_for_sheet(character_sheet: CharacterSheet) -> int:
         .select_related("feature_kind", "room_profile", "stables_details")
         .filter(feature_kind__service_strategy=RoomFeatureServiceStrategy.STABLES)
     )
-    total = 0
-    for instance in instances:
-        room = instance.room_profile.objectdb
-        if room is None:
-            continue
-        if has_standing(persona, room, at_least=LocationRole.TENANT):
-            try:
-                details = instance.stables_details
-            except StablesDetails.DoesNotExist:
-                continue
-            total += details.capacity_bonus_per_level * instance.level
-    return total
+    return sum(_stables_instance_bonus(persona, instance) for instance in instances)
+
+
+def _stables_instance_bonus(persona: Persona, instance) -> int:
+    """Return this Stables instance's capacity bonus when the persona resides there."""
+    from world.companions.models import StablesDetails  # noqa: PLC0415
+    from world.locations.constants import LocationRole  # noqa: PLC0415
+    from world.locations.services import has_standing  # noqa: PLC0415
+
+    room = instance.room_profile.objectdb
+    if room is None or not has_standing(persona, room, at_least=LocationRole.TENANT):
+        return 0
+    try:
+        details = instance.stables_details
+    except StablesDetails.DoesNotExist:
+        return 0
+    return details.capacity_bonus_per_level * instance.level
 
 
 def companion_capacity(character_sheet: CharacterSheet, gift: Gift) -> int:

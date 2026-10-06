@@ -498,7 +498,7 @@ def _manifest_being_avatar(
         encounter,
         name=option.being.name,
         tier=option.tier,
-        threat_pool=None,
+        threat_pool=option.threat_pool,
         existing_objectdb=body,
         position=position_of(caster),
     )

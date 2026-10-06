@@ -749,10 +749,68 @@ def _place_claim_founder(  # noqa: PLR0913 — kin context fields
         )
 
 
+def _materialize_claim_land_writing(claim: HouseClaim, grants: list[Title]) -> None:
+    """Apply optional names and descriptions to each granted demesne."""
+    # Avoid prefetching identity-mapped LandShape rows across claim-land rows.
+    land_rows = {row.title_id: row for row in claim.lands.select_related("title")}
+    for granted in grants:
+        row = land_rows.get(granted.pk)
+        if row is None:
+            continue
+        if row.land_name and not granted.name:
+            name_rung(granted, row.land_name)
+        domain = Domain.objects.filter(area=_rung_area(granted)).first()
+        has_writing = row.description or row.hall_name or row.land_shapes.exists()
+        if domain is not None and has_writing:
+            describe_demesne(
+                domain=domain,
+                description=row.description,
+                hall_name=row.hall_name,
+                land_shape_names=[shape.name for shape in row.land_shapes.all()],
+            )
+
+
+def _apply_claim_domain_setup(
+    claim: HouseClaim, template: HouseTemplate, seat_domain: Domain
+) -> None:
+    """Apply the founder's standing choice and template holdings to the seat."""
+    if claim.draft_id is not None:
+        from world.character_creation.questionnaire import picked_family_standing  # noqa: PLC0415
+
+        standing = picked_family_standing(claim.draft)
+        if standing is not None:
+            seat_domain.prosperity = standing
+            seat_domain.save(update_fields=["prosperity"])
+    for kind in template.holdings.all():
+        add_holding(domain=seat_domain, kind=kind, unsited=True)
+
+
+def _seat_claim_lands(
+    *, claim: HouseClaim, top: Title, org: Organization, template: HouseTemplate
+) -> None:
+    """Seat the claimed title grants and materialize their written lands."""
+    if top.seat_domain_id is not None:
+        grants = claim_grants(top)
+        own_chain_pks = {t.pk for t in _require_chain_top(top)}
+        for granted in grants:
+            # ``assign_holder`` wants chain tops only: the claimed chain is
+            # seated once as a whole (via ``top``); each loose barony extra
+            # is its own one-title chain top and gets its own call.
+            if granted.pk == top.pk or granted.pk not in own_chain_pks:
+                assign_holder(granted, org)
+        _materialize_claim_land_writing(claim, grants)
+        # Re-fetch rather than trust ``top.seat_domain``'s cached FK
+        # reference: ``assign_holder`` above mutated the row through its own
+        # ``_require_chain_top``-fetched instance, a DIFFERENT Python object
+        # than ``top`` even at the same pk (idmapper corollary — see
+        # ``reference_idmapper_rollback_staleness.md``), so ``top``'s own
+        # cached ``seat_domain`` attribute never picked up the write.
+        seat_domain = Domain.objects.get(pk=top.seat_domain_id)
+        _apply_claim_domain_setup(claim, template, seat_domain)
+
+
 @transaction.atomic
-def materialize_house_claim(  # noqa: C901, PLR0912, PLR0915 — one straight-line finalize sequence
-    claim: HouseClaim, *, sheet: CharacterSheet
-) -> Organization:
+def materialize_house_claim(claim: HouseClaim, *, sheet: CharacterSheet) -> Organization:
     """Build the full package at CG finalization (approved claims only).
 
     Family + org (+rank ladder) + fealty to the template's liege + the whole
@@ -825,60 +883,7 @@ def materialize_house_claim(  # noqa: C901, PLR0912, PLR0915 — one straight-li
     sheet.family = family
     sheet.save()
 
-    if top.seat_domain_id is not None:
-        grants = claim_grants(top)
-        own_chain_pks = {t.pk for t in _require_chain_top(top)}
-        for granted in grants:
-            # ``assign_holder`` wants chain tops only: the claimed chain is
-            # seated once as a whole (via ``top``); each loose barony extra
-            # is its own one-title chain top and gets its own call.
-            if granted.pk == top.pk or granted.pk not in own_chain_pks:
-                assign_holder(granted, org)
-        # No ``.prefetch_related("land_shapes")``: ``LandShape`` is identity-
-        # mapped and the same row can sit on more than one ``HouseClaimLand``
-        # "parent" in this very query, which corrupts Django's m2m-join
-        # grouping on a shared instance (feedback_prefetch_to_attr_leaks.md's
-        # second failure mode). The claim's own land rows are a small, fixed
-        # set (one per granted rung at most), so the per-row
-        # ``land_shapes.all()`` calls below stay cheap.
-        land_rows = {row.title_id: row for row in claim.lands.select_related("title")}
-        for granted in grants:
-            row = land_rows.get(granted.pk)
-            if row is None:
-                continue
-            if row.land_name and not granted.name:
-                name_rung(granted, row.land_name)
-            domain = Domain.objects.filter(area=_rung_area(granted)).first()
-            has_writing = row.description or row.hall_name or row.land_shapes.exists()
-            if domain is not None and has_writing:
-                describe_demesne(
-                    domain=domain,
-                    description=row.description,
-                    hall_name=row.hall_name,
-                    land_shape_names=[s.name for s in row.land_shapes.all()],
-                )
-        # Re-fetch rather than trust ``top.seat_domain``'s cached FK
-        # reference: ``assign_holder`` above mutated the row through its own
-        # ``_require_chain_top``-fetched instance, a DIFFERENT Python object
-        # than ``top`` even at the same pk (idmapper corollary — see
-        # ``reference_idmapper_rollback_staleness.md``), so ``top``'s own
-        # cached ``seat_domain`` attribute never picked up the write.
-        seat_domain = Domain.objects.get(pk=top.seat_domain_id)
-        # How the house starts out (#4060 slice 4): the Upbringing answer the
-        # founder picked sets the seat's prosperity; no answer keeps the default.
-        if claim.draft_id is not None:
-            from world.character_creation.questionnaire import (  # noqa: PLC0415
-                picked_family_standing,
-            )
-
-            standing = picked_family_standing(claim.draft)
-            if standing is not None:
-                seat_domain.prosperity = standing
-                seat_domain.save(update_fields=["prosperity"])
-        for kind in template.holdings.all():
-            # A template's holdings stand nowhere yet (#4060): the founder places
-            # each one on the seat's ground in play, and it yields nothing until then.
-            add_holding(domain=seat_domain, kind=kind, unsited=True)
+    _seat_claim_lands(claim=claim, top=top, org=org, template=template)
     # For a landed title, ``assign_holder`` above already wrote ``house``/
     # ``is_claimable`` to the DB through its own fetched instance; this
     # mirrors it directly onto ``top`` too — the exact object the caller

@@ -31,8 +31,14 @@ class TestChangeFormWorkbenchLink(TestCase):
 
         self.assertEqual(resp.status_code, 200)
         self.assertContains(resp, "Open in Authoring Workbench")
-        self.assertContains(resp, reverse("admin_authoring_editor"))
-        self.assertContains(resp, "model=magic.EffectType")
+        # The link opens the workbench PAGE with the row to open (#4155), never the
+        # editor fragment on its own: the fragment has no htmx, so on it "Save and
+        # credit" fell back to a plain form POST the fragment view never reads.
+        self.assertContains(
+            resp,
+            f'href="{reverse("admin_authoring")}?model=magic.EffectType&amp;pk={effect.pk}"',
+        )
+        self.assertNotContains(resp, f'href="{reverse("admin_authoring_editor")}')
 
     def test_non_credited_change_form_has_no_link(self) -> None:
         group = Group.objects.create(name="Workbench Link Control Group")

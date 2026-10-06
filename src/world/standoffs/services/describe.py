@@ -47,17 +47,28 @@ def describe_reveals(
     )
     lines: list[str] = []
     for reveal in reveals:
-        if reveal.kind == RevealKind.CAUSE:
-            if group.creature_template.cause == CauseKind.NONE:
-                continue  # nothing to say; the view omits it the same way
-            lines.append(f"Cause: {CauseKind(group.creature_template.cause).label}.")
-        elif reveal.kind == RevealKind.DRIVE and reveal.drive is not None:
-            label = DriveStrength(reveal.drive.strength).label
-            lines.append(f"Drive: {reveal.drive.property.name} ({label}).")
-        elif reveal.kind == RevealKind.REGARD and reveal.regard_rule is not None:
-            rule = reveal.regard_rule
-            if rule.pk in matching or rule.pk in shared:
-                lines.append(rule.revealed_text or HIDDEN_REGARD_LINE)
-            else:
-                lines.append(HIDDEN_REGARD_LINE)
+        line = _describe_reveal(group, reveal, matching, shared)
+        if line is not None:
+            lines.append(line)
     return lines
+
+
+def _describe_reveal(
+    group: StandoffGroup,
+    reveal: StandoffReveal,
+    matching: set[int],
+    shared: set[int],
+) -> str | None:
+    """Return the reader-safe line for one reveal, if it has one."""
+    if reveal.kind == RevealKind.CAUSE:
+        cause = group.creature_template.cause
+        return None if cause == CauseKind.NONE else f"Cause: {CauseKind(cause).label}."
+    if reveal.kind == RevealKind.DRIVE and reveal.drive is not None:
+        label = DriveStrength(reveal.drive.strength).label
+        return f"Drive: {reveal.drive.property.name} ({label})."
+    if reveal.kind == RevealKind.REGARD and reveal.regard_rule is not None:
+        rule = reveal.regard_rule
+        if rule.pk in matching or rule.pk in shared:
+            return rule.revealed_text or HIDDEN_REGARD_LINE
+        return HIDDEN_REGARD_LINE
+    return None

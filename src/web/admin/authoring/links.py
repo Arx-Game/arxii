@@ -65,6 +65,20 @@ def workbench_editor_url(model_label: str, pk: object) -> str:
     return f"{reverse('admin_authoring_editor')}?{query}"
 
 
+def workbench_page_url(model_label: str, pk: object) -> str:
+    """Build the Authoring Workbench PAGE link that opens one row (#4155).
+
+    For a link a browser navigates to (a change form's object tool, a bookmark):
+    the dashboard, which loads htmx and swaps the row's editor fragment into its
+    own panel on load. ``workbench_editor_url`` above is the fragment's own URL
+    and belongs only in an ``hx-get`` inside that page: served as a document it
+    has no htmx, and every action button on it fell back to a plain form POST
+    the fragment view never reads, which dropped the edit.
+    """
+    query = urlencode({"model": model_label, "pk": pk})
+    return f"{reverse('admin_authoring')}?{query}"
+
+
 def admin_change_url(model_label: str, pk: object) -> str | None:
     """Stock-admin change-form link for one row, or ``None`` when it has no ``ModelAdmin``.
 

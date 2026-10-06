@@ -15,7 +15,8 @@ class TechniqueManifestOption(SharedMemoryModel):
 
     A technique with at least one option row is a manifesting technique. Exactly one of
     ``being`` and ``archetype`` is set. ``tier`` sizes a being's arrival (its stats come
-    from the tier-scaling block); an archetype option takes its stats from the archetype.
+    from the tier-scaling block) and ``threat_pool`` is what it does each round; an
+    archetype option takes its stats from the archetype.
     A low-tier option on an ordinary technique is a limited form; a high-tier option on
     an ultimate is the full arrival.
     """
@@ -42,6 +43,18 @@ class TechniqueManifestOption(SharedMemoryModel):
         choices=OpponentTier.choices,
         default=OpponentTier.MOOK,
         help_text="Opponent tier of a being's arrival. Ignored for an archetype option.",
+    )
+    threat_pool = models.ForeignKey(
+        "arxii.ThreatPool",
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="manifest_options",
+        help_text=(
+            "What a being does once it has arrived: each round it acts from this pool, on "
+            "the caster's side. Without one it arrives and never acts. Ignored for an "
+            "archetype option (a companion acts from its abilities)."
+        ),
     )
 
     class Meta:

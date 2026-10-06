@@ -568,13 +568,9 @@ class CmdGMDashboard(ArxCommand):
         chosen-receiver audience) -- an absent subject skips the private line
         and tells the GM; the room line still goes out regardless.
         """
-        from actions.definitions.communication import EmitAction, PemitAction  # noqa: PLC0415
         from world.gm.models import GMPrompt  # noqa: PLC0415
         from world.gm.prompt_services import (  # noqa: PLC0415
-            narration_location_for,
-            present_characters_in_room,
             prompt_narration_coverage,
-            prompt_subject_name,
             prompt_visible_to,
         )
 
@@ -591,31 +587,46 @@ class CmdGMDashboard(ArxCommand):
             raise CommandError(msg)
         room_covered, private_covered = prompt_narration_coverage(prompt)
         if not private_covered and prompt.private_text.strip() and prompt.character_sheet_id:
-            location = narration_location_for(prompt, self.caller)
-            present = present_characters_in_room([prompt.character_sheet_id], location)
-            subject_character = present.get(prompt.character_sheet_id)
-            if subject_character is None:
-                subject = prompt_subject_name(prompt) or "The subject"
-                self.msg(
-                    f"{subject} isn't here; their private line goes out on its own"
-                    " when the prompt closes."
-                )
-            else:
-                result = PemitAction().run(
-                    actor=self.caller,
-                    text=prompt.private_text,
-                    receivers=[subject_character],
-                    gm_prompt_id=prompt.pk,
-                )
-                if not result.success:
-                    raise CommandError(result.message or "Action failed")
+            self._send_private_prompt_default(prompt)
         if not room_covered and prompt.room_text.strip():
-            result = EmitAction().run(
-                actor=self.caller, text=prompt.room_text, gm_prompt_id=prompt.pk
-            )
-            if not result.success:
-                raise CommandError(result.message or "Action failed")
+            self._send_room_prompt_default(prompt)
         self._dismiss_prompt(prompt.pk, fallback="Sent and closed.")
+
+    def _send_private_prompt_default(self, prompt: Any) -> None:
+        """Send the prompt's private line when its subject is present."""
+        from actions.definitions.communication import PemitAction  # noqa: PLC0415
+        from world.gm.prompt_services import (  # noqa: PLC0415
+            narration_location_for,
+            present_characters_in_room,
+            prompt_subject_name,
+        )
+
+        location = narration_location_for(prompt, self.caller)
+        present = present_characters_in_room([prompt.character_sheet_id], location)
+        subject_character = present.get(prompt.character_sheet_id)
+        if subject_character is None:
+            subject = prompt_subject_name(prompt) or "The subject"
+            self.msg(
+                f"{subject} isn't here; their private line goes out on its own"
+                " when the prompt closes."
+            )
+            return
+        result = PemitAction().run(
+            actor=self.caller,
+            text=prompt.private_text,
+            receivers=[subject_character],
+            gm_prompt_id=prompt.pk,
+        )
+        if not result.success:
+            raise CommandError(result.message or "Action failed")
+
+    def _send_room_prompt_default(self, prompt: Any) -> None:
+        """Send the prompt's authored room line."""
+        from actions.definitions.communication import EmitAction  # noqa: PLC0415
+
+        result = EmitAction().run(actor=self.caller, text=prompt.room_text, gm_prompt_id=prompt.pk)
+        if not result.success:
+            raise CommandError(result.message or "Action failed")
 
     def _render(self) -> None:
         raw = (self.args or "").strip().lower()

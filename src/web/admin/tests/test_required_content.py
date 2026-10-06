@@ -1235,6 +1235,23 @@ class TestManifestOptionProbes(TestCase):
         CompanionAbilityFactory(archetype=archetype)
         self.assertTrue(_probe_manifest_archetypes_have_abilities().present)
 
+    def test_being_without_threat_pool_is_missing_then_fixed(self) -> None:
+        from web.admin.tuning.required_content import _probe_manifest_beings_have_threat_pools
+        from world.combat.factories import ThreatPoolFactory
+        from world.companions.factories import CompanionArchetypeFactory
+        from world.magic.factories import TechniqueManifestOptionFactory
+
+        self.assertTrue(_probe_manifest_beings_have_threat_pools().present)
+        TechniqueManifestOptionFactory(being=None, archetype=CompanionArchetypeFactory())
+        self.assertTrue(_probe_manifest_beings_have_threat_pools().present)  # not a being
+        option = TechniqueManifestOptionFactory()
+        result = _probe_manifest_beings_have_threat_pools()
+        self.assertFalse(result.present)
+        self.assertEqual(result.missing, (f"{option.technique.name} / {option.being.name}",))
+        option.threat_pool = ThreatPoolFactory()
+        option.save()
+        self.assertTrue(_probe_manifest_beings_have_threat_pools().present)
+
     def test_being_tier_without_template_is_missing_then_fixed(self) -> None:
         from web.admin.tuning.required_content import _probe_manifest_tiers_have_templates
         from world.combat.constants import OpponentTier

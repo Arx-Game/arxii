@@ -784,43 +784,8 @@ class ActivatePermitAction(Action):
         )
 
 
-def _technique_grant_for_item(item_instance: ItemInstance) -> Any:
-    """Find the optional technique grant associated with a used item template."""
-    from world.magic.models import TechniqueGrant  # noqa: PLC0415
-
-    return (
-        TechniqueGrant.objects.filter(item_template=item_instance.template)
-        .select_related("technique")
-        .first()
-    )
-
-
-def _learn_use_grant(actor: ObjectDB, grant: Any, result: Any) -> None:
-    """Learn an item's granted technique after a successful use check."""
-    if grant is None or (
-        result.check_result is not None and result.check_result.success_level <= 0
-    ):
-        return
-    import contextlib  # noqa: PLC0415
-
-    from world.achievements.constants import AccessChangeSource  # noqa: PLC0415
-    from world.magic.exceptions import MagicError  # noqa: PLC0415
-    from world.magic.services.technique_acquisition import learn_technique  # noqa: PLC0415
-
-    # The item use already committed; learning failure must not undo the use.
-    with contextlib.suppress(MagicError):
-        learn_technique(
-            actor.sheet_data,
-            grant.technique,
-            source=AccessChangeSource.TECHNIQUE_GRANT,
-            ap_cost=grant.acquisition_ap_cost,
-        )
-
-
-def _technique_grant_use_error(actor: ObjectDB, grant: Any) -> str | None:
-    """Return a safe refusal before a granted technique can spend an item charge."""
-    if grant is None:
-        return None
+def _check_technique_grant(actor: ObjectDB, grant) -> ActionResult | None:
+    """Refuse a gated item grant before the item can be consumed."""
     from world.magic.exceptions import UltimateNotLearnable  # noqa: PLC0415
     from world.magic.services.gift_acquisition import enforce_not_ultimate  # noqa: PLC0415
     from world.progression.services.spends import check_requirements_for_technique  # noqa: PLC0415
@@ -828,13 +793,46 @@ def _technique_grant_use_error(actor: ObjectDB, grant: Any) -> str | None:
     try:
         enforce_not_ultimate(grant.technique)
     except UltimateNotLearnable as exc:
-        return exc.user_message
+        return ActionResult(success=False, message=exc.user_message)
     met, failed = check_requirements_for_technique(actor, grant.technique)
-    if met:
-        return None
-    from world.magic.exceptions import TechniqueRequirementsNotMet  # noqa: PLC0415
+    if not met:
+        from world.magic.exceptions import TechniqueRequirementsNotMet  # noqa: PLC0415
 
-    return TechniqueRequirementsNotMet(failed).user_message
+        return ActionResult(success=False, message=TechniqueRequirementsNotMet(failed).user_message)
+    return None
+
+
+def _prepare_technique_grant(
+    actor: ObjectDB, item_instance: ItemInstance
+) -> tuple[Any, ActionResult | None]:
+    """Load and preflight an item's technique grant before its use is committed."""
+    from world.magic.models import TechniqueGrant  # noqa: PLC0415
+
+    grant = (
+        TechniqueGrant.objects.filter(item_template=item_instance.template)
+        .select_related("technique")
+        .first()
+    )
+    return grant, _check_technique_grant(actor, grant) if grant is not None else None
+
+
+def _learn_technique_grant(actor: ObjectDB, grant, result) -> None:
+    """Learn an item-granted technique after successful item effects."""
+    if result.check_result is not None and result.check_result.success_level <= 0:
+        return
+    import contextlib  # noqa: PLC0415
+
+    from world.achievements.constants import AccessChangeSource  # noqa: PLC0415
+    from world.magic.exceptions import MagicError  # noqa: PLC0415
+    from world.magic.services.technique_acquisition import learn_technique  # noqa: PLC0415
+
+    with contextlib.suppress(MagicError):
+        learn_technique(
+            actor.sheet_data,
+            grant.technique,
+            source=AccessChangeSource.TECHNIQUE_GRANT,
+            ap_cost=grant.acquisition_ap_cost,
+        )
 
 
 @dataclass
@@ -1199,11 +1197,10 @@ class UseItemAction(Action):
         except ValueError as exc:
             return ActionResult(success=False, message=str(exc))
 
-        # TechniqueGrant hook: if the item template has a grant, learn the technique.
-        grant = _technique_grant_for_item(item_instance)
-        grant_error = _technique_grant_use_error(actor, grant)
-        if grant_error is not None:
-            return ActionResult(success=False, message=grant_error)
+        # Preflight grants before use_item() commits item consumption.
+        grant, refusal = _prepare_technique_grant(actor, item_instance)
+        if refusal is not None:
+            return refusal
 
         try:
             result = use_item(
@@ -1217,7 +1214,8 @@ class UseItemAction(Action):
         except ItemError as exc:
             return ActionResult(success=False, message=exc.user_message)
 
-        _learn_use_grant(actor, grant, result)
+        if grant is not None:
+            _learn_technique_grant(actor, grant, result)
 
         sdm = context.scene_data if context else SceneDataManager()
         actor_state = sdm.initialize_state_for_object(actor)

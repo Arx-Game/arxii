@@ -654,6 +654,38 @@ def _check_application_resist(
     return int(result.success_level) > 0
 
 
+def _interaction_match_id(interaction, incoming_id: int, active_ids: set[int]) -> int | None:
+    """Return the active condition paired with an incoming-condition interaction."""
+    if interaction.condition_id == incoming_id:
+        match_id = interaction.other_condition_id
+    elif interaction.other_condition_id == incoming_id:
+        match_id = interaction.condition_id
+    else:
+        return None
+    return match_id if match_id in active_ids else None
+
+
+def _remove_interaction_instance(  # noqa: PLR0913 - all args are mutation state for this operation
+    target,
+    instance,
+    match_id,
+    active_instances,
+    active_condition_ids,
+    ctx,
+    result,
+) -> None:
+    """Remove an existing condition and update the bulk context consistently."""
+    result.removed.append(instance.condition)
+    removed_condition = instance.condition
+    removed_target_id = instance.target_id
+    instance.delete()
+    _clear_unseen_observer_if_concealing(target, removed_condition)
+    active_instances.remove(instance)
+    active_condition_ids.discard(match_id)
+    # Clean existing_pairs so later batch entries don't resurrect it.
+    ctx.existing_pairs.pop((removed_target_id, match_id), None)
+
+
 def _process_interactions_from_context(
     target: "ObjectDB",  # noqa: OBJECTDB_PARAM
     incoming_condition: ConditionTemplate,
@@ -669,37 +701,24 @@ def _process_interactions_from_context(
     active_condition_ids = {i.condition_id for i in active_instances}
 
     for interaction in ctx.application_interactions:
-        # Filter to interactions relevant to this target's active conditions
-        if interaction.condition_id == incoming_condition.pk:
-            if interaction.other_condition_id not in active_condition_ids:
-                continue
-            match_id = interaction.other_condition_id
-        elif interaction.other_condition_id == incoming_condition.pk:
-            if interaction.condition_id not in active_condition_ids:
-                continue
-            match_id = interaction.condition_id
-        else:
+        match_id = _interaction_match_id(interaction, incoming_condition.pk, active_condition_ids)
+        if match_id is None:
             continue
-
         existing_instance = next(
             (i for i in active_instances if i.condition_id == match_id),
             None,
         )
-        if not existing_instance:
+        if existing_instance is None:
             continue
-
         if _should_remove_existing(interaction, incoming_condition):
-            result.removed.append(existing_instance.condition)
-            removed_condition = existing_instance.condition
-            removed_target_id = existing_instance.target_id
-            existing_instance.delete()
-            _clear_unseen_observer_if_concealing(target, removed_condition)
-            active_instances.remove(existing_instance)
-            active_condition_ids.discard(match_id)
-            # Clean existing_pairs so later batch entries don't resurrect it
-            ctx.existing_pairs.pop(
-                (removed_target_id, match_id),
-                None,
+            _remove_interaction_instance(
+                target,
+                existing_instance,
+                match_id,
+                active_instances,
+                active_condition_ids,
+                ctx,
+                result,
             )
 
     return result

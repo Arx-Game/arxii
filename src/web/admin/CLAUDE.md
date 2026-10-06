@@ -530,9 +530,15 @@ The stock changelists carry the same credit story the workbench queue tells:
 - **Change-form deep link** - `templatetags/authoring_tags.py:workbench_url`
   + a superuser-only "Open in Authoring Workbench" object-tool `<li>` in
   `change_form.html`, beside the #3018 export button, for credited models
-  with prose fields. All deep links share one URL builder:
-  `web/admin/authoring/links.py:workbench_editor_url` (promoted from
-  `content_row_export_views`). Its inverse lives beside it:
+  with prose fields. It links to the workbench PAGE with the row to open
+  (`links.py:workbench_page_url`, `admin_authoring?model=&pk=`; the dashboard
+  issues the editor `hx-get` on load), never to the editor fragment: served as
+  a document the fragment has no htmx and "Save and credit" dropped the edit
+  on production (#4155). `authoring_editor` redirects a document navigation
+  (`Sec-Fetch-Dest: document`) to that page. The in-page `hx-get` links (queue,
+  related, mentions, reference) keep the fragment builder
+  `links.py:workbench_editor_url` (promoted from `content_row_export_views`).
+  Reviewer: `tools/agents/fragment-as-page-reviewer.md`. Its inverse lives beside it:
   `links.py:admin_change_url` (`(model_label, pk) -> str | None`, promoted
   from `authoring.views._admin_change_url`) is the outward link the
   related-entries pane and the backlog queue both build - it returns `None`,
