@@ -503,6 +503,9 @@ class BoundBeingTurnsBattleTests(_LethalAudereFixture):
         )
         CharacterManifestationFactory(character=self.sheet, technique=self.ultimate, option=option)
         OpponentTierTemplateFactory(tier=OpponentTier.BOSS, base_health=200)
+        # The ultimate is an earned display that would rout a mook (#4147) and end the
+        # fight before the deferred death lands; this replay is about the bound being.
+        OpponentTierTemplateFactory(tier=OpponentTier.MOOK, has_morale=False)
 
         # The roll that would sink an ordinary cast: an ultimate must not fail on it.
         self.fumble = CheckOutcomeFactory(name="Fumble E2E", success_level=-2)
