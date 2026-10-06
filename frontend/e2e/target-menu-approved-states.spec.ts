@@ -58,7 +58,8 @@ function authoredEntry() {
     key: 'authored:0',
     label: 'Ignite',
     group: 'authored',
-    ref: AUTHORED_REF,
+    // Distinguish the entry ref from PlayerAction.ref to verify authored dispatch authority.
+    ref: { ...AUTHORED_REF, application_id: 90 },
     kwargs: {},
     available: true,
     reasons: [],
