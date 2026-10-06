@@ -15,7 +15,7 @@ from rest_framework.response import Response
 from rest_framework.throttling import SimpleRateThrottle
 from rest_framework.views import APIView
 
-from actions.target_menu import build_target_menu
+from actions.target_menu import InvalidCandidateCursor, build_target_menu
 from actions.target_menu_serializers import TargetMenuSerializer
 from actions.target_menu_types import (
     INPUT_CONTAINER_ITEM,
@@ -103,8 +103,8 @@ class TargetMenuView(APIView):
                 candidate_cursor=cleaned.get(INPUT_CANDIDATE_CURSOR) or None,
                 account_id=request.user.pk,
             )
-        except ValueError as exc:
-            raise ValidationError({"candidate_cursor": [str(exc)]}) from exc
+        except InvalidCandidateCursor:
+            raise ValidationError({INPUT_CANDIDATE_CURSOR: ["Enter a valid cursor."]}) from None
         if menu is None:
             raise NotFound(UNAVAILABLE)
         return Response(TargetMenuSerializer(menu).data)

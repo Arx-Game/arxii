@@ -432,6 +432,7 @@ class TargetMenuAPITests(TestCase):
         }
         invalid = self.client.get(self.url(), {"inputs_for": "give", "candidate_cursor": "bad"})
         assert invalid.status_code == 400
+        assert invalid.json() == {"candidate_cursor": ["Enter a valid cursor."]}
         oversize = self.client.get(
             self.url(), {"inputs_for": "give", "candidate_cursor": "x" * 2049}
         )
@@ -443,6 +444,23 @@ class TargetMenuAPITests(TestCase):
             {"inputs_for": "put_in", "candidate_cursor": give["next_candidate_cursor"]},
         )
         assert wrong_action.status_code == 400
+
+    def test_unexpected_builder_value_error_is_not_reflected(self):
+        raises_request_exceptions = self.client.raise_request_exception
+        self.client.raise_request_exception = False
+        try:
+            with (
+                override_settings(DEBUG=False),
+                patch(
+                    "actions.target_menu_views.build_target_menu",
+                    side_effect=ValueError("private builder detail"),
+                ),
+            ):
+                response = self.client.get(self.url())
+        finally:
+            self.client.raise_request_exception = raises_request_exceptions
+        assert response.status_code == 500
+        assert b"private builder detail" not in response.content
 
     def test_worn_visibility_and_wearer_privacy(self):
         self.item.game_object.location = self.other
