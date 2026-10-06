@@ -75,6 +75,18 @@ interface LeafActions {
   onPublish: (next: boolean) => void;
 }
 
+function stringOrDash(value: string) {
+  return value !== '' ? value : <Dash />;
+}
+
+function valueOrDash(value: string | number) {
+  return value || <Dash />;
+}
+
+function stringOr(value: string, fallback: string) {
+  return value !== '' ? value : fallback;
+}
+
 function leafPresentation(leaf: Leaf, houseId: number, doc: HouseDoc, actions: LeafActions) {
   const { house, family, household, realm, lands, estate } = doc;
   const {
@@ -95,13 +107,13 @@ function leafPresentation(leaf: Leaf, houseId: number, doc: HouseDoc, actions: L
     case 'house':
       chapter = <HouseChapter house={house} realmTheme={realm.realm_theme} onSave={onSaveHouse} />;
       recordRows = [
-        { label: 'crown', value: realm.sworn_to !== '' ? realm.sworn_to : <Dash /> },
-        { label: 'holds', value: realm.holds !== '' ? realm.holds : <Dash /> },
+        { label: 'crown', value: stringOrDash(realm.sworn_to) },
+        { label: 'holds', value: stringOrDash(realm.holds) },
         {
           label: 'demesne',
-          value: `${realm.demesne.length} · seat ${lands.seat !== '' ? lands.seat : 'none'}`,
+          value: `${realm.demesne.length} · seat ${stringOr(lands.seat, 'none')}`,
         },
-        { label: 'vassals', value: realm.vassals.length > 0 ? realm.vassals.length : <Dash /> },
+        { label: 'vassals', value: valueOrDash(realm.vassals.length) },
         { label: 'stature', value: <Dash /> },
       ];
       recordDoors = [{ label: 'the house on the roster', small: 'as players read it' }];
@@ -151,12 +163,12 @@ function leafPresentation(leaf: Leaf, houseId: number, doc: HouseDoc, actions: L
       chapter = <LandsLeaf houseName={house.name} lands={lands} onDescribe={onDescribeDemesne} />;
       recordRows = [
         { label: 'count', value: lands.count },
-        { label: 'population', value: lands.population > 0 ? lands.population : <Dash /> },
+        { label: 'population', value: valueOrDash(lands.population) },
         {
           label: 'produces',
           value: lands.produces.length > 0 ? lands.produces.join(' · ') : <Dash />,
         },
-        { label: 'seat', value: lands.seat !== '' ? lands.seat : <Dash /> },
+        { label: 'seat', value: stringOrDash(lands.seat) },
       ];
       recordDoors = [{ label: 'open on the Atlas', to: '/staff/world-builder' }];
       break;

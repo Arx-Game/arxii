@@ -18,6 +18,8 @@ from world.combat.types import WonOverRow, WonOverSnapshot
 from world.conditions.constants import Allegiance, DurationType
 
 if TYPE_CHECKING:
+    from collections.abc import Callable, Iterable
+
     from evennia.objects.models import ObjectDB
 
     from world.character_sheets.models import CharacterSheet
@@ -63,17 +65,7 @@ def stamp_won_over_opponents(encounter: CombatEncounter) -> list[CombatOpponent]
     by_target = allegiance_instances_for(
         (o.objectdb_id for o in enemies), applied_since=encounter.created_at
     )
-    won: list[CombatOpponent] = []
-    credited: dict[int, int] = {}
-    for opponent in enemies:
-        instance = designating_instance(by_target.get(opponent.objectdb_id, []))
-        if instance is None:
-            continue
-        won.append(opponent)
-        if instance.source_character_id is not None:
-            credited[instance.source_character_id] = (
-                credited.get(instance.source_character_id, 0) + 1
-            )
+    won, credited = _won_over_opponents(enemies, by_target, designating_instance)
     # Per-row saves, not a bulk .update(): a fight has only a handful of
     # opponents, and a bulk update leaves every cached CombatOpponent instance
     # (including these very `enemies` instances, idmapper-shared with any other
@@ -92,6 +84,25 @@ def stamp_won_over_opponents(encounter: CombatEncounter) -> list[CombatOpponent]
                 credited[participant.character_sheet.character_id],
             )
     return won
+
+
+def _won_over_opponents(
+    enemies: list[CombatOpponent],
+    by_target: dict[int, list[ConditionInstance]],
+    designating_instance: Callable[[Iterable[ConditionInstance]], ConditionInstance | None],
+) -> tuple[list[CombatOpponent], dict[int, int]]:
+    """Select designated enemies and count wins by source character."""
+    won: list[CombatOpponent] = []
+    credited: dict[int, int] = {}
+    for opponent in enemies:
+        instance = designating_instance(by_target.get(opponent.objectdb_id, []))
+        if instance is None:
+            continue
+        won.append(opponent)
+        source_id = instance.source_character_id
+        if source_id is not None:
+            credited[source_id] = credited.get(source_id, 0) + 1
+    return won, credited
 
 
 def _window_open(opponent: CombatOpponent, instances: list[ConditionInstance]) -> bool:

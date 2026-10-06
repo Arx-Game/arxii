@@ -40,6 +40,7 @@ import { CommitmentPanel } from './components/CommitmentPanel';
 import { OutcomeRoulette } from './OutcomeRoulette';
 import { StandoffCard } from './standoff/StandoffCard';
 import type { components } from '@/generated/api';
+import type { EncounterDetail } from './types';
 import type { CastPosition, PositionTargetShape } from '@/actions/types';
 
 type ConditionInstance = components['schemas']['ConditionInstance'];
@@ -158,39 +159,12 @@ export function CombatTurnPanel({
   // ---------------------------------------------------------------------------
 
   if (encounter.status === 'completed') {
-    // Pre-#876 rows completed without a recorded outcome (the API sends the
-    // blank string for them); fall back to "abandoned" so the banner always
-    // names a result.
-    const outcome: string = encounter.outcome || 'abandoned';
-    // One digest per participant the viewer can see an aftermath for, since
-    // the server only sends a non-null aftermath to the character's own
-    // owner (or a GM), so this filter is the whole visibility rule (#3551).
-    const digests = encounter.participants
-      .filter((participant) => participant.aftermath != null)
-      .map((participant) => ({
-        participantId: participant.id,
-        characterName: participant.character_name,
-        digest: participant.aftermath as AftermathDigest,
-      }));
     return (
-      <div
-        className={cn('flex flex-col gap-3 rounded-lg border border-border bg-card p-3 shadow-sm')}
-        data-testid="combat-turn-panel"
-      >
-        <div className="flex items-center justify-between">
-          <h2 className="text-sm font-bold text-foreground">
-            Encounter Concluded: Round {encounter.round_number ?? 0}
-          </h2>
-        </div>
-        <EncounterOutcomeBanner
-          outcome={outcome}
-          digests={digests}
-          onDismiss={onDismissOutcome}
-          characterId={characterId}
-          // No scene id, no Settle: WonOverRows hides it rather than post to ''.
-          sceneId={encounter.scene ? String(encounter.scene) : null}
-        />
-      </div>
+      <CompletedEncounter
+        encounter={encounter}
+        characterId={characterId}
+        onDismissOutcome={onDismissOutcome}
+      />
     );
   }
 
@@ -471,6 +445,47 @@ export function CombatTurnPanel({
           )}
         </div>
       )}
+    </div>
+  );
+}
+
+function CompletedEncounter({
+  encounter,
+  characterId,
+  onDismissOutcome,
+}: {
+  encounter: EncounterDetail;
+  characterId: number;
+  onDismissOutcome?: () => void;
+}) {
+  // Pre-#876 rows completed without a recorded outcome send a blank string.
+  const outcome = encounter.outcome || 'abandoned';
+  // The server only sends aftermath data to its owner or a GM.
+  const digests = encounter.participants
+    .filter((participant) => participant.aftermath != null)
+    .map((participant) => ({
+      participantId: participant.id,
+      characterName: participant.character_name,
+      digest: participant.aftermath as AftermathDigest,
+    }));
+  return (
+    <div
+      className={cn('flex flex-col gap-3 rounded-lg border border-border bg-card p-3 shadow-sm')}
+      data-testid="combat-turn-panel"
+    >
+      <div className="flex items-center justify-between">
+        <h2 className="text-sm font-bold text-foreground">
+          Encounter Concluded: Round {encounter.round_number ?? 0}
+        </h2>
+      </div>
+      <EncounterOutcomeBanner
+        outcome={outcome}
+        digests={digests}
+        onDismiss={onDismissOutcome}
+        characterId={characterId}
+        // No scene id, no Settle: WonOverRows hides it rather than post to ''.
+        sceneId={encounter.scene ? String(encounter.scene) : null}
+      />
     </div>
   );
 }

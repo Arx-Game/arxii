@@ -575,18 +575,23 @@ def _narration_coverage(event_group: uuid.UUID) -> tuple[bool, bool]:
     room = False
     private = False
     for link in annotated:
-        interaction = link.interaction
-        if interaction.mode == InteractionMode.WHISPER:
-            if link.has_subject_receiver:
-                private = True
-        elif interaction.mode == InteractionMode.EMIT:
-            if not link.has_any_receiver:
-                room = True
-            elif link.has_subject_receiver:
-                private = True
+        room = room or _narration_covers_room(link)
+        private = private or _narration_covers_subject(link)
         if room and private:
             break
     return room, private
+
+
+def _narration_covers_room(link: GMPromptNarration) -> bool:
+    """Return whether this narration covers the event's room line."""
+    return link.interaction.mode == InteractionMode.EMIT and not link.has_any_receiver
+
+
+def _narration_covers_subject(link: GMPromptNarration) -> bool:
+    """Return whether this narration privately reaches the event subject."""
+    return link.interaction.mode in (InteractionMode.WHISPER, InteractionMode.EMIT) and (
+        link.has_subject_receiver
+    )
 
 
 def prompt_narration_coverage(prompt: GMPrompt) -> tuple[bool, bool]:

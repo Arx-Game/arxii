@@ -48,7 +48,13 @@ import { ServerChangedBanner } from '../components/ServerChangedBanner';
 import { StudioBreadcrumb } from '../components/StudioBreadcrumb';
 import { getMissionOption, patchMissionOption } from '../api';
 import { useServerDraft } from '../hooks/useServerDraft';
-import { missionKeys, usePredicateLeaves, useMissionRoutes, useMissionTemplate } from '../queries';
+import {
+  missionKeys,
+  usePredicateLeaves,
+  useMissionRoutes,
+  useMissionTemplate,
+  type PredicateLeaf,
+} from '../queries';
 import { studioBaseFromPath, studioPaths } from '../studioPaths';
 import type { MissionOption } from '../types';
 import { useMutation } from '@tanstack/react-query';
@@ -186,11 +192,8 @@ function useOption(id: number) {
   });
 }
 
-function OptionEditor({ option }: { option: MissionOption }) {
-  const qc = useQueryClient();
-  const leaves = usePredicateLeaves();
-  const { data: checkTypes = [] } = useCheckTypeCatalog('', true);
-  const { draft, setDraft, dirty, serverChanged, pullFromServer } = useServerDraft(option, (o) => ({
+function optionDraftFromOption(o: MissionOption) {
+  return {
     order: o.order,
     option_kind: o.option_kind,
     source_kind: o.source_kind,
@@ -204,7 +207,44 @@ function OptionEditor({ option }: { option: MissionOption }) {
     opponent_lines: opponentLineDraftsFromOption(o.opponent_lines),
     opposition_sheet: o.opposition_sheet ?? null,
     opposition_check_type: o.opposition_check_type ?? null,
-  }));
+  };
+}
+
+type OptionDraft = ReturnType<typeof optionDraftFromOption>;
+
+function optionPatchPayload(draft: OptionDraft, leaves: PredicateLeaf[] | undefined) {
+  const isCheck = draft.option_kind === 'check';
+  const isContest = draft.option_kind === 'contest';
+
+  return {
+    ...draft,
+    // Coerce string-typed leaf params per the catalog before saving.
+    visibility_rule: coercePredicate(draft.visibility_rule, leaves ?? []),
+    // Non-encounter options cannot carry these fields after a re-kind.
+    encounter_risk_level: draft.option_kind === 'encounter' ? draft.encounter_risk_level : '',
+    opens_as_standoff: draft.option_kind === 'encounter' ? draft.opens_as_standoff : false,
+    opponent_lines:
+      draft.option_kind === 'encounter' ? opponentLineDraftsToPayload(draft.opponent_lines) : [],
+    // Authored check type is valid only for authored checks and contests.
+    authored_check_type:
+      (isCheck && draft.source_kind === 'authored') || isContest ? draft.authored_check_type : null,
+    opposition_sheet: isContest ? draft.opposition_sheet : null,
+    opposition_check_type: isContest ? draft.opposition_check_type : null,
+  };
+}
+
+function saveButtonText(isPending: boolean) {
+  return isPending ? 'Saving…' : 'Save';
+}
+
+function OptionEditor({ option }: { option: MissionOption }) {
+  const qc = useQueryClient();
+  const leaves = usePredicateLeaves();
+  const { data: checkTypes = [] } = useCheckTypeCatalog('', true);
+  const { draft, setDraft, dirty, serverChanged, pullFromServer } = useServerDraft(
+    option,
+    optionDraftFromOption
+  );
 
   // Validate the predicate tree before save — blocks empty leaves, missing
   // required params, and malformed NOT groups so we don't ship a tree that
@@ -217,30 +257,7 @@ function OptionEditor({ option }: { option: MissionOption }) {
   const isContest = draft.option_kind === 'contest';
 
   const mutation = useMutation({
-    mutationFn: () =>
-      patchMissionOption(option.id, {
-        ...draft,
-        // Coerce string-typed leaf params to int / bool / float per the
-        // D5 catalog so the backend resolver gets the type it expects.
-        visibility_rule: coercePredicate(draft.visibility_rule, leaves.data ?? []),
-        // Only an ENCOUNTER option may carry a risk level or opponent lines; the
-        // backend rejects them on any other kind, so a re-kinded option sends none.
-        encounter_risk_level: draft.option_kind === 'encounter' ? draft.encounter_risk_level : '',
-        opens_as_standoff: draft.option_kind === 'encounter' ? draft.opens_as_standoff : false,
-        opponent_lines:
-          draft.option_kind === 'encounter'
-            ? opponentLineDraftsToPayload(draft.opponent_lines)
-            : [],
-        // authored_check_type resolves a CHECK (AUTHORED source) or a CONTEST;
-        // every other kind forbids it, so a re-kinded option sends null.
-        authored_check_type:
-          (isCheck && draft.source_kind === 'authored') || isContest
-            ? draft.authored_check_type
-            : null,
-        // opposition_sheet/opposition_check_type are CONTEST-only (#3568).
-        opposition_sheet: isContest ? draft.opposition_sheet : null,
-        opposition_check_type: isContest ? draft.opposition_check_type : null,
-      }),
+    mutationFn: () => patchMissionOption(option.id, optionPatchPayload(draft, leaves.data)),
     onSuccess: () => {
       qc.invalidateQueries({
         queryKey: [...missionKeys.options(), 'detail', option.id],
@@ -489,7 +506,7 @@ function OptionEditor({ option }: { option: MissionOption }) {
             onClick={() => mutation.mutate()}
             disabled={!dirty || !ruleValid || mutation.isPending}
           >
-            {mutation.isPending ? 'Saving…' : 'Save'}
+            {saveButtonText(mutation.isPending)}
           </Button>
         </div>
       </CardContent>

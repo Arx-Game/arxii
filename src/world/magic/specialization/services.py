@@ -434,6 +434,27 @@ def _gift_thread_for_variant(character, technique: Technique, *, preferred_reson
     return at_resonance if at_resonance is not None else covering[0]
 
 
+def _effective_variant_resonance(sheet, thread, preferred_resonance):
+    """Choose cast-time, alt-self, or thread resonance in priority order."""
+    if preferred_resonance is not None:
+        return preferred_resonance
+    resonance = _active_alt_self_resonance(sheet)
+    return thread.resonance if resonance is None else resonance
+
+
+def _prefer_early_form(character, technique, resonance, variant):
+    """Use an eligible purchased early form when it outranks the natural form."""
+    hold = character.techniques.hold_for(technique)
+    early = hold.early_form if hold is not None else None
+    if early is None or hold.role_source_id is not None:
+        return variant
+    if early.resonance_id != resonance.pk:
+        return variant
+    if variant is not None and early.unlock_thread_level <= variant.unlock_thread_level:
+        return variant
+    return early
+
+
 def _resolve_technique_variant(
     technique: Technique,
     character,
@@ -480,39 +501,14 @@ def _resolve_technique_variant(
     if thread is None:
         return technique
 
-    # #1619: Resonance priority for variant resolution:
-    # 1. preferred_resonance (cast-time picker) — highest priority
-    # 2. active alt-self resonance (alt-self shift)
-    # 3. thread's own resonance (default)
-    if preferred_resonance is not None:
-        effective_resonance = preferred_resonance
-    else:
-        effective_resonance = _active_alt_self_resonance(sheet)
-        if effective_resonance is None:
-            effective_resonance = thread.resonance
-
+    effective_resonance = _effective_variant_resonance(sheet, thread, preferred_resonance)
     variant = TechniqueVariant.matching_variant(
         technique,
         resonance=effective_resonance,
         thread_level=thread.level,
     )
-
-    # #4099: a form bought early (in creation) applies before the GIFT thread reaches
-    # its level, at its own resonance only. A naturally reached higher form still wins.
-    # ``use_role_thread`` only reflects the CALLER-supplied ``character_technique`` — a
-    # caller that omits it (the common case) would otherwise let a role-granted hold's
-    # early_form leak in, so the hold's own ``role_source_id`` is checked explicitly
-    # here rather than trusting the (possibly absent) parameter alone.
     if not use_role_thread:
-        hold = character.techniques.hold_for(technique)
-        early = hold.early_form if hold is not None else None
-        if (
-            early is not None
-            and hold.role_source_id is None
-            and early.resonance_id == effective_resonance.pk
-            and (variant is None or early.unlock_thread_level > variant.unlock_thread_level)
-        ):
-            variant = early
+        variant = _prefer_early_form(character, technique, effective_resonance, variant)
 
     if variant is None:
         return technique
