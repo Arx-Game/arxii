@@ -359,6 +359,22 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/actions/characters/{character_id}/{target_kind}/{target_id}/menu/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations['actions_characters_menu_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/actions/characters/{character_id}/available/': {
     parameters: {
       query?: never;
@@ -32200,6 +32216,14 @@ export interface components {
       is_paused: boolean;
       track: components['schemas']['TrackView'] | null;
     };
+    /**
+     * @description * `perception` - perception
+     *     * `items` - items
+     *     * `movement` - movement
+     *     * `authored` - authored
+     * @enum {string}
+     */
+    GroupDbaEnum: 'perception' | 'items' | 'movement' | 'authored';
     /** @description POST body for the #1036 group-pick endpoint. */
     GroupPickRequestRequest: {
       option_id: number;
@@ -33559,7 +33583,15 @@ export interface components {
      *     * `social` - Social
      * @enum {string}
      */
-    KeyEnum: 'perception' | 'conflict' | 'scene' | 'social';
+    KeyB77Enum: 'perception' | 'conflict' | 'scene' | 'social';
+    /**
+     * @description * `perception` - perception
+     *     * `items` - items
+     *     * `movement` - movement
+     *     * `authored` - authored
+     * @enum {string}
+     */
+    KeyDbaEnum: 'perception' | 'items' | 'movement' | 'authored';
     /**
      * @description Response for GET /api/roster/kin/relationship/ (#3003).
      *
@@ -34104,6 +34136,87 @@ export interface components {
       /** @description Display name for this persona */
       name: string;
     };
+    MenuEntry: {
+      key: string;
+      label: string;
+      group: components['schemas']['GroupDbaEnum'];
+      ref: components['schemas']['ActionRef'];
+      kwargs: components['schemas']['MenuKwargs'];
+      available: boolean;
+      reasons: string[];
+      inputs: components['schemas']['MenuInput'][];
+      /** @description Validate each complete candidate with independent action/kind context. */
+      readonly candidates: {
+        [key: string]: unknown;
+      }[];
+      next_candidate_cursor: string | null;
+      action: components['schemas']['PlayerAction'] | null;
+      risk: components['schemas']['MenuRisk'] | null;
+    };
+    MenuGroup: {
+      key: components['schemas']['KeyDbaEnum'];
+      label: string;
+    };
+    MenuInput: {
+      name: components['schemas']['NameEnum'];
+      kind: components['schemas']['MenuInputKindEnum'];
+      required: boolean;
+      target_kind: string | null;
+      default: unknown;
+    };
+    /**
+     * @description * `recipient` - recipient
+     *     * `container` - container
+     *     * `target` - target
+     *     * `option` - option
+     *     * `text` - text
+     *     * `boolean` - boolean
+     * @enum {string}
+     */
+    MenuInputKindEnum: 'recipient' | 'container' | 'target' | 'option' | 'text' | 'boolean';
+    MenuKwargs: {
+      menu_target?: components['schemas']['MenuTarget'];
+      recipient_persona_id?: number;
+      container_item_id?: number;
+      use_target?: components['schemas']['MenuUseTarget'];
+      option_id?: number;
+      descriptor?: string;
+      blend?: boolean;
+    };
+    MenuRisk: {
+      known: boolean;
+      character_loss_possible: boolean | null;
+      outcomes: components['schemas']['MenuRiskOutcome'][];
+    };
+    MenuRiskOutcome: {
+      stage: string;
+      tier: string;
+      character_loss: boolean;
+    };
+    MenuTarget: {
+      kind: components['schemas']['MenuTargetKindEnum'];
+      target_id: number;
+      owner_persona_id?: number;
+      container_item_id?: number;
+    };
+    /**
+     * @description * `items` - items
+     *     * `objects` - objects
+     *     * `exits` - exits
+     *     * `places` - places
+     * @enum {string}
+     */
+    MenuTargetKindEnum: 'items' | 'objects' | 'exits' | 'places';
+    MenuUseTarget: {
+      kind: components['schemas']['MenuUseTargetKindEnum'];
+      target_id: number;
+    };
+    /**
+     * @description * `items` - items
+     *     * `objects` - objects
+     * @enum {string}
+     */
+    MenuUseTargetKindEnum: 'items' | 'objects';
     /**
      * @description * `machine` - Machine
      * @enum {string}
@@ -35673,6 +35786,22 @@ export interface components {
      * @enum {string}
      */
     NameDegreeEnum: 'familiar' | 'common' | 'styled' | 'full_formal';
+    /**
+     * @description * `recipient_persona_id` - recipient_persona_id
+     *     * `container_item_id` - container_item_id
+     *     * `use_target` - use_target
+     *     * `option_id` - option_id
+     *     * `descriptor` - descriptor
+     *     * `blend` - blend
+     * @enum {string}
+     */
+    NameEnum:
+      | 'recipient_persona_id'
+      | 'container_item_id'
+      | 'use_target'
+      | 'option_id'
+      | 'descriptor'
+      | 'blend';
     /**
      * @description * `story` - Story update
      *     * `atmosphere` - Atmosphere
@@ -42471,7 +42600,7 @@ export interface components {
       scene_actions: components['schemas']['PlayerAction'][];
     };
     PersonaMenuGroup: {
-      key: components['schemas']['KeyEnum'];
+      key: components['schemas']['KeyB77Enum'];
       empty_state: string;
     };
     PersonaMenuItem: {
@@ -47059,6 +47188,13 @@ export interface components {
      * @enum {string}
      */
     TargetKindDdaEnum: 'none' | 'room' | 'org' | 'domain' | 'persona' | 'crisis' | 'predator';
+    TargetMenu: {
+      actor_id: number;
+      target: components['schemas']['MenuTarget'];
+      label: string;
+      groups: components['schemas']['MenuGroup'][];
+      entries: components['schemas']['MenuEntry'][];
+    };
     /** @description Read-only serializer for TargetSpec — entity kind + cardinality + filters. */
     TargetSpec: {
       readonly kind: string;
@@ -50015,6 +50151,29 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['SceneActionTarget'];
+        };
+      };
+    };
+  };
+  actions_characters_menu_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        character_id: number;
+        target_id: number;
+        target_kind: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['TargetMenu'];
         };
       };
     };

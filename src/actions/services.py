@@ -72,10 +72,10 @@ def get_effective_consequences(pool: ConsequencePool) -> list[WeightedConsequenc
     modifications (additions, exclusions, weight overrides); see
     ``merge_pool_entries``.
     """
-    entries = list(pool.entries.select_related("consequence"))
+    entries = list(pool.entries.select_related("consequence__outcome_tier"))
     if pool.parent_id is None:
         return merge_pool_entries(entries, None)
-    parent_entries = list(pool.parent.entries.select_related("consequence"))
+    parent_entries = list(pool.parent.entries.select_related("consequence__outcome_tier"))
     return merge_pool_entries(entries, parent_entries)
 
 

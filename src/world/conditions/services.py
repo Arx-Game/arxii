@@ -334,6 +334,26 @@ def can_perceive(actor: "ObjectDB", target: "ObjectDB") -> bool:  # noqa: OBJECT
     """
     if target.location not in (actor.location, actor):
         return False
+    return passes_concealment_check(actor, target)
+
+
+def passes_concealment_check(
+    actor: "ObjectDB",  # noqa: OBJECTDB_PARAM
+    target: "ObjectDB",  # noqa: OBJECTDB_PARAM
+) -> bool:
+    """Check concealment after the caller has established readable spatial scope.
+
+    This does not check location, enclosing objects or equipment layers, and does
+    not grant permission to act. It never records detection.
+
+    Args:
+        actor: The observer whose detection membership is checked.
+        target: The object within the caller's independently validated scope.
+
+    Returns:
+        True if no active concealment exists or the observer has detected every
+        active concealment instance on the target.
+    """
     concealments = active_concealments(target)
     if not concealments.exists():
         return True

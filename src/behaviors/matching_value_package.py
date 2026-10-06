@@ -1,8 +1,26 @@
 """Generic checks for verifying access requirements."""
 
+from collections.abc import Iterable, Iterator
+
 from behaviors.models import BehaviorPackageInstance
 from commands.exceptions import CommandError
 from flows.object_states.base_state import BaseState
+
+
+def matching_value_refusal(
+    pkg: BehaviorPackageInstance, actor_present: bool, values: Iterable[object]
+) -> str | None:
+    """Return the existing matching-value refusal without loading a state."""
+    if not actor_present:
+        return "No actor provided."
+    attr = pkg.get_from_data("attribute")
+    required = pkg.get_from_data("value")
+    if attr is None or required is None:
+        return "Lock is misconfigured."
+    for value in values:
+        if value == required:
+            return None
+    return pkg.get_from_data("error") or "Access denied."
 
 
 def require_matching_value(
@@ -32,22 +50,12 @@ def require_matching_value(
         ````
     """
 
-    if actor is None:
-        msg = "No actor provided."
-        raise CommandError(msg)
+    def values() -> Iterator[object]:
+        attr = pkg.get_from_data("attribute")
+        yield actor.get_attribute(attr)
+        for item in actor.contents:
+            yield item.get_attribute(attr)
 
-    attr = pkg.get_from_data("attribute")
-    required = pkg.get_from_data("value")
-    if attr is None or required is None:
-        msg = "Lock is misconfigured."
-        raise CommandError(msg)
-
-    # Check the actor and any carried objects for the required value.
-    if actor.get_attribute(attr) == required:
-        return
-    for item in actor.contents:
-        if item.get_attribute(attr) == required:
-            return
-
-    error_message = pkg.get_from_data("error") or "Access denied."
-    raise CommandError(error_message)
+    reason = matching_value_refusal(pkg, actor is not None, values())
+    if reason is not None:
+        raise CommandError(reason)

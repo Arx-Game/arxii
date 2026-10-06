@@ -2,6 +2,7 @@
 
 from django.urls import path
 
+from actions.target_menu_views import TargetMenuView
 from actions.views import AvailableActionsView, DispatchActionView, PersonaMenuView
 
 app_name = "actions"
@@ -21,5 +22,10 @@ urlpatterns = [
         "characters/<int:character_id>/personas/<int:persona_id>/menu/",
         PersonaMenuView.as_view(),
         name="persona-menu",
+    ),
+    path(
+        "characters/<int:character_id>/<str:target_kind>/<int:target_id>/menu/",
+        TargetMenuView.as_view(),
+        name="target-menu",
     ),
 ]

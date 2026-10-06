@@ -4,16 +4,29 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any, ClassVar
+from typing import TYPE_CHECKING, Any, ClassVar, cast
 
 from evennia.objects.models import ObjectDB
 
 from actions.base import Action
-from actions.target_resolution import resolve_persona_pk_to_character
+from actions.definitions.item_helpers import emit_typed_item_intent, resolve_typed_item
+from actions.definitions.room_target_helpers import (
+    MENU_TARGET_KEY,
+    UNAVAILABLE,
+    RoomTargetPrerequisite,
+    apply_room_enhancements,
+    emit_room_intent,
+    room_target,
+)
+from actions.prerequisites import Prerequisite
+from actions.target_menu_types import MenuTargetKind, MenuTargetRequest
+from actions.target_resolution import resolve_menu_target, resolve_persona_pk_to_character
 from actions.types import ActionContext, ActionResult, TargetType
 from flows.scene_data_manager import SceneDataManager
 
 if TYPE_CHECKING:
+    from actions.models import ActionEnhancement
+    from typeclasses.types import ArxTypeclass
     from world.items.models import ItemInstance
 
 _LOOK_AT_WHAT_MESSAGE = "Look at what?"
@@ -59,6 +72,66 @@ def _resolve_look_target(kwargs: dict[str, Any]) -> ObjectDB | None:
     return resolve_persona_pk_to_character(kwargs.get("target_persona_id"))
 
 
+def _character_look_worn_data(actor: ObjectDB, target: ObjectDB) -> dict[str, Any]:
+    """Build current public equipment rows for an authorized character Look."""
+    from world.items.serializers import VisibleWornItemSerializer  # noqa: PLC0415
+    from world.items.services.appearance import visible_worn_items_for  # noqa: PLC0415
+    from world.scenes.models import Persona  # noqa: PLC0415
+    from world.scenes.services import active_persona_for_sheet  # noqa: PLC0415
+
+    sheet = target.character_sheet
+    if sheet is None:
+        return {}
+    if not look_target_visible(actor, target):
+        return {}
+    try:
+        persona = active_persona_for_sheet(sheet)
+    except Persona.DoesNotExist:
+        return {}
+    rows = []
+    for row in visible_worn_items_for(target, observer=actor):
+        request = MenuTargetRequest(
+            kind=MenuTargetKind.ITEMS,
+            target_id=row.item_instance.pk,
+            owner_persona_id=persona.pk,
+        )
+        if resolve_menu_target(actor, request) is not None:
+            data = dict(VisibleWornItemSerializer(row).data)
+            data["owner_persona_id"] = persona.pk
+            rows.append(data)
+    return {"visible_worn_items": rows}
+
+
+def _render_physical_look(
+    actor: ObjectDB,
+    target: ObjectDB,
+    context: ActionContext | None,
+    *,
+    validate_target: Callable[[], bool] | None = None,
+) -> ActionResult:
+    """Render physical Look, rechecking typed scope after initialization."""
+    sdm = context.scene_data if context else SceneDataManager()
+    target_state = sdm.initialize_state_for_object(cast("ArxTypeclass", target))
+    looker_state = sdm.initialize_state_for_object(cast("ArxTypeclass", actor))
+    if validate_target is not None and not validate_target():
+        return ActionResult(success=False, message=UNAVAILABLE)
+    description = target_state.return_appearance(mode="look", looker=cast(Any, looker_state))
+    from actions.definitions.examine_extras import gather_examine_extras  # noqa: PLC0415
+
+    if validate_target is not None and not validate_target():
+        return ActionResult(success=False, message=UNAVAILABLE)
+    extras = gather_examine_extras(actor, target)
+    if extras.cancelled:
+        return ActionResult(success=True, message="")
+    if extras.sections:
+        description = f"{description}\n" + "\n".join(extras.sections)
+    return ActionResult(
+        success=True,
+        message=description,
+        data=_character_look_worn_data(actor, target),
+    )
+
+
 @dataclass
 class LookAction(Action):
     """Look at a target entity to get its description."""
@@ -70,6 +143,28 @@ class LookAction(Action):
     target_type: TargetType = TargetType.SINGLE
 
     objectdb_target_kwargs: ClassVar[frozenset[str]] = frozenset({"target"})
+    menu_kinds: ClassVar[frozenset[MenuTargetKind]] = frozenset(
+        {MenuTargetKind.OBJECTS, MenuTargetKind.EXITS}
+    )
+
+    def is_applicable(self, actor: ObjectDB | None, *, kwargs: dict[str, Any]) -> bool:
+        return room_target(actor, kwargs, self.menu_kinds) is not None
+
+    def get_prerequisites(self) -> list[Prerequisite]:
+        return [*super().get_prerequisites(), RoomTargetPrerequisite(self)]
+
+    def _apply_enhancements(
+        self,
+        context: ActionContext,
+        actor: ObjectDB | None,
+        enhancements: list[ActionEnhancement] | None,
+    ) -> None:
+        apply_room_enhancements(
+            context, actor, enhancements, super()._apply_enhancements, self.menu_kinds
+        )
+
+    def _emit_intent(self, context: ActionContext, actor: ObjectDB | None) -> ActionResult | None:
+        return emit_room_intent(context, actor, super()._emit_intent, self.menu_kinds)
 
     def execute(
         self,
@@ -77,6 +172,17 @@ class LookAction(Action):
         context: ActionContext | None = None,
         **kwargs: Any,
     ) -> ActionResult:
+        if MENU_TARGET_KEY in kwargs:
+            resolved = room_target(actor, kwargs, self.menu_kinds)
+            if resolved is None or resolved.game_object is None:
+                return ActionResult(success=False, message=UNAVAILABLE)
+            target = resolved.game_object
+
+            def still_current() -> bool:
+                fresh = room_target(actor, kwargs, self.menu_kinds)
+                return fresh is not None and fresh.game_object == target
+
+            return _render_physical_look(actor, target, context, validate_target=still_current)
         target = _resolve_look_target(kwargs)
         if target is None:
             return ActionResult(success=False, message=_LOOK_AT_WHAT_MESSAGE)
@@ -119,29 +225,24 @@ class LookAction(Action):
             if perceives_dreamside(sheet):
                 target = dreamspace_for(sheet) or target
 
-        sdm = context.scene_data if context else SceneDataManager()
-        target_state = sdm.initialize_state_for_object(target)
-        looker_state = sdm.initialize_state_for_object(actor)
-        description = target_state.return_appearance(mode="look", looker=looker_state)
+        return _render_physical_look(actor, target, context)
 
-        # #3084 — every other examine-time display extra (reactive scars, ranking
-        # displays, captivity status, board postings, catering history, crafted
-        # provenance, room functionaries/notice-board hint/heat, and the mission
-        # dispatch #3044 wired here first) lives at this one aggregation seam —
-        # see ADR-0213 and ``actions.definitions.examine_extras``.
-        from actions.definitions.examine_extras import gather_examine_extras  # noqa: PLC0415
 
-        extras = gather_examine_extras(actor, target)
-        if extras.cancelled:
-            # Prior contract: a cancelled examine shows nothing.
-            return ActionResult(success=True, message="")
-        if extras.sections:
-            description = f"{description}\n" + "\n".join(extras.sections)
+ITEM_LOOK_UNAVAILABLE_MESSAGE = "That isn't available to look at."
+_ITEM_LOOK_MENU_TARGET_KEY = "menu_target"
 
-        return ActionResult(
-            success=True,
-            message=description,
-        )
+
+@dataclass
+class _TypedItemLookPrerequisite(Prerequisite):
+    """Share typed item visibility between read checks and execution."""
+
+    def is_met(self, actor, target=None, context=None):
+        kwargs = (context or {}).get("kwargs", {})
+        if _ITEM_LOOK_MENU_TARGET_KEY not in kwargs:
+            return True, ""
+        if resolve_typed_item(actor, kwargs) is None:
+            return False, ITEM_LOOK_UNAVAILABLE_MESSAGE
+        return True, ""
 
 
 @dataclass
@@ -169,6 +270,15 @@ class LookAtItemAction(Action):
         context: ActionContext | None = None,
         **kwargs: Any,
     ) -> ActionResult:
+        if _ITEM_LOOK_MENU_TARGET_KEY in kwargs:
+            resolved = resolve_typed_item(actor, kwargs)
+            if resolved is None:
+                return ActionResult(success=False, message=ITEM_LOOK_UNAVAILABLE_MESSAGE)
+            if resolved.game_object is not None:
+                return _render_physical_look(actor, resolved.game_object, context)
+            assert resolved.item is not None  # noqa: S101
+            return ActionResult(success=True, message=self._render_item(resolved.item))
+
         item_name = kwargs.get("item_name")
         owner_id = kwargs.get("owner_id")
         container_id = kwargs.get("container_id")
@@ -182,7 +292,15 @@ class LookAtItemAction(Action):
         if owner_id is not None:
             return self._look_at_worn(actor, owner_id, item_name)
 
+        assert container_id is not None  # noqa: S101
         return self._look_at_contained(actor, container_id, item_name)
+
+    def get_prerequisites(self) -> list[Prerequisite]:
+        return [*super().get_prerequisites(), _TypedItemLookPrerequisite()]
+
+    def _emit_intent(self, context: ActionContext, actor: ObjectDB | None) -> ActionResult | None:
+        """Adapt typed item intent while retaining the standard lifecycle."""
+        return emit_typed_item_intent(context, actor, super()._emit_intent)
 
     def _look_at_worn(
         self,
@@ -229,7 +347,7 @@ class LookAtItemAction(Action):
 
         try:
             container_instance = container_obj.item_instance
-        except ObjectDB.item_instance.RelatedObjectDoesNotExist:  # type: ignore[attr-defined]
+        except ObjectDB.item_instance.RelatedObjectDoesNotExist:
             return ActionResult(success=False, message="That isn't a container.")
 
         # Reach gate: clients can POST any container pk via the action
@@ -318,7 +436,7 @@ class InventoryAction(Action):
         **kwargs: Any,
     ) -> ActionResult:
         sdm = context.scene_data if context else SceneDataManager()
-        caller_state = sdm.initialize_state_for_object(actor)
+        caller_state = sdm.initialize_state_for_object(cast("ArxTypeclass", actor))
         items = caller_state.contents
         burden = _burden_line(actor)
         if not items:

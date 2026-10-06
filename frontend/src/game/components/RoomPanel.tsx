@@ -62,6 +62,7 @@ export interface RoomData {
 
 interface RoomPanelProps {
   character: string | null;
+  accountId?: number | null;
   /** The active puppet's ObjectDB pk, for owner-gated room editing (#1470). */
   characterId?: number | null;
   room: RoomData | null;
@@ -217,6 +218,7 @@ function TenancyAction({
 export function RoomPanel({
   character,
   characterId,
+  accountId: suppliedAccountId,
   room,
   scene,
   onCharacterClick,
@@ -228,6 +230,8 @@ export function RoomPanel({
 }: RoomPanelProps) {
   const { send, connect, requestRoomState } = useGameSocket();
   const dispatch = useAppDispatch();
+  const storeAccountId = useAppSelector((state) => state.auth.account?.id ?? null);
+  const accountId = suppliedAccountId ?? storeAccountId;
   const session = useAppSelector((state) =>
     character ? state.game.sessions[character] : undefined
   );
@@ -388,12 +392,17 @@ export function RoomPanel({
           Select an occupant to open character context and authorized details.
         </p>
       )}
-      <ObjectsList objects={room.objects} characterId={characterId} />
+      <ObjectsList objects={room.objects} characterId={characterId} accountId={accountId} />
       {room.hub && <HubTidingsPanel hub={room.hub} viewerEntryId={viewerEntryId} />}
       {room.hub?.kind === 'NOTICE_BOARD' && (
         <RoomBoardPanel roomProfileId={room.id} characterId={characterId} />
       )}
-      <ExitsList exits={room.exits} onExit={handleExit} />
+      <ExitsList
+        exits={room.exits}
+        onExit={handleExit}
+        partition={accountId === null ? '' : `account-${accountId}`}
+        actorId={characterId ?? null}
+      />
       <PortalsBlock characterId={characterId} />
       <TrapsBlock characterId={characterId} />
       {room.thumbnail_url && (

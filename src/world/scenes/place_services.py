@@ -4,7 +4,9 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from world.scenes.constants import ScenePrivacyMode
+from django.db.models import QuerySet
+
+from world.scenes.constants import PlaceStatus, ScenePrivacyMode
 from world.scenes.models import Scene
 from world.scenes.place_models import Place, PlacePresence
 
@@ -12,6 +14,21 @@ if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
 
     from world.scenes.models import Persona
+
+
+def active_places(*, room_id: int | None = None) -> QuerySet[Place]:
+    """Return authored active places, optionally restricted to one room.
+
+    Args:
+        room_id: A RoomProfile ID, or None for the existing unscoped list.
+
+    Returns:
+        Active places in the existing name order without creating a scene.
+    """
+    places = Place.objects.filter(status=PlaceStatus.ACTIVE).order_by("name")
+    if room_id is not None:
+        places = places.filter(room_id=room_id)
+    return places
 
 
 def ensure_scene_for_location(

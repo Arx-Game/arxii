@@ -478,6 +478,9 @@ SOCIALACCOUNT_PROVIDERS = {
 # Django REST Framework configuration
 ######################################################################
 
+# Account-wide menu reads. LocMemCache histories are approximate and process-local.
+TARGET_MENU_ACCOUNT_RATE = "120/min"
+
 REST_FRAMEWORK = {
     "DEFAULT_RENDERER_CLASSES": [
         "rest_framework.renderers.JSONRenderer",

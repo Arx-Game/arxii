@@ -18,6 +18,7 @@ from world.scenes.interaction_permissions import get_account_personas
 from world.scenes.models import Persona
 from world.scenes.place_filters import PlaceFilter
 from world.scenes.place_models import Place, PlacePresence
+from world.scenes.place_services import active_places
 
 
 class PlaceSerializer(serializers.ModelSerializer):
@@ -76,7 +77,7 @@ class PlaceViewSet(viewsets.ModelViewSet):
     http_method_names = ["get", "post"]
 
     def get_queryset(self) -> QuerySet[Place]:
-        return Place.objects.filter(status="active").order_by("name")
+        return active_places()
 
     def create(self, request: Request, *args: object, **kwargs: object) -> Response:
         """Place creation is staff authoring, not a player verb (#3269).

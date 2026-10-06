@@ -186,26 +186,22 @@ class VisibleWornListEndpointQueryCountTests(_SharedSetupMixin, TestCase):
     """Lock in the query count for ``GET /api/items/visible-worn/?character=N``."""
 
     def test_same_room_observer_query_count(self) -> None:
-        """Same-room observer (account B looking at character A).
+        """Same-room observer pays for session and current wearer concealment.
 
-        After warm-up, the endpoint runs exactly one query — the DRF
-        session lookup. The two ``ObjectDB.objects.get(pk=...)`` calls
-        (target + observer) hit the SharedMemoryModel identity map and
-        return cached instances; ``visible_worn_items_for`` reads from
-        the cached equipment handler. No RosterEntry walks.
-
-        Pinning at 1 guards against new N+1 patterns sneaking into the
-        request path.
+        After warm-up, the endpoint runs exactly two queries: the session lookup
+        and the active-concealment EXISTS check for the wearer. Target/observer
+        ObjectDB lookups hit the identity map, and equipment reads the warmed
+        handler. The concealment query is intentionally repeated per request;
+        warmed equipment must not authorize a newly concealed wearer.
         """
         self.client.force_authenticate(user=self.account_b)
         url = (
             f"/api/items/visible-worn/?character={self.character_a.pk}"
             f"&observer={self.character_b.pk}"
         )
-        # Warm-up call (loads session, equipment handler, etc.).
         self.client.get(url)
 
-        with self.assertNumQueries(1):
+        with self.assertNumQueries(2):
             response = self.client.get(url)
         self.assertEqual(response.status_code, 200)
 
@@ -214,10 +210,9 @@ class VisibleItemDetailQueryCountTests(_SharedSetupMixin, TestCase):
     """Lock in the query count for ``GET /api/items/visible-item-detail/<id>/``.
 
     The detail ViewSet fetches the item directly with select_related, then
-    runs a permission check that derives ``wearing_character`` from
-    ``item.game_object.location`` (no extra query — the FK is selected) and
-    walks the cached ``equipped_items`` handler to test concealment. No
-    RosterEntry queries.
+    revalidates current public worn-item scope through the typed resolver.
+    Equipment layer reads use the warmed handler; persona, perception, item
+    liveness and equipment membership are checked on every request.
     """
 
     def test_same_room_detail_query_count(self) -> None:
@@ -228,20 +223,24 @@ class VisibleItemDetailQueryCountTests(_SharedSetupMixin, TestCase):
         1. Session lookup (DRF auth).
         2. ItemInstance fetch with select_related (template, quality_tier,
            game_object, image, template image, currency_instrument).
-        3. ``can_steal`` (#1909): active RosterTenure lookup for the coat's
+        3. Current public Persona lookup for typed worn-item resolution.
+        4. Wearer active-concealment EXISTS check.
+        5. Live ItemInstance fetch constrained to the asserted holder.
+        6. EquippedItem membership EXISTS check.
+        7. Item active-concealment EXISTS check.
+        8. ``can_steal`` (#1909): active RosterTenure lookup for the coat's
            owner sheet (``steal_permitted`` -> ``_active_tenure_for_sheet``).
-        4. ``can_steal``: active RosterTenure lookup for the viewer/taker
+        9. ``can_steal``: active RosterTenure lookup for the viewer/taker
            sheet (same helper, other side).
-        5. ``can_steal``: ``SocialConsentCategory`` lookup for the "theft"
-           key (``consent_blocks_targeting`` -> ``theft_category()``).
+        10. ``can_steal``: read-only ``SocialConsentCategory`` lookup for the
+            "theft" key. The missing category defaults to denial and short-circuits
+            consent without a preference or whitelist query.
 
         The observer ``ObjectDB.objects.get(pk=...)`` hits the
         SharedMemoryModel identity map (warmed by prior GETs) and runs no
-        query. The wearing character is derived from
-        ``item.game_object.db_location`` — the FK is already in
-        select_related, so the FK walk is free.
-        ``_is_concealed_for_observer`` walks the cached equipped_items
-        handler that was warmed by the prior GET.
+        query. Layer visibility walks the warmed equipment handler, but
+        live scope checks deliberately repeat so stale equipment cannot
+        authorize a concealed wearer, moved item or destroyed item.
         """
         # Coat was equipped at TORSO/OVER — plain cuts conceal by default (#2985) —
         # it's the visible item for same-room observers.
@@ -252,11 +251,8 @@ class VisibleItemDetailQueryCountTests(_SharedSetupMixin, TestCase):
         # Warm-up call (loads session, equipment handlers for observable chars).
         self.client.get(url)
 
-        # 6 (was 5): the steal gate's consent check now consults the theft category's
-        # whitelist even when the owner has no preference row (#2170 unified
-        # ``consent_blocks_targeting`` — a whitelisted actor is honored without a pref row,
-        # which the old ``_decide_default`` short-circuit silently ignored). Still one bounded
-        # query; the mode-scoped signal computation keeps ALLOWLIST to the single whitelist read.
-        with self.assertNumQueries(6):
+        # Five live worn-scope checks plus five detail/steal-consent reads.
+        # Missing theft category short-circuits consent; do not add a query.
+        with self.assertNumQueries(10):
             response = self.client.get(url)
         self.assertEqual(response.status_code, 200)

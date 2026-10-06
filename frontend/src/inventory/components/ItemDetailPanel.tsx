@@ -42,6 +42,7 @@ import { useFacets } from '@/character-creation/queries';
 import type { ContainerAccessPolicy, ItemInstance, UseItemResult } from '../types';
 import { useItemFacets, useQualityTiers, useRemoveItemFacet } from '../hooks/useItemFacets';
 import { useUseItem } from '../hooks/useUseItem';
+import { TargetMenu } from '@/game/target-menu/TargetMenu';
 import { AttachFacetDialog } from './AttachFacetDialog';
 import { ItemLifecycleControls } from './ItemLifecycleControls';
 
@@ -60,6 +61,7 @@ interface ItemDetailPanelProps {
   isEquipped?: boolean;
   /** Character id — required for the Use mutation; optional so existing tests compile. */
   characterId?: number;
+  accountId?: number | null;
 
   // Sheet state
   open: boolean;
@@ -85,6 +87,7 @@ export function ItemDetailPanel({
   facetLabels: _facetLabels = [],
   isEquipped = false,
   characterId,
+  accountId = null,
   open,
   onOpenChange,
   onWear,
@@ -119,6 +122,7 @@ export function ItemDetailPanel({
               tiersQuery={tiersQuery}
               isEquipped={isEquipped}
               characterId={characterId}
+              accountId={accountId}
               onWear={onWear}
               onRemove={onRemove}
               onDrop={onDrop}
@@ -177,6 +181,7 @@ interface ItemContentProps {
   tiersQuery: { data?: QualityTierRecord[] };
   isEquipped: boolean;
   characterId?: number;
+  accountId: number | null;
   onWear?: (itemId: number) => void;
   onRemove?: (itemId: number) => void;
   onDrop?: (itemId: number) => void;
@@ -194,6 +199,7 @@ function ItemContent({
   tiersQuery,
   isEquipped,
   characterId,
+  accountId,
   onWear,
   onRemove,
   onDrop,
@@ -275,7 +281,26 @@ function ItemContent({
         </div>
 
         <SheetHeader className="space-y-2 text-left">
-          <SheetTitle className="text-2xl font-bold">{item.display_name}</SheetTitle>
+          {accountId !== null && characterId !== undefined ? (
+            <>
+              <SheetTitle className="sr-only">{item.display_name}</SheetTitle>
+              <TargetMenu
+                partition={`account-${accountId}`}
+                actorId={characterId}
+                target={{ kind: 'items', target_id: item.id }}
+              >
+                <button
+                  type="button"
+                  aria-label={`Item actions for ${item.display_name}`}
+                  className="text-left text-2xl font-bold text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                >
+                  {item.display_name}
+                </button>
+              </TargetMenu>
+            </>
+          ) : (
+            <SheetTitle className="text-2xl font-bold">{item.display_name}</SheetTitle>
+          )}
           <div className="flex items-center gap-2">
             {tier?.name && (
               <Badge

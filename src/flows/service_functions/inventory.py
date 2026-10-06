@@ -20,6 +20,7 @@ from world.items.exceptions import (
     ContainerFull,
     InventoryError,
     ItemFixedInPlace,
+    ItemPlacedNotEquippable,
     ItemTooLarge,
     NoDropLocation,
     NotAContainer,
@@ -41,6 +42,7 @@ if TYPE_CHECKING:
     from world.character_sheets.models import CharacterSheet
     from world.items.models import ItemInstance
     from world.justice.models import CrimeKind
+    from world.room_features.models import VaultDetails
     from world.roster.models import RosterTenure
     from world.societies.models import LegendSourceType
 
@@ -84,16 +86,18 @@ def require_hot_goods_consent(
 
     if not has_unresolved_stolen_provenance(item_instance):
         return
-    from world.consent.services import (  # noqa: PLC0415
-        consent_blocks_targeting,
-        receiving_stolen_goods_category,
-    )
+    from world.consent.models import SocialConsentCategory  # noqa: PLC0415
+    from world.consent.services import consent_blocks_targeting  # noqa: PLC0415
+
+    category = SocialConsentCategory.objects.filter(key="receiving-stolen-goods").first()
+    if category is None:
+        raise RecipientConsentDenied
 
     giver_sheet = item_instance.holder_character_sheet
     giver_tenure = _active_tenure_for_sheet(giver_sheet) if giver_sheet is not None else None
     if consent_blocks_targeting(
         owner_tenure=recipient_tenure,
-        category=receiving_stolen_goods_category(),
+        category=category,
         actor_tenure=giver_tenure,
     ):
         raise RecipientConsentDenied
@@ -290,6 +294,32 @@ def _fire_item_acquisition_triggers(acquirer: CharacterState, item: ItemState) -
     transaction.on_commit(_run)
 
 
+def validate_pick_up(character: CharacterState, item: ItemState) -> None:
+    """Check existing reach and layered take rules without mutation."""
+    if not item.can_take(taker=character):
+        raise NotReachable
+    denial = _take_denial(character.obj.character_sheet, item.instance)
+    if denial is not None:
+        raise denial()
+
+
+def validate_drop(character: CharacterState, item: ItemState) -> VaultDetails | None:
+    """Check possession, room and capacity, returning the actual deposit vault."""
+    if not item.can_drop(dropper=character):
+        raise NotInPossession
+    if character.obj.location is None:
+        raise NoDropLocation
+    from world.room_features.vault_services import (  # noqa: PLC0415
+        vault_capacity_remaining,
+        vault_for_location,
+    )
+
+    vault = vault_for_location(character.obj.location)
+    if vault is not None and vault_capacity_remaining(vault) <= 0:
+        raise VaultFull
+    return vault
+
+
 @transaction.atomic
 def pick_up(character: CharacterState, item: ItemState) -> None:
     """Move ``item`` from its current location into ``character``'s possession.
@@ -306,12 +336,8 @@ def pick_up(character: CharacterState, item: ItemState) -> None:
     access policy raises ``ContainerAccessDenied``. Steal is the deliberate
     bypass.
     """
-    if not item.can_take(taker=character):
-        raise NotReachable
+    validate_pick_up(character, item)
     taker_sheet = character.obj.character_sheet
-    denial = _take_denial(taker_sheet, item.instance)
-    if denial is not None:
-        raise denial()
     if item.instance.contained_in is not None:
         item.instance.contained_in = None
         item.instance.save(update_fields=["contained_in"])
@@ -344,25 +370,13 @@ def drop(character: CharacterState, item: ItemState) -> None:
     item is in a container in the character's inventory, ``contained_in``
     is cleared as part of the drop.
     """
-    if not item.can_drop(dropper=character):
-        raise NotInPossession
-    if character.obj.location is None:
-        raise NoDropLocation
+    vault = validate_drop(character, item)
     if item.instance.contained_in is not None:
         item.instance.contained_in = None
         item.instance.save(update_fields=["contained_in"])
     # Snapshot rows before iteration — unequip_item deletes them as we go.
     for equipped in list(item.instance.equipped_slots.all()):
         unequip_item(equipped_item=equipped)
-    # Vault capacity check (before move_to so we don't mutate on refusal) (#2179).
-    from world.room_features.vault_services import (  # noqa: PLC0415
-        vault_capacity_remaining,
-        vault_for_location,
-    )
-
-    vault = vault_for_location(character.obj.location)
-    if vault is not None and vault_capacity_remaining(vault) <= 0:
-        raise VaultFull
     if not item.instance.game_object.move_to(character.obj.location, quiet=True):
         raise NotReachable
     # Vault deposit: clear ownership so the item becomes a true unheld
@@ -371,6 +385,15 @@ def drop(character: CharacterState, item: ItemState) -> None:
         item.instance.holder_character_sheet = None
         item.instance.save(update_fields=["holder_character_sheet"])
     character.obj.carried_items.invalidate()
+
+
+def validate_give(giver: CharacterState, recipient: CharacterState, item: ItemState) -> None:
+    """Check existing recipient-specific transfer permission without mutation."""
+    if not item.can_give(giver=giver, recipient=recipient):
+        raise NotInPossession
+    if recipient.obj.location != giver.obj.location:
+        raise RecipientNotAdjacent
+    require_hot_goods_consent(recipient.obj.character_sheet, item.instance)
 
 
 @transaction.atomic
@@ -387,11 +410,7 @@ def give(
     The OwnershipEvent also snapshots each side's presented persona for
     IC-narrative purposes; the audit truth is the CharacterSheet pair.
     """
-    if not item.can_give(giver=giver, recipient=recipient):
-        raise NotInPossession
-    if recipient.obj.location != giver.obj.location:
-        raise RecipientNotAdjacent
-    require_hot_goods_consent(recipient.obj.character_sheet, item.instance)
+    validate_give(giver, recipient, item)
 
     previous_holder_sheet = item.instance.holder_character_sheet
     # Snapshot rows before iteration — unequip_item deletes them as we go.
@@ -421,6 +440,24 @@ def give(
     _fire_item_acquisition_triggers(recipient, item)
 
 
+def validate_equip(character: CharacterState, item: ItemState) -> None:
+    """Check existing equipment permission and placement without mutation."""
+    if not item.can_equip(wearer=character):
+        raise NotInPossession
+    # A slotless legacy equip remains its existing no-op, including placement.
+    if item.instance.template.cached_slots:
+        from world.items.polish_services import can_equip_item  # noqa: PLC0415
+
+        if not can_equip_item(item.instance):
+            raise ItemPlacedNotEquippable
+
+
+def validate_unequip(character: CharacterState, item: ItemState) -> None:
+    """Check actual equipment membership using the CharacterSheet relation."""
+    if not item.instance.equipped_slots.filter(character=character.obj.sheet_data).exists():
+        raise NotEquipped
+
+
 @transaction.atomic
 def equip(character: CharacterState, item: ItemState) -> None:
     """Equip ``item`` on ``character`` in every slot its template declares.
@@ -430,8 +467,7 @@ def equip(character: CharacterState, item: ItemState) -> None:
     unequipped first (auto-swap). Different layers at the same body region
     are left alone. Multi-region items create one row per region atomically.
     """
-    if not item.can_equip(wearer=character):
-        raise NotInPossession
+    validate_equip(character, item)
 
     sheet = character.obj.sheet_data
     for slot in item.instance.template.cached_slots:
@@ -461,33 +497,25 @@ def unequip(character: CharacterState, item: ItemState) -> None:
     stays in the character's inventory — its underlying ``ObjectDB``
     location is unchanged.
     """
+    validate_unequip(character, item)
     # Snapshot rows before iteration — unequip_item deletes them as we go.
-    equipped_rows = list(item.instance.equipped_slots.filter(character_id=character.obj.pk))
+    equipped_rows = list(item.instance.equipped_slots.filter(character=character.obj.sheet_data))
     if not equipped_rows:
         raise NotEquipped
     for row in equipped_rows:
         unequip_item(equipped_item=row)
 
 
-@transaction.atomic
-def put_in(
-    character: CharacterState,
-    item: ItemState,
-    container: ItemState,
-) -> None:
-    """Move ``item`` into ``container`` (an item that is itself a container).
+def validate_put_in_item(character: CharacterState, item: ItemState) -> None:
+    """Check the physical source and direct possession without a destination."""
+    if item.instance.game_object is None:
+        raise NotInPossession
+    if item.instance.game_object.location != character.obj:
+        raise NotInPossession
 
-    Validates the container is reachable by ``character``, the container's
-    template/state, and the item's possession by ``character``. Sets
-    ``item.contained_in = container`` and moves the underlying ``ObjectDB``
-    into the container's ``ObjectDB`` so Evennia's ``look``/contents traversal
-    sees the item as being inside the container.
 
-    Row-only instances (``game_object`` null — the narrative-grant pattern)
-    fail cleanly up front rather than dereferencing a null object below
-    (#1909): a row-only item is not in anyone's physical possession, and a
-    row-only container has no physical inside to put things into.
-    """
+def validate_put_in(character: CharacterState, item: ItemState, container: ItemState) -> None:
+    """Check existing insertion gates in their original service order."""
     if item.instance.game_object is None:
         raise NotInPossession
     if container.instance.game_object is None:
@@ -509,8 +537,29 @@ def put_in(
         and item.instance.template.size > container_template.container_max_item_size
     ):
         raise ItemTooLarge
-    if item.instance.game_object.location != character.obj:
-        raise NotInPossession
+    validate_put_in_item(character, item)
+
+
+@transaction.atomic
+def put_in(
+    character: CharacterState,
+    item: ItemState,
+    container: ItemState,
+) -> None:
+    """Move ``item`` into ``container`` (an item that is itself a container).
+
+    Validates the container is reachable by ``character``, the container's
+    template/state, and the item's possession by ``character``. Sets
+    ``item.contained_in = container`` and moves the underlying ``ObjectDB``
+    into the container's ``ObjectDB`` so Evennia's ``look``/contents traversal
+    sees the item as being inside the container.
+
+    Row-only instances (``game_object`` null — the narrative-grant pattern)
+    fail cleanly up front rather than dereferencing a null object below
+    (#1909): a row-only item is not in anyone's physical possession, and a
+    row-only container has no physical inside to put things into.
+    """
+    validate_put_in(character, item, container)
 
     item.instance.contained_in = container.instance
     item.instance.save(update_fields=["contained_in"])
@@ -527,6 +576,17 @@ def put_in(
     tag_catered_provision(item.instance, container.instance, character.obj)
 
 
+def validate_take_out(character: CharacterState, item: ItemState) -> None:
+    """Check existing reach, containment and take denial without mutation."""
+    if not item.can_take(taker=character):
+        raise NotReachable
+    if item.instance.contained_in is None:
+        raise NotInContainer
+    denial = _take_denial(character.obj.character_sheet, item.instance)
+    if denial is not None:
+        raise denial()
+
+
 @transaction.atomic
 def take_out(character: CharacterState, item: ItemState) -> None:
     """Move ``item`` out of its container into ``character``'s possession.
@@ -541,14 +601,7 @@ def take_out(character: CharacterState, item: ItemState) -> None:
     belongs to a third party (neither the taker nor the container's owner),
     raises ``OwnedByAnother``. Steal is the deliberate bypass.
     """
-    if not item.can_take(taker=character):
-        raise NotReachable
-    if item.instance.contained_in is None:
-        raise NotInContainer
-    taker_sheet = character.obj.character_sheet
-    denial = _take_denial(taker_sheet, item.instance)
-    if denial is not None:
-        raise denial()
+    validate_take_out(character, item)
     item.instance.contained_in = None
     item.instance.save(update_fields=["contained_in"])
     if not item.instance.game_object.move_to(character.obj, quiet=True):
@@ -620,6 +673,21 @@ def _record_theft_deed(character: CharacterState, item: ItemState) -> None:
     )
 
 
+def _theft_consent_blocks(owner_tenure: RosterTenure, taker_tenure: RosterTenure | None) -> bool:
+    """Read existing theft consent; an absent lazy category defaults to denial."""
+    from world.consent.models import SocialConsentCategory  # noqa: PLC0415
+    from world.consent.services import consent_blocks_targeting  # noqa: PLC0415
+
+    category = SocialConsentCategory.objects.filter(key="theft").first()
+    if category is None:
+        # The lazy category has ALLOWLIST default and no parent. No grants can
+        # reference a category that does not exist, so its decision is denial.
+        return True
+    return consent_blocks_targeting(
+        owner_tenure=owner_tenure, category=category, actor_tenure=taker_tenure
+    )
+
+
 def steal_permitted(taker_sheet: CharacterSheet | None, item_instance: ItemInstance) -> bool:
     """Target-side-only availability (#1909): NPC-owned always; players by consent.
 
@@ -660,30 +728,16 @@ def steal_permitted(taker_sheet: CharacterSheet | None, item_instance: ItemInsta
             founder_tenure = _active_tenure_for_sheet(founder_sheet)
             if founder_tenure is None:
                 return True  # Founder has no active tenure — NPC-like, allow
-            from world.consent.services import (  # noqa: PLC0415
-                consent_blocks_targeting,
-                theft_category,
-            )
-
             taker_tenure = _active_tenure_for_sheet(taker_sheet)
-            return not consent_blocks_targeting(
-                owner_tenure=founder_tenure,
-                category=theft_category(),
-                actor_tenure=taker_tenure,
-            )
+            return not _theft_consent_blocks(founder_tenure, taker_tenure)
         return True  # Non-vault unowned items: unchanged behavior
     owner_tenure = _active_tenure_for_sheet(guarded_sheet)
     if owner_tenure is None:
         return True  # NPC/org holdings: always antagonism-allowed (spec decision 5)
-    from world.consent.services import consent_blocks_targeting, theft_category  # noqa: PLC0415
-
     taker_tenure = _active_tenure_for_sheet(taker_sheet)
-    return not consent_blocks_targeting(
-        owner_tenure=owner_tenure, category=theft_category(), actor_tenure=taker_tenure
-    )
+    return not _theft_consent_blocks(owner_tenure, taker_tenure)
 
 
-@transaction.atomic
 def _unconscious_holder_reachable(character: CharacterState, item: ItemState) -> bool:
     """Steal-path-only reach widening (#2852): rob a downed body.
 
@@ -717,6 +771,15 @@ def _unconscious_holder_reachable(character: CharacterState, item: ItemState) ->
     return False
 
 
+def validate_steal(character: CharacterState, item: ItemState) -> None:
+    """Check the existing Steal reach exception and target consent without mutation."""
+    if not item.can_take(taker=character) and not _unconscious_holder_reachable(character, item):
+        raise NotReachable
+    if not steal_permitted(character.obj.character_sheet, item.instance):
+        raise TheftNotPermitted
+
+
+@transaction.atomic
 def steal(character: CharacterState, item: ItemState) -> None:
     """Take an item that plain take refuses (#1909) — with consequences.
 
@@ -725,16 +788,8 @@ def steal(character: CharacterState, item: ItemState) -> None:
     ``concealed=True`` rolls Stealth to shed witnesses (#1824), so an
     unwitnessed theft spreads cold until discovered.
     """
-    if not item.can_take(taker=character) and not _unconscious_holder_reachable(character, item):
-        raise NotReachable
-    # getattr, not direct access: sheet-less actors (GM/staff/companion tooling)
-    # have no reverse CharacterSheet row and must reach ``steal_permitted`` with
-    # None rather than raise DoesNotExist — steal_permitted then delegates to
-    # take_requires_steal, which returns False for a None sheet, so a
-    # sheet-less actor always ends up refused here (they free-take instead).
+    validate_steal(character, item)
     taker_sheet = character.obj.character_sheet
-    if not steal_permitted(taker_sheet, item.instance):
-        raise TheftNotPermitted
     previous_holder_sheet = item.instance.holder_character_sheet
     if item.instance.contained_in is not None:
         item.instance.contained_in = None

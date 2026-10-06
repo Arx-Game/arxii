@@ -89,7 +89,7 @@ def encumbrance_band(character: ObjectDB) -> EncumbranceBand:
     return EncumbranceBand.OVERLOADED
 
 
-def movement_blocked_message(character: ObjectDB) -> str | None:
+def movement_blocked_message(character: ObjectDB, *, read_only: bool = False) -> str | None:
     """The explicit refusal, or None when movement is allowed.
 
     Only the extreme combination blocks: OVERLOADED load AND a physically
@@ -98,12 +98,16 @@ def movement_blocked_message(character: ObjectDB) -> str | None:
     if encumbrance_band(character) is not EncumbranceBand.OVERLOADED:
         return None
     from world.fatigue.constants import FatigueZone  # noqa: PLC0415
-    from world.fatigue.services import get_fatigue_zone  # noqa: PLC0415
+    from world.fatigue.services import (  # noqa: PLC0415
+        get_fatigue_zone,
+        get_fatigue_zone_readonly,
+    )
 
     sheet = character.character_sheet
     if sheet is None:
         return None
-    if get_fatigue_zone(sheet, "physical") == FatigueZone.EXHAUSTED:
+    zone_reader = get_fatigue_zone_readonly if read_only else get_fatigue_zone
+    if zone_reader(sheet, "physical") == FatigueZone.EXHAUSTED:
         return OVERLOADED_EXHAUSTED_MSG
     return None
 

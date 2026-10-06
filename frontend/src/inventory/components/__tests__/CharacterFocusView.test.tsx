@@ -7,6 +7,7 @@
  */
 
 import { fireEvent, screen } from '@testing-library/react';
+import type { ReactNode } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { renderWithProviders } from '@/test/utils/renderWithProviders';
@@ -18,6 +19,14 @@ import type { VisibleWornItem } from '../../api';
 
 vi.mock('../../hooks/useVisibleWornItems', () => ({
   useVisibleWornItems: vi.fn(),
+}));
+
+vi.mock('@/game/target-menu/TargetMenu', () => ({
+  TargetMenu: ({ children, target }: { children: ReactNode; target: unknown }) => (
+    <div data-testid="worn-item-target" data-target={JSON.stringify(target)}>
+      {children}
+    </div>
+  ),
 }));
 
 import * as visibleWornHooks from '../../hooks/useVisibleWornItems';
@@ -124,6 +133,28 @@ describe('CharacterFocusView', () => {
     );
     fireEvent.click(screen.getByRole('button', { name: /silver brooch/i }));
     expect(onItemClick).toHaveBeenCalledWith({ id: 7, name: 'Silver Brooch' });
+  });
+
+  it('wraps the worn row in a menu with its server-provided owner persona id', () => {
+    mockUseVisibleWornItems({
+      data: [makeWornItem({ id: 7, display_name: 'Silver Brooch', owner_persona_id: 91 })],
+      isSuccess: true,
+    });
+    renderWithProviders(
+      <CharacterFocusView
+        character={{ ...character, personaId: 88 }}
+        observerId={1}
+        accountId={5}
+        onItemClick={vi.fn()}
+      />
+    );
+    const menu = screen.getByTestId('worn-item-target');
+    expect(JSON.parse(menu.getAttribute('data-target') ?? '{}')).toEqual({
+      kind: 'items',
+      target_id: 7,
+      owner_persona_id: 91,
+    });
+    expect(menu).toContainElement(screen.getByRole('button', { name: /silver brooch/i }));
   });
 
   it('passes undefined to useVisibleWornItems when observerId is null', () => {

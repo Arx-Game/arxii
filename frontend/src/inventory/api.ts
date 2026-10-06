@@ -219,6 +219,8 @@ export interface VisibleWornItem {
   display_name: string;
   body_region: BodyRegion;
   equipment_layer: EquipmentLayer;
+  /** The viewer-visible active wearer persona used as a target assertion. */
+  owner_persona_id?: number;
 }
 
 /** A visible body marking (#2985) — tattoo, scar, brand, birthmark, rune. */

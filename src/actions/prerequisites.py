@@ -7,7 +7,7 @@ Prerequisites are thin wrappers around existing system queries. They answer
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, ClassVar
 
 CANNOT_BE_USED_MESSAGE = "That can't be used."
 CANNOT_SEE_MESSAGE = "You can't see that."
@@ -38,6 +38,8 @@ class Prerequisite:
     Subclasses implement ``is_met`` to check a specific condition.
     Returns (True, "") if met, or (False, "human-readable reason") if not.
     """
+
+    required_input_names: ClassVar[frozenset[str]] = frozenset()
 
     def is_met(
         self,
@@ -704,13 +706,7 @@ class OwnsItemInstancePrerequisite(Prerequisite):
 
 @dataclass
 class CanStealPrerequisite(Prerequisite):
-    """The ``target`` kwarg item must be steal-eligible for the actor (#1909).
-
-    Visibility = eligibility: ``steal_permitted`` is the same target-side
-    predicate the ``steal`` service re-checks at execution time; reading the
-    ``target`` kwarg via the kwargs-via-context convention lets this gate see
-    it before ``execute()`` runs.
-    """
+    """Read the same current target adaptation, reach and consent checks as Steal."""
 
     def is_met(
         self,
@@ -718,20 +714,9 @@ class CanStealPrerequisite(Prerequisite):
         target: ObjectDB | None = None,
         context: dict | None = None,
     ) -> tuple[bool, str]:
-        from actions.definitions.item_helpers import resolve_item_instance  # noqa: PLC0415
-        from flows.service_functions.inventory import steal_permitted  # noqa: PLC0415
-        from world.items.exceptions import TheftNotPermitted  # noqa: PLC0415
+        from actions.definitions.items import StealAction, _taking_check  # noqa: PLC0415
 
-        target_obj = (context or {}).get("kwargs", {}).get("target")
-        if target_obj is None:
-            return False, "Steal what?"
-        instance = resolve_item_instance(target_obj)
-        if instance is None:
-            return False, "That can't be stolen."
-        actor_sheet = resolve_actor_sheet(actor)
-        if steal_permitted(actor_sheet, instance):
-            return True, ""
-        return False, TheftNotPermitted.user_message
+        return _taking_check(StealAction(), actor, target, context)
 
 
 class BlackmailAmmoPrerequisite(Prerequisite):
@@ -865,13 +850,25 @@ def _check_character_target(actor: ObjectDB, target: ObjectDB) -> tuple[bool, st
     return True, ""
 
 
+def room_use_is_visible(actor: ObjectDB, target: ObjectDB) -> bool:
+    """Check occupied-room use scope before the existing concealment rule."""
+    from world.conditions.services import passes_concealment_check  # noqa: PLC0415
+
+    return (
+        actor.location is not None
+        and target == actor.location
+        and target.is_typeclass("typeclasses.rooms.Room", exact=False)
+        and passes_concealment_check(actor, target)
+    )
+
+
 def _check_room_target(actor: ObjectDB, target: ObjectDB) -> tuple[bool, str]:
     """Validate a ROOM-kind on-use target: must be a room the actor occupies and can see."""
     if not target.is_typeclass("typeclasses.rooms.Room", exact=False):
         return False, "That can only be used on a place."
-    if actor.location not in (target.location, target):
+    if actor.location != target:
         return False, "They aren't here."
-    if not _is_visible_to(actor, target):
+    if not room_use_is_visible(actor, target):
         return False, CANNOT_SEE_MESSAGE
     return True, ""
 

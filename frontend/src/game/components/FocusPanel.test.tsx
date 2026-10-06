@@ -30,7 +30,7 @@ vi.mock('@/inventory/components/CharacterFocusView', () => ({
     character,
     onItemClick,
   }: {
-    character: { id: number; name: string };
+    character: { id: number; name: string; personaId?: number | null };
     onItemClick: (i: { id: number; name: string }) => void;
   }) => (
     <div data-testid="mock-character-focus">
@@ -66,7 +66,7 @@ function makeRoomData(): RoomData {
     description: 'Vast and imposing.',
     thumbnail_url: null,
     characters: [
-      { dbref: '#100', name: 'Alice', thumbnail_url: null },
+      { dbref: '#100', name: 'Alice', thumbnail_url: null, persona_id: 77 },
       { dbref: '#101', name: 'Bob', thumbnail_url: null },
     ],
     objects: [],
@@ -176,7 +176,7 @@ describe('FocusPanel', () => {
     fireEvent.click(screen.getByRole('button', { name: /alice/i }));
     expect(focus.push).toHaveBeenCalledWith({
       kind: 'character',
-      character: { id: 100, name: 'Alice' },
+      character: { id: 100, name: 'Alice', personaId: 77 },
     });
   });
 

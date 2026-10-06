@@ -74,6 +74,7 @@ export function WardrobePage() {
   // as ADR-0247 requires for live-session concerns.
   const { entryId: browsingEntryId, entry: activeEntry } = useBrowsingIdentity();
   const activeCharacter = useAppSelector((state) => state.game.active);
+  const accountId = useAppSelector((state) => state.auth.account?.id ?? null);
   const { isLoading: entriesLoading } = useMyRosterEntriesQuery();
   // #3412 review fix (#3479 update): this page is behind ProtectedRoute, so the
   // exposure window is narrow (a render or two before `useAccountQuery`'s
@@ -395,7 +396,13 @@ export function WardrobePage() {
               <p className="italic text-muted-foreground">Nothing equipped right now.</p>
             ) : (
               equippedItems.map((item) => (
-                <ItemCard key={item.id} item={item} onClick={() => setDetailItemId(item.id)} />
+                <ItemCard
+                  key={item.id}
+                  item={item}
+                  onClick={() => setDetailItemId(item.id)}
+                  actorId={characterId ?? null}
+                  accountId={accountId}
+                />
               ))
             )}
           </div>
@@ -411,7 +418,13 @@ export function WardrobePage() {
         ) : (
           <div className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-3">
             {inventory.map((item) => (
-              <ItemCard key={item.id} item={item} onClick={() => setDetailItemId(item.id)} />
+              <ItemCard
+                key={item.id}
+                item={item}
+                onClick={() => setDetailItemId(item.id)}
+                actorId={characterId ?? null}
+                accountId={accountId}
+              />
             ))}
           </div>
         )}
@@ -425,6 +438,7 @@ export function WardrobePage() {
         }}
         isEquipped={detailItem ? equippedItemIds.has(detailItem.id) : false}
         characterId={characterId}
+        accountId={accountId}
         onWear={handleWear}
         onRemove={handleRemove}
         onDrop={handleDrop}

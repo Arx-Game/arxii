@@ -1,4 +1,5 @@
 from collections import defaultdict
+from collections.abc import Collection, Mapping
 from typing import TYPE_CHECKING
 
 from django.utils.functional import cached_property
@@ -15,6 +16,80 @@ if TYPE_CHECKING:
     from flows.scene_data_manager import SceneDataManager
     from typeclasses.types import ArxTypeclass
     from world.scenes.models import Scene
+
+
+def select_display_name[NameT: str | None](
+    base_name: NameT,
+    *,
+    object_id: int,
+    viewer_id: int | None,
+    fake_name: str | None = None,
+    real_name_viewers: Collection[int] = (),
+) -> str | NameT:
+    """Select the existing flow-local bare name without granting permission.
+
+    Args:
+        base_name: Caller-selected base, including an explicit empty/null name.
+        object_id: Identity of the presented object.
+        viewer_id: Observer identity, or None when there is no observer state.
+        fake_name: Truthy presentation override for observers outside the list.
+        real_name_viewers: Current flow-local presentation exceptions, not durable
+            protected-identity authorization.
+
+    Returns:
+        The selected name, preserving empty/null base values exactly.
+    """
+    if fake_name and (
+        viewer_id is None or (viewer_id != object_id and viewer_id not in real_name_viewers)
+    ):
+        return fake_name
+    return base_name
+
+
+# Accept presentation values directly so callers need not construct or load state.
+def project_display_name(  # noqa: PLR0913
+    base_name: str | None,
+    *,
+    object_id: int,
+    viewer_id: int | None,
+    fake_name: str | None = None,
+    real_name_viewers: Collection[int] = (),
+    name_prefix: str = "",
+    name_suffix: str = "",
+    name_prefix_map: Mapping[int, str] | None = None,
+    name_suffix_map: Mapping[int, str] | None = None,
+) -> str:
+    """Apply existing flow-local name selection and observer decorations.
+
+    Args:
+        base_name: Caller-selected base name, not an authorization result.
+        object_id: Identity of the presented object.
+        viewer_id: Observer identity, or None for global decorations only.
+        fake_name: Optional flow-local alternate name.
+        real_name_viewers: Current flow-local presentation exceptions.
+        name_prefix: Global prefix.
+        name_suffix: Global suffix.
+        name_prefix_map: Observer overrides; an empty string overrides globally.
+        name_suffix_map: Observer overrides; an empty string overrides globally.
+
+    Returns:
+        The decorated string, with the original f-string null-name semantics.
+    """
+    base = select_display_name(
+        base_name,
+        object_id=object_id,
+        viewer_id=viewer_id,
+        fake_name=fake_name,
+        real_name_viewers=real_name_viewers,
+    )
+    prefix = name_prefix
+    suffix = name_suffix
+    if viewer_id is not None:
+        if name_prefix_map is not None:
+            prefix = name_prefix_map.get(viewer_id, prefix)
+        if name_suffix_map is not None:
+            suffix = name_suffix_map.get(viewer_id, suffix)
+    return f"{prefix}{base}{suffix}"
 
 
 def unwrap_objectdb(obj: "BaseState | ObjectDB") -> "ObjectDB":
@@ -204,17 +279,16 @@ class BaseState:
             if pk is not None:
                 looker_state = self.context.get_state_by_pk(pk)
 
-        base = self._base_display_name(looker_state)
-
-        prefix = self.name_prefix
-        suffix = self.name_suffix
-
-        if looker_state is not None:
-            pk = looker_state.obj.pk
-            prefix = self.name_prefix_map.get(pk, prefix)
-            suffix = self.name_suffix_map.get(pk, suffix)
-
-        return f"{prefix}{base}{suffix}"
+        # Preserve subclass identity selection before applying shared decorations.
+        return project_display_name(
+            self._base_display_name(looker_state),
+            object_id=self.obj.pk,
+            viewer_id=looker_state.obj.pk if looker_state is not None else None,
+            name_prefix=self.name_prefix,
+            name_suffix=self.name_suffix,
+            name_prefix_map=self.name_prefix_map,
+            name_suffix_map=self.name_suffix_map,
+        )
 
     def _base_display_name(self, looker_state: "BaseState | None") -> str:
         """The bare name ``looker_state`` sees, before prefix/suffix.
@@ -222,16 +296,13 @@ class BaseState:
         Subclasses override to resolve identity (e.g. ``CharacterState`` renders the presented
         persona — real name / discovery reveal / anonymous sdesc — per viewer).
         """
-        base = self.name
-        if self.fake_name and (
-            looker_state is None
-            or (
-                looker_state.obj.pk != self.obj.pk
-                and looker_state.obj.pk not in self.real_name_viewers
-            )
-        ):
-            base = self.fake_name
-        return base
+        return select_display_name(
+            self.name,
+            object_id=self.obj.pk,
+            viewer_id=looker_state.obj.pk if looker_state is not None else None,
+            fake_name=self.fake_name,
+            real_name_viewers=self.real_name_viewers,
+        )
 
     def get_extra_display_name_info(self, **kwargs: Kwargs) -> str:
         return ""

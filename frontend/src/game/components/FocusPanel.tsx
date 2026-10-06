@@ -29,6 +29,7 @@ import { RoomPanel, type RoomData } from './RoomPanel';
 
 interface FocusPanelProps {
   focus: FocusStackApi;
+  accountId?: number | null;
   /**
    * The active puppet's name (matches the redux ``active`` key). Used to
    * resolve the observer character id by looking it up in the user's
@@ -45,6 +46,7 @@ interface FocusPanelProps {
 
 export function FocusPanel({
   focus,
+  accountId = null,
   roomCharacter,
   roomData,
   sceneData,
@@ -128,7 +130,11 @@ export function FocusPanel({
   const onCharacterClickFromRoom = (character: RoomStateObject) => {
     focus.push({
       kind: 'character',
-      character: { id: dbrefToId(character.dbref), name: character.name },
+      character: {
+        id: dbrefToId(character.dbref),
+        name: character.name,
+        personaId: character.persona_id ?? null,
+      },
     });
   };
 
@@ -139,6 +145,7 @@ export function FocusPanel({
         <RoomPanel
           character={roomCharacter}
           characterId={observerId}
+          accountId={accountId}
           room={roomData}
           scene={sceneData}
           onCharacterClick={onCharacterClickFromRoom}
@@ -156,6 +163,7 @@ export function FocusPanel({
           character={focus.current.character}
           observerId={observerId}
           onItemClick={(item) => focus.push({ kind: 'item', item })}
+          accountId={accountId}
         />
       );
       break;

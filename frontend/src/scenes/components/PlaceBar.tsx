@@ -2,6 +2,9 @@ import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { MapPin } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { TargetMenu } from '@/game/target-menu/TargetMenu';
+import { useAppSelector } from '@/store/hooks';
+import { useMyRosterEntriesQuery } from '@/roster/queries';
 import { fetchPlaces, joinPlace, leavePlace } from '../actionQueries';
 import type { Place } from '../actionTypes';
 
@@ -10,13 +13,31 @@ interface Props {
   /** Active `/game` viewer key; omitted for legacy SceneDetailPage. */
   character?: string;
   currentPlaceId?: number | null;
+  actorId?: number | null;
+  accountId?: number | null;
 }
 
-export function PlaceBar({ sceneId, character, currentPlaceId = null }: Props) {
+export function PlaceBar({
+  sceneId,
+  character,
+  currentPlaceId = null,
+  actorId: suppliedActorId,
+  accountId: suppliedAccountId,
+}: Props) {
   const [localPlaceId, setLocalPlaceId] = useState<number | null>(null);
   const controlled = character !== undefined;
   const selectedPlaceId = controlled ? currentPlaceId : localPlaceId;
   const queryClient = useQueryClient();
+  const storeAccountId = useAppSelector((state) => state.auth.account?.id ?? null);
+  const accountId = suppliedAccountId ?? storeAccountId;
+  const activeCharacter = useAppSelector((state) => state.game.active);
+  const { data: roster = [] } = useMyRosterEntriesQuery();
+  const actorId =
+    suppliedActorId ??
+    (character === undefined
+      ? roster.find((entry) => entry.name === activeCharacter)?.character_id
+      : null) ??
+    null;
 
   const { data, isLoading } = useQuery({
     queryKey: ['scene-places', sceneId, ...(character ? [character] : [])],
@@ -69,17 +90,23 @@ export function PlaceBar({ sceneId, character, currentPlaceId = null }: Props) {
         {places.map((place) => {
           const isCurrent = selectedPlaceId === place.id;
           return (
-            <Button
+            <TargetMenu
               key={place.id}
-              size="sm"
-              variant={isCurrent ? 'default' : 'ghost'}
-              className={isCurrent ? 'underline underline-offset-2' : ''}
-              onClick={() => handlePlaceClick(place)}
-              disabled={join.isPending || leave.isPending}
-              title={place.description}
+              partition={accountId === null ? '' : `account-${accountId}`}
+              actorId={actorId}
+              target={{ kind: 'places', target_id: place.id }}
             >
-              {place.name}
-            </Button>
+              <Button
+                size="sm"
+                variant={isCurrent ? 'default' : 'ghost'}
+                className={isCurrent ? 'underline underline-offset-2' : ''}
+                onClick={() => handlePlaceClick(place)}
+                disabled={join.isPending || leave.isPending}
+                title={place.description}
+              >
+                {place.name}
+              </Button>
+            </TargetMenu>
           );
         })}
       </div>

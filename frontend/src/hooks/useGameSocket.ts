@@ -56,6 +56,7 @@ import { getWebSocketUrl } from '@/config';
 import { toast } from 'sonner';
 import { fetchAccount } from '@/evennia_replacements/api';
 import { queryClient } from '@/queryClient';
+import { markTargetMenusStale } from '@/game/target-menu/targetMenuApi';
 import { reconcileStoredDrafts } from '@/game/useDraftStore';
 import { fetchPoseSubmission } from '@/scenes/queries';
 import { connectionDiagnostics } from '@/diagnostics/connectionDiagnostics';
@@ -265,6 +266,7 @@ interface IncomingMessageContext {
   dispatch: AppDispatch;
   navigate: NavigateFunction;
   onPuppetConfirmed?: () => void;
+  onRoomStateAccepted?: () => void;
   onEntryFailure?: () => void;
 }
 
@@ -343,8 +345,15 @@ function handlerFor(msgType: SocketMessageType): IncomingMessageHandler | undefi
       };
 
     case WS_MESSAGE_TYPE.ROOM_STATE:
-      return ({ character, kwargs, dispatch }) =>
-        handleRoomStatePayload(character, kwargs as unknown as RoomStatePayload, dispatch);
+      return ({ character, kwargs, dispatch, onRoomStateAccepted }) => {
+        const accepted = handleRoomStatePayload(
+          character,
+          kwargs as unknown as RoomStatePayload,
+          dispatch
+        );
+        if (accepted) onRoomStateAccepted?.();
+        return accepted;
+      };
 
     case WS_MESSAGE_TYPE.SCENE:
       return ({ character, kwargs, dispatch }) =>
@@ -565,11 +574,11 @@ function dispatchKnownMessage(
     dispatch,
     navigate,
     onPuppetConfirmed,
+    onRoomStateAccepted,
     onEntryFailure,
   });
   updateLifecycle(character, msgType, kwargs, accepted, dispatch);
   if (msgType === WS_MESSAGE_TYPE.ROOM_STATE && accepted !== false) {
-    onRoomStateAccepted?.();
     clearEntryRecovery(character);
     if (typeof kwargs?.resync_request_id === 'string') {
       markResyncSnapshot(
@@ -902,6 +911,15 @@ export function useGameSocket() {
           return;
         }
 
+        if (parsed[0] === WS_MESSAGE_TYPE.ACTION_RESULT) {
+          const actorId = account?.available_characters.find(
+            (entry) => entry.name === character
+          )?.id;
+          if (account !== null && actorId !== undefined) {
+            void markTargetMenusStale(queryClient, `account-${account.id}`, actorId);
+          }
+        }
+
         dispatchIncomingMessage(
           character,
           parsed,
@@ -909,7 +927,15 @@ export function useGameSocket() {
           navigate,
           generation,
           () => markConnectionReady(character, generation, socket, 'puppetConfirmed', dispatch),
-          () => markConnectionReady(character, generation, socket, 'roomStateAccepted', dispatch),
+          () => {
+            markConnectionReady(character, generation, socket, 'roomStateAccepted', dispatch);
+            const actorId = account?.available_characters.find(
+              (entry) => entry.name === character
+            )?.id;
+            if (account !== null && actorId !== undefined) {
+              void markTargetMenusStale(queryClient, `account-${account.id}`, actorId);
+            }
+          },
           () => markEntryFailure(character, dispatch)
         );
       });

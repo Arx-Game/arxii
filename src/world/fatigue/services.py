@@ -144,6 +144,18 @@ def _zone_from_percentage(percentage: float) -> str:
     return FatigueZone.EXHAUSTED
 
 
+def get_fatigue_zone_readonly(character_sheet: CharacterSheet, category: str) -> str:
+    """Read a zone without materializing the default fatigue pool."""
+    if category not in FatiguePool.VALID_CATEGORIES:
+        message = f"Invalid fatigue category: {category!r}"
+        raise ValueError(message)
+    pool = FatiguePool.objects.filter(character_sheet=character_sheet).first()
+    current = 0 if pool is None else pool.get_current(category)
+    well_rested = False if pool is None else pool.well_rested
+    capacity = get_fatigue_capacity(character_sheet, category, well_rested=well_rested)
+    return _zone_from_percentage(_fatigue_percentage(current, capacity))
+
+
 def get_fatigue_zone(character_sheet: CharacterSheet, category: str) -> str:
     """Return the FatigueZone based on current fatigue percentage.
 

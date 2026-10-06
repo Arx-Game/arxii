@@ -559,6 +559,36 @@ paths:
               schema:
                 $ref: '#/components/schemas/SceneActionTarget'
           description: ''
+  /api/actions/characters/{character_id}/{target_kind}/{target_id}/menu/:
+    get:
+      operationId: actions_characters_menu_retrieve
+      parameters:
+      - in: path
+        name: character_id
+        schema:
+          type: integer
+        required: true
+      - in: path
+        name: target_id
+        schema:
+          type: integer
+        required: true
+      - in: path
+        name: target_kind
+        schema:
+          type: string
+        required: true
+      tags:
+      - actions
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TargetMenu'
+          description: ''
   /api/actions/characters/{character_id}/available/:
     get:
       operationId: actions_characters_available_list
@@ -56001,6 +56031,18 @@ components:
       - options
       - phase
       - track
+    GroupDbaEnum:
+      enum:
+      - perception
+      - items
+      - movement
+      - authored
+      type: string
+      description: |-
+        * `perception` - perception
+        * `items` - items
+        * `movement` - movement
+        * `authored` - authored
     GroupPickRequestRequest:
       type: object
       description: 'POST body for the #1036 group-pick endpoint.'
@@ -58780,7 +58822,7 @@ components:
       - summary
       - tale
       - template_name
-    KeyEnum:
+    KeyB77Enum:
       enum:
       - perception
       - conflict
@@ -58792,6 +58834,18 @@ components:
         * `conflict` - Conflict
         * `scene` - Scene
         * `social` - Social
+    KeyDbaEnum:
+      enum:
+      - perception
+      - items
+      - movement
+      - authored
+      type: string
+      description: |-
+        * `perception` - perception
+        * `items` - items
+        * `movement` - movement
+        * `authored` - authored
     KinRelationship:
       type: object
       description: |-
@@ -59959,6 +60013,203 @@ components:
       required:
       - id
       - name
+    MenuEntry:
+      type: object
+      properties:
+        key:
+          type: string
+        label:
+          type: string
+        group:
+          $ref: '#/components/schemas/GroupDbaEnum'
+        ref:
+          $ref: '#/components/schemas/ActionRef'
+        kwargs:
+          $ref: '#/components/schemas/MenuKwargs'
+        available:
+          type: boolean
+        reasons:
+          type: array
+          items:
+            type: string
+        inputs:
+          type: array
+          items:
+            $ref: '#/components/schemas/MenuInput'
+        candidates:
+          type: array
+          items:
+            type: object
+            additionalProperties: {}
+          description: Validate each complete candidate with independent action/kind
+            context.
+          readOnly: true
+        next_candidate_cursor:
+          type: string
+          nullable: true
+        action:
+          allOf:
+          - $ref: '#/components/schemas/PlayerAction'
+          nullable: true
+        risk:
+          allOf:
+          - $ref: '#/components/schemas/MenuRisk'
+          nullable: true
+      required:
+      - action
+      - available
+      - candidates
+      - group
+      - inputs
+      - key
+      - kwargs
+      - label
+      - next_candidate_cursor
+      - reasons
+      - ref
+      - risk
+    MenuGroup:
+      type: object
+      properties:
+        key:
+          $ref: '#/components/schemas/KeyDbaEnum'
+        label:
+          type: string
+      required:
+      - key
+      - label
+    MenuInput:
+      type: object
+      properties:
+        name:
+          $ref: '#/components/schemas/NameEnum'
+        kind:
+          $ref: '#/components/schemas/MenuInputKindEnum'
+        required:
+          type: boolean
+        target_kind:
+          type: string
+          nullable: true
+        default: {}
+      required:
+      - default
+      - kind
+      - name
+      - required
+      - target_kind
+    MenuInputKindEnum:
+      enum:
+      - recipient
+      - container
+      - target
+      - option
+      - text
+      - boolean
+      type: string
+      description: |-
+        * `recipient` - recipient
+        * `container` - container
+        * `target` - target
+        * `option` - option
+        * `text` - text
+        * `boolean` - boolean
+    MenuKwargs:
+      type: object
+      properties:
+        menu_target:
+          $ref: '#/components/schemas/MenuTarget'
+        recipient_persona_id:
+          type: integer
+          minimum: 1
+        container_item_id:
+          type: integer
+          minimum: 1
+        use_target:
+          $ref: '#/components/schemas/MenuUseTarget'
+        option_id:
+          type: integer
+          minimum: 1
+        descriptor:
+          type: string
+        blend:
+          type: boolean
+    MenuRisk:
+      type: object
+      properties:
+        known:
+          type: boolean
+        character_loss_possible:
+          type: boolean
+          nullable: true
+        outcomes:
+          type: array
+          items:
+            $ref: '#/components/schemas/MenuRiskOutcome'
+      required:
+      - character_loss_possible
+      - known
+      - outcomes
+    MenuRiskOutcome:
+      type: object
+      properties:
+        stage:
+          type: string
+        tier:
+          type: string
+        character_loss:
+          type: boolean
+      required:
+      - character_loss
+      - stage
+      - tier
+    MenuTarget:
+      type: object
+      properties:
+        kind:
+          $ref: '#/components/schemas/MenuTargetKindEnum'
+        target_id:
+          type: integer
+          minimum: 1
+        owner_persona_id:
+          type: integer
+          minimum: 1
+        container_item_id:
+          type: integer
+          minimum: 1
+      required:
+      - kind
+      - target_id
+    MenuTargetKindEnum:
+      enum:
+      - items
+      - objects
+      - exits
+      - places
+      type: string
+      description: |-
+        * `items` - items
+        * `objects` - objects
+        * `exits` - exits
+        * `places` - places
+    MenuUseTarget:
+      type: object
+      properties:
+        kind:
+          $ref: '#/components/schemas/MenuUseTargetKindEnum'
+        target_id:
+          type: integer
+          minimum: 1
+      required:
+      - kind
+      - target_id
+    MenuUseTargetKindEnum:
+      enum:
+      - items
+      - objects
+      type: string
+      description: |-
+        * `items` - items
+        * `objects` - objects
     MethodEnum:
       enum:
       - machine
@@ -62814,6 +63065,22 @@ components:
         * `common` - Common
         * `styled` - Styled
         * `full_formal` - Full Formal
+    NameEnum:
+      enum:
+      - recipient_persona_id
+      - container_item_id
+      - use_target
+      - option_id
+      - descriptor
+      - blend
+      type: string
+      description: |-
+        * `recipient_persona_id` - recipient_persona_id
+        * `container_item_id` - container_item_id
+        * `use_target` - use_target
+        * `option_id` - option_id
+        * `descriptor` - descriptor
+        * `blend` - blend
     NarrativeCategoryEnum:
       enum:
       - story
@@ -74375,7 +74642,7 @@ components:
       type: object
       properties:
         key:
-          $ref: '#/components/schemas/KeyEnum'
+          $ref: '#/components/schemas/KeyB77Enum'
         empty_state:
           type: string
       required:
@@ -84004,6 +84271,29 @@ components:
         * `persona` - Persona
         * `crisis` - Crisis
         * `predator` - Predator Band
+    TargetMenu:
+      type: object
+      properties:
+        actor_id:
+          type: integer
+        target:
+          $ref: '#/components/schemas/MenuTarget'
+        label:
+          type: string
+        groups:
+          type: array
+          items:
+            $ref: '#/components/schemas/MenuGroup'
+        entries:
+          type: array
+          items:
+            $ref: '#/components/schemas/MenuEntry'
+      required:
+      - actor_id
+      - entries
+      - groups
+      - label
+      - target
     TargetSpec:
       type: object
       description: Read-only serializer for TargetSpec — entity kind + cardinality
