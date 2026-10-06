@@ -664,7 +664,8 @@ Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Sc
   carrying PLACEHOLDER text. Full detail: `docs/systems/magic.md`'s "Ultimates"
   section; `docs/adr/adr-4098-ultimates-are-flagged-techniques-revealed-at-audere.md`.
 - **Manifesting a bound entity (#4118):** `TechniqueManifestOption` (`technique`, one of
-  `being` -> `WorshippedBeing` / `archetype` -> `CompanionArchetype`, `tier`; authored
+  `being` -> `WorshippedBeing` / `archetype` -> `CompanionArchetype`, `tier`, and (#4076)
+  `threat_pool`, what a being does each round; authored
   inline on the Technique admin) and `CharacterManifestation` (`character`, `technique`,
   `option`, nullable `companion`; unique per character and technique; `bond_is_active()`,
   `clean()` enforces option-belongs-to-technique and an active bond), both in
@@ -672,7 +673,9 @@ Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Sc
   technique)` (`world/magic/services/effect_handlers.py`) is called from
   `CombatTechniqueResolver`; it moves a being's avatar into the caster's room and adds it
   as an ALLY `CombatOpponent`, or materializes the character's own companion. Probes
-  `manifest-being-avatars`, `manifest-archetype-abilities`, `manifest-tier-templates`.
+  `manifest-being-avatars`, `manifest-archetype-abilities`, `manifest-tier-templates`,
+  `manifest-being-threat-pools`. An ultimate's roll is floored at success in
+  `CombatTechniqueResolver._floor_ultimate_at_success` (#4076).
   Not built: a CG picker, manifestation outside combat, a persistent Companion made by a
   cast. Coexists with the flow-payload `summon_ally`. Detail: `docs/systems/magic.md`'s
   "Manifesting a bound entity"; ADR-4118.

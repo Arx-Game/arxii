@@ -410,7 +410,7 @@ class TechniqueManifestOptionInline(admin.TabularInline):
 
     model = TechniqueManifestOption
     extra = 0
-    autocomplete_fields = ["being", "archetype"]
+    autocomplete_fields = ["being", "archetype", "threat_pool"]
 
 
 #: Query-string values for TechniqueAuthoringGapFilter's three gap kinds.

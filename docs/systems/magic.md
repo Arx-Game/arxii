@@ -2660,7 +2660,7 @@ technique is a limited form, a high-tier option on an ultimate is the full arriv
 
 | Piece | Status | What it is |
 |-------|--------|------------|
-| `TechniqueManifestOption` (`models/manifestation.py`) | [BUILT & WIRED] | Authored per-technique row: `technique`, then exactly one of `being` (`WorshippedBeing`) or `archetype` (`CompanionArchetype`) (check constraint `manifest_option_exactly_one_entity`; unique constraints `unique_manifest_option_being` and `unique_manifest_option_archetype`), plus `tier` (`OpponentTier`, default MOOK; a being's arrival size, ignored for an archetype). A technique with at least one option is a manifesting technique. Authored in the Technique admin through `TechniqueManifestOptionInline`. |
+| `TechniqueManifestOption` (`models/manifestation.py`) | [BUILT & WIRED] | Authored per-technique row: `technique`, then exactly one of `being` (`WorshippedBeing`) or `archetype` (`CompanionArchetype`) (check constraint `manifest_option_exactly_one_entity`; unique constraints `unique_manifest_option_being` and `unique_manifest_option_archetype`), plus `tier` (`OpponentTier`, default MOOK; a being's arrival size, ignored for an archetype) and `threat_pool` (nullable `ThreatPool`, #4076: what a being does each round on the caster's side; without one it arrives and never acts; ignored for an archetype). A technique with at least one option is a manifesting technique. Authored in the Technique admin through `TechniqueManifestOptionInline`. |
 | `CharacterManifestation` (`models/manifestation.py`) | [BUILT & WIRED] | Per-character choice: `character` (`CharacterSheet`), `technique`, `option`, nullable `companion` (for an archetype option, the character's own `Companion`). Unique per (character, technique). Keyed by (character, technique) rather than hung on `CharacterTechnique` because an ultimate has no `CharacterTechnique` row. Set by GM or staff in the admin (`CharacterManifestationAdmin`). |
 | `CharacterManifestation.bond_is_active()` | [BUILT & WIRED] | A being option holds while `active_patronage_for(character)` includes that being. An archetype option holds while the companion is the character's own, matches the archetype, and has no `released_at`. |
 | `CharacterManifestation.clean()` | [BUILT & WIRED] | The option must belong to the technique; a being option takes no companion; an archetype option needs one; the bond must be active. |
@@ -2676,8 +2676,8 @@ not completed, or that entity already has a row in this encounter (one row per o
 encounter, so a defeated avatar is not re-added). The body arrives: a being's avatar or a
 companion's body is first moved into the caster's room with `move_to` (`add_opponent`
 refuses a position in another room) and the location is read back, since a move can be
-vetoed. A being then goes through `add_opponent` with the option's `tier`,
-`existing_objectdb` and the caster's position, and the row is marked `allegiance=ALLY`,
+vetoed. A being then goes through `add_opponent` with the option's `tier` and
+`threat_pool`, `existing_objectdb` and the caster's position, and the row is marked `allegiance=ALLY`,
 `summoned_by=caster`. An archetype goes through `materialize_companion_as_combat_opponent`
 (`world/companions/services.py`, unchanged). A being option whose tier has no
 `OpponentTierTemplate` row makes `add_opponent` raise from `compute_opponent_stat_block`.
@@ -2686,10 +2686,17 @@ participant until staff add the row, and the avatar's move into the caster's roo
 show in memory while the database has it elsewhere. The `manifest-tier-templates`
 dashboard probe flags it.
 
+**An ultimate never fails (#4076).** `CombatTechniqueResolver._roll_check` passes the roll
+through `_floor_ultimate_at_success`: when the technique `is_ultimate` and the roll graded
+below success, the result's outcome becomes the lowest authored `CheckOutcome` with
+`success_level >= 1`. Reaching Audere is the earned moment; the roll only grades how
+spectacular the success is, so effects gated on success (manifestation) always fire.
+
 **Required-content probes (`web/admin/tuning/required_content.py`, all REQUIRED tier):**
 `manifest-being-avatars` (a being option whose being has no `avatar_sheet`: nobody arrives),
 `manifest-archetype-abilities` (an archetype option whose archetype has no
-`CompanionAbility` rows: it arrives and never acts), `manifest-tier-templates` (a being
+`CompanionAbility` rows: it arrives and never acts), `manifest-being-threat-pools` (a being
+option with no `threat_pool`: it arrives and never acts), `manifest-tier-templates` (a being
 option's tier with no `OpponentTierTemplate`: the cast raises and the whole round rolls back).
 
 **Coexists with the flow-payload `summon_ally`.** The threat-pool summon
