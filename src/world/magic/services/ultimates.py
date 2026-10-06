@@ -29,6 +29,7 @@ if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
 
     from world.character_sheets.models import CharacterSheet
+    from world.checks.types import CheckResult
     from world.classes.models import Path
     from world.companions.models import Companion
     from world.magic.models import Gift, KnownUltimate, Technique
@@ -38,6 +39,26 @@ logger = logging.getLogger(__name__)
 
 _CATEGORY_ORDER = (RoleArchetype.SWORD, RoleArchetype.SHIELD, RoleArchetype.CROWN)
 _KEY_SEP = ":"
+
+
+def floor_ultimate_check(result: CheckResult, technique: Technique | None) -> CheckResult:
+    """An ultimate never fails (#4147): raise a failed outcome to the lowest success.
+
+    A roll with no technique behind it (a joust, a passive declaration) is never floored.
+
+    Only the outcome changes; the points stay as rolled. Damage, conditions and success
+    bands all read ``outcome``, so they all see the floored result.
+    """
+    from world.traits.models import CheckOutcome  # noqa: PLC0415
+
+    if technique is None or not technique.is_ultimate:
+        return result
+    if result.outcome is not None and result.outcome.success_level >= 1:
+        return result
+    floor = CheckOutcome.objects.filter(success_level__gte=1).order_by("success_level").first()
+    if floor is None:
+        return result
+    return dataclasses.replace(result, outcome=floor)
 
 
 @dataclass(frozen=True)

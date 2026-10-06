@@ -2583,12 +2583,12 @@ Character identity, appearance, demographics, and guise system.
   `POST …/spend-maturation-point/`.
 - **The Reference Sheet (#3898):** the web sheet is an artist's reference sheet on the
   Folio system — a night plate (art, name + titles, concept, quote, two glance lines,
-  the looks strip) over eight sections, five public and three the owner alone reads
-  (Knowledge, Estate, Growth). Friends moved to `/profile/friends`. Gating is
+  the looks strip) over nine sections, six public (Gallery added by #4151) and three
+  the owner alone reads (Knowledge, Estate, Growth). Friends moved to `/profile/friends`. Gating is
   render-or-vanish: a band a viewer may not read is absent, never an empty state.
-  Payload additions: `looks` (tenure media tagged with the `MoodOption` each shows, via
-  `TenureMedia.look`; public-gallery images plus the worn one for a non-privileged
-  viewer), `plate_ink` (`PlateInk`, OOC chrome), `worn` (what the character has on,
+  Payload additions: `looks` (#4151: every look the character may show, a picture
+  with a saved 4:5 crop, at its cropped URL, with the `MoodOption` it shows),
+  `viewer_is_friend` (the Gallery's NSFW veil), `plate_ink` (`PlateInk`, OOC chrome), `worn` (what the character has on,
   gated by the #2985 layer walk rather than a visibility tier), `mentors` (#1165
   Mentor's Vow bonds, owner and staff only), `domains` (#3901 — land the character's
   organizations hold, gated on active membership; owner and staff only), and `standing` +
@@ -7502,6 +7502,39 @@ from OPEN `StandoffGroup` rows, never a stored flag (ADR-4145-A).
 - **Surfaces:** actions `standoff_*`, telnet `standoff`, `StandoffCard` on the encounter
   detail's per-viewer `standoff` block.
 - **Details:** [standoffs.md](standoffs.md)
+
+### Spectacle (#4147)
+An earned display of power shakes the enemies who witness it: their morale falls once per
+caster and move, and allied NPCs take heart. Ultimates never fail (ADR-4147).
+
+- **Models (`world/combat/models.py`):** `SpectacleConfig` (singleton, `load()` creates it
+  with working defaults; hits per kind, level-gap scaling, thresholds, mindless and ally
+  shares), `SpectacleRecord` (one row per opponent, caster and move, which is the technique
+  when there is one, else the kind; play state), `SpectacleReactionLine` (authored flavour
+  by reaction, optional creature and kind). Choices in `combat/constants.py`:
+  `SpectacleKind` (audere_entry, ultimate, crossing, critical_technique,
+  devastating_action), `SpectacleReaction` (shaken, faltering, broken, heartened). Also
+  `AudereThreshold.check_level_bonus`, `AudereMajoraThreshold.check_level_bonus`,
+  `StandoffApproach.casts_technique`, `StandoffConfig.terms_ease_faltering` / `terms_ease_broken`.
+- **Key functions:** `apply_spectacle`, `classify_cast`, `is_devastating`, `spectacle_hit`,
+  `encounter_for_character`, `deliver_spectacle` (`combat/spectacle.py`);
+  `audere_check_level_bonus`, `shake_witnesses` (`magic/audere.py`); `floor_ultimate_check`
+  (`magic/services/ultimates.py`). The combat action rider is unguarded, but every spectacle
+  line posts after commit (`deliver_spectacle`, `robust=True`); Audere entry and a Crossing
+  also defer the morale write itself.
+- **Surfaces:** admin for the three models; Required content entry
+  `spectacle-reaction-lines`; the standoff display press and a public `morale_state` on each
+  opponent and standoff group.
+- **Lines:** the credit line has one sentence per resulting state, so no witness is
+  credited a state it did not reach: "The <groups> break before <persona>'s <display>. The
+  <groups> falter. The <groups> hold." (the first sentence present carries the credit; "hold"
+  names only groups still Steady, and a group already Faltering that stays so gets no clause;
+  with no state change at all, "The <groups> are shaken by <persona>'s <display>."), then
+  "The <allies> take heart." naming only allies whose morale rose. A verb is singular only
+  when the named group has one active member. With no GM running the scene, the most
+  specific authored line for the strongest enemy reaction (`<group>` = the groups that
+  showed it) and, when allies rose, a Heartened line (`<group>` = those allies) follow.
+- **Details:** [standoffs.md](standoffs.md), [magic.md](magic.md), ADR-4147.
 
 ### Combat
 Turn-based combat engine: encounter lifecycle, NPC threat patterns, damage resolution,

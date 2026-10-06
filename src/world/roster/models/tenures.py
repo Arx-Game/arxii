@@ -7,7 +7,6 @@ from __future__ import annotations
 from typing import ClassVar, cast
 
 from django.db import models
-from django.utils.functional import cached_property
 from evennia.objects.models import ObjectDB
 
 from core.descriptors import ReverseOneToOneOrNone
@@ -86,11 +85,6 @@ class RosterTenure(RelatedCacheClearingMixin, SharedMemoryModel):
 
     # Custom manager
     objects = RosterTenureManager()
-
-    @cached_property
-    def cached_media(self) -> list:
-        """Prefetched media for this tenure."""
-        return list(self.media.all())
 
     @property
     def display_name(self) -> str:

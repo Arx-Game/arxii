@@ -26,8 +26,8 @@ vi.mock('../CharacterApplicationForm', () => ({
 function makeEntry(overrides: Partial<RosterEntryData> = {}): RosterEntryData {
   return {
     id: 1,
-    character: { id: 42, name: 'Test Character', galleries: [] },
-    profile_picture: null,
+    character: { id: 42, name: 'Test Character' },
+    profile_picture_url: null,
     tenures: [],
     can_apply: true,
     fullname: 'Test Character',

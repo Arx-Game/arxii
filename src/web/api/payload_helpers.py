@@ -60,6 +60,7 @@ def build_account_payload_context(account: AccountDB) -> AccountPayloadContext:
             "roster",
             "character_sheet__character__db_location",
             "profile_picture__media",
+            "profile_picture__tenure",
         )
         .prefetch_related(
             Prefetch(
@@ -99,7 +100,11 @@ def build_account_payload_context(account: AccountDB) -> AccountPayloadContext:
     if player_data is not None and player_data.selected_entry_id is not None:
         selected_entry = (
             RosterEntry.objects.filter(pk=player_data.selected_entry_id)
-            .select_related("character_sheet__character", "profile_picture__media")
+            .select_related(
+                "character_sheet__character",
+                "profile_picture__media",
+                "profile_picture__tenure",
+            )
             .first()
         )
     return {

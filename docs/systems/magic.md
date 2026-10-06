@@ -2390,6 +2390,36 @@ audience watches. See `world/checks/CLAUDE.md`'s "#924 theater" section and ADR-
 
 ### Audere & Audere Majora (models/audere.py, audere_majora.py)
 
+**Audere check level bonus (#4147).** `AudereThreshold.check_level_bonus` and
+`AudereMajoraThreshold.check_level_bonus` (PositiveSmallIntegerField, default 0) are the
+extra effective levels every check the character makes counts while in Audere or Audere
+Majora (each level is 5 points, ADR-0166). `audere_check_level_bonus(character)`
+(`world/magic/audere.py`) reads it: Audere Majora's own bonus replaces Audere's while the
+Majora condition holds, using the threshold with the highest `boundary_level` at or below
+the character's path level; with Majora held but no threshold at or below that level, it
+falls back to Audere's bonus; zero when neither condition is held. `perform_check`
+(`world/checks/services.py`) adds it to the resolved path level only when no
+`level_override` is given; an override is used as given. Spectacle's level comparison adds
+the same bonus to the caster's level.
+
+**An ultimate never fails (#4147).** `floor_ultimate_check(result, technique)`
+(`world/magic/services/ultimates.py`) raises a failed outcome to the lowest
+`CheckOutcome` with `success_level >= 1`; points are left as rolled, and a result already
+at success or better, or a technique that is not an ultimate, passes through unchanged. It
+is applied in the combat technique path and the standoff display cast. An ultimate also
+skips the control mishap in `_complete_technique_cast`, which covers every cast path. The
+scene-cast path (`world/scenes/cast_services.py`) does not floor the roll, because
+`start_action_resolution` has no roll hook and Audere arises only in combat in practice.
+
+**Audere entry and a Crossing shake witnesses (#4147).** `shake_witnesses(character, kind,
+display_name=...)` (`world/magic/audere.py`) finds the character's encounter through its
+COMBAT engagement and, on `transaction.on_commit(robust=True)`, applies and delivers a
+spectacle (see `docs/systems/INDEX.md`, Spectacle). It is a no-op with no sheet or no combat
+engagement. `offer_audere` calls it with `AUDERE_ENTRY` after an accepted offer;
+`cross_threshold` calls it with `CROSSING` after the crossing's own broadcast. Deferring to
+commit means a rolled-back acceptance posts nothing, and `robust=True` means a failure in
+the rider is logged without undoing what already committed.
+
 **Surge broadcast on accept (#3451).** `AudereThreshold.surge_manifestation_text`
 (TextField, blank default) is broadcast as a system EMIT to the active scene when a
 character accepts a plain Audere surge — `_broadcast_surge` in `world/magic/audere.py`,

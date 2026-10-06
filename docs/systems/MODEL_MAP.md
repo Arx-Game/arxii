@@ -2399,6 +2399,7 @@
   - pending_selections <- combat.PendingSelection
   - marks <- combat.CombatMark
   - consider_readings <- combat.ConsiderReading
+  - spectacle_records <- combat.SpectacleRecord
 
 ### CombatOpponentAction
 **Foreign Keys:**
@@ -2612,6 +2613,18 @@
   - challenge_instance -> mechanics.ChallengeInstance [FK]
   - challenge_approach -> mechanics.ChallengeApproach [FK]
 
+### SpectacleConfig
+
+### SpectacleReactionLine
+**Foreign Keys:**
+  - creature_template -> combat.CreatureTemplate [FK] (nullable)
+
+### SpectacleRecord
+**Foreign Keys:**
+  - opponent -> combat.CombatOpponent [FK]
+  - caster -> character_sheets.CharacterSheet [FK]
+  - technique -> magic.Technique [FK] (nullable)
+
 ### StakesEscalationModifier
 **Foreign Keys:**
   - default_curve -> combat.EscalationCurve [FK] (nullable)
@@ -2816,6 +2829,7 @@
 ### Service Functions
 - `bind_companion(*, owner: 'CharacterSheet', archetype: 'CompanionArchetype', granting_gift: 'Gift', name: 'str') -> 'Companion' - Create a bonded Companion + its live CompanionObject in owner's current room.`
 - `companion_capacity(character_sheet: 'CharacterSheet', gift: 'Gift') -> 'int' - Total Companion Capacity character_sheet has via gift's Thread level.`
+- `companion_is_savaged(companion: 'Companion') -> 'bool' - True when the companion's body carries the Savaged injury (#3652).`
 - `dismount_companion(sheet: 'CharacterSheet') -> 'Companion' - Dismount *sheet* from whichever companion it is currently riding.`
 - `get_pull_effects_for_thread(thread: 'Thread', **filters: 'object') -> 'list[ThreadPullEffect]' - Return ThreadPullEffect rows for ``thread`` with gift-specific preference.`
 - `handle_stables_progression(project: 'Project', target_level: 'int', outcome_tier: 'CheckOutcome | None' = None) -> 'None' - STABLES strategy: row-only install/level + create StablesDetails (#1863).`
@@ -3088,6 +3102,7 @@
 ### Service Functions
 - `active_concealments(target: 'ObjectDB') -> django.db.models.query.QuerySet`
 - `active_condition_instances_by_sheet(sheet_ids: collections.abc.Iterable[int]) -> list[world.conditions.models.ConditionInstance] - Active condition instances on many sheets, in one query and with no teardown (#4090).`
+- `acute_peril_hand_off_condition_names() -> list[str] - Names of the acute-peril conditions combat hands to a scene round at its end.`
 - `advance_condition_severity(instance: world.conditions.models.ConditionInstance, amount: int) -> world.conditions.types.SeverityAdvanceResult - Increment a condition's severity and advance stage if threshold crossed.`
 - `advance_condition_stage(*, payload: object, condition_name: str) -> int | None - Advance the bearer's condition by one stage *now*, on this event (#3416).`
 - `apply_condition(target: 'ObjectDB', condition: world.conditions.models.ConditionTemplate, *, severity: int = 1, duration_rounds: int | None = None, source_character: 'ObjectDB | None' = None, source_technique: 'Technique | None' = None, source_description: str = '') -> world.conditions.types.ApplyConditionResult - Apply a condition to a target, handling stacking and interactions.`
@@ -8159,6 +8174,11 @@
 **Pointed to by:**
   - applications <- character_creation.DraftApplication
 
+### HiddenCharacterArt
+**Foreign Keys:**
+  - tenure -> roster.RosterTenure [FK]
+  - picture -> roster.TenureMedia [FK]
+
 ### KinSlotPool
 **Foreign Keys:**
   - family -> roster.Family [FK]
@@ -8253,6 +8273,7 @@
   - created_by_account -> evennia.AccountDB [FK] (nullable)
   - created_for_table -> gm.GMTable [FK] (nullable)
 **Pointed to by:**
+  - character_art <- roster.TenureMedia
   - tenures <- roster.RosterTenure
   - clues_held <- clues.CharacterClue
   - codex_knowledge <- codex.CharacterCodexKnowledge
@@ -8273,9 +8294,8 @@
   - sent_mail <- roster.PlayerMail
   - received_mail <- roster.PlayerMail
   - display_settings <- roster.TenureDisplaySettings
-  - galleries <- roster.TenureGallery
-  - shared_galleries <- roster.TenureGallery
   - media <- roster.TenureMedia
+  - hidden_character_art <- roster.HiddenCharacterArt
   - discoveries <- achievements.Discovery
   - shared_discoveries <- achievements.Discovery
   - earned_achievements <- achievements.CharacterAchievement
@@ -8319,21 +8339,15 @@
 **Foreign Keys:**
   - tenure -> roster.RosterTenure [OneToOne]
 
-### TenureGallery
-**Foreign Keys:**
-  - tenure -> roster.RosterTenure [FK]
-  - allowed_viewers -> roster.RosterTenure [M2M]
-**Pointed to by:**
-  - media <- roster.TenureMedia
-
 ### TenureMedia
 **Foreign Keys:**
-  - tenure -> roster.RosterTenure [FK]
+  - tenure -> roster.RosterTenure [FK] (nullable)
+  - roster_entry -> roster.RosterEntry [FK] (nullable)
   - media -> evennia_extensions.Media [FK]
-  - gallery -> roster.TenureGallery [FK] (nullable)
   - look -> character_sheets.MoodOption [FK] (nullable)
 **Pointed to by:**
   - profile_for_entries <- roster.RosterEntry
+  - hidden_by <- roster.HiddenCharacterArt
 
 ### Union
 **Foreign Keys:**
@@ -9916,6 +9930,8 @@
   - capability -> conditions.CapabilityType [FK]
   - sway_target -> mechanics.ModifierTarget [FK] (nullable)
   - archetypes -> societies.PhilosophicalArchetype [M2M]
+**Pointed to by:**
+  - reaction_lines <- standoffs.StandoffReactionLine
 
 ### StandoffConfig
 **Foreign Keys:**
@@ -9933,6 +9949,12 @@
   - reveals <- standoffs.StandoffReveal
   - spark_shares <- standoffs.StandoffSparkShare
 
+### StandoffReactionLine
+**Foreign Keys:**
+  - approach -> standoffs.StandoffApproach [FK] (nullable)
+  - terms -> standoffs.StandoffTerms [FK] (nullable)
+  - creature_template -> combat.CreatureTemplate [FK] (nullable)
+
 ### StandoffReveal
 **Foreign Keys:**
   - group -> standoffs.StandoffGroup [FK]
@@ -9949,6 +9971,8 @@
 **Foreign Keys:**
   - required_drive -> mechanics.Property [FK] (nullable)
   - archetypes -> societies.PhilosophicalArchetype [M2M]
+**Pointed to by:**
+  - reaction_lines <- standoffs.StandoffReactionLine
 
 
 ## world.stealth

@@ -208,8 +208,8 @@ on the Hall card and the new-character tile, over `POST /api/roster/entries/{id}
 | Model | Purpose | Key Fields |
 |-------|---------|------------|
 | `TenureDisplaySettings` | Per-tenure UI preferences (1:1) | `tenure` (OneToOne), `public_character_info`, `show_online_status`, `allow_pages`, `allow_tells`, `appear_offline` (quiet/hidden mode #1463 — drops off where/who + unpageable except allowlist; read via `world.scenes.presence.character_appears_offline`, written via `world.roster.services.display.set_appear_offline`), `rp_preferences`, `plot_involvement` |
-| `TenureGallery` | Named collection of media for a tenure | `tenure` (FK), `name`, `is_public`, `allowed_viewers` (M2M RosterTenure) |
-| `TenureMedia` | Bridge between player media and tenures | `tenure` (FK), `media` (FK Media, renamed from PlayerMedia #2408), `gallery` (FK TenureGallery, nullable), `sort_order` |
+| `TenureMedia` | One picture in a character's Gallery (#4151): a file and this character's use of it | exactly one of `tenure` (FK, a player's own upload, leaves with them) or `roster_entry` (FK, **character art**: staff-commissioned, survives every change of player); `media` (FK Media); `crop_x`/`crop_y`/`crop_width` (a picture with a crop is a **look**, height derived as width x 5/4, all-or-none CHECK); `look` (FK MoodOption, the mood it shows); `sort_order`. CHECK `tenuremedia_one_owner` |
+| `HiddenCharacterArt` | One tenure has hidden one piece of character art (#4151) | `tenure` (FK), `picture` (FK TenureMedia, character art only). Unique per pair. The next tenure starts with the art visible |
 
 ### Mail
 
@@ -261,8 +261,6 @@ tenure.is_current  # True if end_date is None
 # Convenience character access
 tenure.character  # roster_entry.character
 
-# Cached media
-tenure.cached_media  # list of TenureMedia
 ```
 
 ### RosterApplication
@@ -394,7 +392,7 @@ RosterTenure.objects.for_player(player_data)                 # For specific play
   without a new endpoint. Deliberately does NOT expose the unconscious overlay (a
   conditions-system read, not a sheet column) — recorded as an open seam, not built.
 - `POST /api/roster/entries/{id}/apply/` - Apply for a character (requires verified email)
-- `POST /api/roster/entries/{id}/set_profile_picture/` - Set profile picture from tenure media
+- `POST /api/roster/entries/{id}/set_profile_picture/` - Wear a look (`tenure_media_id`), through `wear_look`: only a look that is not NSFW, not hidden, and is the current tenure's upload or the character's art. Its player or staff only
 - `POST /api/roster/entries/select/` - Set/clear the account's durable character selection
 - `POST /api/roster/entries/{id}/freeze/`, `/thaw/`, `/give-up/` - Slot actions on the
   account's own entry (#3996): freeze/thaw an original character, give up a roster
@@ -472,19 +470,45 @@ shelf, not new player-made characters going through CG.
 **Filters:** `family`, `member_type`
 
 ### Media (`/api/roster/media/`)
+
+The account's own file store, which the world-builder's art dialog also reads. Every
+read needs an account (#3904 item 0, #4151).
+
 - `GET /api/roster/media/` - List user's media (staff sees all)
 - `POST /api/roster/media/` - Upload image via Cloudinary, validated by `MediaUploadSerializer`
   (#3164): a 400 with a fixed message on a file over the per-file cap (`image_file`
   never reaches the service) or on quota exceeded (the service's own check);
   `multipart/form-data` request body (`image_file`, `media_type`, `title`, `description`,
   `created_by`)
-- `POST /api/roster/media/{id}/associate_tenure/` - Link media to a tenure/gallery
+- `DELETE /api/roster/media/{id}/` - Delete a file: `perform_destroy` calls
+  `CloudinaryGalleryService.delete_media`, so the Cloudinary asset goes with the row
+  (#4151; the stock destroy used to leave it stored)
+- `POST /api/roster/media/{id}/associate_tenure/` - Link media to a tenure (staff and scripts)
 - `POST /api/roster/media/{id}/set_profile_picture/` - Set as account profile picture
+  (`PlayerData.profile_picture`, the player's own avatar, not a character's look)
 
-### Galleries (`/api/roster/galleries/`)
-- Full CRUD for tenure galleries
+### Gallery (`/api/roster/tenure-media/`, #4151)
 
-**Query Parameters:** `tenure` (filter by tenure ID)
+A character's Gallery: the current tenure's uploads plus the character's art, in order.
+Reads need an account; writes need the character's current player or staff
+(`CanManageGallery`). Every write goes through `world.roster.services.gallery`.
+
+- `GET ?roster_entry=<id>` (required) - The pictures (`GalleryPictureSerializer`: `url`,
+  `look_url` (the 4:5 crop), `title`, `caption`, `is_nsfw`, `mood`/`mood_id`, `crop`,
+  `is_look`, `is_character_art`, `is_worn`, `is_hidden`, `can_delete`, `also_on`).
+  Character art the current player hid is left out for everyone but that player and staff
+- `POST` (multipart `roster_entry` + `images[]`) - Upload into the Gallery. A staff upload
+  on a character they are not playing becomes character art
+- `PATCH /{id}/` - `title`, `caption`, `is_nsfw`, `mood`, `crop` (`{x, y, width}` makes or
+  re-frames a look; `null` makes it a plain picture), `wear`
+- `DELETE /{id}/` - The one Delete: deletes the file (freeing quota) unless another
+  character's gallery holds it, then only unlinks; returns `{outcome: deleted|unlinked}`.
+  Players delete only their own files; character art is staff's
+- `POST /reorder/` - `{roster_entry, ids}`, exactly the gallery's pictures
+- `POST /{id}/hide/`, `/{id}/show/` - The current player hides or shows character art
+- `GET /usage/` - The requester's storage (`media_bytes_used` of `media_quota_bytes`)
+
+The mood picker reads `GET /api/character-sheets/mood-options/` (active `MoodOption`s).
 
 ---
 
@@ -492,9 +516,10 @@ shelf, not new player-made characters going through CG.
 
 | Permission Class | Used For | Rule |
 |-----------------|----------|------|
-| `IsOwnerOrStaff` | Media/gallery modification | `obj.player_data.account == request.user` or staff |
+| `IsOwnerOrStaff` | Media modification | `obj.player_data.account == request.user` or staff |
+| `CanManageGallery` | Gallery (`/tenure-media/`) | Reads: any account. Writes: the character's current player or staff (`can_manage_gallery`) |
 | `IsPlayerOrStaff` | Roster entry modifications | Active tenure for the entry or staff |
-| `ReadOnlyOrOwner` | Media/gallery viewing | Safe methods for all; write requires ownership |
+| `ReadOnlyOrOwner` | (no longer used by media; #4151 made media reads need an account) | Safe methods for all; write requires ownership |
 | `StaffOnlyWrite` | Roster management | Safe methods for all; write requires staff |
 | `CanApproveApplications` | Application review queue (#3265) | `PlayerData.can_approve_applications()` (staff today) |
 
@@ -503,7 +528,8 @@ shelf, not new player-made characters going through CG.
 ## Integration Points
 
 - **PlayerData** (`evennia_extensions.PlayerData`): Extends AccountDB with `player_data` reverse relation; tenures link to PlayerData, not AccountDB directly
-- **Media** (`evennia_extensions.Media`, renamed from `PlayerMedia` #2408): Actual media storage (player uploads and staff-authored art, derived by `player_data` nullability, see ADR-0146); TenureMedia bridges to character tenures. `file_size_bytes` (nullable, #3164) records the upload backend's reported size for player-uploaded rows; null for pre-#3164 rows and staff-pasted art. `PlayerData.media_quota_bytes` (default `settings.DEFAULT_PLAYER_MEDIA_QUOTA_BYTES`, per-account editable) caps the sum of a player's owned `Media.file_size_bytes`; `settings.MAX_PLAYER_MEDIA_FILE_BYTES` is the separate per-file cap. Both are enforced in `CloudinaryGalleryService.upload_image` (#3164) before the Cloudinary call: the per-file cap raises first, then the quota check against the sum of the account's existing `Media.file_size_bytes` (a null row counts as 0); `player_data.account.is_staff` skips both checks. A successful upload sets `Media.file_size_bytes` from the upload result's reported byte count.
+- **Media** (`evennia_extensions.Media`, renamed from `PlayerMedia` #2408): Actual media storage (player uploads and staff-authored art, derived by `player_data` nullability, see ADR-0146); TenureMedia bridges to character tenures. `file_size_bytes` (nullable, #3164) records the upload backend's reported size for player-uploaded rows; null for pre-#3164 rows and staff-pasted art. `PlayerData.media_quota_bytes` (default `settings.DEFAULT_PLAYER_MEDIA_QUOTA_BYTES`, per-account editable) caps the sum of a player's owned `Media.file_size_bytes`; `settings.MAX_PLAYER_MEDIA_FILE_BYTES` is the separate per-file cap. Both are enforced in `CloudinaryGalleryService.upload_image` (#3164) before the Cloudinary call: the per-file cap raises first, then the quota check against the sum of the account's existing `Media.file_size_bytes` (a null row counts as 0); `player_data.account.is_staff` skips both checks. A successful upload sets `Media.file_size_bytes` from the upload result's reported byte count, and (#4151) `Media.width`/`height` from its pixel size, which bound a look's crop. The quota sum is `media_bytes_used(player_data)`, shared by the upload check and the Gallery's storage line; it counts the uploader's files, so character art a staff member uploaded costs whoever plays the character nothing. `Media.is_nsfw` (#4151) is set by the owner: it veils the picture for anyone who is not a friend, and keeps it from ever being a look (`MediaScanService` is the hook that will also set it).
+- **Gallery services** (`world.roster.services.gallery`, #4151): the only writers of a look's crop, the worn look, the gallery's order and hides. `gallery_for(entry, include_hidden=)`, `set_look`, `clear_look`, `update_picture`, `reorder_pictures`, `add_pictures`, `delete_picture` (`DeleteOutcome`), `hide_character_art`/`show_character_art`, `wear_look`, `worn_look`, `portrait_url` (query-free worn-look URL for list surfaces) and `look_url` (inserts `c_crop,x_,y_,w_,h_` after `/upload/` in the stored Cloudinary URL). Anything that takes the worn look away re-picks the next showable look, or none. Refusals are `GalleryError` subclasses carrying a `user_message`.
 - **`MediaUploadSerializer`** (`world.roster.serializers.media`, #3164): validates an upload before `MediaViewSet.create` calls the service. `image_file` is required and `FileExtensionValidator`-checked against the extensions the service's content-type allowlist maps to (jpg, jpeg, png, gif, webp); `media_type` defaults to `photo`; `title`/`description` default to blank; `created_by` is an optional `Artist` id. `validate_image_file` rejects a file over `settings.MAX_PLAYER_MEDIA_FILE_BYTES` with the same fixed message the service raises ("This file is larger than the per-file limit."), so an oversized upload is rejected before the network call; staff bypass this check too, matching the service's staff bypass. The quota check stays service-only (it needs a DB aggregate). The serializer's `create()` calls `CloudinaryGalleryService.upload_image` and translates any `django.core.exceptions.ValidationError` it raises into a DRF 400 carrying the same fixed message ("This upload would exceed your media quota." for the quota case). `MediaViewSet` accepts `multipart/form-data` (and `application/x-www-form-urlencoded`, and JSON) for `create` alongside the project's JSON-only default, since `image_file` travels as a real file upload.
 - **Scenes System**: Personas reference characters via ObjectDB, which have `roster_entry` for identity resolution
 - **Character Creation**: `Family` and `FamilyMember` used during CG for family selection; families filtered by `origin_realm`
@@ -570,7 +596,7 @@ the tab's own.
 - `RosterTenureAdmin` - Autocomplete for entry/player_data; date hierarchy on start_date; displays `is_current` boolean
 - `RosterApplicationAdmin` - Bulk approve/deny actions; autocomplete for character/player_data; date hierarchy on applied_date. No longer the only review surface: staff also review from `/staff/roster-applications` via `RosterApplicationViewSet` (#3265)
 - `TenureDisplaySettingsAdmin` - Grouped fieldsets for display, communication, and roleplay preferences
-- `TenureGalleryAdmin` - Autocomplete for tenure and allowed_viewers
-- `TenureMediaAdmin` - Autocomplete for tenure, media, and gallery
+- `TenureMediaAdmin` - Autocomplete for tenure, roster entry (character art), media and mood; a Look fieldset for the crop
+- `HiddenCharacterArtAdmin` - Autocomplete for tenure and picture
 - `PlayerMailAdmin` - Search by sender/recipient character names; date hierarchy on sent_date; `is_read` boolean display
 - `FamilyAdmin` - List/filter by family type, playability, CG-created status

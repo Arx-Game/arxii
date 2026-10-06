@@ -641,6 +641,38 @@ class TestAudereMajoraThresholdsProbe(TestCase):
         self.assertEqual(result.missing, ())
 
 
+class TestSpectacleReactionLinesProbe(TestCase):
+    """Every reaction needs a non-blank generic line (#4147)."""
+
+    def test_missing_when_no_lines_exist(self) -> None:
+        result = rc._probe_spectacle_reaction_lines()
+        self.assertFalse(result.present)
+        self.assertEqual(set(result.missing), {"Shaken", "Faltering", "Broken", "Heartened"})
+
+    def test_missing_names_only_uncovered_reactions_and_ignores_specific_rows(self) -> None:
+        from world.combat.constants import SpectacleKind, SpectacleReaction
+        from world.combat.factories import SpectacleReactionLineFactory
+
+        for reaction in (SpectacleReaction.SHAKEN, SpectacleReaction.FALTERING):
+            SpectacleReactionLineFactory(reaction=reaction)
+        # A kind-specific row and a blank-text row do not cover their reactions.
+        SpectacleReactionLineFactory(reaction=SpectacleReaction.BROKEN, kind=SpectacleKind.ULTIMATE)
+        SpectacleReactionLineFactory(reaction=SpectacleReaction.HEARTENED, text="  ")
+        result = rc._probe_spectacle_reaction_lines()
+        self.assertFalse(result.present)
+        self.assertEqual(set(result.missing), {"Broken", "Heartened"})
+
+    def test_present_when_every_reaction_has_a_generic_line(self) -> None:
+        from world.combat.constants import SpectacleReaction
+        from world.combat.factories import SpectacleReactionLineFactory
+
+        for reaction in SpectacleReaction.values:
+            SpectacleReactionLineFactory(reaction=reaction)
+        result = rc._probe_spectacle_reaction_lines()
+        self.assertTrue(result.present)
+        self.assertEqual(result.missing, ())
+
+
 class TestEncounterOutcomeMappingsProbe(TestCase):
     """Every EncounterOutcome x RiskLevel pair must have a mapping row (#3559, #3565).
 

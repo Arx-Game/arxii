@@ -5,9 +5,7 @@ import django.db.models.deletion
 
 
 class Migration(migrations.Migration):
-    dependencies = [
-        ("arxii", "0202_alter_technique_is_ultimate"),
-    ]
+    dependencies = [("arxii", "0205_spectacleconfig_and_more")]
 
     operations = [
         migrations.AddField(

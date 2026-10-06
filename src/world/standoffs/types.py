@@ -6,6 +6,8 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
+    from world.checks.types import CheckResult
+    from world.magic.types.techniques import SoulfrayWarning
     from world.standoffs.models import StandoffReveal
 
 
@@ -21,3 +23,13 @@ class StandoffActionResult:
     settled: bool = False
     morale_line: str = ""
     attack_line: str = ""
+    # Set when a display stopped at the Soulfray checkpoint; the press may be re-sent
+    # with ``confirm_soulfray_risk`` to accept it.
+    soulfray_warning: SoulfrayWarning | None = None
+
+
+@dataclass(frozen=True)
+class DisplayCast:
+    """What a display-of-power cast resolved to; ``use_technique`` reads ``check_result``."""
+
+    check_result: CheckResult

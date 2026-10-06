@@ -5,7 +5,6 @@ export function ProfilePage() {
   const { pathname } = useLocation();
 
   const getCurrentTab = () => {
-    if (pathname.includes('/media')) return 'media';
     // #3898 — Friends left the character sheet: an OOC trusted-partner list belongs to
     // the account, not to whichever character's page you happened to open.
     if (pathname.includes('/friends')) return 'friends';
@@ -25,9 +24,6 @@ export function ProfilePage() {
         <TabsList>
           <TabsTrigger value="mail" asChild>
             <Link to="/profile/mail">Mail</Link>
-          </TabsTrigger>
-          <TabsTrigger value="media" asChild>
-            <Link to="/profile/media">Media</Link>
           </TabsTrigger>
           <TabsTrigger value="friends" asChild>
             <Link to="/profile/friends">Friends</Link>

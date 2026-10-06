@@ -6,7 +6,7 @@ This module is organized into logical groups:
 - roster_core: Roster and RosterEntry models
 - tenures: RosterTenure model
 - applications: RosterApplication model
-- settings: TenureDisplaySettings and TenureMedia models
+- settings: TenureDisplaySettings, TenureMedia and HiddenCharacterArt models
 - mail: PlayerMail model
 - families: Family + the kinship graph (#2062)
 - npc_presets: NPCStatlinePreset + its trait/skill lines (#3427)
@@ -45,8 +45,8 @@ from world.roster.models.npc_presets import (
 )
 from world.roster.models.roster_core import Roster, RosterEntry
 from world.roster.models.settings import (
+    HiddenCharacterArt,
     TenureDisplaySettings,
-    TenureGallery,
     TenureMedia,
 )
 from world.roster.models.tenures import RosterTenure
@@ -59,6 +59,7 @@ __all__ = [
     "FamilyKind",
     "FamilyMembership",
     "GameInvite",
+    "HiddenCharacterArt",
     "InviteStatus",
     "KinSlotPool",
     "Kinsperson",
@@ -77,7 +78,6 @@ __all__ = [
     "Soul",
     "SoulIncarnation",
     "TenureDisplaySettings",
-    "TenureGallery",
     "TenureMedia",
     "Union",
     "UnionKind",

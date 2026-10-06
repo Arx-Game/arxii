@@ -400,6 +400,14 @@ line ("Deed remembered") only ever reports an authored deed row, since legend se
 the end of a story from its outcomes, never per fight.
 _Avoid_: aftermath report, post-combat summary, combat recap
 
+**Spectacle** (#4147, ADR-4147):
+An earned display of power that shakes the enemies who witness it: each witness loses morale once per caster and move, and allied NPCs regain some. Earned, never declared: nothing authors a "clever play" tag.
+_Avoid_: awe, dread, intimidation (that is the CheckType), scare, fear effect
+
+**Spectacle kind** (#4147):
+What kind of display shook the witnesses: Audere entry, Ultimate, Crossing, Critical technique, Devastating action (`SpectacleKind`). Each has its own base hit in `SpectacleConfig`. Distinct from **Spectacle reaction** (`SpectacleReaction`: shaken, faltering, broken, heartened), which only picks the authored flavour line.
+_Avoid_: display type, fear source
+
 **Standoff** (#4145):
 The pre-round state of a `CombatEncounter` in which the party reads and talks down groups of opponents before the first round. Its terms (Group, Drive, Cause, Regard rule, Spark, Terms, Approach) live in `src/world/standoffs/AGENT_GLOSSARY.md`.
 _Avoid_: parley phase

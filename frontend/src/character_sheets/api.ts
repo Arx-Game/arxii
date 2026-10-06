@@ -412,9 +412,15 @@ export interface CharacterSheetPayload {
   beats: CharacterSheetBeat[];
   personas: CharacterSheetPersona[];
   theming: Record<string, unknown>;
+  /** The worn look's cropped URL (#4151), or null. */
   profile_picture: string | null;
+  /**
+   * #4151 — whether the viewer sees NSFW pictures plain: the owner, staff, and the
+   * owner's friends do; anyone else sees them veiled until clicked.
+   */
+  viewer_is_friend: boolean;
   current_residence: IdNameRef | null;
-  /** #3898 — the character's images, worn one first. Empty when they have none. */
+  /** #3898/#4151 — the character's looks (cropped pictures), worn one first. */
   looks: CharacterSheetLook[];
   /** #3898 — OOC chrome: the ground colour the plate is printed in. */
   plate_ink: PlateInk;

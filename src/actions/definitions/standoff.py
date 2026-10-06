@@ -59,7 +59,16 @@ def _to_result(outcome: StandoffActionResult) -> ActionResult:
     message = outcome.message
     if outcome.fight_started and message != FIGHT_BEGINS_MESSAGE:
         message = f"{message} They attack!"
-    return ActionResult(success=outcome.success, message=message)
+    data: dict[str, Any] = {}
+    warning = outcome.soulfray_warning
+    if warning is not None:
+        # The web picker shows this and re-sends the press with confirm_soulfray_risk.
+        data["soulfray_warning"] = {
+            "stage_name": warning.stage_name,
+            "stage_description": warning.stage_description,
+            "has_death_risk": warning.has_death_risk,
+        }
+    return ActionResult(success=outcome.success, message=message, data=data)
 
 
 def _announce(participant: CombatParticipant, line: str, outcome: StandoffActionResult) -> None:
@@ -192,14 +201,17 @@ class StandoffPressAction(Action):
     action_category: ActionCategory = ActionCategory.SOCIAL
     target_type: TargetType = TargetType.SINGLE
 
-    def execute(
+    def execute(  # noqa: PLR0913 - the press kwargs are the verb's whole payload
         self,
         actor: ObjectDB,
         context: ActionContext | None = None,
         group_id: int | None = None,
         approach_id: int | None = None,
+        technique_id: int | None = None,
+        confirm_soulfray_risk: bool = False,
         **kwargs: Any,
     ) -> ActionResult:
+        from world.magic.models import Technique  # noqa: PLC0415
         from world.standoffs.models import StandoffApproach  # noqa: PLC0415
         from world.standoffs.services.verbs import standoff_press  # noqa: PLC0415
 
@@ -212,7 +224,14 @@ class StandoffPressAction(Action):
         approach = StandoffApproach.objects.filter(pk=approach_id).first()
         if approach is None:
             return ActionResult(success=False, message="No such approach.")
-        outcome = standoff_press(participant, group, approach)
+        technique = (
+            None if technique_id is None else Technique.objects.filter(pk=technique_id).first()
+        )
+        if technique_id is not None and technique is None:
+            return ActionResult(success=False, message="No such technique.")
+        outcome = standoff_press(
+            participant, group, approach, technique, confirm_soulfray_risk=confirm_soulfray_risk
+        )
         plain = (
             f"{_actor_label(participant)} presses the {group.creature_template.name} "
             f"with {approach.name}: {_outcome_word(outcome)}."

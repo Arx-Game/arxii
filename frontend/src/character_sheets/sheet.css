@@ -250,6 +250,8 @@
   width: 100%;
   height: 100%;
   object-fit: cover;
+  /* A look is a 4:5 crop (#4151); the square tile shows its top, where the face is. */
+  object-position: center top;
 }
 /* A long mood name truncates rather than spilling out of the tile, which clipped it
    mid-word against `overflow: hidden`. The full name stays on the button's title. */

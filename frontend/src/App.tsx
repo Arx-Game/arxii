@@ -27,7 +27,6 @@ import { TiePage } from './relationships/pages/TiePage';
 import { CharacterCreationPage } from './character-creation';
 import { RosterListPage } from './roster/pages/RosterListPage';
 import { FriendsTab } from '@/friends/components/FriendsTab';
-import { PlayerMediaPage } from './roster/pages/PlayerMediaPage';
 import { SettingsPage } from './pages/SettingsPage';
 import { AccountSettingsPage } from './account/pages/AccountSettingsPage';
 import { ScenesListPage } from './scenes/pages/ScenesListPage';
@@ -431,7 +430,6 @@ function App() {
             }
           >
             <Route path="mail" element={<MailPage />} />
-            <Route path="media" element={<PlayerMediaPage />} />
             {/* #3898 — Friends moved off the character sheet to the account it
                 actually belongs to. */}
             <Route path="friends" element={<FriendsTab />} />

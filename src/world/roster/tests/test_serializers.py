@@ -237,7 +237,6 @@ class CharacterSerializerTestCase(TestCase):
 
         # Default list fields
         assert data["relationships"] == []
-        assert data["galleries"] == []
 
         # Verify race field structure
         race_data = data["race"]
@@ -266,7 +265,6 @@ class CharacterSerializerTestCase(TestCase):
         assert isinstance(data["social_rank"], int)  # Should get default
         assert data["background"] == ""
         assert data["relationships"] == []
-        assert data["galleries"] == []
 
         # Race should return empty structure with species key
         assert data["race"] is not None
@@ -538,20 +536,26 @@ class MyRosterEntrySerializerTestCase(TestCase):
         """Create shared test data for all tests in this class."""
         cls.entry = RosterEntryFactory()
         cls.tenure = RosterTenureFactory(roster_entry=cls.entry)
-        cls.media_link = TenureMediaFactory(tenure=cls.tenure)
-        # Assign profile picture to the entry
+        # The worn look (#4151): a picture with a 4:5 crop.
+        cls.media_link = TenureMediaFactory(tenure=cls.tenure, crop_x=10, crop_y=20, crop_width=200)
         cls.entry.profile_picture = cls.media_link
         cls.entry.save()
 
         cls.entry_no_picture = RosterEntryFactory()
 
-    def test_profile_picture_url_present_when_set(self):
-        """profile_picture_url returns the cloudinary URL when a profile picture exists."""
+    def test_profile_picture_url_is_the_worn_looks_crop(self):
+        """profile_picture_url is the worn look's cropped URL (#4151)."""
         data = MyRosterEntrySerializer(self.entry).data
 
-        assert "profile_picture_url" in data
-        expected_url = self.media_link.media.cloudinary_url
-        assert data["profile_picture_url"] == expected_url
+        assert "c_crop,x_10,y_20,w_200,h_250" in data["profile_picture_url"]
+
+    def test_a_look_from_an_ended_tenure_is_not_shown(self):
+        """A handed-over character never shows the last player's upload."""
+        entry = RosterEntryFactory()
+        old = RosterTenureFactory(roster_entry=entry, end_date=timezone.now())
+        entry.profile_picture = TenureMediaFactory(tenure=old, crop_x=0, crop_y=0, crop_width=200)
+        entry.save()
+        assert MyRosterEntrySerializer(entry).data["profile_picture_url"] is None
 
     def test_profile_picture_url_none_when_not_set(self):
         """profile_picture_url is None when no profile picture is assigned."""

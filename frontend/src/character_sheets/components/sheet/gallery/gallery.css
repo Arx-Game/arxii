@@ -1,0 +1,758 @@
+/**
+ * The Gallery tab and its dialogs (#4151).
+ *
+ * Laid out after the approved demo: looks as a grid on the left, every other picture
+ * one at a time in a tall frame on the right with thumbnails under it. Words and tools
+ * appear on hover only; nothing on this page explains itself. Colours come from the
+ * sheet's tokens; the cropper and the lightbox are printed on the plate's night ground
+ * (`--plate-ground`, set by `.refsheet[data-ink]`), like the plate they frame for.
+ */
+
+/* ---------- the tab ---------- */
+
+.gallery {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+.gallery-head {
+  display: flex;
+  align-items: baseline;
+  gap: 0.75rem;
+}
+.gallery-count {
+  font-family: var(--sheet-sans);
+  font-size: 0.875rem;
+  color: hsl(var(--muted-foreground));
+}
+.gallery-drop {
+  position: relative;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: baseline;
+  gap: 0.25rem 0.75rem;
+  padding: 0.65rem 0.75rem;
+  border: 1.5px dashed hsl(var(--border));
+  text-align: center;
+  cursor: pointer;
+}
+.gallery-drop:hover,
+.gallery-drop.is-over {
+  border-color: hsl(var(--primary));
+  background: hsl(var(--card));
+}
+.gallery-drop strong {
+  color: hsl(var(--primary));
+  font-weight: 600;
+}
+.gallery-drop small {
+  font-family: var(--sheet-sans);
+  font-size: 0.8125rem;
+  color: hsl(var(--muted-foreground));
+}
+.gallery-drop input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+}
+.gallery-drop.is-busy {
+  opacity: 0.55;
+  pointer-events: none;
+}
+
+.gallery-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 20.5rem);
+  gap: 2.25rem;
+  align-items: start;
+}
+.gallery-looks {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(9.5rem, 1fr));
+  gap: 0.875rem;
+  align-content: start;
+  min-height: 7rem;
+}
+.gallery-viewer {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  min-width: 0;
+}
+.gallery-looks.is-target,
+.gallery-viewer.is-target {
+  outline: 2px dashed hsl(var(--accent));
+  outline-offset: 6px;
+}
+.gallery-empty {
+  font-style: italic;
+  color: hsl(var(--muted-foreground));
+}
+
+/* ---------- a picture, with words and tools on hover ---------- */
+
+.gallery-pic {
+  position: relative;
+  overflow: hidden;
+  border: 1px solid hsl(var(--border));
+  background: hsl(var(--muted));
+}
+.gallery-pic.is-look {
+  aspect-ratio: 4 / 5;
+}
+.gallery-pic.is-tall {
+  aspect-ratio: 3 / 5;
+  width: 100%;
+}
+.gallery-pic.is-tall::after {
+  content: '';
+  position: absolute;
+  inset: 6px;
+  border: 1px solid rgb(241 230 214 / 45%);
+  pointer-events: none;
+}
+.gallery-pic.is-worn {
+  border-color: hsl(var(--accent));
+  box-shadow: 0 0 0 1px hsl(var(--accent));
+}
+.gallery-pic.is-hidden img {
+  opacity: 0.35;
+  filter: grayscale(0.6);
+}
+.gallery-pic.is-dragging {
+  opacity: 0.35;
+}
+.gallery-pic.drop-before {
+  box-shadow: -4px 0 0 0 hsl(var(--accent));
+}
+.gallery-pic.drop-after {
+  box-shadow: 4px 0 0 0 hsl(var(--accent));
+}
+.gallery-pic-open {
+  position: absolute;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: zoom-in;
+}
+.gallery-pic-open img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center top;
+  transition:
+    filter 0.35s ease,
+    transform 0.35s ease;
+}
+.gallery-cap {
+  position: absolute;
+  inset: auto 0 0 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  padding: 1.6rem 0.75rem 0.6rem;
+  color: #f1e6d6;
+  background: linear-gradient(to top, rgb(14 10 9 / 90%), rgb(14 10 9 / 0%));
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s ease;
+}
+.gallery-cap b {
+  font-family: var(--sheet-caps);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  overflow-wrap: anywhere;
+}
+.gallery-cap i {
+  font-size: 0.9375rem;
+  line-height: 1.4;
+  color: #c4b8a6;
+  overflow-wrap: anywhere;
+}
+.gallery-pic:hover .gallery-cap,
+.gallery-pic:focus-within .gallery-cap {
+  opacity: 1;
+}
+.gallery-tools {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  display: flex;
+  gap: 4px;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+.gallery-pic:hover .gallery-tools,
+.gallery-pic:focus-within .gallery-tools {
+  opacity: 1;
+}
+.gallery-tool {
+  display: grid;
+  place-items: center;
+  width: 1.9rem;
+  height: 1.75rem;
+  padding: 0;
+  border: 1px solid rgb(255 255 255 / 40%);
+  background: rgb(14 10 9 / 66%);
+  color: #f1e6d6;
+  font-family: var(--sheet-sans);
+  font-size: 0.875rem;
+  line-height: 1;
+  cursor: pointer;
+}
+.gallery-tool:hover {
+  background: hsl(var(--primary));
+}
+.gallery-tool.is-danger:hover {
+  background: hsl(var(--destructive));
+}
+.gallery-flag {
+  position: absolute;
+  top: 6px;
+  left: 6px;
+  pointer-events: none;
+}
+.gallery-tag {
+  font-family: var(--sheet-caps);
+  font-size: 0.625rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: #f1e6d6;
+  border: 1px solid rgb(255 255 255 / 40%);
+  background: rgb(14 10 9 / 66%);
+  padding: 2px 8px;
+  white-space: nowrap;
+}
+
+/* NSFW, veiled for anyone who is not a friend until they click */
+.gallery-pic.is-veiled img,
+.gallery-lightbox-img.is-veiled img {
+  filter: blur(22px) saturate(0.85);
+  transform: scale(1.14);
+}
+.gallery-veil {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  pointer-events: none;
+}
+.gallery-veil .gallery-tag {
+  font-size: 0.6875rem;
+  letter-spacing: 0.3em;
+}
+.gallery-veil span:last-child {
+  color: #fff;
+  font-family: var(--sheet-sans);
+  font-size: 0.6875rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  text-shadow: 0 1px 3px rgb(0 0 0 / 70%);
+}
+
+/* the tall frame's thumbnails */
+.gallery-nav {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-width: 0;
+}
+.gallery-arrow {
+  flex: 0 0 auto;
+  width: 1.9rem;
+  height: 1.9rem;
+  padding: 0;
+  border: 1px solid hsl(var(--border));
+  background: hsl(var(--card));
+  color: hsl(var(--foreground));
+  font-family: var(--sheet-sans);
+  cursor: pointer;
+}
+.gallery-arrow:hover {
+  border-color: hsl(var(--primary));
+  color: hsl(var(--primary));
+}
+.gallery-strip {
+  display: flex;
+  flex: 1 1 auto;
+  gap: 6px;
+  min-width: 0;
+  padding: 3px 2px;
+  overflow-x: auto;
+  scrollbar-width: thin;
+}
+.gallery-thumb {
+  position: relative;
+  flex: 0 0 2.75rem;
+  height: 2.75rem;
+  padding: 0;
+  overflow: hidden;
+  border: 1px solid hsl(var(--border));
+  background: hsl(var(--muted));
+  cursor: pointer;
+}
+.gallery-thumb img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.gallery-thumb.is-on {
+  border-color: hsl(var(--primary));
+  box-shadow: 0 0 0 1px hsl(var(--primary));
+}
+.gallery-thumb.is-veiled img {
+  filter: blur(8px);
+  transform: scale(1.2);
+}
+
+/* ---------- dialogs ---------- */
+
+.gallery-dialog {
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+}
+.gallery-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+.gallery-field > span {
+  font-family: var(--sheet-caps);
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: hsl(var(--muted-foreground));
+}
+.gallery-field input,
+.gallery-field textarea,
+.gallery-field select {
+  width: 100%;
+  padding: 0.45rem 0.6rem;
+  border: 1px solid hsl(var(--border));
+  background: hsl(var(--background));
+  color: hsl(var(--foreground));
+  font: inherit;
+  font-size: 1rem;
+}
+.gallery-field textarea {
+  min-height: 5rem;
+  resize: vertical;
+}
+.gallery-check {
+  display: flex;
+  gap: 0.6rem;
+  align-items: flex-start;
+  cursor: pointer;
+}
+.gallery-check input {
+  margin-top: 0.35rem;
+  accent-color: hsl(var(--primary));
+}
+.gallery-check small {
+  display: block;
+  font-family: var(--sheet-sans);
+  font-size: 0.8125rem;
+  color: hsl(var(--muted-foreground));
+}
+.gallery-warn {
+  color: hsl(var(--destructive));
+  font-size: 0.9375rem;
+}
+.gallery-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding-top: 0.9rem;
+  border-top: 1px solid var(--sheet-hair);
+}
+.gallery-actions > div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+.gallery-btn {
+  padding: 0.35rem 0.85rem;
+  border: 1px solid hsl(var(--border));
+  background: hsl(var(--card));
+  color: hsl(var(--foreground));
+  font: inherit;
+  font-size: 1rem;
+  cursor: pointer;
+}
+.gallery-btn:hover {
+  border-color: hsl(var(--primary));
+  color: hsl(var(--primary));
+}
+.gallery-btn.is-primary {
+  background: hsl(var(--primary));
+  border-color: hsl(var(--primary));
+  color: hsl(var(--primary-foreground));
+}
+.gallery-btn.is-quiet {
+  background: transparent;
+}
+.gallery-btn.is-danger {
+  border-color: hsl(var(--destructive));
+  color: hsl(var(--destructive));
+}
+.gallery-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.gallery-pick {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(5.75rem, 1fr));
+  gap: 0.5rem;
+}
+.gallery-pick button {
+  aspect-ratio: 1;
+  padding: 0;
+  overflow: hidden;
+  border: 1px solid hsl(var(--border));
+  background: hsl(var(--muted));
+  cursor: pointer;
+}
+.gallery-pick button:hover {
+  border-color: hsl(var(--primary));
+  box-shadow: 0 0 0 1px hsl(var(--primary));
+}
+.gallery-pick img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.gallery-pick .is-upload {
+  display: grid;
+  place-items: center;
+  padding: 0.4rem;
+  border-style: dashed;
+  background: transparent;
+  color: hsl(var(--primary));
+  font-size: 0.9375rem;
+  line-height: 1.3;
+}
+
+/* the cropper, printed on the plate's ground */
+.gallery-cropper {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 13.5rem;
+  gap: 1.4rem;
+  max-height: calc(100vh - 2rem);
+  overflow-y: auto;
+  padding: 1.25rem;
+  color: #f1e6d6;
+  background: var(--plate-ground);
+  border: 1px solid rgb(255 255 255 / 16%);
+}
+.gallery-cropper .refsheet-eyebrow {
+  color: var(--plate-accent);
+}
+.gallery-cropper .gallery-field > span {
+  color: #c4b8a6;
+}
+.gallery-cropper .gallery-field select {
+  background: var(--plate-ground);
+  color: #f1e6d6;
+  border-color: rgb(255 255 255 / 16%);
+}
+.gallery-cropper .gallery-check input {
+  accent-color: var(--plate-accent);
+}
+.gallery-cropper .gallery-btn {
+  background: transparent;
+  color: #f1e6d6;
+  border-color: rgb(255 255 255 / 16%);
+}
+.gallery-cropper .gallery-btn:hover {
+  color: var(--plate-accent);
+  border-color: var(--plate-accent);
+}
+.gallery-cropper .gallery-btn.is-primary {
+  background: var(--plate-accent);
+  border-color: var(--plate-accent);
+  color: var(--plate-ground);
+}
+.gallery-cropper-stage-wrap {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 0;
+  padding: 0.6rem;
+  background: rgb(0 0 0 / 30%);
+}
+.gallery-cropper-stage {
+  position: relative;
+  display: inline-block;
+  line-height: 0;
+  touch-action: none;
+  user-select: none;
+}
+.gallery-cropper-stage img {
+  display: block;
+  max-width: 100%;
+  max-height: 64vh;
+}
+.gallery-cropper-box {
+  position: absolute;
+  cursor: move;
+  outline: 1px solid #f1e6d6;
+  box-shadow: 0 0 0 9999px rgb(10 6 5 / 62%);
+}
+.gallery-cropper-box::before,
+.gallery-cropper-box::after {
+  content: '';
+  position: absolute;
+  pointer-events: none;
+  border-color: rgb(241 230 214 / 35%);
+  border-style: dashed;
+}
+.gallery-cropper-box::before {
+  inset: 0 33.333%;
+  border-width: 0 1px;
+}
+.gallery-cropper-box::after {
+  inset: 33.333% 0;
+  border-width: 1px 0;
+}
+.gallery-cropper-handle {
+  position: absolute;
+  z-index: 1;
+  width: 18px;
+  height: 18px;
+  margin: -9px 0 0 -9px;
+  background: #f1e6d6;
+  border: 2px solid var(--plate-ground);
+  border-radius: 50%;
+}
+.gallery-cropper-handle.is-n,
+.gallery-cropper-handle.is-s {
+  width: 26px;
+  height: 12px;
+  margin: -6px 0 0 -13px;
+  border-radius: 3px;
+}
+.gallery-cropper-handle.is-e,
+.gallery-cropper-handle.is-w {
+  width: 12px;
+  height: 26px;
+  margin: -13px 0 0 -6px;
+  border-radius: 3px;
+}
+.gallery-cropper-handle.is-nw {
+  left: 0;
+  top: 0;
+  cursor: nwse-resize;
+}
+.gallery-cropper-handle.is-n {
+  left: 50%;
+  top: 0;
+  cursor: ns-resize;
+}
+.gallery-cropper-handle.is-ne {
+  left: 100%;
+  top: 0;
+  cursor: nesw-resize;
+}
+.gallery-cropper-handle.is-e {
+  left: 100%;
+  top: 50%;
+  cursor: ew-resize;
+}
+.gallery-cropper-handle.is-se {
+  left: 100%;
+  top: 100%;
+  cursor: nwse-resize;
+}
+.gallery-cropper-handle.is-s {
+  left: 50%;
+  top: 100%;
+  cursor: ns-resize;
+}
+.gallery-cropper-handle.is-sw {
+  left: 0;
+  top: 100%;
+  cursor: nesw-resize;
+}
+.gallery-cropper-handle.is-w {
+  left: 0;
+  top: 50%;
+  cursor: ew-resize;
+}
+.gallery-cropper-side {
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+  min-width: 0;
+}
+.gallery-cropper-previews {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 0.9rem;
+}
+.gallery-cropper-previews figure {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  margin: 0;
+}
+.gallery-cropper-previews figcaption {
+  font-family: var(--sheet-caps);
+  font-size: 0.5625rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: #c4b8a6;
+}
+.gallery-cropper-actions {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: auto;
+}
+.gallery-crop-preview {
+  position: relative;
+  overflow: hidden;
+  border: 1px solid rgb(255 255 255 / 16%);
+  background: rgb(255 255 255 / 5%);
+}
+.gallery-crop-preview img {
+  position: absolute;
+  display: block;
+  max-width: none;
+}
+.gallery-crop-preview.is-plate {
+  width: 6.5rem;
+  aspect-ratio: 4 / 5;
+}
+.gallery-crop-preview.is-look {
+  width: 3.25rem;
+  aspect-ratio: 1;
+}
+.gallery-crop-preview.is-chip {
+  width: 2.25rem;
+  aspect-ratio: 1;
+  border-radius: 50%;
+}
+
+/* the full-size view */
+.gallery-lightbox {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.75rem;
+  color: #f1e6d6;
+}
+.gallery-lightbox-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  width: 100%;
+}
+.gallery-lightbox-img {
+  position: relative;
+  min-width: 0;
+  overflow: hidden;
+  line-height: 0;
+}
+.gallery-lightbox-img img {
+  display: block;
+  max-width: 100%;
+  max-height: 78vh;
+  transition: filter 0.35s ease;
+}
+.gallery-lightbox .gallery-arrow {
+  background: transparent;
+  color: #f1e6d6;
+  border-color: rgb(255 255 255 / 16%);
+}
+.gallery-lightbox-cap {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  max-width: 44rem;
+  text-align: center;
+}
+/* The lightbox is portalled outside .refsheet, so it names its faces itself. */
+.gallery-lightbox-cap {
+  font-family: 'EB Garamond', Georgia, 'Times New Roman', serif;
+  font-size: 1.1rem;
+}
+.gallery-lightbox-cap b {
+  font-family: 'Cinzel', Georgia, serif;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+}
+.gallery-lightbox-cap i {
+  color: #c4b8a6;
+}
+
+@media (max-width: 52rem) {
+  .gallery-layout {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 1.5rem;
+  }
+  .gallery-viewer {
+    max-width: 22rem;
+  }
+  .gallery-looks {
+    grid-template-columns: repeat(auto-fill, minmax(6.5rem, 1fr));
+    gap: 0.6rem;
+  }
+  .gallery-cropper {
+    grid-template-columns: minmax(0, 1fr);
+    padding: 0.9rem;
+  }
+}
+/* Without hover (a touch screen) the tools would be unreachable, so they stay shown. */
+@media (hover: none) {
+  .gallery-tools {
+    opacity: 1;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .gallery-pic-open img,
+  .gallery-cap,
+  .gallery-tools,
+  .gallery-lightbox-img img {
+    transition: none;
+  }
+}
+
+.gallery-dialog-title {
+  margin: 0;
+  font-family: var(--sheet-caps);
+  font-size: 1.25rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  color: hsl(var(--primary));
+}
+
+/* The cropper's keys, as the demo lists them: the keyboard controls are otherwise unseen. */
+.gallery-cropper-keys {
+  font-family: var(--sheet-sans);
+  font-size: 0.75rem;
+  line-height: 1.6;
+  color: #c4b8a6;
+}
+.gallery-cropper-keys kbd {
+  font-family: var(--sheet-sans);
+  font-size: 0.6875rem;
+  padding: 0 4px;
+  border: 1px solid rgb(255 255 255 / 16%);
+}

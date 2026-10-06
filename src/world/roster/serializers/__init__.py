@@ -21,7 +21,6 @@ from world.roster.serializers.applications import (
     RosterApplicationSerializer,
 )
 from world.roster.serializers.characters import (
-    CharacterGallerySerializer,
     CharacterSerializer,
 )
 from world.roster.serializers.families import (
@@ -42,8 +41,6 @@ from world.roster.serializers.media import (
     ArtistSerializer,
     MediaSerializer,
     MediaUploadSerializer,
-    TenureGallerySerializer,
-    TenureMediaSerializer,
 )
 from world.roster.serializers.npc_presets import (
     NPCPresetSkillLineSerializer,
@@ -70,7 +67,6 @@ __all__ = [
     # Media serializers
     "ArtistSerializer",
     # Character serializers
-    "CharacterGallerySerializer",
     "CharacterSerializer",
     "CharacterSlotsSerializer",
     # Family serializers
@@ -109,7 +105,5 @@ __all__ = [
     "SelectEntryRequestSerializer",
     "SelectedEntryResultSerializer",
     "SlotHolderSerializer",
-    "TenureGallerySerializer",
-    "TenureMediaSerializer",
     "UnreadMailCountSerializer",
 ]

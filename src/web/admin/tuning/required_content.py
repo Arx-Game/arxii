@@ -403,6 +403,32 @@ def _probe_audere_majora_thresholds() -> ProbeResult:
     return ProbeResult(present=not missing, missing=missing, detail=detail)
 
 
+def _probe_spectacle_reaction_lines() -> ProbeResult:
+    """A generic witness line exists for every reaction a display can draw (#4147).
+
+    Consumer: `world/combat/spectacle.py` `_flavour_line`. With no GM running the scene,
+    a display's room line is the authored reaction line; a reaction with no generic row
+    (creature and kind both blank) and no more specific match posts no flavour at all.
+    A generic row with blank text counts as missing.
+    """
+    from world.combat.constants import SpectacleReaction  # noqa: PLC0415
+    from world.combat.models import SpectacleReactionLine  # noqa: PLC0415
+
+    covered = set(
+        SpectacleReactionLine.objects.filter(creature_template__isnull=True, kind="")
+        .exclude(text__regex=r"^\s*$")
+        .values_list("reaction", flat=True)
+    )
+    missing = tuple(label for value, label in SpectacleReaction.choices if value not in covered)
+    if not missing:
+        return ProbeResult(present=True)
+    detail = (
+        "No generic spectacle reaction line for: "
+        f"{', '.join(missing)}. Displays in GM-less scenes post no flavour for them."
+    )
+    return ProbeResult(present=False, missing=missing, detail=detail)
+
+
 def _probe_path_major_gift_ultimates() -> ProbeResult:
     """Every Path x MAJOR-gift grant carries at least one ultimate (#4098 decision 15).
 
@@ -1886,6 +1912,19 @@ def _declarations() -> tuple[ContentDependency, ...]:
             ),
             probe=CustomProbe(fn=_probe_audere_majora_thresholds),
             admin_model="AudereMajoraThreshold",
+        ),
+        ContentDependency(
+            key="spectacle-reaction-lines",
+            label="Spectacle reaction lines",
+            tier=DependencyTier.REQUIRED,
+            consumer="world/combat/spectacle.py _flavour_line() (GM-less display narration)",
+            consequence=(
+                "An earned display in a scene with no GM shakes the witnesses and posts "
+                "the credit line, but a reaction (shaken, faltering, broken, heartened) "
+                "with no generic authored line gets no flavour."
+            ),
+            probe=CustomProbe(fn=_probe_spectacle_reaction_lines),
+            admin_model="SpectacleReactionLine",
         ),
         ContentDependency(
             key="path-major-gift-ultimates",

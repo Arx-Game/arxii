@@ -22,14 +22,28 @@ import {
 import { combatKeys, useDispatchPlayerAction } from '@/combat/queries';
 import { registryRef } from '@/combat/duels/DuelChallengeControls';
 import { isDispatchFailure } from '@/combat/types';
+import type { DispatchResult } from '@/combat/types';
+import type { SoulfrayWarningData } from '@/scenes/actionTypes';
 import type { components } from '@/generated/api';
 import { cn } from '@/lib/utils';
 
+import { MoraleStateChip } from './MoraleStateChip';
 import './standoff.css';
 
 type StandoffView = components['schemas']['StandoffView'];
+type ApproachView = components['schemas']['ApproachView'];
 type GroupView = components['schemas']['GroupView'];
 type TermsView = components['schemas']['TermsView'];
+type DisplayTechnique = components['schemas']['DisplayTechnique'];
+
+type Fire = (key: string, kwargs?: Record<string, unknown>) => void;
+type Display = (kwargs: Record<string, unknown>) => Promise<DispatchResult | null>;
+
+/** The Soulfray warning a refused display carries; the press may be re-sent accepting it. */
+function soulfrayWarningOf(result: DispatchResult | null): SoulfrayWarningData | null {
+  const warning = result?.data?.soulfray_warning;
+  return warning ? (warning as SoulfrayWarningData) : null;
+}
 
 export interface StandoffCardProps {
   standoff: StandoffView;
@@ -87,17 +101,24 @@ export function StandoffCard({ standoff, encounterId, characterId }: StandoffCar
   const { mutateAsync, isPending } = useDispatchPlayerAction(characterId);
   const [focusByGroup, setFocusByGroup] = useState<Record<number, string>>({});
 
-  async function run(key: string, kwargs: Record<string, unknown> = {}) {
+  async function run(
+    key: string,
+    kwargs: Record<string, unknown> = {}
+  ): Promise<DispatchResult | null> {
     try {
       const result = await mutateAsync(registryRef(key, kwargs));
       const message = result.message ?? '';
+      // A Soulfray refusal is shown by the display picker, with its accept control.
+      const warned = soulfrayWarningOf(result) !== null;
       if (isDispatchFailure(result)) {
-        toast.error(message || 'That did not work.', TOAST_OPTIONS);
+        if (!warned) toast.error(message || 'That did not work.', TOAST_OPTIONS);
       } else if (message) {
         toast.success(message, TOAST_OPTIONS);
       }
+      return result;
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'That did not work.');
+      return null;
     } finally {
       await queryClient.invalidateQueries({ queryKey: combatKeys.encounter(encounterId) });
     }
@@ -188,6 +209,7 @@ export function StandoffCard({ standoff, encounterId, characterId }: StandoffCar
           }
           disabled={isPending}
           fire={fire}
+          display={(kwargs) => run('standoff_press', kwargs)}
         />
       ))}
 
@@ -211,7 +233,8 @@ interface GroupSectionProps {
   focus: string;
   onFocusChange: (value: string) => void;
   disabled: boolean;
-  fire: (key: string, kwargs?: Record<string, unknown>) => void;
+  fire: Fire;
+  display: Display;
 }
 
 function GroupSection({
@@ -221,6 +244,7 @@ function GroupSection({
   onFocusChange,
   disabled,
   fire,
+  display,
 }: GroupSectionProps) {
   const approaches = standoff.approaches.filter((a) => a.group_id === group.group_id);
   const terms = standoff.terms.filter((t) => t.group_id === group.group_id);
@@ -239,6 +263,11 @@ function GroupSection({
           <span className="font-display text-sm font-semibold">{group.name}</span>
           <span className="text-xs text-muted-foreground">x{group.member_count}</span>
         </div>
+        {group.morale_state !== 'steady' && (
+          <div>
+            <MoraleStateChip state={group.morale_state} />
+          </div>
+        )}
 
         <div className="flex flex-wrap gap-2" role="group" aria-label="What is known">
           {group.cause !== null && (
@@ -326,52 +355,23 @@ function GroupSection({
         </div>
 
         {approaches.map((approach) => (
-          <Button
+          <ApproachButton
             key={approach.approach_id}
-            variant="outline"
+            approach={approach}
+            groupId={group.group_id}
+            techniques={standoff.display_techniques}
             disabled={disabled || !isOpen}
-            data-testid={approach.hits_revealed_drive ? 'standoff-approach-hit' : undefined}
-            className={cn(
-              'h-auto w-full justify-between gap-2 whitespace-normal py-2 text-left hover:bg-muted hover:text-foreground focus-visible:ring-2',
-              approach.hits_revealed_drive &&
-                'border-accent shadow-[inset_3px_0_0_hsl(var(--accent))]'
-            )}
-            onClick={() =>
-              fire('standoff_press', {
-                group_id: group.group_id,
-                approach_id: approach.approach_id,
-              })
-            }
-          >
-            <span className="flex min-w-0 flex-col">
-              <span>{approach.name}</span>
-              <span className="text-xs font-normal text-muted-foreground">
-                {approach.check_caption}
-              </span>
-              {approach.levers.length === 0 ? (
-                <span className="text-xs font-normal text-muted-foreground">no known lever</span>
-              ) : (
-                approach.levers.map((lever) => (
-                  <span
-                    key={lever.text}
-                    className={cn(
-                      'text-xs font-normal italic',
-                      lever.is_spark ? 'text-primary' : 'text-foreground'
-                    )}
-                  >
-                    {lever.text}
-                  </span>
-                ))
-              )}
-            </span>
-            <Grade value={approach.grade} label={approach.grade_label} />
-          </Button>
+            fire={fire}
+            display={display}
+          />
         ))}
 
         {terms.length > 0 && (
           <TermsSection
             terms={terms}
             ease={group.terms_ease}
+            moraleState={group.morale_state}
+            moraleEase={group.terms_morale_ease}
             disabled={disabled || !isOpen}
             chosen={chosenTerms}
             onChoose={(id) => setChosenTermsId(id)}
@@ -386,16 +386,180 @@ function GroupSection({
   );
 }
 
+interface ApproachButtonProps {
+  approach: ApproachView;
+  groupId: number;
+  techniques: DisplayTechnique[];
+  disabled: boolean;
+  fire: Fire;
+  display: Display;
+}
+
+function ApproachButton({
+  approach,
+  groupId,
+  techniques,
+  disabled,
+  fire,
+  display,
+}: ApproachButtonProps) {
+  const [picking, setPicking] = useState(false);
+  const [techniqueId, setTechniqueId] = useState<string>('');
+  const [soulfray, setSoulfray] = useState<SoulfrayWarningData | null>(null);
+  const needsTechnique = approach.casts_technique;
+  const noTechnique = needsTechnique && techniques.length === 0;
+  const pressKwargs = { group_id: groupId, approach_id: approach.approach_id };
+
+  function onPress() {
+    if (needsTechnique) {
+      setPicking((open) => !open);
+      return;
+    }
+    fire('standoff_press', pressKwargs);
+  }
+
+  return (
+    <div className="flex flex-col gap-1.5">
+      <Button
+        variant="outline"
+        disabled={disabled || noTechnique}
+        data-testid={approach.hits_revealed_drive ? 'standoff-approach-hit' : undefined}
+        className={cn(
+          'h-auto w-full justify-between gap-2 whitespace-normal py-2 text-left hover:bg-muted hover:text-foreground focus-visible:ring-2',
+          approach.hits_revealed_drive && 'border-accent shadow-[inset_3px_0_0_hsl(var(--accent))]'
+        )}
+        onClick={onPress}
+      >
+        <span className="flex min-w-0 flex-col">
+          <span>{approach.name}</span>
+          <span className="text-xs font-normal text-muted-foreground">
+            {approach.check_caption}
+          </span>
+          {approach.levers.length === 0 ? (
+            <span className="text-xs font-normal text-muted-foreground">no known lever</span>
+          ) : (
+            approach.levers.map((lever) => (
+              <span
+                key={lever.text}
+                className={cn(
+                  'text-xs font-normal italic',
+                  lever.is_spark ? 'text-primary' : 'text-foreground'
+                )}
+              >
+                {lever.text}
+              </span>
+            ))
+          )}
+        </span>
+        <Grade value={approach.grade} label={approach.grade_label} />
+      </Button>
+      {noTechnique && (
+        <span className="text-xs text-muted-foreground">No technique to display</span>
+      )}
+      {picking && needsTechnique && !noTechnique && (
+        <div
+          className="flex flex-col gap-1.5 rounded-md border border-primary/50 bg-primary/5 p-2"
+          data-testid="standoff-technique-picker"
+        >
+          <Select value={techniqueId} onValueChange={setTechniqueId}>
+            <SelectTrigger aria-label="Technique to display" className="h-auto min-h-8 w-full">
+              <SelectValue placeholder="Choose a technique" />
+            </SelectTrigger>
+            <SelectContent>
+              {techniques.map((t) => (
+                <SelectItem key={t.technique_id} value={String(t.technique_id)}>
+                  {t.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          {soulfray ? (
+            <div
+              data-testid="standoff-soulfray-gate"
+              className={cn(
+                'rounded-md border p-2',
+                soulfray.has_death_risk
+                  ? 'border-red-500 bg-red-950/50'
+                  : 'border-amber-500 bg-amber-950/50'
+              )}
+            >
+              <p
+                className={cn(
+                  'text-xs font-bold',
+                  soulfray.has_death_risk ? 'text-red-400' : 'text-amber-400'
+                )}
+              >
+                {soulfray.has_death_risk ? 'DANGER: ' : ''}Soulfray Warning: {soulfray.stage_name}
+              </p>
+              <p className="mb-2 text-xs text-gray-300">{soulfray.stage_description}</p>
+              <div className="flex gap-2">
+                <Button size="sm" variant="outline" onClick={() => setSoulfray(null)}>
+                  Cancel
+                </Button>
+                <Button
+                  size="sm"
+                  disabled={disabled}
+                  onClick={() => {
+                    fire('standoff_press', {
+                      ...pressKwargs,
+                      technique_id: Number(techniqueId),
+                      confirm_soulfray_risk: true,
+                    });
+                    setSoulfray(null);
+                    setPicking(false);
+                  }}
+                >
+                  Accept the risk
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <Button
+              size="sm"
+              disabled={disabled || techniqueId === ''}
+              onClick={async () => {
+                const result = await display({
+                  ...pressKwargs,
+                  technique_id: Number(techniqueId),
+                });
+                const warning = soulfrayWarningOf(result);
+                if (warning) {
+                  setSoulfray(warning);
+                } else {
+                  setPicking(false);
+                }
+              }}
+            >
+              Display
+            </Button>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 interface TermsSectionProps {
   terms: TermsView[];
   ease: number;
+  moraleState: string;
+  moraleEase: number;
   disabled: boolean;
   chosen: TermsView | null;
   onChoose: (termsId: number | null) => void;
   onSpin: (terms: TermsView) => void;
 }
 
-function TermsSection({ terms, ease, disabled, chosen, onChoose, onSpin }: TermsSectionProps) {
+function TermsSection({
+  terms,
+  ease,
+  moraleState,
+  moraleEase,
+  disabled,
+  chosen,
+  onChoose,
+  onSpin,
+}: TermsSectionProps) {
   return (
     <div className="flex flex-col gap-1.5">
       <p className="text-xs text-muted-foreground">
@@ -404,6 +568,12 @@ function TermsSection({ terms, ease, disabled, chosen, onChoose, onSpin }: Terms
           ? 'Each successful press makes this easier.'
           : `${plural(ease, 'step', 'steps')} easier so far.`}
       </p>
+      {moraleEase > 0 && (
+        <p className="text-xs text-muted-foreground" data-testid="standoff-terms-morale-ease">
+          {moraleState === 'break' ? 'Broken' : 'Faltering'}: {moraleEase} more{' '}
+          {moraleEase === 1 ? 'step' : 'steps'} easier
+        </p>
+      )}
       {terms.map((term) => (
         <Button
           key={term.terms_id}

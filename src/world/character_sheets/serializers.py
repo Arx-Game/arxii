@@ -24,6 +24,7 @@ from rest_framework.request import Request
 
 from world.character_sheets.models import (
     CharacterSheet,
+    MoodOption,
     Profile,
     ProfileTextVersion,
 )
@@ -115,7 +116,8 @@ from world.magic.services.technique_personalization import (
     price_components_by_price,
 )
 from world.progression.models import CharacterPathHistory
-from world.roster.models import RosterTenure, TenureMedia
+from world.roster.models import RosterTenure
+from world.roster.services.gallery import gallery_for, look_url, portrait_url
 from world.scenes.constants import PersonaType
 from world.scenes.models import Persona
 from world.skills.models import CharacterSkillValue, CharacterSpecializationValue
@@ -546,12 +548,27 @@ def _viewer_access_level(sheet: CharacterSheet, user: Any, privileged: bool) -> 
     if current is None:
         return 0
 
+    return 1 if _viewer_is_friend(sheet, user) else 0
+
+
+def _viewer_is_friend(sheet: CharacterSheet, user: Any) -> bool:
+    """Is the viewer's account on the allow list of this character's current player.
+
+    The FRIENDS test for both the section tiers above and the Gallery's NSFW veil
+    (#4151: a friend sees every picture plain, a stranger sees NSFW ones veiled).
+    """
+    if user is None or not user.is_authenticated:
+        return False
+    roster_entry = sheet.roster_entry
+    current = roster_entry.current_tenure if roster_entry is not None else None
+    if current is None:
+        return False
+
     from evennia_extensions.models import PlayerAllowList  # noqa: PLC0415
 
-    is_friend = PlayerAllowList.objects.filter(
+    return PlayerAllowList.objects.filter(
         owner=current.player_data, allowed_player__account_id=user.pk
     ).exists()
-    return 1 if is_friend else 0
 
 
 def _section_visible(access: int, visibility: str) -> bool:
@@ -1516,7 +1533,11 @@ def _build_theming(sheet: CharacterSheet) -> ThemingSection:
     return ThemingSection(aura=aura_data)
 
 
-_PROFILE_PICTURE_SELECT_RELATED: tuple[str, ...] = ("roster_entry__profile_picture__media",)
+_PROFILE_PICTURE_SELECT_RELATED: tuple[str, ...] = (
+    "roster_entry__profile_picture__media",
+    # portrait_url refuses a look from an ended tenure (#4151), so it reads the tenure.
+    "roster_entry__profile_picture__tenure",
+)
 _PROFILE_PICTURE_PREFETCH_RELATED: tuple[str | Prefetch, ...] = ()
 
 _CURRENT_RESIDENCE_SELECT_RELATED: tuple[str, ...] = ("current_residence__objectdb",)
@@ -1615,72 +1636,50 @@ def _build_covenants(sheet: CharacterSheet) -> list[CovenantRoleEntry]:
     ]
 
 
+# #4151: the looks are read through world.roster.services.gallery (one query for the
+# gallery, one for the current player's hides), so nothing is prefetched for them here.
 _LOOKS_SELECT_RELATED: tuple[str, ...] = ()
-# No ``to_attr`` here (ADR-0278): the rows hang off the prefetch cache on the default
-# related manager, so ``tenure.media.all()`` reads them without a second query and
-# without a parallel attribute on an idmapper-shared parent.
-_LOOKS_PREFETCH_RELATED: tuple[str | Prefetch, ...] = (
-    Prefetch(
-        "roster_entry__tenures__media",
-        queryset=TenureMedia.objects.select_related("media", "gallery", "look").order_by(
-            "sort_order", "-media__uploaded_date"
-        ),
-    ),
-)
+_LOOKS_PREFETCH_RELATED: tuple[str | Prefetch, ...] = ()
 
 
-def _look_entries_for_tenure(
-    tenure, *, current_id: int | None, privileged: bool
-) -> list[LookEntry]:
-    """Build visible look entries for one tenure."""
-    entries: list[LookEntry] = []
-    for link in tenure.media.all():
-        is_current = link.pk == current_id
-        if (
-            not privileged
-            and not is_current
-            and (link.gallery is None or not link.gallery.is_public)
-        ):
-            continue
-        entries.append(
-            LookEntry(
-                tenure_media_id=link.pk,
-                url=link.media.cloudinary_url,
-                title=link.media.title,
-                look=link.look.name if link.look is not None else "",
-                is_current=is_current,
-            )
-        )
-    return entries
+def _build_looks(sheet: CharacterSheet) -> list[LookEntry]:
+    """The plate's strip (#3898, #4151): every look the character may show, worn first.
 
-
-def _build_looks(sheet: CharacterSheet, *, privileged: bool) -> list[LookEntry]:
-    """Build the looks strip, retaining only images visible to the viewer."""
+    A look is a picture with a saved 4:5 crop, from the current player's uploads or the
+    character's own art; hidden art and NSFW pictures never appear (an NSFW picture
+    cannot be a look). ``url`` is the cropped URL, the same one every portrait reads.
+    """
     roster_entry = sheet.roster_entry
     if roster_entry is None:
         return []
+    # Two queries: the gallery and the current player's hides. The worn look is marked
+    # from that same list rather than re-checked through worn_look, which would read
+    # the hides a second time.
+    worn_id = roster_entry.profile_picture_id
     entries = [
-        entry
-        for tenure in roster_entry.tenures.all()
-        for entry in _look_entries_for_tenure(
-            tenure, current_id=roster_entry.profile_picture_id, privileged=privileged
+        LookEntry(
+            tenure_media_id=link.pk,
+            url=look_url(link) or "",
+            title=link.media.title,
+            look=link.look.name if link.look is not None else "",
+            is_current=link.pk == worn_id,
         )
+        for link in gallery_for(roster_entry, include_hidden=False)
+        if link.is_look and not link.media.is_nsfw
     ]
     entries.sort(key=lambda row: not row["is_current"])
     return entries
 
 
 def _build_profile_picture(sheet: CharacterSheet) -> str | None:
-    """Return the profile picture URL or ``None``.
+    """The worn look's cropped URL, or None (#4151: the crop every surface shows).
 
-    RosterEntry.profile_picture is a FK to TenureMedia, which in turn
-    has a FK to Media containing the ``cloudinary_url``.
+    Query-free through ``portrait_url`` and the select_related above.
     """
     roster_entry = sheet.roster_entry
-    profile_pic = roster_entry.profile_picture
-    if profile_pic is None:
+    if roster_entry is None:
         return None
-    return profile_pic.media.cloudinary_url
+    return portrait_url(roster_entry)
 
 
 def _build_current_residence(sheet: CharacterSheet) -> IdNameRef | None:
@@ -2217,11 +2216,14 @@ class CharacterSheetSerializer(serializers.Serializer):
             ),
             "theming": _build_theming(sheet),
             "profile_picture": _build_profile_picture(sheet),
+            # #4151: the Gallery veils NSFW pictures for anyone who is not a friend; the
+            # owner and staff count as friends here (they see everything plain).
+            "viewer_is_friend": privileged or access >= 1 or _viewer_is_friend(sheet, user),
             "current_residence": _build_current_residence(sheet),
             # #3898 — the plate: which images the character can wear, and the ground
             # colour it is printed on. `plate_ink` is OOC chrome and ungated; it says
             # nothing about the character, only how their page is printed.
-            "looks": _build_looks(sheet, privileged=privileged),
+            "looks": _build_looks(sheet),
             "plate_ink": sheet.plate_ink,
             # Worn things are visible things, so this is ungated by tier — only the
             # layer walk decides, and only a covered piece is owner-only.
@@ -2286,3 +2288,12 @@ class ProfileTextVersionSerializer(serializers.ModelSerializer):
 
     def get_staff_edited(self, obj: ProfileTextVersion) -> bool:
         return obj.edited_by_id is not None
+
+
+class MoodOptionSerializer(serializers.ModelSerializer):
+    """A mood a look can be tagged with (#4151): what the picture shows, not a feeling."""
+
+    class Meta:
+        model = MoodOption
+        fields = ("id", "name")
+        read_only_fields = fields

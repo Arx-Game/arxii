@@ -152,6 +152,43 @@ class TestAuthoringEditorGet(AuthoringEditorTestCase):
         self.assertEqual(resp.status_code, 200)
         self.assertIn("does not exist", resp.content.decode())
 
+    def test_a_document_navigation_to_the_fragment_lands_on_the_workbench_page(self) -> None:
+        """The editor is a fragment the dashboard swaps in; opened as a page it has no
+        htmx, and every action button silently drops the edit (#4155). A browser
+        navigation (``Sec-Fetch-Dest: document``) is sent to the page with the row
+        open instead; an htmx load, and the test client, still get the fragment."""
+        entry = self._entry(lore_content="Navigation check.")
+        self.client.force_login(self.super)
+
+        resp = self.client.get(
+            reverse("admin_authoring_editor"),
+            {"model": "codex.CodexEntry", "pk": entry.pk},
+            HTTP_SEC_FETCH_DEST="document",
+        )
+
+        self.assertEqual(resp.status_code, 302)
+        self.assertEqual(
+            resp["Location"], f"{reverse('admin_authoring')}?model=codex.CodexEntry&pk={entry.pk}"
+        )
+
+    def test_the_dashboard_opens_the_row_the_querystring_names(self) -> None:
+        """`?model=&pk=` on the workbench page loads that row's editor on load (#4155),
+        with the same model doubling as the queue filter beside it."""
+        entry = self._entry(lore_content="Open on load.")
+        self.client.force_login(self.super)
+
+        resp = self.client.get(
+            reverse("admin_authoring"), {"model": "codex.CodexEntry", "pk": entry.pk}
+        )
+
+        self.assertEqual(resp.status_code, 200)
+        body = resp.content.decode()
+        self.assertIn(
+            f'hx-get="{reverse("admin_authoring_editor")}?model=codex.CodexEntry&amp;pk={entry.pk}',
+            body,
+        )
+        self.assertIn('hx-trigger="load"', body)
+
     def test_each_action_button_is_an_hx_post_targeting_the_editor_panel(self) -> None:
         """Each Save/Save-and-credit/Mark-reviewed button posts via htmx (#3019 review).
 

@@ -3998,6 +3998,40 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/character-sheets/mood-options/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description The moods a look can be tagged with (#4151), for the Gallery's mood picker. */
+    get: operations['character_sheets_mood_options_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/character-sheets/mood-options/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description The moods a look can be tagged with (#4151), for the Gallery's mood picker. */
+    get: operations['character_sheets_mood_options_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/characters/online/': {
     parameters: {
       query?: never;
@@ -19626,44 +19660,6 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
-  '/api/roster/galleries/': {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    /** @description API viewset for managing tenure galleries. */
-    get: operations['roster_galleries_list'];
-    put?: never;
-    /** @description API viewset for managing tenure galleries. */
-    post: operations['roster_galleries_create'];
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  '/api/roster/galleries/{id}/': {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    /** @description API viewset for managing tenure galleries. */
-    get: operations['roster_galleries_retrieve'];
-    /** @description API viewset for managing tenure galleries. */
-    put: operations['roster_galleries_update'];
-    post?: never;
-    /** @description API viewset for managing tenure galleries. */
-    delete: operations['roster_galleries_destroy'];
-    options?: never;
-    head?: never;
-    /** @description API viewset for managing tenure galleries. */
-    patch: operations['roster_galleries_partial_update'];
-    trace?: never;
-  };
   '/api/roster/invites/': {
     parameters: {
       query?: never;
@@ -20042,6 +20038,111 @@ export interface paths {
     };
     /** @description API viewset for listing rosters. */
     get: operations['roster_rosters_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/roster/tenure-media/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description The pictures in one character's Gallery. ``?roster_entry=<id>`` is required. */
+    get: operations['roster_tenure_media_list'];
+    put?: never;
+    /** @description Upload files into the Gallery (the player's own, or staff's character art). */
+    post: operations['roster_tenure_media_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/roster/tenure-media/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description The pictures in one character's Gallery. ``?roster_entry=<id>`` is required. */
+    get: operations['roster_tenure_media_retrieve'];
+    put?: never;
+    post?: never;
+    /** @description The one Delete: the file goes, unless another character's gallery holds it. */
+    delete: operations['roster_tenure_media_destroy'];
+    options?: never;
+    head?: never;
+    /** @description Change a picture's words, NSFW flag, mood or crop (``crop: null`` un-looks it). */
+    patch: operations['roster_tenure_media_partial_update'];
+    trace?: never;
+  };
+  '/api/roster/tenure-media/{id}/hide/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** @description Stop showing a piece of character art, for this player's time on the character. */
+    post: operations['roster_tenure_media_hide_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/roster/tenure-media/{id}/show/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** @description Show hidden character art again. */
+    post: operations['roster_tenure_media_show_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/roster/tenure-media/reorder/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** @description Put the whole Gallery in a new order. */
+    post: operations['roster_tenure_media_reorder_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/roster/tenure-media/usage/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description The requester's storage: what their own files take, and their quota. */
+    get: operations['roster_tenure_media_usage_retrieve'];
     put?: never;
     post?: never;
     delete?: never;
@@ -25340,6 +25441,7 @@ export interface components {
       check_caption: string;
       levers: components['schemas']['LeverView'][];
       hits_revealed_drive: boolean;
+      casts_technique: boolean;
     };
     /**
      * @description * `global` - Global
@@ -27236,7 +27338,6 @@ export interface components {
       /** @default  */
       readonly background: string;
       relationships?: string[];
-      galleries?: components['schemas']['CharacterGallery'][];
       /**
        * @description Core-identity covenant: the active DURANCE-type covenant role, if any (#1446).
        *
@@ -27604,16 +27705,6 @@ export interface components {
       readonly trait: components['schemas']['FormTrait'];
       readonly option: components['schemas']['FormTraitOption'];
     };
-    /** @description Serialize a single gallery entry for a character. */
-    CharacterGallery: {
-      name: string;
-      url: string;
-    };
-    /** @description Serialize a single gallery entry for a character. */
-    CharacterGalleryRequest: {
-      name: string;
-      url: string;
-    };
     /** @description Serializer for CharacterGift records. */
     CharacterGift: {
       readonly id: number;
@@ -27667,7 +27758,6 @@ export interface components {
     CharacterRequest: {
       name: string;
       relationships?: string[];
-      galleries?: components['schemas']['CharacterGalleryRequest'][];
     };
     /** @description Serializer for CharacterResonance records. */
     CharacterResonance: {
@@ -28917,6 +29007,18 @@ export interface components {
       readonly has_phases: boolean;
       readonly threat_pool_name: string | null;
     };
+    /** @description A look's 4:5 frame in the file's own pixels; height is width x 5/4. */
+    Crop: {
+      x: number;
+      y: number;
+      width: number;
+    };
+    /** @description A look's 4:5 frame in the file's own pixels; height is width x 5/4. */
+    CropRequest: {
+      x: number;
+      y: number;
+      width: number;
+    };
     /** @description Input + dispatch for ThreadViewSet.cross_xp_lock action (Spec A §3.2). */
     CrossXPLockRequest: {
       boundary_level: number;
@@ -29375,6 +29477,10 @@ export interface components {
      * @enum {string}
      */
     DiscoveryTypeEnum: 'obvious' | 'discoverable';
+    DisplayTechnique: {
+      technique_id: number;
+      name: string;
+    };
     /**
      * @description Write serializer for dissolving a Soul Tether (Spec B §13).
      *
@@ -31635,6 +31741,43 @@ export interface components {
      */
     GMTableStatusEnum: 'active' | 'archived';
     /**
+     * @description One picture as a viewer's Gallery shows it.
+     *
+     *     Context: ``account`` (the requester), ``hidden_ids`` and ``also_on`` (filled only
+     *     for the character's own player or staff), ``worn_id``.
+     */
+    GalleryPicture: {
+      readonly id: number;
+      readonly url: string;
+      readonly look_url: string | null;
+      readonly title: string;
+      readonly caption: string;
+      readonly is_nsfw: boolean;
+      readonly width: number | null;
+      readonly height: number | null;
+      readonly file_size_bytes: number | null;
+      readonly mood: string;
+      readonly mood_id: number | null;
+      readonly crop: components['schemas']['Crop'] | null;
+      readonly sort_order: number;
+      readonly is_look: boolean;
+      readonly is_character_art: boolean;
+      readonly is_worn: boolean;
+      readonly is_hidden: boolean;
+      readonly can_delete: boolean;
+      readonly also_on: string[];
+    };
+    /** @description The gallery's pictures, in their new order. */
+    GalleryReorderRequest: {
+      roster_entry: number;
+      ids: number[];
+    };
+    /** @description Files dropped onto a character's Gallery. */
+    GalleryUploadRequest: {
+      roster_entry: number;
+      images: string[];
+    };
+    /**
      * @description Serializer for listing/viewing game invites.
      *
      *     Shows the inviter's display name (not account username) to preserve
@@ -32124,6 +32267,8 @@ export interface components {
       read_check: string;
       read_grade: string;
       read_grade_label: string;
+      morale_state: string;
+      terms_morale_ease: number;
     };
     /** @description POST body for the #1036 group-vote endpoint. */
     GroupVoteRequestRequest: {
@@ -33948,6 +34093,11 @@ export interface components {
       description: string;
       created_by?: number | null;
     };
+    /** @description The requester's storage: bytes their own files take, and their quota. */
+    MediaUsage: {
+      used_bytes: number;
+      quota_bytes: number;
+    };
     /** @description Minimal read-only representation of a mentor persona. */
     MentorPersona: {
       readonly id: number;
@@ -35021,6 +35171,12 @@ export interface components {
        */
       readonly codex_entry_id: number | null;
     };
+    /** @description A mood a look can be tagged with (#4151): what the picture shows, not a feeling. */
+    MoodOption: {
+      readonly id: number;
+      /** @description Mood name (e.g., 'Angry', 'Content', 'Flirty') */
+      readonly name: string;
+    };
     /** @description A mute the requesting player owns. */
     Mute: {
       readonly id: number;
@@ -35100,7 +35256,7 @@ export interface components {
       readonly id: number;
       name: string;
       readonly character_id: number;
-      /** @description Return the cloudinary URL for the entry's profile picture, or None. */
+      /** @description The worn look's cropped URL, or None (#4151). */
       readonly profile_picture_url: string | null;
       /**
        * @description Return the PRIMARY persona's id, or None if none exists.
@@ -35823,7 +35979,13 @@ export interface components {
       readonly vulnerability_rounds_remaining: number | null;
       readonly morale: number | null;
       readonly max_morale: number | null;
-      readonly morale_state: string | null;
+      /**
+       * @description Derived STEADY/FALTER/BREAK - pure arithmetic, no query.
+       *
+       *     Public: the derived state is observable behaviour; the number stays
+       *     GM-only (#4147).
+       */
+      readonly morale_state: string;
       /** @description Public: the enrage line has fired (a transition raised the multiplier). */
       readonly is_enraged: boolean;
       /** @description Public: the break celebration named this boss and the window is open. */
@@ -37631,6 +37793,21 @@ export interface components {
       previous?: string | null;
       results: components['schemas']['GMTableMembership'][];
     };
+    PaginatedGalleryPictureList: {
+      /** @example 123 */
+      count: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results: components['schemas']['GalleryPicture'][];
+    };
     PaginatedGameInviteList: {
       /** @example 123 */
       count: number;
@@ -38072,6 +38249,21 @@ export interface components {
        */
       previous?: string | null;
       results: components['schemas']['MissionTemplate'][];
+    };
+    PaginatedMoodOptionList: {
+      /** @example 123 */
+      count: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results: components['schemas']['MoodOption'][];
     };
     PaginatedMuteList: {
       /** @example 123 */
@@ -40431,6 +40623,21 @@ export interface components {
       name?: string;
       description?: string;
     };
+    /**
+     * @description What the owner changes on one picture. Every field is optional.
+     *
+     *     ``crop`` set makes (or re-frames) a look; ``crop`` null makes it a plain picture.
+     *     ``mood`` is a ``MoodOption`` id, or null for none.
+     */
+    PatchedGalleryPictureUpdateRequest: {
+      title?: string;
+      caption?: string;
+      is_nsfw?: boolean;
+      mood?: number | null;
+      crop?: components['schemas']['CropRequest'] | null;
+      /** @description With a crop: also make this the worn look. */
+      wear?: boolean;
+    };
     /** @description Serializer for creating Gift records. */
     PatchedGiftCreateRequest: {
       /** @description Display name for this gift. */
@@ -41496,14 +41703,6 @@ export interface components {
       reach_hops?: number;
       /** @description Whether working this technique produces something bystanders can see happen, independent of whether they can tell who did it (#2734). True for the overwhelming majority -- almost any condition produces some visible effect. Set False only for a working that leaves nothing to perceive at all (a silent binding, a curse laid at a distance): a concealed cast of one of those is hidden outright from anyone who fails detection, rather than narrated without attribution. */
       has_perceptible_effect?: boolean;
-    };
-    /** @description Serialize tenure galleries. */
-    PatchedTenureGalleryRequest: {
-      name?: string;
-      /** @description Visible to other players */
-      is_public?: boolean;
-      /** @description Tenures allowed to view this private gallery */
-      allowed_viewers?: number[];
     };
     /**
      * @description Serializer for Thread records (Spec A §4.5).
@@ -44222,7 +44421,8 @@ export interface components {
     RosterEntry: {
       readonly id: number;
       readonly character: components['schemas']['Character'];
-      readonly profile_picture: components['schemas']['TenureMedia'];
+      /** @description The worn look's crop; None for a visitor without an account (#3904, #4151). */
+      readonly profile_picture_url: string | null;
       readonly tenures: components['schemas']['RosterTenure'][];
       readonly can_apply: string;
       readonly fullname: string;
@@ -44252,7 +44452,12 @@ export interface components {
       allow_applications?: boolean;
       readonly available_count: string;
     };
-    /** @description Serialize roster tenure information with nested media. */
+    /**
+     * @description Serialize roster tenure information.
+     *
+     *     No nested media (#4151): this is served to anyone by the roster list, and art is
+     *     shown only to accounts. A character's pictures come from its Gallery endpoint.
+     */
     RosterTenure: {
       readonly id: number;
       /** @description 1st, 2nd, 3rd player of this character */
@@ -44273,7 +44478,6 @@ export interface components {
       readonly tenure_notes: string;
       /** @description Cloudinary folder for this tenure's photos */
       readonly photo_folder: string;
-      readonly media: components['schemas']['TenureMedia'][];
     };
     /** @description Lightweight serializer for searching tenures. */
     RosterTenureLookup: {
@@ -46016,6 +46220,7 @@ export interface components {
       terms: components['schemas']['TermsView'][];
       sparks: components['schemas']['SparkView'][];
       shared_sparks: components['schemas']['SparkView'][];
+      display_techniques: components['schemas']['DisplayTechnique'][];
     };
     /**
      * @description Serializer for starting areas.
@@ -47316,35 +47521,6 @@ export interface components {
       readonly body_region_display: string;
       readonly equipment_layer: components['schemas']['EquipmentLayerEnum'];
       readonly equipment_layer_display: string;
-    };
-    /** @description Serialize tenure galleries. */
-    TenureGallery: {
-      readonly id: number;
-      readonly tenure: number;
-      name: string;
-      /** @description Visible to other players */
-      is_public?: boolean;
-      /** @description Tenures allowed to view this private gallery */
-      allowed_viewers?: number[];
-    };
-    /** @description Serialize tenure galleries. */
-    TenureGalleryRequest: {
-      name: string;
-      /** @description Visible to other players */
-      is_public?: boolean;
-      /** @description Tenures allowed to view this private gallery */
-      allowed_viewers?: number[];
-    };
-    /** @description Serialize media associated with a roster tenure. */
-    TenureMedia: {
-      readonly id: number;
-      readonly media: components['schemas']['Media'];
-      readonly gallery: number | null;
-      sort_order?: number;
-    };
-    /** @description Serialize media associated with a roster tenure. */
-    TenureMediaRequest: {
-      sort_order?: number;
     };
     TermsView: {
       terms_id: number;
@@ -54289,6 +54465,53 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['CharacterXPLedger'];
+        };
+      };
+    };
+  };
+  character_sheets_mood_options_list: {
+    parameters: {
+      query?: {
+        name?: string;
+        /** @description A page number within the paginated result set. */
+        page?: number;
+        /** @description Number of results to return per page. */
+        page_size?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedMoodOptionList'];
+        };
+      };
+    };
+  };
+  character_sheets_mood_options_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this Mood Option. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['MoodOption'];
         };
       };
     };
@@ -76154,139 +76377,6 @@ export interface operations {
       };
     };
   };
-  roster_galleries_list: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    requestBody?: never;
-    responses: {
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/json': components['schemas']['TenureGallery'][];
-        };
-      };
-    };
-  };
-  roster_galleries_create: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    requestBody: {
-      content: {
-        'application/json': components['schemas']['TenureGalleryRequest'];
-      };
-    };
-    responses: {
-      201: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/json': components['schemas']['TenureGallery'];
-        };
-      };
-    };
-  };
-  roster_galleries_retrieve: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        id: string;
-      };
-      cookie?: never;
-    };
-    requestBody?: never;
-    responses: {
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/json': components['schemas']['TenureGallery'];
-        };
-      };
-    };
-  };
-  roster_galleries_update: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        id: string;
-      };
-      cookie?: never;
-    };
-    requestBody: {
-      content: {
-        'application/json': components['schemas']['TenureGalleryRequest'];
-      };
-    };
-    responses: {
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/json': components['schemas']['TenureGallery'];
-        };
-      };
-    };
-  };
-  roster_galleries_destroy: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        id: string;
-      };
-      cookie?: never;
-    };
-    requestBody?: never;
-    responses: {
-      /** @description No response body */
-      204: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content?: never;
-      };
-    };
-  };
-  roster_galleries_partial_update: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        id: string;
-      };
-      cookie?: never;
-    };
-    requestBody?: {
-      content: {
-        'application/json': components['schemas']['PatchedTenureGalleryRequest'];
-      };
-    };
-    responses: {
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/json': components['schemas']['TenureGallery'];
-        };
-      };
-    };
-  };
   roster_invites_list: {
     parameters: {
       query?: {
@@ -76836,6 +76926,220 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['RosterList'];
+        };
+      };
+    };
+  };
+  roster_tenure_media_list: {
+    parameters: {
+      query: {
+        /** @description A page number within the paginated result set. */
+        page?: number;
+        /** @description Number of results to return per page. */
+        page_size?: number;
+        roster_entry: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedGalleryPictureList'];
+        };
+      };
+    };
+  };
+  roster_tenure_media_create: {
+    parameters: {
+      query: {
+        /** @description A page number within the paginated result set. */
+        page?: number;
+        /** @description Number of results to return per page. */
+        page_size?: number;
+        roster_entry: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['GalleryUploadRequest'];
+        'multipart/form-data': components['schemas']['GalleryUploadRequest'];
+        'application/x-www-form-urlencoded': components['schemas']['GalleryUploadRequest'];
+      };
+    };
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedGalleryPictureList'];
+        };
+      };
+    };
+  };
+  roster_tenure_media_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this Tenure Media. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['GalleryPicture'];
+        };
+      };
+    };
+  };
+  roster_tenure_media_destroy: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this Tenure Media. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description No response body */
+      204: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  roster_tenure_media_partial_update: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this Tenure Media. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: {
+      content: {
+        'application/json': components['schemas']['PatchedGalleryPictureUpdateRequest'];
+        'multipart/form-data': components['schemas']['PatchedGalleryPictureUpdateRequest'];
+        'application/x-www-form-urlencoded': components['schemas']['PatchedGalleryPictureUpdateRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['GalleryPicture'];
+        };
+      };
+    };
+  };
+  roster_tenure_media_hide_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this Tenure Media. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['GalleryPicture'];
+        };
+      };
+    };
+  };
+  roster_tenure_media_show_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this Tenure Media. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['GalleryPicture'];
+        };
+      };
+    };
+  };
+  roster_tenure_media_reorder_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['GalleryReorderRequest'];
+        'multipart/form-data': components['schemas']['GalleryReorderRequest'];
+        'application/x-www-form-urlencoded': components['schemas']['GalleryReorderRequest'];
+      };
+    };
+    responses: {
+      /** @description No response body */
+      204: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  roster_tenure_media_usage_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['MediaUsage'];
         };
       };
     };

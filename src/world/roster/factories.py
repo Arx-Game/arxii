@@ -28,7 +28,6 @@ from world.roster.models import (
     RosterTenure,
     RosterType,
     TenureDisplaySettings,
-    TenureGallery,
     TenureMedia,
 )
 
@@ -231,10 +230,17 @@ class TenureMediaFactory(factory_django.DjangoModelFactory):
         model = TenureMedia
 
     tenure = factory.SubFactory(RosterTenureFactory)
+    roster_entry = None
+    # A player's upload is owned by that tenure's player; character art (no tenure) by
+    # a fresh account standing in for the staff member who uploaded it.
     media = factory.SubFactory(
         MediaFactory,
         player_data=factory.LazyAttribute(
-            lambda obj: obj.factory_parent.tenure.player_data,
+            lambda obj: (
+                obj.factory_parent.tenure.player_data
+                if obj.factory_parent.tenure is not None
+                else PlayerDataFactory()
+            ),
         ),
     )
     sort_order = 0
@@ -250,17 +256,6 @@ class PlayerMailFactory(factory_django.DjangoModelFactory):
     recipient_tenure = factory.SubFactory(RosterTenureFactory)
     subject = factory.Sequence(lambda n: f"Subject {n}")
     message = factory.Sequence(lambda n: f"Message body {n}")
-
-
-class TenureGalleryFactory(factory_django.DjangoModelFactory):
-    """Factory for TenureGallery instances."""
-
-    class Meta:
-        model = TenureGallery
-
-    tenure = factory.SubFactory(RosterTenureFactory)
-    name = factory.Sequence(lambda n: f"Gallery {n}")
-    is_public = True
 
 
 class ArtistFactory(factory_django.DjangoModelFactory):

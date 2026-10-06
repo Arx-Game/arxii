@@ -16,7 +16,13 @@
   the Next control keeps the writer here; the queue under it; stats, builders
   and reference search after, where a session rarely needs to scroll.
   {% endcomment %}
-  <section class="tuning-panel" id="authoring-editor">
+  {% comment %}
+  `?model=&pk=` on this page opens that row on load (#4155): the change form's
+  "Open in Authoring Workbench" and any bookmark land here, where htmx is loaded
+  and the editor fragment swaps into this panel, never on the fragment URL alone.
+  {% endcomment %}
+  <section class="tuning-panel" id="authoring-editor"{% if open_editor_url %}
+           hx-get="{{ open_editor_url }}" hx-trigger="load" hx-swap="innerHTML"{% endif %}>
     <p>{% translate "Pick a row from the queue below, or press Next once a row is open. The editor stays here at the top of the page." %}</p>
   </section>
 

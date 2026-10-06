@@ -9,15 +9,16 @@ from rest_framework import serializers
 from web.api.character_type import derive_character_type
 from world.roster.models import Roster, RosterEntry
 from world.roster.serializers.characters import CharacterSerializer
-from world.roster.serializers.media import TenureMediaSerializer
 from world.roster.serializers.tenures import RosterTenureSerializer
+from world.roster.services.gallery import portrait_url
 
 
 class RosterEntrySerializer(serializers.ModelSerializer):
     """Serialize roster entry data with nested character info."""
 
     character = CharacterSerializer(read_only=True, source="character_sheet.character")
-    profile_picture = TenureMediaSerializer(read_only=True)
+    # #4151: the worn look's crop, and nothing for a visitor without an account (#3904).
+    profile_picture_url = serializers.SerializerMethodField()
     tenures = RosterTenureSerializer(many=True, read_only=True, source="cached_tenures")
     can_apply = serializers.SerializerMethodField()
     fullname = serializers.SerializerMethodField()
@@ -36,7 +37,7 @@ class RosterEntrySerializer(serializers.ModelSerializer):
         fields: ClassVar[tuple[str, ...]] = (
             "id",
             "character",
-            "profile_picture",
+            "profile_picture_url",
             "tenures",
             "can_apply",
             "fullname",
@@ -47,6 +48,13 @@ class RosterEntrySerializer(serializers.ModelSerializer):
             "created_for_table_name",
         )
         read_only_fields: ClassVar[tuple[str, ...]] = fields
+
+    def get_profile_picture_url(self, obj: RosterEntry) -> str | None:
+        """The worn look's crop; None for a visitor without an account (#3904, #4151)."""
+        request = self.context.get("request")
+        if request is None or not request.user.is_authenticated:
+            return None
+        return portrait_url(obj)
 
     def get_can_apply(self, obj):
         """Return whether the requester may apply to play this character."""
@@ -163,11 +171,8 @@ class MyRosterEntrySerializer(serializers.ModelSerializer):
         return derive_character_type(obj.character_sheet.character)
 
     def get_profile_picture_url(self, obj: RosterEntry) -> str | None:
-        """Return the cloudinary URL for the entry's profile picture, or None."""
-        try:
-            return obj.profile_picture.media.cloudinary_url
-        except AttributeError:
-            return None
+        """The worn look's cropped URL, or None (#4151)."""
+        return portrait_url(obj)
 
     def get_primary_persona_id(self, obj: RosterEntry) -> int | None:
         """Return the PRIMARY persona's id, or None if none exists.

@@ -14,7 +14,6 @@
  * carries is under Estate.
  */
 
-import { Link } from 'react-router-dom';
 import type { CharacterVitalsData } from '@/vitals/vitalsQueries';
 import type { CharacterSheetPayload } from '@/character_sheets/api';
 import { Entries, Entry, Glance, Heading, Ledger, Prose, Stack, Tag } from './primitives';
@@ -39,8 +38,6 @@ interface PhysicalPanelProps {
   isPrivileged: boolean;
   /** The outfit and equipped items the character is wearing, if the viewer may see them. */
   worn: WornItem[];
-  /** The character's published galleries. Every viewer sees these; they are public. */
-  galleries: { name: string; url: string }[];
   /**
    * Opens Estate, where the wardrobe is. Passed only for the character's own player —
    * the demo puts a "Change outfit" line under Wearing, and it is the one place on this
@@ -62,7 +59,6 @@ export function PhysicalPanel({
   vitals,
   isPrivileged,
   worn,
-  galleries,
   onOpenEstate,
 }: PhysicalPanelProps) {
   const { appearance, identity } = sheet;
@@ -170,19 +166,6 @@ export function PhysicalPanel({
           <Prose>
             <p>{appearance.description}</p>
           </Prose>
-        </Stack>
-      )}
-
-      {/* Every published gallery, not just whichever one the plate happens to link.
-          Images of a character are how they look, so they belong on this page. */}
-      {galleries.length > 0 && (
-        <Stack>
-          <Heading>Galleries</Heading>
-          <Entries>
-            {galleries.map((gallery) => (
-              <Entry key={gallery.url} name={<Link to={gallery.url}>{gallery.name}</Link>} />
-            ))}
-          </Entries>
         </Stack>
       )}
     </Stack>
