@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass, field
 from typing import Any
 
 from django.core import signing
 
 from actions.constants import ActionBackend, Pipeline
-from actions.definitions.use_item_helpers import target_label
 from actions.player_interface import _avail_to_player_action
 from actions.registry import get_action
 from actions.services import get_effective_consequences
@@ -20,10 +20,8 @@ from actions.target_menu_types import (
 )
 from actions.target_resolution import resolve_menu_target
 from actions.types import ActionRef
-from world.items.models import ItemInstance
 from world.mechanics.models import ApproachConsequence, ChallengeTemplateConsequence
 from world.mechanics.services import get_available_actions
-from world.scenes.models import Persona
 
 ACTION_GIVE = "give"
 ACTION_PUT_IN = "put_in"
@@ -112,7 +110,7 @@ def _candidate(
     }
 
 
-def _choices(  # noqa: C901
+def _choices(
     actor: Any,
     action: Any,
     values: dict[str, Any],
@@ -125,26 +123,32 @@ def _choices(  # noqa: C901
         page_rows, next_offset = action.recipient_candidate_page(
             actor, kwargs=values, after_pk=after_pk, page_size=CANDIDATE_PAGE_SIZE
         )
-        rows = []
-        for row in page_rows:
-            persona = Persona.objects.get(pk=row["recipient_persona_id"])
-            name = target_label(actor, persona.character_sheet.character)
-            rows.append(
-                _candidate(str(persona.pk), name, {"recipient_persona_id": persona.pk}, row)
+        rows = [
+            _candidate(
+                str(row["recipient_persona_id"]),
+                row["_menu_name"],
+                {"recipient_persona_id": row["recipient_persona_id"]},
+                row,
             )
+            for row in page_rows
+        ]
         cursor_data = {CURSOR_ITEM_PK: next_offset} if next_offset is not None else None
         return [_input("recipient_persona_id", "recipient")], rows, cursor_data
     if action.key == ACTION_PUT_IN:
         page_rows, next_offset = action.container_candidate_page(
             actor, kwargs=values, after_pk=after_pk, page_size=CANDIDATE_PAGE_SIZE
         )
-        rows = []
-        for row in page_rows:
-            item = ItemInstance.objects.get(pk=row["container_item_id"])
-            # The menu chooser is carried containers, not every service-supported destination.
-            if item.game_object is None or item.game_object.location != actor:
-                continue
-            rows.append(_candidate(str(item.pk), row["name"], {"container_item_id": item.pk}, row))
+        # The menu chooser is carried containers, not every service-supported destination.
+        rows = [
+            _candidate(
+                str(row["container_item_id"]),
+                row["name"],
+                {"container_item_id": row["container_item_id"]},
+                row,
+            )
+            for row in page_rows
+            if row["_carried_by_actor"]
+        ]
         cursor_data = {CURSOR_ITEM_PK: next_offset} if next_offset is not None else None
         return [_input("container_item_id", "container")], rows, cursor_data
     if action.key != ACTION_USE_ITEM:
@@ -225,6 +229,60 @@ def _ordinary_entry(  # noqa: PLR0913
     }
 
 
+@dataclass
+class _RiskProjectionCache:
+    """Share authored risk reads across the actions in one target-menu build."""
+
+    action_pools: dict[int, tuple[tuple[str, Any], ...]] = field(default_factory=dict)
+    effective_pools: dict[int, tuple[Any, ...]] = field(default_factory=dict)
+    fallback_consequences: dict[tuple[int, int], tuple[Any, ...]] = field(default_factory=dict)
+
+    def pools_for_action(self, action_template: Any) -> tuple[tuple[str, Any], ...]:
+        template_id = action_template.pk
+        if template_id not in self.action_pools:
+            pools = []
+            if action_template.pipeline == Pipeline.GATED:
+                pools.extend(
+                    (f"gate:{gate.gate_role}", gate.consequence_pool)
+                    for gate in action_template.gates.select_related("consequence_pool").order_by(
+                        "step_order", "pk"
+                    )
+                    if gate.consequence_pool is not None
+                )
+            if action_template.consequence_pool_id is not None:
+                pools.append(("main", action_template.consequence_pool))
+            self.action_pools[template_id] = tuple(pools)
+        return self.action_pools[template_id]
+
+    def effective_consequences(self, pool: Any) -> tuple[Any, ...]:
+        if pool.pk not in self.effective_pools:
+            self.effective_pools[pool.pk] = tuple(get_effective_consequences(pool))
+        return self.effective_pools[pool.pk]
+
+    def fallback_for(self, approach: Any, template: Any) -> tuple[Any, ...]:
+        key = (approach.pk, template.pk)
+        if key not in self.fallback_consequences:
+            overrides = list(
+                ApproachConsequence.objects.filter(approach=approach)
+                .select_related("consequence__outcome_tier")
+                .order_by("pk")
+            )
+            overridden = {link.consequence.outcome_tier_id for link in overrides}
+            links = list(
+                ChallengeTemplateConsequence.objects.filter(challenge_template=template)
+                .select_related("consequence__outcome_tier")
+                .order_by("pk")
+            )
+            consequences = [link.consequence for link in overrides]
+            consequences.extend(
+                link.consequence
+                for link in links
+                if link.consequence.outcome_tier_id not in overridden
+            )
+            self.fallback_consequences[key] = tuple(consequences)
+        return self.fallback_consequences[key]
+
+
 def _risk_row(stage: str, consequence: Any) -> dict[str, Any]:
     return {
         "stage": stage,
@@ -233,8 +291,9 @@ def _risk_row(stage: str, consequence: Any) -> dict[str, Any]:
     }
 
 
-def _risk(avail: Any) -> dict[str, Any]:
+def _risk(avail: Any, cache: _RiskProjectionCache | None = None) -> dict[str, Any]:
     """Project authored candidates, never select effects or infer safety from missing metadata."""
+    cache = cache or _RiskProjectionCache()
     approach = avail.resolved_challenge_approach
     instance = avail.resolved_challenge_instance
     template = instance.template if instance is not None else avail.resolved_default_template
@@ -242,38 +301,14 @@ def _risk(avail: Any) -> dict[str, Any]:
         return {"known": False, "character_loss_possible": None, "outcomes": []}
     rows = []
     if approach.action_template is not None:
-        action_template = approach.action_template
-        pools = []
-        if action_template.pipeline == Pipeline.GATED:
-            pools.extend(
-                (f"gate:{gate.gate_role}", gate.consequence_pool)
-                for gate in action_template.gates.select_related("consequence_pool").order_by(
-                    "step_order", "pk"
-                )
-                if gate.consequence_pool is not None
+        for stage, pool in cache.pools_for_action(approach.action_template):
+            rows.extend(
+                _risk_row(stage, weighted.consequence)
+                for weighted in cache.effective_consequences(pool)
+                if weighted.weight > 0
             )
-        if action_template.consequence_pool is not None:
-            pools.append(("main", action_template.consequence_pool))
-        for stage, pool in pools:
-            for weighted in get_effective_consequences(pool):
-                if weighted.weight > 0:
-                    rows.extend([_risk_row(stage, weighted.consequence)])
     else:
-        overrides = list(
-            ApproachConsequence.objects.filter(approach=approach)
-            .select_related("consequence__outcome_tier")
-            .order_by("pk")
-        )
-        overridden = {link.consequence.outcome_tier_id for link in overrides}
-        links = list(
-            ChallengeTemplateConsequence.objects.filter(challenge_template=template)
-            .select_related("consequence__outcome_tier")
-            .order_by("pk")
-        )
-        consequences = [link.consequence for link in overrides]
-        consequences.extend(
-            link.consequence for link in links if link.consequence.outcome_tier_id not in overridden
-        )
+        consequences = cache.fallback_for(approach, template)
         rows = [
             _risk_row("main", consequence) for consequence in consequences if consequence.weight > 0
         ]
@@ -293,6 +328,7 @@ def _authored_entries(actor: Any, resolved: Any) -> list[dict[str, Any]]:
     ):
         return []
     result = []
+    risk_cache = _RiskProjectionCache()
     for index, avail in enumerate(get_available_actions(actor, actor.location)):
         instance = avail.resolved_challenge_instance
         if instance is None:
@@ -322,7 +358,7 @@ def _authored_entries(actor: Any, resolved: Any) -> list[dict[str, Any]]:
                 "inputs": [],
                 "candidates": [],
                 "action": action,
-                "risk": _risk(avail),
+                "risk": _risk(avail, risk_cache),
             }
         )
     return result

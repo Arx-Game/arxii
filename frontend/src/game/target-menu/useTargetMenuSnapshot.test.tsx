@@ -7,7 +7,7 @@ const { mockApiFetch } = vi.hoisted(() => ({ mockApiFetch: vi.fn() }));
 vi.mock('@/evennia_replacements/api', () => ({ apiFetch: mockApiFetch }));
 
 import { useTargetMenuSnapshot } from './useTargetMenuSnapshot';
-import { targetMenuKey, type TargetMenuData } from './targetMenuApi';
+import { targetMenuKey, type TargetMenuData, type TargetMenuTarget } from './targetMenuApi';
 
 const target = { kind: 'items' as const, target_id: 5 };
 const payload = (label: string): TargetMenuData => ({
@@ -35,6 +35,29 @@ function setup() {
 
 describe('useTargetMenuSnapshot', () => {
   beforeEach(() => mockApiFetch.mockReset());
+
+  it('rejects conflicting runtime context before normalizing a snapshot', () => {
+    const invalidTarget = {
+      ...target,
+      owner_persona_id: 22,
+      container_item_id: 31,
+    } as unknown as TargetMenuTarget;
+    const client = new QueryClient();
+    const wrapper = ({ children }: PropsWithChildren) => (
+      <QueryClientProvider client={client}>{children}</QueryClientProvider>
+    );
+
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    try {
+      expect(() =>
+        renderHook(() => useTargetMenuSnapshot('account-1', 10, invalidTarget, true), { wrapper })
+      ).toThrow('owner_persona_id and container_item_id are mutually exclusive.');
+      expect(mockApiFetch).not.toHaveBeenCalled();
+    } finally {
+      consoleError.mockRestore();
+      client.clear();
+    }
+  });
 
   it('keeps the successful opening snapshot despite later cache changes', async () => {
     mockApiFetch.mockResolvedValue({ ok: true, json: async () => payload('First view') });

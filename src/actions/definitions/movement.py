@@ -50,6 +50,7 @@ from world.areas.positioning.travel import find_route
 from world.conditions.services import can_perceive
 from world.items.exceptions import InventoryError, NotReachable
 from world.scenes.models import Persona
+from world.scenes.persona_display import build_persona_display_map, viewer_context_for_account
 from world.scenes.services import active_persona_for_sheet
 
 if TYPE_CHECKING:
@@ -402,15 +403,20 @@ class GiveAction(Action):
             return (), None
         if actor.location is None:
             return (), None
-        base = Persona.objects.filter(
-            character_sheet__character__db_location=actor.location
-        ).order_by("pk")
+        base = (
+            Persona.objects.filter(character_sheet__character__db_location=actor.location)
+            .select_related(
+                "character_sheet__character",
+                "character_sheet__active_persona",
+            )
+            .order_by("pk")
+        )
         if after_pk is not None:
             base = base.filter(pk__gt=after_pk)
         page = list(base[: page_size + 1])
         has_more = len(page) > page_size
         personas = page[:page_size]
-        rows = []
+        checked_personas = []
         for persona in personas:
             candidate_kwargs = {**kwargs, _GIVE_RECIPIENT: persona.pk}
             if _give_recipient(actor, candidate_kwargs) is None:
@@ -418,14 +424,30 @@ class GiveAction(Action):
             checked = self.check_availability(
                 actor, context={"kwargs": candidate_kwargs}, pending_inputs=frozenset()
             )
-            rows.append(
-                {
-                    "recipient_persona_id": persona.pk,
-                    "name": persona.display_ic(),
-                    "available": checked.available,
-                    "reasons": list(checked.reasons),
-                }
+            checked_personas.append((persona, checked))
+        if checked_personas:
+            account = actor.db_account
+            viewer_persona_ids, viewer_sheet_ids = (
+                viewer_context_for_account(account) if account is not None else (set(), set())
             )
+            display_map = build_persona_display_map(
+                [persona for persona, _ in checked_personas],
+                viewer_persona_ids=viewer_persona_ids,
+                viewer_sheet_ids=viewer_sheet_ids,
+                is_staff=bool(account is not None and account.is_staff),
+            )
+        else:
+            display_map = {}
+        rows = [
+            {
+                "recipient_persona_id": persona.pk,
+                "name": persona.display_ic(),
+                "_menu_name": display_map[persona.pk][0],
+                "available": checked.available,
+                "reasons": list(checked.reasons),
+            }
+            for persona, checked in checked_personas
+        ]
         next_pk = personas[-1].pk if has_more and personas else None
         return tuple(rows), next_pk
 

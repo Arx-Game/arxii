@@ -1160,6 +1160,29 @@ class PlaceExitMenuActionTests(TestCase):
             and location == self.room
         )
 
+    def test_scheduled_hop_stops_when_traversal_hook_does_not_arrive(self):
+        token = uuid.uuid4()
+        self.actor.ndb.active_travel_token = token
+        self.actor.ndb.active_travel_task = object()
+        with (
+            patch.object(self.exit, "at_traverse", return_value=None),
+            patch.object(self.exit, "at_failed_traverse") as failed,
+            patch.object(self.actor, "msg", wraps=self.actor.msg) as messages,
+            patch("actions.definitions.movement.delay") as delay_next,
+            patch("actions.definitions.movement.send_room_state") as broadcast,
+        ):
+            TravelAction._do_hop(self.actor, [self.exit, self.exit], 0, token)
+
+        failed.assert_not_called()
+        assert self.actor.location == self.room
+        assert self.actor.ndb.active_travel_token is None
+        assert self.actor.ndb.active_travel_task is None
+        delay_next.assert_not_called()
+        broadcast.assert_not_called()
+        text = [call.args[0] for call in messages.call_args_list if call.args]
+        assert "Your route stops here: You cannot go that way." in text
+        assert "You arrive." not in text
+
     def test_failed_scheduled_hop_stops_without_next_hop_or_arrival(self):
         token = uuid.uuid4()
         self.actor.ndb.active_travel_token = token

@@ -101,13 +101,15 @@ export function LookDialog({
                       <TargetMenu
                         partition={partition}
                         actorId={actorId}
-                        target={{
-                          kind: 'items',
-                          target_id: item.id,
-                          ...(item.owner_persona_id !== undefined
-                            ? { owner_persona_id: item.owner_persona_id }
-                            : {}),
-                        }}
+                        target={
+                          item.owner_persona_id === undefined
+                            ? { kind: 'items', target_id: item.id }
+                            : {
+                                kind: 'items',
+                                target_id: item.id,
+                                owner_persona_id: item.owner_persona_id,
+                              }
+                        }
                       >
                         <button type="button" className="text-left hover:underline">
                           {item.display_name}{' '}

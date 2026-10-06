@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import {
+  assertTargetMenuContext,
   fetchTargetMenu,
   targetMenuInputPageKey,
   targetMenuQueryPolicy,
@@ -24,6 +25,7 @@ export function useTargetMenuSnapshot(
   candidateCursor?: string
 ) {
   const queryClient = useQueryClient();
+  assertTargetMenuContext(target);
   const [state, setState] = useState<SnapshotState>({
     identity: '',
     data: null,
@@ -31,19 +33,16 @@ export function useTargetMenuSnapshot(
     loading: false,
   });
   const generation = useRef(0);
-  const stableTarget = useMemo(
-    () => ({
-      kind: target.kind,
-      target_id: target.target_id,
-      ...(target.owner_persona_id === undefined
-        ? {}
-        : { owner_persona_id: target.owner_persona_id }),
-      ...(target.container_item_id === undefined
-        ? {}
-        : { container_item_id: target.container_item_id }),
-    }),
-    [target.container_item_id, target.kind, target.owner_persona_id, target.target_id]
-  );
+  const stableTarget = useMemo<TargetMenuTarget>(() => {
+    const base = { kind: target.kind, target_id: target.target_id };
+    if (target.owner_persona_id !== undefined) {
+      return { ...base, owner_persona_id: target.owner_persona_id };
+    }
+    if (target.container_item_id !== undefined) {
+      return { ...base, container_item_id: target.container_item_id };
+    }
+    return base;
+  }, [target.container_item_id, target.kind, target.owner_persona_id, target.target_id]);
   const identity = useMemo(
     () =>
       actorId === null || partition.length === 0

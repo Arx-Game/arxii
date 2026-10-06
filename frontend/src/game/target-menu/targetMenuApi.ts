@@ -6,12 +6,14 @@ import type { PlayerAction } from '@/scenes/actionTypes';
 
 export type TargetMenuKind = 'items' | 'objects' | 'exits' | 'places';
 
-export interface TargetMenuTarget {
+export type TargetMenuTarget = {
   kind: TargetMenuKind;
   target_id: number;
-  owner_persona_id?: number;
-  container_item_id?: number;
-}
+} & (
+  | { owner_persona_id: number; container_item_id?: never }
+  | { owner_persona_id?: never; container_item_id: number }
+  | { owner_persona_id?: never; container_item_id?: never }
+);
 
 export interface TargetMenuInput {
   name: string;
@@ -77,6 +79,15 @@ export const targetMenuInputPageKey = (
   candidateCursor?: string
 ) => [...targetMenuKey(partition, actorId, target), inputsFor, candidateCursor ?? null] as const;
 
+export function assertTargetMenuContext(target: {
+  owner_persona_id?: number;
+  container_item_id?: number;
+}): void {
+  if (target.owner_persona_id !== undefined && target.container_item_id !== undefined) {
+    throw new TypeError('owner_persona_id and container_item_id are mutually exclusive.');
+  }
+}
+
 export class TargetMenuFetchError extends Error {
   constructor(
     message: string,
@@ -95,6 +106,7 @@ export async function fetchTargetMenu(
   inputsFor?: string,
   candidateCursor?: string
 ): Promise<TargetMenuData> {
+  assertTargetMenuContext(target);
   const query = new URLSearchParams();
   if (inputsFor !== undefined) query.set('inputs_for', inputsFor);
   if (candidateCursor !== undefined) query.set('candidate_cursor', candidateCursor);

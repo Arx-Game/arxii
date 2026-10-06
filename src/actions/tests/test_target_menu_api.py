@@ -356,6 +356,7 @@ class TargetMenuAPITests(TestCase):
         )
         assert candidate["available"]
         assert self.other.key not in candidate["label"]
+        assert self.other_sheet.primary_persona.name not in candidate["label"]
         assert not self.dispatch(give).data["success"]
         self.other.location = self.remote
         assert not self.dispatch(give, candidate).data["success"]
@@ -723,6 +724,7 @@ class TargetMenuAPITests(TestCase):
     def test_authored_template_pools_null_target_and_unknown_risk(self):
         from dataclasses import replace
 
+        from actions.services import get_effective_consequences
         from actions.target_menu import _risk
         from world.mechanics.services import get_available_actions
 
@@ -777,8 +779,15 @@ class TargetMenuAPITests(TestCase):
                 if row.target_object == self.obj
             )
             null = replace(actual, target_object=None, challenge_instance_id=999991)
-            with patch(
-                "actions.target_menu.get_available_actions", return_value=[null, actual, actual]
+            with (
+                patch(
+                    "actions.target_menu.get_available_actions",
+                    return_value=[null, actual, actual],
+                ),
+                patch(
+                    "actions.target_menu.get_effective_consequences",
+                    wraps=get_effective_consequences,
+                ) as effective_pool_reads,
             ):
                 rows = [
                     row
@@ -786,6 +795,7 @@ class TargetMenuAPITests(TestCase):
                     if row["group"] == "authored"
                 ]
             assert len(rows) == 2
+            assert effective_pool_reads.call_count == 2
             assert rows[0]["key"] != rows[1]["key"]
             actual.resolved_challenge_approach = None
             assert _risk(actual) == {

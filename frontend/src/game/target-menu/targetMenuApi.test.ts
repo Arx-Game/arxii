@@ -46,15 +46,30 @@ describe('target menu API cache contract', () => {
       signal: undefined,
     });
 
-    await fetchTargetMenu(10, {
+    await fetchTargetMenu(10, { ...target, owner_persona_id: 22 });
+    expect(mockApiFetch).toHaveBeenLastCalledWith(
+      '/api/actions/characters/10/items/5/menu/?owner_persona_id=22',
+      { signal: undefined }
+    );
+
+    await fetchTargetMenu(10, { ...target, container_item_id: 31 });
+    expect(mockApiFetch).toHaveBeenLastCalledWith(
+      '/api/actions/characters/10/items/5/menu/?container_item_id=31',
+      { signal: undefined }
+    );
+  });
+
+  it('rejects conflicting context assertions before making a request', async () => {
+    const invalidTarget = {
       ...target,
       owner_persona_id: 22,
       container_item_id: 31,
-    });
-    expect(mockApiFetch).toHaveBeenLastCalledWith(
-      '/api/actions/characters/10/items/5/menu/?owner_persona_id=22&container_item_id=31',
-      { signal: undefined }
+    } as unknown as Parameters<typeof fetchTargetMenu>[1];
+
+    await expect(fetchTargetMenu(10, invalidTarget)).rejects.toThrow(
+      'owner_persona_id and container_item_id are mutually exclusive.'
     );
+    expect(mockApiFetch).not.toHaveBeenCalled();
   });
 
   it('encodes a typed candidate cursor for deliberate chooser paging', async () => {

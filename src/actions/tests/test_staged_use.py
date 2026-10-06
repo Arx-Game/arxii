@@ -500,6 +500,18 @@ class StagedUseTests(TestCase):
         assert not self.read(values).available
         condition.delete()
 
+    def test_missing_makeover_category_returns_safe_dispatch_refusal_without_write(self):
+        self.category.delete()
+        before = self.snapshot()
+
+        result = self.post(self.values())
+
+        assert not result["success"]
+        assert result["message"] == "They are not letting you restyle them."
+        assert not SocialConsentCategory.objects.filter(key="makeover").exists()
+        self.item.refresh_from_db()
+        assert self.snapshot() == before
+
     def test_real_rest_use_delivers_current_custom_item_label(self):
         self.item.game_object.key = "Raw item object key"
         for label in ("Silver styling kit", "Freshly renamed styling kit"):

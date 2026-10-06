@@ -69,6 +69,7 @@ from world.items.constants import ContainerAccessPolicy
 from world.items.exceptions import InventoryError, ItemError, NotReachable
 from world.items.models import ItemInstance
 from world.items.services.usage import use_item
+from world.scenes.persona_display import viewer_context_for_account
 
 _EQUIPMENT_TARGET_UNAVAILABLE = "That isn't available."
 _EQUIPMENT_TARGET_KEY = "target"
@@ -383,6 +384,7 @@ class PutInAction(Action):
         base = (
             ItemInstance.objects.in_play()
             .filter(scope, contained_in__isnull=True, template__is_container=True)
+            .select_related("game_object")
             .order_by("pk")
         )
         if after_pk is not None:
@@ -408,6 +410,10 @@ class PutInAction(Action):
                 {
                     "container_item_id": container.pk,
                     "name": resolved.label,
+                    "_carried_by_actor": (
+                        container.game_object is not None
+                        and container.game_object.db_location_id == actor.pk
+                    ),
                     "available": checked.available,
                     "reasons": list(checked.reasons),
                 }
@@ -912,6 +918,12 @@ class UseItemAction(Action):
         kind = item.template.on_use_target_kind
         if kind is not None and kind not in SUPPORTED_KINDS:
             return (), None
+        account = actor.db_account
+        viewer_context = (
+            viewer_context_for_account(account)
+            if kind == TargetKind.CHARACTER and account is not None
+            else (set(), set())
+        )
 
         effect = item.template.appearance_effects.filter(target_option__isnull=True).first()
         if effect is None:
@@ -920,11 +932,9 @@ class UseItemAction(Action):
             option_id = kwargs[OPTION_ID_KEY]
             if type(option_id) is not int or option_id <= 0:
                 return (), None
-            if not FormTraitOption.objects.filter(pk=option_id, trait_id=effect.trait_id).exists():
-                return (), None
             option = (
                 FormTraitOption.objects.filter(pk=option_id, trait_id=effect.trait_id)
-                .values_list("pk", "sort_order")
+                .values_list("pk", "sort_order", "display_name")
                 .first()
             )
             if option is None:
@@ -934,11 +944,21 @@ class UseItemAction(Action):
             option_ids = (
                 FormTraitOption.objects.filter(trait_id=effect.trait_id)
                 .order_by("sort_order", "pk")
-                .values_list("pk", "sort_order")
+                .values_list("pk", "sort_order", "display_name")
             )
 
-        if option_ids is not None and not isinstance(option_ids, tuple) and not option_ids.exists():
-            return (), None
+        page_option_rows = None
+        cursor_option_rows = None
+        if option_ids is not None and not isinstance(option_ids, tuple):
+            page_option_rows = tuple(option_ids[: page_size + 1])
+            if not page_option_rows:
+                return (), None
+            if after is not None:
+                cursor_option_rows = tuple(
+                    option_ids.filter(
+                        Q(sort_order__gt=after[1]) | Q(sort_order=after[1], pk__gt=after[2])
+                    )[: page_size + 1]
+                )
 
         fixed_target = USE_TARGET_KEY in kwargs or kind is None
         target_kind = kind
@@ -980,7 +1000,7 @@ class UseItemAction(Action):
             if option_ids is None:
                 if after is not None and after[0] == target_id:
                     continue
-                page_options = ((None, 0),)
+                page_options = ((None, 0, ""),)
             elif isinstance(option_ids, tuple):
                 page_options = tuple(
                     option
@@ -990,16 +1010,16 @@ class UseItemAction(Action):
                     or (option[1], option[0]) > (after[1], after[2])
                 )
             else:
-                options = option_ids
-                if after is not None and target_id == after[0]:
-                    options = options.filter(
-                        Q(sort_order__gt=after[1]) | Q(sort_order=after[1], pk__gt=after[2])
-                    )
                 remaining = page_size - raw_count
-                page_options = tuple(options[: remaining + 1])
+                options = (
+                    cursor_option_rows
+                    if after is not None and target_id == after[0]
+                    else page_option_rows
+                )
+                page_options = options[: remaining + 1]
             if not page_options:
                 continue
-            for option_id, option_sort_order in page_options:
+            for option_id, option_sort_order, option_name in page_options:
                 if raw_count >= page_size:
                     has_more = True
                     break
@@ -1019,14 +1039,6 @@ class UseItemAction(Action):
                 target, reason = use_target(actor, values, item)
                 if reason:
                     continue
-                option_name = ""
-                if option_id is not None:
-                    option_name = (
-                        FormTraitOption.objects.filter(pk=option_id)
-                        .values_list("display_name", flat=True)
-                        .first()
-                        or ""
-                    )
                 checked = self.check_availability(
                     actor, context={"kwargs": values}, pending_inputs=frozenset()
                 )
@@ -1034,7 +1046,9 @@ class UseItemAction(Action):
                     {
                         "use_target": wire,
                         "target_name": (
-                            "Yourself" if target is None else target_label(actor, target)
+                            "Yourself"
+                            if target is None
+                            else target_label(actor, target, viewer_context=viewer_context)
                         ),
                         "option_id": option_id,
                         "option_name": option_name,

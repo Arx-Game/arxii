@@ -169,21 +169,36 @@ def _object_use_target(actor: ObjectDB, pk: int, kind: str) -> tuple[ObjectDB | 
     return target, ""
 
 
-def target_label(actor: ObjectDB, target: ObjectDB) -> str:
+def persona_label_for_viewer(
+    actor: ObjectDB,
+    persona: Persona,
+    *,
+    viewer_context: tuple[set[int], set[int]] | None = None,
+) -> str:
+    """Project one persona's public label using a viewer context that may be batched."""
+    account = actor.db_account
+    personas, sheets = viewer_context or (
+        viewer_context_for_account(account) if account is not None else (set(), set())
+    )
+    name, _ = resolve_display_for_viewer(
+        persona,
+        viewer_persona_ids=personas,
+        viewer_sheet_ids=sheets,
+        is_staff=bool(account is not None and account.is_staff),
+    )
+    return name
+
+
+def target_label(
+    actor: ObjectDB,
+    target: ObjectDB,
+    *,
+    viewer_context: tuple[set[int], set[int]] | None = None,
+) -> str:
     """Project current public target label without initializing flow state."""
     if target.is_typeclass("typeclasses.characters.Character", exact=False):
         persona = active_persona_for_sheet(target.character_sheet)
-        account = actor.db_account
-        personas, sheets = (
-            viewer_context_for_account(account) if account is not None else (set(), set())
-        )
-        name, _ = resolve_display_for_viewer(
-            persona,
-            viewer_persona_ids=personas,
-            viewer_sheet_ids=sheets,
-            is_staff=bool(account is not None and account.is_staff),
-        )
-        return name
+        return persona_label_for_viewer(actor, persona, viewer_context=viewer_context)
     instance = resolve_item_instance(target)
     if instance is not None:
         return instance.display_name
