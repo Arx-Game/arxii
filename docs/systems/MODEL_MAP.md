@@ -3224,10 +3224,10 @@
 - `add_social_consent_whitelist(owner_tenure: 'RosterTenure', allowed_tenure: 'RosterTenure', category: 'SocialConsentCategory') -> 'SocialConsentWhitelist'`
 - `body_handling_category() -> 'SocialConsentCategory' - Lazy seeded row for the body-handling gate (#2852) — default-deny.`
 - `consent_blocks_targeting(*, owner_tenure: 'RosterTenure', category: 'SocialConsentCategory | None', actor_tenure: 'RosterTenure | None') -> 'bool' - True if *owner_tenure*'s consent excludes *actor_tenure* for *category* (#1909/#2170).`
+- `consent_outcome(*, owner_tenure: 'RosterTenure', category: 'SocialConsentCategory | None', actor_tenure: 'RosterTenure | None') -> 'ConsentOutcome' - ALLOW / ASK / REFUSE for *actor_tenure* acting on *owner_tenure* in *category* (#4187).`
 - `decide_consent_block(rule_mode: 'str | None', *, actor_present: 'bool', whitelisted: 'bool', blacklisted: 'bool', is_friend: 'bool', is_rival: 'bool') -> 'bool' - Per-category consent decision, given a pref exists with the master switch on.`
 - `effective_consent_mode(pref: 'SocialConsentPreference | None', category: 'SocialConsentCategory') -> 'str' - The ConsentMode governing *(pref, category)* after tree inheritance (#2170).`
 - `get_social_consent_summary(tenure: 'RosterTenure') -> 'dict'`
-- `makeover_category() -> 'SocialConsentCategory' - Lazy seeded row for the makeover/styling gate (#2632) — default-deny.`
 - `receiving_stolen_goods_category() -> 'SocialConsentCategory' - Lazy seeded row for the hot-goods receipt gate (#1985) — default-deny.`
 - `remove_social_consent_blacklist(owner_tenure: 'RosterTenure', blocked_tenure: 'RosterTenure', category: 'SocialConsentCategory') -> 'bool'`
 - `remove_social_consent_category_rule(preference: 'SocialConsentPreference', category: 'SocialConsentCategory') -> 'bool'`
@@ -4678,6 +4678,7 @@
   - adornments <- items.Adornment
   - adorned_on <- items.Adornment
   - pending_rare_find <- items.PendingRareFind
+  - makeover_requests <- items.MakeoverConsentRequest
   - ware_listing <- items.WareListing
   - market_sales <- items.MarketSale
   - vault_holding <- items.VaultHolding
@@ -4757,6 +4758,13 @@
 ### LabStationDetails
 **Foreign Keys:**
   - feature_instance -> room_features.RoomFeatureInstance [OneToOne]
+
+### MakeoverConsentRequest
+**Foreign Keys:**
+  - stylist_persona -> scenes.Persona [FK]
+  - target_persona -> scenes.Persona [FK]
+  - item_instance -> items.ItemInstance [FK]
+  - option -> forms.FormTraitOption [FK] (nullable)
 
 ### Mantle
 **Foreign Keys:**
@@ -5000,7 +5008,7 @@
 - `record_mantle_clearances(sheet: 'CharacterSheet', mantle: 'Mantle') -> 'list[MantleLevelClearance]' - Idempotently record codex-gated mantle clearances for ``sheet``.`
 - `remove_facet_from_item(*, item_facet: 'ItemFacet') -> 'None' - Remove a facet attachment and invalidate wearers' handler caches.`
 - `unequip_item(*, equipped_item: 'EquippedItem') -> 'None' - Remove an EquippedItem and invalidate the character's handler cache.`
-- `use_item(*, item_instance: 'ItemInstance', user: 'ObjectDB', target: 'ObjectDB | None' = None, descriptor: 'str | None' = None, option_id: 'int | None' = None, blend: 'bool' = False) -> 'UseItemResult' - Use an item with an on-use pool: apply its effects (deterministic when the`
+- `use_item(*, item_instance: 'ItemInstance', user: 'ObjectDB', target: 'ObjectDB | None' = None, descriptor: 'str | None' = None, option_id: 'int | None' = None, blend: 'bool' = False, consent: 'object' = None) -> 'UseItemResult' - Use an item with an on-use pool: apply its effects (deterministic when the`
 - `visible_worn_items_for(character: 'ObjectDB', observer: 'object | None' = None) -> 'list[VisibleWornItem]' - Return ``character``'s worn items visible to ``observer``.`
 
 
@@ -8571,6 +8579,8 @@
   - founded_vaults <- room_features.VaultDetails
   - vault_access_entries <- room_features.VaultAccessEntry
   - vault_access_granted <- room_features.VaultAccessEntry
+  - makeover_requests_made <- items.MakeoverConsentRequest
+  - makeover_requests_received <- items.MakeoverConsentRequest
   - npc_standings <- npc_services.NPCStanding
   - standings_held_by <- npc_services.NPCStanding
   - functionary_placements <- npc_services.Functionary

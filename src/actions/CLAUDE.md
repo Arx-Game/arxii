@@ -481,6 +481,15 @@ They do not use the command system, dispatchers, or handlers.
   enforcement now lives in the service layer (excluding dissolved rows). Re-sanctifying the
   same room after dissolution is a deferred follow-up.
 
+  `items.py`'s `UseItemAction` (#4187) — a cosmetic use on another player's character
+  whose makeover consent resolves to `ConsentOutcome.ASK` is not a refusal: `use_item`
+  raises `MakeoverRequiresConsent` before any charge, and `execute()` records a
+  `MakeoverConsentRequest` via `world.items.services.makeover_requests.offer_makeover`
+  and answers with the offer line. The `_UseTarget` prerequisite still refuses only a
+  `REFUSE` outcome, so the menu shows Use as available when the answer is "ask". The grant
+  path (`respond_to_makeover_request`) re-enters this same `execute()` with the accepted
+  row as the `makeover_consent` kwarg (internal only; the typed menu wire rejects unknown
+  keys), so reach, charges and the technique preflight are re-checked at grant time.
   `perception.py` — `LookAction` (key `"look"`) and `LookAtItemAction` (key
   `"look_at_item"`) are the shared examine seam for telnet `CmdLook` and the web
   examine-on-click dispatch. `LookAction` accepts a `target_persona_id` kwarg

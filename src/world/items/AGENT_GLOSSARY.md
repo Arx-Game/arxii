@@ -181,3 +181,18 @@ _Avoid_: allowance (that's the automatic even split), donation, gem grant (super
   `TradeSession` where both sides staked items (optionally mixed with coin).
   _Avoid_: minting a `TradeKind`/`is_barter` flag — it falls out of the
   primitive for free.
+
+- **Makeover ask** — a `MakeoverConsentRequest` (#4187): a stylist's offer to use a
+  cosmetic item on another player's character, waiting on that player's grant or
+  decline. Written only when the target's makeover consent resolves to `ASK`; nothing
+  is spent until the grant, which re-runs the stylist's ordinary Use with the accepted
+  row as proof. Lapses lazily when the stylist leaves the target's room. _Avoid_:
+  makeover request (in prose), styling invite, consent ticket.
+- **Asks before acting** — `SocialConsentCategory.asks_before_acting`: a consent
+  category whose deed waits for the target's answer (today only `makeover`). Its
+  Privacy row offers Ask me / Always allow / Never, and its whitelist skips the ask
+  while its blacklist refuses whatever the mode. _Avoid_: prompt category, interactive
+  consent.
+- **Remember (always / never)** — `MakeoverRemember`: the one-motion shortcut on a
+  makeover answer that whitelists or blacklists the stylist for the makeover category
+  as the answer is given. _Avoid_: trust / block (those name other systems).
