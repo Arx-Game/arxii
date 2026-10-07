@@ -32,6 +32,7 @@ from world.items.models import (
     ItemTemplate,
     ItemTemplateAppearanceEffect,
     ItemTemplateProperty,
+    MakeoverConsentRequest,
     Mantle,
     MantleLevelDefinition,
     MaterialBucket,
@@ -609,3 +610,22 @@ from world.items.market import admin as _market_admin  # noqa: E402, F401
 
 # Same for the trade submodule (#2990).
 from world.items.trade import admin as _trade_admin  # noqa: E402, F401
+
+
+@admin.register(MakeoverConsentRequest)
+class MakeoverConsentRequestAdmin(admin.ModelAdmin):
+    """A stylist's offer to restyle another character, and how it was answered (#4187)."""
+
+    list_display = [
+        "id",
+        "stylist_persona",
+        "target_persona",
+        "item_instance",
+        "status",
+        "requested_at",
+    ]
+    list_filter = ["status"]
+    # ItemInstanceAdmin has no search_fields, so autocomplete would fail admin.E039.
+    raw_id_fields = ["item_instance"]
+    autocomplete_fields = ["stylist_persona", "target_persona", "option"]
+    readonly_fields = ["requested_at", "responded_at"]
