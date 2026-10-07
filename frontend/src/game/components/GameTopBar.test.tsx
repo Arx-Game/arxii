@@ -279,6 +279,8 @@ describe('GameTopBar', () => {
           ic_datetime: '2026-08-20T12:00:00Z',
           year: 1247,
           month: 3,
+          month_name: 'Thawing',
+          date_display: 'the 12th of the Month of Thawing, Year 1247',
           day: 12,
           hour: 14,
           minute: 5,
@@ -293,7 +295,10 @@ describe('GameTopBar', () => {
       const readout = screen.getByLabelText('The world clock');
       expect(readout).toHaveTextContent('Summer');
       expect(readout).not.toHaveTextContent('14:05');
-      expect(readout).toHaveAttribute('title', 'Year 1247, Month 3, Day 12, 14:05 — Day');
+      expect(readout).toHaveAttribute(
+        'title',
+        'the 12th of the Month of Thawing, Year 1247, 14:05 — Day'
+      );
       expect(screen.queryByText('(Paused)')).not.toBeInTheDocument();
     });
 
@@ -303,6 +308,8 @@ describe('GameTopBar', () => {
           ic_datetime: '2026-08-20T12:00:00Z',
           year: 1247,
           month: 3,
+          month_name: 'Thawing',
+          date_display: 'the 12th of the Month of Thawing, Year 1247',
           day: 12,
           hour: 14,
           minute: 5,

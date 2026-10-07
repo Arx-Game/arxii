@@ -42,6 +42,17 @@ class ClockStateViewTests(TestCase):
         self.assertIn("hour", data)
         self.assertIn("minute", data)
 
+    def test_names_the_month_in_the_game_calendar(self) -> None:
+        """The payload carries the IC month name and the full date (#4185)."""
+        GameClockFactory(anchor_ic_time=datetime(1012, 1, 14, 17, 40, tzinfo=UTC), paused=True)
+
+        self.client.force_authenticate(user=self.account)
+        data = self.client.get("/api/clock/").json()
+
+        self.assertEqual(data["month"], 1)
+        self.assertEqual(data["month_name"], "Dreaming")
+        self.assertEqual(data["date_display"], "the 14th of the Month of Dreaming, Year 1012")
+
     def test_returns_503_when_no_clock(self) -> None:
         """Should return 503 when no clock is configured."""
         self.client.force_authenticate(user=self.account)

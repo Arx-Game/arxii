@@ -1,14 +1,16 @@
 """Tests for game clock service functions."""
 
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime, timedelta, timezone
 
-from django.test import TestCase
+from django.test import SimpleTestCase, TestCase
 
 from evennia_extensions.factories import AccountFactory
 from world.game_clock.constants import Season, TimePhase
 from world.game_clock.factories import GameClockFactory
 from world.game_clock.models import GameClockHistory
 from world.game_clock.services import (
+    format_ic_date,
+    format_ic_date_long,
     get_ic_date_for_real_time,
     get_ic_now,
     get_ic_phase,
@@ -21,6 +23,35 @@ from world.game_clock.services import (
     unpause_clock,
 )
 from world.game_clock.types import ClockError
+
+
+class IcCalendarFormatTests(SimpleTestCase):
+    """IC dates render in the game's month names (#4185)."""
+
+    def test_inline_form_carries_the_numeric_date(self) -> None:
+        self.assertEqual(
+            format_ic_date(datetime(1012, 1, 14, tzinfo=UTC)), "14 Dreaming (1-14-1012)"
+        )
+
+    def test_every_month_has_its_own_name(self) -> None:
+        names = {format_ic_date(datetime(1012, m, 1, tzinfo=UTC)).split()[1] for m in range(1, 13)}
+        self.assertEqual(len(names), 12)
+        self.assertIn("Ending", format_ic_date(datetime(1012, 12, 31, tzinfo=UTC)))
+
+    def test_long_form_uses_ordinals(self) -> None:
+        cases = {1: "1st", 2: "2nd", 3: "3rd", 4: "4th", 11: "11th", 12: "12th", 13: "13th"}
+        cases |= {21: "21st", 22: "22nd", 23: "23rd", 31: "31st"}
+        for day, ordinal in cases.items():
+            with self.subTest(day=day):
+                self.assertEqual(
+                    format_ic_date_long(datetime(1012, 10, day, tzinfo=UTC)),
+                    f"the {ordinal} of the Month of Masquing, Year 1012",
+                )
+
+    def test_reads_the_date_in_utc_like_the_clock(self) -> None:
+        """An aware datetime in another zone must not shift the IC day."""
+        late_evening_west = datetime(1012, 3, 31, 21, 0, tzinfo=timezone(timedelta(hours=-5)))
+        self.assertEqual(format_ic_date(late_evening_west), "1 Waking (4-1-1012)")
 
 
 class GetIcNowTests(TestCase):

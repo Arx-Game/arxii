@@ -68,14 +68,6 @@ export function EventDetail({
     minute: '2-digit',
   });
 
-  const icDateStr = event.scheduled_ic_time
-    ? new Date(event.scheduled_ic_time).toLocaleString(undefined, {
-        month: 'long',
-        day: 'numeric',
-        year: 'numeric',
-      })
-    : null;
-
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -99,7 +91,7 @@ export function EventDetail({
           </div>
           <div className="text-sm">
             <div className="font-medium">{dateStr}</div>
-            {icDateStr && <div className="text-muted-foreground">IC: {icDateStr}</div>}
+            <div className="text-muted-foreground">IC: {event.scheduled_ic_display}</div>
           </div>
           <TimePhaseBadge phase={event.time_phase} showLabel />
         </div>

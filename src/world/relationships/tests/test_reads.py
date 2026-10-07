@@ -1,5 +1,7 @@
 """Per-audience reads (#3957)."""
 
+from datetime import UTC, datetime
+
 from django.test import TestCase
 
 from world.character_sheets.factories import CharacterSheetFactory
@@ -90,6 +92,20 @@ class ReadTests(TestCase):
         self.assertEqual(titles, ["Theirs", "White"])
         titles = [i["title"] for i in tie_stream(self.ab, self.a, False, account=None)]
         self.assertIn("Black", titles)
+
+    def test_stream_spells_the_ic_date_in_the_game_calendar(self):
+        """A dated entry carries its IC date in the game's month names (#4185)."""
+        JournalEntryFactory(
+            author=self.a,
+            about=self.b,
+            is_public=True,
+            title="Dated",
+            ic_timestamp=datetime(1012, 9, 22, 10, 0, tzinfo=UTC),
+        )
+        JournalEntryFactory(author=self.a, about=self.b, is_public=True, title="Undated")
+        items = {i["title"]: i for i in tie_stream(self.ab, self.b, False, account=None)}
+        self.assertEqual(items["Dated"]["ic_timestamp_display"], "22 Unyielding (9-22-1012)")
+        self.assertIsNone(items["Undated"]["ic_timestamp_display"])
 
     def test_stream_staff_with_no_viewer_sees_black_entries(self):
         JournalEntryFactory(author=self.a, about=self.b, is_public=False, title="Black")

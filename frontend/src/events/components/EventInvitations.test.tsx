@@ -88,6 +88,7 @@ function eventWithInvitations(invitations: EventInvitation[]): EventDetailData {
     is_public: true,
     scheduled_real_time: '2026-08-10T20:00:00Z',
     scheduled_ic_time: null,
+    scheduled_ic_display: '14 Dreaming (1-14-1012)',
     time_phase: 'night',
     primary_host_name: 'Host',
     started_at: null,

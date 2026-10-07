@@ -79,8 +79,10 @@ class CmdTime(ArxCommand):
         descriptor = conditions.phase.label if conditions.phase is not None else "an hour"
         if conditions.season is not None:
             descriptor = f"{descriptor} in {conditions.season.label}"
-        stamp = conditions.ic_time.strftime("%H:%M, %B %d, %Y")
-        return f"|wIt is {descriptor} — {stamp}.|n"
+        from world.game_clock.services import format_ic_date_long  # noqa: PLC0415
+
+        clock = conditions.ic_time.strftime("%H:%M")
+        return f"|wIt is {descriptor} — {clock}, {format_ic_date_long(conditions.ic_time)}.|n"
 
     @staticmethod
     def _server_time_line() -> str:

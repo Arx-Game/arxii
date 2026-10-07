@@ -53,6 +53,7 @@ from world.character_sheets.models import DAYS_IN_MONTH, Gender, Heritage, Prono
 from world.classes.models import Path, PathStage
 from world.forms.models import Build, HeightBand
 from world.forms.serializers import BuildSerializer, HeightBandSerializer
+from world.game_clock.constants import IC_MONTH_NAMES
 from world.game_clock.services import get_ic_now
 from world.magic.models import Gift, GlimpseTag, Technique, Tradition
 from world.magic.serializers import TechniqueEffectSummarySerializer
@@ -1298,6 +1299,9 @@ class CharacterDraftSerializer(serializers.ModelSerializer):
     # appearance stage clamps to these instead of knowing the rule.
     age_min = serializers.SerializerMethodField()
     age_max = serializers.SerializerMethodField()
+    # The birthday picker's month names in calendar order (#4185), so the folio
+    # never keeps its own copy of the game's calendar.
+    ic_month_names = serializers.SerializerMethodField()
     # Distinctions the Upbringing answers grant, shown locked in the Distinctions
     # stage so a player can't also hand-pick one already bundled in (#3660).
     bundled_distinctions = serializers.SerializerMethodField()
@@ -1369,6 +1373,7 @@ class CharacterDraftSerializer(serializers.ModelSerializer):
             "starting_technique_picks",
             "age_min",
             "age_max",
+            "ic_month_names",
             "bundled_distinctions",
             "derived_anchors",
             "enemy_offers",
@@ -1381,6 +1386,7 @@ class CharacterDraftSerializer(serializers.ModelSerializer):
             "id",
             "age_min",
             "age_max",
+            "ic_month_names",
             "enemy_offers",
             "enemy_price_tables",
             "enemy_degree_grants",
@@ -1452,6 +1458,10 @@ class CharacterDraftSerializer(serializers.ModelSerializer):
 
     def get_age_max(self, obj: CharacterDraft) -> int:
         return age_bounds(obj.selected_species, obj.selected_beginnings, get_ic_now()).maximum
+
+    @extend_schema_field(serializers.ListField(child=serializers.CharField()))
+    def get_ic_month_names(self, _obj: CharacterDraft) -> list[str]:
+        return [IC_MONTH_NAMES[month] for month in sorted(IC_MONTH_NAMES)]
 
     @extend_schema_field(serializers.ListField(child=serializers.DictField()))
     def get_bundled_distinctions(self, obj: CharacterDraft) -> list[dict]:

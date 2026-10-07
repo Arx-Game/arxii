@@ -1,23 +1,14 @@
 /**
- * The two dates a journal entry carries (#3941).
+ * The posting date a journal entry carries (#3941).
  *
  * An entry has an IC date (when the character wrote it, in the world's own
- * calendar) and a posting date (when the player posted it). The row shows the
- * IC one when there is one and flips to the posting date on a click, so both
- * spellings live here rather than in the row.
+ * calendar) and a posting date (when the player posted it). The IC one arrives
+ * already spelled in the game's calendar as `ic_timestamp_display` (#4185), so
+ * only the posting date is formatted here.
  *
- * Both format in UTC. An IC year can be three digits or fewer, which `Intl`
- * handles; a floating local timezone would make the same entry read as two
- * different days for two readers of the same stream, which the IC calendar in
- * particular cannot afford.
+ * It formats in UTC: a floating local timezone would make the same entry read
+ * as two different days for two readers of the same stream.
  */
-
-const IC_FORMAT = new Intl.DateTimeFormat('en-GB', {
-  day: 'numeric',
-  month: 'long',
-  year: 'numeric',
-  timeZone: 'UTC',
-});
 
 const POSTING_FORMAT = new Intl.DateTimeFormat('en-GB', {
   day: 'numeric',
@@ -25,11 +16,6 @@ const POSTING_FORMAT = new Intl.DateTimeFormat('en-GB', {
   year: 'numeric',
   timeZone: 'UTC',
 });
-
-/** `22 September 1012` — the in-character date, spelled out. */
-export function formatIcDate(iso: string): string {
-  return IC_FORMAT.format(new Date(iso));
-}
 
 /**
  * `17 Sep 2026` — the posting date, abbreviated.

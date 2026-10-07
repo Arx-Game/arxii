@@ -32,6 +32,7 @@ const rows = [
     about_name: 'Ilsavet du Verane',
     author_persona_id: 1,
     ic_timestamp: null,
+    ic_timestamp_display: null,
     can_retort: false,
     is_own: false,
   },

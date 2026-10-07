@@ -52,7 +52,7 @@ class CharacterItemDataHandlerTests(TestCase):
         """The birthday property renders the celebrated month/day pair (#2756)."""
         CharacterSheetFactory(character=self.character, birthday_month=3, birthday_day=15)
 
-        assert self.handler.birthday == "March 15"
+        assert self.handler.birthday == "15 Thawing (3-15)"
 
     def test_attribute_error_when_no_source_found(self):
         """Test AttributeError when no data source has the attribute."""

@@ -125,6 +125,10 @@ class AgeBoundsSerializerTests(TestCase):
         data = CharacterDraftSerializer(draft, context={"request": request}).data
         assert data["age_min"] == AGE_MIN
         assert data["age_max"] == 20
+        # The birthday picker's months, in calendar order (#4185).
+        assert data["ic_month_names"][0] == "Dreaming"
+        assert data["ic_month_names"][11] == "Ending"
+        assert len(data["ic_month_names"]) == 12
         assert data["selected_beginnings"]["heritage"] == {
             "name": "Misbegotten",
             "first_appeared_ic_year": 980,

@@ -93,6 +93,7 @@ function makeEntry(overrides: Partial<JournalEntrySummary> = {}): JournalEntrySu
     about_name: null,
     author_persona_id: 3,
     ic_timestamp: null,
+    ic_timestamp_display: null,
     can_retort: false,
     is_own: false,
     ...overrides,

@@ -7,7 +7,7 @@ from django.test import TestCase
 from evennia_extensions.factories import RoomProfileFactory
 from world.character_sheets.types import ActivityState, LifecycleState
 from world.game_clock.factories import GameClockFactory
-from world.game_clock.services import get_ic_now
+from world.game_clock.services import format_ic_month_day, get_ic_now
 from world.roster.factories import RosterEntryFactory, RosterFactory
 from world.roster.models.choices import RosterType
 from world.tidings.constants import FeedItemKind
@@ -43,6 +43,10 @@ class BirthdayFeedTests(TestCase):
         items = self._birthday_items()
         self.assertEqual(len(items), 1)
         self.assertIn(entry.character_sheet.character.db_key, items[0].headline)
+        sheet = entry.character_sheet
+        self.assertIn(
+            format_ic_month_day(sheet.birthday_month, sheet.birthday_day), items[0].headline
+        )
 
     def test_birthday_beyond_the_window_is_not_listed(self):
         self._entry(days_ahead=40)

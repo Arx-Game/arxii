@@ -135,6 +135,7 @@ class TieStreamItemSerializer(serializers.Serializer):
     capstone_tier = serializers.IntegerField(allow_null=True)
     created_at = serializers.CharField()
     ic_timestamp = serializers.CharField(allow_null=True)
+    ic_timestamp_display = serializers.CharField(allow_null=True)
 
 
 class TieWriteResultSerializer(serializers.Serializer):

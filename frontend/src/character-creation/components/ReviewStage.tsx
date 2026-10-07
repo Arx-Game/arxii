@@ -159,23 +159,9 @@ export function ReviewStage({ draft, isStaff, onStageSelect }: ReviewStageProps)
     { label: 'Protects at all costs', text: draftData.protect, stage: Stage.FINAL_TOUCHES },
     { label: 'Deathly afraid of', text: draftData.fear, stage: Stage.FINAL_TOUCHES },
   ];
-  const months = [
-    'January',
-    'February',
-    'March',
-    'April',
-    'May',
-    'June',
-    'July',
-    'August',
-    'September',
-    'October',
-    'November',
-    'December',
-  ];
   const birthday =
     draft.birthday_month && draft.birthday_day
-      ? `${months[draft.birthday_month - 1]} ${draft.birthday_day}`
+      ? `${draft.birthday_day} ${draft.ic_month_names[draft.birthday_month - 1]}`
       : undefined;
   const record: { label: string; value?: string; stage: Stage }[] = [
     { label: 'Homeland', value: draft.selected_area?.name, stage: Stage.ORIGIN },

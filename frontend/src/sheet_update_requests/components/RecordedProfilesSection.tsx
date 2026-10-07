@@ -28,6 +28,8 @@ interface RecordedProfile {
   created_at: string;
   recorded_at: string | null;
   ic_date: string | null;
+  /** IC date in the game's calendar, e.g. "14 Dreaming (1-14-1012)" (#4185). */
+  ic_date_display: string | null;
   era_season_number: number | null;
 }
 
@@ -115,7 +117,7 @@ export function RecordedProfilesSection() {
               <span>
                 {profile.recorded_by_label}
                 {profile.era_season_number != null && ` · Season ${profile.era_season_number}`}
-                {profile.ic_date && ` · ${new Date(profile.ic_date).toLocaleDateString()}`}
+                {profile.ic_date_display && ` · ${profile.ic_date_display}`}
               </span>
               <Badge variant="secondary">recorded</Badge>
             </div>

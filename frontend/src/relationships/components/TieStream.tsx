@@ -19,7 +19,7 @@ import '@/journals/journals.css';
 import { PillButton } from '@/journals/components/Pill';
 import { EntryBand, EntryBody, EntryMeta, EntryTitle } from '@/journals/components/EntryRowParts';
 import { BLACK_JOURNAL_BAND, entryRowClass } from '@/journals/rows';
-import { formatIcDate, formatPostingDate } from '@/journals/dates';
+import { formatPostingDate } from '@/journals/dates';
 import { useTieStream } from '@/relationships/queries';
 import type { TieStreamItem } from '../api';
 
@@ -146,9 +146,7 @@ export function TieStream({
       {shown.map((item) => {
         const band = bandText(item);
         const isScene = item.kind === 'scene';
-        const date = item.ic_timestamp
-          ? formatIcDate(item.ic_timestamp)
-          : formatPostingDate(item.created_at);
+        const date = item.ic_timestamp_display ?? formatPostingDate(item.created_at);
         return (
           <article
             key={`${item.kind}-${item.id}`}

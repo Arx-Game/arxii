@@ -24,6 +24,30 @@ Per-task tracking of last run time. Tasks are auto-created on first scheduler ti
 - `last_run_at` — real time of last execution
 - `enabled` — staff can disable individual tasks via admin
 
+## Calendar (#4185)
+
+IC dates are plain Gregorian datetimes; the game's calendar is a naming layer over
+them. `constants.IC_MONTH_NAMES` maps month 1-12 to Dreaming, Choosing, Thawing,
+Waking, Rising, Vowing, Enduring, Gathering, Unyielding, Masquing, Keeping, Ending
+(each reads as "the Month of ___"). Seasons, moons, birthdays and every stored date
+are unaffected.
+
+**Every IC date a player sees goes through these formatters**, never `strftime("%B")`,
+`calendar.month_name` or the browser's `toLocaleDateString`:
+
+| Helper | Output | Used by |
+|---|---|---|
+| `format_ic_date(dt)` | `14 Dreaming (1-14-1012)` | `serializers.IcDateDisplayField` (events, journals, profile versions, recorded profiles); the relationship tie stream |
+| `format_ic_month_day(m, d)` | `14 Dreaming (1-14)` | birthdays (item_data, tidings, sheet identity) |
+| `format_ic_date_long(dt)` | `the 14th of the Month of Dreaming, Year 1012` | clock API `date_display`, telnet `time` |
+| `ic_month_name(m)` | `Dreaming` | clock API `month_name` |
+
+The numeric date rides along on the inline forms because players won't remember the
+names at first (ruled on #4185). Formatters read the date in UTC, as the clock does, so
+a serializer's display zone can't move the day. The frontend keeps no copy of the
+names: it renders the `*_display` strings, and the CG birthday picker reads
+`ic_month_names` from the draft payload.
+
 ## Service Functions
 
 ### Clock Queries
@@ -117,7 +141,7 @@ money bands rather than being one task.
 
 ## API Endpoints
 
-- `GET /api/clock/` — current IC time, phase, season, light level
+- `GET /api/clock/` — current IC time, phase, season, light level, `month_name`, `date_display`
 - `GET /api/clock/convert/` — date conversion (IC<>real)
 - `POST /api/clock/adjust/` — set IC time (staff only)
 - `POST /api/clock/ratio/` — change time ratio (staff only)

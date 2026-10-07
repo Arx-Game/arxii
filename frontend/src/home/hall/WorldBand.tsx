@@ -7,8 +7,8 @@
  * (tidings-split ruling — public awareness scopes to the ACTIVE character,
  * never the account, mirrors `TidingsPage`).
  *
- * No month-name helper exists anywhere in the frontend (verified #3412 T3
- * recon) — Time renders the clock's raw fields, no invented calendar lore.
+ * Time renders the clock's `date_display` (#4185): the month names live on
+ * the backend (`world/game_clock/constants.py`), never in the frontend.
  */
 import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
@@ -56,8 +56,7 @@ function TimePlate() {
       {clock ? (
         <div className="space-y-1 text-sm">
           <p>
-            Year {clock.year}, Month {clock.month}, Day {clock.day} — {pad(clock.hour)}:
-            {pad(clock.minute)}
+            {capitalize(clock.date_display)} — {pad(clock.hour)}:{pad(clock.minute)}
           </p>
           <p className="text-muted-foreground">
             {capitalize(clock.season)}, {capitalize(clock.phase)}

@@ -2649,6 +2649,7 @@
   - written_by -> contributors.ContentContributor [FK] (nullable)
   - reviewed_by -> contributors.ContentContributor [FK] (nullable)
 **Pointed to by:**
+  - manifest_options <- magic.TechniqueManifestOption
   - entries <- combat.ThreatPoolEntry
   - opponents <- combat.CombatOpponent
   - bossphase_set <- combat.BossPhase
@@ -3148,6 +3149,7 @@
 - `is_concealed(target: 'ObjectDB') -> bool - True if *target* holds any active perception-concealing condition.`
 - `is_untargetable(target: 'ObjectDB') -> bool - True if *target* holds any active intangibility condition.`
 - `opponent_condition_opposition(objectdb: 'ObjectDB', check_type: world.checks.models.CheckType) -> int - Difficulty delta an opposing entity's active conditions contribute (#3384).`
+- `passes_concealment_check(actor: 'ObjectDB', target: 'ObjectDB') -> bool - Check concealment after the caller has established readable spatial scope.`
 - `perform_check_with_modifiers(character: 'ObjectDB', check_type: 'CheckType', target_difficulty: int = 0, extra_modifiers: int = 0, effort_level: str | None = None, fatigue_penalty: int = 0, specialization: 'Specialization | None' = None, *, situation_ctx: 'SituationContext | None' = None, level_override: int | None = None, scene: 'Scene | None' = None, extra_contributions: 'list[ModifierContribution] | None' = None, skip_fashion: bool = False, stat_override: str | int | None = None) -> world.checks.types.CheckResult - Run a check with all character modifiers gathered automatically.`
 - `perform_treatment(helper_sheet: 'CharacterSheet', target_sheet: 'CharacterSheet', scene: 'Scene', treatment: world.conditions.models.TreatmentTemplate, target_effect: 'ConditionInstance | PendingAlteration', bond_thread: 'Thread | None' = None, skip_engagement_gate: bool = False, power_intensity: int = 0) -> world.conditions.types.TreatmentOutcome - Resolve a TreatmentTemplate against an effect instance.`
 - `priced_percent_severity(*, eff_intensity: int, target: 'ObjectDB') -> int - Apply-time percent severity for the bounded team-damage-percent lane (#2643).`
@@ -3928,6 +3930,7 @@
 - `get_fatigue_penalty(character_sheet: 'CharacterSheet', category: 'str') -> 'int' - Return the check penalty for the current fatigue zone.`
 - `get_fatigue_percentage(character_sheet: 'CharacterSheet', category: 'str') -> 'float' - Return current fatigue as a percentage of capacity.`
 - `get_fatigue_zone(character_sheet: 'CharacterSheet', category: 'str') -> 'str' - Return the FatigueZone based on current fatigue percentage.`
+- `get_fatigue_zone_readonly(character_sheet: 'CharacterSheet', category: 'str') -> 'str' - Read a zone without materializing the default fatigue pool.`
 - `get_full_status(character_sheet: 'CharacterSheet', *, pool: 'FatiguePool | None') -> 'dict' - Get fatigue status for all three categories in one pass.`
 - `get_or_create_fatigue_pool(character_sheet: 'CharacterSheet') -> 'FatiguePool' - Get or create a FatiguePool for a character sheet.`
 - `perform_check_with_modifiers(character: 'ObjectDB', check_type: 'CheckType', target_difficulty: int = 0, extra_modifiers: int = 0, effort_level: str | None = None, fatigue_penalty: int = 0, specialization: 'Specialization | None' = None, *, situation_ctx: 'SituationContext | None' = None, level_override: int | None = None, scene: 'Scene | None' = None, extra_contributions: 'list[ModifierContribution] | None' = None, skip_fashion: bool = False, stat_override: str | int | None = None) -> world.checks.types.CheckResult - Run a check with all character modifiers gathered automatically.`
@@ -4146,6 +4149,9 @@
 ### ScheduledTaskRecord
 
 ### Service Functions
+- `format_ic_date(ic_dt: datetime.datetime) -> str - Inline IC date: "14 Dreaming (1-14-1012)".`
+- `format_ic_date_long(ic_dt: datetime.datetime) -> str - Full IC date for tooltips: "the 14th of the Month of Dreaming, Year 1012".`
+- `format_ic_month_day(month: int, day: int) -> str - A yearless IC date such as a birthday: "14 Dreaming (1-14)".`
 - `get_ic_date_for_real_time(real_dt: datetime.datetime) -> datetime.datetime | None - Convert a real datetime to IC datetime, or None if no clock exists.`
 - `get_ic_now(*, real_now: datetime.datetime | None = None) -> datetime.datetime | None - Return the current IC datetime, or None if no clock exists.`
 - `get_ic_phase(*, real_now: datetime.datetime | None = None) -> world.game_clock.constants.TimePhase | None - Return the current time-of-day phase, or None if no clock exists.`
@@ -4154,6 +4160,7 @@
 - `get_moon_illumination(*, real_now: datetime.datetime | None = None) -> float | None - Return the current 0.0-1.0 lunar illumination, or None if no clock exists.`
 - `get_moon_phase(*, real_now: datetime.datetime | None = None) -> world.game_clock.constants.MoonPhase | None - Return the current lunar phase, or None if no clock exists.`
 - `get_real_time_for_ic_date(ic_dt: datetime.datetime) -> datetime.datetime | None - Convert an IC datetime to real datetime, or None if no clock exists.`
+- `ic_month_name(month: int) -> str - The IC name of a 1-indexed month, e.g. 1 -> "Dreaming".`
 - `light_level_from_ic_time(ic_now: datetime.datetime) -> float - Derive a smooth 0.0-1.0 light level from a concrete IC datetime.`
 - `moon_cycle_fraction_from_ic_time(ic_now: datetime.datetime) -> float - Position in the synodic cycle for a concrete IC datetime, in [0, 1).`
 - `moon_illumination_from_ic_time(ic_now: datetime.datetime) -> float - Smooth 0.0-1.0 illuminated fraction (0 = new, 1 = full).`
@@ -6215,6 +6222,7 @@
   - technique -> magic.Technique [FK]
   - being -> worship.WorshippedBeing [FK] (nullable)
   - archetype -> companions.CompanionArchetype [FK] (nullable)
+  - threat_pool -> combat.ThreatPool [FK] (nullable)
 **Pointed to by:**
   - character_choices <- magic.CharacterManifestation
 
@@ -10488,6 +10496,7 @@
 ## world.tidings
 
 ### Service Functions
+- `format_ic_month_day(month: int, day: int) -> str - A yearless IC date such as a birthday: "14 Dreaming (1-14)".`
 - `house_feed_for(organization, *, limit: 'int' = 30) -> 'list[PublicFeedItem]' - The house feed (#1884): what the household hears about its own people.`
 - `hub_feed_for_room(room: 'ObjectDB | None', *, limit: 'int' = 30) -> 'list[PublicFeedItem]' - The civic-hub scope (#1450): the local slice of awareness at ``room``.`
 - `public_feed_for(persona: 'Persona', *, limit: 'int' = 30) -> 'list[PublicFeedItem]' - Recent public events the persona's societies are aware of, newest first (viewer scope).`

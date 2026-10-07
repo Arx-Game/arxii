@@ -33,3 +33,4 @@ class TieStreamItem(TypedDict):
     capstone_tier: int | None
     created_at: str
     ic_timestamp: str | None
+    ic_timestamp_display: str | None

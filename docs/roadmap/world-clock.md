@@ -20,7 +20,7 @@ The central time engine that drives the living world. An anchor-based game clock
 - **Scheduler-agnostic tasks:** Task logic lives in app service functions. Scheduler only calls them — swappable from Evennia Scripts to Celery later.
 - **Historical IC timestamps:** Stored as concrete values on models (journals, scenes, events). Unaffected by anchor changes.
 - **Season-adjusted phases:** Day/night boundaries shift by season (longer summer days, longer winter nights).
-- **Calendar:** 12 months, 4 seasons, mapped real-world structure. Numbered months now, lore names added via config later.
+- **Calendar:** 12 months, 4 seasons, mapped real-world structure. The months carry the game's names (#4185, below).
 
 ## What Exists
 - **GameWeek model:** Formal game week tracking with `GameWeek` and `GameSeason` models. All weekly systems FK to `GameWeek` instead of storing raw dates. Unified `weekly_rollover` cron orchestrator advances the week then runs all weekly processors in sequence.
@@ -72,7 +72,14 @@ The central time engine that drives the living world. An anchor-based game clock
   NIGHT) and registers the `species.sun_reconcile` cron (5-min, DRAIN band) —
   day/night is now a real mechanical pressure for sun-sensitive species, with
   clothing/shade/magic mitigation and an AFK auto-flee guard.
-- IC calendar lore names (brainstorm separately, populate via config table)
+- ~~IC calendar lore names~~ — **built (#4185)** as a code constant, not a config
+  table: `IC_MONTH_NAMES` in `world/game_clock/constants.py` (Dreaming, Choosing,
+  Thawing, Waking, Rising, Vowing, Enduring, Gathering, Unyielding, Masquing,
+  Keeping, Ending), 1:1 with Gregorian months so all date arithmetic is untouched.
+  Every IC date a player sees reads through `world.game_clock.services`' formatters:
+  inline `14 Dreaming (1-14-1012)`, birthdays `14 Dreaming (1-14)`, full
+  `the 14th of the Month of Dreaming, Year 1012` (clock tooltip, Hall Time band,
+  telnet `time`). Feast days / holidays (the other half of #2762) remain open.
 - ~~Aging mechanics~~ — **built (#2756)**: three age axes on CharacterSheet
   (chronological derives from `ic_birth_year` vs `get_ic_now()`; biological =
   matured + withered years), deterministic Maturation Points, IC-cadence aging

@@ -154,3 +154,20 @@ class TimeCommandHelperTests(APITestCase):
         self.assertEqual(CmdTime._moon_lines(day), [])
         no_clock = SimpleNamespace(phase=None, moon_phase=None)
         self.assertEqual(CmdTime._moon_lines(no_clock), [])
+
+    def test_time_line_names_the_month_in_the_game_calendar(self):
+        """The IC date reads in the game's month names, not Gregorian ones (#4185)."""
+        from types import SimpleNamespace
+
+        from commands.weather import CmdTime
+        from world.game_clock.constants import Season, TimePhase
+
+        conditions = SimpleNamespace(
+            ic_time=datetime(1010, 7, 15, 12, 5, tzinfo=UTC),
+            phase=TimePhase.DAY,
+            season=Season.SUMMER,
+        )
+        self.assertEqual(
+            CmdTime._time_line(conditions),
+            "|wIt is Day in Summer — 12:05, the 15th of the Month of Enduring, Year 1010.|n",
+        )

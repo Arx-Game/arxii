@@ -35,7 +35,7 @@ import type {
   JournalResponseType,
   PosthumousOverride,
 } from '../api';
-import { formatIcDate, formatPostingDate } from '../dates';
+import { formatPostingDate } from '../dates';
 import {
   FIELD_INPUT_CLASS,
   FIELD_LABEL_CLASS,
@@ -130,11 +130,11 @@ function DateStamp({ entry }: { entry: JournalEntrySummary }) {
   const [showIc, setShowIc] = useState(true);
   const posted = formatPostingDate(entry.created_at);
 
-  if (!entry.ic_timestamp) {
+  if (!entry.ic_timestamp_display) {
     return <span>{posted}</span>;
   }
 
-  const ic = formatIcDate(entry.ic_timestamp);
+  const ic = entry.ic_timestamp_display;
   return (
     <button
       type="button"

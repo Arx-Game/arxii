@@ -4,6 +4,7 @@ from django.core.exceptions import ObjectDoesNotExist
 from rest_framework import serializers
 
 from world.character_sheets.types import PosthumousJournalDisposition, RetortConsent
+from world.game_clock.serializers import IcDateDisplayField
 from world.journals.constants import PosthumousOverride, ResponseType
 from world.journals.models import JournalEntry, JournalTag
 from world.journals.services import can_retort
@@ -90,6 +91,7 @@ class JournalEntryListSerializer(_ViewerFieldsMixin, serializers.ModelSerializer
         source="about.character.db_key", read_only=True, default=None
     )
     ic_timestamp = serializers.DateTimeField(read_only=True)
+    ic_timestamp_display = IcDateDisplayField(source="ic_timestamp", allow_null=True)
 
     class Meta:
         model = JournalEntry
@@ -107,6 +109,7 @@ class JournalEntryListSerializer(_ViewerFieldsMixin, serializers.ModelSerializer
             "created_at",
             "edited_at",
             "ic_timestamp",
+            "ic_timestamp_display",
             "tags",
             "response_count",
             "posthumous_override",
@@ -139,6 +142,7 @@ class JournalEntryDetailSerializer(_ViewerFieldsMixin, serializers.ModelSerializ
         source="about.character.db_key", read_only=True, default=None
     )
     ic_timestamp = serializers.DateTimeField(read_only=True)
+    ic_timestamp_display = IcDateDisplayField(source="ic_timestamp", allow_null=True)
 
     class Meta:
         model = JournalEntry
@@ -156,6 +160,7 @@ class JournalEntryDetailSerializer(_ViewerFieldsMixin, serializers.ModelSerializ
             "created_at",
             "edited_at",
             "ic_timestamp",
+            "ic_timestamp_display",
             "tags",
             "responses",
             "posthumous_override",
