@@ -161,13 +161,13 @@ class CharacterItemDataHandler(BaseItemDataHandler):
 
     @property
     def birthday(self) -> str:
-        """Celebrated birthday (waking day for Sleepers) as 'Month day' (#2756)."""
-        import calendar
+        """Celebrated birthday (waking day for Sleepers) as '14 Dreaming (1-14)' (#2756, #4185)."""
+        from world.game_clock.services import format_ic_month_day
 
         sheet = self._get_sheet()
         if sheet.birthday_month is None or sheet.birthday_day is None:
             return ""
-        return f"{calendar.month_name[sheet.birthday_month]} {sheet.birthday_day}"
+        return format_ic_month_day(sheet.birthday_month, sheet.birthday_day)
 
     @property
     def background(self) -> str:

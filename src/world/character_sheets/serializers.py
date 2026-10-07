@@ -9,7 +9,6 @@ in the future when the frontend needs it.
 
 from __future__ import annotations
 
-import calendar
 import contextlib
 from typing import Any
 
@@ -87,6 +86,7 @@ from world.forms.models import (
     PersonaTraitDescriptor,
 )
 from world.game_clock.serializers import IcDateDisplayField
+from world.game_clock.services import format_ic_month_day
 from world.items.models import EquippedItem
 from world.items.services.visibility import compute_worn_visibility
 from world.locations.constants import LocationRole
@@ -340,7 +340,7 @@ def _resolve_birthday(sheet: CharacterSheet) -> str | None:
     # owner/staff-only per the leak table (chronological stays None for a
     # Sleeper even when privileged — unknowable, rendered "Unknown").
     if sheet.birthday_month is not None and sheet.birthday_day is not None:
-        return f"{calendar.month_name[sheet.birthday_month]} {sheet.birthday_day}"
+        return format_ic_month_day(sheet.birthday_month, sheet.birthday_day)
     return None
 
 

@@ -66,6 +66,11 @@ def format_ic_date(ic_dt: datetime) -> str:
     return f"{dt.day} {ic_month_name(dt.month)} ({dt.month}-{dt.day}-{dt.year})"
 
 
+def format_ic_month_day(month: int, day: int) -> str:
+    """A yearless IC date such as a birthday: "14 Dreaming (1-14)"."""
+    return f"{day} {ic_month_name(month)} ({month}-{day})"
+
+
 def format_ic_date_long(ic_dt: datetime) -> str:
     """Full IC date for tooltips: "the 14th of the Month of Dreaming, Year 1012"."""
     dt = _calendar_fields(ic_dt)

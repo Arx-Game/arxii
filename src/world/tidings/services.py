@@ -22,13 +22,13 @@ Items carry a ``category`` when the row's archetypes name a scandal category (th
 
 from __future__ import annotations
 
-import calendar
 from dataclasses import dataclass
 from datetime import datetime
 from typing import TYPE_CHECKING
 
 from django.core.exceptions import ObjectDoesNotExist
 
+from world.game_clock.services import format_ic_month_day
 from world.secrets.models import Secret
 from world.societies.models import LegendEntry, OrganizationMembership, SocietyReputation
 from world.tidings.constants import FeedItemKind
@@ -356,7 +356,7 @@ def _birthday_items(*, limit: int) -> list[PublicFeedItem]:
             kind=FeedItemKind.BIRTHDAY,
             headline=(
                 f"Upcoming: {sheet.character.db_key}'s birthday, "
-                f"{calendar.month_name[sheet.birthday_month]} {sheet.birthday_day}"
+                f"{format_ic_month_day(sheet.birthday_month, sheet.birthday_day)}"
             ),
             subject=sheet.character.db_key,
             occurred_at=ic_now,
