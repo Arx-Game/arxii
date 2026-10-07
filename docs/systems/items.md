@@ -383,7 +383,10 @@ and re-running the stylist's `UseItemAction` with it as `makeover_consent` (reac
 style knowledge and the technique preflight are all re-checked; the usual messages fire);
 declines by spending nothing and telling the stylist "declined"; `remember` writes the target's
 whitelist (`MakeoverRemember.ALWAYS`) or blacklist (`NEVER`) for the makeover category in the
-same motion. There is no timer: `expire_if_lapsed` marks a pending ask expired when the
+same motion, **except for a stylist asking under a mask** (a non-PRIMARY persona): the lists are
+keyed by the real tenure and the Privacy page names it by the real character, so the shortcut
+writes nothing, silently (any signal would itself say "that face is a mask"). The respond
+serializer rejects `always` with a decline and `never` with a grant. There is no timer: `expire_if_lapsed` marks a pending ask expired when the
 stylist is no longer in the target's room, run whenever asks are listed or answered, and a
 grant whose use fails (kit gone or spent, reach lost) expires the row and raises
 `MakeoverRequestLapsed`. One pending ask per stylist/target pair
