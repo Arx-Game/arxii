@@ -195,6 +195,14 @@ class SocialConsentCategory(NaturalKeyMixin, SharedMemoryModel):
             "EVERYONE is default-allow; FRIENDS_WHITELIST/RIVALS/ALLOWLIST make it opt-in."
         ),
     )
+    asks_before_acting = models.BooleanField(
+        default=False,
+        help_text=(
+            "The actor's deed waits for the target's answer (a makeover, #4187). Offers the "
+            "Ask me / Always allow / Never choices instead of the social-action modes, and "
+            "its whitelist skips the ask while its blacklist refuses, whatever the mode."
+        ),
+    )
 
     class Meta:
         ordering = ["display_order", "name"]

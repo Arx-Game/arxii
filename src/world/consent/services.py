@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from django.db import IntegrityError, transaction
 
-from world.consent.constants import ConsentMode
+from world.consent.constants import ConsentMode, ConsentOutcome
 from world.consent.models import (
     SocialConsentBlacklist,
     SocialConsentCategory,
@@ -149,7 +149,7 @@ def decide_consent_block(  # noqa: PLR0913 — keyword-only signal flags, one pe
       everyone else blocked (#2170).
     - ``ALLOWLIST`` → allowed only for a whitelisted actor; everyone else blocked.
     """
-    if rule_mode is None or rule_mode == ConsentMode.EVERYONE:
+    if rule_mode is None or rule_mode in (ConsentMode.EVERYONE, ConsentMode.ASK):
         return False
     if rule_mode == ConsentMode.ALL_BUT_BLACKLIST:
         return actor_present and blacklisted
@@ -204,13 +204,13 @@ def effective_consent_mode(
     return _effective_mode_from_chain(pref, category.ancestor_chain())
 
 
-def consent_blocks_targeting(
+def consent_outcome(
     *,
     owner_tenure: RosterTenure,
     category: SocialConsentCategory | None,
     actor_tenure: RosterTenure | None,
-) -> bool:
-    """True if *owner_tenure*'s consent excludes *actor_tenure* for *category* (#1909/#2170).
+) -> ConsentOutcome:
+    """ALLOW / ASK / REFUSE for *actor_tenure* acting on *owner_tenure* in *category* (#4187).
 
     The single-tenure gate decision — moved here from
     ``actions.player_interface._tenure_blocks_actor`` so later gates (e.g. the steal
@@ -224,10 +224,13 @@ def consent_blocks_targeting(
     NOT auto-allow — it still resolves to the root default (only the ``allow_social_actions``
     master switch is unique to the preference row). The scene-wide picker sweep batches the
     same decision in ``actions.player_interface._consent_excluded_persona_ids``.
-    """
-    from world.relationships.services import mutual_hostile  # noqa: PLC0415
-    from world.scenes.friend_services import is_friend as _is_friend  # noqa: PLC0415
 
+    A category that asks before acting (``asks_before_acting``, a makeover) resolves in
+    :func:`_asking_outcome`: the blacklist refuses and the whitelist allows whatever the
+    mode, then ``ASK`` asks, ``EVERYONE`` allows and ``ALLOWLIST`` refuses. Every other
+    category keeps the yes/no decision of :func:`_ordinary_block` (``ASK`` on one of those
+    reads as ``EVERYONE``); :func:`consent_blocks_targeting` is ``REFUSE`` alone.
+    """
     # Reverse OneToOne accessor (cached on the tenure instance) rather than a fresh filter,
     # so a warmed caller doesn't pay a query for the common has-a-preference-row path.
     try:
@@ -235,13 +238,82 @@ def consent_blocks_targeting(
     except SocialConsentPreference.DoesNotExist:
         pref = None
     if pref is not None and not pref.allow_social_actions:
-        return True
+        return ConsentOutcome.REFUSE
 
     if category is None:
-        return False  # uncategorized → master switch only
+        return ConsentOutcome.ALLOW  # uncategorized → master switch only
 
     chain = category.ancestor_chain()
     rule_mode = _effective_mode_from_chain(pref, chain)
+    if category.asks_before_acting:
+        return _asking_outcome(owner_tenure, actor_tenure, chain, rule_mode)
+    if rule_mode == ConsentMode.ASK:
+        rule_mode = ConsentMode.EVERYONE
+    if _ordinary_block(owner_tenure, actor_tenure, chain, rule_mode):
+        return ConsentOutcome.REFUSE
+    return ConsentOutcome.ALLOW
+
+
+def consent_blocks_targeting(
+    *,
+    owner_tenure: RosterTenure,
+    category: SocialConsentCategory | None,
+    actor_tenure: RosterTenure | None,
+) -> bool:
+    """True if *owner_tenure*'s consent excludes *actor_tenure* for *category* (#1909/#2170).
+
+    The yes/no face of :func:`consent_outcome`: ``REFUSE`` alone blocks; an ``ASK``
+    outcome is not a block (the asking gate handles it itself).
+    """
+    return (
+        consent_outcome(owner_tenure=owner_tenure, category=category, actor_tenure=actor_tenure)
+        == ConsentOutcome.REFUSE
+    )
+
+
+def _asking_outcome(
+    owner_tenure: RosterTenure,
+    actor_tenure: RosterTenure | None,
+    chain: list[SocialConsentCategory],
+    rule_mode: str | None,
+) -> ConsentOutcome:
+    """The decision for a category that asks before acting (#4187).
+
+    The per-person lists come first, whatever the mode: a blacklisted actor is refused
+    even under "Always allow", a whitelisted one skips the ask even under "Never". An
+    unknown actor (no tenure: a staff puppet) is never on a list, so the mode decides and
+    ``ASK`` still asks — the target gets to answer.
+    """
+    if actor_tenure is not None:
+        if SocialConsentBlacklist.objects.filter(
+            owner_tenure=owner_tenure, blocked_tenure=actor_tenure, category__in=chain
+        ).exists():
+            return ConsentOutcome.REFUSE
+        if SocialConsentWhitelist.objects.filter(
+            owner_tenure=owner_tenure, allowed_tenure=actor_tenure, category__in=chain
+        ).exists():
+            return ConsentOutcome.ALLOW
+    if rule_mode == ConsentMode.ASK:
+        return ConsentOutcome.ASK
+    if rule_mode is None or rule_mode == ConsentMode.EVERYONE:
+        return ConsentOutcome.ALLOW
+    if rule_mode == ConsentMode.ALLOWLIST:
+        return ConsentOutcome.REFUSE
+    if _ordinary_block(owner_tenure, actor_tenure, chain, rule_mode):
+        return ConsentOutcome.REFUSE
+    return ConsentOutcome.ALLOW
+
+
+def _ordinary_block(
+    owner_tenure: RosterTenure,
+    actor_tenure: RosterTenure | None,
+    chain: list[SocialConsentCategory],
+    rule_mode: str | None,
+) -> bool:
+    """The social-action yes/no decision for a resolved *rule_mode* (#1909/#2170)."""
+    from world.relationships.services import mutual_hostile  # noqa: PLC0415
+    from world.scenes.friend_services import is_friend as _is_friend  # noqa: PLC0415
+
     if actor_tenure is None or rule_mode is None or rule_mode == ConsentMode.EVERYONE:
         # No actor, or default-allow: no relational signal is consulted.
         return _decide_consent_block(
