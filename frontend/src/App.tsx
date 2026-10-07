@@ -152,6 +152,7 @@ import { HazardPromptNotifier } from './game/components/HazardPromptNotifier';
 import { SummonPromptNotifier } from './gm-adjudication/SummonPromptNotifier';
 import { ConsentAttentionNotifier } from './scenes/components/ConsentAttentionNotifier';
 import { PrecaptureConsentNotifier } from './scenes/components/PrecaptureConsentNotifier';
+import { MakeoverAskNotifier } from './inventory/components/MakeoverAskNotifier';
 
 // ---------------------------------------------------------------------------
 // Lazy-loaded stories pages (React.lazy for route-level code splitting)
@@ -1377,6 +1378,7 @@ function App() {
       <ConsentAttentionNotifier />
       <SummonPromptNotifier />
       <PrecaptureConsentNotifier />
+      <MakeoverAskNotifier />
     </Layout>
   );
 }

@@ -91,7 +91,7 @@ vi.mock('@/mail/queries', () => ({
 }));
 
 import React from 'react';
-import { screen, fireEvent, waitFor } from '@testing-library/react';
+import { screen, fireEvent, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { renderWithProviders } from '@/test/utils/renderWithProviders';
 import { PrivacyPage } from '../pages/PrivacyPage';
@@ -111,6 +111,7 @@ const mockCategories = [
     display_order: 1,
     parent: null,
     default_mode: 'everyone',
+    asks_before_acting: false,
     action_templates: [],
   },
   {
@@ -121,6 +122,18 @@ const mockCategories = [
     display_order: 2,
     parent: null,
     default_mode: 'everyone',
+    asks_before_acting: false,
+    action_templates: [],
+  },
+  {
+    id: 30,
+    key: 'makeover',
+    name: 'Makeovers & Styling',
+    description: 'Other characters restyling your appearance.',
+    display_order: 3,
+    parent: null,
+    default_mode: 'ask',
+    asks_before_acting: true,
     action_templates: [],
   },
 ];
@@ -153,7 +166,7 @@ function setupDefaultMocks() {
   const createMutateAsync = vi.fn();
 
   vi.mocked(queries.useConsentCategories).mockReturnValue({
-    data: { count: 2, results: mockCategories },
+    data: { count: 3, results: mockCategories },
     isLoading: false,
   } as unknown as ReturnType<typeof queries.useConsentCategories>);
 
@@ -245,6 +258,13 @@ function setupDefaultMocks() {
 // ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
+
+/** The Romantic row (category 10): the asking Makeovers row renders both list managers too. */
+function romanticRow() {
+  const row = screen.getByText('Romantic').closest('[data-testid="category-row"]');
+  if (!row) throw new Error('Romantic row not rendered');
+  return within(row as HTMLElement);
+}
 
 describe('PrivacyPage', () => {
   beforeEach(() => {
@@ -342,6 +362,30 @@ describe('PrivacyPage', () => {
     expect(deleteMutate).toHaveBeenCalledWith({ id: 42, preferenceId: mockPreferenceWithId.id });
   });
 
+  it('an asking category offers Ask me / Always allow / Never and both lists (#4187)', async () => {
+    setupDefaultMocks();
+    renderWithProviders(<PrivacyPage />);
+    fireEvent.change(screen.getByLabelText('Character'), { target: { value: '1' } });
+    await waitFor(() => screen.getByText('Makeovers & Styling'));
+    const row = screen.getByText('Makeovers & Styling').closest('[data-testid="category-row"]');
+    expect(row).not.toBeNull();
+    const labels = Array.from(row!.querySelectorAll('option')).map((o) => o.textContent);
+    expect(labels).toEqual(['Default (Ask me)', 'Ask me', 'Always allow', 'Never']);
+    expect(row!.textContent).toMatch(/allow list skip the ask/i);
+  });
+
+  it('a social category does not offer Ask me (#4187)', async () => {
+    setupDefaultMocks();
+    renderWithProviders(<PrivacyPage />);
+    fireEvent.change(screen.getByLabelText('Character'), { target: { value: '1' } });
+    await waitFor(() => screen.getByText('Hostile'));
+    const row = screen.getByText('Hostile').closest('[data-testid="category-row"]');
+    const labels = Array.from(row!.querySelectorAll('option')).map((o) => o.textContent);
+    expect(labels).not.toContain('Ask me');
+    expect(labels).not.toContain('Ask me each time');
+    expect(labels).toContain('Allowlist only');
+  });
+
   it('offers the rivals mode option (#2170)', async () => {
     setupDefaultMocks();
     renderWithProviders(<PrivacyPage />);
@@ -372,9 +416,9 @@ describe('PrivacyPage', () => {
 
     fireEvent.change(screen.getByLabelText('Character'), { target: { value: '1' } });
 
-    await waitFor(() => screen.getByPlaceholderText('Search character to bar...'));
+    await waitFor(() => romanticRow().getByPlaceholderText('Search character to bar...'));
 
-    const zaraButton = await screen.findByRole('button', { name: 'Zara' });
+    const zaraButton = await romanticRow().findByRole('button', { name: 'Zara' });
     await userEvent.click(zaraButton);
 
     expect(addBlacklistMutate).toHaveBeenCalledWith(
@@ -409,10 +453,10 @@ describe('PrivacyPage', () => {
 
     fireEvent.change(screen.getByLabelText('Character'), { target: { value: '1' } });
 
-    await waitFor(() => screen.getByPlaceholderText('Search character to add...'));
+    await waitFor(() => romanticRow().getByPlaceholderText('Search character to add...'));
 
     // Click "Zara" in the dropdown
-    const zaraButton = await screen.findByRole('button', { name: 'Zara' });
+    const zaraButton = await romanticRow().findByRole('button', { name: 'Zara' });
     await userEvent.click(zaraButton);
 
     expect(addMutate).toHaveBeenCalledWith(
@@ -458,9 +502,9 @@ describe('PrivacyPage', () => {
 
     fireEvent.change(screen.getByLabelText('Character'), { target: { value: '1' } });
 
-    await waitFor(() => screen.getByLabelText('Remove 1st player of Zara from allowlist'));
+    await waitFor(() => romanticRow().getByLabelText('Remove 1st player of Zara from allowlist'));
 
-    await userEvent.click(screen.getByLabelText('Remove 1st player of Zara from allowlist'));
+    await userEvent.click(romanticRow().getByLabelText('Remove 1st player of Zara from allowlist'));
 
     expect(removeMutate).toHaveBeenCalledWith({
       id: 55,

@@ -9,9 +9,10 @@ import { WhitelistManager } from './WhitelistManager';
 import { BlacklistManager } from './BlacklistManager';
 import { useUpsertCategoryRule, useDeleteCategoryRule } from '../queries';
 import {
+  ASKING_MODE_ORDER,
   INHERIT_VALUE,
-  MODE_LABELS,
   MODE_ORDER,
+  modeLabel,
   resolveEffectiveMode,
   type ConsentMode,
 } from '../consentModes';
@@ -52,6 +53,11 @@ export function CategoryConsentRow({
   const effectiveMode: ConsentMode =
     rule?.mode ?? resolveEffectiveMode(category.id, categoriesById, ruleByCategoryId);
   const isRoot = category.parent == null;
+  // A category that asks before acting (a makeover, #4187) offers Ask me / Always allow /
+  // Never in place of the social-action modes, and both person lists always apply.
+  const asking = Boolean(category.asks_before_acting);
+  const modeOrder = asking ? ASKING_MODE_ORDER : MODE_ORDER;
+  const label = (mode: ConsentMode) => modeLabel(mode, asking);
 
   function handleModeChange(value: string) {
     if (value === INHERIT_VALUE) {
@@ -71,11 +77,11 @@ export function CategoryConsentRow({
   // A root category has no parent to inherit from — "Inherit" would just mean its own
   // default, so offer "Everyone" as the open option instead of an Inherit sentinel.
   const inheritOptionLabel = isRoot
-    ? `Default (${MODE_LABELS[effectiveMode]})`
-    : `Inherit from parent (${MODE_LABELS[effectiveMode]})`;
+    ? `Default (${label(effectiveMode)})`
+    : `Inherit from parent (${label(effectiveMode)})`;
 
   return (
-    <div className="space-y-2" style={{ marginLeft: depth * 20 }}>
+    <div className="space-y-2" style={{ marginLeft: depth * 20 }} data-testid="category-row">
       <div className="flex items-center justify-between gap-3">
         <div className="space-y-0.5">
           <p className="font-medium">{category.name}</p>
@@ -84,7 +90,7 @@ export function CategoryConsentRow({
           ) : null}
           {rule == null && !isRoot ? (
             <p className="text-xs italic text-muted-foreground">
-              Inheriting {MODE_LABELS[effectiveMode]} from “{parentName(category, categoriesById)}”.
+              Inheriting {label(effectiveMode)} from “{parentName(category, categoriesById)}”.
             </p>
           ) : null}
         </div>
@@ -98,9 +104,9 @@ export function CategoryConsentRow({
           </SelectTrigger>
           <SelectContent>
             <SelectItem value={INHERIT_VALUE}>{inheritOptionLabel}</SelectItem>
-            {MODE_ORDER.map((mode) => (
+            {modeOrder.map((mode) => (
               <SelectItem key={mode} value={mode}>
-                {MODE_LABELS[mode]}
+                {label(mode)}
               </SelectItem>
             ))}
           </SelectContent>
@@ -112,13 +118,26 @@ export function CategoryConsentRow({
       {/* Allowlist / friends / rivals all consult the whitelist (friends & mutual rivals
           auto-pass); all-but-blacklist consults the blacklist. Keyed off the EFFECTIVE mode
           so an inherited allowlist still surfaces its whitelist manager. */}
-      {(effectiveMode === 'allowlist' ||
-        effectiveMode === 'friends_whitelist' ||
-        effectiveMode === 'rivals') && (
-        <WhitelistManager tenureId={tenureId} categoryId={category.id} />
-      )}
-      {effectiveMode === 'all_but_blacklist' && (
-        <BlacklistManager tenureId={tenureId} categoryId={category.id} />
+      {asking ? (
+        <>
+          {/* PLACEHOLDER (agent-drafted player-facing copy, #4187). */}
+          <p className="text-xs text-muted-foreground">
+            People on your allow list skip the ask; people on your blacklist are refused.
+          </p>
+          <WhitelistManager tenureId={tenureId} categoryId={category.id} />
+          <BlacklistManager tenureId={tenureId} categoryId={category.id} />
+        </>
+      ) : (
+        <>
+          {(effectiveMode === 'allowlist' ||
+            effectiveMode === 'friends_whitelist' ||
+            effectiveMode === 'rivals') && (
+            <WhitelistManager tenureId={tenureId} categoryId={category.id} />
+          )}
+          {effectiveMode === 'all_but_blacklist' && (
+            <BlacklistManager tenureId={tenureId} categoryId={category.id} />
+          )}
+        </>
       )}
     </div>
   );
