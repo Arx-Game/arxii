@@ -31,6 +31,7 @@ from world.items.exceptions import (
 )
 from world.items.makeover_models import MakeoverConsentRequest
 from world.scenes.action_constants import ActionRequestStatus
+from world.scenes.constants import PersonaType
 from world.scenes.services import active_persona_for_sheet
 
 if TYPE_CHECKING:
@@ -152,8 +153,17 @@ def pending_makeover_requests_for(sheet: CharacterSheet) -> list[MakeoverConsent
     return [row for row in rows if not expire_if_lapsed(row)]
 
 
-def _remember(remember: str, target: ObjectDB, stylist: ObjectDB) -> None:
-    """Write the one-motion shortcut: ALWAYS whitelists the stylist, NEVER blacklists."""
+def _remember(
+    request: MakeoverConsentRequest, target: ObjectDB, stylist: ObjectDB, *, remember: str
+) -> None:
+    """Write the one-motion shortcut: ALWAYS whitelists the stylist, NEVER blacklists.
+
+    The consent lists are keyed by the stylist's real tenure and the Privacy page shows
+    that tenure under the real character's name. A stylist asking under a mask was seen
+    only as the mask, so writing the row would hand the target the identity behind it;
+    for a non-PRIMARY stylist persona the shortcut writes nothing. It stays silent on
+    purpose: any signal here would itself say "that face is a mask".
+    """
     from world.consent.models import SocialConsentCategory  # noqa: PLC0415
     from world.consent.services import (  # noqa: PLC0415
         add_social_consent_blacklist,
@@ -161,6 +171,8 @@ def _remember(remember: str, target: ObjectDB, stylist: ObjectDB) -> None:
     )
     from world.items.services.usage import _active_tenure_for_sheet  # noqa: PLC0415
 
+    if request.stylist_persona.persona_type != PersonaType.PRIMARY:
+        return
     category = SocialConsentCategory.objects.filter(key=MAKEOVER_CONSENT_CATEGORY_KEY).first()
     owner_tenure = _active_tenure_for_sheet(target.character_sheet)
     stylist_sheet = stylist.character_sheet
@@ -197,7 +209,7 @@ def respond_to_makeover_request(
     if expire_if_lapsed(request):
         raise MakeoverRequestLapsed
     if remember is not None:
-        _remember(remember, target, stylist)
+        _remember(request, target, stylist, remember=remember)
     if not accept:
         _resolve(request, ActionRequestStatus.DENIED)
         # PLACEHOLDER (agent-drafted player-facing copy — Apostate to rewrite, #4187)

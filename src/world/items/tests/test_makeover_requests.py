@@ -37,6 +37,7 @@ from world.items.services.makeover_requests import (
 )
 from world.roster.factories import PlayerDataFactory, RosterEntryFactory, RosterTenureFactory
 from world.scenes.action_constants import ActionRequestStatus
+from world.scenes.services import create_mask, set_active_persona
 
 
 class MakeoverAskFixture(TestCase):
@@ -266,3 +267,36 @@ class LapseTests(MakeoverAskFixture):
         first.save(update_fields=["status"])
         second = self.offer()
         self.assertNotEqual(first.pk, second.pk)
+
+
+class MaskedStylistTests(MakeoverAskFixture):
+    """A stylist asking under a mask: the ask shows the mask, and the remember shortcut
+    must not write a tenure-keyed list row the Privacy page would show under the real name."""
+
+    def setUp(self):
+        super().setUp()
+        self.mask = create_mask(self.sheet, name="Veiled stranger")
+        set_active_persona(self.sheet, self.mask)
+
+    def test_the_ask_names_the_mask(self):
+        request = self.offer()
+        self.assertEqual(request.stylist_persona, self.mask)
+        self.assertIn("Veiled stranger", describe_offer(request))
+
+    def test_always_on_a_masked_stylist_writes_no_whitelist_row(self):
+        request = self.offer()
+        respond_to_makeover_request(request, accept=True, remember="always")
+        self.assertFalse(
+            SocialConsentWhitelist.objects.filter(owner_tenure=self.other_tenure).exists()
+        )
+        # The grant itself still happened.
+        self.assertEqual(self.charges(), 7)
+
+    def test_never_on_a_masked_stylist_writes_no_blacklist_row(self):
+        request = self.offer()
+        respond_to_makeover_request(request, accept=False, remember="never")
+        self.assertFalse(
+            SocialConsentBlacklist.objects.filter(owner_tenure=self.other_tenure).exists()
+        )
+        request.refresh_from_db()
+        self.assertEqual(request.status, ActionRequestStatus.DENIED)

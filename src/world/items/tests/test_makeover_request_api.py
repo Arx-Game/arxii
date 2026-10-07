@@ -100,3 +100,15 @@ class MakeoverRequestApiTests(MakeoverAskFixture):
             self.respond_url(request), {"decision": "maybe"}, format="json"
         )
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_mismatched_shortcut_is_400(self):
+        request = self.offer()
+        for body in (
+            {"decision": "grant", "remember": "never"},
+            {"decision": "decline", "remember": "always"},
+        ):
+            response = self.target_client.post(self.respond_url(request), body, format="json")
+            self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST, body)
+        request.refresh_from_db()
+        self.assertEqual(request.status, ActionRequestStatus.PENDING)
+        self.assertEqual(self.charges(), 8)

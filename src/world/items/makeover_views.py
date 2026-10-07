@@ -78,6 +78,18 @@ class RespondMakeoverRequestSerializer(serializers.Serializer):
         choices=MakeoverRemember.choices, required=False, allow_null=True
     )
 
+    def validate(self, attrs: dict) -> dict:
+        """ALWAYS rides a grant and NEVER a decline; the other pairs are consent footguns."""
+        remember = attrs.get("remember")
+        decision = attrs["decision"]
+        if (remember == MakeoverRemember.ALWAYS and decision != self.GRANT) or (
+            remember == MakeoverRemember.NEVER and decision != self.DECLINE
+        ):
+            raise serializers.ValidationError(
+                {"remember": "Always let goes with a grant; never from goes with a decline."}
+            )
+        return attrs
+
 
 class MakeoverConsentRequestViewSet(viewsets.ReadOnlyModelViewSet):
     """The requesting account's own pending makeover asks (as target)."""
