@@ -86,6 +86,7 @@ from world.forms.models import (
     FormType,
     PersonaTraitDescriptor,
 )
+from world.game_clock.serializers import IcDateDisplayField
 from world.items.models import EquippedItem
 from world.items.services.visibility import compute_worn_visibility
 from world.locations.constants import LocationRole
@@ -2261,6 +2262,7 @@ class ProfileTextVersionSerializer(serializers.ModelSerializer):
     )
     reasoning = serializers.SerializerMethodField()
     staff_edited = serializers.SerializerMethodField()
+    ic_date_display = IcDateDisplayField(source="ic_date", allow_null=True)
 
     class Meta:
         model = ProfileTextVersion
@@ -2270,6 +2272,7 @@ class ProfileTextVersionSerializer(serializers.ModelSerializer):
             "text",
             "created_at",
             "ic_date",
+            "ic_date_display",
             "era_season_number",
             "era_display_name",
             "reasoning",

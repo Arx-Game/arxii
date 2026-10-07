@@ -3,6 +3,7 @@
 from rest_framework import serializers
 
 from world.clues.models import Clue
+from world.game_clock.serializers import IcDateDisplayField
 from world.npc_services.models import (
     ClueRevealOfferDetails,
     MissionOfferDetails,
@@ -315,6 +316,7 @@ class RecordedProfileSerializer(serializers.ModelSerializer):
     era_season_number = serializers.IntegerField(
         source="era.season_number", read_only=True, allow_null=True
     )
+    ic_date_display = IcDateDisplayField(source="ic_date", allow_null=True)
 
     class Meta:
         model = RecordedProfile
@@ -329,6 +331,7 @@ class RecordedProfileSerializer(serializers.ModelSerializer):
             "created_at",
             "recorded_at",
             "ic_date",
+            "ic_date_display",
             "era_season_number",
         ]
         read_only_fields = fields

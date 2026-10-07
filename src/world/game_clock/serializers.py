@@ -1,8 +1,29 @@
 """Serializers for the game clock REST API."""
 
+from datetime import datetime
+
+from drf_spectacular.types import OpenApiTypes
+from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
 
 from world.game_clock.constants import Season, TimePhase
+from world.game_clock.services import format_ic_date
+
+
+@extend_schema_field(OpenApiTypes.STR)
+class IcDateDisplayField(serializers.Field):
+    """Read-only IC date in the game's calendar, e.g. "14 Dreaming (1-14-1012)" (#4185).
+
+    Point ``source`` at an IC datetime field. Formatting stays on the backend so
+    the month names live in one place and the browser's timezone can't move the day.
+    """
+
+    def __init__(self, **kwargs: object) -> None:
+        kwargs["read_only"] = True
+        super().__init__(**kwargs)
+
+    def to_representation(self, value: datetime) -> str:
+        return format_ic_date(value)
 
 
 class ClockStateSerializer(serializers.Serializer):
@@ -11,6 +32,10 @@ class ClockStateSerializer(serializers.Serializer):
     ic_datetime = serializers.DateTimeField()
     year = serializers.IntegerField()
     month = serializers.IntegerField()
+    month_name = serializers.CharField(help_text="IC month name, e.g. 'Dreaming'.")
+    date_display = serializers.CharField(
+        help_text="Full IC date, e.g. 'the 14th of the Month of Dreaming, Year 1012'."
+    )
     day = serializers.IntegerField()
     hour = serializers.IntegerField()
     minute = serializers.IntegerField()

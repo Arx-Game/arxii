@@ -1,6 +1,6 @@
 """Service functions for querying IC time from the game clock."""
 
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 import math
 
 from django.db import transaction
@@ -8,6 +8,7 @@ from django.utils import timezone
 from evennia.accounts.models import AccountDB
 
 from world.game_clock.constants import (
+    IC_MONTH_NAMES,
     MONTH_TO_SEASON,
     MOON_SYNODIC_IC_DAYS,
     PHASE_BOUNDARIES,
@@ -18,6 +19,9 @@ from world.game_clock.constants import (
 from world.game_clock.models import GameClock, GameClockHistory
 from world.game_clock.types import ClockError
 
+_ORDINAL_SUFFIXES = {1: "st", 2: "nd", 3: "rd"}
+_TEEN_DAYS = frozenset({11, 12, 13})  # 11th, 12th, 13th, not 11st/12nd/13rd
+
 
 def get_ic_now(*, real_now: datetime | None = None) -> datetime | None:
     """Return the current IC datetime, or None if no clock exists."""
@@ -25,6 +29,47 @@ def get_ic_now(*, real_now: datetime | None = None) -> datetime | None:
     if clock is None:
         return None
     return clock.get_ic_now(real_now=real_now)
+
+
+def _calendar_fields(ic_dt: datetime) -> datetime:
+    """Read IC calendar fields in UTC, the zone the clock itself reads (#4185).
+
+    An aware datetime from a serializer or the DB may carry another zone, which
+    would move the day across midnight; naive datetimes are taken as-is.
+    """
+    if timezone.is_aware(ic_dt):
+        return ic_dt.astimezone(UTC)
+    return ic_dt
+
+
+def ic_month_name(month: int) -> str:
+    """The IC name of a 1-indexed month, e.g. 1 -> "Dreaming"."""
+    return IC_MONTH_NAMES[month]
+
+
+def _ordinal(day: int) -> str:
+    """1 -> "1st", 2 -> "2nd", 11 -> "11th", 22 -> "22nd"."""
+    if day in _TEEN_DAYS:
+        suffix = "th"
+    else:
+        suffix = _ORDINAL_SUFFIXES.get(day % 10, "th")
+    return f"{day}{suffix}"
+
+
+def format_ic_date(ic_dt: datetime) -> str:
+    """Inline IC date: "14 Dreaming (1-14-1012)".
+
+    The numeric month-day-year rides along because players won't remember the
+    new month names at first (ruled on #4185).
+    """
+    dt = _calendar_fields(ic_dt)
+    return f"{dt.day} {ic_month_name(dt.month)} ({dt.month}-{dt.day}-{dt.year})"
+
+
+def format_ic_date_long(ic_dt: datetime) -> str:
+    """Full IC date for tooltips: "the 14th of the Month of Dreaming, Year 1012"."""
+    dt = _calendar_fields(ic_dt)
+    return f"the {_ordinal(dt.day)} of the Month of {ic_month_name(dt.month)}, Year {dt.year}"
 
 
 def season_from_ic_time(ic_now: datetime) -> Season:

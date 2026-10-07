@@ -1,10 +1,17 @@
 """Tests for event serializers — focus on config-time privacy validation."""
 
+from datetime import UTC, datetime
+
 from django.test import TestCase
 from django.utils import timezone
 
 from world.events.factories import EventFactory
-from world.events.serializers import EventCreateSerializer, EventUpdateSerializer
+from world.events.serializers import (
+    EventCreateSerializer,
+    EventDetailSerializer,
+    EventListSerializer,
+    EventUpdateSerializer,
+)
 
 
 def _future_dt(days: int = 1) -> str:
@@ -105,3 +112,17 @@ class EventUpdateSerializerPrivacyTest(TestCase):
             partial=True,
         )
         self.assertTrue(serializer.is_valid(), serializer.errors)
+
+
+class EventIcDateDisplayTest(TestCase):
+    """Event cards read the IC date in the game's calendar (#4185)."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.event = EventFactory(scheduled_ic_time=datetime(1012, 1, 14, 20, 0, tzinfo=UTC))
+
+    def test_list_and_detail_name_the_month(self) -> None:
+        for serializer_class in (EventListSerializer, EventDetailSerializer):
+            with self.subTest(serializer=serializer_class.__name__):
+                data = serializer_class(self.event).data
+                self.assertEqual(data["scheduled_ic_display"], "14 Dreaming (1-14-1012)")

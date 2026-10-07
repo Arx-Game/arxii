@@ -11,6 +11,7 @@ from world.events.models import (
     EventInvitation,
     EventModification,
 )
+from world.game_clock.serializers import IcDateDisplayField
 
 
 class EventHostSerializer(serializers.ModelSerializer):
@@ -73,6 +74,7 @@ class EventModificationSerializer(serializers.ModelSerializer):
 class EventListSerializer(serializers.ModelSerializer):
     primary_host_name = serializers.SerializerMethodField()
     location_name = serializers.CharField(source="location.objectdb.db_key", read_only=True)
+    scheduled_ic_display = IcDateDisplayField(source="scheduled_ic_time")
 
     class Meta:
         model = Event
@@ -86,6 +88,7 @@ class EventListSerializer(serializers.ModelSerializer):
             "is_public",
             "scheduled_real_time",
             "scheduled_ic_time",
+            "scheduled_ic_display",
             "time_phase",
             "primary_host_name",
         ]
@@ -109,6 +112,7 @@ class EventDetailSerializer(serializers.ModelSerializer):
     location_name = serializers.CharField(source="location.objectdb.db_key", read_only=True)
     is_host = serializers.SerializerMethodField()
     is_gm = serializers.SerializerMethodField()
+    scheduled_ic_display = IcDateDisplayField(source="scheduled_ic_time")
 
     class Meta:
         model = Event
@@ -122,6 +126,7 @@ class EventDetailSerializer(serializers.ModelSerializer):
             "is_public",
             "scheduled_real_time",
             "scheduled_ic_time",
+            "scheduled_ic_display",
             "time_phase",
             "started_at",
             "ended_at",

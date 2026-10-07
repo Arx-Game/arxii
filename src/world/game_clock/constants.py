@@ -49,6 +49,23 @@ MONTH_TO_SEASON: dict[int, Season] = {
     12: Season.WINTER,
 }
 
+# IC month names (#4185), 1:1 with Gregorian months, so IC dates stay plain
+# datetimes and seasons/moons are unaffected. Each reads as "the Month of ___".
+IC_MONTH_NAMES: dict[int, str] = {
+    1: "Dreaming",
+    2: "Choosing",
+    3: "Thawing",
+    4: "Waking",
+    5: "Rising",
+    6: "Vowing",
+    7: "Enduring",
+    8: "Gathering",
+    9: "Unyielding",
+    10: "Masquing",
+    11: "Keeping",
+    12: "Ending",
+}
+
 
 class MoonPhase(TextChoices):
     """Lunar phases derived from IC time (#2845 celestial layer).

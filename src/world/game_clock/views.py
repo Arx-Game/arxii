@@ -18,8 +18,10 @@ from world.game_clock.serializers import (
     ClockStateSerializer,
 )
 from world.game_clock.services import (
+    format_ic_date_long,
     get_ic_date_for_real_time,
     get_real_time_for_ic_date,
+    ic_month_name,
     light_level_from_ic_time,
     pause_clock,
     phase_from_ic_time,
@@ -68,6 +70,8 @@ class ClockViewSet(viewsets.ViewSet):
             "ic_datetime": ic_now,
             "year": ic_now.year,
             "month": ic_now.month,
+            "month_name": ic_month_name(ic_now.month),
+            "date_display": format_ic_date_long(ic_now),
             "day": ic_now.day,
             "hour": ic_now.hour,
             "minute": ic_now.minute,
