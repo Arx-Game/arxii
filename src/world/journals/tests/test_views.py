@@ -943,6 +943,7 @@ class NewFiltersAndFieldsTests(TestCase):
         self.assertFalse(rows[0]["can_retort"])
         self.assertFalse(rows[0]["is_own"])
         self.assertIn("ic_timestamp", rows[0])
+        self.assertIn("ic_timestamp_display", rows[0])
         self.assertIn("author_persona_id", rows[0])
 
     def test_kind_and_introductions_alias(self) -> None:

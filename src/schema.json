@@ -85887,6 +85887,9 @@ components:
         ic_timestamp:
           type: string
           nullable: true
+        ic_timestamp_display:
+          type: string
+          nullable: true
       required:
       - author_id
       - author_name
@@ -85894,6 +85897,7 @@ components:
       - capstone_tier
       - created_at
       - ic_timestamp
+      - ic_timestamp_display
       - id
       - is_capstone
       - is_public

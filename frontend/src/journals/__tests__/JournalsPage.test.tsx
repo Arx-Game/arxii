@@ -88,6 +88,7 @@ function entry(over: Partial<JournalEntrySummary> = {}): JournalEntrySummary {
     about_name: 'Corvin Ashe',
     author_persona_id: 99,
     ic_timestamp: null,
+    ic_timestamp_display: null,
     can_retort: false,
     is_own: false,
     ...over,

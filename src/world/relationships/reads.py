@@ -15,6 +15,7 @@ from typing import TYPE_CHECKING, Any
 from django.core.exceptions import ObjectDoesNotExist
 from django.db.models import Prefetch, Q
 
+from world.game_clock.services import format_ic_date
 from world.relationships.constants import KNOWN_AWARENESS, LabelAwareness, TieAudience
 from world.relationships.models import (
     CharacterRelationship,
@@ -472,6 +473,7 @@ def tie_stream(
             capstone_tier=capstone_by_entry.get(e.pk) if numbers else None,
             created_at=e.created_at.isoformat(),
             ic_timestamp=e.ic_timestamp.isoformat() if e.ic_timestamp else None,
+            ic_timestamp_display=format_ic_date(e.ic_timestamp) if e.ic_timestamp else None,
         )
         for e in entries
     ]
@@ -495,6 +497,7 @@ def tie_stream(
             capstone_tier=None,
             created_at=s.date_started.isoformat(),
             ic_timestamp=None,
+            ic_timestamp_display=None,
         )
         for s in scenes
     )

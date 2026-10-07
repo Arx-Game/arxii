@@ -47967,6 +47967,7 @@ export interface components {
       capstone_tier: number | null;
       created_at: string;
       ic_timestamp: string | null;
+      ic_timestamp_display: string | null;
     };
     TieThread: {
       level: number;

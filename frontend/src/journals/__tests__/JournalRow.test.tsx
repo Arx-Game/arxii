@@ -52,6 +52,7 @@ function entry(over: Partial<JournalEntrySummary> = {}): JournalEntrySummary {
     about_name: null,
     author_persona_id: 99,
     ic_timestamp: '1012-09-22T10:00:00Z',
+    ic_timestamp_display: '22 Unyielding (9-22-1012)',
     can_retort: false,
     is_own: false,
     ...over,
@@ -64,7 +65,7 @@ describe('JournalRow (#3941)', () => {
     detail.mockReturnValue({ data: undefined });
     render(<JournalRow entry={entry()} open={false} onToggle={vi.fn()} viewer={viewer} />);
     expect(screen.getByText('Ilsavet du Verane')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: '22 September 1012' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '22 Unyielding (9-22-1012)' })).toBeInTheDocument();
     expect(screen.queryByText('Praise')).not.toBeInTheDocument();
     expect(screen.queryByText('harbor')).not.toBeInTheDocument();
   });
@@ -84,7 +85,7 @@ describe('JournalRow (#3941)', () => {
     detail.mockReturnValue({ data: undefined });
     const onToggle = vi.fn();
     render(<JournalRow entry={entry()} open={false} onToggle={onToggle} viewer={viewer} />);
-    fireEvent.click(screen.getByRole('button', { name: '22 September 1012' }));
+    fireEvent.click(screen.getByRole('button', { name: '22 Unyielding (9-22-1012)' }));
     expect(screen.getByRole('button', { name: '17 Sep 2026' })).toBeInTheDocument();
     expect(onToggle).not.toHaveBeenCalled();
   });
