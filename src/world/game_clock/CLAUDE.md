@@ -37,7 +37,7 @@ are unaffected.
 
 | Helper | Output | Used by |
 |---|---|---|
-| `format_ic_date(dt)` | `14 Dreaming (1-14-1012)` | `serializers.IcDateDisplayField` (events, profile versions, recorded profiles) |
+| `format_ic_date(dt)` | `14 Dreaming (1-14-1012)` | `serializers.IcDateDisplayField` (events, journals, profile versions, recorded profiles); the relationship tie stream |
 | `format_ic_month_day(m, d)` | `14 Dreaming (1-14)` | birthdays (item_data, tidings, sheet identity) |
 | `format_ic_date_long(dt)` | `the 14th of the Month of Dreaming, Year 1012` | clock API `date_display`, telnet `time` |
 | `ic_month_name(m)` | `Dreaming` | clock API `month_name` |
