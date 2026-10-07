@@ -27627,6 +27627,7 @@ export interface components {
       readonly starting_technique_picks: number;
       readonly age_min: number;
       readonly age_max: number;
+      readonly ic_month_names: string[];
       readonly bundled_distinctions: {
         [key: string]: unknown;
       }[];

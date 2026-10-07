@@ -461,6 +461,8 @@ export interface CharacterDraft {
   /** The age range CG accepts for this draft; the server composes every cap (#3663). */
   age_min: number;
   age_max: number;
+  /** The game calendar's month names in order, January's first (#4185). */
+  ic_month_names: string[];
   /** Distinctions the draft's visible, picked Upbringing answers grant (#3660). */
   bundled_distinctions: BundledDistinction[];
   /**

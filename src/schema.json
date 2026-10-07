@@ -46212,6 +46212,11 @@ components:
         age_max:
           type: integer
           readOnly: true
+        ic_month_names:
+          type: array
+          items:
+            type: string
+          readOnly: true
         bundled_distinctions:
           type: array
           items:
@@ -46270,6 +46275,7 @@ components:
       - family
       - has_existing_characters
       - height_band
+      - ic_month_names
       - id
       - introductions_offered
       - public_worship

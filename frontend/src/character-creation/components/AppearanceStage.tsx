@@ -60,20 +60,8 @@ interface AppearanceFormValues {
 // first appearance, so the folio never has to know the rule.
 const AGE_DEFAULT = 22;
 
-const MONTH_NAMES = [
-  'January',
-  'February',
-  'March',
-  'April',
-  'May',
-  'June',
-  'July',
-  'August',
-  'September',
-  'October',
-  'November',
-  'December',
-];
+// Month names come from the draft payload (`ic_month_names`, #4185); the game's
+// calendar keeps the Gregorian layout, so the day counts below still hold.
 // 29 for February: leap-day birthdays are legal (#2756).
 const DAYS_IN_MONTH = [31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
 
@@ -411,7 +399,7 @@ export function AppearanceStage({
       <h2 className="section-h">{copy?.appearance_birthday_heading ?? 'Birthday'}</h2>
       <ChoiceRow
         label="Month"
-        options={MONTH_NAMES.map((name, index) => ({ value: index + 1, label: name }))}
+        options={draft.ic_month_names.map((name, index) => ({ value: index + 1, label: name }))}
         value={birthdayMonth}
         onChange={(month) => commitBirthday(month, birthdayDay ?? 1)}
       />
