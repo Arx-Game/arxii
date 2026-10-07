@@ -51,6 +51,7 @@ const upcomingEvent: EventListItem = {
   is_public: true,
   scheduled_real_time: '2026-09-01T20:00:00Z',
   scheduled_ic_time: null,
+  scheduled_ic_display: '14 Dreaming (1-14-1012)',
   time_phase: 'night',
   primary_host_name: 'Aria',
 };
@@ -70,6 +71,8 @@ function setDefaultMocks() {
       ic_datetime: '2026-08-20T12:00:00Z',
       year: 1247,
       month: 3,
+      month_name: 'Thawing',
+      date_display: 'the 12th of the Month of Thawing, Year 1247',
       day: 12,
       hour: 14,
       minute: 5,
@@ -95,7 +98,7 @@ describe('WorldBand', () => {
     renderWithProviders(<WorldBand />);
 
     expect(screen.getByText('Time')).toBeInTheDocument();
-    expect(screen.getByText(/Year 1247, Month 3, Day 12/)).toBeInTheDocument();
+    expect(screen.getByText(/The 12th of the Month of Thawing, Year 1247/)).toBeInTheDocument();
     expect(screen.getByText(/Summer, Day/)).toBeInTheDocument();
   });
 

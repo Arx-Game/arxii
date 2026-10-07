@@ -28075,6 +28075,10 @@ export interface components {
       ic_datetime: string;
       year: number;
       month: number;
+      /** @description IC month name, e.g. 'Dreaming'. */
+      month_name: string;
+      /** @description Full IC date, e.g. 'the 14th of the Month of Dreaming, Year 1012'. */
+      date_display: string;
       day: number;
       hour: number;
       minute: number;
@@ -30585,6 +30589,7 @@ export interface components {
        * @description IC datetime — derived from game clock, then adjustable
        */
       readonly scheduled_ic_time: string;
+      readonly scheduled_ic_display: string;
       /**
        * @description Time-of-day phase for the event (scene time freezes here)
        *
@@ -30704,6 +30709,7 @@ export interface components {
        * @description IC datetime — derived from game clock, then adjustable
        */
       readonly scheduled_ic_time: string;
+      readonly scheduled_ic_display: string;
       /**
        * @description Time-of-day phase for the event (scene time freezes here)
        *
@@ -43363,6 +43369,7 @@ export interface components {
        * @description IC datetime at write time (null if the game clock was unset).
        */
       readonly ic_date: string | null;
+      readonly ic_date_display: string | null;
       readonly era_season_number: number | null;
       readonly era_display_name: string | null;
       /**
@@ -43812,6 +43819,7 @@ export interface components {
        * @description IC datetime when the write-up was finalized.
        */
       readonly ic_date: string | null;
+      readonly ic_date_display: string | null;
       readonly era_season_number: number | null;
     };
     /** @description The write-up text for a COMMISSIONED sitting (#2632). */

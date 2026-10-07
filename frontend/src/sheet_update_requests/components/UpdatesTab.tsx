@@ -66,12 +66,12 @@ const STATUS_VARIANTS: Record<string, 'default' | 'secondary' | 'destructive' | 
 
 function formatStamp(version: {
   era_season_number?: number | null;
-  ic_date?: string | null;
+  ic_date_display?: string | null;
   created_at?: string;
 }): string {
   const parts: string[] = [];
   if (version.era_season_number != null) parts.push(`Season ${version.era_season_number}`);
-  if (version.ic_date) parts.push(new Date(version.ic_date).toLocaleDateString());
+  if (version.ic_date_display) parts.push(version.ic_date_display);
   if (parts.length === 0 && version.created_at) {
     parts.push(new Date(version.created_at).toLocaleDateString());
   }

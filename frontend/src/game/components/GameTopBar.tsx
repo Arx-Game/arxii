@@ -61,7 +61,7 @@ function ClockReadout() {
 
   const seasonLabel = capitalize(clock.season);
   const tooltip = [
-    `Year ${clock.year}, Month ${clock.month}, Day ${clock.day}, ${pad(clock.hour)}:${pad(clock.minute)}`,
+    `${clock.date_display}, ${pad(clock.hour)}:${pad(clock.minute)}`,
     capitalize(clock.phase),
   ]
     .filter(Boolean)

@@ -47236,6 +47236,13 @@ components:
           type: integer
         month:
           type: integer
+        month_name:
+          type: string
+          description: IC month name, e.g. 'Dreaming'.
+        date_display:
+          type: string
+          description: Full IC date, e.g. 'the 14th of the Month of Dreaming, Year
+            1012'.
         day:
           type: integer
         hour:
@@ -47252,12 +47259,14 @@ components:
         paused:
           type: boolean
       required:
+      - date_display
       - day
       - hour
       - ic_datetime
       - light_level
       - minute
       - month
+      - month_name
       - paused
       - phase
       - season
@@ -52686,6 +52695,9 @@ components:
           format: date-time
           readOnly: true
           description: IC datetime — derived from game clock, then adjustable
+        scheduled_ic_display:
+          type: string
+          readOnly: true
         time_phase:
           allOf:
           - $ref: '#/components/schemas/TimePhaseEnum'
@@ -52760,6 +52772,7 @@ components:
       - location_name
       - modification
       - name
+      - scheduled_ic_display
       - scheduled_ic_time
       - scheduled_real_time
       - started_at
@@ -52975,6 +52988,9 @@ components:
           format: date-time
           readOnly: true
           description: IC datetime — derived from game clock, then adjustable
+        scheduled_ic_display:
+          type: string
+          readOnly: true
         time_phase:
           allOf:
           - $ref: '#/components/schemas/TimePhaseEnum'
@@ -52998,6 +53014,7 @@ components:
       - location_name
       - name
       - primary_host_name
+      - scheduled_ic_display
       - scheduled_ic_time
       - scheduled_real_time
       - status
@@ -76223,6 +76240,10 @@ components:
           readOnly: true
           nullable: true
           description: IC datetime at write time (null if the game clock was unset).
+        ic_date_display:
+          type: string
+          readOnly: true
+          nullable: true
         era_season_number:
           type: integer
           readOnly: true
@@ -76249,6 +76270,7 @@ components:
       - era_season_number
       - field
       - ic_date
+      - ic_date_display
       - id
       - reasoning
       - staff_edited
@@ -77178,6 +77200,10 @@ components:
           readOnly: true
           nullable: true
           description: IC datetime when the write-up was finalized.
+        ic_date_display:
+          type: string
+          readOnly: true
+          nullable: true
         era_season_number:
           type: integer
           readOnly: true
@@ -77186,6 +77212,7 @@ components:
       - created_at
       - era_season_number
       - ic_date
+      - ic_date_display
       - id
       - persona
       - persona_name
