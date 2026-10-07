@@ -1887,6 +1887,26 @@ def _declarations() -> tuple[ContentDependency, ...]:
                 absent_detail="No SocialConsentCategory row with key='hostile'.",
             ),
         ),
+        ContentDependency(
+            key="makeover-social-consent-category",
+            label="Makeovers & Styling consent category",
+            tier=DependencyTier.REQUIRED,
+            consumer=(
+                "world/items/services/usage.py makeover_outcome() - literal key, no "
+                "constant. Looked up by `key`, not `name`."
+            ),
+            consequence=(
+                "Every makeover of another player's character is refused and nobody can "
+                "be asked or opt a stylist in: the row is the setting (#4187). Create it "
+                "with key='makeover', default mode Ask me, and 'asks before acting' on; "
+                "the seed makes the same row on an empty database."
+            ),
+            probe=FilteredRowProbe(
+                label="SocialConsentCategory",
+                filters=(("key__iexact", "makeover"),),
+                absent_detail="No SocialConsentCategory row with key='makeover'.",
+            ),
+        ),
         # --- CustomProbe: composite invariants a name/existence probe can't express ------
         ContentDependency(
             key="path-gift-starter-pools",
