@@ -26,6 +26,7 @@ export const MODE_ORDER: ConsentMode[] = [
 
 export const MODE_LABELS: Record<ConsentMode, string> = {
   everyone: 'Everyone',
+  ask: 'Ask me each time',
   all_but_blacklist: 'Everyone except blacklist',
   friends_whitelist: 'Friends + whitelist',
   rivals: 'My declared rivals',
