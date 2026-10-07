@@ -324,8 +324,8 @@ shipped system, now each filed:
   — **#2994**.
 - **Block/mute system** — the OOC safety primitive staff-inbox/journals/ooc-social all depend on.
   `intent` — **#2996**.
-- **IC calendar lore + festivals** — lore month names + feast-day cycle over the shipped clock/
-  `FeastDay` hook. `intent` — **#2762**.
+- **IC calendar lore + festivals** — month names **built (#4185)**; the feast-day cycle over the
+  shipped clock/`FeastDay` hook remains. `intent` — **#2762**.
 - **Web surfaces for dreams & kinship** — both backends fully built, telnet/CG-only. `partial` —
   **#3003**.
 - **Dead wires sweep** — scene-dp award (broken + uncalled), level-change hook (uncalled), goals XP
