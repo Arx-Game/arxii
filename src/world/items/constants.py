@@ -371,3 +371,19 @@ class OrgMaterialLedgerKind(models.TextChoices):
 
     GRANT = "grant", "Grant"
     SALE = "sale", "Sale"
+
+
+#: The ``SocialConsentCategory.key`` the makeover gate reads (#2632, #4187). The row is
+#: the setting: seeded, and named by the staff dashboard's required-content sentinel.
+MAKEOVER_CONSENT_CATEGORY_KEY = "makeover"
+
+
+class MakeoverRemember(models.TextChoices):
+    """The one-motion shortcut on a makeover answer (#4187).
+
+    ``ALWAYS`` whitelists the stylist for the makeover category (no more asks);
+    ``NEVER`` blacklists them (always refused, never told).
+    """
+
+    ALWAYS = "always", "Always let them"
+    NEVER = "never", "Never from them"
