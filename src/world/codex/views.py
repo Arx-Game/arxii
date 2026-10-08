@@ -40,7 +40,7 @@ from world.codex.serializers import (
     CodexSubjectSerializer,
     CodexSubjectTreeSerializer,
 )
-from world.codex.types import CharacterKnowledge
+from world.codex.types import CharacterKnowledge, CompanionReader
 from world.roster.models import RosterEntry
 
 
@@ -340,7 +340,8 @@ class CodexEntryViewSet(CodexVisibilityMixin, viewsets.ReadOnlyModelViewSet):
         context = super().get_serializer_context()
         context["knowledge_by_entry"] = self._knowledge_by_entry()
         context["roster_entries"] = self._selected_roster_entries()
-        filing_scope_ids = self._visible_entry_ids()
+        visible_entry_ids = self._visible_entry_ids()
+        filing_scope_ids = set(visible_entry_ids)
         if self.action == "retrieve":
             # A detail response serializes one entry; intersecting with the
             # visible set keeps the filing query scoped to it instead of
@@ -349,5 +350,12 @@ class CodexEntryViewSet(CodexVisibilityMixin, viewsets.ReadOnlyModelViewSet):
                 filing_scope_ids &= {int(self.kwargs["pk"])}
             except (KeyError, TypeError, ValueError):
                 filing_scope_ids = set()
+            # The owner's companion rides the same visibility set (#4198): a line to
+            # another entry is drawn only when the reader may open that entry.
+            user = self.request.user
+            context["companion_reader"] = CompanionReader(
+                visible_entry_ids=frozenset(visible_entry_ids),
+                is_staff=bool(user.is_authenticated and user.is_staff),
+            )
         context["filings_by_entry"] = self._filings_by_entry(filing_scope_ids)
         return context

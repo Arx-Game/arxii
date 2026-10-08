@@ -5,8 +5,10 @@ DRF serializers for codex models with visibility-aware entry serialization.
 """
 
 from django.core.exceptions import ObjectDoesNotExist
+from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
 
+from world.codex.companions import companion_for
 from world.codex.constants import CodexKnowledgeStatus
 from world.codex.models import (
     CodexCategory,
@@ -208,6 +210,33 @@ class CodexEntryListSerializer(EntryKnowledgeMixin, serializers.ModelSerializer)
         return obj.art.cloudinary_url if obj.art_id else None
 
 
+class CompanionItemSerializer(serializers.Serializer):
+    text = serializers.CharField()
+    entry_id = serializers.IntegerField(allow_null=True)
+    anchor = serializers.CharField(allow_null=True)
+
+
+class CompanionGroupSerializer(serializers.Serializer):
+    label = serializers.CharField()
+    items = CompanionItemSerializer(many=True)
+
+
+class CompanionSectionSerializer(serializers.Serializer):
+    anchor = serializers.CharField()
+    label = serializers.CharField()
+    name = serializers.CharField()
+    body = serializers.CharField()
+    when = serializers.CharField(allow_null=True)
+    entry_id = serializers.IntegerField(allow_null=True)
+
+
+class CompanionSerializer(serializers.Serializer):
+    """The facts an entry's owner shows beside the prose (#4198)."""
+
+    rail = CompanionGroupSerializer(many=True)
+    sections = CompanionSectionSerializer(many=True)
+
+
 class CodexEntryDetailSerializer(EntryKnowledgeMixin, serializers.ModelSerializer):
     """Full serializer for entry detail view."""
 
@@ -218,6 +247,7 @@ class CodexEntryDetailSerializer(EntryKnowledgeMixin, serializers.ModelSerialize
     lore_links = serializers.SerializerMethodField()
     mechanics_links = serializers.SerializerMethodField()
     art_url = serializers.SerializerMethodField()
+    companion = serializers.SerializerMethodField()
 
     class Meta:
         model = CodexEntry
@@ -226,6 +256,7 @@ class CodexEntryDetailSerializer(EntryKnowledgeMixin, serializers.ModelSerialize
             "name",
             "summary",
             "quote",
+            "companion",
             "lore_content",
             "mechanics_content",
             "lore_links",
@@ -245,6 +276,15 @@ class CodexEntryDetailSerializer(EntryKnowledgeMixin, serializers.ModelSerialize
             "also_filed_under",
             "art_url",
         ]
+
+    @extend_schema_field(CompanionSerializer(allow_null=True))
+    def get_companion(self, obj: CodexEntry):
+        """The owner's facts beside the prose (#4198); ``None`` when no owner claims it."""
+        reader = self.context.get("companion_reader")
+        if reader is None:
+            return None
+        companion = companion_for(obj, reader)
+        return None if companion is None else CompanionSerializer(companion).data
 
     def get_subject_path(self, obj: CodexEntry) -> list[dict]:
         """Return the subject path with IDs for clickable breadcrumb navigation."""

@@ -125,4 +125,4 @@ class EventIcDateDisplayTest(TestCase):
         for serializer_class in (EventListSerializer, EventDetailSerializer):
             with self.subTest(serializer=serializer_class.__name__):
                 data = serializer_class(self.event).data
-                self.assertEqual(data["scheduled_ic_display"], "14 Dreaming (1-14-1012)")
+                self.assertEqual(data["scheduled_ic_display"], "Dreaming 14 (1/14/1012)")

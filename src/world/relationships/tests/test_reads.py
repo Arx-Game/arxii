@@ -104,7 +104,7 @@ class ReadTests(TestCase):
         )
         JournalEntryFactory(author=self.a, about=self.b, is_public=True, title="Undated")
         items = {i["title"]: i for i in tie_stream(self.ab, self.b, False, account=None)}
-        self.assertEqual(items["Dated"]["ic_timestamp_display"], "22 Unyielding (9-22-1012)")
+        self.assertEqual(items["Dated"]["ic_timestamp_display"], "Unyielding 22 (9/22/1012)")
         self.assertIsNone(items["Undated"]["ic_timestamp_display"])
 
     def test_stream_staff_with_no_viewer_sees_black_entries(self):

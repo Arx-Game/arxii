@@ -30,11 +30,11 @@ class IcCalendarFormatTests(SimpleTestCase):
 
     def test_inline_form_carries_the_numeric_date(self) -> None:
         self.assertEqual(
-            format_ic_date(datetime(1012, 1, 14, tzinfo=UTC)), "14 Dreaming (1-14-1012)"
+            format_ic_date(datetime(1012, 1, 14, tzinfo=UTC)), "Dreaming 14 (1/14/1012)"
         )
 
     def test_every_month_has_its_own_name(self) -> None:
-        names = {format_ic_date(datetime(1012, m, 1, tzinfo=UTC)).split()[1] for m in range(1, 13)}
+        names = {format_ic_date(datetime(1012, m, 1, tzinfo=UTC)).split()[0] for m in range(1, 13)}
         self.assertEqual(len(names), 12)
         self.assertIn("Ending", format_ic_date(datetime(1012, 12, 31, tzinfo=UTC)))
 
@@ -51,7 +51,7 @@ class IcCalendarFormatTests(SimpleTestCase):
     def test_reads_the_date_in_utc_like_the_clock(self) -> None:
         """An aware datetime in another zone must not shift the IC day."""
         late_evening_west = datetime(1012, 3, 31, 21, 0, tzinfo=timezone(timedelta(hours=-5)))
-        self.assertEqual(format_ic_date(late_evening_west), "1 Waking (4-1-1012)")
+        self.assertEqual(format_ic_date(late_evening_west), "Waking 1 (4/1/1012)")
 
 
 class GetIcNowTests(TestCase):
