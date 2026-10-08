@@ -803,3 +803,13 @@ class InvalidPersonalText(MagicError):
     def __init__(self, user_message: str) -> None:
         super().__init__(user_message)
         self.user_message = user_message
+
+
+class UnmergedFacetRelation(MagicError):
+    """A merge found a relation onto Facet it has no handler for (#4197).
+
+    Raised before anything moves, so a binding added later can never be stranded on
+    a deleted facet; the fix is a handler in ``services.facets``, never a skip.
+    """
+
+    user_message = "These facets cannot be merged yet."

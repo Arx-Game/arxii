@@ -30,6 +30,8 @@ vi.mock('../../hooks/useItemFacets', () => ({
 
 vi.mock('@/character-creation/queries', () => ({
   useFacets: vi.fn(),
+  useNearFacets: () => ({ data: [], isPending: false }),
+  useCreateFacet: () => ({ mutate: vi.fn(), isPending: false }),
 }));
 
 vi.mock('../../hooks/useLabStation', () => ({
@@ -220,8 +222,8 @@ describe('AttachFacetDialog', () => {
       <AttachFacetDialog open={true} onOpenChange={vi.fn()} itemInstanceId={ITEM_INSTANCE_ID} />
     );
 
-    // Open the combobox popover by clicking the trigger button.
-    const triggerButton = screen.getByRole('combobox');
+    // Open the picker by clicking its button.
+    const triggerButton = screen.getByRole('button', { name: '+ Choose a facet' });
     await user.click(triggerButton);
 
     // Click the 'Spider' option in the open popover.
@@ -268,8 +270,8 @@ describe('AttachFacetDialog', () => {
       <AttachFacetDialog open={true} onOpenChange={vi.fn()} itemInstanceId={ITEM_INSTANCE_ID} />
     );
 
-    // Open combobox and select Spider.
-    await user.click(screen.getByRole('combobox'));
+    // Open the picker and select Spider.
+    await user.click(screen.getByRole('button', { name: '+ Choose a facet' }));
     await user.click(await screen.findByText('Spider'));
 
     // Click Attach.
@@ -306,8 +308,8 @@ describe('AttachFacetDialog', () => {
       <AttachFacetDialog open={true} onOpenChange={vi.fn()} itemInstanceId={ITEM_INSTANCE_ID} />
     );
 
-    // Open combobox and select Spider.
-    await user.click(screen.getByRole('combobox'));
+    // Open the picker and select Spider.
+    await user.click(screen.getByRole('button', { name: '+ Choose a facet' }));
     await user.click(await screen.findByText('Spider'));
 
     // Click Attach.
@@ -383,7 +385,7 @@ describe('AttachFacetDialog', () => {
     );
 
     // Select Spider to trigger panel visibility.
-    await user.click(screen.getByRole('combobox'));
+    await user.click(screen.getByRole('button', { name: '+ Choose a facet' }));
     await user.click(await screen.findByText('Spider'));
 
     const panel = screen.getByTestId('crafting-quote-panel');
@@ -421,7 +423,7 @@ describe('AttachFacetDialog', () => {
       <AttachFacetDialog open={true} onOpenChange={vi.fn()} itemInstanceId={ITEM_INSTANCE_ID} />
     );
 
-    await user.click(screen.getByRole('combobox'));
+    await user.click(screen.getByRole('button', { name: '+ Choose a facet' }));
     await user.click(await screen.findByText('Spider'));
 
     const panel = screen.getByTestId('crafting-quote-panel');
@@ -469,7 +471,7 @@ describe('AttachFacetDialog', () => {
       <AttachFacetDialog open={true} onOpenChange={vi.fn()} itemInstanceId={ITEM_INSTANCE_ID} />
     );
 
-    await user.click(screen.getByRole('combobox'));
+    await user.click(screen.getByRole('button', { name: '+ Choose a facet' }));
     await user.click(await screen.findByText('Spider'));
 
     const attachBtn = screen.getByRole('button', { name: /can't afford/i });
@@ -504,7 +506,7 @@ describe('AttachFacetDialog', () => {
       <AttachFacetDialog open={true} onOpenChange={vi.fn()} itemInstanceId={ITEM_INSTANCE_ID} />
     );
 
-    await user.click(screen.getByRole('combobox'));
+    await user.click(screen.getByRole('button', { name: '+ Choose a facet' }));
     await user.click(await screen.findByText('Spider'));
     await user.click(screen.getByRole('button', { name: /attach/i }));
 
@@ -557,7 +559,7 @@ describe('AttachFacetDialog', () => {
       <AttachFacetDialog open={true} onOpenChange={vi.fn()} itemInstanceId={ITEM_INSTANCE_ID} />
     );
 
-    await user.click(screen.getByRole('combobox'));
+    await user.click(screen.getByRole('button', { name: '+ Choose a facet' }));
     await user.click(await screen.findByText('Spider'));
 
     const stationCard = screen.getByTestId('lab-station-status-card');
@@ -598,7 +600,7 @@ describe('AttachFacetDialog', () => {
       <AttachFacetDialog open={true} onOpenChange={vi.fn()} itemInstanceId={ITEM_INSTANCE_ID} />
     );
 
-    await user.click(screen.getByRole('combobox'));
+    await user.click(screen.getByRole('button', { name: '+ Choose a facet' }));
     await user.click(await screen.findByText('Spider'));
 
     expect(screen.getByText(/no lab station in this room/i)).toBeInTheDocument();
@@ -664,7 +666,7 @@ describe('AttachFacetDialog', () => {
       <AttachFacetDialog open={true} onOpenChange={vi.fn()} itemInstanceId={ITEM_INSTANCE_ID} />
     );
 
-    await user.click(screen.getByRole('combobox'));
+    await user.click(screen.getByRole('button', { name: '+ Choose a facet' }));
     await user.click(await screen.findByText('Spider'));
 
     await user.click(screen.getByRole('button', { name: /repair/i }));

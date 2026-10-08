@@ -571,6 +571,25 @@ selects rendered); the bind and unbind mutations' 400 `detail` messages both ren
 `useMotifStyleBindings`/`useBindMotifStyle`/`useUnbindMotifStyle` are all called with
 `characterSheetId` (cross-character scoping, #2030 review fix).
 
+### `components/FacetPicker.tsx` + `facetKey.ts` (#4197)
+
+The one way to pick a facet from the flat vocabulary: the deity page (`pantheon`) and item
+crafting (`inventory/AttachFacetDialog`) both mount it. Props: `facets` (the vocabulary the
+caller already loaded, `{id, name}[]`), `exclude`, `onPick(facet)`, `canCreate` (staff only),
+`label`. Closed it is a `+ {label}` button; open it is a cmdk popover: type to search what
+exists; a spelling of two or more letters that resolves to nothing (by `facetKey`, the
+TypeScript mirror of `services.facets.facet_key`) asks `useNearFacets` (debounced 250 ms,
+`GET /api/magic/facets/near/`) and shows the answers under "Did you mean"; with `canCreate`
+and no key-equal answer it offers `Create "<spelling>"`, which `useCreateFacet` POSTs and
+then picks. The server's answer is the truth (a spelling that resolves comes back with
+`matched: true`); `facetKey` only decides what the picker shows while typing.
+
+### `components/__tests__/FacetPicker.test.tsx` (#4197)
+
+Search picks an existing facet; a new spelling shows its near-matches and, for staff, the
+create item that POSTs and picks the result; a player never sees create; a spelling that
+already resolves never offers it. `facetKey`'s cases are pinned beside the Python ones.
+
 ### `components/TechniqueProgressPanel.tsx` (#2739 Task 3)
 
 Card rendered in `SpellbookTab.tsx`, own-view only, below `MotifStylePanel` — the

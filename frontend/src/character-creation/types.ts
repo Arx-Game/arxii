@@ -707,6 +707,11 @@ export interface Facet {
   description: string;
 }
 
+/** A facet the create endpoint answered with, and whether it already existed (#4197). */
+export interface FacetMatch extends Facet {
+  matched: boolean;
+}
+
 /**
  * A built technique within a gift.
  */

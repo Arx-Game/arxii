@@ -1,8 +1,10 @@
 from django import forms
-from django.contrib import admin
+from django.contrib import admin, messages
+from django.contrib.admin import helpers
 from django.core.exceptions import ValidationError
 from django.db.models import Count, Prefetch
 from django.forms.models import BaseInlineFormSet
+from django.template.response import TemplateResponse
 from django.utils.html import format_html
 
 from web.admin.authoring.offers import DistinctionOfferFormSetMixin
@@ -51,6 +53,7 @@ from world.magic.models import (
     DistinctionRitualGrant,
     EffectType,
     Facet,
+    FacetAlias,
     FuryConfig,
     FuryTier,
     Gift,
@@ -134,6 +137,7 @@ from world.magic.models.dramatic_moment import (
     DramaticMomentType,
 )
 from world.magic.models.resonance_environment import ResonanceAlignmentBoonTier
+from world.magic.services.facets import merge_facets
 from world.magic.services.glimpse import refresh_glimpse_state
 from world.magic.services.technique_effects import (
     invalidate_technique_payload_caches,
@@ -1128,18 +1132,72 @@ class MotifResonanceAdmin(admin.ModelAdmin):
     inlines = [MotifResonanceStyleInline]
 
 
+#: A merge needs a survivor and at least one duplicate.
+_MERGE_MINIMUM = 2
+
+
+class FacetAliasInline(admin.TabularInline):
+    """The other spellings that route to this facet (#4197)."""
+
+    model = FacetAlias
+    extra = 0
+    fields = ["name"]
+
+
 @admin.register(Facet)
 class FacetAdmin(admin.ModelAdmin):
-    """Admin for the flat Facet vocabulary."""
+    """Admin for the flat Facet vocabulary.
 
-    list_display = ["name", "description"]
-    search_fields = ["name", "description"]
+    "Merge into..." is where a drifted vocabulary is swept (#4197): select the
+    duplicates, pick the survivor on the confirmation page, and every binding
+    follows while the retired names become aliases of the survivor.
+    """
+
+    list_display = ["name", "description", "alias_names"]
+    search_fields = ["name", "description", "aliases__name"]
     ordering = ["name"]
     readonly_fields = ["get_connections"]
+    inlines = [FacetAliasInline]
+    actions = ["merge_into"]
 
     @admin.display(description="Connections")
     def get_connections(self, obj):
         return describe_reverse_relations(obj)
+
+    @admin.display(description="Also spelled")
+    def alias_names(self, obj: Facet) -> str:
+        return ", ".join(obj.aliases.values_list("name", flat=True))
+
+    @admin.action(description="Merge into...")
+    def merge_into(self, request, queryset):  # type: ignore[no-untyped-def]
+        """Two steps: the confirmation page lists what moves, then the merge runs."""
+        facets = list(queryset.order_by("name"))
+        if len(facets) < _MERGE_MINIMUM:
+            self.message_user(request, "Select at least two facets to merge.", messages.WARNING)
+            return None
+        if request.POST.get("apply"):
+            try:
+                winner = next(f for f in facets if str(f.pk) == request.POST.get("winner"))
+            except StopIteration:
+                self.message_user(request, "Pick the facet that survives.", messages.ERROR)
+                return None
+            losers = [f for f in facets if f.pk != winner.pk]
+            result = merge_facets(winner, losers)
+            self.message_user(
+                request,
+                f"Merged {', '.join(result.retired_names)} into {winner.name}: "
+                f"{result.moved} bindings moved, {result.dropped} already there.",
+                messages.SUCCESS,
+            )
+            return None
+        context = {
+            **self.admin_site.each_context(request),
+            "title": "Merge facets",
+            "facets": [(f, describe_reverse_relations(f)) for f in facets],
+            "action_checkbox_name": helpers.ACTION_CHECKBOX_NAME,
+            "opts": self.model._meta,  # noqa: SLF001 - the admin template takes opts
+        }
+        return TemplateResponse(request, "admin/magic/facet/merge.html", context)
 
 
 @admin.register(Reincarnation)

@@ -10,3 +10,10 @@ Staff-only authoring of the pantheon over `/api/worship/admin/beings/`.
   tabs Overview / Worship / Temples & Shrines / Prayers / Visions / Relics / Codex Entries.
 - Staff-page conventions only (plain cards, `container mx-auto max-w-6xl px-4 py-8`); never
   the realm-themed fonts.
+
+## Facets on the edit page (#4197)
+
+"Favored facets" picks through the shared `FacetPicker` (`@/magic/components/FacetPicker`),
+`canCreate` for staff: a spelling that resolves to nothing shows what it is near, then
+offers to create it in the same gesture. A created facet is not in `useEditorOptions` yet,
+so the pick handler invalidates `pantheonKeys.options`.

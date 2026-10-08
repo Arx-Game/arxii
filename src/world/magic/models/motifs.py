@@ -58,6 +58,38 @@ class Facet(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
         return self.name
 
 
+class FacetAlias(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
+    """Another spelling that routes to a facet (#4197).
+
+    The vocabulary is flat and typed by many hands, so it drifts: Scythe, Scythes,
+    Scythe-like Weapons. A merge (``services.facets.merge_facets``) retires the
+    losers and records each retired name here, and staff may add a spelling by
+    hand; a picker's search and the create endpoint resolve an alias to its facet,
+    so a name that was once merged never comes back as a new row. Never shown to a
+    player; it only routes.
+    """
+
+    name = models.CharField(
+        max_length=100,
+        unique=True,
+        help_text="The other spelling (e.g. 'Scythes'); unique across aliases and facets.",
+    )
+    facet = models.ForeignKey(Facet, on_delete=models.CASCADE, related_name="aliases")
+
+    objects = NaturalKeyManager()
+
+    class Meta:
+        ordering = ["name"]
+        verbose_name = "Facet alias"
+        verbose_name_plural = "Facet aliases"
+
+    class NaturalKeyConfig:
+        fields = ["name"]
+
+    def __str__(self) -> str:
+        return f"{self.name} -> {self.facet.name}"
+
+
 class Motif(SharedMemoryModel):
     """
     Character-level magical aesthetic.

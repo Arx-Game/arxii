@@ -28,7 +28,9 @@ import {
   getDraftCGPoints,
   getDraftOffers,
   getEffectTypes,
+  createFacet,
   getFacets,
+  getNearFacets,
   getFamilies,
   getFamiliesWithOpenKinSlots,
   getClaimableTitles,
@@ -691,6 +693,27 @@ export function useFacets() {
   return useQuery({
     queryKey: characterCreationKeys.facets(),
     queryFn: getFacets,
+  });
+}
+
+/** What a typed spelling is near, asked only while a picker needs it (#4197). */
+export function useNearFacets(name: string, enabled: boolean) {
+  return useQuery({
+    queryKey: [...characterCreationKeys.facets(), 'near', name] as const,
+    queryFn: () => getNearFacets(name),
+    enabled,
+    staleTime: 30_000,
+  });
+}
+
+/** Staff create a facet from a picker; the vocabulary refetches so every picker sees it. */
+export function useCreateFacet() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: createFacet,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: characterCreationKeys.facets() }).catch(() => {});
+    },
   });
 }
 

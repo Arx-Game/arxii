@@ -10,6 +10,18 @@
 ## Game Systems
 
 ### Magic
+
+- **Facet vocabulary guards (#4197, ADR-4197):** `Facet` is a flat vocabulary typed by many
+  hands. `world/magic/services/facets.py` holds the one spelling rule (`facet_key`),
+  `find_facet` / `near_facets` (what a spelling resolves to, and what it is near; aliases
+  count), and `merge_facets(winner, losers) -> FacetMerge` (repoints all eight relations onto
+  `Facet` in one transaction, drops a binding an owner already has on the winner, retires the
+  losers as `FacetAlias` rows, refuses with `UnmergedFacetRelation` when a relation has no
+  handler). API: `GET /api/magic/facets/near/?name=`; `POST /api/magic/facets/` is staff-only
+  and answers an existing facet with `matched: true` for a spelling that already resolves.
+  Admin: `FacetAdmin` action **Merge into...** with a confirmation page; `FacetAlias` inline.
+  Frontend: `FacetPicker` (`frontend/src/magic/components/`), used by the deity page and item
+  crafting; `facetKey` mirrors the rule in TypeScript.
 Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Scars.
 
 - **Models:**

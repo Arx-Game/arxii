@@ -1,0 +1,51 @@
+{% extends "admin/base_site.html" %}
+{% load i18n admin_urls %}
+
+{% block title %}{{ title }} | {% translate 'Site administration' %}{% endblock %}
+
+{% block breadcrumbs %}
+<div class="breadcrumbs">
+    <a href="{% url 'admin:index' %}">{% translate 'Home' %}</a>
+    &rsaquo; <a href="{% url opts|admin_urlname:'changelist' %}">{{ opts.verbose_name_plural|capfirst }}</a>
+    &rsaquo; {{ title }}
+</div>
+{% endblock %}
+
+{% block content %}
+<div id="content-main">
+    <form method="post">
+        {% csrf_token %}
+        <div class="module" style="padding: 15px; margin-bottom: 20px;">
+            <h2 style="margin-top: 0;">Pick the facet that survives</h2>
+            <p>
+                Every binding on the others moves to it (an owner already on the survivor keeps
+                one), each retired name becomes an alias of the survivor, and the others are
+                deleted. One transaction; the aliases make the retired spellings resolve from now on.
+            </p>
+            <table>
+                <thead>
+                    <tr><th>Survives</th><th>Facet</th><th>Bindings that move</th></tr>
+                </thead>
+                <tbody>
+                {% for facet, connections in facets %}
+                    <tr>
+                        <td><input type="radio" name="winner" value="{{ facet.pk }}" id="winner-{{ facet.pk }}" {% if forloop.first %}checked{% endif %}></td>
+                        <td><label for="winner-{{ facet.pk }}"><strong>{{ facet.name }}</strong></label>{% if facet.description %}<br><span class="help">{{ facet.description }}</span>{% endif %}</td>
+                        <td>{{ connections|default:"none" }}</td>
+                    </tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% for facet, connections in facets %}
+        <input type="hidden" name="{{ action_checkbox_name }}" value="{{ facet.pk }}">
+        {% endfor %}
+        <input type="hidden" name="action" value="merge_into">
+        <input type="hidden" name="apply" value="1">
+        <div class="submit-row">
+            <input type="submit" class="default" value="Merge">
+            <a href="{% url opts|admin_urlname:'changelist' %}" class="button cancel-link">{% translate 'Cancel' %}</a>
+        </div>
+    </form>
+</div>
+{% endblock %}

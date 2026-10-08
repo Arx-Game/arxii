@@ -20,7 +20,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
-import { Combobox } from '@/components/ui/combobox';
+import { FacetPicker } from '@/magic/components/FacetPicker';
 import { useFacets } from '@/character-creation/queries';
 import {
   itemFacetKeys,
@@ -69,10 +69,7 @@ export function AttachFacetDialog({ open, onOpenChange, itemInstanceId }: Attach
     }
   }, [open]);
 
-  const comboboxItems = (facetsQuery.data ?? []).map((f) => ({
-    value: String(f.id),
-    label: f.name,
-  }));
+  const selectedFacet = (facetsQuery.data ?? []).find((f) => String(f.id) === selectedFacetId);
 
   function handleOpenChange(next: boolean) {
     if (craftMutation.isPending) return;
@@ -166,15 +163,26 @@ export function AttachFacetDialog({ open, onOpenChange, itemInstanceId }: Attach
 
           <div className="space-y-1.5">
             <p className="text-sm font-medium">Select a facet to attach</p>
-            <Combobox
-              items={comboboxItems}
-              value={selectedFacetId}
-              onValueChange={setSelectedFacetId}
-              placeholder="Choose a facet…"
-              searchPlaceholder="Search facets…"
-              emptyMessage="No facets found."
-              disabled={facetsQuery.isLoading || craftMutation.isPending}
-            />
+            {selectedFacet ? (
+              <div className="flex items-center gap-2 text-sm">
+                <span className="rounded-full bg-muted px-3 py-1">{selectedFacet.name}</span>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setSelectedFacetId('')}
+                  disabled={craftMutation.isPending}
+                >
+                  Change
+                </Button>
+              </div>
+            ) : (
+              <FacetPicker
+                facets={facetsQuery.data}
+                label="Choose a facet"
+                onPick={(facet) => setSelectedFacetId(String(facet.id))}
+              />
+            )}
           </div>
 
           {selectedFacetId && (

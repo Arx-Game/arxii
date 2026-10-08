@@ -172,6 +172,13 @@ _Avoid_: facet binding (a Facet is a different axis — a flat, shared imagery
 vocabulary since #3776/ADR-0289 — bound through `MotifResonanceAssociation`, not
 through `Style`).
 
+**Facet alias**:
+Another spelling that routes to a facet (`FacetAlias`, #4197): the names a merge retired
+("Scythes" after Scythes was merged into Scythe) and any spelling staff add by hand. Read by
+the pickers' search and by `POST /api/magic/facets/`, never shown to a player. The merge
+itself is `merge_facets` (`services/facets.py`); the spelling rule both share is `facet_key`.
+_Avoid_: synonym (an alias is a spelling of the same facet, not a related one); tag.
+
 **Mantle**:
 A specific, storied, attunable ItemInstance in the world (a particular sword, amulet, banner) with authored progression levels. A character attunes by weaving a MANTLE-kind Thread anchored on the Mantle, gated on having cleared at least its first level; the Thread's level cannot exceed the character's max-cleared mantle level.
 

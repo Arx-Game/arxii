@@ -147,6 +147,7 @@ from world.magic.models.liturgy import RitualLiturgy
 from world.magic.models.manifestation import CharacterManifestation, TechniqueManifestOption
 from world.magic.models.motifs import (
     Facet,
+    FacetAlias,
     FacetManager,
     Motif,
     MotifResonance,
@@ -338,6 +339,7 @@ __all__ = [
     # endorsement — entry flourish (#545)
     "EntryFlourishRecord",
     "Facet",
+    "FacetAlias",
     "FacetManager",
     "FallRedemptionConfig",
     "FallRedemptionRecord",

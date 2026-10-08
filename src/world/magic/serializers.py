@@ -713,6 +713,30 @@ class FacetSerializer(serializers.ModelSerializer):
         read_only_fields = ["id"]
 
 
+_FACET_NEEDS_A_NAME = "A facet needs a name."
+
+
+class FacetCreateSerializer(serializers.Serializer):
+    """A staff pick that names a facet not yet in the vocabulary (#4197)."""
+
+    name = serializers.CharField(max_length=100)
+
+    def validate_name(self, value: str) -> str:
+        cleaned = " ".join(value.split())
+        if not cleaned:
+            raise serializers.ValidationError(_FACET_NEEDS_A_NAME)
+        return cleaned
+
+
+class FacetMatchSerializer(FacetSerializer):
+    """A facet the create endpoint answered with, and whether it already existed."""
+
+    matched = serializers.BooleanField(read_only=True)
+
+    class Meta(FacetSerializer.Meta):
+        fields = [*FacetSerializer.Meta.fields, "matched"]
+
+
 # =============================================================================
 # Motif Serializers
 # =============================================================================

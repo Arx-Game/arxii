@@ -13046,10 +13046,25 @@ export interface paths {
       path?: never;
       cookie?: never;
     };
-    /** @description Read-only browse of the flat Facet vocabulary. */
+    /**
+     * @description The flat Facet vocabulary: every player reads it, staff grow it (#4197).
+     *
+     *     ``POST`` names a facet; a name whose spelling already resolves (a facet or an
+     *     alias, by ``facet_key``) answers with that facet and ``matched: true`` instead
+     *     of a near-duplicate. ``GET near/?name=`` is what a picker shows before it
+     *     offers to create.
+     */
     get: operations['magic_facets_list'];
     put?: never;
-    post?: never;
+    /**
+     * @description The flat Facet vocabulary: every player reads it, staff grow it (#4197).
+     *
+     *     ``POST`` names a facet; a name whose spelling already resolves (a facet or an
+     *     alias, by ``facet_key``) answers with that facet and ``matched: true`` instead
+     *     of a near-duplicate. ``GET near/?name=`` is what a picker shows before it
+     *     offers to create.
+     */
+    post: operations['magic_facets_create'];
     delete?: never;
     options?: never;
     head?: never;
@@ -13063,8 +13078,39 @@ export interface paths {
       path?: never;
       cookie?: never;
     };
-    /** @description Read-only browse of the flat Facet vocabulary. */
+    /**
+     * @description The flat Facet vocabulary: every player reads it, staff grow it (#4197).
+     *
+     *     ``POST`` names a facet; a name whose spelling already resolves (a facet or an
+     *     alias, by ``facet_key``) answers with that facet and ``matched: true`` instead
+     *     of a near-duplicate. ``GET near/?name=`` is what a picker shows before it
+     *     offers to create.
+     */
     get: operations['magic_facets_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/magic/facets/near/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description The flat Facet vocabulary: every player reads it, staff grow it (#4197).
+     *
+     *     ``POST`` names a facet; a name whose spelling already resolves (a facet or an
+     *     alias, by ``facet_key``) answers with that facet and ``matched: true`` instead
+     *     of a near-duplicate. ``GET near/?name=`` is what a picker shows before it
+     *     offers to create.
+     */
+    get: operations['magic_facets_near_list'];
     put?: never;
     post?: never;
     delete?: never;
@@ -30979,6 +31025,19 @@ export interface components {
         [key: string]: unknown;
       } | null;
       consequence_label: string | null;
+    };
+    /** @description A staff pick that names a facet not yet in the vocabulary (#4197). */
+    FacetCreateRequest: {
+      name: string;
+    };
+    /** @description A facet the create endpoint answered with, and whether it already existed. */
+    FacetMatch: {
+      readonly id: number;
+      /** @description Facet name (e.g., 'Wolf', 'Silk', 'Scythe'). */
+      name: string;
+      /** @description Description of this facet's thematic meaning. */
+      description?: string;
+      readonly matched: boolean;
     };
     Family: {
       readonly id: number;
@@ -66708,6 +66767,37 @@ export interface operations {
       };
     };
   };
+  magic_facets_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['FacetCreateRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['FacetMatch'];
+        };
+      };
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['FacetMatch'];
+        };
+      };
+    };
+  };
   magic_facets_retrieve: {
     parameters: {
       query?: never;
@@ -66726,6 +66816,29 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['Facet'];
+        };
+      };
+    };
+  };
+  magic_facets_near_list: {
+    parameters: {
+      query: {
+        name: string;
+        /** @description A search term. */
+        search?: string;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['Facet'][];
         };
       };
     };

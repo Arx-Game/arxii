@@ -20147,7 +20147,13 @@ paths:
   /api/magic/facets/:
     get:
       operationId: magic_facets_list
-      description: Read-only browse of the flat Facet vocabulary.
+      description: |-
+        The flat Facet vocabulary: every player reads it, staff grow it (#4197).
+
+        ``POST`` names a facet; a name whose spelling already resolves (a facet or an
+        alias, by ``facet_key``) answers with that facet and ``matched: true`` instead
+        of a near-duplicate. ``GET near/?name=`` is what a picker shows before it
+        offers to create.
       parameters:
       - name: search
         required: false
@@ -20168,10 +20174,48 @@ paths:
                 items:
                   $ref: '#/components/schemas/Facet'
           description: ''
+    post:
+      operationId: magic_facets_create
+      description: |-
+        The flat Facet vocabulary: every player reads it, staff grow it (#4197).
+
+        ``POST`` names a facet; a name whose spelling already resolves (a facet or an
+        alias, by ``facet_key``) answers with that facet and ``matched: true`` instead
+        of a near-duplicate. ``GET near/?name=`` is what a picker shows before it
+        offers to create.
+      tags:
+      - magic
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FacetCreateRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FacetMatch'
+          description: ''
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FacetMatch'
+          description: ''
   /api/magic/facets/{id}/:
     get:
       operationId: magic_facets_retrieve
-      description: Read-only browse of the flat Facet vocabulary.
+      description: |-
+        The flat Facet vocabulary: every player reads it, staff grow it (#4197).
+
+        ``POST`` names a facet; a name whose spelling already resolves (a facet or an
+        alias, by ``facet_key``) answers with that facet and ``matched: true`` instead
+        of a near-duplicate. ``GET near/?name=`` is what a picker shows before it
+        offers to create.
       parameters:
       - in: path
         name: id
@@ -20189,6 +20233,41 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Facet'
+          description: ''
+  /api/magic/facets/near/:
+    get:
+      operationId: magic_facets_near_list
+      description: |-
+        The flat Facet vocabulary: every player reads it, staff grow it (#4197).
+
+        ``POST`` names a facet; a name whose spelling already resolves (a facet or an
+        alias, by ``facet_key``) answers with that facet and ``matched: true`` instead
+        of a near-duplicate. ``GET near/?name=`` is what a picker shows before it
+        offers to create.
+      parameters:
+      - in: query
+        name: name
+        schema:
+          type: string
+        required: true
+      - name: search
+        required: false
+        in: query
+        description: A search term.
+        schema:
+          type: string
+      tags:
+      - magic
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Facet'
           description: ''
   /api/magic/gift-unlocks/purchase/:
     post:
@@ -53373,6 +53452,38 @@ components:
       - outcome_name
       - quality_tier
       - success_level
+    FacetCreateRequest:
+      type: object
+      description: A staff pick that names a facet not yet in the vocabulary (#4197).
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 100
+      required:
+      - name
+    FacetMatch:
+      type: object
+      description: A facet the create endpoint answered with, and whether it already
+        existed.
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        name:
+          type: string
+          description: Facet name (e.g., 'Wolf', 'Silk', 'Scythe').
+          maxLength: 100
+        description:
+          type: string
+          description: Description of this facet's thematic meaning.
+        matched:
+          type: boolean
+          readOnly: true
+      required:
+      - id
+      - matched
+      - name
     Family:
       type: object
       properties:
