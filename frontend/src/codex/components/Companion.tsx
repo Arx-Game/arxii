@@ -78,7 +78,9 @@ export function CompanionSections({ sections, onNavigate }: SectionsProps) {
       {sections.map((section) => (
         <section key={section.anchor} id={section.anchor} className="codex-section space-y-1">
           <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-            <span className="codex-section-label">{section.label}</span>
+            <span className="codex-section-label text-amber-700 dark:text-amber-400">
+              {section.label}
+            </span>
             {section.entry_id !== null ? (
               <button
                 type="button"

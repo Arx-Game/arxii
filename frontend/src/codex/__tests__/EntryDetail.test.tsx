@@ -156,7 +156,7 @@ describe('EntryDetail companion (#4198)', () => {
     rail: [
       { label: 'Domains', items: [{ text: 'Carnage, Hunters', entry_id: null, anchor: null }] },
       {
-        label: 'Feast days',
+        label: 'Feast day',
         items: [
           {
             text: 'The Reaping Festival · Masquing 18 (10/18)',

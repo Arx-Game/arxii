@@ -28,6 +28,7 @@ from world.worship.models import (
 _DOMAINS = "Domains"
 _ALSO_CALLED = "Also called"
 _FEAST_DAYS = "Feast days"
+_FEAST_DAY_ONE = "Feast day"
 _CARDS = "Cards"
 _FACETS = "Facets"
 _FEAST_DAY = "Feast day"
@@ -107,7 +108,7 @@ def _feast_days(
                     anchor=anchor, label=_FEAST_DAY, name=day.name, when=when, body=story
                 )
             )
-    _group(rail, _FEAST_DAYS, items)
+    _group(rail, _FEAST_DAY_ONE if len(items) == 1 else _FEAST_DAYS, items)
 
 
 def _cards(being: WorshippedBeing, rail: list[CompanionGroup]) -> None:

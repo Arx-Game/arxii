@@ -7,10 +7,13 @@ from django.test import TestCase
 from rest_framework import status
 from rest_framework.test import APIClient
 
+from evennia_extensions.factories import AccountFactory
 from world.codex import companions
 from world.codex.companions import companion_for, register_companion
-from world.codex.factories import CodexEntryFactory
+from world.codex.constants import CodexKnowledgeStatus
+from world.codex.factories import CharacterCodexKnowledgeFactory, CodexEntryFactory
 from world.codex.types import Companion, CompanionGroup, CompanionItem, CompanionReader
+from world.roster.factories import RosterTenureFactory
 
 
 class CompanionRegistryTests(TestCase):
@@ -18,6 +21,9 @@ class CompanionRegistryTests(TestCase):
     def setUpTestData(cls):
         cls.entry = CodexEntryFactory(name="The Fleshreaper", is_public=True)
         cls.other = CodexEntryFactory(name="Unowned", is_public=True)
+        cls.hidden = CodexEntryFactory(name="Being Researched", is_public=False)
+        cls.account = AccountFactory(username="researcher")
+        cls.roster_entry = RosterTenureFactory(player_data__account=cls.account).roster_entry
 
     def test_a_provider_answers_on_retrieve_and_is_not_asked_on_list(self):
         asked = []
@@ -64,6 +70,24 @@ class CompanionRegistryTests(TestCase):
 
             unowned = client.get(f"/api/codex/entries/{self.other.pk}/")
             self.assertIsNone(unowned.data["companion"])
+
+    def test_an_entry_still_being_researched_carries_no_companion(self):
+        CharacterCodexKnowledgeFactory(
+            roster_entry=self.roster_entry,
+            entry=self.hidden,
+            status=CodexKnowledgeStatus.UNCOVERED,
+        )
+
+        def always(entry, reader):
+            return Companion(rail=[CompanionGroup("Domains", [CompanionItem("x")])], sections=[])
+
+        with mock.patch.object(companions, "_PROVIDERS", [always]):
+            client = APIClient()
+            client.force_authenticate(user=self.account)
+            detail = client.get(f"/api/codex/entries/{self.hidden.pk}/")
+            self.assertEqual(detail.status_code, status.HTTP_200_OK)
+            self.assertIsNone(detail.data["lore_content"])
+            self.assertIsNone(detail.data["companion"])
 
     def test_no_provider_means_null(self):
         with mock.patch.object(companions, "_PROVIDERS", []):

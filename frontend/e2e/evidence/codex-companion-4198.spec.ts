@@ -26,12 +26,15 @@ const PATH = [
   { type: 'category', id: 1, name: 'The World' },
   { type: 'subject', id: SUBJECT_ID, name: 'Gods' },
 ];
-const TREE = [
+/** The tree counts what the viewer may see, as the API does: a stranger counts one god. */
+const tree = (viewer: Viewer) => [
   {
     id: 1,
     name: 'The World',
     description: 'The lands, the roads between them, and what lies past the last of them.',
-    subjects: [{ id: SUBJECT_ID, name: 'Gods', has_children: false, entry_count: 2 }],
+    subjects: [
+      { id: SUBJECT_ID, name: 'Gods', has_children: false, entry_count: visible(viewer).length },
+    ],
   },
 ];
 const SUBJECT = {
@@ -78,7 +81,7 @@ function fleshreaperCompanion(seesCalyx: boolean) {
       ],
     },
     {
-      label: 'Feast days',
+      label: 'Feast day',
       items: [item('The Reaping Festival · Masquing 18 (10/18)', { anchor: 'feast-10-18' })],
     },
     { label: 'Cards', items: [item('Death'), item('The Tower reversed')] },
@@ -123,7 +126,7 @@ function calyxCompanion(seesFleshreaper: boolean) {
       items: [item('The Brave'), item('The Defender'), item('The One True Knight (Inferna)')],
     },
     {
-      label: 'Feast days',
+      label: 'Feast day',
       items: [item('The Vigil of the Sword · Unyielding 1 (9/1)', { anchor: 'feast-9-1' })],
     },
     { label: 'Favored', items: [item('Fortis')] },
@@ -249,7 +252,7 @@ async function mockCodex(page: Page, viewer: Viewer) {
     const p = url.pathname;
     if (p === '/api/user/') return route.fulfill({ json: accountPayload(viewer) });
     if (p === '/api/roster/entries/mine/') return route.fulfill({ json: [] });
-    if (p === '/api/codex/categories/tree/') return route.fulfill({ json: TREE });
+    if (p === '/api/codex/categories/tree/') return route.fulfill({ json: tree(viewer) });
     if (p === `/api/codex/subjects/${SUBJECT_ID}/`) return route.fulfill({ json: SUBJECT });
     if (p === `/api/codex/subjects/${SUBJECT_ID}/children/`) return route.fulfill({ json: [] });
     if (p === '/api/codex/entries/') {

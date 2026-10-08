@@ -30,16 +30,19 @@
   min-width: 0;
 }
 
-.codex-rail-label,
-.codex-section-label {
+.codex-rail-label {
   color: hsl(var(--muted-foreground));
   font-size: 0.7rem;
   letter-spacing: 0.08em;
   text-transform: uppercase;
 }
 
+/* The section label takes the Lore box's amber through Tailwind classes on the element
+   (a utility emitted later would beat a colour set here, #4191). */
 .codex-section-label {
-  color: hsl(var(--primary));
+  font-size: 0.7rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
   font-weight: 600;
 }
 

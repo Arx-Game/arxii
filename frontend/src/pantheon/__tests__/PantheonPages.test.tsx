@@ -135,6 +135,55 @@ describe('BeingEditPage', () => {
     expect(saved.visibility).toBe('public');
     expect(saved.organization).toBeNull();
   });
+
+  it('offers each card both ways up and saves the orientation and this side of a story', async () => {
+    vi.mocked(api.fetchBeingPage).mockResolvedValue({
+      ...page,
+      tarot_cards: [{ card: 14, is_reversed: true }],
+      relationships: [{ other_being: 2, valence: 'feud', story: 'She stole it.' }],
+    });
+    vi.mocked(api.fetchEditorOptions).mockResolvedValue({
+      ...options,
+      tarot_cards: [
+        { id: 14, name: 'The Tower' },
+        { id: 15, name: 'Death' },
+      ],
+      beings: [...options.beings, { id: 2, name: 'Calyx' }],
+    });
+    vi.mocked(api.saveBeingPage).mockResolvedValue(page);
+    renderWithProviders(
+      <Routes>
+        <Route path="/staff/pantheon/:id/edit" element={<BeingEditPage />} />
+      </Routes>,
+      { initialEntries: ['/staff/pantheon/1/edit'] }
+    );
+    expect(await screen.findByDisplayValue('Fleshreaper')).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: /Tarot/ }));
+    const tarot = screen.getByTestId('section-tarot');
+    expect(tarot).toHaveTextContent('The Tower, reversed');
+    await userEvent.click(within(tarot).getByRole('button', { name: '+ Add card' }));
+    await userEvent.click(within(tarot).getByRole('combobox'));
+    // A picked card is offered neither way; the other both ways.
+    expect(screen.queryByText('The Tower')).not.toBeInTheDocument();
+    expect(screen.getByText('Death')).toBeInTheDocument();
+    await userEvent.click(screen.getByText('Death, reversed'));
+    expect(tarot).toHaveTextContent('Death, reversed');
+
+    await userEvent.click(screen.getByRole('button', { name: /Relationships/ }));
+    expect(screen.getByDisplayValue('She stole it.')).toBeInTheDocument();
+
+    await userEvent.click(screen.getByTestId('save-top'));
+    await waitFor(() => expect(api.saveBeingPage).toHaveBeenCalledTimes(1));
+    const [, saved] = vi.mocked(api.saveBeingPage).mock.calls[0];
+    expect(saved.tarot_cards).toEqual([
+      { card: 14, is_reversed: true },
+      { card: 15, is_reversed: true },
+    ]);
+    expect(saved.relationships).toEqual([
+      { other_being: 2, valence: 'feud', story: 'She stole it.' },
+    ]);
+  });
 });
 
 describe('BeingDashboardPage', () => {

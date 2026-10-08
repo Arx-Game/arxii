@@ -281,7 +281,9 @@ class CodexEntryDetailSerializer(EntryKnowledgeMixin, serializers.ModelSerialize
     def get_companion(self, obj: CodexEntry):
         """The owner's facts beside the prose (#4198); ``None`` when no owner claims it."""
         reader = self.context.get("companion_reader")
-        if reader is None:
+        # The owner's facts ride the same gate as the prose: an entry still being
+        # researched shows its summary alone.
+        if reader is None or not self._can_see_content(obj):
             return None
         companion = companion_for(obj, reader)
         return None if companion is None else CompanionSerializer(companion).data
