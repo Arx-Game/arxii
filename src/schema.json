@@ -47558,6 +47558,11 @@ components:
           description: An italic intro line shown at the top of this entry's Codex
             page (e.g. a quote attributed to the subject). Optional; blank hides it.
           maxLength: 300
+        companion:
+          allOf:
+          - $ref: '#/components/schemas/Companion'
+          nullable: true
+          readOnly: true
         lore_content:
           type: string
           nullable: true
@@ -47663,6 +47668,7 @@ components:
       required:
       - also_filed_under
       - art_url
+      - companion
       - id
       - knowledge_status
       - known_by
@@ -47871,47 +47877,19 @@ components:
         * `status_change` - Status Change
     Companion:
       type: object
+      description: The facts an entry's owner shows beside the prose (#4198).
       properties:
-        id:
-          type: integer
-          readOnly: true
-        name:
-          type: string
-          readOnly: true
-        archetype:
-          allOf:
-          - $ref: '#/components/schemas/CompanionArchetype'
-          readOnly: true
-        bonded_at:
-          type: string
-          format: date-time
-          readOnly: true
-        released_at:
-          type: string
-          format: date-time
-          readOnly: true
-          nullable: true
-        is_present:
-          type: boolean
-          description: |-
-            True when the companion's live object shares the actor's current room (#3294).
-
-            Gates the web composer's "as <companion>" emote toggle. ``actor_location_id``
-            is seeded onto the serializer context by ``CompanionViewSet.get_serializer_context``;
-            with no resolvable actor location, every companion reads as absent.
-          readOnly: true
-        objectdb_id:
-          type: integer
-          readOnly: true
-          nullable: true
+        rail:
+          type: array
+          items:
+            $ref: '#/components/schemas/CompanionGroup'
+        sections:
+          type: array
+          items:
+            $ref: '#/components/schemas/CompanionSection'
       required:
-      - archetype
-      - bonded_at
-      - id
-      - is_present
-      - name
-      - objectdb_id
-      - released_at
+      - rail
+      - sections
     CompanionArchetype:
       type: object
       properties:
@@ -47943,6 +47921,33 @@ components:
       - domain
       - id
       - name
+    CompanionGroup:
+      type: object
+      properties:
+        label:
+          type: string
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/CompanionItem'
+      required:
+      - items
+      - label
+    CompanionItem:
+      type: object
+      properties:
+        text:
+          type: string
+        entry_id:
+          type: integer
+          nullable: true
+        anchor:
+          type: string
+          nullable: true
+      required:
+      - anchor
+      - entry_id
+      - text
     CompanionOrderSummary:
       type: object
       description: Current-round companion directive exposed on an encounter read.
@@ -47965,6 +47970,30 @@ components:
       - defending_participant_id
       - order_kind
       - target_opponent_id
+    CompanionSection:
+      type: object
+      properties:
+        anchor:
+          type: string
+        label:
+          type: string
+        name:
+          type: string
+        body:
+          type: string
+        when:
+          type: string
+          nullable: true
+        entry_id:
+          type: integer
+          nullable: true
+      required:
+      - anchor
+      - body
+      - entry_id
+      - label
+      - name
+      - when
     ConditionCategory:
       type: object
       description: Serializer for condition categories.
@@ -77627,7 +77656,7 @@ components:
           type: integer
         valence:
           $ref: '#/components/schemas/RelationshipLineValenceEnum'
-        public_story:
+        story:
           type: string
           default: ''
       required:
@@ -77640,7 +77669,7 @@ components:
           type: integer
         valence:
           $ref: '#/components/schemas/RelationshipLineValenceEnum'
-        public_story:
+        story:
           type: string
           default: ''
       required:
@@ -81697,7 +81726,7 @@ components:
         tarot_cards:
           type: array
           items:
-            type: integer
+            $ref: '#/components/schemas/TarotLine'
         relationships:
           type: array
           items:
@@ -81770,7 +81799,7 @@ components:
         tarot_cards:
           type: array
           items:
-            type: integer
+            $ref: '#/components/schemas/TarotLineRequest'
         relationships:
           type: array
           items:
@@ -84657,6 +84686,26 @@ components:
       - rank
       - surname_reversed
       - surname_upright
+    TarotLine:
+      type: object
+      properties:
+        card:
+          type: integer
+        is_reversed:
+          type: boolean
+          default: false
+      required:
+      - card
+    TarotLineRequest:
+      type: object
+      properties:
+        card:
+          type: integer
+        is_reversed:
+          type: boolean
+          default: false
+      required:
+      - card
     TaskFulfillment:
       type: object
       description: 'Board row detail: who is on the job and, once resolved, the report.'

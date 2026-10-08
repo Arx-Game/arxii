@@ -37,6 +37,7 @@ import type {
   ResonanceLineWithName,
   StaffBeingPage,
   StaffBeingPageRequest,
+  TarotLine,
   Visibility,
 } from '../types';
 
@@ -66,7 +67,7 @@ interface Draft {
   resonances: ResonanceLineWithName[];
   facets: number[];
   feast_days: FeastDayLine[];
-  tarot_cards: number[];
+  tarot_cards: TarotLine[];
   relationships: RelationshipLineWithName[];
   visibility: Visibility;
   organization: string;
@@ -124,10 +125,10 @@ function toRequest(draft: Draft): StaffBeingPageRequest {
     facets: draft.facets,
     feast_days: draft.feast_days.filter((day) => day.name.trim()),
     tarot_cards: draft.tarot_cards,
-    relationships: draft.relationships.map(({ other_being, valence, public_story }) => ({
+    relationships: draft.relationships.map(({ other_being, valence, story }) => ({
       other_being,
       valence,
-      public_story: public_story ?? '',
+      story: story ?? '',
     })),
     visibility: draft.visibility,
     organization:
@@ -141,6 +142,26 @@ function nameOf(refs: { id: number; name: string }[] | undefined, id: number): s
 }
 
 /** A picker that adds one id to a list, then clears. */
+const REVERSED_SUFFIX = ':reversed';
+
+/** Each card is offered both ways up (#4198); a card already picked is offered neither. */
+function tarotItems(refs: { id: number; name: string }[] | undefined, picked: number[]) {
+  return (refs ?? [])
+    .filter((ref) => !picked.includes(ref.id))
+    .flatMap((ref) => [
+      { value: String(ref.id), label: ref.name },
+      { value: `${ref.id}${REVERSED_SUFFIX}`, label: `${ref.name}, reversed` },
+    ]);
+}
+
+function tarotLine(value: string): TarotLine {
+  const is_reversed = value.endsWith(REVERSED_SUFFIX);
+  return {
+    card: Number(is_reversed ? value.slice(0, -REVERSED_SUFFIX.length) : value),
+    is_reversed,
+  };
+}
+
 function AddPicker({
   items,
   label,
@@ -149,7 +170,7 @@ function AddPicker({
 }: {
   items: { value: string; label: string }[];
   label: string;
-  onPick: (id: number) => void;
+  onPick: (value: string) => void;
   hint: string;
 }) {
   const [open, setOpen] = useState(false);
@@ -166,7 +187,7 @@ function AddPicker({
         items={items}
         value=""
         onValueChange={(value) => {
-          if (value) onPick(Number(value));
+          if (value) onPick(value);
           setOpen(false);
         }}
         placeholder={label}
@@ -539,9 +560,10 @@ export function BeingEditPage() {
 
         <EditorSection value="tarot" title="Tarot" incomplete={incomplete.tarot}>
           <div className="flex flex-wrap items-center gap-2">
-            {draft.tarot_cards.map((cardId) => (
-              <Badge key={cardId} variant="secondary">
-                {nameOf(options?.tarot_cards, cardId)}
+            {draft.tarot_cards.map((line) => (
+              <Badge key={line.card} variant="secondary">
+                {nameOf(options?.tarot_cards, line.card)}
+                {line.is_reversed && ', reversed'}
                 <button
                   type="button"
                   className="ml-2"
@@ -549,7 +571,7 @@ export function BeingEditPage() {
                   onClick={() =>
                     set(
                       'tarot_cards',
-                      draft.tarot_cards.filter((c) => c !== cardId)
+                      draft.tarot_cards.filter((c) => c.card !== line.card)
                     )
                   }
                 >
@@ -558,10 +580,13 @@ export function BeingEditPage() {
               </Badge>
             ))}
             <AddPicker
-              items={refItems(options?.tarot_cards, draft.tarot_cards)}
+              items={tarotItems(
+                options?.tarot_cards,
+                draft.tarot_cards.map((line) => line.card)
+              )}
               label="Add card"
               hint="Cards people believe represent the being; empty hides Tarot from the Codex."
-              onPick={(cardId) => set('tarot_cards', [...draft.tarot_cards, cardId])}
+              onPick={(value) => set('tarot_cards', [...draft.tarot_cards, tarotLine(value)])}
             />
           </div>
         </EditorSection>
@@ -617,13 +642,13 @@ export function BeingEditPage() {
               </div>
               <Textarea
                 rows={2}
-                placeholder="Public story shown on the Codex"
-                value={line.public_story ?? ''}
+                placeholder="This god's side of it"
+                value={line.story ?? ''}
                 onChange={(e) =>
                   set(
                     'relationships',
                     draft.relationships.map((r, i) =>
-                      i === index ? { ...r, public_story: e.target.value } : r
+                      i === index ? { ...r, story: e.target.value } : r
                     )
                   )
                 }
@@ -640,7 +665,7 @@ export function BeingEditPage() {
             onPick={(otherId) =>
               set('relationships', [
                 ...draft.relationships,
-                { other_being: otherId, valence: 'ally', public_story: '' },
+                { other_being: Number(otherId), valence: 'ally', story: '' },
               ])
             }
           />

@@ -129,7 +129,7 @@ export const STREAM: TieStreamItem[] = [
     capstone_tier: 2,
     created_at: '2026-09-22T00:00:00Z',
     ic_timestamp: '1012-09-22T00:00:00Z',
-    ic_timestamp_display: '22 Unyielding (9-22-1012)',
+    ic_timestamp_display: 'Unyielding 22 (9/22/1012)',
   },
   {
     kind: 'entry',
@@ -143,7 +143,7 @@ export const STREAM: TieStreamItem[] = [
     capstone_tier: null,
     created_at: '2026-09-18T00:00:00Z',
     ic_timestamp: '1012-09-18T00:00:00Z',
-    ic_timestamp_display: '18 Unyielding (9-18-1012)',
+    ic_timestamp_display: 'Unyielding 18 (9/18/1012)',
   },
   {
     kind: 'scene',
@@ -157,7 +157,7 @@ export const STREAM: TieStreamItem[] = [
     capstone_tier: null,
     created_at: '2026-09-16T00:00:00Z',
     ic_timestamp: '1012-09-16T00:00:00Z',
-    ic_timestamp_display: '16 Unyielding (9-16-1012)',
+    ic_timestamp_display: 'Unyielding 16 (9/16/1012)',
   },
   // A PRIVATE scene the viewer took part in: `is_public` is the scene's own privacy mode
   // here, never the journals' white/black distinction (#3957 final review).
@@ -173,6 +173,6 @@ export const STREAM: TieStreamItem[] = [
     capstone_tier: null,
     created_at: '2026-09-14T00:00:00Z',
     ic_timestamp: '1012-09-14T00:00:00Z',
-    ic_timestamp_display: '14 Unyielding (9-14-1012)',
+    ic_timestamp_display: 'Unyielding 14 (9/14/1012)',
   },
 ];

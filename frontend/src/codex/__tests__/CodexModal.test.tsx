@@ -50,6 +50,7 @@ function makeEntry(
     name,
     summary: `${name} summary`,
     quote: '',
+    companion: null,
     lore_content: loreContent,
     mechanics_content: null,
     lore_links: links,

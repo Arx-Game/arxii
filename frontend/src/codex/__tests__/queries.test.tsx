@@ -242,6 +242,7 @@ describe('Codex Query Hooks', () => {
         name: 'Bene',
         summary: 'Resonance of giving',
         quote: '',
+        companion: null,
         lore_content: 'Full content',
         mechanics_content: null,
         lore_links: [],

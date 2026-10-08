@@ -1,6 +1,6 @@
 /**
- * Tests for EntryDetail's "Also filed under" line (#2896) and its restricted-knowledge
- * reading (#4191).
+ * Tests for EntryDetail's "Also filed under" line (#2896), its restricted-knowledge
+ * reading (#4191) and the owner's companion beside and under the prose (#4198).
  *
  * A filed entry keeps one canonical home (`subject`/`subject_path`) but can
  * also be cross-listed under other subjects; the detail view renders those
@@ -9,10 +9,16 @@
  */
 
 import { describe, it, expect, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { EntryDetail } from '../components/EntryDetail';
+
+const mockNavigate = vi.fn();
+vi.mock('react-router-dom', async () => ({
+  ...(await vi.importActual<typeof import('react-router-dom')>('react-router-dom')),
+  useNavigate: () => mockNavigate,
+}));
 import type { CodexEntryDetail } from '../types';
 
 function makeEntry(overrides: Partial<CodexEntryDetail> = {}): CodexEntryDetail {
@@ -21,6 +27,7 @@ function makeEntry(overrides: Partial<CodexEntryDetail> = {}): CodexEntryDetail 
     name: 'The Shroud',
     summary: 'A grey veil no army and no messenger ever crossed.',
     quote: '',
+    companion: null,
     lore_content: 'Full lore content.',
     mechanics_content: null,
     lore_links: [],
@@ -141,5 +148,83 @@ describe('EntryDetail restricted tone', () => {
     rerender(<EntryDetail entry={entry} multiCharacter onNavigateBreadcrumb={vi.fn()} />);
     expect(screen.getByText('Known by:')).toBeInTheDocument();
     expect(screen.getByText('Ilsavet')).toBeInTheDocument();
+  });
+});
+
+describe('EntryDetail companion (#4198)', () => {
+  const companion = {
+    rail: [
+      { label: 'Domains', items: [{ text: 'Carnage, Hunters', entry_id: null, anchor: null }] },
+      {
+        label: 'Feast days',
+        items: [
+          {
+            text: 'The Reaping Festival · Masquing 18 (10/18)',
+            entry_id: null,
+            anchor: 'feast-10-18',
+          },
+        ],
+      },
+      {
+        label: 'Cards',
+        items: [
+          { text: 'Death', entry_id: null, anchor: null },
+          { text: 'The Tower reversed', entry_id: null, anchor: null },
+        ],
+      },
+      { label: 'Feud', items: [{ text: 'Calyx', entry_id: 8, anchor: 'relationship-2' }] },
+    ],
+    sections: [
+      {
+        anchor: 'feast-10-18',
+        label: 'Feast day',
+        name: 'The Reaping Festival',
+        when: 'Masquing 18 (10/18)',
+        entry_id: null,
+        body: 'Grand hunts and a feast of undercooked meat.',
+      },
+      {
+        anchor: 'relationship-2',
+        label: 'Feud',
+        name: 'Calyx',
+        when: null,
+        entry_id: 8,
+        body: 'She stole the first harvest.',
+      },
+    ],
+  };
+
+  it('draws nothing beside the prose when no owner claims the entry', () => {
+    renderEntry(makeEntry({ companion: null }));
+    expect(screen.queryByLabelText('At a glance')).not.toBeInTheDocument();
+    expect(document.querySelector('.codex-with-rail')).toBeNull();
+  });
+
+  it('draws the rail beside the Lore and the sections under it', () => {
+    renderEntry(makeEntry({ companion }));
+    const rail = screen.getByLabelText('At a glance');
+    expect(rail.closest('.codex-with-rail')).not.toBeNull();
+    expect(rail).toHaveTextContent('Domains');
+    expect(rail).toHaveTextContent('Carnage, Hunters');
+    expect(rail).toHaveTextContent('Death, The Tower reversed');
+    expect(
+      screen.getByRole('link', { name: 'The Reaping Festival · Masquing 18 (10/18)' })
+    ).toHaveAttribute('href', '#feast-10-18');
+    const section = document.getElementById('feast-10-18');
+    expect(section).toHaveTextContent('Feast day');
+    expect(section).toHaveTextContent('The Reaping Festival');
+    expect(section).toHaveTextContent('Masquing 18 (10/18)');
+    expect(section).toHaveTextContent('Grand hunts and a feast of undercooked meat.');
+    expect(document.getElementById('relationship-2')).toHaveTextContent(
+      'She stole the first harvest.'
+    );
+  });
+
+  it('a line to another god opens that entry', async () => {
+    renderEntry(makeEntry({ companion }));
+    await userEvent.click(
+      within(screen.getByLabelText('At a glance')).getByRole('button', { name: 'Calyx' })
+    );
+    expect(mockNavigate).toHaveBeenCalledWith('/codex?entry=8');
   });
 });

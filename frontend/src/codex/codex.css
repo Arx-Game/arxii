@@ -11,3 +11,56 @@
   border-color: color-mix(in oklab, hsl(var(--border)) 70%, hsl(var(--primary)));
   background-image: linear-gradient(hsl(var(--primary) / 0.08), hsl(var(--primary) / 0.08));
 }
+
+/* The companion (#4198): the owner's facts in a rail beside the Lore, its stories as
+   sections under it. The rail folds under the prose on a phone. */
+.codex-with-rail {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 14rem;
+  gap: 1.1rem;
+}
+
+.codex-rail {
+  border-left: 1px solid hsl(var(--border));
+  padding-left: 1rem;
+  font-size: 0.9rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.7rem;
+  min-width: 0;
+}
+
+.codex-rail-label,
+.codex-section-label {
+  color: hsl(var(--muted-foreground));
+  font-size: 0.7rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.codex-section-label {
+  color: hsl(var(--primary));
+  font-weight: 600;
+}
+
+.codex-rail a,
+.codex-rail button,
+.codex-section a,
+.codex-section button {
+  color: hsl(var(--primary));
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+@media (max-width: 640px) {
+  .codex-with-rail {
+    grid-template-columns: 1fr;
+  }
+
+  .codex-rail {
+    border-left: 0;
+    border-top: 1px solid hsl(var(--border));
+    padding-left: 0;
+    padding-top: 0.75rem;
+  }
+}
