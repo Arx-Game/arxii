@@ -181,7 +181,7 @@ describe('MuteSettingsPage', () => {
     render(<MuteSettingsPage />, { wrapper: createWrapper() });
 
     expect(screen.getByTestId('mute-empty-state')).toBeInTheDocument();
-    expect(screen.getByText(/You haven't muted any stories/i)).toBeInTheDocument();
+    expect(screen.getByText(/No muted stories/i)).toBeInTheDocument();
   });
 
   it('renders loading skeletons during fetch', () => {

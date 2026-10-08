@@ -13,7 +13,6 @@ import { Button } from '@/components/ui/button';
 import {
   Dialog,
   DialogContent,
-  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -105,10 +104,6 @@ export function SendVisionDialog({
         <form onSubmit={handleSubmit} className="space-y-4">
           <DialogHeader>
             <DialogTitle>Send {recipientName} a vision</DialogTitle>
-            <DialogDescription>
-              Prose from a god. It spends the being&apos;s pool and reaches the character at once,
-              or at their next login.
-            </DialogDescription>
           </DialogHeader>
           <div className="space-y-2">
             <Label htmlFor="vision-being">From</Label>

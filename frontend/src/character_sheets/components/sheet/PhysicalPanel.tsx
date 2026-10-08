@@ -93,10 +93,6 @@ export function PhysicalPanel({
           <Stack>
             <Heading>Physique</Heading>
             <Glance rows={physiqueRows} />
-            <p className="refsheet-note">
-              Colours are set in character creation, and change through disguise, shapeshift or
-              modification, where the full palette is offered.
-            </p>
           </Stack>
 
           {features.length > 0 && (
@@ -120,19 +116,7 @@ export function PhysicalPanel({
               <Heading>Wearing</Heading>
               <Entries>
                 {worn.map((item) => (
-                  <Entry
-                    key={item.id}
-                    name={item.name}
-                    gloss={
-                      item.isHidden ? (
-                        <>
-                          {item.description} <em>Only you know it is there.</em>
-                        </>
-                      ) : (
-                        item.description || undefined
-                      )
-                    }
-                  />
+                  <Entry key={item.id} name={item.name} gloss={item.description || undefined} />
                 ))}
               </Entries>
               {onOpenEstate && (
@@ -148,9 +132,6 @@ export function PhysicalPanel({
           <Stack>
             <Heading>Condition</Heading>
             <Glance rows={conditionRows(vitals, identity)} />
-            <p className="refsheet-note">
-              Yours and the staff&apos;s only. Anima is on the Magic page.
-            </p>
           </Stack>
         ) : (
           <Stack>

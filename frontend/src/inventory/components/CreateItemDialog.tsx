@@ -12,7 +12,6 @@ import { toast } from 'sonner';
 import {
   Dialog,
   DialogContent,
-  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -98,10 +97,6 @@ export function CreateItemDialog({ open, onOpenChange }: CreateItemDialogProps) 
       <DialogContent>
         <DialogHeader>
           <DialogTitle>Craft an item</DialogTitle>
-          <DialogDescription>
-            Pick a recipe you know, name your work, and craft it. Quality depends on your skill and
-            the roll.
-          </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4 py-2">

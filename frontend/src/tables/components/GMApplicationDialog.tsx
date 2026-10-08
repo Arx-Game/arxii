@@ -15,7 +15,6 @@ import { FieldError, FormErrors } from './FieldError';
 import {
   Dialog,
   DialogContent,
-  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -79,10 +78,6 @@ export function GMApplicationDialog({ children, onSuccess }: GMApplicationDialog
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>Apply to be a GM</DialogTitle>
-          <DialogDescription>
-            Tell us what you want to GM, which players you'd run for, and what stories you'd tell.
-            Staff will review your application.
-          </DialogDescription>
         </DialogHeader>
 
         <form onSubmit={(e) => handleSubmit(e)} className="space-y-4">

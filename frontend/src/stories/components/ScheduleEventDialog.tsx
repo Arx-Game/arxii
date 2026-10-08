@@ -312,7 +312,7 @@ export function ScheduleEventDialog({ request }: ScheduleEventDialogProps) {
             {/* Public */}
             <div className="flex items-center gap-3">
               <Switch id="schedule-public" checked={isPublic} onCheckedChange={setIsPublic} />
-              <Label htmlFor="schedule-public">Public event (visible to everyone)</Label>
+              <Label htmlFor="schedule-public">Public event</Label>
             </div>
           </div>
 

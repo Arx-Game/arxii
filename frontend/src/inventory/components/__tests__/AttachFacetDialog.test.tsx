@@ -184,7 +184,6 @@ describe('AttachFacetDialog', () => {
       <AttachFacetDialog open={true} onOpenChange={vi.fn()} itemInstanceId={ITEM_INSTANCE_ID} />
     );
     expect(screen.getByText('Attach Facet')).toBeInTheDocument();
-    expect(screen.getByText(/quality is determined by your enchanting skill/i)).toBeInTheDocument();
   });
 
   it('does not render when open=false', () => {

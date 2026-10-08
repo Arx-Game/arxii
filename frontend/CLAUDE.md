@@ -24,6 +24,17 @@ Modern React application with TypeScript, Vite, and Tailwind CSS powering the Ar
 - **Custom hooks** for WebSocket management and game logic
 - **Error boundaries** for graceful error handling
 
+### Copy
+
+- **Never explain what the screen already shows** (#4193). No caption saying who may see a
+  thing ("Only you", "visible to everyone": privacy is a tone shift or a word in the
+  label), no paragraph under a heading saying what the page is, no help sentence beside a
+  control, no empty state that teaches ("No X yet. Do Y to get one." is "No X yet."). What
+  stays: destructive-action confirmations, errors, account security, the public onboarding
+  pages, bare costs and limits, and voice lines ApostateCD wrote. The
+  `overexplaining-copy` hook (`tools/lint_overexplaining_copy.py`) catches the phrases a
+  regex can name; the `overexplaining-copy-reviewer` agent reads a diff for the shape.
+
 ### Build & Code Splitting
 
 - **Never use file path patterns in `manualChunks` for app code** — only split `node_modules` into vendor chunks. App code splitting creates circular chunk dependencies that work in Vite dev mode but crash in production (`Cannot access 'x' before initialization`). For feature-based splitting, use `React.lazy(() => import('./SomePage'))` at the route level instead

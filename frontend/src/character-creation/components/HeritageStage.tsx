@@ -300,9 +300,6 @@ export function HeritageStage({ draft, onStageSelect }: HeritageStageProps) {
           }
         }}
       />
-      <p className="ledger-line">
-        Pronouns will be derived from your gender choice. You can customize them in-game.
-      </p>
     </ChapterLeaf>
   );
 }

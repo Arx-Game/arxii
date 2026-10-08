@@ -33,7 +33,7 @@ const FILTER_CHIPS: { value: ScopeFilter; label: string }[] = [
 ];
 
 const EMPTY_MESSAGES: Record<ScopeFilter, string> = {
-  all: 'No stories are visible to you right now.',
+  all: 'No stories right now.',
   character: 'No personal stories visible.',
   group: 'No group stories visible.',
   global: 'No global metaplot stories active right now.',

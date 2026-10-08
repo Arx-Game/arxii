@@ -13,7 +13,6 @@ import { Button } from '@/components/ui/button';
 import {
   Dialog,
   DialogContent,
-  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -82,10 +81,6 @@ export function PrayDialog({ characterId, defaultBeingId }: PrayDialogProps) {
         <form onSubmit={handleSubmit} className="space-y-4">
           <DialogHeader>
             <DialogTitle>Pray</DialogTitle>
-            <DialogDescription>
-              Your own words, to a god. Prayers are read by staff and may be answered; they change
-              nothing by themselves.
-            </DialogDescription>
           </DialogHeader>
           <div className="space-y-2">
             <Label htmlFor="pray-being">To</Label>

@@ -18,7 +18,6 @@ import { toast } from 'sonner';
 import {
   Dialog,
   DialogContent,
-  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -102,7 +101,7 @@ export function SendGemitDialog() {
         onError: (err: unknown) => {
           const fetchErr = err as { status?: number; response?: Response };
           if (fetchErr.status === 403) {
-            toast.error('Permission denied. Only staff can broadcast gemits.');
+            toast.error('Permission denied.');
             setOpen(false);
             return;
           }
@@ -142,10 +141,6 @@ export function SendGemitDialog() {
         <form onSubmit={handleSubmit}>
           <DialogHeader>
             <DialogTitle>Broadcast Gemit</DialogTitle>
-            <DialogDescription>
-              Send a server-wide announcement to all online players in real time. Gemits are also
-              persisted for players who are offline.
-            </DialogDescription>
           </DialogHeader>
 
           {/* Non-field / global error banner */}

@@ -57,10 +57,6 @@ export function TreasuredSubjectList({ tenureId }: Props) {
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between">
-        <p className="text-sm text-muted-foreground">
-          Things this character treasures: staking one of these in a scene requires your pre-scene
-          sign-off.
-        </p>
         <Button size="sm" onClick={openCreate}>
           Flag a treasured subject
         </Button>

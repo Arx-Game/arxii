@@ -95,9 +95,7 @@ describe('StoryLog', () => {
     setupMock({ entries: [] });
     render(<StoryLog storyId={1} />, { wrapper: createWrapper() });
 
-    expect(
-      screen.getByText(/Story log is empty\. Beats will appear here as they resolve\./i)
-    ).toBeInTheDocument();
+    expect(screen.getByText(/Story log is empty\./i)).toBeInTheDocument();
   });
 
   it('renders a list of mixed entries', () => {

@@ -15,7 +15,6 @@ import { toast } from 'sonner';
 import {
   Dialog,
   DialogContent,
-  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -134,9 +133,6 @@ export function AttachFacetDialog({ open, onOpenChange, itemInstanceId }: Attach
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>Attach Facet</DialogTitle>
-          <DialogDescription>
-            Quality is determined by your Enchanting skill; you choose only which facet to attach.
-          </DialogDescription>
         </DialogHeader>
 
         <div className="grid gap-4">

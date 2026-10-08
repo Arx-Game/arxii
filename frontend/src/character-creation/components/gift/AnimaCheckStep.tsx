@@ -111,11 +111,7 @@ export function AnimaCheckStep({ draft, register }: AnimaCheckStepProps) {
         onChange={handleSkillChange}
       />
 
-      <Field
-        id="ritual-name"
-        label="Ritual name"
-        hint="Optional. Defaults to “[Character]’s Anima Ritual” if left blank."
-      >
+      <Field id="ritual-name" label="Ritual name">
         <input id="ritual-name" type="text" maxLength={100} {...register('anima_ritual_name')} />
       </Field>
     </>

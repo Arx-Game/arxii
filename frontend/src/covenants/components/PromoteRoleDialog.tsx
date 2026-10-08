@@ -15,7 +15,6 @@ import { useState } from 'react';
 import {
   Dialog,
   DialogContent,
-  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -117,7 +116,6 @@ export function PromoteRoleDialog({
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>Promote {parentRole.name}</DialogTitle>
-          <DialogDescription>Choose a sub-role to unlock for this member.</DialogDescription>
         </DialogHeader>
 
         {errorMessage && (

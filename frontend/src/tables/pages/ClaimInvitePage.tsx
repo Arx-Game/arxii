@@ -14,7 +14,7 @@
 import { useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { bulletinErrorsFrom, type BulletinFieldErrors } from '../bulletinErrors';
@@ -43,16 +43,11 @@ export function ClaimInvitePage() {
       <Card>
         <CardHeader>
           <CardTitle>Claim Your Invite</CardTitle>
-          <CardDescription>
-            Enter the invite code a GM shared with you to apply for that character.
-          </CardDescription>
         </CardHeader>
         <CardContent>
           {applicationId !== null ? (
             <div className="space-y-4">
-              <p className="text-sm">
-                Application submitted. The table&apos;s GM will review it from their queue.
-              </p>
+              <p className="text-sm">Application submitted.</p>
               <Button asChild>
                 <Link to="/roster">Browse the Roster</Link>
               </Button>

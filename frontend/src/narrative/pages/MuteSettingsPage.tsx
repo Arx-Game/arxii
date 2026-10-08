@@ -85,8 +85,7 @@ function MuteSettingsInner() {
   if (mutes.length === 0) {
     return (
       <p className="py-8 text-center text-muted-foreground" data-testid="mute-empty-state">
-        You haven&apos;t muted any stories. Real-time updates will arrive for all your active
-        stories.
+        No muted stories.
       </p>
     );
   }
@@ -108,9 +107,6 @@ export function MuteSettingsPage() {
   return (
     <div className="container mx-auto px-4 py-6 sm:px-6 sm:py-8 lg:px-8">
       <h1 className="mb-2 text-2xl font-bold">Notification Settings</h1>
-      <p className="mb-6 text-muted-foreground">
-        Muted items still appear in your dashboard; only the real-time push is suppressed.
-      </p>
 
       <section className="mb-8">
         <h2 className="mb-3 text-lg font-semibold">Ambient Categories</h2>

@@ -110,7 +110,7 @@ export function EventEditForm({ event }: EventEditFormProps) {
 
       <div className="flex items-center gap-3">
         <Switch id="event-public" checked={isPublic} onCheckedChange={setIsPublic} />
-        <Label htmlFor="event-public">Public event (visible to everyone)</Label>
+        <Label htmlFor="event-public">Public event</Label>
       </div>
 
       <div className="flex gap-3">

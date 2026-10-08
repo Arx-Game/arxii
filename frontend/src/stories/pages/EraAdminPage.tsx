@@ -167,9 +167,6 @@ export function EraAdminPage() {
       <div className="mb-6 flex flex-wrap items-start justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold">Eras (Seasons)</h1>
-          <p className="text-sm text-muted-foreground">
-            Manage the metaplot era lifecycle. Only staff can advance or archive eras.
-          </p>
         </div>
         <Button onClick={() => setCreateOpen(true)} data-testid="create-era-button">
           + Create Era

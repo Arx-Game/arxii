@@ -13,7 +13,6 @@ import { toast } from 'sonner';
 import {
   Dialog,
   DialogContent,
-  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -147,9 +146,6 @@ export function CrossoverInviteComposeDialog({
         <form onSubmit={handleSubmit}>
           <DialogHeader>
             <DialogTitle>Send Crossover Invite</DialogTitle>
-            <DialogDescription>
-              Invite another story&apos;s Lead GM to co-run a shared event.
-            </DialogDescription>
           </DialogHeader>
 
           {(nonFieldErrors.length > 0 || detailError) && (

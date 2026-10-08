@@ -2,10 +2,9 @@
  * ChapterFormDialog Tests — Task E2
  *
  * Covers (Task E2 — GM/player text split):
- *  - description control relabeled to "Internal GM Description" + "not shown
- *    to players" helper, still bound to the description state key
- *  - new "The Story So Far" control bound to `summary` with a player-facing
- *    recap helper
+ *  - description control relabeled to "Internal GM Description", still bound to the
+ *    description state key
+ *  - new "The Story So Far" control bound to `summary`
  *  - both submitted in the create body
  *  - both prefilled on edit from the existing chapter
  *  - read-only maturity indicator on edit; absent in create mode
@@ -92,22 +91,18 @@ describe('ChapterFormDialog — Task E2 GM/player text split', () => {
     vi.clearAllMocks();
   });
 
-  it('relabels the description control to "Internal GM Description" with a not-shown helper', () => {
+  it('relabels the description control to "Internal GM Description"', () => {
     setupMocks();
     renderWithProviders(<ChapterFormDialog {...defaultProps} />);
 
     expect(screen.getByLabelText(/internal gm description/i)).toBeInTheDocument();
-    expect(screen.getByText(/not shown to players/i)).toBeInTheDocument();
   });
 
-  it('renders a "The Story So Far" control bound to summary with a recap helper', () => {
+  it('renders a "The Story So Far" control bound to summary', () => {
     setupMocks();
     renderWithProviders(<ChapterFormDialog {...defaultProps} />);
 
     expect(screen.getByLabelText(/the story so far/i)).toBeInTheDocument();
-    expect(
-      screen.getByText(/player-facing recap: keep this current as the story advances/i)
-    ).toBeInTheDocument();
   });
 
   it('does not render a maturity indicator in create mode', () => {

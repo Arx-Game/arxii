@@ -59,15 +59,9 @@ export function NominationsPanel() {
             ))}
           </ul>
         ) : (
-          <p className="text-sm text-muted-foreground">
-            Nobody nominated yet this week. Read a pose or a journal you liked and press the award
-            beside it.
-          </p>
+          <p className="text-sm text-muted-foreground">Nobody nominated yet this week.</p>
         )}
-        <p className="mt-3 text-xs text-muted-foreground">
-          One nomination per person per week, however many pieces you cite. They never learn who; it
-          settles into XP at the week&apos;s end.
-        </p>
+        <p className="mt-3 text-xs text-muted-foreground">One nomination per person per week.</p>
       </CardContent>
     </Card>
   );

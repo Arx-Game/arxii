@@ -59,9 +59,6 @@ export function NPCRolesLibraryPage() {
     <div className="container mx-auto max-w-4xl space-y-6 py-6">
       <div>
         <h1 className="text-2xl font-semibold">NPC Roles</h1>
-        <p className="text-sm text-muted-foreground">
-          Author the roles NPCs play and the services (missions, permits) they offer.
-        </p>
       </div>
 
       <CreateRoleCard />

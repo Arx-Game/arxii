@@ -387,11 +387,6 @@ export function RoomPanel({
         viewerInScene={scene?.viewer_entered ?? null}
       />
       <NpcGiversBlock npcGivers={room.npc_givers ?? []} />
-      {room.characters.length > 0 && (
-        <p className="border-b px-3 py-2 text-xs text-muted-foreground" role="note">
-          Select an occupant to open character context and authorized details.
-        </p>
-      )}
       <ObjectsList objects={room.objects} characterId={characterId} accountId={accountId} />
       {room.hub && <HubTidingsPanel hub={room.hub} viewerEntryId={viewerEntryId} />}
       {room.hub?.kind === 'NOTICE_BOARD' && (

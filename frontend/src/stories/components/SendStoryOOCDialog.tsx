@@ -174,7 +174,6 @@ export function SendStoryOOCDialog({ story }: SendStoryOOCDialogProps) {
               </Label>
               <Textarea
                 id="ooc-note"
-                placeholder="Visible only to staff and GMs with access to recipient characters…"
                 value={oocNote}
                 onChange={(e) => setOocNote(e.target.value)}
                 rows={2}

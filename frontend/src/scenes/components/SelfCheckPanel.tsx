@@ -88,10 +88,6 @@ function ProposeCheckForm({
 
   return (
     <div className="space-y-2 rounded-md border border-dashed p-3" data-testid="propose-check-form">
-      <p className="text-xs text-muted-foreground">
-        Nothing in the catalog fits? Propose a new check — staff review it, they never auto-create
-        it.
-      </p>
       <Input
         placeholder="Check name"
         value={proposedName}

@@ -76,10 +76,7 @@ export function UnseenPresenceRow({ viewerPersonaId }: UnseenPresenceRowProps) {
           <DialogHeader>
             <DialogTitle>Report unseen presence</DialogTitle>
           </DialogHeader>
-          <p className="text-sm text-muted-foreground">
-            Someone here is hidden. You will not learn who they are; staff will. Use this if a
-            hidden presence is being used to make people uncomfortable.
-          </p>
+          <p className="text-sm text-muted-foreground">Someone here is hidden.</p>
           <Textarea
             value={description}
             onChange={(e) => setDescription(e.target.value)}

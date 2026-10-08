@@ -127,9 +127,6 @@ export function BoonAskForm({
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
       <div className="w-full max-w-sm rounded-lg border bg-background p-4 shadow-lg">
         <h3 className="mb-1 text-sm font-semibold">Ask {targetName ?? 'them'} for a boon</h3>
-        <p className="mb-3 text-xs text-muted-foreground">
-          Name what you ask up front; they see exactly what granting costs them.
-        </p>
         <div className="mb-3 flex flex-wrap gap-2">
           {KIND_OPTIONS.map((option) => (
             <Button

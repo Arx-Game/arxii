@@ -65,10 +65,6 @@ export function StaffActionsCard({ template }: StaffActionsCardProps) {
               <div className="text-sm font-medium">Visibility</div>
               <div className="text-xs text-muted-foreground">
                 Currently <Badge variant="outline">{template.visibility}</Badge>
-                {'-'}
-                {isOpen
-                  ? 'visible to everyone; the availability rule is ignored.'
-                  : 'the availability rule is the audience; empty rule = staff-only.'}
               </div>
             </div>
             <Button

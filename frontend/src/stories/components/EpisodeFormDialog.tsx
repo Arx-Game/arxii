@@ -255,7 +255,6 @@ export function EpisodeFormDialog({
                 placeholder="GM-only notes about this episode…"
                 rows={2}
               />
-              <p className="text-xs text-muted-foreground">Not shown to players.</p>
               {fieldErrors.description && (
                 <p className="text-xs text-destructive">{fieldErrors.description.join(' ')}</p>
               )}
@@ -271,9 +270,6 @@ export function EpisodeFormDialog({
                 placeholder="What players know so far…"
                 rows={2}
               />
-              <p className="text-xs text-muted-foreground">
-                Player-facing recap: keep this current as the story advances.
-              </p>
               {fieldErrors.summary && (
                 <p className="text-xs text-destructive">{fieldErrors.summary.join(' ')}</p>
               )}
@@ -289,9 +285,6 @@ export function EpisodeFormDialog({
                 placeholder="How the story reads if it rests here…"
                 rows={2}
               />
-              <p className="text-xs text-muted-foreground">
-                Shown to players if the story rests here.
-              </p>
               {fieldErrors.resting_conclusion && (
                 <p className="text-xs text-destructive">
                   {fieldErrors.resting_conclusion.join(' ')}

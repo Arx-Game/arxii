@@ -559,9 +559,6 @@ function NoActiveCharacterState() {
     <div className="flex flex-col items-center justify-center rounded-lg border border-dashed px-6 py-16 text-center">
       <Shirt className="mb-4 h-12 w-12 text-muted-foreground/50" aria-hidden="true" />
       <p className="mb-1 text-muted-foreground">Pick a character to manage their wardrobe.</p>
-      <p className="text-sm text-muted-foreground">
-        Switch characters from the game window to load their outfits and inventory.
-      </p>
     </div>
   );
 }

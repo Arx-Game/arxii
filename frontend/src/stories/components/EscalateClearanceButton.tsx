@@ -26,7 +26,6 @@ export function EscalateClearanceButton({ clearanceId }: Props) {
   return (
     <ClearanceConfirmButton
       title="Escalate to staff?"
-      description="Staff will make the final call on this clearance request."
       confirmLabel="Escalate"
       isPending={mutation.isPending}
       onConfirm={handleConfirm}

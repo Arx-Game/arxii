@@ -269,7 +269,7 @@ export function EpisodeDAG({
         className="flex h-64 items-center justify-center text-sm italic text-muted-foreground"
         data-testid="dag-empty"
       >
-        No episodes yet. Add episodes in the Tree view to see the DAG.
+        No episodes yet.
       </div>
     );
   }

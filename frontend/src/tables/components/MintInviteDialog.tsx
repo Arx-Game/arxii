@@ -16,7 +16,6 @@ import { FieldError, FormErrors } from './FieldError';
 import {
   Dialog,
   DialogContent,
-  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -96,9 +95,6 @@ export function MintInviteDialog({ children }: MintInviteDialogProps) {
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>Mint Invite</DialogTitle>
-          <DialogDescription>
-            Generate a claim code for a roster character you oversee at this table.
-          </DialogDescription>
         </DialogHeader>
 
         <form onSubmit={(e) => handleSubmit(e)} className="space-y-4">

@@ -86,9 +86,6 @@ export function TriggerGiversPage() {
     <div className="container mx-auto max-w-3xl space-y-6 py-6">
       <div>
         <h1 className="text-2xl font-semibold">Trigger Givers</h1>
-        <p className="text-sm text-muted-foreground">
-          Rooms and objects that hand a player a mission when entered or examined.
-        </p>
       </div>
 
       <CreateGiverCard />

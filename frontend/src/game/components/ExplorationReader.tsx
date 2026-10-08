@@ -133,7 +133,7 @@ export function ExplorationReader({
               {visibleEntryError ??
                 (lifecycleState === 'entry-error'
                   ? 'The world did not confirm this character. Check your connection and try again.'
-                  : 'Your confirmed surroundings will appear here when entry completes.')}
+                  : 'Confirming your entry…')}
             </p>
             {lifecycleState === 'entry-error' && onRetry && (
               <button

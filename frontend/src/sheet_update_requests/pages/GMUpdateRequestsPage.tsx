@@ -139,11 +139,6 @@ export function GMUpdateRequestsPage() {
   return (
     <div className="container mx-auto max-w-5xl px-4 py-8">
       <h1 className="mb-2 text-2xl font-bold">Sheet Update Requests</h1>
-      <p className="mb-6 text-sm text-muted-foreground">
-        Players at your tables proposing sheet changes. Your call is story-fit, yes or no; the
-        player wrote the content. Approvals apply immediately (distinction changes debit any XP cost
-        at approval).
-      </p>
 
       <div className="mb-6 flex flex-wrap gap-2">
         {STATUS_OPTIONS.map((option) => (

@@ -14,7 +14,6 @@ import type React from 'react';
 import {
   Dialog,
   DialogContent,
-  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -260,9 +259,6 @@ export function RitualSessionDraftDialog({
         <form onSubmit={handleSubmit}>
           <DialogHeader>
             <DialogTitle>{ritual.name}</DialogTitle>
-            <DialogDescription>
-              Draft a session invitation. Invitees can accept or decline.
-            </DialogDescription>
           </DialogHeader>
 
           {/* Narrative prose */}

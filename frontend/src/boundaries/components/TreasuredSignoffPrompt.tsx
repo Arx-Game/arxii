@@ -17,7 +17,7 @@
 
 import { ShieldCheck } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import {
   useTreasuredSubjects,
@@ -60,10 +60,6 @@ export function TreasuredSignoffPrompt({ beatId, tenureId, pendingSubjectIds }: 
           <ShieldCheck className="h-4 w-4" />
           Pre-scene sign-offs
         </CardTitle>
-        <CardDescription>
-          These are things this character treasures. Sign off to allow them to be staked in this
-          beat: you can withdraw at any time before the scene resolves.
-        </CardDescription>
       </CardHeader>
       <CardContent className="space-y-2">
         {subjects.map((subject) => {

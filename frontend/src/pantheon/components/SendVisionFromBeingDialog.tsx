@@ -11,7 +11,6 @@ import { Combobox } from '@/components/ui/combobox';
 import {
   Dialog,
   DialogContent,
-  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -74,9 +73,6 @@ export function SendVisionFromBeingDialog({ beingId, beingName }: SendVisionFrom
         <form onSubmit={handleSubmit} className="space-y-4">
           <DialogHeader>
             <DialogTitle>A vision from {beingName}</DialogTitle>
-            <DialogDescription>
-              Spends the being&apos;s pool; reaches the character at once or at login.
-            </DialogDescription>
           </DialogHeader>
           <div className="space-y-2">
             <Label htmlFor="vision-search">Find the character</Label>

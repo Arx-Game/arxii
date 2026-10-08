@@ -91,9 +91,6 @@ export function CatalogSuggestionDialog({
         <DialogHeader>
           <DialogTitle>Suggest a catalog entry</DialogTitle>
         </DialogHeader>
-        <p className="text-sm text-muted-foreground">
-          Staff review every suggestion. Some kinds need more GM trust than others.
-        </p>
         <div className="space-y-1">
           <Label htmlFor="suggestion-proposal-kind">What kind of addition?</Label>
           <select

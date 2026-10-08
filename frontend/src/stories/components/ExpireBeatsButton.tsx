@@ -47,8 +47,7 @@ export function ExpireBeatsButton() {
         <AlertDialogHeader>
           <AlertDialogTitle>Sweep overdue beats?</AlertDialogTitle>
           <AlertDialogDescription>
-            Beats with past deadlines will be marked EXPIRED. This is idempotent and safe to run
-            repeatedly.
+            Beats with past deadlines will be marked EXPIRED.
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>

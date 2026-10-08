@@ -177,9 +177,6 @@ function NonStaffInbox() {
     <>
       <section data-testid="incoming-clearances-section">
         <h3 className="text-base font-semibold">Incoming ({incoming.length})</h3>
-        <p className="text-sm text-muted-foreground">
-          Requests from other GMs to act on your stories&apos; protected subjects.
-        </p>
         <div className="mt-3 space-y-3">{renderIncoming()}</div>
       </section>
 

@@ -404,7 +404,7 @@ function GameWindowFeed({
           className="min-h-0 flex-1 overflow-y-auto px-6 py-8 text-sm italic text-muted-foreground"
           data-testid="feed-all-off"
         >
-          Everything is switched off. Press a chip to bring one kind back.
+          Everything is switched off.
         </div>
       </>
     );
@@ -757,9 +757,7 @@ export function GameWindow({
       <div className="flex flex-1 items-center justify-center p-6">
         <div className="max-w-md rounded-lg border border-dashed p-8 text-center">
           <h1 className="font-serif text-2xl">Enter the world</h1>
-          <p className="mt-2 text-sm text-muted-foreground">
-            Choose a character above to begin. Your surroundings and story will appear here.
-          </p>
+          <p className="mt-2 text-sm text-muted-foreground">Choose a character above to begin.</p>
         </div>
       </div>
     );

@@ -45,7 +45,7 @@ describe('FriendsTab', () => {
   it('empty state prompts to friend from another sheet', () => {
     mockFriends([]);
     render(<FriendsTab />);
-    expect(screen.getByText(/no friends listed/i)).toBeInTheDocument();
+    expect(screen.getByText(/No friends yet/i)).toBeInTheDocument();
   });
 
   it('removes a friend on click', () => {

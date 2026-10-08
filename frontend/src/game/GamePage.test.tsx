@@ -952,9 +952,7 @@ describe('GamePage', () => {
         'true'
       );
       fireEvent.click(within(strip).getByRole('button', { name: 'All' }));
-      expect(screen.getByTestId('feed-all-off')).toHaveTextContent(
-        'Everything is switched off. Press a chip to bring one kind back.'
-      );
+      expect(screen.getByTestId('feed-all-off')).toHaveTextContent('Everything is switched off.');
       expect(screen.queryByTestId('pose-unit')).not.toBeInTheDocument();
 
       fireEvent.click(within(strip).getByRole('button', { name: 'Roleplay' }));

@@ -47,9 +47,9 @@ import { AttachFacetDialog } from './AttachFacetDialog';
 import { ItemLifecycleControls } from './ItemLifecycleControls';
 
 const ACCESS_POLICY_LABELS: Record<ContainerAccessPolicy, string> = {
-  open: 'Open: anyone may take contents',
-  friends: 'Friends: only your friends may take contents',
-  owner_only: 'Owner only: only you may take contents',
+  open: 'Open',
+  friends: 'Friends',
+  owner_only: 'Owner only',
 };
 
 interface ItemDetailPanelProps {

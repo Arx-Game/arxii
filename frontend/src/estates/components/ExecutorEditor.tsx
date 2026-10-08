@@ -20,9 +20,6 @@ export function ExecutorEditor({ will, frozen, mutations }: ExecutorEditorProps)
   return (
     <section className="space-y-2">
       <h3 className="text-xl font-semibold">Executors</h3>
-      <p className="text-sm text-muted-foreground">
-        Anyone named here may hold your will-reading after your death.
-      </p>
       <ul className="space-y-1">
         {will.executors.map((executor) => (
           <li

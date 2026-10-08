@@ -59,10 +59,6 @@ export function PlayerBoundaryList() {
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between">
-        <p className="text-sm text-muted-foreground">
-          Hard lines are auto-blocked from stakes and always private. Advisories can optionally be
-          shared with scene partners.
-        </p>
         <Button size="sm" onClick={openCreate}>
           Add boundary
         </Button>

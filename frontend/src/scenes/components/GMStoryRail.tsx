@@ -153,7 +153,7 @@ export function GMStoryRail({ scene }: GMStoryRailProps) {
         </CardHeader>
         <CardContent>
           <p className="text-sm text-muted-foreground" data-testid="gm-story-rail-no-beat">
-            No beat running - Run one from the panel.
+            No beat running.
           </p>
         </CardContent>
       </Card>

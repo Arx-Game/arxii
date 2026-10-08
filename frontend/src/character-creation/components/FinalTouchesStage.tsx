@@ -823,11 +823,7 @@ export function FinalTouchesStage({ draft, onRegisterBeforeLeave }: FinalTouches
         open={openIntros.whispers}
         onToggle={() => toggleIntro('whispers')}
       >
-        <Field
-          id="whispers-text"
-          label="One rumor per line"
-          hint="Each line becomes a rumor the city can overhear at its social hubs, and that you or anyone else can spread or hush."
-        >
+        <Field id="whispers-text" label="One rumor per line">
           <textarea
             id="whispers-text"
             rows={4}
