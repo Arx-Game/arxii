@@ -1,9 +1,13 @@
 /* Restricted knowledge reads as a tone shift and nothing written (#4191), the same
-   word the sheet's private region uses (#4124): the card drawn a shade toward the
+   word the sheet's private region uses (#4124): the card washed a shade toward the
    theme's primary. Every non-public entry takes it. For a player that is an entry a
    character of theirs holds or is researching; for staff, who read the whole corpus,
-   it is the restricted knowledge among the public. */
+   it is the restricted knowledge among the public.
+
+   The wash is a background-image, not a background-color: Tailwind's `bg-card` owns
+   the Card's background-color and is emitted later in the bundle, so a colour set
+   here never reached the page (the first evidence run, #4191). */
 .codex-restricted {
   border-color: color-mix(in oklab, hsl(var(--border)) 70%, hsl(var(--primary)));
-  background-color: color-mix(in oklab, hsl(var(--card)) 92%, hsl(var(--primary)));
+  background-image: linear-gradient(hsl(var(--primary) / 0.08), hsl(var(--primary) / 0.08));
 }
