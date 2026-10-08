@@ -1,7 +1,6 @@
 import { ReactNode } from 'react';
 import { ErrorBoundary as ReactErrorBoundary } from 'react-error-boundary';
 import { QueryErrorResetBoundary } from '@tanstack/react-query';
-import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Home, RefreshCw } from 'lucide-react';
@@ -18,11 +17,14 @@ function ErrorFallback({
   resetErrorBoundary: () => void;
 }) {
   const isDevelopment = import.meta.env.DEV;
-  const navigate = useNavigate();
 
+  // A hard navigation, never useNavigate: this fallback also renders for the root
+  // boundary in main.tsx, which sits ABOVE the Router, and a fallback that needs a
+  // provider mounted below it throws instead of rendering (#4195: every chrome or
+  // provider error on production was a blank page). After an uncaught error the
+  // in-memory state is suspect anyway; a fresh load of / is the honest home.
   const goHome = () => {
-    resetErrorBoundary();
-    navigate('/');
+    window.location.assign('/');
   };
 
   const reloadPage = () => {

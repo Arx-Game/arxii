@@ -22,7 +22,10 @@ Modern React application with TypeScript, Vite, and Tailwind CSS powering the Ar
 - **Functional components only** with TypeScript interfaces
 - **React Query** for server state, **Redux** for global client state only
 - **Custom hooks** for WebSocket management and game logic
-- **Error boundaries** for graceful error handling
+- **Error boundaries** for graceful error handling. Two: the root one in `main.tsx` sits
+  ABOVE `BrowserRouter`, the route-level one in `App.tsx` inside it. A fallback rendered
+  by the root boundary may consume nothing mounted below it (no `useNavigate`, no app
+  context); "Go home" there is `window.location.assign('/')` (#4195)
 
 ### Copy
 

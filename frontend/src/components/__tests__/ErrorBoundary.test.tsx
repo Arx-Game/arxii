@@ -2,7 +2,10 @@
  * Tests for ErrorBoundary recovery buttons.
  *
  * Verifies that the error fallback renders "Go Home" and "Reload" buttons
- * in addition to "Try again", so users are never trapped without recovery.
+ * in addition to "Try again", so users are never trapped without recovery,
+ * and that the fallback renders with no Router above it: main.tsx mounts the
+ * root boundary outside BrowserRouter, and a fallback that needed one threw
+ * instead of rendering (#4195).
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
@@ -65,13 +68,37 @@ describe('ErrorBoundary', () => {
     expect(screen.getByRole('button', { name: /reload/i })).toBeInTheDocument();
   });
 
-  it('navigates to home when Go Home is clicked', async () => {
+  it('loads / afresh when Go Home is clicked', async () => {
+    const assignSpy = vi.fn();
+    Object.defineProperty(window, 'location', {
+      value: { assign: assignSpy },
+      writable: true,
+    });
+
     renderWithProviders('/crash');
     await userEvent.click(screen.getByRole('button', { name: /go home/i }));
-    // After navigation, the error should be cleared and home should render.
-    // The ThrowOnRender component's error boundary is reset, and navigation
-    // takes us to / which renders "Home page".
-    expect(screen.getByText('Home page')).toBeInTheDocument();
+    expect(assignSpy).toHaveBeenCalledWith('/');
+  });
+
+  it('renders the fallback with no Router above it, as the root boundary does', () => {
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <ErrorBoundary>
+          <ThrowOnRender message="Chrome error" />
+        </ErrorBoundary>
+      </QueryClientProvider>
+    );
+
+    expect(screen.getByText('Something went wrong')).toBeInTheDocument();
+    expect(screen.getByText('Chrome error')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /go home/i })).toBeInTheDocument();
+    const routerComplaint = errorSpy.mock.calls
+      .flat()
+      .some((arg) => typeof arg === 'string' && arg.includes('useNavigate'));
+    expect(routerComplaint).toBe(false);
   });
 
   it('calls window.location.reload when Reload is clicked', async () => {
