@@ -3,8 +3,10 @@ import { Link } from 'react-router-dom';
 import { ArrowLeft, ArrowRight, ExternalLink, Loader2 } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
+import { cn } from '@/lib/utils';
 import { useCodexEntry } from '../queries';
 import { LoreSection, OOCSection } from './ContentSections';
+import '../codex.css';
 
 interface CodexModalProps {
   entryId: number;
@@ -147,7 +149,9 @@ export function CodexModal({ entryId, open, onOpenChange }: CodexModalProps) {
         onOpenChange(open);
       }}
     >
-      <DialogContent className="sm:max-w-md">{renderEntry()}</DialogContent>
+      <DialogContent className={cn('sm:max-w-md', entry && !entry.is_public && 'codex-restricted')}>
+        {renderEntry()}
+      </DialogContent>
     </Dialog>
   );
 }

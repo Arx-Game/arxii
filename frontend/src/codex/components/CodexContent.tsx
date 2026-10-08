@@ -19,6 +19,8 @@ interface CodexContentProps {
   entryId?: number;
   /** Roster entry id scoping knowledge to one character (undefined = all). */
   characterId?: number;
+  /** The account plays two or more characters (see `EntryGrid`). */
+  multiCharacter: boolean;
   onSelectSubject: (subjectId: number) => void;
   onSelectEntry: (entryId: number) => void;
   onNavigateBreadcrumb: (type: 'home' | 'category' | 'subject', id?: number) => void;
@@ -29,6 +31,7 @@ export function CodexContent({
   subjectId,
   entryId,
   characterId,
+  multiCharacter,
   onSelectSubject,
   onSelectEntry,
   onNavigateBreadcrumb,
@@ -39,6 +42,7 @@ export function CodexContent({
       <EntryDetailView
         entryId={entryId}
         characterId={characterId}
+        multiCharacter={multiCharacter}
         onNavigateBreadcrumb={onNavigateBreadcrumb}
       />
     );
@@ -50,6 +54,7 @@ export function CodexContent({
       <SubjectView
         subjectId={subjectId}
         characterId={characterId}
+        multiCharacter={multiCharacter}
         onSelectSubject={onSelectSubject}
         onSelectEntry={onSelectEntry}
       />
@@ -144,11 +149,13 @@ function CategoryView({
 function SubjectView({
   subjectId,
   characterId,
+  multiCharacter,
   onSelectSubject,
   onSelectEntry,
 }: {
   subjectId: number;
   characterId?: number;
+  multiCharacter: boolean;
   onSelectSubject: (id: number) => void;
   onSelectEntry: (id: number) => void;
 }) {
@@ -216,7 +223,12 @@ function SubjectView({
         <h2 className="text-xl font-semibold">{subject.name}</h2>
         {subject.description && <p className="mt-1 text-muted-foreground">{subject.description}</p>}
       </div>
-      <EntryGrid entries={entries} subjectId={subjectId} onSelectEntry={onSelectEntry} />
+      <EntryGrid
+        entries={entries}
+        subjectId={subjectId}
+        multiCharacter={multiCharacter}
+        onSelectEntry={onSelectEntry}
+      />
     </div>
   );
 }
@@ -224,10 +236,12 @@ function SubjectView({
 function EntryDetailView({
   entryId,
   characterId,
+  multiCharacter,
   onNavigateBreadcrumb,
 }: {
   entryId: number;
   characterId?: number;
+  multiCharacter: boolean;
   onNavigateBreadcrumb: (type: 'home' | 'category' | 'subject', id?: number) => void;
 }) {
   const { data: entry, isLoading } = useCodexEntry(entryId, characterId);
@@ -240,5 +254,11 @@ function EntryDetailView({
     return <div className="text-muted-foreground">Entry not found</div>;
   }
 
-  return <EntryDetail entry={entry} onNavigateBreadcrumb={onNavigateBreadcrumb} />;
+  return (
+    <EntryDetail
+      entry={entry}
+      multiCharacter={multiCharacter}
+      onNavigateBreadcrumb={onNavigateBreadcrumb}
+    />
+  );
 }

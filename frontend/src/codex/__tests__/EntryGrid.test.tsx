@@ -1,5 +1,6 @@
 /**
- * Tests for EntryGrid's "filed from <canonical subject>" gloss (#2896).
+ * Tests for EntryGrid's "filed from <canonical subject>" gloss (#2896) and its
+ * restricted-knowledge reading (#4191).
  *
  * A subject listing can include entries filed there from elsewhere; the grid
  * glosses those cards with their canonical subject so browsing stays honest
@@ -57,5 +58,41 @@ describe('EntryGrid filed-from gloss', () => {
     );
 
     expect(screen.getByText('Filed from Celestial')).toBeInTheDocument();
+  });
+});
+
+const KNOWER = {
+  roster_entry_id: 7,
+  character_name: 'Ilsavet',
+  status: 'known' as const,
+  research_progress: 0,
+};
+
+describe('EntryGrid restricted tone', () => {
+  it('shifts the tone of a non-public entry and writes nothing', () => {
+    render(
+      <EntryGrid
+        entries={[makeEntry({ is_public: false, knowledge_status: 'known' })]}
+        onSelectEntry={vi.fn()}
+      />
+    );
+
+    expect(screen.getByText('Bene').closest('.codex-restricted')).not.toBeNull();
+    expect(screen.queryByText(/restricted|private|secret/i)).not.toBeInTheDocument();
+  });
+
+  it('leaves a public entry plain', () => {
+    render(<EntryGrid entries={[makeEntry({ is_public: true })]} onSelectEntry={vi.fn()} />);
+
+    expect(screen.getByText('Bene').closest('.codex-restricted')).toBeNull();
+  });
+
+  it('shows the per-character badges only on a multi-character account', () => {
+    const entry = makeEntry({ is_public: false, knowledge_status: 'known', known_by: [KNOWER] });
+    const { rerender } = render(<EntryGrid entries={[entry]} onSelectEntry={vi.fn()} />);
+    expect(screen.queryByText('Ilsavet')).not.toBeInTheDocument();
+
+    rerender(<EntryGrid entries={[entry]} multiCharacter onSelectEntry={vi.fn()} />);
+    expect(screen.getByText('Ilsavet')).toBeInTheDocument();
   });
 });

@@ -2,16 +2,24 @@ import { BookOpenCheck, Lock } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { cn } from '@/lib/utils';
 import { Breadcrumb, BreadcrumbLink } from './Breadcrumb';
 import { LoreSection, OOCSection } from './ContentSections';
 import type { CodexEntryDetail as CodexEntryDetailType } from '../types';
+import '../codex.css';
 
 interface EntryDetailProps {
   entry: CodexEntryDetailType;
+  /** See `EntryGrid`: per-character badges only mean something with two or more. */
+  multiCharacter?: boolean;
   onNavigateBreadcrumb: (type: 'home' | 'category' | 'subject', id?: number) => void;
 }
 
-export function EntryDetail({ entry, onNavigateBreadcrumb }: EntryDetailProps) {
+export function EntryDetail({
+  entry,
+  multiCharacter = false,
+  onNavigateBreadcrumb,
+}: EntryDetailProps) {
   const isUncovered = entry.knowledge_status === 'uncovered';
   const navigate = useNavigate();
 
@@ -27,7 +35,7 @@ export function EntryDetail({ entry, onNavigateBreadcrumb }: EntryDetailProps) {
   }));
 
   return (
-    <Card>
+    <Card className={cn(!entry.is_public && 'codex-restricted')}>
       <CardHeader>
         <Breadcrumb items={breadcrumbItems} />
         {entry.also_filed_under.length > 0 && (
@@ -56,7 +64,7 @@ export function EntryDetail({ entry, onNavigateBreadcrumb }: EntryDetailProps) {
       </CardHeader>
       <CardContent className="space-y-4">
         {entry.quote && <p className="text-base italic text-muted-foreground">{entry.quote}</p>}
-        {entry.known_by.length > 0 && (
+        {multiCharacter && entry.known_by.length > 0 && (
           <div className="flex flex-wrap items-center gap-1.5">
             <span className="text-sm text-muted-foreground">Known by:</span>
             {entry.known_by.map((knower) => (

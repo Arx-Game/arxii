@@ -1,5 +1,6 @@
 /**
- * Tests for EntryDetail's "Also filed under" line (#2896).
+ * Tests for EntryDetail's "Also filed under" line (#2896) and its restricted-knowledge
+ * reading (#4191).
  *
  * A filed entry keeps one canonical home (`subject`/`subject_path`) but can
  * also be cross-listed under other subjects; the detail view renders those
@@ -108,5 +109,37 @@ describe('EntryDetail also_filed_under', () => {
     await userEvent.click(screen.getByText('Rites of Passage'));
 
     expect(onNavigateBreadcrumb).toHaveBeenCalledWith('subject', 5);
+  });
+});
+
+describe('EntryDetail restricted tone', () => {
+  const knower = {
+    roster_entry_id: 7,
+    character_name: 'Ilsavet',
+    status: 'known' as const,
+    research_progress: 0,
+  };
+
+  it('shifts the tone of a non-public entry and leaves a public one plain', () => {
+    const { rerender } = render(
+      <EntryDetail entry={makeEntry({ is_public: false })} onNavigateBreadcrumb={vi.fn()} />,
+      { wrapper: ({ children }) => <MemoryRouter>{children}</MemoryRouter> }
+    );
+    expect(screen.getByText('The Shroud').closest('.codex-restricted')).not.toBeNull();
+
+    rerender(<EntryDetail entry={makeEntry({ is_public: true })} onNavigateBreadcrumb={vi.fn()} />);
+    expect(screen.getByText('The Shroud').closest('.codex-restricted')).toBeNull();
+  });
+
+  it('shows "Known by" only on a multi-character account', () => {
+    const entry = makeEntry({ is_public: false, known_by: [knower] });
+    const { rerender } = render(<EntryDetail entry={entry} onNavigateBreadcrumb={vi.fn()} />, {
+      wrapper: ({ children }) => <MemoryRouter>{children}</MemoryRouter>,
+    });
+    expect(screen.queryByText('Known by:')).not.toBeInTheDocument();
+
+    rerender(<EntryDetail entry={entry} multiCharacter onNavigateBreadcrumb={vi.fn()} />);
+    expect(screen.getByText('Known by:')).toBeInTheDocument();
+    expect(screen.getByText('Ilsavet')).toBeInTheDocument();
   });
 });
