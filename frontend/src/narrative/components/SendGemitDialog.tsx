@@ -15,6 +15,7 @@
 
 import { useState } from 'react';
 import { toast } from 'sonner';
+import { handleFormMutationError } from '@/lib/formMutationError';
 import {
   Dialog,
   DialogContent,
@@ -98,30 +99,12 @@ export function SendGemitDialog() {
           resetForm();
           toast.success('Gemit broadcast: all online accounts notified');
         },
-        onError: (err: unknown) => {
-          const fetchErr = err as { status?: number; response?: Response };
-          if (fetchErr.status === 403) {
-            toast.error('Permission denied.');
-            setOpen(false);
-            return;
-          }
-          if (fetchErr.response) {
-            fetchErr.response
-              .json()
-              .then((data: unknown) => {
-                if (data && typeof data === 'object') {
-                  setFieldErrors(data as DRFFieldErrors);
-                }
-              })
-              .catch(() => {
-                toast.error('Failed to broadcast gemit. Please try again.');
-              });
-            return;
-          }
-          const message =
-            err instanceof Error ? err.message : 'Failed to broadcast gemit. Please try again.';
-          toast.error(message);
-        },
+        onError: (err: unknown) =>
+          handleFormMutationError(err, {
+            onForbidden: () => setOpen(false),
+            onFieldErrors: (data) => setFieldErrors(data as DRFFieldErrors),
+            fallback: 'Failed to broadcast gemit. Please try again.',
+          }),
       }
     );
   }

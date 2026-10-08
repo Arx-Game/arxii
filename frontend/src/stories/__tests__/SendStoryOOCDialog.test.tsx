@@ -223,9 +223,7 @@ describe('SendStoryOOCDialog', () => {
     await user.click(screen.getByRole('button', { name: /send notice/i }));
 
     await waitFor(() => {
-      expect(toast.error).toHaveBeenCalledWith(
-        'Permission denied. Only Lead GMs and staff can send OOC notices.'
-      );
+      expect(toast.error).toHaveBeenCalledWith('Permission denied.');
     });
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
   });

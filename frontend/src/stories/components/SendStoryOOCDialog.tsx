@@ -11,6 +11,7 @@
 
 import { useState } from 'react';
 import { toast } from 'sonner';
+import { handleFormMutationError } from '@/lib/formMutationError';
 import {
   Dialog,
   DialogContent,
@@ -90,30 +91,12 @@ export function SendStoryOOCDialog({ story }: SendStoryOOCDialogProps) {
           resetForm();
           toast.success('OOC notice sent to story participants');
         },
-        onError: (err: unknown) => {
-          const fetchErr = err as { status?: number; response?: Response };
-          if (fetchErr.status === 403) {
-            toast.error('Permission denied. Only Lead GMs and staff can send OOC notices.');
-            setOpen(false);
-            return;
-          }
-          if (fetchErr.response) {
-            fetchErr.response
-              .json()
-              .then((data: unknown) => {
-                if (data && typeof data === 'object') {
-                  setFieldErrors(data as DRFFieldErrors);
-                }
-              })
-              .catch(() => {
-                toast.error('Failed to send OOC notice. Please try again.');
-              });
-            return;
-          }
-          const message =
-            err instanceof Error ? err.message : 'Failed to send OOC notice. Please try again.';
-          toast.error(message);
-        },
+        onError: (err: unknown) =>
+          handleFormMutationError(err, {
+            onForbidden: () => setOpen(false),
+            onFieldErrors: (data) => setFieldErrors(data as DRFFieldErrors),
+            fallback: 'Failed to send OOC notice. Please try again.',
+          }),
       }
     );
   }
