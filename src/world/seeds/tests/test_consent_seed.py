@@ -65,3 +65,44 @@ class BlackmailConsentCategoryTests(TestCase):
         # #2540 slice 3: one opt-in covers every ask flavor of the same structured ask.
         for name in ("Boon", "Con a Boon", "Charm a Boon", "Menace a Boon"):
             self.assertEqual(_TEMPLATE_CATEGORY_MAP[name], "boon", name)
+
+
+class MakeoverConsentCategoryTests(TestCase):
+    """Makeovers & Styling is an independent root that asks before acting (#4187)."""
+
+    def test_seeds_makeover_as_an_asking_root(self) -> None:
+        seed_social_consent_categories()
+        cat = SocialConsentCategory.objects.get(key="makeover")
+        self.assertEqual(cat.name, "Makeovers & Styling")
+        self.assertEqual(cat.default_mode, ConsentMode.ASK)
+        self.assertTrue(cat.asks_before_acting)
+        self.assertIsNone(cat.parent)
+
+    def test_rerun_adopts_a_hand_made_row(self) -> None:
+        # A staff member who created the row in admin before the seed ran gets the flag
+        # on the next press; name and description are theirs and stay.
+        SocialConsentCategory.objects.create(
+            key="makeover", name="Styling", default_mode=ConsentMode.ASK
+        )
+        seed_social_consent_categories()
+        cat = SocialConsentCategory.objects.get(key="makeover")
+        self.assertEqual(cat.name, "Styling")
+        self.assertTrue(cat.asks_before_acting)
+
+    def test_required_content_sentinel_names_the_row(self) -> None:
+        from web.admin.tuning.required_content import collect_required_content
+
+        def row_for(key):
+            snapshot = collect_required_content()
+            for rows, present in (
+                (snapshot.missing_required, False),
+                (snapshot.present_required, True),
+            ):
+                for row in rows:
+                    if row.dependency.key == key:
+                        return present
+            return None
+
+        self.assertIs(row_for("makeover-social-consent-category"), False)
+        seed_social_consent_categories()
+        self.assertIs(row_for("makeover-social-consent-category"), True)

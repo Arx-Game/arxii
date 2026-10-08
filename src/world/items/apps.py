@@ -31,3 +31,9 @@ def ready() -> None:
 
     register_kind_handler(ProjectKind.ITEM_REFINEMENT, resolve_item_refinement)
     register_instant_completion_kind(ProjectKind.ITEM_REFINEMENT)
+
+    # Telnet `accept makeover` / `decline makeover` for a pending restyle ask (#4187).
+    from commands.offer_registry import register_offer_handler  # noqa: PLC0415
+    from world.items.offer_handlers import MakeoverOfferHandler  # noqa: PLC0415
+
+    register_offer_handler(MakeoverOfferHandler())

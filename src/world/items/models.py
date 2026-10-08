@@ -2507,6 +2507,11 @@ from world.items.gems.models import (  # noqa: E402,F401
 )
 
 # ---------------------------------------------------------------------------
+# Makeover consent ask (#4187) — a stylist's offer waiting on the target
+# ---------------------------------------------------------------------------
+from world.items.makeover_models import MakeoverConsentRequest  # noqa: E402,F401
+
+# ---------------------------------------------------------------------------
 # Market submodule (#2066) — import last so all models above register first
 # ---------------------------------------------------------------------------
 from world.items.market.models import (  # noqa: E402,F401

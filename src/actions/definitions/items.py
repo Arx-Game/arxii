@@ -66,9 +66,15 @@ from flows.service_functions.inventory import (
 )
 from world.gm.constants import GMLevel
 from world.items.constants import ContainerAccessPolicy
-from world.items.exceptions import InventoryError, ItemError, NotReachable
+from world.items.exceptions import (
+    InventoryError,
+    ItemError,
+    MakeoverRequiresConsent,
+    NotReachable,
+)
 from world.items.models import ItemInstance
 from world.items.services.usage import use_item
+from world.items.types import UseItemResult
 from world.scenes.persona_display import viewer_context_for_account
 
 _EQUIPMENT_TARGET_UNAVAILABLE = "That isn't available."
@@ -1202,17 +1208,17 @@ class UseItemAction(Action):
         if refusal is not None:
             return refusal
 
-        try:
-            result = use_item(
-                item_instance=item_instance,
-                user=actor,
-                target=target,
-                descriptor=descriptor,
-                option_id=option_id,
-                blend=blend,
-            )
-        except ItemError as exc:
-            return ActionResult(success=False, message=exc.user_message)
+        result = self._use(
+            actor,
+            item_instance,
+            target,
+            option_id=option_id,
+            descriptor=descriptor,
+            blend=blend,
+            consent=kwargs.get("makeover_consent"),
+        )
+        if isinstance(result, ActionResult):
+            return result
 
         if grant is not None:
             _learn_technique_grant(actor, grant, result)
@@ -1232,6 +1238,68 @@ class UseItemAction(Action):
                 "applied_effect_count": len(result.applied_effects),
                 "appearance_changes": len(result.appearance_changes),
             },
+        )
+
+    def _use(  # noqa: PLR0913 - the validated use inputs, one keyword each
+        self,
+        actor: ObjectDB,
+        item_instance: ItemInstance,
+        target: ObjectDB | None,
+        *,
+        option_id: int | None,
+        descriptor: str | None,
+        blend: bool,
+        consent: object,
+    ) -> UseItemResult | ActionResult:
+        """Run ``use_item``; a refusal, or an ask recorded instead (#4187), is an ActionResult."""
+        try:
+            return use_item(
+                item_instance=item_instance,
+                user=actor,
+                target=target,
+                descriptor=descriptor,
+                option_id=option_id,
+                blend=blend,
+                consent=consent,
+            )
+        except MakeoverRequiresConsent:
+            # Restyling someone on "Ask me": record the ask instead. Nothing was
+            # spent; the grant path re-enters this action with the accepted row.
+            return self._offer_makeover(actor, target, item_instance, option_id, blend, descriptor)
+        except ItemError as exc:
+            return ActionResult(success=False, message=exc.user_message)
+
+    @staticmethod
+    def _offer_makeover(  # noqa: PLR0913 - the validated use inputs, as use_item took them
+        actor: ObjectDB,
+        target: ObjectDB | None,
+        item_instance: ItemInstance,
+        option_id: int | None,
+        blend: bool,
+        descriptor: str | None,
+    ) -> ActionResult:
+        from world.items.services.makeover_requests import (  # noqa: PLC0415
+            offer_line,
+            offer_makeover,
+        )
+
+        if target is None:
+            return ActionResult(success=False, message=UNAVAILABLE)
+        try:
+            request = offer_makeover(
+                user=actor,
+                target=target,
+                item_instance=item_instance,
+                option_id=option_id,
+                blend=blend,
+                descriptor=descriptor,
+            )
+        except ItemError as exc:
+            return ActionResult(success=False, message=exc.user_message)
+        return ActionResult(
+            success=True,
+            message=offer_line(request),
+            data={"makeover_request_id": request.pk},
         )
 
 

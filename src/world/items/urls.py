@@ -2,6 +2,7 @@
 
 from rest_framework.routers import DefaultRouter
 
+from world.items.makeover_views import MakeoverConsentRequestViewSet
 from world.items.market.views import MarketSquareViewSet, ServiceOfferViewSet
 from world.items.trade.views import TradeSessionViewSet
 from world.items.views import (
@@ -28,6 +29,7 @@ from world.items.views_station import LabStationViewSet
 
 router = DefaultRouter()
 router.register("quality-tiers", QualityTierViewSet, basename="quality-tier")
+router.register("makeover-requests", MakeoverConsentRequestViewSet, basename="makeover-request")
 router.register("styles", StyleViewSet, basename="style")
 router.register("market-squares", MarketSquareViewSet, basename="market-square")
 router.register("service-offers", ServiceOfferViewSet, basename="service-offer")

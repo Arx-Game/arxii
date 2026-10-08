@@ -2,6 +2,7 @@
 
 from rest_framework import serializers
 
+from world.consent.constants import ConsentMode
 from world.consent.models import (
     SocialConsentBlacklist,
     SocialConsentCategory,
@@ -31,6 +32,7 @@ class SocialConsentCategorySerializer(serializers.ModelSerializer):
             "display_order",
             "parent",
             "default_mode",
+            "asks_before_acting",
             "action_templates",
         )
         read_only_fields = fields
@@ -91,6 +93,17 @@ class SocialConsentCategoryRuleSerializer(serializers.ModelSerializer):
                     raise serializers.ValidationError(
                         {"preference": "You may only manage rules for your own preferences."}
                     )
+        category = attrs.get("category")
+        if (
+            attrs.get("mode") == ConsentMode.ASK
+            and category is not None
+            and not category.asks_before_acting
+        ):
+            # Every social-action category already prompts the target; "Ask me" only
+            # means something where the deed itself waits (#4187).
+            raise serializers.ValidationError(
+                {"mode": "Ask me is only offered for things done to your character."}
+            )
         return attrs
 
 

@@ -654,3 +654,24 @@ Explicitly NOT in this slice (parked):
 - Cross-reference: `docs/systems/magic.md` for the full model lineup
 
 ## Notes
+
+## Makeover Consent Ask (DONE, #4187)
+
+Restyling another player's character used to be refused for everyone: the `makeover`
+consent category defaulted to allowlist and no row existed on production. Built:
+
+- `ConsentMode.ASK` and `SocialConsentCategory.asks_before_acting`; `consent_outcome()`
+  returns allow / ask / refuse (`consent_blocks_targeting` is its refuse face). The
+  Privacy row for an asking category offers **Ask me / Always allow / Never**, with the
+  whitelist (skip the ask) and blacklist (refuse) always shown.
+- `MakeoverConsentRequest`: `use_item` on ASK raises `MakeoverRequiresConsent` before any
+  charge; `UseItemAction` records the ask and answers "You offer to restyle ...". The target
+  answers on the web (`/api/items/makeover-requests/`, the `MakeoverAskNotifier` toast
+  with Grant / Decline / Always let / Never from) or telnet (`accept makeover` /
+  `decline makeover`). A grant re-runs the stylist's Use with the accepted row as proof;
+  a decline spends nothing; an ask lapses lazily when the stylist leaves the room.
+- The `makeover` category is seeded as an asking root and named by the staff dashboard's
+  required-content sentinel; production needs the row created once in admin
+  (RunPython seeds are banned, ADR-0013). Player-facing copy is PLACEHOLDER.
+- Not built: asks for any other category (body handling, treatment); a timer; a card
+  pinned in `/game` beyond the toast.

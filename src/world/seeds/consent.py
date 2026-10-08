@@ -30,7 +30,7 @@ if TYPE_CHECKING:
     from world.consent.models import SocialConsentCategory
 
 # (key, name, description, display_order, default_mode)
-_CATEGORIES: tuple[tuple[str, str, str, int, str], ...] = (
+_CATEGORIES: tuple[tuple[str, str, str, int, str, bool], ...] = (
     (
         "antagonism",
         "All Antagonism",
@@ -44,6 +44,7 @@ _CATEGORIES: tuple[tuple[str, str, str, int, str], ...] = (
         # whitelist only until the player widens it. This root value cascades to every
         # antagonism category that has no rule of its own.
         ConsentMode.FRIENDS_WHITELIST,
+        False,
     ),
     (
         "romantic",
@@ -51,6 +52,7 @@ _CATEGORIES: tuple[tuple[str, str, str, int, str], ...] = (
         "Flirtatious, romantic, or intimacy-adjacent social actions.",
         10,
         ConsentMode.EVERYONE,
+        False,
     ),
     (
         "hostile",
@@ -60,6 +62,7 @@ _CATEGORIES: tuple[tuple[str, str, str, int, str], ...] = (
         # Own default is moot while parented under All Antagonism — it inherits the root
         # (FRIENDS_WHITELIST). Left EVERYONE so an orphaned row (root deleted) is legible.
         ConsentMode.EVERYONE,
+        False,
     ),
     (
         "drain",
@@ -69,6 +72,7 @@ _CATEGORIES: tuple[tuple[str, str, str, int, str], ...] = (
         # Inherits All Antagonism (FRIENDS_WHITELIST); own value kept opt-in so an
         # orphaned row never reverts to EVERYONE.
         ConsentMode.FRIENDS_WHITELIST,
+        False,
     ),
     (
         "blackmail",
@@ -78,6 +82,7 @@ _CATEGORIES: tuple[tuple[str, str, str, int, str], ...] = (
         # Inherits All Antagonism (FRIENDS_WHITELIST); own value kept as the #1680 default
         # so an orphaned row stays opt-in rather than reverting to EVERYONE.
         ConsentMode.FRIENDS_WHITELIST,
+        False,
     ),
     (
         "boon",
@@ -90,6 +95,7 @@ _CATEGORIES: tuple[tuple[str, str, str, int, str], ...] = (
         # Inherits All Antagonism (FRIENDS_WHITELIST); own value kept opt-in so an
         # orphaned row stays gated (mirrors blackmail, #2540).
         ConsentMode.FRIENDS_WHITELIST,
+        False,
     ),
     (
         "embezzlement",
@@ -103,6 +109,7 @@ _CATEGORIES: tuple[tuple[str, str, str, int, str], ...] = (
         # orphaned row stays gated. Dedicated category (not theft) — Apostate's
         # ruling 2026-07-20.
         ConsentMode.FRIENDS_WHITELIST,
+        False,
     ),
     (
         "secret-investigation",
@@ -114,6 +121,7 @@ _CATEGORIES: tuple[tuple[str, str, str, int, str], ...] = (
         # Inherits All Antagonism (FRIENDS_WHITELIST); own value kept opt-in so an
         # orphaned row stays gated (mirrors blackmail, #2289).
         ConsentMode.FRIENDS_WHITELIST,
+        False,
     ),
     (
         "theft",
@@ -125,6 +133,7 @@ _CATEGORIES: tuple[tuple[str, str, str, int, str], ...] = (
         # Apostate's "no floors, fully inherit" call (#2170). Own value kept at ALLOWLIST so
         # the lazy `theft_category()` fallback (unseeded) and any orphaned row stay strict.
         ConsentMode.ALLOWLIST,
+        False,
     ),
     (
         "receiving-stolen-goods",
@@ -138,6 +147,7 @@ _CATEGORIES: tuple[tuple[str, str, str, int, str], ...] = (
         # lazy `receiving_stolen_goods_category()` fallback (unseeded) and any orphaned
         # row stay strict (mirrors theft, #1985).
         ConsentMode.ALLOWLIST,
+        False,
     ),
     (
         "manipulative",
@@ -147,6 +157,7 @@ _CATEGORIES: tuple[tuple[str, str, str, int, str], ...] = (
         30,
         # Inherits All Antagonism (FRIENDS_WHITELIST); own value moot while parented.
         ConsentMode.EVERYONE,
+        False,
     ),
     (
         "espionage",
@@ -160,6 +171,7 @@ _CATEGORIES: tuple[tuple[str, str, str, int, str], ...] = (
         # Inherits All Antagonism (FRIENDS_WHITELIST); own value kept strict for
         # the unseeded/orphaned-row fallback (mirrors theft).
         ConsentMode.ALLOWLIST,
+        False,
     ),
     (
         "general",
@@ -167,6 +179,19 @@ _CATEGORIES: tuple[tuple[str, str, str, int, str], ...] = (
         "Public-facing social performances and recovery actions with broad audience.",
         40,
         ConsentMode.EVERYONE,
+        False,
+    ),
+    (
+        "makeover",
+        "Makeovers & Styling",
+        # PLACEHOLDER (agent-drafted player-facing copy — Apostate to rewrite, #4187):
+        "Other characters restyling your appearance (dye, cuts, cosmetics). By default "
+        "they ask and you answer each time.",
+        40,
+        # An independent root, not under All Antagonism: a makeover is friendly. Ask me is
+        # the default (#4187); the whitelist skips the ask and the blacklist refuses.
+        ConsentMode.ASK,
+        True,
     ),
 )
 
@@ -222,7 +247,7 @@ def seed_social_consent_categories() -> None:
     from world.consent.models import SocialConsentCategory  # noqa: PLC0415
 
     categories: dict[str, SocialConsentCategory] = {}
-    for key, name, description, display_order, default_mode in _CATEGORIES:
+    for key, name, description, display_order, default_mode, asks in _CATEGORIES:
         cat, _ = SocialConsentCategory.objects.get_or_create(
             key=key,
             defaults={
@@ -230,8 +255,14 @@ def seed_social_consent_categories() -> None:
                 "description": description,
                 "display_order": display_order,
                 "default_mode": default_mode,
+                "asks_before_acting": asks,
             },
         )
+        # Not a staff-authored field: a row made by hand before the seed ran (or by an
+        # older seed) is adopted so the asking category really asks (#4187).
+        if cat.asks_before_acting != asks:
+            cat.asks_before_acting = asks
+            cat.save(update_fields=["asks_before_acting"])
         categories[key] = cat
 
     _apply_category_parents(categories)

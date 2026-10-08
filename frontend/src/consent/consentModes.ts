@@ -26,11 +26,31 @@ export const MODE_ORDER: ConsentMode[] = [
 
 export const MODE_LABELS: Record<ConsentMode, string> = {
   everyone: 'Everyone',
+  ask: 'Ask me each time',
   all_but_blacklist: 'Everyone except blacklist',
   friends_whitelist: 'Friends + whitelist',
   rivals: 'My declared rivals',
   allowlist: 'Allowlist only',
 };
+
+/**
+ * A category that asks before acting (`asks_before_acting`, a makeover, #4187) offers
+ * three plain choices in place of the social-action modes. They are the `ask`,
+ * `everyone` and `allowlist` modes under names that say what they do to a deed that
+ * waits for your answer; the whitelist skips the ask and the blacklist refuses either way.
+ */
+export const ASKING_MODE_ORDER: ConsentMode[] = ['ask', 'everyone', 'allowlist'];
+
+export const ASKING_MODE_LABELS: Partial<Record<ConsentMode, string>> = {
+  ask: 'Ask me',
+  everyone: 'Always allow',
+  allowlist: 'Never',
+};
+
+/** The picker label for `mode` on `category`: the asking names when the category asks. */
+export function modeLabel(mode: ConsentMode, asksBeforeActing: boolean): string {
+  return (asksBeforeActing ? ASKING_MODE_LABELS[mode] : undefined) ?? MODE_LABELS[mode];
+}
 
 /** Sentinel Select value for "no rule of my own — inherit from parent / root default". */
 export const INHERIT_VALUE = 'inherit';

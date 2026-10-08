@@ -13,6 +13,7 @@ from evennia.objects.models import ObjectDB
 if TYPE_CHECKING:
     from world.forms.models import CharacterFormState, FormTrait, FormTraitOption
     from world.items.models import ItemTemplate
+    from world.roster.models import RosterTenure
 
 from world.checks.consequence_resolution import (
     apply_pool_deterministically,
@@ -21,12 +22,14 @@ from world.checks.consequence_resolution import (
     select_consequence,
 )
 from world.checks.types import ResolutionContext
-from world.items.constants import OwnershipEventType
+from world.consent.constants import ConsentOutcome
+from world.items.constants import MAKEOVER_CONSENT_CATEGORY_KEY, OwnershipEventType
 from world.items.exceptions import (
     BlendNotSupported,
     ItemNotAttuned,
     ItemNotUsable,
     MakeoverNotPermitted,
+    MakeoverRequiresConsent,
     NoChargesRemaining,
     NotReachable,
     StyleChoiceRequired,
@@ -35,6 +38,7 @@ from world.items.exceptions import (
 )
 from world.items.models import EquippedItem, ItemInstance, OwnershipEvent
 from world.items.types import UseItemResult
+from world.scenes.action_constants import ActionRequestStatus
 
 logger = logging.getLogger(__name__)
 
@@ -376,6 +380,7 @@ def use_item(  # noqa: PLR0913
     descriptor: str | None = None,
     option_id: int | None = None,
     blend: bool = False,
+    consent: object = None,
 ) -> UseItemResult:
     """Use an item with an on-use pool: apply its effects (deterministic when the
     template has no on_use_check_type, else check-gated). Consumables spend one
@@ -401,7 +406,11 @@ def use_item(  # noqa: PLR0913
 
     Exotic (requires_teaching) choose-at-use options are gated on the ACTING
     character knowing them (StyleNotKnown, pre-charge); a successful
-    application teaches the recipient — you learn a look by having it done."""
+    application teaches the recipient — you learn a look by having it done.
+
+    ``consent`` (#4187) is the target's accepted ``MakeoverConsentRequest`` when a
+    makeover on "Ask me" was granted; without it such a use raises
+    ``MakeoverRequiresConsent`` before any charge and the action records the ask."""
     locked = ItemInstance.objects.select_for_update().get(pk=item_instance.pk)
     template = locked.template
     chosen_option = _run_pre_charge_gates(
@@ -411,6 +420,16 @@ def use_item(  # noqa: PLR0913
         option_id=option_id,
         blend=blend,
     )
+    # Restyling someone else on "Ask me" (#4187): still before any charge. ``consent`` is
+    # the target's accepted ``MakeoverConsentRequest``, passed by the grant path only.
+    if (
+        target is not None
+        and target != user
+        and template.appearance_effects.exists()
+        and makeover_outcome(user, target) == ConsentOutcome.ASK
+        and not _consent_covers(consent, user=user, target=target, item=locked)
+    ):
+        raise MakeoverRequiresConsent
 
     context = ResolutionContext(character=user, target=target)
     check_result, applied = _apply_on_use_pool(template, user, context)
@@ -448,21 +467,25 @@ def use_item(  # noqa: PLR0913
     )
 
 
-def _require_makeover_consent(user: ObjectDB, target: ObjectDB) -> None:
-    """Require existing makeover consent without seeding policy on a read.
-
-    NPCs without an active tenure bypass consent. A missing category refuses
-    PC styling, matching its unconfigured ALLOWLIST default. Existing category
-    hierarchy and player rules remain governed by the shared consent service.
-    """
-    from world.consent.models import SocialConsentCategory  # noqa: PLC0415
-    from world.consent.services import consent_blocks_targeting  # noqa: PLC0415
+def _active_tenure_for_sheet(sheet: object) -> RosterTenure | None:
+    """The sheet's live tenure, or None for an NPC / sheet-less actor."""
     from world.roster.models import RosterTenure  # noqa: PLC0415
 
-    def _active_tenure_for_sheet(sheet: object) -> RosterTenure | None:
-        return RosterTenure.objects.filter(
-            roster_entry__character_sheet=sheet, end_date__isnull=True
-        ).first()
+    return RosterTenure.objects.filter(
+        roster_entry__character_sheet=sheet, end_date__isnull=True
+    ).first()
+
+
+def makeover_outcome(user: ObjectDB, target: ObjectDB) -> ConsentOutcome:
+    """ALLOW / ASK / REFUSE for *user* restyling *target* (#2632, #4187).
+
+    An NPC target (no active tenure) allows; a missing ``makeover`` category refuses
+    (the row is the setting: the staff dashboard's required-content sentinel names it).
+    Everything else is the shared consent decision, so the category's mode, whitelist and
+    blacklist all apply.
+    """
+    from world.consent.models import SocialConsentCategory  # noqa: PLC0415
+    from world.consent.services import consent_outcome  # noqa: PLC0415
 
     target_sheet = target.character_sheet
     if target_sheet is None:
@@ -470,18 +493,46 @@ def _require_makeover_consent(user: ObjectDB, target: ObjectDB) -> None:
         raise MakeoverNotPermitted(msg)
     owner_tenure = _active_tenure_for_sheet(target_sheet)
     if owner_tenure is None:
-        return
-    category = SocialConsentCategory.objects.filter(key="makeover").first()
+        return ConsentOutcome.ALLOW
+    category = SocialConsentCategory.objects.filter(key=MAKEOVER_CONSENT_CATEGORY_KEY).first()
     if category is None:
-        raise MakeoverNotPermitted
+        return ConsentOutcome.REFUSE
     user_sheet = user.character_sheet
     actor_tenure = _active_tenure_for_sheet(user_sheet) if user_sheet else None
-    if consent_blocks_targeting(
-        owner_tenure=owner_tenure,
-        category=category,
-        actor_tenure=actor_tenure,
-    ):
+    return consent_outcome(owner_tenure=owner_tenure, category=category, actor_tenure=actor_tenure)
+
+
+def _require_makeover_consent(user: ObjectDB, target: ObjectDB) -> None:
+    """Refuse a makeover the target's settings exclude; an ask is not a refusal here.
+
+    Runs from the availability prerequisite as well as pre-charge, so the menu shows
+    Use as available when the answer is "ask" — ``use_item`` then raises
+    ``MakeoverRequiresConsent`` and the action records the ask (#4187).
+    """
+    if makeover_outcome(user, target) == ConsentOutcome.REFUSE:
         raise MakeoverNotPermitted
+
+
+def _consent_covers(
+    consent: object, *, user: ObjectDB, target: ObjectDB, item: ItemInstance
+) -> bool:
+    """True when *consent* is this target's accepted ask for this stylist and kit (#4187).
+
+    Anything that is not a ``MakeoverConsentRequest`` row (a wire kwarg, a string) is no
+    proof at all; a row for another item, stylist or target is not either.
+    """
+    from world.items.makeover_models import MakeoverConsentRequest  # noqa: PLC0415
+
+    if not isinstance(consent, MakeoverConsentRequest):
+        return False
+    user_sheet = user.character_sheet
+    return (
+        consent.status == ActionRequestStatus.ACCEPTED
+        and consent.item_instance_id == item.pk
+        and user_sheet is not None
+        and consent.stylist_persona.character_sheet_id == user_sheet.pk
+        and consent.target_persona.character_sheet_id == target.character_sheet.pk
+    )
 
 
 def _resolve_choose_at_use_option(

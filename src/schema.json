@@ -17627,6 +17627,70 @@ paths:
               schema:
                 $ref: '#/components/schemas/RoomFeatureProjectStartResult'
           description: ''
+  /api/items/makeover-requests/:
+    get:
+      operationId: items_makeover_requests_list
+      description: Pending asks, after expiring any whose stylist has left the room.
+      tags:
+      - items
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/MakeoverConsentRequest'
+          description: ''
+  /api/items/makeover-requests/{id}/:
+    get:
+      operationId: items_makeover_requests_retrieve
+      description: The requesting account's own pending makeover asks (as target).
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+        required: true
+      tags:
+      - items
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MakeoverConsentRequest'
+          description: ''
+  /api/items/makeover-requests/{id}/respond/:
+    post:
+      operationId: items_makeover_requests_respond_create
+      description: |-
+        Grant or decline this ask; ``remember`` writes the always / never shortcut.
+
+        Looks up by (pk, own personas) rather than through ``get_queryset`` (PENDING-only)
+        so a double-submit lands on the "already answered" 400 instead of a bare 404; a
+        row addressed to someone else's persona is a 404 either way.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+        required: true
+      tags:
+      - items
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MakeoverConsentRequest'
+          description: ''
   /api/items/market-squares/:
     get:
       operationId: items_market_squares_list
@@ -48325,6 +48389,7 @@ components:
     ConsentModeEnum:
       enum:
       - everyone
+      - ask
       - all_but_blacklist
       - friends_whitelist
       - rivals
@@ -48332,6 +48397,7 @@ components:
       type: string
       description: |-
         * `everyone` - Everyone
+        * `ask` - Ask me each time
         * `all_but_blacklist` - Everyone except my blacklist
         * `friends_whitelist` - Friends and my whitelist
         * `rivals` - My declared rivals (and whitelist)
@@ -59616,6 +59682,58 @@ components:
         * `COMA` - Coma
         * `RETIRED` - Retired
         * `DEAD` - Dead
+    MakeoverConsentRequest:
+      type: object
+      description: One pending ask as the target's card shows it.
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        stylist_name:
+          type: string
+          readOnly: true
+        item_name:
+          type: string
+          readOnly: true
+        trait_name:
+          type: string
+          nullable: true
+          readOnly: true
+        option_name:
+          type: string
+          nullable: true
+          readOnly: true
+        blend:
+          type: boolean
+          readOnly: true
+          description: Add the color instead of replacing it (#2632).
+        descriptor:
+          type: string
+          readOnly: true
+          description: Free-text presentation flavor the stylist chose (#2632).
+        description:
+          type: string
+          readOnly: true
+        target_character_id:
+          type: integer
+          description: The ObjectDB pk of the asked character, so the notifier can
+            switch to them.
+          readOnly: true
+        requested_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - blend
+      - description
+      - descriptor
+      - id
+      - item_name
+      - option_name
+      - requested_at
+      - stylist_name
+      - target_character_id
+      - trait_name
     ManageTrainingAddRequest:
       type: object
       description: Validate input for creating a training allocation.
@@ -72626,6 +72744,7 @@ components:
             EVERYONE (anyone), ALL_BUT_BLACKLIST (anyone but this category's blacklist), FRIENDS_WHITELIST (OOC friends + whitelist), or ALLOWLIST (only whitelisted actors).
 
             * `everyone` - Everyone
+            * `ask` - Ask me each time
             * `all_but_blacklist` - Everyone except my blacklist
             * `friends_whitelist` - Friends and my whitelist
             * `rivals` - My declared rivals (and whitelist)
@@ -80844,10 +80963,18 @@ components:
             Targeting mode when NOTHING is set anywhere up this category's parent chain. Only consulted on the ROOT of a tree (a category with no parent) — a non-root category inherits its parent instead of consulting its own default_mode. EVERYONE is default-allow; FRIENDS_WHITELIST/RIVALS/ALLOWLIST make it opt-in.
 
             * `everyone` - Everyone
+            * `ask` - Ask me each time
             * `all_but_blacklist` - Everyone except my blacklist
             * `friends_whitelist` - Friends and my whitelist
             * `rivals` - My declared rivals (and whitelist)
             * `allowlist` - Allowlist only
+        asks_before_acting:
+          type: boolean
+          readOnly: true
+          description: 'The actor''s deed waits for the target''s answer (a makeover,
+            #4187). Offers the Ask me / Always allow / Never choices instead of the
+            social-action modes, and its whitelist skips the ask while its blacklist
+            refuses, whatever the mode.'
         action_templates:
           type: array
           items:
@@ -80856,6 +80983,7 @@ components:
           readOnly: true
       required:
       - action_templates
+      - asks_before_acting
       - default_mode
       - description
       - display_order
@@ -80881,6 +81009,7 @@ components:
             EVERYONE (anyone), ALL_BUT_BLACKLIST (anyone but this category's blacklist), FRIENDS_WHITELIST (OOC friends + whitelist), or ALLOWLIST (only whitelisted actors).
 
             * `everyone` - Everyone
+            * `ask` - Ask me each time
             * `all_but_blacklist` - Everyone except my blacklist
             * `friends_whitelist` - Friends and my whitelist
             * `rivals` - My declared rivals (and whitelist)
@@ -80904,6 +81033,7 @@ components:
             EVERYONE (anyone), ALL_BUT_BLACKLIST (anyone but this category's blacklist), FRIENDS_WHITELIST (OOC friends + whitelist), or ALLOWLIST (only whitelisted actors).
 
             * `everyone` - Everyone
+            * `ask` - Ask me each time
             * `all_but_blacklist` - Everyone except my blacklist
             * `friends_whitelist` - Friends and my whitelist
             * `rivals` - My declared rivals (and whitelist)

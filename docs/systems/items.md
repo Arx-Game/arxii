@@ -47,6 +47,7 @@ from world.items.constants import (
 | Model | Purpose | Key Fields |
 |-------|---------|------------|
 | `ItemInstance` | A specific item in the game world | `template` (FK, PROTECT), `game_object` (OneToOne to ObjectDB), `custom_name`, `custom_description`, `quality_tier` (FK), `quantity`, `charges`, `is_open`, `holder_character_sheet` (FK to CharacterSheet), `crafter_character_sheet` (FK to CharacterSheet), `lore_value`, `destroyed_at`, `attuned_to_character_sheet` (FK to CharacterSheet, `SET_NULL`, nullable — the character this touchstone instance is personally bound to) + `attuned_at` (DateTimeField, nullable; set by `attune_touchstone()`, #707) |
+| `MakeoverConsentRequest` | A stylist's offer to restyle another character, waiting on their answer (#4187) | `stylist_persona` / `target_persona` (FK Persona), `item_instance` (FK, CASCADE), `option` (FK FormTraitOption, nullable), `blend`, `descriptor`, `status` (`ActionRequestStatus`), `requested_at`, `responded_at`; partial unique: one pending per pair (`makeover_models.py`) |
 | `EquippedItem` | Tracks equipped item at a body slot | `character` (FK to ObjectDB), `item_instance` (FK), `body_region`, `equipment_layer`. Unique on (character, body_region, equipment_layer) |
 
 ### Economy & History
@@ -355,6 +356,41 @@ After existing consequence/charge dispatch, `use_item` calls
 - `NonCosmeticTraitError` is caught silently (defense-in-depth; `clean()` should prevent it).
 - `UseItemResult.appearance_changes` carries the changed pairs; `UseItemAction` surfaces
   the count in its result data.
+
+### Makeover consent ask (#4187)
+
+Restyling **another player's character** reads the target's makeover consent before any
+charge (`makeover_outcome(user, target)` in `services/usage.py`, over
+`world.consent.services.consent_outcome`): `REFUSE` is `MakeoverNotPermitted` as before;
+`ALLOW` restyles at once; `ASK` (the seeded default of the `makeover` category) raises
+`MakeoverRequiresConsent` unless `use_item(..., consent=<accepted MakeoverConsentRequest>)`
+carries the target's grant. NPC targets and self-use never reach the check. A missing
+`makeover` category refuses (the row is the setting; see `docs/systems/consent.md`).
+
+`UseItemAction` catches `MakeoverRequiresConsent`, records the ask with
+`offer_makeover(...)` (`services/makeover_requests.py`) and answers "You offer to restyle
+Tehom's hair (crimson) with a silver styling kit." Nothing is spent. The target answers:
+
+- web: `GET /api/items/makeover-requests/` (their pending asks, after the lazy lapse check)
+  and `POST .../{id}/respond/` `{decision: grant|decline, remember: always|never|null}`
+  (`makeover_views.py`), surfaced by the site-wide `MakeoverAskNotifier` toast
+  (`frontend/src/inventory/components/`);
+- telnet: `accept makeover` / `decline makeover` through the offer registry
+  (`offer_handlers.MakeoverOfferHandler`, registered in `apps.ready`).
+
+`respond_to_makeover_request(request, *, accept, remember)` grants by marking the row accepted
+and re-running the stylist's `UseItemAction` with it as `makeover_consent` (reach, charges,
+style knowledge and the technique preflight are all re-checked; the usual messages fire);
+declines by spending nothing and telling the stylist "declined"; `remember` writes the target's
+whitelist (`MakeoverRemember.ALWAYS`) or blacklist (`NEVER`) for the makeover category in the
+same motion, **except for a stylist asking under a mask** (a non-PRIMARY persona): the lists are
+keyed by the real tenure and the Privacy page names it by the real character, so the shortcut
+writes nothing, silently (any signal would itself say "that face is a mask"). The respond
+serializer rejects `always` with a decline and `never` with a grant. There is no timer: `expire_if_lapsed` marks a pending ask expired when the
+stylist is no longer in the target's room, run whenever asks are listed or answered, and a
+grant whose use fails (kit gone or spent, reach lost) expires the row and raises
+`MakeoverRequestLapsed`. One pending ask per stylist/target pair
+(`one_pending_makeover_ask_per_pair`); a second offer is `MakeoverAlreadyAsked`.
 
 ### Admin Authoring
 

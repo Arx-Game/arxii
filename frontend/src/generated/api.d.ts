@@ -11240,6 +11240,63 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/items/makeover-requests/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description Pending asks, after expiring any whose stylist has left the room. */
+    get: operations['items_makeover_requests_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/items/makeover-requests/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description The requesting account's own pending makeover asks (as target). */
+    get: operations['items_makeover_requests_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/items/makeover-requests/{id}/respond/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * @description Grant or decline this ask; ``remember`` writes the always / never shortcut.
+     *
+     *     Looks up by (pk, own personas) rather than through ``get_queryset`` (PENDING-only)
+     *     so a double-submit lands on the "already answered" 400 instead of a bare 404; a
+     *     row addressed to someone else's persona is a 404 either way.
+     */
+    post: operations['items_makeover_requests_respond_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/items/market-squares/': {
     parameters: {
       query?: never;
@@ -28555,6 +28612,7 @@ export interface components {
     ConnectionTypeEnum: 'therefore' | 'but';
     /**
      * @description * `everyone` - Everyone
+     *     * `ask` - Ask me each time
      *     * `all_but_blacklist` - Everyone except my blacklist
      *     * `friends_whitelist` - Friends and my whitelist
      *     * `rivals` - My declared rivals (and whitelist)
@@ -28563,6 +28621,7 @@ export interface components {
      */
     ConsentModeEnum:
       | 'everyone'
+      | 'ask'
       | 'all_but_blacklist'
       | 'friends_whitelist'
       | 'rivals'
@@ -33958,6 +34017,23 @@ export interface components {
      * @enum {string}
      */
     MachineMatchLifecycleStateEnum: 'ALIVE' | 'CAPTURED' | 'UNKNOWN' | 'COMA' | 'RETIRED' | 'DEAD';
+    /** @description One pending ask as the target's card shows it. */
+    MakeoverConsentRequest: {
+      readonly id: number;
+      readonly stylist_name: string;
+      readonly item_name: string;
+      readonly trait_name: string | null;
+      readonly option_name: string | null;
+      /** @description Add the color instead of replacing it (#2632). */
+      readonly blend: boolean;
+      /** @description Free-text presentation flavor the stylist chose (#2632). */
+      readonly descriptor: string;
+      readonly description: string;
+      /** @description The ObjectDB pk of the asked character, so the notifier can switch to them. */
+      readonly target_character_id: number;
+      /** Format: date-time */
+      readonly requested_at: string;
+    };
     /** @description Validate input for creating a training allocation. */
     ManageTrainingAddRequest: {
       skill_id?: number | null;
@@ -41466,6 +41542,7 @@ export interface components {
        * @description EVERYONE (anyone), ALL_BUT_BLACKLIST (anyone but this category's blacklist), FRIENDS_WHITELIST (OOC friends + whitelist), or ALLOWLIST (only whitelisted actors).
        *
        *     * `everyone` - Everyone
+       *     * `ask` - Ask me each time
        *     * `all_but_blacklist` - Everyone except my blacklist
        *     * `friends_whitelist` - Friends and my whitelist
        *     * `rivals` - My declared rivals (and whitelist)
@@ -45532,12 +45609,15 @@ export interface components {
        * @description Targeting mode when NOTHING is set anywhere up this category's parent chain. Only consulted on the ROOT of a tree (a category with no parent) — a non-root category inherits its parent instead of consulting its own default_mode. EVERYONE is default-allow; FRIENDS_WHITELIST/RIVALS/ALLOWLIST make it opt-in.
        *
        *     * `everyone` - Everyone
+       *     * `ask` - Ask me each time
        *     * `all_but_blacklist` - Everyone except my blacklist
        *     * `friends_whitelist` - Friends and my whitelist
        *     * `rivals` - My declared rivals (and whitelist)
        *     * `allowlist` - Allowlist only
        */
       readonly default_mode: components['schemas']['ConsentModeEnum'];
+      /** @description The actor's deed waits for the target's answer (a makeover, #4187). Offers the Ask me / Always allow / Never choices instead of the social-action modes, and its whitelist skips the ask while its blacklist refuses, whatever the mode. */
+      readonly asks_before_acting: boolean;
       /** @description Return the names of action templates tagged with this category. */
       readonly action_templates: string[];
     };
@@ -45550,6 +45630,7 @@ export interface components {
        * @description EVERYONE (anyone), ALL_BUT_BLACKLIST (anyone but this category's blacklist), FRIENDS_WHITELIST (OOC friends + whitelist), or ALLOWLIST (only whitelisted actors).
        *
        *     * `everyone` - Everyone
+       *     * `ask` - Ask me each time
        *     * `all_but_blacklist` - Everyone except my blacklist
        *     * `friends_whitelist` - Friends and my whitelist
        *     * `rivals` - My declared rivals (and whitelist)
@@ -45565,6 +45646,7 @@ export interface components {
        * @description EVERYONE (anyone), ALL_BUT_BLACKLIST (anyone but this category's blacklist), FRIENDS_WHITELIST (OOC friends + whitelist), or ALLOWLIST (only whitelisted actors).
        *
        *     * `everyone` - Everyone
+       *     * `ask` - Ask me each time
        *     * `all_but_blacklist` - Everyone except my blacklist
        *     * `friends_whitelist` - Friends and my whitelist
        *     * `rivals` - My declared rivals (and whitelist)
@@ -64377,6 +64459,67 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['RoomFeatureProjectStartResult'];
+        };
+      };
+    };
+  };
+  items_makeover_requests_list: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['MakeoverConsentRequest'][];
+        };
+      };
+    };
+  };
+  items_makeover_requests_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['MakeoverConsentRequest'];
+        };
+      };
+    };
+  };
+  items_makeover_requests_respond_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['MakeoverConsentRequest'];
         };
       };
     };

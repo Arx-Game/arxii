@@ -182,6 +182,36 @@ class MakeoverNotPermitted(ItemError):
     SAFE_MESSAGES: ClassVar[frozenset[str]] = frozenset({"They are not letting you restyle them."})
 
 
+class MakeoverRequiresConsent(ItemError):
+    """The target must be asked first (#4187); the caller records the ask instead of using."""
+
+    user_message = "They have to agree first."
+    SAFE_MESSAGES: ClassVar[frozenset[str]] = frozenset({"They have to agree first."})
+
+
+class MakeoverAlreadyAsked(ItemError):
+    """An ask from this stylist to this target is still open (#4187)."""
+
+    # PLACEHOLDER (agent-drafted player-facing copy — Apostate to rewrite, #4187)
+    user_message = "You've already asked."
+    SAFE_MESSAGES: ClassVar[frozenset[str]] = frozenset({"You've already asked."})
+
+
+class MakeoverRequestLapsed(ItemError):
+    """The ask can no longer be granted: stylist gone, kit gone or spent (#4187)."""
+
+    # PLACEHOLDER (agent-drafted player-facing copy — Apostate to rewrite, #4187)
+    user_message = "They are no longer here to do it."
+    SAFE_MESSAGES: ClassVar[frozenset[str]] = frozenset({"They are no longer here to do it."})
+
+
+class MakeoverRequestResolved(ItemError):
+    """The ask was already answered (#4187)."""
+
+    user_message = "That offer has already been answered."
+    SAFE_MESSAGES: ClassVar[frozenset[str]] = frozenset({"That offer has already been answered."})
+
+
 class StyleChoiceRequired(ItemError):
     """A choose-at-use cosmetic was used without a valid option choice (#2632)."""
 

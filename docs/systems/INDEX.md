@@ -2405,7 +2405,12 @@ so web and telnet converge on the same write path.
   actor_tenure)` (#1909/#2170 — the public single-tenure gate decision; resolves the effective
   mode by walking the category's ancestor chain, nearest rule wins else the root default),
   `effective_consent_mode(pref, category)` (#2170 — shared walk-up used by read surfaces),
-  `theft_category()` (#1909 — lazy seeded "theft" category, own `ALLOWLIST` root)
+  `consent_outcome(*, owner_tenure, category, actor_tenure) -> ConsentOutcome` (#4187 — the
+  three-valued ALLOW / ASK / REFUSE decision; `consent_blocks_targeting` is its REFUSE face;
+  ASK only for a category with `asks_before_acting`, today `makeover`),
+  `theft_category()` (#1909 — lazy seeded "theft" category, own `ALLOWLIST` root;
+  `makeover_category()` was removed in #4187: the seed and the required-content sentinel own
+  that row now)
   (`world/consent/services.py`)
 - **Action Keys:** `set_social_consent_preference`, `set_social_consent_category_rule`,
   `add_social_consent_whitelist`, `remove_social_consent_whitelist`,
@@ -2415,8 +2420,10 @@ so web and telnet converge on the same write path.
   `consent modes` (#2170 — per-mode pros/cons), `consent category <key>=<mode>`,
   `consent whitelist add|remove|list`, `consent blacklist add|remove|list` (#1698); plus
   `accept/<difficulty>` + `deny/blacklist` on the consent-response commands (`commands/consent.py`)
-- **API:** `/api/consent/` — categories (read-only, now carry `parent` + `default_mode` for the
-  tree; `GET /categories/modes/` returns the mode guidance rows, #2170), preferences,
+- **API:** `/api/consent/` — categories (read-only, now carry `parent` + `default_mode` +
+  `asks_before_acting` for the tree; `GET /categories/modes/` returns the mode guidance rows,
+  #2170; a `category-rules` write with `mode=ask` is rejected unless the category asks, #4187),
+  preferences,
   category-rules, whitelist, blacklist (#1698); writes dispatch through the consent Actions via
   `dispatch_player_action()`
 - **Pattern:** RosterTenure-based (player's tenure, not character); absent preference row and
@@ -6905,6 +6912,14 @@ holder is never notified a claim exists.
   - `character.equipped_items` (`CharacterEquipmentHandler`) — `iter()`,
     `iter_item_facets()`, `item_facets_for(facet)`, `invalidate()`
 - **Key Services:**
+  - **Makeover ask (#4187, `services/makeover_requests.py`):** `offer_makeover(*, user,
+    target, item_instance, option_id, blend, descriptor) -> MakeoverConsentRequest`,
+    `respond_to_makeover_request(request, *, accept, remember)`,
+    `pending_makeover_requests_for(sheet)`, `expire_if_lapsed(request)`,
+    `describe_offer` / `offer_line`; `services/usage.py`'s `makeover_outcome(user, target)
+    -> ConsentOutcome` and `use_item(..., consent=)`; model `MakeoverConsentRequest`
+    (`makeover_models.py`); telnet `accept makeover` / `decline makeover`
+    (`offer_handlers.py`). See items.md "Makeover consent ask".
   - `equip_item(*, character_sheet, item_instance, body_region, equipment_layer) -> EquippedItem`
     — raises `SlotConflict` / `SlotIncompatible`
   - `unequip_item(*, equipped_item) -> None`
@@ -7016,6 +7031,10 @@ holder is never notified a claim exists.
 - **API Endpoints:**
   - `/api/items/quality-tiers/`, `/api/items/interaction-types/`, `/api/items/templates/`
     (read-only catalog)
+  - `GET /api/items/makeover-requests/` (the caller's pending makeover asks as target, lapsed
+    ones dropped) and `POST /api/items/makeover-requests/{id}/respond/`
+    `{decision: grant|decline, remember: always|never|null}` (#4187; 400 answered twice,
+    409 lapsed, 404 not yours)
   - `GET/POST /api/items/item-facets/` — list/attach via `craft_attach_facet`
     (owner-or-staff perm); returns `FacetCraftResult` (201 on attach, 200 on failed roll);
     `DELETE /api/items/item-facets/{id}/` — remove

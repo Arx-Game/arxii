@@ -20,9 +20,14 @@ class ConsentMode(models.TextChoices):
       on, but only from the characters I've agreed to feud with" setting (#2170).
     - ``ALLOWLIST`` — only actors on the explicit per-category whitelist (strict
       default-deny; friendship/rivalry alone is not enough).
+    - ``ASK`` — anyone may offer, and the target answers each time (#4187). Offered only
+      by a category whose ``asks_before_acting`` is set (a makeover): every social-action
+      category already prompts the target for any permitted actor, so for those ``ASK``
+      reads as ``EVERYONE``.
     """
 
     EVERYONE = "everyone", "Everyone"
+    ASK = "ask", "Ask me each time"
     ALL_BUT_BLACKLIST = "all_but_blacklist", "Everyone except my blacklist"
     FRIENDS_WHITELIST = "friends_whitelist", "Friends and my whitelist"
     RIVALS = "rivals", "My declared rivals (and whitelist)"
@@ -37,6 +42,11 @@ CONSENT_MODE_GUIDANCE: dict[str, str] = {
     ConsentMode.EVERYONE.value: (
         "Wide open: anyone may do this to you. Most spontaneous conflict and story, but you "
         "can't refuse a particular player short of blocking them outright."
+    ),
+    # PLACEHOLDER (agent-drafted player-facing copy — Apostate to rewrite, #4187).
+    ConsentMode.ASK.value: (
+        "Ask me: anyone may offer, and you answer each time. The default for things done to "
+        "your character's appearance."
     ),
     ConsentMode.ALL_BUT_BLACKLIST.value: (
         "Open, with exceptions: anyone may do this to you except the specific people you list. "
@@ -68,3 +78,16 @@ def consent_mode_guidance() -> list[dict[str, str]]:
         {"value": mode.value, "label": mode.label, "guidance": CONSENT_MODE_GUIDANCE[mode.value]}
         for mode in ConsentMode
     ]
+
+
+class ConsentOutcome(models.TextChoices):
+    """What a consent read lets the actor do to the owner (#4187).
+
+    ``consent_outcome`` returns one of these; ``consent_blocks_targeting`` is
+    ``REFUSE`` alone. ``ASK`` only ever comes back for a category whose
+    ``asks_before_acting`` is set.
+    """
+
+    ALLOW = "allow", "Allow"
+    ASK = "ask", "Ask the target"
+    REFUSE = "refuse", "Refuse"

@@ -28,6 +28,14 @@ consent preferences gating which social actions a character may receive (#1141).
 #                     declared under a still-open tenure)
 # ALLOWLIST         - Only tenures on the SocialConsentWhitelist (strict; friendship/mutual
 #                     hostile labels alone is not enough)
+# ASK               - Anyone may offer and the target answers each time (#4187). Offered only
+#                     by a category whose asks_before_acting is set (a makeover); on any other
+#                     category it reads as EVERYONE, since every social-action category already
+#                     prompts the target for a permitted actor.
+
+# ConsentOutcome (TextChoices) — in world.consent.constants (#4187):
+# ALLOW / ASK / REFUSE - what consent_outcome() lets the actor do; consent_blocks_targeting()
+#                        is REFUSE alone.
 ```
 
 ---
@@ -45,7 +53,7 @@ consent preferences gating which social actions a character may receive (#1141).
 
 | Model | Purpose | Key Fields |
 |-------|---------|------------|
-| `SocialConsentCategory` | Staff-authored category for social action types (NaturalKey on `key`); forms a **tree** via `parent` (#2170) | `key` (slug), `name`, `description`, `display_order`, `parent` (self-FK, `SET_NULL`; `None` = root group), `default_mode` (ConsentMode — consulted **only on a root**; a non-root inherits its parent). `ancestor_chain()` returns `[leaf, …, root]` (cycle-guarded) |
+| `SocialConsentCategory` | Staff-authored category for social action types (NaturalKey on `key`); forms a **tree** via `parent` (#2170) | `key` (slug), `name`, `description`, `display_order`, `parent` (self-FK, `SET_NULL`; `None` = root group), `default_mode` (ConsentMode — consulted **only on a root**; a non-root inherits its parent), `asks_before_acting` (bool, #4187 — the deed waits for the target's answer; see "Categories that ask before acting"). `ancestor_chain()` returns `[leaf, …, root]` (cycle-guarded) |
 | `SocialConsentPreference` | Per-tenure opt-out for social action targeting (OneToOne on tenure) | `tenure` (RosterTenure FK), `allow_social_actions` (bool, default True) |
 | `SocialConsentCategoryRule` | Per-category targeting mode on a preference | `preference` FK, `category` FK, `mode` (ConsentMode) |
 | `SocialConsentWhitelist` | Explicit allow entry: allowed_tenure may target owner with social actions | `owner_tenure` FK, `allowed_tenure` FK, `category` FK, `added_at` |
@@ -96,8 +104,15 @@ Four canonical categories are seeded via `arx seed dev` (cluster `consent`):
 | `hostile` | Hostile | Intimidate |
 | `manipulative` | Manipulative | Deceive, Persuade |
 | `general` | General | Perform, Entrance, Restore to Sense |
+| `makeover` | Makeovers & Styling | (none: the item-use gate, `asks_before_acting=True`, default `ask`, #4187) |
 
 Staff can add additional categories through the Django admin without code changes.
+
+The `makeover` row **is** the setting for restyling another player's character: with no row,
+every such makeover is refused. It is seeded for an empty database and named by the staff
+dashboard's required-content sentinel (`web/admin/tuning/required_content.py`,
+`makeover-social-consent-category`) when a populated database lacks it; a `RunPython` seed is
+not an option (ADR-0013), so on production staff create it once in admin.
 
 ---
 
@@ -184,6 +199,35 @@ target's master switch (mirroring `_tenure_blocks_actor` with `category=None`, w
 gated only by `allow_social_actions`) so the scene UI can hide the affordance for opted-out
 targets. The backend still enforces the full gate at dispatch — the serializer field is a
 UX hint, not the authority.
+
+---
+
+## Categories that ask before acting (#4187)
+
+`SocialConsentCategory.asks_before_acting` marks a category whose deed waits for the target's
+answer (today: `makeover`). For such a category the decision is three-valued:
+
+```python
+from world.consent.services import consent_outcome
+from world.consent.constants import ConsentOutcome
+
+# consent_outcome(*, owner_tenure, category, actor_tenure) -> ConsentOutcome
+#   Master switch off              -> REFUSE
+#   actor on the chain's blacklist -> REFUSE   (whatever the mode)
+#   actor on the chain's whitelist -> ALLOW    (whatever the mode: a trusted stylist)
+#   mode ASK (the seeded default)  -> ASK      (an unknown actor with no tenure still asks)
+#   mode EVERYONE                  -> ALLOW
+#   mode ALLOWLIST                 -> REFUSE
+#   any other mode                 -> the social-action yes/no decision
+# For a category that does not ask: ALLOW / REFUSE exactly as consent_blocks_targeting()
+# decided before; ASK on such a category reads as EVERYONE.
+```
+
+The Privacy page shows an asking category's row as **Ask me / Always allow / Never** (the
+`ask` / `everyone` / `allowlist` modes under plain names, `frontend/src/consent/consentModes.ts`
+`ASKING_MODE_ORDER`) and always shows both person lists; the rule serializer rejects `ask` on
+a category that does not ask. What happens on ASK is the consumer's business: for makeovers it
+is the `MakeoverConsentRequest` ask in `docs/systems/items.md`. See ADR-4187.
 
 ---
 

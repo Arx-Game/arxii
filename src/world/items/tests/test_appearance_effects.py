@@ -214,8 +214,13 @@ class PCStylistTests(TestCase):
         self.assertEqual(value.option, self.crimson)
         self.assertEqual(len(result.appearance_changes), 1)
 
-    def test_styling_player_target_blocked_by_default(self) -> None:
-        """Makeover category defaults to allowlist — strangers are refused, no charge burnt."""
+    def test_styling_player_target_refused_without_the_category_row(self) -> None:
+        """No ``makeover`` category in the database: strangers are refused, no charge burnt.
+
+        With the row seeded the same use asks the target instead (#4187, see
+        ``test_makeover_requests``); the row IS the setting, and the staff dashboard's
+        required-content sentinel names it when it is missing.
+        """
         from world.items.exceptions import MakeoverNotPermitted
 
         self._tenure_for(self.client_sheet)
@@ -228,12 +233,17 @@ class PCStylistTests(TestCase):
 
     def test_styling_whitelisted_stylist_allowed(self) -> None:
         """A whitelisted stylist restyles the target's real form; stylist is the actor."""
-        from world.consent.services import add_social_consent_whitelist, makeover_category
+        from world.consent.constants import ConsentMode
+        from world.consent.factories import SocialConsentCategoryFactory
+        from world.consent.services import add_social_consent_whitelist
         from world.forms.models import AppearanceChangeLog
 
+        category = SocialConsentCategoryFactory(
+            key="makeover", default_mode=ConsentMode.ASK, asks_before_acting=True
+        )
         owner_tenure = self._tenure_for(self.client_sheet)
         stylist_tenure = self._tenure_for(self.stylist_sheet)
-        add_social_consent_whitelist(owner_tenure, stylist_tenure, makeover_category())
+        add_social_consent_whitelist(owner_tenure, stylist_tenure, category)
 
         use_item(item_instance=self.item, user=self.stylist, target=self.client_char)
         value = self.client_form.values.get(trait=self.trait)
