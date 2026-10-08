@@ -21,7 +21,10 @@ issue bodies; the model decision is ADR-0132.
   CharacterSheet (rare played gods), `is_active`, `tarot_cards` (#3776 Task 9:
   M2M → `tarot.TarotCard`, `related_name="represented_beings"`, blank, no cap —
   cards people believe represent this being; pure association, read by
-  `is_birth_favored_by` below), nullable `codex_entry` FK (#3776 Task 11:
+  `is_birth_favored_by` below; since #4198 `through="arxii.BeingTarotCard"`, the link
+  row carrying `is_reversed` - the through model adopted the auto M2M table in place,
+  so `being.tarot_cards` and `.add()` still answer, and a reversed representation still
+  counts as the card for birth favor), nullable `codex_entry` FK (#3776 Task 11:
   `codex.CodexEntry`, `on_delete=PROTECT`, `related_name="worshipped_beings"` —
   mirrors `Gift.codex_entry`/`Technique.codex_entry`/`HouseAspectOption.codex_entry`;
   visibility (Public/Obscure/Secret) is read entirely through the linked entry's
@@ -55,10 +58,21 @@ issue bodies; the model decision is ADR-0132.
   the same being. Read by issue #3777's `WorshipRite` reward calculation
   (FAVORED pays double, ASSOCIATED the ordinary rate) and by #3776 Task 9's
   tarot/feast-day mechanic.
+- `BeingTarotCard` (#4198) — the link row behind `WorshippedBeing.tarot_cards`:
+  `being` FK (`db_column="worshippedbeing_id"`, `related_name="card_links"`), `card` FK
+  (`db_column="tarotcard_id"`, `related_name="being_links"`), `is_reversed`
+  (`db_default=False`). `db_table` is the auto M2M's own
+  (`arxii_worshippedbeing_tarot_cards`), adopted in state by migration 0210 so the rows
+  entered before the orientation existed carry over as uprights. One row per
+  (being, card); reversal is a flag on the link, as `TarotCard.get_surname(is_reversed)`
+  already treats it, not a second card. The Codex rail reads "The Tower reversed".
 - `BeingRelationship` (#3776) — a public relationship fact between two gods:
   `being_a`/`being_b` FKs (`related_name`s `relationships_as_a`/`relationships_as_b`),
-  `valence` (`BeingRelationshipValence`: ALLY/RIVAL/FEUD/UNKNOWN), `public_story`
-  (freeform prose). Exactly one prose field — deliberately NO hidden-truth field on
+  `valence` (`BeingRelationshipValence`: ALLY/RIVAL/FEUD/UNKNOWN), `story_from_a` /
+  `story_from_b` (#4198: freeform prose, one per side - each god's own telling of it;
+  `story_from(being_id)` / `set_story_from(being_id, story)` pick the side, and
+  `_normalize_order` swaps the stories with their beings). Two public prose fields and
+  deliberately NO hidden-truth field on
   this model: a real hidden truth (why two beings actually feud) lives entirely as a
   separately-authored, separately-gated `CodexEntry` reached through a `Clue`, never a
   maybe-secret field here, because even a hidden/blank field on a public row would leak
@@ -271,8 +285,10 @@ saved live (no draft gate pre-launch); blank fields simply do not render on the 
 
 - `BeingPage` (dataclass) is the page: identity (`name`, `description`, `domains`,
   `tradition_id`, `is_active`), the Codex `quote`, `nicknames`, `resonances`
-  (`ResonanceLine`), `facet_ids`, `feast_days` (`FeastDayLine`), `tarot_card_ids`,
-  `relationships` (`RelationshipLine`, from this being's side), `visibility`,
+  (`ResonanceLine`), `facet_ids`, `feast_days` (`FeastDayLine`), `tarot_cards`
+  (`TarotLine`: `card_id`, `is_reversed`; #4198), `relationships` (`RelationshipLine`:
+  `other_being_id`, `valence`, `story` - this being's own side; the other god's side is
+  never written from this page, #4198), `visibility`,
   `organization_id`, `gm_notes`. `save_being(page, *, being=None)` writes it in one
   transaction: the being, then its Codex page (`ensure_codex_entry` creates one under
   the seeded "The World" / "The Pantheon" subject when a public or obscure tier needs
@@ -280,8 +296,21 @@ saved live (no draft gate pre-launch); blank fields simply do not render on the 
   grant (`OrganizationCodexGrant`, handed to current members through
   `codex.services.grant_organization_entry_to_members`), and every satellite set
   replaced wholesale (the page is the truth; relationships are stored once per pair in
-  canonical id order, so this being's page owns every pair it is part of).
+  canonical id order, so this being's page owns every pair it is part of and writes only
+  its own side's story).
 - `visibility_of(being)` / `obscure_organization_of(being)`: the read side.
+- **The Codex reads it all (#4198, ADR-4198):** `worship/companion.py`
+  `being_companion(entry, reader)` is the deity's Codex companion provider, registered
+  from `worship/apps.py` `ready()` through `codex.companions.register_companion`. The
+  rail, in order and each group left out when empty: Domains, Also called (nicknames),
+  Feast day(s) (`format_ic_month_day`, "The Reaping Festival · Masquing 18 (10/18)",
+  anchored to its section when the day has lore), Cards ("The Tower reversed"; a card has
+  no entry of its own, so never a link), Favored, Associated, Facets, then one group per
+  valence (Ally, Rival, Feud, Unclear) naming the other god as a link to its entry -
+  drawn only when the reader may open that entry (`CompanionReader.may_see`), so a feud
+  with a god the reader cannot see is not drawn at all. Sections under the Lore: one per
+  feast day with lore (calendar order), one per visible relationship whose story from
+  this god's side is non-blank. Before #4198 nothing read these rows.
 - API (`/api/worship/admin/beings/`, staff only, `StaffBeingViewSet`): list = tiles
   (`StaffBeingListSerializer`: name, first nickname as an annotation, domain chips,
   pool, lifetime worship, visibility, organization; sorted by pool; `search` on name

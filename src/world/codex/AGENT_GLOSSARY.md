@@ -65,3 +65,12 @@ holders" action calls it for every existing grant on the selected entries plus
 `grant_entry_to_species_holders` for species. Idempotent, because the `grant_codex_entry`
 it calls is idempotent.
 _Avoid_: backfill, retroactive grant.
+
+**Companion** (#4198, ADR-4198):
+The facts an entry's owner shows beside the prose: a `rail` of labelled groups (a date, a
+name, a card, a link to another entry) drawn beside the Lore box, and `sections` (a feast
+day's story, a god's own side of a feud) drawn under it. Built by a provider the owning
+sub-package registers at `ready()` through `codex.companions.register_companion`; the Codex
+imports no owner. Gated exactly as the prose is, and a line to another entry is drawn only
+when the reader may open that entry (`CompanionReader.may_see`).
+_Avoid_: sidebar, metadata, infobox, satellite data.
