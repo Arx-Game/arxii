@@ -89,7 +89,16 @@ async function mockEditor(page: Page) {
       return route.fulfill({ status: 201, json: { ...row, matched: false } });
     }
     if (p === '/api/roster/mail/unread-count/') return route.fulfill({ json: { count: 0 } });
-    if (method === 'GET') return route.fulfill({ json: EMPTY_PAGE });
+    if (
+      p === '/api/relationships/types/' ||
+      p === '/api/relationships/relationships/' ||
+      p === '/api/personas/' ||
+      p === '/api/journals/entries/' ||
+      p === '/api/narrative/my-messages/'
+    )
+      return route.fulfill({ json: EMPTY_PAGE });
+    // Everything else the chrome asks for on load is a bare list.
+    if (method === 'GET') return route.fulfill({ json: [] });
     return route.fulfill({ status: 404, json: { detail: 'Not provided by this fixture.' } });
   });
 }
@@ -103,8 +112,9 @@ test.describe('The facet picker (#4197) on the production bundle', () => {
     await page.goto(`/staff/pantheon/${BEING_ID}/edit`);
     await expect(page.getByText('Favored facets')).toBeVisible();
     await expect(page.getByText('Wolf')).toBeVisible();
+    expect(errors).toEqual([]);
     await page.getByRole('button', { name: '+ Add facet' }).click();
-    const input = page.getByLabel('Add facet');
+    const input = page.getByRole('combobox', { name: 'Add facet' });
     await input.fill('Sickles');
     await expect(page.getByText('Did you mean')).toBeVisible();
     await expect(page.getByText('Scythe')).toBeVisible();
@@ -123,7 +133,7 @@ test.describe('The facet picker (#4197) on the production bundle', () => {
     await mockEditor(page);
     await page.goto(`/staff/pantheon/${BEING_ID}/edit`);
     await page.getByRole('button', { name: '+ Add facet' }).click();
-    await page.getByLabel('Add facet').fill('scythes');
+    await page.getByRole('combobox', { name: 'Add facet' }).fill('scythes');
     await expect(page.getByText('Scythe')).toBeVisible();
     await expect(page.getByText(/^Create/)).toHaveCount(0);
     await page.screenshot({ path: shot('03-resolves-no-create-1280.png') });
