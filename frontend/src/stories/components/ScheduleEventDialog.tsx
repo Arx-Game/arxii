@@ -30,7 +30,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { Switch } from '@/components/ui/switch';
+import { PublicEventSwitch } from '@/events/components/PublicEventSwitch';
 import { AreaDrilldownPicker } from '@/events/components/AreaDrilldownPicker';
 import { usePersonaSearch } from '@/roster/usePersonaSearch';
 import { toLocalDatetimeValue } from '@/events/types';
@@ -310,10 +310,11 @@ export function ScheduleEventDialog({ request }: ScheduleEventDialogProps) {
             </div>
 
             {/* Public */}
-            <div className="flex items-center gap-3">
-              <Switch id="schedule-public" checked={isPublic} onCheckedChange={setIsPublic} />
-              <Label htmlFor="schedule-public">Public event</Label>
-            </div>
+            <PublicEventSwitch
+              id="schedule-public"
+              checked={isPublic}
+              onCheckedChange={setIsPublic}
+            />
           </div>
 
           <DialogFooter className="mt-6">
