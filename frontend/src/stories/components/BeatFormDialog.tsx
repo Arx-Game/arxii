@@ -1369,7 +1369,6 @@ export function BeatFormDialog({
                 id="beat-resolution-text"
                 value={playerResolutionText}
                 onChange={(e) => setPlayerResolutionText(e.target.value)}
-                placeholder="Text shown to the player when this beat resolves…"
                 rows={2}
               />
               {fieldErrors.player_resolution_text && (

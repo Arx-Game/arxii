@@ -120,10 +120,7 @@ export function MissionDetailPanel({ id }: MissionDetailPanelProps) {
         <TemplateRuleSection template={template} />
       ) : (
         <Card>
-          <CardContent className="p-4 text-xs text-muted-foreground">
-            This mission is open to everyone; the availability rule is not consulted. Restrict it
-            (Staff actions above) to gate the audience with a rule.
-          </CardContent>
+          <CardContent className="p-4 text-xs text-muted-foreground">Open to everyone.</CardContent>
         </Card>
       )}
       <FlavorRewriteCard template={template} />

@@ -92,7 +92,7 @@ export function GroupStoryRequestPanel({
             id="gm-request-message"
             value={message}
             onChange={(e) => setMessage(e.target.value)}
-            placeholder="Pitch your covenant to prospective GMs (visible to the GM pool)…"
+            placeholder="Pitch your covenant to prospective GMs…"
             rows={3}
           />
           <div className="flex gap-2">

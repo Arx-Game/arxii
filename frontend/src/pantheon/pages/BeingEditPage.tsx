@@ -677,7 +677,7 @@ export function BeingEditPage() {
             value={draft.gm_notes}
             aria-label="GM notes"
             onChange={(e) => set('gm_notes', e.target.value)}
-            title="Staff only, never shown to players: continuity, who this was in Arx 1."
+            title="Who this was in Arx 1."
           />
         </EditorSection>
       </Accordion>

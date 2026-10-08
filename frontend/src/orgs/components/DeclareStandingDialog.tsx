@@ -120,8 +120,7 @@ export function DeclareStandingDialog({
           <DialogTitle>Declare Standing</DialogTitle>
           <DialogDescription>
             Officially declare a persona favored or disfavored by{' '}
-            <strong>{organizationName}</strong>. Disfavor requires the target&apos;s antagonism
-            consent; this is public and rate-limited to once per person per IC week.
+            <strong>{organizationName}</strong>. Once per person per IC week.
           </DialogDescription>
         </DialogHeader>
 

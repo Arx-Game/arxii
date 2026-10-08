@@ -138,10 +138,6 @@ export function ProtectedSubjectsPanel({ storyId }: ProtectedSubjectsPanelProps)
   return (
     <div className="space-y-4" data-testid="protected-subjects-panel">
       <div className="flex items-center justify-between">
-        <p className="text-sm text-muted-foreground">
-          Story assets flagged as load-bearing. Other GMs must request custody clearance before
-          acting against them.
-        </p>
         <ProtectedSubjectFormDialog storyId={storyId} />
       </div>
 

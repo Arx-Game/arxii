@@ -93,10 +93,6 @@ function StageErrorFallback({
                 </Button>
               )}
             </div>
-
-            <p className="mt-4 text-xs text-muted-foreground">
-              You can also use the stage navigation at the top to jump to any step.
-            </p>
           </div>
         </div>
       </div>

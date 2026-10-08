@@ -136,6 +136,7 @@ export function StaffPetitionDetailPage() {
                 className="mt-2"
                 disabled={ignore.isPending}
                 onClick={() => ignore.mutate(!ctx.is_ignored)}
+                // noqa: OVEREXPLAIN - the consequence of Ignore: it is silent, and the petitions persist
                 title="Silent: the sender is never told. Their petitions persist but stop surfacing."
               >
                 {ctx.is_ignored ? 'Lift perma-ignore' : 'Perma-ignore this sender'}
@@ -160,7 +161,7 @@ export function StaffPetitionDetailPage() {
             <Textarea
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
-              placeholder="Staff notes (visible to the sender)"
+              placeholder="Notes to the sender"
               rows={3}
             />
             <div className="flex gap-2">

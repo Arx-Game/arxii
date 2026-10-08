@@ -40,12 +40,7 @@ export function AgreementsPanel({ characterSheetId }: AgreementsPanelProps) {
             This will is sealed: the estate is being settled.
           </p>
         )}
-        {!will && (
-          <p className="text-sm text-muted-foreground">
-            No will written. Declare where your belongings go; otherwise your estate falls to your
-            house, then next of kin, then the crown of the region.
-          </p>
-        )}
+        {!will && <p className="text-sm text-muted-foreground">No will written.</p>}
         <Textarea
           value={testamentValue}
           onChange={(e) => setTestament(e.target.value)}
@@ -78,10 +73,7 @@ export function AgreementsPanel({ characterSheetId }: AgreementsPanelProps) {
       {settlements && settlements.length > 0 && (
         <section className="space-y-2">
           <h3 className="text-xl font-semibold">Estates Awaiting You</h3>
-          <p className="text-sm text-muted-foreground">
-            You are named executor. Hold a will-reading in the game, or a funeral's rites will carry
-            it; unattended estates settle on their own at the deadline.
-          </p>
+          <p className="text-sm text-muted-foreground">You are named executor.</p>
           <ul className="space-y-1">
             {settlements.map((s) => (
               <li key={s.id} className="rounded border p-2 text-sm">

@@ -17,7 +17,6 @@ import { toast } from 'sonner';
 import {
   Dialog,
   DialogContent,
-  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -105,9 +104,6 @@ export function SaveOutfitDialog({
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>Save current look</DialogTitle>
-          <DialogDescription>
-            Snapshot what you&apos;re currently wearing as a saved outfit.
-          </DialogDescription>
         </DialogHeader>
 
         {hasNoWardrobes ? (

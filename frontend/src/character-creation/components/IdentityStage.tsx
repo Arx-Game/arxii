@@ -132,11 +132,7 @@ export function IdentityStage({ draft, onRegisterBeforeLeave }: IdentityStagePro
       </Field>
 
       <h2 className="section-h">{copy?.identity_concept_heading ?? 'Concept'}</h2>
-      <Field
-        id="concept"
-        label="Character concept"
-        hint="A brief archetype or tagline (e.g., “Ruthless pragmatist with a hidden heart”)."
-      >
+      <Field id="concept" label="Character concept">
         <input
           id="concept"
           type="text"
@@ -147,11 +143,7 @@ export function IdentityStage({ draft, onRegisterBeforeLeave }: IdentityStagePro
       </Field>
 
       <h2 className="section-h">{copy?.identity_quote_heading ?? 'Quote'}</h2>
-      <Field
-        id="quote"
-        label="Character quote"
-        hint="A saying, motto, or line that captures your character’s voice."
-      >
+      <Field id="quote" label="Character quote">
         <input
           id="quote"
           type="text"
@@ -162,11 +154,7 @@ export function IdentityStage({ draft, onRegisterBeforeLeave }: IdentityStagePro
       </Field>
 
       <h2 className="section-h">{copy?.identity_worship_heading ?? 'Worship'}</h2>
-      <Field
-        id="public_worship"
-        label="Public worship"
-        hint="The god, spirit, or power your character openly worships. Optional."
-      >
+      <Field id="public_worship" label="Public worship">
         <select
           id="public_worship"
           value={draft.public_worship?.id ?? ''}
@@ -185,11 +173,7 @@ export function IdentityStage({ draft, onRegisterBeforeLeave }: IdentityStagePro
           ))}
         </select>
       </Field>
-      <Field
-        id="secret_worship"
-        label="Secret worship"
-        hint="The god, spirit, or power your character worships in private. Optional."
-      >
+      <Field id="secret_worship" label="Secret worship">
         <select
           id="secret_worship"
           value={draft.secret_worship?.id ?? ''}

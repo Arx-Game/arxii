@@ -10,7 +10,7 @@
  */
 
 import { useState } from 'react';
-import { toast } from 'sonner';
+import { formDialogCallbacks } from '@/lib/formMutationError';
 import {
   Dialog,
   DialogContent,
@@ -78,43 +78,17 @@ export function SendStoryOOCDialog({ story }: SendStoryOOCDialogProps) {
       return;
     }
 
+    const callbacks = formDialogCallbacks({
+      close: () => setOpen(false),
+      reset: resetForm,
+      success: 'OOC notice sent to story participants',
+      fallback: 'Failed to send OOC notice. Please try again.',
+      onFieldErrors: (data) => setFieldErrors(data as DRFFieldErrors),
+    });
+
     sendMutation.mutate(
-      {
-        storyId: story.id,
-        body: trimmedBody,
-        ooc_note: oocNote.trim() || undefined,
-      },
-      {
-        onSuccess: () => {
-          setOpen(false);
-          resetForm();
-          toast.success('OOC notice sent to story participants');
-        },
-        onError: (err: unknown) => {
-          const fetchErr = err as { status?: number; response?: Response };
-          if (fetchErr.status === 403) {
-            toast.error('Permission denied. Only Lead GMs and staff can send OOC notices.');
-            setOpen(false);
-            return;
-          }
-          if (fetchErr.response) {
-            fetchErr.response
-              .json()
-              .then((data: unknown) => {
-                if (data && typeof data === 'object') {
-                  setFieldErrors(data as DRFFieldErrors);
-                }
-              })
-              .catch(() => {
-                toast.error('Failed to send OOC notice. Please try again.');
-              });
-            return;
-          }
-          const message =
-            err instanceof Error ? err.message : 'Failed to send OOC notice. Please try again.';
-          toast.error(message);
-        },
-      }
+      { storyId: story.id, body: trimmedBody, ooc_note: oocNote.trim() || undefined },
+      callbacks
     );
   }
 
@@ -174,7 +148,6 @@ export function SendStoryOOCDialog({ story }: SendStoryOOCDialogProps) {
               </Label>
               <Textarea
                 id="ooc-note"
-                placeholder="Visible only to staff and GMs with access to recipient characters…"
                 value={oocNote}
                 onChange={(e) => setOocNote(e.target.value)}
                 rows={2}

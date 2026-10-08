@@ -212,7 +212,6 @@ export function StaffInboxPage() {
           variant={kudosSort ? 'default' : 'outline'}
           size="sm"
           onClick={() => setKudosSort((v) => !v)}
-          title="Float senders with the strongest contribution record to the top."
         >
           Sort by sender kudos
         </Button>

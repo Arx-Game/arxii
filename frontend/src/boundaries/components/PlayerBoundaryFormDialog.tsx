@@ -198,11 +198,7 @@ export function PlayerBoundaryFormDialog({ open, onOpenChange, boundary, onSucce
               id="boundary-detail"
               value={detail}
               onChange={(e) => setDetail(e.target.value)}
-              placeholder={
-                isHardLine
-                  ? 'Staff/audit-only nuance: never shown to anyone else.'
-                  : 'What should scene partners know?'
-              }
+              placeholder={isHardLine ? undefined : 'What should scene partners know?'}
               rows={3}
             />
           </div>
@@ -223,11 +219,6 @@ export function PlayerBoundaryFormDialog({ open, onOpenChange, boundary, onSucce
                 <SelectItem value="characters">Specific characters</SelectItem>
               </SelectContent>
             </Select>
-            {isHardLine && (
-              <p className="text-xs text-muted-foreground">
-                Hard lines are always private and cannot be shared.
-              </p>
-            )}
             {!isHardLine && effectiveVisibility === 'characters' && (
               <TenureMultiSearch
                 value={visibleToTenures}

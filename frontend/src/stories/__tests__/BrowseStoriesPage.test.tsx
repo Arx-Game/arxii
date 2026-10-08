@@ -133,7 +133,7 @@ describe('BrowseStoriesPage', () => {
   it('renders empty state for All Visible filter when no stories exist', () => {
     setupMock(emptyResponse);
     render(<BrowseStoriesPage />, { wrapper: createWrapper() });
-    expect(screen.getByText('No stories are visible to you right now.')).toBeInTheDocument();
+    expect(screen.getByText('No stories right now.')).toBeInTheDocument();
   });
 
   it('renders filter chips', () => {

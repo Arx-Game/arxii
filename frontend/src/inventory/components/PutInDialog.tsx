@@ -12,7 +12,6 @@ import { Package } from 'lucide-react';
 import {
   Dialog,
   DialogContent,
-  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -59,7 +58,6 @@ export function PutInDialog({ open, onOpenChange, containers, onConfirm }: PutIn
       <DialogContent className="sm:max-w-sm">
         <DialogHeader>
           <DialogTitle>Put item in…</DialogTitle>
-          <DialogDescription>Choose a container from your inventory.</DialogDescription>
         </DialogHeader>
 
         {hasNoContainers ? (

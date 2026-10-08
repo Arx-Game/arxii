@@ -44,7 +44,6 @@ describe('NominationsPanel', () => {
     expect(screen.getByText('Alice')).toBeInTheDocument();
     expect(screen.getByText('She lifts the lantern...')).toBeInTheDocument();
     expect(screen.getByText('Journal')).toBeInTheDocument();
-    expect(screen.getByText(/they never learn who/i)).toBeInTheDocument();
 
     await userEvent.click(screen.getByLabelText('Withdraw nomination of Bob'));
     expect(mockWithdraw).toHaveBeenCalledWith(32, expect.anything());

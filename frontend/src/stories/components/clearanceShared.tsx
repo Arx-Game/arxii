@@ -219,7 +219,7 @@ interface ClearanceConfirmButtonProps {
   /** AlertDialog title. */
   title: string;
   /** Description shown below the title. */
-  description: string;
+  description?: string;
   /** Text for the confirm button. */
   confirmLabel: string;
   /** Whether the mutation is pending. */
@@ -267,7 +267,7 @@ export function ClearanceConfirmButton({
       <AlertDialogContent>
         <AlertDialogHeader>
           <AlertDialogTitle>{title}</AlertDialogTitle>
-          <AlertDialogDescription>{description}</AlertDialogDescription>
+          {description && <AlertDialogDescription>{description}</AlertDialogDescription>}
         </AlertDialogHeader>
         <AlertDialogFooter>
           <AlertDialogCancel>Cancel</AlertDialogCancel>

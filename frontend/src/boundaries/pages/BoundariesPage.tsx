@@ -8,7 +8,7 @@
  */
 
 import { useState } from 'react';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
@@ -27,10 +27,6 @@ function BoundariesPageInner() {
       <Card>
         <CardHeader>
           <CardTitle>My content boundaries</CardTitle>
-          <CardDescription>
-            Hard lines are auto-blocked from stakes across every character you play. Advisories are
-            communicated, and can be shared with scene partners.
-          </CardDescription>
         </CardHeader>
         <CardContent>
           <PlayerBoundaryList />
@@ -40,10 +36,6 @@ function BoundariesPageInner() {
       <Card>
         <CardHeader>
           <CardTitle>Treasured subjects</CardTitle>
-          <CardDescription>
-            Pick a character to manage what they treasure; staking one of these requires your
-            pre-scene sign-off.
-          </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <MyTenureSelect value={tenureId} onChange={setTenureId} label="Character" />
@@ -55,10 +47,6 @@ function BoundariesPageInner() {
         <Card>
           <CardHeader>
             <CardTitle>Pre-scene sign-offs</CardTitle>
-            <CardDescription>
-              A GM staking one of your treasured subjects in a beat will ask you to sign off
-              beforehand. Check a specific beat here, or withdraw a sign-off you already granted.
-            </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="w-40 space-y-1">

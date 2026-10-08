@@ -50,11 +50,6 @@ function CreateCharacterCallout() {
     <Card>
       <CardHeader>
         <CardTitle className="text-base">Create a character for this table</CardTitle>
-        <CardDescription>
-          Author a new roster character through the character creator, then mint an invite once
-          it&rsquo;s ready. Character creation uses the same shared single-draft slot as any other
-          character you create, so finish or discard an existing draft first.
-        </CardDescription>
       </CardHeader>
       <CardContent>
         <Button asChild variant="outline" size="sm">

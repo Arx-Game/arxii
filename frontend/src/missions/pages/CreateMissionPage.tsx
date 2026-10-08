@@ -371,10 +371,7 @@ export function CreateMissionPage() {
         {visibility === 'restricted' ? (
           <div data-testid="create-availability-rule">
             <Label className="mb-1 block">Availability rule (the audience gate)</Label>
-            <p className="mb-2 text-xs text-muted-foreground">
-              Whoever passes this rule sees the mission; staff always do. Leave empty to keep it
-              staff-only while in testing.
-            </p>
+            <p className="mb-2 text-xs text-muted-foreground">Empty: staff-only.</p>
             <PredicateBuilder value={availabilityRule} onChange={setAvailabilityRule} />
             {ruleErrors.length > 0 ? (
               <ul className="mt-1 list-inside list-disc text-xs text-destructive">

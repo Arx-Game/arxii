@@ -33,7 +33,6 @@ import { useState } from 'react';
 import {
   Dialog,
   DialogContent,
-  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -153,10 +152,6 @@ export function NarrationComposer({
           {/* F5: "Tied to" is its own labelled chip line below, not folded
               into the title -- the title stays for the accessible name only. */}
           <DialogTitle className="sr-only">Narrate {prompt.kind_label}</DialogTitle>
-          <DialogDescription>
-            Two sends are offered here: a room line everyone present can read, and a private line to
-            the people chosen.
-          </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-2">

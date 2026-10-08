@@ -842,10 +842,6 @@ export function PersonaMenu({
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Offer treatment to {personaName}</DialogTitle>
-            <DialogDescription>
-              Offer to treat one of their conditions or alterations. They will be asked to accept
-              before anything takes effect.
-            </DialogDescription>
           </DialogHeader>
           <TreatActionPanel sceneId={String(data?.scene_id ?? '')} targetPersonaId={personaId} />
           <DialogFooter>

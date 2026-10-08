@@ -188,9 +188,7 @@ describe('GMStoryRail', () => {
   it('renders the "no beat running" fallback when the GM has no running beat', () => {
     useGMStoryRailQuery.mockReturnValue({ data: undefined });
     renderRail(buildScene({ running_beat: null }));
-    expect(screen.getByTestId('gm-story-rail-no-beat')).toHaveTextContent(
-      'No beat running - Run one from the panel.'
-    );
+    expect(screen.getByTestId('gm-story-rail-no-beat')).toHaveTextContent('No beat running.');
   });
 
   it('renders the beat summary section for a qualifying GM', () => {

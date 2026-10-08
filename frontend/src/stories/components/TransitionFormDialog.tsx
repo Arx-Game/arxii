@@ -579,8 +579,7 @@ export function TransitionFormDialog({
             <div className="space-y-2">
               <p className="text-sm font-medium">Routing Predicate</p>
               <p className="text-xs text-muted-foreground">
-                Beat-outcome conditions: ALL must be true for this transition to fire. Submitted
-                atomically with the transition fields; no partial saves.
+                Beat-outcome conditions: ALL must be true for this transition to fire.
               </p>
               {routingRows.length === 0 ? (
                 <p

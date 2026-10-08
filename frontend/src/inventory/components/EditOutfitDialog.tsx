@@ -17,7 +17,6 @@ import { toast } from 'sonner';
 import {
   Dialog,
   DialogContent,
-  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -185,9 +184,6 @@ export function EditOutfitDialog({
       <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
         <DialogHeader>
           <DialogTitle>Edit outfit</DialogTitle>
-          <DialogDescription>
-            Rename, redescribe, or rearrange the pieces in this saved outfit.
-          </DialogDescription>
         </DialogHeader>
 
         {/* ----- Info section ----- */}

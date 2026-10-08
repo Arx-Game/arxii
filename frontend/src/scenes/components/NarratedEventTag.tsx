@@ -7,7 +7,9 @@
  * undiscovered fake-name face reads as its short description, not a name —
  * see `narrated_event_payload`/`get_narrates`), so a masked face's first word
  * can read as a bare article ("a" for "a hooded figure"). This deviates from
- * the demo; flagged for the demo-fidelity reviewer.
+ * the demo; flagged for the demo-fidelity reviewer. The suffix itself is
+ * "· <name> only" since #4193: the exception is marked with a word, never a
+ * "visible only to" caption.
  *
  * Demo-fidelity fix round 2 (F1b): the demo's `.log-tag` is small, uppercase
  * and letter-spaced (never italic) -- matches here via `uppercase
@@ -35,7 +37,7 @@ export function NarratedEventTag({
     narrates.subject_persona_id != null &&
     receiverPersonaIds.length === 1 &&
     receiverPersonaIds[0] === narrates.subject_persona_id;
-  const suffix = onlySubject ? ` · visible only to ${narrates.subject_name}` : '';
+  const suffix = onlySubject ? ` · ${narrates.subject_name} only` : '';
   return (
     <p
       data-testid="narrated-event-tag"

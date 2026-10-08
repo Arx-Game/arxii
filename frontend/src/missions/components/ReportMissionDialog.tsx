@@ -14,7 +14,6 @@ import { Button } from '@/components/ui/button';
 import {
   Dialog,
   DialogContent,
-  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -67,9 +66,6 @@ export function ReportMissionDialog({ instanceId, templateName }: ReportMissionD
       <DialogContent>
         <DialogHeader>
           <DialogTitle>Report {templateName}</DialogTitle>
-          <DialogDescription>
-            Choose how to tell it. You need to be standing with the right person to report to.
-          </DialogDescription>
         </DialogHeader>
         <RadioGroup
           value={style}

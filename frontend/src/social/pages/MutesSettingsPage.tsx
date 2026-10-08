@@ -63,9 +63,6 @@ export function MutesSettingsPage() {
       <div className="space-y-4">
         <div>
           <h2 className="text-lg font-semibold">Muted</h2>
-          <p className="text-sm text-muted-foreground">
-            Characters you've quietly filtered from your own feed. They are never told.
-          </p>
         </div>
         {renderMutes()}
       </div>

@@ -118,10 +118,7 @@ function CancelClaimButton({ claimId }: { claimId: number }) {
       <AlertDialogContent>
         <AlertDialogHeader>
           <AlertDialogTitle>Cancel this claim?</AlertDialogTitle>
-          <AlertDialogDescription>
-            This will withdraw your claim request. You can submit a new claim on this beat later if
-            it remains AGM-eligible.
-          </AlertDialogDescription>
+          <AlertDialogDescription>This will withdraw your claim request.</AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
           <AlertDialogCancel>Keep Claim</AlertDialogCancel>

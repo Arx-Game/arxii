@@ -12,7 +12,6 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
-  DialogDescription,
   DialogFooter,
 } from '@/components/ui/dialog';
 import {
@@ -82,9 +81,6 @@ export function DramaticMomentTagDialog({
       <DialogContent>
         <DialogHeader>
           <DialogTitle>Tag Dramatic Moment</DialogTitle>
-          <DialogDescription>
-            Select a moment type to award to the character who posed this.
-          </DialogDescription>
         </DialogHeader>
 
         {isLoading ? (

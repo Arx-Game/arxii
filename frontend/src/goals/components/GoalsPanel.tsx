@@ -21,7 +21,6 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import {
   Dialog,
   DialogContent,
-  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -93,9 +92,6 @@ function LogProgressDialog({ characterId }: { characterId: number }) {
       <DialogContent>
         <DialogHeader>
           <DialogTitle>Log Goal Progress</DialogTitle>
-          <DialogDescription>
-            Writing about your progress toward a goal earns XP (weekly capped).
-          </DialogDescription>
         </DialogHeader>
         <div className="space-y-3 py-2">
           <div className="space-y-1">

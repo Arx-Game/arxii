@@ -18,7 +18,6 @@ import { FieldError, FormErrors } from './FieldError';
 import {
   Dialog,
   DialogContent,
-  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -129,10 +128,6 @@ export function CreateBulletinPostDialog({
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>New Bulletin Post</DialogTitle>
-          <DialogDescription>
-            Create a post visible to table members. Choose a section to scope it to a specific
-            story, or leave as Table-Wide.
-          </DialogDescription>
         </DialogHeader>
 
         <form onSubmit={(e) => handleSubmit(e)} className="space-y-4">

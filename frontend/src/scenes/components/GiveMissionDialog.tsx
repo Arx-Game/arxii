@@ -3,7 +3,6 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   Dialog,
   DialogContent,
-  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -79,10 +78,6 @@ export function GiveMissionDialog({
       <DialogContent>
         <DialogHeader>
           <DialogTitle>Give mission to {targetPersonaName}</DialogTitle>
-          <DialogDescription>
-            Direct a mission offer at this character. They will see it as a summons in their journal
-            and can accept or decline.
-          </DialogDescription>
         </DialogHeader>
         <div className="space-y-4">
           <div className="space-y-2">

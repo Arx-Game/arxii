@@ -43,10 +43,6 @@ export function FlowsBuilderPage() {
     <div className="container mx-auto max-w-5xl space-y-6 py-6">
       <div>
         <h1 className="text-2xl font-semibold">Flows Builder</h1>
-        <p className="text-sm text-muted-foreground">
-          Author flow definitions, the trigger definitions that run them, and the triggers installed
-          on specific objects.
-        </p>
       </div>
 
       <Tabs defaultValue="flows">

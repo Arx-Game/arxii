@@ -10,7 +10,6 @@ import { toast } from 'sonner';
 import {
   Dialog,
   DialogContent,
-  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -76,10 +75,6 @@ export function AcceptInviteDialog({ invite, open, onOpenChange }: AcceptInviteD
         <form onSubmit={handleSubmit}>
           <DialogHeader>
             <DialogTitle>Accept Crossover Invite</DialogTitle>
-            <DialogDescription>
-              Select an episode to link to the shared event. The invited story&apos;s Lead GM will
-              be enrolled as a scene GM.
-            </DialogDescription>
           </DialogHeader>
 
           <div className="mt-4 grid gap-4">
@@ -102,11 +97,6 @@ export function AcceptInviteDialog({ invite, open, onOpenChange }: AcceptInviteD
                   ))}
                 </SelectContent>
               </Select>
-              {hasProposedEpisode && (
-                <p className="text-xs text-muted-foreground">
-                  The inviter proposed an episode. You can keep it or pick another.
-                </p>
-              )}
             </div>
 
             <div className="space-y-1.5">

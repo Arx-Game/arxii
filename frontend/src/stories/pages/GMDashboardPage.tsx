@@ -18,7 +18,6 @@ import { Button } from '@/components/ui/button';
 import {
   Dialog,
   DialogContent,
-  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -335,10 +334,6 @@ function GMDashboardContent() {
             <DialogContent>
               <DialogHeader>
                 <DialogTitle>Mint Story NPC</DialogTitle>
-                <DialogDescription>
-                  Create a Story NPC bound to your account — playable immediately via the persona
-                  picker or telnet @ic. Bounded by your GM level's cap.
-                </DialogDescription>
               </DialogHeader>
               <form
                 onSubmit={(e) => {

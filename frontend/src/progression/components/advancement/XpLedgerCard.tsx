@@ -45,10 +45,6 @@ export function XpLedgerCard({ sheetId }: { sheetId: number }) {
       {data && (
         <Stack>
           <Glance rows={rows} />
-          <p className="refsheet-note">
-            XP is held by the account, not by any one character. This is the record of where it came
-            from and where it went.
-          </p>
         </Stack>
       )}
     </div>

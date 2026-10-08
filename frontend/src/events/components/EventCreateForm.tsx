@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { Switch } from '@/components/ui/switch';
+import { PublicEventSwitch } from './PublicEventSwitch';
 import { urls } from '@/utils/urls';
 import { createEvent } from '../queries';
 import { TIME_PHASES, toLocalDatetimeValue } from '../types';
@@ -109,10 +109,7 @@ export function EventCreateForm() {
         </select>
       </div>
 
-      <div className="flex items-center gap-3">
-        <Switch id="event-public" checked={isPublic} onCheckedChange={setIsPublic} />
-        <Label htmlFor="event-public">Public event (visible to everyone)</Label>
-      </div>
+      <PublicEventSwitch id="event-public" checked={isPublic} onCheckedChange={setIsPublic} />
 
       <div className="flex gap-3">
         <Button type="submit" disabled={!isValid || mutation.isPending}>

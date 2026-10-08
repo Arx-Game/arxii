@@ -338,7 +338,7 @@ export function AtmosphereSection({ room, catalogs, runAction }: RoomAuthoringSe
           rows={2}
           value={lineText}
           onChange={(e) => setLineText(e.target.value)}
-          placeholder="Entry line (shown to the arriver)…"
+          placeholder="Entry line…"
         />
         <Button
           size="sm"

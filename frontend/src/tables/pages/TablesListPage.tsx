@@ -197,9 +197,7 @@ function TablesListInner() {
 
       {/* Total empty state */}
       {allTables.length === 0 && (
-        <p className="py-8 text-center text-muted-foreground">
-          No tables found. Ask a GM to invite you, or create your own if you have a GM profile.
-        </p>
+        <p className="py-8 text-center text-muted-foreground">No tables found.</p>
       )}
     </div>
   );

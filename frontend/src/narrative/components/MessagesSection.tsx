@@ -66,11 +66,7 @@ export function MessagesSection() {
       );
     }
     if (results.length === 0) {
-      return (
-        <p className="py-8 text-center text-muted-foreground">
-          No messages yet. Narrative messages from your GM will appear here.
-        </p>
-      );
+      return <p className="py-8 text-center text-muted-foreground">No messages yet.</p>;
     }
     return (
       <div className="space-y-2">

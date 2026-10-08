@@ -931,10 +931,6 @@ function DramaticBeatTab({ characterId, targetCharacterId }: TabProps) {
 
   return (
     <div className="space-y-3" data-testid="gm-adjudication-dramaticbeat-tab">
-      <p className="text-xs text-muted-foreground">
-        Manually spotlights a dramatic beat on the selected participant (Senior GM+). A stated
-        reason is required and is kept as staff provenance — never broadcast to the room.
-      </p>
       <div className="space-y-1">
         <Label htmlFor="gm-dramaticbeat-reason">Reason</Label>
         <Input
@@ -973,10 +969,6 @@ function SummonTab({ characterId, targetCharacterId }: TabProps) {
 
   return (
     <div className="space-y-3" data-testid="gm-adjudication-summon-tab">
-      <p className="text-xs text-muted-foreground">
-        Invites the selected participant to your current scene room. They must accept
-        (consent-prompted) before they are moved.
-      </p>
       <Button disabled={!canSubmit} onClick={handleSubmit} data-testid="gm-summon-submit">
         {dispatch.isPending ? 'Sending…' : 'Summon'}
       </Button>
@@ -1148,9 +1140,6 @@ function StageTab({ characterId, targetCharacterId }: TabProps) {
         </div>
       ) : (
         <>
-          <p className="text-xs text-muted-foreground">
-            Tags the selected participant, or the room itself when no participant is selected above.
-          </p>
           <div className="space-y-1">
             <Label htmlFor="gm-stage-property-name">Property</Label>
             <Input
@@ -1340,10 +1329,6 @@ function RunBeatTab({ characterId }: { characterId: number }) {
 
   return (
     <div className="space-y-3" data-testid="gm-adjudication-runbeat-tab">
-      <p className="text-xs text-muted-foreground">
-        Instantiates a beat's authored session prep (opponents, situations) into this scene and
-        marks the scene as running it.
-      </p>
       <Button
         variant="outline"
         disabled={dispatch.isPending}

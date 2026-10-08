@@ -195,9 +195,6 @@ export function DigRoomDialog({
                 onChange={(event) => setFixtureKey(event.target.value)}
                 placeholder="area-slug/room-name"
               />
-              <p className="text-xs text-muted-foreground">
-                Leave blank to auto-generate from the area slug and room name.
-              </p>
             </div>
           )}
         </div>

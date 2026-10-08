@@ -32,7 +32,7 @@ export function AbilitiesBand({ stats, skills }: AbilitiesBandProps) {
   const breakthroughs = skills.filter((entry) => entry.at_boundary);
 
   return (
-    <Band title="Abilities" note="Yours, unless you open them to friends or everyone.">
+    <Band title="Abilities">
       <div className="refsheet-columns-even">
         {statEntries.length > 0 && (
           <div className="flex flex-col gap-2">

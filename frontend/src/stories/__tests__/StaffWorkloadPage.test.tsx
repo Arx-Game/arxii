@@ -416,7 +416,6 @@ describe('StaffWorkloadPage', () => {
 
     expect(screen.getByRole('alertdialog')).toBeInTheDocument();
     expect(screen.getByText(/Sweep overdue beats/i)).toBeInTheDocument();
-    expect(screen.getByText(/idempotent and safe/i)).toBeInTheDocument();
   });
 
   it('ExpireBeatsButton fires mutation and shows toast on confirm', async () => {

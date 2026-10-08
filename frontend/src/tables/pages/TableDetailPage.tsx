@@ -68,8 +68,6 @@ function TableDetailInner({ tableId }: { tableId: number }) {
   }
 
   const isGMOrStaff = table.viewer_role === 'gm' || table.viewer_role === 'staff';
-  const isMemberOrAbove =
-    table.viewer_role === 'gm' || table.viewer_role === 'staff' || table.viewer_role === 'member';
 
   // My membership ID is needed for "leave" — we can only derive it if the
   // viewer is a member. The membership list will surface it when rendered.
@@ -187,15 +185,7 @@ function TableDetailInner({ tableId }: { tableId: number }) {
             onRemove={isGMOrStaff ? handleRemoveMember : undefined}
           />
 
-          {/* "Other personas in stories I'm in" — deferred cross-reference */}
-          {isMemberOrAbove && !isGMOrStaff && (
-            <div className="mt-6 border-t pt-4">
-              <p className="text-sm text-muted-foreground">
-                Other personas in your stories at this table are shown above.
-                {/* TODO: cross-reference StoryParticipation to filter — Wave 5 */}
-              </p>
-            </div>
-          )}
+          {/* TODO: "Other personas in stories I'm in": cross-reference StoryParticipation (Wave 5) */}
         </TabsContent>
 
         <TabsContent value="bulletin" className="mt-4">

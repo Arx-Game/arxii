@@ -7,7 +7,7 @@
  */
 
 import { useState } from 'react';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import MyTenureSelect from '@/components/MyTenureSelect';
 import { useSceneLinesAndVeils } from '../queries';
@@ -24,9 +24,6 @@ export function SceneLinesAndVeilsCard({ sceneId }: Props) {
     <Card>
       <CardHeader>
         <CardTitle>Lines &amp; veils</CardTitle>
-        <CardDescription>
-          Shared content boundaries and treasured subjects for this scene&apos;s cast.
-        </CardDescription>
       </CardHeader>
       <CardContent className="space-y-3">
         <MyTenureSelect value={tenureId} onChange={setTenureId} label="View as" />

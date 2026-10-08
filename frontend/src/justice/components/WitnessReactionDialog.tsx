@@ -66,8 +66,7 @@ export function WitnessReactionDialog({
             Witnessed Moment
           </DialogTitle>
           <DialogDescription className="text-base">
-            Your character saw what just happened in this scene. Choose a response, or close this to
-            decide later.
+            Choose a response, or close this to decide later.
           </DialogDescription>
         </DialogHeader>
 

@@ -929,7 +929,7 @@ describe('narration rows (#4101, demo Screen 3, F1)', () => {
     expect(block).toHaveAttribute('role', 'note');
     expect(screen.queryByText('Alice')).not.toBeInTheDocument();
     expect(screen.queryByText('Kudos')).not.toBeInTheDocument();
-    expect(screen.getByText(/visible only to Rowan Ashcombe/)).toBeInTheDocument();
+    expect(screen.getByText(/Rowan Ashcombe only/)).toBeInTheDocument();
 
     // F1b: the private block already wraps the tag in its own rule/tint box;
     // confirm the shared tag styling (uppercase, not italic) applies here too.

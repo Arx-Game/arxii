@@ -79,9 +79,6 @@ export function BlocksSettingsPage() {
       <div className="space-y-4">
         <div>
           <h2 className="text-lg font-semibold">Blocked</h2>
-          <p className="text-sm text-muted-foreground">
-            Unblocking takes a full cron cycle to clear, so blocks are deliberate.
-          </p>
         </div>
         {renderBlocks()}
       </div>

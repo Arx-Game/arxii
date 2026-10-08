@@ -370,7 +370,7 @@ export function StoryAuthorPage() {
 
           {stories.length === 0 ? (
             <p className="text-sm italic text-muted-foreground" data-testid="stories-sidebar-empty">
-              No stories yet. Create one to get started.
+              No stories yet.
             </p>
           ) : (
             <ul className="space-y-0.5" data-testid="stories-sidebar-list">

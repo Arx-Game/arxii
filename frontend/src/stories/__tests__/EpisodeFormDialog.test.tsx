@@ -2,10 +2,9 @@
  * EpisodeFormDialog Tests — Task E2
  *
  * Covers (Task E2 — GM/player text split + episode authoring fields):
- *  - description control relabeled to "Internal GM Description" + "not shown
- *    to players" helper, still bound to the description state key
- *  - new "The Story So Far" control bound to `summary` with a player-facing
- *    recap helper
+ *  - description control relabeled to "Internal GM Description", still bound to the
+ *    description state key
+ *  - new "The Story So Far" control bound to `summary`
  *  - new `resting_conclusion` textarea (player-facing) + `is_ending` checkbox
  *  - all submitted in the create body
  *  - all prefilled on edit from the existing episode
@@ -133,22 +132,18 @@ describe('EpisodeFormDialog — Task E2 GM/player text split + episode fields', 
     vi.clearAllMocks();
   });
 
-  it('relabels the description control to "Internal GM Description" with a not-shown helper', () => {
+  it('relabels the description control to "Internal GM Description"', () => {
     setupMocks();
     renderWithProviders(<EpisodeFormDialog {...defaultProps} />);
 
     expect(screen.getByLabelText(/internal gm description/i)).toBeInTheDocument();
-    expect(screen.getByText(/not shown to players/i)).toBeInTheDocument();
   });
 
-  it('renders a "The Story So Far" control bound to summary with a recap helper', () => {
+  it('renders a "The Story So Far" control bound to summary', () => {
     setupMocks();
     renderWithProviders(<EpisodeFormDialog {...defaultProps} />);
 
     expect(screen.getByLabelText(/the story so far/i)).toBeInTheDocument();
-    expect(
-      screen.getByText(/player-facing recap: keep this current as the story advances/i)
-    ).toBeInTheDocument();
   });
 
   it('renders the resting conclusion textarea and is-ending checkbox', () => {
@@ -156,7 +151,6 @@ describe('EpisodeFormDialog — Task E2 GM/player text split + episode fields', 
     renderWithProviders(<EpisodeFormDialog {...defaultProps} />);
 
     expect(screen.getByLabelText(/resting conclusion \(player-facing\)/i)).toBeInTheDocument();
-    expect(screen.getByText(/shown to players if the story rests here/i)).toBeInTheDocument();
 
     const ending = screen.getByLabelText(/this is an ending/i) as HTMLInputElement;
     expect(ending).toBeInTheDocument();

@@ -376,6 +376,18 @@ repos:
         language: system
         pass_filenames: true
         files: ^frontend/.*\.test\.(ts|tsx)$
+      - id: overexplaining-copy
+        name: Reject copy that says who may see a thing (a tone or a label word says it)
+        entry: uv run python tools/lint_overexplaining_copy.py
+        language: system
+        pass_filenames: true
+        files: ^frontend/src/.*\.tsx$
+        exclude: ^frontend/src/.*(\.test\.tsx|/__tests__/|/test/)
+        # The lintable subset of the over-explaining rule (#4193, 2026-10-08):
+        # "Only you can see this", "visible to everyone", "will appear here".
+        # The overexplaining-copy-reviewer agent reads a diff for the whole
+        # shape; this catches the instances a regex can name. `noqa: OVEREXPLAIN`
+        # with a reason suppresses.
       - id: shellcheck-skills
         name: shellcheck tools/skills and tools/githooks bash scripts
         entry: shellcheck

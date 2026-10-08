@@ -218,9 +218,6 @@ function OfferStep({ story, onSuccess, onCancel }: OfferStepProps) {
     <form onSubmit={handleSubmit}>
       <DialogHeader>
         <DialogTitle>Offer to a GM</DialogTitle>
-        <DialogDescription>
-          Choose a GM to offer &quot;{story.title}&quot; to. They can accept or decline.
-        </DialogDescription>
       </DialogHeader>
 
       {/* Global error banner */}

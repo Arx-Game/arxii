@@ -75,10 +75,7 @@ function CrossoverInboxContent() {
       <section>
         <h2 className="mb-3 text-lg font-semibold">Incoming Invites ({incoming.length})</h2>
         {incoming.length === 0 ? (
-          <p className="text-sm text-muted-foreground">
-            No incoming crossover invites. When a GM invites your story to co-run an event, it will
-            appear here.
-          </p>
+          <p className="text-sm text-muted-foreground">No incoming crossover invites.</p>
         ) : (
           <div className="space-y-3">
             {incoming.map((invite) => (
@@ -98,9 +95,7 @@ function CrossoverInboxContent() {
       <section>
         <h2 className="mb-3 text-lg font-semibold">Sent Invites ({sent.length})</h2>
         {sent.length === 0 ? (
-          <p className="text-sm text-muted-foreground">
-            No sent crossover invites. Visit a story page to send a crossover invite.
-          </p>
+          <p className="text-sm text-muted-foreground">No sent crossover invites.</p>
         ) : (
           <div className="space-y-3">
             {sent.map((invite) => (

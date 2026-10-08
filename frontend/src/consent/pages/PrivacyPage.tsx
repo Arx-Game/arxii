@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Switch } from '@/components/ui/switch';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Label } from '@/components/ui/label';
@@ -88,9 +88,6 @@ function ConsentPanel({ tenureId }: ConsentPanelProps) {
       <Card>
         <CardHeader>
           <CardTitle>Social targeting</CardTitle>
-          <CardDescription>
-            Controls whether this character can be targeted by social actions from other players.
-          </CardDescription>
         </CardHeader>
         <CardContent>
           <div className="flex items-center justify-between">
@@ -110,9 +107,6 @@ function ConsentPanel({ tenureId }: ConsentPanelProps) {
         <Card>
           <CardHeader>
             <CardTitle>Category permissions</CardTitle>
-            <CardDescription>
-              Fine-tune which players can target this character for each type of social action.
-            </CardDescription>
           </CardHeader>
           <CardContent className="space-y-6">
             {rulesLoading ? (

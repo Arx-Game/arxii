@@ -223,20 +223,12 @@ export function InventedParentsCard({
       <Label className="text-sm font-medium text-muted-foreground">
         {adoptive ? 'Your adoptive parents' : 'Your Parents'}
       </Label>
-      <p className="text-xs text-muted-foreground">
-        Optional: name them and they become part of your family record.
-        {/* Adoptive parents pass nothing by blood, so no species or features line (#4024). */}
-        {!adoptive && (
-          <> A parent of another species opens that line&apos;s features for your appearance.</>
-        )}
-        {sameGender && !adoptive && (
-          <span>
-            {' '}
-            Two parents of the same gender bore you through the Tree of Souls; the first parent
-            invoked the ritual and carries your line.
-          </span>
-        )}
-      </p>
+      {sameGender && !adoptive && (
+        <p className="text-xs text-muted-foreground">
+          Two parents of the same gender bore you through the Tree of Souls; the first parent
+          invoked the ritual and carries your line.
+        </p>
+      )}
       <div className="grid gap-3 sm:grid-cols-2">
         <div className="space-y-2">
           <Label htmlFor="line-parent-name" className="text-xs">
@@ -436,9 +428,6 @@ export function KinSlotPicker({ draft, familyId }: KinSlotPickerProps) {
       <Label className="text-sm font-medium text-muted-foreground">
         Open Positions in This House
       </Label>
-      <p className="text-xs text-muted-foreground">
-        Claim a pre-authored position to inherit a living family tree, or take none and stand apart.
-      </p>
       <div className="grid gap-2 sm:grid-cols-2">
         <Card
           className={cn(

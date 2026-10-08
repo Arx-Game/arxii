@@ -14,11 +14,10 @@
  */
 
 import { useState } from 'react';
-import { toast } from 'sonner';
+import { formDialogCallbacks } from '@/lib/formMutationError';
 import {
   Dialog,
   DialogContent,
-  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -86,44 +85,17 @@ export function SendGemitDialog() {
 
     const relatedEra = parseOptionalId(relatedEraRaw);
     const relatedStory = parseOptionalId(relatedStoryRaw);
+    const callbacks = formDialogCallbacks({
+      close: () => setOpen(false),
+      reset: resetForm,
+      success: 'Gemit broadcast: all online accounts notified',
+      fallback: 'Failed to broadcast gemit. Please try again.',
+      onFieldErrors: (data) => setFieldErrors(data as DRFFieldErrors),
+    });
 
     broadcastMutation.mutate(
-      {
-        body: trimmedBody,
-        related_era: relatedEra ?? null,
-        related_story: relatedStory ?? null,
-      },
-      {
-        onSuccess: () => {
-          setOpen(false);
-          resetForm();
-          toast.success('Gemit broadcast: all online accounts notified');
-        },
-        onError: (err: unknown) => {
-          const fetchErr = err as { status?: number; response?: Response };
-          if (fetchErr.status === 403) {
-            toast.error('Permission denied. Only staff can broadcast gemits.');
-            setOpen(false);
-            return;
-          }
-          if (fetchErr.response) {
-            fetchErr.response
-              .json()
-              .then((data: unknown) => {
-                if (data && typeof data === 'object') {
-                  setFieldErrors(data as DRFFieldErrors);
-                }
-              })
-              .catch(() => {
-                toast.error('Failed to broadcast gemit. Please try again.');
-              });
-            return;
-          }
-          const message =
-            err instanceof Error ? err.message : 'Failed to broadcast gemit. Please try again.';
-          toast.error(message);
-        },
-      }
+      { body: trimmedBody, related_era: relatedEra ?? null, related_story: relatedStory ?? null },
+      callbacks
     );
   }
 
@@ -142,10 +114,6 @@ export function SendGemitDialog() {
         <form onSubmit={handleSubmit}>
           <DialogHeader>
             <DialogTitle>Broadcast Gemit</DialogTitle>
-            <DialogDescription>
-              Send a server-wide announcement to all online players in real time. Gemits are also
-              persisted for players who are offline.
-            </DialogDescription>
           </DialogHeader>
 
           {/* Non-field / global error banner */}

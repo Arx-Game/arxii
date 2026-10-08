@@ -147,7 +147,7 @@ export function GMNotesPanel({ storyId }: GMNotesPanelProps) {
     if (notes.length === 0) {
       return (
         <p className="text-sm italic text-muted-foreground" data-testid="gm-notes-empty">
-          No GM notes yet. Add the first one below.
+          No GM notes yet.
         </p>
       );
     }
@@ -162,11 +162,6 @@ export function GMNotesPanel({ storyId }: GMNotesPanelProps) {
 
   return (
     <div className="space-y-4" data-testid="gm-notes-panel">
-      <p className="text-sm text-muted-foreground">
-        Append-only authorial memory shared with this story&apos;s GMs. Notes cannot be edited or
-        deleted.
-      </p>
-
       {/* Notes list */}
       {renderNotes()}
 

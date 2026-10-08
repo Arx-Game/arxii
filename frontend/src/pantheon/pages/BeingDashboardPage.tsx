@@ -357,9 +357,7 @@ export function BeingDashboardPage() {
           <Card>
             <CardContent className="py-4">
               {(codex ?? []).length === 0 ? (
-                <p className="text-sm text-muted-foreground">
-                  No Codex entry yet. Set a visibility on the edit page to create one.
-                </p>
+                <p className="text-sm text-muted-foreground">No Codex entry yet.</p>
               ) : (
                 <table className="w-full text-sm">
                   <thead className="text-left text-xs text-muted-foreground">

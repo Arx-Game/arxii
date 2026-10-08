@@ -12,18 +12,11 @@ export function FriendsTab() {
 
   const friends = data?.results ?? [];
   if (friends.length === 0) {
-    return (
-      <p className="text-muted-foreground">
-        You have no friends listed yet. Visit another character's sheet to friend them.
-      </p>
-    );
+    return <p className="text-muted-foreground">No friends yet.</p>;
   }
 
   return (
     <div className="space-y-2">
-      <p className="text-sm text-muted-foreground">
-        Your trusted RP partners (out-of-character). You get a login/logoff alert for each.
-      </p>
       {friends.map((friend) => (
         <div key={friend.id} className="flex items-center justify-between rounded-md border p-3">
           <span>{friend.friend_name}</span>

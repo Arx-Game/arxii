@@ -85,7 +85,7 @@ describe('SendGemitDialog', () => {
     await user.click(screen.getByRole('button', { name: /broadcast gemit/i }));
 
     expect(screen.getByRole('dialog')).toBeInTheDocument();
-    expect(screen.getByText(/server-wide announcement/i)).toBeInTheDocument();
+    expect(screen.getByPlaceholderText(/server-wide announcement/i)).toBeInTheDocument();
   });
 
   it('disables submit when body is empty', async () => {
@@ -214,9 +214,7 @@ describe('SendGemitDialog', () => {
     await user.click(screen.getByRole('button', { name: /^broadcast$/i }));
 
     await waitFor(() => {
-      expect(toast.error).toHaveBeenCalledWith(
-        'Permission denied. Only staff can broadcast gemits.'
-      );
+      expect(toast.error).toHaveBeenCalledWith('Permission denied.');
     });
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
   });

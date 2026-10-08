@@ -209,7 +209,6 @@ export function ChapterFormDialog({
                 placeholder="GM-only notes about this chapter…"
                 rows={2}
               />
-              <p className="text-xs text-muted-foreground">Not shown to players.</p>
               {fieldErrors.description && (
                 <p className="text-xs text-destructive">{fieldErrors.description.join(' ')}</p>
               )}
@@ -225,9 +224,6 @@ export function ChapterFormDialog({
                 placeholder="What players know so far…"
                 rows={2}
               />
-              <p className="text-xs text-muted-foreground">
-                Player-facing recap: keep this current as the story advances.
-              </p>
               {fieldErrors.summary && (
                 <p className="text-xs text-destructive">{fieldErrors.summary.join(' ')}</p>
               )}

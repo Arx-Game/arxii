@@ -391,10 +391,6 @@ export function ReviewStage({ draft, isStaff, onStageSelect }: ReviewStageProps)
             },
           }}
         >
-          <p className="plate-sub">
-            Staff will read it and let you know in the Hall. If they ask for revisions, the stages
-            reopen.
-          </p>
           <Link className="quiet-link" to="/characters/create/application">
             View the application thread
           </Link>
@@ -518,7 +514,6 @@ function NoApplicationActions({
           onChange={(e) => onNotesChange(e.target.value)}
           rows={3}
         />
-        <span className="hint">Only staff see this. It is not part of the character.</span>
       </div>
 
       <div className="plate-door" id="door">
@@ -634,7 +629,6 @@ function RevisionsActions({
           onChange={(e) => onCommentChange(e.target.value)}
           rows={3}
         />
-        <span className="hint">Only staff see this. It is not part of the character.</span>
       </div>
 
       <div className="plate-door">

@@ -39,10 +39,7 @@ export function AdvancementTab({ characterId, isActiveCharacter }: AdvancementTa
         data-testid="advancement-inactive-character-notice"
       >
         <AlertCircle className="h-4 w-4 shrink-0" />
-        <p>
-          Advancement acts on your currently active character. Switch to this character to manage
-          their breakthroughs, unlocks, training, and Durance.
-        </p>
+        <p>Switch to this character to manage their advancement.</p>
       </div>
     );
   }

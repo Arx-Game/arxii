@@ -145,11 +145,7 @@ export function StoryLog({ storyId }: StoryLogProps) {
   const entries = data?.entries ?? [];
 
   if (entries.length === 0) {
-    return (
-      <p className="text-sm text-muted-foreground">
-        Story log is empty. Beats will appear here as they resolve.
-      </p>
-    );
+    return <p className="text-sm text-muted-foreground">Story log is empty.</p>;
   }
 
   return (
