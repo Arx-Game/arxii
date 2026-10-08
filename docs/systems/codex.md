@@ -313,7 +313,13 @@ restored_ap = offer.cancel()
   entries, and an all-secret branch must not leak its name
 - Detail view gates `lore_content` and `mechanics_content` behind KNOWN status or `is_public`
 - Staff (`is_staff`) see every entry with full content (#3775); GMs are not staff and read
-  as a player
+  as a player. The page carries no staff banner (#4191)
+- **The reader draws every non-public entry in a restricted tone** (`.codex-restricted`,
+  `frontend/src/codex/codex.css`: the card a shade toward the theme's primary, nothing
+  written), the same word as the sheet's private region (#4124). For a player that is an
+  entry a character holds or is researching; for staff it marks the restricted knowledge
+  among the public. The per-character `known_by` badges appear only on accounts with two
+  or more characters, the threshold the character-scope dropdown already uses (#4191)
 
 ---
 

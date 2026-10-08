@@ -1,16 +1,28 @@
 import { BookOpenCheck, Lock } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { cn } from '@/lib/utils';
 import type { CodexEntryListItem } from '../types';
+import '../codex.css';
 
 interface EntryGridProps {
   entries: CodexEntryListItem[];
   /** Subject currently being browsed; used to gloss entries filed here from elsewhere. */
   subjectId?: number;
+  /**
+   * The account plays more than one character, so a per-character badge answers
+   * "which of mine"; with one character the restricted tone already says it (#4191).
+   */
+  multiCharacter?: boolean;
   onSelectEntry: (entryId: number) => void;
 }
 
-export function EntryGrid({ entries, subjectId, onSelectEntry }: EntryGridProps) {
+export function EntryGrid({
+  entries,
+  subjectId,
+  multiCharacter = false,
+  onSelectEntry,
+}: EntryGridProps) {
   return (
     <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
       {entries.map((entry) => (
@@ -18,6 +30,7 @@ export function EntryGrid({ entries, subjectId, onSelectEntry }: EntryGridProps)
           key={entry.id}
           entry={entry}
           subjectId={subjectId}
+          multiCharacter={multiCharacter}
           onClick={() => onSelectEntry(entry.id)}
         />
       ))}
@@ -28,10 +41,12 @@ export function EntryGrid({ entries, subjectId, onSelectEntry }: EntryGridProps)
 function EntryCard({
   entry,
   subjectId,
+  multiCharacter,
   onClick,
 }: {
   entry: CodexEntryListItem;
   subjectId?: number;
+  multiCharacter: boolean;
   onClick: () => void;
 }) {
   // A filing puts the entry in this listing without moving its canonical home
@@ -39,7 +54,13 @@ function EntryCard({
   const filedFromElsewhere = subjectId !== undefined && entry.subject !== subjectId;
 
   return (
-    <Card className="cursor-pointer transition-colors hover:bg-accent/50" onClick={onClick}>
+    <Card
+      className={cn(
+        'cursor-pointer transition-colors hover:bg-accent/50',
+        !entry.is_public && 'codex-restricted'
+      )}
+      onClick={onClick}
+    >
       <CardHeader className="pb-2">
         <div className="flex items-center gap-2">
           <CardTitle className="text-base">{entry.name}</CardTitle>
@@ -56,7 +77,7 @@ function EntryCard({
       </CardHeader>
       <CardContent className="space-y-2">
         <p className="line-clamp-2 text-sm text-muted-foreground">{entry.summary}</p>
-        {entry.known_by.length > 0 && (
+        {multiCharacter && entry.known_by.length > 0 && (
           <div className="flex flex-wrap items-center gap-1">
             {entry.known_by.map((knower) => (
               <Badge key={knower.roster_entry_id} variant="secondary" className="text-xs">

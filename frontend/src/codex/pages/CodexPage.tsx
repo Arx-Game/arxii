@@ -11,12 +11,13 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { useMyRosterEntriesQuery } from '@/roster/queries';
-import { useAccount } from '@/store/hooks';
+import { cn } from '@/lib/utils';
 import { useCodexTree, useCodexSearch } from '../queries';
 import { CodexTree } from '../components/CodexTree';
 import { CodexContent } from '../components/CodexContent';
 import { useDebouncedValue } from '@/hooks/useDebouncedValue';
 import type { CodexCategoryTree, CodexEntryListItem } from '../types';
+import '../codex.css';
 
 const ALL_CHARACTERS = 'all';
 
@@ -30,7 +31,6 @@ export function CodexPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const [searchInput, setSearchInput] = useState('');
   const debouncedSearch = useDebouncedValue(searchInput, 300);
-  const account = useAccount();
 
   const categoryId = getIntParam(searchParams, 'category');
   const subjectId = getIntParam(searchParams, 'subject');
@@ -106,21 +106,18 @@ export function CodexPage() {
   );
 
   const showSearchResults = debouncedSearch.length >= 2;
-  const showCharacterScope = (myCharacters?.length ?? 0) >= 2;
+  // Two or more characters: the scope dropdown and the per-character badges both
+  // answer "which of mine", and neither means anything with one (#4191).
+  const multiCharacter = (myCharacters?.length ?? 0) >= 2;
 
   return (
     <div className="flex flex-col gap-4">
-      {account?.is_staff && (
-        <p className="rounded border border-amber-300/60 bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:border-amber-500/40 dark:bg-amber-950/40 dark:text-amber-100">
-          Staff view: every entry is shown. Players see only what their characters know.
-        </p>
-      )}
       <div className="flex gap-6">
         {/* Sidebar */}
         <aside className="w-64 shrink-0">
           <div className="sticky top-4 space-y-4">
             {/* Character knowledge scope (multi-character accounts only) */}
-            {showCharacterScope && (
+            {multiCharacter && (
               <Select
                 value={characterId ? characterId.toString() : ALL_CHARACTERS}
                 onValueChange={handleSelectCharacter}
@@ -175,6 +172,7 @@ export function CodexPage() {
             subjectId={subjectId}
             entryId={entryId}
             characterId={characterId}
+            multiCharacter={multiCharacter}
             onSelectSubject={handleSelectSubject}
             onSelectEntry={handleSelectEntry}
             onNavigateBreadcrumb={handleNavigateBreadcrumb}
@@ -262,7 +260,13 @@ function CodexSidebarResults({
 
 function SearchResultItem({ entry, onClick }: { entry: CodexEntryListItem; onClick: () => void }) {
   return (
-    <button onClick={onClick} className="w-full rounded px-2 py-1.5 text-left hover:bg-accent">
+    <button
+      onClick={onClick}
+      className={cn(
+        'w-full rounded px-2 py-1.5 text-left hover:bg-accent',
+        !entry.is_public && 'codex-restricted'
+      )}
+    >
       <div className="text-sm font-medium">{entry.name}</div>
       <div className="truncate text-xs text-muted-foreground">
         {entry.subject_path.map((s) => s.name).join(' > ')}
