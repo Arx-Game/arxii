@@ -10,8 +10,7 @@
  */
 
 import { useState } from 'react';
-import { toast } from 'sonner';
-import { handleFormMutationError } from '@/lib/formMutationError';
+import { formDialogCallbacks } from '@/lib/formMutationError';
 import {
   Dialog,
   DialogContent,
@@ -79,25 +78,17 @@ export function SendStoryOOCDialog({ story }: SendStoryOOCDialogProps) {
       return;
     }
 
+    const callbacks = formDialogCallbacks({
+      close: () => setOpen(false),
+      reset: resetForm,
+      success: 'OOC notice sent to story participants',
+      fallback: 'Failed to send OOC notice. Please try again.',
+      onFieldErrors: (data) => setFieldErrors(data as DRFFieldErrors),
+    });
+
     sendMutation.mutate(
-      {
-        storyId: story.id,
-        body: trimmedBody,
-        ooc_note: oocNote.trim() || undefined,
-      },
-      {
-        onSuccess: () => {
-          setOpen(false);
-          resetForm();
-          toast.success('OOC notice sent to story participants');
-        },
-        onError: (err: unknown) =>
-          handleFormMutationError(err, {
-            onForbidden: () => setOpen(false),
-            onFieldErrors: (data) => setFieldErrors(data as DRFFieldErrors),
-            fallback: 'Failed to send OOC notice. Please try again.',
-          }),
-      }
+      { storyId: story.id, body: trimmedBody, ooc_note: oocNote.trim() || undefined },
+      callbacks
     );
   }
 

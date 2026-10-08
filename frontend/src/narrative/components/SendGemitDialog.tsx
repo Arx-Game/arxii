@@ -14,8 +14,7 @@
  */
 
 import { useState } from 'react';
-import { toast } from 'sonner';
-import { handleFormMutationError } from '@/lib/formMutationError';
+import { formDialogCallbacks } from '@/lib/formMutationError';
 import {
   Dialog,
   DialogContent,
@@ -86,26 +85,17 @@ export function SendGemitDialog() {
 
     const relatedEra = parseOptionalId(relatedEraRaw);
     const relatedStory = parseOptionalId(relatedStoryRaw);
+    const callbacks = formDialogCallbacks({
+      close: () => setOpen(false),
+      reset: resetForm,
+      success: 'Gemit broadcast: all online accounts notified',
+      fallback: 'Failed to broadcast gemit. Please try again.',
+      onFieldErrors: (data) => setFieldErrors(data as DRFFieldErrors),
+    });
 
     broadcastMutation.mutate(
-      {
-        body: trimmedBody,
-        related_era: relatedEra ?? null,
-        related_story: relatedStory ?? null,
-      },
-      {
-        onSuccess: () => {
-          setOpen(false);
-          resetForm();
-          toast.success('Gemit broadcast: all online accounts notified');
-        },
-        onError: (err: unknown) =>
-          handleFormMutationError(err, {
-            onForbidden: () => setOpen(false),
-            onFieldErrors: (data) => setFieldErrors(data as DRFFieldErrors),
-            fallback: 'Failed to broadcast gemit. Please try again.',
-          }),
-      }
+      { body: trimmedBody, related_era: relatedEra ?? null, related_story: relatedStory ?? null },
+      callbacks
     );
   }
 
