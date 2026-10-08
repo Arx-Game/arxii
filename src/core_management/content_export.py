@@ -220,6 +220,7 @@ CONTENT_MODELS: frozenset[str] = frozenset(
         "magic.dramaticmomenttype",
         "magic.effecttype",
         "magic.facet",
+        "magic.facetalias",
         "magic.gift",
         "magic.giftunlock",
         "magic.glimpsetag",

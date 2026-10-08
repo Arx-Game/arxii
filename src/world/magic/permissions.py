@@ -121,3 +121,17 @@ class IsInvitedParticipant(BasePermission):
         my_sheet_ids = _active_sheet_ids_for_user(request.user)
         # User must be a participant (not the initiator) to accept/decline.
         return obj.participants.filter(character_sheet_id__in=my_sheet_ids).exists()
+
+
+class IsStaffOrReadOnly(BasePermission):
+    """Any authenticated user may read; only staff may write (#4197).
+
+    The flat Facet vocabulary: every player's pickers read it, staff grow it.
+    """
+
+    def has_permission(self, request: Request, view: APIView) -> bool:
+        if not request.user.is_authenticated:
+            return False
+        if request.method in SAFE_METHODS:
+            return True
+        return bool(request.user.is_staff)

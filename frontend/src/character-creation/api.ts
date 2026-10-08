@@ -24,6 +24,7 @@ import type {
   DraftApplicationDetail,
   EffectType,
   Facet,
+  FacetMatch,
   Family,
   FamilySlots,
   FormOptionsResponse,
@@ -744,6 +745,27 @@ export async function getPathSkillSuggestions(pathId: number): Promise<PathSkill
 export async function getFacets(): Promise<Facet[]> {
   const res = await apiFetch(`${MAGIC_URL}/facets/`);
   if (!res.ok) throw new Error('Failed to load facets');
+  return res.json();
+}
+
+/** The facets a spelling is near (same key, a shared stem, one edit apart; aliases count). */
+export async function getNearFacets(name: string): Promise<Facet[]> {
+  const res = await apiFetch(`${MAGIC_URL}/facets/near/?name=${encodeURIComponent(name)}`);
+  if (!res.ok) throw new Error('Failed to look up facets');
+  return res.json();
+}
+
+/**
+ * Staff name a facet (#4197). A spelling that already resolves, by a facet's own name or
+ * an alias, answers that facet with `matched: true` instead of a near-duplicate.
+ */
+export async function createFacet(name: string): Promise<FacetMatch> {
+  const res = await apiFetch(`${MAGIC_URL}/facets/`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name }),
+  });
+  if (!res.ok) await throwApiError(res, 'The facet could not be created.');
   return res.json();
 }
 

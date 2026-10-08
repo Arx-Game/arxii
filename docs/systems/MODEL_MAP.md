@@ -5542,6 +5542,7 @@
   - written_by -> contributors.ContentContributor [FK] (nullable)
   - reviewed_by -> contributors.ContentContributor [FK] (nullable)
 **Pointed to by:**
+  - aliases <- magic.FacetAlias
   - motif_usages <- magic.MotifResonanceAssociation
   - signature_bonuses <- magic.SignatureMotifBonus
   - anchored_threads <- magic.Thread
@@ -5550,6 +5551,12 @@
   - vogue_momentum <- items.FacetVogueMomentum
   - fashion_styles <- items.FashionStyle
   - favored_by_beings <- worship.BeingFacet
+
+### FacetAlias
+**Foreign Keys:**
+  - written_by -> contributors.ContentContributor [FK] (nullable)
+  - reviewed_by -> contributors.ContentContributor [FK] (nullable)
+  - facet -> magic.Facet [FK]
 
 ### FallRedemptionConfig
 

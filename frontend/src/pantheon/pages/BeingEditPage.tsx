@@ -6,6 +6,7 @@
  */
 
 import { useEffect, useMemo, useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { toast } from 'sonner';
 import { Accordion } from '@/components/ui/accordion';
@@ -24,9 +25,11 @@ import {
 import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
 import { cn } from '@/lib/utils';
+import { FacetPicker } from '@/magic/components/FacetPicker';
+import { useAccount } from '@/store/hooks';
 import { EditorSection } from '../components/EditorSection';
 import { VISIBILITY_LABELS } from '../visibility';
-import { useBeingPage, useEditorOptions, useSaveBeing } from '../queries';
+import { pantheonKeys, useBeingPage, useEditorOptions, useSaveBeing } from '../queries';
 import type {
   EditorOptions,
   FeastDayLine,
@@ -182,6 +185,8 @@ export function BeingEditPage() {
   const navigate = useNavigate();
   const { data: page, isLoading } = useBeingPage(beingId);
   const { data: options } = useEditorOptions();
+  const account = useAccount();
+  const queryClient = useQueryClient();
   const save = useSaveBeing(beingId);
   const [draft, setDraft] = useState<Draft>(EMPTY);
   const [loadedFor, setLoadedFor] = useState<number | null>(null);
@@ -423,11 +428,15 @@ export function BeingEditPage() {
                   </button>
                 </Badge>
               ))}
-              <AddPicker
-                items={refItems(options?.facets, draft.facets)}
-                label="Add facet"
-                hint="An aesthetic facet the being favors; an offered item carrying it is credited double."
-                onPick={(facetId) => set('facets', [...draft.facets, facetId])}
+              <FacetPicker
+                facets={options?.facets}
+                exclude={draft.facets}
+                canCreate={Boolean(account?.is_staff)}
+                onPick={(facet) => {
+                  set('facets', [...draft.facets, facet.id]);
+                  // A facet made from the picker is not in the editor's options yet.
+                  queryClient.invalidateQueries({ queryKey: pantheonKeys.options }).catch(() => {});
+                }}
               />
             </div>
           </div>

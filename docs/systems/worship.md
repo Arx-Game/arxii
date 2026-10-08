@@ -39,7 +39,9 @@ issue bodies; the model decision is ADR-0132.
   today means going through the model or admin, not the API.
 - `BeingFacet` (#3776) — a being's favored aesthetic Facets: `being` FK,
   `facet` FK → the shared `magic.Facet` pool (same pool Motif draws from),
-  unique per (being, facet).
+  unique per (being, facet). The deity page picks through the shared `FacetPicker`
+  (#4197): search, "Did you mean" near-matches, and a staff-only **Create** for a
+  spelling that resolves to nothing, so the vocabulary grows from the page that needs it.
 - `BeingNickname` (#3776) — an alternate name a being's worshippers use:
   `being` FK (`related_name="nicknames"`), `name`, unique per (being, name).
   No reverent/irreverent field — tone is prose, not data. Reached

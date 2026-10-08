@@ -88,7 +88,12 @@ from world.magic.models.dramatic_moment import (
     DramaticMomentTag,
     DramaticMomentType,
 )
-from world.magic.permissions import CanPrepareCharacterText, IsRitualAuthorOrStaff, IsThreadOwner
+from world.magic.permissions import (
+    CanPrepareCharacterText,
+    IsRitualAuthorOrStaff,
+    IsStaffOrReadOnly,
+    IsThreadOwner,
+)
 from world.magic.serializers import (
     AcceptSoulTetherSerializer,
     AcceptTeachingOfferResponseSerializer,
@@ -120,6 +125,8 @@ from world.magic.serializers import (
     EffectTypeSerializer,
     EntryFlourishRespondSerializer,
     EntryFlourishResultSerializer,
+    FacetCreateSerializer,
+    FacetMatchSerializer,
     FacetSerializer,
     GiftCreateSerializer,
     GiftListSerializer,
@@ -165,6 +172,7 @@ from world.magic.serializers import (
     primary_persona_names_for,
 )
 from world.magic.services import (
+    facets as facet_services,
     get_library_entries,
     glimpse as glimpse_services,
     preview_resonance_pull,
@@ -324,15 +332,52 @@ class RestrictionViewSet(viewsets.ReadOnlyModelViewSet):
     pagination_class = None  # Small lookup table
 
 
-class FacetViewSet(viewsets.ReadOnlyModelViewSet):
-    """Read-only browse of the flat Facet vocabulary."""
+class FacetViewSet(mixins.CreateModelMixin, viewsets.ReadOnlyModelViewSet):
+    """The flat Facet vocabulary: every player reads it, staff grow it (#4197).
+
+    ``POST`` names a facet; a name whose spelling already resolves (a facet or an
+    alias, by ``facet_key``) answers with that facet and ``matched: true`` instead
+    of a near-duplicate. ``GET near/?name=`` is what a picker shows before it
+    offers to create.
+    """
 
     queryset = Facet.objects.order_by("name")
     serializer_class = FacetSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsStaffOrReadOnly]
     filter_backends = [DjangoFilterBackend, SearchFilter]
     search_fields = ["name", "description"]
     pagination_class = None  # Small, flat, fully-browsable vocabulary.
+
+    @extend_schema(
+        request=FacetCreateSerializer,
+        responses={200: FacetMatchSerializer, 201: FacetMatchSerializer},
+    )
+    def create(self, request: Request, *args: object, **kwargs: object) -> Response:
+        serializer = FacetCreateSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        name = serializer.validated_data["name"]
+        existing = facet_services.find_facet(name)
+        if existing is not None:
+            return Response(_facet_match(existing, matched=True), status=status.HTTP_200_OK)
+        created = Facet.objects.create(name=name)
+        return Response(_facet_match(created, matched=False), status=status.HTTP_201_CREATED)
+
+    @extend_schema(
+        parameters=[OpenApiParameter("name", str, OpenApiParameter.QUERY, required=True)],
+        responses=FacetSerializer(many=True),
+    )
+    @action(detail=False, methods=["get"])
+    def near(self, request: Request) -> Response:
+        # A lookup term for the vocabulary, not a filter on the queryset.
+        name = request.query_params.get("name", "")  # noqa: USE_FILTERSET
+        rows = facet_services.near_facets(name)
+        return Response(FacetSerializer(rows, many=True).data)
+
+
+def _facet_match(facet: Facet, *, matched: bool) -> dict[str, object]:
+    data = FacetSerializer(facet).data
+    data["matched"] = matched
+    return data
 
 
 class GiftViewSet(viewsets.ModelViewSet):
