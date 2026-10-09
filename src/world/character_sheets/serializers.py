@@ -1616,14 +1616,23 @@ def _build_standing(active: Persona | None, *, visible: bool) -> StandingSection
     }
 
 
-def _build_covenants(sheet: CharacterSheet) -> list[CovenantRoleEntry]:
+def _build_covenants(sheet: CharacterSheet, *, reveal_identity: bool) -> list[CovenantRoleEntry]:
     """The covenant roles this character holds. PUBLIC, by Apostate's ruling (#3906).
 
     Unlike the org memberships beside it, this needs no tier: a covenant role is a
     thing a character IS in the world, the way a title is, and the Titles block on the
     same rail has always been public. It rides the payload only because
     ``CharacterCovenantRoleViewSet`` is self-only for non-staff.
+
+    Public about the CHARACTER, though, not about whatever face is worn (#4207). The
+    row is keyed on the sheet, so for a masked or hidden-alt face it would name the
+    real character's covenant, and anyone who knows that roster would know who is
+    behind the mask. It follows the same reveal flag as the bio and appearance: an
+    undisclosed face shows nothing here. Recording which face a vow was sworn under,
+    so an alt can show its own covenant, is #4208.
     """
+    if not reveal_identity:
+        return []
     return [
         CovenantRoleEntry(
             id=row.pk,
@@ -2199,9 +2208,10 @@ class CharacterSheetSerializer(serializers.Serializer):
             # The beats of the life (#4124): the private sheet's, owner and staff only.
             "beats": _build_beats(sheet) if privileged else [],
             # #3906 — Ties' rail. Standing rides its own tier; covenant roles are
-            # public, the way the Titles block beside them has always been.
+            # public, the way the Titles block beside them has always been, but only
+            # for a revealed identity (#4207).
             "standing": _build_standing(active, visible=show_standing),
-            "covenants": _build_covenants(sheet),
+            "covenants": _build_covenants(sheet, reveal_identity=reveal_identity),
             "actor_sheet": _build_actor_sheet(
                 sheet,
                 bio_profile=bio_profile,

@@ -11,6 +11,7 @@ from rest_framework.test import APITestCase
 from evennia_extensions.factories import AccountFactory
 from evennia_extensions.models import PlayerData
 from world.character_sheets.models import Gender
+from world.covenants.factories import CharacterCovenantRoleFactory
 from world.distinctions.factories import CharacterDistinctionFactory, DistinctionFactory
 from world.distinctions.services import mint_distinction_secret
 from world.roster.factories import RosterEntryFactory, RosterTenureFactory
@@ -227,6 +228,56 @@ class ProfileIdentityPrivacyTests(APITestCase):
         data = self._get(sheet, owner).data
         assert data["stats"] == {"strength": 5}
         assert data["story"]["background"] == "Born in the undercity"
+
+    def test_covenant_roles_are_withheld_from_a_non_revealed_anonymous_figure(self) -> None:
+        """#4207: the covenant block is public, but it belongs to the real identity.
+
+        A covenant role is keyed on the sheet, so for a masked face it names the real
+        character's covenant - and anyone who knows that covenant's roster then knows who
+        is behind the mask. It follows the same reveal flag as the bio and appearance.
+        """
+        sheet = self._character_sheet(AccountFactory(), fake_active=True)
+        CharacterCovenantRoleFactory(character_sheet=sheet)
+        viewer = AccountFactory()
+        self._character_sheet(viewer)
+
+        data = self._get(sheet, viewer).data
+        assert data["covenants"] == []
+
+    def test_covenant_roles_are_withheld_behind_a_named_alt_with_a_hidden_link(self) -> None:
+        """A named ESTABLISHED alt keeps its link to the primary hidden, covenant included."""
+        sheet = self._character_sheet(AccountFactory(), extra_alt=True)
+        sheet.active_persona = sheet.personas.get(name="Robert")
+        sheet.save()
+        CharacterCovenantRoleFactory(character_sheet=sheet)
+        viewer = AccountFactory()
+        self._character_sheet(viewer)
+
+        data = self._get(sheet, viewer).data
+        assert data["identity"]["name"] == "Robert"
+        assert data["covenants"] == []
+
+    def test_covenant_roles_show_once_the_mask_is_discovered(self) -> None:
+        sheet = self._character_sheet(AccountFactory(), fake_active=True)
+        role = CharacterCovenantRoleFactory(character_sheet=sheet)
+        viewer = AccountFactory()
+        viewer_sheet = self._character_sheet(viewer)
+        PersonaDiscoveryFactory(
+            persona=sheet.active_persona,
+            linked_to=sheet.primary_persona,
+            discovered_by=viewer_sheet,
+        )
+
+        data = self._get(sheet, viewer).data
+        assert [row["covenant"] for row in data["covenants"]] == [role.covenant.name]
+
+    def test_owner_sees_covenant_roles_behind_their_own_mask(self) -> None:
+        owner = AccountFactory()
+        sheet = self._character_sheet(owner, fake_active=True)
+        role = CharacterCovenantRoleFactory(character_sheet=sheet)
+
+        data = self._get(sheet, owner).data
+        assert [row["covenant"] for row in data["covenants"]] == [role.covenant.name]
 
     def test_story_is_withheld_from_a_non_revealed_anonymous_figure(self) -> None:
         sheet = self._character_sheet(AccountFactory(), fake_active=True)
