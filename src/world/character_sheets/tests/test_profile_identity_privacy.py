@@ -244,6 +244,19 @@ class ProfileIdentityPrivacyTests(APITestCase):
         data = self._get(sheet, viewer).data
         assert data["covenants"] == []
 
+    def test_covenant_roles_are_withheld_behind_a_named_alt_with_a_hidden_link(self) -> None:
+        """A named ESTABLISHED alt keeps its link to the primary hidden, covenant included."""
+        sheet = self._character_sheet(AccountFactory(), extra_alt=True)
+        sheet.active_persona = sheet.personas.get(name="Robert")
+        sheet.save()
+        CharacterCovenantRoleFactory(character_sheet=sheet)
+        viewer = AccountFactory()
+        self._character_sheet(viewer)
+
+        data = self._get(sheet, viewer).data
+        assert data["identity"]["name"] == "Robert"
+        assert data["covenants"] == []
+
     def test_covenant_roles_show_once_the_mask_is_discovered(self) -> None:
         sheet = self._character_sheet(AccountFactory(), fake_active=True)
         role = CharacterCovenantRoleFactory(character_sheet=sheet)
