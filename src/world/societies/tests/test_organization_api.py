@@ -104,6 +104,29 @@ class OrganizationApiTests(TestCase):
             f"House payload query count scaled with org count: {one_org} -> {five_orgs}",
         )
 
+    def test_house_payload_carries_the_days_of_remembrance(self) -> None:
+        """#4206: the house block lists the org's observances in calendar order,
+        each spelled with the game's one IC date formatter."""
+        from world.roster.factories import FamilyFactory
+        from world.societies.houses.factories import OrganizationObservanceFactory
+
+        house = OrganizationFactory(name="House Vigil", family=FamilyFactory(name="Vigil"))
+        OrganizationObservanceFactory(
+            organization=house, ic_month=10, ic_day=18, name="Founding Night", lore="Fire."
+        )
+        OrganizationObservanceFactory(organization=house, ic_month=1, ic_day=2, name="The Vigil")
+        self.client.force_authenticate(user=AccountFactory(is_staff=True))
+
+        response = self.client.get(reverse("societies:organization-list"))
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        payload = next(org for org in response.data["results"] if org["id"] == house.id)
+        self.assertEqual(
+            [(row["name"], row["when"]) for row in payload["house"]["observances"]],
+            [("The Vigil", "Dreaming 2 (1/2)"), ("Founding Night", "Masquing 18 (10/18)")],
+        )
+        self.assertEqual(payload["house"]["observances"][1]["lore"], "Fire.")
+
     def test_staff_sees_all_non_covenant_organizations(self) -> None:
         """Staff users see every non-covenant organization, regardless of membership."""
         staff_account = AccountFactory(is_staff=True)

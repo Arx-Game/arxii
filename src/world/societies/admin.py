@@ -1047,10 +1047,12 @@ from world.societies.houses.models import (  # noqa: E402
     HouseClaimAspect,
     HouseClaimKin,
     HouseClaimLand,
+    HouseClaimObservance,
     HouseFeature,
     HouseRecognitionRule,
     HouseTemplate,
     NobiliaryParticle,
+    OrganizationObservance,
     PactKind,
     PrestigeRankBand,
     StatureBand,
@@ -1275,6 +1277,27 @@ class HouseClaimLandInline(admin.TabularInline):
         return False
 
 
+class HouseClaimObservanceInline(admin.TabularInline):
+    """#4206 — the founder's days of remembrance, read-only for the review queue."""
+
+    model = HouseClaimObservance
+    extra = 0
+    readonly_fields = ("name", "ic_month", "ic_day", "lore", "sort_order")
+    can_delete = False
+
+    def has_add_permission(self, request: object, obj: object = None) -> bool:  # noqa: ARG002
+        return False
+
+
+@admin.register(OrganizationObservance)
+class OrganizationObservanceAdmin(admin.ModelAdmin):
+    """#4206 — a house's days of remembrance, directly authorable for staff-built houses."""
+
+    list_display = ("name", "organization", "ic_month", "ic_day")
+    search_fields = ("name", "organization__name")
+    autocomplete_fields = ("organization",)
+
+
 @admin.register(HouseClaim)
 class HouseClaimAdmin(admin.ModelAdmin):
     """#1884 Phase D — approve/reject CG house claims (v1 review surface).
@@ -1316,7 +1339,12 @@ class HouseClaimAdmin(admin.ModelAdmin):
         "review_note",
     )
     actions = ("approve_claims", "reject_claims")
-    inlines = (HouseClaimAspectInline, HouseClaimKinInline, HouseClaimLandInline)
+    inlines = (
+        HouseClaimAspectInline,
+        HouseClaimKinInline,
+        HouseClaimLandInline,
+        HouseClaimObservanceInline,
+    )
 
     @admin.action(description="Approve selected claims")
     def approve_claims(self, request, queryset):

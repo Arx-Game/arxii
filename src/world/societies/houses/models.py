@@ -1607,6 +1607,30 @@ class HouseClaimLand(SharedMemoryModel):
         return f"claim {self.claim_id}: {self.title_id}"
 
 
+class HouseClaimObservance(SharedMemoryModel):
+    """A day of remembrance the founder writes for the house before finalize (#4206).
+
+    The same shape as ``WorshipFeastDay`` (an IC month and day that recurs every
+    year, a name, the story), a house's rather than a god's. A styling, not an
+    aspect: free prose with no catalog behind it (ADR-0101). Draft-scoped like
+    the claim; ``materialize_house_claim`` copies it onto the org as an
+    ``OrganizationObservance``.
+    """
+
+    claim = models.ForeignKey(HouseClaim, on_delete=models.CASCADE, related_name="observances")
+    ic_month = models.PositiveSmallIntegerField()
+    ic_day = models.PositiveSmallIntegerField()
+    name = models.CharField(max_length=120)
+    lore = models.TextField(blank=True, default="")
+    sort_order = models.PositiveSmallIntegerField(default=0)
+
+    class Meta:
+        ordering = ["claim", "sort_order", "pk"]
+
+    def __str__(self) -> str:
+        return f"claim {self.claim_id}: {self.name} ({self.ic_month}/{self.ic_day})"
+
+
 class OrganizationAspect(SharedMemoryModel):
     """A house's permanent identity facet (#2079).
 
@@ -1646,6 +1670,38 @@ class OrganizationFeature(SharedMemoryModel):
 
     def __str__(self) -> str:
         return f"{self.organization}: {self.feature}"
+
+
+class OrganizationObservance(SharedMemoryModel):
+    """A house's own day of remembrance (#4206): an IC month and day that comes
+    round every year, a name, and the house's prose for it.
+
+    The same shape as ``WorshipFeastDay``, a house's rather than a god's. One
+    of the stylings (ADR-0101 keeps free text out of aspects): written by the
+    founder beside the words and sigil, edited later with them on the Almanach
+    document, and directly authorable in admin for staff-built houses. No
+    mechanic rides on the day; the calendar and tidings may read it later the
+    way they read birthdays and feast days.
+    """
+
+    organization = models.ForeignKey(_ORG_FK, on_delete=models.CASCADE, related_name="observances")
+    ic_month = models.PositiveSmallIntegerField()
+    ic_day = models.PositiveSmallIntegerField()
+    name = models.CharField(max_length=120)
+    lore = models.TextField(blank=True, default="")
+    display_order = models.PositiveSmallIntegerField(default=0)
+
+    class Meta:
+        ordering = ["organization", "ic_month", "ic_day", "display_order", "pk"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["organization", "ic_month", "ic_day", "name"],
+                name="unique_org_observance",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.organization}: {self.name} ({self.ic_month}/{self.ic_day})"
 
 
 # ---------------------------------------------------------------------------

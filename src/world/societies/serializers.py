@@ -12,7 +12,7 @@ from world.scenes.models import Persona
 
 if TYPE_CHECKING:
     from world.character_sheets.models import CharacterSheet
-from world.societies.houses.almanach_reads import demesne_count
+from world.societies.houses.almanach_reads import demesne_count, observance_rows
 from world.societies.houses.models import Domain, Title
 from world.societies.models import (
     LegendEntry,
@@ -148,6 +148,17 @@ class VacancyOfferSerializer(serializers.Serializer):
     presumed_importance = serializers.IntegerField()
 
 
+class HouseObservanceSerializer(serializers.Serializer):
+    """A house's day of remembrance as the house block shows it (#4206); ``when``
+    is the game's one IC date spelling."""
+
+    ic_month = serializers.IntegerField()
+    ic_day = serializers.IntegerField()
+    name = serializers.CharField()
+    lore = serializers.CharField(allow_blank=True)
+    when = serializers.CharField()
+
+
 class HouseDetailSerializer(serializers.Serializer):
     """The house block of an org payload (#1884) — null for non-family orgs."""
 
@@ -165,6 +176,7 @@ class HouseDetailSerializer(serializers.Serializer):
     open_crises = HouseCrisisSerializer(many=True)
     stature = HouseStatureSerializer(allow_null=True)
     vacancies = VacancyOfferSerializer(many=True)
+    observances = HouseObservanceSerializer(many=True)
 
 
 class OrganizationShopWindowSerializer(serializers.ModelSerializer):
@@ -268,6 +280,9 @@ class OrganizationSerializer(serializers.ModelSerializer):
                 for vacancy in obj.vacancies.all()
                 if vacancy.is_open
             ],
+            # Reads the prefetched ``observances`` relation (#4206); the spelling
+            # of the day is the document's, so both surfaces agree.
+            "observances": observance_rows(obj),
         }
         return HouseDetailSerializer(payload).data
 

@@ -45,13 +45,14 @@ from world.societies.houses.models import (
     Domain,
     FealtyEdge,
     HoldingKind,
+    HouseClaim,
     HouseTemplate,
     LandShape,
     SuccessionLaw,
     Title,
 )
 from world.societies.houses.services import HousesServiceError
-from world.societies.houses.types import ClaimKinDraft, ClaimLandDraft
+from world.societies.houses.types import ClaimKinDraft, ClaimLandDraft, ClaimObservanceDraft
 from world.societies.models import Organization, OrganizationMembership, Vacancy
 
 
@@ -155,6 +156,34 @@ class GateTests(HouseCreatorTestData):
     def test_principle_range_gate(self):
         with self.assertRaises(HousesServiceError):
             self._submit(principles={"mercy": 5})
+
+    def test_observance_gates(self):
+        """#4206: a day of remembrance needs a name and a calendar date, and the
+        same day is not written twice; a well-formed list files with the claim."""
+        for rows in (
+            [ClaimObservanceDraft(ic_month=1, ic_day=1, name=" ")],
+            [ClaimObservanceDraft(ic_month=13, ic_day=1, name="Nowhen")],
+            [ClaimObservanceDraft(ic_month=1, ic_day=32, name="Nowhen")],
+            [
+                ClaimObservanceDraft(ic_month=1, ic_day=1, name="Twice"),
+                ClaimObservanceDraft(ic_month=1, ic_day=1, name="TWICE"),
+            ],
+        ):
+            with self.assertRaises(HousesServiceError):
+                self._submit(observances=rows)
+        self.assertFalse(HouseClaim.objects.filter(draft=self.draft).exists())
+
+        claim = self._submit(
+            observances=[
+                ClaimObservanceDraft(ic_month=10, ic_day=18, name="Founding Night", lore="Fire."),
+                ClaimObservanceDraft(ic_month=10, ic_day=18, name="The Vigil "),
+            ]
+        )
+        rows = list(claim.observances.all())
+        self.assertEqual(
+            [(r.name, r.sort_order) for r in rows], [("Founding Night", 0), ("The Vigil", 1)]
+        )
+        self.assertEqual(rows[0].lore, "Fire.")
 
     def test_empty_backstory_gate(self):
         with self.assertRaises(HousesServiceError):
@@ -340,6 +369,31 @@ class MaterializationTests(HouseCreatorTestData):
 
         # No accidental auto-membership rows beyond the rank ladder.
         self.assertEqual(OrganizationMembership.objects.filter(organization=org).count(), 0)
+
+    def test_observances_materialize_onto_the_house(self):
+        """#4206: the founder's days of remembrance copy onto the org in the
+        order they were written, the way the words and sigil do."""
+        own_title = plant_rung(
+            realm=self.realm,
+            tier=TitleTier.BARONY,
+            name="Vigilcastle",
+            parent_title=self.crown_county,
+        )
+        claim = self._submit(
+            title=own_title,
+            house_name="Vigilwood",
+            observances=[
+                ClaimObservanceDraft(ic_month=10, ic_day=18, name="Founding Night", lore="Fire."),
+                ClaimObservanceDraft(ic_month=1, ic_day=2, name="The Vigil"),
+            ],
+        )
+        approve_house_claim(claim, reviewer=AccountFactory())
+        org = materialize_house_claim(claim, sheet=CharacterSheetFactory())
+        rows = list(org.observances.all())
+        self.assertEqual(
+            [(r.ic_month, r.ic_day, r.name, r.lore, r.display_order) for r in rows],
+            [(1, 2, "The Vigil", "", 1), (10, 18, "Founding Night", "Fire.", 0)],
+        )
 
     def test_estate_lands_under_the_drafts_realm_capital(self):
         """#3983 Plan B fold-in: ``materialize_house_claim`` resolves the

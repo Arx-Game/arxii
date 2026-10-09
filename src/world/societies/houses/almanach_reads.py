@@ -91,6 +91,7 @@ from django.core.exceptions import ObjectDoesNotExist
 
 from world.areas.constants import AreaLevel
 from world.areas.models import Area
+from world.game_clock.services import format_ic_month_day
 from world.locations.models import LocationOwnership
 from world.roster.constants import NOBLE_KIND_NAME
 from world.roster.models import Kinsperson
@@ -556,7 +557,24 @@ def _house_payload(house: Organization) -> dict:
             }
             for office in house.offices.select_related("holder").all()
         ],
+        "observances": observance_rows(house),
     }
+
+
+def observance_rows(house: Organization) -> list[dict]:
+    """The house's days of remembrance (#4206) in calendar order, each with the
+    game's one IC date spelling. Shared by the document and the org payload so
+    both surfaces spell a day the same way."""
+    return [
+        {
+            "ic_month": row.ic_month,
+            "ic_day": row.ic_day,
+            "name": row.name,
+            "lore": row.lore,
+            "when": format_ic_month_day(row.ic_month, row.ic_day),
+        }
+        for row in house.observances.all()
+    ]
 
 
 def _family_payload(house: Organization, viewer: object, *, staff: bool) -> dict:
