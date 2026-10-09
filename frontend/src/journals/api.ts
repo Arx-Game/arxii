@@ -85,7 +85,7 @@ export interface JournalEntrySummary {
   author_persona_id: number | null;
   /** In-character timestamp the entry was written at, if the author has one (#3941). */
   ic_timestamp: string | null;
-  /** The IC date in the game's calendar, e.g. "22 Unyielding (9-22-1012)" (#4185). */
+  /** The IC date in the game's calendar, e.g. "Unyielding 22 (9/22/1012)" (#4185). */
   ic_timestamp_display: string | null;
   /** Whether the viewer may Retort/Condemn this entry right now (#3941). */
   can_retort: boolean;

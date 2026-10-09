@@ -28264,6 +28264,7 @@ export interface components {
       summary?: string;
       /** @description An italic intro line shown at the top of this entry's Codex page (e.g. a quote attributed to the subject). Optional; blank hides it. */
       quote?: string;
+      readonly companion: components['schemas']['Companion'] | null;
       /** @description Return lore content only if public or KNOWN. */
       readonly lore_content: string | null;
       /** @description Return mechanics content only if public or KNOWN. */
@@ -28411,23 +28412,10 @@ export interface components {
      * @enum {string}
      */
     CommentTypeEnum: 'message' | 'status_change';
+    /** @description The facts an entry's owner shows beside the prose (#4198). */
     Companion: {
-      readonly id: number;
-      readonly name: string;
-      readonly archetype: components['schemas']['CompanionArchetype'];
-      /** Format: date-time */
-      readonly bonded_at: string;
-      /** Format: date-time */
-      readonly released_at: string | null;
-      /**
-       * @description True when the companion's live object shares the actor's current room (#3294).
-       *
-       *     Gates the web composer's "as <companion>" emote toggle. ``actor_location_id``
-       *     is seeded onto the serializer context by ``CompanionViewSet.get_serializer_context``;
-       *     with no resolvable actor location, every companion reads as absent.
-       */
-      readonly is_present: boolean;
-      readonly objectdb_id: number | null;
+      rail: components['schemas']['CompanionGroup'][];
+      sections: components['schemas']['CompanionSection'][];
     };
     CompanionArchetype: {
       readonly id: number;
@@ -28439,6 +28427,15 @@ export interface components {
       /** @description Companion Capacity consumed while this archetype is bonded. */
       readonly capacity_cost: number;
     };
+    CompanionGroup: {
+      label: string;
+      items: components['schemas']['CompanionItem'][];
+    };
+    CompanionItem: {
+      text: string;
+      entry_id: number | null;
+      anchor: string | null;
+    };
     /** @description Current-round companion directive exposed on an encounter read. */
     CompanionOrderSummary: {
       companion_id: number;
@@ -28446,6 +28443,14 @@ export interface components {
       order_kind: string;
       target_opponent_id: number | null;
       defending_participant_id: number | null;
+    };
+    CompanionSection: {
+      anchor: string;
+      label: string;
+      name: string;
+      body: string;
+      when: string | null;
+      entry_id: number | null;
     };
     /** @description Serializer for condition categories. */
     ConditionCategory: {
@@ -33780,6 +33785,7 @@ export interface components {
       is_deceased: boolean;
       is_appable: boolean;
       sheet_id: number | null;
+      roster_entry_id: number | null;
       gender: string;
       age: number | null;
       description: string;
@@ -44047,13 +44053,13 @@ export interface components {
       other_being: number;
       valence: components['schemas']['RelationshipLineValenceEnum'];
       /** @default  */
-      public_story: string;
+      story: string;
     };
     RelationshipLineRequest: {
       other_being: number;
       valence: components['schemas']['RelationshipLineValenceEnum'];
       /** @default  */
-      public_story: string;
+      story: string;
     };
     /**
      * @description * `ally` - Ally
@@ -45938,7 +45944,7 @@ export interface components {
       resonances?: components['schemas']['ResonanceLine'][];
       facets?: number[];
       feast_days?: components['schemas']['FeastDayLine'][];
-      tarot_cards?: number[];
+      tarot_cards?: components['schemas']['TarotLine'][];
       relationships?: components['schemas']['RelationshipLine'][];
       /** @default secret */
       visibility: components['schemas']['StaffBeingPageVisibilityEnum'];
@@ -45964,7 +45970,7 @@ export interface components {
       resonances?: components['schemas']['ResonanceLineRequest'][];
       facets?: number[];
       feast_days?: components['schemas']['FeastDayLineRequest'][];
-      tarot_cards?: number[];
+      tarot_cards?: components['schemas']['TarotLineRequest'][];
       relationships?: components['schemas']['RelationshipLineRequest'][];
       /** @default secret */
       visibility: components['schemas']['StaffBeingPageVisibilityEnum'];
@@ -47395,6 +47401,16 @@ export interface components {
       description_reversed?: string;
       readonly surname_upright: string;
       readonly surname_reversed: string;
+    };
+    TarotLine: {
+      card: number;
+      /** @default false */
+      is_reversed: boolean;
+    };
+    TarotLineRequest: {
+      card: number;
+      /** @default false */
+      is_reversed: boolean;
     };
     /** @description Board row detail: who is on the job and, once resolved, the report. */
     TaskFulfillment: {

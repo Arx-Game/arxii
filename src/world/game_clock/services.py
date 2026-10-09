@@ -57,18 +57,20 @@ def _ordinal(day: int) -> str:
 
 
 def format_ic_date(ic_dt: datetime) -> str:
-    """Inline IC date: "14 Dreaming (1-14-1012)".
+    """Inline IC date: "Dreaming 14 (1/14/1012)".
 
-    The numeric month-day-year rides along because players won't remember the
-    new month names at first (ruled on #4185).
+    The numeric month/day/year rides along because players won't remember the
+    new month names at first (ruled on #4185; the spelling, month name first and
+    the numbers with slashes, on #4198). Every IC date a player reads goes through
+    this function or ``format_ic_month_day``, so they move together.
     """
     dt = _calendar_fields(ic_dt)
-    return f"{dt.day} {ic_month_name(dt.month)} ({dt.month}-{dt.day}-{dt.year})"
+    return f"{ic_month_name(dt.month)} {dt.day} ({dt.month}/{dt.day}/{dt.year})"
 
 
 def format_ic_month_day(month: int, day: int) -> str:
-    """A yearless IC date such as a birthday: "14 Dreaming (1-14)"."""
-    return f"{day} {ic_month_name(month)} ({month}-{day})"
+    """A yearless IC date such as a birthday or feast day: "Dreaming 14 (1/14)"."""
+    return f"{ic_month_name(month)} {day} ({month}/{day})"
 
 
 def format_ic_date_long(ic_dt: datetime) -> str:

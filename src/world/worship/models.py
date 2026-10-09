@@ -111,9 +111,14 @@ class WorshippedBeing(SharedMemoryModel):
     )
     tarot_cards = models.ManyToManyField(
         "arxii.TarotCard",
+        through="arxii.BeingTarotCard",
+        through_fields=("being", "card"),
         blank=True,
         related_name="represented_beings",
-        help_text="Cards people believe represent this being. Pure association, no cap.",
+        help_text=(
+            "Cards people believe represent this being, upright or reversed "
+            "(BeingTarotCard.is_reversed, #4198). Pure association, no cap."
+        ),
     )
     codex_entry = models.ForeignKey(
         "arxii.CodexEntry",
@@ -170,6 +175,46 @@ class WorshipFeastDay(SharedMemoryModel):
 
     def __str__(self) -> str:
         return f"{self.name} ({self.being})"
+
+
+class BeingTarotCard(SharedMemoryModel):
+    """A card people believe represents a being, and which way up (#4198).
+
+    The link row behind ``WorshippedBeing.tarot_cards``: it adopted the auto M2M table
+    (``arxii_worshippedbeing_tarot_cards``) in place so the rows entered before the
+    orientation existed carry over as uprights. One row per (being, card); reversal is
+    a flag on the link, as ``TarotCard.get_surname(is_reversed)`` already treats it,
+    not a second card.
+    """
+
+    being = models.ForeignKey(
+        WorshippedBeing,
+        on_delete=models.CASCADE,
+        db_column="worshippedbeing_id",
+        related_name="card_links",
+    )
+    card = models.ForeignKey(
+        "arxii.TarotCard",
+        on_delete=models.CASCADE,
+        db_column="tarotcard_id",
+        related_name="being_links",
+    )
+    is_reversed = models.BooleanField(
+        default=False,
+        db_default=False,
+        help_text="The card represents the being reversed.",
+    )
+
+    class Meta:
+        db_table = "arxii_worshippedbeing_tarot_cards"
+        ordering = ["being", "card__name", "is_reversed"]
+        constraints = [
+            models.UniqueConstraint(fields=["being", "card"], name="unique_being_tarot_card"),
+        ]
+
+    def __str__(self) -> str:
+        suffix = " reversed" if self.is_reversed else ""
+        return f"{self.being}: {self.card.name}{suffix}"
 
 
 class BeingFacet(SharedMemoryModel):
@@ -245,10 +290,12 @@ class BeingNickname(SharedMemoryModel):
 class BeingRelationship(SharedMemoryModel):
     """A public relationship fact between two gods (#3776).
 
-    Exactly one prose field — no hidden-truth field on this model at all. A real
-    hidden truth (why two beings actually feud) lives entirely as a separately-
-    authored, separately-gated CodexEntry reached through a Clue; putting it here
-    instead would leak presence/absence of a mystery even with the text hidden.
+    Two public prose fields, one per side (#4198: ``story_from_a`` is being_a's own
+    telling, ``story_from_b`` being_b's; each god's page edits and shows its own), and
+    no hidden-truth field on this model at all. A real hidden truth (why two beings
+    actually feud) lives entirely as a separately-authored, separately-gated
+    CodexEntry reached through a Clue; putting it here instead would leak
+    presence/absence of a mystery even with the text hidden.
 
     ALLY/RIVAL/FEUD/UNKNOWN all read as undirected facts — being_a/being_b carry no
     meaning of their own beyond which side happened to be passed first. Without
@@ -269,7 +316,8 @@ class BeingRelationship(SharedMemoryModel):
         WorshippedBeing, on_delete=models.CASCADE, related_name="relationships_as_b"
     )
     valence = models.CharField(max_length=20, choices=BeingRelationshipValence.choices)
-    public_story = models.TextField(blank=True)
+    story_from_a = models.TextField(blank=True, help_text="being_a's own telling of it.")
+    story_from_b = models.TextField(blank=True, help_text="being_b's own telling of it.")
 
     class Meta:
         ordering = ["being_a", "being_b"]
@@ -299,13 +347,28 @@ class BeingRelationship(SharedMemoryModel):
         super().save(*args, **kwargs)
 
     def _normalize_order(self) -> None:
-        """Swap being_a/being_b into canonical (pk-ascending) order, in place."""
+        """Swap being_a/being_b into canonical (pk-ascending) order, in place.
+
+        The stories swap with their sides, so a caller who built the row the other
+        way round still has each god telling its own.
+        """
         if (
             self.being_a_id is not None
             and self.being_b_id is not None
             and self.being_a_id > self.being_b_id
         ):
             self.being_a, self.being_b = self.being_b, self.being_a
+            self.story_from_a, self.story_from_b = self.story_from_b, self.story_from_a
+
+    def story_from(self, being_id: int) -> str:
+        """This god's own telling of the relationship."""
+        return self.story_from_a if being_id == self.being_a_id else self.story_from_b
+
+    def set_story_from(self, being_id: int, story: str) -> None:
+        if being_id == self.being_a_id:
+            self.story_from_a = story
+        else:
+            self.story_from_b = story
 
 
 class WorshipGrant(SharedMemoryModel):

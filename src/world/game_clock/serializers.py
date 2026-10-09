@@ -12,7 +12,7 @@ from world.game_clock.services import format_ic_date
 
 @extend_schema_field(OpenApiTypes.STR)
 class IcDateDisplayField(serializers.Field):
-    """Read-only IC date in the game's calendar, e.g. "14 Dreaming (1-14-1012)" (#4185).
+    """Read-only IC date in the game's calendar, e.g. "Dreaming 14 (1/14/1012)" (#4185).
 
     Point ``source`` at an IC datetime field. Formatting stays on the backend so
     the month names live in one place and the browser's timezone can't move the day.

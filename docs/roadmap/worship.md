@@ -76,6 +76,13 @@ Vitals (#2287 ghost containers), Events/Scenes (optional chassis)
   and the sheet's emerald `VisionCard` on the web. Rarity is the GM's restraint, not a rule.
   Every magnitude is PLACEHOLDER. The near-death read is a light touch on TehomCD's
   Soulfray/vitals domain, flagged on the PR.
+- **The Codex reads the editor (#4198, 2026-10-08):** a deity's Codex entry carries what
+  the editor authors - domains, names, feast days with their date and story, cards
+  (upright or reversed: `BeingTarotCard.is_reversed`), favored and associated resonances,
+  facets, and relationships as links, each god telling its own side
+  (`BeingRelationship.story_from_a`/`story_from_b`) - through the Codex's companion
+  registry (ADR-4198), gated as the prose is. Every IC date now reads
+  "Masquing 18 (10/18)".
 - **Deity Editor (#3780, 2026-09-16):** the staff surface over the whole stack, at
   `/staff/pantheon`. A tile grid sorted by resonance pool (the number beside each name),
   searchable by name or nickname, filterable by Codex tier; "+ Add God" opens the edit

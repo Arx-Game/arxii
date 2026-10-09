@@ -158,7 +158,13 @@ own issue. It is not absent because the data was already shown elsewhere.
 **Ties visibility was settled by #3906.** Covenant is PUBLIC — a covenant role is a thing
 a character IS in the world, the way a title is, and the Titles block beside it has always
 been public. Standing is FRIENDS by default with `standing_visibility` as the opt-in to
-`PUBLIC`.
+`PUBLIC`. Public about the *character*, though, not about whatever face is worn (#4207):
+`CharacterCovenantRole` is keyed on the sheet, so for a masked or undiscovered-alt face the
+block would name the real character's covenant and out them to anyone who knows that
+roster. `_build_covenants` therefore takes the same `reveal_identity` flag the bio and
+appearance blocks take and returns nothing for an undisclosed face. The Titles block needs
+no such gate because `achievements.PersonaTitle` hangs on the persona (ADR-0253). Recording
+which face a vow was sworn under, so an alt can present its own covenant, is #4208.
 
 Both blocks now read the **sheet payload** (`standing`, `covenants`) rather than calling
 the society and covenant-role endpoints. That is not a refactor for tidiness: all three of

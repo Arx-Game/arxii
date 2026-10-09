@@ -291,6 +291,23 @@ class BuilderSaveTest(BuilderTestCase):
         assert resp.status_code == 302
         assert OriginTemplateSlot.objects.get(pk=text_q.pk).prompt == "Where did you grow up"
 
+    def test_the_founder_tier_cap_is_on_the_page_and_saves(self):
+        """``max_claim_tier`` (#3983) is a claim-path knob and sits under Family paths
+        (#4202); before, only the stock change page could set it."""
+        self.client.force_login(self.author)
+        page = self.client.get(reverse("admin_upbringing_builder", args=[self.template.pk]))
+        self.assertContains(page, 'name="max_claim_tier"')
+        self.assertContains(page, "Founders may claim up to")
+        resp = self.client.post(
+            reverse("admin_upbringing_builder", args=[self.template.pk]),
+            self._post_data(max_claim_tier="duchy"),
+        )
+        assert resp.status_code == 302, (
+            resp.context["form"].errors.as_text() if resp.context else resp.status_code
+        )
+        self.template.refresh_from_db()
+        assert self.template.max_claim_tier == "duchy"
+
     def test_naming_path_saves_with_the_family_template_the_operator_just_picked(self):
         """Reported from production: the name path could never be saved (#3673).
 

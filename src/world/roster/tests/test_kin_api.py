@@ -85,6 +85,25 @@ class CharacterKinTreeViewTests(APITestCase):
         self.assertIn(self.orphan_node.pk, node_ids)
         self.assertIn(self.orphan_mother.pk, node_ids)
 
+    def test_nodes_name_the_roster_entry_of_a_sheeted_kinsperson(self) -> None:
+        """A sheet-bound node carries its RosterEntry pk, the id ``/characters/:id``
+        takes; an unsheeted node carries null. Both builders (the family tree and
+        the ego-centric walk) stamp it, so a client never has to guess from
+        ``sheet_id``, which is a different id space (#4210)."""
+        self.client.force_authenticate(user=self.viewer_account)
+        ego = self.client.get(f"/api/roster/kin/tree/{self.orphan_sheet.pk}/")
+        self.assertEqual(ego.status_code, status.HTTP_200_OK)
+        by_id = {n["id"]: n for n in ego.data["nodes"]}
+        self.assertEqual(
+            by_id[self.orphan_node.pk]["roster_entry_id"], self.orphan_sheet.roster_entry.pk
+        )
+        self.assertIsNone(by_id[self.orphan_mother.pk]["roster_entry_id"])
+
+        family = self.client.get(f"/api/roster/kin/tree/{self.bound_sheet.pk}/")
+        self.assertEqual(family.status_code, status.HTTP_200_OK)
+        bound = next(n for n in family.data["nodes"] if n["sheet_id"] == self.bound_sheet.pk)
+        self.assertEqual(bound["roster_entry_id"], self.bound_sheet.roster_entry.pk)
+
     def test_viewer_without_secret_sees_no_hidden_edge(self) -> None:
         self.client.force_authenticate(user=self.viewer_account)
         response = self.client.get(f"/api/roster/kin/tree/{self.misbegotten_sheet.pk}/")

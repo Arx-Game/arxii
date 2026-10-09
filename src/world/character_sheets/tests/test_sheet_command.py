@@ -106,7 +106,7 @@ class SheetCommandTests(TestCase):
         assert "Family: Stormwind" in output
         assert "Vocation: Knight" in output
         assert "Social Rank: 3" in output
-        assert "Birthday: 15 Thawing (3-15)" in output
+        assert "Birthday: Thawing 15 (3/15)" in output
 
     def test_sheet_command_physical_characteristics(self):
         """Test that physical characteristics are displayed."""

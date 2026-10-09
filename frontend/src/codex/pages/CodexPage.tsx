@@ -112,10 +112,10 @@ export function CodexPage() {
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex gap-6">
-        {/* Sidebar */}
-        <aside className="w-64 shrink-0">
-          <div className="sticky top-4 space-y-4">
+      <div className="flex flex-col gap-6 md:flex-row">
+        {/* Sidebar: beside the content from md up, above it on a phone (#4198). */}
+        <aside className="w-full shrink-0 md:w-64">
+          <div className="space-y-4 md:sticky md:top-4">
             {/* Character knowledge scope (multi-character accounts only) */}
             {multiCharacter && (
               <Select

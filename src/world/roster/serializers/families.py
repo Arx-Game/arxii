@@ -150,6 +150,12 @@ class KinspersonNodeSerializer(serializers.Serializer):
     # space from the relationship endpoint's ``a``/``b`` — a viewer needs this
     # to query relatedness for a node without conflating the two spaces.
     sheet_id = serializers.IntegerField(allow_null=True)
+    # RosterEntry pk for a sheet-bound node that has one, else null (#4210):
+    # the id the sheet route ``/characters/:id`` takes, which is neither the
+    # Kinsperson pk above nor ``sheet_id`` — a third id space, stamped by the
+    # tree builders so a client links a kinsperson to their sheet without
+    # guessing.
+    roster_entry_id = serializers.IntegerField(allow_null=True)
     gender = serializers.CharField(allow_blank=True)
     age = serializers.IntegerField(allow_null=True)
     description = serializers.CharField(allow_blank=True)

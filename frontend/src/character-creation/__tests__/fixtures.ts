@@ -1274,6 +1274,7 @@ export function mockCodexEntry(id: number): CodexEntryDetail {
     name: `Codex Entry ${id}`,
     summary: 'A lore entry.',
     quote: '',
+    companion: null,
     is_public: true,
     is_featured: false,
     featured_order: null,

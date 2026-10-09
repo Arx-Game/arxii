@@ -2027,8 +2027,15 @@ Lore storage and character knowledge tracking.
 - **Quote (#3776 Task 10):** `CodexEntry.quote` — optional `CharField` (max 300, blank
   hides it), an italic intro line meant atop any entry's page; general-purpose (not
   worship-specific) so `worship.WorshippedBeing.codex_entry` (below) can reuse it.
-  Not yet exposed by `CodexEntryListSerializer`/`CodexEntryDetailSerializer` — model
-  and admin only today.
+  Exposed as `quote` on both entry serializers and drawn as the opener of the entry page
+  and the modal (#3780).
+- **Companion (#4198, ADR-4198):** `CodexEntryDetailSerializer.companion` - the facts an
+  entry's owner shows beside the prose (a rail of groups) and under it (sections), from a
+  provider the owner registers at `ready()` through `codex/companions.py`
+  `register_companion`; the Codex imports no owner. Rides the prose's research gate; a
+  line to another entry is drawn only when the reader may open it
+  (`types.CompanionReader`). The deity's provider is `worship/companion.py`; cards,
+  gifts and species are open slots. Web: `frontend/src/codex/components/Companion.tsx`.
 - **Integrates with:** action_points (teaching costs), consent (visibility), character_creation (starting knowledge), evennia_extensions (`Media`, art)
 - **Source:** `src/world/codex/`
 - **Details:** [codex.md](codex.md)
@@ -2958,8 +2965,10 @@ Secrets, souls with per-life-knowledge reincarnation chains, app-in slots/pools.
 - **Surfaces:** `families/` (+`has_open_positions`/`area_id` filters) +
   `families/:id/tree/` + `families/:id/slots/` REST — the same `FamilyViewSet`
   is also mounted at `/api/character-creation/families/` for CG; (#3003)
-  `kin/tree/<character_id>/` (viewer-filtered graph payload for one character)
-  + `kin/relationship/?a=&b=` (viewer-derived relationship label); CG slot claim
+  `kin/tree/<character_id>/` (viewer-filtered graph payload for one character;
+  since #4210 each node also carries `roster_entry_id`, the sheet route's id,
+  beside `sheet_id`) + `kin/relationship/?a=&b=` (viewer-derived relationship
+  label); CG slot claim
   (draft `claimed_kin_slot/_pool`, `_bind_kinship_node` at finalize; FE
   `KinSlotPicker`); CG invented parents (`second_parent_species` + draft_data
   names/genders → `_bind_invented_parents` + `_pin_heredity_back_inference` at
@@ -8896,6 +8905,7 @@ lightly-structured freeform RP. Full doc: `docs/systems/worship.md`; model decis
   skills.Specialization), `WorshippedBeing` (tradition FK, `domains` free-text spheres (#3776, no
   lookup table — no mechanical matching need confirmed), `resonance_pool` + `lifetime_worship`
   BigIntegers, nullable OneToOne `avatar_sheet`, `is_active`, `tarot_cards` M2M → `tarot.TarotCard`
+  (through `BeingTarotCard`, #4198: the link row carries `is_reversed`; the auto table adopted in place)
   (#3776 Task 9, blank, no cap, `related_name="represented_beings"`), nullable `codex_entry` FK →
   `codex.CodexEntry` (#3776 Task 11, `PROTECT`, `related_name="worshipped_beings"` — mirrors
   `Gift.codex_entry`/`Technique.codex_entry`/`HouseAspectOption.codex_entry`; visibility reads
@@ -8905,7 +8915,8 @@ lightly-structured freeform RP. Full doc: `docs/systems/worship.md`; model decis
   it), `BeingResonance` (#3776: `resonance` FK + `tier` (`BeingResonanceTier`:
   FAVORED/ASSOCIATED), unique per being+resonance — FAVORED pays double on future worship-rite
   reward calculation, #3777), `BeingRelationship` (#3776: `being_a`/`being_b` FKs +
-  `valence` (`BeingRelationshipValence`: ALLY/RIVAL/FEUD/UNKNOWN) + `public_story`; NO
+  `valence` (`BeingRelationshipValence`: ALLY/RIVAL/FEUD/UNKNOWN) + `story_from_a`/`story_from_b`
+  (#4198, one telling per side, `story_from(being_id)`); NO
   hidden-truth field, a real hidden truth is a separately-authored `CodexEntry` reached
   via a `Clue`; `save()` sorts being_a/being_b into pk-ascending order, DB-enforced, so
   a caller can't record the same undirected pair twice under swapped args),

@@ -28,7 +28,7 @@ interface RecordedProfile {
   created_at: string;
   recorded_at: string | null;
   ic_date: string | null;
-  /** IC date in the game's calendar, e.g. "14 Dreaming (1-14-1012)" (#4185). */
+  /** IC date in the game's calendar, e.g. "Dreaming 14 (1/14/1012)" (#4185). */
   ic_date_display: string | null;
   era_season_number: number | null;
 }

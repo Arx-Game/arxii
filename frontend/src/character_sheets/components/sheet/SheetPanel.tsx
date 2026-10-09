@@ -51,12 +51,9 @@ export function SheetPanel({ sheet, isMyCharacter, rumor, languages }: SheetPane
     // may hold more than one; `origin` is the realm they are FROM, which is its own row.
     { label: 'Beginning', value: identity.beginnings.map((row) => row.name).join(', ') },
     { label: 'From', value: identity.origin?.name },
-    {
-      label: 'House',
-      value: identity.family?.name ? (
-        <Link to={`/orgs/${identity.family.id}`}>{identity.family.name}</Link>
-      ) : null,
-    },
+    // Plain text, not a link: a Family pk is not an Organization pk, and the org page
+    // is member-only besides. The family page (#4209) becomes the destination (#4210).
+    { label: 'House', value: identity.family?.name },
     { label: 'Tarot', value: identity.tarot_card?.name },
     { label: 'Gender', value: identity.gender?.name },
     { label: 'Path', value: identity.path?.name },

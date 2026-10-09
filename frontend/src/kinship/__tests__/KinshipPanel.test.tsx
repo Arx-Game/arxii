@@ -4,6 +4,7 @@
  * idiom).
  */
 import { fireEvent, render, screen } from '@testing-library/react';
+import { MemoryRouter } from 'react-router-dom';
 import { describe, expect, it, vi } from 'vitest';
 
 import { KinshipPanel } from '../components/KinshipPanel';
@@ -26,8 +27,9 @@ const mockTreeQuery = vi.mocked(useKinTree);
 const mockRelationshipQuery = vi.mocked(useKinRelationship);
 
 /** Fills in the fields a test doesn't care about with harmless defaults. Note
- * `sheet_id` defaults to a value distinct from the node's own Kinsperson id
- * (`900 + id`) — the two are deliberately different id spaces (#3003). */
+ * `sheet_id` and `roster_entry_id` default to values distinct from the node's own
+ * Kinsperson id (`900 + id`, `500 + id`) — three deliberately different id spaces
+ * (#3003, #4210). */
 function node(
   overrides: Partial<KinspersonNode> & Pick<KinspersonNode, 'id' | 'name'>
 ): KinspersonNode {
@@ -37,6 +39,7 @@ function node(
     is_deceased: false,
     is_appable: false,
     sheet_id: 900 + overrides.id,
+    roster_entry_id: 500 + overrides.id,
     gender: '',
     age: null,
     description: '',
@@ -53,6 +56,23 @@ function edge(
     via_secret: false,
     ...overrides,
   };
+}
+
+/** A family as the tree payload carries it; `description` and `kind` are what the
+ * panel reads beyond the name. */
+function family(overrides: Partial<NonNullable<FamilyTree['family']>> = {}) {
+  return {
+    id: 1,
+    name: 'Valardin',
+    kind: { id: 1, name: 'Noble', styles_as_house: true },
+    influence: 0,
+    description: '',
+    born_particle: '',
+    taken_in_particle: '',
+    standing: null,
+    inherited: { aspects: [], features: [], liege_name: '' },
+    ...overrides,
+  } as NonNullable<FamilyTree['family']>;
 }
 
 interface TreeFixture {
@@ -83,6 +103,15 @@ function mockKinRelationship(payload: KinRelationship): void {
   } as ReturnType<typeof useKinRelationship>);
 }
 
+/** The panel links a sheeted kinsperson to their sheet, so it needs a router. */
+function renderPanel(characterId = 7) {
+  return render(
+    <MemoryRouter>
+      <KinshipPanel characterId={characterId} />
+    </MemoryRouter>
+  );
+}
+
 describe('KinshipPanel', () => {
   beforeEach(() => {
     // Explicit per-test reset (rather than relying on default vitest
@@ -102,15 +131,7 @@ describe('KinshipPanel', () => {
 
   it('renders kin nodes', () => {
     mockKinTree({
-      family: {
-        id: 1,
-        name: 'Valardin',
-        kind: { id: 1, name: 'Noble', styles_as_house: true },
-        born_particle: '',
-        taken_in_particle: '',
-        standing: null,
-        inherited: { aspects: [], features: [], liege_name: '' },
-      },
+      family: family(),
       nodes: [
         { id: 2, name: 'Aria' },
         { id: 3, name: 'Bel' },
@@ -118,8 +139,37 @@ describe('KinshipPanel', () => {
       parentage: [],
       unions: [],
     });
-    render(<KinshipPanel characterId={7} />);
+    renderPanel();
     expect(screen.getByText('Aria')).toBeInTheDocument();
+  });
+
+  it('reads a house-styled family as a House, with its description under the line', () => {
+    mockKinTree({
+      family: family({ description: 'Old blood of the eastern marches.' }),
+      nodes: [{ id: 2, name: 'Aria' }],
+    });
+    renderPanel();
+    expect(screen.getByText('House Valardin')).toBeInTheDocument();
+    expect(screen.getByText('Old blood of the eastern marches.')).toBeInTheDocument();
+  });
+
+  it('reads a commoner family by its bare name', () => {
+    mockKinTree({
+      family: family({
+        name: 'Tallow',
+        kind: { id: 2, name: 'Commoner', styles_as_house: false },
+      }),
+      nodes: [{ id: 2, name: 'Aria' }],
+    });
+    renderPanel();
+    expect(screen.getByText('Tallow')).toBeInTheDocument();
+    expect(screen.queryByText('House Tallow')).not.toBeInTheDocument();
+  });
+
+  it('draws no description line for a family without one', () => {
+    mockKinTree({ family: family({ description: '' }), nodes: [{ id: 2, name: 'Aria' }] });
+    const { container } = renderPanel();
+    expect(container.querySelector('.refsheet-prose')).toBeNull();
   });
 
   it('marks a secret-known edge distinctly', () => {
@@ -133,7 +183,7 @@ describe('KinshipPanel', () => {
       ],
       unions: [],
     });
-    const { container } = render(<KinshipPanel characterId={7} />);
+    const { container } = renderPanel();
     expect(container.querySelector('[data-via-secret="true"]')).toBeTruthy();
   });
 
@@ -148,13 +198,13 @@ describe('KinshipPanel', () => {
       ],
       unions: [],
     });
-    const { container } = render(<KinshipPanel characterId={7} />);
+    const { container } = renderPanel();
     expect(container.querySelector('[data-believed-false="true"]')).toBeTruthy();
   });
 
   it('renders the familyless case', () => {
     mockKinTree({ family: null, nodes: [{ id: 2, name: 'Nobody' }], parentage: [], unions: [] });
-    render(<KinshipPanel characterId={7} />);
+    renderPanel();
     expect(screen.getByText('Nobody')).toBeInTheDocument();
   });
 
@@ -168,20 +218,35 @@ describe('KinshipPanel', () => {
       unions: [],
     });
     mockKinRelationship({ label: 'cousin' });
-    render(<KinshipPanel characterId={7} />);
+    renderPanel();
     fireEvent.click(screen.getByText('Bel'));
     expect(screen.getByText(/cousin/i)).toBeInTheDocument();
   });
 
+  it("links a sheeted kinsperson to their sheet by the roster entry's id", () => {
+    // The sheet route takes a RosterEntry pk; `sheet_id` (903 here) is a different
+    // id space and must never be the href (#4210).
+    mockKinTree({
+      nodes: [
+        { id: 2, name: 'Aria' },
+        { id: 3, name: 'Bel' },
+      ],
+    });
+    renderPanel();
+    fireEvent.click(screen.getByText('Bel'));
+    expect(screen.getByRole('link', { name: 'Bel' })).toHaveAttribute('href', '/characters/503');
+  });
+
   it('is honest about a node with no linked character record', () => {
     mockKinTree({
-      nodes: [{ id: 2, name: 'Aria', sheet_id: null }],
+      nodes: [{ id: 2, name: 'Aria', sheet_id: null, roster_entry_id: null }],
       parentage: [],
       unions: [],
     });
-    render(<KinshipPanel characterId={7} />);
+    renderPanel();
     fireEvent.click(screen.getByText('Aria'));
     expect(useKinRelationship).toHaveBeenCalled();
     expect(screen.getByText(/nobody on the roster answers to this person/i)).toBeInTheDocument();
+    expect(screen.queryByRole('link')).not.toBeInTheDocument();
   });
 });

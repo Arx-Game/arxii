@@ -4,9 +4,7 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-    dependencies = [
-        ("arxii", "0209_facet_alias"),
-    ]
+    dependencies = [("arxii", "0210_being_tarot_orientation_and_relationship_sides")]
 
     operations = [
         migrations.AddField(

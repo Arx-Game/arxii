@@ -77,7 +77,7 @@ The central time engine that drives the living world. An anchor-based game clock
   Thawing, Waking, Rising, Vowing, Enduring, Gathering, Unyielding, Masquing,
   Keeping, Ending), 1:1 with Gregorian months so all date arithmetic is untouched.
   Every IC date a player sees reads through `world.game_clock.services`' formatters:
-  inline `14 Dreaming (1-14-1012)`, birthdays `14 Dreaming (1-14)`, full
+  inline `Dreaming 14 (1/14/1012)`, birthdays `Dreaming 14 (1/14)`, full
   `the 14th of the Month of Dreaming, Year 1012` (clock tooltip, Hall Time band,
   telnet `time`). Feast days / holidays (the other half of #2762) remain open.
 - ~~Aging mechanics~~ — **built (#2756)**: three age axes on CharacterSheet

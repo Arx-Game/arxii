@@ -4,6 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 import { Breadcrumb, BreadcrumbLink } from './Breadcrumb';
+import { CompanionRail, CompanionSections } from './Companion';
 import { LoreSection, OOCSection } from './ContentSections';
 import type { CodexEntryDetail as CodexEntryDetailType } from '../types';
 import '../codex.css';
@@ -33,6 +34,9 @@ export function EntryDetail({
     label: segment.name,
     onClick: () => onNavigateBreadcrumb(segment.type, segment.id),
   }));
+  // The owner's facts (#4198) ride beside the prose; an empty rail draws nothing.
+  const rail = entry.companion?.rail ?? [];
+  const sections = entry.companion?.sections ?? [];
 
   return (
     <Card className={cn(!entry.is_public && 'codex-restricted')}>
@@ -106,27 +110,33 @@ export function EntryDetail({
           <p className="text-sm italic text-muted-foreground">As told by {entry.perspective_of}</p>
         )}
         {entry.lore_content || entry.mechanics_content ? (
-          <div className="space-y-3">
-            {entry.lore_content && (
-              <LoreSection
-                content={entry.lore_content}
-                links={entry.lore_links}
-                onNavigate={handleNavigate}
-              />
-            )}
-            {entry.mechanics_content && (
-              <OOCSection
-                content={entry.mechanics_content}
-                links={entry.mechanics_links}
-                onNavigate={handleNavigate}
-              />
-            )}
+          <div className={rail.length > 0 ? 'codex-with-rail' : 'space-y-3'}>
+            <div className="min-w-0 space-y-3">
+              {entry.lore_content && (
+                <LoreSection
+                  content={entry.lore_content}
+                  links={entry.lore_links}
+                  onNavigate={handleNavigate}
+                />
+              )}
+              {entry.mechanics_content && (
+                <OOCSection
+                  content={entry.mechanics_content}
+                  links={entry.mechanics_links}
+                  onNavigate={handleNavigate}
+                />
+              )}
+            </div>
+            {rail.length > 0 && <CompanionRail groups={rail} onNavigate={handleNavigate} />}
           </div>
         ) : (
           <div className="italic text-muted-foreground">
             {entry.summary}
             <p className="mt-2 text-sm">Continue researching to uncover the full content.</p>
           </div>
+        )}
+        {sections.length > 0 && (
+          <CompanionSections sections={sections} onNavigate={handleNavigate} />
         )}
       </CardContent>
     </Card>

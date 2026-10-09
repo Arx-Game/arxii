@@ -312,6 +312,20 @@ restored_ap = offer.cancel()
   A subject description must not become the public face of a topic with no readable
   entries, and an all-secret branch must not leak its name
 - Detail view gates `lore_content` and `mechanics_content` behind KNOWN status or `is_public`
+- **The companion (#4198, ADR-4198):** `CodexEntryDetailSerializer.companion` is what the
+  entry's owner shows beside the prose: `rail` (groups of `{text, entry_id, anchor}` lines,
+  drawn beside the Lore box) and `sections` (`{anchor, label, name, when, entry_id, body}`,
+  drawn under it). `world/codex/companions.py` is the registry: an owning sub-package calls
+  `register_companion(provider)` from its `ready()` (through `world/apps.py`); the Codex
+  never imports an owner (ADR-0010). The view hands every provider a `CompanionReader`
+  (`types.py`: the `_visible_entry_ids` set and `is_staff`) on retrieve only, and takes the
+  first non-null answer; `null` when no owner claims the entry. The companion rides the same
+  gate as the prose (`_can_see_content`: an entry still being researched carries none), and a
+  provider draws a line to another entry only when `reader.may_see(entry_id)`. The deity's
+  provider is `world/worship/companion.py`; the Codex modal stays prose-only.
+  Web: `frontend/src/codex/components/Companion.tsx` (`.codex-with-rail` / `.codex-rail`,
+  folding under the prose at 640px; a rail line with an `anchor` scrolls to its section,
+  one with an `entry_id` opens that entry).
 - Staff (`is_staff`) see every entry with full content (#3775); GMs are not staff and read
   as a player. The page carries no staff banner (#4191)
 - **The reader draws every non-public entry in a restricted tone** (`.codex-restricted`,

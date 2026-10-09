@@ -9,10 +9,14 @@ def handle_shrine_progression(project, target_level: int, outcome_tier=None) -> 
 
 
 def ready() -> None:
-    """Register the SHRINE room-feature strategy (its home app is worship)."""
+    """Register the SHRINE room-feature strategy (its home app is worship) and the
+    deity's Codex companion (#4198)."""
+    from world.codex.companions import register_companion  # noqa: PLC0415
     from world.room_features.constants import RoomFeatureServiceStrategy  # noqa: PLC0415
     from world.room_features.services import register_room_feature_strategy  # noqa: PLC0415
+    from world.worship.companion import being_companion  # noqa: PLC0415
 
     register_room_feature_strategy(
         RoomFeatureServiceStrategy.SHRINE, handle_shrine_progression, as_default=True
     )
+    register_companion(being_companion)

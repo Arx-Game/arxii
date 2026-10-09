@@ -30,8 +30,13 @@
   for beings (that's the per-character currency).
 - **Tarot cards** — `WorshippedBeing.tarot_cards`, the cards people BELIEVE represent a
   being (#3776). Pure association, no cap, no claim of canon. Read by birth favor (below);
-  distinct from a character's own single `tarot_card`. _Avoid_: the being's card (there may
-  be several, and belief is not fact).
+  distinct from a character's own single `tarot_card`. Since #4198 the link row is
+  `BeingTarotCard` and carries `is_reversed`: a card represents a being upright or
+  reversed, one row per (being, card), read as "The Tower reversed". _Avoid_: the being's
+  card (there may be several, and belief is not fact); a reversed card as a second card.
+- **Companion** — what a being's Codex entry shows beside the prose (#4198): the deity's
+  provider `worship/companion.py`, registered at `ready()` into the Codex's companion
+  registry; see the codex glossary. _Avoid_: sidebar, infobox.
 - **Deity Editor** — the staff tool that authors the pantheon (#3780): one long edit
   page per being, saved live, and a per-being tracking dashboard. Lives in
   `worship/editor_services.py` and `frontend/src/pantheon/`. _Avoid_: "god admin",
@@ -67,7 +72,8 @@
   deletes or mutates either.
 - **Being relationship** — a public relationship fact between two gods
   (`BeingRelationship`, #3776): `being_a`/`being_b` + `valence`
-  (`BeingRelationshipValence`: ALLY/RIVAL/FEUD/UNKNOWN) + `public_story`. Deliberately
+  (`BeingRelationshipValence`: ALLY/RIVAL/FEUD/UNKNOWN) + `story_from_a`/`story_from_b`
+  (#4198: one telling per side, each god's page writes and shows its own). Deliberately
   NO hidden-truth field — a real hidden truth (why two beings actually feud) is a
   separately-authored, separately-gated `CodexEntry` reached through a `Clue`, never a
   maybe-secret field here, because even a hidden/blank field on a public row would leak

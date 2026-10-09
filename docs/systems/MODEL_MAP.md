@@ -4149,9 +4149,9 @@
 ### ScheduledTaskRecord
 
 ### Service Functions
-- `format_ic_date(ic_dt: datetime.datetime) -> str - Inline IC date: "14 Dreaming (1-14-1012)".`
+- `format_ic_date(ic_dt: datetime.datetime) -> str - Inline IC date: "Dreaming 14 (1/14/1012)".`
 - `format_ic_date_long(ic_dt: datetime.datetime) -> str - Full IC date for tooltips: "the 14th of the Month of Dreaming, Year 1012".`
-- `format_ic_month_day(month: int, day: int) -> str - A yearless IC date such as a birthday: "14 Dreaming (1-14)".`
+- `format_ic_month_day(month: int, day: int) -> str - A yearless IC date such as a birthday or feast day: "Dreaming 14 (1/14)".`
 - `get_ic_date_for_real_time(real_dt: datetime.datetime) -> datetime.datetime | None - Convert a real datetime to IC datetime, or None if no clock exists.`
 - `get_ic_now(*, real_now: datetime.datetime | None = None) -> datetime.datetime | None - Return the current IC datetime, or None if no clock exists.`
 - `get_ic_phase(*, real_now: datetime.datetime | None = None) -> world.game_clock.constants.TimePhase | None - Return the current time-of-day phase, or None if no clock exists.`
@@ -10402,6 +10402,7 @@
 **Pointed to by:**
   - profiles <- character_sheets.Profile
   - represented_beings <- worship.WorshippedBeing
+  - being_links <- worship.BeingTarotCard
 
 
 ## world.tasking
@@ -10513,7 +10514,7 @@
 ## world.tidings
 
 ### Service Functions
-- `format_ic_month_day(month: int, day: int) -> str - A yearless IC date such as a birthday: "14 Dreaming (1-14)".`
+- `format_ic_month_day(month: int, day: int) -> str - A yearless IC date such as a birthday or feast day: "Dreaming 14 (1/14)".`
 - `house_feed_for(organization, *, limit: 'int' = 30) -> 'list[PublicFeedItem]' - The house feed (#1884): what the household hears about its own people.`
 - `hub_feed_for_room(room: 'ObjectDB | None', *, limit: 'int' = 30) -> 'list[PublicFeedItem]' - The civic-hub scope (#1450): the local slice of awareness at ``room``.`
 - `public_feed_for(persona: 'Persona', *, limit: 'int' = 30) -> 'list[PublicFeedItem]' - Recent public events the persona's societies are aware of, newest first (viewer scope).`
@@ -10825,6 +10826,11 @@
 **Pointed to by:**
   - rites <- worship.WorshipRite
 
+### BeingTarotCard
+**Foreign Keys:**
+  - being -> worship.WorshippedBeing [FK]
+  - card -> tarot.TarotCard [FK]
+
 ### ChosenFavorConfig
 
 ### ConsecrationTier
@@ -10963,6 +10969,7 @@
   - audere_majora_faith_variants <- magic.AudereMajoraFaithVariant
   - manifest_options <- magic.TechniqueManifestOption
   - feast_days <- worship.WorshipFeastDay
+  - card_links <- worship.BeingTarotCard
   - being_facets <- worship.BeingFacet
   - resonances <- worship.BeingResonance
   - nicknames <- worship.BeingNickname
