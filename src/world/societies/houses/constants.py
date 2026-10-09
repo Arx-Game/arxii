@@ -226,6 +226,16 @@ class SuccessionOrdering(models.TextChoices):
     MOST_POWERFUL_GIFTED = "most_powerful_gifted", "Most powerful Gifted first"
 
 
+class SuccessionGenderTiebreak(models.TextChoices):
+    """Who goes first when the ordering rule ties (#4201): Umbros's non-imperial
+    titles pass to the most powerful Gifted of the legitimate children, daughters
+    first on a tie. A tie only - never a preference over the ordering itself."""
+
+    NONE = "", "No preference"
+    FEMALE = "female", "Daughters first on a tie"
+    MALE = "male", "Sons first on a tie"
+
+
 class PactCommitmentKind(models.TextChoices):
     """Coded marriage-pact commitments that fire mechanically (#1884).
 

@@ -33,6 +33,7 @@ from world.societies.houses.constants import (
     PactDissolutionReason,
     RecognitionRuleKind,
     SuccessionDerivation,
+    SuccessionGenderTiebreak,
     SuccessionOrdering,
     TitleSuffixMode,
     TitleTier,
@@ -406,6 +407,60 @@ class SuccessionTests(TestCase):
         ParentageEdgeFactory(child=bastard, parent=holder)  # out of wedlock
         candidates = derive_succession_candidates(title)
         self.assertEqual([c.name for c in candidates], ["Eldest", "Younger"])
+
+    def test_gender_tiebreak_breaks_a_tie_and_never_outranks_the_measure(self):
+        """Umbros (#4201): most powerful Gifted of the legitimate children, daughters
+        first on a tie - and a stronger son still precedes a weaker daughter."""
+        from world.character_sheets.factories import GenderFactory
+        from world.societies.houses import services as houses_services
+
+        law = SuccessionLaw.objects.create(
+            name="Umbral Gifted Succession",
+            derivation=SuccessionDerivation.PRIMOGENITURE_WEDLOCK,
+            ordering_rule=SuccessionOrdering.MOST_POWERFUL_GIFTED,
+            gender_tiebreak=SuccessionGenderTiebreak.FEMALE,
+        )
+        title = self._title(law)
+        holder = KinspersonFactory(family=self.family, age=60)
+        title.holder = holder
+        title.save(update_fields=["holder"])
+        female = GenderFactory(key="female", display_name="Female")
+        male = GenderFactory(key="male", display_name="Male")
+        strong_son = KinspersonFactory(name="Strong Son", age=20, gender=male)
+        tied_son = KinspersonFactory(name="Tied Son", age=30, gender=male)
+        tied_daughter = KinspersonFactory(name="Tied Daughter", age=25, gender=female)
+        for child in (strong_son, tied_son, tied_daughter):
+            ParentageEdgeFactory(child=child, parent=holder)
+        rating = {strong_son.pk: 9, tied_son.pk: 5, tied_daughter.pk: 5}
+        previous = houses_services._gifted_power_rater
+        houses_services.register_gifted_power_rater(lambda p: rating[p.pk])
+        try:
+            names = [c.name for c in derive_succession_candidates(title)]
+        finally:
+            houses_services.register_gifted_power_rater(previous)
+        self.assertEqual(names, ["Strong Son", "Tied Daughter", "Tied Son"])
+
+    def test_gender_tiebreak_under_eldest_breaks_an_equal_age(self):
+        from world.character_sheets.factories import GenderFactory
+
+        law = SuccessionLaw.objects.create(
+            name="Eldest, Sons First",
+            derivation=SuccessionDerivation.PRIMOGENITURE_WEDLOCK,
+            gender_tiebreak=SuccessionGenderTiebreak.MALE,
+        )
+        title = self._title(law)
+        holder = KinspersonFactory(family=self.family, age=60)
+        title.holder = holder
+        title.save(update_fields=["holder"])
+        female = GenderFactory(key="female", display_name="Female")
+        male = GenderFactory(key="male", display_name="Male")
+        twin_sister = KinspersonFactory(name="Twin Sister", age=30, gender=female)
+        twin_brother = KinspersonFactory(name="Twin Brother", age=30, gender=male)
+        elder_sister = KinspersonFactory(name="Elder Sister", age=34, gender=female)
+        for child in (twin_sister, twin_brother, elder_sister):
+            ParentageEdgeFactory(child=child, parent=holder)
+        names = [c.name for c in derive_succession_candidates(title)]
+        self.assertEqual(names, ["Elder Sister", "Twin Brother", "Twin Sister"])
 
     def test_chosen_heir_law(self):
         heir = KinspersonFactory(name="Chosen")

@@ -1063,8 +1063,8 @@ from world.societies.houses.models import (  # noqa: E402
 class SuccessionLawAdmin(admin.ModelAdmin):
     """#2875 - the house charter's succession vocabulary (a `HouseTemplate` FK)."""
 
-    list_display = ("name", "derivation", "ordering_rule", "require_wedlock")
-    list_filter = ("derivation", "ordering_rule", "require_wedlock")
+    list_display = ("name", "derivation", "ordering_rule", "gender_tiebreak", "require_wedlock")
+    list_filter = ("derivation", "ordering_rule", "gender_tiebreak", "require_wedlock")
     search_fields = ("name", "description")
 
 
