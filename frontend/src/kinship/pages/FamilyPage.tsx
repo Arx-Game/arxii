@@ -131,17 +131,17 @@ export function FamilyPageInner({ familyId }: { familyId: number | undefined }) 
 
   if (familyId == null || isError || (!isLoading && !tree?.family)) {
     return (
-      <main className="family-page">
+      <article className="family-page">
         <p className="family-empty">No family by that name is recorded.</p>
-      </main>
+      </article>
     );
   }
   if (isLoading || !tree?.family) {
     return (
-      <main className="family-page" aria-busy="true">
+      <article className="family-page" aria-busy="true">
         <Skeleton className="h-10 w-72" />
         <Skeleton className="h-40 w-full" />
-      </main>
+      </article>
     );
   }
 
@@ -163,7 +163,7 @@ export function FamilyPageInner({ familyId }: { familyId: number | undefined }) 
   const pools = seats?.pools ?? [];
 
   return (
-    <main className="family-page">
+    <article className="family-page">
       <header className={styled ? 'family-plate' : 'family-head'}>
         <span className="family-eyebrow">{eyebrow}</span>
         <h1>{title}</h1>
@@ -223,6 +223,6 @@ export function FamilyPageInner({ familyId }: { familyId: number | undefined }) 
           </ul>
         </section>
       )}
-    </main>
+    </article>
   );
 }
