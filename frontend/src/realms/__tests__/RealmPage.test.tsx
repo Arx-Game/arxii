@@ -105,6 +105,19 @@ describe('RealmPage (#3725)', () => {
           society_name: 'The Peerage',
           family_id: null,
         },
+        {
+          id: 10,
+          name: 'House Katta',
+          description: '',
+          words: '',
+          colors: '',
+          sigil_description: '',
+          org_type_name: 'noble',
+          society_name: 'The Peerage',
+          // Rooted in a family: the link goes to the family page (#4209), which a
+          // non-member can read, never the members-only org page.
+          family_id: 7,
+        },
       ],
     };
     mocks.boards = {
@@ -115,6 +128,10 @@ describe('RealmPage (#3725)', () => {
     };
     renderPage();
     expect(screen.getByRole('link', { name: 'House Veyle' })).toHaveAttribute('href', '/orgs/9');
+    expect(screen.getByRole('link', { name: 'House Katta' })).toHaveAttribute(
+      'href',
+      '/families/7'
+    );
     expect(screen.getByText(/Dare, and be remembered/)).toBeInTheDocument();
     expect(screen.getByText('Isolde Veyle')).toBeInTheDocument();
     expect(screen.getByText('First among the peers')).toBeInTheDocument();

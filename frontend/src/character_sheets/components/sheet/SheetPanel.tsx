@@ -14,6 +14,7 @@
 
 import { Link } from 'react-router-dom';
 import { cn } from '@/lib/utils';
+import { urls } from '@/utils/urls';
 import type {
   CharacterSheetDistinction,
   CharacterSheetGift,
@@ -51,9 +52,14 @@ export function SheetPanel({ sheet, isMyCharacter, rumor, languages }: SheetPane
     // may hold more than one; `origin` is the realm they are FROM, which is its own row.
     { label: 'Beginning', value: identity.beginnings.map((row) => row.name).join(', ') },
     { label: 'From', value: identity.origin?.name },
-    // Plain text, not a link: a Family pk is not an Organization pk, and the org page
-    // is member-only besides. The family page (#4209) becomes the destination (#4210).
-    { label: 'House', value: identity.family?.name },
+    // The family page (#4209), keyed by the Family pk: never the org route, since a
+    // Family pk is not an Organization pk and the org page is member-only (#4210).
+    {
+      label: 'House',
+      value: identity.family ? (
+        <Link to={urls.family(identity.family.id)}>{identity.family.name}</Link>
+      ) : null,
+    },
     { label: 'Tarot', value: identity.tarot_card?.name },
     { label: 'Gender', value: identity.gender?.name },
     { label: 'Path', value: identity.path?.name },

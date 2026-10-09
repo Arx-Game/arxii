@@ -257,6 +257,12 @@ const OrgPage = lazy(() =>
     default: m.OrgPage,
   }))
 );
+// The family page (#4209): one page per Family, keyed by the Family pk.
+const FamilyPage = lazy(() =>
+  import('@/kinship/pages/FamilyPage').then((m) => ({
+    default: m.FamilyPage,
+  }))
+);
 
 // ---------------------------------------------------------------------------
 // Lazy-loaded org books pages (#930)
@@ -484,6 +490,17 @@ function App() {
           <Route path="/tidings" element={<TidingsPage />} />
           <Route path="/realms" element={<RealmsHubPage />} />
           <Route path="/realms/:slug" element={<RealmPage />} />
+          {/* The family page (#4209): signed-in viewers, the tree endpoint's own gate. */}
+          <Route
+            path="/families/:id"
+            element={
+              <Suspense fallback={<PageLoadingFallback />}>
+                <ProtectedRoute>
+                  <FamilyPage />
+                </ProtectedRoute>
+              </Suspense>
+            }
+          />
           <Route path="/scenes" element={<ScenesListPage />} />
           <Route path="/scenes/:id" element={<SceneDetailPage />} />
           <Route path="/scenes/:id/combat" element={<CombatRouteRedirect />} />

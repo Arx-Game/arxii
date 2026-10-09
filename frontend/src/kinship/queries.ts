@@ -1,10 +1,13 @@
 /** React Query hooks for the kin tree + pairwise relationship reads (#2062, #3003). */
 import { useQuery } from '@tanstack/react-query';
 
-import { getKinRelationship, getKinTree } from './api';
+import { getFamilySlots } from '@/character-creation/api';
+import { getFamilyTree, getKinRelationship, getKinTree } from './api';
 
 export const kinshipKeys = {
   tree: (characterId: number) => ['kinship', 'tree', characterId] as const,
+  family: (familyId: number) => ['kinship', 'family', familyId] as const,
+  familySlots: (familyId: number) => ['kinship', 'family-slots', familyId] as const,
   relationship: (a: number, b: number) => ['kinship', 'relationship', a, b] as const,
 };
 
@@ -13,6 +16,27 @@ export function useKinTree(characterId: number) {
   return useQuery({
     queryKey: kinshipKeys.tree(characterId),
     queryFn: () => getKinTree(characterId),
+  });
+}
+
+/** The family page's tree, keyed by a Family pk (#4209). */
+export function useFamilyTree(familyId: number | undefined) {
+  return useQuery({
+    queryKey: kinshipKeys.family(familyId ?? -1),
+    queryFn: () => getFamilyTree(familyId as number),
+    enabled: familyId != null,
+  });
+}
+
+/**
+ * The family's open seats (#4209): the CG slot browser's own payload. A family
+ * CG cannot pick answers with none, so the section simply vanishes.
+ */
+export function useFamilySlots(familyId: number | undefined) {
+  return useQuery({
+    queryKey: kinshipKeys.familySlots(familyId ?? -1),
+    queryFn: () => getFamilySlots(familyId as number),
+    enabled: familyId != null,
   });
 }
 

@@ -11,11 +11,20 @@
  * (`data-believed-false="true"`) and rendered at reduced opacity. `kind` (blood
  * vs marriage vs foster) is color-coded so the three never read as ambiguous;
  * unions are a separate edge type, drawn as a connector between members.
+ *
+ * A node prints its tree form (`short_name`: the first name for a person of this
+ * family, the birth family added for someone taken in, first + own family for a
+ * relative not of the name) and nothing else (#4209): no definition tier, since
+ * the only distinction a reader needs is whether the person is played, and a
+ * played person's name is a link to their sheet. Clicking the box still selects.
  */
 import { useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
 
 import { cn } from '@/lib/utils';
+import { urls } from '@/utils/urls';
 
+import { computeGenerations } from '../generations';
 import type { KinspersonNode, ParentageEdge, UnionEdge } from '../types';
 
 interface Props {
@@ -36,48 +45,6 @@ const NODE_H = 56;
 const COL_GAP = 24;
 const ROW_H = 128;
 const PADDING = 28;
-
-/**
- * One generation per node, derived by walking parentage depth from the roots
- * (no visible parent → generation 0; otherwise one below the deepest visible
- * parent). A cycle guard keeps this a total function over any edge set —
- * upstream data is never trusted blindly in a layout algorithm that must
- * always terminate.
- */
-function computeGenerations(
-  nodes: KinspersonNode[],
-  parentage: ParentageEdge[]
-): Map<number, number> {
-  const nodeIds = new Set(nodes.map((n) => n.id));
-  const parentsOf = new Map<number, number[]>();
-  for (const edge of parentage) {
-    if (!nodeIds.has(edge.child_id) || !nodeIds.has(edge.parent_id)) continue;
-    const list = parentsOf.get(edge.child_id) ?? [];
-    list.push(edge.parent_id);
-    parentsOf.set(edge.child_id, list);
-  }
-
-  const generation = new Map<number, number>();
-  const visiting = new Set<number>();
-
-  function resolve(id: number): number {
-    const cached = generation.get(id);
-    if (cached !== undefined) return cached;
-    if (visiting.has(id)) {
-      generation.set(id, 0);
-      return 0;
-    }
-    visiting.add(id);
-    const parents = parentsOf.get(id) ?? [];
-    const gen = parents.length === 0 ? 0 : Math.max(...parents.map(resolve)) + 1;
-    visiting.delete(id);
-    generation.set(id, gen);
-    return gen;
-  }
-
-  for (const node of nodes) resolve(node.id);
-  return generation;
-}
 
 function layoutNodes(
   nodes: KinspersonNode[],
@@ -131,6 +98,7 @@ function kindStrokeClass(kind: string): string {
 }
 
 export function KinTreeGraph({ nodes, parentage, unions, selectedNodeId, onSelectNode }: Props) {
+  const navigate = useNavigate();
   const generation = useMemo(() => computeGenerations(nodes, parentage), [nodes, parentage]);
   const { positions, width, height } = useMemo(
     () => layoutNodes(nodes, generation),
@@ -202,6 +170,9 @@ export function KinTreeGraph({ nodes, parentage, unions, selectedNodeId, onSelec
           const pos = positions.get(node.id);
           if (!pos) return null;
           const isSelected = node.id === selectedNodeId;
+          const label = `${node.short_name}${node.is_deceased ? ' †' : ''}`;
+          const sheetUrl =
+            node.roster_entry_id != null ? urls.character(node.roster_entry_id) : null;
           return (
             <g
               key={node.id}
@@ -228,23 +199,36 @@ export function KinTreeGraph({ nodes, parentage, unions, selectedNodeId, onSelec
                   node.is_deceased && 'opacity-60'
                 )}
               />
-              <text
-                x={pos.x}
-                y={pos.y - 4}
-                textAnchor="middle"
-                className="select-none fill-foreground text-sm font-medium"
-              >
-                {node.name}
-                {node.is_deceased ? ' †' : ''}
-              </text>
-              <text
-                x={pos.x}
-                y={pos.y + 14}
-                textAnchor="middle"
-                className="select-none fill-muted-foreground text-xs"
-              >
-                {node.tier.replace(/_/g, ' ')}
-              </text>
+              {sheetUrl ? (
+                // A played person's name is the link to their sheet; the box
+                // around it still selects. An SVG anchor, navigated in-app.
+                <a
+                  href={sheetUrl}
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    navigate(sheetUrl);
+                  }}
+                >
+                  <text
+                    x={pos.x}
+                    y={pos.y + 5}
+                    textAnchor="middle"
+                    className="select-none fill-primary text-sm font-medium underline"
+                  >
+                    {label}
+                  </text>
+                </a>
+              ) : (
+                <text
+                  x={pos.x}
+                  y={pos.y + 5}
+                  textAnchor="middle"
+                  className="select-none fill-foreground text-sm font-medium"
+                >
+                  {label}
+                </text>
+              )}
             </g>
           );
         })}

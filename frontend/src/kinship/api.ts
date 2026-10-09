@@ -14,6 +14,15 @@ export async function getKinTree(characterId: number): Promise<FamilyTree> {
   return res.json() as Promise<FamilyTree>;
 }
 
+/** Viewer-aware tree keyed by a family (#4209). `familyId` is a Family pk, not an Organization pk. */
+export async function getFamilyTree(familyId: number): Promise<FamilyTree> {
+  const res = await apiFetch(`${ROSTER_URL}/families/${familyId}/tree/`);
+  if (!res.ok) {
+    throw new Error('Failed to load family');
+  }
+  return res.json() as Promise<FamilyTree>;
+}
+
 /** Viewer-derived relationship label between two characters. `a`/`b` are CharacterSheet pks. */
 export async function getKinRelationship(a: number, b: number): Promise<KinRelationship> {
   const params = new URLSearchParams({ a: String(a), b: String(b) });

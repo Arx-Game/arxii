@@ -11,6 +11,7 @@
  */
 
 import { render, screen } from '@testing-library/react';
+import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { OrgPageInner } from './OrgPage';
@@ -113,7 +114,11 @@ describe('OrgPageInner', () => {
       isError: false,
     } as ReturnType<typeof useOrganizationQuery>);
 
-    render(<OrgPageInner orgId={7} />);
+    render(
+      <MemoryRouter>
+        <OrgPageInner orgId={7} />
+      </MemoryRouter>
+    );
 
     expect(screen.getByText('The Gilded Compass')).toBeInTheDocument();
   });
@@ -125,7 +130,11 @@ describe('OrgPageInner', () => {
       isError: true,
     } as ReturnType<typeof useOrganizationQuery>);
 
-    render(<OrgPageInner orgId={7} />);
+    render(
+      <MemoryRouter>
+        <OrgPageInner orgId={7} />
+      </MemoryRouter>
+    );
 
     expect(screen.getByText(/not yet public/i)).toBeInTheDocument();
   });
@@ -137,7 +146,11 @@ describe('OrgPageInner', () => {
       isError: false,
     } as ReturnType<typeof useOrganizationQuery>);
 
-    render(<OrgPageInner orgId={7} />);
+    render(
+      <MemoryRouter>
+        <OrgPageInner orgId={7} />
+      </MemoryRouter>
+    );
 
     expect(screen.getByText(/not yet public/i)).toBeInTheDocument();
   });
@@ -183,10 +196,16 @@ describe('OrgPageInner', () => {
       isError: false,
     } as ReturnType<typeof useOrganizationQuery>);
 
-    render(<OrgPageInner orgId={7} />);
+    render(
+      <MemoryRouter>
+        <OrgPageInner orgId={7} />
+      </MemoryRouter>
+    );
 
     expect(screen.getByText(/The Debt Is Kept/)).toBeInTheDocument();
     expect(screen.getByText(/oxblood and slate/)).toBeInTheDocument();
+    // The house block's family name opens the family page, by the Family pk (#4209).
+    expect(screen.getByRole('link', { name: 'Maldrave' })).toHaveAttribute('href', '/families/3');
     expect(screen.getByText(/Patron Deity: The Chained Judge/)).toBeInTheDocument();
     expect(screen.getByText('Black Ledger')).toBeInTheDocument();
     expect(screen.getByText(/Ways of the House/)).toBeInTheDocument();
@@ -248,7 +267,11 @@ describe('OrgPageInner', () => {
       isError: false,
     } as ReturnType<typeof useOrganizationQuery>);
 
-    render(<OrgPageInner orgId={7} />);
+    render(
+      <MemoryRouter>
+        <OrgPageInner orgId={7} />
+      </MemoryRouter>
+    );
     expect(screen.getByText(/Bandit Trouble in Westrock Vale/)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Pay it off \(2000c\)/ })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Ride it out/ })).toBeInTheDocument();
@@ -294,7 +317,11 @@ describe('OrgPageInner', () => {
       isError: false,
     } as ReturnType<typeof useOrganizationQuery>);
 
-    render(<OrgPageInner orgId={7} />);
+    render(
+      <MemoryRouter>
+        <OrgPageInner orgId={7} />
+      </MemoryRouter>
+    );
     expect(screen.getByText(/None dare test House Maldrave/)).toBeInTheDocument();
     expect(screen.getByText(/Formidable/)).toBeInTheDocument();
     expect(screen.getByText('12400')).toBeInTheDocument();
@@ -335,7 +362,11 @@ describe('OrgPageInner', () => {
         isLoading: false,
       } as unknown as ReturnType<typeof useStandingDeclarationsQuery>);
 
-      render(<OrgPageInner orgId={7} />);
+      render(
+        <MemoryRouter>
+          <OrgPageInner orgId={7} />
+        </MemoryRouter>
+      );
 
       expect(screen.getByText('Serenity Vale')).toBeInTheDocument();
       expect(screen.getByText(/Guildmaster Orrin/)).toBeInTheDocument();
@@ -358,7 +389,11 @@ describe('OrgPageInner', () => {
         ],
       } as unknown as ReturnType<typeof useOrganizationMembershipsQuery>);
 
-      render(<OrgPageInner orgId={7} />);
+      render(
+        <MemoryRouter>
+          <OrgPageInner orgId={7} />
+        </MemoryRouter>
+      );
 
       expect(screen.queryByRole('button', { name: /Declare Standing/i })).not.toBeInTheDocument();
     });
@@ -379,7 +414,11 @@ describe('OrgPageInner', () => {
         ],
       } as unknown as ReturnType<typeof useOrganizationMembershipsQuery>);
 
-      render(<OrgPageInner orgId={7} />);
+      render(
+        <MemoryRouter>
+          <OrgPageInner orgId={7} />
+        </MemoryRouter>
+      );
 
       expect(screen.getByRole('button', { name: /Declare Standing/i })).toBeInTheDocument();
     });

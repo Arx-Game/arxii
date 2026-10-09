@@ -86,12 +86,12 @@ function renderSheet(sheet: CharacterSheetPayload) {
 }
 
 describe('SheetPanel', () => {
-  it('reads the family name as plain text, never as an organization link', () => {
+  it('links the House row to the family page by the Family pk, never the org route', () => {
     // A Family pk is not an Organization pk, and the org page is member-only
-    // besides, so the House row names the family and links nowhere (#4210).
+    // besides (#4210); the family page is keyed by the Family pk (#4209).
     renderSheet(payload({ family: { id: 7, name: 'Katta' } }));
-    expect(screen.getByText('Katta')).toBeInTheDocument();
-    expect(screen.queryByRole('link', { name: 'Katta' })).not.toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Katta' })).toHaveAttribute('href', '/families/7');
+    expect(document.querySelector('a[href^="/orgs/"]')).toBeNull();
   });
 
   it('has no House row for a character without a family', () => {

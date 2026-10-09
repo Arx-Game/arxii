@@ -12,6 +12,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { Skeleton } from '@/components/ui/skeleton';
+import { urls } from '@/utils/urls';
 import { CharacterAvatarLink, CharacterLink } from '@/components/character';
 import { REALM_THEMES, useRealmTheme } from '@/components/realm-theme-provider';
 import type { RealmTheme } from '@/components/realm-theme-provider';
@@ -236,7 +237,13 @@ export function RealmPage() {
               {rows.map((org) => (
                 <li key={org.id}>
                   <div>
-                    <Link to={`/orgs/${org.id}`}>{org.name}</Link>
+                    {/* A house links to its family page (#4209), which any signed-in
+                        player can read; any other org still goes to its own page. */}
+                    <Link
+                      to={org.family_id != null ? urls.family(org.family_id) : `/orgs/${org.id}`}
+                    >
+                      {org.name}
+                    </Link>
                     {(org.words || org.sigil_description) && (
                       <>
                         <br />
