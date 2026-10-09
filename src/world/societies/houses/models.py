@@ -9,6 +9,7 @@ civ stats) and feed the existing streams→treasury spine. Marriage pacts are
 union-bound (CK2 rule: a spouse dies, the pact dies) with coded commitments.
 """
 
+from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
 
 from core.models import ArxSharedMemoryModel as SharedMemoryModel
@@ -20,6 +21,10 @@ from world.roster.constants import MembershipBasis
 from world.societies.houses.constants import (
     CRISIS_INCOME_FACTORS,
     DOMAIN_PROSPERITY_BASELINE,
+    IC_DAY_MAX,
+    IC_DAY_MIN,
+    IC_MONTH_MAX,
+    IC_MONTH_MIN,
     ClaimKinRelation,
     CrisisAudience,
     CrisisIntelSource,
@@ -1618,8 +1623,12 @@ class HouseClaimObservance(SharedMemoryModel):
     """
 
     claim = models.ForeignKey(HouseClaim, on_delete=models.CASCADE, related_name="observances")
-    ic_month = models.PositiveSmallIntegerField()
-    ic_day = models.PositiveSmallIntegerField()
+    ic_month = models.PositiveSmallIntegerField(
+        validators=[MinValueValidator(IC_MONTH_MIN), MaxValueValidator(IC_MONTH_MAX)]
+    )
+    ic_day = models.PositiveSmallIntegerField(
+        validators=[MinValueValidator(IC_DAY_MIN), MaxValueValidator(IC_DAY_MAX)]
+    )
     name = models.CharField(max_length=120)
     lore = models.TextField(blank=True, default="")
     sort_order = models.PositiveSmallIntegerField(default=0)
@@ -1685,8 +1694,12 @@ class OrganizationObservance(SharedMemoryModel):
     """
 
     organization = models.ForeignKey(_ORG_FK, on_delete=models.CASCADE, related_name="observances")
-    ic_month = models.PositiveSmallIntegerField()
-    ic_day = models.PositiveSmallIntegerField()
+    ic_month = models.PositiveSmallIntegerField(
+        validators=[MinValueValidator(IC_MONTH_MIN), MaxValueValidator(IC_MONTH_MAX)]
+    )
+    ic_day = models.PositiveSmallIntegerField(
+        validators=[MinValueValidator(IC_DAY_MIN), MaxValueValidator(IC_DAY_MAX)]
+    )
     name = models.CharField(max_length=120)
     lore = models.TextField(blank=True, default="")
     display_order = models.PositiveSmallIntegerField(default=0)

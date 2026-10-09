@@ -19,7 +19,6 @@ from django.db import transaction
 from django.utils import timezone
 
 from world.areas.models import Area
-from world.game_clock.constants import IC_MONTH_NAMES
 from world.roster.constants import MembershipBasis
 from world.roster.models import Family, Kinsperson, UnionKind
 from world.seeds.kinship import MARRIAGE_KIND_NAME
@@ -35,7 +34,15 @@ from world.societies.houses.almanach import (
     plan_estate,
     record_kin,
 )
-from world.societies.houses.constants import TITLE_TIER_RANK, ClaimKinRelation, HouseClaimStatus
+from world.societies.houses.constants import (
+    IC_DAY_MAX,
+    IC_DAY_MIN,
+    IC_MONTH_MAX,
+    IC_MONTH_MIN,
+    TITLE_TIER_RANK,
+    ClaimKinRelation,
+    HouseClaimStatus,
+)
 from world.societies.houses.models import (
     Domain,
     HouseClaim,
@@ -67,12 +74,6 @@ if TYPE_CHECKING:
     from world.societies.models import CrewSlot
 
 _PRINCIPLE_AXES = ("mercy", "method", "status", "change", "allegiance", "power")
-# The IC calendar an observance can sit on (#4206): months are 1:1 with the
-# Gregorian layout (#4185), so a day runs to 31 like a feast day's.
-IC_MONTH_MIN = 1
-IC_MONTH_MAX = len(IC_MONTH_NAMES)
-IC_DAY_MIN = 1
-IC_DAY_MAX = 31
 # HouseClaim stores the status axis as ``status_principle`` (``status`` is the
 # claim lifecycle); this maps axis name → claim field name.
 _CLAIM_FIELD = {axis: axis for axis in _PRINCIPLE_AXES} | {"status": "status_principle"}

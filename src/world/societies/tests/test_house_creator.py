@@ -48,6 +48,7 @@ from world.societies.houses.models import (
     HouseClaim,
     HouseTemplate,
     LandShape,
+    OrganizationObservance,
     SuccessionLaw,
     Title,
 )
@@ -184,6 +185,20 @@ class GateTests(HouseCreatorTestData):
             [(r.name, r.sort_order) for r in rows], [("Founding Night", 0), ("The Vigil", 1)]
         )
         self.assertEqual(rows[0].lore, "Fire.")
+
+    def test_observance_model_refuses_off_calendar_dates(self):
+        """#4206: the model's own validators hold the calendar bounds, so an admin
+        row (which never passes the claim gate) refuses month 13 or day 0 too."""
+        from django.core.exceptions import ValidationError
+
+        for month, day in ((13, 1), (0, 1), (1, 32), (1, 0)):
+            with self.assertRaises(ValidationError):
+                OrganizationObservance(
+                    organization=self.crown, ic_month=month, ic_day=day, name="Nowhen"
+                ).full_clean()
+        OrganizationObservance(
+            organization=self.crown, ic_month=12, ic_day=31, name="Year's End"
+        ).full_clean()
 
     def test_empty_backstory_gate(self):
         with self.assertRaises(HousesServiceError):
