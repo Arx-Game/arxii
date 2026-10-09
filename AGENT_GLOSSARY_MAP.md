@@ -54,7 +54,7 @@ term is chosen and the rest are listed under `_Avoid_`.
 - [gm](src/world/gm/AGENT_GLOSSARY.md) - also holds the GM Prompt Queue terms (#4101):
   GM Prompt, Narratable Event, GM Prompt Filter, Prompt Narration
 - [flows](src/flows/AGENT_GLOSSARY.md) - the authoring-API vocabulary (#3417); root Flow/Trigger/Event terms stay in this file's Architecture seam section
-- [roster / kinship](src/world/roster/AGENT_GLOSSARY.md) - character slots, original vs roster character, freeze / give up (#3996); also holds the CG Lineage-step
+- [roster / kinship](src/world/roster/AGENT_GLOSSARY.md) - character slots, original vs roster character, freeze / give up (#3996); the family page, the roll, the tree name, no tier words on player kin surfaces (#4209); also holds the CG Lineage-step
   terms (#3617): Upbringing, Family Path, Prompt (Upbringing), Choice (Upbringing), Family
   Kind, Influence, plus (#3648) Family Template, Vacancy, Importance / Presumed importance,
   Served house, (#3660) Connection, Anchor, Stance, Follow-up, Question kind, (#3675)
