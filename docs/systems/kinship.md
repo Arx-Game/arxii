@@ -148,7 +148,13 @@ definitions both tree builders share — never duplicate them.
 - Telnet: `sheet/family` (alias `kin`) section — the viewer's own visible
   kin, labeled.
 - Admin: Kinsperson (+parentage/membership inlines), ParentageEdge,
-  KinSlotPool.
+  KinSlotPool. (#4213) Family carries its kin and its slot pools as inlines
+  (an appable row with no sheet is an open slot) and a read-only link to the
+  Almanach house document when an organization is rooted in it; a kin row
+  added on the family page is created through `create_person`, so the
+  `FamilyMembership` the tree builders read exists (`Kinsperson.family` alone
+  is the denorm). Rows cannot be deleted from the family page: leaving a
+  family is a membership end on the person's page.
 
 ## Seeds
 
