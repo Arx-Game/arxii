@@ -34,6 +34,7 @@ from world.roster.models import (
     KinSlotPool,
     Kinsperson,
     ParentageEdge,
+    RosterEntry,
     Soul,
     SoulIncarnation,
     Union,
@@ -772,8 +773,30 @@ class FamilyTreePayload:
     unions: list[dict] = field(default_factory=list)
 
 
-def _node_dict(person: Kinsperson, viewer: object) -> dict:
+def _roster_entries_by_sheet(people: dict[int, Kinsperson]) -> dict[int, int]:
+    """``{sheet pk: RosterEntry pk}`` for every sheet-bound node, in one query.
+
+    The sheet route (``/characters/:id``) takes a RosterEntry pk, not the
+    CharacterSheet pk a node carries as ``sheet_id``; the two are different
+    id spaces (#4210). Batched here rather than read off ``person.sheet.
+    roster_entry`` per node, which would be a query per sheeted kinsperson.
+    """
+    sheet_ids = [p.sheet_id for p in people.values() if p.sheet_id is not None]
+    if not sheet_ids:
+        return {}
+    return dict(
+        RosterEntry.objects.filter(character_sheet_id__in=sheet_ids).values_list(
+            "character_sheet_id", "pk"
+        )
+    )
+
+
+def _node_dict(person: Kinsperson, viewer: object, entry_by_sheet: dict[int, int]) -> dict:
     """One Kinsperson as a payload node dict — the single node-shape definition.
+
+    ``entry_by_sheet`` is ``_roster_entries_by_sheet`` over the whole tree;
+    ``roster_entry_id`` is null for an unsheeted node and for a sheet with no
+    roster entry, so a client links only where a sheet page exists.
 
     ``is_deceased`` is the value the VIEWER is entitled to, not the
     mechanical truth (#3983): a house can put it about that an heir died,
@@ -799,6 +822,9 @@ def _node_dict(person: Kinsperson, viewer: object) -> dict:
         # kinship panel needs it to query GET .../kin/relationship/ without
         # conflating Kinsperson pks with CharacterSheet pks.
         "sheet_id": person.sheet_id,
+        "roster_entry_id": (
+            entry_by_sheet.get(person.sheet_id) if person.sheet_id is not None else None
+        ),
         "gender": person.gender.name if person.gender_id else "",
         "age": person.age,
         "description": person.description,
@@ -885,7 +911,8 @@ def family_tree_for(family: Family, viewer: object) -> FamilyTreePayload:
             people.setdefault(partner.pk, partner)
 
     payload = FamilyTreePayload(family=family)
-    payload.nodes = [_node_dict(p, viewer) for p in people.values()]
+    entry_by_sheet = _roster_entries_by_sheet(people)
+    payload.nodes = [_node_dict(p, viewer, entry_by_sheet) for p in people.values()]
     _populate_edges_and_unions(payload, people, viewer)
     return payload
 
@@ -919,7 +946,8 @@ def kin_tree_for_sheet(sheet: CharacterSheet, viewer: object) -> FamilyTreePaylo
         people.setdefault(step.pk, step)
 
     payload = FamilyTreePayload(family=None)
-    payload.nodes = [_node_dict(p, viewer) for p in people.values()]
+    entry_by_sheet = _roster_entries_by_sheet(people)
+    payload.nodes = [_node_dict(p, viewer, entry_by_sheet) for p in people.values()]
     _populate_edges_and_unions(payload, people, viewer)
     return payload
 

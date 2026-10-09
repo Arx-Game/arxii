@@ -2,7 +2,8 @@
  * OrgPage — organization detail page (#1446, house layer #1884).
  *
  * A click-through destination for organization links elsewhere in the app
- * (e.g. a character's family name on the sheet). Family-rooted orgs render
+ * (a realm hub's houses, a sheet's origin groups; the sheet's House row no longer
+ * links here, since a Family pk is not an Organization pk, #4210). Family-rooted orgs render
  * the house block on top of the base metadata: fealty, titles, domains, and
  * the house feed (the Arx 1 informs replacement). Anyone who isn't an active
  * member (or an org that doesn't exist) sees a placeholder.

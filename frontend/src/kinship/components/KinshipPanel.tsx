@@ -10,15 +10,23 @@
  * with no bound sheet at all, so a selection only gets a relatedness query
  * when its `sheet_id` is known (see `KinspersonNode` in `types.ts`); for
  * everyone else the panel says so honestly instead of guessing with the
- * wrong id.
+ * wrong id. The sheet route is a third id space again (a RosterEntry pk), so a
+ * node links to its sheet only through `roster_entry_id` (#4210).
  *
  * Drawn in the Reference Sheet's vocabulary (#3898): the graph keeps its frame, since a
  * drawing needs edges, but everything around it is ledger lines and entries.
  */
 import { useState } from 'react';
+import { Link } from 'react-router-dom';
 
 import { useKinRelationship, useKinTree } from '../queries';
-import { Entries, Entry, Ledger, Stack } from '@/character_sheets/components/sheet/primitives';
+import {
+  Entries,
+  Entry,
+  Ledger,
+  Prose,
+  Stack,
+} from '@/character_sheets/components/sheet/primitives';
 import type { KinspersonNode } from '../types';
 import { KinTreeGraph } from './KinTreeGraph';
 
@@ -48,10 +56,18 @@ export function KinshipPanel({ characterId }: Props) {
   }
 
   const selectedNode = nodes.find((n) => n.id === selectedId) ?? null;
+  const family = tree?.family ?? null;
+  // Only a house-styled kind is a "House"; a commoner family is read by its name.
+  const familyLine = family?.kind.styles_as_house ? `House ${family.name}` : family?.name;
 
   return (
     <Stack>
-      {tree?.family && <Ledger>House {tree.family.name}</Ledger>}
+      {family && <Ledger>{familyLine}</Ledger>}
+      {family?.description && (
+        <Prose>
+          <p>{family.description}</p>
+        </Prose>
+      )}
       <div className="refsheet-plateau">
         <KinTreeGraph
           nodes={nodes}
@@ -94,10 +110,19 @@ function SelectedKinDetail({ characterId, node }: SelectedKinDetailProps) {
       : 'No determinable relationship on record.';
   };
 
+  // A kinsperson with a sheet page links to it; the page being read is not linked
+  // to itself, and an unplayed NPC has nowhere to go.
+  const name =
+    node.roster_entry_id != null && !isSelf ? (
+      <Link to={`/characters/${node.roster_entry_id}`}>{node.name}</Link>
+    ) : (
+      node.name
+    );
+
   return (
     <Entries>
       <Entry
-        name={node.name}
+        name={name}
         aside={<span className="refsheet-note">{node.tier.replace(/_/g, ' ')}</span>}
         gloss={node.description || undefined}
       >

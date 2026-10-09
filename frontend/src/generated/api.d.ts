@@ -33785,6 +33785,7 @@ export interface components {
       is_deceased: boolean;
       is_appable: boolean;
       sheet_id: number | null;
+      roster_entry_id: number | null;
       gender: string;
       age: number | null;
       description: string;

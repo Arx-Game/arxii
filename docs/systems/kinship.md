@@ -144,7 +144,15 @@ definitions both tree builders share — never duplicate them.
   in the tree payload (`_node_dict`) carries `sheet_id` (the bound
   `CharacterSheet` pk, or `null` when the node is unsheeted) — a distinct id
   space from the `Kinsperson` pk used for `id`, needed so the panel can call
-  `kin/relationship/?a=&b=` without conflating the two.
+  `kin/relationship/?a=&b=` without conflating the two. (#4210) A node also
+  carries `roster_entry_id` (the `RosterEntry` pk, or `null` for an unsheeted
+  node or a sheet with no entry): a third id space, the one the sheet route
+  `/characters/:id` takes, batched by `_roster_entries_by_sheet` in one query
+  per tree. The panel links a selected sheeted node to its sheet through it,
+  reads the family line as "House X" only for a `styles_as_house` kind, and
+  draws `Family.description` under that line when it is non-empty; the sheet's
+  own House row is plain text (a `Family` pk is not an `Organization` pk, and
+  the org page is member-only). The family-keyed page is #4209.
 - Telnet: `sheet/family` (alias `kin`) section — the viewer's own visible
   kin, labeled.
 - Admin: Kinsperson (+parentage/membership inlines), ParentageEdge,
