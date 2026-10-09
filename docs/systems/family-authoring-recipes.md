@@ -24,8 +24,10 @@ society, features, aspect definitions, and served house choices (staff houses th
 family's kind may declare it served; blank = the question is not offered). Then
 Admin > Character Creation > Upbringings > Add: beginning, name, frame text, CG cost
 (0 = free, negative refunds), trust required, the family paths it allows, the kinds it
-offers on the claim path (empty = all), and, under **Family Templates**, tick the
-templates its name path offers (one auto-picks; more than one shows a picker). Add
+offers on the claim path (empty = all), **Founders may claim up to** (the highest rung
+of the realm ladder a founder from this Upbringing may define; blank = any, #3983), and,
+under **Family Templates**, tick the templates its name path offers (one auto-picks;
+more than one shows a picker, each with the template's description under it). Add
 Prompts (each: question, example, required, which path it applies to, whether a
 write-in is allowed) and, on a pick-list prompt, its Choices with flat and
 per-influence costs. Do not: add a column to Beginnings; the old family-known switch is
