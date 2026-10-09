@@ -401,7 +401,10 @@ section for the full #2428/#2440/#2441/#2442 build record.
   PLACEHOLDER ducal demo seed (cluster `kinship`). (#3003) Character-sheet
   web surface: `kin/tree/<character_id>/` + `kin/relationship/?a=&b=` REST,
   rendered by the `KinshipPanel` sheet tab (`KinTreeGraph` + relationship
-  readout).
+  readout). (#4210) The Kin block reads the family's own description and
+  links a selected sheeted kinsperson to their sheet by a new
+  `roster_entry_id` on the node; the sheet's House row is plain text, since
+  it linked a Family pk into the org route. A family-keyed page is #4209.
 - Consumed next by #1884 (recognition, succession law, fealty).
 
 

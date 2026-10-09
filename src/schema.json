@@ -59228,6 +59228,9 @@ components:
         sheet_id:
           type: integer
           nullable: true
+        roster_entry_id:
+          type: integer
+          nullable: true
         gender:
           type: string
         age:
@@ -59244,6 +59247,7 @@ components:
       - is_appable
       - is_deceased
       - name
+      - roster_entry_id
       - sheet_id
       - tier
     KnownSecret:
