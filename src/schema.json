@@ -41451,6 +41451,10 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/AlmanachHouseOffice'
+        observances:
+          type: array
+          items:
+            $ref: '#/components/schemas/AlmanachHouseObservance'
       required:
       - aspects
       - colors
@@ -41460,6 +41464,7 @@ components:
       - house_state
       - id
       - name
+      - observances
       - offices
       - particle_example
       - published_at
@@ -41478,6 +41483,29 @@ components:
       - description
       - name
       - slug
+    AlmanachHouseObservance:
+      type: object
+      description: |-
+        A house's day of remembrance on the document (#4206). ``when`` is the
+        game's one IC date spelling (``format_ic_month_day``); the month and day
+        ride beside it so the chapter can edit the row.
+      properties:
+        ic_month:
+          type: integer
+        ic_day:
+          type: integer
+        name:
+          type: string
+        lore:
+          type: string
+        when:
+          type: string
+      required:
+      - ic_day
+      - ic_month
+      - lore
+      - name
+      - when
     AlmanachHouseOffice:
       type: object
       properties:
@@ -47205,6 +47233,28 @@ components:
             minLength: 1
       required:
       - title
+    ClaimObservanceDraftRequest:
+      type: object
+      description: |-
+        One founder-written day of remembrance (#4206); converted to a
+        ``ClaimObservanceDraft`` by ``HouseClaimSubmitSerializer.validate()``.
+        Calendar bounds are checked by the service's shared gate.
+      properties:
+        ic_month:
+          type: integer
+        ic_day:
+          type: integer
+        name:
+          type: string
+          minLength: 1
+          maxLength: 120
+        lore:
+          type: string
+          default: ''
+      required:
+      - ic_day
+      - ic_month
+      - name
     ClaimableTitle:
       type: object
       description: A vacant set-aside title open to CG house definition (#1884 Phase
@@ -56829,6 +56879,31 @@ components:
       required:
       - land_shapes
       - title_id
+    HouseClaimObservance:
+      type: object
+      description: One founder-written day of remembrance, as CG echoes it back (#4206).
+      properties:
+        ic_month:
+          type: integer
+          maximum: 32767
+          minimum: 0
+        ic_day:
+          type: integer
+          maximum: 32767
+          minimum: 0
+        name:
+          type: string
+          maxLength: 120
+        lore:
+          type: string
+        sort_order:
+          type: integer
+          maximum: 32767
+          minimum: 0
+      required:
+      - ic_day
+      - ic_month
+      - name
     HouseClaimStatus:
       type: object
       description: 'The draft''s house claim, as CG shows it (#1884 Phase D, #2079,
@@ -56875,6 +56950,11 @@ components:
           items:
             $ref: '#/components/schemas/HouseClaimLand'
           readOnly: true
+        observances:
+          type: array
+          items:
+            $ref: '#/components/schemas/HouseClaimObservance'
+          readOnly: true
         estate_name:
           type: string
           maxLength: 120
@@ -56908,6 +56988,7 @@ components:
       - id
       - kin
       - lands
+      - observances
       - title_name
     HouseClaimStatusStatusEnum:
       enum:
@@ -56987,6 +57068,10 @@ components:
           allOf:
           - $ref: '#/components/schemas/ClaimEstateRequest'
           nullable: true
+        observances:
+          type: array
+          items:
+            $ref: '#/components/schemas/ClaimObservanceDraftRequest'
       required:
       - backstory
       - house_name
@@ -57100,6 +57185,10 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/VacancyOffer'
+        observances:
+          type: array
+          items:
+            $ref: '#/components/schemas/HouseObservance'
       required:
       - aspects
       - demesne
@@ -57108,6 +57197,7 @@ components:
       - features
       - house_state
       - liege_name
+      - observances
       - open_crises
       - stature
       - titles
@@ -57215,6 +57305,28 @@ components:
       - description
       - name
       - slug
+    HouseObservance:
+      type: object
+      description: |-
+        A house's day of remembrance as the house block shows it (#4206); ``when``
+        is the game's one IC date spelling.
+      properties:
+        ic_month:
+          type: integer
+        ic_day:
+          type: integer
+        name:
+          type: string
+        lore:
+          type: string
+        when:
+          type: string
+      required:
+      - ic_day
+      - ic_month
+      - lore
+      - name
+      - when
     HouseStateEnum:
       enum:
       - standing
