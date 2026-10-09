@@ -11,6 +11,7 @@ export type StaffBeingPageRequest = components['schemas']['StaffBeingPageRequest
 export type ResonanceLine = components['schemas']['ResonanceLine'];
 export type FeastDayLine = components['schemas']['FeastDayLine'];
 export type RelationshipLine = components['schemas']['RelationshipLine'];
+export type TarotLine = components['schemas']['TarotLine'];
 
 export type Visibility = 'public' | 'obscure' | 'secret';
 

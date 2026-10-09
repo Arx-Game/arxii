@@ -81,9 +81,38 @@ export interface CodexLinkRef {
   accessible: boolean;
 }
 
+/** One rail line (#4198): a fact, optionally linking to another entry or to a section below. */
+export interface CodexCompanionItem {
+  text: string;
+  entry_id: number | null;
+  anchor: string | null;
+}
+
+export interface CodexCompanionGroup {
+  label: string;
+  items: CodexCompanionItem[];
+}
+
+/** A paragraph under the Lore: a feast day's story, a god's own side of a feud. */
+export interface CodexCompanionSection {
+  anchor: string;
+  label: string;
+  name: string;
+  body: string;
+  when: string | null;
+  entry_id: number | null;
+}
+
+/** What an entry's owner shows beside the prose (#4198); null when nothing owns the entry. */
+export interface CodexCompanion {
+  rail: CodexCompanionGroup[];
+  sections: CodexCompanionSection[];
+}
+
 export interface CodexEntryDetail extends CodexEntryListItem {
   /** Optional italic intro line rendered above the entry's content; '' hides it. */
   quote: string;
+  companion: CodexCompanion | null;
   lore_content: string | null;
   mechanics_content: string | null;
   lore_links: CodexLinkRef[];

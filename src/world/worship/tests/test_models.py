@@ -22,6 +22,7 @@ from world.worship.models import (
     BeingNickname,
     BeingRelationship,
     BeingResonance,
+    BeingTarotCard,
     WorshipFeastDay,
 )
 
@@ -132,17 +133,32 @@ class BeingResonanceTests(TestCase):
 
 
 class BeingRelationshipTests(TestCase):
-    def test_relationship_has_only_public_story(self) -> None:
+    def test_relationship_has_only_public_stories(self) -> None:
         fleshreaper = WorshippedBeingFactory(name="Fleshreaper")
         leviathan = WorshippedBeingFactory(name="Leviathan")
         rel = BeingRelationship.objects.create(
             being_a=fleshreaper,
             being_b=leviathan,
             valence=BeingRelationshipValence.ALLY,
-            public_story="Old friends since before the Godswar.",
+            story_from_a="Old friends since before the Godswar.",
         )
-        self.assertEqual(rel.public_story, "Old friends since before the Godswar.")
+        self.assertEqual(rel.story_from(fleshreaper.pk), "Old friends since before the Godswar.")
+        self.assertEqual(rel.story_from(leviathan.pk), "")
         self.assertFalse(hasattr(rel, "hidden_truth"))
+
+    def test_stories_swap_with_their_sides_when_the_pair_is_put_in_order(self) -> None:
+        first = WorshippedBeingFactory(name="First")
+        second = WorshippedBeingFactory(name="Second")
+        rel = BeingRelationship.objects.create(
+            being_a=second,
+            being_b=first,
+            valence=BeingRelationshipValence.RIVAL,
+            story_from_a="Second's side.",
+            story_from_b="First's side.",
+        )
+        self.assertEqual(rel.being_a, first)
+        self.assertEqual(rel.story_from(second.pk), "Second's side.")
+        self.assertEqual(rel.story_from(first.pk), "First's side.")
 
     def test_no_self_relationship(self) -> None:
         being = WorshippedBeingFactory()
@@ -203,3 +219,11 @@ class WorshippedBeingTarotTests(TestCase):
         tower = TarotCardFactory(name="The Tower")
         being.tarot_cards.add(tower)
         self.assertEqual(being.tarot_cards.count(), 1)
+        self.assertFalse(being.card_links.get().is_reversed)
+
+    def test_a_card_is_held_once_and_reversal_is_a_flag_on_the_link(self) -> None:
+        being = WorshippedBeingFactory()
+        tower = TarotCardFactory(name="The Tower")
+        BeingTarotCard.objects.create(being=being, card=tower, is_reversed=True)
+        with transaction.atomic(), self.assertRaises(IntegrityError):
+            BeingTarotCard.objects.create(being=being, card=tower, is_reversed=False)

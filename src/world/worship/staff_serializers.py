@@ -18,12 +18,14 @@ from world.worship.editor_services import (
     FeastDayLine,
     RelationshipLine,
     ResonanceLine,
+    TarotLine,
     obscure_organization_of,
     visibility_of,
 )
 from world.worship.models import (
     BeingFacet,
     BeingRelationship,
+    BeingTarotCard,
     Prayer,
     Relic,
     Vision,
@@ -100,10 +102,16 @@ class FeastDayLineSerializer(serializers.Serializer):
     lore = serializers.CharField(allow_blank=True, required=False, default="")
 
 
+class TarotLineSerializer(serializers.Serializer):
+    card = serializers.PrimaryKeyRelatedField(queryset=TarotCard.objects.all())
+    is_reversed = serializers.BooleanField(required=False, default=False)
+
+
 class RelationshipLineSerializer(serializers.Serializer):
     other_being = serializers.PrimaryKeyRelatedField(queryset=WorshippedBeing.objects.all())
     valence = serializers.ChoiceField(choices=BeingRelationshipValence.choices)
-    public_story = serializers.CharField(allow_blank=True, required=False, default="")
+    # This being's own telling (#4198); the other god's side is edited on its own page.
+    story = serializers.CharField(allow_blank=True, required=False, default="")
 
 
 class StaffBeingPageSerializer(serializers.Serializer):
@@ -124,9 +132,7 @@ class StaffBeingPageSerializer(serializers.Serializer):
         queryset=Facet.objects.all(), many=True, required=False, default=list
     )
     feast_days = FeastDayLineSerializer(many=True, required=False, default=list)
-    tarot_cards = serializers.PrimaryKeyRelatedField(
-        queryset=TarotCard.objects.all(), many=True, required=False, default=list
-    )
+    tarot_cards = TarotLineSerializer(many=True, required=False, default=list)
     relationships = RelationshipLineSerializer(many=True, required=False, default=list)
     visibility = serializers.ChoiceField(
         choices=BeingVisibility.choices, default=BeingVisibility.SECRET
@@ -169,12 +175,15 @@ class StaffBeingPageSerializer(serializers.Serializer):
                 )
                 for line in data.get("feast_days", [])
             ],
-            tarot_card_ids=[card.pk for card in data.get("tarot_cards", [])],
+            tarot_cards=[
+                TarotLine(card_id=line["card"].pk, is_reversed=line.get("is_reversed", False))
+                for line in data.get("tarot_cards", [])
+            ],
             relationships=[
                 RelationshipLine(
                     other_being_id=line["other_being"].pk,
                     valence=line["valence"],
-                    public_story=line.get("public_story", ""),
+                    story=line.get("story", ""),
                 )
                 for line in data.get("relationships", [])
             ],
@@ -196,7 +205,7 @@ class StaffBeingPageSerializer(serializers.Serializer):
                     "other_being": other.pk,
                     "other_being_name": other.name,
                     "valence": row.valence,
-                    "public_story": row.public_story,
+                    "story": row.story_from(being.pk),
                 }
             )
         return {
@@ -225,7 +234,10 @@ class StaffBeingPageSerializer(serializers.Serializer):
                 {"ic_month": row.ic_month, "ic_day": row.ic_day, "name": row.name, "lore": row.lore}
                 for row in being.feast_days.order_by("ic_month", "ic_day")
             ],
-            "tarot_cards": list(being.tarot_cards.order_by("pk").values_list("pk", flat=True)),
+            "tarot_cards": [
+                {"card": row.card_id, "is_reversed": row.is_reversed}
+                for row in BeingTarotCard.objects.filter(being=being).order_by("card_id")
+            ],
             "relationships": relationships,
             "visibility": visibility_of(being),
             "organization": organization.pk if organization is not None else None,

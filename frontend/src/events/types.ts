@@ -19,7 +19,7 @@ export interface EventListItem {
   is_public: boolean;
   scheduled_real_time: string;
   scheduled_ic_time: string | null;
-  /** IC date in the game's calendar, e.g. "14 Dreaming (1-14-1012)" (#4185). */
+  /** IC date in the game's calendar, e.g. "Dreaming 14 (1/14/1012)" (#4185). */
   scheduled_ic_display: string;
   time_phase: TimePhase;
   primary_host_name: string | null;

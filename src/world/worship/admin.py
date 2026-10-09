@@ -5,6 +5,7 @@ from world.worship.models import (
     BeingNickname,
     BeingRelationship,
     BeingResonance,
+    BeingTarotCard,
     ChosenFavorConfig,
     ConsecrationTier,
     DevotionStanding,
@@ -36,6 +37,12 @@ class WorshipTraditionAdmin(admin.ModelAdmin):
     search_fields = ("name",)
 
 
+class BeingTarotCardInline(admin.TabularInline):
+    model = BeingTarotCard
+    extra = 0
+    autocomplete_fields = ("card",)
+
+
 @admin.register(WorshippedBeing)
 class WorshippedBeingAdmin(admin.ModelAdmin):
     list_display = ("name", "tradition", "resonance_pool", "lifetime_worship", "is_active")
@@ -46,8 +53,9 @@ class WorshippedBeingAdmin(admin.ModelAdmin):
     # render every entry. Same widget MagicProgressionMilestoneAdmin uses against
     # the same CodexEntryAdmin (which declares the required search_fields).
     autocomplete_fields = ("codex_entry",)
-    # 78 tarot cards: too many for a scrolling multi-select, too few to search.
-    filter_horizontal = ("tarot_cards", "ultimate_techniques")
+    filter_horizontal = ("ultimate_techniques",)
+    # The tarot link carries an orientation (#4198), so it is a row, not a multi-select.
+    inlines = (BeingTarotCardInline,)
 
 
 @admin.register(BeingFacet)

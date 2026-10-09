@@ -29,6 +29,7 @@ from world.worship.models import (
     BeingNickname,
     BeingRelationship,
     BeingResonance,
+    BeingTarotCard,
     WorshipFeastDay,
     WorshippedBeing,
 )
@@ -98,10 +99,17 @@ class FeastDayLine:
 
 
 @dataclass(frozen=True)
+class TarotLine:
+    card_id: int
+    is_reversed: bool = False
+
+
+@dataclass(frozen=True)
 class RelationshipLine:
     other_being_id: int
     valence: str
-    public_story: str = ""
+    # This being's own telling of it (#4198); the other god's side is edited on its page.
+    story: str = ""
 
 
 @dataclass(frozen=True)
@@ -118,7 +126,7 @@ class BeingPage:
     resonances: list[ResonanceLine] = field(default_factory=list)
     facet_ids: list[int] = field(default_factory=list)
     feast_days: list[FeastDayLine] = field(default_factory=list)
-    tarot_card_ids: list[int] = field(default_factory=list)
+    tarot_cards: list[TarotLine] = field(default_factory=list)
     relationships: list[RelationshipLine] = field(default_factory=list)
     visibility: str = BeingVisibility.SECRET
     organization_id: int | None = None
@@ -164,7 +172,7 @@ def save_being(page: BeingPage, *, being: WorshippedBeing | None = None) -> Wors
         _replace_resonances(being, page.resonances)
         _replace_facets(being, page.facet_ids)
         _replace_feast_days(being, page.feast_days)
-        being.tarot_cards.set(page.tarot_card_ids)
+        _replace_tarot_cards(being, page.tarot_cards)
         _replace_relationships(being, page.relationships)
     return being
 
@@ -236,9 +244,27 @@ def _replace_feast_days(being: WorshippedBeing, lines: list[FeastDayLine]) -> No
     )
 
 
+def _replace_tarot_cards(being: WorshippedBeing, lines: list[TarotLine]) -> None:
+    """One link per card; the last line for a card wins its orientation."""
+    wanted = {line.card_id: line.is_reversed for line in lines}
+    for row in BeingTarotCard.objects.filter(being=being):
+        reversed_now = wanted.pop(row.card_id, None)
+        if reversed_now is None:
+            row.delete()
+        elif row.is_reversed != reversed_now:
+            row.is_reversed = reversed_now
+            row.save(update_fields=["is_reversed"])
+    BeingTarotCard.objects.bulk_create(
+        [
+            BeingTarotCard(being=being, card_id=card_id, is_reversed=is_reversed)
+            for card_id, is_reversed in wanted.items()
+        ]
+    )
+
+
 def _replace_relationships(being: WorshippedBeing, lines: list[RelationshipLine]) -> None:
     """Relationships are stored once per pair in canonical id order; this being's
-    page owns every pair it is part of."""
+    page owns every pair it is part of, and writes only its own side's story."""
     wanted = {line.other_being_id: line for line in lines if line.other_being_id != being.pk}
     rows = BeingRelationship.objects.filter(Q(being_a=being) | Q(being_b=being))
     for row in rows:
@@ -246,11 +272,11 @@ def _replace_relationships(being: WorshippedBeing, lines: list[RelationshipLine]
         line = wanted.pop(other_id, None)
         if line is None:
             row.delete()
-        elif (row.valence, row.public_story) != (line.valence, line.public_story):
-            row.valence, row.public_story = line.valence, line.public_story
-            row.save(update_fields=["valence", "public_story"])
+        elif (row.valence, row.story_from(being.pk)) != (line.valence, line.story):
+            row.valence = line.valence
+            row.set_story_from(being.pk, line.story)
+            row.save(update_fields=["valence", "story_from_a", "story_from_b"])
     for other_id, line in wanted.items():
-        a, b = sorted((being.pk, other_id))
-        BeingRelationship.objects.create(
-            being_a_id=a, being_b_id=b, valence=line.valence, public_story=line.public_story
-        )
+        row = BeingRelationship(being_a=being, being_b_id=other_id, valence=line.valence)
+        row.set_story_from(being.pk, line.story)
+        row.save()

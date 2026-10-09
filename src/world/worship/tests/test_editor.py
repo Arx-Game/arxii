@@ -25,6 +25,7 @@ from world.worship.editor_services import (
     FeastDayLine,
     RelationshipLine,
     ResonanceLine,
+    TarotLine,
     obscure_organization_of,
     save_being,
     visibility_of,
@@ -37,7 +38,7 @@ from world.worship.factories import (
     WorshippedBeingFactory,
     WorshipTraditionFactory,
 )
-from world.worship.models import BeingFacet, BeingRelationship, WorshippedBeing
+from world.worship.models import BeingFacet, BeingRelationship, BeingTarotCard, WorshippedBeing
 
 
 def _page(tradition, **overrides) -> BeingPage:
@@ -77,7 +78,7 @@ class SaveBeingTests(TestCase):
                 resonances=[ResonanceLine(self.resonance.pk, BeingResonanceTier.FAVORED)],
                 facet_ids=[self.facet.pk],
                 feast_days=[FeastDayLine(3, 14, "The Long Bleeding", "A night of it.")],
-                tarot_card_ids=[self.card.pk],
+                tarot_cards=[TarotLine(self.card.pk, is_reversed=True)],
                 relationships=[
                     RelationshipLine(self.other.pk, BeingRelationshipValence.ALLY, "Old friends.")
                 ],
@@ -90,10 +91,16 @@ class SaveBeingTests(TestCase):
         self.assertEqual(BeingFacet.objects.get(being=being).facet, self.facet)
         self.assertEqual(being.feast_days.get().name, "The Long Bleeding")
         self.assertEqual(list(being.tarot_cards.all()), [self.card])
+        self.assertTrue(BeingTarotCard.objects.get(being=being, card=self.card).is_reversed)
         relationship = BeingRelationship.objects.get()
         self.assertEqual({relationship.being_a, relationship.being_b}, {being, self.other})
-        self.assertEqual(relationship.public_story, "Old friends.")
+        self.assertEqual(relationship.story_from(being.pk), "Old friends.")
+        self.assertEqual(relationship.story_from(self.other.pk), "")
         self.assertEqual(being.gm_notes, "Was a warlord in Arx 1.")
+
+        # The other god tells its own side; this page's save must leave it alone.
+        relationship.set_story_from(self.other.pk, "A friend I never asked for.")
+        relationship.save()
 
         save_being(
             _page(
@@ -101,6 +108,7 @@ class SaveBeingTests(TestCase):
                 nicknames=["the Red"],
                 resonances=[ResonanceLine(self.resonance.pk, BeingResonanceTier.ASSOCIATED)],
                 feast_days=[FeastDayLine(3, 14, "The Long Bleeding", "Retold.")],
+                tarot_cards=[TarotLine(self.card.pk)],
                 relationships=[
                     RelationshipLine(self.other.pk, BeingRelationshipValence.FEUD, "Fell out.")
                 ],
@@ -112,9 +120,14 @@ class SaveBeingTests(TestCase):
         self.assertEqual(being.resonances.get().tier, BeingResonanceTier.ASSOCIATED)
         self.assertFalse(BeingFacet.objects.filter(being=being).exists())
         self.assertEqual(being.feast_days.get().lore, "Retold.")
-        self.assertEqual(list(being.tarot_cards.all()), [])
+        self.assertFalse(BeingTarotCard.objects.get(being=being, card=self.card).is_reversed)
         relationship = BeingRelationship.objects.get()
         self.assertEqual(relationship.valence, BeingRelationshipValence.FEUD)
+        self.assertEqual(relationship.story_from(being.pk), "Fell out.")
+        self.assertEqual(relationship.story_from(self.other.pk), "A friend I never asked for.")
+
+        save_being(_page(self.tradition, nicknames=["the Red"]), being=being)
+        self.assertEqual(list(being.tarot_cards.all()), [])
 
     def test_a_public_being_gets_a_codex_page_with_its_quote(self) -> None:
         being = save_being(
@@ -188,6 +201,7 @@ class StaffBeingAPITests(TestCase):
         cls.rich = WorshippedBeingFactory(tradition=cls.tradition, resonance_pool=500)
         cls.poor = WorshippedBeingFactory(tradition=cls.tradition, resonance_pool=5)
         BeingNicknameFactory(being=cls.poor, name="the Quiet")
+        cls.card = TarotCardFactory()
         cls.rich.codex_entry = CodexEntryFactory(is_public=True)
         cls.rich.save(update_fields=["codex_entry"])
         PrayerFactory(being=cls.rich)
@@ -233,8 +247,9 @@ class StaffBeingAPITests(TestCase):
                 "nicknames": ["the Patient Weaver"],
                 "resonances": [{"resonance": resonance.pk, "tier": "favored"}],
                 "feast_days": [{"ic_month": 1, "ic_day": 2, "name": "First Thread"}],
+                "tarot_cards": [{"card": self.card.pk, "is_reversed": True}],
                 "relationships": [
-                    {"other_being": self.rich.pk, "valence": "rival", "public_story": "Old."}
+                    {"other_being": self.rich.pk, "valence": "rival", "story": "Old."}
                 ],
                 "visibility": "public",
             },
@@ -247,6 +262,8 @@ class StaffBeingAPITests(TestCase):
         self.assertEqual(page["quote"], "Every thread ends.")
         self.assertEqual(page["nicknames"], ["the Patient Weaver"])
         self.assertEqual(page["relationships"][0]["other_being_name"], self.rich.name)
+        self.assertEqual(page["relationships"][0]["story"], "Old.")
+        self.assertEqual(page["tarot_cards"], [{"card": self.card.pk, "is_reversed": True}])
         self.assertEqual(page["visibility"], "public")
 
         updated = client.put(

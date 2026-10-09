@@ -134,6 +134,7 @@ function detail(seed: Seed, viewer: Viewer) {
   return {
     ...item,
     quote: '',
+    companion: null,
     lore_content: readable ? `${seed.summary} The road runs north of the last milestone.` : null,
     mechanics_content: null,
     lore_links: [],
