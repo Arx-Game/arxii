@@ -14,6 +14,7 @@ flagged ``believed_lie``. Renderers get both and choose presentation.
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
@@ -44,6 +45,8 @@ from world.roster.models import (
 if TYPE_CHECKING:
     from world.character_sheets.models import CharacterSheet
     from world.secrets.models import Secret
+    from world.societies.houses.services import TreeNames
+    from world.societies.models import Organization
 
 
 class KinshipServiceError(Exception):
@@ -768,9 +771,26 @@ class FamilyTreePayload:
     """
 
     family: Family | None = None
+    # The Organization rooted in the family, when one exists, and the realm the
+    # family page reads under: the house's realm, else the family's
+    # ``origin_realm``, else blank (#4209).
+    house: Organization | None = None
+    realm_name: str = ""
     nodes: list[dict] = field(default_factory=list)
     parentage: list[dict] = field(default_factory=list)
     unions: list[dict] = field(default_factory=list)
+
+
+def _tree_names(people: dict[int, Kinsperson], within: Family | None) -> dict[int, TreeNames]:
+    """``tree_names_for`` over the whole tree (#4209): one batched call.
+
+    Naming (particles, styles, the née grammar) lives in
+    ``world.societies.houses``, which imports this module, so the dependency
+    is lazy on this side.
+    """
+    from world.societies.houses.services import tree_names_for  # noqa: PLC0415
+
+    return tree_names_for(list(people.values()), within=within)
 
 
 def _roster_entries_by_sheet(people: dict[int, Kinsperson]) -> dict[int, int]:
@@ -791,12 +811,20 @@ def _roster_entries_by_sheet(people: dict[int, Kinsperson]) -> dict[int, int]:
     )
 
 
-def _node_dict(person: Kinsperson, viewer: object, entry_by_sheet: dict[int, int]) -> dict:
+def _node_dict(
+    person: Kinsperson,
+    viewer: object,
+    entry_by_sheet: dict[int, int],
+    names: dict[int, TreeNames],
+) -> dict:
     """One Kinsperson as a payload node dict — the single node-shape definition.
 
     ``entry_by_sheet`` is ``_roster_entries_by_sheet`` over the whole tree;
     ``roster_entry_id`` is null for an unsheeted node and for a sheet with no
-    roster entry, so a client links only where a sheet page exists.
+    roster entry, so a client links only where a sheet page exists. ``names``
+    is ``_tree_names`` over the whole tree (#4209): ``full_name`` is the
+    full-formal composed name the roll and the selected entry print, and
+    ``short_name`` the tree form the graphic prints.
 
     ``is_deceased`` is the value the VIEWER is entitled to, not the
     mechanical truth (#3983): a house can put it about that an heir died,
@@ -825,7 +853,11 @@ def _node_dict(person: Kinsperson, viewer: object, entry_by_sheet: dict[int, int
         "roster_entry_id": (
             entry_by_sheet.get(person.sheet_id) if person.sheet_id is not None else None
         ),
-        "gender": person.gender.name if person.gender_id else "",
+        "full_name": names[person.pk].full,
+        "short_name": names[person.pk].short,
+        # ``Gender`` has ``key`` and ``display_name``, no ``name``; the old
+        # ``.name`` read raised for any node with a gender set (#4209 fix-on-sight).
+        "gender": person.gender.display_name if person.gender_id else "",
         "age": person.age,
         "description": person.description,
     }
@@ -878,42 +910,93 @@ def _populate_edges_and_unions(
             continue
         payload.parentage.append(_edge_dict(edge))
 
-    seen_unions: set[int] = set()
-    for person in people.values():
-        for union in unions_of(person, viewer):
-            if union.pk in seen_unions:
-                continue
-            member_pks = [m.pk for m in union.members.all() if m.pk in people]
-            min_rendered = 2
-            if len(member_pks) < min_rendered:
-                continue
-            seen_unions.add(union.pk)
-            payload.unions.append(_union_dict(union, member_pks))
+    for union in _visible_unions_among(people, viewer):
+        member_pks = [m.pk for m in union.members.all() if m.pk in people]
+        min_rendered = 2
+        if len(member_pks) < min_rendered:
+            continue
+        payload.unions.append(_union_dict(union, member_pks))
+
+
+def _visible_unions_among(ids: Iterable[int], viewer: object) -> list[Union]:
+    """Visible unions with at least one member in ``ids``, in one query.
+
+    The per-person ``unions_of`` is right for a relationship walk; a tree
+    builder asking it once per node paid two queries per node (#4209).
+    """
+    unions = (
+        Union.objects.filter(members__in=ids)
+        .distinct()
+        .select_related("kind", "secret")
+        .prefetch_related("members")  # noqa: PREFETCH_STRING — no to_attr on SharedMemoryModel (leak)
+    )
+    return [u for u in unions if fact_visible(u, viewer)]
+
+
+def _fill_payload(
+    payload: FamilyTreePayload,
+    people: dict[int, Kinsperson],
+    viewer: object,
+    *,
+    within: Family | None,
+) -> None:
+    """Nodes, edges and unions for an assembled ``people`` set.
+
+    Shared by both builders: the per-tree batches (roster entries, names)
+    run once here, then every node is shaped by ``_node_dict``.
+    """
+    entry_by_sheet = _roster_entries_by_sheet(people)
+    names = _tree_names(people, within)
+    payload.nodes = [_node_dict(p, viewer, entry_by_sheet, names) for p in people.values()]
+    _populate_edges_and_unions(payload, people, viewer)
 
 
 def family_tree_for(family: Family, viewer: object) -> FamilyTreePayload:
-    """Assemble the visible tree for ``family``: members + married-in partners.
+    """Assemble the visible tree for ``family``: its people and their nearest kin.
 
     Nodes: everyone with an active membership, plus visible union partners
-    of members (so in-laws render). Edges: visible parentage among included
-    nodes; visible unions with 2+ included members. Hidden facts the viewer
-    knows are included flagged ``via_secret``; false public facts are
-    included flagged ``is_true=False`` only for viewers who know the truth.
+    of members (so in-laws render), plus every visible parent and child of a
+    member (#4209): a member's child born into another house, a spouse's
+    child from an earlier union, or a secret bastard for the viewer who
+    knows, sit on the roll without being of the name. Each hop is
+    viewer-filtered, so a secret relative appears only for a knower or
+    staff. Edges: visible parentage among included nodes; visible unions
+    with 2+ included members. Hidden facts the viewer knows are included
+    flagged ``via_secret``; false public facts are included flagged
+    ``is_true=False`` only for viewers who know the truth.
     """
+    from world.societies.houses.services import (  # noqa: PLC0415
+        house_for_family,
+        realm_for_house,
+    )
+
     member_ids = set(
         FamilyMembership.objects.filter(family=family, ended_at__isnull=True).values_list(
             "kinsperson_id", flat=True
         )
     )
     people = {p.pk: p for p in Kinsperson.objects.filter(pk__in=member_ids)}
-    for person in list(people.values()):
-        for partner in spouses_of(person, viewer):
-            people.setdefault(partner.pk, partner)
+    # Union partners of members (``spouses_of`` for the whole set in one
+    # query): active unions only, every member of each.
+    for union in _visible_unions_among(member_ids, viewer):
+        if union.ended_at is None:
+            for partner in union.members.all():
+                people.setdefault(partner.pk, partner)
+    # One hop out along every visible parentage edge that touches a member,
+    # in one query: the other end joins the roll whether or not it is of the
+    # name. ``_visible_edges`` applies the viewer's gate to each edge.
+    for edge in _visible_edges(Q(child_id__in=member_ids) | Q(parent_id__in=member_ids), viewer):
+        people.setdefault(edge.parent_id, edge.parent)
+        people.setdefault(edge.child_id, edge.child)
 
-    payload = FamilyTreePayload(family=family)
-    entry_by_sheet = _roster_entries_by_sheet(people)
-    payload.nodes = [_node_dict(p, viewer, entry_by_sheet) for p in people.values()]
-    _populate_edges_and_unions(payload, people, viewer)
+    house = house_for_family(family)
+    realm = realm_for_house(house) or family.origin_realm
+    payload = FamilyTreePayload(
+        family=family,
+        house=house,
+        realm_name=realm.name if realm is not None else "",
+    )
+    _fill_payload(payload, people, viewer, within=family)
     return payload
 
 
@@ -946,14 +1029,18 @@ def kin_tree_for_sheet(sheet: CharacterSheet, viewer: object) -> FamilyTreePaylo
         people.setdefault(step.pk, step)
 
     payload = FamilyTreePayload(family=None)
-    entry_by_sheet = _roster_entries_by_sheet(people)
-    payload.nodes = [_node_dict(p, viewer, entry_by_sheet) for p in people.values()]
-    _populate_edges_and_unions(payload, people, viewer)
+    _fill_payload(payload, people, viewer, within=None)
     return payload
 
 
 def open_slots_for(family: Family) -> tuple[list[Kinsperson], list[KinSlotPool]]:
-    """CG surface: unclaimed appable nodes + non-empty pools for a family."""
+    """CG surface: unclaimed appable nodes + non-empty pools for a family.
+
+    Nothing for a family CG cannot offer (``is_playable=False``): the family
+    page reads the same seats (#4209), and a seat nobody may claim is not open.
+    """
+    if not family.is_playable:
+        return [], []
     nodes = list(
         Kinsperson.objects.filter(
             family=family, is_appable=True, sheet__isnull=True

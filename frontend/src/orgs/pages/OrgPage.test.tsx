@@ -151,6 +151,7 @@ describe('OrgPageInner', () => {
       sigil_description: 'A black key crossed with a sword.',
       house: {
         family_name: 'Maldrave',
+        family_id: 3,
         house_state: 'standing',
         demesne: 0,
         liege_name: 'The Crown',
@@ -197,6 +198,7 @@ describe('OrgPageInner', () => {
       name: 'House Maldrave',
       house: {
         family_name: 'Maldrave',
+        family_id: 3,
         house_state: 'standing',
         demesne: 0,
         liege_name: '',
@@ -258,6 +260,7 @@ describe('OrgPageInner', () => {
       name: 'House Maldrave',
       house: {
         family_name: 'Maldrave',
+        family_id: 3,
         house_state: 'standing',
         demesne: 0,
         liege_name: '',

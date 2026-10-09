@@ -29,7 +29,7 @@ const mockRelationshipQuery = vi.mocked(useKinRelationship);
 /** Fills in the fields a test doesn't care about with harmless defaults. Note
  * `sheet_id` and `roster_entry_id` default to values distinct from the node's own
  * Kinsperson id (`900 + id`, `500 + id`) — three deliberately different id spaces
- * (#3003, #4210). */
+ * (#3003, #4210). The two display names default to the bare name (#4209). */
 function node(
   overrides: Partial<KinspersonNode> & Pick<KinspersonNode, 'id' | 'name'>
 ): KinspersonNode {
@@ -40,6 +40,8 @@ function node(
     is_appable: false,
     sheet_id: 900 + overrides.id,
     roster_entry_id: 500 + overrides.id,
+    full_name: overrides.name,
+    short_name: overrides.name,
     gender: '',
     age: null,
     description: '',

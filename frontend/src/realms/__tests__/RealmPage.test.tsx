@@ -103,6 +103,7 @@ describe('RealmPage (#3725)', () => {
           sigil_description: 'a black stag',
           org_type_name: 'noble',
           society_name: 'The Peerage',
+          family_id: null,
         },
       ],
     };

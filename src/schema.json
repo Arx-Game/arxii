@@ -53657,6 +53657,12 @@ components:
           allOf:
           - $ref: '#/components/schemas/Family'
           nullable: true
+        house:
+          allOf:
+          - $ref: '#/components/schemas/OrganizationShopWindow'
+          nullable: true
+        realm_name:
+          type: string
         nodes:
           type: array
           items:
@@ -53671,8 +53677,10 @@ components:
             $ref: '#/components/schemas/UnionEdge'
       required:
       - family
+      - house
       - nodes
       - parentage
+      - realm_name
       - unions
     FashionJudgement:
       type: object
@@ -57062,6 +57070,8 @@ components:
       properties:
         family_name:
           type: string
+        family_id:
+          type: integer
         house_state:
           type: string
         demesne:
@@ -57104,6 +57114,7 @@ components:
       - aspects
       - demesne
       - domains
+      - family_id
       - family_name
       - features
       - house_state
@@ -59231,6 +59242,10 @@ components:
         roster_entry_id:
           type: integer
           nullable: true
+        full_name:
+          type: string
+        short_name:
+          type: string
         gender:
           type: string
         age:
@@ -59242,6 +59257,7 @@ components:
       - age
       - description
       - family_id
+      - full_name
       - gender
       - id
       - is_appable
@@ -59249,6 +59265,7 @@ components:
       - name
       - roster_entry_id
       - sheet_id
+      - short_name
       - tier
     KnownSecret:
       type: object
@@ -65106,9 +65123,14 @@ components:
         society_name:
           type: string
           readOnly: true
+        family_id:
+          type: integer
+          readOnly: true
+          nullable: true
       required:
       - colors
       - description
+      - family_id
       - id
       - name
       - org_type_name
