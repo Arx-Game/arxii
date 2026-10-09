@@ -3,6 +3,9 @@ Django admin configuration for roster models.
 """
 
 from django.contrib import admin
+from django.forms import BaseInlineFormSet, ModelForm
+from django.http import HttpRequest
+from django.utils.html import format_html
 
 from world.roster.models import (
     Family,
@@ -27,6 +30,37 @@ from world.roster.models import (
     TenureMedia,
     UnionKind,
 )
+from world.roster.services.kinship import create_person
+
+
+class KinInline(admin.TabularInline):
+    """The family's people (#4213). An appable row with no sheet is an open slot.
+
+    A row added here becomes a person through ``create_person`` in
+    ``FamilyAdmin.save_formset``, so its ``FamilyMembership`` exists:
+    ``Kinsperson.family`` is only the denorm of that claim, and the tree
+    builders read the claim. Leaving a family is a membership end on the
+    person's own page, never a row delete here.
+    """
+
+    model = Kinsperson
+    fk_name = "family"
+    extra = 0
+    show_change_link = True
+    can_delete = False
+    fields = ["name", "definition_tier", "sheet", "gender", "age", "is_deceased", "is_appable"]
+    raw_id_fields = ["sheet"]
+    ordering = ["name"]
+
+
+class KinSlotPoolInline(admin.TabularInline):
+    """The family's fuzzy-capacity openings (#4213); ``parents`` stays on the pool's page."""
+
+    model = KinSlotPool
+    extra = 0
+    show_change_link = True
+    fields = ["description", "count_remaining", "allowed_genders", "age_min", "age_max"]
+    autocomplete_fields = ["allowed_genders"]
 
 
 @admin.register(Family)
@@ -36,6 +70,45 @@ class FamilyAdmin(admin.ModelAdmin):
     list_filter = ["kind", "is_playable", "created_by_cg"]
     search_fields = ["name", "description"]
     ordering = ["kind", "name"]
+    readonly_fields = ["almanach"]
+    inlines = [KinInline, KinSlotPoolInline]
+
+    @admin.display(description="Almanach")
+    def almanach(self, obj: Family) -> str:
+        """The house document for a housed family; a commoner family has none."""
+        if obj.pk is None:
+            return "Save the family first."
+        org = obj.organizations.first()
+        if org is None:
+            return "No organization; no Almanach page."
+        return format_html('<a href="/staff/almanach/houses/{}">{}</a>', org.pk, org.name)
+
+    def save_formset(
+        self, request: HttpRequest, form: ModelForm, formset: BaseInlineFormSet, change: bool
+    ) -> None:
+        """A new kin row is created through ``create_person`` (membership included);
+        an existing row saves as itself. Pools save the ordinary way."""
+        if formset.model is not Kinsperson:
+            super().save_formset(request, form, formset, change)
+            return
+        for person in formset.save(commit=False):
+            if person.pk is not None:
+                person.save()
+                continue
+            node = create_person(
+                name=person.name,
+                tier=person.definition_tier,
+                sheet=person.sheet,
+                family=form.instance,
+                age=person.age,
+                gender=person.gender,
+                is_deceased=person.is_deceased,
+                created_by=request.user,
+            )
+            if person.is_appable:
+                node.is_appable = True
+                node.save(update_fields=["is_appable"])
+        formset.save_m2m()
 
 
 @admin.register(FamilyKind)
