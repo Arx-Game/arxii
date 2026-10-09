@@ -215,18 +215,23 @@ function NamedFamilyPath({
         />
       )}
       {offered.length > 1 && (
-        <ChoiceRow
-          label={copy?.family_template_heading ?? 'Family template'}
-          options={offered.map((t) => ({ value: t.id, label: t.name }))}
-          value={familyTemplate?.id ?? null}
-          clearable
-          onChange={(value) =>
-            updateDraft.mutate({
-              draftId: draft.id,
-              data: { draft_data: { family_template_id: value } },
-            })
-          }
-        />
+        <>
+          <ChoiceRow
+            label={copy?.family_template_heading ?? 'Family template'}
+            options={offered.map((t) => ({ value: t.id, label: t.name }))}
+            value={familyTemplate?.id ?? null}
+            clearable
+            onChange={(value) =>
+              updateDraft.mutate({
+                draftId: draft.id,
+                data: { draft_data: { family_template_id: value } },
+              })
+            }
+          />
+          {familyTemplate?.description && (
+            <p className="text-sm text-muted-foreground">{familyTemplate.description}</p>
+          )}
+        </>
       )}
       <Field id="new-family-name" label="Family name">
         <Input

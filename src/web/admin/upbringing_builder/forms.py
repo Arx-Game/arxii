@@ -37,6 +37,7 @@ class UpbringingForm(forms.ModelForm):
             "parentage",
             "parentage_note",
             "claimable_kinds",
+            "max_claim_tier",
             "family_templates",
             "closed_distinctions",
             "closed_reason",
@@ -49,6 +50,7 @@ class UpbringingForm(forms.ModelForm):
             "cg_point_cost": "Point cost",
             "closed_distinctions": "Distinctions",
             "closed_reason": "The player reads",
+            "max_claim_tier": "Founders may claim up to",
         }
         widgets = {
             "closed_distinctions": FilteredSelectMultiple("distinctions", is_stacked=False),
@@ -173,6 +175,9 @@ UPBRINGING_FIELDSETS = (
             "fields": (
                 ("allows_claim_family", "allows_name_family", "allows_no_family"),
                 "claimable_kinds",
+                # The founder's ceiling on the realm ladder (#3983): a claim-path knob,
+                # so it sits with the claim path's other one (#4202).
+                "max_claim_tier",
                 "family_templates",
             )
         },

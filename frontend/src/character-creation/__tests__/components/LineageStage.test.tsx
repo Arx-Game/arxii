@@ -683,6 +683,10 @@ describe('LineageStage', () => {
       });
 
       const option = await screen.findByRole('button', { name: mockFamilyTemplate.name });
+      // The picked template's description reads under the row (#4202).
+      expect(
+        screen.getByText('A staff-authored template for houses answering to the Regency.')
+      ).toBeInTheDocument();
       await userEvent.click(option);
 
       expect(api.updateDraft).toHaveBeenCalledWith(draft.id, {
