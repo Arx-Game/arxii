@@ -36,6 +36,7 @@ from world.societies.houses.constants import (
     RecognitionRuleKind,
     StatureShiftCause,
     SuccessionDerivation,
+    SuccessionGenderTiebreak,
     SuccessionOrdering,
     TitleTier,
 )
@@ -194,6 +195,19 @@ class SuccessionLaw(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
     enatic_tiebreak = models.BooleanField(
         default=False,
         help_text="Prefer the mother's line in disputes (Luxen).",
+    )
+    gender_tiebreak = models.CharField(
+        max_length=10,
+        choices=SuccessionGenderTiebreak.choices,
+        blank=True,
+        default=SuccessionGenderTiebreak.NONE,
+        # The previous release inserts rows without the column during the deploy
+        # window; a database default keeps that insert valid (migration-reviewer, #4201).
+        db_default="",
+        help_text=(
+            "Who goes first when the ordering rule ties (#4201): equal age under Eldest, "
+            "equal rating under Most powerful Gifted. Umbros: daughters first."
+        ),
     )
     require_wedlock = models.BooleanField(
         default=False,
