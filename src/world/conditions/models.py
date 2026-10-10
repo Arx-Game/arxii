@@ -1344,6 +1344,11 @@ class ConditionInstance(SharedMemoryModel):
     All targets in Evennia are ObjectDB, so we use a single model.
     """
 
+    # noqa: OBJECTDB_FIELD
+    # ObjectDB by design (#2608): a condition lands on a character, a room, an
+    # item or an exit alike (a door can be Jammed, a vase Burning), so the bearer
+    # is any game object. ``source_character`` below is NOT a keeper: it is a
+    # character-only fact that belongs on CharacterSheet (audit verdict b).
     target = models.ForeignKey(
         "objects.ObjectDB",
         on_delete=models.CASCADE,
