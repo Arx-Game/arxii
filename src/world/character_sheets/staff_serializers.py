@@ -322,9 +322,14 @@ def _grant_profile_queryset() -> Any:
 
 
 def _house_claim_queryset() -> Any:
+    """Approved claims riding a staff account's draft: a claim on a player's draft is
+    that player's application, and materializing it here would take their house."""
+    from world.societies.houses.constants import HouseClaimStatus  # noqa: PLC0415
     from world.societies.houses.models import HouseClaim  # noqa: PLC0415
 
-    return HouseClaim.objects.all()
+    return HouseClaim.objects.filter(
+        status=HouseClaimStatus.APPROVED, draft__account__is_staff=True
+    )
 
 
 def _vacancy_queryset() -> Any:

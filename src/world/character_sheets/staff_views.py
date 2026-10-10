@@ -619,7 +619,9 @@ def _estate_options(room_query: str) -> dict[str, Any]:
         "rooms": [{"id": room.pk, "name": room.objectdb.db_key} for room in rooms],
         "grant_profiles": _named(PropertyGrantProfile.objects.order_by("name")),
         "house_claims": _named(
-            HouseClaim.objects.filter(status=HouseClaimStatus.APPROVED).order_by("house_name"),
+            HouseClaim.objects.filter(
+                status=HouseClaimStatus.APPROVED, draft__account__is_staff=True
+            ).order_by("house_name"),
             "house_name",
         ),
         "vacancies": [{"id": v.pk, "name": f"{v.organization.name}: {v.name}"} for v in vacancies],

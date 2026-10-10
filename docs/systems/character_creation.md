@@ -186,6 +186,21 @@ from the draft and passes its draft-only steps as `MagicHooks`; staff edit mode 
 `validate_staff_magic` (the stage's structural rules, without costs) first.
 `technique_pick_limit(sheet)` reads the starting-technique bonus from held distinctions.
 
+**Kinship, estate and reputation (#4226, `world.character_creation.estate_writer`).**
+`bind_kinship_node(sheet, *, node=None, family=None)` claims an appable position or
+self-serves one (a sheet already in the tree may not claim a second), then syncs the
+particled-name aliases; `grant_residence(sheet, room_profile, *, notes)` makes the PRIMARY
+persona a tenant (no second open row); `grant_property(sheet, profile)` grants a property
+house once per profile; `bind_house_claim(sheet, claim)` materializes an approved claim in
+its own savepoint and puts the identity-mapped `sheet.family` back on a refusal;
+`bind_vacancy(sheet, vacancy, *, created_by)` takes an opening (kin position, then
+membership); `set_organization_reputation(sheet, organization, value)` sets an opinion
+within the clamp through `bump_organization_reputation`. Refusals are `SheetWriteError`.
+Finalize's `_grant_cg_residence_tenancy`, `_grant_property_house_if_eligible`,
+`_bind_house_claim` and `_bind_vacancy` delegate and keep their best-effort logging; the
+draft-bound kin claim (pools, adoption, invented parents) and the questionnaire reputation
+seed stay in finalize.
+
 ```python
 from world.character_creation.services import (
     finalize_character,           # Create Character from completed draft (atomic); stamps

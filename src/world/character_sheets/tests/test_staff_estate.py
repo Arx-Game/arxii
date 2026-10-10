@@ -96,6 +96,40 @@ class EstateWriterTests(TestCase):
         with self.assertRaises(SheetWriteError):
             bind_vacancy(RosterEntryFactory().character_sheet, vacancy)
 
+    def test_a_refused_membership_is_a_message_and_the_count_survives(self) -> None:
+        org = OrganizationFactory(name="House Estatewright", family=self.family)
+        first = VacancyFactory(organization=org, name="Steward", count_remaining=2)
+        bind_vacancy(self.sheet, first)
+        second = VacancyFactory(organization=org, name="Cupbearer", count_remaining=1)
+        with self.assertRaises(SheetWriteError):
+            bind_vacancy(self.sheet, second)
+        # The rollback restored the row; the cached instance must agree with it.
+        assert Vacancy.objects.get(pk=second.pk).count_remaining == 1
+        assert Vacancy.objects.get(pk=second.pk).is_open
+
+    def test_a_kin_opening_is_refused_to_a_sheet_already_in_the_tree(self) -> None:
+        bind_kinship_node(self.sheet, family=self.family)
+        org = OrganizationFactory(name="House Estatewright", family=self.family)
+        position = KinspersonFactory(is_appable=True, family=self.family)
+        vacancy = VacancyFactory(organization=org, kin_node=position, count_remaining=1)
+        with self.assertRaises(SheetWriteError):
+            bind_vacancy(self.sheet, vacancy)
+        assert Vacancy.objects.values_list("count_remaining", flat=True).get(pk=vacancy.pk) == 1
+
+    def test_a_guest_key_does_not_count_as_living_there(self) -> None:
+        from world.locations.constants import LocationRole
+        from world.locations.services import grant_tenancy
+
+        room = RoomProfileFactory()
+        grant_tenancy(kind=LocationRole.GUEST, room_profile=room, tenant_persona=self.persona)
+        grant_residence(self.sheet, room)
+        kinds = set(
+            LocationTenancy.objects.filter(
+                room_profile=room, tenant_persona=self.persona
+            ).values_list("kind", flat=True)
+        )
+        assert kinds == {LocationRole.GUEST, LocationRole.TENANT}
+
     def test_reputation_is_set_to_the_value_not_bumped(self) -> None:
         org = OrganizationFactory(name="The Estate Guild")
         set_organization_reputation(self.sheet, org, 300)

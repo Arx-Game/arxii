@@ -95,7 +95,8 @@ def grant_residence(
 
     A system or staff grant (``granted_by`` stays None, #3902). A character who already
     holds an open tenancy there keeps it; no second row is written. ``grant_tenancy``
-    defaults the Evennia home and the sheet's current residence when none is set.
+    defaults the Evennia home and the sheet's current residence when none is set. A guest
+    or trustee key to the same room is a different rung and does not count as living there.
     """
     from django.db.models import Q  # noqa: PLC0415
     from django.utils import timezone  # noqa: PLC0415
@@ -106,7 +107,9 @@ def grant_residence(
 
     persona = primary_persona(sheet)
     held = (
-        LocationTenancy.objects.filter(room_profile=room_profile, tenant_persona=persona)
+        LocationTenancy.objects.filter(
+            room_profile=room_profile, tenant_persona=persona, kind=LocationRole.TENANT
+        )
         .filter(Q(ends_at__isnull=True) | Q(ends_at__gt=timezone.now()))
         .first()
     )
@@ -172,19 +175,29 @@ def bind_vacancy(
     """Take one opening: its kin position (if any), then the organization membership (#3648).
 
     The opening is locked and counted down; a kin pool mints a new position, a kin
-    node is claimed as it stands. A closed opening or a refused kin claim rolls the
-    whole take back.
+    node is claimed as it stands. A closed opening, a refused kin claim or a refused
+    membership rolls the whole take back. A sheet already in the kin tree may not take
+    a kin-bearing opening, since a sheet holds one position. On a refusal the opening
+    is evicted from the identity map: the rollback restores its row, not the cached
+    instance ``take_vacancy`` counted down.
     """
+    from world.roster.models import Kinsperson  # noqa: PLC0415
     from world.roster.services.kinship import (  # noqa: PLC0415
         KinshipServiceError,
         claim_appable_node,
         mint_from_pool,
     )
+    from world.societies.exceptions import OrganizationMembershipError  # noqa: PLC0415
     from world.societies.houses.services import HousesServiceError  # noqa: PLC0415
     from world.societies.membership_services import join_organization  # noqa: PLC0415
     from world.societies.vacancy_services import take_vacancy  # noqa: PLC0415
 
     persona = primary_persona(sheet)
+    bears_kin = vacancy.kin_pool_id is not None or vacancy.kin_node_id is not None
+    if bears_kin and Kinsperson.objects.filter(sheet=sheet).exists():
+        msg = "This character already has a place in the family tree; that opening brings one."
+        raise SheetWriteError(msg)
+    taken_ok = False
     try:
         with transaction.atomic():
             taken = take_vacancy(vacancy.pk)
@@ -194,8 +207,12 @@ def bind_vacancy(
             elif taken.kin_node_id is not None:
                 claim_appable_node(node=taken.kin_node, sheet=sheet)
             join_organization(taken.organization, persona, rank=taken.rank, vacancy=taken)
-    except (HousesServiceError, KinshipServiceError) as exc:
+        taken_ok = True
+    except (HousesServiceError, KinshipServiceError, OrganizationMembershipError) as exc:
         raise SheetWriteError(exc.user_message) from exc
+    finally:
+        if not taken_ok:
+            vacancy.flush_from_cache(force=True)
 
 
 def set_organization_reputation(

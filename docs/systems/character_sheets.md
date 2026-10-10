@@ -273,7 +273,16 @@ prose field (`ProfileTextField.GLIMPSE`, routed to `CharacterAura.glimpse_story`
 the Spellbook's aura rail; a sheet with no aura refuses it. `StaffEditRows` adds `has_gift`
 and `has_aura`.
 
-Pieces D (kinship and estate) and E (group fit) continue on #4224.
+**Piece D, kinship, estate and reputation (#4226).** The rows band adds a family tree
+editor (claim an open position or place the character in a family), a residence editor
+(rooms are searched with `staff-estate-options?room=`, never listed), property, house
+claim, vacancy and reputation. The actions are `staff-kinship`, `staff-residence`,
+`staff-property` (blank uses the Beginnings' grant profile), `staff-house-claim`,
+`staff-vacancy` and `staff-reputation` (sets the value, the clamp holds); each writes
+through `world.character_creation.estate_writer`. `StaffEditRows` adds `kin_node`,
+`residences`, `properties` and `reputations`.
+
+Piece E (group fit) continues on #4226.
 
 ## Web Sheet Mechanics Display (#3042)
 
