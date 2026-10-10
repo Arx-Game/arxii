@@ -63,8 +63,8 @@ class StaffSheetRowsMixin:
     """The row-writing staff actions; the viewset supplies the gate and the payload."""
 
     def _staff_sheet(self, request: Request) -> CharacterSheet:
-        sheet = self.get_object()  # type: ignore[attr-defined]
-        self._require_staff_edit(sheet)  # type: ignore[attr-defined]
+        sheet = self.get_object()
+        self._require_staff_edit(sheet)
         return sheet
 
     def _validated(self, serializer_cls: Any, request: Request, sheet: CharacterSheet) -> Any:
@@ -73,7 +73,7 @@ class StaffSheetRowsMixin:
         return serializer.validated_data
 
     def _answer(self, request: Request, sheet: CharacterSheet) -> Response:
-        return self._fresh_payload(request, sheet.pk)  # type: ignore[attr-defined]
+        return self._fresh_payload(request, sheet.pk)
 
     @extend_schema(request=StaffStatsSerializer, responses={200: CharacterSheetSerializer})
     @action(detail=True, methods=[HTTPMethod.PATCH], url_path="staff-stats")
