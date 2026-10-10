@@ -158,3 +158,6 @@ Domain-local vocabulary. Cross-cutting terms live in the root
 - **Stored values** — the `staff_edit` block of the sheet payload: the character as
   stored (true profile, exact height, social rank), which edit mode edits, as opposed
   to the rest of the payload, shaped for the viewer.
+- **Staff-seeded label** (#4229) — a tie label staff declared through edit mode. On a
+  character nobody plays it waits with no tenure and binds to the tenure that picks the
+  character up. _Avoid_: pending label, draft label.

@@ -3484,6 +3484,7 @@
 - `rise_battle_covenant_via_session(*, session: 'RitualSession') -> 'Covenant' - Dispatched on a 'call the banners' rise ritual fire.`
 - `secondary_vow_config() -> 'SecondaryVowConfig' - Lazy-create and return the SecondaryVowConfig singleton (pk=1, #2641).`
 - `set_engaged_membership(*, membership: 'CharacterCovenantRole', as_secondary: 'bool' = False) -> 'None' - Engage this membership; un-engage other same-type-and-standing rows (#2641).`
+- `set_member_rank(*, membership: 'CharacterCovenantRole', rank: 'CovenantRank') -> 'CharacterCovenantRole' - Put a member on a rank of their own covenant; the write behind ``assign_rank``.`
 - `set_rank_capabilities(*, rank: 'CovenantRank', actor: 'CharacterCovenantRole', can_invite: 'bool | None' = None, can_kick: 'bool | None' = None, can_manage_ranks: 'bool | None' = None, can_lead_rituals: 'bool | None' = None) -> 'CovenantRank' - Update capability flags on a rank. Requires can_manage_ranks.`
 - `stand_down_battle_covenant(*, covenant: 'Covenant') -> 'None' - Stand a STANDING battle covenant down to dormant; clear engagement.`
 - `step_back_to_minor(*, membership: 'CharacterCovenantRole') -> 'None' - A core member unilaterally steps back to MINOR standing (#2992).`
@@ -8015,12 +8016,13 @@
 - `advance_tier(*, side: 'CharacterRelationship', journal_entry: 'JournalEntry') -> 'RelationshipCapstone' - Claim the next tier with a capstone entry and XP (#3957). Cost = xp_per_tier x new tier.`
 - `apply_affection_shift(*, source: 'CharacterSheet', target: 'CharacterSheet', scene: 'Scene', effect: 'ConsequenceEffect | None', amount: 'int', boon: 'Boon | None' = None) -> 'AffectionShift | None' - A social action's automatic shift on the target's gauges (#1697, #2540, #3957).`
 - `apply_relationship_bump(*, source: 'CharacterSheet', target: 'CharacterSheet', interaction: 'Interaction', valence: 'int', source_emoji: 'ReactionEmoji | None' = None) -> 'RelationshipBump' - Ambient +/-1 on source's Affection or Conflict toward target (#1699, #3957).`
+- `bind_staff_seeded_labels(tenure: 'RosterTenure') -> 'int' - Bind the character's waiting staff-seeded labels to a tenure that just started.`
 - `bond_bonus(actor: 'ObjectDB', protected: 'ObjectDB') -> 'int'`
 - `bond_combat_bonus(sheet: 'CharacterSheet', encounter: 'CombatEncounter') -> 'list[ModifierContribution]' - One contribution per bonded ACTIVE co-combatant, valued by this side's tier (#2021).`
 - `clear_very_attracted(sheets) -> 'None' - Drop Very Attracted for the given characters -- the scene-end early clear (#1697).`
 - `companion_target_error(source: 'CharacterSheet', companion: 'Companion') -> 'str' - Why ``source`` may not hold a relationship toward ``companion``, else "" (#3575).`
 - `credit_scene_depth(scene: 'Scene') -> 'int' - First scene together in a game week credits each side ``scene_base_gain`` (#3957).`
-- `declare_label(*, side: 'CharacterRelationship', type: 'RelationshipType', awareness: 'str' = LabelAwareness.PRIVATE, tenure: 'RosterTenure | None' = None) -> 'RelationshipLabel' - Name one type on this side, Private unless told otherwise (#3957).`
+- `declare_label(*, side: 'CharacterRelationship', type: 'RelationshipType', awareness: 'str' = LabelAwareness.PRIVATE, tenure: 'RosterTenure | None' = None, staff_seeded: 'bool' = False) -> 'RelationshipLabel' - Name one type on this side, Private unless told otherwise (#3957).`
 - `end_label(*, label: 'RelationshipLabel') -> 'RelationshipLabel'`
 - `get_bond_combat_config() -> 'BondCombatConfig' - Get-or-create the BondCombatConfig singleton (pk=1).`
 - `get_growth_config() -> 'RelationshipGrowthConfig'`
@@ -8039,6 +8041,7 @@
 - `shift_label(*, label: 'RelationshipLabel', new_type: 'RelationshipType', note: 'str' = '') -> 'RelationshipLabel' - Change one label into another: the old row ends, the new one remembers it.`
 - `soul_tether_active(a_sheet: 'CharacterSheet', b_sheet: 'CharacterSheet') -> 'bool' - Check whether two characters have an active Soul Tether bond.`
 - `spend_xp_for_character(sheet: 'CharacterSheet', amount: 'int', description: 'str', *, reason: 'str' = ProgressionReason.XP_PURCHASE, gm: 'AccountDB | None' = None) -> 'XPTransaction | None' - Debit the account's pool for something bought for ``sheet``, and attribute it.`
+- `staff_set_tier(*, side: 'CharacterRelationship', tier_number: 'int') -> 'CharacterRelationship' - Set a side's claimed tier by staff fiat (#4229): no XP, no capstone entry.`
 - `standing_tie_ap(sheet_id: 'int', *, exclude_side_id: 'int | None' = None) -> 'int' - AP this character has standing across their tie allocations (#3957).`
 - `standing_weekly_ap(sheet_id: 'int', *, exclude_side_id: 'int | None' = None) -> 'int' - AP this character has already promised for the week: ties + training (#3957).`
 
@@ -8909,7 +8912,7 @@
 - `record_persona_discovery(persona: 'Persona | None', linked: 'Persona | None', discovered_by: 'CharacterSheet') -> 'PersonaDiscovery | None' - Record that ``discovered_by`` learned ``persona`` and ``linked`` are the same person.`
 - `register_unseen_observer(scene: 'Scene', observer: 'CharacterSheet', source_label: 'str') -> 'None' - Record that observer can unseen-witness scene; broadcast the OOC state if new.`
 - `set_active_persona(sheet: 'CharacterSheet', persona: 'Persona') -> 'None' - Set the character's active face (#981) — the ONLY mutator.`
-- `set_persona_profile(persona: 'Persona', *, concept: 'str | None' = None, quote: 'str | None' = None, never_do: 'str | None' = None, protect: 'str | None' = None, fear: 'str | None' = None, background: 'str | None' = None) -> 'Profile' - Author the fabricated bio a non-primary persona presents — its **Guise Sheet** (#1270).`
+- `set_persona_profile(persona: 'Persona', *, concept: 'str | None' = None, quote: 'str | None' = None, never_do: 'str | None' = None, protect: 'str | None' = None, fear: 'str | None' = None, background: 'str | None' = None, edited_by: 'AccountDB | None' = None) -> 'Profile' - Author the fabricated bio a non-primary persona presents — its **Guise Sheet** (#1270).`
 
 
 ## world.secrets

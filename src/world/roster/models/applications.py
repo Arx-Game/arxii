@@ -114,6 +114,12 @@ class RosterApplication(SharedMemoryModel):
                 approved_by=staff_player_data,
             )
 
+        # Labels staff seeded on the character while nobody played it are live from
+        # pickup: the applicant saw them on the sheet (#4229).
+        from world.relationships.services import bind_staff_seeded_labels
+
+        bind_staff_seeded_labels(tenure)
+
         # Someone is playing this character now, so it leaves the shelf it was
         # offered from. The authored activity_requirement lives on the entry and is
         # untouched by the move (#2728) — that is why it isn't on the Roster.

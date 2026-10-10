@@ -137,7 +137,15 @@ class CmdPersona(DispatchCommand):
         from world.scenes.services import GuiseProfileError, set_persona_profile  # noqa: PLC0415
 
         try:
-            set_persona_profile(persona, **fields)
+            set_persona_profile(
+                persona,
+                concept=fields.get("concept"),
+                quote=fields.get("quote"),
+                never_do=fields.get("never_do"),
+                protect=fields.get("protect"),
+                fear=fields.get("fear"),
+                background=fields.get("background"),
+            )
         except GuiseProfileError as exc:
             self.msg(exc.user_message)
             return

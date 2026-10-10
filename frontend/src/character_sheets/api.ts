@@ -443,6 +443,72 @@ export interface CharacterSheetStaffRows {
   residences: StaffOption[];
   properties: StaffOption[];
   reputations: { organization: number; name: string; value: number }[];
+  /** #4229: group fit, for piece E's editors. */
+  personas: StaffPersonaRow[];
+  titles: { id: number; name: string; persona: number; persona_name: string }[];
+  noble_titles: StaffOption[];
+  ties: StaffTieRow[];
+  covenant_roles: StaffCovenantRoleRow[];
+  mentor_bonds: StaffMentorBondRow[];
+}
+
+/** The cover-bio fields a guise carries (#1270), in the order the editor shows them. */
+export const GUISE_FIELDS = [
+  'concept',
+  'quote',
+  'never_do',
+  'protect',
+  'fear',
+  'background',
+] as const;
+export type GuiseField = (typeof GUISE_FIELDS)[number];
+
+/** A face of the character other than their own (#4229). */
+export interface StaffPersonaRow {
+  id: number;
+  name: string;
+  persona_type: string;
+  guise: Record<GuiseField, string>;
+}
+
+/** One side of a tie; ``waiting`` marks a staff label that binds when a player picks up. */
+export interface StaffTieSide {
+  id: number;
+  tier: number;
+  summary: string;
+  labels: { id: number; type: number; name: string; awareness: string; waiting: boolean }[];
+}
+
+/** A tie with another character: ``toward`` is this character's side, ``back`` theirs. */
+export interface StaffTieRow {
+  other: number;
+  other_name: string;
+  toward: StaffTieSide | null;
+  back: StaffTieSide | null;
+}
+
+export type StaffTieDirection = 'toward' | 'from';
+
+export interface StaffCovenantRoleRow {
+  id: number;
+  covenant: number;
+  covenant_name: string;
+  role: number;
+  role_name: string;
+  rank: number;
+  rank_name: string;
+  standing: string;
+  engaged: boolean;
+  is_secondary: boolean;
+}
+
+/** ``warning`` says why the pair breaks the level band; staff may bond it anyway. */
+export interface StaffMentorBondRow {
+  id: number;
+  covenant_name: string;
+  other_name: string;
+  as_mentor: boolean;
+  warning: string;
 }
 
 export interface CharacterSheetStaffEdit {
@@ -827,7 +893,83 @@ export type StaffRowAction =
   | { path: 'staff-property'; method: 'POST'; body: { profile?: number | null } }
   | { path: 'staff-house-claim'; method: 'POST'; body: { claim: number } }
   | { path: 'staff-vacancy'; method: 'POST'; body: { vacancy: number } }
-  | { path: 'staff-reputation'; method: 'PUT'; body: { organization: number; value: number } };
+  | { path: 'staff-reputation'; method: 'PUT'; body: { organization: number; value: number } }
+  | { path: 'staff-personas'; method: 'POST'; body: { name: string } }
+  | {
+      path: 'staff-persona';
+      method: 'PATCH';
+      body: { persona: number; name?: string } & Partial<Record<GuiseField, string>>;
+    }
+  | { path: 'staff-persona-remove'; method: 'POST'; body: { persona: number } }
+  | {
+      path: 'staff-titles';
+      method: 'POST';
+      body: { persona: number; reward?: number | null; legend_entry?: number | null };
+    }
+  | { path: 'staff-title-remove'; method: 'POST'; body: { title: number } }
+  | { path: 'staff-noble-title'; method: 'POST'; body: { title: number } }
+  | {
+      path: 'staff-tie-labels';
+      method: 'POST';
+      body: { other: number; direction: StaffTieDirection; type: number; awareness: string };
+    }
+  | {
+      path: 'staff-tie-label';
+      method: 'PATCH';
+      body: { label: number; new_type?: number | null; awareness?: string; end?: boolean };
+    }
+  | {
+      path: 'staff-tie';
+      method: 'PATCH';
+      body: { other: number; direction: StaffTieDirection; summary?: string; tier?: number };
+    }
+  | {
+      path: 'staff-covenant-roles';
+      method: 'POST';
+      body: { covenant: number; covenant_role: number; rank?: number | null };
+    }
+  | {
+      path: 'staff-covenant-role';
+      method: 'PATCH';
+      body: {
+        membership: number;
+        covenant_role?: number;
+        rank?: number;
+        engaged?: boolean;
+        as_secondary?: boolean;
+        end?: boolean;
+      };
+    }
+  | {
+      path: 'staff-mentor-bonds';
+      method: 'POST';
+      body: { covenant: number; other: number; as_mentor: boolean };
+    }
+  | { path: 'staff-mentor-bond-end'; method: 'POST'; body: { bond: number } };
+
+/** `GET .../staff-group-options/?character=` (#4229): what piece E's editors pick from. */
+export interface StaffGroupOptions {
+  characters: StaffOption[];
+  faces: StaffOption[];
+  relationship_types: StaffOption[];
+  awareness: StaffChoice[];
+  tiers: StaffOption[];
+  title_rewards: StaffOption[];
+  deeds: StaffOption[];
+  noble_titles: StaffOption[];
+  covenants: (StaffOption & { roles: StaffOption[]; ranks: StaffOption[] })[];
+}
+
+export async function fetchStaffGroupOptions(
+  sheetId: number,
+  character: string
+): Promise<StaffGroupOptions> {
+  const params = new URLSearchParams();
+  if (character) params.set('character', character);
+  const res = await apiFetch(`/api/character-sheets/${sheetId}/staff-group-options/?${params}`);
+  if (!res.ok) await throwApiError(res, 'Failed to load the choices.');
+  return (await res.json()) as StaffGroupOptions;
+}
 
 /** `GET .../staff-estate-options/?room=` (#4226): what piece D's editors pick from. */
 export interface StaffEstateOptions {

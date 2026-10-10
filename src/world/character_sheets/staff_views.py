@@ -35,12 +35,15 @@ from world.character_creation.sheet_writers import (
 from world.character_sheets.serializers import CharacterSheetSerializer
 from world.character_sheets.staff_serializers import (
     StaffBeginningsSerializer,
+    StaffCovenantMembershipSerializer,
+    StaffCovenantRoleAddSerializer,
     StaffDistinctionAddSerializer,
     StaffDistinctionChangeSerializer,
     StaffEnemySerializer,
     StaffEstateOptionsSerializer,
     StaffFormSerializer,
     StaffGoalsSerializer,
+    StaffGroupOptionsSerializer,
     StaffHouseClaimSerializer,
     StaffIntroductionSerializer,
     StaffKinshipSerializer,
@@ -48,13 +51,24 @@ from world.character_sheets.staff_serializers import (
     StaffMagicSerializer,
     StaffMarkingAddSerializer,
     StaffMarkingRemoveSerializer,
+    StaffMentorBondSerializer,
+    StaffMentorDissolveSerializer,
+    StaffNobleTitleSerializer,
     StaffOptionsSerializer,
     StaffPathSerializer,
+    StaffPersonaChangeSerializer,
+    StaffPersonaCreateSerializer,
+    StaffPersonaRemoveSerializer,
     StaffPropertySerializer,
     StaffReputationSerializer,
     StaffResidenceSerializer,
     StaffSkillsSerializer,
     StaffStatsSerializer,
+    StaffTieLabelAddSerializer,
+    StaffTieLabelChangeSerializer,
+    StaffTieSerializer,
+    StaffTitleGrantSerializer,
+    StaffTitleRevokeSerializer,
     StaffVacancySerializer,
     StaffWorshipSerializer,
 )
@@ -468,6 +482,241 @@ class StaffSheetRowsMixin:
         options = _estate_options(request.query_params.get("room", ""))
         return Response(StaffEstateOptionsSerializer(options).data)
 
+    # --- Group fit (#4229, #3988 piece E) ---------------------------------------
+
+    @extend_schema(request=StaffPersonaCreateSerializer, responses={200: CharacterSheetSerializer})
+    @action(detail=True, methods=[HTTPMethod.POST], url_path="staff-personas")
+    def staff_add_persona(self, request: Request, pk: int | None = None) -> Response:
+        """Give the character a new established identity (no cap for staff)."""
+        from world.character_sheets.group_writer import (  # noqa: PLC0415
+            create_established_persona,
+        )
+
+        sheet = self._staff_sheet(request)
+        data = self._validated(StaffPersonaCreateSerializer, request, sheet)
+        try:
+            create_established_persona(sheet, data["name"])
+        except SheetWriteError as exc:
+            return _refused(exc)
+        return self._answer(request, sheet)
+
+    @extend_schema(request=StaffPersonaChangeSerializer, responses={200: CharacterSheetSerializer})
+    @action(detail=True, methods=[HTTPMethod.PATCH], url_path="staff-persona")
+    def staff_change_persona(self, request: Request, pk: int | None = None) -> Response:
+        """Rename one of the character's faces and/or write its cover bio (versioned)."""
+        from django.db import transaction  # noqa: PLC0415
+
+        from world.character_sheets.group_writer import (  # noqa: PLC0415
+            rename_persona,
+            set_guise_prose,
+        )
+        from world.character_sheets.serializers import GUISE_FIELDS  # noqa: PLC0415
+
+        sheet = self._staff_sheet(request)
+        data = self._validated(StaffPersonaChangeSerializer, request, sheet)
+        persona = data["persona"]
+        prose = {field: data[field] for field in GUISE_FIELDS if field in data}
+        try:
+            with transaction.atomic():
+                if "name" in data:  # noqa: STRING_LITERAL - the input serializer's field name
+                    rename_persona(persona, data["name"])
+                if prose:
+                    set_guise_prose(persona, edited_by=cast("AccountDB", request.user), prose=prose)
+        except SheetWriteError as exc:
+            persona.flush_from_cache(force=True)
+            return _refused(exc)
+        return self._answer(request, sheet)
+
+    @extend_schema(request=StaffPersonaRemoveSerializer, responses={200: CharacterSheetSerializer})
+    @action(detail=True, methods=[HTTPMethod.POST], url_path="staff-persona-remove")
+    def staff_remove_persona(self, request: Request, pk: int | None = None) -> Response:
+        """Remove an identity nobody has played; one with history stays."""
+        from world.character_sheets.group_writer import remove_persona  # noqa: PLC0415
+
+        sheet = self._staff_sheet(request)
+        data = self._validated(StaffPersonaRemoveSerializer, request, sheet)
+        try:
+            remove_persona(data["persona"])
+        except SheetWriteError as exc:
+            return _refused(exc)
+        return self._answer(request, sheet)
+
+    @extend_schema(request=StaffTitleGrantSerializer, responses={200: CharacterSheetSerializer})
+    @action(detail=True, methods=[HTTPMethod.POST], url_path="staff-titles")
+    def staff_grant_title(self, request: Request, pk: int | None = None) -> Response:
+        """Give one of the character's faces a title reward or one of its deeds."""
+        from world.character_sheets.group_writer import grant_persona_title  # noqa: PLC0415
+
+        sheet = self._staff_sheet(request)
+        data = self._validated(StaffTitleGrantSerializer, request, sheet)
+        try:
+            grant_persona_title(
+                data["persona"], reward=data["reward"], legend_entry=data["legend_entry"]
+            )
+        except SheetWriteError as exc:
+            return _refused(exc)
+        return self._answer(request, sheet)
+
+    @extend_schema(request=StaffTitleRevokeSerializer, responses={200: CharacterSheetSerializer})
+    @action(detail=True, methods=[HTTPMethod.POST], url_path="staff-title-remove")
+    def staff_revoke_title(self, request: Request, pk: int | None = None) -> Response:
+        """Take a title away from one of the character's faces."""
+        from world.character_sheets.group_writer import revoke_persona_title  # noqa: PLC0415
+
+        sheet = self._staff_sheet(request)
+        data = self._validated(StaffTitleRevokeSerializer, request, sheet)
+        revoke_persona_title(data["title"])
+        return self._answer(request, sheet)
+
+    @extend_schema(request=StaffNobleTitleSerializer, responses={200: CharacterSheetSerializer})
+    @action(detail=True, methods=[HTTPMethod.POST], url_path="staff-noble-title")
+    def staff_noble_title(self, request: Request, pk: int | None = None) -> Response:
+        """Seat the character on a noble title (staff fiat through ``pass_title``)."""
+        from world.character_sheets.group_writer import seat_noble_title  # noqa: PLC0415
+
+        sheet = self._staff_sheet(request)
+        data = self._validated(StaffNobleTitleSerializer, request, sheet)
+        try:
+            seat_noble_title(sheet, data["title"])
+        except SheetWriteError as exc:
+            return _refused(exc)
+        return self._answer(request, sheet)
+
+    @extend_schema(request=StaffTieLabelAddSerializer, responses={200: CharacterSheetSerializer})
+    @action(detail=True, methods=[HTTPMethod.POST], url_path="staff-tie-labels")
+    def staff_add_tie_label(self, request: Request, pk: int | None = None) -> Response:
+        """Declare a label on either side of a tie with another character."""
+        from world.character_sheets.group_writer import (  # noqa: PLC0415
+            declare_tie_label,
+            tie_side,
+        )
+
+        sheet = self._staff_sheet(request)
+        data = self._validated(StaffTieLabelAddSerializer, request, sheet)
+        try:
+            side = tie_side(sheet, data["other"], data["direction"])
+            declare_tie_label(side, data["type"], data["awareness"])
+        except SheetWriteError as exc:
+            return _refused(exc)
+        return self._answer(request, sheet)
+
+    @extend_schema(request=StaffTieLabelChangeSerializer, responses={200: CharacterSheetSerializer})
+    @action(detail=True, methods=[HTTPMethod.PATCH], url_path="staff-tie-label")
+    def staff_change_tie_label(self, request: Request, pk: int | None = None) -> Response:
+        """Shift, reveal or end a label on either side of one of the character's ties."""
+        from world.character_sheets.group_writer import change_tie_label  # noqa: PLC0415
+
+        sheet = self._staff_sheet(request)
+        data = self._validated(StaffTieLabelChangeSerializer, request, sheet)
+        try:
+            change_tie_label(
+                data["label"],
+                new_type=data["new_type"],
+                awareness=data["awareness"],
+                end=data["end"],
+            )
+        except SheetWriteError as exc:
+            return _refused(exc)
+        return self._answer(request, sheet)
+
+    @extend_schema(request=StaffTieSerializer, responses={200: CharacterSheetSerializer})
+    @action(detail=True, methods=[HTTPMethod.PATCH], url_path="staff-tie")
+    def staff_tie(self, request: Request, pk: int | None = None) -> Response:
+        """Set a side's summary and/or claimed tier (no XP, no capstone entry)."""
+        from world.character_sheets.group_writer import (  # noqa: PLC0415
+            set_tie_state,
+            tie_side,
+        )
+
+        sheet = self._staff_sheet(request)
+        data = self._validated(StaffTieSerializer, request, sheet)
+        try:
+            side = tie_side(sheet, data["other"], data["direction"])
+            set_tie_state(side, summary=data["summary"], tier=data["tier"])
+        except SheetWriteError as exc:
+            return _refused(exc)
+        return self._answer(request, sheet)
+
+    @extend_schema(
+        request=StaffCovenantRoleAddSerializer, responses={200: CharacterSheetSerializer}
+    )
+    @action(detail=True, methods=[HTTPMethod.POST], url_path="staff-covenant-roles")
+    def staff_add_covenant_role(self, request: Request, pk: int | None = None) -> Response:
+        """Make the character a covenant member in a role (no induction, no band gate)."""
+        from world.character_sheets.group_writer import assign_role  # noqa: PLC0415
+
+        sheet = self._staff_sheet(request)
+        data = self._validated(StaffCovenantRoleAddSerializer, request, sheet)
+        try:
+            assign_role(sheet, data["covenant"], data["covenant_role"], rank=data["rank"])
+        except SheetWriteError as exc:
+            return _refused(exc)
+        return self._answer(request, sheet)
+
+    @extend_schema(
+        request=StaffCovenantMembershipSerializer, responses={200: CharacterSheetSerializer}
+    )
+    @action(detail=True, methods=[HTTPMethod.PATCH], url_path="staff-covenant-role")
+    def staff_change_covenant_role(self, request: Request, pk: int | None = None) -> Response:
+        """One change to a membership: role, rank, engagement, or end it."""
+        from world.character_sheets.group_writer import change_membership  # noqa: PLC0415
+
+        sheet = self._staff_sheet(request)
+        data = self._validated(StaffCovenantMembershipSerializer, request, sheet)
+        try:
+            change_membership(
+                data["membership"],
+                covenant_role=data["covenant_role"],
+                rank=data["rank"],
+                engaged=data["engaged"],
+                as_secondary=data["as_secondary"],
+                end=data["end"],
+            )
+        except SheetWriteError as exc:
+            return _refused(exc)
+        return self._answer(request, sheet)
+
+    @extend_schema(request=StaffMentorBondSerializer, responses={200: CharacterSheetSerializer})
+    @action(detail=True, methods=[HTTPMethod.POST], url_path="staff-mentor-bonds")
+    def staff_add_mentor_bond(self, request: Request, pk: int | None = None) -> Response:
+        """Bond the character and another as mentor and sidekick in a covenant.
+
+        A pair outside the level band is bonded anyway; its row carries the warning.
+        """
+        from world.character_sheets.group_writer import bond_mentor  # noqa: PLC0415
+
+        sheet = self._staff_sheet(request)
+        data = self._validated(StaffMentorBondSerializer, request, sheet)
+        other = data["other"]
+        mentor, sidekick = (sheet, other) if data["as_mentor"] else (other, sheet)
+        try:
+            bond_mentor(data["covenant"], mentor=mentor, sidekick=sidekick)
+        except SheetWriteError as exc:
+            return _refused(exc)
+        return self._answer(request, sheet)
+
+    @extend_schema(request=StaffMentorDissolveSerializer, responses={200: CharacterSheetSerializer})
+    @action(detail=True, methods=[HTTPMethod.POST], url_path="staff-mentor-bond-end")
+    def staff_end_mentor_bond(self, request: Request, pk: int | None = None) -> Response:
+        """End one of the character's mentor bonds."""
+        from world.character_sheets.group_writer import dissolve_mentor  # noqa: PLC0415
+
+        sheet = self._staff_sheet(request)
+        data = self._validated(StaffMentorDissolveSerializer, request, sheet)
+        try:
+            dissolve_mentor(data["bond"])
+        except SheetWriteError as exc:
+            return _refused(exc)
+        return self._answer(request, sheet)
+
+    @extend_schema(responses={200: StaffGroupOptionsSerializer})
+    @action(detail=True, methods=[HTTPMethod.GET], url_path="staff-group-options")
+    def staff_group_options(self, request: Request, pk: int | None = None) -> Response:
+        """What the group-fit editors offer; ``?character=`` searches other characters."""
+        sheet = self._staff_sheet(request)
+        options = _group_options(sheet, request.query_params.get("character", ""))
+        return Response(StaffGroupOptionsSerializer(options).data)
+
 
 def _ensure_vitals_if_missing(sheet: CharacterSheet) -> None:
     """A sheet without vitals may not function in play; a stat or level edit fills them."""
@@ -626,4 +875,69 @@ def _estate_options(room_query: str) -> dict[str, Any]:
         ),
         "vacancies": [{"id": v.pk, "name": f"{v.organization.name}: {v.name}"} for v in vacancies],
         "organizations": _named(Organization.objects.order_by("name")),
+    }
+
+
+#: How many characters a tie or mentor search answers with; characters are searched.
+CHARACTER_SEARCH_LIMIT = 20
+
+
+def _group_options(sheet: CharacterSheet, character_query: str) -> dict[str, Any]:
+    """Characters matching a search, the tie catalog and ladder, title rewards, the
+    character's own deeds, noble titles, and covenants with their roles and ranks (#4229)."""
+    from world.achievements.constants import RewardType  # noqa: PLC0415
+    from world.achievements.models import RewardDefinition  # noqa: PLC0415
+    from world.covenants.models import Covenant, CovenantRank, CovenantRole  # noqa: PLC0415
+    from world.relationships.constants import LabelAwareness  # noqa: PLC0415
+    from world.relationships.models import RelationshipTier, RelationshipType  # noqa: PLC0415
+    from world.scenes.constants import PersonaType  # noqa: PLC0415
+    from world.scenes.models import Persona  # noqa: PLC0415
+    from world.societies.houses.models import Title  # noqa: PLC0415
+    from world.societies.models import LegendEntry  # noqa: PLC0415
+
+    query = character_query.strip()
+    characters = (
+        Persona.objects.filter(persona_type=PersonaType.PRIMARY, name__icontains=query)
+        .exclude(character_sheet=sheet)
+        .order_by("name")[:CHARACTER_SEARCH_LIMIT]
+        if query
+        else []
+    )
+    deeds = (
+        LegendEntry.objects.filter(persona__character_sheet=sheet)
+        .select_related("persona")
+        .order_by("persona__name", "title")
+    )
+    covenants = list(Covenant.objects.filter(dissolved_at__isnull=True).order_by("name"))
+    roles = list(CovenantRole.objects.order_by("name"))
+    ranks = list(
+        CovenantRank.objects.filter(covenant__in=covenants).order_by("covenant_id", "tier")
+    )
+    faces = Persona.objects.filter(character_sheet=sheet, is_system=False).order_by("pk")
+    return {
+        "characters": [{"id": p.character_sheet_id, "name": p.name} for p in characters],
+        "faces": _named(faces),
+        "relationship_types": _named(RelationshipType.objects.order_by("display_order", "name")),
+        "awareness": _choices(LabelAwareness),
+        "tiers": [
+            {"id": tier.tier_number, "name": tier.name}
+            for tier in RelationshipTier.objects.order_by("tier_number")
+        ],
+        "title_rewards": _named(
+            RewardDefinition.objects.filter(reward_type=RewardType.TITLE).order_by("name")
+        ),
+        "deeds": [{"id": d.pk, "name": f"{d.title} ({d.persona.name})"} for d in deeds],
+        "noble_titles": [
+            {"id": t.pk, "name": t.name or t.get_tier_display()}
+            for t in Title.objects.order_by("name", "pk")
+        ],
+        "covenants": [
+            {
+                "id": covenant.pk,
+                "name": covenant.name,
+                "roles": _named(r for r in roles if r.covenant_type == covenant.covenant_type),
+                "ranks": _named(r for r in ranks if r.covenant_id == covenant.pk),
+            }
+            for covenant in covenants
+        ],
     }

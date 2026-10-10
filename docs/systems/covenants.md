@@ -534,6 +534,9 @@ ADR-0213 for the rationale.
   `create_rank`, `rename_rank`, `set_rank_capabilities`, `reorder_ranks`,
   `delete_rank`, `assign_rank`, `transfer_top`. Lock-out invariant:
   `LastManagerRankError` if an op would leave zero active managers.
+  `set_member_rank(*, membership, rank)` (#4229) is `assign_rank`'s write with the actor
+  check left out; staff edit mode calls it directly. The cross-covenant and lock-out
+  rules still hold.
 
 ### Mentor's Vow services (`world.covenants.mentorship`)
 
@@ -559,11 +562,16 @@ ADR-0213 for the rationale.
 
 - **`is_bond_graduated(bond) -> bool`** — True when the adjusted party's raw primary
   level has re-entered the covenant band (bond is mechanically inactive).
-- **`establish_mentor_bond(*, covenant, mentor_sheet, sidekick_sheet) -> MentorBond`** —
-  atomically determines `adjusted_party` (exactly one must be out of band), enforces the
-  `max_sidekicks_per_mentor` cap (counts all active bonds where this character is the
-  mentor in this covenant), and creates the `MentorBond`. Raises `MentorBondError` on
-  constraint violations.
+- **`establish_mentor_bond(*, covenant, mentor_sheet, sidekick_sheet, staff_override=False)
+  -> MentorBond`** — atomically determines `adjusted_party` (exactly one must be out of
+  band), enforces the `max_sidekicks_per_mentor` cap (counts all active bonds where this
+  character is the mentor in this covenant), and creates the `MentorBond`. Raises
+  `MentorBondError` on constraint violations. `staff_override` (#4229, staff edit mode)
+  bonds a pair that breaks the band rule anyway, the sidekick as the adjusted party; the
+  cap still holds.
+- **`mentor_band_problem(*, covenant, mentor_sheet, sidekick_sheet) -> str`** — why the
+  pair breaks the band rule, else "". `establish_mentor_bond` raises it; staff edit mode
+  shows it on the bond's row.
 - **`dissolve_mentor_bond(bond) -> None`** — sets `dissolved_at = now()`.
 - **`assert_membership_level_allowed(*, covenant, character_sheet) -> None`** — the
   **Vow gate**. Raises `VowGateError` if the character's raw primary level is outside

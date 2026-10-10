@@ -4,7 +4,7 @@
  * action; the answer replaces the sheet in the cache. Drawn only in edit mode.
  */
 
-import { useContext, useState, type ReactNode } from 'react';
+import { useContext, useState } from 'react';
 
 import { Button } from '@/components/ui/button';
 import { Combobox } from '@/components/ui/combobox';
@@ -16,7 +16,6 @@ import type {
   StaffEstateOptions,
   StaffOption,
   StaffOptions,
-  StaffRowAction,
 } from '@/character_sheets/api';
 import {
   useStaffEstateOptions,
@@ -25,52 +24,10 @@ import {
   useStaffRowMutation,
 } from '@/character_sheets/queries';
 import { Band } from './primitives';
+import { GroupFitEditors } from './StaffGroupFitEditors';
+import { asItems } from './staffRowItems';
+import { PickAndRun, Section, Select, type Run } from './staffRowPrimitives';
 import { StaffEditContext } from './staffEditContext';
-
-type Run = (request: StaffRowAction, onDone?: () => void) => void;
-
-function Section({ title, children }: { title: string; children: ReactNode }) {
-  return (
-    <section className="flex flex-col gap-2 border-t pt-3" aria-label={title}>
-      <h3 className="refsheet-eyebrow">{title}</h3>
-      {children}
-    </section>
-  );
-}
-
-function asItems(options: StaffOption[]) {
-  return options.map((option) => ({ value: String(option.id), label: option.name }));
-}
-
-function Select({
-  label,
-  value,
-  onChange,
-  options,
-  blank = '—',
-}: {
-  label: string;
-  value: string;
-  onChange: (value: string) => void;
-  options: { value: string; label: string }[];
-  blank?: string;
-}) {
-  return (
-    <select
-      aria-label={label}
-      className="h-9 rounded-md border bg-transparent px-2 text-sm"
-      value={value}
-      onChange={(event) => onChange(event.target.value)}
-    >
-      <option value="">{blank}</option>
-      {options.map((option) => (
-        <option key={option.value} value={option.value}>
-          {option.label}
-        </option>
-      ))}
-    </select>
-  );
-}
 
 const choiceItems = (choices: StaffChoice[]) =>
   choices.map((choice) => ({ value: choice.value, label: choice.label }));
@@ -102,6 +59,7 @@ function StaffRows({ sheetId, rows }: { sheetId: number; rows: CharacterSheetSta
           <IntroductionEditor run={run} />
           {!rows.has_gift && <MagicEditor sheetId={sheetId} run={run} />}
           <EstateEditors sheetId={sheetId} rows={rows} run={run} />
+          <GroupFitEditors sheetId={sheetId} rows={rows} run={run} />
           {!rows.has_vitals && (
             <Section title="Vitals">
               <span>
@@ -867,45 +825,6 @@ function EstateEditors({
       </Section>
       <ReputationEditor rows={rows} options={options} run={run} />
     </>
-  );
-}
-
-/** A picker and the one action it feeds; ``allowBlank`` sends no id for the blank row. */
-function PickAndRun({
-  label,
-  options,
-  action,
-  onRun,
-  blank,
-  allowBlank = false,
-}: {
-  label: string;
-  options: StaffOption[];
-  action: string;
-  /** ``null`` only when ``allowBlank`` lets the blank row through. */
-  onRun: (id: number | null) => void;
-  blank?: string;
-  allowBlank?: boolean;
-}) {
-  const [value, setValue] = useState('');
-  return (
-    <span className="flex flex-wrap items-center gap-2">
-      <Select
-        label={label}
-        value={value}
-        onChange={setValue}
-        options={asItems(options)}
-        blank={blank}
-      />
-      <Button
-        type="button"
-        size="sm"
-        disabled={!value && !allowBlank}
-        onClick={() => onRun(value ? Number(value) : null)}
-      >
-        {action}
-      </Button>
-    </span>
   );
 }
 

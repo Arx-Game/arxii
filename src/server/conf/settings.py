@@ -530,6 +530,10 @@ SPECTACULAR_SETTINGS = {
         # SocialConsentCategory.default_mode. Without a pin, spectacular splits them into a
         # field-named enum plus a hash-suffixed collision name (Mode447Enum) that churns.
         "ConsentModeEnum": "world.consent.constants.ConsentMode.choices",
+        # Staff edit mode's tie `direction` (#4229) shares its field name with the
+        # standing declarations' favor/disfavor `direction`; pinned so neither is renamed.
+        "StaffTieDirectionEnum": "world.character_sheets.types.StaffTieDirection.choices",
+        "DirectionEnum": "world.societies.constants.StandingDirection.choices",
     },
 }
 

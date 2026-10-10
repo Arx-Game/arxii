@@ -2594,7 +2594,12 @@ Character identity, appearance, demographics, and guise system.
   (`restore_profile_text_version`, a restore is a new version), `rename_character` (key,
   primary persona name and particled aliases together), `ensure_true_profile`; the sheet
   payload's `staff_edit` block (stored values, staff only); `GET
-  /api/character-sheets/heritages/` for the picker. Table update requests stay limited to
+  /api/character-sheets/heritages/` for the picker. Group fit (#4229): the
+  `staff-personas`, `staff-persona`, `staff-persona-remove`, `staff-titles`,
+  `staff-title-remove`, `staff-noble-title`, `staff-tie-labels`, `staff-tie-label`,
+  `staff-tie`, `staff-covenant-roles`, `staff-covenant-role`, `staff-mentor-bonds`,
+  `staff-mentor-bond-end` and `staff-group-options` actions, written through
+  `world.character_sheets.group_writer`. Table update requests stay limited to
   `PLAYER_REQUESTABLE_TEXT_FIELDS`.
 - **Absence vocabulary (#2728 §5):** `CharacterSheet.objects` carries the single
   answer to "is this character absent?" — `.active()` (ACTIVE + ALIVE),
@@ -7357,6 +7362,8 @@ weights, speed_rank, Thread pulls). `CovenantRank` = administrative authority
     `create_rank`, `rename_rank`, `set_rank_capabilities`, `reorder_ranks`,
     `delete_rank`, `assign_rank`, `transfer_top`. Lock-out invariant:
     `LastManagerRankError` if an op would leave zero active managers.
+    `set_member_rank(*, membership, rank)` (#4229) is `assign_rank`'s write without the
+    actor check (cross-covenant and lock-out rules kept), for staff edit mode.
   - **Induction draft gate (#1231):**
     - `can_invite_to_covenant(covenant, *, character_sheet=None, account=None) -> bool`
       — canonical predicate: True iff the character's active rank in that covenant
@@ -7380,7 +7387,11 @@ weights, speed_rank, Thread pulls). `CovenantRank` = administrative authority
     - `bond_adjusted_level(sheet) -> int | None` — adjusted level or None.
     - `active_bond_adjusting(sheet) -> MentorBond | None` — the active non-graduated
       bond where sheet is the adjusted party; None if absent.
-    - `establish_mentor_bond(*, covenant, mentor_sheet, sidekick_sheet) -> MentorBond`
+    - `establish_mentor_bond(*, covenant, mentor_sheet, sidekick_sheet,
+      staff_override=False) -> MentorBond` — `staff_override` (#4229) bonds a pair that
+      breaks the band rule (sidekick adjusted); the sidekick cap still holds.
+    - `mentor_band_problem(*, covenant, mentor_sheet, sidekick_sheet) -> str` — why the
+      pair breaks the band rule (exactly one party outside it), else "".
     - `dissolve_mentor_bond(bond) -> None`
     - `is_bond_graduated(bond) -> bool` — True when adjusted party is now in band.
     - `assert_membership_level_allowed(*, covenant, character_sheet) -> None` — **Vow gate**:
@@ -9302,7 +9313,8 @@ history, one pooled depth, a tier claimed per side by capstone journal entry and
   `target_companion` (#3575), `scene_depth`, `invested_depth`, `tier`, `affection`,
   `conflict`, `summary`, `is_active`, the soul-tether fields), `RelationshipLabel`
   (side + type + `awareness` + `declared_by_tenure` + `since`/`clandestine_at`/`public_at`/
-  `ended_at` + `replaced` self-FK + `note`; one open label per type per side),
+  `ended_at` + `replaced` self-FK + `note` + `staff_seeded` (#4229); one open label per
+  type per side),
   `RelationshipAllocation` (this week's AP, mirrors `TrainingAllocation`),
   `RelationshipDepthTransaction` (the audit behind the two depth columns),
   `RelationshipGrowthConfig` (pk=1: `scene_base_gain`, `depth_per_ap`, `xp_per_tier`,
@@ -9324,7 +9336,10 @@ history, one pooled depth, a tier claimed per side by capstone journal entry and
   lists and **404s** on retrieve (never 403); STAFF sees everything. Companion sides are
   owner/staff-only. ADR-0117 amended, not repealed.
 - **Services (`services.py`):** `get_or_create_side(*, source, target=None,
-  target_companion=None)`, `declare_label(*, side, type, awareness=PRIVATE, tenure=None)`,
+  target_companion=None)`, `declare_label(*, side, type, awareness=PRIVATE, tenure=None,
+  staff_seeded=False)`, `bind_staff_seeded_labels(tenure)` (#4229, run at application
+  approval: a waiting staff label binds to the tenure that picks the character up,
+  ADR-4229), `staff_set_tier(*, side, tier_number)` (staff fiat, no XP or capstone),
   `shift_label(*, label, new_type, note="")` (old row ends, new row records `replaced`),
   `end_label(*, label)`, `advance_awareness(*, label, to)`, `set_summary`,
   `set_allocation(*, side, ap_amount)` (ties and training share ONE weekly budget —

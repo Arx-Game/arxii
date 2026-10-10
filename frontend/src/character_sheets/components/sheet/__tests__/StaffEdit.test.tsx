@@ -1,6 +1,8 @@
 /**
  * Staff edit mode on the sheet (#3988): the toggle is staff-only, a field saves and
- * cancels, an empty field keeps a slot, and a past version restores.
+ * cancels, an empty field keeps a slot, and a past version restores. Group fit
+ * (#4229): ties are declared on a searched character, covenants and bonds post one
+ * change each, and a waiting label and a bond's band warning show on their rows.
  */
 import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -18,6 +20,7 @@ const fetchStaffOptions = vi.fn();
 const runStaffRowAction = vi.fn();
 const fetchStaffMagicOptions = vi.fn();
 const fetchStaffEstateOptions = vi.fn();
+const fetchStaffGroupOptions = vi.fn();
 
 vi.mock('@/character_sheets/api', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/character_sheets/api')>();
@@ -29,6 +32,7 @@ vi.mock('@/character_sheets/api', async (importOriginal) => {
     runStaffRowAction: (...args: unknown[]) => runStaffRowAction(...args),
     fetchStaffMagicOptions: (...args: unknown[]) => fetchStaffMagicOptions(...args),
     fetchStaffEstateOptions: (...args: unknown[]) => fetchStaffEstateOptions(...args),
+    fetchStaffGroupOptions: (...args: unknown[]) => fetchStaffGroupOptions(...args),
   };
 });
 vi.mock('@/sheet_update_requests/api', () => ({
@@ -55,6 +59,12 @@ const STORED: CharacterSheetStaffEdit = {
     residences: [],
     properties: [],
     reputations: [],
+    personas: [],
+    titles: [],
+    noble_titles: [],
+    ties: [],
+    covenant_roles: [],
+    mentor_bonds: [],
   },
   prose: {
     description: '',
@@ -94,6 +104,28 @@ const ESTATE_OPTIONS = {
   house_claims: [],
   vacancies: [],
   organizations: [{ id: 42, name: 'The Lamplighters' }],
+};
+
+const GROUP_OPTIONS = {
+  characters: [],
+  faces: [{ id: 70, name: 'Kathryn' }],
+  relationship_types: [{ id: 50, name: 'Rival' }],
+  awareness: [
+    { value: 'private', label: 'Private' },
+    { value: 'public', label: 'Public' },
+  ],
+  tiers: [{ id: 1, name: 'Acquainted' }],
+  title_rewards: [],
+  deeds: [],
+  noble_titles: [],
+  covenants: [
+    {
+      id: 60,
+      name: 'The Lantern Oath',
+      roles: [{ id: 61, name: 'Vanguard' }],
+      ranks: [{ id: 62, name: 'Sworn' }],
+    },
+  ],
 };
 
 const OPTIONS = {
@@ -172,6 +204,13 @@ describe('staff edit mode', () => {
     fetchStaffMagicOptions.mockReset();
     fetchStaffEstateOptions.mockReset();
     fetchStaffEstateOptions.mockResolvedValue(ESTATE_OPTIONS);
+    fetchStaffGroupOptions.mockReset();
+    fetchStaffGroupOptions.mockImplementation((_sheetId: number, character: string) =>
+      Promise.resolve({
+        ...GROUP_OPTIONS,
+        characters: character ? [{ id: 80, name: 'Ser Aldric' }] : [],
+      })
+    );
   });
   afterEach(() => sessionStorage.clear());
 
@@ -426,5 +465,98 @@ describe('staff edit mode', () => {
     const tree = await within(band).findByRole('region', { name: 'Family tree' });
     expect(within(tree).getByText('Kathryn (House Marrow)')).toBeInTheDocument();
     expect(within(tree).queryByRole('button', { name: 'Claim position' })).not.toBeInTheDocument();
+  });
+
+  it('declares a label on a searched character and swears a covenant role (#4229)', async () => {
+    const user = userEvent.setup();
+    runStaffRowAction.mockResolvedValue(sheet());
+    sessionStorage.setItem('arx.staffEditMode', '1');
+    renderSheet(sheet());
+
+    const band = await screen.findByTestId('staff-rows-band');
+    const ties = await within(band).findByRole('region', { name: 'Ties' });
+    await user.type(within(ties).getByRole('textbox', { name: 'Find a character' }), 'Ald');
+    await user.click(within(ties).getByRole('button', { name: 'Find' }));
+    await waitFor(() => expect(fetchStaffGroupOptions).toHaveBeenLastCalledWith(20, 'Ald'));
+    await user.selectOptions(
+      await within(ties).findByRole('combobox', { name: 'Character' }),
+      '80'
+    );
+    await user.selectOptions(within(ties).getByRole('combobox', { name: 'Side' }), 'from');
+    await user.selectOptions(within(ties).getByRole('combobox', { name: 'Relationship' }), '50');
+    await user.selectOptions(within(ties).getByRole('combobox', { name: 'Awareness' }), 'public');
+    await user.click(within(ties).getByRole('button', { name: 'Declare' }));
+    await waitFor(() =>
+      expect(runStaffRowAction).toHaveBeenCalledWith(20, {
+        path: 'staff-tie-labels',
+        method: 'POST',
+        body: { other: 80, direction: 'from', type: 50, awareness: 'public' },
+      })
+    );
+
+    const covenants = within(band).getByRole('region', { name: 'Covenants' });
+    await user.selectOptions(within(covenants).getByRole('combobox', { name: 'Covenant' }), '60');
+    await user.selectOptions(within(covenants).getByRole('combobox', { name: 'Role' }), '61');
+    await user.click(within(covenants).getByRole('button', { name: 'Swear in' }));
+    await waitFor(() =>
+      expect(runStaffRowAction).toHaveBeenCalledWith(20, {
+        path: 'staff-covenant-roles',
+        method: 'POST',
+        body: { covenant: 60, covenant_role: 61, rank: null },
+      })
+    );
+  });
+
+  it('marks a waiting label and shows a bond outside the band with its warning (#4229)', async () => {
+    const user = userEvent.setup();
+    runStaffRowAction.mockResolvedValue(sheet());
+    sessionStorage.setItem('arx.staffEditMode', '1');
+    renderSheet(
+      sheet({
+        staff_edit: {
+          ...STORED,
+          rows: {
+            ...STORED.rows,
+            ties: [
+              {
+                other: 80,
+                other_name: 'Ser Aldric',
+                toward: {
+                  id: 5,
+                  tier: 0,
+                  summary: '',
+                  labels: [{ id: 6, type: 50, name: 'Rival', awareness: 'private', waiting: true }],
+                },
+                back: null,
+              },
+            ],
+            mentor_bonds: [
+              {
+                id: 7,
+                covenant_name: 'The Lantern Oath',
+                other_name: 'Ser Aldric',
+                as_mentor: false,
+                warning: 'Both parties are outside the covenant band.',
+              },
+            ],
+          },
+        },
+      })
+    );
+    const band = await screen.findByTestId('staff-rows-band');
+    const tie = await within(band).findByLabelText('Tie with Ser Aldric');
+    expect(within(tie).getByText('(binds at pickup)')).toBeInTheDocument();
+    await user.click(within(tie).getByRole('button', { name: 'End' }));
+    await waitFor(() =>
+      expect(runStaffRowAction).toHaveBeenCalledWith(20, {
+        path: 'staff-tie-label',
+        method: 'PATCH',
+        body: { label: 6, end: true },
+      })
+    );
+    const bonds = within(band).getByRole('region', { name: 'Mentor bonds' });
+    expect(
+      within(bonds).getByText('Both parties are outside the covenant band.')
+    ).toBeInTheDocument();
   });
 });

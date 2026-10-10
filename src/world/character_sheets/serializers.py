@@ -71,12 +71,19 @@ from world.character_sheets.types import (
     SkillEntry,
     SkillRef,
     SpecializationEntry,
+    StaffCovenantRoleRow,
     StaffEditFields,
     StaffEditRows,
     StaffHeldDistinction,
     StaffMarking,
+    StaffMentorBondRow,
     StaffOptionRow,
+    StaffPersonaRow,
     StaffReputationRow,
+    StaffTieLabelRow,
+    StaffTieRow,
+    StaffTieSideRow,
+    StaffTitleRow,
     StandingSection,
     StorySection,
     TechniqueEntry,
@@ -2401,6 +2408,7 @@ def _build_staff_rows(sheet: CharacterSheet) -> StaffEditRows:
         has_gift=CharacterGift.objects.filter(character=sheet).exists(),
         has_aura=CharacterAura.objects.filter(character=sheet).exists(),
         **_staff_estate_rows(sheet),
+        **_staff_group_rows(sheet),
     )
 
 
@@ -2466,6 +2474,169 @@ def _staff_estate_rows(sheet: CharacterSheet) -> dict[str, Any]:
             for row in reputations
         ],
     }
+
+
+#: The cover-bio fields a guise carries, in the order the editor shows them.
+GUISE_FIELDS = ("concept", "quote", "never_do", "protect", "fear", "background")
+
+
+def _staff_group_rows(sheet: CharacterSheet) -> dict[str, Any]:
+    """Faces, titles, ties, covenant roles and mentor bonds, for piece E (#4229)."""
+    from django.db.models import Q  # noqa: PLC0415
+
+    from world.achievements.models import PersonaTitle  # noqa: PLC0415
+    from world.covenants.mentorship import mentor_band_problem  # noqa: PLC0415
+    from world.covenants.models import CharacterCovenantRole, MentorBond  # noqa: PLC0415
+    from world.relationships.models import (  # noqa: PLC0415
+        CharacterRelationship,
+        RelationshipLabel,
+    )
+    from world.scenes.constants import PersonaType  # noqa: PLC0415
+    from world.scenes.models import Persona  # noqa: PLC0415
+    from world.societies.houses.models import Title  # noqa: PLC0415
+
+    def true_names(ids: set[int]) -> dict[int, str]:
+        # Staff see who a character is, never the mask they wear now.
+        return dict(
+            Persona.objects.filter(
+                character_sheet_id__in=ids, persona_type=PersonaType.PRIMARY
+            ).values_list("character_sheet_id", "name")
+        )
+
+    faces = (
+        Persona.objects.filter(character_sheet=sheet, is_system=False)
+        .exclude(persona_type=PersonaType.PRIMARY)
+        .select_related("profile")
+        .order_by("pk")
+    )
+    titles = (
+        PersonaTitle.objects.filter(persona__character_sheet=sheet)
+        .select_related("persona", "reward", "legend_entry")
+        .order_by("persona_id", "pk")
+    )
+    sides = list(
+        CharacterRelationship.objects.filter(
+            Q(source=sheet, target__isnull=False) | Q(target=sheet)
+        ).order_by("pk")
+    )
+    open_labels: dict[int, list[Any]] = {}
+    for label in (
+        RelationshipLabel.objects.filter(relationship__in=sides, ended_at__isnull=True)
+        .select_related("type")
+        .order_by("since")
+    ):
+        open_labels.setdefault(label.relationship_id, []).append(label)
+    others = sorted(
+        {side.target_id if side.source_id == sheet.pk else side.source_id for side in sides}
+    )
+    names = true_names(set(others))
+    roles = (
+        CharacterCovenantRole.objects.filter(character_sheet=sheet, left_at__isnull=True)
+        .select_related("covenant", "covenant_role", "rank")
+        .order_by("covenant__name")
+    )
+    bonds = (
+        MentorBond.objects.active()
+        .filter(Q(mentor_sheet=sheet) | Q(sidekick_sheet=sheet))
+        .select_related("covenant", "mentor_sheet", "sidekick_sheet")
+        .order_by("pk")
+    )
+    bond_names = true_names(
+        {b.sidekick_sheet_id if b.mentor_sheet_id == sheet.pk else b.mentor_sheet_id for b in bonds}
+    )
+    return {
+        "personas": [
+            StaffPersonaRow(
+                id=face.pk,
+                name=face.name,
+                persona_type=face.persona_type,
+                guise={
+                    field: getattr(face.profile, field) if face.profile else ""
+                    for field in GUISE_FIELDS
+                },
+            )
+            for face in faces
+        ],
+        "titles": [
+            StaffTitleRow(
+                id=title.pk,
+                name=title.display_name,
+                persona=title.persona_id,
+                persona_name=title.persona.name,
+            )
+            for title in titles
+        ],
+        "noble_titles": [
+            StaffOptionRow(id=title.pk, name=title.name or title.get_tier_display())
+            for title in Title.objects.filter(holder__sheet=sheet).order_by("pk")
+        ],
+        "ties": [
+            StaffTieRow(
+                other=other,
+                other_name=names.get(other, ""),
+                toward=_staff_tie_side(sides, open_labels, source=sheet.pk, target=other),
+                back=_staff_tie_side(sides, open_labels, source=other, target=sheet.pk),
+            )
+            for other in others
+        ],
+        "covenant_roles": [
+            StaffCovenantRoleRow(
+                id=row.pk,
+                covenant=row.covenant_id,
+                covenant_name=row.covenant.name,
+                role=row.covenant_role_id,
+                role_name=row.covenant_role.name,
+                rank=row.rank_id,
+                rank_name=row.rank.name,
+                standing=row.standing,
+                engaged=row.engaged,
+                is_secondary=row.is_secondary,
+            )
+            for row in roles
+        ],
+        "mentor_bonds": [
+            StaffMentorBondRow(
+                id=bond.pk,
+                covenant_name=bond.covenant.name,
+                other_name=bond_names.get(
+                    bond.sidekick_sheet_id
+                    if bond.mentor_sheet_id == sheet.pk
+                    else bond.mentor_sheet_id,
+                    "",
+                ),
+                as_mentor=bond.mentor_sheet_id == sheet.pk,
+                warning=mentor_band_problem(
+                    covenant=bond.covenant,
+                    mentor_sheet=bond.mentor_sheet,
+                    sidekick_sheet=bond.sidekick_sheet,
+                ),
+            )
+            for bond in bonds
+        ],
+    }
+
+
+def _staff_tie_side(
+    sides: list[Any], open_labels: dict[int, list[Any]], *, source: int, target: int
+) -> StaffTieSideRow | None:
+    side = next((s for s in sides if s.source_id == source and s.target_id == target), None)
+    if side is None:
+        return None
+    return StaffTieSideRow(
+        id=side.pk,
+        tier=side.tier,
+        summary=side.summary,
+        labels=[
+            StaffTieLabelRow(
+                id=label.pk,
+                type=label.type_id,
+                name=label.type.name,
+                awareness=label.awareness,
+                waiting=label.staff_seeded and label.declared_by_tenure_id is None,
+            )
+            for label in open_labels.get(side.pk, [])
+        ],
+    )
 
 
 class StaffEditSerializer(serializers.Serializer):

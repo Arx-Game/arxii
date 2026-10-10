@@ -150,6 +150,10 @@ result in nothing. If the original player is the one approved,
 second one, which would otherwise announce them as "2nd player of X" when they are
 the same person.
 
+**Approval binds staff-seeded ties (#4229).** Labels staff declared on the character while
+nobody played it carry no tenure and count toward nothing; `approve` runs
+`bind_staff_seeded_labels(tenure)`, so they are live from pickup (ADR-4229).
+
 Consumers should ask the shared vocabulary on `CharacterSheet.objects`
 (`.active()` / `.claimable()` / `.dormant()` / `.inactive_at_least(tier)`) rather
 than deriving absence from timestamps. Mothballing (90d) reads

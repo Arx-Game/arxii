@@ -864,6 +864,85 @@ class StaffReputationRow(TypedDict):
     value: int
 
 
+class StaffTieDirection(models.TextChoices):
+    """Which side of a tie staff edit (#4229): this character's, or the other's."""
+
+    TOWARD = "toward", "This character toward the other"
+    FROM = "from", "The other toward this character"
+
+
+class StaffPersonaRow(TypedDict):
+    """A face of the character other than their own, with its cover bio (#4229)."""
+
+    id: int
+    name: str
+    persona_type: str
+    guise: dict[str, str]
+
+
+class StaffTitleRow(TypedDict):
+    """A title one of the character's faces holds (#4229)."""
+
+    id: int
+    name: str
+    persona: int
+    persona_name: str
+
+
+class StaffTieLabelRow(TypedDict):
+    """One open label on a side (#4229); ``waiting`` is staff-seeded, not yet bound."""
+
+    id: int
+    type: int
+    name: str
+    awareness: str
+    waiting: bool
+
+
+class StaffTieSideRow(TypedDict):
+    """One side of a tie: its claimed tier, summary and open labels (#4229)."""
+
+    id: int
+    tier: int
+    summary: str
+    labels: list[StaffTieLabelRow]
+
+
+class StaffTieRow(TypedDict):
+    """A tie between this character and another, both sides (#4229)."""
+
+    other: int
+    other_name: str
+    toward: StaffTieSideRow | None
+    back: StaffTieSideRow | None
+
+
+class StaffCovenantRoleRow(TypedDict):
+    """An active covenant membership (#4229)."""
+
+    id: int
+    covenant: int
+    covenant_name: str
+    role: int
+    role_name: str
+    rank: int
+    rank_name: str
+    standing: str
+    engaged: bool
+    is_secondary: bool
+
+
+class StaffMentorBondRow(TypedDict):
+    """An active mentor bond (#4229); ``as_mentor`` says which party this character is,
+    ``warning`` why the pair breaks the level band, if it does (staff may bond it anyway)."""
+
+    id: int
+    covenant_name: str
+    other_name: str
+    as_mentor: bool
+    warning: str
+
+
 class StaffEditRows(TypedDict):
     """The CG rows a sheet holds, by id, for staff edit mode's editors (#4221).
 
@@ -890,6 +969,13 @@ class StaffEditRows(TypedDict):
     residences: list[StaffOptionRow]
     properties: list[StaffOptionRow]
     reputations: list[StaffReputationRow]
+    # #4229 — group fit: faces, titles, ties, covenant roles and mentor bonds.
+    personas: list[StaffPersonaRow]
+    titles: list[StaffTitleRow]
+    noble_titles: list[StaffOptionRow]
+    ties: list[StaffTieRow]
+    covenant_roles: list[StaffCovenantRoleRow]
+    mentor_bonds: list[StaffMentorBondRow]
 
 
 class StaffEditFields(TypedDict):

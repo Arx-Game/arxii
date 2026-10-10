@@ -287,7 +287,41 @@ claim, vacancy and reputation. The actions are `staff-kinship`, `staff-residence
 through `world.character_creation.estate_writer`. `StaffEditRows` adds `kin_node`,
 `residences`, `properties` and `reputations`.
 
-Piece E (group fit) continues on #4226.
+**Piece E, group fit (#4229).** Placing a character into a group that already shares
+play state: the rows band adds Identities, Titles, Ties, Covenants and Mentor bonds, each
+writing through `world.character_sheets.group_writer` and the owning app's own service,
+skipping what a player pays or proves (XP, the established-persona cap, induction, the
+level band) and announcing nothing to another character. Other characters are searched
+(`staff-group-options?character=`), never listed.
+
+- Identities: `staff-personas` (an ESTABLISHED persona past the cap), `staff-persona`
+  (rename and/or cover bio; the bio goes through `set_persona_profile`, which now writes
+  every changed field through `update_profile_text`, so a guise keeps version history),
+  `staff-persona-remove` (refused when anything protected stands behind the persona, such as
+  its poses; a worn face returns the character to their own first).
+- Titles: `staff-titles` (a TITLE reward or one of that face's own deeds, written as a
+  `PersonaTitle` directly so an achievement's bonus modifiers are never reapplied),
+  `staff-title-remove`, `staff-noble-title` (`pass_title` to the character's kinsperson).
+- Ties (#3957): `staff-tie-labels` declares a label on either side of a tie with a searched
+  character; `staff-tie-label` shifts, reveals or ends one; `staff-tie` sets a side's summary
+  and claimed tier (`staff_set_tier`, no XP and no capstone). A played character's label is
+  declared under their open tenure and counts at once; a character nobody plays gets a
+  waiting label (`RelationshipLabel.staff_seeded`, no tenure) that binds to the tenure that
+  picks the character up (ADR-4229).
+- Covenants: `staff-covenant-roles` (`assign_covenant_role`, sworn under the character's own
+  face, no induction session, band gate or sworn act) and `staff-covenant-role` (one change
+  per call: role, rank through `set_member_rank`, engage or disengage, end). Engaging keeps
+  its gift, technique and capability grants and tells the character what they gained.
+- Mentor bonds: `staff-mentor-bonds` (`establish_mentor_bond(staff_override=True)`: a pair
+  outside the band is bonded, and its row carries `mentor_band_problem` as a warning; the
+  sidekick cap holds) and `staff-mentor-bond-end`.
+- Looks need nothing new: the gallery (#4151) already lets staff upload character art onto
+  the entry, tag moods, crop looks and wear one as the profile picture.
+
+`StaffEditRows` adds `personas`, `titles`, `noble_titles`, `ties`, `covenant_roles` and
+`mentor_bonds`. `test_staff_completeness` builds every family `finalize_character` writes
+(less the onboarding missions and point conversion) on a bare `mint_gm_character` sheet
+through the staff endpoints alone.
 
 ## Web Sheet Mechanics Display (#3042)
 

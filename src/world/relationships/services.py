@@ -114,8 +114,14 @@ def declare_label(
     type: RelationshipType,  # noqa: A002 - the model field is named type
     awareness: str = LabelAwareness.PRIVATE,
     tenure: RosterTenure | None = None,
+    staff_seeded: bool = False,
 ) -> RelationshipLabel:
-    """Name one type on this side, Private unless told otherwise (#3957)."""
+    """Name one type on this side, Private unless told otherwise (#3957).
+
+    ``staff_seeded`` (#4229) marks a label staff declared through edit mode; with no
+    ``tenure`` it waits for the next player to pick the character up
+    (``bind_staff_seeded_labels``).
+    """
     if awareness not in AWARENESS_RANK:
         msg = "Unknown awareness."
         raise TieError(msg)
@@ -127,6 +133,7 @@ def declare_label(
                 type=type,
                 awareness=awareness,
                 declared_by_tenure=tenure,
+                staff_seeded=staff_seeded,
                 since=now,
                 clandestine_at=now if awareness == LabelAwareness.CLANDESTINE else None,
                 public_at=now if awareness == LabelAwareness.PUBLIC else None,
@@ -154,6 +161,7 @@ def shift_label(
                 type=new_type,
                 awareness=label.awareness,
                 declared_by_tenure=label.declared_by_tenure,
+                staff_seeded=label.staff_seeded,
                 since=now,
                 clandestine_at=label.clandestine_at,
                 public_at=label.public_at,
@@ -173,6 +181,44 @@ def end_label(*, label: RelationshipLabel) -> RelationshipLabel:
     label.ended_at = timezone.now()
     label.save(update_fields=["ended_at"])
     return label
+
+
+def bind_staff_seeded_labels(tenure: RosterTenure) -> int:
+    """Bind the character's waiting staff-seeded labels to a tenure that just started.
+
+    Staff declare labels on a character nobody plays with no tenure (#4229), so they
+    count toward nothing. The player who picks the character up saw them on the sheet,
+    so they are live from pickup: each open one is stamped with the new tenure. A label
+    an earlier player declared keeps its ended tenure and stays inert until re-declared
+    (#3957). Returns how many labels were bound.
+    """
+    waiting = list(
+        RelationshipLabel.objects.filter(
+            relationship__source_id=tenure.roster_entry.character_sheet_id,
+            staff_seeded=True,
+            declared_by_tenure__isnull=True,
+            ended_at__isnull=True,
+        )
+    )
+    for label in waiting:
+        label.declared_by_tenure = tenure
+        label.save(update_fields=["declared_by_tenure"])
+    return len(waiting)
+
+
+def staff_set_tier(*, side: CharacterRelationship, tier_number: int) -> CharacterRelationship:
+    """Set a side's claimed tier by staff fiat (#4229): no XP, no capstone entry.
+
+    ``advance_tier`` is the player's claim, paid in XP against a journal entry; staff
+    placing a character into an existing group set where the tie already stands. Zero
+    clears the claim; any other number must be a rung of the ladder.
+    """
+    if tier_number and not RelationshipTier.objects.filter(tier_number=tier_number).exists():
+        msg = "There is no such tier."
+        raise TieError(msg)
+    side.tier = tier_number
+    side.save(update_fields=["tier", "updated_at"])
+    return side
 
 
 def advance_awareness(*, label: RelationshipLabel, to: str) -> RelationshipLabel:

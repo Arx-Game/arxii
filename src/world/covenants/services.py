@@ -1433,6 +1433,21 @@ def assign_rank(
     """
     if not actor.rank.can_manage_ranks:
         raise NotAuthorizedToManageRanksError
+    return set_member_rank(membership=membership, rank=rank)
+
+
+@transaction.atomic
+def set_member_rank(
+    *,
+    membership: CharacterCovenantRole,
+    rank: CovenantRank,
+) -> CharacterCovenantRole:
+    """Put a member on a rank of their own covenant; the write behind ``assign_rank``.
+
+    Takes no actor: ``assign_rank`` checks the actor's authority first, and staff edit
+    mode (#4229) calls this directly. The rank must be the membership's covenant's,
+    and the last member who can manage ranks may not lose that power.
+    """
     if rank.covenant_id != membership.covenant_id:
         raise CrossCovenantRankError
 
