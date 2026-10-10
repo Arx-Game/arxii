@@ -31,31 +31,28 @@ import {
 const ENCOUNTER_ID = 77;
 
 /**
- * Boots `/game` into an active scene with an already-active encounter, in
- * the sidebar's default Conversations mode (explicit click below, matching
- * `narrative-play-delivery.spec.ts`'s own established pattern, even though
- * `GamePage`'s initial `sidebarMode` already defaults to 'conversations'
- * whenever a scene is active — being explicit doesn't depend on that default
- * holding).
+ * Boots `/game` into an active scene with an already-active encounter, with
+ * the sidebar on History (an unrelated mode, so the jump to Here is real;
+ * the Conversations mode left for the rail in #4129).
  */
 async function bootWithActiveEncounter(page: Page): Promise<Connection[]> {
   await mockRestRoutes(page, { activeEncounterId: ENCOUNTER_ID });
   const connections = await reachReadySession(page);
   await page
     .getByRole('navigation', { name: 'Sidebar modes' })
-    .getByRole('button', { name: 'Conversations', exact: true })
+    .getByRole('button', { name: 'History', exact: true })
     .click();
   return connections;
 }
 
 test.describe('#3761 encounter reachability', () => {
-  test('banner and nav icon both appear and both route to the rail while reading Conversations', async ({
+  test('banner and nav icon both appear and both route to the rail while reading History', async ({
     page,
   }) => {
     await bootWithActiveEncounter(page);
 
     // Both Task 1-3/5 surfaces reach the SAME active encounter while the
-    // sidebar is showing an unrelated mode (Conversations, not Here).
+    // sidebar is showing an unrelated mode (History, not Here).
     const banner = page.getByTestId('combat-banner');
     await expect(banner).toBeVisible();
     const sidebarNav = page.getByRole('navigation', { name: 'Sidebar modes' });

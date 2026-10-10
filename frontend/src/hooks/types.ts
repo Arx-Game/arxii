@@ -107,6 +107,14 @@ export interface FeedNote {
   subject?: string;
   /** ISO-8601, client clock at receipt; sorts as a string against interaction timestamps. */
   timestamp: string;
+  /**
+   * The correspondent of a page (#4129): the server tags both the line a
+   * character receives and the echo the sender gets with the other party, so
+   * the rail groups them under one row. Absent on every other kind.
+   */
+  from?: { personaId: number; name: string };
+  /** True on the sender's own echo of a page, which never counts as unread. */
+  outgoing?: boolean;
 }
 
 /**

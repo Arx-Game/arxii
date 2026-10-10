@@ -28,10 +28,7 @@ import {
   setSessionRoom,
   setSessionScene,
   markThreadSeen,
-  openThreadTab,
-  closeThreadTab,
   setActiveThreadTab,
-  hydrateThreadTabs,
   resetGame,
   hydrateActiveCharacter,
 } from '../gameSlice';
@@ -79,7 +76,6 @@ interface Session {
   sceneInteractions: InteractionWsPayload[];
   threadLastSeen: Record<string, number>;
   sceneBaselineId: number | null;
-  openThreadTabs: string[];
   activeThreadTab: string | null;
 }
 
@@ -104,7 +100,6 @@ const createDefaultSession = (overrides: Partial<Session> = {}): Session => ({
   sceneInteractions: [],
   threadLastSeen: {},
   sceneBaselineId: null,
-  openThreadTabs: [],
   activeThreadTab: null,
   ...overrides,
 });
@@ -277,7 +272,6 @@ describe('gameSlice', () => {
           sceneInteractions: [],
           threadLastSeen: {},
           sceneBaselineId: null,
-          openThreadTabs: [],
           activeThreadTab: null,
         });
       });
@@ -1505,7 +1499,6 @@ describe('gameSlice', () => {
             sceneInteractions: [],
             threadLastSeen: { room: 5 },
             sceneBaselineId: null,
-            openThreadTabs: ['whisper:1'],
             activeThreadTab: 'whisper:1',
           },
         },
@@ -1638,143 +1631,48 @@ describe('gameSlice', () => {
   });
 });
 
-describe('conversation tabs (#2165)', () => {
+describe('the rail selection (#4129)', () => {
   const character = 'Alise';
   function withSession(): ReturnType<typeof reducer> {
     return reducer(undefined, startSession(character));
   }
 
-  it('openThreadTab appends once and activates', () => {
+  it('setActiveThreadTab selects any row, and null is All', () => {
     let state = withSession();
-    state = reducer(state, openThreadTab({ character, threadKey: 'whisper:1,2' }));
-    state = reducer(state, openThreadTab({ character, threadKey: 'whisper:1,2' }));
-    expect(state.sessions[character].openThreadTabs).toEqual(['whisper:1,2']);
-    expect(state.sessions[character].activeThreadTab).toBe('whisper:1,2');
-  });
-
-  it('openThreadTab with room activates the anchor without appending', () => {
-    let state = withSession();
-    state = reducer(state, openThreadTab({ character, threadKey: 'whisper:1,2' }));
-    state = reducer(state, openThreadTab({ character, threadKey: 'room' }));
-    expect(state.sessions[character].openThreadTabs).toEqual(['whisper:1,2']);
-    expect(state.sessions[character].activeThreadTab).toBeNull();
-  });
-
-  it('closeThreadTab removes the tab and clears active when it was the active tab', () => {
-    let state = withSession();
-    state = reducer(state, openThreadTab({ character, threadKey: 'whisper:1,2' }));
-    state = reducer(state, closeThreadTab({ character, threadKey: 'whisper:1,2' }));
-    expect(state.sessions[character].openThreadTabs).toEqual([]);
-    expect(state.sessions[character].activeThreadTab).toBeNull();
-  });
-
-  it('closeThreadTab removes an inactive tab and leaves active untouched', () => {
-    let state = withSession();
-    state = reducer(state, openThreadTab({ character, threadKey: 'whisper:1,2' }));
-    state = reducer(state, openThreadTab({ character, threadKey: 'whisper:3,4' }));
-    state = reducer(state, setActiveThreadTab({ character, threadKey: 'whisper:1,2' }));
-    state = reducer(state, closeThreadTab({ character, threadKey: 'whisper:3,4' }));
-    expect(state.sessions[character].openThreadTabs).toEqual(['whisper:1,2']);
-    expect(state.sessions[character].activeThreadTab).toBe('whisper:1,2');
-  });
-
-  it('setActiveThreadTab activates an open tab', () => {
-    let state = withSession();
-    state = reducer(state, openThreadTab({ character, threadKey: 'whisper:1,2' }));
-    state = reducer(state, openThreadTab({ character, threadKey: 'whisper:3,4' }));
     state = reducer(state, setActiveThreadTab({ character, threadKey: 'whisper:1,2' }));
     expect(state.sessions[character].activeThreadTab).toBe('whisper:1,2');
-  });
-
-  it('setActiveThreadTab activates null (the room anchor)', () => {
-    let state = withSession();
-    state = reducer(state, openThreadTab({ character, threadKey: 'whisper:1,2' }));
+    state = reducer(state, setActiveThreadTab({ character, threadKey: 'page:9' }));
+    expect(state.sessions[character].activeThreadTab).toBe('page:9');
     state = reducer(state, setActiveThreadTab({ character, threadKey: null }));
     expect(state.sessions[character].activeThreadTab).toBeNull();
   });
 
-  it('setActiveThreadTab ignores a key not in openThreadTabs', () => {
-    let state = withSession();
-    state = reducer(state, openThreadTab({ character, threadKey: 'whisper:1,2' }));
-    state = reducer(state, setActiveThreadTab({ character, threadKey: 'whisper:9,9' }));
-    expect(state.sessions[character].activeThreadTab).toBe('whisper:1,2');
-  });
-
-  it('hydrateThreadTabs seeds both fields when openThreadTabs is empty', () => {
-    let state = withSession();
-    state = reducer(
-      state,
-      hydrateThreadTabs({
-        character,
-        openThreadTabs: ['whisper:1,2', 'table:5'],
-        activeThreadTab: 'table:5',
-      })
-    );
-    expect(state.sessions[character].openThreadTabs).toEqual(['whisper:1,2', 'table:5']);
-    expect(state.sessions[character].activeThreadTab).toBe('table:5');
-  });
-
-  it('hydrateThreadTabs does nothing when openThreadTabs is already occupied', () => {
-    let state = withSession();
-    state = reducer(state, openThreadTab({ character, threadKey: 'whisper:1,2' }));
-    state = reducer(
-      state,
-      hydrateThreadTabs({
-        character,
-        openThreadTabs: ['table:5'],
-        activeThreadTab: 'table:5',
-      })
-    );
-    expect(state.sessions[character].openThreadTabs).toEqual(['whisper:1,2']);
-    expect(state.sessions[character].activeThreadTab).toBe('whisper:1,2');
-  });
-
-  it('hydrateThreadTabs filters room out of the incoming open list', () => {
-    let state = withSession();
-    state = reducer(
-      state,
-      hydrateThreadTabs({
-        character,
-        openThreadTabs: ['room', 'whisper:1,2'],
-        activeThreadTab: 'whisper:1,2',
-      })
-    );
-    expect(state.sessions[character].openThreadTabs).toEqual(['whisper:1,2']);
-    expect(state.sessions[character].activeThreadTab).toBe('whisper:1,2');
-  });
-
-  it('hydrateThreadTabs drops an activeThreadTab not present in the hydrated open list', () => {
-    let state = withSession();
-    state = reducer(
-      state,
-      hydrateThreadTabs({
-        character,
-        openThreadTabs: ['whisper:1,2'],
-        activeThreadTab: 'table:5',
-      })
-    );
-    expect(state.sessions[character].openThreadTabs).toEqual(['whisper:1,2']);
-    expect(state.sessions[character].activeThreadTab).toBeNull();
-  });
-
-  it('setSessionScene with a different scene id clears openThreadTabs and activeThreadTab', () => {
+  it('setSessionScene with a different scene id resets the selection to All', () => {
     const sceneOne = createSceneSummary(1, 'Scene One');
     const sceneTwo = createSceneSummary(2, 'Scene Two');
     let state = withSession();
     state = reducer(state, setSessionScene({ character, scene: sceneOne }));
-    state = reducer(state, openThreadTab({ character, threadKey: 'whisper:1,2' }));
+    state = reducer(state, setActiveThreadTab({ character, threadKey: 'whisper:1,2' }));
     state = reducer(state, setSessionScene({ character, scene: sceneTwo }));
-    expect(state.sessions[character].openThreadTabs).toEqual([]);
     expect(state.sessions[character].activeThreadTab).toBeNull();
   });
 
-  it('setSessionScene with the same scene id leaves tabs alone', () => {
+  it('the room row survives a scene change (decision 3)', () => {
+    const sceneOne = createSceneSummary(1, 'Scene One');
+    const sceneTwo = createSceneSummary(2, 'Scene Two');
+    let state = withSession();
+    state = reducer(state, setSessionScene({ character, scene: sceneOne }));
+    state = reducer(state, setActiveThreadTab({ character, threadKey: 'room' }));
+    state = reducer(state, setSessionScene({ character, scene: sceneTwo }));
+    expect(state.sessions[character].activeThreadTab).toBe('room');
+  });
+
+  it('setSessionScene with the same scene id leaves the selection alone', () => {
     const scene = createSceneSummary(1, 'Scene One');
     let state = withSession();
     state = reducer(state, setSessionScene({ character, scene }));
-    state = reducer(state, openThreadTab({ character, threadKey: 'whisper:1,2' }));
+    state = reducer(state, setActiveThreadTab({ character, threadKey: 'whisper:1,2' }));
     state = reducer(state, setSessionScene({ character, scene: { ...scene } }));
-    expect(state.sessions[character].openThreadTabs).toEqual(['whisper:1,2']);
     expect(state.sessions[character].activeThreadTab).toBe('whisper:1,2');
   });
 });

@@ -8,47 +8,48 @@ import {
 import { usePageBackgrounds, pageBackgroundStyle } from '@/hooks/usePageBackgrounds';
 import {
   DEFAULT_PLAY_PREFERENCES,
+  RAIL_MAX,
+  RAIL_MIN,
+  RAIL_STRIP_WIDTH,
   loadPlayPreferences,
   savePlayPreferences,
+  usePlayPreferences,
   type SidebarSide,
 } from '../playPreferences';
+
+type MobilePane = 'rail' | 'story' | 'sidebar';
 
 interface GameLayoutProps {
   topBar: ReactNode;
   center: ReactNode;
   /** The single contextual sidebar. */
   sidebar?: ReactNode;
-  /** Kept as a compatibility alias while callers migrate. */
-  leftSidebar?: ReactNode;
-  /** Deprecated compatibility input; it is never rendered as a second column. */
-  rightSidebar?: ReactNode;
+  /** The conversation rail (#4129), the far-left column; absent, the shell is two columns. */
+  rail?: ReactNode;
   accountId?: number | null;
 }
 
 /**
- * App shell for play: one wide reader/composer and one contextual sidebar.
- * At narrow widths the user explicitly switches panes instead of losing either.
+ * App shell for play (#3758, #4129): the conversation rail on the far left, one
+ * wide reader/composer, and one contextual sidebar. At narrow widths the user
+ * explicitly switches panes instead of losing any of them.
  */
-export function GameLayout({
-  topBar,
-  center,
-  sidebar,
-  leftSidebar,
-  rightSidebar,
-  accountId,
-}: GameLayoutProps) {
+export function GameLayout({ topBar, center, sidebar, rail, accountId }: GameLayoutProps) {
   const { data: backgrounds } = usePageBackgrounds();
-  const [mobilePane, setMobilePane] = useState<'story' | 'sidebar'>('story');
+  const [mobilePane, setMobilePane] = useState<MobilePane>('story');
   const [sidebarWidth, setSidebarWidth] = useState(DEFAULT_PLAY_PREFERENCES.sidebarWidth);
   const [sidebarSide, setSidebarSide] = useState<SidebarSide>(DEFAULT_PLAY_PREFERENCES.sidebarSide);
-  const contextualSidebar = sidebar ?? rightSidebar ?? leftSidebar;
+  // The rail's width and folded state live in the shared preferences store, so
+  // the rail's own « control and this column agree without an event between them.
+  const { preferences, update } = usePlayPreferences(accountId);
+  const railWidth = preferences.railCollapsed ? RAIL_STRIP_WIDTH : preferences.railWidth;
 
   useEffect(() => {
-    const preferences = loadPlayPreferences(accountId);
-    setSidebarWidth(preferences.sidebarWidth);
-    setSidebarSide(preferences.sidebarSide);
+    const stored = loadPlayPreferences(accountId);
+    setSidebarWidth(stored.sidebarWidth);
+    setSidebarSide(stored.sidebarSide);
     const sync = (event: Event) => {
-      const detail = (event as CustomEvent<typeof preferences>).detail;
+      const detail = (event as CustomEvent<typeof stored>).detail;
       if (!detail) return;
       setSidebarWidth(detail.sidebarWidth);
       setSidebarSide(detail.sidebarSide);
@@ -84,18 +85,81 @@ export function GameLayout({
     window.addEventListener('pointerup', onUp, { once: true });
   };
 
+  const clampRail = (width: number) => Math.min(RAIL_MAX, Math.max(RAIL_MIN, width));
+  const resizeRail = (event: ReactPointerEvent<HTMLButtonElement>) => {
+    event.currentTarget.setPointerCapture(event.pointerId);
+    const origin = event.clientX;
+    const initial = preferences.railWidth;
+    let latestWidth = initial;
+    const onMove = (move: globalThis.PointerEvent) => {
+      latestWidth = clampRail(initial + move.clientX - origin);
+      update({ railWidth: latestWidth });
+    };
+    const onUp = () => {
+      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerup', onUp);
+    };
+    window.addEventListener('pointermove', onMove);
+    window.addEventListener('pointerup', onUp, { once: true });
+  };
+
   const style = {
     '--play-sidebar-width': `${sidebarWidth}px`,
+    '--play-rail-width': rail ? `${railWidth}px` : '0px',
   } as CSSProperties;
+  const paneButton = (pane: MobilePane, label: string) => (
+    <button
+      type="button"
+      aria-pressed={mobilePane === pane}
+      onClick={() => setMobilePane(pane)}
+      className="min-h-11 flex-1 rounded text-sm"
+    >
+      {label}
+    </button>
+  );
   return (
     <div
       className="flex min-h-0 min-h-[100dvh] min-w-0 flex-1 flex-col"
       style={pageBackgroundStyle(backgrounds, 'game_client', 'Game Client')}
       data-sidebar-side={sidebarSide}
       data-sidebar-width={sidebarWidth}
+      data-rail-width={rail ? railWidth : undefined}
     >
       {topBar}
-      <div className="play-workspace flex min-h-0 flex-1 flex-col" style={style}>
+      <div
+        className="play-workspace flex min-h-0 flex-1 flex-col"
+        style={style}
+        data-sidebar-side={sidebarSide}
+      >
+        {rail && (
+          <div
+            className={`play-rail-pane relative min-h-0 flex-1 overflow-hidden border-r bg-card ${mobilePane !== 'rail' ? 'hidden' : 'flex'}`}
+            data-testid="play-rail-pane"
+          >
+            {rail}
+            {!preferences.railCollapsed && (
+              <button
+                type="button"
+                aria-label="Resize the rail"
+                aria-valuemin={RAIL_MIN}
+                aria-valuemax={RAIL_MAX}
+                aria-valuenow={preferences.railWidth}
+                aria-valuetext={`${preferences.railWidth}px`}
+                data-testid="rail-resize"
+                aria-orientation="vertical"
+                role="separator"
+                className="play-sidebar-resize absolute right-0 top-0 z-10 h-full w-3 cursor-col-resize touch-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                onPointerDown={resizeRail}
+                onKeyDown={(event) => {
+                  if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return;
+                  event.preventDefault();
+                  const delta = event.key === 'ArrowLeft' ? -8 : 8;
+                  update({ railWidth: clampRail(preferences.railWidth + delta) });
+                }}
+              />
+            )}
+          </div>
+        )}
         <div
           className={`play-story-pane min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-background ${mobilePane !== 'story' ? 'hidden' : 'flex'}`}
           style={{ order: sidebarSide === 'left' ? 1 : 0 }}
@@ -135,26 +199,13 @@ export function GameLayout({
               }
             }}
           />
-          {contextualSidebar}
+          {sidebar}
         </div>
       </div>
       <nav className="play-mobile-nav flex shrink-0 border-t bg-card p-1" aria-label="Play panes">
-        <button
-          type="button"
-          aria-pressed={mobilePane === 'story'}
-          onClick={() => setMobilePane('story')}
-          className="min-h-11 flex-1 rounded text-sm"
-        >
-          Story
-        </button>
-        <button
-          type="button"
-          aria-pressed={mobilePane === 'sidebar'}
-          onClick={() => setMobilePane('sidebar')}
-          className="min-h-11 flex-1 rounded text-sm"
-        >
-          Sidebar
-        </button>
+        {rail && paneButton('rail', 'Rail')}
+        {paneButton('story', 'Story')}
+        {paneButton('sidebar', 'Sidebar')}
       </nav>
     </div>
   );

@@ -445,8 +445,16 @@
   }
   .play-workspace {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) var(--play-sidebar-width);
+    /* The conversation rail (#4129) is the first column wherever the sidebar sits. */
+    grid-template-columns: var(--play-rail-width, 0px) minmax(0, 1fr) var(--play-sidebar-width);
   }
+  .play-workspace[data-sidebar-side='left'] {
+    grid-template-columns: var(--play-rail-width, 0px) var(--play-sidebar-width) minmax(0, 1fr);
+  }
+  .play-rail-pane {
+    order: -1;
+  }
+  .play-rail-pane,
   .play-story-pane,
   .play-sidebar-pane {
     display: flex !important;
@@ -457,6 +465,7 @@
   }
 }
 @media (max-width: 959px) {
+  .play-rail-pane.hidden,
   .play-story-pane.hidden,
   .play-sidebar-pane.hidden {
     display: none !important;

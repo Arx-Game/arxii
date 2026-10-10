@@ -1409,7 +1409,7 @@ the unchanged record/detail page (`SceneInteractionPanel`).
 **`GamePage`** (`frontend/src/game/GamePage.tsx`) is the composition root: it
 derives the active session's `sceneId`/`roomName`, calls `useSceneInteractions` +
 `useThreading` **once**, and threads the results down as props to
-`ConversationSidebar` (left column), `GameWindow` (center feed + composer), and the
+`ConversationRail` (the far-left column, #4129), `GameWindow` (center feed + composer), and the
 scene toolset (`ActionPanel`, `PlaceBar`, `ConsentPrompt`, `CharacterCardDrawer`) —
 no child re-fetches the same scene/roster data.
 
@@ -1441,9 +1441,10 @@ closes the markdown-rendering gap the #2155 audit flagged: the feed now renders
 `FormattedContent`, so `RichTextInput`'s markdown output actually displays as
 formatted prose instead of raw text.
 
-**Threading + per-thread unread:** `ConversationSidebar` renders `ThreadSidebar` +
-`ThreadFilterModal` from the `ThreadingState` `GamePage` composes, falling back to
-a static "Room" button with no active scene. Per-thread unread counts are backed by
+**Threading + per-thread unread:** the conversation rail (`ConversationRail`,
+rows from `railRows.ts`) lists every conversation from the `ThreadingState`
+`GamePage` composes, plus the quiet room's ambient interactions grouped the same way
+and the session's pages; with no scene it lists the room row alone. Per-thread unread counts are backed by
 `Session.threadLastSeen` (per-thread last-seen **interaction ids**, persisted in
 Redux via `markThreadSeen`) rather than stubbed to 0. A thread key with no
 last-seen entry — i.e. a thread that's new since the session started — falls back
@@ -1504,29 +1505,36 @@ routing, own-pose exclusion).
 there; that's a separate, pre-existing latent bug on that page, left untouched
 by this slate.
 
-**#2165 conversation tabs:** `/game` can keep several conversations open at once
-— the room feed as a permanent anchor plus a closable tab per broken-out
-place/whisper/target thread (`ConversationTabStrip.tsx`, rendered above the feed
-in `GameWindow`). Tab state (`openThreadTabs`/`activeThreadTab`) lives in
-`gameSlice`'s per-character `Session`, one tab set per session. The
-`ConversationSidebar` is the **open-a-tab surface**: clicking a thread row opens
-or focuses its tab; clicking the room row or "All" re-anchors the strip back to
-the room feed. The composer's audience is **derived from the active tab and
-locked**, never stored independently — `tabKeyToComposerMode` (in
-`threadToComposerMode.ts`) translates the active tab's key into a locked
-`ComposerMode` every render, which is the mis-send guard (a stale composer
-audience surviving a tab switch is the failure mode this closes). The room anchor's
+**#4129 conversation rail (replaced #2165's conversation tabs):** every
+conversation the character is in sits in a rail on the far left of the play shell
+(`ConversationRail.tsx`, `GameLayout`'s `rail` prop): **All** on top, then **Here**
+(the room, its threads, places and whispers, and the quiet room's out-of-scene
+whispers and tabletalk grouped by the same `getThreadKey`) and **OOC Pages** (one
+row per correspondent; `CmdPage` types both frames `page` with
+`from_persona_id`/`from_name`, the echo `outgoing`); **Channels** is reserved for
+#3299 and not drawn. One row is selected at a time — `activeThreadTab` in
+`gameSlice`'s per-character `Session`, `null` for All — and a picked row shows
+that conversation **in full** (lines hidden or folded in All are shown there),
+clears its count, and locks the composer to it; the kind chips keep filtering
+inside it. The right sidebar keeps Here and History only. The composer's audience is
+**derived from the selection and locked**, never stored independently —
+`tabKeyToComposerMode` (in `threadToComposerMode.ts`) translates the selected key
+into a locked `ComposerMode` every render (a page row to `page <name>=`), which is
+the mis-send guard (a stale composer audience surviving a switch is the failure
+mode this closes). The find box at the rail's foot narrows what the session holds
+to lines containing the text, within the selection and chips, matches marked
+(`feedFind.ts`); History's search is untouched. All's
 own default is derived the same way (#3857): with no mode chosen it is Pose, so a
 typed line is a pose and never a raw command; a line starting with `/` is the
 command after the slash; staff have a Commands mode whose lines go as typed and
 whose answers land in the staff console (`StaffConsole.tsx`), tagged `console` by
 `server/conf/serversession.py` while `server/conf/inputfuncs.py:text` runs the
-line, never in the player-facing column. The open-tab
-layout is persisted client-locally per character+scene (thread **keys** only,
-never message content) via `threadTabsStorage.ts`'s `localStorage` helpers, and
-`gameSlice` resets both tab fields whenever the session's scene id actually
-changes, since a tab pointing at a previous scene's thread set is unsafe to keep
-open.
+line, never in the player-facing column. Nothing about the selection is
+persisted: conversations tied to a scene come back with the scene's history and
+everything else lives in the session and starts empty at login. `gameSlice` resets
+the selection (the room row excepted) whenever the session's scene id actually
+changes, since a selection pointing at a previous scene's thread set is unsafe to
+keep.
 
 ### #2166 multi-character attention
 
@@ -1537,16 +1545,16 @@ and per-PC scoped, no new server data or write path.
 **Two-tier attention derivation:** `sessionAttention(session, personaId)`
 (`frontend/src/game/attention.ts`) is a pure, selector-side function reusing
 #2165's `getThreadKey`/`countUnread` grouping against
-`threadLastSeen`/`sceneBaselineId` — the same threshold rule the tab strip's
-own unread badges already use, just re-run per background session instead of
-per open tab. `direct` = unread on `whisper:*` threads plus `target:*` threads
+`threadLastSeen`/`sceneBaselineId` — the same threshold rule the conversation
+rail's own unread counts already use, just re-run per background session instead
+of per row. `direct` = unread on `whisper:*` threads plus `target:*` threads
 that include that session's `personaId` (an @-target, duel challenge, or
 consent request aimed at that persona specifically); `ambient` = any other
 thread unread, or the legacy `session.unread` scalar. `GameTopBar`'s alt
 avatars and `GameWindow`'s puppet tab bar both render the tier as a red
 numeric badge (direct) or a muted dot (ambient) — the **active** character is
-always excluded (its own attention already lives in `ConversationTabStrip`'s
-per-tab badges), so nothing double-counts.
+always excluded (its own attention already lives on the conversation rail's
+rows), so nothing double-counts.
 
 **Whisper toasts:** `handleInteractionPayload.ts` (`frontend/src/hooks/`)
 fires one toast when a whisper lands on a session that isn't the active one

@@ -8,7 +8,6 @@ import type { RoomData } from './RoomPanel';
 import { ThreadedNarrativeReader } from './ThreadedNarrativeReader';
 import { CommandInput } from './CommandInput';
 import type { ComposerMode } from './CommandInput';
-import { ConversationTabStrip, type ConversationTabStripProps } from './ConversationTabStrip';
 import type { PoseUnitAvatarClickPersona } from '@/scenes/components/PoseUnit';
 import type { Interaction } from '@/scenes/types';
 import type { ActionAttachmentInfo } from '@/scenes/actionTypes';
@@ -31,6 +30,7 @@ import { Link } from 'react-router-dom';
 import type { MyRosterEntry } from '@/roster/types';
 import { characterAttention, chipUnread, type AttentionOptions } from '@/game/attention';
 import { visibleInteractions, visibleNotes, wakingKinds } from '../feedChips';
+import { FeedFindContext, findInteractions, findNotes } from '../feedFind';
 import { FeedChipStrip } from './FeedChipStrip';
 import { FeedBlockControlsContext, type FeedBlockControls } from '../feedBlockControls';
 import { AttentionBadge } from '@/game/components/AttentionBadge';
@@ -141,8 +141,16 @@ interface GameWindowProps {
   speakerQueueBar?: ReactNode;
   /** `PendingActionAttachments`, rendered directly above the composer (#2156). */
   pendingAttachments?: ReactNode;
-  /** Open conversation tabs (#2165); absent = no strip, plain feed. */
-  conversationTabs?: ConversationTabStripProps;
+  /**
+   * The rail's selected conversation (#4129): a thread key, `room`, or a page
+   * row's key; null is All. A selected conversation shows in full: lines
+   * hidden or folded in All are shown, and the chips still apply.
+   */
+  selectedConversation?: string | null;
+  /** Every conversation key the rail offers, so a closed one's scroll memory is dropped. */
+  conversationKeys?: string[];
+  /** Find in this session (#4129): the needle the feed is narrowed to and marked with. */
+  find?: string;
   /** "Speaking as" identity chip (#2166 Decision 3) — threaded straight to `CommandInput`. */
   speakingAs?: { name: string; thumbnailUrl: string | null };
   /** Read-only historical reference shown in the same reader. */
@@ -173,6 +181,7 @@ interface GameWindowProps {
  * "a different conversation was selected"; it is never a lookup value.
  */
 const ROOM_ANCHOR_CONVERSATION = 'room-anchor';
+const EMPTY_KEYS = new Set<string>();
 
 interface GameWindowStatusProps {
   reference?: GameWindowProps['reference'];
@@ -325,7 +334,6 @@ type GameWindowFeedProps = Pick<
   GameWindowProps,
   | 'accountId'
   | 'sceneFeed'
-  | 'conversationTabs'
   | 'reference'
   | 'referenceLoading'
   | 'referenceUnavailable'
@@ -354,6 +362,8 @@ type GameWindowFeedProps = Pick<
   showHidden?: ReactNode;
   /** True while the All switch is off: the column shows one line instead of a reader. */
   allOff?: boolean;
+  /** True while a find matches nothing: the column shows one quiet line (#4129). */
+  findEmpty?: boolean;
   onFeedScroll: () => void;
   session: Session;
   effectiveLifecycle?: GameLifecycleState;
@@ -364,7 +374,6 @@ type GameWindowFeedProps = Pick<
 function GameWindowFeed({
   accountId,
   sceneFeed,
-  conversationTabs,
   reference,
   referenceLoading = false,
   referenceUnavailable = false,
@@ -378,6 +387,7 @@ function GameWindowFeed({
   chipStrip,
   showHidden,
   allOff = false,
+  findEmpty = false,
   session,
   room,
   ambientInteractions,
@@ -399,7 +409,6 @@ function GameWindowFeed({
       <>
         {chipStrip}
         {showHidden}
-        {sceneFeed && conversationTabs && <ConversationTabStrip {...conversationTabs} />}
         <div
           className="min-h-0 flex-1 overflow-y-auto px-6 py-8 text-sm italic text-muted-foreground"
           data-testid="feed-all-off"
@@ -409,12 +418,26 @@ function GameWindowFeed({
       </>
     );
   }
+  if (findEmpty) {
+    return (
+      <>
+        {chipStrip}
+        {showHidden}
+        <div
+          className="min-h-0 flex-1 overflow-y-auto px-6 py-8 text-sm italic text-muted-foreground"
+          data-testid="feed-find-empty"
+          role="status"
+        >
+          Nothing in this session says that.
+        </div>
+      </>
+    );
+  }
 
   return (
     <>
       {chipStrip}
       {showHidden}
-      {sceneFeed && conversationTabs && <ConversationTabStrip {...conversationTabs} />}
       {sceneFeed ? (
         <>
           <div
@@ -561,7 +584,9 @@ export function GameWindow({
   tavernGameWidget,
   speakerQueueBar,
   pendingAttachments,
-  conversationTabs,
+  selectedConversation = null,
+  conversationKeys,
+  find = '',
   speakingAs,
   reference,
   targetPoseId,
@@ -575,7 +600,7 @@ export function GameWindow({
   // while that conversation's storage key settles. The room-anchor composer
   // keeps one identity whether or not the room id has arrived yet; a
   // conversation tab is its own audience and is identified by its own key.
-  const draftConversation = conversationTabs?.activeKey ?? ROOM_ANCHOR_CONVERSATION;
+  const draftConversation = selectedConversation ?? ROOM_ANCHOR_CONVERSATION;
   const dispatch = useAppDispatch();
   const { connect, requestRoomState } = useGameSocket();
   const selectCharacter = useSelectCharacterMutation();
@@ -598,7 +623,7 @@ export function GameWindow({
   );
   const allChipRef = useRef<HTMLButtonElement>(null);
   const scrollPositionsRef = useRef(new Map<string, number>());
-  const activeConvKey = conversationTabs?.activeKey ?? 'room';
+  const activeConvKey = selectedConversation ?? 'room';
   // Threads and Chronological keep their OWN anchor slot (#3759 review
   // finding I5) -- this bypass must check whichever mode is CURRENTLY
   // active, not a single shared `anchor` field that no longer exists.
@@ -623,13 +648,22 @@ export function GameWindow({
     () => new Set(activeSessionForFeed?.minimizedFeed ?? []),
     [activeSessionForFeed?.minimizedFeed]
   );
-  // A reference view reads history as it was; chips and dismissals apply to
-  // the live column only.
+  // A selected conversation shows in full (#4129, decision 3): what was hidden
+  // or folded in All is shown there, the quickest way back to a sorted-away
+  // line. The chips keep applying inside it.
+  const inFull = selectedConversation !== null;
+  const hiddenKeys = inFull ? EMPTY_KEYS : dismissedKeys;
+  const foldedKeys = inFull ? EMPTY_KEYS : minimizedKeys;
+  // A reference view reads history as it was; chips, dismissals and the find
+  // apply to the live column only.
   const visibleSceneFeed = useMemo(() => {
     if (!sceneFeed || reference) return sceneFeed;
-    const interactions = visibleInteractions(sceneFeed.interactions, chipState, dismissedKeys);
+    const interactions = findInteractions(
+      visibleInteractions(sceneFeed.interactions, chipState, hiddenKeys),
+      find
+    );
     return interactions === sceneFeed.interactions ? sceneFeed : { ...sceneFeed, interactions };
-  }, [sceneFeed, reference, chipState, dismissedKeys]);
+  }, [sceneFeed, reference, chipState, hiddenKeys, find]);
   const visibleAmbient = useMemo(() => {
     const items = ambientInteractions ?? activeSessionForFeed?.ambientInteractions ?? [];
     const hydrated = items.map((item) => ({
@@ -637,12 +671,19 @@ export function GameWindow({
       content: item.content || getNarrativeBody(item)?.content || '',
       line: item.line || getNarrativeBody(item)?.line,
     }));
-    return visibleInteractions(hydrated, chipState, dismissedKeys);
-  }, [ambientInteractions, activeSessionForFeed?.ambientInteractions, chipState, dismissedKeys]);
+    return findInteractions(visibleInteractions(hydrated, chipState, hiddenKeys), find);
+  }, [ambientInteractions, activeSessionForFeed?.ambientInteractions, chipState, hiddenKeys, find]);
   const visibleNoteList = useMemo(() => {
     const items = notes ?? activeSessionForFeed?.notes ?? [];
-    return visibleNotes(items, chipState, dismissedKeys);
-  }, [notes, activeSessionForFeed?.notes, chipState, dismissedKeys]);
+    return findNotes(visibleNotes(items, chipState, hiddenKeys), find);
+  }, [notes, activeSessionForFeed?.notes, chipState, hiddenKeys, find]);
+  // No match: one quiet line and nothing else (#4129, decision 7).
+  const findEmpty =
+    find !== '' &&
+    !reference &&
+    (visibleSceneFeed?.interactions.length ?? 0) === 0 &&
+    visibleAmbient.length === 0 &&
+    visibleNoteList.length === 0;
   const newCounts = useMemo(
     () =>
       activeSessionForFeed
@@ -652,7 +693,7 @@ export function GameWindow({
   );
   const blockControls = useMemo<FeedBlockControls>(
     () => ({
-      minimized: minimizedKeys,
+      minimized: foldedKeys,
       minimize: (key) => active && dispatch(minimizeFeedItem({ character: active, key })),
       restore: (key) => active && dispatch(restoreFeedItem({ character: active, key })),
       dismiss: (key) => active && dispatch(dismissFeedItem({ character: active, key })),
@@ -661,7 +702,7 @@ export function GameWindow({
       restoreAll: () => active && dispatch(restoreAllFeed(active)),
       restoreDismissed: () => active && dispatch(restoreDismissedFeed(active)),
     }),
-    [minimizedKeys, active, dispatch]
+    [foldedKeys, active, dispatch]
   );
   const attentionOptionsFor = (name: string): AttentionOptions => ({
     wakingKinds: waking,
@@ -702,9 +743,9 @@ export function GameWindow({
       el.scrollTop = el.scrollHeight;
       pinnedRef.current = true;
     }
-    // Prune scroll offsets for tabs that are no longer open (#2165 review
-    // fold-in) — otherwise a closed tab's entry lingers in the map forever.
-    const liveKeys = new Set(['room', ...(conversationTabs?.tabs.map((t) => t.key) ?? [])]);
+    // Prune scroll offsets for conversations the rail no longer offers (#2165
+    // review fold-in) — otherwise a gone row's entry lingers in the map forever.
+    const liveKeys = new Set(['room', ...(conversationKeys ?? [])]);
     for (const key of scrollPositionsRef.current.keys()) {
       if (!liveKeys.has(key)) scrollPositionsRef.current.delete(key);
     }
@@ -714,12 +755,12 @@ export function GameWindow({
     // on every unrelated re-render instead of only on an actual tab switch or
     // scene change. `sceneFeed?.sceneId` is stable across those.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeConvKey, conversationTabs?.tabs, sceneFeed?.sceneId]);
+  }, [activeConvKey, conversationKeys, sceneFeed?.sceneId]);
 
   const handleFeedScroll = () => {
     // Never record a position while browsing a historical reference (#3759
     // review finding I5): the reference view falls back `activeConvKey` to
-    // 'room' (`conversationTabs` is undefined in reference mode), so without
+    // 'room' (`selectedConversation` is null in reference mode), so without
     // this guard a reference-mode scroll would corrupt the room tab's own
     // remembered raw offset under that same key -- and unlike the
     // downstream bypass in the effect above (which only masks the symptom
@@ -805,151 +846,153 @@ export function GameWindow({
 
   return (
     <FeedBlockControlsContext.Provider value={reference ? null : blockControls}>
-      <div className="flex min-h-0 flex-1 flex-col">
-        <GameWindowStatus
-          reference={reference}
-          onReturnToLive={onReturnToLive}
-          awaitingRoom={awaitingRoom}
-          effectiveLifecycle={effectiveLifecycle}
-          session={session}
-          visibleDiagnostics={visibleDiagnostics}
-          sessionNames={sessionNames}
-          characters={characters}
-          active={active}
-          sessions={sessions}
-          onTabClick={handleTabClick}
-          onRetryLocation={() => {
-            if (!active) return;
-            if (session.isConnected) {
-              requestRoomState(active);
-            } else {
-              connect(active).catch(() => {});
+      <FeedFindContext.Provider value={reference ? '' : find}>
+        <div className="flex min-h-0 flex-1 flex-col">
+          <GameWindowStatus
+            reference={reference}
+            onReturnToLive={onReturnToLive}
+            awaitingRoom={awaitingRoom}
+            effectiveLifecycle={effectiveLifecycle}
+            session={session}
+            visibleDiagnostics={visibleDiagnostics}
+            sessionNames={sessionNames}
+            characters={characters}
+            active={active}
+            sessions={sessions}
+            onTabClick={handleTabClick}
+            onRetryLocation={() => {
+              if (!active) return;
+              if (session.isConnected) {
+                requestRoomState(active);
+              } else {
+                connect(active).catch(() => {});
+              }
+            }}
+            attentionOptionsFor={attentionOptionsFor}
+          />
+          <GameWindowFeed
+            accountId={accountId}
+            sceneFeed={visibleSceneFeed}
+            chipStrip={
+              !reference && (
+                <FeedChipStrip
+                  state={chipState}
+                  onChange={(next) =>
+                    updateChipPreferences({ feedChips: next.chips, feedAll: next.all })
+                  }
+                  newCounts={newCounts}
+                  allButtonRef={allChipRef}
+                />
+              )
             }
-          }}
-          attentionOptionsFor={attentionOptionsFor}
-        />
-        <GameWindowFeed
-          accountId={accountId}
-          sceneFeed={visibleSceneFeed}
-          chipStrip={
-            !reference && (
-              <FeedChipStrip
-                state={chipState}
-                onChange={(next) =>
-                  updateChipPreferences({ feedChips: next.chips, feedAll: next.all })
-                }
-                newCounts={newCounts}
-                allButtonRef={allChipRef}
-              />
-            )
-          }
-          showHidden={
-            !reference &&
-            active &&
-            dismissedKeys.size > 0 && (
-              <div className="flex shrink-0 justify-end border-b px-3 py-1.5">
-                <button
-                  type="button"
-                  className="inline-flex items-center gap-1 rounded border border-border px-2 py-1 text-xs font-medium text-foreground hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                  onClick={() => {
-                    if (!active) return;
-                    dispatch(restoreDismissedFeed(active));
-                    allChipRef.current?.focus();
-                  }}
-                >
-                  <span aria-hidden="true">↶</span> Show hidden
-                </button>
-              </div>
-            )
-          }
-          allOff={!reference && !chipState.all}
-          conversationTabs={conversationTabs}
-          reference={reference}
-          referenceLoading={referenceLoading}
-          referenceUnavailable={referenceUnavailable}
-          referenceRetryable={referenceRetryable}
-          onReturnToLive={onReturnToLive}
-          onRetryReference={onRetryReference}
-          activeConvKey={activeConvKey}
-          feedScrollRef={setFeedScrollElement}
-          feedContentRef={feedStick.contentRef}
-          onFeedScroll={handleFeedScroll}
-          session={session}
-          room={room}
-          ambientInteractions={visibleAmbient}
-          notes={visibleNoteList}
-          effectiveLifecycle={effectiveLifecycle}
-          active={active}
-          connect={connect}
-          onAvatarClick={onAvatarClick}
-          onAddTarget={onAddTarget}
-          onAttachAction={onAttachAction}
-          onReply={onReply}
-          targetPoseId={targetPoseId}
-          isAtPlace={isAtPlace}
-          currentPlaceId={currentPlaceId}
-          currentPlaceName={currentPlaceName}
-        />
-        {placeBar}
-        {tavernGameWidget}
-        {speakerQueueBar}
-        {pendingAttachments}
-        {reference ? (
-          <div className="shrink-0 border-t bg-card px-4 py-3 text-center text-xs text-muted-foreground">
-            Draft preserved for your live conversation
-          </div>
-        ) : (
-          <CommandInput
-            character={active}
-            sceneId={sceneFeed?.sceneId}
-            personaId={personaId}
-            composerMode={composerMode}
-            onModeChange={onModeChange}
-            targetToAppend={targetToAppend}
-            onTargetConsumed={onTargetConsumed}
-            actionAttachment={actionAttachment}
-            onActionAttach={onActionAttach}
-            onActionDetach={onActionDetach}
-            onSubmitAction={onSubmitAction}
-            pendingActionIds={pendingActionIds}
-            detachedActionIds={detachedActionIds}
-            onPoseSubmitted={onPoseSubmitted}
+            showHidden={
+              !reference &&
+              active &&
+              dismissedKeys.size > 0 && (
+                <div className="flex shrink-0 justify-end border-b px-3 py-1.5">
+                  <button
+                    type="button"
+                    className="inline-flex items-center gap-1 rounded border border-border px-2 py-1 text-xs font-medium text-foreground hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    onClick={() => {
+                      if (!active) return;
+                      dispatch(restoreDismissedFeed(active));
+                      allChipRef.current?.focus();
+                    }}
+                  >
+                    <span aria-hidden="true">↶</span> Show hidden
+                  </button>
+                </div>
+              )
+            }
+            allOff={!reference && !chipState.all}
+            findEmpty={findEmpty}
+            reference={reference}
+            referenceLoading={referenceLoading}
+            referenceUnavailable={referenceUnavailable}
+            referenceRetryable={referenceRetryable}
+            onReturnToLive={onReturnToLive}
+            onRetryReference={onRetryReference}
+            activeConvKey={activeConvKey}
+            feedScrollRef={setFeedScrollElement}
+            feedContentRef={feedStick.contentRef}
+            onFeedScroll={handleFeedScroll}
+            session={session}
+            room={room}
+            ambientInteractions={visibleAmbient}
+            notes={visibleNoteList}
+            effectiveLifecycle={effectiveLifecycle}
+            active={active}
+            connect={connect}
+            onAvatarClick={onAvatarClick}
+            onAddTarget={onAddTarget}
+            onAttachAction={onAttachAction}
+            onReply={onReply}
+            targetPoseId={targetPoseId}
             isAtPlace={isAtPlace}
             currentPlaceId={currentPlaceId}
             currentPlaceName={currentPlaceName}
-            speakingAs={speakingAs}
-            replyTarget={replyTarget}
-            onCancelReply={onCancelReply}
-            // Enter sends, Shift+Enter breaks the line (#3818) — the convention
-            // of every chat RP interface; the reviewer found Enter-as-newline
-            // and a reach for the Send button slower than typing. This was
-            // `submitOnEnter={false}` (Cmd/Ctrl+Enter to send) since the
-            // narrative composer landed. Ctrl/Cmd+Enter still sends too.
-            draftScope={`${draftScopePrefix ?? 'account'}:${active}:${conversationTabs?.activeKey ?? `room:${roomId ?? 'unknown'}`}`}
-            // #3784 — the `room:unknown` placeholder above is not a room, it is
-            // "the room we're standing in, not yet named": during entry the
-            // client has no `room_state` yet. Saying so lets the draft move with
-            // the scope when the id lands, instead of being stranded under the
-            // placeholder while the composer re-hydrates an empty row
-            // (`e2e/game-entry.spec.ts`). Naming the conversation alongside it is
-            // what keeps the move within one audience: a tab opening before
-            // `room_state` arrives changes the conversation, so the room pose
-            // stays put instead of following into the whisper composer. (It does
-            // then stay stranded under the placeholder for as long as that tab is
-            // the active one -- no composer is mounted on the room anchor to carry
-            // it -- which is the same outcome as before #3784 for that narrow
-            // path, not a new loss.)
-            draftScopeSettling={
-              conversationTabs?.activeKey == null && roomId == null
-                ? { provisional: true, conversation: draftConversation }
-                : { conversation: draftConversation }
-            }
-            roomName={roomName}
-            ready={playReady}
-            isStaff={isStaff}
           />
-        )}
-      </div>
+          {placeBar}
+          {tavernGameWidget}
+          {speakerQueueBar}
+          {pendingAttachments}
+          {reference ? (
+            <div className="shrink-0 border-t bg-card px-4 py-3 text-center text-xs text-muted-foreground">
+              Draft preserved for your live conversation
+            </div>
+          ) : (
+            <CommandInput
+              character={active}
+              sceneId={sceneFeed?.sceneId}
+              personaId={personaId}
+              composerMode={composerMode}
+              onModeChange={onModeChange}
+              targetToAppend={targetToAppend}
+              onTargetConsumed={onTargetConsumed}
+              actionAttachment={actionAttachment}
+              onActionAttach={onActionAttach}
+              onActionDetach={onActionDetach}
+              onSubmitAction={onSubmitAction}
+              pendingActionIds={pendingActionIds}
+              detachedActionIds={detachedActionIds}
+              onPoseSubmitted={onPoseSubmitted}
+              isAtPlace={isAtPlace}
+              currentPlaceId={currentPlaceId}
+              currentPlaceName={currentPlaceName}
+              speakingAs={speakingAs}
+              replyTarget={replyTarget}
+              onCancelReply={onCancelReply}
+              // Enter sends, Shift+Enter breaks the line (#3818) — the convention
+              // of every chat RP interface; the reviewer found Enter-as-newline
+              // and a reach for the Send button slower than typing. This was
+              // `submitOnEnter={false}` (Cmd/Ctrl+Enter to send) since the
+              // narrative composer landed. Ctrl/Cmd+Enter still sends too.
+              draftScope={`${draftScopePrefix ?? 'account'}:${active}:${selectedConversation ?? `room:${roomId ?? 'unknown'}`}`}
+              // #3784 — the `room:unknown` placeholder above is not a room, it is
+              // "the room we're standing in, not yet named": during entry the
+              // client has no `room_state` yet. Saying so lets the draft move with
+              // the scope when the id lands, instead of being stranded under the
+              // placeholder while the composer re-hydrates an empty row
+              // (`e2e/game-entry.spec.ts`). Naming the conversation alongside it is
+              // what keeps the move within one audience: a tab opening before
+              // `room_state` arrives changes the conversation, so the room pose
+              // stays put instead of following into the whisper composer. (It does
+              // then stay stranded under the placeholder for as long as that tab is
+              // the active one -- no composer is mounted on the room anchor to carry
+              // it -- which is the same outcome as before #3784 for that narrow
+              // path, not a new loss.)
+              draftScopeSettling={
+                selectedConversation == null && roomId == null
+                  ? { provisional: true, conversation: draftConversation }
+                  : { conversation: draftConversation }
+              }
+              roomName={roomName}
+              ready={playReady}
+              isStaff={isStaff}
+            />
+          )}
+        </div>
+      </FeedFindContext.Provider>
     </FeedBlockControlsContext.Provider>
   );
 }
