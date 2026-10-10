@@ -613,6 +613,8 @@ class ProfileTextField(models.TextChoices):
     QUOTE = "quote", "Quote"
     OBITUARY = "obituary", "Obituary"
     DESCRIPTION = "description", "Physical description"
+    # The Glimpse (#4224): lives on the character's aura, versioned like the rest.
+    GLIMPSE = "glimpse", "Glimpse"
 
 
 #: The prose fields a player may ask to change through a table update request (#2631);

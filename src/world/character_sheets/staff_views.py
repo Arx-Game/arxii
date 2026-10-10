@@ -10,7 +10,7 @@ runs for it, so a staff-built sheet ends where CG would have left it.
 from __future__ import annotations
 
 from http import HTTPMethod
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 from drf_spectacular.utils import extend_schema
 from rest_framework import status
@@ -41,6 +41,8 @@ from world.character_sheets.staff_serializers import (
     StaffFormSerializer,
     StaffGoalsSerializer,
     StaffIntroductionSerializer,
+    StaffMagicOptionsSerializer,
+    StaffMagicSerializer,
     StaffMarkingAddSerializer,
     StaffMarkingRemoveSerializer,
     StaffOptionsSerializer,
@@ -52,6 +54,8 @@ from world.character_sheets.staff_serializers import (
 from world.traits.models import TraitChangeSource
 
 if TYPE_CHECKING:
+    from evennia.accounts.models import AccountDB
+
     from world.character_sheets.models import CharacterSheet
 
 
@@ -279,6 +283,66 @@ class StaffSheetRowsMixin:
         )
         return self._answer(request, sheet)
 
+    @extend_schema(request=StaffMagicSerializer, responses={200: CharacterSheetSerializer})
+    @action(detail=True, methods=[HTTPMethod.POST], url_path="staff-magic")
+    def staff_magic(self, request: Request, pk: int | None = None) -> Response:
+        """Grant a giftless sheet its magic, as CG's magic stage would (#4224).
+
+        The CG stage's structural rules hold (a gift the tradition offers on the sheet's
+        path, available finished techniques within the pick limit, a resonance, an anima
+        stat and skill); its costs do not. Changing magic that exists is out of scope.
+        """
+        from world.character_creation.magic_writer import (  # noqa: PLC0415
+            MagicPicks,
+            provision_magic,
+            validate_staff_magic,
+        )
+        from world.character_creation.sheet_writers import creation_beginnings  # noqa: PLC0415
+        from world.magic.constants import AcquisitionOrigin  # noqa: PLC0415
+        from world.magic.exceptions import MagicError  # noqa: PLC0415
+
+        sheet = self._staff_sheet(request)
+        data = self._validated(StaffMagicSerializer, request, sheet)
+        tenure = sheet.roster_entry.current_tenure if sheet.roster_entry else None
+        picks = MagicPicks(
+            tradition=data["tradition"],
+            gift=data["gift"],
+            techniques=data["techniques"],
+            resonance=data["resonance"],
+            anima_stat=data["anima_stat"],
+            anima_skill=data["anima_skill"],
+            ritual_name=data.get("ritual_name") or f"{sheet.character.db_key}'s Anima Ritual",
+            # The ritual is the player's; staff author it only for a character nobody plays.
+            account=tenure.player_data.account if tenure else cast("AccountDB", request.user),
+            origin=AcquisitionOrigin.CHARACTER_CREATION,
+            species=sheet.species,
+            beginnings=creation_beginnings(sheet),
+            glimpse_story=data["glimpse"],
+        )
+        try:
+            validate_staff_magic(sheet, picks)
+            provision_magic(sheet, picks)
+        except SheetWriteError as exc:
+            return _refused(exc)
+        except MagicError as exc:
+            return _refused(SheetWriteError(str(exc.user_message)))
+        return self._answer(request, sheet)
+
+    @extend_schema(responses={200: StaffMagicOptionsSerializer})
+    @action(detail=True, methods=[HTTPMethod.GET], url_path="staff-magic-options")
+    def staff_magic_options(self, request: Request, pk: int | None = None) -> Response:
+        """What Grant magic offers, given ``?tradition=`` and ``?gift=`` picked so far."""
+        sheet = self._staff_sheet(request)
+        return Response(
+            StaffMagicOptionsSerializer(
+                _magic_options(
+                    sheet,
+                    request.query_params.get("tradition"),
+                    request.query_params.get("gift"),
+                )
+            ).data
+        )
+
     @extend_schema(responses={200: StaffOptionsSerializer})
     @action(detail=True, methods=[HTTPMethod.GET], url_path="staff-options")
     def staff_options(self, request: Request, pk: int | None = None) -> Response:
@@ -351,3 +415,48 @@ def _staff_options(sheet: CharacterSheet) -> dict[str, Any]:
 
 def _choices(choices: Any) -> list[dict[str, str]]:
     return [{"value": value, "label": label} for value, label in choices.choices]
+
+
+def _magic_options(sheet: CharacterSheet, tradition_id: str | None, gift_id: str | None) -> dict:
+    """Traditions; the tradition's gifts on the sheet's path; the gift's techniques and
+    resonances; the anima stats and skills; the sheet's technique limit."""
+    from world.character_creation.magic_writer import technique_pick_limit  # noqa: PLC0415
+    from world.magic.models import Tradition  # noqa: PLC0415
+    from world.magic.services.cg_catalog import (  # noqa: PLC0415
+        get_gift_options,
+        get_species_technique_options,
+        get_technique_options,
+    )
+    from world.progression.models import CharacterPathHistory  # noqa: PLC0415
+    from world.skills.models import Skill  # noqa: PLC0415
+    from world.traits.models import Trait, TraitType  # noqa: PLC0415
+
+    path_row = CharacterPathHistory.objects.filter(character=sheet).order_by("-pk").first()
+    tradition = Tradition.objects.filter(pk=tradition_id).first() if tradition_id else None
+    gifts = get_gift_options(tradition, path_row.path) if tradition and path_row else []
+    gift = next((g for g in gifts if str(g.pk) == gift_id), None) if gift_id else None
+    techniques: list[Any] = []
+    if gift is not None and tradition is not None and path_row is not None:
+        options = get_technique_options(
+            path_row.path, gift, tradition, include_unready=True, exclude_gated=True
+        )
+        techniques = [
+            technique
+            for technique in [
+                *options.pool,
+                *options.tradition,
+                *get_species_technique_options(sheet.species, include_unready=True),
+            ]
+            if technique.action_template_id
+        ]
+    return {
+        "traditions": _named(Tradition.objects.order_by("name")),
+        "gifts": _named(gifts),
+        "techniques": _named(list({t.pk: t for t in techniques}.values())),
+        "resonances": _named(gift.resonances.order_by("name")) if gift else [],
+        "stats": _named(Trait.objects.filter(trait_type=TraitType.STAT).order_by("name")),
+        "skills": _named(
+            Skill.objects.filter(is_active=True).select_related("trait").order_by("trait__name")
+        ),
+        "technique_limit": technique_pick_limit(sheet),
+    }

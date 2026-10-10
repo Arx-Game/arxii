@@ -62,10 +62,24 @@ def set_glimpse_tags(
     refresh_glimpse_state(aura)
 
 
-def set_glimpse_prose(aura: CharacterAura, text: str) -> None:
-    """Write the glimpse story prose and recompute the state."""
-    aura.glimpse_story = text
-    aura.save()
+def set_glimpse_prose(aura: CharacterAura, text: str, *, edited_by: object | None = None) -> None:
+    """Write the glimpse story prose and recompute the state.
+
+    Versioned (#4224) through ``update_profile_text`` on the sheet's true profile, like
+    every other prose field, so a rewrite never loses the earlier Glimpse.
+    """
+    from world.character_sheets.services import (  # noqa: PLC0415
+        ensure_true_profile,
+        update_profile_text,
+    )
+    from world.character_sheets.types import ProfileTextField  # noqa: PLC0415
+
+    update_profile_text(
+        ensure_true_profile(aura.character),
+        ProfileTextField.GLIMPSE,
+        text,
+        edited_by=edited_by,
+    )
     refresh_glimpse_state(aura)
 
 

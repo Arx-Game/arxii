@@ -2278,12 +2278,15 @@ def _build_staff_edit(sheet: CharacterSheet) -> StaffEditFields:
     the character, never a cover. A sheet with no profile yet reads blank.
     """
     profile = sheet.true_profile
+    from world.magic.models import CharacterAura  # noqa: PLC0415
+
+    aura = CharacterAura.objects.filter(character=sheet).first()
+    special = {
+        ProfileTextField.DESCRIPTION: sheet.additional_desc,
+        ProfileTextField.GLIMPSE: aura.glimpse_story if aura else "",
+    }
     prose = {
-        field: (
-            sheet.additional_desc
-            if field == ProfileTextField.DESCRIPTION
-            else (getattr(profile, field) if profile else "")
-        )
+        field: special[field] if field in special else (getattr(profile, field) if profile else "")
         for field in ProfileTextField.values
     }
     return StaffEditFields(
@@ -2395,6 +2398,7 @@ class StaffEditSerializer(serializers.Serializer):
     protect = serializers.CharField(allow_blank=True, required=False)
     fear = serializers.CharField(allow_blank=True, required=False)
     obituary = serializers.CharField(allow_blank=True, required=False)
+    glimpse = serializers.CharField(allow_blank=True, required=False)
     name = serializers.CharField(required=False, max_length=255)
     ic_birth_year = serializers.IntegerField(required=False, allow_null=True)
     true_height_inches = serializers.IntegerField(

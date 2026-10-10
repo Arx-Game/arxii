@@ -144,6 +144,9 @@ def update_profile_text(
             msg = "A description belongs to a sheet's true profile; this profile has no sheet."
             raise ValueError(msg)
         attribute = "additional_desc"
+    elif field == ProfileTextField.GLIMPSE:
+        holder = _glimpse_holder(profile)
+        attribute = "glimpse_story"
     else:
         holder = profile
         attribute = field
@@ -190,6 +193,18 @@ def _date_original_to_creation(original: ProfileTextVersion, profile: Profile) -
         created_at=created,
     )
     original.created_at = created
+
+
+def _glimpse_holder(profile: Profile) -> Any:
+    """The aura a true profile's Glimpse lives on (#4224); a magicless sheet has none."""
+    from world.magic.models import CharacterAura  # noqa: PLC0415
+
+    sheet = profile.owning_sheet_or_none
+    aura = CharacterAura.objects.filter(character=sheet).first() if sheet is not None else None
+    if aura is None:
+        msg = "This character has no aura to hold a Glimpse."
+        raise StaffEditError(msg)
+    return aura
 
 
 def set_physical_description(

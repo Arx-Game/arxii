@@ -25,6 +25,7 @@ if TYPE_CHECKING:
 
     from world.character_creation.models import Beginnings
     from world.character_sheets.models import CharacterSheet
+    from world.classes.models import Path
     from world.magic.models import CharacterAura, Gift, Resonance, Technique, Tradition
     from world.skills.models import Skill
     from world.species.models import Species
@@ -46,7 +47,7 @@ class MagicPicks:
     anima_stat: Trait | None
     anima_skill: Skill | None
     ritual_name: str
-    account: AccountDB | None
+    account: AccountDB
     origin: str
     species: Species | None = None
     beginnings: Beginnings | None = None
@@ -94,7 +95,7 @@ def technique_pick_limit(sheet: CharacterSheet) -> int:
     )
 
 
-def _check_techniques(sheet: CharacterSheet, picks: MagicPicks, path: object) -> None:
+def _check_techniques(sheet: CharacterSheet, picks: MagicPicks, path: Path, gift: Gift) -> None:
     """Each technique from the gift's pool, the tradition or the species; finished; in limit."""
     from world.magic.services.cg_catalog import (  # noqa: PLC0415
         get_species_technique_options,
@@ -105,7 +106,7 @@ def _check_techniques(sheet: CharacterSheet, picks: MagicPicks, path: object) ->
         raise SheetWriteError(message)
 
     options = get_technique_options(
-        path, picks.gift, picks.tradition, include_unready=True, exclude_gated=True
+        path, gift, picks.tradition, include_unready=True, exclude_gated=True
     )
     available = [
         *options.pool,
@@ -147,9 +148,11 @@ def validate_staff_magic(sheet: CharacterSheet, picks: MagicPicks) -> None:
     if path_row is None:
         refuse("Give the character a path first.")
     path = path_row.path
-    if picks.gift is None or picks.gift not in get_gift_options(picks.tradition, path):
-        refuse("Choose a gift the tradition offers on this path.")
-    _check_techniques(sheet, picks, path)
+    gift = picks.gift
+    if gift is None or gift not in get_gift_options(picks.tradition, path):
+        msg = "Choose a gift the tradition offers on this path."
+        raise SheetWriteError(msg)
+    _check_techniques(sheet, picks, path, gift)
     if picks.resonance is None:
         refuse("Choose the gift's resonance.")
     if picks.anima_stat is None or picks.anima_skill is None:
