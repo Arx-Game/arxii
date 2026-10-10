@@ -162,6 +162,7 @@ function baseDraft(): FounderDraft {
     lands: {},
     estate_name: '',
     estate_description: '',
+    observances: [],
   };
 }
 

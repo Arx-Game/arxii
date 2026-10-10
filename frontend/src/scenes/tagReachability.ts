@@ -44,9 +44,11 @@ function describeUnreachableTargets(names: string[]): string {
  * prose (which is never sent to the server as a target at all). `mode` is
  * `composerMode.command`: whisper is always reachable for its own named
  * targets (receiver-based, never location-based, mirroring
- * `persona_can_receive`'s whisper branch); every other mode checks physical
- * presence only (room-heard), except `tt` (Tabletalk), which is Place-scoped
- * and additionally requires the target share the actor's own current Place.
+ * `persona_can_receive`'s whisper branch), and so is a page (#4129), which is
+ * OOC and reaches its correspondent wherever they stand; every other mode
+ * checks physical presence only (room-heard), except `tt` (Tabletalk), which
+ * is Place-scoped and additionally requires the target share the actor's own
+ * current Place.
  */
 export function tagReachability(
   targetNames: string[],
@@ -54,7 +56,7 @@ export function tagReachability(
   mode: string,
   venue: ViewerVenue
 ): TagRefusal {
-  if (targetNames.length === 0 || mode === 'whisper') {
+  if (targetNames.length === 0 || mode === 'whisper' || mode === 'page') {
     return REACHABLE;
   }
 

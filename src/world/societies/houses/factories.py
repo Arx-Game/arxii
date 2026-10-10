@@ -77,3 +77,16 @@ class HouseTemplateFactory(factory.django.DjangoModelFactory):
     kind = factory.SubFactory("world.roster.factories.FamilyKindFactory")
     society = factory.SubFactory("world.societies.factories.SocietyFactory")
     org_type = factory.SubFactory("world.societies.factories.OrganizationTypeFactory")
+
+
+class OrganizationObservanceFactory(factory.django.DjangoModelFactory):
+    """A house's day of remembrance (#4206)."""
+
+    class Meta:
+        model = "arxii.OrganizationObservance"
+
+    organization = factory.SubFactory(OrganizationFactory)
+    ic_month = 10
+    ic_day = 18
+    name = factory.Sequence(lambda n: f"Day of Remembrance {n}")
+    lore = ""

@@ -81,11 +81,13 @@ export interface CodexLinkRef {
   accessible: boolean;
 }
 
-/** One rail line (#4198): a fact, optionally linking to another entry or to a section below. */
+/** One rail line (#4198): a fact, optionally linking to another entry, to a section
+ * below, or (#4205) to a page outside the Codex by site path, such as a house's page. */
 export interface CodexCompanionItem {
   text: string;
   entry_id: number | null;
   anchor: string | null;
+  href?: string | null;
 }
 
 export interface CodexCompanionGroup {

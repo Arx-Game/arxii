@@ -2385,6 +2385,7 @@ class RankingDisplay(SharedMemoryModel):
         ACADEMY_LEGEND = "academy_legend", "Academy Legend"
         FASHION = "society_fashion", "Society Fashion"
 
+    # noqa: OBJECTDB_FIELD
     # ObjectDB by design (#2608): a diegetic prop (herald/plaque/board), never a
     # character.
     display_object = models.OneToOneField(

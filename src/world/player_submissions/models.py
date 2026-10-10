@@ -39,6 +39,7 @@ class PlayerFeedback(SharedMemoryModel):
         help_text="The persona the submitter was wearing when they submitted.",
     )
     description = models.TextField(help_text="Freeform feedback text from the player.")
+    # noqa: OBJECTDB_FIELD
     # ObjectDB by design (#2608): an audit stamp of raw `character.location` — no
     # Room typeclass guarantee, so no RoomProfile to point at.
     location = models.ForeignKey(
@@ -80,6 +81,7 @@ class BugReport(SharedMemoryModel):
         related_name="bug_reports",
     )
     description = models.TextField(help_text="What the player observed.")
+    # noqa: OBJECTDB_FIELD
     # ObjectDB by design (#2608): audit stamp of raw `character.location` (see
     # BugReport.location).
     location = models.ForeignKey(
@@ -186,6 +188,7 @@ class PlayerReport(SharedMemoryModel):
         db_constraint=False,
         help_text="A specific flagged interaction, if applicable.",
     )
+    # noqa: OBJECTDB_FIELD
     # ObjectDB by design (#2608): audit stamp of raw `character.location` (see
     # BugReport.location).
     location = models.ForeignKey(

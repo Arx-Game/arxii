@@ -6,6 +6,7 @@ organizations, memberships, reputations, and legend entries.
 Note: Realm admin is in the `realms` app.
 """
 
+from django import forms
 from django.contrib import admin, messages
 from django.core.exceptions import ValidationError
 from django.http import HttpRequest
@@ -1047,10 +1048,12 @@ from world.societies.houses.models import (  # noqa: E402
     HouseClaimAspect,
     HouseClaimKin,
     HouseClaimLand,
+    HouseClaimObservance,
     HouseFeature,
     HouseRecognitionRule,
     HouseTemplate,
     NobiliaryParticle,
+    OrganizationObservance,
     PactKind,
     PrestigeRankBand,
     StatureBand,
@@ -1186,10 +1189,32 @@ class HoldingKindAdmin(admin.ModelAdmin):
     search_fields = ("name", "description")
 
 
+class HouseTemplateAdminForm(forms.ModelForm):
+    """One patron question per charter (#4205), checked against the questions this
+    save SELECTS: the model's own ``clean()`` reads the M2M from the database, which
+    on an admin save still holds the old set."""
+
+    class Meta:
+        model = HouseTemplate
+        # The ModelAdmin hands this form its real field list; the Meta only lets the
+        # form be built standalone (tests), and it must not silently drop a column.
+        fields = "__all__"  # noqa: DJ007
+
+    def clean(self):
+        cleaned = super().clean()
+        definitions = cleaned.get("aspect_definitions")
+        if definitions is not None and sum(1 for d in definitions if d.sets_patron) > 1:
+            raise ValidationError(
+                {"aspect_definitions": "Only one question on a charter may set the patron."}
+            )
+        return cleaned
+
+
 @admin.register(HouseTemplate)
 class HouseTemplateAdmin(admin.ModelAdmin):
     """#1884 Phase D — realm recipes for CG-defined houses."""
 
+    form = HouseTemplateAdminForm
     list_display = ("name", "realm", "kind", "org_type", "liege", "starting_kin_slots")
     list_select_related = ("realm", "liege", "org_type")
     list_filter = ("realm", "kind")
@@ -1207,15 +1232,27 @@ class HouseAspectOptionInline(admin.TabularInline):
 
     model = HouseAspectOption
     extra = 0
-    fields = ("name", "description", "codex_entry", "is_active", "display_order")
+    fields = (
+        "name",
+        "description",
+        "codex_entry",
+        "being",
+        "being_nickname",
+        "is_active",
+        "display_order",
+    )
     raw_id_fields = ("codex_entry",)
+    # What the option IS (#4205): a god or totem, and the name a house calls it by.
+    autocomplete_fields = ("being", "being_nickname")
 
 
 @admin.register(HouseAspectDefinition)
 class HouseAspectDefinitionAdmin(admin.ModelAdmin):
-    """#2079 — authored, catalog-only required choices (ADR-0101)."""
+    """#2079 — authored, catalog-only required choices (ADR-0101). ``sets_patron``
+    (#4205) marks the one question whose pick names the house's patron."""
 
-    list_display = ("name", "min_picks", "max_picks", "display_order")
+    list_display = ("name", "min_picks", "max_picks", "sets_patron", "display_order")
+    list_filter = ("sets_patron",)
     search_fields = ("name", "prompt")
     inlines = (HouseAspectOptionInline,)
 
@@ -1275,6 +1312,27 @@ class HouseClaimLandInline(admin.TabularInline):
         return False
 
 
+class HouseClaimObservanceInline(admin.TabularInline):
+    """#4206 — the founder's days of remembrance, read-only for the review queue."""
+
+    model = HouseClaimObservance
+    extra = 0
+    readonly_fields = ("name", "ic_month", "ic_day", "lore", "sort_order")
+    can_delete = False
+
+    def has_add_permission(self, request: object, obj: object = None) -> bool:  # noqa: ARG002
+        return False
+
+
+@admin.register(OrganizationObservance)
+class OrganizationObservanceAdmin(admin.ModelAdmin):
+    """#4206 — a house's days of remembrance, directly authorable for staff-built houses."""
+
+    list_display = ("name", "organization", "ic_month", "ic_day")
+    search_fields = ("name", "organization__name")
+    autocomplete_fields = ("organization",)
+
+
 @admin.register(HouseClaim)
 class HouseClaimAdmin(admin.ModelAdmin):
     """#1884 Phase D — approve/reject CG house claims (v1 review surface).
@@ -1316,7 +1374,12 @@ class HouseClaimAdmin(admin.ModelAdmin):
         "review_note",
     )
     actions = ("approve_claims", "reject_claims")
-    inlines = (HouseClaimAspectInline, HouseClaimKinInline, HouseClaimLandInline)
+    inlines = (
+        HouseClaimAspectInline,
+        HouseClaimKinInline,
+        HouseClaimLandInline,
+        HouseClaimObservanceInline,
+    )
 
     @admin.action(description="Approve selected claims")
     def approve_claims(self, request, queryset):

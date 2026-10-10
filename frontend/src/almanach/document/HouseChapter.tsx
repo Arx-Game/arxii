@@ -41,6 +41,7 @@ import { Link } from 'react-router-dom';
 import { useDraft } from '@/world-builder/document/useDraft';
 
 import { HOUSE_STATES, DRAFT_NOTE, GENTRY_LUXEN_ONLY } from '../copy';
+import { ObservanceRows, type ObservanceRow } from '../ObservanceRows';
 import type { AlmanachHouseDocumentHouse } from '../types';
 
 export interface EditHouseFields {
@@ -50,6 +51,19 @@ export interface EditHouseFields {
   sigil_description?: string;
   description?: string;
   house_state?: string;
+  /** The whole list, replacing the house's days of remembrance (#4206). */
+  observances?: ObservanceRow[];
+}
+
+/** The document's rows as the editor holds them: the spelled `when` dropped,
+ * since the server derives it and the action does not take it. */
+function editableObservances(house: AlmanachHouseDocumentHouse): ObservanceRow[] {
+  return house.observances.map((row) => ({
+    ic_month: row.ic_month,
+    ic_day: row.ic_day,
+    name: row.name,
+    lore: row.lore,
+  }));
 }
 
 export interface HouseChapterProps {
@@ -72,6 +86,9 @@ export function HouseChapter({ house, realmTheme, onSave }: HouseChapterProps) {
   const colors = useDraft(house.id, 'house-colors', house.colors);
   const sigil = useDraft(house.id, 'house-sigil_description', house.sigil_description);
   const description = useDraft(house.id, 'house-description', house.description);
+  // Staged like the state toggle, not a per-field draft: the list is one value
+  // and the action replaces it wholesale (#4206).
+  const [observances, setObservances] = useState<ObservanceRow[]>(() => editableObservances(house));
   const particleGlossId = `house-particle-gloss-${house.id}`;
 
   const save = () => {
@@ -81,6 +98,8 @@ export function HouseChapter({ house, realmTheme, onSave }: HouseChapterProps) {
     if (colors.value !== house.colors) fields.colors = colors.value;
     if (sigil.value !== house.sigil_description) fields.sigil_description = sigil.value;
     if (description.value !== house.description) fields.description = description.value;
+    if (JSON.stringify(observances) !== JSON.stringify(editableObservances(house)))
+      fields.observances = observances;
     if (Object.keys(fields).length === 0) return;
     onSave(fields);
     if (fields.words !== undefined) words.clearDraft();
@@ -158,6 +177,19 @@ export function HouseChapter({ house, realmTheme, onSave }: HouseChapterProps) {
           </div>
         </div>
       </div>
+      {house.patron && (
+        <div className="field">
+          <span className="label">patron</span>
+          <div className="val">
+            {house.patron.nickname}{' '}
+            {house.patron.codex_entry_id != null ? (
+              <Link to={`/codex/${house.patron.codex_entry_id}`}>({house.patron.being_name})</Link>
+            ) : (
+              <>({house.patron.being_name})</>
+            )}
+          </div>
+        </div>
+      )}
       <div className="row2">
         <div className="field">
           <label htmlFor={`house-words-${house.id}`}>words</label>
@@ -196,6 +228,7 @@ export function HouseChapter({ house, realmTheme, onSave }: HouseChapterProps) {
           onChange={(event) => description.setValue(event.target.value)}
         />
       </div>
+      <ObservanceRows idPrefix={`house-${house.id}`} rows={observances} onChange={setObservances} />
       <div className="field">
         <span className="label">
           House Quiddity <span className="chip">seed copy · PLACEHOLDER</span>
@@ -205,7 +238,13 @@ export function HouseChapter({ house, realmTheme, onSave }: HouseChapterProps) {
             <li key={`${aspect.definition}-${aspect.option}`} className="on">
               <span className="mark">◆</span>
               <span>
-                <span className="nm">{aspect.option}</span>
+                {aspect.target_entry_id != null ? (
+                  <Link to={`/codex/${aspect.target_entry_id}`} className="nm">
+                    {aspect.option}
+                  </Link>
+                ) : (
+                  <span className="nm">{aspect.option}</span>
+                )}
                 <span className="ds">{aspect.description}</span>
               </span>
               <span className="rt">

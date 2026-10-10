@@ -98,6 +98,7 @@ class FamilySerializer(serializers.ModelSerializer):
         grouping = self.context.get("inherited_by_family")
         if grouping is not None:
             return grouping.get(obj.id, {"aspects": [], "features": [], "liege_name": ""})
+        from world.societies.houses.almanach_reads import aspect_facet  # noqa: PLC0415
         from world.societies.houses.services import house_for_family  # noqa: PLC0415
 
         org = house_for_family(obj)
@@ -109,12 +110,8 @@ class FamilySerializer(serializers.ModelSerializer):
             liege = None
         return {
             "aspects": [
-                {
-                    "definition": facet.definition.name,
-                    "option": facet.option.name,
-                    "description": facet.option.description,
-                }
-                for facet in org.aspects.select_related("definition", "option")
+                aspect_facet(facet)
+                for facet in org.aspects.select_related("definition", "option", "option__being")
             ],
             "features": [
                 {

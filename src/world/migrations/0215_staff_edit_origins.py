@@ -4,9 +4,7 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-    dependencies = [
-        ("arxii", "0212_profile_text_every_prose_field"),
-    ]
+    dependencies = [("arxii", "0214_profile_text_every_prose_field")]
 
     operations = [
         migrations.AlterField(

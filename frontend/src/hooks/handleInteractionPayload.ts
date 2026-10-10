@@ -6,7 +6,7 @@ import { store } from '@/store/store';
 import {
   addAmbientInteraction,
   addSceneInteraction,
-  openThreadTab,
+  setActiveThreadTab,
   setActiveSession,
 } from '@/store/gameSlice';
 import { actingPersonaId } from '@/roster/persona';
@@ -117,7 +117,7 @@ function maybeToastWhisperAttention(
       label: 'Switch',
       onClick: () => {
         dispatch(setActiveSession(character));
-        dispatch(openThreadTab({ character, threadKey }));
+        dispatch(setActiveThreadTab({ character, threadKey }));
         if (window.location.pathname !== '/game') {
           navigate('/game');
         }

@@ -536,6 +536,15 @@ function dispatchLegacyText(
       return true;
     }
     const subject = typeof kwargs?.subject === 'string' ? kwargs.subject : undefined;
+    // A page carries its correspondent (#4129): `from_persona_id` and `from_name`
+    // on both the recipient's line and the sender's echo (`outgoing`), so the
+    // rail can group the two under one row.
+    const fromPersonaId = Number(kwargs?.from_persona_id);
+    const fromName = typeof kwargs?.from_name === 'string' ? kwargs.from_name : '';
+    const from =
+      Number.isFinite(fromPersonaId) && fromPersonaId > 0 && fromName
+        ? { personaId: fromPersonaId, name: fromName }
+        : undefined;
     dispatch(
       addFeedNote({
         character,
@@ -543,6 +552,8 @@ function dispatchLegacyText(
           kind: classifyText(kwargs?.type, kwargs?.category),
           content: message.content,
           ...(subject ? { subject } : {}),
+          ...(from ? { from } : {}),
+          ...(from && kwargs?.outgoing === true ? { outgoing: true } : {}),
           timestamp: new Date().toISOString(),
         },
       })

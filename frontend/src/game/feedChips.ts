@@ -48,7 +48,7 @@ export const DEFAULT_FEED_CHIPS: readonly FeedChip[] = [
     // System owns the untyped `system` kind too (#3933): it is the hide-system
     // button (#3856's ruling), so pressing it must actually hide login/connection
     // chatter, not just look/item/error.
-    kinds: ['look', 'item', 'error', 'system'],
+    kinds: ['look', 'item', 'error', 'page', 'system'],
     on: true,
     wake: false,
     custom: false,
@@ -76,6 +76,7 @@ export const KIND_LABELS: Record<FeedKind, string> = {
   look: 'Look results',
   item: 'Item handling',
   error: 'Command errors',
+  page: 'Pages',
   system: 'Everything else',
 };
 

@@ -31,6 +31,7 @@ _FEAST_DAYS = "Feast days"
 _FEAST_DAY_ONE = "Feast day"
 _CARDS = "Cards"
 _FACETS = "Facets"
+_SWORN_HOUSES = "Sworn houses"
 _FEAST_DAY = "Feast day"
 _REVERSED = " reversed"
 # The rail's relationship groups, in the order they are drawn.
@@ -84,7 +85,29 @@ def being_companion(entry: CodexEntry, reader: CompanionReader) -> Companion | N
         ],
     )
     _relationships(being, reader, rail, sections)
+    _sworn_houses(being, rail)
     return Companion(rail=rail, sections=sections)
+
+
+def _sworn_houses(being: WorshippedBeing, rail: list[CompanionGroup]) -> None:
+    """The published houses whose patron is this god (#4205), each a link to its page.
+
+    Read through ``Organization.patron_nickname`` (#3776), the one column the
+    founding write sets; a house not yet published is not on the roster, so it is
+    not here either.
+    """
+    from world.societies.models import Organization  # noqa: PLC0415
+
+    houses = (
+        Organization.objects.filter(patron_nickname__being=being, published_at__isnull=False)
+        .order_by("name")
+        .values_list("pk", "name")
+    )
+    _group(
+        rail,
+        _SWORN_HOUSES,
+        [CompanionItem(name, href=f"/orgs/{pk}") for pk, name in houses],
+    )
 
 
 def _group(rail: list[CompanionGroup], label: str, items: list[CompanionItem]) -> None:

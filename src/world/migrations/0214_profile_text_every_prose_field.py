@@ -4,9 +4,7 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-    dependencies = [
-        ("arxii", "0211_succession_law_gender_tiebreak"),
-    ]
+    dependencies = [("arxii", "0213_house_aspect_targets")]
 
     operations = [
         migrations.AlterField(

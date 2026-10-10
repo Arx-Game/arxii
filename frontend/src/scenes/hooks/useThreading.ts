@@ -1,11 +1,18 @@
 import { useState, useMemo, useCallback } from 'react';
 import type { Interaction } from '../types';
 
+export interface ThreadPersona {
+  id: number;
+  name: string;
+  /** The face the rail draws (#4129); absent on rows that never carried one. */
+  thumbnailUrl?: string | null;
+}
+
 export interface Thread {
   key: string;
   type: 'room' | 'place' | 'whisper' | 'target';
   label: string;
-  participantPersonas: Array<{ id: number; name: string }>;
+  participantPersonas: ThreadPersona[];
   latestTimestamp: string;
   unreadCount: number;
 }
@@ -89,14 +96,18 @@ export function getThreadKey(interaction: Interaction): string {
   return 'room';
 }
 
-function getParticipantPersonas(interactions: Interaction[]): Array<{ id: number; name: string }> {
-  const seen = new Map<number, string>();
+function getParticipantPersonas(interactions: Interaction[]): ThreadPersona[] {
+  const seen = new Map<number, ThreadPersona>();
   for (const interaction of interactions) {
     if (!seen.has(interaction.persona.id)) {
-      seen.set(interaction.persona.id, interaction.persona.name);
+      seen.set(interaction.persona.id, {
+        id: interaction.persona.id,
+        name: interaction.persona.name,
+        thumbnailUrl: interaction.persona.thumbnail_url ?? null,
+      });
     }
   }
-  return [...seen.entries()].map(([id, name]) => ({ id, name }));
+  return [...seen.values()];
 }
 
 function formatPersonaNames(personas: Array<{ name: string }>): string {
@@ -155,11 +166,62 @@ export function countUnread(
 }
 
 /** Which channel a thread key names. */
-function channelKind(key: string): 'room' | 'place' | 'whisper' | 'target' {
+export function channelKind(key: string): 'room' | 'place' | 'whisper' | 'target' {
   if (key === 'room') return 'room';
   if (key.startsWith('place:')) return 'place';
   if (key.startsWith('whisper:')) return 'whisper';
   return 'target';
+}
+
+export interface ThreadGroups {
+  threads: Thread[];
+  threadKeyMap: Map<number, string>;
+  interactionsByThread: Map<string, Interaction[]>;
+}
+
+/**
+ * Group a list of interactions into conversations, room first and then newest
+ * first. Pure, so the conversation rail (#4129) runs the same grouping over the
+ * quiet room's ambient interactions as this hook runs over the scene's.
+ */
+export function groupThreads(
+  interactions: Interaction[],
+  roomName: string,
+  opts: UseThreadingOpts = {}
+): ThreadGroups {
+  const { lastSeenByThread, viewerPersonaId, sceneBaselineId } = opts;
+  const groups = new Map<string, Interaction[]>();
+  const keyMap = new Map<number, string>();
+  for (const interaction of interactions) {
+    const key = getThreadKey(interaction);
+    keyMap.set(interaction.id, key);
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key)!.push(interaction);
+  }
+  const threadList = [...groups.entries()]
+    .map(([key, threadInteractions]) => {
+      const type: Thread['type'] = channelKind(key);
+      return {
+        key,
+        type,
+        label: getThreadLabel(key, type, threadInteractions, roomName),
+        participantPersonas: getParticipantPersonas(threadInteractions),
+        latestTimestamp: threadInteractions[threadInteractions.length - 1]?.timestamp ?? '',
+        unreadCount: countUnread(
+          threadInteractions,
+          key,
+          lastSeenByThread,
+          viewerPersonaId,
+          sceneBaselineId
+        ),
+      } as Thread;
+    })
+    .sort((a, b) => {
+      if (a.type === 'room') return -1;
+      if (b.type === 'room') return 1;
+      return b.latestTimestamp.localeCompare(a.latestTimestamp);
+    });
+  return { threads: threadList, threadKeyMap: keyMap, interactionsByThread: groups };
 }
 
 export function useThreading(
@@ -175,40 +237,11 @@ export function useThreading(
   const viewerPersonaId = opts?.viewerPersonaId;
   const sceneBaselineId = opts?.sceneBaselineId;
 
-  const { threads, threadKeyMap, interactionsByThread } = useMemo(() => {
-    const groups = new Map<string, Interaction[]>();
-    const keyMap = new Map<number, string>();
-    for (const interaction of interactions) {
-      const key = getThreadKey(interaction);
-      keyMap.set(interaction.id, key);
-      if (!groups.has(key)) groups.set(key, []);
-      groups.get(key)!.push(interaction);
-    }
-    const threadList = [...groups.entries()]
-      .map(([key, threadInteractions]) => {
-        const type: Thread['type'] = channelKind(key);
-        return {
-          key,
-          type,
-          label: getThreadLabel(key, type, threadInteractions, roomName),
-          participantPersonas: getParticipantPersonas(threadInteractions),
-          latestTimestamp: threadInteractions[threadInteractions.length - 1]?.timestamp ?? '',
-          unreadCount: countUnread(
-            threadInteractions,
-            key,
-            lastSeenByThread,
-            viewerPersonaId,
-            sceneBaselineId
-          ),
-        } as Thread;
-      })
-      .sort((a, b) => {
-        if (a.type === 'room') return -1;
-        if (b.type === 'room') return 1;
-        return b.latestTimestamp.localeCompare(a.latestTimestamp);
-      });
-    return { threads: threadList, threadKeyMap: keyMap, interactionsByThread: groups };
-  }, [interactions, roomName, lastSeenByThread, viewerPersonaId, sceneBaselineId]);
+  const { threads, threadKeyMap, interactionsByThread } = useMemo(
+    () =>
+      groupThreads(interactions, roomName, { lastSeenByThread, viewerPersonaId, sceneBaselineId }),
+    [interactions, roomName, lastSeenByThread, viewerPersonaId, sceneBaselineId]
+  );
 
   const filteredInteractions = useMemo(() => {
     // Fast path: no thread filter and no hidden personas — return interactions as-is (Fix #6)

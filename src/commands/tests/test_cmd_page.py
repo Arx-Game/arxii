@@ -43,9 +43,23 @@ class CmdPageTests(TestCase):
         cmd.func()
 
         mock_search.assert_called_once_with("Bob", exact=True)
-        self.character.msg.assert_called_once_with("Alice pages: hello")
+        # Both lines are typed `page` and carry the other party (#4129): the
+        # recipient's line names the sender's persona when the sender puppets
+        # one (this caller is a bare account, so none), the echo names Bob's.
+        self.character.msg.assert_called_once_with(("Alice pages: hello", {"type": "page"}))
         self.target_account.msg.assert_not_called()
-        self.caller.msg.assert_any_call("You page Bob: hello")
+        bob = self.character.sheet_data.primary_persona
+        self.caller.msg.assert_any_call(
+            (
+                "You page Bob: hello",
+                {
+                    "type": "page",
+                    "from_persona_id": bob.pk,
+                    "from_name": bob.name,
+                    "outgoing": True,
+                },
+            )
+        )
 
     @patch("commands.evennia_overrides.communication.search.object_search")
     def test_page_requires_active_player(self, mock_search):
@@ -111,7 +125,7 @@ class CmdPageTests(TestCase):
         cmd.args = "Bob=hi"
         cmd.func()
 
-        self.character.msg.assert_called_once_with("Alice pages: hi")
+        self.character.msg.assert_called_once_with(("Alice pages: hi", {"type": "page"}))
 
     @patch("commands.evennia_overrides.communication.search.object_search")
     def test_hidden_sender_cannot_page_non_allowlisted_target(self, mock_search):
@@ -201,7 +215,18 @@ class CmdPageAccountBlockTests(TestCase):
             owner=self.receiver_player, blocked_player=self.sender_player, account_level=True
         )
         cmd = self._page()
-        cmd.caller.msg.assert_called_once_with(f"You page {self.receiver_char.key}: hello there")
+        receiver = self.receiver_char.sheet_data.primary_persona
+        cmd.caller.msg.assert_called_once_with(
+            (
+                f"You page {self.receiver_char.key}: hello there",
+                {
+                    "type": "page",
+                    "from_persona_id": receiver.pk,
+                    "from_name": receiver.name,
+                    "outgoing": True,
+                },
+            )
+        )
 
     def test_blocked_pair_still_flags_the_contact_attempt_for_staff(self):
         """The existing staff contact-flagging keeps firing under delivery suppression."""
@@ -216,4 +241,10 @@ class CmdPageAccountBlockTests(TestCase):
 
     def test_unblocked_pair_page_is_delivered_normally(self):
         self._page()
-        self.receiver_char.msg.assert_called_once_with("Sender pages: hello there")
+        sender = self.sender_char.sheet_data.primary_persona
+        self.receiver_char.msg.assert_called_once_with(
+            (
+                "Sender pages: hello there",
+                {"type": "page", "from_persona_id": sender.pk, "from_name": sender.name},
+            )
+        )
