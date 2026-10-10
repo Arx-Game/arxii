@@ -279,6 +279,55 @@ class ProfileIdentityPrivacyTests(APITestCase):
         data = self._get(sheet, owner).data
         assert [row["covenant"] for row in data["covenants"]] == [role.covenant.name]
 
+    def test_a_vow_sworn_under_an_alt_shows_on_the_alt_and_not_on_the_primary(self) -> None:
+        """#4208: the block follows the face that swore. An unrevealed viewer of Robert
+        sees Robert's covenant and nothing of the primary's; the same viewer of the
+        primary face sees the primary's covenant and nothing of Robert's."""
+        owner = AccountFactory()
+        sheet = self._character_sheet(owner, extra_alt=True)
+        robert = sheet.personas.get(name="Robert")
+        as_primary = CharacterCovenantRoleFactory(character_sheet=sheet)
+        as_robert = CharacterCovenantRoleFactory(character_sheet=sheet, sworn_as=robert)
+        viewer = AccountFactory()
+        self._character_sheet(viewer)
+
+        sheet.active_persona = robert
+        sheet.save()
+        data = self._get(sheet, viewer).data
+        assert data["identity"]["name"] == "Robert"
+        assert [(row["covenant"], row["sworn_as"]) for row in data["covenants"]] == [
+            (as_robert.covenant.name, "")
+        ]
+
+        sheet.active_persona = None
+        sheet.save()
+        data = self._get(sheet, viewer).data
+        assert [(row["covenant"], row["sworn_as"]) for row in data["covenants"]] == [
+            (as_primary.covenant.name, "")
+        ]
+
+    def test_a_revealed_viewer_sees_every_vow_each_naming_its_face(self) -> None:
+        """The owner (or staff, or a discoverer) reads both rows on either face; a row
+        sworn under a face other than the one presented says which."""
+        owner = AccountFactory()
+        sheet = self._character_sheet(owner, extra_alt=True)
+        robert = sheet.personas.get(name="Robert")
+        as_primary = CharacterCovenantRoleFactory(character_sheet=sheet)
+        as_robert = CharacterCovenantRoleFactory(character_sheet=sheet, sworn_as=robert)
+
+        data = self._get(sheet, owner).data
+        rows = {row["covenant"]: row["sworn_as"] for row in data["covenants"]}
+        assert rows == {as_primary.covenant.name: "", as_robert.covenant.name: "Robert"}
+
+        sheet.active_persona = robert
+        sheet.save()
+        data = self._get(sheet, owner).data
+        rows = {row["covenant"]: row["sworn_as"] for row in data["covenants"]}
+        assert rows == {
+            as_primary.covenant.name: sheet.primary_persona.name,
+            as_robert.covenant.name: "",
+        }
+
     def test_story_is_withheld_from_a_non_revealed_anonymous_figure(self) -> None:
         sheet = self._character_sheet(AccountFactory(), fake_active=True)
         viewer = AccountFactory()

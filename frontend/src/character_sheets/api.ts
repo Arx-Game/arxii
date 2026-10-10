@@ -517,6 +517,9 @@ export interface CharacterSheetStanding {
  * covenant role. Public, the way the Titles block beside it has always been.
  */
 export interface CharacterSheetCovenantRole {
+  /** The face the vow was sworn under (#4208), named only when it is not the face the
+   * sheet is presenting; blank otherwise. */
+  sworn_as: string;
   id: number;
   covenant_id: number;
   covenant: string;

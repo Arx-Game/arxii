@@ -238,6 +238,82 @@ class AddMemberTests(TestCase):
         self.assertEqual(cov.ranks.count(), 1)
         self.assertEqual(membership.rank, cov.ranks.get())
 
+
+class SwornFaceTests(TestCase):
+    """#4208: a vow records the face it was sworn under, and only a kept face can swear."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.cov = CovenantFactory()
+        CovenantRankFactory(covenant=cls.cov, tier=1)
+        cls.role = CovenantRoleFactory(covenant_type=cls.cov.covenant_type)
+        cls.sheet = CharacterSheetFactory()
+
+    def test_defaults_to_the_active_face(self) -> None:
+        from world.scenes.factories import PersonaFactory
+        from world.scenes.services import set_active_persona
+
+        membership = add_member(covenant=self.cov, character_sheet=self.sheet, role=self.role)
+        self.assertEqual(membership.sworn_as, self.sheet.primary_persona)
+
+        other_cov = CovenantFactory()
+        CovenantRankFactory(covenant=other_cov, tier=1)
+        alt = PersonaFactory(character_sheet=self.sheet, name="Robert")
+        set_active_persona(self.sheet, alt)
+        as_alt = add_member(
+            covenant=other_cov,
+            character_sheet=self.sheet,
+            role=CovenantRoleFactory(covenant_type=other_cov.covenant_type),
+        )
+        self.assertEqual(as_alt.sworn_as, alt)
+
+    def test_an_explicit_established_face_is_recorded(self) -> None:
+        from world.scenes.factories import PersonaFactory
+
+        alt = PersonaFactory(character_sheet=self.sheet, name="Robert")
+        membership = add_member(
+            covenant=self.cov, character_sheet=self.sheet, role=self.role, sworn_as=alt
+        )
+        self.assertEqual(membership.sworn_as, alt)
+
+    def test_a_temporary_mask_cannot_swear(self) -> None:
+        from world.covenants.exceptions import SwornFaceError
+        from world.scenes.constants import PersonaType
+        from world.scenes.factories import PersonaFactory
+
+        mask = PersonaFactory(
+            character_sheet=self.sheet, name="stag mask", persona_type=PersonaType.TEMPORARY
+        )
+        with self.assertRaises(SwornFaceError):
+            add_member(covenant=self.cov, character_sheet=self.sheet, role=self.role, sworn_as=mask)
+        self.assertFalse(CharacterCovenantRole.objects.filter(character_sheet=self.sheet).exists())
+
+    def test_another_characters_face_is_refused(self) -> None:
+        from world.covenants.exceptions import SwornFaceError
+
+        stranger = CharacterSheetFactory()
+        with self.assertRaises(SwornFaceError):
+            add_member(
+                covenant=self.cov,
+                character_sheet=self.sheet,
+                role=self.role,
+                sworn_as=stranger.primary_persona,
+            )
+
+    def test_the_model_refuses_a_foreign_or_masked_face_too(self) -> None:
+        from world.scenes.constants import PersonaType
+        from world.scenes.factories import PersonaFactory
+
+        membership = add_member(covenant=self.cov, character_sheet=self.sheet, role=self.role)
+        membership.sworn_as = CharacterSheetFactory().primary_persona
+        with self.assertRaises(ValidationError):
+            membership.full_clean()
+        membership.sworn_as = PersonaFactory(
+            character_sheet=self.sheet, name="veil", persona_type=PersonaType.TEMPORARY
+        )
+        with self.assertRaises(ValidationError):
+            membership.full_clean()
+
     def test_cannot_join_when_a_member_has_blocked_you(self) -> None:
         """#1278 — a member who blocked the joiner gates the join (generic, no name)."""
         from evennia_extensions.factories import AccountFactory
@@ -2121,7 +2197,8 @@ class RecomputeHealthOnEngagementTests(TestCase):
         from world.vitals.factories import CharacterVitalsFactory
 
         self.character = CharacterFactory()
-        self.sheet = CharacterSheetFactory(character=self.character, primary_persona=False)
+        # A vow needs a face to be sworn under (#4208), so the sheet keeps its primary.
+        self.sheet = CharacterSheetFactory(character=self.character)
         # Vitals row with base_max_health=None (derived) and max_health=0.
         # Without engagement, derive_base_max_health returns 0 (no class, no stamina).
         # After engaging a role with bonus_per_level=5 at level 1, it returns 5.
@@ -2213,7 +2290,8 @@ class StandDownBattleCovenantHealthTests(TestCase):
 
         # Member with derived max_health (base_max_health=None), currently engaged.
         self.character = CharacterFactory()
-        self.sheet = CharacterSheetFactory(character=self.character, primary_persona=False)
+        # A vow needs a face to be sworn under (#4208), so the sheet keeps its primary.
+        self.sheet = CharacterSheetFactory(character=self.character)
         CharacterVitalsFactory(
             character_sheet=self.sheet,
             base_max_health=None,

@@ -519,6 +519,10 @@ class CovenantRoleEntry(TypedDict):
     role: str
     rank: str
     engaged: bool
+    # The face the vow was sworn under (#4208), named only when it is not the face
+    # the sheet is presenting: a revealed viewer reading an alt's vow on the primary's
+    # sheet sees "as <alt>"; a row sworn under the face in front of you says nothing.
+    sworn_as: str
 
 
 class MentorBondEntry(TypedDict):

@@ -287,6 +287,8 @@ class CharacterCovenantRoleFactory(factory_django.DjangoModelFactory):
     covenant = factory.SubFactory(CovenantFactory)
     covenant_role = factory.SubFactory(CovenantRoleFactory)
     rank = factory.LazyAttribute(lambda o: CovenantRankFactory(covenant=o.covenant))
+    # The face the vow was sworn under (#4208): the primary unless a test says otherwise.
+    sworn_as = factory.LazyAttribute(lambda o: o.character_sheet.primary_persona)
     engaged = False
 
 

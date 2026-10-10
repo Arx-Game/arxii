@@ -65,6 +65,7 @@ if TYPE_CHECKING:
     from world.combat.models import CombatEncounter
     from world.covenants.models import CharacterCovenantRole as _CharacterCovenantRole
     from world.magic.models.sessions import RitualSession, RitualSessionParticipant
+    from world.scenes.models import Persona
     from world.stories.models import Story
 
 logger = logging.getLogger(__name__)
@@ -227,6 +228,8 @@ def _create_founder_memberships(
             covenant=cov,
             covenant_role=founder.role,
             rank=founder_rank,
+            # A founder swears under the face worn at the founding (#4208).
+            sworn_as=resolve_sworn_face(founder.character_sheet, None),
         )
         founder.character_sheet.character.covenant_roles.invalidate()
 
@@ -325,6 +328,24 @@ def _ensure_base_rank(covenant: Covenant) -> CovenantRank:
     )
 
 
+def resolve_sworn_face(character_sheet: CharacterSheet, sworn_as: Persona | None) -> Persona:
+    """The face a vow is sworn under (#4208): the one given, else the character's
+    active persona now. Refuses another character's persona and a temporary mask:
+    org membership refuses a mask the same way, and a vow binds the body to a
+    face the character will keep."""
+    from world.covenants.exceptions import SwornFaceError  # noqa: PLC0415
+    from world.scenes.services import active_persona_for_sheet  # noqa: PLC0415
+
+    face = sworn_as if sworn_as is not None else active_persona_for_sheet(character_sheet)
+    if face.character_sheet_id != character_sheet.pk:
+        msg = f"persona {face.pk} is not a face of sheet {character_sheet.pk}"
+        raise SwornFaceError(msg)
+    if not face.is_established_or_primary:
+        msg = f"persona {face.pk} is a {face.persona_type} face; a vow needs a kept one"
+        raise SwornFaceError(msg)
+    return face
+
+
 @transaction.atomic
 def add_member(
     *,
@@ -332,6 +353,7 @@ def add_member(
     character_sheet: CharacterSheet,
     role: CovenantRole,
     standing: str = MembershipStanding.CORE,
+    sworn_as: Persona | None = None,
 ) -> CharacterCovenantRole:
     """Create a new active membership row. Atomic.
 
@@ -340,11 +362,17 @@ def add_member(
     enforces "at most one active role per (character, covenant)"; the
     IntegrityError on conflict is the contract.
 
+    ``sworn_as`` (#4208) is the face the vow is sworn under, recorded for
+    presentation: the character's active persona when not given. A persona of
+    another character, or a temporary mask, raises ``SwornFaceError`` before
+    anything is written.
+
     Raises VowGateError when the character's level is outside the covenant band
     and they hold no active Mentor's Vow bond in this covenant — except for a
     MINOR-standing join (#2992), which bypasses the level band entirely: a
     guest never took the full vow the band protects.
     """
+    face = resolve_sworn_face(character_sheet, sworn_as)
     # #1278 — you can't join a covenant that holds a member who has blocked you (or whom you
     # blocked). Generic to the joiner: they're told a member blocked them, never which one.
     # Applies to every standing — the block check runs unconditionally, above the branch below.
@@ -372,6 +400,7 @@ def add_member(
         covenant_role=role,
         rank=rank,
         standing=standing,
+        sworn_as=face,
     )
     character_sheet.character.covenant_roles.invalidate()
     covenant.member_roster.invalidate()
@@ -453,6 +482,8 @@ def change_role(
         covenant=membership.covenant,
         covenant_role=new_role,
         rank=existing_rank,
+        # A new role is the same vow under the same face (#4208).
+        sworn_as=membership.sworn_as,
     )
     membership.character_sheet.character.covenant_roles.invalidate()
     _invalidate_role_caches(membership.character_sheet)
@@ -544,11 +575,13 @@ def assign_covenant_role(
     covenant: Covenant,
     covenant_role: CovenantRole,
     rank: CovenantRank | None = None,
+    sworn_as: Persona | None = None,
 ) -> CharacterCovenantRole:
     """Create a new active CharacterCovenantRole row. Atomic.
 
     If ``rank`` is not provided, the covenant's base rank (highest tier = lowest
-    authority) is used.
+    authority) is used. ``sworn_as`` (#4208) is the face the vow is sworn under,
+    the character's active persona when not given.
     """
     effective_rank = rank if rank is not None else _ensure_base_rank(covenant)
     row = CharacterCovenantRole.objects.create(
@@ -556,6 +589,7 @@ def assign_covenant_role(
         covenant=covenant,
         covenant_role=covenant_role,
         rank=effective_rank,
+        sworn_as=resolve_sworn_face(character_sheet, sworn_as),
     )
     character_sheet.character.covenant_roles.invalidate()
     covenant.member_roster.invalidate()
@@ -1983,15 +2017,22 @@ def _resolve_induction_membership(
     must not re-run swear_core's level-band gate (a spurious VowGateError
     for a guest who never asked to be fully sworn in).
     """
+    from world.scenes.services import active_persona_for_sheet  # noqa: PLC0415
+
     if existing is not None and existing.standing == MembershipStanding.MINOR:
         if standing == MembershipStanding.CORE:
             swear_core(membership=existing)
         return existing
+    # The face is read at fire, not stored on the session (#4208): the candidate
+    # swears under whatever face they are presenting when the rite completes.
+    # RitualSessionParticipant stays sheet-keyed.
+    candidate_sheet = candidate_participant.character_sheet
     return add_member(
         covenant=target_covenant,
-        character_sheet=candidate_participant.character_sheet,
+        character_sheet=candidate_sheet,
         role=chosen_role,
         standing=standing,
+        sworn_as=active_persona_for_sheet(candidate_sheet),
     )
 
 

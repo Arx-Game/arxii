@@ -282,22 +282,28 @@ def _render_covenant_section(command: Command) -> list[str]:
     viewer = _viewer_sheet(command)
     assignments = list(
         CharacterCovenantRole.objects.filter(character_sheet=viewer, left_at__isnull=True)
-        .select_related("covenant", "covenant_role", "rank")
+        .select_related("covenant", "covenant_role", "rank", "sworn_as")
         .order_by("covenant__name")
     )
     return _format_covenant(assignments)
 
 
 def _format_covenant(assignments: list) -> list[str]:
+    """Self-only, so every vow is listed; one sworn under another of your own faces
+    says which (#4208), the way the web sheet does for a revealed viewer."""
+    from world.scenes.constants import PersonaType  # noqa: PLC0415
+
     if not assignments:
         return ["You belong to no covenant."]
     lines = ["|wYour covenant:|n"]
     for assignment in assignments:
         rank = f", {assignment.rank.name}" if assignment.rank_id else ""
         engaged = " |g[engaged]|n" if assignment.engaged else ""
+        face = assignment.sworn_as
+        sworn = f" (as {face.name})" if face.persona_type != PersonaType.PRIMARY else ""
         name = assignment.covenant.name
         role = assignment.covenant_role.name
-        lines.append(f"  {name}: {role}{rank}{engaged}")
+        lines.append(f"  {name}: {role}{rank}{sworn}{engaged}")
     return lines
 
 
