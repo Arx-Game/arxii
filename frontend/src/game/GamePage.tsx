@@ -541,7 +541,8 @@ export function GamePage() {
         threads: sceneId ? threading.threads : [],
         ambientInteractions,
         notes: sessionNotes,
-        roomName,
+        // The row names the room; the composer's label names the scene.
+        roomName: roomData?.name ?? roomName,
         viewerPersonaId: personaId,
         lastSeenByThread: threadLastSeen,
         sceneBaselineId,
@@ -551,6 +552,7 @@ export function GamePage() {
       threading.threads,
       ambientInteractions,
       sessionNotes,
+      roomData?.name,
       roomName,
       personaId,
       threadLastSeen,

@@ -138,10 +138,12 @@ function Row({
             leftClick
             contextMenu={false}
           >
-            <PersonaAvatar
-              source={{ name: row.person.name, thumbnailUrl: row.person.thumbnailUrl }}
-              size="xs"
-            />
+            <span role="img" aria-label={row.person.name} className="flex">
+              <PersonaAvatar
+                source={{ name: row.person.name, thumbnailUrl: row.person.thumbnailUrl }}
+                size="xs"
+              />
+            </span>
           </PersonaMenu>
         </span>
       )}

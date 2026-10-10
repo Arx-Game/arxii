@@ -38,6 +38,7 @@ export interface RailRowsInput {
   ambientInteractions: Interaction[];
   /** The session's notes; only page notes with a correspondent become rows. */
   notes: FeedNote[];
+  /** The room's own name, the room row's label (the composer names the scene instead). */
   roomName: string;
   viewerPersonaId: number | null;
   lastSeenByThread: Record<string, number>;
@@ -67,12 +68,12 @@ function othersIn(thread: Thread, viewerPersonaId: number | null): ThreadPersona
   return others.length > 0 ? others : thread.participantPersonas;
 }
 
-function rowFromThread(thread: Thread, viewerPersonaId: number | null): RailRow {
+function rowFromThread(thread: Thread, viewerPersonaId: number | null, roomName: string): RailRow {
   if (thread.type === 'room') {
     return {
       key: 'room',
       kind: 'room',
-      label: thread.label,
+      label: roomName,
       person: null,
       unreadCount: thread.unreadCount,
       latestTimestamp: thread.latestTimestamp,
@@ -162,7 +163,7 @@ export function buildRailRows(input: RailRowsInput): RailGroups {
   const ambient = groupThreads(input.ambientInteractions, input.roomName, opts).threads;
   const byKey = new Map<string, RailRow>();
   for (const thread of [...input.threads, ...ambient]) {
-    const row = rowFromThread(thread, input.viewerPersonaId);
+    const row = rowFromThread(thread, input.viewerPersonaId, input.roomName);
     const existing = byKey.get(row.key);
     byKey.set(row.key, existing ? mergeRows(existing, row) : row);
   }
