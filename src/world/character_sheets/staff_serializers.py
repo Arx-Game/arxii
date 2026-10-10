@@ -292,3 +292,101 @@ class StaffMagicOptionsSerializer(serializers.Serializer):
     stats = StaffOptionSerializer(many=True)
     skills = StaffOptionSerializer(many=True)
     technique_limit = serializers.IntegerField()
+
+
+# --- Kinship, estate and reputation (#4226, #3988 piece D) ---------------------
+
+
+def _kinsperson_queryset() -> Any:
+    from world.roster.models import Kinsperson  # noqa: PLC0415
+
+    return Kinsperson.objects.all()
+
+
+def _family_queryset() -> Any:
+    from world.roster.models import Family  # noqa: PLC0415
+
+    return Family.objects.all()
+
+
+def _room_profile_queryset() -> Any:
+    from evennia_extensions.models import RoomProfile  # noqa: PLC0415
+
+    return RoomProfile.objects.all()
+
+
+def _grant_profile_queryset() -> Any:
+    from world.buildings.models import PropertyGrantProfile  # noqa: PLC0415
+
+    return PropertyGrantProfile.objects.all()
+
+
+def _house_claim_queryset() -> Any:
+    """Approved claims riding a staff account's draft: a claim on a player's draft is
+    that player's application, and materializing it here would take their house."""
+    from world.societies.houses.constants import HouseClaimStatus  # noqa: PLC0415
+    from world.societies.houses.models import HouseClaim  # noqa: PLC0415
+
+    return HouseClaim.objects.filter(
+        status=HouseClaimStatus.APPROVED, draft__account__is_staff=True
+    )
+
+
+def _vacancy_queryset() -> Any:
+    from world.societies.models import Vacancy  # noqa: PLC0415
+
+    return Vacancy.objects.all()
+
+
+def _organization_queryset() -> Any:
+    from world.societies.models import Organization  # noqa: PLC0415
+
+    return Organization.objects.all()
+
+
+class StaffKinshipSerializer(serializers.Serializer):
+    """Claim an open position (``node``), or self-serve one in ``family`` (or none)."""
+
+    node = serializers.PrimaryKeyRelatedField(
+        queryset=_kinsperson_queryset(), required=False, allow_null=True, default=None
+    )
+    family = serializers.PrimaryKeyRelatedField(
+        queryset=_family_queryset(), required=False, allow_null=True, default=None
+    )
+
+
+class StaffResidenceSerializer(serializers.Serializer):
+    room_profile = serializers.PrimaryKeyRelatedField(queryset=_room_profile_queryset())
+
+
+class StaffPropertySerializer(serializers.Serializer):
+    """A grant profile; blank means the one the character's Beginnings carries."""
+
+    profile = serializers.PrimaryKeyRelatedField(
+        queryset=_grant_profile_queryset(), required=False, allow_null=True, default=None
+    )
+
+
+class StaffHouseClaimSerializer(serializers.Serializer):
+    claim = serializers.PrimaryKeyRelatedField(queryset=_house_claim_queryset())
+
+
+class StaffVacancySerializer(serializers.Serializer):
+    vacancy = serializers.PrimaryKeyRelatedField(queryset=_vacancy_queryset())
+
+
+class StaffReputationSerializer(serializers.Serializer):
+    organization = serializers.PrimaryKeyRelatedField(queryset=_organization_queryset())
+    value = serializers.IntegerField()
+
+
+class StaffEstateOptionsSerializer(serializers.Serializer):
+    """What the kin, estate and reputation editors pick from; rooms come by search."""
+
+    open_positions = StaffOptionSerializer(many=True)
+    families = StaffOptionSerializer(many=True)
+    rooms = StaffOptionSerializer(many=True)
+    grant_profiles = StaffOptionSerializer(many=True)
+    house_claims = StaffOptionSerializer(many=True)
+    vacancies = StaffOptionSerializer(many=True)
+    organizations = StaffOptionSerializer(many=True)

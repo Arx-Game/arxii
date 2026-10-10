@@ -75,6 +75,8 @@ from world.character_sheets.types import (
     StaffEditRows,
     StaffHeldDistinction,
     StaffMarking,
+    StaffOptionRow,
+    StaffReputationRow,
     StandingSection,
     StorySection,
     TechniqueEntry,
@@ -2398,7 +2400,72 @@ def _build_staff_rows(sheet: CharacterSheet) -> StaffEditRows:
         has_vitals=CharacterVitals.objects.filter(character_sheet=sheet).exists(),
         has_gift=CharacterGift.objects.filter(character=sheet).exists(),
         has_aura=CharacterAura.objects.filter(character=sheet).exists(),
+        **_staff_estate_rows(sheet),
     )
+
+
+def _staff_estate_rows(sheet: CharacterSheet) -> dict[str, Any]:
+    """The kin node, open residences, granted houses and organization opinions (#4226)."""
+    from django.db.models import Q  # noqa: PLC0415
+    from django.utils import timezone  # noqa: PLC0415
+
+    from world.buildings.models import Building  # noqa: PLC0415
+    from world.locations.models import LocationTenancy  # noqa: PLC0415
+    from world.roster.models import Kinsperson  # noqa: PLC0415
+    from world.societies.models import OrganizationReputation  # noqa: PLC0415
+
+    node = Kinsperson.objects.filter(sheet=sheet).select_related("family").first()
+    from world.scenes.constants import PersonaType  # noqa: PLC0415
+    from world.scenes.models import Persona  # noqa: PLC0415
+
+    # What CG grants is held by the character as themselves; a sheet missing its
+    # PRIMARY persona shows empty rows rather than failing the whole payload.
+    persona = Persona.objects.filter(
+        character_sheet=sheet, persona_type=PersonaType.PRIMARY
+    ).first()
+    tenancies = (
+        LocationTenancy.objects.filter(tenant_persona=persona, room_profile__isnull=False)
+        .filter(Q(ends_at__isnull=True) | Q(ends_at__gt=timezone.now()))
+        .select_related("room_profile__objectdb")
+        .order_by("pk")
+        if persona is not None
+        else []
+    )
+    buildings = (
+        Building.objects.filter(owner_persona=persona, property_granted_at__isnull=False)
+        .select_related("area")
+        .order_by("pk")
+        if persona is not None
+        else []
+    )
+    reputations = (
+        OrganizationReputation.objects.filter(persona=persona)
+        .select_related("organization")
+        .order_by("organization__name")
+        if persona is not None
+        else []
+    )
+    return {
+        "kin_node": (
+            StaffOptionRow(
+                id=node.pk,
+                name=f"{node.name} ({node.family.name})" if node.family else node.name,
+            )
+            if node is not None
+            else None
+        ),
+        "residences": [
+            StaffOptionRow(id=row.room_profile.pk, name=row.room_profile.objectdb.db_key)
+            for row in tenancies
+        ],
+        "properties": [StaffOptionRow(id=b.pk, name=b.area.name) for b in buildings],
+        "reputations": [
+            StaffReputationRow(
+                organization=row.organization_id, name=row.organization.name, value=row.value
+            )
+            for row in reputations
+        ],
+    }
 
 
 class StaffEditSerializer(serializers.Serializer):

@@ -6022,6 +6022,28 @@ paths:
       responses:
         '200':
           description: No response body
+  /api/character-sheets/{id}/staff-estate-options/:
+    get:
+      operationId: character_sheets_staff_estate_options_retrieve
+      description: What the kin, estate and reputation editors offer; ``?room=`` searches
+        rooms.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+        required: true
+      tags:
+      - character-sheets
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StaffEstateOptions'
+          description: ''
   /api/character-sheets/{id}/staff-form/:
     patch:
       operationId: character_sheets_staff_form_partial_update
@@ -6069,6 +6091,30 @@ paths:
       responses:
         '200':
           description: No response body
+  /api/character-sheets/{id}/staff-house-claim/:
+    post:
+      operationId: character_sheets_staff_house_claim_create
+      description: Materialize an approved house claim with this character as its
+        founder.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+        required: true
+      tags:
+      - character-sheets
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StaffHouseClaimRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          description: No response body
   /api/character-sheets/{id}/staff-introductions/:
     post:
       operationId: character_sheets_staff_introductions_create
@@ -6088,6 +6134,29 @@ paths:
             schema:
               $ref: '#/components/schemas/StaffIntroductionRequest'
         required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/character-sheets/{id}/staff-kinship/:
+    post:
+      operationId: character_sheets_staff_kinship_create
+      description: 'Place the character in the kin tree: claim an open position, or
+        self-serve one.'
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+        required: true
+      tags:
+      - character-sheets
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StaffKinshipRequest'
       security:
       - cookieAuth: []
       responses:
@@ -6236,6 +6305,76 @@ paths:
       responses:
         '200':
           description: No response body
+  /api/character-sheets/{id}/staff-property/:
+    post:
+      operationId: character_sheets_staff_property_create
+      description: Grant a property house, once per profile; blank uses the Beginnings'
+        profile.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+        required: true
+      tags:
+      - character-sheets
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StaffPropertyRequest'
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/character-sheets/{id}/staff-reputation/:
+    put:
+      operationId: character_sheets_staff_reputation_update
+      description: Set an organization's opinion of the character (the clamp holds).
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+        required: true
+      tags:
+      - character-sheets
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StaffReputationRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/character-sheets/{id}/staff-residence/:
+    post:
+      operationId: character_sheets_staff_residence_create
+      description: Make the character a tenant of a room, as CG's starting residence
+        does.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+        required: true
+      tags:
+      - character-sheets
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StaffResidenceRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          description: No response body
   /api/character-sheets/{id}/staff-skills/:
     patch:
       operationId: character_sheets_staff_skills_partial_update
@@ -6276,6 +6415,29 @@ paths:
           application/json:
             schema:
               $ref: '#/components/schemas/PatchedStaffStatsRequest'
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/character-sheets/{id}/staff-vacancy/:
+    post:
+      operationId: character_sheets_staff_vacancy_create
+      description: 'Take an opening: its kin position, if it has one, then the membership.'
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+        required: true
+      tags:
+      - character-sheets
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StaffVacancyRequest'
+        required: true
       security:
       - cookieAuth: []
       responses:
@@ -82898,6 +83060,47 @@ components:
       description: |-
         * `placed` - Placed
         * `pending` - Pending staff placement
+    StaffEstateOptions:
+      type: object
+      description: What the kin, estate and reputation editors pick from; rooms come
+        by search.
+      properties:
+        open_positions:
+          type: array
+          items:
+            $ref: '#/components/schemas/StaffOption'
+        families:
+          type: array
+          items:
+            $ref: '#/components/schemas/StaffOption'
+        rooms:
+          type: array
+          items:
+            $ref: '#/components/schemas/StaffOption'
+        grant_profiles:
+          type: array
+          items:
+            $ref: '#/components/schemas/StaffOption'
+        house_claims:
+          type: array
+          items:
+            $ref: '#/components/schemas/StaffOption'
+        vacancies:
+          type: array
+          items:
+            $ref: '#/components/schemas/StaffOption'
+        organizations:
+          type: array
+          items:
+            $ref: '#/components/schemas/StaffOption'
+      required:
+      - families
+      - grant_profiles
+      - house_claims
+      - open_positions
+      - organizations
+      - rooms
+      - vacancies
     StaffFormTraitOptions:
       type: object
       properties:
@@ -82922,6 +83125,13 @@ components:
             $ref: '#/components/schemas/GoalInputRequest'
       required:
       - goals
+    StaffHouseClaimRequest:
+      type: object
+      properties:
+        claim:
+          type: integer
+      required:
+      - claim
     StaffIntroductionKindEnum:
       enum:
       - first_journal
@@ -82948,6 +83158,17 @@ components:
       - body
       - kind
       - title
+    StaffKinshipRequest:
+      type: object
+      description: Claim an open position (``node``), or self-serve one in ``family``
+        (or none).
+      properties:
+        node:
+          type: integer
+          nullable: true
+        family:
+          type: integer
+          nullable: true
     StaffMagicOptions:
       type: object
       description: What Grant magic picks from, narrowed by the tradition and gift
@@ -83117,6 +83338,38 @@ components:
       - skills
       - specializations
       - stats
+    StaffPropertyRequest:
+      type: object
+      description: A grant profile; blank means the one the character's Beginnings
+        carries.
+      properties:
+        profile:
+          type: integer
+          nullable: true
+    StaffReputationRequest:
+      type: object
+      properties:
+        organization:
+          type: integer
+        value:
+          type: integer
+      required:
+      - organization
+      - value
+    StaffResidenceRequest:
+      type: object
+      properties:
+        room_profile:
+          type: integer
+      required:
+      - room_profile
+    StaffVacancyRequest:
+      type: object
+      properties:
+        vacancy:
+          type: integer
+      required:
+      - vacancy
     StaffWorshipRequest:
       type: object
       properties:

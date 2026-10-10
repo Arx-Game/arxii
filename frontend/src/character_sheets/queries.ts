@@ -9,6 +9,7 @@ import { fetchProfileTextVersions } from '@/sheet_update_requests/api';
 import {
   STAFF_CHOICE_SOURCES,
   fetchCharacterSheet,
+  fetchStaffEstateOptions,
   fetchStaffMagicOptions,
   fetchStaffOptions,
   runStaffRowAction,
@@ -108,6 +109,18 @@ export function useStaffMagicOptions(
     // The stepper stays drawn while the next pick's options load.
     placeholderData: keepPreviousData,
     staleTime: 5 * 60_000,
+  });
+}
+
+/** What piece D's editors offer (#4226); ``room`` is the residence search so far. */
+export function useStaffEstateOptions(sheetId: number, room: string, enabled: boolean) {
+  return useQuery({
+    queryKey: ['character-sheets', sheetId, 'staff-estate-options', room],
+    queryFn: () => fetchStaffEstateOptions(sheetId, room),
+    enabled: enabled && !!sheetId,
+    staleTime: 60_000,
+    // The editors stay drawn while a new room search loads.
+    placeholderData: keepPreviousData,
   });
 }
 

@@ -4087,6 +4087,23 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/character-sheets/{id}/staff-estate-options/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description What the kin, estate and reputation editors offer; ``?room=`` searches rooms. */
+    get: operations['character_sheets_staff_estate_options_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/character-sheets/{id}/staff-form/': {
     parameters: {
       query?: never;
@@ -4121,6 +4138,23 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/character-sheets/{id}/staff-house-claim/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** @description Materialize an approved house claim with this character as its founder. */
+    post: operations['character_sheets_staff_house_claim_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/character-sheets/{id}/staff-introductions/': {
     parameters: {
       query?: never;
@@ -4132,6 +4166,23 @@ export interface paths {
     put?: never;
     /** @description Write one Introduction as the character's journal (#3621). No journal XP. */
     post: operations['character_sheets_staff_introductions_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/character-sheets/{id}/staff-kinship/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** @description Place the character in the kin tree: claim an open position, or self-serve one. */
+    post: operations['character_sheets_staff_kinship_create'];
     delete?: never;
     options?: never;
     head?: never;
@@ -4250,6 +4301,57 @@ export interface paths {
     patch: operations['character_sheets_staff_path_partial_update'];
     trace?: never;
   };
+  '/api/character-sheets/{id}/staff-property/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** @description Grant a property house, once per profile; blank uses the Beginnings' profile. */
+    post: operations['character_sheets_staff_property_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/character-sheets/{id}/staff-reputation/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    /** @description Set an organization's opinion of the character (the clamp holds). */
+    put: operations['character_sheets_staff_reputation_update'];
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/character-sheets/{id}/staff-residence/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** @description Make the character a tenant of a room, as CG's starting residence does. */
+    post: operations['character_sheets_staff_residence_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/character-sheets/{id}/staff-skills/': {
     parameters: {
       query?: never;
@@ -4282,6 +4384,23 @@ export interface paths {
     head?: never;
     /** @description Set stats at display scale (1 to 5); missing rows are created. */
     patch: operations['character_sheets_staff_stats_partial_update'];
+    trace?: never;
+  };
+  '/api/character-sheets/{id}/staff-vacancy/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** @description Take an opening: its kin position, if it has one, then the membership. */
+    post: operations['character_sheets_staff_vacancy_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
     trace?: never;
   };
   '/api/character-sheets/{id}/staff-vitals/': {
@@ -46662,6 +46781,16 @@ export interface components {
      * @enum {string}
      */
     StaffEnemyStatusEnum: 'placed' | 'pending';
+    /** @description What the kin, estate and reputation editors pick from; rooms come by search. */
+    StaffEstateOptions: {
+      open_positions: components['schemas']['StaffOption'][];
+      families: components['schemas']['StaffOption'][];
+      rooms: components['schemas']['StaffOption'][];
+      grant_profiles: components['schemas']['StaffOption'][];
+      house_claims: components['schemas']['StaffOption'][];
+      vacancies: components['schemas']['StaffOption'][];
+      organizations: components['schemas']['StaffOption'][];
+    };
     StaffFormTraitOptions: {
       id: number;
       name: string;
@@ -46669,6 +46798,9 @@ export interface components {
     };
     StaffGoalsRequest: {
       goals: components['schemas']['GoalInputRequest'][];
+    };
+    StaffHouseClaimRequest: {
+      claim: number;
     };
     /**
      * @description * `first_journal` - First Journal
@@ -46681,6 +46813,11 @@ export interface components {
       kind: components['schemas']['StaffIntroductionKindEnum'];
       title: string;
       body: string;
+    };
+    /** @description Claim an open position (``node``), or self-serve one in ``family`` (or none). */
+    StaffKinshipRequest: {
+      node?: number | null;
+      family?: number | null;
     };
     /** @description What Grant magic picks from, narrowed by the tradition and gift picked so far. */
     StaffMagicOptions: {
@@ -46730,6 +46867,20 @@ export interface components {
       enemy_kinds: components['schemas']['StaffChoice'][];
       enemy_degrees: components['schemas']['StaffChoice'][];
       enemy_power_tiers: components['schemas']['StaffChoice'][];
+    };
+    /** @description A grant profile; blank means the one the character's Beginnings carries. */
+    StaffPropertyRequest: {
+      profile?: number | null;
+    };
+    StaffReputationRequest: {
+      organization: number;
+      value: number;
+    };
+    StaffResidenceRequest: {
+      room_profile: number;
+    };
+    StaffVacancyRequest: {
+      vacancy: number;
     };
     StaffWorshipRequest: {
       public_being: number | null;
@@ -55644,6 +55795,27 @@ export interface operations {
       };
     };
   };
+  character_sheets_staff_estate_options_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['StaffEstateOptions'];
+        };
+      };
+    };
+  };
   character_sheets_staff_form_partial_update: {
     parameters: {
       query?: never;
@@ -55692,6 +55864,30 @@ export interface operations {
       };
     };
   };
+  character_sheets_staff_house_claim_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['StaffHouseClaimRequest'];
+      };
+    };
+    responses: {
+      /** @description No response body */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
   character_sheets_staff_introductions_create: {
     parameters: {
       query?: never;
@@ -55704,6 +55900,30 @@ export interface operations {
     requestBody: {
       content: {
         'application/json': components['schemas']['StaffIntroductionRequest'];
+      };
+    };
+    responses: {
+      /** @description No response body */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  character_sheets_staff_kinship_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: {
+      content: {
+        'application/json': components['schemas']['StaffKinshipRequest'];
       };
     };
     responses: {
@@ -55854,6 +56074,78 @@ export interface operations {
       };
     };
   };
+  character_sheets_staff_property_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: {
+      content: {
+        'application/json': components['schemas']['StaffPropertyRequest'];
+      };
+    };
+    responses: {
+      /** @description No response body */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  character_sheets_staff_reputation_update: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['StaffReputationRequest'];
+      };
+    };
+    responses: {
+      /** @description No response body */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  character_sheets_staff_residence_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['StaffResidenceRequest'];
+      };
+    };
+    responses: {
+      /** @description No response body */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
   character_sheets_staff_skills_partial_update: {
     parameters: {
       query?: never;
@@ -55890,6 +56182,30 @@ export interface operations {
     requestBody?: {
       content: {
         'application/json': components['schemas']['PatchedStaffStatsRequest'];
+      };
+    };
+    responses: {
+      /** @description No response body */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  character_sheets_staff_vacancy_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['StaffVacancyRequest'];
       };
     };
     responses: {

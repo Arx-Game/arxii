@@ -849,6 +849,21 @@ class StaffMarking(TypedDict):
     kind: str
 
 
+class StaffOptionRow(TypedDict):
+    """A row staff edit mode shows by id and name (#4226)."""
+
+    id: int
+    name: str
+
+
+class StaffReputationRow(TypedDict):
+    """An organization's opinion of the character (#4226)."""
+
+    organization: int
+    name: str
+    value: int
+
+
 class StaffEditRows(TypedDict):
     """The CG rows a sheet holds, by id, for staff edit mode's editors (#4221).
 
@@ -870,6 +885,11 @@ class StaffEditRows(TypedDict):
     # #4224 — Grant magic is offered to a giftless sheet; the Glimpse needs an aura.
     has_gift: bool
     has_aura: bool
+    # #4226 — kinship, estate and reputation, for piece D's editors.
+    kin_node: StaffOptionRow | None
+    residences: list[StaffOptionRow]
+    properties: list[StaffOptionRow]
+    reputations: list[StaffReputationRow]
 
 
 class StaffEditFields(TypedDict):

@@ -13,11 +13,13 @@ import { Textarea } from '@/components/ui/textarea';
 import type {
   CharacterSheetStaffRows,
   StaffChoice,
+  StaffEstateOptions,
   StaffOption,
   StaffOptions,
   StaffRowAction,
 } from '@/character_sheets/api';
 import {
+  useStaffEstateOptions,
   useStaffMagicOptions,
   useStaffOptions,
   useStaffRowMutation,
@@ -99,6 +101,7 @@ function StaffRows({ sheetId, rows }: { sheetId: number; rows: CharacterSheetSta
           <EnemyEditor options={options} run={run} />
           <IntroductionEditor run={run} />
           {!rows.has_gift && <MagicEditor sheetId={sheetId} run={run} />}
+          <EstateEditors sheetId={sheetId} rows={rows} run={run} />
           {!rows.has_vitals && (
             <Section title="Vitals">
               <span>
@@ -763,6 +766,276 @@ function MagicEditor({ sheetId, run }: { sheetId: number; run: Run }) {
           </span>
         </div>
       )}
+    </Section>
+  );
+}
+
+/**
+ * Kinship, estate and reputation (#4226): the rows CG's finalize writes for a family,
+ * a home, a house and the organizations' opinions. Rooms are searched, never listed.
+ */
+function EstateEditors({
+  sheetId,
+  rows,
+  run,
+}: {
+  sheetId: number;
+  rows: CharacterSheetStaffRows;
+  run: Run;
+}) {
+  const [roomQuery, setRoomQuery] = useState('');
+  const [searched, setSearched] = useState('');
+  const { data: options } = useStaffEstateOptions(sheetId, searched, true);
+  if (!options) return null;
+  return (
+    <>
+      <KinEditor rows={rows} options={options} run={run} />
+      <Section title="Residence">
+        {rows.residences.length > 0 && (
+          <ul className="text-sm">
+            {rows.residences.map((room) => (
+              <li key={room.id}>{room.name}</li>
+            ))}
+          </ul>
+        )}
+        <div className="flex flex-wrap items-center gap-2">
+          <Input
+            aria-label="Find a room"
+            placeholder="Find a room"
+            className="h-9 w-56"
+            value={roomQuery}
+            onChange={(event) => setRoomQuery(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter') setSearched(roomQuery.trim());
+            }}
+          />
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            onClick={() => setSearched(roomQuery.trim())}
+          >
+            Find
+          </Button>
+          <PickAndRun
+            label="Room"
+            options={options.rooms}
+            action="Make residence"
+            onRun={(id) =>
+              id !== null &&
+              run({ path: 'staff-residence', method: 'POST', body: { room_profile: id } })
+            }
+          />
+        </div>
+      </Section>
+      <Section title="Property">
+        {rows.properties.length > 0 && (
+          <ul className="text-sm">
+            {rows.properties.map((building) => (
+              <li key={building.id}>{building.name}</li>
+            ))}
+          </ul>
+        )}
+        <PickAndRun
+          label="Grant profile"
+          options={options.grant_profiles}
+          blank="Beginnings' grant"
+          allowBlank
+          action="Grant property"
+          onRun={(id) => run({ path: 'staff-property', method: 'POST', body: { profile: id } })}
+        />
+      </Section>
+      <Section title="House claim">
+        <PickAndRun
+          label="Approved claim"
+          options={options.house_claims}
+          action="Found house"
+          onRun={(id) =>
+            id !== null && run({ path: 'staff-house-claim', method: 'POST', body: { claim: id } })
+          }
+        />
+      </Section>
+      <Section title="Vacancy">
+        <PickAndRun
+          label="Opening"
+          options={options.vacancies}
+          action="Take opening"
+          onRun={(id) =>
+            id !== null && run({ path: 'staff-vacancy', method: 'POST', body: { vacancy: id } })
+          }
+        />
+      </Section>
+      <ReputationEditor rows={rows} options={options} run={run} />
+    </>
+  );
+}
+
+/** A picker and the one action it feeds; ``allowBlank`` sends no id for the blank row. */
+function PickAndRun({
+  label,
+  options,
+  action,
+  onRun,
+  blank,
+  allowBlank = false,
+}: {
+  label: string;
+  options: StaffOption[];
+  action: string;
+  /** ``null`` only when ``allowBlank`` lets the blank row through. */
+  onRun: (id: number | null) => void;
+  blank?: string;
+  allowBlank?: boolean;
+}) {
+  const [value, setValue] = useState('');
+  return (
+    <span className="flex flex-wrap items-center gap-2">
+      <Select
+        label={label}
+        value={value}
+        onChange={setValue}
+        options={asItems(options)}
+        blank={blank}
+      />
+      <Button
+        type="button"
+        size="sm"
+        disabled={!value && !allowBlank}
+        onClick={() => onRun(value ? Number(value) : null)}
+      >
+        {action}
+      </Button>
+    </span>
+  );
+}
+
+function KinEditor({
+  rows,
+  options,
+  run,
+}: {
+  rows: CharacterSheetStaffRows;
+  options: StaffEstateOptions;
+  run: Run;
+}) {
+  const [family, setFamily] = useState('');
+  return (
+    <Section title="Family tree">
+      {rows.kin_node ? (
+        <p className="text-sm">{rows.kin_node.name}</p>
+      ) : (
+        <div className="flex flex-col gap-2">
+          <PickAndRun
+            label="Open position"
+            options={options.open_positions}
+            action="Claim position"
+            onRun={(id) =>
+              id !== null && run({ path: 'staff-kinship', method: 'POST', body: { node: id } })
+            }
+          />
+          <span className="flex flex-wrap items-center gap-2">
+            <Select
+              label="Family"
+              value={family}
+              onChange={setFamily}
+              options={asItems(options.families)}
+              blank="Their own family"
+            />
+            <Button
+              type="button"
+              size="sm"
+              onClick={() =>
+                run({
+                  path: 'staff-kinship',
+                  method: 'POST',
+                  body: { family: family ? Number(family) : null },
+                })
+              }
+            >
+              Place in tree
+            </Button>
+          </span>
+        </div>
+      )}
+    </Section>
+  );
+}
+
+function ReputationEditor({
+  rows,
+  options,
+  run,
+}: {
+  rows: CharacterSheetStaffRows;
+  options: StaffEstateOptions;
+  run: Run;
+}) {
+  const [draft, setDraft] = useState<Record<string, string>>({});
+  const [adding, setAdding] = useState('');
+  const [addValue, setAddValue] = useState('');
+  const save = (organization: number, text: string, onDone?: () => void) =>
+    run(
+      {
+        path: 'staff-reputation',
+        method: 'PUT',
+        body: { organization, value: Number(text) },
+      },
+      onDone
+    );
+  return (
+    <Section title="Reputation">
+      {rows.reputations.map((row) => {
+        const text = draft[row.organization] ?? String(row.value);
+        return (
+          <label key={row.organization} className="flex items-center gap-2 text-sm">
+            <span className="w-48 truncate">{row.name}</span>
+            <Input
+              aria-label={`${row.name} reputation`}
+              type="number"
+              className="h-8 w-24"
+              value={text}
+              onChange={(event) => setDraft({ ...draft, [row.organization]: event.target.value })}
+            />
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              disabled={text.trim() === '' || text === String(row.value)}
+              onClick={() => save(row.organization, text, () => setDraft({}))}
+            >
+              Save
+            </Button>
+          </label>
+        );
+      })}
+      <span className="flex flex-wrap items-center gap-2">
+        <Select
+          label="Organization"
+          value={adding}
+          onChange={setAdding}
+          options={asItems(options.organizations)}
+        />
+        <Input
+          aria-label="Reputation"
+          type="number"
+          className="h-9 w-24"
+          value={addValue}
+          onChange={(event) => setAddValue(event.target.value)}
+        />
+        <Button
+          type="button"
+          size="sm"
+          disabled={!adding || addValue.trim() === ''}
+          onClick={() =>
+            save(Number(adding), addValue, () => {
+              setAdding('');
+              setAddValue('');
+            })
+          }
+        >
+          Set reputation
+        </Button>
+      </span>
     </Section>
   );
 }

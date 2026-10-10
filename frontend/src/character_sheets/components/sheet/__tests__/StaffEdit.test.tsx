@@ -17,6 +17,7 @@ const fetchProfileTextVersions = vi.fn();
 const fetchStaffOptions = vi.fn();
 const runStaffRowAction = vi.fn();
 const fetchStaffMagicOptions = vi.fn();
+const fetchStaffEstateOptions = vi.fn();
 
 vi.mock('@/character_sheets/api', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/character_sheets/api')>();
@@ -27,6 +28,7 @@ vi.mock('@/character_sheets/api', async (importOriginal) => {
     fetchStaffOptions: (...args: unknown[]) => fetchStaffOptions(...args),
     runStaffRowAction: (...args: unknown[]) => runStaffRowAction(...args),
     fetchStaffMagicOptions: (...args: unknown[]) => fetchStaffMagicOptions(...args),
+    fetchStaffEstateOptions: (...args: unknown[]) => fetchStaffEstateOptions(...args),
   };
 });
 vi.mock('@/sheet_update_requests/api', () => ({
@@ -49,6 +51,10 @@ const STORED: CharacterSheetStaffEdit = {
     has_vitals: true,
     has_gift: true,
     has_aura: false,
+    kin_node: null,
+    residences: [],
+    properties: [],
+    reputations: [],
   },
   prose: {
     description: '',
@@ -78,6 +84,16 @@ const STORED: CharacterSheetStaffEdit = {
   family: null,
   tarot_card: null,
   tarot_reversed: false,
+};
+
+const ESTATE_OPTIONS = {
+  open_positions: [{ id: 40, name: 'Second son (House Marrow)' }],
+  families: [{ id: 41, name: 'House Marrow' }],
+  rooms: [],
+  grant_profiles: [],
+  house_claims: [],
+  vacancies: [],
+  organizations: [{ id: 42, name: 'The Lamplighters' }],
 };
 
 const OPTIONS = {
@@ -154,6 +170,8 @@ describe('staff edit mode', () => {
     fetchStaffOptions.mockReset();
     fetchStaffOptions.mockResolvedValue(OPTIONS);
     fetchStaffMagicOptions.mockReset();
+    fetchStaffEstateOptions.mockReset();
+    fetchStaffEstateOptions.mockResolvedValue(ESTATE_OPTIONS);
   });
   afterEach(() => sessionStorage.clear());
 
@@ -359,5 +377,54 @@ describe('staff edit mode', () => {
     await screen.findByTestId('staff-rows-band');
     expect(screen.queryByTestId('staff-magic-editor')).not.toBeInTheDocument();
     expect(fetchStaffMagicOptions).not.toHaveBeenCalled();
+  });
+  it('claims an open kin position and sets a reputation (#4226)', async () => {
+    const user = userEvent.setup();
+    runStaffRowAction.mockResolvedValue(sheet());
+    sessionStorage.setItem('arx.staffEditMode', '1');
+    renderSheet(sheet());
+
+    const band = await screen.findByTestId('staff-rows-band');
+    const tree = await within(band).findByRole('region', { name: 'Family tree' });
+    await user.selectOptions(within(tree).getByRole('combobox', { name: 'Open position' }), '40');
+    await user.click(within(tree).getByRole('button', { name: 'Claim position' }));
+    await waitFor(() =>
+      expect(runStaffRowAction).toHaveBeenCalledWith(20, {
+        path: 'staff-kinship',
+        method: 'POST',
+        body: { node: 40 },
+      })
+    );
+
+    const reputation = within(band).getByRole('region', { name: 'Reputation' });
+    await user.selectOptions(
+      within(reputation).getByRole('combobox', { name: 'Organization' }),
+      '42'
+    );
+    await user.type(within(reputation).getByRole('spinbutton', { name: 'Reputation' }), '250');
+    await user.click(within(reputation).getByRole('button', { name: 'Set reputation' }));
+    await waitFor(() =>
+      expect(runStaffRowAction).toHaveBeenCalledWith(20, {
+        path: 'staff-reputation',
+        method: 'PUT',
+        body: { organization: 42, value: 250 },
+      })
+    );
+  });
+
+  it('shows the kin node in place of the pickers once the sheet has one (#4226)', async () => {
+    sessionStorage.setItem('arx.staffEditMode', '1');
+    renderSheet(
+      sheet({
+        staff_edit: {
+          ...STORED,
+          rows: { ...STORED.rows, kin_node: { id: 9, name: 'Kathryn (House Marrow)' } },
+        },
+      })
+    );
+    const band = await screen.findByTestId('staff-rows-band');
+    const tree = await within(band).findByRole('region', { name: 'Family tree' });
+    expect(within(tree).getByText('Kathryn (House Marrow)')).toBeInTheDocument();
+    expect(within(tree).queryByRole('button', { name: 'Claim position' })).not.toBeInTheDocument();
   });
 });

@@ -2659,7 +2659,8 @@ Character identity, appearance, demographics, and guise system.
 ### Character Creation
 Multi-stage character creation flow with draft system. The rows finalize writes are public
 services on a live sheet (`sheet_writers.py`, #4221), shared with staff edit mode; magic's are
-`magic_writer.provision_magic` (#4224).
+`magic_writer.provision_magic` (#4224); kinship, estate and reputation's are
+`estate_writer.py` (#4226).
 
 - **Models:** `CharacterDraft`, `StartingArea` (`grants_residence_tenancy` BooleanField, default
   True, #2036 — an authored per-area toggle for whether finalizing a character there grants a
