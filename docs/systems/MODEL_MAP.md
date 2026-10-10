@@ -1855,8 +1855,13 @@
 
 ### Service Functions
 - `can_edit_character_sheet(user: 'AbstractBaseUser | AnonymousUser', roster_entry: 'RosterEntry') -> 'bool' - True if the user is the original creator (player_number=1) or staff.`
+- `can_staff_edit_sheet(user: 'AbstractBaseUser | AnonymousUser', sheet: 'CharacterSheet') -> 'bool' - Whether this account may edit this sheet in place (#3988).`
 - `create_character_with_sheet(*, character_key: 'str', primary_persona_name: 'str', typeclass: 'str' = 'typeclasses.characters.Character', home: 'ObjectDB | None' = None, **sheet_kwargs: 'Any') -> 'tuple[ObjectDB, CharacterSheet, Persona]' - Atomically create a Character + CharacterSheet + PRIMARY Persona.`
-- `set_physical_description(sheet: 'CharacterSheet', text: 'str') -> 'None' - THE seam for setting a character's free-text physical description (#2632).`
+- `ensure_true_profile(sheet: 'CharacterSheet') -> 'Profile' - The sheet's true profile, created empty if an older character has none (#3988).`
+- `rename_character(sheet: 'CharacterSheet', name: 'str') -> 'None' - Rename a character: its key and its primary persona's name together (#3988).`
+- `restore_profile_text_version(version: 'ProfileTextVersion', *, edited_by: 'Any') -> 'ProfileTextVersion' - Write a past version's text back as the current text (#3988).`
+- `set_physical_description(sheet: 'CharacterSheet', text: 'str', *, edited_by: 'Any | None' = None) -> 'ProfileTextVersion' - THE seam for setting a character's free-text physical description (#2632).`
+- `staff_edit_sheet(sheet: 'CharacterSheet', changes: 'dict[str, Any]', *, edited_by: 'Any') -> 'None' - Apply a staff edit to a sheet's prose and identity fields (#3988).`
 - `update_profile_text(profile: 'Profile', field: 'str', text: 'str', *, edited_by: 'Any | None' = None, previous_text: 'str | None' = None) -> 'ProfileTextVersion' - Write a versioned Profile prose field — the ONLY sanctioned write path (#2631).`
 
 

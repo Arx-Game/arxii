@@ -2555,8 +2555,10 @@ XP, kudos, development points, and unlock system. Contains the most explicit pre
 Character identity, appearance, demographics, and guise system.
 
 - **Models:** `CharacterSheet`, `Profile` (bio + lineage, #1270; the Actor's Sheet answers `never_do`/`protect`/`fear` replaced `personality`, #3621; `beginnings`, an M2M to `character_creation.Beginnings` through `ProfileBeginnings` (`source`, `note`, `gained_at`), every origin the character holds, #3775, ADR-0303), `ProfileBeginnings` (the through row; `source` is `character_creation`/`recovered_memory`/`past_life`, one `character_creation` row per profile), `CharacterEnemy` (the priced enemy, #3621, ADR-0279), `ProfileTextVersion`
-  (#2631 — snapshot-on-write history for `ProfileTextField` prose (background,
-  personality): full text per version, stamped with IC datetime + active `stories.Era`;
+  (#2631 — snapshot-on-write history for `ProfileTextField` prose; since #3988 every
+  prose field: background, the Actor's Sheet answers, concept, real_concept, quote,
+  obituary and the physical description (`CharacterSheet.additional_desc`, versioned on
+  the true profile; `set_physical_description` writes through it): full text per version, stamped with IC datetime + active `stories.Era`;
   written ONLY through `services.update_profile_text`, which also captures the CG
   original on the first post-CG write; admin edits route through it via
   `ProfileAdmin.save_model`), `Heritage` (`first_appeared_ic`, #3663: nullable IC date
@@ -2572,8 +2574,17 @@ Character identity, appearance, demographics, and guise system.
   Mood" (both content gaps, fail cleanly until the lore repo authors them). See
   `character_sheets.md`'s "Mood" section.
 - **API:** `GET /api/character-sheets/{pk}/profile-text-versions/` — the prose-history
-  timeline; **owner/staff-only by default** (#2631 ruling — everyone else gets an empty
-  list); entries carry era/IC-date stamps + the applying request's reasoning caption
+  timeline; staff see every version, the current player only those written since their
+  own current tenure began (ADR-3988, amending #2631), everyone else an empty list;
+  entries carry era/IC-date stamps + the applying request's reasoning caption.
+  **Staff edit mode (#3988):** `PATCH .../staff-edit/` (any subset of the prose, identity
+  scalars and identity choices; `services.staff_edit_sheet`, gated by
+  `can_staff_edit_sheet`), `POST .../profile-text-versions/{version_id}/restore/`
+  (`restore_profile_text_version`, a restore is a new version), `rename_character` (key,
+  primary persona name and particled aliases together), `ensure_true_profile`; the sheet
+  payload's `staff_edit` block (stored values, staff only); `GET
+  /api/character-sheets/heritages/` for the picker. Table update requests stay limited to
+  `PLAYER_REQUESTABLE_TEXT_FIELDS`.
 - **Absence vocabulary (#2728 §5):** `CharacterSheet.objects` carries the single
   answer to "is this character absent?" — `.active()` (ACTIVE + ALIVE),
   `.dormant()` (its exact complement), `.claimable()` (delegates to
