@@ -313,7 +313,8 @@ restored_ap = offer.cancel()
   entries, and an all-secret branch must not leak its name
 - Detail view gates `lore_content` and `mechanics_content` behind KNOWN status or `is_public`
 - **The companion (#4198, ADR-4198):** `CodexEntryDetailSerializer.companion` is what the
-  entry's owner shows beside the prose: `rail` (groups of `{text, entry_id, anchor}` lines,
+  entry's owner shows beside the prose: `rail` (groups of `{text, entry_id, anchor, href}` lines
+  (`href`, #4205, a site path outside the Codex such as a house page `/orgs/<id>`),
   drawn beside the Lore box) and `sections` (`{anchor, label, name, when, entry_id, body}`,
   drawn under it). `world/codex/companions.py` is the registry: an owning sub-package calls
   `register_companion(provider)` from its `ready()` (through `world/apps.py`); the Codex

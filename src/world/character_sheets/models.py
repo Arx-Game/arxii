@@ -420,6 +420,7 @@ class CharacterSheet(SharedMemoryModel):
     # each deriving "is this character absent?" from raw timestamps or flags.
     objects = CharacterSheetManager()
 
+    # noqa: OBJECTDB_FIELD
     # ObjectDB by design (#2608): THE canonical character↔ObjectDB anchor. PK-sharing
     # means sheet.pk == character ObjectDB pk; every character-scoped model FKs this
     # sheet, never ObjectDB directly.

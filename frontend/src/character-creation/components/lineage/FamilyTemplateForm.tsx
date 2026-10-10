@@ -3,6 +3,7 @@
  * Shared by the noble house claim and the name path. Pure presentation.
  */
 
+import { Link } from 'react-router-dom';
 import { Label } from '@/components/ui/label';
 import { cn } from '@/lib/utils';
 import type { FamilyTemplate } from '../../types';
@@ -48,23 +49,31 @@ export function FamilyTemplateForm({
             <p className="text-xs text-muted-foreground">{definition.prompt}</p>
             <div className="grid gap-1 sm:grid-cols-2">
               {definition.options.map((option) => (
-                <button
-                  key={option.id}
-                  type="button"
-                  aria-pressed={picked.includes(option.id)}
-                  onClick={() => onToggle(definition.id, option.id, maxPicks)}
-                  className={cn(
-                    'rounded-md border p-2 text-left text-xs transition-colors',
-                    picked.includes(option.id)
-                      ? 'border-primary bg-primary/10'
-                      : 'hover:bg-muted/50'
+                <div key={option.id} className="flex flex-col gap-0.5">
+                  <button
+                    type="button"
+                    aria-pressed={picked.includes(option.id)}
+                    onClick={() => onToggle(definition.id, option.id, maxPicks)}
+                    className={cn(
+                      'rounded-md border p-2 text-left text-xs transition-colors',
+                      picked.includes(option.id)
+                        ? 'border-primary bg-primary/10'
+                        : 'hover:bg-muted/50'
+                    )}
+                  >
+                    <span className="font-medium">{option.name}</span>
+                    {option.description && (
+                      <span className="block text-muted-foreground">{option.description}</span>
+                    )}
+                  </button>
+                  {/* What the option IS (#4205): a god or totem opens its own page, a lore
+                      answer its entry. */}
+                  {option.target_entry_id != null && (
+                    <Link to={`/codex/${option.target_entry_id}`} className="text-xs underline">
+                      {option.being_name !== '' ? option.being_name : 'codex'}
+                    </Link>
                   )}
-                >
-                  <span className="font-medium">{option.name}</span>
-                  {option.description && (
-                    <span className="block text-muted-foreground">{option.description}</span>
-                  )}
-                </button>
+                </div>
               ))}
             </div>
           </div>

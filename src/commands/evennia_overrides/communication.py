@@ -51,6 +51,37 @@ def _flag_page_contact(sender_char: object, target_char: object) -> None:
     )
 
 
+def _page_persona(char: object) -> object | None:
+    """The persona a page is attributed to: the character's primary face, or None.
+
+    A page is OOC, so the face is the character's own (the same identity the
+    mute and block checks read), never a mask.
+    """
+    try:
+        return char.sheet_data.primary_persona
+    except (AttributeError, ObjectDoesNotExist):
+        return None
+
+
+def _page_frame(text: str, correspondent: object | None, *, outgoing: bool = False) -> tuple:
+    """A page line in Evennia's tuple form, typed ``page`` for the web client (#4129).
+
+    The web client sorts the line as a page by ``type`` and lists it in the
+    rail under its correspondent by ``from_persona_id``/``from_name``: the
+    sender on the line a character receives, the recipient on the sender's own
+    echo (``outgoing``), so both sides of one exchange sit under one row. Telnet
+    ignores the dict. Without a resolvable correspondent the line is still
+    typed, so it still sorts as a page; it just joins no row.
+    """
+    kwargs: dict[str, object] = {"type": "page"}
+    if correspondent is not None:
+        kwargs["from_persona_id"] = correspondent.pk
+        kwargs["from_name"] = correspondent.name
+    if outgoing:
+        kwargs["outgoing"] = True
+    return (text, kwargs)
+
+
 def _ooc_muted_by(*, receiver_account: object, sender_char: object) -> bool:
     """True if the receiver has OOC-muted the sender's active persona (#2087).
 
@@ -274,11 +305,16 @@ class CmdPage(FrontendMetadataMixin, Command):  # ty: ignore[invalid-base]
             receiver_account=account, sender_char=sender_char
         )
 
+        echo = _page_frame(
+            f"You page {character.key}: {text}", _page_persona(character), outgoing=True
+        )
         if blocked or muted:
-            self.caller.msg(f"You page {character.key}: {text}")
+            self.caller.msg(echo)
         else:
-            character.msg(f"{self.caller.key} pages: {text}")
-            self.caller.msg(f"You page {character.key}: {text}")
+            character.msg(
+                _page_frame(f"{self.caller.key} pages: {text}", _page_persona(sender_char))
+            )
+            self.caller.msg(echo)
 
         # #1278/#2088 — flag circumvention: a blocked player paging the blocker via
         # another identity. OOC (no scene); the service no-ops when no active block

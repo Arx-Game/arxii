@@ -9311,6 +9311,8 @@
   - reviewed_by -> contributors.ContentContributor [FK] (nullable)
   - definition -> societies.HouseAspectDefinition [FK]
   - codex_entry -> codex.CodexEntry [FK] (nullable)
+  - being -> worship.WorshippedBeing [FK] (nullable)
+  - being_nickname -> worship.BeingNickname [FK] (nullable)
 
 ### HouseClaim
 **Foreign Keys:**
@@ -9323,6 +9325,7 @@
   - aspects <- societies.HouseClaimAspect
   - kin <- societies.HouseClaimKin
   - lands <- societies.HouseClaimLand
+  - observances <- societies.HouseClaimObservance
 
 ### HouseClaimAspect
 **Foreign Keys:**
@@ -9341,6 +9344,10 @@
   - claim -> societies.HouseClaim [FK]
   - title -> societies.Title [FK]
   - land_shapes -> societies.LandShape [M2M]
+
+### HouseClaimObservance
+**Foreign Keys:**
+  - claim -> societies.HouseClaim [FK]
 
 ### HouseFeature
 **Foreign Keys:**
@@ -9576,6 +9583,7 @@
   - house_templates <- societies.HouseTemplate
   - aspects <- societies.OrganizationAspect
   - features <- societies.OrganizationFeature
+  - observances <- societies.OrganizationObservance
   - stature <- societies.HouseStature
   - stature_shifts <- societies.StatureShift
   - prestige_rank_row <- societies.OrgPrestigeRank
@@ -9662,6 +9670,10 @@
   - debtor -> character_sheets.CharacterSheet [FK]
   - creditor -> societies.Organization [FK]
   - settled_by_token -> currency.FavorTokenDetails [FK] (nullable)
+
+### OrganizationObservance
+**Foreign Keys:**
+  - organization -> societies.Organization [FK]
 
 ### OrganizationOffice
 **Foreign Keys:**
@@ -10816,6 +10828,7 @@
   - being -> worship.WorshippedBeing [FK]
 **Pointed to by:**
   - patron_organizations <- societies.Organization
+  - house_aspect_options <- societies.HouseAspectOption
 
 ### BeingRelationship
 **Foreign Keys:**
@@ -10969,6 +10982,7 @@
   - ultimate_techniques -> magic.Technique [M2M]
 **Pointed to by:**
   - ceremonies <- ceremonies.Ceremony
+  - house_aspect_options <- societies.HouseAspectOption
   - audere_majora_faith_variants <- magic.AudereMajoraFaithVariant
   - manifest_options <- magic.TechniqueManifestOption
   - feast_days <- worship.WorshipFeastDay

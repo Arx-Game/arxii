@@ -490,7 +490,7 @@ combat action records whom it targeted.
 > two-surface split flagged by the audit (built-on-`/scenes/:id`-only, absent from
 > `/game`) is closed. `GamePage` is now the composition root: it derives the active
 > session's scene, composes `useSceneInteractions` + `useThreading` once, and feeds
-> the result to `ConversationSidebar` (thread sidebar, unread badges, filter modal),
+> the result to the conversation rail (`ConversationRail`, #4129; was `ConversationSidebar`),
 > the center feed (chat-bubble `PoseUnit`s + `SystemLane`, the latter replaced by
 > in-column `FeedNoteBlock`s in #3856), and the scene toolset
 > (actions/places/consent/composer modes incl. tabletalk) — all on `/game`.
@@ -530,9 +530,12 @@ combat action records whom it targeted.
   plus action attachment mount on `/game`'s composer, wired to the same
   `useSceneInteractions` session the feed and toolset share; tabletalk is live
   (no longer hardcoded off)
-- **Conversation threading** — DONE. `useThreading`/`ThreadSidebar`/`ThreadFilterModal`
-  (grouping by whisper-set/place/target) render on `/game` via `ConversationSidebar`;
-  per-thread unread counts are backed by session last-seen, not stubbed to 0
+- **Conversation threading** — DONE. `useThreading` (grouping by
+  whisper-set/place/target) renders on `/game` as the conversation rail
+  (`ConversationRail`, #4129: every conversation on the far left, one selected at
+  a time, pages per correspondent, find in this session; the sidebar's
+  Conversations mode and #2165's tab strip are gone); per-thread unread counts
+  are backed by session last-seen, not stubbed to 0
 - **Threaded/chronological reader, read receipts, history browsing, reference
   mode** — DONE (#3759). `ThreadedNarrativeReader` reads the live scene feed and
   historical browsing through the same component: Threads view default-collapses

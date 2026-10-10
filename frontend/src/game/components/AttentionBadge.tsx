@@ -3,7 +3,7 @@ const MAX_SHOWN = 99;
 /**
  * Two-tier attention indicator (#2166 Decision 4a) -- direct (unseen
  * whisper/@-target aimed at this character) badges a small red numeric
- * count, mirroring `ConversationTabStrip`'s `UnreadBadge`; ambient (any
+ * count, mirroring the conversation rail's row counts; ambient (any
  * other unread) shows a muted dot; neither renders nothing.
  *
  * Extracted here (#3774) from the byte-identical copies that lived in

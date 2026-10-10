@@ -7,6 +7,7 @@ import django.db.models.deletion
 class Migration(migrations.Migration):
     dependencies = [
         ("arxii", "0213_covenant_role_sworn_as_backfill"),
+        ("arxii", "0213_house_aspect_targets"),
     ]
 
     operations = [

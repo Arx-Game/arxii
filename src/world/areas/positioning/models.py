@@ -377,6 +377,7 @@ class ObjectPosition(SharedMemoryModel):
     Invariant maintained by services: position.room == objectdb.db_location.
     """
 
+    # noqa: OBJECTDB_FIELD
     # ObjectDB by design (#2608): props and hazards (volatile objects, detonation
     # targets) occupy positions exactly like characters — mirrors db_location.
     objectdb = models.OneToOneField(

@@ -1,5 +1,6 @@
 import DOMPurify from 'dompurify';
 import { useMemo } from 'react';
+import { markMatchesInHtml, useFeedFind } from '../feedFind';
 
 interface EvenniaMessageProps {
   content: string;
@@ -32,6 +33,9 @@ export function EvenniaMessage({
   className = '',
   presentation = 'terminal',
 }: EvenniaMessageProps) {
+  // Find in this session (#4129): matches are marked after sanitizing, so the
+  // only `<mark>` in the HTML is ours.
+  const find = useFeedFind();
   const processedContent = useMemo(() => {
     // Convert Evennia color classes to Tailwind classes
     let processed = content;
@@ -49,8 +53,8 @@ export function EvenniaMessage({
     // Evennia's ANSI→HTML conversion, so the string is untrusted. Sanitize
     // before injecting: DOMPurify strips scripts/event-handlers/dangerous tags
     // while keeping the legitimate color <span>s.
-    return DOMPurify.sanitize(processed);
-  }, [content]);
+    return markMatchesInHtml(DOMPurify.sanitize(processed), find);
+  }, [content, find]);
 
   return (
     <div

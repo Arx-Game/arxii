@@ -91,6 +91,7 @@ from django.core.exceptions import ObjectDoesNotExist
 
 from world.areas.constants import AreaLevel
 from world.areas.models import Area
+from world.game_clock.services import format_ic_month_day
 from world.locations.models import LocationOwnership
 from world.roster.constants import NOBLE_KIND_NAME
 from world.roster.models import Kinsperson
@@ -516,6 +517,35 @@ def _particle_example(house: Organization) -> str:
     return f"{pair_born} · {pair_taken_in}"
 
 
+def aspect_facet(facet) -> dict:
+    """One picked aspect as every house surface shows it (#2079, #4205): the question,
+    the answer, its blurb, the being it is (if a god or totem) and the one Codex entry
+    the answer opens. Shared by the org payload, the document and the family read, so
+    a pick reads the same everywhere."""
+    option = facet.option
+    return {
+        "definition": facet.definition.name,
+        "option": option.name,
+        "description": option.description,
+        "being_name": option.being.name if option.being_id is not None else "",
+        "target_entry_id": option.target_entry_id,
+    }
+
+
+def patron_payload(house: Organization) -> dict | None:
+    """The house's patron (#4205) by the house's own name for it, or ``None``:
+    ``{"nickname", "being_name", "codex_entry_id"}`` read through
+    ``Organization.patron_nickname`` (#3776)."""
+    nickname = house.patron_nickname
+    if nickname is None:
+        return None
+    return {
+        "nickname": nickname.name,
+        "being_name": nickname.being.name,
+        "codex_entry_id": nickname.being.codex_entry_id,
+    }
+
+
 def _house_payload(house: Organization) -> dict:
     law = house.default_succession_law
     law_payload = (
@@ -532,13 +562,10 @@ def _house_payload(house: Organization) -> dict:
         "published_at": house.published_at,
         "particle_example": _particle_example(house),
         "default_succession_law": law_payload,
+        "patron": patron_payload(house),
         "aspects": [
-            {
-                "definition": facet.definition.name,
-                "option": facet.option.name,
-                "description": facet.option.description,
-            }
-            for facet in house.aspects.select_related("definition", "option").all()
+            aspect_facet(facet)
+            for facet in house.aspects.select_related("definition", "option", "option__being").all()
         ],
         "features": [
             {
@@ -556,7 +583,24 @@ def _house_payload(house: Organization) -> dict:
             }
             for office in house.offices.select_related("holder").all()
         ],
+        "observances": observance_rows(house),
     }
+
+
+def observance_rows(house: Organization) -> list[dict]:
+    """The house's days of remembrance (#4206) in calendar order, each with the
+    game's one IC date spelling. Shared by the document and the org payload so
+    both surfaces spell a day the same way."""
+    return [
+        {
+            "ic_month": row.ic_month,
+            "ic_day": row.ic_day,
+            "name": row.name,
+            "lore": row.lore,
+            "when": format_ic_month_day(row.ic_month, row.ic_day),
+        }
+        for row in house.observances.all()
+    ]
 
 
 def _family_payload(house: Organization, viewer: object, *, staff: bool) -> dict:

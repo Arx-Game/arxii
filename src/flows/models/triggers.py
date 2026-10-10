@@ -94,6 +94,11 @@ class Trigger(SharedMemoryModel):
         on_delete=models.CASCADE,
         help_text="The trigger template this is based on.",
     )
+    # noqa: OBJECTDB_FIELD
+    # ObjectDB by design (#2608): a trigger listens on whatever object an event
+    # reaches - a room, an exit, a prop, a character - so there is no more
+    # specific model; "a trigger really can fire on a vase" is the audit's own
+    # example of a keeper.
     obj = models.ForeignKey(
         "objects.ObjectDB",
         on_delete=models.CASCADE,

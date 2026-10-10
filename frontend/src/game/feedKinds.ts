@@ -21,6 +21,7 @@ export const FEED_KINDS = [
   'look',
   'item',
   'error',
+  'page',
   'system',
 ] as const;
 
@@ -54,6 +55,7 @@ export function classifyText(wireType: unknown, category?: unknown): FeedKind {
     case 'error':
     case 'move':
     case 'arrive':
+    case 'page':
       return wireType;
     case 'narrative':
       return category === 'visions' ? 'vision' : 'ambience';

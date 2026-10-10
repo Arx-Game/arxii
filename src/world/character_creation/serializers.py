@@ -70,11 +70,12 @@ from world.societies.houses.models import (
     HouseClaim,
     HouseClaimKin,
     HouseClaimLand,
+    HouseClaimObservance,
     HouseFeature,
     HouseTemplate,
     Title,
 )
-from world.societies.houses.types import ClaimKinDraft, ClaimLandDraft
+from world.societies.houses.types import ClaimKinDraft, ClaimLandDraft, ClaimObservanceDraft
 from world.societies.models import Organization, Vacancy
 from world.species.models import Language, Species
 from world.worship.models import WorshippedBeing
@@ -2249,14 +2250,28 @@ class HouseAspectOptionSerializer(serializers.ModelSerializer):
     """One authored answer in an aspect catalog (#2079).
 
     ``codex_entry_id`` (#2868) lets the CG option card link the option's lore
-    write-up — Inferna's House Quiddities each have one.
+    write-up — Inferna's House Quiddities each have one. ``being_id``/``being_name``
+    say what the option IS when it is a god or a totem (#4205), and
+    ``target_entry_id`` is the one entry the card opens: the option's own, else
+    the being's page.
     """
 
     codex_entry_id = serializers.IntegerField(read_only=True, allow_null=True)
+    being_id = serializers.IntegerField(read_only=True, allow_null=True)
+    being_name = serializers.CharField(source="being.name", read_only=True, default="")
+    target_entry_id = serializers.IntegerField(read_only=True, allow_null=True)
 
     class Meta:
         model = HouseAspectOption
-        fields = ["id", "name", "description", "codex_entry_id"]
+        fields = [
+            "id",
+            "name",
+            "description",
+            "codex_entry_id",
+            "being_id",
+            "being_name",
+            "target_entry_id",
+        ]
 
 
 class HouseAspectDefinitionSerializer(serializers.ModelSerializer):
@@ -2476,6 +2491,17 @@ class ClaimLandDraftSerializer(serializers.Serializer):
     land_shapes = serializers.ListField(child=serializers.CharField(), required=False, default=list)
 
 
+class ClaimObservanceDraftSerializer(serializers.Serializer):
+    """One founder-written day of remembrance (#4206); converted to a
+    ``ClaimObservanceDraft`` by ``HouseClaimSubmitSerializer.validate()``.
+    Calendar bounds are checked by the service's shared gate."""
+
+    ic_month = serializers.IntegerField()
+    ic_day = serializers.IntegerField()
+    name = serializers.CharField(max_length=120)
+    lore = serializers.CharField(required=False, allow_blank=True, default="")
+
+
 class ClaimEstateSerializer(serializers.Serializer):
     """The founder's optional estate pitch (#3983 Plan B)."""
 
@@ -2510,11 +2536,21 @@ class HouseClaimSubmitSerializer(serializers.Serializer):
     kin = ClaimKinDraftSerializer(many=True, required=False, default=list)
     lands = ClaimLandDraftSerializer(many=True, required=False, default=list)
     estate = ClaimEstateSerializer(required=False, allow_null=True, default=None)
+    observances = ClaimObservanceDraftSerializer(many=True, required=False, default=list)
 
     def validate(self, attrs: dict) -> dict:
-        """Convert the nested kin/land rows to dataclasses; no service calls
-        here (the automated gates run in the view's ``submit_house_claim``
-        call, not in validation)."""
+        """Convert the nested kin/land/observance rows to dataclasses; no
+        service calls here (the automated gates run in the view's
+        ``submit_house_claim`` call, not in validation)."""
+        attrs["observances"] = [
+            ClaimObservanceDraft(
+                ic_month=row["ic_month"],
+                ic_day=row["ic_day"],
+                name=row["name"],
+                lore=row.get("lore", ""),
+            )
+            for row in attrs.get("observances", [])
+        ]
         attrs["kin"] = [
             ClaimKinDraft(
                 name=row["name"],
@@ -2564,6 +2600,7 @@ class HouseClaimSubmitSerializer(serializers.Serializer):
             "estate_description": estate.get("description", ""),
             "founder_relation": data.get("founder_relation", ClaimKinRelation.HEAD),
             "founder_is_heir": data.get("founder_is_heir", False),
+            "observances": data.get("observances", []),
         }
 
 
@@ -2621,6 +2658,14 @@ class HouseClaimLandSerializer(serializers.ModelSerializer):
         return [shape.name for shape in obj.land_shapes.all()]
 
 
+class HouseClaimObservanceSerializer(serializers.ModelSerializer):
+    """One founder-written day of remembrance, as CG echoes it back (#4206)."""
+
+    class Meta:
+        model = HouseClaimObservance
+        fields = ["ic_month", "ic_day", "name", "lore", "sort_order"]
+
+
 class HouseClaimStatusSerializer(serializers.ModelSerializer):
     """The draft's house claim, as CG shows it (#1884 Phase D, #2079, #3983 Plan B)."""
 
@@ -2628,6 +2673,7 @@ class HouseClaimStatusSerializer(serializers.ModelSerializer):
     aspects = serializers.SerializerMethodField()
     kin = HouseClaimKinSerializer(many=True, read_only=True)
     lands = HouseClaimLandSerializer(many=True, read_only=True)
+    observances = HouseClaimObservanceSerializer(many=True, read_only=True)
     estate_district_id = serializers.IntegerField(read_only=True, allow_null=True)
 
     class Meta:
@@ -2644,6 +2690,7 @@ class HouseClaimStatusSerializer(serializers.ModelSerializer):
             "aspects",
             "kin",
             "lands",
+            "observances",
             "estate_name",
             "estate_description",
             "estate_district_id",
