@@ -20,7 +20,12 @@ from world.traits.constants import STAT_DISPLAY_DIVISOR
 
 if TYPE_CHECKING:
     from world.character_creation.models import Beginnings
-    from world.character_sheets.models import CharacterSheet, Gender, ProfileBeginnings
+    from world.character_sheets.models import (
+        CharacterEnemy,
+        CharacterSheet,
+        Gender,
+        ProfileBeginnings,
+    )
     from world.classes.models import Path
     from world.distinctions.models import Distinction
     from world.forms.models import FormTrait, FormTraitOption
@@ -430,3 +435,59 @@ def beginnings_consequences(sheet: CharacterSheet, beginnings: Beginnings) -> No
     grant_beginnings_codex(sheet, beginnings)
     provision_starting_languages(sheet, beginnings=beginnings)
     refresh_origin_story_state(sheet)
+
+
+def path_consequences(sheet: CharacterSheet, path: Path) -> None:
+    """What a Path carries: its codex, and for Path of the Chosen the worship patronage."""
+    grant_path_codex(sheet, path)
+    establish_chosen_patronage(sheet, path)
+
+
+def establish_chosen_patronage(sheet: CharacterSheet, path: Path) -> None:
+    """Path of the Chosen binds the declared being as patron (#2550); other paths, nothing."""
+    from world.character_creation.constants import PATH_OF_THE_CHOSEN_NAME  # noqa: PLC0415
+    from world.worship.models import PatronageValence, WorshipDeclaration  # noqa: PLC0415
+    from world.worship.services import establish_patronage  # noqa: PLC0415
+
+    if path.name != PATH_OF_THE_CHOSEN_NAME:
+        return
+    declaration = WorshipDeclaration.objects.filter(character_sheet=sheet).first()
+    being = declaration and (declaration.secret_being or declaration.public_being)
+    if being:
+        establish_patronage(sheet, being, valence=PatronageValence.DEVOTIONAL)
+
+
+def distinction_consequences(sheet: CharacterSheet, distinction: Distinction) -> None:
+    """What a distinction carries beyond its row: its codex entries."""
+    grant_distinction_codex(sheet, [distinction])
+
+
+def set_enemy(
+    sheet: CharacterSheet,
+    *,
+    enemy: CharacterEnemy | None = None,
+    validate: bool = True,
+    **fields: object,
+) -> CharacterEnemy:
+    """Write the Actor's Sheet enemy row (#3621): a new one, or ``enemy`` updated.
+
+    Only the row: CG's finalize collects the enemy's debt (the group's opinion, pursuit
+    heat) from the draft, which staff editing a sheet have no business repeating. The
+    model's own validation decides what a person or a group enemy needs; CG resolved
+    its enemy already and passes ``validate=False``.
+    """
+    from django.core.exceptions import ValidationError  # noqa: PLC0415
+
+    from world.character_sheets.models import CharacterEnemy  # noqa: PLC0415
+
+    row = enemy or CharacterEnemy(character=sheet)
+    for name, value in fields.items():
+        setattr(row, name, value)
+    if validate:
+        try:
+            row.full_clean(exclude=["secret"])
+        except ValidationError as exc:
+            msg = "; ".join(exc.messages)
+            raise SheetWriteError(msg) from exc
+    row.save()
+    return row

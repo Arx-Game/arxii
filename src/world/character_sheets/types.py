@@ -825,6 +825,44 @@ DECAY_TIER_THRESHOLDS_DAYS = {
 biggest matching tier wins. Tuneable; the values match the #671 spec."""
 
 
+class StaffHeldDistinction(TypedDict):
+    """A held distinction as staff edit mode edits it (#4221)."""
+
+    id: int
+    distinction: int
+    name: str
+    rank: int
+    max_rank: int
+    feature: str
+
+
+class StaffMarking(TypedDict):
+    id: int
+    name: str
+    body_region: str
+    kind: str
+
+
+class StaffEditRows(TypedDict):
+    """The CG rows a sheet holds, by id, for staff edit mode's editors (#4221).
+
+    ``stats`` is display scale by trait id; ``form`` is option id by form trait id.
+    """
+
+    stats: dict[int, int]
+    skills: dict[int, int]
+    specializations: dict[int, int]
+    distinctions: list[StaffHeldDistinction]
+    form: dict[int, int]
+    markings: list[StaffMarking]
+    beginnings: int | None
+    path: int | None
+    class_level: int | None
+    public_being: int | None
+    secret_being: int | None
+    has_vitals: bool
+
+
 class StaffEditFields(TypedDict):
     """What staff edit mode edits, as stored (#3988); in the payload for staff only.
 
@@ -852,3 +890,5 @@ class StaffEditFields(TypedDict):
     family: int | None
     tarot_card: int | None
     tarot_reversed: bool
+    # #4221 — the CG rows behind the sheet, for the row editors.
+    rows: StaffEditRows

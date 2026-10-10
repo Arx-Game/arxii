@@ -29,7 +29,6 @@ from world.character_creation.constants import (
     FALLBACK_STARTING_ROOM_FIXTURE_KEY,
     FALLBACK_STARTING_ROOM_KEY,
     FALLBACK_STARTING_ROOM_TYPECLASS,
-    PATH_OF_THE_CHOSEN_NAME,
     STAT_DISPLAY_DIVISOR,
     TECHNIQUE_PERSONALIZATIONS_KEY,
     ApplicationStatus,
@@ -549,7 +548,7 @@ def _create_enemy(
     """
     from world.character_creation.constants import ENEMY_REPUTATION_SEED  # noqa: PLC0415
     from world.character_creation.enemies import resolve_enemy  # noqa: PLC0415
-    from world.character_sheets.models import CharacterEnemy  # noqa: PLC0415
+    from world.character_creation.sheet_writers import set_enemy  # noqa: PLC0415
     from world.societies.models import Organization  # noqa: PLC0415
     from world.societies.renown import bump_organization_reputation  # noqa: PLC0415
 
@@ -565,8 +564,9 @@ def _create_enemy(
     # property's query. Only an already-warm cache needs the append below - a cold
     # one reloads fresh (this enemy included) whenever something next reads it.
     cached_enemy_rows = sheet.__dict__.get("enemy_rows")
-    enemy = CharacterEnemy.objects.create(
-        character=sheet,
+    enemy = set_enemy(
+        sheet,
+        validate=False,
         kind=resolved.kind,
         organization=org,
         figure_name=resolved.figure_name,
@@ -1509,26 +1509,12 @@ def _stamp_default_class_level(character: ObjectDB) -> None:
 
 
 def _establish_chosen_patronage(character: ObjectDB, draft: CharacterDraft) -> None:
-    """Establish patronage for a Path of the Chosen character (#2550).
-
-    If the character's selected path is "Path of the Chosen" and they have a
-    worship declaration with a being, establishes a devotional patronage link.
-
-    Args:
-        character: The newly created ``ObjectDB`` character.
-        draft: The completed ``CharacterDraft``.
-    """
-    if not draft.selected_path or draft.selected_path.name != PATH_OF_THE_CHOSEN_NAME:
+    """Path of the Chosen's patronage (#2550), through ``establish_chosen_patronage``."""
+    if not draft.selected_path:
         return
-    from world.worship.models import PatronageValence, WorshipDeclaration  # noqa: PLC0415
-    from world.worship.services import establish_patronage  # noqa: PLC0415
+    from world.character_creation.sheet_writers import establish_chosen_patronage  # noqa: PLC0415
 
-    declaration = WorshipDeclaration.objects.filter(character_sheet=character.sheet_data).first()
-    if not declaration:
-        return
-    being = declaration.secret_being or declaration.public_being
-    if being:
-        establish_patronage(character.sheet_data, being, valence=PatronageValence.DEVOTIONAL)
+    establish_chosen_patronage(character.sheet_data, draft.selected_path)
 
 
 def _apply_post_cg_bonuses(

@@ -299,6 +299,36 @@ STAFF_PRONOUNS_FIELD = "pronouns"
 STAFF_TAROT_REVERSED_FIELD = "tarot_reversed"
 
 
+def _apply_staff_change(  # noqa: PLR0913 - one field's write and the two save lists
+    sheet: CharacterSheet,
+    profile: Profile,
+    key: str,
+    value: Any,
+    edited_by: Any,
+    sheet_fields: list[str],
+    profile_fields: list[str],
+) -> None:
+    """One field of a staff edit: versioned prose, the rename, a sheet or profile column."""
+    if key in ProfileTextField.values:
+        update_profile_text(profile, key, value, edited_by=edited_by)
+    elif key == STAFF_NAME_FIELD:
+        rename_character(sheet, value)
+    elif key in STAFF_IDENTITY_SCALARS or key in STAFF_SHEET_CHOICES:
+        setattr(sheet, key, value)
+        sheet_fields.append(key)
+        if key == STAFF_PRONOUNS_FIELD and value is not None:
+            sheet.pronoun_subject = value.subject
+            sheet.pronoun_object = value.object
+            sheet.pronoun_possessive = value.possessive
+            sheet_fields.extend(["pronoun_subject", "pronoun_object", "pronoun_possessive"])
+    elif key in STAFF_PROFILE_CHOICES or key == STAFF_TAROT_REVERSED_FIELD:
+        setattr(profile, key, value)
+        profile_fields.append(key)
+    else:
+        msg = f"{key!r} is not a field staff edit in place."
+        raise StaffEditError(msg)
+
+
 @transaction.atomic
 def staff_edit_sheet(sheet: CharacterSheet, changes: dict[str, Any], *, edited_by: Any) -> None:
     """Apply a staff edit to a sheet's prose and identity fields (#3988).
@@ -310,29 +340,25 @@ def staff_edit_sheet(sheet: CharacterSheet, changes: dict[str, Any], *, edited_b
     pronoun set copies its three forms onto the sheet, since the sheet's own
     pronoun strings are what every reader prints.
     """
+    from world.character_creation.sheet_writers import (  # noqa: PLC0415
+        set_pronouns_from_gender,
+        species_consequences,
+    )
+
     profile = ensure_true_profile(sheet)
     sheet_fields: list[str] = []
     profile_fields: list[str] = []
+    # A new gender sets the pronoun forms CG would set for it, unless the same edit
+    # chooses a pronoun set (#4221).
+    if changes.get("gender") is not None and STAFF_PRONOUNS_FIELD not in changes:
+        set_pronouns_from_gender(sheet, changes["gender"])
+        sheet_fields.extend(["pronoun_subject", "pronoun_object", "pronoun_possessive"])
     for key, value in changes.items():
-        if key in ProfileTextField.values:
-            update_profile_text(profile, key, value, edited_by=edited_by)
-        elif key == STAFF_NAME_FIELD:
-            rename_character(sheet, value)
-        elif key in STAFF_IDENTITY_SCALARS or key in STAFF_SHEET_CHOICES:
-            setattr(sheet, key, value)
-            sheet_fields.append(key)
-            if key == STAFF_PRONOUNS_FIELD and value is not None:
-                sheet.pronoun_subject = value.subject
-                sheet.pronoun_object = value.object
-                sheet.pronoun_possessive = value.possessive
-                sheet_fields.extend(["pronoun_subject", "pronoun_object", "pronoun_possessive"])
-        elif key in STAFF_PROFILE_CHOICES or key == STAFF_TAROT_REVERSED_FIELD:
-            setattr(profile, key, value)
-            profile_fields.append(key)
-        else:
-            msg = f"{key!r} is not a field staff edit in place."
-            raise StaffEditError(msg)
+        _apply_staff_change(sheet, profile, key, value, edited_by, sheet_fields, profile_fields)
     if sheet_fields:
-        sheet.save(update_fields=sheet_fields)
+        sheet.save(update_fields=list(dict.fromkeys(sheet_fields)))
     if profile_fields:
         profile.save(update_fields=profile_fields)
+    # A species carries its gifts, languages and codex, as it does in CG (#4221).
+    if changes.get("species") is not None:
+        species_consequences(sheet)
