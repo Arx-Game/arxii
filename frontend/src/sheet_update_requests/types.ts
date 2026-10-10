@@ -5,6 +5,7 @@
  * character-sheets profile-text-versions timeline endpoint.
  */
 
+import type { StaffProseField } from '@/character_sheets/api';
 import type { components } from '@/generated/api';
 
 export type TableUpdateRequest = components['schemas']['TableUpdateRequest'];
@@ -31,6 +32,23 @@ export const PROFILE_TEXT_FIELDS = [
   { value: 'protect', label: 'What would you protect at all costs?' },
   { value: 'fear', label: 'What are you deathly afraid of?' },
 ] as const;
+
+/**
+ * Every versioned prose field's heading in the history timeline (#3988 widened the
+ * versioned set past the four a player may request).
+ */
+export const PROSE_FIELD_LABELS: Record<StaffProseField, string> = {
+  background: 'Background',
+  never_do: 'What would you never do?',
+  protect: 'What would you protect at all costs?',
+  fear: 'What are you deathly afraid of?',
+  concept: 'Concept',
+  quote: 'Quote',
+  obituary: 'Obituary',
+  description: 'Physical description',
+  real_concept: 'Real concept',
+  glimpse: 'Glimpse',
+};
 
 export const DISTINCTION_ACTIONS = {
   ADD: 'distinction_add',

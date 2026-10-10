@@ -165,6 +165,27 @@ application.is_editable   # True when revisions_requested
 
 ## Service Functions
 
+**One writer per row family (#4221, `world.character_creation.sheet_writers`).** The rows CG
+writes are public services that take the sheet and explicit values, so finalize and staff
+edit mode share them: `set_stat_values`, `set_skill_values` (caps kept unless
+`enforce_caps=False`, CG's choice), `set_true_form_values`, `set_trait_descriptors`,
+`set_beginnings` (one `character_creation` ProfileBeginnings), `set_worship_declaration`,
+`set_pronouns_from_gender`, `initialize_full_vitals`, `set_enemy` (the row only; CG's
+reputation and heat stay in `_create_enemy`), the codex grants (`grant_codex_entries`,
+`grant_path_codex`, `grant_beginnings_codex`, `grant_distinction_codex`, `grant_species_codex`),
+`grant_beginnings_rituals`, `establish_chosen_patronage`, and the bundles a choice carries
+(`species_consequences`, `beginnings_consequences`, `path_consequences`). CG's private helpers
+delegate to them. A staff write raises `SheetWriteError` (with `user_message`) on a rule.
+
+**Magic (#4224, `world.character_creation.magic_writer`).** `provision_magic(sheet, picks, *,
+hooks, require_roster_entry)` gives a sheet its magic in finalize's order from a `MagicPicks`
+of rows: gift and technique links, species gifts, languages, tradition and Academy
+obligation, tradition codex, aura and Glimpse, aura recompute and affinity nudge, anima
+pools and the player anima ritual, resonance codex. `finalize_magic_data` builds the picks
+from the draft and passes its draft-only steps as `MagicHooks`; staff edit mode calls
+`validate_staff_magic` (the stage's structural rules, without costs) first.
+`technique_pick_limit(sheet)` reads the starting-technique bonus from held distinctions.
+
 ```python
 from world.character_creation.services import (
     finalize_character,           # Create Character from completed draft (atomic); stamps

@@ -123,8 +123,16 @@ Character creation grants distinctions through `CharacterDraft.draft_data` and
 `_create_distinction_modifiers_bulk` (`world.character_creation.services`) — the CG-only path.
 Every **in-play** (post-CG) acquisition or rank-up, from any source, goes through exactly one
 function: `world.distinctions.services.grant_distinction(character, distinction, *, origin,
-rank=None, source_description="")`. It is the single writer of `CharacterDistinction` outside
+rank=None, source_description="", feature_trait=None, feature_marking=None)`. It is the single writer of `CharacterDistinction` outside
 CG finalization and Django admin — no in-play caller re-implements the create/rank-up branching.
+The feature pair (#4221) aims a per-feature distinction at its trait or marking; the holder row
+is matched on it, so one character holds a per-feature distinction once per feature.
+
+**Staff edit mode (#4221, `world.distinctions.staff`):** `staff_add_distinction` (origin
+`STAFF`, through `grant_distinction`; exclusions, the per-feature aim and the rank range hold;
+it also mints the default Secret, grants the codex and links the Glimpse, as CG does),
+`staff_set_distinction_rank` (up or down, modifiers recalculated) and `staff_remove_distinction`
+(modifiers and Secret torn down, the row deleted). No XP, no `SheetUpdateRequest`, no narrative.
 
 **Semantics:**
 

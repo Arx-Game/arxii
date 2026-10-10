@@ -390,7 +390,8 @@ class AcademyEntranceObligationTest(TestCase):
             tradition_name=UNBOUND_TRADITION_NAME, self_taught=True
         )
 
-        with self.assertLogs("world.character_creation.services", level="WARNING") as logs:
+        # The obligation is written by the shared magic writer since #4224.
+        with self.assertLogs("world.character_creation.magic_writer", level="WARNING") as logs:
             finalize_magic_data(draft, sheet)
 
         self.assertFalse(OrganizationObligation.objects.exists())

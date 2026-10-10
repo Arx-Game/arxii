@@ -20,22 +20,32 @@ from world.character_creation.services import (
     clear_origin_slot,
     set_origin_slot,
 )
-from world.character_sheets.filters import MoodOptionFilterSet
-from world.character_sheets.models import CharacterSheet, MoodOption
+from world.character_sheets.filters import HeritageFilterSet, MoodOptionFilterSet
+from world.character_sheets.models import CharacterSheet, Heritage, MoodOption
 from world.character_sheets.serializers import (
     CharacterSheetSerializer,
     CharacterXPLedgerSerializer,
+    HeritageSerializer,
     MaturationSpendInputSerializer,
     MaturationStateSerializer,
     MoodOptionSerializer,
     OriginSlotClearSerializer,
     OriginSlotInputSerializer,
     ProfileTextVersionSerializer,
+    StaffEditSerializer,
     StatPointStateSerializer,
     _viewer_is_privileged,
     get_character_sheet_queryset,
 )
-from world.character_sheets.services import can_edit_character_sheet
+from world.character_sheets.services import (
+    StaffEditError,
+    can_edit_character_sheet,
+    can_staff_edit_sheet,
+    restore_profile_text_version,
+    staff_edit_sheet,
+)
+from world.character_sheets.staff_views import StaffSheetRowsMixin
+from world.character_sheets.types import ProfileTextField
 from world.scenes.block_services import sheet_blocked_for_viewer
 
 
@@ -63,7 +73,7 @@ def _spendable_stat_rows(sheet: CharacterSheet, cap: int | None) -> list[dict]:
     ]
 
 
-class CharacterSheetViewSet(RetrieveModelMixin, GenericViewSet):
+class CharacterSheetViewSet(StaffSheetRowsMixin, RetrieveModelMixin, GenericViewSet):
     """Read-only detail endpoint for character sheets, keyed by character pk.
 
     Returns character sheet data for a single character. The response
@@ -300,12 +310,25 @@ class CharacterSheetViewSet(RetrieveModelMixin, GenericViewSet):
         from world.gm.models import ProfileTextRequestDetails  # noqa: PLC0415
 
         sheet = self.get_object()
-        if not _viewer_is_privileged(sheet, request.user):
+        if not _viewer_is_privileged(sheet, request.user) or sheet.true_profile is None:
             return Response([])
 
-        versions = list(
-            sheet.true_profile.text_versions.select_related("era").order_by("field", "-created_at")
-        )
+        versions_qs = sheet.true_profile.text_versions.select_related("era")
+        if not request.user.is_staff:
+            # The real concept is staff's (#3988): its history is too.
+            versions_qs = versions_qs.exclude(field=ProfileTextField.REAL_CONCEPT)
+            # Tenure-scoped (#3988, amends the #2631 ruling): a player sees only what was
+            # written since their own current tenure began, so a new roster tenant never
+            # reads the previous player's prose. The character's first player wrote all of
+            # it, so their view has no cutoff. A later tenure with no start date shows none.
+            tenure = sheet.roster_entry.current_tenure if sheet.roster_entry else None
+            if tenure is None:
+                return Response([])
+            if tenure.player_number != 1:
+                if tenure.start_date is None:
+                    return Response([])
+                versions_qs = versions_qs.filter(created_at__gte=tenure.start_date)
+        versions = list(versions_qs.order_by("field", "-created_at"))
         reasoning_by_version = {
             row.applied_version_id: row.request.player_reasoning
             for row in ProfileTextRequestDetails.objects.filter(
@@ -318,6 +341,75 @@ class CharacterSheetViewSet(RetrieveModelMixin, GenericViewSet):
             context={"reasoning_by_version": reasoning_by_version},
         )
         return Response(serializer.data)
+
+    def _require_staff_edit(self, sheet: CharacterSheet) -> None:
+        """404 unless this account may edit the sheet in place (#3988)."""
+        if not can_staff_edit_sheet(self.request.user, sheet):
+            raise Http404
+
+    def _fresh_payload(self, request: Request, pk: int | None) -> Response:
+        """The refreshed sheet payload, read the way GET reads it."""
+        sheet = get_character_sheet_queryset().get(pk=pk)
+        return Response(CharacterSheetSerializer(sheet, context={"request": request}).data)
+
+    @extend_schema(request=StaffEditSerializer, responses={200: CharacterSheetSerializer})
+    @action(detail=True, methods=[HTTPMethod.PATCH], url_path="staff-edit")
+    def staff_edit(self, request: Request, pk: int | None = None) -> Response:
+        """Edit a sheet's prose and identity in place (#3988, staff edit mode).
+
+        Prose saves through ``update_profile_text``, so every change is a version.
+        Fields outside the staff-edit list are refused. Answers with the refreshed
+        sheet payload.
+        """
+        sheet = self.get_object()
+        self._require_staff_edit(sheet)
+        serializer = StaffEditSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        try:
+            staff_edit_sheet(sheet, serializer.validated_data, edited_by=request.user)
+        except StaffEditError as exc:
+            return Response({"detail": exc.user_message}, status=status.HTTP_400_BAD_REQUEST)
+        return self._fresh_payload(request, pk)
+
+    @extend_schema(request=None, responses={200: CharacterSheetSerializer})
+    @action(
+        detail=True,
+        methods=[HTTPMethod.POST],
+        url_path=r"profile-text-versions/(?P<version_id>[0-9]+)/restore",
+    )
+    def restore_profile_text_version(
+        self, request: Request, pk: int | None = None, version_id: str | None = None
+    ) -> Response:
+        """Write a past version back as the current text (#3988). Staff only.
+
+        A restore adds a version and deletes nothing.
+        """
+        sheet = self.get_object()
+        self._require_staff_edit(sheet)
+        if sheet.true_profile is None:
+            raise Http404
+        version = sheet.true_profile.text_versions.filter(pk=version_id).first()
+        if version is None:
+            raise Http404
+        try:
+            restore_profile_text_version(version, edited_by=request.user)
+        except StaffEditError as exc:
+            # A Glimpse version on a sheet whose aura is gone has nowhere to go (#4224).
+            return Response({"detail": exc.user_message}, status=status.HTTP_400_BAD_REQUEST)
+        return self._fresh_payload(request, pk)
+
+
+class HeritageViewSet(ReadOnlyModelViewSet):
+    """Every heritage, for staff edit mode's heritage picker (#3988)."""
+
+    pagination_class = None  # a handful of rows; the picker is the whole list (ADR-0138)
+    serializer_class = HeritageSerializer
+    permission_classes = [IsAuthenticated]
+    filter_backends = [DjangoFilterBackend]
+    filterset_class = HeritageFilterSet
+
+    def get_queryset(self) -> QuerySet[Heritage]:
+        return Heritage.objects.order_by("name")
 
 
 class MoodOptionViewSet(ReadOnlyModelViewSet):

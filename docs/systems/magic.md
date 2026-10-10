@@ -382,8 +382,10 @@ recomputes `glimpse_state` so it never drifts from the prose+tag truth:
   — replaces the character's chosen tags for one axis (transactional). Enforces
   the axis's select-arity (`GLIMPSE_AXIS_CONFIG`) and that every tag belongs to
   `axis`; an empty `tags` clears the axis. Calls `refresh_glimpse_state`.
-- `set_glimpse_prose(aura, text: str) -> None` — writes `glimpse_story` and
-  calls `refresh_glimpse_state`.
+- `set_glimpse_prose(aura, text: str, *, edited_by=None) -> None` — writes
+  `glimpse_story` through `character_sheets.services.update_profile_text`
+  (`ProfileTextField.GLIMPSE`, #4224), so every rewrite keeps a `ProfileTextVersion` on the
+  true profile, then calls `refresh_glimpse_state`.
 - `link_distinction_to_glimpse(character_distinction: CharacterDistinction, aura: CharacterAura) -> None`
   — sets `from_glimpse`; raises `ValidationError` if the distinction and aura
   belong to different characters.

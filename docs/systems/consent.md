@@ -324,6 +324,12 @@ hooks). The **deny-and-blacklist** affordance lives on the scene consent prompt
 `blacklist_actor: true` through `respondToRequest`); the accept-side difficulty-grade picker
 (`PLAUSIBILITY_BANDS`) predates #1698.
 
+**A masked actor is never remembered (#4189, ADR-4189).** "Deny & block" and the makeover ask's
+"Always let" / "Never from" write a list row only when the actor acts as themselves (a PRIMARY
+persona). Under any other persona the deny or answer stands and no row is written, silently:
+the lists are keyed by the real tenure and the Privacy page names it, so the row would unmask
+the actor (`_blacklist_initiator_for_denier`, `makeover_requests._remember`).
+
 ---
 
 ## Telnet (`consent`)

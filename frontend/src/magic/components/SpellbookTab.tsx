@@ -39,6 +39,8 @@ import type { TechniqueForm } from '@/magic/types';
 import { MotifStylePanel } from './MotifStylePanel';
 import { TechniqueEffectSummaryDisplay } from './TechniqueEffectSummary';
 import { TechniqueProgressPanel } from './TechniqueProgressPanel';
+import { StaffEditable } from '@/character_sheets/components/sheet/StaffEdit';
+import { useStaffEditing } from '@/character_sheets/components/sheet/staffEditContext';
 import { GlimpseEditorDialog } from './glimpse/GlimpseEditorDialog';
 
 interface Props {
@@ -268,6 +270,7 @@ function dominantAffinityLabel(aura: CharacterSheetAura): string {
 export function SpellbookTab({ characterId, isMyCharacter, slot = 'all' }: Props) {
   const { data: payload, isLoading } = useCharacterSheetQuery(characterId);
   const [glimpseDialogOpen, setGlimpseDialogOpen] = useState(false);
+  const staffEditing = useStaffEditing();
 
   if (isLoading) {
     return <Ledger>Reading their spellbook…</Ledger>;
@@ -441,9 +444,17 @@ export function SpellbookTab({ characterId, isMyCharacter, slot = 'all' }: Props
               ))}
             </div>
           )}
-          {magic.aura.glimpse_story && (
+          {/* Staff edit mode (#4224) edits the Glimpse in place, with its history. */}
+          {(magic.aura.glimpse_story || staffEditing) && (
             <Prose>
-              <p>{magic.aura.glimpse_story}</p>
+              <p>
+                <StaffEditable
+                  field="glimpse"
+                  kind="prose"
+                  label="Glimpse"
+                  display={magic.aura.glimpse_story}
+                />
+              </p>
             </Prose>
           )}
           {isMyCharacter && magic.aura.can_finish_glimpse && (
