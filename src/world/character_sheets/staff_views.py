@@ -310,9 +310,16 @@ def _named(rows: Any, name: str = "name") -> list[dict[str, Any]]:
 def _staff_options(sheet: CharacterSheet) -> dict[str, Any]:
     """The catalogs a staff editor picks from; form options are the species' CG palette."""
     from world.character_creation.models import Beginnings  # noqa: PLC0415
+    from world.character_sheets.types import (  # noqa: PLC0415
+        EnemyDegree,
+        EnemyKind,
+        EnemyPowerTier,
+    )
     from world.classes.models import Path  # noqa: PLC0415
     from world.distinctions.models import Distinction  # noqa: PLC0415
+    from world.forms.constants import MarkingKind  # noqa: PLC0415
     from world.forms.services import get_cg_form_options  # noqa: PLC0415
+    from world.items.constants import BodyRegion  # noqa: PLC0415
     from world.skills.models import Skill, Specialization  # noqa: PLC0415
     from world.traits.models import Trait, TraitType  # noqa: PLC0415
     from world.worship.models import WorshippedBeing  # noqa: PLC0415
@@ -334,4 +341,13 @@ def _staff_options(sheet: CharacterSheet) -> dict[str, Any]:
         "beginnings": _named(Beginnings.objects.order_by("name")),
         "paths": _named(Path.objects.order_by("name")),
         "beings": _named(WorshippedBeing.objects.order_by("name")),
+        "marking_regions": _choices(BodyRegion),
+        "marking_kinds": _choices(MarkingKind),
+        "enemy_kinds": _choices(EnemyKind),
+        "enemy_degrees": _choices(EnemyDegree),
+        "enemy_power_tiers": _choices(EnemyPowerTier),
     }
+
+
+def _choices(choices: Any) -> list[dict[str, str]]:
+    return [{"value": value, "label": label} for value, label in choices.choices]

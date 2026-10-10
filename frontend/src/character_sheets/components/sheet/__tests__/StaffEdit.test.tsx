@@ -14,6 +14,8 @@ import { StaffEditProvider, StaffEditToggle } from '../StaffEdit';
 const patchStaffEdit = vi.fn();
 const restoreProfileTextVersion = vi.fn();
 const fetchProfileTextVersions = vi.fn();
+const fetchStaffOptions = vi.fn();
+const runStaffRowAction = vi.fn();
 
 vi.mock('@/character_sheets/api', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/character_sheets/api')>();
@@ -21,6 +23,8 @@ vi.mock('@/character_sheets/api', async (importOriginal) => {
     ...actual,
     patchStaffEdit: (...args: unknown[]) => patchStaffEdit(...args),
     restoreProfileTextVersion: (...args: unknown[]) => restoreProfileTextVersion(...args),
+    fetchStaffOptions: (...args: unknown[]) => fetchStaffOptions(...args),
+    runStaffRowAction: (...args: unknown[]) => runStaffRowAction(...args),
   };
 });
 vi.mock('@/sheet_update_requests/api', () => ({
@@ -28,6 +32,20 @@ vi.mock('@/sheet_update_requests/api', () => ({
 }));
 
 const STORED: CharacterSheetStaffEdit = {
+  rows: {
+    stats: {},
+    skills: {},
+    specializations: {},
+    distinctions: [],
+    form: {},
+    markings: [],
+    beginnings: null,
+    path: null,
+    class_level: null,
+    public_being: null,
+    secret_being: null,
+    has_vitals: true,
+  },
   prose: {
     description: '',
     background: 'Raised at the quay.',
@@ -55,6 +73,25 @@ const STORED: CharacterSheetStaffEdit = {
   family: null,
   tarot_card: null,
   tarot_reversed: false,
+};
+
+const OPTIONS = {
+  stats: [
+    { id: 1, name: 'strength' },
+    { id: 2, name: 'wits' },
+  ],
+  skills: [],
+  specializations: [],
+  distinctions: [{ id: 30, name: 'Keen Eyes' }],
+  form_traits: [],
+  beginnings: [],
+  paths: [],
+  beings: [],
+  marking_regions: [],
+  marking_kinds: [],
+  enemy_kinds: [],
+  enemy_degrees: [],
+  enemy_power_tiers: [],
 };
 
 function sheet(overrides: Partial<CharacterSheetPayload> = {}): CharacterSheetPayload {
@@ -108,6 +145,9 @@ describe('staff edit mode', () => {
     patchStaffEdit.mockReset();
     restoreProfileTextVersion.mockReset();
     fetchProfileTextVersions.mockReset();
+    runStaffRowAction.mockReset();
+    fetchStaffOptions.mockReset();
+    fetchStaffOptions.mockResolvedValue(OPTIONS);
   });
   afterEach(() => sessionStorage.clear());
 
@@ -210,5 +250,51 @@ describe('staff edit mode', () => {
 
     await user.click(within(history).getByRole('button', { name: 'Restore' }));
     await waitFor(() => expect(restoreProfileTextVersion).toHaveBeenCalledWith(20, 7));
+  });
+
+  it('saves the stats a staff editor fills on a sheet that had none (#4221)', async () => {
+    const user = userEvent.setup();
+    runStaffRowAction.mockResolvedValue(sheet());
+    sessionStorage.setItem('arx.staffEditMode', '1');
+    renderSheet(sheet());
+
+    const rowsBand = await screen.findByTestId('staff-rows-band');
+    await user.type(within(rowsBand).getByRole('spinbutton', { name: 'strength' }), '3');
+    await user.click(within(rowsBand).getByRole('button', { name: 'Save stats' }));
+    await waitFor(() =>
+      expect(runStaffRowAction).toHaveBeenCalledWith(20, {
+        path: 'staff-stats',
+        method: 'PATCH',
+        body: { stats: { '1': 3 } },
+      })
+    );
+  });
+
+  it('removes a held distinction without a request (#4221)', async () => {
+    const user = userEvent.setup();
+    runStaffRowAction.mockResolvedValue(sheet());
+    sessionStorage.setItem('arx.staffEditMode', '1');
+    const held = sheet({
+      staff_edit: {
+        ...STORED,
+        rows: {
+          ...STORED.rows,
+          distinctions: [
+            { id: 77, distinction: 30, name: 'Keen Eyes', rank: 1, max_rank: 1, feature: '' },
+          ],
+        },
+      },
+    });
+    renderSheet(held);
+
+    const rowsBand = await screen.findByTestId('staff-rows-band');
+    await user.click(within(rowsBand).getByRole('button', { name: 'Remove Keen Eyes' }));
+    await waitFor(() =>
+      expect(runStaffRowAction).toHaveBeenCalledWith(20, {
+        path: 'staff-distinction',
+        method: 'PATCH',
+        body: { character_distinction: 77 },
+      })
+    );
   });
 });

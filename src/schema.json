@@ -82518,6 +82518,16 @@ components:
         * `public` - Public
         * `obscure` - Obscure
         * `secret` - Secret
+    StaffChoice:
+      type: object
+      properties:
+        value:
+          type: string
+        label:
+          type: string
+      required:
+      - label
+      - value
     StaffDistinctionAddRequest:
       type: object
       properties:
@@ -82724,11 +82734,36 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/StaffOption'
+        marking_regions:
+          type: array
+          items:
+            $ref: '#/components/schemas/StaffChoice'
+        marking_kinds:
+          type: array
+          items:
+            $ref: '#/components/schemas/StaffChoice'
+        enemy_kinds:
+          type: array
+          items:
+            $ref: '#/components/schemas/StaffChoice'
+        enemy_degrees:
+          type: array
+          items:
+            $ref: '#/components/schemas/StaffChoice'
+        enemy_power_tiers:
+          type: array
+          items:
+            $ref: '#/components/schemas/StaffChoice'
       required:
       - beginnings
       - beings
       - distinctions
+      - enemy_degrees
+      - enemy_kinds
+      - enemy_power_tiers
       - form_traits
+      - marking_kinds
+      - marking_regions
       - paths
       - skills
       - specializations

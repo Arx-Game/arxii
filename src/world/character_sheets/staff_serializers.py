@@ -218,6 +218,11 @@ class StaffFormTraitOptionsSerializer(serializers.Serializer):
     options = StaffOptionSerializer(many=True)
 
 
+class StaffChoiceSerializer(serializers.Serializer):
+    value = serializers.CharField()
+    label = serializers.CharField()
+
+
 class StaffOptionsSerializer(serializers.Serializer):
     """What staff edit mode's row editors pick from, for one sheet (#4221)."""
 
@@ -229,3 +234,8 @@ class StaffOptionsSerializer(serializers.Serializer):
     beginnings = StaffOptionSerializer(many=True)
     paths = StaffOptionSerializer(many=True)
     beings = StaffOptionSerializer(many=True)
+    marking_regions = StaffChoiceSerializer(many=True)
+    marking_kinds = StaffChoiceSerializer(many=True)
+    enemy_kinds = StaffChoiceSerializer(many=True)
+    enemy_degrees = StaffChoiceSerializer(many=True)
+    enemy_power_tiers = StaffChoiceSerializer(many=True)

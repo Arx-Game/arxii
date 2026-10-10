@@ -46467,6 +46467,10 @@ export interface components {
      * @enum {string}
      */
     StaffBeingPageVisibilityEnum: 'public' | 'obscure' | 'secret';
+    StaffChoice: {
+      value: string;
+      label: string;
+    };
     StaffDistinctionAddRequest: {
       distinction: number;
       /** @default 1 */
@@ -46559,6 +46563,11 @@ export interface components {
       beginnings: components['schemas']['StaffOption'][];
       paths: components['schemas']['StaffOption'][];
       beings: components['schemas']['StaffOption'][];
+      marking_regions: components['schemas']['StaffChoice'][];
+      marking_kinds: components['schemas']['StaffChoice'][];
+      enemy_kinds: components['schemas']['StaffChoice'][];
+      enemy_degrees: components['schemas']['StaffChoice'][];
+      enemy_power_tiers: components['schemas']['StaffChoice'][];
     };
     StaffWorshipRequest: {
       public_being: number | null;
