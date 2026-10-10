@@ -84,6 +84,8 @@ class GrantMagicTests(TestCase):
     def test_grant_writes_the_rows_cg_would(self) -> None:
         response = self.client.post(f"{self.base}/staff-magic/", self._payload(), format="json")
         assert response.status_code == 200, response.content[:800]
+        rows = response.data["staff_edit"]["rows"]
+        assert (rows["has_gift"], rows["has_aura"]) == (True, True)
         gift = CharacterGift.objects.get(character=self.sheet)
         assert gift.gift == self.gift
         assert gift.origin == AcquisitionOrigin.CHARACTER_CREATION

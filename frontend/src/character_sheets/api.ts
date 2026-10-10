@@ -405,7 +405,8 @@ export type StaffProseField =
   | 'never_do'
   | 'protect'
   | 'fear'
-  | 'obituary';
+  | 'obituary'
+  | 'glimpse';
 
 /**
  * Mirrors `world.character_sheets.types.StaffEditFields` (#3988): the stored values
@@ -435,6 +436,8 @@ export interface CharacterSheetStaffRows {
   public_being: number | null;
   secret_being: number | null;
   has_vitals: boolean;
+  has_gift: boolean;
+  has_aura: boolean;
 }
 
 export interface CharacterSheetStaffEdit {
@@ -805,7 +808,44 @@ export type StaffRowAction =
         public_line?: string;
       };
     }
-  | { path: 'staff-vitals'; method: 'POST'; body: Record<string, never> };
+  | { path: 'staff-vitals'; method: 'POST'; body: Record<string, never> }
+  | { path: 'staff-magic'; method: 'POST'; body: StaffMagicBody };
+
+/** `POST .../staff-magic/` (#4224): a giftless sheet's starting magic, as CG would write it. */
+export interface StaffMagicBody {
+  tradition: number;
+  gift: number;
+  techniques: number[];
+  resonance: number;
+  anima_stat: number;
+  anima_skill: number;
+  ritual_name?: string;
+  glimpse?: string;
+}
+
+/** `GET .../staff-magic-options/?tradition=&gift=`: what Grant magic offers so far. */
+export interface StaffMagicOptions {
+  traditions: StaffOption[];
+  gifts: StaffOption[];
+  techniques: StaffOption[];
+  resonances: StaffOption[];
+  stats: StaffOption[];
+  skills: StaffOption[];
+  technique_limit: number;
+}
+
+export async function fetchStaffMagicOptions(
+  sheetId: number,
+  tradition: string,
+  gift: string
+): Promise<StaffMagicOptions> {
+  const params = new URLSearchParams();
+  if (tradition) params.set('tradition', tradition);
+  if (gift) params.set('gift', gift);
+  const res = await apiFetch(`/api/character-sheets/${sheetId}/staff-magic-options/?${params}`);
+  if (!res.ok) await throwApiError(res, 'Failed to load the choices.');
+  return (await res.json()) as StaffMagicOptions;
+}
 
 export async function runStaffRowAction(
   sheetId: number,

@@ -863,6 +863,9 @@ class StaffEditRows(TypedDict):
     public_being: int | None
     secret_being: int | None
     has_vitals: bool
+    # #4224 — Grant magic is offered to a giftless sheet; the Glimpse needs an aura.
+    has_gift: bool
+    has_aura: bool
 
 
 class StaffEditFields(TypedDict):

@@ -17,7 +17,11 @@ import type {
   StaffOptions,
   StaffRowAction,
 } from '@/character_sheets/api';
-import { useStaffOptions, useStaffRowMutation } from '@/character_sheets/queries';
+import {
+  useStaffMagicOptions,
+  useStaffOptions,
+  useStaffRowMutation,
+} from '@/character_sheets/queries';
 import { Band } from './primitives';
 import { StaffEditContext } from './staffEditContext';
 
@@ -94,6 +98,7 @@ function StaffRows({ sheetId, rows }: { sheetId: number; rows: CharacterSheetSta
           <MarkingsEditor rows={rows} options={options} run={run} />
           <EnemyEditor options={options} run={run} />
           <IntroductionEditor run={run} />
+          {!rows.has_gift && <MagicEditor sheetId={sheetId} run={run} />}
           {!rows.has_vitals && (
             <Section title="Vitals">
               <span>
@@ -620,6 +625,144 @@ function IntroductionEditor({ run }: Pick<EditorProps, 'run'>) {
           Add introduction
         </Button>
       </span>
+    </Section>
+  );
+}
+
+/**
+ * Grant magic (#4224): a giftless sheet's starting magic, picked as CG's magic stage
+ * picks it. Each pick narrows the next; the server holds the stage's rules.
+ */
+function MagicEditor({ sheetId, run }: { sheetId: number; run: Run }) {
+  const [tradition, setTradition] = useState('');
+  const [gift, setGift] = useState('');
+  const [techniques, setTechniques] = useState<number[]>([]);
+  const [resonance, setResonance] = useState('');
+  const [stat, setStat] = useState('');
+  const [skill, setSkill] = useState('');
+  const [ritualName, setRitualName] = useState('');
+  const [glimpse, setGlimpse] = useState('');
+  const { data: options } = useStaffMagicOptions(sheetId, tradition, gift, true);
+
+  const pickTradition = (value: string) => {
+    setTradition(value);
+    setGift('');
+    setTechniques([]);
+    setResonance('');
+  };
+  const pickGift = (value: string) => {
+    setGift(value);
+    setTechniques([]);
+    setResonance('');
+  };
+  const toggle = (id: number) =>
+    setTechniques((held) => (held.includes(id) ? held.filter((t) => t !== id) : [...held, id]));
+
+  const limit = options?.technique_limit ?? 1;
+  const ready = tradition && gift && techniques.length > 0 && resonance && stat && skill && options;
+  return (
+    <Section title="Magic">
+      {!options ? (
+        <p className="opacity-70">Loading…</p>
+      ) : (
+        <div className="flex flex-col gap-2" data-testid="staff-magic-editor">
+          <div className="flex flex-wrap gap-2">
+            <Select
+              label="Tradition"
+              value={tradition}
+              onChange={pickTradition}
+              options={asItems(options.traditions)}
+            />
+            {tradition && (
+              <Select
+                label="Gift"
+                value={gift}
+                onChange={pickGift}
+                options={asItems(options.gifts)}
+              />
+            )}
+            {gift && (
+              <Select
+                label="Resonance"
+                value={resonance}
+                onChange={setResonance}
+                options={asItems(options.resonances)}
+              />
+            )}
+          </div>
+          {gift && (
+            <fieldset className="flex flex-col gap-1">
+              <legend className="text-sm">
+                Techniques {techniques.length}/{limit}
+              </legend>
+              {options.techniques.map((technique) => (
+                <label key={technique.id} className="flex items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={techniques.includes(technique.id)}
+                    disabled={!techniques.includes(technique.id) && techniques.length >= limit}
+                    onChange={() => toggle(technique.id)}
+                  />
+                  {technique.name}
+                </label>
+              ))}
+            </fieldset>
+          )}
+          <div className="flex flex-wrap gap-2">
+            <Select
+              label="Anima stat"
+              value={stat}
+              onChange={setStat}
+              options={asItems(options.stats)}
+            />
+            <Select
+              label="Anima skill"
+              value={skill}
+              onChange={setSkill}
+              options={asItems(options.skills)}
+            />
+            <Input
+              aria-label="Anima ritual name"
+              placeholder="Anima ritual name"
+              className="h-9 w-56"
+              value={ritualName}
+              onChange={(event) => setRitualName(event.target.value)}
+            />
+          </div>
+          <Textarea
+            aria-label="Glimpse"
+            placeholder="Glimpse"
+            rows={3}
+            value={glimpse}
+            onChange={(event) => setGlimpse(event.target.value)}
+          />
+          <span>
+            <Button
+              type="button"
+              size="sm"
+              disabled={!ready}
+              onClick={() =>
+                run({
+                  path: 'staff-magic',
+                  method: 'POST',
+                  body: {
+                    tradition: Number(tradition),
+                    gift: Number(gift),
+                    techniques,
+                    resonance: Number(resonance),
+                    anima_stat: Number(stat),
+                    anima_skill: Number(skill),
+                    ritual_name: ritualName.trim(),
+                    glimpse: glimpse.trim(),
+                  },
+                })
+              }
+            >
+              Grant magic
+            </Button>
+          </span>
+        </div>
+      )}
     </Section>
   );
 }

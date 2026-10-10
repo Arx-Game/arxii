@@ -85,6 +85,7 @@ const PROSE_FIELDS = new Set<string>([
   'protect',
   'fear',
   'obituary',
+  'glimpse',
 ]);
 
 function storedValue(stored: CharacterSheetStaffEdit, field: string): unknown {

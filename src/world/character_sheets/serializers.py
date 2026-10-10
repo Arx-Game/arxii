@@ -2377,6 +2377,8 @@ def _build_staff_rows(sheet: CharacterSheet) -> StaffEditRows:
         public_being=worship.public_being_id if worship else None,
         secret_being=worship.secret_being_id if worship else None,
         has_vitals=CharacterVitals.objects.filter(character_sheet=sheet).exists(),
+        has_gift=CharacterGift.objects.filter(character=sheet).exists(),
+        has_aura=CharacterAura.objects.filter(character=sheet).exists(),
     )
 
 
