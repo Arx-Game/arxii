@@ -74,8 +74,19 @@ function template(overrides: Partial<HouseTemplateOption> = {}): HouseTemplateOp
             name: 'The Veiled',
             description: 'Deception as a way of life.',
             codex_entry_id: 4,
+            being_id: null,
+            being_name: '',
+            target_entry_id: 4,
           },
-          { id: 11, name: 'Glamour', description: 'Grandeur is the house due.', codex_entry_id: 5 },
+          {
+            id: 11,
+            name: 'Glamour',
+            description: 'Grandeur is the house due.',
+            codex_entry_id: null,
+            being_id: 9,
+            being_name: 'Calyx',
+            target_entry_id: 5,
+          },
         ],
       },
     ],
@@ -158,4 +169,14 @@ test('the range for an axis with window [-2, 3] renders min=-2 max=3', () => {
   const methodRange = screen.getByRole('slider', { name: 'Cunning to Honor' });
   expect(methodRange).toHaveAttribute('min', '-5');
   expect(methodRange).toHaveAttribute('max', '5');
+});
+
+test('an option opens the one entry it targets, named for the god when it is one (#4205)', () => {
+  renderWithProviders(<Harness initial={baseDraft()} tpl={template()} />);
+
+  // A lore answer links its own entry as "codex" (the succession line has one too, so
+  // match by target); a god answer links the god's page by name.
+  const codexLinks = screen.getAllByRole('link', { name: 'codex' });
+  expect(codexLinks.map((link) => link.getAttribute('href'))).toContain('/codex/4');
+  expect(screen.getByRole('link', { name: 'Calyx' })).toHaveAttribute('href', '/codex/5');
 });

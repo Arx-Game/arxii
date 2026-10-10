@@ -158,6 +158,19 @@ export function HouseChapter({ house, realmTheme, onSave }: HouseChapterProps) {
           </div>
         </div>
       </div>
+      {house.patron && (
+        <div className="field">
+          <span className="label">patron</span>
+          <div className="val">
+            {house.patron.nickname}{' '}
+            {house.patron.codex_entry_id != null ? (
+              <Link to={`/codex/${house.patron.codex_entry_id}`}>({house.patron.being_name})</Link>
+            ) : (
+              <>({house.patron.being_name})</>
+            )}
+          </div>
+        </div>
+      )}
       <div className="row2">
         <div className="field">
           <label htmlFor={`house-words-${house.id}`}>words</label>
@@ -205,7 +218,13 @@ export function HouseChapter({ house, realmTheme, onSave }: HouseChapterProps) {
             <li key={`${aspect.definition}-${aspect.option}`} className="on">
               <span className="mark">◆</span>
               <span>
-                <span className="nm">{aspect.option}</span>
+                {aspect.target_entry_id != null ? (
+                  <Link to={`/codex/${aspect.target_entry_id}`} className="nm">
+                    {aspect.option}
+                  </Link>
+                ) : (
+                  <span className="nm">{aspect.option}</span>
+                )}
                 <span className="ds">{aspect.description}</span>
               </span>
               <span className="rt">

@@ -530,12 +530,15 @@ export function buildPiropaDocument(published: boolean): HouseDocument {
       published_at: published ? '2026-09-20T00:00:00Z' : null,
       particle_example: 'Océane aza Piropa · Raffaele azas Piropa',
       default_succession_law: { name: 'Infernal Enatic - Durance', codex_entry_id: 12 },
+      patron: null,
       aspects: [
         {
           definition: 'Quiddity',
           option: 'Glamour',
           description:
             "Grandeur is the house's due, and a slight is answered before the ball has ended.",
+          being_name: '',
+          target_entry_id: null,
         },
       ],
       features: [

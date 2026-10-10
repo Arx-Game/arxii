@@ -256,8 +256,10 @@ export function FounderHouseChapter({
                     </button>
                   </span>
                   <span className="rt">
-                    {option.codex_entry_id != null && (
-                      <a href={`/codex/${option.codex_entry_id}`}>codex</a>
+                    {option.target_entry_id != null && (
+                      <a href={`/codex/${option.target_entry_id}`}>
+                        {option.being_name !== '' ? option.being_name : 'codex'}
+                      </a>
                     )}
                   </span>
                 </li>

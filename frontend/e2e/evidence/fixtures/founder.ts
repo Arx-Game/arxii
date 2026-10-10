@@ -49,6 +49,9 @@ export const TEMPLATE: HouseTemplateOption = {
           description:
             "Grandeur is the house's due, and a slight is answered before the ball has ended.",
           codex_entry_id: null,
+          being_id: null,
+          being_name: '',
+          target_entry_id: null,
         },
         {
           id: 102,
@@ -56,6 +59,9 @@ export const TEMPLATE: HouseTemplateOption = {
           description:
             'Claw and fang kept ready for the foes of the house. The grudge is always paid.',
           codex_entry_id: null,
+          being_id: null,
+          being_name: '',
+          target_entry_id: null,
         },
         {
           id: 103,
@@ -63,6 +69,9 @@ export const TEMPLATE: HouseTemplateOption = {
           description:
             "No advantage that cannot be bettered, whether by theft or by the sabotage of one's rivals.",
           codex_entry_id: null,
+          being_id: null,
+          being_name: '',
+          target_entry_id: null,
         },
         {
           id: 104,
@@ -70,12 +79,18 @@ export const TEMPLATE: HouseTemplateOption = {
           description:
             'Better to be loved by somebody who can move a mountain. The work of the house is introductions.',
           codex_entry_id: null,
+          being_id: null,
+          being_name: '',
+          target_entry_id: null,
         },
         {
           id: 105,
           name: 'The Veiled',
           description: 'Deception as a way of life, in a realm where lying is a competitive sport.',
           codex_entry_id: null,
+          being_id: null,
+          being_name: '',
+          target_entry_id: null,
         },
         {
           id: 106,
@@ -83,6 +98,9 @@ export const TEMPLATE: HouseTemplateOption = {
           description:
             'Far rather feared than loved, and content to empty a harbor without fighting it.',
           codex_entry_id: null,
+          being_id: null,
+          being_name: '',
+          target_entry_id: null,
         },
         {
           id: 107,
@@ -90,6 +108,9 @@ export const TEMPLATE: HouseTemplateOption = {
           description:
             'The rarest Quiddity and believed the oldest. A reputation for ferocity it does very little to correct.',
           codex_entry_id: null,
+          being_id: null,
+          being_name: '',
+          target_entry_id: null,
         },
       ],
     },

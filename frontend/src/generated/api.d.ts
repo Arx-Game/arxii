@@ -25375,10 +25375,17 @@ export interface components {
       target_companion_id?: number;
       ap_amount: number;
     };
+    /**
+     * @description One picked aspect (mirrors ``almanach_reads.aspect_facet``): ``being_name``
+     *     is the god or totem the answer is (#4205), ``target_entry_id`` the one Codex
+     *     entry it opens.
+     */
     AlmanachHouseAspect: {
       definition: string;
       option: string;
       description: string;
+      being_name: string;
+      target_entry_id: number | null;
     };
     /**
      * @description The document's ``house`` section (mirrors ``_house_payload``) — the
@@ -25397,6 +25404,7 @@ export interface components {
       published_at: string | null;
       particle_example: string;
       default_succession_law: components['schemas']['AlmanachSuccessionLaw'] | null;
+      patron: components['schemas']['AlmanachHousePatron'] | null;
       aspects: components['schemas']['AlmanachHouseAspect'][];
       features: components['schemas']['AlmanachHouseFeature'][];
       offices: components['schemas']['AlmanachHouseOffice'][];
@@ -25410,6 +25418,15 @@ export interface components {
       slug: string;
       title: string;
       holder_name: string;
+    };
+    /**
+     * @description The house's patron by its own name for it (#4205; mirrors
+     *     ``almanach_reads.patron_payload``).
+     */
+    AlmanachHousePatron: {
+      nickname: string;
+      being_name: string;
+      codex_entry_id: number | null;
     };
     /**
      * @description A house row in the Almanach's house list/detail (not the document).
@@ -28435,6 +28452,7 @@ export interface components {
       text: string;
       entry_id: number | null;
       anchor: string | null;
+      href: string | null;
     };
     /** @description Current-round companion directive exposed on an encounter read. */
     CompanionOrderSummary: {
@@ -32554,17 +32572,26 @@ export interface components {
       max_picks?: number;
       readonly options: components['schemas']['HouseAspectOption'][];
     };
-    /** @description One picked identity facet on the house block (#2079). */
+    /**
+     * @description One picked identity facet on the house block (#2079; mirrors
+     *     ``almanach_reads.aspect_facet``). ``being_name`` is the god or totem the answer
+     *     is (#4205), ``target_entry_id`` the one Codex entry it opens.
+     */
     HouseAspectFacet: {
       definition: string;
       option: string;
       description: string;
+      being_name: string;
+      target_entry_id: number | null;
     };
     /**
      * @description One authored answer in an aspect catalog (#2079).
      *
      *     ``codex_entry_id`` (#2868) lets the CG option card link the option's lore
-     *     write-up — Inferna's House Quiddities each have one.
+     *     write-up — Inferna's House Quiddities each have one. ``being_id``/``being_name``
+     *     say what the option IS when it is a god or a totem (#4205), and
+     *     ``target_entry_id`` is the one entry the card opens: the option's own, else
+     *     the being's page.
      */
     HouseAspectOption: {
       readonly id: number;
@@ -32572,6 +32599,10 @@ export interface components {
       /** @description Player-facing blurb shown on the option card. */
       description?: string;
       readonly codex_entry_id: number | null;
+      readonly being_id: number | null;
+      /** @default  */
+      readonly being_name: string;
+      readonly target_entry_id: number | null;
     };
     /** @description One founder-written kin row, as CG echoes it back (#3983 Plan B). */
     HouseClaimKin: {
@@ -32708,6 +32739,7 @@ export interface components {
       vassal_names: string[];
       titles: components['schemas']['HouseTitle'][];
       domains: components['schemas']['HouseDomain'][];
+      patron: components['schemas']['HousePatron'] | null;
       aspects: components['schemas']['HouseAspectFacet'][];
       features: components['schemas']['HouseFeatureFacet'][];
       open_crises: components['schemas']['HouseCrisis'][];
@@ -32763,6 +32795,15 @@ export interface components {
       name: string;
       slug: string;
       description: string;
+    };
+    /**
+     * @description The house's patron by its own name for it (#4205; mirrors
+     *     ``almanach_reads.patron_payload``).
+     */
+    HousePatron: {
+      nickname: string;
+      being_name: string;
+      codex_entry_id: number | null;
     };
     /**
      * @description * `standing` - Standing
