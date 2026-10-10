@@ -3918,6 +3918,27 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/character-sheets/{id}/profile-text-versions/{version_id}/restore/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * @description Write a past version back as the current text (#3988). Staff only.
+     *
+     *     A restore adds a version and deletes nothing.
+     */
+    post: operations['character_sheets_profile_text_versions_restore_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/character-sheets/{id}/set-origin-slot/': {
     parameters: {
       query?: never;
@@ -3975,6 +3996,29 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/character-sheets/{id}/staff-edit/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    /**
+     * @description Edit a sheet's prose and identity in place (#3988, staff edit mode).
+     *
+     *     Prose saves through ``update_profile_text``, so every change is a version.
+     *     Fields outside the staff-edit list are refused. Answers with the refreshed
+     *     sheet payload.
+     */
+    patch: operations['character_sheets_staff_edit_partial_update'];
+    trace?: never;
+  };
   '/api/character-sheets/{id}/stat-points/': {
     parameters: {
       query?: never;
@@ -4006,6 +4050,40 @@ export interface paths {
      *     off a public sheet.
      */
     get: operations['character_sheets_xp_ledger_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/character-sheets/heritages/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description Every heritage, for staff edit mode's heritage picker (#3988). */
+    get: operations['character_sheets_heritages_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/character-sheets/heritages/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description Every heritage, for staff edit mode's heritage picker (#3988). */
+    get: operations['character_sheets_heritages_retrieve'];
     put?: never;
     post?: never;
     delete?: never;
@@ -31260,9 +31338,23 @@ export interface components {
      *     * `never_do` - What would you never do?
      *     * `protect` - What would you protect at all costs?
      *     * `fear` - What are you deathly afraid of?
+     *     * `concept` - Concept
+     *     * `real_concept` - Real concept
+     *     * `quote` - Quote
+     *     * `obituary` - Obituary
+     *     * `description` - Physical description
      * @enum {string}
      */
-    FieldEnum: 'background' | 'never_do' | 'protect' | 'fear';
+    FieldEnum:
+      | 'background'
+      | 'never_do'
+      | 'protect'
+      | 'fear'
+      | 'concept'
+      | 'real_concept'
+      | 'quote'
+      | 'obituary'
+      | 'description';
     /** @description One axis a fixture kind mitigates (negative value = mitigation). */
     FixtureAffinity: {
       key: string;
@@ -32508,6 +32600,12 @@ export interface components {
       readonly target_kind: string;
       /** Format: date-time */
       readonly found_at: string;
+    };
+    /** @description A heritage, for staff edit mode's picker (#3988). */
+    Heritage: {
+      readonly id: number;
+      /** @description Heritage name (e.g., 'Sleeper', 'Misbegotten', 'Normal') */
+      readonly name: string;
     };
     /**
      * @description The world fact behind a heritage's CG age ceiling (#3663).
@@ -34245,6 +34343,14 @@ export interface components {
      * @enum {string}
      */
     ManagerTenancyKindEnum: 'guest' | 'tenant' | 'trustee';
+    /**
+     * @description * `single` - Single
+     *     * `married` - Married
+     *     * `widowed` - Widowed
+     *     * `divorced` - Divorced
+     * @enum {string}
+     */
+    MaritalStatusEnum: 'single' | 'married' | 'widowed' | 'divorced';
     MarketSquare: {
       readonly id: number;
       readonly name: string;
@@ -41719,6 +41825,41 @@ export interface components {
       /** @description Allowlist is scoped per category. */
       category?: number;
     };
+    /**
+     * @description Input for ``PATCH /api/character-sheets/{id}/staff-edit/`` (#3988).
+     *
+     *     Any subset of the prose, identity scalars and identity choices; a field
+     *     outside the list is refused rather than ignored, so a typo never reads as
+     *     a save. Choices arrive as primary keys and leave ``validated_data`` as
+     *     model instances (or None to clear).
+     */
+    PatchedStaffEditRequest: {
+      description?: string;
+      background?: string;
+      concept?: string;
+      real_concept?: string;
+      quote?: string;
+      never_do?: string;
+      protect?: string;
+      fear?: string;
+      obituary?: string;
+      name?: string;
+      ic_birth_year?: number | null;
+      true_height_inches?: number | null;
+      weight_pounds?: number | null;
+      marital_status?: components['schemas']['MaritalStatusEnum'];
+      vocation?: string;
+      social_rank?: number;
+      build?: number | null;
+      gender?: number | null;
+      pronouns?: number | null;
+      species?: number | null;
+      heritage?: number | null;
+      origin_realm?: number | null;
+      family?: number | null;
+      tarot_card?: number | null;
+      tarot_reversed?: boolean;
+    };
     PatchedStaffingProfileLineRequest: {
       profile?: number;
       role?: number;
@@ -43589,6 +43730,11 @@ export interface components {
        *     * `never_do` - What would you never do?
        *     * `protect` - What would you protect at all costs?
        *     * `fear` - What are you deathly afraid of?
+       *     * `concept` - Concept
+       *     * `real_concept` - Real concept
+       *     * `quote` - Quote
+       *     * `obituary` - Obituary
+       *     * `description` - Physical description
        */
       readonly field: components['schemas']['FieldEnum'];
       /** @description The full field text as of this version. */
@@ -54771,6 +54917,27 @@ export interface operations {
       };
     };
   };
+  character_sheets_profile_text_versions_restore_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+        version_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description No response body */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
   character_sheets_set_origin_slot_create: {
     parameters: {
       query?: never;
@@ -54841,6 +55008,30 @@ export interface operations {
       };
     };
   };
+  character_sheets_staff_edit_partial_update: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: {
+      content: {
+        'application/json': components['schemas']['PatchedStaffEditRequest'];
+      };
+    };
+    responses: {
+      /** @description No response body */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
   character_sheets_stat_points_retrieve: {
     parameters: {
       query?: never;
@@ -54879,6 +55070,49 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['CharacterXPLedger'];
+        };
+      };
+    };
+  };
+  character_sheets_heritages_list: {
+    parameters: {
+      query?: {
+        name?: string;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['Heritage'][];
+        };
+      };
+    };
+  };
+  character_sheets_heritages_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this Heritage. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['Heritage'];
         };
       };
     };

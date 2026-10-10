@@ -16,6 +16,8 @@ import { useState } from 'react';
 import type { ReactNode } from 'react';
 import type { CharacterSheetLook } from '@/character_sheets/api';
 import { LooksStrip } from './LooksStrip';
+import { StaffEditable } from './StaffEdit';
+import { useStaffEditing } from './staffEditContext';
 
 interface PlateProps {
   /** The presented name — the real one only when the viewer may see it. */
@@ -58,6 +60,9 @@ export function Plate({
 
   // What the empty frame is waiting on: the clicked look, else the worn one.
   const shownLookName = shown?.look || shown?.title || '';
+  // Staff edit mode (#3988): the name, concept and quote are edited where they stand,
+  // and an empty concept or quote keeps a slot so it can be filled in.
+  const editing = useStaffEditing();
 
   const handleShow = (look: CharacterSheetLook) => {
     setPreviewId(look.tenure_media_id);
@@ -91,11 +96,19 @@ export function Plate({
 
       <div className="refsheet-plate-body">
         <h1 className="refsheet-name">
-          {name}
+          <StaffEditable field="name" kind="line" label="Name" display={name} />
           {titles.length > 0 && <span className="refsheet-title">{titles.join(' · ')}</span>}
         </h1>
-        {concept && <p className="refsheet-concept">{concept}</p>}
-        {quote && <blockquote className="refsheet-quote">{quote}</blockquote>}
+        {(concept || editing) && (
+          <p className="refsheet-concept">
+            <StaffEditable field="concept" kind="prose" label="Concept" display={concept} />
+          </p>
+        )}
+        {(quote || editing) && (
+          <blockquote className="refsheet-quote">
+            <StaffEditable field="quote" kind="prose" label="Quote" display={quote} />
+          </blockquote>
+        )}
 
         {glanceLines.filter(Boolean).length > 0 && (
           <>

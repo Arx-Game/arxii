@@ -5800,6 +5800,32 @@ paths:
                 items:
                   $ref: '#/components/schemas/ProfileTextVersion'
           description: ''
+  /api/character-sheets/{id}/profile-text-versions/{version_id}/restore/:
+    post:
+      operationId: character_sheets_profile_text_versions_restore_create
+      description: |-
+        Write a past version back as the current text (#3988). Staff only.
+
+        A restore adds a version and deletes nothing.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+        required: true
+      - in: path
+        name: version_id
+        schema:
+          type: string
+          pattern: ^[0-9]+$
+        required: true
+      tags:
+      - character-sheets
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          description: No response body
   /api/character-sheets/{id}/set-origin-slot/:
     post:
       operationId: character_sheets_set_origin_slot_create
@@ -5876,6 +5902,33 @@ paths:
               schema:
                 $ref: '#/components/schemas/StatPointState'
           description: ''
+  /api/character-sheets/{id}/staff-edit/:
+    patch:
+      operationId: character_sheets_staff_edit_partial_update
+      description: |-
+        Edit a sheet's prose and identity in place (#3988, staff edit mode).
+
+        Prose saves through ``update_profile_text``, so every change is a version.
+        Fields outside the staff-edit list are refused. Answers with the refreshed
+        sheet payload.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+        required: true
+      tags:
+      - character-sheets
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedStaffEditRequest'
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          description: No response body
   /api/character-sheets/{id}/stat-points/:
     get:
       operationId: character_sheets_stat_points_retrieve
@@ -5921,6 +5974,50 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/CharacterXPLedger'
+          description: ''
+  /api/character-sheets/heritages/:
+    get:
+      operationId: character_sheets_heritages_list
+      description: Every heritage, for staff edit mode's heritage picker (#3988).
+      parameters:
+      - in: query
+        name: name
+        schema:
+          type: string
+      tags:
+      - character-sheets
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Heritage'
+          description: ''
+  /api/character-sheets/heritages/{id}/:
+    get:
+      operationId: character_sheets_heritages_retrieve
+      description: Every heritage, for staff edit mode's heritage picker (#3988).
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this Heritage.
+        required: true
+      tags:
+      - character-sheets
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Heritage'
           description: ''
   /api/character-sheets/mood-options/:
     get:
@@ -53942,12 +54039,22 @@ components:
       - never_do
       - protect
       - fear
+      - concept
+      - real_concept
+      - quote
+      - obituary
+      - description
       type: string
       description: |-
         * `background` - Background
         * `never_do` - What would you never do?
         * `protect` - What would you protect at all costs?
         * `fear` - What are you deathly afraid of?
+        * `concept` - Concept
+        * `real_concept` - Real concept
+        * `quote` - Quote
+        * `obituary` - Obituary
+        * `description` - Physical description
     FixtureAffinity:
       type: object
       description: One axis a fixture kind mitigates (negative value = mitigation).
@@ -56654,6 +56761,20 @@ components:
       - id
       - name
       - target_kind
+    Heritage:
+      type: object
+      description: A heritage, for staff edit mode's picker (#3988).
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        name:
+          type: string
+          readOnly: true
+          description: Heritage name (e.g., 'Sleeper', 'Misbegotten', 'Normal')
+      required:
+      - id
+      - name
     HeritageAnchor:
       type: object
       description: |-
@@ -60231,6 +60352,18 @@ components:
         * `guest` - Guest
         * `tenant` - Tenant
         * `trustee` - Trustee
+    MaritalStatusEnum:
+      enum:
+      - single
+      - married
+      - widowed
+      - divorced
+      type: string
+      description: |-
+        * `single` - Single
+        * `married` - Married
+        * `widowed` - Widowed
+        * `divorced` - Divorced
     MarketSquare:
       type: object
       properties:
@@ -73116,6 +73249,88 @@ components:
         category:
           type: integer
           description: Allowlist is scoped per category.
+    PatchedStaffEditRequest:
+      type: object
+      description: |-
+        Input for ``PATCH /api/character-sheets/{id}/staff-edit/`` (#3988).
+
+        Any subset of the prose, identity scalars and identity choices; a field
+        outside the list is refused rather than ignored, so a typo never reads as
+        a save. Choices arrive as primary keys and leave ``validated_data`` as
+        model instances (or None to clear).
+      properties:
+        description:
+          type: string
+        background:
+          type: string
+        concept:
+          type: string
+          maxLength: 255
+        real_concept:
+          type: string
+          maxLength: 255
+        quote:
+          type: string
+        never_do:
+          type: string
+        protect:
+          type: string
+        fear:
+          type: string
+        obituary:
+          type: string
+        name:
+          type: string
+          minLength: 1
+          maxLength: 255
+        ic_birth_year:
+          type: integer
+          nullable: true
+        true_height_inches:
+          type: integer
+          maximum: 600
+          minimum: 12
+          nullable: true
+        weight_pounds:
+          type: integer
+          maximum: 32767
+          minimum: 0
+          nullable: true
+        marital_status:
+          $ref: '#/components/schemas/MaritalStatusEnum'
+        vocation:
+          type: string
+          maxLength: 255
+        social_rank:
+          type: integer
+          maximum: 20
+          minimum: 1
+        build:
+          type: integer
+          nullable: true
+        gender:
+          type: integer
+          nullable: true
+        pronouns:
+          type: integer
+          nullable: true
+        species:
+          type: integer
+          nullable: true
+        heritage:
+          type: integer
+          nullable: true
+        origin_realm:
+          type: integer
+          nullable: true
+        family:
+          type: integer
+          nullable: true
+        tarot_card:
+          type: integer
+          nullable: true
+        tarot_reversed:
+          type: boolean
     PatchedStaffingProfileLineRequest:
       type: object
       properties:
@@ -76694,6 +76909,11 @@ components:
             * `never_do` - What would you never do?
             * `protect` - What would you protect at all costs?
             * `fear` - What are you deathly afraid of?
+            * `concept` - Concept
+            * `real_concept` - Real concept
+            * `quote` - Quote
+            * `obituary` - Obituary
+            * `description` - Physical description
         text:
           type: string
           readOnly: true

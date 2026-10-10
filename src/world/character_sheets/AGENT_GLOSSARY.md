@@ -147,3 +147,14 @@ Domain-local vocabulary. Cross-cutting terms live in the root
   this is not gated by a visibility tier; only a COVERED piece is owner-only, and
   it carries `is_hidden` so the sheet can say it is there and unseen. _Avoid_:
   equipment, inventory (those are everything they hold, not what shows).
+
+## Staff edit mode (#3988)
+
+- **Staff edit mode** — the sheet page's Edit toggle, for staff: every prose and
+  identity field is edited where it is drawn, and a Staff edit band holds the ones the
+  sheet never draws. On for the browser tab until switched off. Every prose save is a
+  version (`ProfileTextVersion`) and any version can be restored. _Avoid_: admin mode,
+  GM mode (GMs editing their own NPC sheets is a later piece).
+- **Stored values** — the `staff_edit` block of the sheet payload: the character as
+  stored (true profile, exact height, social rank), which edit mode edits, as opposed
+  to the rest of the payload, shaped for the viewer.

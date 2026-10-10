@@ -32,6 +32,21 @@ export const PROFILE_TEXT_FIELDS = [
   { value: 'fear', label: 'What are you deathly afraid of?' },
 ] as const;
 
+/**
+ * Every versioned prose field's heading in the history timeline (#3988 widened the
+ * versioned set past the four a player may request).
+ */
+export const PROSE_FIELD_LABELS: Record<string, string> = {
+  background: 'Background',
+  never_do: 'What would you never do?',
+  protect: 'What would you protect at all costs?',
+  fear: 'What are you deathly afraid of?',
+  concept: 'Concept',
+  quote: 'Quote',
+  obituary: 'Obituary',
+  description: 'Physical description',
+};
+
 export const DISTINCTION_ACTIONS = {
   ADD: 'distinction_add',
   REMOVE: 'distinction_remove',

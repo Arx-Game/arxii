@@ -135,19 +135,33 @@ def update_profile_text(
     ic_date = clock.get_ic_now() if clock else None
     era = Era.objects.get_active()
 
+    # The physical description (#3988) is the one versioned field that lives on the
+    # sheet owning the profile, not on the profile: the version rows still hang off
+    # the profile, so one timeline covers every prose field of the character.
+    if field == ProfileTextField.DESCRIPTION:
+        holder = profile.owning_sheet_or_none
+        if holder is None:
+            msg = "A description belongs to a sheet's true profile; this profile has no sheet."
+            raise ValueError(msg)
+        attribute = "additional_desc"
+    else:
+        holder = profile
+        attribute = field
+
     with transaction.atomic():
-        current = previous_text if previous_text is not None else getattr(profile, field)
+        current = previous_text if previous_text is not None else getattr(holder, attribute)
         has_versions = ProfileTextVersion.objects.filter(profile=profile, field=field).exists()
         if not has_versions and current:
-            ProfileTextVersion.objects.create(
+            original = ProfileTextVersion.objects.create(
                 profile=profile,
                 field=field,
                 text=current,
                 ic_date=ic_date,
                 era=era,
             )
-        setattr(profile, field, text)
-        profile.save(update_fields=[field])
+            _date_original_to_creation(original, profile)
+        setattr(holder, attribute, text)
+        holder.save(update_fields=[attribute])
         return ProfileTextVersion.objects.create(
             profile=profile,
             field=field,
@@ -158,14 +172,167 @@ def update_profile_text(
         )
 
 
-def set_physical_description(sheet: CharacterSheet, text: str) -> None:
+def _date_original_to_creation(original: ProfileTextVersion, profile: Profile) -> None:
+    """Stamp a captured original with the character's creation time (#3988).
+
+    The original is captured lazily, on the first versioned write, but its text was
+    written before that, possibly by an earlier player. Stamped with the write time,
+    it would fall inside a later tenant's tenure and show them the previous player's
+    prose; stamped with the character's creation, the tenure-scoped history keeps it
+    from anyone but the first player and staff. A cover profile keeps the write time.
+    """
+    sheet = profile.owning_sheet_or_none
+    created = sheet.character.db_date_created if sheet is not None else None
+    if created is None:
+        return
+    ProfileTextVersion.objects.filter(pk=original.pk).update_with_reason(
+        reason="a captured original predates its capture; date it to the character",
+        created_at=created,
+    )
+    original.created_at = created
+
+
+def set_physical_description(
+    sheet: CharacterSheet, text: str, *, edited_by: Any | None = None
+) -> ProfileTextVersion:
     """THE seam for setting a character's free-text physical description (#2632).
 
     ``CharacterSheet.additional_desc`` is the field the web sheet's
     appearance section and telnet ``sheet`` actually render; CG writes it
-    inline at finalize, and until now no post-CG caller existed. New writers
-    (the Great Archive recorded-profile flow, future desc surfaces) go
-    through here — never assign the attribute directly.
+    inline at finalize. New writers (the Great Archive recorded-profile flow,
+    staff edit mode) go through here — never assign the attribute directly.
+    Since #3988 the write is versioned like every other prose field: the first
+    one captures what was there, so a rewrite never loses the earlier text.
     """
-    sheet.additional_desc = text
-    sheet.save(update_fields=["additional_desc"])
+    return update_profile_text(
+        ensure_true_profile(sheet), ProfileTextField.DESCRIPTION, text, edited_by=edited_by
+    )
+
+
+def ensure_true_profile(sheet: CharacterSheet) -> Profile:
+    """The sheet's true profile, created empty if an older character has none (#3988).
+
+    ``create_character_with_sheet`` has always made one, but characters that
+    predate it can carry a null ``true_profile``; staff edit mode writes to the
+    profile, so it has to exist before the first write.
+    """
+    if sheet.true_profile_id is None:
+        sheet.true_profile = Profile.objects.create()
+        sheet.save(update_fields=["true_profile"])
+    return sheet.true_profile
+
+
+def restore_profile_text_version(
+    version: ProfileTextVersion, *, edited_by: Any
+) -> ProfileTextVersion:
+    """Write a past version's text back as the current text (#3988).
+
+    A restore is one more version, never a deletion: the timeline keeps the
+    text that was replaced, and a second restore can bring it back again.
+    """
+    return update_profile_text(version.profile, version.field, version.text, edited_by=edited_by)
+
+
+def can_staff_edit_sheet(user: AbstractBaseUser | AnonymousUser, sheet: CharacterSheet) -> bool:
+    """Whether this account may edit this sheet in place (#3988).
+
+    The one predicate every staff-edit endpoint checks. Staff only in this piece;
+    a later piece widens it to GMs editing the NPC sheets they own (``sheet`` is
+    taken now so that widening changes nothing but this body).
+    """
+    del sheet
+    return bool(user.is_authenticated and user.is_staff)
+
+
+class StaffEditError(ValueError):
+    """A staff edit the sheet refuses, with a message safe to show."""
+
+    def __init__(self, user_message: str) -> None:
+        super().__init__(user_message)
+        self.user_message = user_message
+
+
+@transaction.atomic
+def rename_character(sheet: CharacterSheet, name: str) -> None:
+    """Rename a character: its key and its primary persona's name together (#3988).
+
+    No service renamed a character before this; the key, the PRIMARY persona's
+    name and the particled-name telnet aliases (#3261) are three copies of one
+    fact, so they move in one transaction, the way CG's finalize sets them.
+    """
+    from django.core.exceptions import ObjectDoesNotExist  # noqa: PLC0415
+
+    from world.societies.houses.services import sync_name_aliases  # noqa: PLC0415
+
+    name = name.strip()
+    if not name:
+        msg = "A character needs a name."
+        raise StaffEditError(msg)
+    character = sheet.character
+    character.key = name
+    primary = sheet.primary_persona
+    primary.name = name
+    primary.save(update_fields=["name"])
+    try:
+        person = sheet.kinsperson
+    except ObjectDoesNotExist:
+        return
+    sync_name_aliases(person)
+
+
+#: The scalar identity fields staff edit in place, all on the sheet (#3988).
+STAFF_IDENTITY_SCALARS: tuple[str, ...] = (
+    "ic_birth_year",
+    "true_height_inches",
+    "weight_pounds",
+    "marital_status",
+    "vocation",
+    "social_rank",
+)
+#: The identity choices on the sheet, by field name.
+STAFF_SHEET_CHOICES: tuple[str, ...] = ("build", "gender", "pronouns", "species")
+#: The identity choices on the true profile (the lineage, #1270).
+STAFF_PROFILE_CHOICES: tuple[str, ...] = ("heritage", "origin_realm", "family", "tarot_card")
+#: The three staff-edit keys with a write of their own.
+STAFF_NAME_FIELD = "name"
+STAFF_PRONOUNS_FIELD = "pronouns"
+STAFF_TAROT_REVERSED_FIELD = "tarot_reversed"
+
+
+@transaction.atomic
+def staff_edit_sheet(sheet: CharacterSheet, changes: dict[str, Any], *, edited_by: Any) -> None:
+    """Apply a staff edit to a sheet's prose and identity fields (#3988).
+
+    ``changes`` is the validated subset the staff-edit serializer resolved: prose
+    fields by their ``ProfileTextField`` value (versioned through
+    ``update_profile_text``), ``name`` (through ``rename_character``), the scalar
+    identity fields, and the choice fields as model instances or None. Choosing a
+    pronoun set copies its three forms onto the sheet, since the sheet's own
+    pronoun strings are what every reader prints.
+    """
+    profile = ensure_true_profile(sheet)
+    sheet_fields: list[str] = []
+    profile_fields: list[str] = []
+    for key, value in changes.items():
+        if key in ProfileTextField.values:
+            update_profile_text(profile, key, value, edited_by=edited_by)
+        elif key == STAFF_NAME_FIELD:
+            rename_character(sheet, value)
+        elif key in STAFF_IDENTITY_SCALARS or key in STAFF_SHEET_CHOICES:
+            setattr(sheet, key, value)
+            sheet_fields.append(key)
+            if key == STAFF_PRONOUNS_FIELD and value is not None:
+                sheet.pronoun_subject = value.subject
+                sheet.pronoun_object = value.object
+                sheet.pronoun_possessive = value.possessive
+                sheet_fields.extend(["pronoun_subject", "pronoun_object", "pronoun_possessive"])
+        elif key in STAFF_PROFILE_CHOICES or key == STAFF_TAROT_REVERSED_FIELD:
+            setattr(profile, key, value)
+            profile_fields.append(key)
+        else:
+            msg = f"{key!r} is not a field staff edit in place."
+            raise StaffEditError(msg)
+    if sheet_fields:
+        sheet.save(update_fields=sheet_fields)
+    if profile_fields:
+        profile.save(update_fields=profile_fields)

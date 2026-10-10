@@ -185,6 +185,33 @@ class CharacterSheetAdmin(admin.ModelAdmin):
     autocomplete_fields = ["active_persona", "character", "current_residence"]
     # roster_entry is a reverse OneToOneRel — can't use autocomplete_fields/raw_id_fields
     large_table_widget_exempt = ["roster_entry"]
+
+    def save_model(
+        self, request: HttpRequest, obj: CharacterSheet, form: Any, change: bool
+    ) -> None:
+        """Route a description edit through the versioned write (#3988).
+
+        The description is versioned prose; an admin edit must leave a version like
+        every other path. The pre-edit text comes from ``form.initial`` (the identity
+        map means the instance already holds the new value).
+        """
+        from world.character_sheets.services import (  # noqa: PLC0415
+            ensure_true_profile,
+            update_profile_text,
+        )
+
+        # The model field name, as the admin form reports it changed.
+        described = change and "additional_desc" in form.changed_data  # noqa: STRING_LITERAL
+        super().save_model(request, obj, form, change)
+        if described:
+            update_profile_text(
+                ensure_true_profile(obj),
+                ProfileTextField.DESCRIPTION,
+                obj.additional_desc,
+                edited_by=request.user,
+                previous_text=form.initial.get("additional_desc") or "",
+            )
+
     list_display = [
         "character",
         "matured_years",

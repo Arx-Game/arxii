@@ -18,7 +18,8 @@ class ProfileTextVersionEndpointTests(TestCase):
         cls.account = AccountFactory()
         roster_entry = RosterEntryFactory()
         player_data, _ = PlayerData.objects.get_or_create(account=cls.account)
-        RosterTenureFactory(player_data=player_data, roster_entry=roster_entry)
+        # The character's first player: their history has no tenure cutoff (#3988).
+        RosterTenureFactory(player_data=player_data, roster_entry=roster_entry, player_number=1)
         cls.sheet = roster_entry.character_sheet
         profile = cls.sheet.true_profile
         profile.background = "The CG original."

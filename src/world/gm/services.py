@@ -884,11 +884,13 @@ def submit_profile_text_request(
     Returns:
         The PENDING request.
     """
-    from world.character_sheets.types import ProfileTextField  # noqa: PLC0415
+    from world.character_sheets.types import PLAYER_REQUESTABLE_TEXT_FIELDS  # noqa: PLC0415
     from world.gm.models import ProfileTextRequestDetails, TableUpdateRequest  # noqa: PLC0415
 
     _require_active_membership(membership)
-    if field not in ProfileTextField.values:
+    # Only the four a player may ask to change (#3988 widened the versioned set to
+    # every prose field, but the concept, quote, obituary and description stay staff's).
+    if field not in PLAYER_REQUESTABLE_TEXT_FIELDS:
         msg = f"{field!r} is not an updatable profile field."
         raise TableRequestError(msg)
     if not proposed_text.strip() or not reasoning.strip():

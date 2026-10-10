@@ -84,7 +84,8 @@ class UpdateProfileTextTests(TestCase):
 
     def test_rejects_unversioned_field(self):
         with self.assertRaises(ValueError):
-            update_profile_text(self.profile, "concept", "Not versioned.")
+            # Every prose field is versioned since #3988; a lineage field never is.
+            update_profile_text(self.profile, "tarot_reversed", "Not versioned.")
 
     def test_era_stamp_when_active_era_exists(self):
         from world.stories.constants import EraStatus

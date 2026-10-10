@@ -11,6 +11,7 @@
  */
 
 import { apiFetch } from '@/evennia_replacements/api';
+import { throwApiError } from '@/lib/errors';
 import type {
   TechniqueEffectSummary,
   TechniqueForm,
@@ -394,9 +395,53 @@ export interface CharacterSheetLook {
 /** The four plate inks (`world.character_sheets.types.PlateInk`, #3898). */
 export type PlateInk = 'ember' | 'verdigris' | 'rose' | 'night';
 
+/** The prose fields staff edit mode versions (`world.character_sheets.types.ProfileTextField`). */
+export type StaffProseField =
+  | 'description'
+  | 'background'
+  | 'concept'
+  | 'real_concept'
+  | 'quote'
+  | 'never_do'
+  | 'protect'
+  | 'fear'
+  | 'obituary';
+
+/**
+ * Mirrors `world.character_sheets.types.StaffEditFields` (#3988): the stored values
+ * staff edit mode edits, present for staff only. The rest of the payload is shaped
+ * for the viewer; this is the character as stored.
+ */
+export interface CharacterSheetStaffEdit {
+  prose: Record<StaffProseField, string>;
+  name: string;
+  ic_birth_year: number | null;
+  true_height_inches: number | null;
+  weight_pounds: number | null;
+  marital_status: string;
+  vocation: string;
+  social_rank: number;
+  build: number | null;
+  gender: number | null;
+  pronouns: number | null;
+  species: number | null;
+  heritage: number | null;
+  origin_realm: number | null;
+  family: number | null;
+  tarot_card: number | null;
+  tarot_reversed: boolean;
+}
+
+/** One field of a staff edit (#3988): any subset is sent, each key its stored value. */
+export type StaffEditBody = Partial<
+  Omit<CharacterSheetStaffEdit, 'prose'> & Record<StaffProseField, string>
+>;
+
 export interface CharacterSheetPayload {
   id: number;
   can_edit: boolean;
+  /** #3988 — the stored values behind the sheet, for staff edit mode; null for anyone else. */
+  staff_edit: CharacterSheetStaffEdit | null;
   identity: CharacterSheetIdentity;
   appearance: CharacterSheetAppearance;
   /** Stat name -> display value (already ÷10 from the ×10 internal storage, ADR-0193). */
@@ -588,3 +633,63 @@ export async function fetchCharacterSheet(sheetId: number): Promise<CharacterShe
   if (!res.ok) throw new Error('Failed to load character sheet');
   return (await res.json()) as CharacterSheetPayload;
 }
+
+/** PATCH the staff edit (#3988); answers with the refreshed sheet payload. */
+export async function patchStaffEdit(
+  sheetId: number,
+  body: StaffEditBody
+): Promise<CharacterSheetPayload> {
+  const res = await apiFetch(`/api/character-sheets/${sheetId}/staff-edit/`, {
+    method: 'PATCH',
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) await throwApiError(res, 'The edit was not saved.');
+  return (await res.json()) as CharacterSheetPayload;
+}
+
+/** Restore a past prose version as the current text (#3988); a restore adds a version. */
+export async function restoreProfileTextVersion(
+  sheetId: number,
+  versionId: number
+): Promise<CharacterSheetPayload> {
+  const res = await apiFetch(
+    `/api/character-sheets/${sheetId}/profile-text-versions/${versionId}/restore/`,
+    { method: 'POST' }
+  );
+  if (!res.ok) await throwApiError(res, 'The version was not restored.');
+  return (await res.json()) as CharacterSheetPayload;
+}
+
+/** One row of a lookup list a staff picker offers. */
+export interface StaffPickerOption {
+  value: string;
+  label: string;
+}
+
+/** A lookup list as picker options; every endpoint here returns an unpaginated array. */
+async function fetchOptions(
+  url: string,
+  label: (row: Record<string, unknown>) => string
+): Promise<StaffPickerOption[]> {
+  const res = await apiFetch(url);
+  if (!res.ok) await throwApiError(res, 'Failed to load the choices.');
+  const rows = (await res.json()) as Record<string, unknown>[];
+  return rows.map((row) => ({ value: String(row.id), label: label(row) }));
+}
+
+const nameOf = (row: Record<string, unknown>) => String(row.name ?? '');
+const displayNameOf = (row: Record<string, unknown>) => String(row.display_name ?? row.name ?? '');
+
+/** The lookup endpoints behind each identity choice staff edit mode offers (#3988). */
+export const STAFF_CHOICE_SOURCES = {
+  build: () => fetchOptions('/api/forms/builds/', displayNameOf),
+  gender: () => fetchOptions('/api/character-creation/genders/', displayNameOf),
+  pronouns: () => fetchOptions('/api/character-creation/pronouns/', displayNameOf),
+  species: () => fetchOptions('/api/character-creation/species/', nameOf),
+  heritage: () => fetchOptions('/api/character-sheets/heritages/', nameOf),
+  origin_realm: () => fetchOptions('/api/realms/', nameOf),
+  family: () => fetchOptions('/api/roster/families/', nameOf),
+  tarot_card: () => fetchOptions('/api/character-creation/tarot-cards/', nameOf),
+} as const;
+
+export type StaffChoiceField = keyof typeof STAFF_CHOICE_SOURCES;
