@@ -56,7 +56,12 @@ class CompanionRegistryTests(TestCase):
                         {
                             "label": "Domains",
                             "items": [
-                                {"text": "Carnage, Hunters", "entry_id": None, "anchor": None}
+                                {
+                                    "text": "Carnage, Hunters",
+                                    "entry_id": None,
+                                    "anchor": None,
+                                    "href": None,
+                                }
                             ],
                         }
                     ],

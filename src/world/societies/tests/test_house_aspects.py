@@ -321,3 +321,171 @@ class DisplaySurfaceTests(AspectTestData):
         self.assertIn("russet and bog-iron grey", lines)
         self.assertIn("House Virtue: Fortitude", lines)
         self.assertIn("Hearth Right", lines)
+
+
+class AspectTargetTests(TestCase):
+    """#4205: an option is one typed thing, and a patron question's options always
+    carry a god and a name for it."""
+
+    @classmethod
+    def setUpTestData(cls):
+        from django.core.exceptions import ValidationError
+
+        from world.worship.factories import BeingNicknameFactory, WorshippedBeingFactory
+
+        cls.ValidationError = ValidationError
+        cls.calyx_entry = CodexEntryFactory(name="Calyx")
+        cls.calyx = WorshippedBeingFactory(name="Calyx", codex_entry=cls.calyx_entry)
+        cls.knight = BeingNicknameFactory(being=cls.calyx, name="The One True Knight")
+        cls.other = WorshippedBeingFactory(name="The Fleshreaper")
+        cls.other_name = BeingNicknameFactory(being=cls.other, name="The Gory Goddess")
+        cls.patron = HouseAspectDefinition.objects.create(
+            name="Patron", prompt="Whom does the house serve?", sets_patron=True
+        )
+        cls.plain = HouseAspectDefinition.objects.create(name="Virtue", prompt="Which?")
+
+    def test_a_nickname_must_be_the_beings_own(self):
+        option = HouseAspectOption(
+            definition=self.plain, name="Calyx", being=self.calyx, being_nickname=self.other_name
+        )
+        with self.assertRaises(self.ValidationError) as caught:
+            option.full_clean()
+        self.assertIn("being_nickname", caught.exception.message_dict)
+        option.being_nickname = self.knight
+        option.full_clean()
+
+    def test_a_nickname_without_its_being_is_refused(self):
+        option = HouseAspectOption(definition=self.plain, name="X", being_nickname=self.knight)
+        with self.assertRaises(self.ValidationError) as caught:
+            option.full_clean()
+        self.assertIn("being_nickname", caught.exception.message_dict)
+
+    def test_a_being_and_a_lore_entry_are_not_both_claimed(self):
+        option = HouseAspectOption(
+            definition=self.plain,
+            name="Calyx",
+            being=self.calyx,
+            codex_entry=CodexEntryFactory(name="Calyx, again"),
+        )
+        with self.assertRaises(self.ValidationError) as caught:
+            option.full_clean()
+        self.assertIn("codex_entry", caught.exception.message_dict)
+
+    def test_a_patron_question_needs_a_being_and_a_name(self):
+        option = HouseAspectOption(definition=self.patron, name="Nobody")
+        with self.assertRaises(self.ValidationError) as caught:
+            option.full_clean()
+        self.assertIn("being", caught.exception.message_dict)
+        option.being = self.calyx
+        option.being_nickname = self.knight
+        option.full_clean()
+
+    def test_the_target_entry_is_the_options_own_else_the_beings_page(self):
+        lore = CodexEntryFactory(name="The Battle of the Ford")
+        by_lore = HouseAspectOption(definition=self.plain, name="Ford", codex_entry=lore)
+        by_being = HouseAspectOption(definition=self.plain, name="Calyx", being=self.calyx)
+        bare = HouseAspectOption(definition=self.plain, name="Bare")
+        self.assertEqual(by_lore.target_entry_id, lore.pk)
+        self.assertEqual(by_being.target_entry_id, self.calyx_entry.pk)
+        self.assertIsNone(bare.target_entry_id)
+
+    def test_one_patron_question_per_charter(self):
+        from world.societies.houses.factories import HouseTemplateFactory
+
+        second = HouseAspectDefinition.objects.create(
+            name="Totem", prompt="Which totem?", sets_patron=True
+        )
+        template = HouseTemplateFactory()
+        template.aspect_definitions.add(self.patron)
+        template.full_clean()
+        template.aspect_definitions.add(second)
+        with self.assertRaises(self.ValidationError) as caught:
+            template.full_clean()
+        self.assertIn("aspect_definitions", caught.exception.message_dict)
+
+
+class PatronFoundingTests(AspectTestData):
+    """#4205: the pick on the patron question becomes the house's patron, once, at founding."""
+
+    @classmethod
+    def setUpTestData(cls):
+        from world.worship.factories import BeingNicknameFactory, WorshippedBeingFactory
+
+        super().setUpTestData()
+        cls.calyx_entry = CodexEntryFactory(name="Calyx")
+        cls.calyx = WorshippedBeingFactory(name="Calyx", codex_entry=cls.calyx_entry)
+        cls.knight = BeingNicknameFactory(being=cls.calyx, name="The One True Knight")
+        cls.patron = HouseAspectDefinition.objects.create(
+            name="Patron", prompt="Whom does the house serve?", sets_patron=True
+        )
+        cls.calyx_option = HouseAspectOption.objects.create(
+            definition=cls.patron, name="Calyx", being=cls.calyx, being_nickname=cls.knight
+        )
+        cls.template.aspect_definitions.add(cls.patron)
+
+    def _picks(self):
+        return {
+            self.virtue.pk: [self.fortitude.pk],
+            self.traditions.pk: [self.trad_a.pk, self.trad_b.pk],
+            self.patron.pk: [self.calyx_option.pk],
+        }
+
+    def _found(self, name, **overrides):
+        """Submit, approve and materialize on a method-local title: ``assign_holder``
+        mutates the identity-mapped title, so a class-shared one would be seated
+        for the next test too (idmapper rollback staleness)."""
+        from evennia_extensions.factories import AccountFactory
+        from world.societies.houses.almanach import plant_rung
+        from world.societies.houses.constants import TitleTier
+
+        own_title = plant_rung(
+            realm=self.realm, tier=TitleTier.BARONY, name=name, parent_title=self.crown_county
+        )
+        claim = self._submit_full(
+            title=own_title,
+            lands=[ClaimLandDraft(title_id=own_title.pk, description="Fen villages.")],
+            **overrides,
+        )
+        approve_house_claim(claim, reviewer=AccountFactory())
+        return materialize_house_claim(claim, sheet=CharacterSheetFactory())
+
+    def test_founding_writes_the_patron_by_the_houses_own_name(self):
+        from world.roster.services.kinship import OMNISCIENT
+        from world.societies.houses.almanach import publish_house
+        from world.societies.houses.almanach_reads import document_for_house
+        from world.societies.serializers import OrganizationSerializer
+
+        org = self._found("Knightsmere", aspect_picks=self._picks())
+        self.assertEqual(org.patron_nickname, self.knight)
+
+        # Every read says what the pick is and where it opens.
+        house = OrganizationSerializer(org).data["house"]
+        self.assertEqual(
+            house["patron"],
+            {
+                "nickname": "The One True Knight",
+                "being_name": "Calyx",
+                "codex_entry_id": self.calyx_entry.pk,
+            },
+        )
+        calyx_facet = next(a for a in house["aspects"] if a["option"] == "Calyx")
+        self.assertEqual(calyx_facet["being_name"], "Calyx")
+        self.assertEqual(calyx_facet["target_entry_id"], self.calyx_entry.pk)
+        plain_facet = next(a for a in house["aspects"] if a["option"] == "Fortitude")
+        self.assertEqual(plain_facet["being_name"], "")
+        self.assertIsNone(plain_facet["target_entry_id"])
+        publish_house(org)
+        document = document_for_house(org, viewer=OMNISCIENT, staff=True)
+        self.assertEqual(document.house["patron"]["nickname"], "The One True Knight")
+        self.assertEqual(
+            next(a for a in document.house["aspects"] if a["option"] == "Calyx")["target_entry_id"],
+            self.calyx_entry.pk,
+        )
+
+    def test_a_charter_without_a_patron_question_writes_none(self):
+        from world.societies.serializers import OrganizationSerializer
+
+        self.template.aspect_definitions.remove(self.patron)
+        org = self._found("Godlessmere")
+        self.assertIsNone(org.patron_nickname)
+        self.assertIsNone(OrganizationSerializer(org).data["house"]["patron"])

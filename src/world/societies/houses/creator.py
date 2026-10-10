@@ -37,6 +37,7 @@ from world.societies.houses.almanach import (
 from world.societies.houses.constants import TITLE_TIER_RANK, ClaimKinRelation, HouseClaimStatus
 from world.societies.houses.models import (
     Domain,
+    HouseAspectOption,
     HouseClaim,
     HouseClaimAspect,
     HouseClaimKin,
@@ -504,6 +505,32 @@ def _claim_aspect_picks(claim: HouseClaim) -> dict[int, list[int]]:
     return picks
 
 
+def patron_option_from_picks(aspect_picks: dict[int, list[int]]) -> HouseAspectOption | None:
+    """The one picked option on a ``sets_patron`` question (#4205), or ``None``.
+
+    Two such picks cannot both be the patron, and an option on that question
+    without a name for the house to use is a catalog error the founder cannot
+    fix; both refuse rather than found a house with the wrong god.
+    """
+    option_ids = [option_id for ids in aspect_picks.values() for option_id in ids]
+    if not option_ids:
+        return None
+    options = list(
+        HouseAspectOption.objects.filter(
+            pk__in=option_ids, definition__sets_patron=True
+        ).select_related("being_nickname")
+    )
+    if len(options) > 1:
+        msg = f"more than one patron pick: {[o.pk for o in options]}"
+        raise HousesServiceError(msg, user_message="A house serves one patron.")
+    if options and options[0].being_nickname_id is None:
+        msg = f"patron option {options[0].pk} has no being_nickname"
+        raise HousesServiceError(
+            msg, user_message="That patron has no name for the house to call it by."
+        )
+    return options[0] if options else None
+
+
 def build_family_org(  # noqa: PLR0913 - keyword-only; one arg per package input
     template: HouseTemplate,
     name: str,
@@ -568,11 +595,7 @@ def build_family_org(  # noqa: PLR0913 - keyword-only; one arg per package input
         liege = served_house or template.liege
         if liege is not None:
             swear_fealty(vassal=org, liege=liege)
-    for definition_id, option_ids in (aspect_picks or {}).items():
-        for option_id in option_ids:
-            OrganizationAspect.objects.create(
-                organization=org, definition_id=definition_id, option_id=option_id
-            )
+    _stamp_aspects(org, aspect_picks or {})
     for feature in template.features.all():
         OrganizationFeature.objects.create(organization=org, feature=feature)
     if template.starting_kin_slots:
@@ -587,6 +610,24 @@ def build_family_org(  # noqa: PLR0913 - keyword-only; one arg per package input
                 domain=home_domain, kind=kind, owner_org=org, unsited=True, standing=standing
             )
     return family, org
+
+
+def _stamp_aspects(org: Organization, aspect_picks: dict[int, list[int]]) -> None:
+    """Write the picks as the house's facets, and the patron the one patron pick names.
+
+    The patron is fixed at founding (#4205): the pick on the charter's ``sets_patron``
+    question becomes the house's own name for its god. Nothing else writes the
+    column; staff change it in the org admin.
+    """
+    for definition_id, option_ids in aspect_picks.items():
+        for option_id in option_ids:
+            OrganizationAspect.objects.create(
+                organization=org, definition_id=definition_id, option_id=option_id
+            )
+    patron_option = patron_option_from_picks(aspect_picks)
+    if patron_option is not None:
+        org.patron_nickname = patron_option.being_nickname
+        org.save(update_fields=["patron_nickname"])
 
 
 def _place_claim_row(*, org: Organization, row: HouseClaimKin, **kin_kwargs) -> Kinsperson:

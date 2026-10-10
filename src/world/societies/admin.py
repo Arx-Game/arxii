@@ -1207,15 +1207,27 @@ class HouseAspectOptionInline(admin.TabularInline):
 
     model = HouseAspectOption
     extra = 0
-    fields = ("name", "description", "codex_entry", "is_active", "display_order")
+    fields = (
+        "name",
+        "description",
+        "codex_entry",
+        "being",
+        "being_nickname",
+        "is_active",
+        "display_order",
+    )
     raw_id_fields = ("codex_entry",)
+    # What the option IS (#4205): a god or totem, and the name a house calls it by.
+    autocomplete_fields = ("being", "being_nickname")
 
 
 @admin.register(HouseAspectDefinition)
 class HouseAspectDefinitionAdmin(admin.ModelAdmin):
-    """#2079 — authored, catalog-only required choices (ADR-0101)."""
+    """#2079 — authored, catalog-only required choices (ADR-0101). ``sets_patron``
+    (#4205) marks the one question whose pick names the house's patron."""
 
-    list_display = ("name", "min_picks", "max_picks", "display_order")
+    list_display = ("name", "min_picks", "max_picks", "sets_patron", "display_order")
+    list_filter = ("sets_patron",)
     search_fields = ("name", "prompt")
     inlines = (HouseAspectOptionInline,)
 

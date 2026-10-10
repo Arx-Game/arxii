@@ -420,6 +420,10 @@ EXPORT_FIELD_EXCLUSIONS: dict[str, frozenset[str]] = {
     # #3648: which staff houses a Family Template lists as served is installation
     # state (those orgs are not corpus rows), same rationale as faction_affiliation.
     "societies.housetemplate": frozenset({"served_house_choices"}),
+    # #4205: a god or totem an aspect option IS, and the name a house calls it by,
+    # are installation rows (beings and nicknames carry no natural key), so the
+    # catalog exports without them and staff re-bind both in admin elsewhere.
+    "societies.houseaspectoption": frozenset({"being", "being_nickname"}),
 }
 
 

@@ -1336,6 +1336,12 @@ class HouseTemplate(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
             re.compile(self.name_pattern)
         except re.error as exc:
             raise ValidationError({"name_pattern": f"Not a valid regex: {exc}"}) from exc
+        # One question may name the patron (#4205); two would fight over one column.
+        # Read only once the row exists, since an unsaved template has no M2M rows.
+        if self.pk is not None and self.aspect_definitions.filter(sets_patron=True).count() > 1:
+            raise ValidationError(
+                {"aspect_definitions": "Only one question on a charter may set the patron."}
+            )
 
     def __str__(self) -> str:
         return self.name
@@ -1444,6 +1450,14 @@ class HouseAspectDefinition(NaturalKeyMixin, CreditedContent, SharedMemoryModel)
     min_picks = models.PositiveSmallIntegerField(default=1)
     max_picks = models.PositiveSmallIntegerField(default=1)
     display_order = models.PositiveSmallIntegerField(default=0)
+    sets_patron = models.BooleanField(
+        default=False,
+        help_text=(
+            "A pick on this question makes the option's being the house's patron "
+            "(Organization.patron_nickname), fixed at founding (#4205). Every option "
+            "then needs a being and a nickname; at most one such question per template."
+        ),
+    )
 
     objects = NaturalKeyManager()
 
@@ -1483,6 +1497,30 @@ class HouseAspectOption(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
         related_name="house_aspect_options",
         help_text="Lore entry this option is bound to, if any.",
     )
+    # What the option IS, when it is a god or a totem (#4205): a typed target
+    # beside the lore target above. An option carries at most one of the two
+    # as its "what it is"; a being's own Codex page is the link when it is set.
+    # Installation rows, so both leave the content export
+    # (EXPORT_FIELD_EXCLUSIONS) and are re-bound in admin elsewhere.
+    being = models.ForeignKey(
+        "arxii.WorshippedBeing",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="house_aspect_options",
+        help_text="The god or totem this option is (#4205).",
+    )
+    being_nickname = models.ForeignKey(
+        "arxii.BeingNickname",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="house_aspect_options",
+        help_text=(
+            "The name a house on this option calls the being by; one of the being's "
+            "own nicknames. Becomes the house's patron_nickname on a patron question."
+        ),
+    )
     is_active = models.BooleanField(default=True)
     display_order = models.PositiveSmallIntegerField(default=0)
 
@@ -1502,6 +1540,41 @@ class HouseAspectOption(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
 
     def __str__(self) -> str:
         return f"{self.definition.name}: {self.name}"
+
+    @property
+    def target_entry_id(self) -> int | None:
+        """The Codex entry the option opens: its own lore entry, else its being's page."""
+        if self.codex_entry_id is not None:
+            return self.codex_entry_id
+        if self.being_id is not None:
+            return self.being.codex_entry_id
+        return None
+
+    def clean(self) -> None:
+        """A typed target is one thing (#4205): the nickname is the being's own, a god
+        and a lore entry are not both claimed, and a patron question's options always
+        carry a being and a name for it."""
+        from django.core.exceptions import ValidationError  # noqa: PLC0415
+
+        super().clean()
+        errors: dict[str, str] = {}
+        if self.being_nickname_id is not None:
+            if self.being_id is None:
+                errors["being_nickname"] = "A nickname needs the being it names."
+            elif self.being_nickname.being_id != self.being_id:
+                errors["being_nickname"] = "That nickname belongs to another being."
+        if self.being_id is not None and self.codex_entry_id is not None:
+            errors["codex_entry"] = (
+                "A being's option opens the being's own page; leave the lore entry blank."
+            )
+        if (
+            self.definition_id is not None
+            and self.definition.sets_patron
+            and (self.being_id is None or self.being_nickname_id is None)
+        ):
+            errors["being"] = "An option on a patron question needs a being and a nickname."
+        if errors:
+            raise ValidationError(errors)
 
 
 class HouseFeature(NaturalKeyMixin, CreditedContent, SharedMemoryModel):

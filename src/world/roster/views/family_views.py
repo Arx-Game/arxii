@@ -39,6 +39,7 @@ from world.roster.services.kinship import (
     kin_tree_for_sheet,
     open_slots_for,
 )
+from world.societies.houses.almanach_reads import aspect_facet
 
 
 def _viewer_entry(request: Request) -> object:
@@ -90,15 +91,9 @@ def _inherited_by_family(families: list[Family]) -> dict[int, dict]:
 
     aspects_by_org: dict[int, list[dict]] = {}
     for aspect in OrganizationAspect.objects.filter(organization_id__in=org_ids).select_related(
-        "definition", "option"
+        "definition", "option", "option__being"
     ):
-        aspects_by_org.setdefault(aspect.organization_id, []).append(
-            {
-                "definition": aspect.definition.name,
-                "option": aspect.option.name,
-                "description": aspect.option.description,
-            }
-        )
+        aspects_by_org.setdefault(aspect.organization_id, []).append(aspect_facet(aspect))
 
     features_by_org: dict[int, list[dict]] = {}
     for stamped in OrganizationFeature.objects.filter(organization_id__in=org_ids).select_related(

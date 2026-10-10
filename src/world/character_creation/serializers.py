@@ -2249,14 +2249,28 @@ class HouseAspectOptionSerializer(serializers.ModelSerializer):
     """One authored answer in an aspect catalog (#2079).
 
     ``codex_entry_id`` (#2868) lets the CG option card link the option's lore
-    write-up — Inferna's House Quiddities each have one.
+    write-up — Inferna's House Quiddities each have one. ``being_id``/``being_name``
+    say what the option IS when it is a god or a totem (#4205), and
+    ``target_entry_id`` is the one entry the card opens: the option's own, else
+    the being's page.
     """
 
     codex_entry_id = serializers.IntegerField(read_only=True, allow_null=True)
+    being_id = serializers.IntegerField(read_only=True, allow_null=True)
+    being_name = serializers.CharField(source="being.name", read_only=True, default="")
+    target_entry_id = serializers.IntegerField(read_only=True, allow_null=True)
 
     class Meta:
         model = HouseAspectOption
-        fields = ["id", "name", "description", "codex_entry_id"]
+        fields = [
+            "id",
+            "name",
+            "description",
+            "codex_entry_id",
+            "being_id",
+            "being_name",
+            "target_entry_id",
+        ]
 
 
 class HouseAspectDefinitionSerializer(serializers.ModelSerializer):
