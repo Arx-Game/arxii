@@ -10,6 +10,7 @@ import {
   STAFF_CHOICE_SOURCES,
   fetchCharacterSheet,
   fetchStaffEstateOptions,
+  fetchStaffGroupOptions,
   fetchStaffMagicOptions,
   fetchStaffOptions,
   runStaffRowAction,
@@ -120,6 +121,18 @@ export function useStaffEstateOptions(sheetId: number, room: string, enabled: bo
     enabled: enabled && !!sheetId,
     staleTime: 60_000,
     // The editors stay drawn while a new room search loads.
+    placeholderData: keepPreviousData,
+  });
+}
+
+/** What piece E's editors offer (#4229); ``character`` is the character search so far. */
+export function useStaffGroupOptions(sheetId: number, character: string, enabled: boolean) {
+  return useQuery({
+    queryKey: ['character-sheets', sheetId, 'staff-group-options', character],
+    queryFn: () => fetchStaffGroupOptions(sheetId, character),
+    enabled: enabled && !!sheetId,
+    staleTime: 60_000,
+    // The editors stay drawn while a new character search loads.
     placeholderData: keepPreviousData,
   });
 }

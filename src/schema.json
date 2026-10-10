@@ -5925,6 +5925,52 @@ paths:
       responses:
         '200':
           description: No response body
+  /api/character-sheets/{id}/staff-covenant-role/:
+    patch:
+      operationId: character_sheets_staff_covenant_role_partial_update
+      description: 'One change to a membership: role, rank, engagement, or end it.'
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+        required: true
+      tags:
+      - character-sheets
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedStaffCovenantMembershipRequest'
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/character-sheets/{id}/staff-covenant-roles/:
+    post:
+      operationId: character_sheets_staff_covenant_roles_create
+      description: Make the character a covenant member in a role (no induction, no
+        band gate).
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+        required: true
+      tags:
+      - character-sheets
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StaffCovenantRoleAddRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          description: No response body
   /api/character-sheets/{id}/staff-distinction/:
     patch:
       operationId: character_sheets_staff_distinction_partial_update
@@ -6091,6 +6137,28 @@ paths:
       responses:
         '200':
           description: No response body
+  /api/character-sheets/{id}/staff-group-options/:
+    get:
+      operationId: character_sheets_staff_group_options_retrieve
+      description: What the group-fit editors offer; ``?character=`` searches other
+        characters.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+        required: true
+      tags:
+      - character-sheets
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StaffGroupOptions'
+          description: ''
   /api/character-sheets/{id}/staff-house-claim/:
     post:
       operationId: character_sheets_staff_house_claim_create
@@ -6258,6 +6326,78 @@ paths:
       responses:
         '200':
           description: No response body
+  /api/character-sheets/{id}/staff-mentor-bond-end/:
+    post:
+      operationId: character_sheets_staff_mentor_bond_end_create
+      description: End one of the character's mentor bonds.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+        required: true
+      tags:
+      - character-sheets
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StaffMentorDissolveRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/character-sheets/{id}/staff-mentor-bonds/:
+    post:
+      operationId: character_sheets_staff_mentor_bonds_create
+      description: |-
+        Bond the character and another as mentor and sidekick in a covenant.
+
+        A pair outside the level band is bonded anyway; its row carries the warning.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+        required: true
+      tags:
+      - character-sheets
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StaffMentorBondRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/character-sheets/{id}/staff-noble-title/:
+    post:
+      operationId: character_sheets_staff_noble_title_create
+      description: Seat the character on a noble title (staff fiat through ``pass_title``).
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+        required: true
+      tags:
+      - character-sheets
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StaffNobleTitleRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          description: No response body
   /api/character-sheets/{id}/staff-options/:
     get:
       operationId: character_sheets_staff_options_retrieve
@@ -6300,6 +6440,75 @@ paths:
           application/json:
             schema:
               $ref: '#/components/schemas/PatchedStaffPathRequest'
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/character-sheets/{id}/staff-persona/:
+    patch:
+      operationId: character_sheets_staff_persona_partial_update
+      description: Rename one of the character's faces and/or write its cover bio
+        (versioned).
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+        required: true
+      tags:
+      - character-sheets
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedStaffPersonaChangeRequest'
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/character-sheets/{id}/staff-persona-remove/:
+    post:
+      operationId: character_sheets_staff_persona_remove_create
+      description: Remove an identity nobody has played; one with history stays.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+        required: true
+      tags:
+      - character-sheets
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StaffPersonaRemoveRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/character-sheets/{id}/staff-personas/:
+    post:
+      operationId: character_sheets_staff_personas_create
+      description: Give the character a new established identity (no cap for staff).
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+        required: true
+      tags:
+      - character-sheets
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StaffPersonaCreateRequest'
+        required: true
       security:
       - cookieAuth: []
       responses:
@@ -6415,6 +6624,121 @@ paths:
           application/json:
             schema:
               $ref: '#/components/schemas/PatchedStaffStatsRequest'
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/character-sheets/{id}/staff-tie/:
+    patch:
+      operationId: character_sheets_staff_tie_partial_update
+      description: Set a side's summary and/or claimed tier (no XP, no capstone entry).
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+        required: true
+      tags:
+      - character-sheets
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedStaffTieRequest'
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/character-sheets/{id}/staff-tie-label/:
+    patch:
+      operationId: character_sheets_staff_tie_label_partial_update
+      description: Shift, reveal or end a label on either side of one of the character's
+        ties.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+        required: true
+      tags:
+      - character-sheets
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedStaffTieLabelChangeRequest'
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/character-sheets/{id}/staff-tie-labels/:
+    post:
+      operationId: character_sheets_staff_tie_labels_create
+      description: Declare a label on either side of a tie with another character.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+        required: true
+      tags:
+      - character-sheets
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StaffTieLabelAddRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/character-sheets/{id}/staff-title-remove/:
+    post:
+      operationId: character_sheets_staff_title_remove_create
+      description: Take a title away from one of the character's faces.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+        required: true
+      tags:
+      - character-sheets
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StaffTitleRevokeRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/character-sheets/{id}/staff-titles/:
+    post:
+      operationId: character_sheets_staff_titles_create
+      description: Give one of the character's faces a title reward or one of its
+        deeds.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+        required: true
+      tags:
+      - character-sheets
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StaffTitleGrantRequest'
+        required: true
       security:
       - cookieAuth: []
       responses:
@@ -73871,6 +74195,28 @@ components:
         category:
           type: integer
           description: Allowlist is scoped per category.
+    PatchedStaffCovenantMembershipRequest:
+      type: object
+      description: 'One change to an active membership: role, rank, engagement, or
+        ``end``.'
+      properties:
+        membership:
+          type: integer
+        covenant_role:
+          type: integer
+          nullable: true
+        rank:
+          type: integer
+          nullable: true
+        engaged:
+          type: boolean
+          nullable: true
+        as_secondary:
+          type: boolean
+          default: false
+        end:
+          type: boolean
+          default: false
     PatchedStaffDistinctionChangeRequest:
       type: object
       description: Re-rank (``rank``) or remove (no rank) one held distinction of
@@ -73995,6 +74341,29 @@ components:
           type: integer
           maximum: 30
           minimum: 1
+    PatchedStaffPersonaChangeRequest:
+      type: object
+      description: Rename a face and/or write its cover bio; an absent field is left
+        alone.
+      properties:
+        persona:
+          type: integer
+        name:
+          type: string
+          minLength: 1
+          maxLength: 255
+        concept:
+          type: string
+        quote:
+          type: string
+        never_do:
+          type: string
+        protect:
+          type: string
+        fear:
+          type: string
+        background:
+          type: string
     PatchedStaffSkillsRequest:
       type: object
       description: '``{"skills": {"<skill id>": n}, "specializations": {"<id>": n}}``.'
@@ -74015,6 +74384,38 @@ components:
           type: object
           additionalProperties:
             type: integer
+    PatchedStaffTieLabelChangeRequest:
+      type: object
+      description: Shift, reveal or end a label on either side of one of this character's
+        ties.
+      properties:
+        label:
+          type: integer
+        new_type:
+          type: integer
+          nullable: true
+        awareness:
+          default: ''
+          oneOf:
+          - $ref: '#/components/schemas/AwarenessEnum'
+          - $ref: '#/components/schemas/BlankEnum'
+        end:
+          type: boolean
+          default: false
+    PatchedStaffTieRequest:
+      type: object
+      description: Set one side's summary and/or claimed tier.
+      properties:
+        other:
+          type: integer
+          description: The character this sheet belongs to
+        direction:
+          $ref: '#/components/schemas/StaffTieDirectionEnum'
+        summary:
+          type: string
+        tier:
+          type: integer
+          minimum: 0
     PatchedStaffingProfileLineRequest:
       type: object
       properties:
@@ -82968,6 +83369,40 @@ components:
       required:
       - label
       - value
+    StaffCovenantOption:
+      type: object
+      description: A covenant with the roles of its kind and its own ranks.
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        roles:
+          type: array
+          items:
+            $ref: '#/components/schemas/StaffOption'
+        ranks:
+          type: array
+          items:
+            $ref: '#/components/schemas/StaffOption'
+      required:
+      - id
+      - name
+      - ranks
+      - roles
+    StaffCovenantRoleAddRequest:
+      type: object
+      properties:
+        covenant:
+          type: integer
+        covenant_role:
+          type: integer
+        rank:
+          type: integer
+          nullable: true
+      required:
+      - covenant
+      - covenant_role
     StaffDistinctionAddRequest:
       type: object
       properties:
@@ -83125,6 +83560,56 @@ components:
             $ref: '#/components/schemas/GoalInputRequest'
       required:
       - goals
+    StaffGroupOptions:
+      type: object
+      description: What the group-fit editors pick from; characters come by search.
+      properties:
+        characters:
+          type: array
+          items:
+            $ref: '#/components/schemas/StaffOption'
+        faces:
+          type: array
+          items:
+            $ref: '#/components/schemas/StaffOption'
+        relationship_types:
+          type: array
+          items:
+            $ref: '#/components/schemas/StaffOption'
+        awareness:
+          type: array
+          items:
+            $ref: '#/components/schemas/StaffChoice'
+        tiers:
+          type: array
+          items:
+            $ref: '#/components/schemas/StaffOption'
+        title_rewards:
+          type: array
+          items:
+            $ref: '#/components/schemas/StaffOption'
+        deeds:
+          type: array
+          items:
+            $ref: '#/components/schemas/StaffOption'
+        noble_titles:
+          type: array
+          items:
+            $ref: '#/components/schemas/StaffOption'
+        covenants:
+          type: array
+          items:
+            $ref: '#/components/schemas/StaffCovenantOption'
+      required:
+      - awareness
+      - characters
+      - covenants
+      - deeds
+      - faces
+      - noble_titles
+      - relationship_types
+      - tiers
+      - title_rewards
     StaffHouseClaimRequest:
       type: object
       properties:
@@ -83258,6 +83743,38 @@ components:
       - body_region
       - kind
       - name
+    StaffMentorBondRequest:
+      type: object
+      description: Bond this character with ``other``; ``as_mentor`` says which party
+        they are.
+      properties:
+        covenant:
+          type: integer
+        other:
+          type: integer
+          description: The character this sheet belongs to
+        as_mentor:
+          type: boolean
+      required:
+      - as_mentor
+      - covenant
+      - other
+    StaffMentorDissolveRequest:
+      type: object
+      description: Refuses a row that belongs to another character, as an unknown
+        id.
+      properties:
+        bond:
+          type: integer
+      required:
+      - bond
+    StaffNobleTitleRequest:
+      type: object
+      properties:
+        title:
+          type: integer
+      required:
+      - title
     StaffOption:
       type: object
       properties:
@@ -83338,6 +83855,24 @@ components:
       - skills
       - specializations
       - stats
+    StaffPersonaCreateRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 255
+      required:
+      - name
+    StaffPersonaRemoveRequest:
+      type: object
+      description: Refuses a row that belongs to another character, as an unknown
+        id.
+      properties:
+        persona:
+          type: integer
+      required:
+      - persona
     StaffPropertyRequest:
       type: object
       description: A grant profile; blank means the one the character's Beginnings
@@ -83363,6 +83898,56 @@ components:
           type: integer
       required:
       - room_profile
+    StaffTieDirectionEnum:
+      enum:
+      - toward
+      - from
+      type: string
+      description: |-
+        * `toward` - This character toward the other
+        * `from` - The other toward this character
+    StaffTieLabelAddRequest:
+      type: object
+      description: Declare a label on one side of this character's tie to ``other``.
+      properties:
+        other:
+          type: integer
+          description: The character this sheet belongs to
+        direction:
+          $ref: '#/components/schemas/StaffTieDirectionEnum'
+        type:
+          type: integer
+        awareness:
+          $ref: '#/components/schemas/AwarenessEnum'
+      required:
+      - awareness
+      - direction
+      - other
+      - type
+    StaffTitleGrantRequest:
+      type: object
+      description: A title reward or one of the face's own deeds, on one of the character's
+        faces.
+      properties:
+        persona:
+          type: integer
+        reward:
+          type: integer
+          nullable: true
+        legend_entry:
+          type: integer
+          nullable: true
+      required:
+      - persona
+    StaffTitleRevokeRequest:
+      type: object
+      description: Refuses a row that belongs to another character, as an unknown
+        id.
+      properties:
+        title:
+          type: integer
+      required:
+      - title
     StaffVacancyRequest:
       type: object
       properties:

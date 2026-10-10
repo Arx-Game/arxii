@@ -4013,6 +4013,40 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/character-sheets/{id}/staff-covenant-role/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    /** @description One change to a membership: role, rank, engagement, or end it. */
+    patch: operations['character_sheets_staff_covenant_role_partial_update'];
+    trace?: never;
+  };
+  '/api/character-sheets/{id}/staff-covenant-roles/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** @description Make the character a covenant member in a role (no induction, no band gate). */
+    post: operations['character_sheets_staff_covenant_roles_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/character-sheets/{id}/staff-distinction/': {
     parameters: {
       query?: never;
@@ -4131,6 +4165,23 @@ export interface paths {
     get?: never;
     /** @description Replace the goals; the point cap holds, the weekly revision limit does not. */
     put: operations['character_sheets_staff_goals_update'];
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/character-sheets/{id}/staff-group-options/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description What the group-fit editors offer; ``?character=`` searches other characters. */
+    get: operations['character_sheets_staff_group_options_retrieve'];
+    put?: never;
     post?: never;
     delete?: never;
     options?: never;
@@ -4263,6 +4314,61 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/character-sheets/{id}/staff-mentor-bond-end/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** @description End one of the character's mentor bonds. */
+    post: operations['character_sheets_staff_mentor_bond_end_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/character-sheets/{id}/staff-mentor-bonds/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * @description Bond the character and another as mentor and sidekick in a covenant.
+     *
+     *     A pair outside the level band is bonded anyway; its row carries the warning.
+     */
+    post: operations['character_sheets_staff_mentor_bonds_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/character-sheets/{id}/staff-noble-title/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** @description Seat the character on a noble title (staff fiat through ``pass_title``). */
+    post: operations['character_sheets_staff_noble_title_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/character-sheets/{id}/staff-options/': {
     parameters: {
       query?: never;
@@ -4299,6 +4405,57 @@ export interface paths {
      *     Changing an existing path is out of scope: crossing into a path grants its magic.
      */
     patch: operations['character_sheets_staff_path_partial_update'];
+    trace?: never;
+  };
+  '/api/character-sheets/{id}/staff-persona/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    /** @description Rename one of the character's faces and/or write its cover bio (versioned). */
+    patch: operations['character_sheets_staff_persona_partial_update'];
+    trace?: never;
+  };
+  '/api/character-sheets/{id}/staff-persona-remove/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** @description Remove an identity nobody has played; one with history stays. */
+    post: operations['character_sheets_staff_persona_remove_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/character-sheets/{id}/staff-personas/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** @description Give the character a new established identity (no cap for staff). */
+    post: operations['character_sheets_staff_personas_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
     trace?: never;
   };
   '/api/character-sheets/{id}/staff-property/': {
@@ -4384,6 +4541,91 @@ export interface paths {
     head?: never;
     /** @description Set stats at display scale (1 to 5); missing rows are created. */
     patch: operations['character_sheets_staff_stats_partial_update'];
+    trace?: never;
+  };
+  '/api/character-sheets/{id}/staff-tie/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    /** @description Set a side's summary and/or claimed tier (no XP, no capstone entry). */
+    patch: operations['character_sheets_staff_tie_partial_update'];
+    trace?: never;
+  };
+  '/api/character-sheets/{id}/staff-tie-label/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    /** @description Shift, reveal or end a label on either side of one of the character's ties. */
+    patch: operations['character_sheets_staff_tie_label_partial_update'];
+    trace?: never;
+  };
+  '/api/character-sheets/{id}/staff-tie-labels/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** @description Declare a label on either side of a tie with another character. */
+    post: operations['character_sheets_staff_tie_labels_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/character-sheets/{id}/staff-title-remove/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** @description Take a title away from one of the character's faces. */
+    post: operations['character_sheets_staff_title_remove_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/character-sheets/{id}/staff-titles/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** @description Give one of the character's faces a title reward or one of its deeds. */
+    post: operations['character_sheets_staff_titles_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
     trace?: never;
   };
   '/api/character-sheets/{id}/staff-vacancy/': {
@@ -42280,6 +42522,17 @@ export interface components {
       /** @description Allowlist is scoped per category. */
       category?: number;
     };
+    /** @description One change to an active membership: role, rank, engagement, or ``end``. */
+    PatchedStaffCovenantMembershipRequest: {
+      membership?: number;
+      covenant_role?: number | null;
+      rank?: number | null;
+      engaged?: boolean | null;
+      /** @default false */
+      as_secondary: boolean;
+      /** @default false */
+      end: boolean;
+    };
     /** @description Re-rank (``rank``) or remove (no rank) one held distinction of this sheet. */
     PatchedStaffDistinctionChangeRequest: {
       character_distinction?: number;
@@ -42338,6 +42591,17 @@ export interface components {
       path?: number | null;
       level?: number;
     };
+    /** @description Rename a face and/or write its cover bio; an absent field is left alone. */
+    PatchedStaffPersonaChangeRequest: {
+      persona?: number;
+      name?: string;
+      concept?: string;
+      quote?: string;
+      never_do?: string;
+      protect?: string;
+      fear?: string;
+      background?: string;
+    };
     /** @description ``{"skills": {"<skill id>": n}, "specializations": {"<id>": n}}``. */
     PatchedStaffSkillsRequest: {
       skills?: {
@@ -42352,6 +42616,23 @@ export interface components {
       stats?: {
         [key: string]: number;
       };
+    };
+    /** @description Shift, reveal or end a label on either side of one of this character's ties. */
+    PatchedStaffTieLabelChangeRequest: {
+      label?: number;
+      new_type?: number | null;
+      /** @default  */
+      awareness: components['schemas']['AwarenessEnum'] | components['schemas']['BlankEnum'];
+      /** @default false */
+      end: boolean;
+    };
+    /** @description Set one side's summary and/or claimed tier. */
+    PatchedStaffTieRequest: {
+      /** @description The character this sheet belongs to */
+      other?: number;
+      direction?: components['schemas']['StaffTieDirectionEnum'];
+      summary?: string;
+      tier?: number;
     };
     PatchedStaffingProfileLineRequest: {
       profile?: number;
@@ -46730,6 +47011,18 @@ export interface components {
       value: string;
       label: string;
     };
+    /** @description A covenant with the roles of its kind and its own ranks. */
+    StaffCovenantOption: {
+      id: number;
+      name: string;
+      roles: components['schemas']['StaffOption'][];
+      ranks: components['schemas']['StaffOption'][];
+    };
+    StaffCovenantRoleAddRequest: {
+      covenant: number;
+      covenant_role: number;
+      rank?: number | null;
+    };
     StaffDistinctionAddRequest: {
       distinction: number;
       /** @default 1 */
@@ -46799,6 +47092,18 @@ export interface components {
     StaffGoalsRequest: {
       goals: components['schemas']['GoalInputRequest'][];
     };
+    /** @description What the group-fit editors pick from; characters come by search. */
+    StaffGroupOptions: {
+      characters: components['schemas']['StaffOption'][];
+      faces: components['schemas']['StaffOption'][];
+      relationship_types: components['schemas']['StaffOption'][];
+      awareness: components['schemas']['StaffChoice'][];
+      tiers: components['schemas']['StaffOption'][];
+      title_rewards: components['schemas']['StaffOption'][];
+      deeds: components['schemas']['StaffOption'][];
+      noble_titles: components['schemas']['StaffOption'][];
+      covenants: components['schemas']['StaffCovenantOption'][];
+    };
     StaffHouseClaimRequest: {
       claim: number;
     };
@@ -46848,6 +47153,20 @@ export interface components {
       /** @default  */
       description: string;
     };
+    /** @description Bond this character with ``other``; ``as_mentor`` says which party they are. */
+    StaffMentorBondRequest: {
+      covenant: number;
+      /** @description The character this sheet belongs to */
+      other: number;
+      as_mentor: boolean;
+    };
+    /** @description Refuses a row that belongs to another character, as an unknown id. */
+    StaffMentorDissolveRequest: {
+      bond: number;
+    };
+    StaffNobleTitleRequest: {
+      title: number;
+    };
     StaffOption: {
       id: number;
       name: string;
@@ -46868,6 +47187,13 @@ export interface components {
       enemy_degrees: components['schemas']['StaffChoice'][];
       enemy_power_tiers: components['schemas']['StaffChoice'][];
     };
+    StaffPersonaCreateRequest: {
+      name: string;
+    };
+    /** @description Refuses a row that belongs to another character, as an unknown id. */
+    StaffPersonaRemoveRequest: {
+      persona: number;
+    };
     /** @description A grant profile; blank means the one the character's Beginnings carries. */
     StaffPropertyRequest: {
       profile?: number | null;
@@ -46878,6 +47204,30 @@ export interface components {
     };
     StaffResidenceRequest: {
       room_profile: number;
+    };
+    /**
+     * @description * `toward` - This character toward the other
+     *     * `from` - The other toward this character
+     * @enum {string}
+     */
+    StaffTieDirectionEnum: 'toward' | 'from';
+    /** @description Declare a label on one side of this character's tie to ``other``. */
+    StaffTieLabelAddRequest: {
+      /** @description The character this sheet belongs to */
+      other: number;
+      direction: components['schemas']['StaffTieDirectionEnum'];
+      type: number;
+      awareness: components['schemas']['AwarenessEnum'];
+    };
+    /** @description A title reward or one of the face's own deeds, on one of the character's faces. */
+    StaffTitleGrantRequest: {
+      persona: number;
+      reward?: number | null;
+      legend_entry?: number | null;
+    };
+    /** @description Refuses a row that belongs to another character, as an unknown id. */
+    StaffTitleRevokeRequest: {
+      title: number;
     };
     StaffVacancyRequest: {
       vacancy: number;
@@ -55699,6 +56049,54 @@ export interface operations {
       };
     };
   };
+  character_sheets_staff_covenant_role_partial_update: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: {
+      content: {
+        'application/json': components['schemas']['PatchedStaffCovenantMembershipRequest'];
+      };
+    };
+    responses: {
+      /** @description No response body */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  character_sheets_staff_covenant_roles_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['StaffCovenantRoleAddRequest'];
+      };
+    };
+    responses: {
+      /** @description No response body */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
   character_sheets_staff_distinction_partial_update: {
     parameters: {
       query?: never;
@@ -55861,6 +56259,27 @@ export interface operations {
           [name: string]: unknown;
         };
         content?: never;
+      };
+    };
+  };
+  character_sheets_staff_group_options_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['StaffGroupOptions'];
+        };
       };
     };
   };
@@ -56029,6 +56448,78 @@ export interface operations {
       };
     };
   };
+  character_sheets_staff_mentor_bond_end_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['StaffMentorDissolveRequest'];
+      };
+    };
+    responses: {
+      /** @description No response body */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  character_sheets_staff_mentor_bonds_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['StaffMentorBondRequest'];
+      };
+    };
+    responses: {
+      /** @description No response body */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  character_sheets_staff_noble_title_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['StaffNobleTitleRequest'];
+      };
+    };
+    responses: {
+      /** @description No response body */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
   character_sheets_staff_options_retrieve: {
     parameters: {
       query?: never;
@@ -56062,6 +56553,78 @@ export interface operations {
     requestBody?: {
       content: {
         'application/json': components['schemas']['PatchedStaffPathRequest'];
+      };
+    };
+    responses: {
+      /** @description No response body */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  character_sheets_staff_persona_partial_update: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: {
+      content: {
+        'application/json': components['schemas']['PatchedStaffPersonaChangeRequest'];
+      };
+    };
+    responses: {
+      /** @description No response body */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  character_sheets_staff_persona_remove_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['StaffPersonaRemoveRequest'];
+      };
+    };
+    responses: {
+      /** @description No response body */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  character_sheets_staff_personas_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['StaffPersonaCreateRequest'];
       };
     };
     responses: {
@@ -56182,6 +56745,126 @@ export interface operations {
     requestBody?: {
       content: {
         'application/json': components['schemas']['PatchedStaffStatsRequest'];
+      };
+    };
+    responses: {
+      /** @description No response body */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  character_sheets_staff_tie_partial_update: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: {
+      content: {
+        'application/json': components['schemas']['PatchedStaffTieRequest'];
+      };
+    };
+    responses: {
+      /** @description No response body */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  character_sheets_staff_tie_label_partial_update: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: {
+      content: {
+        'application/json': components['schemas']['PatchedStaffTieLabelChangeRequest'];
+      };
+    };
+    responses: {
+      /** @description No response body */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  character_sheets_staff_tie_labels_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['StaffTieLabelAddRequest'];
+      };
+    };
+    responses: {
+      /** @description No response body */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  character_sheets_staff_title_remove_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['StaffTitleRevokeRequest'];
+      };
+    };
+    responses: {
+      /** @description No response body */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  character_sheets_staff_titles_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['StaffTitleGrantRequest'];
       };
     };
     responses: {
