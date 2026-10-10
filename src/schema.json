@@ -5902,6 +5902,75 @@ paths:
               schema:
                 $ref: '#/components/schemas/StatPointState'
           description: ''
+  /api/character-sheets/{id}/staff-beginnings/:
+    put:
+      operationId: character_sheets_staff_beginnings_update
+      description: Set where play began; its rituals, codex and languages follow.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+        required: true
+      tags:
+      - character-sheets
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StaffBeginningsRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/character-sheets/{id}/staff-distinction/:
+    patch:
+      operationId: character_sheets_staff_distinction_partial_update
+      description: Re-rank a held distinction (``rank``), or remove it (no ``rank``).
+        No XP.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+        required: true
+      tags:
+      - character-sheets
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedStaffDistinctionChangeRequest'
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/character-sheets/{id}/staff-distinctions/:
+    post:
+      operationId: character_sheets_staff_distinctions_create
+      description: 'Add a distinction (origin Staff): exclusions hold, no XP, no request.'
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+        required: true
+      tags:
+      - character-sheets
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StaffDistinctionAddRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          description: No response body
   /api/character-sheets/{id}/staff-edit/:
     patch:
       operationId: character_sheets_staff_edit_partial_update
@@ -5924,6 +5993,279 @@ paths:
           application/json:
             schema:
               $ref: '#/components/schemas/PatchedStaffEditRequest'
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/character-sheets/{id}/staff-enemy/:
+    put:
+      operationId: character_sheets_staff_enemy_update
+      description: 'Write the Actor''s Sheet enemy row: a new one, or the one ``id``
+        names.'
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+        required: true
+      tags:
+      - character-sheets
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StaffEnemyRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/character-sheets/{id}/staff-form/:
+    patch:
+      operationId: character_sheets_staff_form_partial_update
+      description: Set the TRUE form's options (creating the form) and the primary
+        face's descriptors.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+        required: true
+      tags:
+      - character-sheets
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedStaffFormRequest'
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/character-sheets/{id}/staff-goals/:
+    put:
+      operationId: character_sheets_staff_goals_update
+      description: Replace the goals; the point cap holds, the weekly revision limit
+        does not.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+        required: true
+      tags:
+      - character-sheets
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StaffGoalsRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/character-sheets/{id}/staff-introductions/:
+    post:
+      operationId: character_sheets_staff_introductions_create
+      description: Write one Introduction as the character's journal (#3621). No journal
+        XP.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+        required: true
+      tags:
+      - character-sheets
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StaffIntroductionRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/character-sheets/{id}/staff-marking-remove/:
+    patch:
+      operationId: character_sheets_staff_marking_remove_partial_update
+      description: Remove a marking; a per-feature distinction aimed at it goes with
+        it.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+        required: true
+      tags:
+      - character-sheets
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedStaffMarkingRemoveRequest'
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/character-sheets/{id}/staff-markings/:
+    post:
+      operationId: character_sheets_staff_markings_create
+      description: Add a marking (a distinctive feature) to the TRUE form.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+        required: true
+      tags:
+      - character-sheets
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StaffMarkingAddRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/character-sheets/{id}/staff-options/:
+    get:
+      operationId: character_sheets_staff_options_retrieve
+      description: 'What the row editors pick from: the catalogs and this species''
+        form options.'
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+        required: true
+      tags:
+      - character-sheets
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StaffOptions'
+          description: ''
+  /api/character-sheets/{id}/staff-path/:
+    patch:
+      operationId: character_sheets_staff_path_partial_update
+      description: |-
+        Give a pathless sheet its first path, and/or set the primary class level.
+
+        Changing an existing path is out of scope: crossing into a path grants its magic.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+        required: true
+      tags:
+      - character-sheets
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedStaffPathRequest'
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/character-sheets/{id}/staff-skills/:
+    patch:
+      operationId: character_sheets_staff_skills_partial_update
+      description: Set skills and specializations within the configured caps; no point
+        budget.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+        required: true
+      tags:
+      - character-sheets
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedStaffSkillsRequest'
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/character-sheets/{id}/staff-stats/:
+    patch:
+      operationId: character_sheets_staff_stats_partial_update
+      description: Set stats at display scale (1 to 5); missing rows are created.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+        required: true
+      tags:
+      - character-sheets
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedStaffStatsRequest'
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/character-sheets/{id}/staff-vitals/:
+    post:
+      operationId: character_sheets_staff_vitals_create
+      description: Create the vitals row and fill health, for a sheet that has none.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+        required: true
+      tags:
+      - character-sheets
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/character-sheets/{id}/staff-worship/:
+    put:
+      operationId: character_sheets_staff_worship_update
+      description: Set the public and secret worship; a secret being mints its Secret.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+        required: true
+      tags:
+      - character-sheets
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StaffWorshipRequest'
+        required: true
       security:
       - cookieAuth: []
       responses:
@@ -50328,6 +50670,18 @@ components:
           type: integer
       required:
       - project_id
+    DegreeEnum:
+      enum:
+      - annoyed
+      - thwarted
+      - ruined
+      - destroy
+      type: string
+      description: |-
+        * `annoyed` - They want you annoyed
+        * `thwarted` - They want you thwarted
+        * `ruined` - They want you ruined
+        * `destroy` - They will relentlessly try to destroy you
     DeliveryEnum:
       enum:
       - pose
@@ -51370,7 +51724,7 @@ components:
         body_region:
           $ref: '#/components/schemas/BodyRegionEnum'
         kind:
-          $ref: '#/components/schemas/DraftMarkingKindEnum'
+          $ref: '#/components/schemas/Kind363Enum'
         name:
           type: string
           maxLength: 100
@@ -51381,20 +51735,6 @@ components:
       - id
       - kind
       - name
-    DraftMarkingKindEnum:
-      enum:
-      - tattoo
-      - scar
-      - brand
-      - birthmark
-      - rune
-      type: string
-      description: |-
-        * `tattoo` - Tattoo
-        * `scar` - Scar
-        * `brand` - Brand
-        * `birthmark` - Birthmark
-        * `rune` - Rune
     DraftMarkingRequest:
       type: object
       description: CG-authored body markings (#2985) — materialized at finalization.
@@ -51402,7 +51742,7 @@ components:
         body_region:
           $ref: '#/components/schemas/BodyRegionEnum'
         kind:
-          $ref: '#/components/schemas/DraftMarkingKindEnum'
+          $ref: '#/components/schemas/Kind363Enum'
         name:
           type: string
           minLength: 1
@@ -56274,6 +56614,28 @@ components:
       - id
       - is_optional
       - name
+    GoalInputRequest:
+      type: object
+      description: |-
+        Serializer for a single goal input in the update request.
+
+        Uses PrimaryKeyRelatedField for domain lookup with built-in validation.
+      properties:
+        domain:
+          type: integer
+        points:
+          type: integer
+          minimum: 0
+        notes:
+          type: string
+          default: ''
+        horizon:
+          allOf:
+          - $ref: '#/components/schemas/HorizonEnum'
+          default: short_term
+      required:
+      - domain
+      - points
     GossipActionActionEnum:
       enum:
       - plant
@@ -56906,6 +57268,14 @@ components:
       required:
       - id
       - name
+    HorizonEnum:
+      enum:
+      - short_term
+      - long_term
+      type: string
+      description: |-
+        * `short_term` - Short term
+        * `long_term` - Long term
     HouseAspectDefinition:
       type: object
       description: A required catalog choice on a template, with its active options
@@ -59508,6 +59878,20 @@ components:
       - family
       - id
       - parent_names
+    Kind363Enum:
+      enum:
+      - tattoo
+      - scar
+      - brand
+      - birthmark
+      - rune
+      type: string
+      description: |-
+        * `tattoo` - Tattoo
+        * `scar` - Scar
+        * `brand` - Brand
+        * `birthmark` - Birthmark
+        * `rune` - Rune
     Kind989Enum:
       enum:
       - wall
@@ -71799,7 +72183,7 @@ components:
         body_region:
           $ref: '#/components/schemas/BodyRegionEnum'
         kind:
-          $ref: '#/components/schemas/DraftMarkingKindEnum'
+          $ref: '#/components/schemas/Kind363Enum'
         name:
           type: string
           minLength: 1
@@ -73249,6 +73633,16 @@ components:
         category:
           type: integer
           description: Allowlist is scoped per category.
+    PatchedStaffDistinctionChangeRequest:
+      type: object
+      description: Re-rank (``rank``) or remove (no rank) one held distinction of
+        this sheet.
+      properties:
+        character_distinction:
+          type: integer
+        rank:
+          type: integer
+          minimum: 1
     PatchedStaffEditRequest:
       type: object
       description: |-
@@ -73331,6 +73725,56 @@ components:
           nullable: true
         tarot_reversed:
           type: boolean
+    PatchedStaffFormRequest:
+      type: object
+      description: '``{"values": {"<form trait id>": <option id>}, "descriptors":
+        {"<trait id>": text}}``.'
+      properties:
+        values:
+          type: object
+          additionalProperties:
+            type: integer
+        descriptors:
+          type: object
+          additionalProperties:
+            type: string
+    PatchedStaffMarkingRemoveRequest:
+      type: object
+      properties:
+        marking:
+          type: integer
+    PatchedStaffPathRequest:
+      type: object
+      description: The first path (only when the sheet has none) and/or the primary
+        class level.
+      properties:
+        path:
+          type: integer
+          nullable: true
+        level:
+          type: integer
+          maximum: 30
+          minimum: 1
+    PatchedStaffSkillsRequest:
+      type: object
+      description: '``{"skills": {"<skill id>": n}, "specializations": {"<id>": n}}``.'
+      properties:
+        skills:
+          type: object
+          additionalProperties:
+            type: integer
+        specializations:
+          type: object
+          additionalProperties:
+            type: integer
+    PatchedStaffStatsRequest:
+      type: object
+      description: '``{"stats": {"<trait id>": <1 to 5>}}``.'
+      properties:
+        stats:
+          type: object
+          additionalProperties:
+            type: integer
     PatchedStaffingProfileLineRequest:
       type: object
       properties:
@@ -76544,6 +76988,22 @@ components:
       - running_total
       - source_label
       - stage
+    PowerTierEnum:
+      enum:
+      - quiescent
+      - prospect
+      - potential
+      - puissant
+      - 'true'
+      - grand
+      type: string
+      description: |-
+        * `quiescent` - Quiescent
+        * `prospect` - Prospect
+        * `potential` - Potential
+        * `puissant` - Puissant
+        * `true` - True
+        * `grand` - Grand
     Prayer:
       type: object
       description: A character's prayer as its owner (or staff) reads it back (#3779).
@@ -82054,6 +82514,13 @@ components:
       - created_at
       - id
       - title
+    StaffBeginningsRequest:
+      type: object
+      properties:
+        beginnings:
+          type: integer
+      required:
+      - beginnings
     StaffBeingList:
       type: object
       description: A tile on the god list.
@@ -82250,6 +82717,268 @@ components:
         * `public` - Public
         * `obscure` - Obscure
         * `secret` - Secret
+    StaffChoice:
+      type: object
+      properties:
+        value:
+          type: string
+        label:
+          type: string
+      required:
+      - label
+      - value
+    StaffDistinctionAddRequest:
+      type: object
+      properties:
+        distinction:
+          type: integer
+        rank:
+          type: integer
+          minimum: 1
+          default: 1
+        feature_trait:
+          type: integer
+          nullable: true
+        feature_marking:
+          type: integer
+          nullable: true
+      required:
+      - distinction
+    StaffEnemyKindEnum:
+      enum:
+      - person
+      - group
+      type: string
+      description: |-
+        * `person` - A person
+        * `group` - A group
+    StaffEnemyRequest:
+      type: object
+      description: The Actor's Sheet enemy (#3621); ``id`` names a held one to change.
+      properties:
+        id:
+          type: integer
+          nullable: true
+        kind:
+          $ref: '#/components/schemas/StaffEnemyKindEnum'
+        organization:
+          type: integer
+          nullable: true
+          description: The group, or the group a person belongs to. Null until staff
+            place a free-written enemy.
+        figure_name:
+          type: string
+          description: The person's name (a person), or the free-written group's name
+            until placed.
+          maxLength: 200
+        power_tier:
+          description: |-
+            A person's power.
+
+            * `quiescent` - Quiescent
+            * `prospect` - Prospect
+            * `potential` - Potential
+            * `puissant` - Puissant
+            * `true` - True
+            * `grand` - Grand
+          oneOf:
+          - $ref: '#/components/schemas/PowerTierEnum'
+          - $ref: '#/components/schemas/BlankEnum'
+        reach:
+          type: string
+          description: A group's reach (societies.EnemyReach), copied at pricing time.
+          maxLength: 12
+        degree:
+          $ref: '#/components/schemas/DegreeEnum'
+        price:
+          type: integer
+          maximum: 2147483647
+          minimum: 0
+          description: CG points awarded for carrying this enemy.
+        why:
+          type: string
+          description: Why they want it; blank when it lives in a Secret.
+        public_line:
+          type: string
+          description: How the character's sheet says it to everyone else.
+        status:
+          $ref: '#/components/schemas/StaffEnemyStatusEnum'
+        reason:
+          type: integer
+          nullable: true
+          description: Why they want it, from the authored list (#3709); ``why`` is
+            the own words.
+      required:
+      - degree
+      - kind
+    StaffEnemyStatusEnum:
+      enum:
+      - placed
+      - pending
+      type: string
+      description: |-
+        * `placed` - Placed
+        * `pending` - Pending staff placement
+    StaffFormTraitOptions:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        options:
+          type: array
+          items:
+            $ref: '#/components/schemas/StaffOption'
+      required:
+      - id
+      - name
+      - options
+    StaffGoalsRequest:
+      type: object
+      properties:
+        goals:
+          type: array
+          items:
+            $ref: '#/components/schemas/GoalInputRequest'
+      required:
+      - goals
+    StaffIntroductionKindEnum:
+      enum:
+      - first_journal
+      - application
+      - whispers
+      type: string
+      description: |-
+        * `first_journal` - First Journal
+        * `application` - Application to Shroudwatch Academy
+        * `whispers` - The Whispers
+    StaffIntroductionRequest:
+      type: object
+      properties:
+        kind:
+          $ref: '#/components/schemas/StaffIntroductionKindEnum'
+        title:
+          type: string
+          minLength: 1
+          maxLength: 200
+        body:
+          type: string
+          minLength: 1
+      required:
+      - body
+      - kind
+      - title
+    StaffMarkingAddRequest:
+      type: object
+      properties:
+        body_region:
+          $ref: '#/components/schemas/BodyRegionEnum'
+        kind:
+          $ref: '#/components/schemas/Kind363Enum'
+        name:
+          type: string
+          minLength: 1
+          maxLength: 100
+        description:
+          type: string
+          default: ''
+      required:
+      - body_region
+      - kind
+      - name
+    StaffOption:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+      required:
+      - id
+      - name
+    StaffOptions:
+      type: object
+      description: What staff edit mode's row editors pick from, for one sheet (#4221).
+      properties:
+        stats:
+          type: array
+          items:
+            $ref: '#/components/schemas/StaffOption'
+        skills:
+          type: array
+          items:
+            $ref: '#/components/schemas/StaffOption'
+        specializations:
+          type: array
+          items:
+            $ref: '#/components/schemas/StaffOption'
+        distinctions:
+          type: array
+          items:
+            $ref: '#/components/schemas/StaffOption'
+        form_traits:
+          type: array
+          items:
+            $ref: '#/components/schemas/StaffFormTraitOptions'
+        beginnings:
+          type: array
+          items:
+            $ref: '#/components/schemas/StaffOption'
+        paths:
+          type: array
+          items:
+            $ref: '#/components/schemas/StaffOption'
+        beings:
+          type: array
+          items:
+            $ref: '#/components/schemas/StaffOption'
+        marking_regions:
+          type: array
+          items:
+            $ref: '#/components/schemas/StaffChoice'
+        marking_kinds:
+          type: array
+          items:
+            $ref: '#/components/schemas/StaffChoice'
+        enemy_kinds:
+          type: array
+          items:
+            $ref: '#/components/schemas/StaffChoice'
+        enemy_degrees:
+          type: array
+          items:
+            $ref: '#/components/schemas/StaffChoice'
+        enemy_power_tiers:
+          type: array
+          items:
+            $ref: '#/components/schemas/StaffChoice'
+      required:
+      - beginnings
+      - beings
+      - distinctions
+      - enemy_degrees
+      - enemy_kinds
+      - enemy_power_tiers
+      - form_traits
+      - marking_kinds
+      - marking_regions
+      - paths
+      - skills
+      - specializations
+      - stats
+    StaffWorshipRequest:
+      type: object
+      properties:
+        public_being:
+          type: integer
+          nullable: true
+        secret_being:
+          type: integer
+          nullable: true
+      required:
+      - public_being
+      - secret_being
     StaffingProfile:
       type: object
       description: 'Staff authoring: a building kind''s baseline crew (#2827 phase

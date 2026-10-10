@@ -299,8 +299,69 @@ STAFF_PRONOUNS_FIELD = "pronouns"
 STAFF_TAROT_REVERSED_FIELD = "tarot_reversed"
 
 
-@transaction.atomic
+def _apply_staff_change(  # noqa: PLR0913 - one field's write and the two save lists
+    sheet: CharacterSheet,
+    profile: Profile,
+    key: str,
+    value: Any,
+    edited_by: Any,
+    sheet_fields: list[str],
+    profile_fields: list[str],
+) -> None:
+    """One field of a staff edit: versioned prose, the rename, a sheet or profile column."""
+    if key in ProfileTextField.values:
+        update_profile_text(profile, key, value, edited_by=edited_by)
+    elif key == STAFF_NAME_FIELD:
+        rename_character(sheet, value)
+    elif key in STAFF_IDENTITY_SCALARS or key in STAFF_SHEET_CHOICES:
+        setattr(sheet, key, value)
+        sheet_fields.append(key)
+        if key == STAFF_PRONOUNS_FIELD and value is not None:
+            sheet.pronoun_subject = value.subject
+            sheet.pronoun_object = value.object
+            sheet.pronoun_possessive = value.possessive
+            sheet_fields.extend(["pronoun_subject", "pronoun_object", "pronoun_possessive"])
+    elif key in STAFF_PROFILE_CHOICES or key == STAFF_TAROT_REVERSED_FIELD:
+        setattr(profile, key, value)
+        profile_fields.append(key)
+    else:
+        msg = f"{key!r} is not a field staff edit in place."
+        raise StaffEditError(msg)
+
+
+def _grant_species_consequences(sheet: CharacterSheet) -> None:
+    """A species' gifts, languages and codex; a refusal is a staff-facing message (#4221)."""
+    from world.character_creation.sheet_writers import species_consequences  # noqa: PLC0415
+    from world.distinctions.exceptions import DistinctionExclusionError  # noqa: PLC0415
+    from world.magic.exceptions import MagicError  # noqa: PLC0415
+
+    try:
+        species_consequences(sheet)
+    except (MagicError, DistinctionExclusionError) as exc:
+        raise StaffEditError(str(exc.user_message)) from exc
+
+
 def staff_edit_sheet(sheet: CharacterSheet, changes: dict[str, Any], *, edited_by: Any) -> None:
+    """Apply a staff edit atomically; a refused edit leaves no phantom values in the cache.
+
+    The sheet and profile are identity-mapped (ADR-0008): a rollback restores their rows
+    but not the cached instances, which would show, and could later save, the refused
+    values. On any failure both are evicted from the cache so the next read is the row.
+    """
+    profile = sheet.true_profile
+    applied = False
+    try:
+        with transaction.atomic():
+            _staff_edit_sheet(sheet, changes, edited_by=edited_by)
+        applied = True
+    finally:
+        if not applied:
+            sheet.flush_from_cache(force=True)
+            if profile is not None:
+                profile.flush_from_cache(force=True)
+
+
+def _staff_edit_sheet(sheet: CharacterSheet, changes: dict[str, Any], *, edited_by: Any) -> None:
     """Apply a staff edit to a sheet's prose and identity fields (#3988).
 
     ``changes`` is the validated subset the staff-edit serializer resolved: prose
@@ -310,29 +371,24 @@ def staff_edit_sheet(sheet: CharacterSheet, changes: dict[str, Any], *, edited_b
     pronoun set copies its three forms onto the sheet, since the sheet's own
     pronoun strings are what every reader prints.
     """
+    from world.character_creation.sheet_writers import (  # noqa: PLC0415
+        set_pronouns_from_gender,
+    )
+
     profile = ensure_true_profile(sheet)
     sheet_fields: list[str] = []
     profile_fields: list[str] = []
+    # A new gender sets the pronoun forms CG would set for it, unless the same edit
+    # chooses a pronoun set (#4221).
+    if changes.get("gender") is not None and STAFF_PRONOUNS_FIELD not in changes:
+        set_pronouns_from_gender(sheet, changes["gender"])
+        sheet_fields.extend(["pronoun_subject", "pronoun_object", "pronoun_possessive"])
     for key, value in changes.items():
-        if key in ProfileTextField.values:
-            update_profile_text(profile, key, value, edited_by=edited_by)
-        elif key == STAFF_NAME_FIELD:
-            rename_character(sheet, value)
-        elif key in STAFF_IDENTITY_SCALARS or key in STAFF_SHEET_CHOICES:
-            setattr(sheet, key, value)
-            sheet_fields.append(key)
-            if key == STAFF_PRONOUNS_FIELD and value is not None:
-                sheet.pronoun_subject = value.subject
-                sheet.pronoun_object = value.object
-                sheet.pronoun_possessive = value.possessive
-                sheet_fields.extend(["pronoun_subject", "pronoun_object", "pronoun_possessive"])
-        elif key in STAFF_PROFILE_CHOICES or key == STAFF_TAROT_REVERSED_FIELD:
-            setattr(profile, key, value)
-            profile_fields.append(key)
-        else:
-            msg = f"{key!r} is not a field staff edit in place."
-            raise StaffEditError(msg)
+        _apply_staff_change(sheet, profile, key, value, edited_by, sheet_fields, profile_fields)
     if sheet_fields:
-        sheet.save(update_fields=sheet_fields)
+        sheet.save(update_fields=list(dict.fromkeys(sheet_fields)))
     if profile_fields:
         profile.save(update_fields=profile_fields)
+    # A species carries its gifts, languages and codex, as it does in CG (#4221).
+    if changes.get("species") is not None:
+        _grant_species_consequences(sheet)

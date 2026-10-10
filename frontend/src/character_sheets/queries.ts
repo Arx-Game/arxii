@@ -9,6 +9,9 @@ import { fetchProfileTextVersions } from '@/sheet_update_requests/api';
 import {
   STAFF_CHOICE_SOURCES,
   fetchCharacterSheet,
+  fetchStaffOptions,
+  runStaffRowAction,
+  type StaffRowAction,
   patchStaffEdit,
   restoreProfileTextVersion,
   type CharacterSheetPayload,
@@ -77,5 +80,27 @@ export function useStaffChoiceOptions(field: StaffChoiceField, enabled: boolean)
     queryFn: STAFF_CHOICE_SOURCES[field],
     enabled,
     staleTime: 5 * 60_000,
+  });
+}
+
+/** What the staff row editors pick from (#4221), fetched while edit mode is on. */
+export function useStaffOptions(sheetId: number, enabled: boolean) {
+  return useQuery({
+    queryKey: ['character-sheets', sheetId, 'staff-options'],
+    queryFn: () => fetchStaffOptions(sheetId),
+    enabled: enabled && !!sheetId,
+    staleTime: 5 * 60_000,
+  });
+}
+
+/** One staff row action (#4221); the answer replaces the sheet in the cache. */
+export function useStaffRowMutation(sheetId: number) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (request: StaffRowAction) => runStaffRowAction(sheetId, request),
+    onSuccess: (sheet: CharacterSheetPayload) => {
+      queryClient.setQueryData(characterSheetKey(sheetId), sheet);
+    },
+    onError: (err) => toast.error(err instanceof Error ? err.message : 'The change was not saved.'),
   });
 }

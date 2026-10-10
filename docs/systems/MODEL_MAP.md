@@ -3755,7 +3755,7 @@
 - `compute_sheet_update_xp_cost(request_type: 'str', distinction: 'Distinction', rank: 'int') -> 'int' - Compute the XP cost for a sheet-update request.`
 - `create_sheet_update_request(character_sheet: 'CharacterSheet', request_type: 'str', *, justification: 'str', target_distinction: 'Distinction | None' = None, target_character_distinction: 'CharacterDistinction | None' = None, submitted_by: 'object | None' = None, origin: 'str' = DistinctionOrigin.UNLOCK_PURCHASE) -> 'SheetUpdateRequest' - Create a PENDING SheetUpdateRequest.`
 - `deny_sheet_update_request(request: 'SheetUpdateRequest', gm_account: 'object') -> 'None' - Deny a PENDING SheetUpdateRequest. No XP debit, no change.`
-- `grant_distinction(character: 'CharacterSheet', distinction: 'Distinction', *, origin: 'str', rank: 'int | None' = None, source_description: 'str' = '') -> 'CharacterDistinction' - Grant a Distinction, or rank one up, through the single acquisition seam (#2037).`
+- `grant_distinction(character: 'CharacterSheet', distinction: 'Distinction', *, origin: 'str', rank: 'int | None' = None, source_description: 'str' = '', feature_trait: 'FormTrait | None' = None, feature_marking: 'FormMarking | None' = None) -> 'CharacterDistinction' - Grant a Distinction, or rank one up, through the single acquisition seam (#2037).`
 - `mint_distinction_secret(character_distinction: 'CharacterDistinction', *, level: 'int | None' = None, provenance: 'str' = SecretProvenance.GM_AUTHORED, author_persona: 'Persona | None' = None, content: 'str' = '') -> 'Secret' - Relocate a distinction into a Secret, returning it (#1334).`
 - `remove_distinction(character_distinction: 'CharacterDistinction', *, sheet_update_request: 'SheetUpdateRequest') -> 'None' - Remove a CharacterDistinction, reconciling all dependent systems.`
 
@@ -4437,7 +4437,7 @@
 - `get_goal_bonuses_breakdown(character: 'CharacterSheet') -> dict[str, world.goals.types.GoalBonusBreakdown] - Get breakdown of all goal bonuses for a character.`
 - `get_total_goal_points(character: 'CharacterSheet') -> int - Get the total goal points available for a character to distribute.`
 - `log_goal_progress(*, character: 'CharacterSheet', domain: 'ModifierTarget | None', title: str, content: str, is_public: bool = False) -> 'GoalJournal' - Create a goal-progress journal entry and grant weekly-capped XP.`
-- `set_character_goals(*, character: 'CharacterSheet', goals: list['GoalInputData']) -> list[world.goals.models.CharacterGoal] - Replace a character's goal allocations, enforcing the weekly revision limit.`
+- `set_character_goals(*, character: 'CharacterSheet', goals: list['GoalInputData'], bypass_revision_gate: bool = False) -> list[world.goals.models.CharacterGoal] - Replace a character's goal allocations, enforcing the weekly revision limit.`
 
 
 ## world.instances

@@ -3996,6 +3996,57 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/character-sheets/{id}/staff-beginnings/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    /** @description Set where play began; its rituals, codex and languages follow. */
+    put: operations['character_sheets_staff_beginnings_update'];
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/character-sheets/{id}/staff-distinction/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    /** @description Re-rank a held distinction (``rank``), or remove it (no ``rank``). No XP. */
+    patch: operations['character_sheets_staff_distinction_partial_update'];
+    trace?: never;
+  };
+  '/api/character-sheets/{id}/staff-distinctions/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** @description Add a distinction (origin Staff): exclusions hold, no XP, no request. */
+    post: operations['character_sheets_staff_distinctions_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/character-sheets/{id}/staff-edit/': {
     parameters: {
       query?: never;
@@ -4017,6 +4068,214 @@ export interface paths {
      *     sheet payload.
      */
     patch: operations['character_sheets_staff_edit_partial_update'];
+    trace?: never;
+  };
+  '/api/character-sheets/{id}/staff-enemy/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    /** @description Write the Actor's Sheet enemy row: a new one, or the one ``id`` names. */
+    put: operations['character_sheets_staff_enemy_update'];
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/character-sheets/{id}/staff-form/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    /** @description Set the TRUE form's options (creating the form) and the primary face's descriptors. */
+    patch: operations['character_sheets_staff_form_partial_update'];
+    trace?: never;
+  };
+  '/api/character-sheets/{id}/staff-goals/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    /** @description Replace the goals; the point cap holds, the weekly revision limit does not. */
+    put: operations['character_sheets_staff_goals_update'];
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/character-sheets/{id}/staff-introductions/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** @description Write one Introduction as the character's journal (#3621). No journal XP. */
+    post: operations['character_sheets_staff_introductions_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/character-sheets/{id}/staff-marking-remove/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    /** @description Remove a marking; a per-feature distinction aimed at it goes with it. */
+    patch: operations['character_sheets_staff_marking_remove_partial_update'];
+    trace?: never;
+  };
+  '/api/character-sheets/{id}/staff-markings/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** @description Add a marking (a distinctive feature) to the TRUE form. */
+    post: operations['character_sheets_staff_markings_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/character-sheets/{id}/staff-options/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description What the row editors pick from: the catalogs and this species' form options. */
+    get: operations['character_sheets_staff_options_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/character-sheets/{id}/staff-path/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    /**
+     * @description Give a pathless sheet its first path, and/or set the primary class level.
+     *
+     *     Changing an existing path is out of scope: crossing into a path grants its magic.
+     */
+    patch: operations['character_sheets_staff_path_partial_update'];
+    trace?: never;
+  };
+  '/api/character-sheets/{id}/staff-skills/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    /** @description Set skills and specializations within the configured caps; no point budget. */
+    patch: operations['character_sheets_staff_skills_partial_update'];
+    trace?: never;
+  };
+  '/api/character-sheets/{id}/staff-stats/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    /** @description Set stats at display scale (1 to 5); missing rows are created. */
+    patch: operations['character_sheets_staff_stats_partial_update'];
+    trace?: never;
+  };
+  '/api/character-sheets/{id}/staff-vitals/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** @description Create the vitals row and fill health, for a sheet that has none. */
+    post: operations['character_sheets_staff_vitals_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/character-sheets/{id}/staff-worship/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    /** @description Set the public and secret worship; a secret being mints its Secret. */
+    put: operations['character_sheets_staff_worship_update'];
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
     trace?: never;
   };
   '/api/character-sheets/{id}/stat-points/': {
@@ -29587,6 +29846,14 @@ export interface components {
       project_id: number;
     };
     /**
+     * @description * `annoyed` - They want you annoyed
+     *     * `thwarted` - They want you thwarted
+     *     * `ruined` - They want you ruined
+     *     * `destroy` - They will relentlessly try to destroy you
+     * @enum {string}
+     */
+    DegreeEnum: 'annoyed' | 'thwarted' | 'ruined' | 'destroy';
+    /**
      * @description * `pose` - Pose (whole room)
      *     * `whisper` - Whisper (target only)
      *     * `table_talk` - Table talk (your place)
@@ -30042,23 +30309,14 @@ export interface components {
     DraftMarking: {
       readonly id: number;
       body_region: components['schemas']['BodyRegionEnum'];
-      kind: components['schemas']['DraftMarkingKindEnum'];
+      kind: components['schemas']['Kind363Enum'];
       name: string;
       description?: string;
     };
-    /**
-     * @description * `tattoo` - Tattoo
-     *     * `scar` - Scar
-     *     * `brand` - Brand
-     *     * `birthmark` - Birthmark
-     *     * `rune` - Rune
-     * @enum {string}
-     */
-    DraftMarkingKindEnum: 'tattoo' | 'scar' | 'brand' | 'birthmark' | 'rune';
     /** @description CG-authored body markings (#2985) — materialized at finalization. */
     DraftMarkingRequest: {
       body_region: components['schemas']['BodyRegionEnum'];
-      kind: components['schemas']['DraftMarkingKindEnum'];
+      kind: components['schemas']['Kind363Enum'];
       name: string;
       description?: string;
     };
@@ -32407,6 +32665,19 @@ export interface components {
       readonly is_optional: boolean;
     };
     /**
+     * @description Serializer for a single goal input in the update request.
+     *
+     *     Uses PrimaryKeyRelatedField for domain lookup with built-in validation.
+     */
+    GoalInputRequest: {
+      domain: number;
+      points: number;
+      /** @default  */
+      notes: string;
+      /** @default short_term */
+      horizon: components['schemas']['HorizonEnum'];
+    };
+    /**
      * @description * `plant` - Plant
      *     * `seek` - Seek
      *     * `suppress` - Suppress
@@ -32685,6 +32956,12 @@ export interface components {
       readonly id: number;
       name: string;
     };
+    /**
+     * @description * `short_term` - Short term
+     *     * `long_term` - Long term
+     * @enum {string}
+     */
+    HorizonEnum: 'short_term' | 'long_term';
     /** @description A required catalog choice on a template, with its active options (#2079). */
     HouseAspectDefinition: {
       readonly id: number;
@@ -33948,6 +34225,15 @@ export interface components {
       readonly allowed_genders: string[];
       readonly parent_names: string[];
     };
+    /**
+     * @description * `tattoo` - Tattoo
+     *     * `scar` - Scar
+     *     * `brand` - Brand
+     *     * `birthmark` - Birthmark
+     *     * `rune` - Rune
+     * @enum {string}
+     */
+    Kind363Enum: 'tattoo' | 'scar' | 'brand' | 'birthmark' | 'rune';
     /**
      * @description * `wall` - Wall
      *     * `gate` - Gate
@@ -40947,7 +41233,7 @@ export interface components {
     /** @description CG-authored body markings (#2985) — materialized at finalization. */
     PatchedDraftMarkingRequest: {
       body_region?: components['schemas']['BodyRegionEnum'];
-      kind?: components['schemas']['DraftMarkingKindEnum'];
+      kind?: components['schemas']['Kind363Enum'];
       name?: string;
       description?: string;
     };
@@ -41825,6 +42111,11 @@ export interface components {
       /** @description Allowlist is scoped per category. */
       category?: number;
     };
+    /** @description Re-rank (``rank``) or remove (no rank) one held distinction of this sheet. */
+    PatchedStaffDistinctionChangeRequest: {
+      character_distinction?: number;
+      rank?: number;
+    };
     /**
      * @description Input for ``PATCH /api/character-sheets/{id}/staff-edit/`` (#3988).
      *
@@ -41859,6 +42150,38 @@ export interface components {
       family?: number | null;
       tarot_card?: number | null;
       tarot_reversed?: boolean;
+    };
+    /** @description ``{"values": {"<form trait id>": <option id>}, "descriptors": {"<trait id>": text}}``. */
+    PatchedStaffFormRequest: {
+      values?: {
+        [key: string]: number;
+      };
+      descriptors?: {
+        [key: string]: string;
+      };
+    };
+    PatchedStaffMarkingRemoveRequest: {
+      marking?: number;
+    };
+    /** @description The first path (only when the sheet has none) and/or the primary class level. */
+    PatchedStaffPathRequest: {
+      path?: number | null;
+      level?: number;
+    };
+    /** @description ``{"skills": {"<skill id>": n}, "specializations": {"<id>": n}}``. */
+    PatchedStaffSkillsRequest: {
+      skills?: {
+        [key: string]: number;
+      };
+      specializations?: {
+        [key: string]: number;
+      };
+    };
+    /** @description ``{"stats": {"<trait id>": <1 to 5>}}``. */
+    PatchedStaffStatsRequest: {
+      stats?: {
+        [key: string]: number;
+      };
     };
     PatchedStaffingProfileLineRequest: {
       profile?: number;
@@ -43551,6 +43874,16 @@ export interface components {
       amount: number;
       running_total: number;
     };
+    /**
+     * @description * `quiescent` - Quiescent
+     *     * `prospect` - Prospect
+     *     * `potential` - Potential
+     *     * `puissant` - Puissant
+     *     * `true` - True
+     *     * `grand` - Grand
+     * @enum {string}
+     */
+    PowerTierEnum: 'quiescent' | 'prospect' | 'potential' | 'puissant' | 'true' | 'grand';
     /** @description A character's prayer as its owner (or staff) reads it back (#3779). */
     Prayer: {
       readonly id: number;
@@ -46146,6 +46479,9 @@ export interface components {
       /** Format: date-time */
       readonly created_at: string;
     };
+    StaffBeginningsRequest: {
+      beginnings: number;
+    };
     /** @description A tile on the god list. */
     StaffBeingList: {
       readonly id: number;
@@ -46219,6 +46555,112 @@ export interface components {
      * @enum {string}
      */
     StaffBeingPageVisibilityEnum: 'public' | 'obscure' | 'secret';
+    StaffChoice: {
+      value: string;
+      label: string;
+    };
+    StaffDistinctionAddRequest: {
+      distinction: number;
+      /** @default 1 */
+      rank: number;
+      feature_trait?: number | null;
+      feature_marking?: number | null;
+    };
+    /**
+     * @description * `person` - A person
+     *     * `group` - A group
+     * @enum {string}
+     */
+    StaffEnemyKindEnum: 'person' | 'group';
+    /** @description The Actor's Sheet enemy (#3621); ``id`` names a held one to change. */
+    StaffEnemyRequest: {
+      id?: number | null;
+      kind: components['schemas']['StaffEnemyKindEnum'];
+      /** @description The group, or the group a person belongs to. Null until staff place a free-written enemy. */
+      organization?: number | null;
+      /** @description The person's name (a person), or the free-written group's name until placed. */
+      figure_name?: string;
+      /**
+       * @description A person's power.
+       *
+       *     * `quiescent` - Quiescent
+       *     * `prospect` - Prospect
+       *     * `potential` - Potential
+       *     * `puissant` - Puissant
+       *     * `true` - True
+       *     * `grand` - Grand
+       */
+      power_tier?: components['schemas']['PowerTierEnum'] | components['schemas']['BlankEnum'];
+      /** @description A group's reach (societies.EnemyReach), copied at pricing time. */
+      reach?: string;
+      degree: components['schemas']['DegreeEnum'];
+      /** @description CG points awarded for carrying this enemy. */
+      price?: number;
+      /** @description Why they want it; blank when it lives in a Secret. */
+      why?: string;
+      /** @description How the character's sheet says it to everyone else. */
+      public_line?: string;
+      status?: components['schemas']['StaffEnemyStatusEnum'];
+      /** @description Why they want it, from the authored list (#3709); ``why`` is the own words. */
+      reason?: number | null;
+    };
+    /**
+     * @description * `placed` - Placed
+     *     * `pending` - Pending staff placement
+     * @enum {string}
+     */
+    StaffEnemyStatusEnum: 'placed' | 'pending';
+    StaffFormTraitOptions: {
+      id: number;
+      name: string;
+      options: components['schemas']['StaffOption'][];
+    };
+    StaffGoalsRequest: {
+      goals: components['schemas']['GoalInputRequest'][];
+    };
+    /**
+     * @description * `first_journal` - First Journal
+     *     * `application` - Application to Shroudwatch Academy
+     *     * `whispers` - The Whispers
+     * @enum {string}
+     */
+    StaffIntroductionKindEnum: 'first_journal' | 'application' | 'whispers';
+    StaffIntroductionRequest: {
+      kind: components['schemas']['StaffIntroductionKindEnum'];
+      title: string;
+      body: string;
+    };
+    StaffMarkingAddRequest: {
+      body_region: components['schemas']['BodyRegionEnum'];
+      kind: components['schemas']['Kind363Enum'];
+      name: string;
+      /** @default  */
+      description: string;
+    };
+    StaffOption: {
+      id: number;
+      name: string;
+    };
+    /** @description What staff edit mode's row editors pick from, for one sheet (#4221). */
+    StaffOptions: {
+      stats: components['schemas']['StaffOption'][];
+      skills: components['schemas']['StaffOption'][];
+      specializations: components['schemas']['StaffOption'][];
+      distinctions: components['schemas']['StaffOption'][];
+      form_traits: components['schemas']['StaffFormTraitOptions'][];
+      beginnings: components['schemas']['StaffOption'][];
+      paths: components['schemas']['StaffOption'][];
+      beings: components['schemas']['StaffOption'][];
+      marking_regions: components['schemas']['StaffChoice'][];
+      marking_kinds: components['schemas']['StaffChoice'][];
+      enemy_kinds: components['schemas']['StaffChoice'][];
+      enemy_degrees: components['schemas']['StaffChoice'][];
+      enemy_power_tiers: components['schemas']['StaffChoice'][];
+    };
+    StaffWorshipRequest: {
+      public_being: number | null;
+      secret_being: number | null;
+    };
     /** @description Staff authoring: a building kind's baseline crew (#2827 phase 1). */
     StaffingProfile: {
       readonly id: number;
@@ -55008,6 +55450,78 @@ export interface operations {
       };
     };
   };
+  character_sheets_staff_beginnings_update: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['StaffBeginningsRequest'];
+      };
+    };
+    responses: {
+      /** @description No response body */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  character_sheets_staff_distinction_partial_update: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: {
+      content: {
+        'application/json': components['schemas']['PatchedStaffDistinctionChangeRequest'];
+      };
+    };
+    responses: {
+      /** @description No response body */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  character_sheets_staff_distinctions_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['StaffDistinctionAddRequest'];
+      };
+    };
+    responses: {
+      /** @description No response body */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
   character_sheets_staff_edit_partial_update: {
     parameters: {
       query?: never;
@@ -55020,6 +55534,287 @@ export interface operations {
     requestBody?: {
       content: {
         'application/json': components['schemas']['PatchedStaffEditRequest'];
+      };
+    };
+    responses: {
+      /** @description No response body */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  character_sheets_staff_enemy_update: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['StaffEnemyRequest'];
+      };
+    };
+    responses: {
+      /** @description No response body */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  character_sheets_staff_form_partial_update: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: {
+      content: {
+        'application/json': components['schemas']['PatchedStaffFormRequest'];
+      };
+    };
+    responses: {
+      /** @description No response body */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  character_sheets_staff_goals_update: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['StaffGoalsRequest'];
+      };
+    };
+    responses: {
+      /** @description No response body */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  character_sheets_staff_introductions_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['StaffIntroductionRequest'];
+      };
+    };
+    responses: {
+      /** @description No response body */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  character_sheets_staff_marking_remove_partial_update: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: {
+      content: {
+        'application/json': components['schemas']['PatchedStaffMarkingRemoveRequest'];
+      };
+    };
+    responses: {
+      /** @description No response body */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  character_sheets_staff_markings_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['StaffMarkingAddRequest'];
+      };
+    };
+    responses: {
+      /** @description No response body */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  character_sheets_staff_options_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['StaffOptions'];
+        };
+      };
+    };
+  };
+  character_sheets_staff_path_partial_update: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: {
+      content: {
+        'application/json': components['schemas']['PatchedStaffPathRequest'];
+      };
+    };
+    responses: {
+      /** @description No response body */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  character_sheets_staff_skills_partial_update: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: {
+      content: {
+        'application/json': components['schemas']['PatchedStaffSkillsRequest'];
+      };
+    };
+    responses: {
+      /** @description No response body */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  character_sheets_staff_stats_partial_update: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: {
+      content: {
+        'application/json': components['schemas']['PatchedStaffStatsRequest'];
+      };
+    };
+    responses: {
+      /** @description No response body */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  character_sheets_staff_vitals_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description No response body */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  character_sheets_staff_worship_update: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['StaffWorshipRequest'];
       };
     };
     responses: {

@@ -72,6 +72,9 @@ from world.character_sheets.types import (
     SkillRef,
     SpecializationEntry,
     StaffEditFields,
+    StaffEditRows,
+    StaffHeldDistinction,
+    StaffMarking,
     StandingSection,
     StorySection,
     TechniqueEntry,
@@ -2301,6 +2304,76 @@ def _build_staff_edit(sheet: CharacterSheet) -> StaffEditFields:
         family=profile.family_id if profile else None,
         tarot_card=profile.tarot_card_id if profile else None,
         tarot_reversed=bool(profile and profile.tarot_reversed),
+        rows=_build_staff_rows(sheet),
+    )
+
+
+def _build_staff_rows(sheet: CharacterSheet) -> StaffEditRows:
+    """The CG rows the sheet holds, by id (#4221). Staff only, so a few plain queries."""
+    from world.character_creation.sheet_writers import creation_beginnings  # noqa: PLC0415
+    from world.classes.models import CharacterClassLevel  # noqa: PLC0415
+    from world.forms.models import CharacterFormValue, FormMarking, FormType  # noqa: PLC0415
+    from world.progression.models import CharacterPathHistory  # noqa: PLC0415
+    from world.traits.constants import STAT_DISPLAY_DIVISOR  # noqa: PLC0415
+    from world.traits.models import CharacterTraitValue, TraitType  # noqa: PLC0415
+    from world.vitals.models import CharacterVitals  # noqa: PLC0415
+    from world.worship.models import WorshipDeclaration  # noqa: PLC0415
+
+    stats = {
+        trait_id: value // STAT_DISPLAY_DIVISOR
+        for trait_id, value in CharacterTraitValue.objects.filter(
+            character=sheet, trait__trait_type=TraitType.STAT
+        ).values_list("trait_id", "value")
+    }
+    held = CharacterDistinction.objects.filter(character=sheet).select_related(
+        "distinction", "feature_trait", "feature_marking"
+    )
+    true_values = CharacterFormValue.objects.filter(
+        form__character=sheet, form__form_type=FormType.TRUE
+    ).values_list("trait_id", "option_id")
+    markings = FormMarking.objects.filter(
+        form__character=sheet, form__form_type=FormType.TRUE
+    ).order_by("pk")
+    path_row = CharacterPathHistory.objects.filter(character=sheet).order_by("-pk").first()
+    level_row = CharacterClassLevel.objects.filter(character=sheet, is_primary=True).first()
+    worship = WorshipDeclaration.objects.filter(character_sheet=sheet).first()
+    beginnings = creation_beginnings(sheet)
+    return StaffEditRows(
+        stats=stats,
+        skills=dict(
+            CharacterSkillValue.objects.filter(character=sheet).values_list("skill_id", "value")
+        ),
+        specializations=dict(
+            CharacterSpecializationValue.objects.filter(character=sheet).values_list(
+                "specialization_id", "value"
+            )
+        ),
+        distinctions=[
+            StaffHeldDistinction(
+                id=row.pk,
+                distinction=row.distinction_id,
+                name=row.distinction.name,
+                rank=row.rank,
+                max_rank=row.distinction.max_rank,
+                feature=(
+                    row.feature_trait.display_name
+                    if row.feature_trait
+                    else (row.feature_marking.name if row.feature_marking else "")
+                ),
+            )
+            for row in held
+        ],
+        form=dict(true_values),
+        markings=[
+            StaffMarking(id=m.pk, name=m.name, body_region=m.body_region, kind=m.kind)
+            for m in markings
+        ],
+        beginnings=beginnings.pk if beginnings else None,
+        path=path_row.path_id if path_row else None,
+        class_level=level_row.level if level_row else None,
+        public_being=worship.public_being_id if worship else None,
+        secret_being=worship.secret_being_id if worship else None,
+        has_vitals=CharacterVitals.objects.filter(character_sheet=sheet).exists(),
     )
 
 

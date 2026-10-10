@@ -165,6 +165,18 @@ application.is_editable   # True when revisions_requested
 
 ## Service Functions
 
+**One writer per row family (#4221, `world.character_creation.sheet_writers`).** The rows CG
+writes are public services that take the sheet and explicit values, so finalize and staff
+edit mode share them: `set_stat_values`, `set_skill_values` (caps kept unless
+`enforce_caps=False`, CG's choice), `set_true_form_values`, `set_trait_descriptors`,
+`set_beginnings` (one `character_creation` ProfileBeginnings), `set_worship_declaration`,
+`set_pronouns_from_gender`, `initialize_full_vitals`, `set_enemy` (the row only; CG's
+reputation and heat stay in `_create_enemy`), the codex grants (`grant_codex_entries`,
+`grant_path_codex`, `grant_beginnings_codex`, `grant_distinction_codex`, `grant_species_codex`),
+`grant_beginnings_rituals`, `establish_chosen_patronage`, and the bundles a choice carries
+(`species_consequences`, `beginnings_consequences`, `path_consequences`). CG's private helpers
+delegate to them. A staff write raises `SheetWriteError` (with `user_message`) on a rule.
+
 ```python
 from world.character_creation.services import (
     finalize_character,           # Create Character from completed draft (atomic); stamps

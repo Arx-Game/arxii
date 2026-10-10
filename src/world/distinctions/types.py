@@ -156,6 +156,8 @@ class DistinctionOrigin(models.TextChoices):
     ENDORSEMENT_THRESHOLD = "endorsement_threshold", "Endorsement Threshold"
     SPECIES = "species", "Species"
     UNLOCK_PURCHASE = "unlock_purchase", "Unlock Purchase"
+    # Staff edit mode (#4221): staff building or repairing a sheet, no XP or request.
+    STAFF = "staff", "Staff"
 
 
 class OtherStatus(models.TextChoices):

@@ -44,6 +44,7 @@ from world.character_sheets.services import (
     restore_profile_text_version,
     staff_edit_sheet,
 )
+from world.character_sheets.staff_views import StaffSheetRowsMixin
 from world.character_sheets.types import ProfileTextField
 from world.scenes.block_services import sheet_blocked_for_viewer
 
@@ -72,7 +73,7 @@ def _spendable_stat_rows(sheet: CharacterSheet, cap: int | None) -> list[dict]:
     ]
 
 
-class CharacterSheetViewSet(RetrieveModelMixin, GenericViewSet):
+class CharacterSheetViewSet(StaffSheetRowsMixin, RetrieveModelMixin, GenericViewSet):
     """Read-only detail endpoint for character sheets, keyed by character pk.
 
     Returns character sheet data for a single character. The response

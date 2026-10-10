@@ -27,6 +27,7 @@ import { GuidelinesBand } from './GuidelinesBand';
 import { Entries, Entry, Glance, Heading, Ledger, Prose, Stack, Tag } from './primitives';
 import type { GlanceRow } from './primitives';
 import { StaffEditBand, StaffEditable } from './StaffEdit';
+import { StaffRowsBand } from './StaffRowsBand';
 import { useStaffEditing } from './staffEditContext';
 
 interface SheetPanelProps {
@@ -87,6 +88,7 @@ export function SheetPanel({ sheet, isMyCharacter, rumor, languages }: SheetPane
   return (
     <Stack wide>
       <StaffEditBand sheet={sheet} />
+      <StaffRowsBand />
       {hasPrivate && <Heading>Public sheet</Heading>}
       <div className="refsheet-columns">
         <Stack>

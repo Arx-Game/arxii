@@ -2657,7 +2657,8 @@ Character identity, appearance, demographics, and guise system.
 - **Source:** `src/world/character_sheets/`
 - **Details:** [character_sheets.md](character_sheets.md)
 ### Character Creation
-Multi-stage character creation flow with draft system.
+Multi-stage character creation flow with draft system. The rows finalize writes are public
+services on a live sheet (`sheet_writers.py`, #4221), shared with staff edit mode.
 
 - **Models:** `CharacterDraft`, `StartingArea` (`grants_residence_tenancy` BooleanField, default
   True, #2036 — an authored per-area toggle for whether finalizing a character there grants a
