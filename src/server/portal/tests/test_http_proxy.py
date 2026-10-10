@@ -38,6 +38,12 @@ class HttpProxyTests(SimpleTestCase):
         self.factory.clientConnectionFailed(None, Failure(ConnectionLost()))
         self.assertFalse(self.request.finished)
 
+    def test_live_upstream_failure_returns_gateway_error(self):
+        self.channel.requests.append(self.request)
+        self.factory.clientConnectionFailed(None, Failure(ConnectionLost()))
+        self.assertTrue(self.request.finished)
+        self.assertEqual(self.request.code, 501)
+
     def test_live_response_is_finished(self):
         self.channel.requests.append(self.request)
         self.protocol.handleStatus(b"HTTP/1.1", b"200", b"OK")
