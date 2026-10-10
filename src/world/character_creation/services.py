@@ -353,22 +353,14 @@ def finalize_character(
 
 
 def _initialize_full_vitals(sheet: CharacterSheet) -> None:
-    """Create CharacterVitals and set health to full, once class levels/stats exist.
+    """Create vitals and fill health once class levels and stats exist (``initialize_full_vitals``).
 
-    ``derive_base_max_health`` (via ``recompute_max_health_with_threads``) needs those
-    as inputs, so this runs after ``_apply_character_mechanics``. Recompute alone never
-    heals from 0, so health is explicitly set to max_health to give a fresh character a
-    full pool. Split out of ``finalize_character`` to keep it under the statement
-    ceiling (#3675/#3621 merge).
+    Runs after ``_apply_character_mechanics``; the shared writer lives in
+    ``sheet_writers`` so staff edit mode fills a sheet's vitals the same way (#3988).
     """
-    from world.magic.services.threads import recompute_max_health_with_threads  # noqa: PLC0415
-    from world.vitals.models import CharacterVitals  # noqa: PLC0415
+    from world.character_creation.sheet_writers import initialize_full_vitals  # noqa: PLC0415
 
-    vitals, _ = CharacterVitals.objects.get_or_create(character_sheet=sheet)
-    recompute_max_health_with_threads(sheet)
-    vitals.refresh_from_db()
-    vitals.health = vitals.max_health
-    vitals.save(update_fields=["health"])
+    initialize_full_vitals(sheet)
 
 
 def _sync_finalized_name_aliases(sheet: CharacterSheet) -> None:
@@ -1313,24 +1305,16 @@ def _set_origin_realm(sheet: CharacterSheet, draft: CharacterDraft) -> None:
 
 
 def _set_beginnings(sheet: CharacterSheet, draft: CharacterDraft) -> None:
-    """Record the chosen Beginnings as where play began (#3775).
+    """Record the chosen Beginnings as where play began (#3775), through ``set_beginnings``.
 
     The draft is deleted at the end of finalize, so this row is the only record
     of the character's origin afterwards. Idempotent: a re-run finds the row.
     """
     if not draft.selected_beginnings:
         return
-    from world.character_sheets.models import ProfileBeginnings  # noqa: PLC0415
-    from world.character_sheets.types import ProfileBeginningsSource  # noqa: PLC0415
+    from world.character_creation.sheet_writers import set_beginnings  # noqa: PLC0415
 
-    profile = _ensure_profile(sheet)
-    if profile.pk is None:
-        profile.save()
-    ProfileBeginnings.objects.get_or_create(
-        profile=profile,
-        beginnings=draft.selected_beginnings,
-        defaults={"source": ProfileBeginningsSource.CHARACTER_CREATION},
-    )
+    set_beginnings(sheet, draft.selected_beginnings)
 
 
 def _ensure_profile(sheet: CharacterSheet) -> Profile:
@@ -1456,53 +1440,27 @@ def _create_stat_values(
     _trait_type_cls: Any,
     _character_trait_value_cls: Any,
 ) -> None:
-    """Create stat trait values from the draft's stat allocations.
+    """Write the draft's stat allocations through ``set_stat_values`` (#3988).
 
-    Fetches all stat traits in one query and bulk-creates the trait values.
-
-    Args:
-        character: The newly created ``ObjectDB`` character.
-        draft: The completed ``CharacterDraft``.
-        _trait_cls: ``Trait`` model class.
-        _trait_type_cls: ``TraitType`` enum.
-        _character_trait_value_cls: ``CharacterTraitValue`` model class.
+    Draft allocations are display scale (1 to 5); the shared writer stores x10
+    (#2894) and stamps each new row's ``CharacterTraitChange`` (#3055).
     """
+    from world.character_creation.sheet_writers import set_stat_values  # noqa: PLC0415
+    from world.traits.models import TraitChangeSource  # noqa: PLC0415
+
     stats = draft.draft_data.get("stats", {})
     if not stats:
         return
-    stat_names = list(stats.keys())
     traits_by_name = {
         trait.name: trait
-        for trait in _trait_cls.objects.filter(name__in=stat_names, trait_type=_trait_type_cls.STAT)
-    }
-    # Draft allocations are display-scale (1-5); storage is internal ×10 (#2894)
-    # so checks, modifiers, and DP level-ups all read one scale.
-    trait_values = [
-        _character_trait_value_cls(
-            character=character.sheet_data,
-            trait=traits_by_name[name],
-            value=value * STAT_DISPLAY_DIVISOR,
+        for trait in _trait_cls.objects.filter(
+            name__in=list(stats), trait_type=_trait_type_cls.STAT
         )
-        for name, value in stats.items()
-        if name in traits_by_name
-    ]
-    _character_trait_value_cls.objects.bulk_create(trait_values)
-
-    # Acquisition-provenance baseline stamp (#3055): a brand-new
-    # CharacterTraitValue row has no prior authored value, so old_value=0.
-    from world.traits.models import CharacterTraitChange, TraitChangeSource  # noqa: PLC0415
-
-    CharacterTraitChange.objects.bulk_create(
-        [
-            CharacterTraitChange(
-                character_sheet=character.sheet_data,
-                trait=tv.trait,
-                old_value=0,
-                new_value=tv.value,
-                source=TraitChangeSource.CHARACTER_CREATION,
-            )
-            for tv in trait_values
-        ]
+    }
+    set_stat_values(
+        character.sheet_data,
+        {traits_by_name[name]: value for name, value in stats.items() if name in traits_by_name},
+        source=TraitChangeSource.CHARACTER_CREATION,
     )
 
 
@@ -1613,26 +1571,10 @@ def _apply_post_cg_bonuses(
 
 
 def _create_worship_declaration(character: ObjectDB, draft: CharacterDraft) -> None:
-    """Create the WorshipDeclaration from the draft's picks; mint the Secret (#2355).
+    """Write the draft's worship picks through ``set_worship_declaration`` (#2355, #3988)."""
+    from world.character_creation.sheet_writers import set_worship_declaration  # noqa: PLC0415
 
-    Both picks are optional (an unaffiliated character has no declaration row).
-    A secret pick equal to the public pick is stored public-only — there is
-    nothing to hide.
-    """
-    if draft.public_worship_id is None and draft.secret_worship_id is None:
-        return
-    from world.worship.models import WorshipDeclaration  # noqa: PLC0415
-    from world.worship.secrets import mint_worship_secret  # noqa: PLC0415
-
-    secret_being = draft.secret_worship
-    if secret_being is not None and secret_being.pk == draft.public_worship_id:
-        secret_being = None
-    declaration, _ = WorshipDeclaration.objects.get_or_create(
-        character_sheet=character.sheet_data,
-        defaults={"public_being": draft.public_worship, "secret_being": secret_being},
-    )
-    if declaration.secret_being is not None:
-        mint_worship_secret(declaration)
+    set_worship_declaration(character.sheet_data, draft.public_worship, draft.secret_worship)
 
 
 def _convert_remaining_cg_points_to_xp(draft: CharacterDraft, character: ObjectDB) -> None:
@@ -1663,26 +1605,11 @@ def _convert_remaining_cg_points_to_xp(draft: CharacterDraft, character: ObjectD
         )
 
 
-def _set_pronouns_from_gender(sheet: CharacterSheet, gender: str) -> None:
-    """
-    Set pronoun fields on CharacterSheet based on selected gender.
+def _set_pronouns_from_gender(sheet: CharacterSheet, gender: Any) -> None:
+    """Set the sheet's pronoun strings from the chosen gender (``set_pronouns_from_gender``)."""
+    from world.character_creation.sheet_writers import set_pronouns_from_gender  # noqa: PLC0415
 
-    Maps gender key to default pronouns:
-    - male → he/him/his
-    - female → she/her/her
-    - nonbinary, other → they/them/their (default)
-    """
-    pronoun_map = {
-        "male": ("he", "him", "his"),
-        "female": ("she", "her", "her"),
-    }
-
-    # Default to they/them/their for non-binary or unrecognized gender keys
-    subject, obj, possessive = pronoun_map.get(gender.key, ("they", "them", "their"))
-
-    sheet.pronoun_subject = subject
-    sheet.pronoun_object = obj
-    sheet.pronoun_possessive = possessive
+    set_pronouns_from_gender(sheet, gender)
 
 
 def _build_and_create_goals(character: ObjectDB, draft: CharacterDraft) -> list:
@@ -2053,8 +1980,8 @@ def _create_true_form(character: ObjectDB, draft_data: dict) -> None:
         character: The newly created Character object
         draft_data: The draft's JSON data blob
     """
+    from world.character_creation.sheet_writers import set_true_form_values  # noqa: PLC0415
     from world.forms.models import FormTrait, FormTraitOption  # noqa: PLC0415
-    from world.forms.services import create_true_form  # noqa: PLC0415
 
     form_traits = draft_data.get("form_traits", {})
     if not form_traits:
@@ -2063,7 +1990,7 @@ def _create_true_form(character: ObjectDB, draft_data: dict) -> None:
     selections = _resolve_form_trait_selections(form_traits, FormTrait, FormTraitOption)
 
     if selections:
-        create_true_form(character, selections)
+        set_true_form_values(character.sheet_data, selections)
 
     _apply_form_trait_descriptors(character, draft_data, selections)
 
@@ -2125,110 +2052,50 @@ def _apply_form_trait_descriptors(
     descriptors = draft_data.get("form_trait_descriptors", {})
     if not selections or not isinstance(descriptors, dict):
         return
-    from world.forms.models import PersonaTraitDescriptor  # noqa: PLC0415
+    from world.character_creation.sheet_writers import set_trait_descriptors  # noqa: PLC0415
 
     sheet = character.character_sheet
     persona = sheet.primary_persona if sheet else None
     if persona is None:
         return
     opened = opened_feature_traits(draft_data)
-    for trait in selections:
-        if trait.name not in opened:
-            continue
-        text = descriptors.get(trait.name)
-        if isinstance(text, str) and text.strip():
-            PersonaTraitDescriptor.objects.update_or_create(
-                persona=persona,
-                trait=trait,
-                defaults={"text": text.strip()},
-            )
+    set_trait_descriptors(
+        persona,
+        {
+            trait: descriptors[trait.name]
+            for trait in selections
+            if trait.name in opened
+            and isinstance(descriptors.get(trait.name), str)
+            and descriptors[trait.name].strip()
+        },
+    )
 
 
 def _create_skill_values(character: ObjectDB, draft: CharacterDraft) -> None:
-    """Create CharacterSkillValue and CharacterSpecializationValue records from draft.
+    """Write the draft's skills and specializations through ``set_skill_values`` (#3988).
 
-    Also writes the matching ``CharacterTraitValue`` row for each skill (#2894):
-    ``perform_check`` reads only trait values, so without this bridge a freshly
-    finalized character contributed zero skill points to every check until the
-    DP path happened to seed a trait row (at 10, ignoring the CG allocation).
-    Skill values are already stored (and displayed) at their true 1-100 value,
-    so the number carries over verbatim — no conversion, unlike stats — and
-    ``DevelopmentPoints.award_points`` increments the same row from the CG
-    level onward.
+    The shared writer also writes each skill's ``CharacterTraitValue`` the check engine
+    reads (#2894). CG validated its picks already, so caps are not re-checked here; an
+    unknown id is skipped with a warning, as before.
     """
-    from world.skills.models import (  # noqa: PLC0415
-        CharacterSkillValue,
-        CharacterSpecializationValue,
-        Skill,
-        Specialization,
+    from world.character_creation.sheet_writers import set_skill_values  # noqa: PLC0415
+    from world.skills.models import Skill, Specialization  # noqa: PLC0415
+    from world.traits.models import TraitChangeSource  # noqa: PLC0415
+
+    def by_id(queryset: Any, data: dict) -> dict:
+        wanted = {int(pk): value for pk, value in data.items() if value > 0}
+        found = {row.pk: row for row in queryset.filter(pk__in=list(wanted))}
+        for pk in wanted.keys() - found.keys():
+            logger.warning("Invalid ID %s in draft for character %s", pk, character.key)
+        return {found[pk]: value for pk, value in wanted.items() if pk in found}
+
+    set_skill_values(
+        character.sheet_data,
+        by_id(Skill.objects.select_related("trait"), draft.draft_data.get("skills", {})),
+        by_id(Specialization.objects.all(), draft.draft_data.get("specializations", {})),
+        source=TraitChangeSource.CHARACTER_CREATION,
+        enforce_caps=False,
     )
-    from world.traits.models import (  # noqa: PLC0415
-        CharacterTraitChange,
-        CharacterTraitValue,
-        TraitChangeSource,
-    )
-
-    skills_data = draft.draft_data.get("skills", {})
-    specializations_data = draft.draft_data.get("specializations", {})
-
-    # Create skill values + the trait-row bridge the check engine reads
-    skill_trait_values = []
-    for skill_id, value in skills_data.items():
-        if value > 0:
-            try:
-                skill = Skill.objects.select_related("trait").get(pk=int(skill_id))
-                CharacterSkillValue.objects.create(
-                    character=character.sheet_data,
-                    skill=skill,
-                    value=value,
-                    development_points=0,
-                    rust_points=0,
-                )
-                skill_trait_values.append(
-                    CharacterTraitValue(
-                        character=character.sheet_data, trait=skill.trait, value=value
-                    )
-                )
-            except Skill.DoesNotExist:
-                logger.warning(
-                    "Invalid skill ID %s in draft for character %s",
-                    skill_id,
-                    character.key,
-                )
-    CharacterTraitValue.objects.bulk_create(skill_trait_values)
-
-    # Acquisition-provenance baseline stamp (#3055): the skill-trait bridge
-    # rows above are all brand-new, so old_value=0.
-    CharacterTraitChange.objects.bulk_create(
-        [
-            CharacterTraitChange(
-                character_sheet=tv.character,
-                trait=tv.trait,
-                old_value=0,
-                new_value=tv.value,
-                source=TraitChangeSource.CHARACTER_CREATION,
-            )
-            for tv in skill_trait_values
-        ]
-    )
-
-    # Create specialization values
-    for spec_id, value in specializations_data.items():
-        if value > 0:
-            try:
-                spec = Specialization.objects.get(pk=int(spec_id))
-                CharacterSpecializationValue.objects.create(
-                    character=character.sheet_data,
-                    specialization=spec,
-                    value=value,
-                    development_points=0,
-                )
-            except Specialization.DoesNotExist:
-                logger.warning(
-                    "Invalid specialization ID %s in draft for character %s",
-                    spec_id,
-                    character.key,
-                )
 
 
 def resolve_fallback_starting_room() -> ObjectDB | None:
@@ -2402,24 +2269,15 @@ def _finalize_gift_and_techniques(draft: CharacterDraft, sheet: CharacterSheet) 
 
 
 def _grant_codex_entries(sheet: CharacterSheet, entry_ids: Iterable[int]) -> None:
-    """Grant every entry in ``entry_ids`` to the sheet's character, as KNOWN.
+    """Grant every entry to the sheet's character as KNOWN (``sheet_writers.grant_codex_entries``).
 
-    One shared body for the six CG grant sources (beginnings, path, distinction,
-    tradition, species, gift resonance), all of which previously carried their
-    own ``get_or_create`` with ``status=KNOWN``. That is what made them skip the
-    KNOWN-transition hook — see ``world.codex.services.grant_codex_entry``, which
-    is the only sanctioned way to land a character on KNOWN.
+    One shared body for the CG grant sources, all through
+    ``world.codex.services.grant_codex_entry``, the only sanctioned way to land a
+    character on KNOWN.
     """
-    from world.codex.models import CodexEntry  # noqa: PLC0415
-    from world.codex.services import grant_codex_entry  # noqa: PLC0415
+    from world.character_creation.sheet_writers import grant_codex_entries  # noqa: PLC0415
 
-    entry_ids = list(entry_ids)
-    if not entry_ids:
-        return
-
-    roster_entry = sheet.roster_entry
-    for entry in CodexEntry.objects.filter(pk__in=entry_ids):
-        grant_codex_entry(roster_entry, entry)
+    grant_codex_entries(sheet, entry_ids)
 
 
 def _finalize_tradition_codex_grants(draft: CharacterDraft, sheet: CharacterSheet) -> None:
@@ -2438,40 +2296,21 @@ def _finalize_tradition_codex_grants(draft: CharacterDraft, sheet: CharacterShee
 
 
 def _finalize_path_codex_grants(draft: CharacterDraft, sheet: CharacterSheet) -> None:
-    """Apply Path codex grants. No-op without a selected path.
-
-    Mirrors _finalize_tradition_codex_grants: the chosen Path teaches the
-    character which magic milestones exist (drives the dashboard discovery
-    tiers). Idempotent via get_or_create.
-    """
+    """Apply Path codex grants (``grant_path_codex``). No-op without a selected path."""
     if not draft.selected_path:
         return
+    from world.character_creation.sheet_writers import grant_path_codex  # noqa: PLC0415
 
-    from world.codex.models import PathCodexGrant  # noqa: PLC0415
-
-    _grant_codex_entries(
-        sheet,
-        PathCodexGrant.objects.filter(path=draft.selected_path).values_list("entry_id", flat=True),
-    )
+    grant_path_codex(sheet, draft.selected_path)
 
 
 def _finalize_beginnings_codex_grants(draft: CharacterDraft, sheet: CharacterSheet) -> None:
-    """Apply Beginnings codex grants. No-op without a selected beginnings.
-
-    Mirrors _finalize_tradition_codex_grants: the chosen Beginnings teaches the
-    character lore about their origin. Idempotent via get_or_create.
-    """
+    """Apply Beginnings codex grants (``grant_beginnings_codex``). No-op without one."""
     if not draft.selected_beginnings:
         return
+    from world.character_creation.sheet_writers import grant_beginnings_codex  # noqa: PLC0415
 
-    from world.codex.models import BeginningsCodexGrant  # noqa: PLC0415
-
-    _grant_codex_entries(
-        sheet,
-        BeginningsCodexGrant.objects.filter(beginnings=draft.selected_beginnings).values_list(
-            "entry_id", flat=True
-        ),
-    )
+    grant_beginnings_codex(sheet, draft.selected_beginnings)
 
 
 def _finalize_distinction_codex_grants(draft: CharacterDraft, sheet: CharacterSheet) -> None:
@@ -2502,34 +2341,10 @@ def _finalize_distinction_codex_grants(draft: CharacterDraft, sheet: CharacterSh
 
 
 def _finalize_species_codex(sheet: CharacterSheet) -> None:
-    """Grant the codex entries owed to the character's species (#2880).
+    """Grant the codex entries owed to the species and its parents (``grant_species_codex``)."""
+    from world.character_creation.sheet_writers import grant_species_codex  # noqa: PLC0415
 
-    ``Species.codex_entries`` walks ``Species.parent``, so a Vulpi character
-    receives the Khati umbrella entry alongside the Vulpi one. Reading only the
-    leaf's own entry — which is what this did before — left the three umbrella
-    entries (Khati, Elf, Infernal) reachable by nobody who picked a subspecies.
-    Idempotent via get_or_create.
-    """
-    try:
-        species = sheet.species
-    except AttributeError:
-        return
-    if species is None:
-        return
-
-    entries = species.codex_entries
-    if not entries:
-        return
-
-    from world.codex.services import grant_codex_entry  # noqa: PLC0415
-
-    # Resolved only once there is something to grant: a species whose whole
-    # lineage has a null codex_entry must stay a no-op on a sheet that has no
-    # RosterEntry yet, which is the shape isolated unit tests build. The
-    # pre-#2880 version got this for free by returning on codex_entry_id.
-    roster_entry = sheet.roster_entry
-    for entry in entries:
-        grant_codex_entry(roster_entry, entry)
+    grant_species_codex(sheet)
 
 
 def _finalize_resonance_codex(draft: CharacterDraft, sheet: CharacterSheet) -> None:
@@ -2858,33 +2673,16 @@ def _finalize_academy_entrance_obligation(draft: CharacterDraft, sheet: Characte
 
 
 def _grant_beginnings_ritual_knowledge(draft: CharacterDraft, roster_entry: RosterEntry) -> None:
-    """Grant CharacterRitualKnowledge for BeginningsRitualGrant rows.
+    """Grant the selected Beginnings' rituals (``grant_beginnings_rituals``). Idempotent.
 
-    Beginnings is not stored on CharacterSheet post-finalization, so
-    reconcile_ritual_knowledge() cannot walk it. This function handles the
-    Beginnings grant source directly at finalization time (Option A from Phase 8
-    design notes), before the general reconciliation pass.
-
-    Idempotent via get_or_create — safe to call multiple times.
+    Beginnings is not stored where ``reconcile_ritual_knowledge`` walks, so this runs
+    before the general reconciliation pass.
     """
-    beginnings = draft.selected_beginnings
-    if beginnings is None:
+    if draft.selected_beginnings is None:
         return
+    from world.character_creation.sheet_writers import grant_beginnings_rituals  # noqa: PLC0415
 
-    from world.magic.models import CharacterRitualKnowledge  # noqa: PLC0415
-    from world.magic.models.grants import BeginningsRitualGrant  # noqa: PLC0415
-
-    ritual_ids = list(
-        BeginningsRitualGrant.objects.filter(beginnings=beginnings).values_list(
-            "ritual_id", flat=True
-        )
-    )
-    for ritual_id in ritual_ids:
-        CharacterRitualKnowledge.objects.get_or_create(
-            roster_entry=roster_entry,
-            ritual_id=ritual_id,
-            defaults={"learned_from": None},
-        )
+    grant_beginnings_rituals(roster_entry.character_sheet, draft.selected_beginnings)
 
 
 def submit_draft_for_review(
