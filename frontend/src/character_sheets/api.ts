@@ -438,6 +438,11 @@ export interface CharacterSheetStaffRows {
   has_vitals: boolean;
   has_gift: boolean;
   has_aura: boolean;
+  /** #4226: kinship, estate and reputation, for piece D's editors. */
+  kin_node: StaffOption | null;
+  residences: StaffOption[];
+  properties: StaffOption[];
+  reputations: { organization: number; name: string; value: number }[];
 }
 
 export interface CharacterSheetStaffEdit {
@@ -809,7 +814,39 @@ export type StaffRowAction =
       };
     }
   | { path: 'staff-vitals'; method: 'POST'; body: Record<string, never> }
-  | { path: 'staff-magic'; method: 'POST'; body: StaffMagicBody };
+  | { path: 'staff-magic'; method: 'POST'; body: StaffMagicBody }
+  | {
+      path: 'staff-kinship';
+      method: 'POST';
+      body: { node?: number | null; family?: number | null };
+    }
+  | { path: 'staff-residence'; method: 'POST'; body: { room_profile: number } }
+  | { path: 'staff-property'; method: 'POST'; body: { profile?: number | null } }
+  | { path: 'staff-house-claim'; method: 'POST'; body: { claim: number } }
+  | { path: 'staff-vacancy'; method: 'POST'; body: { vacancy: number } }
+  | { path: 'staff-reputation'; method: 'PUT'; body: { organization: number; value: number } };
+
+/** `GET .../staff-estate-options/?room=` (#4226): what piece D's editors pick from. */
+export interface StaffEstateOptions {
+  open_positions: StaffOption[];
+  families: StaffOption[];
+  rooms: StaffOption[];
+  grant_profiles: StaffOption[];
+  house_claims: StaffOption[];
+  vacancies: StaffOption[];
+  organizations: StaffOption[];
+}
+
+export async function fetchStaffEstateOptions(
+  sheetId: number,
+  room: string
+): Promise<StaffEstateOptions> {
+  const params = new URLSearchParams();
+  if (room) params.set('room', room);
+  const res = await apiFetch(`/api/character-sheets/${sheetId}/staff-estate-options/?${params}`);
+  if (!res.ok) await throwApiError(res, 'Failed to load the choices.');
+  return (await res.json()) as StaffEstateOptions;
+}
 
 /** `POST .../staff-magic/` (#4224): a giftless sheet's starting magic, as CG would write it. */
 export interface StaffMagicBody {

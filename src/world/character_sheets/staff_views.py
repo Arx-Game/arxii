@@ -38,17 +38,24 @@ from world.character_sheets.staff_serializers import (
     StaffDistinctionAddSerializer,
     StaffDistinctionChangeSerializer,
     StaffEnemySerializer,
+    StaffEstateOptionsSerializer,
     StaffFormSerializer,
     StaffGoalsSerializer,
+    StaffHouseClaimSerializer,
     StaffIntroductionSerializer,
+    StaffKinshipSerializer,
     StaffMagicOptionsSerializer,
     StaffMagicSerializer,
     StaffMarkingAddSerializer,
     StaffMarkingRemoveSerializer,
     StaffOptionsSerializer,
     StaffPathSerializer,
+    StaffPropertySerializer,
+    StaffReputationSerializer,
+    StaffResidenceSerializer,
     StaffSkillsSerializer,
     StaffStatsSerializer,
+    StaffVacancySerializer,
     StaffWorshipSerializer,
 )
 from world.traits.models import TraitChangeSource
@@ -358,6 +365,109 @@ class StaffSheetRowsMixin:
         initialize_full_vitals(sheet)
         return self._answer(request, sheet)
 
+    # --- Kinship, estate and reputation (#4226, #3988 piece D) ------------------
+
+    @extend_schema(request=StaffKinshipSerializer, responses={200: CharacterSheetSerializer})
+    @action(detail=True, methods=[HTTPMethod.POST], url_path="staff-kinship")
+    def staff_kinship(self, request: Request, pk: int | None = None) -> Response:
+        """Place the character in the kin tree: claim an open position, or self-serve one."""
+        from world.character_creation.estate_writer import bind_kinship_node  # noqa: PLC0415
+
+        sheet = self._staff_sheet(request)
+        data = self._validated(StaffKinshipSerializer, request, sheet)
+        try:
+            bind_kinship_node(sheet, node=data["node"], family=data["family"] or sheet.family)
+        except SheetWriteError as exc:
+            return _refused(exc)
+        return self._answer(request, sheet)
+
+    @extend_schema(request=StaffResidenceSerializer, responses={200: CharacterSheetSerializer})
+    @action(detail=True, methods=[HTTPMethod.POST], url_path="staff-residence")
+    def staff_residence(self, request: Request, pk: int | None = None) -> Response:
+        """Make the character a tenant of a room, as CG's starting residence does."""
+        from world.character_creation.estate_writer import grant_residence  # noqa: PLC0415
+
+        sheet = self._staff_sheet(request)
+        data = self._validated(StaffResidenceSerializer, request, sheet)
+        try:
+            grant_residence(sheet, data["room_profile"])
+        except SheetWriteError as exc:
+            return _refused(exc)
+        return self._answer(request, sheet)
+
+    @extend_schema(request=StaffPropertySerializer, responses={200: CharacterSheetSerializer})
+    @action(detail=True, methods=[HTTPMethod.POST], url_path="staff-property")
+    def staff_property(self, request: Request, pk: int | None = None) -> Response:
+        """Grant a property house, once per profile; blank uses the Beginnings' profile."""
+        from world.character_creation.estate_writer import grant_property  # noqa: PLC0415
+        from world.character_creation.sheet_writers import creation_beginnings  # noqa: PLC0415
+
+        sheet = self._staff_sheet(request)
+        data = self._validated(StaffPropertySerializer, request, sheet)
+        profile = data["profile"]
+        if profile is None:
+            beginnings = creation_beginnings(sheet)
+            profile = beginnings.property_grant_profile if beginnings is not None else None
+        if profile is None:
+            return _refused(SheetWriteError("Choose a grant profile; the Beginnings carries none."))
+        try:
+            grant_property(sheet, profile)
+        except SheetWriteError as exc:
+            return _refused(exc)
+        return self._answer(request, sheet)
+
+    @extend_schema(request=StaffHouseClaimSerializer, responses={200: CharacterSheetSerializer})
+    @action(detail=True, methods=[HTTPMethod.POST], url_path="staff-house-claim")
+    def staff_house_claim(self, request: Request, pk: int | None = None) -> Response:
+        """Materialize an approved house claim with this character as its founder."""
+        from world.character_creation.estate_writer import bind_house_claim  # noqa: PLC0415
+
+        sheet = self._staff_sheet(request)
+        data = self._validated(StaffHouseClaimSerializer, request, sheet)
+        try:
+            bind_house_claim(sheet, data["claim"])
+        except SheetWriteError as exc:
+            return _refused(exc)
+        return self._answer(request, sheet)
+
+    @extend_schema(request=StaffVacancySerializer, responses={200: CharacterSheetSerializer})
+    @action(detail=True, methods=[HTTPMethod.POST], url_path="staff-vacancy")
+    def staff_vacancy(self, request: Request, pk: int | None = None) -> Response:
+        """Take an opening: its kin position, if it has one, then the membership."""
+        from world.character_creation.estate_writer import bind_vacancy  # noqa: PLC0415
+
+        sheet = self._staff_sheet(request)
+        data = self._validated(StaffVacancySerializer, request, sheet)
+        try:
+            bind_vacancy(sheet, data["vacancy"], created_by=cast("AccountDB", request.user))
+        except SheetWriteError as exc:
+            return _refused(exc)
+        return self._answer(request, sheet)
+
+    @extend_schema(request=StaffReputationSerializer, responses={200: CharacterSheetSerializer})
+    @action(detail=True, methods=[HTTPMethod.PUT], url_path="staff-reputation")
+    def staff_reputation(self, request: Request, pk: int | None = None) -> Response:
+        """Set an organization's opinion of the character (the clamp holds)."""
+        from world.character_creation.estate_writer import (  # noqa: PLC0415
+            set_organization_reputation,
+        )
+
+        sheet = self._staff_sheet(request)
+        data = self._validated(StaffReputationSerializer, request, sheet)
+        try:
+            set_organization_reputation(sheet, data["organization"], data["value"])
+        except SheetWriteError as exc:
+            return _refused(exc)
+        return self._answer(request, sheet)
+
+    @extend_schema(responses={200: StaffEstateOptionsSerializer})
+    @action(detail=True, methods=[HTTPMethod.GET], url_path="staff-estate-options")
+    def staff_estate_options(self, request: Request, pk: int | None = None) -> Response:
+        """What the kin, estate and reputation editors offer; ``?room=`` searches rooms."""
+        self._staff_sheet(request)  # the gate: a 404 for anyone who may not edit it
+        options = _estate_options(request.query_params.get("room", ""))
+        return Response(StaffEstateOptionsSerializer(options).data)
+
 
 def _ensure_vitals_if_missing(sheet: CharacterSheet) -> None:
     """A sheet without vitals may not function in play; a stat or level edit fills them."""
@@ -459,4 +569,59 @@ def _magic_options(sheet: CharacterSheet, tradition_id: str | None, gift_id: str
             Skill.objects.filter(is_active=True).select_related("trait").order_by("trait__name")
         ),
         "technique_limit": technique_pick_limit(sheet),
+    }
+
+
+#: How many rooms a residence search answers with; rooms are searched, never listed.
+ROOM_SEARCH_LIMIT = 20
+
+
+def _estate_options(room_query: str) -> dict[str, Any]:
+    """Open kin positions, families, matching rooms, grant profiles, approved house
+    claims, open vacancies and organizations, for the piece D editors (#4226)."""
+    from django.db.models import Q  # noqa: PLC0415
+
+    from evennia_extensions.models import RoomProfile  # noqa: PLC0415
+    from world.buildings.models import PropertyGrantProfile  # noqa: PLC0415
+    from world.roster.models import Family, Kinsperson  # noqa: PLC0415
+    from world.societies.houses.constants import HouseClaimStatus  # noqa: PLC0415
+    from world.societies.houses.models import HouseClaim  # noqa: PLC0415
+    from world.societies.models import Organization, Vacancy  # noqa: PLC0415
+
+    positions = (
+        Kinsperson.objects.filter(is_appable=True, sheet__isnull=True)
+        .select_related("family")
+        .order_by("family__name", "name")
+    )
+    query = room_query.strip()
+    rooms = (
+        RoomProfile.objects.filter(objectdb__db_key__icontains=query)
+        .select_related("objectdb")
+        .order_by("objectdb__db_key")[:ROOM_SEARCH_LIMIT]
+        if query
+        else []
+    )
+    vacancies = (
+        Vacancy.objects.filter(is_active=True)
+        .filter(Q(count_remaining__isnull=True) | Q(count_remaining__gt=0))
+        .select_related("organization")
+        .order_by("organization__name", "name")
+    )
+    return {
+        "open_positions": [
+            {
+                "id": node.pk,
+                "name": f"{node.name} ({node.family.name})" if node.family else node.name,
+            }
+            for node in positions
+        ],
+        "families": _named(Family.objects.order_by("name")),
+        "rooms": [{"id": room.pk, "name": room.objectdb.db_key} for room in rooms],
+        "grant_profiles": _named(PropertyGrantProfile.objects.order_by("name")),
+        "house_claims": _named(
+            HouseClaim.objects.filter(status=HouseClaimStatus.APPROVED).order_by("house_name"),
+            "house_name",
+        ),
+        "vacancies": [{"id": v.pk, "name": f"{v.organization.name}: {v.name}"} for v in vacancies],
+        "organizations": _named(Organization.objects.order_by("name")),
     }

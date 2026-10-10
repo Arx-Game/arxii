@@ -47,6 +47,7 @@ from world.character_creation.models import (
     OriginTemplateSlotChoice,
 )
 from world.character_creation.offers import opened_feature_traits, reconcile_offer_picks
+from world.character_creation.sheet_writers import SheetWriteError
 from world.character_sheets.services import create_character_with_sheet
 from world.forms.services import calculate_weight
 from world.roster.constants import MembershipBasis, ParentageKind
@@ -311,7 +312,7 @@ def finalize_character(
     # Vacancy binding (#3648): take the chosen opening's kin claim and org
     # membership before the kinship bind below, so a kin vacancy's node exists
     # by the time the self-serve fallback looks.
-    _bind_vacancy(draft, sheet, primary_persona)
+    _bind_vacancy(draft, sheet)
 
     # Connection reputation seeding (#3660): each picked group answer's authored
     # seed becomes the anchor org's opinion of the new PC.
@@ -376,30 +377,17 @@ def _sync_finalized_name_aliases(sheet: CharacterSheet) -> None:
 
 
 def _bind_house_claim(draft: CharacterDraft, sheet: CharacterSheet) -> None:
-    """Materialize an approved CG house claim (#1884 Phase D).
+    """Materialize an approved CG house claim (#1884 Phase D), best-effort.
 
-    Pending or rejected claims materialize nothing — the character enters
-    play houseless (the claim dies with the draft). Best-effort like the
-    kinship bind: a refusal must not strand finalization.
-
-    Every refusal class materialize can raise is caught, not just the
-    house services' own: an ``IntegrityError`` from a colliding land name
-    and a ``KinshipServiceError`` from the kin tree would otherwise escape
-    ``finalize_character``'s transaction and hand the founder a 500 at the
-    very last step of character creation (#3983). And because the claim's
-    savepoint rolls back while ``sheet`` keeps its in-memory writes —
-    ``CharacterSheet`` is identity-mapped, and ``materialize_house_claim``
-    stamps ``sheet.family`` before the failing row — the family FK is put
-    back by hand here; otherwise the next ``save()`` on that shared instance
-    would persist a Family that no longer exists.
+    Pending or rejected claims materialize nothing: the character enters play
+    houseless (the claim dies with the draft). A refusal from the build (#3983) must
+    not hand the founder a 500 at the last step of character creation, so it is
+    logged and finalize continues houseless; ``bind_house_claim`` restores the
+    identity-mapped sheet's family on the way out.
     """
-    from django.db import IntegrityError  # noqa: PLC0415
-
-    from world.roster.services.kinship import KinshipServiceError  # noqa: PLC0415
+    from world.character_creation.estate_writer import bind_house_claim  # noqa: PLC0415
     from world.societies.houses.constants import HouseClaimStatus  # noqa: PLC0415
-    from world.societies.houses.creator import materialize_house_claim  # noqa: PLC0415
     from world.societies.houses.models import HouseClaim  # noqa: PLC0415
-    from world.societies.houses.services import HousesServiceError  # noqa: PLC0415
 
     claim = HouseClaim.objects.filter(draft=draft).first()
     if claim is None:
@@ -412,11 +400,9 @@ def _bind_house_claim(draft: CharacterDraft, sheet: CharacterSheet) -> None:
             claim.status,
         )
         return
-    previous_family = sheet.family
     try:
-        materialize_house_claim(claim, sheet=sheet)
-    except (HousesServiceError, KinshipServiceError, IntegrityError):
-        sheet.family = previous_family
+        bind_house_claim(sheet, claim)
+    except SheetWriteError:
         logger.exception(
             "House claim %s materialization failed for draft %s; continuing houseless.",
             claim.pk,
@@ -434,12 +420,12 @@ def _grant_property_house_if_eligible(draft: CharacterDraft, persona: Persona) -
     profile = beginnings.property_grant_profile if beginnings is not None else None
     if profile is None:
         return
-    from world.buildings.property_grant_services import grant_property_house  # noqa: PLC0415
+    from world.character_creation.estate_writer import grant_property  # noqa: PLC0415
 
-    grant_property_house(persona, profile)
+    grant_property(persona.character_sheet, profile)
 
 
-def _bind_vacancy(draft: CharacterDraft, sheet: CharacterSheet, primary_persona: Persona) -> None:
+def _bind_vacancy(draft: CharacterDraft, sheet: CharacterSheet) -> None:
     """Take the chosen Vacancy: kin claim (if any), then the org membership (#3648).
 
     Runs before ``_bind_kinship_node`` so a kin vacancy's node exists by the time
@@ -447,31 +433,13 @@ def _bind_vacancy(draft: CharacterDraft, sheet: CharacterSheet, primary_persona:
     to zero, or a kin pool exhausted moments earlier, logs and continues without
     the membership rather than stranding approval.
     """
-    from world.roster.services.kinship import (  # noqa: PLC0415
-        KinshipServiceError,
-        claim_appable_node,
-        mint_from_pool,
-    )
-    from world.societies.membership_services import join_organization  # noqa: PLC0415
-    from world.societies.vacancy_services import (  # noqa: PLC0415
-        VacancyExhaustedError,
-        take_vacancy,
-    )
+    from world.character_creation.estate_writer import bind_vacancy  # noqa: PLC0415
 
-    if draft.selected_vacancy_id is None:
+    if draft.selected_vacancy is None:
         return
     try:
-        with transaction.atomic():
-            vacancy = take_vacancy(draft.selected_vacancy_id)
-            if vacancy.kin_pool_id is not None:
-                node = mint_from_pool(vacancy.kin_pool, created_by=draft.account)
-                claim_appable_node(node=node, sheet=sheet)
-            elif vacancy.kin_node_id is not None:
-                claim_appable_node(node=vacancy.kin_node, sheet=sheet)
-            join_organization(
-                vacancy.organization, primary_persona, rank=vacancy.rank, vacancy=vacancy
-            )
-    except (VacancyExhaustedError, KinshipServiceError):
+        bind_vacancy(sheet, draft.selected_vacancy, created_by=draft.account)
+    except SheetWriteError:
         logger.exception(
             "Vacancy %s could not be taken for draft %s; finalizing without it.",
             draft.selected_vacancy_id,
@@ -1008,8 +976,7 @@ def _grant_cg_residence_tenancy(
     if starting_area is None or not starting_area.grants_residence_tenancy:
         return
     from evennia_extensions.models import RoomProfile  # noqa: PLC0415
-    from world.locations.constants import LocationRole  # noqa: PLC0415
-    from world.locations.services import grant_tenancy  # noqa: PLC0415
+    from world.character_creation.estate_writer import grant_residence  # noqa: PLC0415
 
     try:
         room_profile = starting_room.room_profile
@@ -1017,12 +984,7 @@ def _grant_cg_residence_tenancy(
         return
     # A starting residence is a TENANT grant, not a key: the character lives there.
     # granted_by stays None because the world granted it, not a persona (#3902).
-    grant_tenancy(
-        kind=LocationRole.TENANT,
-        room_profile=room_profile,
-        tenant_persona=primary_persona,
-        notes="Academy enrollment",
-    )
+    grant_residence(primary_persona.character_sheet, room_profile, notes="Academy enrollment")
 
 
 def _grant_prelude_mission(draft: CharacterDraft, character: ObjectDB, persona: Persona) -> None:
@@ -2920,7 +2882,7 @@ def finalize_gm_character(
 
     # Vacancy binding (#3648): take the chosen opening's kin claim and org
     # membership, mirroring the player finalize flow.
-    _bind_vacancy(draft, sheet, primary_persona)
+    _bind_vacancy(draft, sheet)
 
     # Connection reputation seeding (#3660): mirrors the player finalize flow.
     _seed_connection_reputation(draft, primary_persona)
