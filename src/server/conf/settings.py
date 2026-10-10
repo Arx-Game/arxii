@@ -96,6 +96,9 @@ INSTALLED_APPS += [
 SERVERNAME = "Arx"
 # Our ServerSession subclass (server/conf/serversession.py): tags the output of
 # a staff console line so the web client keeps it out of the column (#3857).
+# Background maintenance needs Django's connection lifecycle boundary too.
+EVENNIA_SERVER_SERVICE_CLASS = "server.service.ArxServerService"
+
 SERVER_SESSION_CLASS = "server.conf.serversession.ServerSession"
 EVENNIA_ADMIN = False
 # Sessions share a character (#3812, ADR-0294): a phone and a laptop on the same
