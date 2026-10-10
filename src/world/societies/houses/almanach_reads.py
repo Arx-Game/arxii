@@ -19,7 +19,8 @@ realm, ordered by the Area's ancestry depth then name.
   Area) — this is the graph ``sworn_to``/``vassals``/``unclaimed_by_tier``
   all walk.
 - A row is a *chain top* when it is the highest-tier title sharing its
-  ``seat_domain_id`` (``almanach._family_top``). A non-top row (an internal
+  ``seat_domain_id`` (``almanach._family_top``); a title with no seat shares
+  it with nothing, so it is always its own chain top (#4237). A non-top row (an internal
   chain member — a duchy's own unnamed county/barony) always reports its
   chain top's name via both ``comes_with`` and ``sworn_to``: it isn't an
   independent rung, so it has nothing of its own to report.
@@ -281,9 +282,16 @@ class _RealmGraph:
 
     def is_top(self, t: Title) -> bool:
         """Whether ``t`` is the highest-tier title sharing its seat (its
-        own chain's top), not an internal chain member."""
-        top_id = self.family_top_by_seat.get(t.seat_domain_id)
-        return t.seat_domain_id is not None and top_id == t.pk
+        own chain's top), not an internal chain member.
+
+        A title with no seat shares it with nothing, so it is its own top,
+        which is what ``chain_top_id`` reports for it too. ``seat_domain`` is
+        nullable and goes null when the seat's domain is deleted; reading such
+        a title as a chain member looked up the top of seat ``None`` and took
+        down the whole realm list (#4237)."""
+        if t.seat_domain_id is None:
+            return True
+        return self.family_top_by_seat.get(t.seat_domain_id) == t.pk
 
     def liege_title(self, title_pk: int) -> Title | None:
         """Nearest ancestor rung (via ``parent_title_id``) with a house set."""

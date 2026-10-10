@@ -599,8 +599,9 @@ actions telnet would.
 
 - **`ladder_for_realm(realm, *, for_founder=False) -> LadderPayload`** — one `LadderRow` per
   `Title` in the realm (state, seat, demesne, vassals, sworn-to, per-tier unclaimed counts).
-  `chain_top_id` is the title_id of the chain top a row belongs to (itself, for a top): that is
-  what a client keys chain membership on, because `comes_with` carries the top's NAME and is
+  `chain_top_id` is the title_id of the chain top a row belongs to (itself, for a top; a title
+  with no `seat_domain` is always its own top, #4237): that is what a client keys chain
+  membership on, because `comes_with` carries the top's NAME and is
   therefore `""` for an undefined top — exactly the rows a founder claiming an undefined slot most
   needs grouped. `claimant_name` is `Title.claimant_org`'s name (`""` when nothing contests it).
   `for_founder=True` hides any rung whose own house, or any held house above it, isn't published

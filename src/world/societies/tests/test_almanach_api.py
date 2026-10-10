@@ -24,6 +24,7 @@ from world.societies.houses.models import (
     HouseTemplate,
     NobiliaryParticle,
     SuccessionLaw,
+    Title,
 )
 
 
@@ -65,6 +66,36 @@ class AlmanachApiTests(TestCase):
         law_payload = res.data["house"]["default_succession_law"]
         assert law_payload["name"] == self.law.name
         assert law_payload["codex_entry_id"] is None
+
+    def test_a_title_with_no_seat_reads_as_its_own_chain_top(self) -> None:
+        """#4237: ``Title.seat_domain`` is nullable, and goes null when the seat's
+        domain is deleted. A seatless title shares its seat with nothing, so it is
+        its own chain top, as ``chain_top_id`` already said. Read as a chain member
+        instead, its row looked up the chain top of seat ``None`` and raised, and
+        the realm list, which builds every realm's ladder, answered 500."""
+        realm = RealmFactory(name="Seatless Realm")
+        unclaimed = Title.objects.create(
+            realm=realm, tier=TitleTier.BARONY, name="Barony of Nowhere", is_claimable=True
+        )
+        house = OrganizationFactory(
+            name="Landless", family=FamilyFactory(name="House Landless", origin_realm=realm)
+        )
+        held = Title.objects.create(realm=realm, tier=TitleTier.BARONY, name="Lost", house=house)
+        client = APIClient()
+        client.force_authenticate(self.staff)
+
+        assert client.get("/api/almanach/realms/").status_code == 200
+        res = client.get(f"/api/almanach/realms/{realm.pk}/ladder/")
+        assert res.status_code == 200
+        rows = {row["title_id"]: row for row in res.data["rows"]}
+        for title in (unclaimed, held):
+            assert rows[title.pk]["chain_top_id"] == title.pk
+            assert rows[title.pk]["sworn_to"] == ""
+            assert rows[title.pk]["comes_with"] == ""
+        # A held seatless barony is nobody's seat; an unclaimed one counts at its tier.
+        assert rows[held.pk]["is_seat_of"] == ""
+        assert res.data["unclaimed_by_tier"]["barony"] == 1
+        assert client.get(f"/api/almanach/houses/{house.pk}/document/").status_code == 200
 
     def test_document_carries_the_houses_days_of_remembrance(self) -> None:
         """#4206: the house section lists its observances in calendar order,
