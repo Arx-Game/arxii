@@ -214,7 +214,6 @@ def effective_combat_level(sheet: CharacterSheet) -> int:
     return _raw_primary_level(sheet)
 
 
-@transaction.atomic
 def mentor_band_problem(
     *, covenant: Covenant, mentor_sheet: CharacterSheet, sidekick_sheet: CharacterSheet
 ) -> str:
@@ -231,6 +230,7 @@ def mentor_band_problem(
     return ""
 
 
+@transaction.atomic
 def establish_mentor_bond(
     *,
     covenant: Covenant,

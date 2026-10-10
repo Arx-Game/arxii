@@ -69,8 +69,8 @@ class RelationshipTierAdmin(admin.ModelAdmin):
 class RelationshipLabelInline(admin.TabularInline):
     model = RelationshipLabel
     extra = 0
-    fields = ["type", "awareness", "since", "ended_at", "replaced", "note"]
-    readonly_fields = ["since", "replaced"]
+    fields = ["type", "awareness", "since", "ended_at", "replaced", "note", "staff_seeded"]
+    readonly_fields = ["since", "replaced", "staff_seeded"]
     autocomplete_fields = ["type"]
 
 

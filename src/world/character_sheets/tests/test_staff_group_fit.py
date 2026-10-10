@@ -189,7 +189,10 @@ class TieWriterTests(TestCase):
         side = tie_side(self.unpicked, self.played, StaffTieDirection.TOWARD)
         label = declare_tie_label(side, self.rival, LabelAwareness.PRIVATE)
         friend = RelationshipTypeFactory(name="Friend", valence=TypeValence.WARM)
-        shifted = change_tie_label(label, new_type=friend, awareness=LabelAwareness.PUBLIC)
+        with self.assertRaises(SheetWriteError):
+            change_tie_label(label, new_type=friend, awareness=LabelAwareness.PUBLIC)
+        shifted = change_tie_label(label, new_type=friend)
+        shifted = change_tie_label(shifted, awareness=LabelAwareness.PUBLIC)
         assert shifted.staff_seeded
         assert shifted.declared_by_tenure_id is None
         assert shifted.awareness == LabelAwareness.PUBLIC
@@ -250,6 +253,23 @@ class CovenantAndMentorWriterTests(TestCase):
         with self.assertRaises(SheetWriteError):
             bond_mentor(self.covenant, mentor=mentor, sidekick=other)
         assert MentorBond.objects.filter(mentor_sheet=mentor).count() == 1
+
+    def test_a_bond_rolls_back_when_its_health_recompute_fails(self) -> None:
+        from world.covenants.mentorship import establish_mentor_bond
+
+        mentor = RosterEntryFactory().character_sheet
+        _level(mentor, 4)
+        with (
+            mock.patch(
+                "world.magic.services.threads.recompute_max_health_with_threads",
+                side_effect=RuntimeError("recompute failed"),
+            ),
+            self.assertRaises(RuntimeError),
+        ):
+            establish_mentor_bond(
+                covenant=self.covenant, mentor_sheet=mentor, sidekick_sheet=self.sheet
+            )
+        assert not MentorBond.objects.filter(mentor_sheet=mentor).exists()
 
 
 class StaffWritesSendNothingTests(TestCase):

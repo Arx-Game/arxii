@@ -231,7 +231,10 @@ def change_tie_label(
     awareness: str = "",
     end: bool = False,
 ) -> RelationshipLabel:
-    """Shift, reveal or end one label, through the same services a player's change runs."""
+    """Shift, reveal or end one label, through the same services a player's change runs.
+
+    One change per call, so a refusal never leaves half of a request written.
+    """
     from world.relationships.exceptions import TieError  # noqa: PLC0415
     from world.relationships.services import (  # noqa: PLC0415
         advance_awareness,
@@ -239,12 +242,15 @@ def change_tie_label(
         shift_label,
     )
 
+    if sum([new_type is not None, bool(awareness), end]) != 1:
+        msg = "Make one change at a time."
+        raise SheetWriteError(msg)
     try:
         if end:
             return end_label(label=label)
         if new_type is not None:
-            label = shift_label(label=label, new_type=new_type)
-        if awareness and awareness != label.awareness:
+            return shift_label(label=label, new_type=new_type)
+        if awareness != label.awareness:
             label = advance_awareness(label=label, to=awareness)
     except TieError as exc:
         raise SheetWriteError(exc.user_message) from exc
@@ -319,8 +325,8 @@ def assign_role(
             rank=rank,
             sworn_as=sheet.primary_persona,
         )
-    except CovenantError as exc:
-        raise SheetWriteError(exc.user_message) from exc
+    except (CovenantError, ValidationError) as exc:
+        raise _covenant_refusal(exc) from exc
 
 
 def change_membership(  # noqa: PLR0913 - keyword-only; one argument per change

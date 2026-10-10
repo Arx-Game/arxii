@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any, cast
 
 from django.core.exceptions import ObjectDoesNotExist
+from django.db import transaction
 from django.db.models import Q
 
 from world.scenes.constants import SceneAction
@@ -285,27 +286,39 @@ def set_persona_profile(  # noqa: PLR0913 - keyword-only; one argument per guise
     keeps the same version history as the true profile; ``edited_by`` names the staff
     account for a staff edit. An unchanged field writes no version.
     """
-    from world.character_sheets.models import Profile  # noqa: PLC0415
-    from world.character_sheets.services import update_profile_text  # noqa: PLC0415
     from world.scenes.constants import PersonaType  # noqa: PLC0415
 
     if persona.persona_type == PersonaType.PRIMARY:
         msg = "Cannot author a guise profile for a PRIMARY persona."
         raise GuiseProfileError(msg)
 
+    with transaction.atomic():
+        return _write_guise(
+            persona,
+            edited_by,
+            {
+                "concept": concept,
+                "quote": quote,
+                "never_do": never_do,
+                "protect": protect,
+                "fear": fear,
+                "background": background,
+            },
+        )
+
+
+def _write_guise(
+    persona: Persona, edited_by: AccountDB | None, updates: dict[str, str | None]
+) -> Profile:
+    """``set_persona_profile``'s writes: the guise profile if missing, then each change."""
+    from world.character_sheets.models import Profile  # noqa: PLC0415
+    from world.character_sheets.services import update_profile_text  # noqa: PLC0415
+
     profile = persona.profile
     if profile is None:
         profile = Profile.objects.create()
         persona.profile = profile
         persona.save(update_fields=["profile"])
-    updates = {
-        "concept": concept,
-        "quote": quote,
-        "never_do": never_do,
-        "protect": protect,
-        "fear": fear,
-        "background": background,
-    }
     for field_name, value in updates.items():
         if value is not None and value != getattr(profile, field_name):
             update_profile_text(profile, field_name, value, edited_by=edited_by)
