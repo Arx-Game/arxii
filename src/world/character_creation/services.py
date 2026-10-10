@@ -2317,10 +2317,13 @@ def finalize_magic_data(draft: CharacterDraft, sheet: CharacterSheet) -> None:
         pk = data.get(key)
         return model.objects.filter(pk=pk).first() if pk else None
 
+    # A stale gift id fails loudly, as it always has: the stage validated it, so a
+    # missing row means the catalog changed under the draft.
+    gift_id = data.get("selected_gift_id")
     character_name = data.get("first_name", "Character")
     picks = MagicPicks(
         tradition=draft.selected_tradition,
-        gift=by_id(Gift, "selected_gift_id"),
+        gift=Gift.objects.get(pk=gift_id) if gift_id else None,
         techniques=resolve_rows(Technique, data.get("selected_technique_ids") or []),
         resonance=by_id(Resonance, "selected_gift_resonance_id"),
         anima_stat=by_id(Trait, "anima_check_stat_id"),

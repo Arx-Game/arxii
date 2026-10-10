@@ -391,7 +391,11 @@ class CharacterSheetViewSet(StaffSheetRowsMixin, RetrieveModelMixin, GenericView
         version = sheet.true_profile.text_versions.filter(pk=version_id).first()
         if version is None:
             raise Http404
-        restore_profile_text_version(version, edited_by=request.user)
+        try:
+            restore_profile_text_version(version, edited_by=request.user)
+        except StaffEditError as exc:
+            # A Glimpse version on a sheet whose aura is gone has nowhere to go (#4224).
+            return Response({"detail": exc.user_message}, status=status.HTTP_400_BAD_REQUEST)
         return self._fresh_payload(request, pk)
 
 

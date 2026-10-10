@@ -66,7 +66,8 @@ def set_glimpse_prose(aura: CharacterAura, text: str, *, edited_by: object | Non
     """Write the glimpse story prose and recompute the state.
 
     Versioned (#4224) through ``update_profile_text`` on the sheet's true profile, like
-    every other prose field, so a rewrite never loses the earlier Glimpse.
+    every other prose field, so a rewrite never loses the earlier Glimpse; that write
+    also recomputes the state.
     """
     from world.character_sheets.services import (  # noqa: PLC0415
         ensure_true_profile,
@@ -80,7 +81,6 @@ def set_glimpse_prose(aura: CharacterAura, text: str, *, edited_by: object | Non
         text,
         edited_by=edited_by,
     )
-    refresh_glimpse_state(aura)
 
 
 def link_distinction_to_glimpse(

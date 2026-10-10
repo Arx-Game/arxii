@@ -2,14 +2,18 @@
 
 from __future__ import annotations
 
-from django.test import TestCase
+from types import SimpleNamespace
+
+from django.contrib.admin.sites import AdminSite
+from django.test import RequestFactory, TestCase
 from rest_framework.test import APIClient
 
 from actions.factories import ActionTemplateFactory
 from evennia_extensions.factories import AccountFactory
 from world.character_sheets.models import ProfileTextVersion
 from world.character_sheets.services import ensure_true_profile
-from world.magic.constants import AcquisitionOrigin
+from world.magic.admin import CharacterAuraAdmin
+from world.magic.constants import AcquisitionOrigin, GlimpseState
 from world.magic.factories import (
     CharacterAuraFactory,
     GiftFactory,
@@ -115,6 +119,15 @@ class GrantMagicTests(TestCase):
             profile=profile, field="glimpse", text="The lamp went out and I could still see."
         ).exists()
 
+    def test_a_blank_glimpse_writes_no_version(self) -> None:
+        response = self.client.post(
+            f"{self.base}/staff-magic/", self._payload(glimpse=""), format="json"
+        )
+        assert response.status_code == 200, response.content[:800]
+        assert not ProfileTextVersion.objects.filter(
+            profile=self.sheet.true_profile, field="glimpse"
+        ).exists()
+
     def test_options_follow_the_picks_so_far(self) -> None:
         bare = self.client.get(f"{self.base}/staff-magic-options/")
         assert bare.status_code == 200, bare.content[:800]
@@ -214,3 +227,57 @@ class GlimpseVersioningTests(TestCase):
             format="json",
         )
         assert response.status_code == 400
+
+    def test_a_staff_edit_and_a_restore_move_the_glimpse_state(self) -> None:
+        aura = CharacterAuraFactory(character=self.sheet, glimpse_story="")
+        client = APIClient()
+        client.force_authenticate(user=self.staff)
+        url = f"/api/character-sheets/{self.sheet.pk}"
+        client.patch(f"{url}/staff-edit/", {"glimpse": "It was the river."}, format="json")
+        assert CharacterAura.objects.values_list("glimpse_state", flat=True).get(pk=aura.pk) == (
+            GlimpseState.COMPLETE
+        )
+        client.patch(f"{url}/staff-edit/", {"glimpse": ""}, format="json")
+        assert CharacterAura.objects.values_list("glimpse_state", flat=True).get(pk=aura.pk) == (
+            GlimpseState.NOT_STARTED
+        )
+        first = ProfileTextVersion.objects.get(
+            profile=self.sheet.true_profile, field="glimpse", text="It was the river."
+        )
+        response = client.post(f"{url}/profile-text-versions/{first.pk}/restore/")
+        assert response.status_code == 200, response.content[:800]
+        assert CharacterAura.objects.values_list("glimpse_story", "glimpse_state").get(
+            pk=aura.pk
+        ) == ("It was the river.", GlimpseState.COMPLETE)
+
+    def test_restoring_a_glimpse_with_no_aura_is_refused(self) -> None:
+        aura = CharacterAuraFactory(character=self.sheet, glimpse_story="Gone now.")
+        set_glimpse_prose(aura, "Gone soon.")
+        version = ProfileTextVersion.objects.filter(
+            profile=self.sheet.true_profile, field="glimpse"
+        ).first()
+        aura.delete()
+        client = APIClient()
+        client.force_authenticate(user=self.staff)
+        response = client.post(
+            f"/api/character-sheets/{self.sheet.pk}/profile-text-versions/{version.pk}/restore/"
+        )
+        assert response.status_code == 400
+
+    def test_the_aura_admin_versions_a_glimpse_edit(self) -> None:
+        aura = CharacterAuraFactory(character=self.sheet, glimpse_story="Before.")
+        request = RequestFactory().post("/")
+        request.user = self.staff
+        # The identity map has already put the new text on the instance by save time.
+        aura.glimpse_story = "After."
+        form = SimpleNamespace(changed_data=["glimpse_story"], initial={"glimpse_story": "Before."})
+        CharacterAuraAdmin(CharacterAura, AdminSite()).save_model(request, aura, form, True)
+        texts = list(
+            ProfileTextVersion.objects.filter(profile=self.sheet.true_profile, field="glimpse")
+            .order_by("pk")
+            .values_list("text", flat=True)
+        )
+        assert texts == ["Before.", "After."]
+        assert CharacterAura.objects.values_list("glimpse_state", flat=True).get(pk=aura.pk) == (
+            GlimpseState.COMPLETE
+        )

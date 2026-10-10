@@ -197,7 +197,11 @@ def _glimpse(sheet: CharacterSheet, picks: MagicPicks) -> CharacterAura:
     """The aura, its Glimpse tags by axis, and its prose (versioned through the services)."""
     from world.magic.constants import GlimpseTagAxis  # noqa: PLC0415
     from world.magic.models import CharacterAura, GlimpseTag  # noqa: PLC0415
-    from world.magic.services.glimpse import set_glimpse_prose, set_glimpse_tags  # noqa: PLC0415
+    from world.magic.services.glimpse import (  # noqa: PLC0415
+        refresh_glimpse_state,
+        set_glimpse_prose,
+        set_glimpse_tags,
+    )
 
     aura = CharacterAura.objects.filter(character=sheet).first()
     if aura is None:
@@ -210,7 +214,12 @@ def _glimpse(sheet: CharacterSheet, picks: MagicPicks) -> CharacterAura:
             axis_tags = [tag for tag in tags if tag.axis == axis]
             if axis_tags:
                 set_glimpse_tags(aura, axis_tags, axis=axis)
-    set_glimpse_prose(aura, picks.glimpse_story)
+    # An unchanged Glimpse (a blank one, at CG) writes no version; the state is still
+    # recomputed, since the tags above may have moved it.
+    if picks.glimpse_story != aura.glimpse_story:
+        set_glimpse_prose(aura, picks.glimpse_story)
+    else:
+        refresh_glimpse_state(aura)
     return aura
 
 
