@@ -62,7 +62,10 @@ Per-tie rows:
   `since` / `clandestine_at` / `public_at` / `ended_at`, `replaced` self-FK, `note`.
   `UniqueConstraint(relationship, type)` partial on `ended_at IS NULL`. `is_former` property.
   `declared_by_tenure` is read by **consent only** — a roster successor inherits the label but
-  the RIVALS gate needs one declared under a tenure that is still open.
+  the RIVALS gate needs one declared under a tenure that is still open. `staff_seeded`
+  (#4229) marks a label staff declared through edit mode; on a character nobody plays it has
+  no tenure and waits, and application approval binds it to the new tenure
+  (`bind_staff_seeded_labels`, ADR-4229).
 - **`RelationshipAllocation`** — one row per side (`OneToOne`), `ap_amount`, `game_week`.
   Mirrors `TrainingAllocation`.
 - **`RelationshipDepthTransaction`** — the audit of one award: `amount`, `source`
@@ -159,8 +162,12 @@ ADR-0308).
 Writes:
 
 - `get_or_create_side(*, source, target=None, target_companion=None)` — exactly one target.
-- `declare_label(*, side, type, awareness=PRIVATE, tenure=None)` → `LabelAlreadyDeclaredError`
-  on a second open label of the same type.
+- `declare_label(*, side, type, awareness=PRIVATE, tenure=None, staff_seeded=False)` →
+  `LabelAlreadyDeclaredError` on a second open label of the same type.
+- `bind_staff_seeded_labels(tenure) -> int` (#4229) — stamps the picked-up character's waiting
+  staff labels with the new tenure; called from `RosterApplication.approve`.
+- `staff_set_tier(*, side, tier_number)` (#4229) — staff fiat: sets the claimed tier with no
+  XP and no capstone; zero clears it.
 - `shift_label(*, label, new_type, note="")` — creates the new row **first** so a constraint
   collision leaves no stale idmapper instance behind (ADR-0008 addendum).
 - `end_label(*, label)`, `advance_awareness(*, label, to)` (`AwarenessBackwardError`).

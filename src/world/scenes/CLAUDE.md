@@ -428,7 +428,9 @@ Key service functions for scene round lifecycle:
     is never created here. Creation copies **no** descriptors from sibling faces — the
     descriptor-never-auto-attach privacy invariant (#1109) holds structurally.
   - **Guise-Sheet authoring (#1682):** `set-profile` POST action — the web face of
-    `scenes.services.set_persona_profile` (sole mutator; PRIMARY rejected). Ownership-gated
+    `scenes.services.set_persona_profile` (sole mutator; PRIMARY rejected; since #4229
+    every changed field writes through `update_profile_text`, so a guise's bio is
+    versioned like the true profile). Ownership-gated
     like `set_active` (own-sheet personas only, uniform rejection); absent fields stay
     untouched, blank fields clear. `PersonaSerializer` exposes read-only `guise_concept` /
     `guise_quote` / `guise_personality` / `guise_background` so the switcher's
