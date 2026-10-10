@@ -289,6 +289,22 @@ class MinorInductionAndSwearCoreTests(TestCase):
             1,
         )
 
+    def test_induction_swears_the_candidate_under_the_face_worn_at_fire(self) -> None:
+        """#4208: the rite reads the candidate's active persona when it fires; the
+        session itself stays sheet-keyed."""
+        from world.scenes.factories import PersonaFactory
+        from world.scenes.services import set_active_persona
+
+        candidate = CharacterSheetFactory()
+        _set_primary_level(candidate, 4)
+        alt = PersonaFactory(character_sheet=candidate, name="Robert")
+        session = self._build_induction_session(candidate=candidate, standing="core")
+        set_active_persona(candidate, alt)
+
+        membership = induct_member_via_session(session=session)
+
+        self.assertEqual(membership.sworn_as, alt)
+
     def test_induct_existing_minor_member_reselecting_minor_is_noop(self) -> None:
         """Re-inducting an existing MINOR row with standing="minor" must honor the
         pick, not force-promote to CORE (#2992 review finding). Uses an

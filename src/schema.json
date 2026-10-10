@@ -46864,10 +46864,12 @@ components:
         display_name:
           type: string
           description: |-
-            The member's display name, or a generic placeholder if they blocked the viewer (#2086).
+            The member as the covenant knows them, or a placeholder if they blocked the viewer.
 
-            When the viewer is blocked by this member's player, returns "a member has blocked you"
-            — never the member's name or identity. Staff always see the real character name.
+            The name is the face the vow was sworn under (``sworn_as``, #4208), never the
+            character behind it: a covenant mate addresses an alt as the alt. When the viewer
+            is blocked by this member's player, returns "a member has blocked you" (#2086),
+            never the member's name or identity.
           readOnly: true
       required:
       - anchor_role
@@ -54393,6 +54395,12 @@ components:
           allOf:
           - $ref: '#/components/schemas/Family'
           nullable: true
+        house:
+          allOf:
+          - $ref: '#/components/schemas/OrganizationShopWindow'
+          nullable: true
+        realm_name:
+          type: string
         nodes:
           type: array
           items:
@@ -54407,8 +54415,10 @@ components:
             $ref: '#/components/schemas/UnionEdge'
       required:
       - family
+      - house
       - nodes
       - parentage
+      - realm_name
       - unions
     FashionJudgement:
       type: object
@@ -57917,6 +57927,8 @@ components:
       properties:
         family_name:
           type: string
+        family_id:
+          type: integer
         house_state:
           type: string
         demesne:
@@ -57967,6 +57979,7 @@ components:
       - aspects
       - demesne
       - domains
+      - family_id
       - family_name
       - features
       - house_state
@@ -60149,6 +60162,10 @@ components:
         roster_entry_id:
           type: integer
           nullable: true
+        full_name:
+          type: string
+        short_name:
+          type: string
         gender:
           type: string
         age:
@@ -60160,6 +60177,7 @@ components:
       - age
       - description
       - family_id
+      - full_name
       - gender
       - id
       - is_appable
@@ -60167,6 +60185,7 @@ components:
       - name
       - roster_entry_id
       - sheet_id
+      - short_name
       - tier
     KnownSecret:
       type: object
@@ -66036,9 +66055,14 @@ components:
         society_name:
           type: string
           readOnly: true
+        family_id:
+          type: integer
+          readOnly: true
+          nullable: true
       required:
       - colors
       - description
+      - family_id
       - id
       - name
       - org_type_name

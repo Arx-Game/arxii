@@ -11,6 +11,7 @@ from rest_framework import serializers
 
 from world.roster.constants import RelationshipType
 from world.roster.models import Family, FamilyKind, KinSlotPool, Kinsperson
+from world.societies.serializers import OrganizationShopWindowSerializer
 
 
 class FamilyKindSerializer(serializers.ModelSerializer):
@@ -153,6 +154,13 @@ class KinspersonNodeSerializer(serializers.Serializer):
     # tree builders so a client links a kinsperson to their sheet without
     # guessing.
     roster_entry_id = serializers.IntegerField(allow_null=True)
+    # The two names a kin surface prints (#4209, ADR-0218 grammar): the
+    # full-formal composed name for the roll and the selected entry, and the
+    # tree form (first name alone for a person of this family, plus the née
+    # family when taken in; first + particle + own family for anyone else)
+    # for the graphic. ``name`` stays the bare node name.
+    full_name = serializers.CharField()
+    short_name = serializers.CharField()
     gender = serializers.CharField(allow_blank=True)
     age = serializers.IntegerField(allow_null=True)
     description = serializers.CharField(allow_blank=True)
@@ -185,6 +193,13 @@ class FamilyTreeSerializer(serializers.Serializer):
     """
 
     family = FamilySerializer(allow_null=True)
+    # The house rooted in the family as a gate shows it (#4209): the realm hub's
+    # shape, so nothing members-only can ride along; null for a family with no
+    # organization and for the ego-centric payload.
+    house = OrganizationShopWindowSerializer(allow_null=True)
+    # The realm the page reads under: the house's realm, else the family's
+    # origin realm, else blank.
+    realm_name = serializers.CharField(allow_blank=True)
     nodes = KinspersonNodeSerializer(many=True)
     parentage = ParentageEdgeSerializer(many=True)
     unions = UnionEdgeSerializer(many=True)

@@ -158,13 +158,18 @@ own issue. It is not absent because the data was already shown elsewhere.
 **Ties visibility was settled by #3906.** Covenant is PUBLIC — a covenant role is a thing
 a character IS in the world, the way a title is, and the Titles block beside it has always
 been public. Standing is FRIENDS by default with `standing_visibility` as the opt-in to
-`PUBLIC`. Public about the *character*, though, not about whatever face is worn (#4207):
-`CharacterCovenantRole` is keyed on the sheet, so for a masked or undiscovered-alt face the
-block would name the real character's covenant and out them to anyone who knows that
-roster. `_build_covenants` therefore takes the same `reveal_identity` flag the bio and
-appearance blocks take and returns nothing for an undisclosed face. The Titles block needs
-no such gate because `achievements.PersonaTitle` hangs on the persona (ADR-0253). Recording
-which face a vow was sworn under, so an alt can present its own covenant, is #4208.
+`PUBLIC`. Public about a *face*, though, not about the body behind it (#4207, #4208):
+`CharacterCovenantRole` is keyed on the sheet for its mechanics, and every row also records
+the persona the vow was sworn under (`sworn_as`, PRIMARY or ESTABLISHED, never a mask). The
+block shows the rows sworn under the face the sheet is presenting, so an alt's sheet shows
+the alt's covenant and not the primary's, a mask shows none, and nobody learns who is behind
+a face here. Rows sworn under the character's *other* faces reach only a viewer who may
+read the link between the faces: the owner and staff (`privileged`), or on an alt anyone it
+is revealed to (`reveal_identity`; they discovered the primary behind it). On the primary
+face `reveal_identity` is true for everyone, since the face is the identity, so it says
+nothing about the alts and they stay hidden there. Each entry carries `sworn_as`, blank
+when it is the presented face, else the face's name ("as Robert"). The Titles block needs
+no such gate because `achievements.PersonaTitle` hangs on the persona (ADR-0253).
 
 Both blocks now read the **sheet payload** (`standing`, `covenants`) rather than calling
 the society and covenant-role endpoints. That is not a refactor for tidiness: all three of

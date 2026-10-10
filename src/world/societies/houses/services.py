@@ -247,21 +247,87 @@ def _gender_key(person: Kinsperson) -> str:
     return gender.key if gender is not None else ""
 
 
-def _personal_style(person: Kinsperson) -> str:
+@dataclass(frozen=True)
+class _NameFacts:
+    """What composing one person's name reads beyond the node itself (#4209).
+
+    Fetched once per person (``_name_facts_for``) or once per tree
+    (``_name_facts_for_many``), so the grammar below is written exactly once
+    and the batched path cannot drift from the per-person one.
+    """
+
+    memberships: tuple[FamilyMembership, ...]
+    particles: FamilyParticles
+    titles: tuple[Title, ...]
+    housed: bool
+
+
+_NO_PARTICLES = FamilyParticles(born="", taken_in="")
+
+
+def _name_facts_for(person: Kinsperson) -> _NameFacts:
+    """One person's facts: the bounded handful of queries a single name costs."""
+    family = person.family
+    return _NameFacts(
+        memberships=tuple(
+            person.family_memberships.filter(ended_at__isnull=True).select_related("family")
+        ),
+        particles=(
+            FamilyParticles(
+                born=resolve_particle(family),
+                taken_in=resolve_particle(family, taken_in=True),
+            )
+            if family is not None
+            else _NO_PARTICLES
+        ),
+        titles=tuple(person.titles_held.all()),
+        housed=house_for_family(family) is not None,
+    )
+
+
+def _name_facts_for_many(people: Sequence[Kinsperson]) -> dict[int, _NameFacts]:
+    """Every person's facts in a fixed number of queries, however many people.
+
+    Active memberships, the particle pair per family (``particles_for_families``),
+    the house refs and the held titles: six flat queries for a whole tree, where
+    the per-person path costs about eight per node.
+    """
+    ids = [person.pk for person in people]
+    memberships_by_person: dict[int, list[FamilyMembership]] = {}
+    for membership in FamilyMembership.objects.filter(
+        kinsperson_id__in=ids, ended_at__isnull=True
+    ).select_related("family"):
+        memberships_by_person.setdefault(membership.kinsperson_id, []).append(membership)
+    family_ids = [
+        family_id for family_id in {person.family_id for person in people} if family_id is not None
+    ]
+    particles = particles_for_families(list(Family.objects.filter(pk__in=family_ids)))
+    refs = _house_refs_by_family(family_ids)
+    titles_by_holder: dict[int, list[Title]] = {}
+    for title in Title.objects.filter(holder_id__in=ids):
+        titles_by_holder.setdefault(title.holder_id, []).append(title)
+    return {
+        person.pk: _NameFacts(
+            memberships=tuple(memberships_by_person.get(person.pk, [])),
+            particles=particles.get(person.family_id, _NO_PARTICLES),
+            titles=tuple(titles_by_holder.get(person.pk, [])),
+            housed=person.family_id in refs,
+        )
+        for person in people
+    }
+
+
+def _personal_style(person: Kinsperson, facts: _NameFacts) -> str:
     """The styled-degree prefix ("Queen", "Lord") from the highest held title.
 
     Authorable per Title row (holder_style_*); blank falls back to the tier's
     PLACEHOLDER default. Untitled members of a housed family get the plain
     courtesy style; the familyless get none.
     """
-    title = max(
-        person.titles_held.all(),
-        key=lambda t: TITLE_TIER_RANK.get(t.tier, 0),
-        default=None,
-    )
+    title = max(facts.titles, key=lambda t: TITLE_TIER_RANK.get(t.tier, 0), default=None)
     key = _gender_key(person)
     if title is None:
-        if house_for_family(person.family) is None:
+        if not facts.housed:
             return ""
         # PLACEHOLDER courtesy pair; other/unset genders omit the style until
         # a neutral courtesy is authored (flagged for content pass).
@@ -277,20 +343,26 @@ def _personal_style(person: Kinsperson) -> str:
     return {"male": defaults[0], "female": defaults[1]}.get(key, defaults[2])
 
 
-def _title_suffix_text(person: Kinsperson, mode: str) -> str:
+def _title_suffix_text(facts: _NameFacts, mode: str) -> str:
     """ ", Title, Title…" for the held titles the mode admits, tier order."""
     if mode == TitleSuffixMode.NONE:
         return ""
-    titles = sorted(
-        person.titles_held.all(),
-        key=lambda t: TITLE_TIER_RANK.get(t.tier, 0),
-        reverse=True,
-    )
+    titles = sorted(facts.titles, key=lambda t: TITLE_TIER_RANK.get(t.tier, 0), reverse=True)
     if mode == TitleSuffixMode.PRIMARY:
         titles = titles[:1]
     if not titles:
         return ""
     return ", " + ", ".join(t.name for t in titles)
+
+
+def _compose_name(person: Kinsperson, *, degree: str, title_suffix: str, facts: _NameFacts) -> str:
+    """``full_display_name`` over facts already fetched: the one grammar."""
+    name = _name_body(person, degree, facts)
+    if degree in (NameDegree.STYLED, NameDegree.FULL_FORMAL):
+        style = _personal_style(person, facts)
+        if style:
+            name = f"{style} {name}"
+    return name + _title_suffix_text(facts, title_suffix)
 
 
 def full_display_name(
@@ -307,20 +379,42 @@ def full_display_name(
     the current-house segment ("Queen Sharlotte ne Regente dau Vaelmont").
     Taken-in members (basis outside born/founding) wear the taken-in form.
     ``title_suffix`` appends held titles (", Monarch of Luxen") in tier order.
-    People without a housed family keep their bare node name at every degree.
+    People without a family keep their bare node name at every degree.
+    For a whole tree at once, ``tree_names_for`` composes the same grammar
+    over batched facts.
     """
-    name = _name_body(person, degree)
-    if degree in (NameDegree.STYLED, NameDegree.FULL_FORMAL):
-        style = _personal_style(person)
-        if style:
-            name = f"{style} {name}"
-    return name + _title_suffix_text(person, title_suffix)
+    return _compose_name(
+        person, degree=degree, title_suffix=title_suffix, facts=_name_facts_for(person)
+    )
 
 
-def _name_body(person: Kinsperson, degree: str) -> str:
+def _first_name(person: Kinsperson) -> str:
+    base = person.display_name
+    return base.split()[0] if base else ""
+
+
+def _taken_in_birth_family(person: Kinsperson, facts: _NameFacts) -> tuple[bool, Family | None]:
+    """Whether the current membership was taken in, and the born family when it differs.
+
+    ``person.family`` must be set. The born family is what the née segment
+    names; it is ``None`` for a born member and for a taken-in member whose
+    only born membership is this same family.
+    """
+    family = person.family
+    current = next((m for m in facts.memberships if m.family_id == family.pk), None)
+    taken_in = current is not None and current.basis not in _BORN_EQUIVALENT_BASES
+    if not taken_in:
+        return False, None
+    birth = next((m for m in facts.memberships if m.basis == MembershipBasis.BORN), None)
+    if birth is None or birth.family_id == family.pk:
+        return True, None
+    return True, birth.family
+
+
+def _name_body(person: Kinsperson, degree: str, facts: _NameFacts) -> str:
     """The composed name without style prefix or title suffix."""
     base = person.display_name
-    first = base.split()[0] if base else ""
+    first = _first_name(person)
     if not first:
         return base
     family = person.family
@@ -328,16 +422,64 @@ def _name_body(person: Kinsperson, degree: str) -> str:
         return first
     if family is None:
         return base
-    memberships = list(person.family_memberships.filter(ended_at__isnull=True))
-    current = next((m for m in memberships if m.family_id == family.pk), None)
-    taken_in = current is not None and current.basis not in _BORN_EQUIVALENT_BASES
+    taken_in, birth = _taken_in_birth_family(person, facts)
     pieces = [first]
-    if degree == NameDegree.FULL_FORMAL and taken_in:
-        birth = next((m for m in memberships if m.basis == MembershipBasis.BORN), None)
-        if birth is not None and birth.family_id != family.pk:
-            pieces.extend([NEE_MARKER, birth.family.name])
-    pieces.extend([resolve_particle(family, taken_in=taken_in), family.name])
+    if degree == NameDegree.FULL_FORMAL and birth is not None:
+        pieces.extend([NEE_MARKER, birth.name])
+    pieces.extend([facts.particles.taken_in if taken_in else facts.particles.born, family.name])
     return _join_name_pieces(pieces)
+
+
+@dataclass(frozen=True)
+class TreeNames:
+    """A person's two names on a kin surface (#4209).
+
+    ``full`` is the full-formal name the roll and the selected entry print;
+    ``short`` is the tree form the graphic prints.
+    """
+
+    full: str
+    short: str
+
+
+def tree_names_for(people: Sequence[Kinsperson], *, within: Family | None) -> dict[int, TreeNames]:
+    """``full_display_name`` and the tree form for a whole tree, batched (#4209).
+
+    The tree form is relative to ``within``, the family whose page or tree this
+    is: a person of that family prints the first name alone, plus
+    ``ne <BirthFamily>`` when they were taken in and born to another family,
+    because the page head already says which family this is; anyone else
+    prints the common degree (first + particle + their own family), so a
+    relative who is not of the name keeps their name, and a familyless person
+    keeps the bare node name. Not a ``NameDegree``: the familiar degree is bare
+    first with no née segment, and the rule here depends on the page, not on
+    the person.
+    """
+    facts_by_id = _name_facts_for_many(people)
+    names: dict[int, TreeNames] = {}
+    for person in people:
+        facts = facts_by_id[person.pk]
+        names[person.pk] = TreeNames(
+            full=_compose_name(
+                person,
+                degree=NameDegree.FULL_FORMAL,
+                title_suffix=TitleSuffixMode.NONE,
+                facts=facts,
+            ),
+            short=_tree_form(person, within, facts),
+        )
+    return names
+
+
+def _tree_form(person: Kinsperson, within: Family | None, facts: _NameFacts) -> str:
+    first = _first_name(person)
+    family = person.family
+    if not first or family is None or within is None or family.pk != within.pk:
+        return _name_body(person, NameDegree.COMMON, facts)
+    _taken_in, birth = _taken_in_birth_family(person, facts)
+    if birth is not None:
+        return _join_name_pieces([first, NEE_MARKER, birth.name])
+    return first
 
 
 def name_alias_forms(person: Kinsperson) -> set[str]:
@@ -348,11 +490,12 @@ def name_alias_forms(person: Kinsperson) -> set[str]:
     dressing, not addresses. Includes the bare node name so pre-particle
     forms keep matching.
     """
+    facts = _name_facts_for(person)
     forms = {
         person.display_name,
-        _name_body(person, NameDegree.FAMILIAR),
-        _name_body(person, NameDegree.COMMON),
-        _name_body(person, NameDegree.FULL_FORMAL),
+        _name_body(person, NameDegree.FAMILIAR, facts),
+        _name_body(person, NameDegree.COMMON, facts),
+        _name_body(person, NameDegree.FULL_FORMAL, facts),
     }
     return {form for form in forms if form}
 

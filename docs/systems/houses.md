@@ -158,7 +158,12 @@ MOST_POWERFUL_GIFTED plug. `HousesServiceError.user_message` on refusals.
 - **House feed:** `world/tidings/services.house_feed_for(org)` — member deeds +
   revealed scandals, query-and-merge, no feed model (replaces Arx 1 informs).
 - **Web:** `/orgs/:id` renders the house block + House Tidings (extends the
-  #1446 stub OrgPage).
+  #1446 stub OrgPage). (#4209) The house block carries `family_id` beside
+  `family_name`, and "House of X" links to the family page `/families/:id`,
+  the public face of the house's people (see `kinship.md`); the realm hub's
+  `OrganizationShopWindow` carries the same `family_id` (null for an org
+  that is not a house) and links a house there rather than to the
+  members-only org page.
 - **Telnet:** `sheet/house` (house, particle name, fealty chain, titles,
   tidings).
 - **Channel:** `sync_house_channel(org)` — Evennia channel `house_<pk>`

@@ -260,22 +260,24 @@ class CharacterCovenantRoleSerializer(serializers.ModelSerializer):
         }
 
     def get_display_name(self, obj: CharacterCovenantRole) -> str:
-        """The member's display name, or a generic placeholder if they blocked the viewer (#2086).
+        """The member as the covenant knows them, or a placeholder if they blocked the viewer.
 
-        When the viewer is blocked by this member's player, returns "a member has blocked you"
-        — never the member's name or identity. Staff always see the real character name.
+        The name is the face the vow was sworn under (``sworn_as``, #4208), never the
+        character behind it: a covenant mate addresses an alt as the alt. When the viewer
+        is blocked by this member's player, returns "a member has blocked you" (#2086),
+        never the member's name or identity.
         """
         from world.scenes.block_services import member_blocked_viewer  # noqa: PLC0415
 
         request = self.context.get("request")
         if request is None or not request.user.is_authenticated:
-            return f"Character #{obj.character_sheet_id}"
+            return obj.sworn_as.name
         try:
             if member_blocked_viewer(viewer_account=request.user, member_sheet=obj.character_sheet):
                 return "a member has blocked you"
         except ObjectDoesNotExist:
             pass  # No roster entry on this sheet — show the normal name.
-        return f"Character #{obj.character_sheet_id}"
+        return obj.sworn_as.name
 
 
 class CovenantSerializer(serializers.ModelSerializer):

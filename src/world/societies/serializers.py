@@ -181,6 +181,9 @@ class HouseDetailSerializer(serializers.Serializer):
     """The house block of an org payload (#1884) — null for non-family orgs."""
 
     family_name = serializers.CharField()
+    # The Family pk, so the org page can link its family page (#4209): a Family pk
+    # is not an Organization pk, and the family page is keyed by the former.
+    family_id = serializers.IntegerField()
     house_state = serializers.CharField()
     # The Almanach document's own demesne number (``demesne_count``: baronies
     # the house holds), so an org page needs no second reader for it (#3983).
@@ -208,6 +211,10 @@ class OrganizationShopWindowSerializer(serializers.ModelSerializer):
 
     society_name = serializers.CharField(source="society.name", read_only=True)
     org_type_name = serializers.CharField(source="org_type.name", read_only=True)
+    # The Family a house is rooted in, or null for an org that is not a house, so
+    # a realm hub links a house to its family page rather than the members-only
+    # org page (#4209).
+    family_id = serializers.IntegerField(read_only=True, allow_null=True)
 
     class Meta:
         model = Organization
@@ -220,6 +227,7 @@ class OrganizationShopWindowSerializer(serializers.ModelSerializer):
             "sigil_description",
             "org_type_name",
             "society_name",
+            "family_id",
         ]
         read_only_fields = fields
 
@@ -262,6 +270,7 @@ class OrganizationSerializer(serializers.ModelSerializer):
         titles = sorted(obj.titles.all(), key=lambda t: (t.tier, t.name))
         payload = {
             "family_name": obj.family.name,
+            "family_id": obj.family_id,
             "house_state": obj.house_state,
             "demesne": demesne_count(titles),
             "liege_name": liege_edge.liege.name if liege_edge is not None else "",

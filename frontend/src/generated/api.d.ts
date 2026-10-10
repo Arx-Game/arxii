@@ -28160,10 +28160,12 @@ export interface components {
       readonly engage_blocked_reason: string | null;
       readonly viewer_capabilities: components['schemas']['ViewerCapabilities'];
       /**
-       * @description The member's display name, or a generic placeholder if they blocked the viewer (#2086).
+       * @description The member as the covenant knows them, or a placeholder if they blocked the viewer.
        *
-       *     When the viewer is blocked by this member's player, returns "a member has blocked you"
-       *     — never the member's name or identity. Staff always see the real character name.
+       *     The name is the face the vow was sworn under (``sworn_as``, #4208), never the
+       *     character behind it: a covenant mate addresses an alt as the alt. When the viewer
+       *     is blocked by this member's player, returns "a member has blocked you" (#2086),
+       *     never the member's name or identity.
        */
       readonly display_name: string;
     };
@@ -31649,6 +31651,8 @@ export interface components {
      */
     FamilyTree: {
       family: components['schemas']['Family'] | null;
+      house: components['schemas']['OrganizationShopWindow'] | null;
+      realm_name: string;
       nodes: components['schemas']['KinspersonNode'][];
       parentage: components['schemas']['ParentageEdge'][];
       unions: components['schemas']['UnionEdge'][];
@@ -33304,6 +33308,7 @@ export interface components {
     /** @description The house block of an org payload (#1884) — null for non-family orgs. */
     HouseDetail: {
       family_name: string;
+      family_id: number;
       house_state: string;
       demesne: number;
       liege_name: string;
@@ -34419,6 +34424,8 @@ export interface components {
       is_appable: boolean;
       sheet_id: number | null;
       roster_entry_id: number | null;
+      full_name: string;
+      short_name: string;
       gender: string;
       age: number | null;
       description: string;
@@ -37439,6 +37446,7 @@ export interface components {
       readonly sigil_description: string;
       readonly org_type_name: string;
       readonly society_name: string;
+      readonly family_id: number | null;
     };
     /** @description A ``DistinctionOffer`` embedded on an Upbringing answer row (#3675). */
     OriginChoiceOffer: {

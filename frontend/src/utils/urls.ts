@@ -17,6 +17,9 @@ export const urls = {
   // Character URLs
   character: (id: number | string) => `${ROUTES.CHARACTERS}/${id}`,
 
+  // Family page (#4209): keyed by the Family pk, which is not an Organization pk.
+  family: (id: number | string) => `/families/${id}`,
+
   // Scene URLs
   scene: (id: number | string) => `${ROUTES.SCENES}/${id}`,
 

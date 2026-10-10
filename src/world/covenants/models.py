@@ -9,7 +9,7 @@ membership, progression) is future work.
 from __future__ import annotations
 
 from decimal import Decimal
-from typing import TYPE_CHECKING, ClassVar
+from typing import TYPE_CHECKING, Any, ClassVar
 
 from django.core.exceptions import ValidationError
 from django.core.validators import MaxValueValidator, MinValueValidator
@@ -804,6 +804,25 @@ class CharacterCovenantRole(RelatedCacheClearingMixin, SharedMemoryModel):
         on_delete=models.PROTECT,
         related_name="memberships",
     )
+    # The face the vow was sworn under (#4208): presentation only. The mechanics
+    # of the vow (engaged bonuses, thread pulls, command tiers, the Durance gate)
+    # stay on the sheet above, because they are facts about the body; this says
+    # which of the character's faces the world knows the vow by, so an alt's
+    # sheet shows the alt's covenant and the primary's does not. PRIMARY or
+    # ESTABLISHED only: a temporary mask cannot swear. PROTECT: a face with vows
+    # is not deleted out from under them.
+    sworn_as = models.ForeignKey(
+        "arxii.Persona",
+        on_delete=models.PROTECT,
+        related_name="covenant_roles_sworn",
+        # NOT NULL at the database; blank here so a row built without a face passes
+        # form validation and ``save()`` fills in the primary.
+        blank=True,
+        help_text=(
+            "The persona this vow was sworn under (#4208): one of the character's own, "
+            "PRIMARY or ESTABLISHED. The sheet shows a row on the face that swore it."
+        ),
+    )
     joined_at = models.DateTimeField(auto_now_add=True)
     left_at = models.DateTimeField(null=True, blank=True)
 
@@ -816,12 +835,21 @@ class CharacterCovenantRole(RelatedCacheClearingMixin, SharedMemoryModel):
             ),
         ]
 
+    def save(self, *args: Any, **kwargs: Any) -> None:
+        # A row written with no face named is the primary's (#4208). Every production
+        # writer resolves a face explicitly (``services.resolve_sworn_face``); this
+        # serves direct ORM creation only, so the column can stay NOT NULL.
+        if self.sworn_as_id is None:
+            self.sworn_as = self.character_sheet.primary_persona
+        super().save(*args, **kwargs)
+
     def clean(self) -> None:
         super().clean()
         if self.rank_id and self.rank.covenant_id != self.covenant_id:
             raise ValidationError(
                 {"rank": "Rank must belong to the same covenant as the membership."}
             )
+        self._validate_sworn_face()
         if self.engaged and self.left_at is not None:
             raise ValidationError({"engaged": "Engaged row cannot have left_at set."})
         if self.engaged:
@@ -837,6 +865,17 @@ class CharacterCovenantRole(RelatedCacheClearingMixin, SharedMemoryModel):
                 raise ValidationError(
                     {"standing": "A minor member may only engage the secondary lane."}
                 )
+
+    def _validate_sworn_face(self) -> None:
+        """The sworn face is one of this character's own, and one they keep (#4208)."""
+        if self.sworn_as_id is None:
+            return
+        if self.sworn_as.character_sheet_id != self.character_sheet_id:
+            raise ValidationError(
+                {"sworn_as": "The sworn face must be one of this character's own personas."}
+            )
+        if not self.sworn_as.is_established_or_primary:
+            raise ValidationError({"sworn_as": "A vow needs a PRIMARY or ESTABLISHED face."})
 
     def _validate_engaged_exclusivity(self) -> None:
         """At most one engaged active role per covenant type + per special role.

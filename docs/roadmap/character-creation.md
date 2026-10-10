@@ -403,8 +403,13 @@ section for the full #2428/#2440/#2441/#2442 build record.
   rendered by the `KinshipPanel` sheet tab (`KinTreeGraph` + relationship
   readout). (#4210) The Kin block reads the family's own description and
   links a selected sheeted kinsperson to their sheet by a new
-  `roster_entry_id` on the node; the sheet's House row is plain text, since
-  it linked a Family pk into the org route. A family-keyed page is #4209.
+  `roster_entry_id` on the node. (#4209) The family page at `/families/:id`
+  (keyed by the Family pk): the house's gate, the family's description, the
+  roll in full-formal names with every played person linked, the tree in
+  short names, the selected person with their relatedness to the viewer's
+  own character, and the open seats; the sheet's House row, the org page's
+  house block and the realm hub link to it, and no definition tier appears
+  on any player kin surface (ADR-4209).
 - Consumed next by #1884 (recognition, succession law, fealty).
 
 

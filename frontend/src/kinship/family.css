@@ -1,0 +1,228 @@
+/**
+ * The family page (#4209): one page per family at /families/:id. Same grammar as
+ * the realm pages (realm.css) and the Reference Sheet (sheet.css): Cinzel for
+ * inscription, EB Garamond for reading, entries and ledger lines rather than
+ * cards. Scoped under `.family-page` so nothing leaks onto other pages.
+ *
+ * A house-styled family opens on a plate painted in explicit night literals in
+ * both themes, as the sheet's plate is: the gate is the same object whichever
+ * way the reader has the lights. A commoner family opens on a plain head.
+ */
+
+.family-page {
+  font-family: 'EB Garamond', Georgia, serif;
+  font-size: 1.1875rem;
+  line-height: 1.62;
+  color: hsl(var(--foreground));
+  background: hsl(var(--background));
+  max-width: 72rem;
+  margin: 0 auto;
+  padding: clamp(1.5rem, 4vh, 2.5rem) clamp(1rem, 4vw, 3rem) 5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 2.4rem;
+  box-sizing: border-box;
+}
+.family-page a {
+  color: hsl(var(--primary));
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 4px;
+}
+.family-page a:hover {
+  color: hsl(var(--accent-foreground));
+}
+.family-page a:focus-visible {
+  outline: 2px solid hsl(var(--primary));
+  outline-offset: 3px;
+}
+
+/* ---------- the gate ---------- */
+.family-eyebrow {
+  display: block;
+  font-family: 'Cinzel', Georgia, serif;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  letter-spacing: 0.25em;
+  text-transform: uppercase;
+  color: hsl(var(--muted-foreground));
+}
+.family-head,
+.family-plate {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+.family-head {
+  padding-bottom: 1.5rem;
+  border-bottom: 1px solid hsl(var(--border));
+}
+.family-head h1,
+.family-plate h1 {
+  font-family: 'Cinzel', Georgia, serif;
+  font-weight: 700;
+  font-size: clamp(2.2rem, 5vw, 3.5rem);
+  line-height: 1.05;
+  letter-spacing: 0.02em;
+  margin: 0;
+  text-wrap: balance;
+}
+.family-head h1 {
+  color: hsl(var(--primary));
+}
+.family-plate {
+  background: #1b1311;
+  color: #efe6d6;
+  padding: clamp(1.75rem, 4vw, 2.75rem) clamp(1.25rem, 4vw, 3rem);
+}
+.family-plate .family-eyebrow {
+  color: #c4b8a6;
+}
+.family-words {
+  margin: 0;
+  font-style: italic;
+  font-size: 1.1em;
+  color: #c4b8a6;
+}
+.family-arms {
+  margin: 0;
+  font-size: 0.95em;
+  color: #c4b8a6;
+}
+
+/* ---------- reading ---------- */
+.family-description {
+  max-width: 760px;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+.family-description p {
+  margin: 0;
+  text-wrap: pretty;
+}
+.family-empty {
+  font-style: italic;
+  color: hsl(var(--muted-foreground));
+  margin: 0;
+}
+
+/* ---------- sections ---------- */
+.family-section {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+.family-section h2 {
+  font-family: 'Cinzel', Georgia, serif;
+  font-weight: 600;
+  font-size: 1.35rem;
+  letter-spacing: 0.08em;
+  color: hsl(var(--primary));
+  margin: 0;
+}
+.family-name {
+  font-family: 'Cinzel', Georgia, serif;
+  font-weight: 600;
+  font-size: 1rem;
+  letter-spacing: 0.04em;
+}
+
+/* The roll: one list per generation, a rule between generations. */
+.family-roll {
+  list-style: none;
+  margin: 0;
+  padding: 0 0 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  border-bottom: 1px solid hsl(var(--border));
+}
+.family-roll:last-child {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+
+/* The tree keeps its frame, since a drawing needs edges; it scrolls sideways
+   inside the frame rather than widening the page. */
+.family-tree {
+  border: 1px solid hsl(var(--border));
+  padding: 1.5rem 1.25rem;
+  overflow-x: auto;
+}
+.family-tree svg {
+  display: block;
+  margin: 0 auto;
+}
+
+/* The selected entry: the name, the blurb, the relatedness line. */
+.family-selected {
+  max-width: 760px;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid hsl(var(--border));
+}
+.family-gloss {
+  margin: 0;
+  color: hsl(var(--muted-foreground));
+}
+.family-ledger {
+  margin: 0;
+  font-size: 0.95em;
+  color: hsl(var(--muted-foreground));
+}
+
+/* Open seats: a seat with its chip and blurb; a pool with its count. */
+.family-seats {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  max-width: 760px;
+}
+.family-seat {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.75rem;
+}
+.family-seats p {
+  flex-basis: 100%;
+  margin: 0;
+  color: hsl(var(--muted-foreground));
+}
+.family-chip {
+  font-family: ui-sans-serif, system-ui, sans-serif;
+  font-size: 0.6875rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: hsl(var(--primary));
+  border: 1px solid hsl(var(--primary));
+  padding: 1px 8px;
+}
+.family-count {
+  font-size: 0.95rem;
+  color: hsl(var(--muted-foreground));
+}
+
+@media (max-width: 40rem) {
+  .family-page {
+    font-size: 1.125rem;
+    padding-left: 1rem;
+    padding-right: 1rem;
+    gap: 1.75rem;
+  }
+  .family-plate {
+    padding: 1.75rem 1.25rem;
+  }
+  .family-name {
+    font-size: 0.9375rem;
+  }
+  .family-tree {
+    padding: 1rem 0.75rem;
+  }
+}

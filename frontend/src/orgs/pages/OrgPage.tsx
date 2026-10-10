@@ -14,6 +14,7 @@
 import { useMemo } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
+import { urls } from '@/utils/urls';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -208,7 +209,10 @@ function HouseSection({ orgId, house }: { orgId: number; house: HouseDetail }) {
       {house.stature && <StatureCard stature={house.stature} />}
       <Card>
         <CardHeader className="pb-3">
-          <CardTitle className="text-lg">House of {house.family_name}</CardTitle>
+          <CardTitle className="text-lg">
+            {/* The family page (#4209): the public face of the house's people. */}
+            House of <Link to={urls.family(house.family_id)}>{house.family_name}</Link>
+          </CardTitle>
         </CardHeader>
         <CardContent className="space-y-3 text-sm">
           {house.open_crises.length > 0 && (

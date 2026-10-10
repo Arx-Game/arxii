@@ -479,3 +479,23 @@ closes by field on `OriginTemplate`, never by matching a distinction's name.
 - **Give up** (#3996) — `release_tenure`: a player ends their own tenure on a roster
   character, returning it to Available. _Avoid_: "release" for the player-initiated case
   (that word is the sweep's).
+- **Family page** (#4209) — `/families/:id`, one page per `Family` keyed by its
+  pk (never an `Organization` pk): the house's gate, the family's description,
+  the roll, the tree, the selected person, the open seats. _Avoid_: house page,
+  org page (that is `/orgs/:id`, members-only).
+- **The roll** (#4209) — the family page's list of its people, one list per
+  generation, in full-formal names (`full_name`), a dagger for the deceased and
+  a link for every played person. Reaches one hop past the name: a member's
+  visible parents and children sit on it without being of the name. _Avoid_:
+  member list, roster (that word is the character roster).
+- **Tree name** (#4209) — `short_name`, the form the tree graphic prints,
+  relative to the family whose tree it is: first name alone for a person of
+  that family, plus `ne <BirthFamily>` when taken in and born elsewhere; the
+  common degree (first + particle + own family) for anyone else; the bare node
+  name for the familyless. Composed by `houses.services.tree_names_for`
+  beside the full-formal name. Not a `NameDegree`: the rule depends on the
+  page, not the person. _Avoid_: familiar degree, nickname.
+- **No tier words on player kin surfaces** (ADR-4209) — the roll, the tree, the
+  selected entry and the sheet's Kin block never print `definition_tier`; a
+  played person's name is a link, and that is the only distinction a reader
+  needs. Staff keep the tier in admin and the Almanach.

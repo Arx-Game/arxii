@@ -49,10 +49,12 @@ CONDITION_TEMPLATE_FACTORY = "world.conditions.factories.ConditionTemplateFactor
 PRIMARY_STAT_DESCRIPTION = "Primary character statistics."
 
 if TYPE_CHECKING:
+    from world.character_sheets.models import CharacterSheet
     from world.checks.models import CheckType
     from world.conditions.models import CapabilityType, ConditionTemplate
     from world.magic.models import Resonance, ThreadPullEffect
     from world.mechanics.models import ModifierCategory
+    from world.scenes.models import Persona
 
 
 class CovenantRoleFactory(factory_django.DjangoModelFactory):
@@ -263,6 +265,29 @@ class CovenantManagerRankFactory(CovenantRankFactory):
     can_request_gm = True
 
 
+def primary_face_for_tests(sheet: "CharacterSheet") -> "Persona":
+    """The sheet's PRIMARY persona, created if the test built the sheet without one.
+
+    A vow is always sworn under a face (#4208, NOT NULL). Many suites build their
+    sheet with ``primary_persona=False`` because nothing they test reads a persona;
+    giving them one here keeps the invariant without touching each of them.
+    """
+    from world.scenes.constants import PersonaType
+    from world.scenes.models import Persona
+
+    primary = Persona.objects.filter(
+        character_sheet=sheet, persona_type=PersonaType.PRIMARY
+    ).first()
+    if primary is not None:
+        return primary
+    return Persona.objects.create(
+        character_sheet=sheet,
+        name=sheet.character.db_key,
+        persona_type=PersonaType.PRIMARY,
+        profile=sheet.true_profile,
+    )
+
+
 class CharacterCovenantRoleFactory(factory_django.DjangoModelFactory):
     """Factory for CharacterCovenantRole.
 
@@ -287,6 +312,8 @@ class CharacterCovenantRoleFactory(factory_django.DjangoModelFactory):
     covenant = factory.SubFactory(CovenantFactory)
     covenant_role = factory.SubFactory(CovenantRoleFactory)
     rank = factory.LazyAttribute(lambda o: CovenantRankFactory(covenant=o.covenant))
+    # The face the vow was sworn under (#4208): the primary unless a test says otherwise.
+    sworn_as = factory.LazyAttribute(lambda o: primary_face_for_tests(o.character_sheet))
     engaged = False
 
 

@@ -12,8 +12,10 @@
  * for a stranger, a friend and the character's own player alike.
  */
 
+import type { ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import { cn } from '@/lib/utils';
+import { urls } from '@/utils/urls';
 import type {
   CharacterSheetDistinction,
   CharacterSheetGift,
@@ -50,7 +52,7 @@ export function SheetPanel({ sheet, isMyCharacter, rumor, languages }: SheetPane
   const choice = (
     field: 'species' | 'origin_realm' | 'family' | 'tarot_card' | 'gender',
     label: string,
-    name: string | undefined
+    name: ReactNode
   ) =>
     editing ? <StaffEditable field={field} kind="choice" label={label} display={name} /> : name;
 
@@ -62,9 +64,18 @@ export function SheetPanel({ sheet, isMyCharacter, rumor, languages }: SheetPane
     // may hold more than one; `origin` is the realm they are FROM, which is its own row.
     { label: 'Beginning', value: identity.beginnings.map((row) => row.name).join(', ') },
     { label: 'From', value: choice('origin_realm', 'From', identity.origin?.name) },
-    // Plain text, not a link: a Family pk is not an Organization pk, and the org page
-    // is member-only besides. The family page (#4209) becomes the destination (#4210).
-    { label: 'House', value: choice('family', 'House', identity.family?.name) },
+    // The family page (#4209), keyed by the Family pk: never the org route, since a
+    // Family pk is not an Organization pk and the org page is member-only (#4210).
+    {
+      label: 'House',
+      value: choice(
+        'family',
+        'House',
+        identity.family ? (
+          <Link to={urls.family(identity.family.id)}>{identity.family.name}</Link>
+        ) : undefined
+      ),
+    },
     { label: 'Tarot', value: choice('tarot_card', 'Tarot', identity.tarot_card?.name) },
     { label: 'Gender', value: choice('gender', 'Gender', identity.gender?.name) },
     { label: 'Path', value: identity.path?.name },
