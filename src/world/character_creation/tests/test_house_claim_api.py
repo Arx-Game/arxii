@@ -122,6 +122,38 @@ class HouseClaimApiTests(TestCase):
         self.assertNotIn("Retired API", option_names)
         feature_slugs = [f["slug"] for f in template["features"]]
         self.assertEqual(feature_slugs, ["hearth-right-api"])
+        # #4205: a plain option names no being and opens nothing.
+        fortitude = next(o for o in definitions[0]["options"] if o["name"] == "Fortitude API")
+        self.assertIsNone(fortitude["being_id"])
+        self.assertEqual(fortitude["being_name"], "")
+        self.assertIsNone(fortitude["target_entry_id"])
+
+    def test_house_titles_say_what_a_god_option_is_and_where_it_opens(self):
+        """#4205: an option that IS a god carries the being and opens its page."""
+        from world.codex.factories import CodexEntryFactory
+        from world.worship.factories import BeingNicknameFactory, WorshippedBeingFactory
+
+        entry = CodexEntryFactory(name="Calyx API")
+        calyx = WorshippedBeingFactory(name="Calyx API", codex_entry=entry)
+        knight = BeingNicknameFactory(being=calyx, name="The One True Knight")
+        patron = HouseAspectDefinition.objects.create(
+            name="Patron API", prompt="Whom does the house serve?", sets_patron=True
+        )
+        HouseAspectOption.objects.create(
+            definition=patron, name="Calyx API", being=calyx, being_nickname=knight
+        )
+        self.template.aspect_definitions.add(patron)
+
+        response = self.client.get("/api/character-creation/house-titles/")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        titles = response.data["results"] if isinstance(response.data, dict) else response.data
+        title = next(t for t in titles if t["id"] == self.title.pk)
+        template = next(t for t in title["templates"] if t["id"] == self.template.pk)
+        definition = next(d for d in template["aspect_definitions"] if d["name"] == "Patron API")
+        option = definition["options"][0]
+        self.assertEqual(option["being_id"], calyx.pk)
+        self.assertEqual(option["being_name"], "Calyx API")
+        self.assertEqual(option["target_entry_id"], entry.pk)
 
     def test_post_full_claim_persists_picks_and_stylings(self):
         response = self.client.post(

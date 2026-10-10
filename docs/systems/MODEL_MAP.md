@@ -9308,6 +9308,8 @@
   - reviewed_by -> contributors.ContentContributor [FK] (nullable)
   - definition -> societies.HouseAspectDefinition [FK]
   - codex_entry -> codex.CodexEntry [FK] (nullable)
+  - being -> worship.WorshippedBeing [FK] (nullable)
+  - being_nickname -> worship.BeingNickname [FK] (nullable)
 
 ### HouseClaim
 **Foreign Keys:**
@@ -10823,6 +10825,7 @@
   - being -> worship.WorshippedBeing [FK]
 **Pointed to by:**
   - patron_organizations <- societies.Organization
+  - house_aspect_options <- societies.HouseAspectOption
 
 ### BeingRelationship
 **Foreign Keys:**
@@ -10976,6 +10979,7 @@
   - ultimate_techniques -> magic.Technique [M2M]
 **Pointed to by:**
   - ceremonies <- ceremonies.Ceremony
+  - house_aspect_options <- societies.HouseAspectOption
   - audere_majora_faith_variants <- magic.AudereMajoraFaithVariant
   - manifest_options <- magic.TechniqueManifestOption
   - feast_days <- worship.WorshipFeastDay

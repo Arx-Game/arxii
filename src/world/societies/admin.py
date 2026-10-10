@@ -6,6 +6,7 @@ organizations, memberships, reputations, and legend entries.
 Note: Realm admin is in the `realms` app.
 """
 
+from django import forms
 from django.contrib import admin, messages
 from django.core.exceptions import ValidationError
 from django.http import HttpRequest
@@ -1188,10 +1189,32 @@ class HoldingKindAdmin(admin.ModelAdmin):
     search_fields = ("name", "description")
 
 
+class HouseTemplateAdminForm(forms.ModelForm):
+    """One patron question per charter (#4205), checked against the questions this
+    save SELECTS: the model's own ``clean()`` reads the M2M from the database, which
+    on an admin save still holds the old set."""
+
+    class Meta:
+        model = HouseTemplate
+        # The ModelAdmin hands this form its real field list; the Meta only lets the
+        # form be built standalone (tests), and it must not silently drop a column.
+        fields = "__all__"  # noqa: DJ007
+
+    def clean(self):
+        cleaned = super().clean()
+        definitions = cleaned.get("aspect_definitions")
+        if definitions is not None and sum(1 for d in definitions if d.sets_patron) > 1:
+            raise ValidationError(
+                {"aspect_definitions": "Only one question on a charter may set the patron."}
+            )
+        return cleaned
+
+
 @admin.register(HouseTemplate)
 class HouseTemplateAdmin(admin.ModelAdmin):
     """#1884 Phase D — realm recipes for CG-defined houses."""
 
+    form = HouseTemplateAdminForm
     list_display = ("name", "realm", "kind", "org_type", "liege", "starting_kin_slots")
     list_select_related = ("realm", "liege", "org_type")
     list_filter = ("realm", "kind")
@@ -1209,15 +1232,27 @@ class HouseAspectOptionInline(admin.TabularInline):
 
     model = HouseAspectOption
     extra = 0
-    fields = ("name", "description", "codex_entry", "is_active", "display_order")
+    fields = (
+        "name",
+        "description",
+        "codex_entry",
+        "being",
+        "being_nickname",
+        "is_active",
+        "display_order",
+    )
     raw_id_fields = ("codex_entry",)
+    # What the option IS (#4205): a god or totem, and the name a house calls it by.
+    autocomplete_fields = ("being", "being_nickname")
 
 
 @admin.register(HouseAspectDefinition)
 class HouseAspectDefinitionAdmin(admin.ModelAdmin):
-    """#2079 — authored, catalog-only required choices (ADR-0101)."""
+    """#2079 — authored, catalog-only required choices (ADR-0101). ``sets_patron``
+    (#4205) marks the one question whose pick names the house's patron."""
 
-    list_display = ("name", "min_picks", "max_picks", "display_order")
+    list_display = ("name", "min_picks", "max_picks", "sets_patron", "display_order")
+    list_filter = ("sets_patron",)
     search_fields = ("name", "prompt")
     inlines = (HouseAspectOptionInline,)
 

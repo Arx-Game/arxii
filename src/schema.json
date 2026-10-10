@@ -41397,6 +41397,10 @@ components:
       - ap_amount
     AlmanachHouseAspect:
       type: object
+      description: |-
+        One picked aspect (mirrors ``almanach_reads.aspect_facet``): ``being_name``
+        is the god or totem the answer is (#4205), ``target_entry_id`` the one Codex
+        entry it opens.
       properties:
         definition:
           type: string
@@ -41404,10 +41408,17 @@ components:
           type: string
         description:
           type: string
+        being_name:
+          type: string
+        target_entry_id:
+          type: integer
+          nullable: true
       required:
+      - being_name
       - definition
       - description
       - option
+      - target_entry_id
     AlmanachHouseDocumentHouse:
       type: object
       description: |-
@@ -41439,6 +41450,10 @@ components:
           allOf:
           - $ref: '#/components/schemas/AlmanachSuccessionLaw'
           nullable: true
+        patron:
+          allOf:
+          - $ref: '#/components/schemas/AlmanachHousePatron'
+          nullable: true
         aspects:
           type: array
           items:
@@ -41467,6 +41482,7 @@ components:
       - observances
       - offices
       - particle_example
+      - patron
       - published_at
       - sigil_description
       - words
@@ -41519,6 +41535,23 @@ components:
       - holder_name
       - slug
       - title
+    AlmanachHousePatron:
+      type: object
+      description: |-
+        The house's patron by its own name for it (#4205; mirrors
+        ``almanach_reads.patron_payload``).
+      properties:
+        nickname:
+          type: string
+        being_name:
+          type: string
+        codex_entry_id:
+          type: integer
+          nullable: true
+      required:
+      - being_name
+      - codex_entry_id
+      - nickname
     AlmanachHouseSummary:
       type: object
       description: |-
@@ -47994,9 +48027,13 @@ components:
         anchor:
           type: string
           nullable: true
+        href:
+          type: string
+          nullable: true
       required:
       - anchor
       - entry_id
+      - href
       - text
     CompanionOrderSummary:
       type: object
@@ -56782,7 +56819,10 @@ components:
       - prompt
     HouseAspectFacet:
       type: object
-      description: One picked identity facet on the house block (#2079).
+      description: |-
+        One picked identity facet on the house block (#2079; mirrors
+        ``almanach_reads.aspect_facet``). ``being_name`` is the god or totem the answer
+        is (#4205), ``target_entry_id`` the one Codex entry it opens.
       properties:
         definition:
           type: string
@@ -56790,17 +56830,27 @@ components:
           type: string
         description:
           type: string
+        being_name:
+          type: string
+        target_entry_id:
+          type: integer
+          nullable: true
       required:
+      - being_name
       - definition
       - description
       - option
+      - target_entry_id
     HouseAspectOption:
       type: object
       description: |-
         One authored answer in an aspect catalog (#2079).
 
         ``codex_entry_id`` (#2868) lets the CG option card link the option's lore
-        write-up — Inferna's House Quiddities each have one.
+        write-up — Inferna's House Quiddities each have one. ``being_id``/``being_name``
+        say what the option IS when it is a god or a totem (#4205), and
+        ``target_entry_id`` is the one entry the card opens: the option's own, else
+        the being's page.
       properties:
         id:
           type: integer
@@ -56815,10 +56865,25 @@ components:
           type: integer
           readOnly: true
           nullable: true
+        being_id:
+          type: integer
+          readOnly: true
+          nullable: true
+        being_name:
+          type: string
+          readOnly: true
+          default: ''
+        target_entry_id:
+          type: integer
+          readOnly: true
+          nullable: true
       required:
+      - being_id
+      - being_name
       - codex_entry_id
       - id
       - name
+      - target_entry_id
     HouseClaimKin:
       type: object
       description: One founder-written kin row, as CG echoes it back (#3983 Plan B).
@@ -57165,6 +57230,10 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/HouseDomain'
+        patron:
+          allOf:
+          - $ref: '#/components/schemas/HousePatron'
+          nullable: true
         aspects:
           type: array
           items:
@@ -57199,6 +57268,7 @@ components:
       - liege_name
       - observances
       - open_crises
+      - patron
       - stature
       - titles
       - vacancies
@@ -57327,6 +57397,23 @@ components:
       - lore
       - name
       - when
+    HousePatron:
+      type: object
+      description: |-
+        The house's patron by its own name for it (#4205; mirrors
+        ``almanach_reads.patron_payload``).
+      properties:
+        nickname:
+          type: string
+        being_name:
+          type: string
+        codex_entry_id:
+          type: integer
+          nullable: true
+      required:
+      - being_name
+      - codex_entry_id
+      - nickname
     HouseStateEnum:
       enum:
       - standing

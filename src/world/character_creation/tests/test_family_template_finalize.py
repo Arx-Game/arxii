@@ -85,6 +85,37 @@ class NamedFamilyMaterializeTest(FinalizationTestMixin, TestCase):
         assert KinSlotPool.objects.filter(family=family).count() == 1
         assert org.ranks.count() == 5
 
+    def test_name_path_writes_the_patron_the_charter_question_names(self) -> None:
+        """#4205: the name path founds through the same builder, so a pick on the
+        charter's patron question sets the family org's patron too."""
+        from world.worship.factories import BeingNicknameFactory, WorshippedBeingFactory
+
+        calyx = WorshippedBeingFactory(name="Calyx")
+        knight = BeingNicknameFactory(being=calyx, name="The One True Knight")
+        patron = HouseAspectDefinition.objects.create(
+            name="Patron", prompt="Whom does the family serve?", sets_patron=True
+        )
+        calyx_option = HouseAspectOption.objects.create(
+            definition=patron, name="Calyx", being=calyx, being_nickname=knight
+        )
+        self.template.aspect_definitions.add(patron)
+        draft = self._create_base_draft(
+            new_family_name="Cisternwrights",
+            family_aspect_picks={
+                str(self.charge.id): [self.granaries.id],
+                str(patron.id): [calyx_option.id],
+            },
+        )
+        draft.selected_origin_template = self.upbringing
+        draft.served_house = self.served
+        draft.draft_data.pop("tarot_card_name", None)
+        draft.save()
+
+        finalize_character(draft, add_to_roster=True)
+        org = house_for_family(Family.objects.get(name="Cisternwrights"))
+        assert org is not None
+        assert org.patron_nickname == knight
+
     def test_second_finalize_on_the_same_family_id_is_idempotent(self) -> None:
         draft = self._named_draft()
         finalize_character(draft, add_to_roster=True)

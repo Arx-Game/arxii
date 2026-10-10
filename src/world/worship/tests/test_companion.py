@@ -126,6 +126,7 @@ class BeingCompanionTests(TestCase):
                     "text": "Calyx",
                     "entry_id": self.calyx_entry.pk,
                     "anchor": f"relationship-{self.calyx.pk}",
+                    "href": None,
                 }
             ],
         )
@@ -136,6 +137,38 @@ class BeingCompanionTests(TestCase):
                 ("Feud", "Calyx", "She stole the first harvest."),
             ],
         )
+
+    def test_sworn_houses_list_the_published_houses_whose_patron_this_is(self):
+        """#4205: a published house whose patron_nickname names this god is on the rail,
+        linked to its page by site path; an unpublished one, or one sworn to another
+        god, is not; and the group is absent when there is nobody."""
+        from world.societies.factories import OrganizationFactory
+        from world.societies.houses.almanach import publish_house
+
+        before = self._retrieve(self.entry)
+        self.assertNotIn("Sworn houses", [g["label"] for g in before["rail"]])
+
+        gory = self.being.nicknames.get(name="The Gory Goddess")
+        piropa = publish_house(OrganizationFactory(name="House Piropa", patron_nickname=gory))
+        OrganizationFactory(name="House Unpublished", patron_nickname=gory)
+        other_name = BeingNicknameFactory(being=self.calyx, name="The Knight")
+        publish_house(OrganizationFactory(name="House Elsewhere", patron_nickname=other_name))
+
+        companion = self._retrieve(self.entry)
+        sworn = next(g for g in companion["rail"] if g["label"] == "Sworn houses")
+        self.assertEqual(
+            sworn["items"],
+            [
+                {
+                    "text": "House Piropa",
+                    "entry_id": None,
+                    "anchor": None,
+                    "href": f"/orgs/{piropa.pk}",
+                }
+            ],
+        )
+        # The group comes last on the rail, after the relationships.
+        self.assertEqual(companion["rail"][-1]["label"], "Sworn houses")
 
     def test_the_other_god_tells_its_own_side(self):
         companion = self._retrieve(self.calyx_entry, self.staff)

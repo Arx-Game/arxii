@@ -34,7 +34,16 @@ const doc: HouseDocumentPayload = {
     published_at: null,
     particle_example: 'Océane aza Piropa · Raffaele azas Piropa',
     default_succession_law: { name: 'Infernal Enatic - Durance', codex_entry_id: null },
-    aspects: [],
+    patron: { nickname: 'The One True Knight', being_name: 'Calyx', codex_entry_id: 77 },
+    aspects: [
+      {
+        definition: 'Patron',
+        option: 'Calyx',
+        description: 'The knight who kept the first vigil.',
+        being_name: 'Calyx',
+        target_entry_id: 77,
+      },
+    ],
     features: [],
     offices: [],
     observances: [
@@ -108,6 +117,19 @@ test('Gentry toggles like any other state when the realm theme is luxen', async 
 
   await userEvent.click(screen.getByRole('button', { name: 'Save' }));
   expect(mutate).toHaveBeenCalledWith({ org_id: 9, house_state: 'gentry' });
+});
+
+test("the patron reads by the house's own name and a pick that is a god opens its page (#4205)", () => {
+  vi.mocked(queries.useHouseDocument).mockReturnValue({
+    data: doc,
+    isLoading: false,
+  } as never);
+
+  renderWithProviders(<HouseDocument houseId={9} />);
+  expect(screen.getByText('patron')).toBeInTheDocument();
+  expect(screen.getByText(/The One True Knight/)).toBeInTheDocument();
+  expect(screen.getByRole('link', { name: '(Calyx)' })).toHaveAttribute('href', '/codex/77');
+  expect(screen.getByRole('link', { name: 'Calyx' })).toHaveAttribute('href', '/codex/77');
 });
 
 test('editing a day of remembrance saves the whole list, without the spelled date (#4206)', async () => {

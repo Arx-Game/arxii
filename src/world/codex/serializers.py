@@ -214,6 +214,7 @@ class CompanionItemSerializer(serializers.Serializer):
     text = serializers.CharField()
     entry_id = serializers.IntegerField(allow_null=True)
     anchor = serializers.CharField(allow_null=True)
+    href = serializers.CharField(allow_null=True)
 
 
 class CompanionGroupSerializer(serializers.Serializer):

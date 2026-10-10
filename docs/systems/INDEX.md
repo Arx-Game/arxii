@@ -1775,6 +1775,14 @@ Noble/merchant/crime houses as first-class play — a house IS an `Organization`
 (`family` FK → `roster.Family`) on the kinship graph (#2062, ADR-0098).
 
 - **Models** (`world/societies/houses/`): `NobiliaryParticle`, `HouseRecognitionRule`, `FealtyEdge`, `SuccessionLaw`, `Title`, `LandShape`, `Domain`, `DomainGarrisonPost`, `HoldingKind`, `DomainHolding`, `DomainImprovementDetails`, `DomainCrisis`, `CrisisIntel`, `MarriagePact`, `PactCommitment`; plus `Organization.family` / `Organization.default_succession_law` / `Organization.house_state` / `Organization.published_at`
+- **Aspects point at real things (#4205, ADR-4205):** `HouseAspectOption.being` /
+  `being_nickname` (PROTECT, nullable) say an authored answer IS a god or a totem and
+  what a house calls it; `codex_entry` stays the lore target; `target_entry_id` is the
+  one entry a pick opens. `HouseAspectDefinition.sets_patron` marks the one question per
+  charter whose pick writes `Organization.patron_nickname` at founding
+  (`creator._stamp_aspects`). Every house read goes through
+  `almanach_reads.aspect_facet` / `patron_payload`; the deity's Codex companion lists
+  its sworn houses. Member effects (quiddity, totem bonuses) are a later issue.
 - **Developments (#4060 slice 2, ADR-0320):** a `DomainHolding` is the physical
   income-generating thing a family possesses: `HoldingKind.site_kind`
   (ABSTRACT/LAND/BUILDING), `units_required`, `requires_field` (a farm);
