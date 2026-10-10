@@ -63,6 +63,20 @@ rows, stamped on the org as `OrganizationAspect`. A flat fact: a `HouseFeature` 
 stable slug code can check) stamped as `OrganizationFeature`. Both can be set directly
 on staff-authored houses. Do not: add a boolean per fact.
 
+An answer that IS a real thing (#4205): bind the option to it. A god or a totem is the
+option's `being` plus `being_nickname` (one of that being's own names, the name a house on
+this option will use); a battle or a tradition is its `codex_entry`. One or the other,
+never both. The pick then opens that page from the house, the family and the CG card.
+
+## Recipe 7b: a patron question (Umbros's patron god, Aythirmok's totem)
+One `HouseAspectDefinition` on the charter with `sets_patron` on, `max_picks` 1, and one
+option per god the realm's houses may serve, each with `being` and `being_nickname`. The
+founder's pick becomes `Organization.patron_nickname` at founding and the god's Codex
+page lists the house among its sworn houses once published. Optional patron: `min_picks`
+0. Only one such question per charter. Beings and nicknames are installation rows, so a
+catalog loaded on another installation needs its options re-bound (and the flag re-set)
+in admin: `sets_patron`, `being` and `being_nickname` do not travel in the export.
+
 ## Recipe 8: servants of a powerful family
 Superseded by Recipes 11 and 12 (#3648): a claim-path role priced by influence is now a
 kin or retainer **Vacancy** on the staff family's org, not a pick-list prompt. See

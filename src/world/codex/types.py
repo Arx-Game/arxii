@@ -37,11 +37,13 @@ class CompanionReader:
 
 @dataclass(frozen=True)
 class CompanionItem:
-    """One rail line: a fact, optionally a link to another entry or to a section below."""
+    """One rail line: a fact, optionally a link to another entry, to a section below,
+    or (#4205) to a page outside the Codex by site path, such as a house's page."""
 
     text: str
     entry_id: int | None = None
     anchor: str | None = None
+    href: str | None = None
 
 
 @dataclass(frozen=True)

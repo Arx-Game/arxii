@@ -308,7 +308,10 @@ saved live (no draft gate pre-launch); blank fields simply do not render on the 
   no entry of its own, so never a link), Favored, Associated, Facets, then one group per
   valence (Ally, Rival, Feud, Unclear) naming the other god as a link to its entry -
   drawn only when the reader may open that entry (`CompanionReader.may_see`), so a feud
-  with a god the reader cannot see is not drawn at all. Sections under the Lore: one per
+  with a god the reader cannot see is not drawn at all - and last **Sworn houses**
+  (#4205): the published organisations whose `patron_nickname.being` is this god, each
+  a site-path link to its house page (`CompanionItem.href`, `/orgs/<id>`), left out when
+  there is nobody. Sections under the Lore: one per
   feast day with lore (calendar order), one per visible relationship whose story from
   this god's side is non-blank. Before #4198 nothing read these rows.
 - API (`/api/worship/admin/beings/`, staff only, `StaffBeingViewSet`): list = tiles

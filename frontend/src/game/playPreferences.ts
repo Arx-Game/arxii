@@ -16,6 +16,9 @@ export interface PlayPreferences {
   measure: number;
   sidebarWidth: number;
   sidebarSide: SidebarSide;
+  /** The conversation rail's width (#4129), 200 to 320, and whether it is folded to its strip. */
+  railWidth: number;
+  railCollapsed: boolean;
   density: PlayDensity;
   readerMode: ReaderMode;
   /** The feed's filter chips (#3856), the player's own layout; per account, per browser. */
@@ -31,6 +34,8 @@ export const DEFAULT_PLAY_PREFERENCES: PlayPreferences = {
   measure: 90,
   sidebarWidth: 280,
   sidebarSide: 'right',
+  railWidth: 240,
+  railCollapsed: false,
   density: 'compact',
   readerMode: 'threads',
   feedChips: DEFAULT_FEED_CHIPS.map((chip) => ({ ...chip })),
@@ -38,6 +43,12 @@ export const DEFAULT_PLAY_PREFERENCES: PlayPreferences = {
 };
 
 const STORAGE_PREFIX = 'arx:play-preferences:v2:account:';
+
+/** The rail's resize range (#4129, decision 1). */
+export const RAIL_MIN = 200;
+export const RAIL_MAX = 320;
+/** The rail folded to a strip of counts. */
+export const RAIL_STRIP_WIDTH = 44;
 
 function reportStorageFailure(): void {
   if (typeof window !== 'undefined') window.dispatchEvent(new Event('arx-play-storage-warning'));
@@ -70,6 +81,8 @@ export function loadPlayPreferences(accountId?: number | null): PlayPreferences 
       measure: clamp(value.measure, 72, 110, DEFAULT_PLAY_PREFERENCES.measure),
       sidebarWidth: clamp(value.sidebarWidth, 240, 360, DEFAULT_PLAY_PREFERENCES.sidebarWidth),
       sidebarSide: value.sidebarSide === 'left' ? 'left' : 'right',
+      railWidth: clamp(value.railWidth, RAIL_MIN, RAIL_MAX, DEFAULT_PLAY_PREFERENCES.railWidth),
+      railCollapsed: value.railCollapsed === true,
       density: value.density === 'comfortable' ? 'comfortable' : 'compact',
       readerMode: value.readerMode === 'chronological' ? 'chronological' : 'threads',
       feedChips: normalizeFeedChips(value.feedChips),

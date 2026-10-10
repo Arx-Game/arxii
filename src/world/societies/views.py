@@ -96,7 +96,12 @@ class OrganizationViewSet(viewsets.ReadOnlyModelViewSet):
     # the family + prefetch the rest so the payload reads from cache.
     queryset = (
         Organization.objects.select_related(
-            "family", "society", "org_type", "stature__band", "stature__previous_band"
+            "family",
+            "society",
+            "org_type",
+            "stature__band",
+            "stature__previous_band",
+            "patron_nickname__being",  # the patron line (#4205, get_house)
         )
         .prefetch_related(
             "ranks",  # noqa: PREFETCH_STRING
@@ -104,6 +109,7 @@ class OrganizationViewSet(viewsets.ReadOnlyModelViewSet):
             "domains__holdings",  # noqa: PREFETCH_STRING
             "aspects__definition",  # noqa: PREFETCH_STRING
             "aspects__option",  # noqa: PREFETCH_STRING
+            "aspects__option__being",  # noqa: PREFETCH_STRING - what a pick IS (#4205)
             "features__feature",  # noqa: PREFETCH_STRING
             "domains__crises__crisis_type__options",  # noqa: PREFETCH_STRING — crisis cards (#2238)
             "domains__crises__chosen_option",  # noqa: PREFETCH_STRING
@@ -112,6 +118,7 @@ class OrganizationViewSet(viewsets.ReadOnlyModelViewSet):
             "fealty__liege",  # noqa: PREFETCH_STRING  — this org's liege edge (get_house)
             "vassal_edges__vassal",  # noqa: PREFETCH_STRING  — its direct vassals
             "vacancies",  # noqa: PREFETCH_STRING - open openings (#3648, get_house)
+            "observances",  # noqa: PREFETCH_STRING - days of remembrance (#4206, get_house)
         )
         .order_by("id")
     )

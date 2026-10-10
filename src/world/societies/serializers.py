@@ -12,7 +12,12 @@ from world.scenes.models import Persona
 
 if TYPE_CHECKING:
     from world.character_sheets.models import CharacterSheet
-from world.societies.houses.almanach_reads import demesne_count
+from world.societies.houses.almanach_reads import (
+    aspect_facet,
+    demesne_count,
+    observance_rows,
+    patron_payload,
+)
 from world.societies.houses.models import Domain, Title
 from world.societies.models import (
     LegendEntry,
@@ -75,11 +80,24 @@ class HouseDomainSerializer(serializers.ModelSerializer):
 
 
 class HouseAspectFacetSerializer(serializers.Serializer):
-    """One picked identity facet on the house block (#2079)."""
+    """One picked identity facet on the house block (#2079; mirrors
+    ``almanach_reads.aspect_facet``). ``being_name`` is the god or totem the answer
+    is (#4205), ``target_entry_id`` the one Codex entry it opens."""
 
     definition = serializers.CharField()
     option = serializers.CharField()
     description = serializers.CharField(allow_blank=True)
+    being_name = serializers.CharField(allow_blank=True)
+    target_entry_id = serializers.IntegerField(allow_null=True)
+
+
+class HousePatronSerializer(serializers.Serializer):
+    """The house's patron by its own name for it (#4205; mirrors
+    ``almanach_reads.patron_payload``)."""
+
+    nickname = serializers.CharField()
+    being_name = serializers.CharField()
+    codex_entry_id = serializers.IntegerField(allow_null=True)
 
 
 class HouseFeatureFacetSerializer(serializers.Serializer):
@@ -148,6 +166,17 @@ class VacancyOfferSerializer(serializers.Serializer):
     presumed_importance = serializers.IntegerField()
 
 
+class HouseObservanceSerializer(serializers.Serializer):
+    """A house's day of remembrance as the house block shows it (#4206); ``when``
+    is the game's one IC date spelling."""
+
+    ic_month = serializers.IntegerField()
+    ic_day = serializers.IntegerField()
+    name = serializers.CharField()
+    lore = serializers.CharField(allow_blank=True)
+    when = serializers.CharField()
+
+
 class HouseDetailSerializer(serializers.Serializer):
     """The house block of an org payload (#1884) — null for non-family orgs."""
 
@@ -163,11 +192,13 @@ class HouseDetailSerializer(serializers.Serializer):
     vassal_names = serializers.ListField(child=serializers.CharField())
     titles = HouseTitleSerializer(many=True)
     domains = HouseDomainSerializer(many=True)
+    patron = HousePatronSerializer(allow_null=True)
     aspects = HouseAspectFacetSerializer(many=True)
     features = HouseFeatureFacetSerializer(many=True)
     open_crises = HouseCrisisSerializer(many=True)
     stature = HouseStatureSerializer(allow_null=True)
     vacancies = VacancyOfferSerializer(many=True)
+    observances = HouseObservanceSerializer(many=True)
 
 
 class OrganizationShopWindowSerializer(serializers.ModelSerializer):
@@ -246,14 +277,10 @@ class OrganizationSerializer(serializers.ModelSerializer):
             "vassal_names": [edge.vassal.name for edge in obj.vassal_edges.all()],
             "titles": titles,
             "domains": obj.domains.all(),
-            "aspects": [
-                {
-                    "definition": facet.definition.name,
-                    "option": facet.option.name,
-                    "description": facet.option.description,
-                }
-                for facet in obj.aspects.all()
-            ],
+            # Both read the prefetched ``patron_nickname__being`` and
+            # ``aspects__option__being`` relations (#4205).
+            "patron": patron_payload(obj),
+            "aspects": [aspect_facet(facet) for facet in obj.aspects.all()],
             "features": [
                 {
                     "name": stamped.feature.name,
@@ -277,6 +304,9 @@ class OrganizationSerializer(serializers.ModelSerializer):
                 for vacancy in obj.vacancies.all()
                 if vacancy.is_open
             ],
+            # Reads the prefetched ``observances`` relation (#4206); the spelling
+            # of the day is the document's, so both surfaces agree.
+            "observances": observance_rows(obj),
         }
         return HouseDetailSerializer(payload).data
 

@@ -1,4 +1,5 @@
 import { FormattedContent } from '@/components/FormattedContent';
+import { markMatches, useFeedFind } from '@/game/feedFind';
 
 interface ActorLineProps {
   /** The whole sentence the server rendered for this viewer (#3858); absent on older rows. */
@@ -26,6 +27,7 @@ const LEAD_IN = /^(?:At [^,]+, )?(?:Quietly, )?/;
  * did.
  */
 export function ActorLine({ line, content, actorName }: ActorLineProps) {
+  const find = useFeedFind();
   if (!line) return <FormattedContent content={content} />;
   const leadIn = LEAD_IN.exec(line)?.[0] ?? '';
   const opensWithActor = actorName.length > 0 && line.startsWith(actorName, leadIn.length);
@@ -38,8 +40,8 @@ export function ActorLine({ line, content, actorName }: ActorLineProps) {
   }
   return (
     <span data-testid="actor-line" data-actor={actorName}>
-      {leadIn}
-      <span className="font-semibold">{actorName}</span>
+      {markMatches(leadIn, find)}
+      <span className="font-semibold">{markMatches(actorName, find)}</span>
       <FormattedContent content={line.slice(leadIn.length + actorName.length)} />
     </span>
   );

@@ -136,6 +136,7 @@ function makeSheet(overrides: Partial<CharacterSheetPayload> = {}): CharacterShe
   return {
     id: 42,
     can_edit: false,
+    staff_edit: null,
     identity: {
       name: 'Ilsavet du Verane',
       fullname: 'Ilsavet du Verane',

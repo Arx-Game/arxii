@@ -44,6 +44,8 @@ class TraitChangeSource(models.TextChoices):
     GM_GRANT = "gm_grant", "GM Grant"
     NPC_PRESET = "npc_preset", "NPC Statline Preset"
     XP_BREAKTHROUGH = "xp_breakthrough", "XP Breakthrough"
+    # Staff edit mode (#4221): a value staff set while building or repairing a sheet.
+    STAFF_EDIT = "staff_edit", "Staff Edit"
 
 
 class TraitType(models.TextChoices):

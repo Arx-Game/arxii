@@ -23,11 +23,14 @@ from rest_framework.request import Request
 
 from world.character_sheets.models import (
     CharacterSheet,
+    Gender,
+    Heritage,
     MoodOption,
     Profile,
     ProfileTextVersion,
+    Pronouns,
 )
-from world.character_sheets.services import can_edit_character_sheet
+from world.character_sheets.services import can_edit_character_sheet, can_staff_edit_sheet
 from world.character_sheets.types import (
     SHEET_VISIBILITY_RANK,
     ActorSheetSection,
@@ -50,6 +53,7 @@ from world.character_sheets.types import (
     KnownUltimateEntry,
     LookEntry,
     MagicSection,
+    MaritalStatus,
     MentorBondEntry,
     MotifResonanceEntry,
     MotifSection,
@@ -60,12 +64,17 @@ from world.character_sheets.types import (
     PathDetailSection,
     PathHistoryEntry,
     PersonaEntry,
+    ProfileTextField,
     PronounsData,
     ResonanceBalanceEntry,
     SheetVisibility,
     SkillEntry,
     SkillRef,
     SpecializationEntry,
+    StaffEditFields,
+    StaffEditRows,
+    StaffHeldDistinction,
+    StaffMarking,
     StandingSection,
     StorySection,
     TechniqueEntry,
@@ -80,6 +89,7 @@ from world.conditions.models import ConditionInstance
 from world.covenants.models import CharacterCovenantRole, MentorBond
 from world.distinctions.models import CharacterDistinction
 from world.forms.models import (
+    Build,
     CharacterForm,
     CharacterFormValue,
     FormType,
@@ -117,7 +127,8 @@ from world.magic.services.technique_personalization import (
     price_components_by_price,
 )
 from world.progression.models import CharacterPathHistory
-from world.roster.models import RosterTenure
+from world.realms.models import Realm
+from world.roster.models import Family, RosterTenure
 from world.roster.services.gallery import gallery_for, look_url, portrait_url
 from world.scenes.constants import PersonaType
 from world.scenes.models import Persona
@@ -126,6 +137,8 @@ from world.skills.services import is_skill_at_xp_boundary
 from world.societies.constants import MembershipFavor
 from world.societies.houses.models import Domain
 from world.societies.models import OrganizationMembership, OrganizationReputation
+from world.species.models import Species
+from world.tarot.models import TarotCard
 from world.traits.models import STAT_DISPLAY_DIVISOR, CharacterTraitValue, TraitType
 
 
@@ -2197,6 +2210,8 @@ class CharacterSheetSerializer(serializers.Serializer):
             "appearance": _build_appearance(
                 sheet, reveal_identity=reveal_identity, privileged=privileged
             ),
+            # #3988 — the stored values staff edit mode edits; None for anyone else.
+            "staff_edit": _build_staff_edit(sheet) if can_staff_edit_sheet(user, sheet) else None,
             "stats": _build_stats(sheet) if show_stats else {},
             "skills": _build_skills(sheet) if show_skills else [],
             "path": _build_path_detail(sheet),
@@ -2256,6 +2271,185 @@ class CharacterSheetSerializer(serializers.Serializer):
         }
 
 
+def _build_staff_edit(sheet: CharacterSheet) -> StaffEditFields:
+    """The stored values behind the sheet, for staff edit mode (#3988).
+
+    Reads the TRUE profile whatever face the character presents: staff edit
+    the character, never a cover. A sheet with no profile yet reads blank.
+    """
+    profile = sheet.true_profile
+    from world.magic.models import CharacterAura  # noqa: PLC0415
+
+    aura = CharacterAura.objects.filter(character=sheet).first()
+    special = {
+        ProfileTextField.DESCRIPTION: sheet.additional_desc,
+        ProfileTextField.GLIMPSE: aura.glimpse_story if aura else "",
+    }
+    prose = {
+        field: special[field] if field in special else (getattr(profile, field) if profile else "")
+        for field in ProfileTextField.values
+    }
+    return StaffEditFields(
+        prose=prose,
+        name=sheet.character.db_key,
+        ic_birth_year=sheet.ic_birth_year,
+        true_height_inches=sheet.true_height_inches,
+        weight_pounds=sheet.weight_pounds,
+        marital_status=sheet.marital_status,
+        vocation=sheet.vocation,
+        social_rank=sheet.social_rank,
+        build=sheet.build_id,
+        gender=sheet.gender_id,
+        pronouns=sheet.pronouns_id,
+        species=sheet.species_id,
+        heritage=profile.heritage_id if profile else None,
+        origin_realm=profile.origin_realm_id if profile else None,
+        family=profile.family_id if profile else None,
+        tarot_card=profile.tarot_card_id if profile else None,
+        tarot_reversed=bool(profile and profile.tarot_reversed),
+        rows=_build_staff_rows(sheet),
+    )
+
+
+def _build_staff_rows(sheet: CharacterSheet) -> StaffEditRows:
+    """The CG rows the sheet holds, by id (#4221). Staff only, so a few plain queries."""
+    from world.character_creation.sheet_writers import creation_beginnings  # noqa: PLC0415
+    from world.classes.models import CharacterClassLevel  # noqa: PLC0415
+    from world.forms.models import CharacterFormValue, FormMarking, FormType  # noqa: PLC0415
+    from world.progression.models import CharacterPathHistory  # noqa: PLC0415
+    from world.traits.constants import STAT_DISPLAY_DIVISOR  # noqa: PLC0415
+    from world.traits.models import CharacterTraitValue, TraitType  # noqa: PLC0415
+    from world.vitals.models import CharacterVitals  # noqa: PLC0415
+    from world.worship.models import WorshipDeclaration  # noqa: PLC0415
+
+    stats = {
+        trait_id: value // STAT_DISPLAY_DIVISOR
+        for trait_id, value in CharacterTraitValue.objects.filter(
+            character=sheet, trait__trait_type=TraitType.STAT
+        ).values_list("trait_id", "value")
+    }
+    held = CharacterDistinction.objects.filter(character=sheet).select_related(
+        "distinction", "feature_trait", "feature_marking"
+    )
+    true_values = CharacterFormValue.objects.filter(
+        form__character=sheet, form__form_type=FormType.TRUE
+    ).values_list("trait_id", "option_id")
+    markings = FormMarking.objects.filter(
+        form__character=sheet, form__form_type=FormType.TRUE
+    ).order_by("pk")
+    path_row = CharacterPathHistory.objects.filter(character=sheet).order_by("-pk").first()
+    level_row = CharacterClassLevel.objects.filter(character=sheet, is_primary=True).first()
+    worship = WorshipDeclaration.objects.filter(character_sheet=sheet).first()
+    beginnings = creation_beginnings(sheet)
+    return StaffEditRows(
+        stats=stats,
+        skills=dict(
+            CharacterSkillValue.objects.filter(character=sheet).values_list("skill_id", "value")
+        ),
+        specializations=dict(
+            CharacterSpecializationValue.objects.filter(character=sheet).values_list(
+                "specialization_id", "value"
+            )
+        ),
+        distinctions=[
+            StaffHeldDistinction(
+                id=row.pk,
+                distinction=row.distinction_id,
+                name=row.distinction.name,
+                rank=row.rank,
+                max_rank=row.distinction.max_rank,
+                feature=(
+                    row.feature_trait.display_name
+                    if row.feature_trait
+                    else (row.feature_marking.name if row.feature_marking else "")
+                ),
+            )
+            for row in held
+        ],
+        form=dict(true_values),
+        markings=[
+            StaffMarking(id=m.pk, name=m.name, body_region=m.body_region, kind=m.kind)
+            for m in markings
+        ],
+        beginnings=beginnings.pk if beginnings else None,
+        path=path_row.path_id if path_row else None,
+        class_level=level_row.level if level_row else None,
+        public_being=worship.public_being_id if worship else None,
+        secret_being=worship.secret_being_id if worship else None,
+        has_vitals=CharacterVitals.objects.filter(character_sheet=sheet).exists(),
+        has_gift=CharacterGift.objects.filter(character=sheet).exists(),
+        has_aura=CharacterAura.objects.filter(character=sheet).exists(),
+    )
+
+
+class StaffEditSerializer(serializers.Serializer):
+    """Input for ``PATCH /api/character-sheets/{id}/staff-edit/`` (#3988).
+
+    Any subset of the prose, identity scalars and identity choices; a field
+    outside the list is refused rather than ignored, so a typo never reads as
+    a save. Choices arrive as primary keys and leave ``validated_data`` as
+    model instances (or None to clear).
+    """
+
+    description = serializers.CharField(allow_blank=True, required=False)
+    background = serializers.CharField(allow_blank=True, required=False)
+    concept = serializers.CharField(allow_blank=True, required=False, max_length=255)
+    real_concept = serializers.CharField(allow_blank=True, required=False, max_length=255)
+    quote = serializers.CharField(allow_blank=True, required=False)
+    never_do = serializers.CharField(allow_blank=True, required=False)
+    protect = serializers.CharField(allow_blank=True, required=False)
+    fear = serializers.CharField(allow_blank=True, required=False)
+    obituary = serializers.CharField(allow_blank=True, required=False)
+    glimpse = serializers.CharField(allow_blank=True, required=False)
+    name = serializers.CharField(required=False, max_length=255)
+    ic_birth_year = serializers.IntegerField(required=False, allow_null=True)
+    true_height_inches = serializers.IntegerField(
+        required=False, allow_null=True, min_value=12, max_value=600
+    )
+    weight_pounds = serializers.IntegerField(
+        required=False, allow_null=True, min_value=0, max_value=32767
+    )
+    marital_status = serializers.ChoiceField(choices=MaritalStatus.choices, required=False)
+    vocation = serializers.CharField(allow_blank=True, required=False, max_length=255)
+    social_rank = serializers.IntegerField(required=False, min_value=1, max_value=20)
+    build = serializers.PrimaryKeyRelatedField(
+        queryset=Build.objects.all(), required=False, allow_null=True
+    )
+    gender = serializers.PrimaryKeyRelatedField(
+        queryset=Gender.objects.all(), required=False, allow_null=True
+    )
+    pronouns = serializers.PrimaryKeyRelatedField(
+        queryset=Pronouns.objects.all(), required=False, allow_null=True
+    )
+    species = serializers.PrimaryKeyRelatedField(
+        queryset=Species.objects.all(), required=False, allow_null=True
+    )
+    heritage = serializers.PrimaryKeyRelatedField(
+        queryset=Heritage.objects.all(), required=False, allow_null=True
+    )
+    origin_realm = serializers.PrimaryKeyRelatedField(
+        queryset=Realm.objects.all(), required=False, allow_null=True
+    )
+    family = serializers.PrimaryKeyRelatedField(
+        queryset=Family.objects.all(), required=False, allow_null=True
+    )
+    tarot_card = serializers.PrimaryKeyRelatedField(
+        queryset=TarotCard.objects.all(), required=False, allow_null=True
+    )
+    tarot_reversed = serializers.BooleanField(required=False)
+
+    def validate(self, attrs: dict[str, Any]) -> dict[str, Any]:
+        unknown = set(self.initial_data) - set(self.fields)
+        if unknown:
+            raise serializers.ValidationError(
+                dict.fromkeys(sorted(unknown), "Staff edit mode does not edit this field.")
+            )
+        if not attrs:
+            msg = "Nothing to change."
+            raise serializers.ValidationError(msg)
+        return attrs
+
+
 class ProfileTextVersionSerializer(serializers.ModelSerializer):
     """One entry of a sheet's prose-history timeline (#2631).
 
@@ -2301,6 +2495,15 @@ class ProfileTextVersionSerializer(serializers.ModelSerializer):
 
     def get_staff_edited(self, obj: ProfileTextVersion) -> bool:
         return obj.edited_by_id is not None
+
+
+class HeritageSerializer(serializers.ModelSerializer):
+    """A heritage, for staff edit mode's picker (#3988)."""
+
+    class Meta:
+        model = Heritage
+        fields = ("id", "name")
+        read_only_fields = fields
 
 
 class MoodOptionSerializer(serializers.ModelSerializer):

@@ -12,6 +12,7 @@
  * for a stranger, a friend and the character's own player alike.
  */
 
+import type { ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import { cn } from '@/lib/utils';
 import { urls } from '@/utils/urls';
@@ -27,6 +28,9 @@ import { CastRow } from './CastRow';
 import { GuidelinesBand } from './GuidelinesBand';
 import { Entries, Entry, Glance, Heading, Ledger, Prose, Stack, Tag } from './primitives';
 import type { GlanceRow } from './primitives';
+import { StaffEditBand, StaffEditable } from './StaffEdit';
+import { StaffRowsBand } from './StaffRowsBand';
+import { useStaffEditing } from './staffEditContext';
 
 interface SheetPanelProps {
   sheet: CharacterSheetPayload;
@@ -43,25 +47,37 @@ interface SheetPanelProps {
 
 export function SheetPanel({ sheet, isMyCharacter, rumor, languages }: SheetPanelProps) {
   const { identity, story, actor_sheet: actorSheet, distinctions, magic } = sheet;
+  // Staff edit mode (#3988): the identity choices drawn at a glance are edited there.
+  const editing = useStaffEditing();
+  const choice = (
+    field: 'species' | 'origin_realm' | 'family' | 'tarot_card' | 'gender',
+    label: string,
+    name: ReactNode
+  ) =>
+    editing ? <StaffEditable field={field} kind="choice" label={label} display={name} /> : name;
 
   const glanceRows: GlanceRow[] = [
     { label: 'Age', value: identity.age },
     { label: 'Born', value: identity.birthday },
-    { label: 'Kind', value: identity.species?.name },
+    { label: 'Kind', value: choice('species', 'Kind', identity.species?.name) },
     // Beginning is the CG archetype (Caretaker, Sleeper, Misbegotten), and a character
     // may hold more than one; `origin` is the realm they are FROM, which is its own row.
     { label: 'Beginning', value: identity.beginnings.map((row) => row.name).join(', ') },
-    { label: 'From', value: identity.origin?.name },
+    { label: 'From', value: choice('origin_realm', 'From', identity.origin?.name) },
     // The family page (#4209), keyed by the Family pk: never the org route, since a
     // Family pk is not an Organization pk and the org page is member-only (#4210).
     {
       label: 'House',
-      value: identity.family ? (
-        <Link to={urls.family(identity.family.id)}>{identity.family.name}</Link>
-      ) : null,
+      value: choice(
+        'family',
+        'House',
+        identity.family ? (
+          <Link to={urls.family(identity.family.id)}>{identity.family.name}</Link>
+        ) : undefined
+      ),
     },
-    { label: 'Tarot', value: identity.tarot_card?.name },
-    { label: 'Gender', value: identity.gender?.name },
+    { label: 'Tarot', value: choice('tarot_card', 'Tarot', identity.tarot_card?.name) },
+    { label: 'Gender', value: choice('gender', 'Gender', identity.gender?.name) },
     { label: 'Path', value: identity.path?.name },
     { label: 'Keeps faith with', value: identity.worship?.name },
     { label: 'Lives', value: sheet.current_residence?.name },
@@ -82,6 +98,8 @@ export function SheetPanel({ sheet, isMyCharacter, rumor, languages }: SheetPane
 
   return (
     <Stack wide>
+      <StaffEditBand sheet={sheet} />
+      <StaffRowsBand />
       {hasPrivate && <Heading>Public sheet</Heading>}
       <div className="refsheet-columns">
         <Stack>
@@ -113,15 +131,22 @@ export function SheetPanel({ sheet, isMyCharacter, rumor, languages }: SheetPane
       {hasAbilities && <AbilitiesBand stats={sheet.stats} skills={sheet.skills} />}
 
       <div className="refsheet-columns-even">
-        {(sheet.appearance.description || '') !== '' && (
+        {((sheet.appearance.description || '') !== '' || editing) && (
           <Stack>
             <Heading>As they appear</Heading>
             <Prose>
-              <p>{sheet.appearance.description}</p>
+              <p>
+                <StaffEditable
+                  field="description"
+                  kind="prose"
+                  label="As they appear"
+                  display={sheet.appearance.description}
+                />
+              </p>
             </Prose>
           </Stack>
         )}
-        <OriginsBlock story={story} />
+        <OriginsBlock story={story} editing={editing} />
       </div>
 
       {hasPrivate && (
@@ -198,15 +223,28 @@ function GiftBlock({
 }
 
 /** Where they come from: the formative ties, then the background prose. */
-function OriginsBlock({ story }: { story: CharacterSheetPayload['story'] }) {
+function OriginsBlock({
+  story,
+  editing,
+}: {
+  story: CharacterSheetPayload['story'];
+  editing: boolean;
+}) {
   const groups = story.origin_slots.filter((slot) => slot.kind === 'group');
-  if (groups.length === 0 && !story.background) return null;
+  if (groups.length === 0 && !story.background && !editing) return null;
   return (
     <Stack>
       <Heading>Where they come from</Heading>
-      {story.background && (
+      {(story.background || editing) && (
         <Prose>
-          <p>{story.background}</p>
+          <p>
+            <StaffEditable
+              field="background"
+              kind="prose"
+              label="Where they come from"
+              display={story.background}
+            />
+          </p>
         </Prose>
       )}
       {groups.length > 0 && (

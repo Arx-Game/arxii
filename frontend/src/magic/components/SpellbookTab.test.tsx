@@ -22,7 +22,9 @@ import type {
   CharacterSheetAura,
   CharacterSheetDistinction,
   CharacterSheetTechnique,
+  CharacterSheetStaffEdit,
 } from '@/character_sheets/api';
+import { StaffEditContext } from '@/character_sheets/components/sheet/staffEditContext';
 import type { GlimpseTagOption } from './glimpse/glimpseTypes';
 import type { TechniqueEffectSummary, TechniqueForm, TechniqueSignature } from '../types';
 
@@ -62,6 +64,11 @@ const mockBaseForm: TechniqueForm = {
 
 vi.mock('@/character_sheets/queries', () => ({
   useCharacterSheetQuery: vi.fn(),
+  // Staff edit mode's field (#4224) draws the Glimpse; only its save hook is reached.
+  useStaffEditMutation: vi.fn(() => ({ mutate: vi.fn(), isPending: false })),
+  useProfileTextVersions: vi.fn(() => ({ data: [] })),
+  useRestoreProfileTextVersion: vi.fn(() => ({ mutate: vi.fn() })),
+  useStaffChoiceOptions: vi.fn(() => ({ data: [] })),
 }));
 
 // MotifStylePanel (#2030) and TechniqueProgressPanel (#2739) are mounted below
@@ -412,6 +419,23 @@ describe('SpellbookTab', () => {
 
     const chips = screen.getByTestId('spellbook-glimpse-tags');
     expect(chips).toHaveTextContent('Wonder');
+  });
+
+  it('keeps an editable Glimpse slot in staff edit mode, even when empty (#4224)', () => {
+    mockPayload(makeMagic({ aura: makeAura({ glimpse_story: '' }) }));
+    const stored = { prose: { glimpse: '' } } as unknown as CharacterSheetStaffEdit;
+    renderWithProviders(
+      <StaffEditContext.Provider value={{ sheetId: 1, stored }}>
+        <SpellbookTab characterId={1} isMyCharacter={false} />
+      </StaffEditContext.Provider>
+    );
+    expect(screen.getByRole('button', { name: 'Edit Glimpse' })).toBeInTheDocument();
+  });
+
+  it('draws no empty Glimpse slot outside edit mode', () => {
+    mockPayload(makeMagic({ aura: makeAura({ glimpse_story: '' }) }));
+    renderWithProviders(<SpellbookTab characterId={1} isMyCharacter={false} />);
+    expect(screen.queryByRole('button', { name: 'Edit Glimpse' })).not.toBeInTheDocument();
   });
 
   it('does not render a glimpse-tags row when there are no chosen tags', () => {

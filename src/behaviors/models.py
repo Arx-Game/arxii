@@ -51,6 +51,7 @@ class BehaviorPackageInstance(SharedMemoryModel):
         on_delete=models.CASCADE,
         related_name="instances",
     )
+    # noqa: OBJECTDB_FIELD
     # ObjectDB by design (#2608): packages attach to any object — exit locks and
     # stateful item keys in production, not just characters.
     obj = models.ForeignKey(

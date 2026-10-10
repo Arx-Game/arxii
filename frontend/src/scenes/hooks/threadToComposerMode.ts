@@ -33,17 +33,30 @@ export function threadToComposerMode(thread: Thread, roomName: string): Composer
 }
 
 /**
- * Composer mode for an open conversation TAB (#2165) — always `locked`.
- * Prefers the resolved thread; a restored tab whose thread hasn't backfilled
- * yet derives a safe audience from the key shape alone. An unresolved whisper
- * key yields `targets: []`, which CommandInput's whisper guard refuses to
- * send — fail-closed beats mis-sending to the room.
+ * Composer mode for the conversation the rail has selected (#4129, formerly a
+ * tab, #2165) — always `locked`. Prefers the resolved thread; a key whose
+ * thread hasn't backfilled yet derives a safe audience from the key shape
+ * alone. An unresolved whisper key yields `targets: []`, which CommandInput's
+ * whisper guard refuses to send — fail-closed beats mis-sending to the room.
+ * A page row (`page:<persona id>`) addresses the OOC page command to its
+ * correspondent by name.
  */
 export function tabKeyToComposerMode(
   key: string,
   threads: Thread[],
-  roomName: string
+  roomName: string,
+  pageCorrespondent?: string
 ): ComposerMode {
+  if (key.startsWith('page:')) {
+    return pageCorrespondent
+      ? {
+          command: 'page',
+          targets: [pageCorrespondent],
+          label: `Page → ${pageCorrespondent}`,
+          locked: true,
+        }
+      : { command: 'page', targets: [], label: 'Page', locked: true };
+  }
   const thread = threads.find((t) => t.key === key);
   if (thread) return { ...threadToComposerMode(thread, roomName), locked: true };
   if (key.startsWith('place:')) {

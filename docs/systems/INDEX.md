@@ -473,7 +473,7 @@ Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Sc
     .from_glimpse` (nullable FK → `CharacterAura`, SET_NULL — provenance, mirrors
     `CharacterDistinction.secret`). Services (`services/glimpse.py`):
     `refresh_glimpse_state(aura) -> GlimpseState`, `set_glimpse_tags(aura, tags, *,
-    axis)`, `set_glimpse_prose(aura, text)`, `link_distinction_to_glimpse(character_distinction,
+    axis)`, `set_glimpse_prose(aura, text, *, edited_by)` (versioned, #4224), `link_distinction_to_glimpse(character_distinction,
     aura)` / `unlink_distinction_from_glimpse(character_distinction)`. CG finalize
     (`world.character_creation.services.finalize_magic_data`) consumes
     `draft_data["glimpse_tag_ids"/"glimpse_story"]` through these services;
@@ -1775,6 +1775,14 @@ Noble/merchant/crime houses as first-class play — a house IS an `Organization`
 (`family` FK → `roster.Family`) on the kinship graph (#2062, ADR-0098).
 
 - **Models** (`world/societies/houses/`): `NobiliaryParticle`, `HouseRecognitionRule`, `FealtyEdge`, `SuccessionLaw`, `Title`, `LandShape`, `Domain`, `DomainGarrisonPost`, `HoldingKind`, `DomainHolding`, `DomainImprovementDetails`, `DomainCrisis`, `CrisisIntel`, `MarriagePact`, `PactCommitment`; plus `Organization.family` / `Organization.default_succession_law` / `Organization.house_state` / `Organization.published_at`
+- **Aspects point at real things (#4205, ADR-4205):** `HouseAspectOption.being` /
+  `being_nickname` (PROTECT, nullable) say an authored answer IS a god or a totem and
+  what a house calls it; `codex_entry` stays the lore target; `target_entry_id` is the
+  one entry a pick opens. `HouseAspectDefinition.sets_patron` marks the one question per
+  charter whose pick writes `Organization.patron_nickname` at founding
+  (`creator._stamp_aspects`). Every house read goes through
+  `almanach_reads.aspect_facet` / `patron_payload`; the deity's Codex companion lists
+  its sworn houses. Member effects (quiddity, totem bonuses) are a later issue.
 - **Developments (#4060 slice 2, ADR-0320):** a `DomainHolding` is the physical
   income-generating thing a family possesses: `HoldingKind.site_kind`
   (ABSTRACT/LAND/BUILDING), `units_required`, `requires_field` (a farm);
@@ -1872,7 +1880,10 @@ Noble/merchant/crime houses as first-class play — a house IS an `Organization`
 - **Founder mode (#3983 Plan B, ADR-0314/ADR-0315):** the CG-facing claim journey — the whole
   draft lives client-side (ADR-0314) until one submit, `POST
   /api/character-creation/drafts/{id}/house-claim/` (`HouseClaimSubmitSerializer`), nested
-  `HouseClaimKin`/`HouseClaimLand` rows and all. `claim_grants(title)` is what a claim actually
+  `HouseClaimKin`/`HouseClaimLand`/`HouseClaimObservance` rows and all (an observance is a
+  house's own day of remembrance, #4206: an IC month and day, a name and the house's prose,
+  copied onto the org as `OrganizationObservance` and shown on the org page and the Almanach
+  document through `format_ic_month_day`). `claim_grants(title)` is what a claim actually
   seats the house on: the seat chain plus the loose baronies inside it, never a vassal's own held
   seat (ADR-0315). `record_kin` is the shared kin-writing engine both the founder finalize path and
   staff's `AlmanachEditKinAction` place nodes through. See [houses.md](houses.md)'s "Founder mode"
@@ -2555,8 +2566,10 @@ XP, kudos, development points, and unlock system. Contains the most explicit pre
 Character identity, appearance, demographics, and guise system.
 
 - **Models:** `CharacterSheet`, `Profile` (bio + lineage, #1270; the Actor's Sheet answers `never_do`/`protect`/`fear` replaced `personality`, #3621; `beginnings`, an M2M to `character_creation.Beginnings` through `ProfileBeginnings` (`source`, `note`, `gained_at`), every origin the character holds, #3775, ADR-0303), `ProfileBeginnings` (the through row; `source` is `character_creation`/`recovered_memory`/`past_life`, one `character_creation` row per profile), `CharacterEnemy` (the priced enemy, #3621, ADR-0279), `ProfileTextVersion`
-  (#2631 — snapshot-on-write history for `ProfileTextField` prose (background,
-  personality): full text per version, stamped with IC datetime + active `stories.Era`;
+  (#2631 — snapshot-on-write history for `ProfileTextField` prose; since #3988 every
+  prose field: background, the Actor's Sheet answers, concept, real_concept, quote,
+  obituary and the physical description (`CharacterSheet.additional_desc`, versioned on
+  the true profile; `set_physical_description` writes through it): full text per version, stamped with IC datetime + active `stories.Era`;
   written ONLY through `services.update_profile_text`, which also captures the CG
   original on the first post-CG write; admin edits route through it via
   `ProfileAdmin.save_model`), `Heritage` (`first_appeared_ic`, #3663: nullable IC date
@@ -2572,8 +2585,17 @@ Character identity, appearance, demographics, and guise system.
   Mood" (both content gaps, fail cleanly until the lore repo authors them). See
   `character_sheets.md`'s "Mood" section.
 - **API:** `GET /api/character-sheets/{pk}/profile-text-versions/` — the prose-history
-  timeline; **owner/staff-only by default** (#2631 ruling — everyone else gets an empty
-  list); entries carry era/IC-date stamps + the applying request's reasoning caption
+  timeline; staff see every version, the current player only those written since their
+  own current tenure began (ADR-3988, amending #2631), everyone else an empty list;
+  entries carry era/IC-date stamps + the applying request's reasoning caption.
+  **Staff edit mode (#3988):** `PATCH .../staff-edit/` (any subset of the prose, identity
+  scalars and identity choices; `services.staff_edit_sheet`, gated by
+  `can_staff_edit_sheet`), `POST .../profile-text-versions/{version_id}/restore/`
+  (`restore_profile_text_version`, a restore is a new version), `rename_character` (key,
+  primary persona name and particled aliases together), `ensure_true_profile`; the sheet
+  payload's `staff_edit` block (stored values, staff only); `GET
+  /api/character-sheets/heritages/` for the picker. Table update requests stay limited to
+  `PLAYER_REQUESTABLE_TEXT_FIELDS`.
 - **Absence vocabulary (#2728 §5):** `CharacterSheet.objects` carries the single
   answer to "is this character absent?" — `.active()` (ACTIVE + ALIVE),
   `.dormant()` (its exact complement), `.claimable()` (delegates to
@@ -2635,7 +2657,9 @@ Character identity, appearance, demographics, and guise system.
 - **Source:** `src/world/character_sheets/`
 - **Details:** [character_sheets.md](character_sheets.md)
 ### Character Creation
-Multi-stage character creation flow with draft system.
+Multi-stage character creation flow with draft system. The rows finalize writes are public
+services on a live sheet (`sheet_writers.py`, #4221), shared with staff edit mode; magic's are
+`magic_writer.provision_magic` (#4224).
 
 - **Models:** `CharacterDraft`, `StartingArea` (`grants_residence_tenancy` BooleanField, default
   True, #2036 — an authored per-area toggle for whether finalizing a character there grants a

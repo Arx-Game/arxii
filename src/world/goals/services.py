@@ -139,6 +139,7 @@ def set_character_goals(
     *,
     character: "CharacterSheet",
     goals: list["GoalInputData"],
+    bypass_revision_gate: bool = False,
 ) -> list[CharacterGoal]:
     """Replace a character's goal allocations, enforcing the weekly revision limit.
 
@@ -165,7 +166,8 @@ def set_character_goals(
     revision, _created = GoalRevision.objects.get_or_create(character=character)
     has_existing_goals = CharacterGoal.objects.filter(character=character).exists()
 
-    if has_existing_goals and not revision.can_revise():
+    # Staff edit mode (#4221) sets goals whenever; the weekly limit is the player's.
+    if has_existing_goals and not bypass_revision_gate and not revision.can_revise():
         raise GoalError(GoalError.REVISION_TOO_SOON)
 
     from world.goals.constants import GoalHorizon  # noqa: PLC0415

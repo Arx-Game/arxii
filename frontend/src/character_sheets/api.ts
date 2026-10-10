@@ -11,6 +11,7 @@
  */
 
 import { apiFetch } from '@/evennia_replacements/api';
+import { throwApiError } from '@/lib/errors';
 import type {
   TechniqueEffectSummary,
   TechniqueForm,
@@ -394,9 +395,82 @@ export interface CharacterSheetLook {
 /** The four plate inks (`world.character_sheets.types.PlateInk`, #3898). */
 export type PlateInk = 'ember' | 'verdigris' | 'rose' | 'night';
 
+/** The prose fields staff edit mode versions (`world.character_sheets.types.ProfileTextField`). */
+export type StaffProseField =
+  | 'description'
+  | 'background'
+  | 'concept'
+  | 'real_concept'
+  | 'quote'
+  | 'never_do'
+  | 'protect'
+  | 'fear'
+  | 'obituary'
+  | 'glimpse';
+
+/**
+ * Mirrors `world.character_sheets.types.StaffEditFields` (#3988): the stored values
+ * staff edit mode edits, present for staff only. The rest of the payload is shaped
+ * for the viewer; this is the character as stored.
+ */
+/** Mirrors `world.character_sheets.types.StaffEditRows` (#4221): the CG rows by id. */
+export interface CharacterSheetStaffRows {
+  /** Display scale (1 to 5) by stat trait id. */
+  stats: Record<string, number>;
+  skills: Record<string, number>;
+  specializations: Record<string, number>;
+  distinctions: {
+    id: number;
+    distinction: number;
+    name: string;
+    rank: number;
+    max_rank: number;
+    feature: string;
+  }[];
+  /** Option id by form trait id. */
+  form: Record<string, number>;
+  markings: { id: number; name: string; body_region: string; kind: string }[];
+  beginnings: number | null;
+  path: number | null;
+  class_level: number | null;
+  public_being: number | null;
+  secret_being: number | null;
+  has_vitals: boolean;
+  has_gift: boolean;
+  has_aura: boolean;
+}
+
+export interface CharacterSheetStaffEdit {
+  rows: CharacterSheetStaffRows;
+  prose: Record<StaffProseField, string>;
+  name: string;
+  ic_birth_year: number | null;
+  true_height_inches: number | null;
+  weight_pounds: number | null;
+  marital_status: string;
+  vocation: string;
+  social_rank: number;
+  build: number | null;
+  gender: number | null;
+  pronouns: number | null;
+  species: number | null;
+  heritage: number | null;
+  origin_realm: number | null;
+  family: number | null;
+  tarot_card: number | null;
+  tarot_reversed: boolean;
+}
+
+/** One field of a staff edit (#3988): any subset is sent, each key its stored value. */
+export type StaffEditBody = Partial<
+  Omit<CharacterSheetStaffEdit, 'prose' | 'rows'> & Record<StaffProseField, string>
+>;
+
 export interface CharacterSheetPayload {
   id: number;
   can_edit: boolean;
+  /** #3988 — the stored values behind the sheet, for staff edit mode; null for anyone else. */
+  staff_edit: CharacterSheetStaffEdit | null;
   identity: CharacterSheetIdentity;
   appearance: CharacterSheetAppearance;
   /** Stat name -> display value (already ÷10 from the ×10 internal storage, ADR-0193). */
@@ -586,5 +660,201 @@ export interface CharacterSheetWorn {
 export async function fetchCharacterSheet(sheetId: number): Promise<CharacterSheetPayload> {
   const res = await apiFetch(`/api/character-sheets/${sheetId}/`);
   if (!res.ok) throw new Error('Failed to load character sheet');
+  return (await res.json()) as CharacterSheetPayload;
+}
+
+/** PATCH the staff edit (#3988); answers with the refreshed sheet payload. */
+export async function patchStaffEdit(
+  sheetId: number,
+  body: StaffEditBody
+): Promise<CharacterSheetPayload> {
+  const res = await apiFetch(`/api/character-sheets/${sheetId}/staff-edit/`, {
+    method: 'PATCH',
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) await throwApiError(res, 'The edit was not saved.');
+  return (await res.json()) as CharacterSheetPayload;
+}
+
+/** Restore a past prose version as the current text (#3988); a restore adds a version. */
+export async function restoreProfileTextVersion(
+  sheetId: number,
+  versionId: number
+): Promise<CharacterSheetPayload> {
+  const res = await apiFetch(
+    `/api/character-sheets/${sheetId}/profile-text-versions/${versionId}/restore/`,
+    { method: 'POST' }
+  );
+  if (!res.ok) await throwApiError(res, 'The version was not restored.');
+  return (await res.json()) as CharacterSheetPayload;
+}
+
+/** One row of a lookup list a staff picker offers. */
+export interface StaffPickerOption {
+  value: string;
+  label: string;
+}
+
+/** A lookup list as picker options; every endpoint here returns an unpaginated array. */
+async function fetchOptions(
+  url: string,
+  label: (row: Record<string, unknown>) => string
+): Promise<StaffPickerOption[]> {
+  const res = await apiFetch(url);
+  if (!res.ok) await throwApiError(res, 'Failed to load the choices.');
+  const rows = (await res.json()) as Record<string, unknown>[];
+  return rows.map((row) => ({ value: String(row.id), label: label(row) }));
+}
+
+const nameOf = (row: Record<string, unknown>) => String(row.name ?? '');
+const displayNameOf = (row: Record<string, unknown>) => String(row.display_name ?? row.name ?? '');
+
+/** The lookup endpoints behind each identity choice staff edit mode offers (#3988). */
+export const STAFF_CHOICE_SOURCES = {
+  build: () => fetchOptions('/api/forms/builds/', displayNameOf),
+  gender: () => fetchOptions('/api/character-creation/genders/', displayNameOf),
+  pronouns: () => fetchOptions('/api/character-creation/pronouns/', displayNameOf),
+  species: () => fetchOptions('/api/character-creation/species/', nameOf),
+  heritage: () => fetchOptions('/api/character-sheets/heritages/', nameOf),
+  origin_realm: () => fetchOptions('/api/realms/', nameOf),
+  family: () => fetchOptions('/api/roster/families/', nameOf),
+  tarot_card: () => fetchOptions('/api/character-creation/tarot-cards/', nameOf),
+} as const;
+
+export type StaffChoiceField = keyof typeof STAFF_CHOICE_SOURCES;
+
+/** One id/name a staff row editor picks from (#4221). */
+export interface StaffOption {
+  id: number;
+  name: string;
+}
+
+/** `GET /api/character-sheets/{id}/staff-options/`: what the row editors pick from. */
+export interface StaffOptions {
+  stats: StaffOption[];
+  skills: StaffOption[];
+  specializations: StaffOption[];
+  distinctions: StaffOption[];
+  form_traits: (StaffOption & { options: StaffOption[] })[];
+  beginnings: StaffOption[];
+  paths: StaffOption[];
+  beings: StaffOption[];
+  marking_regions: StaffChoice[];
+  marking_kinds: StaffChoice[];
+  enemy_kinds: StaffChoice[];
+  enemy_degrees: StaffChoice[];
+  enemy_power_tiers: StaffChoice[];
+}
+
+/** A fixed choice (a TextChoices member) a staff row editor offers. */
+export interface StaffChoice {
+  value: string;
+  label: string;
+}
+
+export async function fetchStaffOptions(sheetId: number): Promise<StaffOptions> {
+  const res = await apiFetch(`/api/character-sheets/${sheetId}/staff-options/`);
+  if (!res.ok) await throwApiError(res, 'Failed to load the choices.');
+  return (await res.json()) as StaffOptions;
+}
+
+/** The staff row actions (#4221); each answers with the refreshed sheet payload. */
+export type StaffRowAction =
+  | { path: 'staff-stats'; method: 'PATCH'; body: { stats: Record<string, number> } }
+  | {
+      path: 'staff-skills';
+      method: 'PATCH';
+      body: { skills?: Record<string, number>; specializations?: Record<string, number> };
+    }
+  | { path: 'staff-distinctions'; method: 'POST'; body: { distinction: number; rank?: number } }
+  | {
+      path: 'staff-distinction';
+      method: 'PATCH';
+      body: { character_distinction: number; rank?: number };
+    }
+  | {
+      path: 'staff-form';
+      method: 'PATCH';
+      body: { values?: Record<string, number>; descriptors?: Record<string, string> };
+    }
+  | { path: 'staff-beginnings'; method: 'PUT'; body: { beginnings: number } }
+  | { path: 'staff-path'; method: 'PATCH'; body: { path?: number | null; level?: number } }
+  | {
+      path: 'staff-worship';
+      method: 'PUT';
+      body: { public_being: number | null; secret_being: number | null };
+    }
+  | {
+      path: 'staff-markings';
+      method: 'POST';
+      body: { body_region: string; kind: string; name: string; description?: string };
+    }
+  | { path: 'staff-marking-remove'; method: 'PATCH'; body: { marking: number } }
+  | {
+      path: 'staff-introductions';
+      method: 'POST';
+      body: { kind: string; title: string; body: string };
+    }
+  | {
+      path: 'staff-enemy';
+      method: 'PUT';
+      body: {
+        kind: string;
+        degree: string;
+        figure_name?: string;
+        power_tier?: string;
+        price?: number;
+        why?: string;
+        public_line?: string;
+      };
+    }
+  | { path: 'staff-vitals'; method: 'POST'; body: Record<string, never> }
+  | { path: 'staff-magic'; method: 'POST'; body: StaffMagicBody };
+
+/** `POST .../staff-magic/` (#4224): a giftless sheet's starting magic, as CG would write it. */
+export interface StaffMagicBody {
+  tradition: number;
+  gift: number;
+  techniques: number[];
+  resonance: number;
+  anima_stat: number;
+  anima_skill: number;
+  ritual_name?: string;
+  glimpse?: string;
+}
+
+/** `GET .../staff-magic-options/?tradition=&gift=`: what Grant magic offers so far. */
+export interface StaffMagicOptions {
+  traditions: StaffOption[];
+  gifts: StaffOption[];
+  techniques: StaffOption[];
+  resonances: StaffOption[];
+  stats: StaffOption[];
+  skills: StaffOption[];
+  technique_limit: number;
+}
+
+export async function fetchStaffMagicOptions(
+  sheetId: number,
+  tradition: string,
+  gift: string
+): Promise<StaffMagicOptions> {
+  const params = new URLSearchParams();
+  if (tradition) params.set('tradition', tradition);
+  if (gift) params.set('gift', gift);
+  const res = await apiFetch(`/api/character-sheets/${sheetId}/staff-magic-options/?${params}`);
+  if (!res.ok) await throwApiError(res, 'Failed to load the choices.');
+  return (await res.json()) as StaffMagicOptions;
+}
+
+export async function runStaffRowAction(
+  sheetId: number,
+  request: StaffRowAction
+): Promise<CharacterSheetPayload> {
+  const res = await apiFetch(`/api/character-sheets/${sheetId}/${request.path}/`, {
+    method: request.method,
+    body: JSON.stringify(request.body),
+  });
+  if (!res.ok) await throwApiError(res, 'The change was not saved.');
   return (await res.json()) as CharacterSheetPayload;
 }

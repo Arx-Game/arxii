@@ -28,6 +28,7 @@ if TYPE_CHECKING:
         Distinction,
         SheetUpdateRequest,
     )
+    from world.forms.models import FormMarking, FormTrait
     from world.scenes.models import Persona
 
 
@@ -116,13 +117,15 @@ def _check_exclusions(character: CharacterSheet, distinction: Distinction) -> No
             raise DistinctionExclusionError(msg)
 
 
-def grant_distinction(
+def grant_distinction(  # noqa: PLR0913 - the feature pair mirrors the held row's columns
     character: CharacterSheet,
     distinction: Distinction,
     *,
     origin: str,
     rank: int | None = None,
     source_description: str = "",
+    feature_trait: FormTrait | None = None,
+    feature_marking: FormMarking | None = None,
 ) -> CharacterDistinction:
     """Grant a Distinction, or rank one up, through the single acquisition seam (#2037).
 
@@ -157,9 +160,12 @@ def grant_distinction(
 
     _check_exclusions(character, distinction)
 
-    existing = CharacterDistinction.objects.filter(
-        character=character, distinction=distinction
-    ).first()
+    # A per-feature distinction is held once per feature (#3739), so the holder row is
+    # the one aimed at the same feature; a plain one has neither feature set.
+    holders = CharacterDistinction.objects.filter(character=character, distinction=distinction)
+    if feature_trait is not None or feature_marking is not None:
+        holders = holders.filter(feature_trait=feature_trait, feature_marking=feature_marking)
+    existing = holders.first()
 
     with transaction.atomic():
         if existing is None:
@@ -170,6 +176,8 @@ def grant_distinction(
                 rank=new_rank,
                 origin=origin,
                 source_description=source_description,
+                feature_trait=feature_trait,
+                feature_marking=feature_marking,
             )
             create_distinction_modifiers(char_distinction)
             is_new = True

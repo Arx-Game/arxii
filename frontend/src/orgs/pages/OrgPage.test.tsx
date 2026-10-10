@@ -178,6 +178,8 @@ describe('OrgPageInner', () => {
             definition: 'Patron Deity',
             option: 'The Chained Judge',
             description: 'Keeper of debts.',
+            being_name: 'The Chained Judge',
+            target_entry_id: 55,
           },
         ],
         features: [
@@ -188,6 +190,20 @@ describe('OrgPageInner', () => {
           },
         ],
         vacancies: [],
+        patron: {
+          nickname: 'The Debt-Keeper',
+          being_name: 'The Chained Judge',
+          codex_entry_id: 55,
+        },
+        observances: [
+          {
+            ic_month: 10,
+            ic_day: 18,
+            name: 'Founding Night',
+            lore: 'The first fire on the hill.',
+            when: 'Masquing 18 (10/18)',
+          },
+        ],
       },
     };
     mockedUseOrganizationQuery.mockReturnValue({
@@ -196,6 +212,7 @@ describe('OrgPageInner', () => {
       isError: false,
     } as ReturnType<typeof useOrganizationQuery>);
 
+    // The patron and a god-backed pick render as router links (#4205).
     render(
       <MemoryRouter>
         <OrgPageInner orgId={7} />
@@ -209,6 +226,22 @@ describe('OrgPageInner', () => {
     expect(screen.getByText(/Patron Deity: The Chained Judge/)).toBeInTheDocument();
     expect(screen.getByText('Black Ledger')).toBeInTheDocument();
     expect(screen.getByText(/Ways of the House/)).toBeInTheDocument();
+    // #4205: the patron reads by the house's own name, the god's name opens its page,
+    // and a pick that IS the god opens the same page.
+    expect(screen.getByText(/The Debt-Keeper/)).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: '(The Chained Judge)' })).toHaveAttribute(
+      'href',
+      '/codex/55'
+    );
+    expect(screen.getByRole('link', { name: /Patron Deity: The Chained Judge/ })).toHaveAttribute(
+      'href',
+      '/codex/55'
+    );
+    // A day of remembrance (#4206) reads name, the server-spelled date, then the prose.
+    expect(screen.getByText(/Days of Remembrance/)).toBeInTheDocument();
+    expect(screen.getByText('Founding Night')).toBeInTheDocument();
+    expect(screen.getByText(/Masquing 18 \(10\/18\)/)).toBeInTheDocument();
+    expect(screen.getByText('The first fire on the hill.')).toBeInTheDocument();
   });
 
   it('renders an open domain crisis with its judgment-call options (#2238)', () => {
@@ -259,6 +292,8 @@ describe('OrgPageInner', () => {
           },
         ],
         vacancies: [],
+        patron: null,
+        observances: [],
       },
     };
     mockedUseOrganizationQuery.mockReturnValue({
@@ -309,6 +344,8 @@ describe('OrgPageInner', () => {
           realm_cohort_size: 11,
         },
         vacancies: [],
+        patron: null,
+        observances: [],
       },
     };
     mockedUseOrganizationQuery.mockReturnValue({

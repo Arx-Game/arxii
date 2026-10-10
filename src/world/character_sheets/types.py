@@ -594,16 +594,39 @@ class WornEntry(TypedDict):
 
 
 class ProfileTextField(models.TextChoices):
-    """Profile prose fields covered by table update requests + version history (#2631).
+    """Prose fields covered by version history (#2631, widened to every prose field in #3988).
 
     Values are Profile attribute names — services setattr() by this value, so a
-    new member must match its Profile field name exactly.
+    new member must match its Profile field name exactly. The one exception is
+    ``DESCRIPTION``, the physical description, which lives on the sheet that owns
+    the profile (``CharacterSheet.additional_desc``); ``update_profile_text`` routes
+    it there. Table update requests still offer only the four the player may ask
+    to change (``PLAYER_REQUESTABLE``).
     """
 
     BACKGROUND = "background", "Background"
     NEVER_DO = "never_do", "What would you never do?"
     PROTECT = "protect", "What would you protect at all costs?"
     FEAR = "fear", "What are you deathly afraid of?"
+    CONCEPT = "concept", "Concept"
+    REAL_CONCEPT = "real_concept", "Real concept"
+    QUOTE = "quote", "Quote"
+    OBITUARY = "obituary", "Obituary"
+    DESCRIPTION = "description", "Physical description"
+    # The Glimpse (#4224): lives on the character's aura, versioned like the rest.
+    GLIMPSE = "glimpse", "Glimpse"
+
+
+#: The prose fields a player may ask to change through a table update request (#2631);
+#: the rest are staff's to edit in place (#3988).
+PLAYER_REQUESTABLE_TEXT_FIELDS: frozenset[str] = frozenset(
+    {
+        ProfileTextField.BACKGROUND,
+        ProfileTextField.NEVER_DO,
+        ProfileTextField.PROTECT,
+        ProfileTextField.FEAR,
+    }
+)
 
 
 class EnemyKind(models.TextChoices):
@@ -802,3 +825,75 @@ DECAY_TIER_THRESHOLDS_DAYS = {
 }
 """Tier → minimum days-since-signal. Walked in descending-threshold order so the
 biggest matching tier wins. Tuneable; the values match the #671 spec."""
+
+
+class StaffHeldDistinction(TypedDict):
+    """A held distinction as staff edit mode edits it (#4221)."""
+
+    id: int
+    distinction: int
+    name: str
+    rank: int
+    max_rank: int
+    feature: str
+
+
+class StaffMarking(TypedDict):
+    id: int
+    name: str
+    body_region: str
+    kind: str
+
+
+class StaffEditRows(TypedDict):
+    """The CG rows a sheet holds, by id, for staff edit mode's editors (#4221).
+
+    ``stats`` is display scale by trait id; ``form`` is option id by form trait id.
+    """
+
+    stats: dict[int, int]
+    skills: dict[int, int]
+    specializations: dict[int, int]
+    distinctions: list[StaffHeldDistinction]
+    form: dict[int, int]
+    markings: list[StaffMarking]
+    beginnings: int | None
+    path: int | None
+    class_level: int | None
+    public_being: int | None
+    secret_being: int | None
+    has_vitals: bool
+    # #4224 — Grant magic is offered to a giftless sheet; the Glimpse needs an aura.
+    has_gift: bool
+    has_aura: bool
+
+
+class StaffEditFields(TypedDict):
+    """What staff edit mode edits, as stored (#3988); in the payload for staff only.
+
+    The rest of the payload is shaped for the viewer (the presented face's bio, a
+    height band, pronoun strings); edit mode needs the true values behind them,
+    including the ones no reader is shown (the real concept, the obituary, the
+    exact height and weight, the social rank). ``prose`` maps each
+    ``ProfileTextField`` value to the true profile's current text.
+    """
+
+    prose: dict[str, str]
+    name: str
+    ic_birth_year: int | None
+    true_height_inches: int | None
+    weight_pounds: int | None
+    marital_status: str
+    vocation: str
+    social_rank: int
+    build: int | None
+    gender: int | None
+    pronouns: int | None
+    species: int | None
+    heritage: int | None
+    origin_realm: int | None
+    family: int | None
+    tarot_card: int | None
+    tarot_reversed: bool
+    # #4221 — the CG rows behind the sheet, for the row editors.
+    rows: StaffEditRows

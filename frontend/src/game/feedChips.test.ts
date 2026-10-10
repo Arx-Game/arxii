@@ -35,7 +35,8 @@ describe('default chips (#3856)', () => {
       ['Ambience', 'ambience', false],
       // A vision is rare and prized (#3779): it shows and it wakes.
       ['Visions', 'vision', true],
-      ['System', 'look,item,error,system', false],
+      // Pages (#4129) are OOC lines, so the hide-system button hides them too.
+      ['System', 'look,item,error,page,system', false],
     ]);
     expect(DEFAULT_FEED_CHIPS.every((c) => c.on && !c.custom)).toBe(true);
   });
@@ -174,7 +175,13 @@ describe('normalizeFeedChips', () => {
 
   it('leaves a System chip that already owns system alone', () => {
     const chips = normalizeFeedChips(DEFAULT_FEED_CHIPS);
-    expect(chips.find((c) => c.id === 'sy')?.kinds).toEqual(['look', 'item', 'error', 'system']);
+    expect(chips.find((c) => c.id === 'sy')?.kinds).toEqual([
+      'look',
+      'item',
+      'error',
+      'page',
+      'system',
+    ]);
   });
 });
 

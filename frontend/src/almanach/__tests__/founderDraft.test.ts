@@ -55,6 +55,7 @@ function baseDraft(): FounderDraft {
     },
     estate_name: 'Casa Candela',
     estate_description: 'A quiet townhouse above the harbor.',
+    observances: [{ ic_month: 10, ic_day: 18, name: 'Founding Night', lore: 'The first fire.' }],
   };
 }
 
@@ -110,6 +111,7 @@ test('toClaimPayload maps kin, lands, and the estate to the nested claim shape e
       },
     ],
     estate: { name: 'Casa Candela', description: 'A quiet townhouse above the harbor.' },
+    observances: [{ ic_month: 10, ic_day: 18, name: 'Founding Night', lore: 'The first fire.' }],
   });
 });
 

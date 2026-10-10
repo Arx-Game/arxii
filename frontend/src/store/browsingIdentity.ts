@@ -11,7 +11,7 @@
  * durable default selection and Tab A's next `['account']` refetch mirrored
  * it in.
  *
- * Storage idiom copied from `game/threadTabsStorage.ts`: every read and
+ * Storage idiom (shared with `game/playPreferences.ts`): every read and
  * write sits in try/catch, and a failure (private browsing, quota, storage
  * disabled) degrades to "no stored identity" rather than throwing -- the
  * caller must render correctly with nothing stored.

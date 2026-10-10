@@ -97,6 +97,10 @@ function buildFullCommand(trimmed: string, composerMode?: ComposerMode): string 
   if (composerMode.command === 'whisper' && composerMode.targets.length > 0) {
     return `whisper ${composerMode.targets[0]}=${trimmed}`;
   }
+  // A page row in the rail (#4129) addresses the composer to its correspondent.
+  if (composerMode.command === 'page' && composerMode.targets.length > 0) {
+    return `page ${composerMode.targets[0]}=${trimmed}`;
+  }
   const targetStr = composerMode.targets.length > 0 ? ` @${composerMode.targets.join(',@')} ` : ' ';
   return `${composerMode.command}${targetStr}${trimmed}`;
 }

@@ -220,6 +220,61 @@ Two things deliberately keep their old chrome. `OwnedDwellingsCard` and
 would change a surface outside this issue; and the cards under Estate and Growth are
 forms rather than reference reading. Both are recorded in the roadmap as remaining.
 
+## Staff Edit Mode (#3988)
+
+Staff build or repair any sheet on the sheet page itself. The header's **Edit** toggle
+(`StaffEditToggle`, drawn when the payload carries `staff_edit`, which it does for staff
+only; on for the tab, in sessionStorage) turns the plate's name, concept and quote, the
+glance's identity choices (Kind, From, House, Tarot, Gender) and the description and
+background into in-place fields (`StaffEditable`), and adds a **Staff edit** band for the
+fields the sheet never draws or draws only when filled (real concept, the Actor's Sheet
+answers, obituary, heritage, build, pronouns, tarot reversed, birth year, exact height and
+weight, marital status, vocation, social rank). An empty field keeps a slot. A save calls
+`PATCH /api/character-sheets/{id}/staff-edit/` and the answer replaces the sheet cache.
+
+- **Every prose field is versioned.** `ProfileTextField` covers background, the three
+  Actor's Sheet answers, concept, real concept, quote, obituary, the physical
+  description and the Glimpse (#4224, stored on the aura). The description lives on `CharacterSheet.additional_desc` but its versions
+  hang off the true profile, so one timeline covers the character; `set_physical_description`
+  writes through `update_profile_text`. Blanking a field saves an empty version.
+- **Restore** writes a past version back as a new one; nothing is deleted.
+- **History is tenure-scoped for players** (ADR-3988, amending #2631): staff see every
+  version; the current player sees those written since their own current tenure began, so
+  a new roster tenant never reads the previous player's prose (the first player sees all of
+  it). A captured original is dated to the character's creation. The real concept's history
+  is staff-only. An admin edit of the description is versioned too.
+- **Rename** (`rename_character`) moves the key, the primary persona's name and the
+  particled-name aliases together.
+- A sheet with no `true_profile` gets one on its first edit (`ensure_true_profile`).
+- Table update requests still offer only the four player-requestable fields
+  (`PLAYER_REQUESTABLE_TEXT_FIELDS`).
+
+**Piece B, the CG rows (#4221).** In edit mode a rows band edits every family CG writes,
+each through a staff action on the sheet API (`staff_views.StaffSheetRowsMixin`, inputs in
+`staff_serializers.py`): `staff-stats` (display scale, `TraitChangeSource.STAFF_EDIT`; fills
+vitals if missing), `staff-skills`, `staff-distinctions` / `staff-distinction` (add, re-rank,
+remove), `staff-form`, `staff-beginnings`, `staff-path` (the first path only, plus the class
+level), `staff-goals` (revision limit bypassed), `staff-worship`, `staff-markings` /
+`staff-marking-remove`, `staff-enemy`, `staff-introductions`, `staff-vitals`, and
+`staff-options` (the pickers, the species' form palette included). A choice runs what CG runs
+for it: a gender edit sets the pronoun forms, a species its gifts, languages and codex, a
+beginning its rituals, codex and languages, a path its codex and Chosen patronage. The staff
+payload block carries the stored rows by id (`StaffEditRows`).
+
+**Piece C, magic (#4224).** A giftless sheet gets a Grant magic stepper in the rows band:
+`staff-magic-options?tradition=&gift=` narrows tradition, gift (offered on the sheet's path),
+techniques (pool, tradition signatures and species gifts, finished only, up to the sheet's
+pick limit), resonance, and the anima stat and skill; `POST staff-magic` validates with
+`validate_staff_magic` and writes through `provision_magic`, the same writer CG's finalize
+uses. The stage's rules hold and its costs do not; a sheet that already holds a gift is
+refused (changing magic is not edit mode). The anima ritual belongs to the current tenure's
+player, or the staff member for a character nobody plays. The Glimpse is a versioned
+prose field (`ProfileTextField.GLIMPSE`, routed to `CharacterAura.glimpse_story`) edited in
+the Spellbook's aura rail; a sheet with no aura refuses it. `StaffEditRows` adds `has_gift`
+and `has_aura`.
+
+Pieces D (kinship and estate) and E (group fit) continue on #4224.
+
 ## Web Sheet Mechanics Display (#3042)
 
 The `stats`/`skills` sections of `CharacterSheetSerializer` were always built (`_build_stats`/

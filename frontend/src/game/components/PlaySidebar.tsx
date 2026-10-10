@@ -1,19 +1,13 @@
 import { useLayoutEffect, useRef, type ReactNode } from 'react';
-import { Compass, History, MessageSquare, Swords } from 'lucide-react';
-import { ConversationSidebar } from './ConversationSidebar';
+import { Compass, History, Swords } from 'lucide-react';
 import { HistoryNavigator } from './HistoryNavigator';
 import { DisplaySettings } from './DisplaySettings';
-import type { ThreadingState } from '@/scenes/hooks/useThreading';
 
-export type SidebarMode = 'here' | 'conversations' | 'history';
+export type SidebarMode = 'here' | 'history';
 
 interface PlaySidebarProps {
   here: ReactNode;
   accountId?: number | null;
-  threading?: ThreadingState;
-  onThreadClick: (key: string) => void;
-  onShowAll?: () => void;
-  selectedThreadKey?: string;
   onOpenReference?: (ref: {
     kind: string;
     key: string;
@@ -30,25 +24,23 @@ interface PlaySidebarProps {
   onJumpToCombat?: () => void;
 }
 
-/** The one contextual sidebar for the narrative play workspace. */
+/**
+ * The one contextual sidebar for the narrative play workspace: Here and
+ * History. Conversations live in the rail on the far left (#4129).
+ */
 export function PlaySidebar({
   here,
   accountId,
-  threading,
-  onThreadClick,
-  onShowAll,
-  selectedThreadKey,
   onOpenReference,
   mode,
   onModeChange,
   hasActiveEncounter,
   onJumpToCombat,
 }: PlaySidebarProps) {
-  // #3759 review fix: the three modes share ONE scroll container
+  // #3759 review fix: the modes share ONE scroll container
   // (`play-sidebar-scroll`), so each mode needs its own remembered scroll
-  // position, restored on switch — mirrors GameWindow.tsx's per-tab
-  // scrollPositionsRef pattern, adapted for these three fixed modes instead
-  // of dynamic conversation tabs. `useLayoutEffect` (not `useEffect`) matters
+  // position, restored on switch — mirrors GameWindow.tsx's per-conversation
+  // scrollPositionsRef pattern, adapted for these fixed modes. `useLayoutEffect` (not `useEffect`) matters
   // here specifically: these bodies are `hidden`-attribute siblings, not
   // swapped content, so the newly-shown body's layout (scrollHeight) is only
   // final once the browser has applied the `hidden` toggle — restoring after
@@ -71,7 +63,7 @@ export function PlaySidebar({
   return (
     <aside className="flex h-full min-h-0 flex-col" aria-label="Play sidebar">
       <nav
-        className={`grid shrink-0 gap-1 border-b p-2 ${hasActiveEncounter ? 'grid-cols-4' : 'grid-cols-3'}`}
+        className={`grid shrink-0 gap-1 border-b p-2 ${hasActiveEncounter ? 'grid-cols-3' : 'grid-cols-2'}`}
         aria-label="Sidebar modes"
       >
         <button
@@ -82,15 +74,6 @@ export function PlaySidebar({
         >
           <Compass className="h-3.5 w-3.5" />
           Here
-        </button>
-        <button
-          type="button"
-          aria-current={mode === 'conversations' ? 'page' : undefined}
-          onClick={() => onModeChange('conversations')}
-          className={`flex min-h-11 items-center justify-center gap-1 rounded px-2 text-xs ${mode === 'conversations' ? 'bg-accent font-medium' : 'text-muted-foreground hover:bg-accent/60'}`}
-        >
-          <MessageSquare className="h-3.5 w-3.5" />
-          Conversations
         </button>
         <button
           type="button"
@@ -122,14 +105,6 @@ export function PlaySidebar({
         onScroll={handleScroll}
       >
         <div hidden={mode !== 'here'}>{here}</div>
-        <div hidden={mode !== 'conversations'}>
-          <ConversationSidebar
-            threading={threading}
-            onThreadClick={onThreadClick}
-            onShowAll={onShowAll}
-            selectedThreadKey={selectedThreadKey}
-          />
-        </div>
         <div hidden={mode !== 'history'}>
           <HistoryNavigator onOpenReference={onOpenReference} />
         </div>

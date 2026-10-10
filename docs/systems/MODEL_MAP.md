@@ -1541,7 +1541,7 @@
 - `family_name_is_taken(name: 'str') -> 'bool' - Case-insensitive collision with any family or organisation name (#3617).`
 - `finalize_character(draft: 'CharacterDraft', *, add_to_roster: 'bool' = False, created_by_account: 'AccountDB | None' = None) -> 'ObjectDB' - Create a Character from a completed CharacterDraft.`
 - `finalize_gm_character(draft: 'CharacterDraft', *, claim_as_npc: 'bool' = False) -> 'tuple[RosterEntry, Story]' - Finalize a GM-initiated draft into a roster character + story.`
-- `finalize_magic_data(draft: 'CharacterDraft', sheet: 'CharacterSheet') -> 'None' - Create magic models from the CG-chosen catalog Gift/Techniques during finalization.`
+- `finalize_magic_data(draft: 'CharacterDraft', sheet: 'CharacterSheet') -> 'None' - Give the new character its magic from the draft's picks (``provision_magic``, #4224).`
 - `first_journal_offered(draft: 'CharacterDraft') -> 'bool' - The First Journal is offered to an Arx start; anyone else writes one in play.`
 - `get_accessible_starting_areas(account: 'AbstractBaseUser | AnonymousUser') -> 'QuerySet' - Get all starting areas accessible to an account.`
 - `opened_feature_traits(draft_data: 'dict') -> 'set[str]' - The names of the trait rows this draft has made distinctive (#3739).`
@@ -1855,8 +1855,13 @@
 
 ### Service Functions
 - `can_edit_character_sheet(user: 'AbstractBaseUser | AnonymousUser', roster_entry: 'RosterEntry') -> 'bool' - True if the user is the original creator (player_number=1) or staff.`
+- `can_staff_edit_sheet(user: 'AbstractBaseUser | AnonymousUser', sheet: 'CharacterSheet') -> 'bool' - Whether this account may edit this sheet in place (#3988).`
 - `create_character_with_sheet(*, character_key: 'str', primary_persona_name: 'str', typeclass: 'str' = 'typeclasses.characters.Character', home: 'ObjectDB | None' = None, **sheet_kwargs: 'Any') -> 'tuple[ObjectDB, CharacterSheet, Persona]' - Atomically create a Character + CharacterSheet + PRIMARY Persona.`
-- `set_physical_description(sheet: 'CharacterSheet', text: 'str') -> 'None' - THE seam for setting a character's free-text physical description (#2632).`
+- `ensure_true_profile(sheet: 'CharacterSheet') -> 'Profile' - The sheet's true profile, created empty if an older character has none (#3988).`
+- `rename_character(sheet: 'CharacterSheet', name: 'str') -> 'None' - Rename a character: its key and its primary persona's name together (#3988).`
+- `restore_profile_text_version(version: 'ProfileTextVersion', *, edited_by: 'Any') -> 'ProfileTextVersion' - Write a past version's text back as the current text (#3988).`
+- `set_physical_description(sheet: 'CharacterSheet', text: 'str', *, edited_by: 'Any | None' = None) -> 'ProfileTextVersion' - THE seam for setting a character's free-text physical description (#2632).`
+- `staff_edit_sheet(sheet: 'CharacterSheet', changes: 'dict[str, Any]', *, edited_by: 'Any') -> 'None' - Apply a staff edit atomically; a refused edit leaves no phantom values in the cache.`
 - `update_profile_text(profile: 'Profile', field: 'str', text: 'str', *, edited_by: 'Any | None' = None, previous_text: 'str | None' = None) -> 'ProfileTextVersion' - Write a versioned Profile prose field — the ONLY sanctioned write path (#2631).`
 
 
@@ -3750,7 +3755,7 @@
 - `compute_sheet_update_xp_cost(request_type: 'str', distinction: 'Distinction', rank: 'int') -> 'int' - Compute the XP cost for a sheet-update request.`
 - `create_sheet_update_request(character_sheet: 'CharacterSheet', request_type: 'str', *, justification: 'str', target_distinction: 'Distinction | None' = None, target_character_distinction: 'CharacterDistinction | None' = None, submitted_by: 'object | None' = None, origin: 'str' = DistinctionOrigin.UNLOCK_PURCHASE) -> 'SheetUpdateRequest' - Create a PENDING SheetUpdateRequest.`
 - `deny_sheet_update_request(request: 'SheetUpdateRequest', gm_account: 'object') -> 'None' - Deny a PENDING SheetUpdateRequest. No XP debit, no change.`
-- `grant_distinction(character: 'CharacterSheet', distinction: 'Distinction', *, origin: 'str', rank: 'int | None' = None, source_description: 'str' = '') -> 'CharacterDistinction' - Grant a Distinction, or rank one up, through the single acquisition seam (#2037).`
+- `grant_distinction(character: 'CharacterSheet', distinction: 'Distinction', *, origin: 'str', rank: 'int | None' = None, source_description: 'str' = '', feature_trait: 'FormTrait | None' = None, feature_marking: 'FormMarking | None' = None) -> 'CharacterDistinction' - Grant a Distinction, or rank one up, through the single acquisition seam (#2037).`
 - `mint_distinction_secret(character_distinction: 'CharacterDistinction', *, level: 'int | None' = None, provenance: 'str' = SecretProvenance.GM_AUTHORED, author_persona: 'Persona | None' = None, content: 'str' = '') -> 'Secret' - Relocate a distinction into a Secret, returning it (#1334).`
 - `remove_distinction(character_distinction: 'CharacterDistinction', *, sheet_update_request: 'SheetUpdateRequest') -> 'None' - Remove a CharacterDistinction, reconciling all dependent systems.`
 
@@ -4432,7 +4437,7 @@
 - `get_goal_bonuses_breakdown(character: 'CharacterSheet') -> dict[str, world.goals.types.GoalBonusBreakdown] - Get breakdown of all goal bonuses for a character.`
 - `get_total_goal_points(character: 'CharacterSheet') -> int - Get the total goal points available for a character to distribute.`
 - `log_goal_progress(*, character: 'CharacterSheet', domain: 'ModifierTarget | None', title: str, content: str, is_public: bool = False) -> 'GoalJournal' - Create a goal-progress journal entry and grant weekly-capped XP.`
-- `set_character_goals(*, character: 'CharacterSheet', goals: list['GoalInputData']) -> list[world.goals.models.CharacterGoal] - Replace a character's goal allocations, enforcing the weekly revision limit.`
+- `set_character_goals(*, character: 'CharacterSheet', goals: list['GoalInputData'], bypass_revision_gate: bool = False) -> list[world.goals.models.CharacterGoal] - Replace a character's goal allocations, enforcing the weekly revision limit.`
 
 
 ## world.instances
@@ -9308,6 +9313,8 @@
   - reviewed_by -> contributors.ContentContributor [FK] (nullable)
   - definition -> societies.HouseAspectDefinition [FK]
   - codex_entry -> codex.CodexEntry [FK] (nullable)
+  - being -> worship.WorshippedBeing [FK] (nullable)
+  - being_nickname -> worship.BeingNickname [FK] (nullable)
 
 ### HouseClaim
 **Foreign Keys:**
@@ -9320,6 +9327,7 @@
   - aspects <- societies.HouseClaimAspect
   - kin <- societies.HouseClaimKin
   - lands <- societies.HouseClaimLand
+  - observances <- societies.HouseClaimObservance
 
 ### HouseClaimAspect
 **Foreign Keys:**
@@ -9338,6 +9346,10 @@
   - claim -> societies.HouseClaim [FK]
   - title -> societies.Title [FK]
   - land_shapes -> societies.LandShape [M2M]
+
+### HouseClaimObservance
+**Foreign Keys:**
+  - claim -> societies.HouseClaim [FK]
 
 ### HouseFeature
 **Foreign Keys:**
@@ -9573,6 +9585,7 @@
   - house_templates <- societies.HouseTemplate
   - aspects <- societies.OrganizationAspect
   - features <- societies.OrganizationFeature
+  - observances <- societies.OrganizationObservance
   - stature <- societies.HouseStature
   - stature_shifts <- societies.StatureShift
   - prestige_rank_row <- societies.OrgPrestigeRank
@@ -9659,6 +9672,10 @@
   - debtor -> character_sheets.CharacterSheet [FK]
   - creditor -> societies.Organization [FK]
   - settled_by_token -> currency.FavorTokenDetails [FK] (nullable)
+
+### OrganizationObservance
+**Foreign Keys:**
+  - organization -> societies.Organization [FK]
 
 ### OrganizationOffice
 **Foreign Keys:**
@@ -10813,6 +10830,7 @@
   - being -> worship.WorshippedBeing [FK]
 **Pointed to by:**
   - patron_organizations <- societies.Organization
+  - house_aspect_options <- societies.HouseAspectOption
 
 ### BeingRelationship
 **Foreign Keys:**
@@ -10966,6 +10984,7 @@
   - ultimate_techniques -> magic.Technique [M2M]
 **Pointed to by:**
   - ceremonies <- ceremonies.Ceremony
+  - house_aspect_options <- societies.HouseAspectOption
   - audere_majora_faith_variants <- magic.AudereMajoraFaithVariant
   - manifest_options <- magic.TechniqueManifestOption
   - feast_days <- worship.WorshipFeastDay
