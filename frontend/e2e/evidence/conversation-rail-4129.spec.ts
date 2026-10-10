@@ -130,6 +130,8 @@ test.describe('the conversation rail (#4129)', () => {
     // A page row addresses the composer to its correspondent and shows the page alone.
     await pages.getByRole('button', { name: /^Bram\s+page/ }).click();
     await expect(page.getByText('Page → Bram')).toBeVisible();
+    // A page reaches its correspondent wherever they stand: no table-talk refusal.
+    await expect(page.getByText(/will not see table talk/)).toHaveCount(0);
     await expect(page.getByText(/Are you around for the Sunday scene/)).toBeVisible();
     await expect(page.getByText('Meet me by the east gate after.')).toHaveCount(0);
     // A row is read once it has been on screen a moment, like a thread.
@@ -152,6 +154,9 @@ test.describe('the conversation rail (#4129)', () => {
       'Expand all',
       'Unhide all',
     ]);
+    // Let the menu's open transition settle so the capture is legible.
+    await expect.poll(async () => menu.evaluate((el) => getComputedStyle(el).opacity)).toBe('1');
+    await page.waitForTimeout(250);
     await page.screenshot({ path: shot('rail-person-menu-1280.png'), fullPage: true });
     await page.keyboard.press('Escape');
     await expect(menu).toHaveCount(0);
@@ -169,6 +174,7 @@ test.describe('the conversation rail (#4129)', () => {
     await expect(page.getByTestId('feed-find-empty')).toHaveText(
       'Nothing in this session says that.'
     );
+    await page.screenshot({ path: shot('rail-find-empty-1280.png'), fullPage: true });
     await find.press('Escape');
     await expect(find).toHaveValue('');
     await expect(page.getByText('glances toward the noise, unhurried.')).toBeVisible();

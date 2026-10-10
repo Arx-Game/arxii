@@ -46,6 +46,15 @@ describe('tagReachability', () => {
     expect(result.reachable).toBe(true);
   });
 
+  it('is reachable for a page regardless of location, so a page row never shows a table-talk refusal (#4129)', () => {
+    const result = tagReachability(['Bram'], [], 'page', {
+      isAtPlace: true,
+      currentPlaceId: 5,
+      currentPlaceName: 'The long table',
+    });
+    expect(result.reachable).toBe(true);
+  });
+
   it('is reachable for a whisper regardless of location', () => {
     const result = tagReachability(['Vayne'], room, 'whisper', {
       isAtPlace: true,
