@@ -56885,12 +56885,12 @@ components:
       properties:
         ic_month:
           type: integer
-          maximum: 32767
-          minimum: 0
+          maximum: 12
+          minimum: 1
         ic_day:
           type: integer
-          maximum: 32767
-          minimum: 0
+          maximum: 31
+          minimum: 1
         name:
           type: string
           maxLength: 120
