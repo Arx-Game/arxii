@@ -162,12 +162,10 @@ def grant_distinction(  # noqa: PLR0913 - the feature pair mirrors the held row'
 
     # A per-feature distinction is held once per feature (#3739), so the holder row is
     # the one aimed at the same feature; a plain one has neither feature set.
-    existing = CharacterDistinction.objects.filter(
-        character=character,
-        distinction=distinction,
-        feature_trait=feature_trait,
-        feature_marking=feature_marking,
-    ).first()
+    holders = CharacterDistinction.objects.filter(character=character, distinction=distinction)
+    if feature_trait is not None or feature_marking is not None:
+        holders = holders.filter(feature_trait=feature_trait, feature_marking=feature_marking)
+    existing = holders.first()
 
     with transaction.atomic():
         if existing is None:

@@ -329,8 +329,39 @@ def _apply_staff_change(  # noqa: PLR0913 - one field's write and the two save l
         raise StaffEditError(msg)
 
 
-@transaction.atomic
+def _grant_species_consequences(sheet: CharacterSheet) -> None:
+    """A species' gifts, languages and codex; a refusal is a staff-facing message (#4221)."""
+    from world.character_creation.sheet_writers import species_consequences  # noqa: PLC0415
+    from world.distinctions.exceptions import DistinctionExclusionError  # noqa: PLC0415
+    from world.magic.exceptions import MagicError  # noqa: PLC0415
+
+    try:
+        species_consequences(sheet)
+    except (MagicError, DistinctionExclusionError) as exc:
+        raise StaffEditError(str(exc.user_message)) from exc
+
+
 def staff_edit_sheet(sheet: CharacterSheet, changes: dict[str, Any], *, edited_by: Any) -> None:
+    """Apply a staff edit atomically; a refused edit leaves no phantom values in the cache.
+
+    The sheet and profile are identity-mapped (ADR-0008): a rollback restores their rows
+    but not the cached instances, which would show, and could later save, the refused
+    values. On any failure both are evicted from the cache so the next read is the row.
+    """
+    profile = sheet.true_profile
+    applied = False
+    try:
+        with transaction.atomic():
+            _staff_edit_sheet(sheet, changes, edited_by=edited_by)
+        applied = True
+    finally:
+        if not applied:
+            sheet.flush_from_cache(force=True)
+            if profile is not None:
+                profile.flush_from_cache(force=True)
+
+
+def _staff_edit_sheet(sheet: CharacterSheet, changes: dict[str, Any], *, edited_by: Any) -> None:
     """Apply a staff edit to a sheet's prose and identity fields (#3988).
 
     ``changes`` is the validated subset the staff-edit serializer resolved: prose
@@ -342,7 +373,6 @@ def staff_edit_sheet(sheet: CharacterSheet, changes: dict[str, Any], *, edited_b
     """
     from world.character_creation.sheet_writers import (  # noqa: PLC0415
         set_pronouns_from_gender,
-        species_consequences,
     )
 
     profile = ensure_true_profile(sheet)
@@ -361,4 +391,4 @@ def staff_edit_sheet(sheet: CharacterSheet, changes: dict[str, Any], *, edited_b
         profile.save(update_fields=profile_fields)
     # A species carries its gifts, languages and codex, as it does in CG (#4221).
     if changes.get("species") is not None:
-        species_consequences(sheet)
+        _grant_species_consequences(sheet)

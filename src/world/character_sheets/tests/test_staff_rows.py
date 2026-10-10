@@ -221,3 +221,36 @@ class StaffRowsPayloadTests(TestCase):
         assert options.status_code == 200, options.content[:400]
         assert {"id": strength.pk, "name": strength.name} in options.data["stats"]
         assert options.data["form_traits"] == []
+
+
+class SpeciesEditTests(TestCase):
+    def test_a_species_whose_gifts_cannot_be_granted_is_a_400_and_saves_nothing(self) -> None:
+        from unittest import mock
+
+        from world.magic.exceptions import MagicError
+        from world.species.factories import SpeciesFactory
+
+        staff = AccountFactory(is_staff=True)
+        sheet = RosterEntryFactory().character_sheet
+        species = SpeciesFactory()
+        client = APIClient()
+        client.force_authenticate(user=staff)
+        with mock.patch(
+            "world.character_creation.sheet_writers.species_consequences",
+            side_effect=MagicError("No resonance to anchor the gift."),
+        ):
+            response = client.patch(
+                f"/api/character-sheets/{sheet.pk}/staff-edit/",
+                {"species": species.pk, "vocation": "Smith"},
+                format="json",
+            )
+        assert response.status_code == 400, response.content[:400]
+        # The row, not the cached instance (refresh_from_db is a no-op on the identity map).
+        from world.character_sheets.models import CharacterSheet
+
+        row = CharacterSheet.objects.filter(pk=sheet.pk).values("vocation", "species_id").get()
+        assert row["vocation"] != "Smith"
+        assert row["species_id"] != species.pk
+        # The next read is the row too: the refused values did not stay in the cache.
+        fresh = CharacterSheet.objects.get(pk=sheet.pk)
+        assert fresh.vocation != "Smith"

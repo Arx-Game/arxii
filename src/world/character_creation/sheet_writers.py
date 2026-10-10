@@ -320,15 +320,21 @@ def _roster_entry(sheet: CharacterSheet) -> RosterEntry | None:
         return None
 
 
-def grant_codex_entries(sheet: CharacterSheet, entry_ids: Iterable[int]) -> None:
-    """Grant every entry to the sheet's character as KNOWN; nothing without a roster entry."""
+def grant_codex_entries(
+    sheet: CharacterSheet, entry_ids: Iterable[int], *, require_roster_entry: bool = False
+) -> None:
+    """Grant every entry to the sheet's character as KNOWN.
+
+    A sheet with no roster entry yet gets nothing; ``require_roster_entry`` (CG's
+    finalize) makes that loud instead, so a grant is never silently lost.
+    """
     from world.codex.models import CodexEntry  # noqa: PLC0415
     from world.codex.services import grant_codex_entry  # noqa: PLC0415
 
     entry_ids = list(entry_ids)
     if not entry_ids:
         return
-    roster_entry = _roster_entry(sheet)
+    roster_entry = sheet.roster_entry if require_roster_entry else _roster_entry(sheet)
     if roster_entry is None:
         return
     for entry in CodexEntry.objects.filter(pk__in=entry_ids):
@@ -371,7 +377,7 @@ def grant_distinction_codex(sheet: CharacterSheet, distinctions: Iterable[Distin
     )
 
 
-def grant_species_codex(sheet: CharacterSheet) -> None:
+def grant_species_codex(sheet: CharacterSheet, *, require_roster_entry: bool = False) -> None:
     """The codex entries owed to the sheet's species and its parents (#2880)."""
     from world.codex.services import grant_codex_entry  # noqa: PLC0415
 
@@ -381,7 +387,7 @@ def grant_species_codex(sheet: CharacterSheet) -> None:
     entries = species.codex_entries
     if not entries:
         return
-    roster_entry = _roster_entry(sheet)
+    roster_entry = sheet.roster_entry if require_roster_entry else _roster_entry(sheet)
     if roster_entry is None:
         return
     for entry in entries:

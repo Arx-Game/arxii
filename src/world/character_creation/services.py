@@ -2263,7 +2263,7 @@ def _grant_codex_entries(sheet: CharacterSheet, entry_ids: Iterable[int]) -> Non
     """
     from world.character_creation.sheet_writers import grant_codex_entries  # noqa: PLC0415
 
-    grant_codex_entries(sheet, entry_ids)
+    grant_codex_entries(sheet, entry_ids, require_roster_entry=True)
 
 
 def _finalize_tradition_codex_grants(draft: CharacterDraft, sheet: CharacterSheet) -> None:
@@ -2330,7 +2330,7 @@ def _finalize_species_codex(sheet: CharacterSheet) -> None:
     """Grant the codex entries owed to the species and its parents (``grant_species_codex``)."""
     from world.character_creation.sheet_writers import grant_species_codex  # noqa: PLC0415
 
-    grant_species_codex(sheet)
+    grant_species_codex(sheet, require_roster_entry=True)
 
 
 def _finalize_resonance_codex(draft: CharacterDraft, sheet: CharacterSheet) -> None:
