@@ -15,6 +15,7 @@ from rest_framework.test import APIClient, APITestCase
 
 from evennia_extensions.factories import AccountFactory, CharacterFactory
 from world.character_sheets.factories import CharacterSheetFactory
+from world.character_sheets.models import CharacterSheet
 from world.roster.constants import DefinitionTier, RelationshipType
 from world.roster.factories import FamilyFactory, RosterTenureFactory
 from world.roster.services import kinship
@@ -478,3 +479,246 @@ class FamilyListParticleQueryCountTests(APITestCase):
         self.assertEqual(rows["Minorhouse"]["taken_in_particle"], "dau")
         self.assertEqual(rows["Driftkin"]["born_particle"], "")
         self.assertEqual(rows["Driftkin"]["taken_in_particle"], "")
+
+
+class FamilyTreeViewTests(APITestCase):
+    """GET /api/roster/families/<id>/tree/ as the family page reads it (#4209).
+
+    The house block and realm, the two names on every node, the roll reaching
+    one hop past the name under the viewer's gate, and a family CG cannot pick
+    still having a page.
+    """
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        from world.character_creation.factories import RealmFactory
+        from world.character_sheets.factories import GenderFactory
+        from world.roster.constants import NOBLE_KIND_NAME, MembershipBasis
+        from world.roster.factories import FamilyKindFactory, UnionFactory
+        from world.secrets.services import grant_secret_knowledge
+        from world.societies.factories import OrganizationFactory, SocietyFactory
+        from world.societies.houses.models import NobiliaryParticle
+
+        noble = FamilyKindFactory(name=NOBLE_KIND_NAME)
+        female = GenderFactory(key="female")
+        male = GenderFactory(key="male")
+        cls.umbros = RealmFactory(name="Umbros")
+        society = SocietyFactory(name="The Umbral Court", realm=cls.umbros)
+        NobiliaryParticle.objects.create(
+            realm=cls.umbros, kind=noble, particle="mar", taken_in_particle="mal"
+        )
+
+        # The housed family: a house org with its gate fields.
+        cls.katta = FamilyFactory(
+            name="Katta", kind=noble, description="The imperial house of Umbros. PLACEHOLDER"
+        )
+        cls.house = OrganizationFactory(
+            name="House Katta",
+            family=cls.katta,
+            society=society,
+            words="What the dark keeps. PLACEHOLDER",
+            colors="black and silver",
+            sigil_description="a crowned key",
+        )
+        valeweep = FamilyFactory(name="Valeweep", kind=noble)
+        OrganizationFactory(name="House Valeweep", family=valeweep, society=society)
+
+        cls.alarysa = kinship.create_person(name="Alarysa", family=cls.katta, gender=female)
+        # Married in from Valeweep: born there, now primarily of the Katta.
+        cls.galleron = kinship.create_person(name="Galleron", family=valeweep, gender=male)
+        kinship.add_membership(
+            kinsperson=cls.galleron, family=cls.katta, basis=MembershipBasis.MARRIED_IN
+        )
+        UnionFactory(members=[cls.alarysa, cls.galleron])
+        cls.kathryn_account = AccountFactory()
+        cls.kathryn_sheet = CharacterSheetFactory(
+            character=CharacterFactory(db_key="Kathryn"), gender=female
+        )
+        RosterTenureFactory(
+            roster_entry__character_sheet=cls.kathryn_sheet,
+            player_data__account=cls.kathryn_account,
+        )
+        cls.kathryn = kinship.create_person(
+            tier=DefinitionTier.PC, sheet=cls.kathryn_sheet, family=cls.katta
+        )
+        cls.alyssa = kinship.create_person(name="Alyssa", family=cls.katta, gender=female)
+        cls.alyssa.believed_deceased = True
+        cls.alyssa.save(update_fields=["believed_deceased"])
+        for child in (cls.kathryn, cls.alyssa):
+            kinship.record_parentage(child=child, parent=cls.alarysa)
+            kinship.record_parentage(child=child, parent=cls.galleron)
+
+        # A public-record relative who is not of the name: Alarysa's child
+        # from before, born into an unhoused family.
+        ashcombe = FamilyFactory(name="Ashcombe")
+        cls.bram = kinship.create_person(name="Bram", family=ashcombe)
+        kinship.record_parentage(child=cls.bram, parent=cls.alarysa)
+
+        # A secret child of Galleron: on the roll for a knower and for staff only.
+        # Sheet-bound, since a hidden fact mints its secret only when a sheet
+        # on either side anchors it (``_mint_hidden_secret``).
+        wren_sheet, _ = _sheet_with_account("Wren")
+        cls.secret_child = kinship.create_person(tier=DefinitionTier.PC, sheet=wren_sheet)
+        cls.hidden_edge = kinship.record_parentage(
+            child=cls.secret_child,
+            parent=cls.galleron,
+            is_public_record=False,
+            secret_content="Galleron fathered a child nobody acknowledges. PLACEHOLDER",
+        )
+
+        cls.stranger_sheet, cls.stranger_account = _sheet_with_account("Stranger")
+        cls.knower_sheet, cls.knower_account = _sheet_with_account("Knower")
+        grant_secret_knowledge(
+            roster_entry=cls.knower_sheet.roster_entry, secret=cls.hidden_edge.secret
+        )
+        cls.staff_account = AccountFactory(is_staff=True)
+
+        # A commoner family with no house and a realm of its own; a mother
+        # taken in from another commoner family.
+        cls.tallow = FamilyFactory(name="Tallow", origin_realm=RealmFactory(name="Arx"))
+        marrow = FamilyFactory(name="Marrow")
+        cls.hesper = kinship.create_person(name="Hesper", family=marrow)
+        kinship.add_membership(
+            kinsperson=cls.hesper, family=cls.tallow, basis=MembershipBasis.MARRIED_IN
+        )
+        cls.tam = kinship.create_person(name="Tam", family=cls.tallow)
+        kinship.record_parentage(child=cls.tam, parent=cls.hesper)
+
+        # A family CG cannot pick, with a seat that would otherwise be open.
+        cls.closed = FamilyFactory(name="Closed", is_playable=False)
+        last = kinship.create_person(name="Last Closed", family=cls.closed)
+        last.is_appable = True
+        last.save(update_fields=["is_appable"])
+
+    @classmethod
+    def tearDownClass(cls) -> None:
+        super().tearDownClass()
+        # The class transaction rolls back, but the identity map keeps these
+        # sheets, and the next class's first sheet takes the same pk (a sheet's
+        # pk is its character's). A kept sheet carrying a rolled-back gender
+        # would then be inserted with a dangling foreign key; flushing is the
+        # documented convention (django_notes.md, idmapper rollback staleness).
+        CharacterSheet.flush_instance_cache()
+
+    def _tree(self, family, account):
+        self.client.force_authenticate(user=account)
+        response = self.client.get(f"/api/roster/families/{family.pk}/tree/")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        return response.data
+
+    def test_house_block_and_realm_for_a_housed_family(self) -> None:
+        data = self._tree(self.katta, self.stranger_account)
+        self.assertEqual(data["realm_name"], "Umbros")
+        house = data["house"]
+        self.assertEqual(house["name"], "House Katta")
+        self.assertEqual(house["words"], "What the dark keeps. PLACEHOLDER")
+        self.assertEqual(house["sigil_description"], "a crowned key")
+        self.assertEqual(house["family_id"], self.katta.pk)
+        # The gate shape only: nothing members-only rides along.
+        self.assertNotIn("ranks", house)
+        self.assertNotIn("house", house)
+
+    def test_no_house_and_the_origin_realm_for_a_commoner_family(self) -> None:
+        data = self._tree(self.tallow, self.stranger_account)
+        self.assertIsNone(data["house"])
+        self.assertEqual(data["realm_name"], "Arx")
+
+    def test_every_node_carries_a_full_and_a_short_name(self) -> None:
+        by_name = {n["name"]: n for n in self._tree(self.katta, self.stranger_account)["nodes"]}
+        # Born member of a housed family, untitled: the courtesy style, the
+        # born particle; the tree form is the first name alone.
+        self.assertEqual(by_name["Alarysa"]["full_name"], "Lady Alarysa mar Katta")
+        self.assertEqual(by_name["Alarysa"]["short_name"], "Alarysa")
+        # Taken in: the née segment and the taken-in particle in the roll; the
+        # tree keeps only the birth family, the one fact the page does not say.
+        self.assertEqual(by_name["Galleron"]["full_name"], "Lord Galleron ne Valeweep mal Katta")
+        self.assertEqual(by_name["Galleron"]["short_name"], "Galleron ne Valeweep")
+        # Sheet-bound: the character's key is the first name.
+        self.assertEqual(by_name["Kathryn"]["full_name"], "Lady Kathryn mar Katta")
+        self.assertEqual(by_name["Kathryn"]["short_name"], "Kathryn")
+        # Not of the name: first + own family in both, unhoused so unstyled.
+        self.assertEqual(by_name["Bram"]["full_name"], "Bram Ashcombe")
+        self.assertEqual(by_name["Bram"]["short_name"], "Bram Ashcombe")
+
+        tallow = {n["name"]: n for n in self._tree(self.tallow, self.stranger_account)["nodes"]}
+        self.assertEqual(tallow["Hesper"]["full_name"], "Hesper ne Marrow Tallow")
+        self.assertEqual(tallow["Hesper"]["short_name"], "Hesper ne Marrow")
+        self.assertEqual(tallow["Tam"]["full_name"], "Tam Tallow")
+        self.assertEqual(tallow["Tam"]["short_name"], "Tam")
+
+    def test_the_roll_reaches_one_hop_past_the_name_under_the_viewers_gate(self) -> None:
+        stranger = {n["id"] for n in self._tree(self.katta, self.stranger_account)["nodes"]}
+        self.assertIn(self.bram.pk, stranger)
+        self.assertNotIn(self.secret_child.pk, stranger)
+
+        knower = self._tree(self.katta, self.knower_account)
+        self.assertIn(self.secret_child.pk, {n["id"] for n in knower["nodes"]})
+        edge = next(e for e in knower["parentage"] if e["child_id"] == self.secret_child.pk)
+        self.assertTrue(edge["via_secret"])
+
+        staff = {n["id"] for n in self._tree(self.katta, self.staff_account)["nodes"]}
+        self.assertIn(self.secret_child.pk, staff)
+
+    def test_a_believed_death_reads_as_death_on_the_roll(self) -> None:
+        by_name = {n["name"]: n for n in self._tree(self.katta, self.stranger_account)["nodes"]}
+        self.assertTrue(by_name["Alyssa"]["is_deceased"])
+        self.assertNotIn("believed_deceased", by_name["Alyssa"])
+
+    def test_a_family_cg_cannot_pick_still_has_a_page_and_no_open_seats(self) -> None:
+        data = self._tree(self.closed, self.stranger_account)
+        self.assertEqual([n["name"] for n in data["nodes"]], ["Last Closed"])
+        slots = self.client.get(f"/api/roster/families/{self.closed.pk}/slots/")
+        self.assertEqual(slots.status_code, status.HTTP_200_OK)
+        self.assertEqual(slots.data, {"slots": [], "pools": []})
+        listed = self.client.get("/api/roster/families/")
+        self.assertNotIn(self.closed.pk, {row["id"] for row in listed.json()})
+
+    def test_the_character_tree_carries_the_same_keys(self) -> None:
+        self.client.force_authenticate(user=self.stranger_account)
+        response = self.client.get(f"/api/roster/kin/tree/{self.kathryn_sheet.pk}/")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["house"]["family_id"], self.katta.pk)
+        self.assertEqual(response.data["realm_name"], "Umbros")
+        kathryn = next(n for n in response.data["nodes"] if n["sheet_id"] == self.kathryn_sheet.pk)
+        self.assertEqual(kathryn["short_name"], "Kathryn")
+
+    def test_query_count_does_not_grow_with_the_roll(self) -> None:
+        """One member or three, same shape, same number of queries: the names,
+        the roster entries, the unions and the hop past the name are each one
+        batch per tree, never one per node."""
+        from django.db import connection
+        from django.test.utils import CaptureQueriesContext
+
+        from world.roster.constants import NOBLE_KIND_NAME
+        from world.roster.factories import FamilyKindFactory
+        from world.societies.factories import OrganizationFactory, SocietyFactory
+
+        noble = FamilyKindFactory(name=NOBLE_KIND_NAME)
+        society = SocietyFactory(name="The Counting Court", realm=self.umbros)
+
+        def housed(name: str, members: int) -> Family:
+            family = FamilyFactory(name=name, kind=noble)
+            OrganizationFactory(name=f"House {name}", family=family, society=society)
+            parent = kinship.create_person(name=f"{name} Elder", family=family)
+            for index in range(members):
+                sheet = CharacterSheetFactory(
+                    character=CharacterFactory(db_key=f"{name} Scion {index}")
+                )
+                RosterTenureFactory(roster_entry__character_sheet=sheet)
+                child = kinship.create_person(tier=DefinitionTier.PC, sheet=sheet, family=family)
+                kinship.record_parentage(child=child, parent=parent)
+            return family
+
+        one = housed("Onefold", 1)
+        three = housed("Threefold", 3)
+        self.client.force_authenticate(user=self.stranger_account)
+        # Warm the request-level caches so the pair differs only by roll size.
+        self.client.get(f"/api/roster/families/{one.pk}/tree/")
+        self.client.get(f"/api/roster/families/{three.pk}/tree/")
+        with CaptureQueriesContext(connection) as ctx_one:
+            res_one = self.client.get(f"/api/roster/families/{one.pk}/tree/")
+        with CaptureQueriesContext(connection) as ctx_three:
+            res_three = self.client.get(f"/api/roster/families/{three.pk}/tree/")
+        self.assertEqual(len(res_one.data["nodes"]), 2)
+        self.assertEqual(len(res_three.data["nodes"]), 4)
+        self.assertEqual(len(ctx_one.captured_queries), len(ctx_three.captured_queries))

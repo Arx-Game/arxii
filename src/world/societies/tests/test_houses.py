@@ -848,3 +848,126 @@ class HouseChannelTests(TestCase):
         self.assertTrue(channel.has_connection(vassal_account))
         # Idempotent re-run.
         self.assertEqual(sync_house_channel(house).pk, channel.pk)
+
+
+class TreeNamesTests(TestCase):
+    """``tree_names_for`` (#4209): the batched full-formal name never drifts from
+    ``full_display_name``, and the tree form is relative to the page's family."""
+
+    @classmethod
+    def setUpTestData(cls):
+        from django.utils import timezone
+
+        from world.roster.factories import KinspersonFactory
+
+        cls.female = GenderFactory(key="female")
+        noble = FamilyKindFactory(name=NOBLE_KIND_NAME)
+        cls.regente, cls.regente_org = _make_house("Regente")
+        society = cls.regente_org.society
+        cls.realm = society.realm
+        cls.vaelmont = FamilyFactory(name="Vaelmont", kind=noble)
+        cls.vaelmont_org = OrganizationFactory(
+            name="House Vaelmont", family=cls.vaelmont, society=society
+        )
+        NobiliaryParticle.objects.create(
+            realm=cls.realm,
+            kind=noble,
+            tier_floor=TitleTier.DUCHY,
+            particle="du",
+            taken_in_particle="dau",
+        )
+        NobiliaryParticle.objects.create(
+            realm=cls.realm, kind=noble, tier_floor="", particle="D'", taken_in_particle="dau"
+        )
+        now = timezone.now()
+
+        def member(name, family, basis, *, gender=None, born_in=None):
+            person = KinspersonFactory(name=name, family=family, gender=gender)
+            if born_in is not None:
+                FamilyMembership.objects.create(
+                    kinsperson=person,
+                    family=born_in,
+                    basis=MembershipBasis.BORN,
+                    is_primary=False,
+                    started_at=now,
+                )
+            FamilyMembership.objects.create(
+                kinsperson=person, family=family, basis=basis, started_at=now
+            )
+            return person
+
+        # The duchess: born, titled, styled by the title row.
+        cls.elia = member("Elia Vaelmont", cls.vaelmont, MembershipBasis.BORN, gender=cls.female)
+        Title.objects.create(
+            name="Duchy of Vaelmont",
+            tier=TitleTier.DUCHY,
+            realm=cls.realm,
+            house=cls.vaelmont_org,
+            holder=cls.elia,
+            holder_style_female="Duchess",
+        )
+        # Married in from Regente: the née segment at full formal.
+        cls.sharlotte = member(
+            "Sharlotte Vaelmont",
+            cls.vaelmont,
+            MembershipBasis.MARRIED_IN,
+            gender=cls.female,
+            born_in=cls.regente,
+        )
+        # A lesser house's born member, attached particle, untitled courtesy style.
+        cls.sybel = member("Sybel Regente", cls.regente, MembershipBasis.BORN, gender=cls.female)
+        # An unhoused commoner family: no particle, no style.
+        cls.driftkin = FamilyFactory(name="Driftkin")
+        cls.wren = member("Wren Driftkin", cls.driftkin, MembershipBasis.BORN)
+        # Nobody's: the bare node name everywhere.
+        cls.nix = KinspersonFactory(name="Nix")
+        cls.people = [cls.elia, cls.sharlotte, cls.sybel, cls.wren, cls.nix]
+
+    def test_batched_full_name_agrees_with_the_per_person_composer(self):
+        from world.societies.houses.services import tree_names_for
+
+        names = tree_names_for(self.people, within=self.vaelmont)
+        for person in self.people:
+            self.assertEqual(names[person.pk].full, full_display_name(person), person.name)
+        self.assertEqual(names[self.elia.pk].full, "Duchess Elia du Vaelmont")
+        self.assertEqual(names[self.sharlotte.pk].full, "Lady Sharlotte ne Regente dau Vaelmont")
+        self.assertEqual(names[self.sybel.pk].full, "Lady Sybel D'Regente")
+        self.assertEqual(names[self.wren.pk].full, "Wren Driftkin")
+        self.assertEqual(names[self.nix.pk].full, "Nix")
+
+    def test_tree_form_is_relative_to_the_page_family(self):
+        from world.societies.houses.services import tree_names_for
+
+        on_vaelmont = tree_names_for(self.people, within=self.vaelmont)
+        self.assertEqual(on_vaelmont[self.elia.pk].short, "Elia")
+        self.assertEqual(on_vaelmont[self.sharlotte.pk].short, "Sharlotte ne Regente")
+        # Not of the name: the common degree, so the relative keeps their house.
+        self.assertEqual(on_vaelmont[self.sybel.pk].short, "Sybel D'Regente")
+        self.assertEqual(on_vaelmont[self.wren.pk].short, "Wren Driftkin")
+        self.assertEqual(on_vaelmont[self.nix.pk].short, "Nix")
+
+        on_regente = tree_names_for(self.people, within=self.regente)
+        self.assertEqual(on_regente[self.sybel.pk].short, "Sybel")
+        # Sharlotte's Regente membership is her birth, not her name: on the
+        # Regente page she is a relative who married out.
+        self.assertEqual(on_regente[self.sharlotte.pk].short, "Sharlotte dau Vaelmont")
+
+        on_driftkin = tree_names_for(self.people, within=self.driftkin)
+        self.assertEqual(on_driftkin[self.wren.pk].short, "Wren")
+
+        ego = tree_names_for(self.people, within=None)
+        self.assertEqual(ego[self.elia.pk].short, "Elia du Vaelmont")
+        self.assertEqual(ego[self.nix.pk].short, "Nix")
+
+    def test_query_count_does_not_grow_with_the_people(self):
+        from django.db import connection
+        from django.test.utils import CaptureQueriesContext
+
+        from world.societies.houses.services import tree_names_for
+
+        tree_names_for(self.people, within=self.vaelmont)  # warm the identity map
+        with CaptureQueriesContext(connection) as one:
+            tree_names_for([self.elia], within=self.vaelmont)
+        with CaptureQueriesContext(connection) as five:
+            tree_names_for(self.people, within=self.vaelmont)
+        self.assertEqual(len(one.captured_queries), len(five.captured_queries))

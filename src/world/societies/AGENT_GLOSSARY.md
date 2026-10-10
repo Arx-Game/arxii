@@ -433,6 +433,10 @@ _Avoid_: maiden name, birth suffix.
 How much of a composed name a persona leads with (`NameDegree`: familiar / common / styled / full formal), a per-Persona preference orthogonal to the **Title Suffix** (`TitleSuffixMode`: none / primary / all held titles). Formal contexts render full formal regardless of preference.
 _Avoid_: name length setting, verbosity.
 
+**Tree Name** (#4209):
+The form a kin tree's graphic prints, relative to the family whose tree it is (`tree_names_for(people, within=family)`): a person of that family prints the first name alone, plus the née segment when taken in and born elsewhere ("Galleron ne Valeweep"); anyone else prints the common degree ("Bram Ashcombe"); the familyless keep the bare node name. Composed beside the full-formal name over facts fetched once per tree, by the same grammar `full_display_name` uses. Not a Degree of Address: the rule depends on the page, not the person.
+_Avoid_: familiar degree, short name (as a stored field), nickname.
+
 **Appeal** (`OrgAppeal`, #3293):
 The canonical IC term for a free-text ask lodged with an organization — any character may lodge one, members read and sign onto it, leadership resolves it (`GRANTED`/`DECLINED`) with a written answer, or the petitioner withdraws it. Mirrors `GroupStoryRequest`'s OPEN→resolved shape for a different target (org vs. GM pool). See ADR-0231.
 _Avoid_: **petition** — that word is reserved for the unrelated OOC staff-contact ticket (`player_submissions.Petition`); never use it for this IC surface.

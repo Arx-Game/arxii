@@ -29,7 +29,7 @@ const mockRelationshipQuery = vi.mocked(useKinRelationship);
 /** Fills in the fields a test doesn't care about with harmless defaults. Note
  * `sheet_id` and `roster_entry_id` default to values distinct from the node's own
  * Kinsperson id (`900 + id`, `500 + id`) — three deliberately different id spaces
- * (#3003, #4210). */
+ * (#3003, #4210). The two display names default to the bare name (#4209). */
 function node(
   overrides: Partial<KinspersonNode> & Pick<KinspersonNode, 'id' | 'name'>
 ): KinspersonNode {
@@ -40,6 +40,8 @@ function node(
     is_appable: false,
     sheet_id: 900 + overrides.id,
     roster_entry_id: 500 + overrides.id,
+    full_name: overrides.name,
+    short_name: overrides.name,
     gender: '',
     age: null,
     description: '',
@@ -218,9 +220,31 @@ describe('KinshipPanel', () => {
       unions: [],
     });
     mockKinRelationship({ label: 'cousin' });
-    renderPanel();
-    fireEvent.click(screen.getByText('Bel'));
+    const { container } = renderPanel();
+    // The box selects; the name inside it is the link to the sheet (#4209).
+    fireEvent.click(container.querySelector('[data-node-id="3"]')!);
     expect(screen.getByText(/cousin/i)).toBeInTheDocument();
+  });
+
+  it('prints no definition tier anywhere, and the tree in short names (#4209)', () => {
+    mockKinTree({
+      nodes: [
+        { id: 2, name: 'Aria', full_name: 'Lady Aria du Valardin', short_name: 'Aria', tier: 'pc' },
+        {
+          id: 3,
+          name: 'Bel',
+          full_name: 'Bel ne Marrow du Valardin',
+          short_name: 'Bel ne Marrow',
+          tier: 'standing',
+        },
+      ],
+    });
+    const { container } = renderPanel();
+    expect(screen.getByText('Bel ne Marrow')).toBeInTheDocument();
+    expect(screen.queryByText('Bel ne Marrow du Valardin')).not.toBeInTheDocument();
+    fireEvent.click(container.querySelector('[data-node-id="3"]')!);
+    expect(screen.getByRole('link', { name: 'Bel ne Marrow du Valardin' })).toBeInTheDocument();
+    expect(container.textContent).not.toMatch(/standing|\bpc\b/);
   });
 
   it("links a sheeted kinsperson to their sheet by the roster entry's id", () => {

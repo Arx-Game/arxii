@@ -110,22 +110,20 @@ function SelectedKinDetail({ characterId, node }: SelectedKinDetailProps) {
       : 'No determinable relationship on record.';
   };
 
-  // A kinsperson with a sheet page links to it; the page being read is not linked
-  // to itself, and an unplayed NPC has nowhere to go.
+  // The full-formal composed name (#4209), as the roll prints it. A kinsperson with
+  // a sheet page links to it; the page being read is not linked to itself, and an
+  // unplayed NPC has nowhere to go. No definition tier beside it: a link is the
+  // only distinction a reader needs.
   const name =
     node.roster_entry_id != null && !isSelf ? (
-      <Link to={`/characters/${node.roster_entry_id}`}>{node.name}</Link>
+      <Link to={`/characters/${node.roster_entry_id}`}>{node.full_name}</Link>
     ) : (
-      node.name
+      node.full_name
     );
 
   return (
     <Entries>
-      <Entry
-        name={name}
-        aside={<span className="refsheet-note">{node.tier.replace(/_/g, ' ')}</span>}
-        gloss={node.description || undefined}
-      >
+      <Entry name={name} gloss={node.description || undefined}>
         <Ledger>{relatedness()}</Ledger>
       </Entry>
     </Entries>

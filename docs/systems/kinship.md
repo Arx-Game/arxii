@@ -105,14 +105,34 @@ Readers (all viewer-aware; `viewer` = RosterEntry, `None` = public-only,
 (full/half), `spouses_of`, `step_parents_of`, `unions_of`,
 `incarnation_chain_of` (per-life knowledge), `derive_relationship` (labeled
 precedence walk incl. foster/step/in-law/soul), `family_tree_for` (graph
-payload for a `Family`), `kin_tree_for_sheet` (#3003 — the same graph payload
+payload for a `Family`: every active member, their union partners, and
+since #4209 every visible parent and child of a member, so a relative who is
+not of the name sits on the roll; each hop is viewer-filtered, and the
+payload also carries `house`, the Organization rooted in the family, and
+`realm_name`, the house's realm else the family's `origin_realm`),
+`kin_tree_for_sheet` (#3003 — the same graph payload
 centred on one `CharacterSheet`: delegates to `family_tree_for` when the
 sheet's `Kinsperson` node has a family, else walks parents/children/siblings/
 spouses/step-parents directly so a familyless character — Misbegotten,
 tarot-named — still gets an ego-centric kin graph; `FamilyTreePayload.family`
-is `None` in that branch), `open_slots_for` (CG browser). `_node_dict`/
-`_edge_dict`/`_union_dict` are the single node/edge/union dict-shape
-definitions both tree builders share — never duplicate them.
+is `None` in that branch), `open_slots_for` (CG browser; nothing for a
+family with `is_playable=False`, since a seat CG cannot offer is not open).
+`_node_dict`/`_edge_dict`/`_union_dict` are the single node/edge/union
+dict-shape definitions both tree builders share — never duplicate them. The
+per-tree batches (`_roster_entries_by_sheet`, `_tree_names`,
+`_visible_unions_among`) run once in `_fill_payload`, so a tree's query
+count does not grow with its size (asserted by
+`FamilyTreeViewTests.test_query_count_does_not_grow_with_the_roll`). Each
+node carries two display names (#4209): `full_name`, the full-formal
+composed name (`full_display_name`, ADR-0218), and `short_name`, the tree
+form, both from `world.societies.houses.services.tree_names_for`, which
+composes the same grammar as `full_display_name` over facts fetched once per
+tree. The tree form is relative to the family whose tree it is: a person of
+that family prints the first name alone, plus `ne <BirthFamily>` when taken
+in and born elsewhere; anyone else prints the common degree (first +
+particle + their own family); a familyless person keeps the bare node name.
+It is not a `NameDegree`, since the rule depends on the page, not the
+person.
 
 ## Surfaces
 
@@ -120,8 +140,14 @@ definitions both tree builders share — never duplicate them.
   filters (renamed from `has_open_positions`, #3648), `area_id` resolves through
   `StartingArea.realm`, matching
   families with that realm or with no `origin_realm` at all),
-  `families/:id/tree/` (viewer-filtered graph payload),
-  `families/:id/slots/` (slot browser). The same `FamilyViewSet` is also
+  `families/:id/tree/` (viewer-filtered graph payload; since #4209 the
+  family page's read, so it reaches every family, not only `is_playable`
+  ones, which only the list filters on for CG; the payload carries `house`
+  through `OrganizationShopWindowSerializer`, the realm hub's gate shape, or
+  null for a family with no org, plus `realm_name`, and each node's
+  `full_name`/`short_name`),
+  `families/:id/slots/` (slot browser; `[]` for a non-playable family). The
+  same `FamilyViewSet` is also
   mounted at `GET /api/character-creation/families/` (`character_creation/
   urls.py:38`) for the CG Lineage stage, producing two operation ids for one
   ViewSet. The list serializes from two batched groupings passed through
@@ -150,9 +176,26 @@ definitions both tree builders share — never duplicate them.
   `/characters/:id` takes, batched by `_roster_entries_by_sheet` in one query
   per tree. The panel links a selected sheeted node to its sheet through it,
   reads the family line as "House X" only for a `styles_as_house` kind, and
-  draws `Family.description` under that line when it is non-empty; the sheet's
-  own House row is plain text (a `Family` pk is not an `Organization` pk, and
-  the org page is member-only). The family-keyed page is #4209.
+  draws `Family.description` under that line when it is non-empty.
+- (#4209) FE: the family page, `frontend/src/kinship/pages/FamilyPage.tsx`
+  at `/families/:id` (a `Family` pk, never an `Organization` pk; signed-in
+  viewers, the tree endpoint's own gate), over `useFamilyTree` and
+  `useFamilySlots` (`kinship/queries.ts`). Sections render or vanish: the
+  gate (a plate for a `styles_as_house` kind with the house's words, colours
+  and sigil; a plain head otherwise), `Family.description`, the roll grouped
+  by generation (`kinship/generations.ts`, the walk the graph lays out by)
+  in `full_name` with a dagger for the deceased and a link for every played
+  person, the tree (`KinTreeGraph`, in `short_name`), the selected person
+  (full name, the kin row's blurb, and "Related as X." only when the
+  relationship endpoint returns a label for the viewer's own selected
+  character, `account.selected_entry.character_id`), and the open seats
+  from `families/:id/slots/`. No definition tier appears on any player kin
+  surface (ADR-4209): the sheet's Kin block prints `full_name` with no tier
+  aside, and the graph prints `short_name` with a played person's name as
+  the link to their sheet while the box selects. The sheet's House row, the
+  org page's house block (`HouseDetail.family_id`) and the realm hub
+  (`OrganizationShopWindow.family_id`, family-rooted orgs only) link here;
+  `urls.family(id)` in `frontend/src/utils/urls.ts` is the one spelling.
 - Telnet: `sheet/family` (alias `kin`) section — the viewer's own visible
   kin, labeled.
 - Admin: Kinsperson (+parentage/membership inlines), ParentageEdge,

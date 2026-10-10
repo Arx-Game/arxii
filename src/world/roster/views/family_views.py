@@ -10,6 +10,7 @@ mutation (the truth/record layer and canon gating make open CRUD wrong here).
 from http import HTTPMethod
 from typing import cast
 
+from django.db.models import QuerySet
 from django_filters.rest_framework import DjangoFilterBackend
 from drf_spectacular.utils import OpenApiParameter, extend_schema
 from evennia.accounts.models import AccountDB
@@ -34,6 +35,7 @@ from world.roster.serializers import (
 )
 from world.roster.services.kinship import (
     OMNISCIENT,
+    FamilyTreePayload,
     derive_relationship,
     family_tree_for,
     kin_tree_for_sheet,
@@ -120,20 +122,44 @@ def _inherited_by_family(families: list[Family]) -> dict[int, dict]:
     return grouping
 
 
+def _tree_response(payload: FamilyTreePayload, request: Request) -> Response:
+    """Serialize a tree payload the same way for both tree views."""
+    serializer = FamilyTreeSerializer(
+        {
+            "family": payload.family,
+            "house": payload.house,
+            "realm_name": payload.realm_name,
+            "nodes": payload.nodes,
+            "parentage": payload.parentage,
+            "unions": payload.unions,
+        },
+        context={"request": request},
+    )
+    return Response(serializer.data)
+
+
 class FamilyViewSet(viewsets.ReadOnlyModelViewSet):
     """Families list/detail + the viewer-aware tree and CG slot browser."""
 
     pagination_class = None  # 2026-07 audit: opt out of default paginator (ADR-0138)
 
-    queryset = (
-        Family.objects.filter(is_playable=True)
-        .select_related("kind")
-        .order_by("kind__sort_order", "kind__name", "name")
+    queryset = Family.objects.select_related("kind").order_by(
+        "kind__sort_order", "kind__name", "name"
     )
     serializer_class = FamilySerializer
     permission_classes = [IsAuthenticated]
     filter_backends = [DjangoFilterBackend]
     filterset_class = FamilyFilterSet
+
+    def get_queryset(self) -> QuerySet[Family]:
+        # ``is_playable`` is CG selectability, so only the list (the CG family
+        # picker) filters on it. A family a sheet names must have a page even
+        # when CG cannot pick it (#4209), so the detail actions reach every
+        # family; ``open_slots_for`` answers nothing for a non-playable one.
+        queryset = super().get_queryset()
+        if self.action == "list":
+            return queryset.filter(is_playable=True)
+        return queryset
 
     def list(self, request: Request, *args: object, **kwargs: object) -> Response:
         # Serialize with batched groupings, not one lookup per row. Mirrors
@@ -161,17 +187,7 @@ class FamilyViewSet(viewsets.ReadOnlyModelViewSet):
     def tree(self, request: Request, pk: int | None = None) -> Response:
         """The family's kinship graph, filtered to what the viewer may see."""
         family = self.get_object()
-        payload = family_tree_for(family, _viewer_entry(request))
-        serializer = FamilyTreeSerializer(
-            {
-                "family": payload.family,
-                "nodes": payload.nodes,
-                "parentage": payload.parentage,
-                "unions": payload.unions,
-            },
-            context={"request": request},
-        )
-        return Response(serializer.data)
+        return _tree_response(family_tree_for(family, _viewer_entry(request)), request)
 
     @action(detail=True, methods=[HTTPMethod.GET])
     def slots(self, request: Request, pk: int | None = None) -> Response:
@@ -202,17 +218,7 @@ class CharacterKinTreeView(APIView):
             sheet = CharacterSheet.objects.get(pk=character_id)
         except CharacterSheet.DoesNotExist:
             raise NotFound from None
-        payload = kin_tree_for_sheet(sheet, _viewer_entry(request))
-        serializer = FamilyTreeSerializer(
-            {
-                "family": payload.family,
-                "nodes": payload.nodes,
-                "parentage": payload.parentage,
-                "unions": payload.unions,
-            },
-            context={"request": request},
-        )
-        return Response(serializer.data)
+        return _tree_response(kin_tree_for_sheet(sheet, _viewer_entry(request)), request)
 
 
 class KinRelationshipView(APIView):

@@ -31530,6 +31530,8 @@ export interface components {
      */
     FamilyTree: {
       family: components['schemas']['Family'] | null;
+      house: components['schemas']['OrganizationShopWindow'] | null;
+      realm_name: string;
       nodes: components['schemas']['KinspersonNode'][];
       parentage: components['schemas']['ParentageEdge'][];
       unions: components['schemas']['UnionEdge'][];
@@ -33185,6 +33187,7 @@ export interface components {
     /** @description The house block of an org payload (#1884) — null for non-family orgs. */
     HouseDetail: {
       family_name: string;
+      family_id: number;
       house_state: string;
       demesne: number;
       liege_name: string;
@@ -34300,6 +34303,8 @@ export interface components {
       is_appable: boolean;
       sheet_id: number | null;
       roster_entry_id: number | null;
+      full_name: string;
+      short_name: string;
       gender: string;
       age: number | null;
       description: string;
@@ -37320,6 +37325,7 @@ export interface components {
       readonly sigil_description: string;
       readonly org_type_name: string;
       readonly society_name: string;
+      readonly family_id: number | null;
     };
     /** @description A ``DistinctionOffer`` embedded on an Upbringing answer row (#3675). */
     OriginChoiceOffer: {

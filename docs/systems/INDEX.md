@@ -2991,8 +2991,15 @@ Secrets, souls with per-life-knowledge reincarnation chains, app-in slots/pools.
   is also mounted at `/api/character-creation/families/` for CG; (#3003)
   `kin/tree/<character_id>/` (viewer-filtered graph payload for one character;
   since #4210 each node also carries `roster_entry_id`, the sheet route's id,
-  beside `sheet_id`) + `kin/relationship/?a=&b=` (viewer-derived relationship
-  label); CG slot claim
+  beside `sheet_id`; since #4209 both tree payloads carry `house` (the gate
+  shape), `realm_name`, and per node `full_name`/`short_name` from
+  `houses.services.tree_names_for`, and `family_tree_for` reaches one hop
+  past the name to a member's visible parents and children) +
+  `kin/relationship/?a=&b=` (viewer-derived relationship
+  label); (#4209) the family page `/families/:id`
+  (`frontend/src/kinship/pages/FamilyPage.tsx`: gate, description, roll,
+  tree, selected person, open seats; linked from the sheet's House row, the
+  org house block's `family_id` and the realm hub's `family_id`); CG slot claim
   (draft `claimed_kin_slot/_pool`, `_bind_kinship_node` at finalize; FE
   `KinSlotPicker`); CG invented parents (`second_parent_species` + draft_data
   names/genders → `_bind_invented_parents` + `_pin_heredity_back_inference` at
