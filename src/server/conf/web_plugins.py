@@ -38,4 +38,10 @@ def at_webproxy_root_creation(web_root):
             primarily for new protocol development, but suitable
             for other shenanigans.
     """
-    return web_root
+    from server.portal.http_proxy import DisconnectAwareProxyResource  # noqa: PLC0415
+
+    proxy = DisconnectAwareProxyResource(
+        web_root.host, web_root.port, web_root.path, web_root.reactor
+    )
+    proxy.children.update(web_root.children)
+    return proxy
