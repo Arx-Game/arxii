@@ -15,6 +15,7 @@ describe('classifyText (#3856)', () => {
     ['arrive', 'arrive'],
     ['narrative', 'ambience'],
     ['gemit', 'ambience'],
+    ['page', 'page'],
     ['system', 'system'],
     ['weather', 'system'],
     [undefined, 'system'],
@@ -63,6 +64,7 @@ describe('FEED_KINDS', () => {
       'look',
       'item',
       'error',
+      'page',
       'system',
     ]);
   });
