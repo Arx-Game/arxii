@@ -215,21 +215,41 @@ def effective_combat_level(sheet: CharacterSheet) -> int:
 
 
 @transaction.atomic
+def mentor_band_problem(
+    *, covenant: Covenant, mentor_sheet: CharacterSheet, sidekick_sheet: CharacterSheet
+) -> str:
+    """Why the pair breaks the band rule (exactly one party outside it), else ""."""
+    mentor_in = is_in_band(covenant, _raw_primary_level(mentor_sheet))
+    sidekick_in = is_in_band(covenant, _raw_primary_level(sidekick_sheet))
+    if mentor_in and sidekick_in:
+        return "Both parties are already within the covenant band — no Mentor's Vow bond needed."
+    if not mentor_in and not sidekick_in:
+        return (
+            "Both parties are outside the covenant band — "
+            "the in-band partner required for a Mentor's Vow is absent."
+        )
+    return ""
+
+
 def establish_mentor_bond(
     *,
     covenant: Covenant,
     mentor_sheet: CharacterSheet,
     sidekick_sheet: CharacterSheet,
+    staff_override: bool = False,
 ) -> MentorBond:
     """Create an active MentorBond between mentor_sheet and sidekick_sheet in covenant.
 
     Determines the adjusted_party by checking which of the two is outside the
     covenant band via their raw primary level. Exactly one must be out of band
-    and the other in band; otherwise raises MentorBondError.
+    and the other in band; otherwise raises MentorBondError. With
+    ``staff_override`` (#4229, staff edit mode) a pair that breaks the band rule
+    is bonded anyway, the sidekick as the adjusted party; the caller shows staff
+    ``mentor_band_problem`` as a warning.
 
     Enforces max_sidekicks_per_mentor when set on the config singleton: counts
     the mentor's currently active sidekick bonds in this covenant and raises
-    MentorBondError when the cap would be exceeded.
+    MentorBondError when the cap would be exceeded, staff or not.
 
     Returns the created MentorBond.
     """
@@ -238,28 +258,17 @@ def establish_mentor_bond(
     from world.covenants.models import MentorBond  # noqa: PLC0415
     from world.covenants.services import get_mentor_bond_config  # noqa: PLC0415
 
-    mentor_raw = _raw_primary_level(mentor_sheet)
-    sidekick_raw = _raw_primary_level(sidekick_sheet)
+    problem = mentor_band_problem(
+        covenant=covenant, mentor_sheet=mentor_sheet, sidekick_sheet=sidekick_sheet
+    )
+    if problem and not staff_override:
+        raise MentorBondError(problem)
 
-    mentor_in = is_in_band(covenant, mentor_raw)
-    sidekick_in = is_in_band(covenant, sidekick_raw)
-
-    if mentor_in and sidekick_in:
-        msg = "Both parties are already within the covenant band — no Mentor's Vow bond needed."
-        raise MentorBondError(msg)
-    if not mentor_in and not sidekick_in:
-        msg = (
-            "Both parties are outside the covenant band — "
-            "the in-band partner required for a Mentor's Vow is absent."
-        )
-        raise MentorBondError(msg)
-
-    # Exactly one is out of band.
-    if sidekick_in:
+    if not problem and is_in_band(covenant, _raw_primary_level(sidekick_sheet)):
         # mentor is out-of-band → adjusted_party = MENTOR
         adjusted_party = MentorBondAdjusted.MENTOR
     else:
-        # sidekick is out-of-band → adjusted_party = SIDEKICK
+        # sidekick is out-of-band (or staff bonded a pair outside the rule)
         adjusted_party = MentorBondAdjusted.SIDEKICK
 
     # Enforce max_sidekicks_per_mentor cap: counts all active bonds in this covenant

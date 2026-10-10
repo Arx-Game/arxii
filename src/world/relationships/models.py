@@ -343,6 +343,15 @@ class RelationshipLabel(SharedMemoryModel):
         help_text="The label this one was changed from.",
     )
     note = models.CharField(max_length=200, blank=True)
+    # #4229: a label staff declared for this side (staff edit mode, #3988). On a
+    # character nobody is playing it is declared with no tenure, so it counts toward
+    # nothing until a player picks the character up; tenure start then binds it to the
+    # new tenure (``bind_staff_seeded_labels``), since the applicant saw it on the sheet.
+    staff_seeded = models.BooleanField(
+        default=False,
+        db_default=False,
+        help_text="Declared by staff; binds to the next tenure when it has none.",
+    )
 
     class Meta:
         ordering = ["since"]

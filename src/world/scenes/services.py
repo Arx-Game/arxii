@@ -12,6 +12,8 @@ from world.scenes.models import Persona, Scene
 if TYPE_CHECKING:
     from collections.abc import Iterable
 
+    from evennia.accounts.models import AccountDB
+
     from typeclasses.characters import Character
     from world.character_sheets.models import CharacterSheet, Profile
     from world.forms.models import CharacterForm
@@ -265,6 +267,7 @@ def set_persona_profile(  # noqa: PLR0913 - keyword-only; one argument per guise
     protect: str | None = None,
     fear: str | None = None,
     background: str | None = None,
+    edited_by: AccountDB | None = None,
 ) -> Profile:
     """Author the fabricated bio a non-primary persona presents — its **Guise Sheet** (#1270).
 
@@ -277,8 +280,13 @@ def set_persona_profile(  # noqa: PLR0913 - keyword-only; one argument per guise
     sheet, never authored here. Only narrative text is set; **lineage stays display-only** (the
     sheet's forwarding properties keep every *mechanical* lineage read on the real ``true_profile``,
     so a fabricated guise can never leak into mechanics).
+
+    Each changed field goes through ``update_profile_text`` (#4229), so a guise's prose
+    keeps the same version history as the true profile; ``edited_by`` names the staff
+    account for a staff edit. An unchanged field writes no version.
     """
     from world.character_sheets.models import Profile  # noqa: PLC0415
+    from world.character_sheets.services import update_profile_text  # noqa: PLC0415
     from world.scenes.constants import PersonaType  # noqa: PLC0415
 
     if persona.persona_type == PersonaType.PRIMARY:
@@ -286,9 +294,10 @@ def set_persona_profile(  # noqa: PLR0913 - keyword-only; one argument per guise
         raise GuiseProfileError(msg)
 
     profile = persona.profile
-    created = profile is None
-    if created:
-        profile = Profile()
+    if profile is None:
+        profile = Profile.objects.create()
+        persona.profile = profile
+        persona.save(update_fields=["profile"])
     updates = {
         "concept": concept,
         "quote": quote,
@@ -298,12 +307,8 @@ def set_persona_profile(  # noqa: PLR0913 - keyword-only; one argument per guise
         "background": background,
     }
     for field_name, value in updates.items():
-        if value is not None:
-            setattr(profile, field_name, value)
-    profile.save()
-    if created:
-        persona.profile = profile
-        persona.save(update_fields=["profile"])
+        if value is not None and value != getattr(profile, field_name):
+            update_profile_text(profile, field_name, value, edited_by=edited_by)
     return profile
 
 
