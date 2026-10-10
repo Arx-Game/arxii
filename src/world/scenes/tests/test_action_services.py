@@ -31,13 +31,14 @@ from world.scenes.action_services import (
     respond_to_action_request,
     respond_to_action_target,
 )
+from world.scenes.constants import PersonaType
 from world.scenes.factories import (
     PersonaFactory,
     SceneActionRequestFactory,
     SceneActionTargetFactory,
     SceneFactory,
 )
-from world.scenes.models import InteractionTargetPersona
+from world.scenes.models import InteractionTargetPersona, Persona
 from world.scenes.place_models import InteractionReceiver
 from world.scenes.types import EnhancedSceneActionResult
 
@@ -222,7 +223,12 @@ class DenyBlacklistTests(TestCase):
     @classmethod
     def setUpTestData(cls) -> None:
         cls.scene = SceneFactory()
-        cls.initiator = PersonaFactory()
+        # The factory persona is an ESTABLISHED face (a mask); the sheet also holds its
+        # PRIMARY persona, which is the character acting as themselves.
+        cls.mask = PersonaFactory()
+        cls.initiator = Persona.objects.get(
+            character_sheet=cls.mask.character_sheet, persona_type=PersonaType.PRIMARY
+        )
         cls.target = PersonaFactory()
         cls.initiator_tenure = cls._tenure_for(cls.initiator)
         cls.target_tenure = cls._tenure_for(cls.target)
@@ -233,10 +239,10 @@ class DenyBlacklistTests(TestCase):
         entry = RosterEntryFactory(character_sheet=persona.character_sheet)
         return RosterTenureFactory(roster_entry=entry, end_date=None)
 
-    def _request(self, *, with_category: bool = True):
+    def _request(self, *, with_category: bool = True, initiator: object = None):
         request = create_action_request(
             scene=self.scene,
-            initiator_persona=self.initiator,
+            initiator_persona=initiator or self.initiator,
             target_persona=self.target,
             action_key="intimidate",
         )
@@ -259,6 +265,20 @@ class DenyBlacklistTests(TestCase):
     def test_deny_without_flag_adds_no_entry(self) -> None:
         request = self._request()
         respond_to_action_request(action_request=request, decision=ConsentDecision.DENY)
+        assert not SocialConsentBlacklist.objects.exists()
+
+    def test_a_masked_initiator_is_never_remembered(self) -> None:
+        """#4189: the row would name the character behind the mask on the Privacy page."""
+        for persona_type in (PersonaType.ESTABLISHED, PersonaType.TEMPORARY, PersonaType.ALTERNATE):
+            mask = PersonaFactory(
+                character_sheet=self.initiator.character_sheet, persona_type=persona_type
+            )
+            request = self._request(initiator=mask)
+            respond_to_action_request(
+                action_request=request, decision=ConsentDecision.DENY, blacklist_actor=True
+            )
+            request.refresh_from_db()
+            assert request.status == ActionRequestStatus.DENIED
         assert not SocialConsentBlacklist.objects.exists()
 
     def test_deny_blacklist_no_category_is_noop(self) -> None:

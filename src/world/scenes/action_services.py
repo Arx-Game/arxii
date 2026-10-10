@@ -33,7 +33,7 @@ from world.scenes.action_models import (
 )
 from world.scenes.action_resolvers import get_resolver
 from world.scenes.boon_services import BOON_ACTION_KEYS
-from world.scenes.constants import InteractionMode
+from world.scenes.constants import InteractionMode, PersonaType
 from world.scenes.interaction_services import (
     create_interaction,
     deliver_outcome_interaction,
@@ -715,7 +715,15 @@ def _blacklist_initiator_for_denier(
     both refuse the action AND bar that actor from the action's category in future. No-op
     when the action has no consent category, or when either tenure can't be resolved (the
     blacklist is tenure-scoped). The blocked party is never told.
+
+    An initiator acting through a mask (any non-PRIMARY persona) is never remembered
+    (#4189): the list is keyed by the real tenure and the Privacy page shows it under the
+    real character's name, so the row would tell the denier who wore the mask. The deny
+    stands; the shortcut skips silently, since a signal would itself say "that face is a
+    mask". The makeover shortcut holds the same rule (#4187).
     """
+    if action_request.initiator_persona.persona_type != PersonaType.PRIMARY:
+        return
     template = action_request.action_template
     category = template.consent_category if template is not None else None
     if category is None:
