@@ -233,8 +233,8 @@ weight, marital status, vocation, social rank). An empty field keeps a slot. A s
 `PATCH /api/character-sheets/{id}/staff-edit/` and the answer replaces the sheet cache.
 
 - **Every prose field is versioned.** `ProfileTextField` covers background, the three
-  Actor's Sheet answers, concept, real concept, quote, obituary and the physical
-  description. The description lives on `CharacterSheet.additional_desc` but its versions
+  Actor's Sheet answers, concept, real concept, quote, obituary, the physical
+  description and the Glimpse (#4224, stored on the aura). The description lives on `CharacterSheet.additional_desc` but its versions
   hang off the true profile, so one timeline covers the character; `set_physical_description`
   writes through `update_profile_text`. Blanking a field saves an empty version.
 - **Restore** writes a past version back as a new one; nothing is deleted.
@@ -261,7 +261,19 @@ for it: a gender edit sets the pronoun forms, a species its gifts, languages and
 beginning its rituals, codex and languages, a path its codex and Chosen patronage. The staff
 payload block carries the stored rows by id (`StaffEditRows`).
 
-Pieces C (magic), D (kinship and estate) and E (group fit) continue on #4221.
+**Piece C, magic (#4224).** A giftless sheet gets a Grant magic stepper in the rows band:
+`staff-magic-options?tradition=&gift=` narrows tradition, gift (offered on the sheet's path),
+techniques (pool, tradition signatures and species gifts, finished only, up to the sheet's
+pick limit), resonance, and the anima stat and skill; `POST staff-magic` validates with
+`validate_staff_magic` and writes through `provision_magic`, the same writer CG's finalize
+uses. The stage's rules hold and its costs do not; a sheet that already holds a gift is
+refused (changing magic is not edit mode). The anima ritual belongs to the current tenure's
+player, or the staff member for a character nobody plays. The Glimpse is a versioned
+prose field (`ProfileTextField.GLIMPSE`, routed to `CharacterAura.glimpse_story`) edited in
+the Spellbook's aura rail; a sheet with no aura refuses it. `StaffEditRows` adds `has_gift`
+and `has_aura`.
+
+Pieces D (kinship and estate) and E (group fit) continue on #4224.
 
 ## Web Sheet Mechanics Display (#3042)
 

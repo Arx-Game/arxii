@@ -1541,7 +1541,7 @@
 - `family_name_is_taken(name: 'str') -> 'bool' - Case-insensitive collision with any family or organisation name (#3617).`
 - `finalize_character(draft: 'CharacterDraft', *, add_to_roster: 'bool' = False, created_by_account: 'AccountDB | None' = None) -> 'ObjectDB' - Create a Character from a completed CharacterDraft.`
 - `finalize_gm_character(draft: 'CharacterDraft', *, claim_as_npc: 'bool' = False) -> 'tuple[RosterEntry, Story]' - Finalize a GM-initiated draft into a roster character + story.`
-- `finalize_magic_data(draft: 'CharacterDraft', sheet: 'CharacterSheet') -> 'None' - Create magic models from the CG-chosen catalog Gift/Techniques during finalization.`
+- `finalize_magic_data(draft: 'CharacterDraft', sheet: 'CharacterSheet') -> 'None' - Give the new character its magic from the draft's picks (``provision_magic``, #4224).`
 - `first_journal_offered(draft: 'CharacterDraft') -> 'bool' - The First Journal is offered to an Arx start; anyone else writes one in play.`
 - `get_accessible_starting_areas(account: 'AbstractBaseUser | AnonymousUser') -> 'QuerySet' - Get all starting areas accessible to an account.`
 - `opened_feature_traits(draft_data: 'dict') -> 'set[str]' - The names of the trait rows this draft has made distinctive (#3739).`
@@ -1861,7 +1861,7 @@
 - `rename_character(sheet: 'CharacterSheet', name: 'str') -> 'None' - Rename a character: its key and its primary persona's name together (#3988).`
 - `restore_profile_text_version(version: 'ProfileTextVersion', *, edited_by: 'Any') -> 'ProfileTextVersion' - Write a past version's text back as the current text (#3988).`
 - `set_physical_description(sheet: 'CharacterSheet', text: 'str', *, edited_by: 'Any | None' = None) -> 'ProfileTextVersion' - THE seam for setting a character's free-text physical description (#2632).`
-- `staff_edit_sheet(sheet: 'CharacterSheet', changes: 'dict[str, Any]', *, edited_by: 'Any') -> 'None' - Apply a staff edit to a sheet's prose and identity fields (#3988).`
+- `staff_edit_sheet(sheet: 'CharacterSheet', changes: 'dict[str, Any]', *, edited_by: 'Any') -> 'None' - Apply a staff edit atomically; a refused edit leaves no phantom values in the cache.`
 - `update_profile_text(profile: 'Profile', field: 'str', text: 'str', *, edited_by: 'Any | None' = None, previous_text: 'str | None' = None) -> 'ProfileTextVersion' - Write a versioned Profile prose field — the ONLY sanctioned write path (#2631).`
 
 
