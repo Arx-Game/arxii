@@ -389,29 +389,25 @@ def change_membership(  # noqa: PLR0913 - keyword-only; one argument per change
 
 def bond_mentor(
     covenant: Covenant, *, mentor: CharacterSheet, sidekick: CharacterSheet
-) -> tuple[MentorBond, str]:
-    """Bond a mentor and a sidekick in a covenant; returns the bond and any band warning.
+) -> MentorBond:
+    """Bond a mentor and a sidekick in a covenant, by staff fiat.
 
-    The level band (exactly one party outside it) is a warning for staff, not a refusal;
-    the cap on a mentor's sidekicks still holds.
+    The level band (exactly one party outside it) is a warning for staff, not a refusal:
+    the staff rows show ``mentor_band_problem`` beside the bond. The cap on a mentor's
+    sidekicks still holds.
     """
     from world.covenants.exceptions import MentorBondError  # noqa: PLC0415
-    from world.covenants.mentorship import (  # noqa: PLC0415
-        establish_mentor_bond,
-        mentor_band_problem,
-    )
+    from world.covenants.mentorship import establish_mentor_bond  # noqa: PLC0415
 
     if mentor.pk == sidekick.pk:
         msg = "A character cannot mentor themselves."
         raise SheetWriteError(msg)
-    warning = mentor_band_problem(covenant=covenant, mentor_sheet=mentor, sidekick_sheet=sidekick)
     try:
-        bond = establish_mentor_bond(
+        return establish_mentor_bond(
             covenant=covenant, mentor_sheet=mentor, sidekick_sheet=sidekick, staff_override=True
         )
     except MentorBondError as exc:
         raise SheetWriteError(exc.user_message) from exc
-    return bond, warning
 
 
 def dissolve_mentor(bond: MentorBond) -> None:

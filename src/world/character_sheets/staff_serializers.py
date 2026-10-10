@@ -645,6 +645,7 @@ class StaffGroupOptionsSerializer(serializers.Serializer):
     """What the group-fit editors pick from; characters come by search."""
 
     characters = StaffOptionSerializer(many=True)
+    faces = StaffOptionSerializer(many=True)
     relationship_types = StaffOptionSerializer(many=True)
     awareness = StaffChoiceSerializer(many=True)
     tiers = StaffOptionSerializer(many=True)

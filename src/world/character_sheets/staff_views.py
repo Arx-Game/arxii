@@ -12,8 +12,8 @@ from __future__ import annotations
 from http import HTTPMethod
 from typing import TYPE_CHECKING, Any, cast
 
-from drf_spectacular.utils import extend_schema, inline_serializer
-from rest_framework import serializers, status
+from drf_spectacular.utils import extend_schema
+from rest_framework import status
 from rest_framework.decorators import action
 from rest_framework.request import Request
 from rest_framework.response import Response
@@ -676,23 +676,12 @@ class StaffSheetRowsMixin:
             return _refused(exc)
         return self._answer(request, sheet)
 
-    @extend_schema(
-        request=StaffMentorBondSerializer,
-        responses={
-            200: inline_serializer(
-                name="StaffMentorBondResult",
-                fields={
-                    "warning": serializers.CharField(allow_blank=True),
-                    "sheet": CharacterSheetSerializer(),
-                },
-            )
-        },
-    )
+    @extend_schema(request=StaffMentorBondSerializer, responses={200: CharacterSheetSerializer})
     @action(detail=True, methods=[HTTPMethod.POST], url_path="staff-mentor-bonds")
     def staff_add_mentor_bond(self, request: Request, pk: int | None = None) -> Response:
         """Bond the character and another as mentor and sidekick in a covenant.
 
-        A pair outside the level band is bonded anyway and the answer carries the warning.
+        A pair outside the level band is bonded anyway; its row carries the warning.
         """
         from world.character_sheets.group_writer import bond_mentor  # noqa: PLC0415
 
@@ -701,10 +690,10 @@ class StaffSheetRowsMixin:
         other = data["other"]
         mentor, sidekick = (sheet, other) if data["as_mentor"] else (other, sheet)
         try:
-            _bond, warning = bond_mentor(data["covenant"], mentor=mentor, sidekick=sidekick)
+            bond_mentor(data["covenant"], mentor=mentor, sidekick=sidekick)
         except SheetWriteError as exc:
             return _refused(exc)
-        return Response({"warning": warning, "sheet": self._answer(request, sheet).data})
+        return self._answer(request, sheet)
 
     @extend_schema(request=StaffMentorDissolveSerializer, responses={200: CharacterSheetSerializer})
     @action(detail=True, methods=[HTTPMethod.POST], url_path="staff-mentor-bond-end")
@@ -924,8 +913,10 @@ def _group_options(sheet: CharacterSheet, character_query: str) -> dict[str, Any
     ranks = list(
         CovenantRank.objects.filter(covenant__in=covenants).order_by("covenant_id", "tier")
     )
+    faces = Persona.objects.filter(character_sheet=sheet, is_system=False).order_by("pk")
     return {
         "characters": [{"id": p.character_sheet_id, "name": p.name} for p in characters],
+        "faces": _named(faces),
         "relationship_types": _named(RelationshipType.objects.order_by("display_order", "name")),
         "awareness": _choices(LabelAwareness),
         "tiers": [

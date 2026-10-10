@@ -2485,6 +2485,7 @@ def _staff_group_rows(sheet: CharacterSheet) -> dict[str, Any]:
     from django.db.models import Q  # noqa: PLC0415
 
     from world.achievements.models import PersonaTitle  # noqa: PLC0415
+    from world.covenants.mentorship import mentor_band_problem  # noqa: PLC0415
     from world.covenants.models import CharacterCovenantRole, MentorBond  # noqa: PLC0415
     from world.relationships.models import (  # noqa: PLC0415
         CharacterRelationship,
@@ -2537,7 +2538,7 @@ def _staff_group_rows(sheet: CharacterSheet) -> dict[str, Any]:
     bonds = (
         MentorBond.objects.active()
         .filter(Q(mentor_sheet=sheet) | Q(sidekick_sheet=sheet))
-        .select_related("covenant")
+        .select_related("covenant", "mentor_sheet", "sidekick_sheet")
         .order_by("pk")
     )
     bond_names = true_names(
@@ -2604,6 +2605,11 @@ def _staff_group_rows(sheet: CharacterSheet) -> dict[str, Any]:
                     "",
                 ),
                 as_mentor=bond.mentor_sheet_id == sheet.pk,
+                warning=mentor_band_problem(
+                    covenant=bond.covenant,
+                    mentor_sheet=bond.mentor_sheet,
+                    sidekick_sheet=bond.sidekick_sheet,
+                ),
             )
             for bond in bonds
         ],

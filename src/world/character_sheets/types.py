@@ -933,12 +933,14 @@ class StaffCovenantRoleRow(TypedDict):
 
 
 class StaffMentorBondRow(TypedDict):
-    """An active mentor bond; ``as_mentor`` says which party this character is (#4229)."""
+    """An active mentor bond (#4229); ``as_mentor`` says which party this character is,
+    ``warning`` why the pair breaks the level band, if it does (staff may bond it anyway)."""
 
     id: int
     covenant_name: str
     other_name: str
     as_mentor: bool
+    warning: str
 
 
 class StaffEditRows(TypedDict):

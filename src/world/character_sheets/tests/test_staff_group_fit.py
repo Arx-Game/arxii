@@ -36,6 +36,7 @@ from world.covenants.factories import (
     CovenantRoleFactory,
     seed_mentor_bond_defaults,
 )
+from world.covenants.mentorship import mentor_band_problem
 from world.covenants.models import CharacterCovenantRole, MentorBond, MentorBondConfig
 from world.narrative.models import NarrativeMessage
 from world.relationships.constants import LabelAwareness, TypeValence
@@ -236,9 +237,11 @@ class CovenantAndMentorWriterTests(TestCase):
     def test_a_band_violation_warns_staff_and_the_cap_still_holds(self) -> None:
         mentor = RosterEntryFactory().character_sheet
         _level(mentor, 1)  # both outside the band
-        bond, warning = bond_mentor(self.covenant, mentor=mentor, sidekick=self.sheet)
+        bond = bond_mentor(self.covenant, mentor=mentor, sidekick=self.sheet)
         assert bond.pk
-        assert warning
+        assert mentor_band_problem(
+            covenant=self.covenant, mentor_sheet=mentor, sidekick_sheet=self.sheet
+        )
         config = MentorBondConfig.objects.get(pk=1)
         config.max_sidekicks_per_mentor = 1
         config.save()
@@ -326,7 +329,7 @@ class GroupFitApiTests(TestCase):
         )
         assert response.status_code == 400
 
-    def test_a_mentor_bond_answers_with_its_warning_and_the_sheet(self) -> None:
+    def test_a_bond_outside_the_band_carries_its_warning_in_the_rows(self) -> None:
         seed_mentor_bond_defaults()
         covenant = CovenantFactory(level=4)
         other = RosterEntryFactory().character_sheet
@@ -336,9 +339,9 @@ class GroupFitApiTests(TestCase):
             format="json",
         )
         assert response.status_code == 200, response.content[:800]
-        assert response.data["warning"]
-        (bond,) = response.data["sheet"]["staff_edit"]["rows"]["mentor_bonds"]
+        (bond,) = response.data["staff_edit"]["rows"]["mentor_bonds"]
         assert bond["as_mentor"] is True
+        assert bond["warning"]
 
     def test_characters_are_searched_never_listed(self) -> None:
         other = RosterEntryFactory().character_sheet
