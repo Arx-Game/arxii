@@ -37,7 +37,6 @@ function makeSession(overrides: Partial<Session> = {}): Session {
     sceneInteractions: [],
     threadLastSeen: {},
     sceneBaselineId: 0,
-    openThreadTabs: [],
     activeThreadTab: null,
     ...overrides,
   };

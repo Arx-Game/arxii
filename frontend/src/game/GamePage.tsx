@@ -37,16 +37,21 @@ import { useWakeResume } from './hooks/useWakeResume';
 import {
   markThreadSeen,
   setSceneBaseline,
-  openThreadTab,
-  closeThreadTab,
   setActiveThreadTab,
-  hydrateThreadTabs,
   startSession,
+  minimizeFeedItems,
+  dismissFeedItems,
+  restoreAllFeed,
+  restoreDismissedFeed,
 } from '@/store/gameSlice';
-import { loadThreadTabs, saveThreadTabs } from './threadTabsStorage';
-import { useSceneInteractions } from '@/scenes/hooks/useSceneInteractions';
+import { useSceneInteractions, wsPayloadToInteraction } from '@/scenes/hooks/useSceneInteractions';
 import { useThreading, getThreadKey } from '@/scenes/hooks/useThreading';
 import type { Thread } from '@/scenes/hooks/useThreading';
+import { ConversationRail, type RailPersonActions } from './components/ConversationRail';
+import { allRailRows, buildRailRows, isPageRowKey, pageRowKey } from './railRows';
+import { feedItemKey } from './feedChips';
+import { normalizeFind } from './feedFind';
+import type { FeedNote, InteractionWsPayload } from '@/hooks/types';
 import { threadToComposerMode, tabKeyToComposerMode } from '@/scenes/hooks/threadToComposerMode';
 import { usePendingUnlinkedActions } from '@/scenes/hooks/usePendingUnlinkedActions';
 import { ConsentPrompt } from '@/scenes/components/ConsentPrompt';
@@ -64,7 +69,6 @@ import type { Interaction, SceneDetail } from '@/scenes/types';
 import type { PoseUnitAvatarClickPersona } from '@/scenes/components/PoseUnit';
 import { PersonaCardContext } from './persona-menu/PersonaCardContext';
 import type { ComposerMode } from './components/CommandInput';
-import type { ConversationTabStripProps } from './components/ConversationTabStrip';
 
 const DEFAULT_ROOM_ENTRY: FocusEntry = {
   kind: 'room',
@@ -75,8 +79,9 @@ const DEFAULT_ROOM_ENTRY: FocusEntry = {
 // Stable empty-object reference so `useThreading`'s memo doesn't see a "changed"
 // lastSeenByThread on every render when there's no active session yet (#2156).
 const EMPTY_THREAD_LAST_SEEN: Record<string, number> = {};
-// Stable empty-array reference (#2165) — same reasoning as EMPTY_THREAD_LAST_SEEN.
-const EMPTY_OPEN_TABS: string[] = [];
+// Stable empty-array references — same reasoning as EMPTY_THREAD_LAST_SEEN.
+const EMPTY_AMBIENT: InteractionWsPayload[] = [];
+const EMPTY_NOTES: FeedNote[] = [];
 
 /**
  * Derive the tab label from the current focus entry, falling back to the
@@ -95,75 +100,12 @@ function deriveRoomTabLabel(focus: FocusEntry, roomName: string | undefined): st
   }
 }
 
-/** Map the open thread keys onto the conversation strip's tab descriptors. */
-function buildTabDescriptors(openThreadTabs: string[], threads: Thread[]) {
-  return openThreadTabs.map((key) => {
-    const thread = threads.find((t) => t.key === key);
-    return {
-      key,
-      label: thread?.label ?? (key.startsWith('place:') ? 'Place' : 'Whisper'),
-      unreadCount: thread?.unreadCount ?? 0,
-    };
-  });
-}
-
-/** The composer mode the room anchor resets to when its tab is selected. */
+/** The composer mode All resets to when it is selected. */
 function roomComposerMode(threads: Thread[], roomName: string): ComposerMode {
   const roomThread = threads.find((t) => t.key === 'room');
   return roomThread
     ? threadToComposerMode(roomThread, roomName)
     : { command: 'pose', targets: [], label: `Pose → ${roomName}` };
-}
-
-/**
- * Hydrate the scene's saved thread-tab layout once, then persist later changes.
- *
- * #2165 tab-layout persistence (spec decision 5a). Hydration runs once per
- * character+scene, BEFORE the save effect may write. This used to be a ref
- * handshake, but a ref is set synchronously the instant hydration is
- * *attempted*: the save effect runs in the same commit right after, while its
- * closure still holds the pre-hydration `openThreadTabs: []`, so it wrote (and
- * pruned) an empty layout over the entry just loaded. That self-healed on the
- * next render UNLESS the user switched character/scene first (A->B->A), leaving
- * the empty write durable. Using React state instead means `setTabsReadyFor`
- * and the `hydrateThreadTabs` dispatch land in the same batched re-render, so
- * the save effect's first run for a key is the POST-hydration commit, with
- * hydrated values in the closure. The save is gated on hydration having
- * LANDED, not attempted.
- */
-function useThreadTabPersistence(
-  active: string | null,
-  sceneId: string | undefined,
-  openThreadTabs: string[],
-  activeThreadTabRaw: string | null,
-  accountId?: number | null
-) {
-  const dispatch = useAppDispatch();
-  const [tabsReadyFor, setTabsReadyFor] = useState<string | null>(null);
-  useEffect(() => {
-    if (!active || !sceneId) return;
-    const hydrationKey = `${accountId ?? 'anonymous'}:${active}:${sceneId}`;
-    if (tabsReadyFor === hydrationKey) return;
-    const stored = loadThreadTabs(active, sceneId, accountId);
-    if (stored && stored.openThreadTabs.length > 0) {
-      dispatch(hydrateThreadTabs({ character: active, ...stored }));
-    }
-    setTabsReadyFor(hydrationKey);
-  }, [active, sceneId, dispatch, tabsReadyFor, accountId]);
-
-  useEffect(() => {
-    if (!active || !sceneId) return;
-    if (tabsReadyFor !== `${accountId ?? 'anonymous'}:${active}:${sceneId}`) return;
-    saveThreadTabs(
-      active,
-      sceneId,
-      {
-        openThreadTabs,
-        activeThreadTab: activeThreadTabRaw,
-      },
-      accountId
-    );
-  }, [active, sceneId, openThreadTabs, activeThreadTabRaw, tabsReadyFor, accountId]);
 }
 
 /** The feed props GameWindow takes, present only when we are inside a scene. */
@@ -328,6 +270,8 @@ interface SceneThreadStateSyncArgs {
   active: string | null;
   sceneBaselineId: number | null | undefined;
   allInteractions: Interaction[];
+  /** The quiet room's interactions (#4129): their rows are read the same way. */
+  ambientInteractions: Interaction[];
   activeThreadTab: string | null;
   resetForNewScene: () => void;
   setComposerMode: (mode: undefined) => void;
@@ -341,6 +285,7 @@ function useSceneThreadStateSync({
   active,
   sceneBaselineId,
   allInteractions,
+  ambientInteractions,
   activeThreadTab,
   resetForNewScene,
   setComposerMode,
@@ -366,15 +311,22 @@ function useSceneThreadStateSync({
     setReplyTarget(null);
   }, [active, sceneId, setComposerMode, setReplyTarget]);
 
+  // The selected row is read as it grows (#4129): its newest id becomes its
+  // last-seen mark a second after it is on screen. All reads the room row. A
+  // page row's mark is a time, since a page is a note with no id of its own.
   useEffect(() => {
-    if (!sceneId || !active || document.visibilityState === 'hidden') return;
+    if (!active || document.visibilityState === 'hidden') return;
     const seenKey = activeThreadTab ?? 'room';
     let maxId: number | undefined;
-    for (const interaction of allInteractions) {
-      if (getThreadKey(interaction) !== seenKey) continue;
-      const id = Number(interaction.id);
-      if (!Number.isFinite(id) || id <= 0) continue;
-      if (maxId === undefined || id > maxId) maxId = id;
+    if (isPageRowKey(seenKey)) {
+      maxId = Date.now();
+    } else {
+      for (const interaction of [...allInteractions, ...ambientInteractions]) {
+        if (getThreadKey(interaction) !== seenKey) continue;
+        const id = Number(interaction.id);
+        if (!Number.isFinite(id) || id <= 0) continue;
+        if (maxId === undefined || id > maxId) maxId = id;
+      }
     }
     const timer = window.setTimeout(() => {
       if (maxId !== undefined && document.visibilityState !== 'hidden') {
@@ -382,7 +334,7 @@ function useSceneThreadStateSync({
       }
     }, 1000);
     return () => window.clearTimeout(timer);
-  }, [sceneId, active, allInteractions, activeThreadTab, dispatch]);
+  }, [sceneId, active, allInteractions, ambientInteractions, activeThreadTab, dispatch]);
 }
 
 interface GameCenterProps {
@@ -560,8 +512,7 @@ export function GamePage() {
 
   // GamePage is the composition root (#2156): it calls the scene-feed +
   // threading hooks once for the active session's scene and feeds both the
-  // left column (ThreadSidebar via ConversationSidebar) and the center
-  // (SceneMessages + composer). Called unconditionally — sceneId is simply
+  // conversation rail (#4129) and the center (the reader + composer). Called unconditionally — sceneId is simply
   // undefined with no active scene, which both hooks handle without firing
   // network calls or producing threads.
   const { allInteractions, retention, hasNextPage, fetchNextPage } = useSceneInteractions(
@@ -576,24 +527,51 @@ export function GamePage() {
     sceneBaselineId,
   });
 
-  const openThreadTabs = activeSession?.openThreadTabs ?? EMPTY_OPEN_TABS;
+  // The conversation rail's rows (#4129): the scene's threads, the quiet
+  // room's interactions grouped the same way, and the session's pages.
+  const ambientPayloads = activeSession?.ambientInteractions ?? EMPTY_AMBIENT;
+  const ambientInteractions = useMemo(
+    () => ambientPayloads.map(wsPayloadToInteraction),
+    [ambientPayloads]
+  );
+  const sessionNotes = activeSession?.notes ?? EMPTY_NOTES;
+  const railGroups = useMemo(
+    () =>
+      buildRailRows({
+        threads: sceneId ? threading.threads : [],
+        ambientInteractions,
+        notes: sessionNotes,
+        roomName,
+        viewerPersonaId: personaId,
+        lastSeenByThread: threadLastSeen,
+        sceneBaselineId,
+      }),
+    [
+      sceneId,
+      threading.threads,
+      ambientInteractions,
+      sessionNotes,
+      roomName,
+      personaId,
+      threadLastSeen,
+      sceneBaselineId,
+    ]
+  );
+  const railRows = useMemo(() => allRailRows(railGroups), [railGroups]);
   const activeThreadTabRaw = activeSession?.activeThreadTab ?? null;
-  // Guard against a stale active pointer (e.g. hydration races): only an
-  // OPEN tab may be active; anything else is the room anchor.
+  // Guard against a stale pointer: only a row the rail offers may be the
+  // selection; anything else reads as All.
   const activeThreadTab =
-    activeThreadTabRaw !== null && openThreadTabs.includes(activeThreadTabRaw)
+    activeThreadTabRaw !== null && railRows.some((row) => row.key === activeThreadTabRaw)
       ? activeThreadTabRaw
       : null;
-
-  useThreadTabPersistence(active, sceneId, openThreadTabs, activeThreadTabRaw, account?.id);
+  const selectedRow = railRows.find((row) => row.key === activeThreadTab) ?? null;
 
   // #3761 Task 1: lifted from PlaySidebar/SidebarTabPanel so a later top-bar
   // combat banner (Task 3) can also drive the sidebar into view.
   // `jumpToCombat` (Task 2) is the first real caller of this state — it jumps
   // to Here mode + the Room tab, where `CombatRail` already renders.
-  const [sidebarMode, setSidebarMode] = useState<SidebarMode>(
-    sceneId && threading ? 'conversations' : 'here'
-  );
+  const [sidebarMode, setSidebarMode] = useState<SidebarMode>('here');
   const [hereActiveTab, setHereActiveTab] = useState('room');
   const jumpToCombat = useCallback(() => {
     setSidebarMode('here');
@@ -601,48 +579,94 @@ export function GamePage() {
   }, []);
 
   const [composerMode, setComposerMode] = useState<ComposerMode | undefined>();
+  // Find in this session (#4129, decision 7): the rail's find box narrows the
+  // feed GameWindow draws; the text lives here, with the feed it narrows, and
+  // goes with every character or scene change.
+  const [findText, setFindText] = useState('');
+  const find = normalizeFind(findText);
 
-  // #2165: the active conversation tab narrows the feed to its thread; the
-  // room anchor keeps the existing filtered feed. The composer's audience is
-  // DERIVED from the active tab every render (never stored) — that derivation
-  // is the mis-send guard.
+  // The rail's selection narrows the feed to its conversation (#4129): All is
+  // the whole filtered feed, the room row the room's own lines, a thread its
+  // lines, a page row nothing structured (its lines are notes, below). The
+  // composer's audience is DERIVED from the selection every render (never
+  // stored) — that derivation is the mis-send guard.
   const tabInteractions = useMemo(() => {
     if (activeThreadTab === null) return threading.filteredInteractions;
+    if (isPageRowKey(activeThreadTab)) return [];
     return threading.interactionsByThread.get(activeThreadTab) ?? [];
   }, [activeThreadTab, threading.filteredInteractions, threading.interactionsByThread]);
+  const feedAmbient = useMemo(() => {
+    if (activeThreadTab === null) return ambientPayloads;
+    if (isPageRowKey(activeThreadTab)) return EMPTY_AMBIENT;
+    return ambientPayloads.filter(
+      (item) => getThreadKey(wsPayloadToInteraction(item)) === activeThreadTab
+    );
+  }, [activeThreadTab, ambientPayloads]);
+  // Notes belong to the room (a look, an arrival) or to a page correspondent;
+  // a whisper or a table has none.
+  const feedNotes = useMemo(() => {
+    if (activeThreadTab === null || activeThreadTab === 'room') return sessionNotes;
+    if (isPageRowKey(activeThreadTab)) {
+      return sessionNotes.filter(
+        (note) =>
+          note.kind === 'page' && note.from && pageRowKey(note.from.personaId) === activeThreadTab
+      );
+    }
+    return EMPTY_NOTES;
+  }, [activeThreadTab, sessionNotes]);
 
   // The label is the truth (#3857): with nothing chosen yet (a fresh connection,
-  // or the reset on every character or scene change) the room anchor's mode is
-  // Pose, so a typed line is a pose and never a raw command by accident. The
-  // default is derived here, never stored, like the tab-locked modes below it.
+  // or the reset on every character or scene change) All's mode is Pose, so a
+  // typed line is a pose and never a raw command by accident. The default is
+  // derived here, never stored, like the row-locked modes below it. The room
+  // row keeps the choice of pose, say or emit: every one of them is the room's.
   const effectiveComposerMode = useMemo(() => {
     if (activeThreadTab === null) {
       return composerMode ?? roomComposerMode(threading.threads, roomName);
     }
-    return tabKeyToComposerMode(activeThreadTab, threading.threads, roomName);
-  }, [activeThreadTab, threading.threads, roomName, composerMode]);
+    if (activeThreadTab === 'room') {
+      return composerMode ?? roomComposerMode(threading.threads, roomName);
+    }
+    return tabKeyToComposerMode(
+      activeThreadTab,
+      threading.threads,
+      roomName,
+      isPageRowKey(activeThreadTab) ? selectedRow?.label : undefined
+    );
+  }, [activeThreadTab, threading.threads, roomName, composerMode, selectedRow?.label]);
 
-  const conversationTabs = useMemo<ConversationTabStripProps | undefined>(() => {
-    if (!sceneId || !active || openThreadTabs.length === 0) return undefined;
-    const roomThread = threading.threads.find((t) => t.key === 'room');
+  // The rail's selection (#4129, decision 3): one row at a time. Choosing All
+  // or the room row resets the composer to the room's pose mode, so a locked
+  // whisper or a drawer whisper never survives the switch.
+  const handleRailSelect = useCallback(
+    (key: string | null) => {
+      if (!active) return;
+      dispatch(setActiveThreadTab({ character: active, threadKey: key }));
+      if (key === null || key === 'room') {
+        setComposerMode(roomComposerMode(threading.threads, roomName));
+      }
+    },
+    [active, dispatch, threading.threads, roomName]
+  );
+
+  // The information-flow menu on a person's row (#4129, decision 5): the same
+  // batch actions #4128's line menu offers per character, over every line of
+  // theirs this session holds.
+  const sceneInteractionsForKeys = activeSession?.sceneInteractions;
+  const personActions = useMemo<RailPersonActions>(() => {
+    const keysOf = (personaId: number) =>
+      [...(sceneInteractionsForKeys ?? []), ...ambientPayloads]
+        .filter((item) => item.persona.id === personaId)
+        .map((item) => feedItemKey('interaction', item.id));
     return {
-      roomLabel: roomName,
-      roomUnreadCount: roomThread?.unreadCount ?? 0,
-      tabs: buildTabDescriptors(openThreadTabs, threading.threads),
-      activeKey: activeThreadTab,
-      onSelect: (key: string | null) => {
-        dispatch(setActiveThreadTab({ character: active, threadKey: key }));
-        // #2165 review fix: the strip's room-anchor tab must reset the
-        // composer the same way the sidebar's room row does (handleThreadClick
-        // below) — otherwise a stale locked mode (e.g. a whisper) survives the
-        // switch back to the room anchor.
-        if (key === null) {
-          setComposerMode(roomComposerMode(threading.threads, roomName));
-        }
-      },
-      onClose: (key: string) => dispatch(closeThreadTab({ character: active, threadKey: key })),
+      minimizeAllFrom: (personaId) =>
+        active && dispatch(minimizeFeedItems({ character: active, keys: keysOf(personaId) })),
+      hideAllFrom: (personaId) =>
+        active && dispatch(dismissFeedItems({ character: active, keys: keysOf(personaId) })),
+      expandAll: () => active && dispatch(restoreAllFeed(active)),
+      unhideAll: () => active && dispatch(restoreDismissedFeed(active)),
     };
-  }, [sceneId, active, openThreadTabs, threading.threads, roomName, activeThreadTab, dispatch]);
+  }, [active, dispatch, sceneInteractionsForKeys, ambientPayloads]);
 
   // Character-card drawer (#2156 Task 7): the clicked bubble's persona identity,
   // or null when the drawer is closed. GamePage owns this state (mirrored on
@@ -775,12 +799,12 @@ export function GamePage() {
     (interaction: Interaction) => {
       setReplyTarget(interaction);
       if (active) {
-        // #3787 rework: a nested exchange opens ONE tab, not one per level --
+        // #3787 rework: a nested exchange is ONE conversation, not one per level --
         // `getThreadKey` already prefers `root_thread_id` for exactly this, so
         // the explicit read ahead of it does too rather than quietly disagreeing.
         const key =
           interaction.root_thread_id ?? interaction.thread_id ?? getThreadKey(interaction);
-        if (key !== 'room') dispatch(openThreadTab({ character: active, threadKey: key }));
+        if (key !== 'room') dispatch(setActiveThreadTab({ character: active, threadKey: key }));
       }
     },
     [active, dispatch]
@@ -793,38 +817,16 @@ export function GamePage() {
     active,
     sceneBaselineId: activeSession?.sceneBaselineId,
     allInteractions,
+    ambientInteractions,
     activeThreadTab,
     resetForNewScene: threading.resetForNewScene,
     setComposerMode,
     setReplyTarget,
     dispatch,
   });
-
-  // #2165: the sidebar is the open-a-tab surface. A conversation row opens or
-  // focuses its tab; the room row focuses the anchor. The old
-  // toggleThreadVisibility narrowing is retired for the room feed — the
-  // per-participant mute (ThreadFilterModal) still applies to the anchor.
-  const handleThreadClick = (key: string) => {
-    if (!active) return;
-    if (key === 'room') {
-      dispatch(setActiveThreadTab({ character: active, threadKey: null }));
-      const roomThread = threading.threads.find((t) => t.key === 'room');
-      if (roomThread) setComposerMode(threadToComposerMode(roomThread, roomName));
-      return;
-    }
-    dispatch(openThreadTab({ character: active, threadKey: key }));
-  };
-
-  // #2165 review fix: the sidebar's "All" button must restore the room feed,
-  // not just reset the filter/mute state. `threading.showAll` alone clears
-  // `enabledThreadKeys`/`hiddenPersonaIds` but leaves an active conversation
-  // TAB in place — without also re-anchoring the tab, the tab strip keeps a
-  // whisper tab selected and the "All" click appears to do nothing.
-  const threadingShowAll = threading.showAll;
-  const handleShowAll = useCallback(() => {
-    threadingShowAll();
-    if (active) dispatch(setActiveThreadTab({ character: active, threadKey: null }));
-  }, [threadingShowAll, active, dispatch]);
+  useEffect(() => {
+    setFindText('');
+  }, [active, sceneId]);
 
   // Scene toolset (#2156 Task 6) — GamePage is the composition root, so it
   // owns the same handler state SceneDetailPage.tsx:120-178 owns, mirrored
@@ -940,7 +942,8 @@ export function GamePage() {
         onSubmitAction: undefined,
         onReply: undefined,
         replyTarget: null,
-        conversationTabs: undefined,
+        selectedConversation: null,
+        find: '',
       }
     : {
         onAvatarClick: setCardPersona,
@@ -951,7 +954,8 @@ export function GamePage() {
         onSubmitAction: handleSubmitAction,
         onReply: handleReply,
         replyTarget,
-        conversationTabs,
+        selectedConversation: activeThreadTab,
+        find,
       };
 
   if (!account) {
@@ -984,7 +988,9 @@ export function GamePage() {
     accountId: account.id,
     sceneFeed: displaySceneFeed,
     room: roomData,
-    ambientInteractions: activeSession?.ambientInteractions,
+    ambientInteractions: feedAmbient,
+    notes: feedNotes,
+    conversationKeys: railRows.map((row) => row.key),
     lifecycleState: activeEncounter ? 'encounter' : activeSession?.lifecycleState,
     composerMode: effectiveComposerMode,
     onModeChange: setComposerMode,
@@ -1035,6 +1041,19 @@ export function GamePage() {
             onJumpToCombat={jumpToCombat}
           />
         }
+        rail={
+          activeSession ? (
+            <ConversationRail
+              accountId={account.id}
+              groups={railGroups}
+              selectedKey={activeThreadTab}
+              onSelect={handleRailSelect}
+              personActions={personActions}
+              find={findText}
+              onFindChange={setFindText}
+            />
+          ) : undefined
+        }
         center={
           <GameCenter
             sceneId={sceneId}
@@ -1070,10 +1089,6 @@ export function GamePage() {
                 onTabChange={setHereActiveTab}
               />
             }
-            threading={sceneId ? threading : undefined}
-            onThreadClick={handleThreadClick}
-            onShowAll={handleShowAll}
-            selectedThreadKey={activeThreadTab ?? 'room'}
             onOpenReference={openReference}
           />
         }

@@ -27,18 +27,15 @@ Redux Toolkit store for global client state management. Minimal use of Redux - o
   `dismissFeedItems`, `restoreAllFeed` for the sorting menu's per-character and
   all-lines actions, #4128); in memory only, nothing is deleted for anyone else,
   and a dismissed block never badges.
-  Each per-character `Session` also carries the **conversation-tab state** (#2165):
-  `openThreadTabs` (ordered thread keys with an open tab; never contains `'room'`,
-  which is always the anchor) and `activeThreadTab` (the focused tab's key, or
-  `null` for the room anchor). Reducers: `openThreadTab` (opens or focuses a tab),
-  `closeThreadTab` (drops a tab, falling back to the room anchor if it was
-  active), `setActiveThreadTab` (guards against activating a key that isn't in
-  `openThreadTabs`), and `hydrateThreadTabs` (seeds tab state from
-  `frontend/src/game/threadTabsStorage.ts`'s `localStorage` snapshot — only when
-  the session hasn't already opened tabs, so a live session always wins over a
-  stale snapshot). `setSessionScene` resets both fields to empty/`null` whenever
-  the session's scene id actually changes — a tab pointing at a previous scene's
-  thread set is a mis-send vector, not just stale UI.
+  Each per-character `Session` also carries the **rail selection** (#4129, which
+  replaced #2165's open-tab list): `activeThreadTab` is the conversation rail's one
+  selected row — a thread key, `'room'`, a page row's `page:<persona id>`, or `null`
+  for All. `setActiveThreadTab` writes any key; nothing is persisted, so
+  everything not tied to a scene starts fresh at login. `setSessionScene` (and the
+  room-state path) reset it to `null` whenever the session's scene id actually
+  changes, the room row excepted — a selection pointing at a previous scene's
+  whisper set is a mis-send vector, not just stale UI. A page row's
+  `threadLastSeen` mark is a time in ms, since a page is a note with no id.
   `browsingEntryId` (#3479, ADR-0302) is THIS tab's browsing identity, a `RosterEntry`
   id mirrored from `browsingIdentity.ts`; `setBrowsingIdentity`/`clearBrowsingIdentity`
   write it, and `useAccountQuery`'s hydration effect (`evennia_replacements/queries.tsx`)

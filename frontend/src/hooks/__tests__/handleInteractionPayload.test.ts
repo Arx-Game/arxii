@@ -33,7 +33,7 @@ vi.mock('@/queryClient', () => ({
 }));
 
 import { handleInteractionPayload } from '../handleInteractionPayload';
-import { addSceneInteraction, openThreadTab, setActiveSession } from '@/store/gameSlice';
+import { addSceneInteraction, setActiveThreadTab, setActiveSession } from '@/store/gameSlice';
 import type { InteractionWsPayload } from '../types';
 import type { MyRosterEntry } from '@/roster/types';
 import type { NavigateFunction } from 'react-router-dom';
@@ -206,7 +206,7 @@ describe('handleInteractionPayload', () => {
     expect(toastMock).toHaveBeenCalledTimes(1);
   });
 
-  it('click dispatches setActiveSession + openThreadTab and navigates to /game', () => {
+  it('click dispatches setActiveSession + setActiveThreadTab and navigates to /game', () => {
     const payload = makeWhisperPayload({ id: 506 });
     handleInteractionPayload('Bob', payload, dispatch, navigate);
 
@@ -215,7 +215,7 @@ describe('handleInteractionPayload', () => {
 
     expect(dispatch).toHaveBeenCalledWith(setActiveSession('Bob'));
     expect(dispatch).toHaveBeenCalledWith(
-      openThreadTab({ character: 'Bob', threadKey: 'whisper:11,22' })
+      setActiveThreadTab({ character: 'Bob', threadKey: 'whisper:11,22' })
     );
     expect(navigate).toHaveBeenCalledWith('/game');
   });
