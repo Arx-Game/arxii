@@ -135,11 +135,30 @@ describe('TiesPanel', () => {
           role: 'Blade',
           rank: 'Sworn',
           engaged: false,
+          sworn_as: '',
         },
       ],
     });
     expect(screen.getByText('Covenant')).toBeInTheDocument();
     expect(screen.getByText('Blade')).toBeInTheDocument();
+    expect(screen.queryByText(/as /)).not.toBeInTheDocument();
+  });
+
+  it('names the face a vow was sworn under when it is not the one presented (#4208)', () => {
+    renderTies({
+      covenants: [
+        {
+          id: 4,
+          covenant_id: 9,
+          covenant: 'The Ember Court',
+          role: 'Herald',
+          rank: 'Sworn',
+          engaged: false,
+          sworn_as: 'Robert',
+        },
+      ],
+    });
+    expect(screen.getByText(/Sworn · as Robert/)).toBeInTheDocument();
   });
 
   it('drops the whole Covenant block when they hold no role', () => {

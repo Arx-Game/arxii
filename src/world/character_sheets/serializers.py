@@ -1569,7 +1569,7 @@ _STANDING_PREFETCH_RELATED: tuple[str | Prefetch, ...] = (
     Prefetch(
         "covenant_role_assignments",
         queryset=CharacterCovenantRole.objects.filter(left_at__isnull=True).select_related(
-            "covenant", "covenant_role", "rank"
+            "covenant", "covenant_role", "rank", "sworn_as"
         ),
     ),
 )
@@ -1629,7 +1629,13 @@ def _build_standing(active: Persona | None, *, visible: bool) -> StandingSection
     }
 
 
-def _build_covenants(sheet: CharacterSheet, *, reveal_identity: bool) -> list[CovenantRoleEntry]:
+def _build_covenants(
+    sheet: CharacterSheet,
+    *,
+    reveal_identity: bool,
+    presented: Persona | None,
+    privileged: bool,
+) -> list[CovenantRoleEntry]:
     """The covenant roles this character holds. PUBLIC, by Apostate's ruling (#3906).
 
     Unlike the org memberships beside it, this needs no tier: a covenant role is a
@@ -1637,15 +1643,25 @@ def _build_covenants(sheet: CharacterSheet, *, reveal_identity: bool) -> list[Co
     same rail has always been public. It rides the payload only because
     ``CharacterCovenantRoleViewSet`` is self-only for non-staff.
 
-    Public about the CHARACTER, though, not about whatever face is worn (#4207). The
-    row is keyed on the sheet, so for a masked or hidden-alt face it would name the
-    real character's covenant, and anyone who knows that roster would know who is
-    behind the mask. It follows the same reveal flag as the bio and appearance: an
-    undisclosed face shows nothing here. Recording which face a vow was sworn under,
-    so an alt can show its own covenant, is #4208.
+    Public about a FACE, though, not about the body behind it (#4207, #4208). Every
+    vow records the persona it was sworn under (``sworn_as``), so the sheet shows the
+    rows sworn under the face it is presenting: an alt's sheet shows the alt's
+    covenant and not the primary's, a temporary mask (which cannot swear) shows none,
+    and nobody learns who is behind a face from this block. A revealed viewer (the
+    owner, staff, someone who has discovered the link) sees every row, each naming
+    its face when that is not the face in front of them.
     """
-    if not reveal_identity:
-        return []
+    presented_id = presented.pk if presented is not None else None
+    rows = sheet.covenant_role_assignments.all()
+    # Rows sworn under another of the character's faces reach a viewer who may read
+    # the link between the faces: the owner and staff always; on an alt, anyone the
+    # alt is revealed to (they have discovered the primary behind it). On the primary
+    # face ``reveal_identity`` is true for everyone, since the face IS the identity,
+    # so it says nothing about the alts and they stay hidden there.
+    presented_is_primary = presented is None or presented.persona_type == PersonaType.PRIMARY
+    show_every_face = privileged or (reveal_identity and not presented_is_primary)
+    if not show_every_face:
+        rows = [row for row in rows if row.sworn_as_id == presented_id]
     return [
         CovenantRoleEntry(
             id=row.pk,
@@ -1654,8 +1670,9 @@ def _build_covenants(sheet: CharacterSheet, *, reveal_identity: bool) -> list[Co
             role=row.covenant_role.name,
             rank=row.rank.name,
             engaged=row.engaged,
+            sworn_as="" if row.sworn_as_id == presented_id else row.sworn_as.name,
         )
-        for row in sheet.covenant_role_assignments.all()
+        for row in rows
     ]
 
 
@@ -2226,7 +2243,9 @@ class CharacterSheetSerializer(serializers.Serializer):
             # public, the way the Titles block beside them has always been, but only
             # for a revealed identity (#4207).
             "standing": _build_standing(active, visible=show_standing),
-            "covenants": _build_covenants(sheet, reveal_identity=reveal_identity),
+            "covenants": _build_covenants(
+                sheet, reveal_identity=reveal_identity, presented=active, privileged=privileged
+            ),
             "actor_sheet": _build_actor_sheet(
                 sheet,
                 bio_profile=bio_profile,

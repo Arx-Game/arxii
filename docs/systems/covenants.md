@@ -15,7 +15,22 @@ weights, speed_rank, Thread pulls). `CovenantRank` = administrative authority
   currently active. Fields include `covenant` FK, `covenant_role` FK, `engaged`
   boolean, `rank` FK → `CovenantRank`, `is_secondary` boolean (#2641 — see "Secondary
   vows" below), `standing` (`MembershipStanding.CORE`/`MINOR`, #2992 — see "Minor
-  covenant membership" below).
+  covenant membership" below), and `sworn_as` (#4208, ADR-4208): the **sworn face**,
+  the `Persona` the vow was sworn under, one of the character's own and PRIMARY or
+  ESTABLISHED (a temporary mask cannot swear; `clean()` and `services.resolve_sworn_face`
+  both refuse a foreign or temporary face). Presentation only: the mechanics of the vow
+  (engaged bonuses, COVENANT_ROLE thread pulls, command tiers, the Durance gate) stay
+  keyed on the sheet. `add_member` and `assign_covenant_role` take `sworn_as`, the
+  character's active persona when not given; a founder swears under the face worn at
+  the founding; `change_role`'s replacement row keeps the face; the induction ritual
+  reads the candidate's active persona when it fires (`RitualSessionParticipant` stays
+  sheet-keyed). A row saved with no face named gets the primary (`save()`), so the
+  column is NOT NULL; the three migrations 0212-0214 added it nullable, backfilled every
+  existing vow to the primary face, then made it required. Readers: the sheet's
+  covenant block follows the presented face (`docs/systems/character_sheets.md`, "Ties
+  visibility"), `CharacterCovenantRoleSerializer.display_name` names the sworn face
+  (never "Character #n"), and the telnet `sheet/covenant` section, self-only, marks a
+  vow sworn under another of your own faces "(as Robert)".
 - **`GearArchetypeCompatibility`** — existence-only join: which `CovenantRole`s are
   compatible with which `GearArchetype` values (read-only authored content).
   Lore-repo content as of #2533 (`NaturalKeyMixin` NK `["covenant_role",

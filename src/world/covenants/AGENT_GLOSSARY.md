@@ -479,3 +479,7 @@ _Avoid_: duelist role, hero role.
 **Mentor's Vow / Mentor Bond**:
 A consensual bond pairing a higher-level mentor with a lower-level sidekick so a level-mismatched party scales fairly; the `MentorBond` record is active while `dissolved_at` is null.
 _Avoid_: master/apprentice (a future flavor display-label only, with no model surface), patron, sponsor.
+
+**Sworn Face** (`CharacterCovenantRole.sworn_as`, #4208, ADR-4208):
+The `Persona` a vow was sworn under — one of the character's own, PRIMARY or ESTABLISHED, never a temporary mask. Presentation only: the world knows the vow by that face (the alt's sheet shows the alt's covenant, the roster names the alt), while the vow's mechanics stay on the sheet. Set once at joining (the active persona unless the service is told otherwise), carried across a role change, read by the sheet, the roster and `sheet/covenant`.
+_Avoid_: persona-scoped membership (the row is sheet-keyed; only the face is persona-scoped), mask vow (a mask cannot swear).

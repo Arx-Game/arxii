@@ -291,6 +291,7 @@ describe('CovenantRoles', () => {
             role: 'Blade',
             rank: 'Sworn',
             engaged: true,
+            sworn_as: '',
           },
           {
             id: 2,
@@ -299,6 +300,7 @@ describe('CovenantRoles', () => {
             role: 'Scribe',
             rank: 'Novice',
             engaged: false,
+            sworn_as: '',
           },
         ]}
       />

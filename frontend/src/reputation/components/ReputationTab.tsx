@@ -197,7 +197,14 @@ export function CovenantRoles({ covenants }: { covenants: CharacterSheetCovenant
         <Entry
           key={role.id}
           name={<Link to={`/covenants/${role.covenant_id}`}>{role.role}</Link>}
-          aside={<span className="refsheet-note">{role.rank}</span>}
+          // A vow sworn under another of the character's faces says which (#4208);
+          // the server leaves `sworn_as` blank when it is the face being presented.
+          aside={
+            <span className="refsheet-note">
+              {role.rank}
+              {role.sworn_as ? ` · as ${role.sworn_as}` : ''}
+            </span>
+          }
           tags={role.engaged ? <Tag accent>Engaged</Tag> : undefined}
         />
       ))}

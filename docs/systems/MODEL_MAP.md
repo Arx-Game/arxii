@@ -3257,6 +3257,7 @@
   - covenant_role -> covenants.CovenantRole [FK]
   - covenant -> covenants.Covenant [FK]
   - rank -> covenants.CovenantRank [FK]
+  - sworn_as -> scenes.Persona [FK]
 **Pointed to by:**
   - granted_techniques <- magic.CharacterTechnique
 
@@ -3443,9 +3444,9 @@
 
 ### Service Functions
 - `active_court_pact_for(*, covenant: 'Covenant', servant_sheet: 'CharacterSheet') -> 'CourtPact | None' - Return the single active CourtPact for (covenant, servant_sheet), or None.`
-- `add_member(*, covenant: 'Covenant', character_sheet: 'CharacterSheet', role: 'CovenantRole', standing: 'str' = MembershipStanding.CORE) -> 'CharacterCovenantRole' - Create a new active membership row. Atomic.`
+- `add_member(*, covenant: 'Covenant', character_sheet: 'CharacterSheet', role: 'CovenantRole', standing: 'str' = MembershipStanding.CORE, sworn_as: 'Persona | None' = None) -> 'CharacterCovenantRole' - Create a new active membership row. Atomic.`
 - `assert_initiator_can_induct(*, session: 'RitualSession') -> 'None' - Draft-time gate for INDUCTION rituals: the initiator must hold a can_invite`
-- `assign_covenant_role(*, character_sheet: 'CharacterSheet', covenant: 'Covenant', covenant_role: 'CovenantRole', rank: 'CovenantRank | None' = None) -> 'CharacterCovenantRole' - Create a new active CharacterCovenantRole row. Atomic.`
+- `assign_covenant_role(*, character_sheet: 'CharacterSheet', covenant: 'Covenant', covenant_role: 'CovenantRole', rank: 'CovenantRank | None' = None, sworn_as: 'Persona | None' = None) -> 'CharacterCovenantRole' - Create a new active CharacterCovenantRole row. Atomic.`
 - `assign_rank(*, membership: 'CharacterCovenantRole', actor: 'CharacterCovenantRole', rank: 'CovenantRank') -> 'CharacterCovenantRole' - Assign a new rank to a member. Requires can_manage_ranks.`
 - `can_invite_to_covenant(covenant: 'Covenant', *, character_sheet: 'CharacterSheet | None' = None, account: 'AccountDB | None' = None) -> 'bool' - Return True if an active member with a can_invite rank grants invite authority.`
 - `can_request_gm_for_covenant(covenant: 'Covenant', *, character_sheet: 'CharacterSheet | None' = None, account: 'AccountDB | None' = None) -> 'bool' - Return True if an active member with a can_request_gm rank grants that authority.`
@@ -3478,6 +3479,7 @@
 - `rename_rank(*, rank: 'CovenantRank', actor: 'CharacterCovenantRole', name: 'str') -> 'CovenantRank' - Rename a rank. Requires can_manage_ranks.`
 - `reorder_ranks(*, covenant: 'Covenant', actor: 'CharacterCovenantRole', ordered_rank_ids: 'list[int]') -> 'list[CovenantRank]' - Rewrite tiers for the given ranks atomically and uniquely.`
 - `resolve_effective_role(*, character: 'Character', role: 'CovenantRole') -> 'CovenantRole' - Return the resonance-specialized sub-role for ``role`` (one-line shim over`
+- `resolve_sworn_face(character_sheet: 'CharacterSheet', sworn_as: 'Persona | None') -> 'Persona' - The face a vow is sworn under (#4208): the one given, else the character's`
 - `revalidate_engagements(*, character_sheet: 'CharacterSheet', room: 'ObjectDB') -> 'None' - Re-check co-presence for all engaged covenant roles; dim vows that no longer hold.`
 - `rise_battle_covenant_via_session(*, session: 'RitualSession') -> 'Covenant' - Dispatched on a 'call the banners' rise ritual fire.`
 - `secondary_vow_config() -> 'SecondaryVowConfig' - Lazy-create and return the SecondaryVowConfig singleton (pk=1, #2641).`
@@ -8567,6 +8569,7 @@
   - sceneentryendorsement_set <- magic.SceneEntryEndorsement
   - presentationendorsement_set <- magic.PresentationEndorsement
   - stylepresentationendorsement_set <- magic.StylePresentationEndorsement
+  - covenant_roles_sworn <- covenants.CharacterCovenantRole
   - combat_opponents <- combat.CombatOpponent
   - org_contributions <- currency.ContributionRecord
   - contracts_proposed <- currency.Contract

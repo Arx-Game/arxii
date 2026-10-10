@@ -91,6 +91,8 @@ class MembershipListBlockPlaceholderTests(TestCase):
         rows = response.data["results"]
         own_row = next(r for r in rows if r["character_sheet"] == self.blocked_sheet.pk)
         self.assertNotEqual(own_row["display_name"], "a member has blocked you")
+        # #4208: the roster names the face the vow was sworn under, never "Character #n".
+        self.assertEqual(own_row["display_name"], self.blocked_sheet.primary_persona.name)
 
     def test_blocker_sees_blocked_player_normally(self) -> None:
         """The blocker sees the blocked player's row normally (no suppression on blocker's side)."""

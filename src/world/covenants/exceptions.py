@@ -25,6 +25,18 @@ class CovenantRoleNeverHeldError(CovenantError):
     )
 
 
+class SwornFaceError(CovenantError):
+    """Raised when a vow would be sworn under a face that cannot carry it (#4208):
+    another character's persona, or a temporary mask the character will drop."""
+
+    user_message = "A vow needs a face you keep: your own, or an established one."
+    SAFE_MESSAGES: ClassVar[frozenset[str]] = frozenset(
+        {
+            "A vow needs a face you keep: your own, or an established one.",
+        }
+    )
+
+
 class CovenantMemberBlockError(CovenantError):
     """Raised when joining is blocked because a member has blocked the would-be member (#1278).
 
