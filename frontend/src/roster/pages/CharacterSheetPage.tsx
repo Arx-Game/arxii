@@ -42,6 +42,7 @@ import {
 import { Heading, Stack } from '@/character_sheets/components/sheet/primitives';
 import { GalleryPanel } from '@/character_sheets/components/sheet/gallery/GalleryPanel';
 import { AddLookFlow } from '@/character_sheets/components/sheet/gallery/AddLookFlow';
+import { StaffEditProvider, StaffEditToggle } from '@/character_sheets/components/sheet/StaffEdit';
 
 export function CharacterSheetPage() {
   const { id } = useParams();
@@ -110,171 +111,176 @@ export function CharacterSheetPage() {
     // `--plate-accent` are declared by `.refsheet[data-ink=...]` and read by every part
     // of the plate. Without this attribute the plate renders with no ground at all, so
     // the default stands in until the payload arrives.
-    <div className="refsheet" data-ink={sheet?.plate_ink ?? 'ember'}>
-      <Plate
-        name={displayName}
-        titles={titleNames}
-        concept={sheet?.identity.concept ?? entry.character.concept ?? ''}
-        quote={sheet?.identity.quote ?? entry.quote ?? ''}
-        glanceLines={glanceLines(sheet)}
-        looks={sheet?.looks ?? []}
-        canWear={isMyCharacter}
-        onWear={(look) => wearLook.mutate(look.tenure_media_id)}
-        isSaving={wearLook.isPending}
-        onAddLook={isMyCharacter ? () => setAddingLook(true) : undefined}
-        actions={
-          <>
-            <Link
-              to={`/journals?writer=${sheetId}`}
-              className="rounded border px-3 py-1 text-sm hover:bg-accent"
-            >
-              Journal
-            </Link>
-            {/* Friend is the account's OOC list and stays. Rival is gone with #3957:
+    <StaffEditProvider sheet={sheet}>
+      <div className="refsheet" data-ink={sheet?.plate_ink ?? 'ember'}>
+        <Plate
+          name={displayName}
+          titles={titleNames}
+          concept={sheet?.identity.concept ?? entry.character.concept ?? ''}
+          quote={sheet?.identity.quote ?? entry.quote ?? ''}
+          glanceLines={glanceLines(sheet)}
+          looks={sheet?.looks ?? []}
+          canWear={isMyCharacter}
+          onWear={(look) => wearLook.mutate(look.tenure_media_id)}
+          isSaving={wearLook.isPending}
+          onAddLook={isMyCharacter ? () => setAddingLook(true) : undefined}
+          actions={
+            <>
+              <StaffEditToggle sheet={sheet} />
+              <Link
+                to={`/journals?writer=${sheetId}`}
+                className="rounded border px-3 py-1 text-sm hover:bg-accent"
+              >
+                Journal
+              </Link>
+              {/* Friend is the account's OOC list and stays. Rival is gone with #3957:
                 declaring someone an enemy is an IC label on a tie now, not an OOC
                 double opt-in, and it is named on their tie page. */}
-            {!isMyCharacter && (
-              <FriendButton
-                viewerEntryId={viewerEntryId}
-                targetEntryId={entryId}
-                targetName={entry.character.name}
-              />
-            )}
-          </>
-        }
-      />
-
-      {isMyCharacter && (
-        <AddLookFlow
-          open={addingLook}
-          entryId={entryId}
-          sheetId={sheetId}
-          ink={sheet?.plate_ink ?? 'ember'}
-          onClose={() => setAddingLook(false)}
+              {!isMyCharacter && (
+                <FriendButton
+                  viewerEntryId={viewerEntryId}
+                  targetEntryId={entryId}
+                  targetName={entry.character.name}
+                />
+              )}
+            </>
+          }
         />
-      )}
-      <SectionRow current={shown} onSelect={setSection} isMyCharacter={isMyCharacter} />
 
-      <div className="refsheet-leaf">
-        {shown === 'sheet' && (
-          <Stack wide>
-            {sheet && (
-              <SheetPanel
-                sheet={sheet}
+        {isMyCharacter && (
+          <AddLookFlow
+            open={addingLook}
+            entryId={entryId}
+            sheetId={sheetId}
+            ink={sheet?.plate_ink ?? 'ember'}
+            onClose={() => setAddingLook(false)}
+          />
+        )}
+        <SectionRow current={shown} onSelect={setSection} isMyCharacter={isMyCharacter} />
+
+        <div className="refsheet-leaf">
+          {shown === 'sheet' && (
+            <Stack wide>
+              {sheet && (
+                <SheetPanel
+                  sheet={sheet}
+                  isMyCharacter={isMyCharacter}
+                  rumor={null}
+                  languages={
+                    // Trained languages only (#4090): a condition can raise
+                    // comprehension of a tongue the character never speaks, so
+                    // "Speaks" stays scoped to fluency > 0, same as the picker.
+                    (() => {
+                      const spoken = (myLanguages ?? []).filter((row) => row.fluency > 0);
+                      return isActiveCharacter && spoken.length
+                        ? spoken.map((row) => row.name).join(', ')
+                        : null;
+                    })()
+                  }
+                />
+              )}
+              <WorshipSection
+                sheetId={sheetId}
+                characterName={entry.character.name}
                 isMyCharacter={isMyCharacter}
-                rumor={null}
-                languages={
-                  // Trained languages only (#4090): a condition can raise
-                  // comprehension of a tongue the character never speaks, so
-                  // "Speaks" stays scoped to fluency > 0, same as the picker.
-                  (() => {
-                    const spoken = (myLanguages ?? []).filter((row) => row.fluency > 0);
-                    return isActiveCharacter && spoken.length
-                      ? spoken.map((row) => row.name).join(', ')
-                      : null;
-                  })()
-                }
+                isStaff={Boolean(account?.is_staff)}
+                publicWorship={(sheet?.identity.worship as PublicWorshipRef | null) ?? null}
               />
-            )}
-            <WorshipSection
+              <ApplicationSlot entry={entry} account={account} />
+            </Stack>
+          )}
+
+          {shown === 'physical' && sheet && (
+            <PhysicalPanel
+              sheet={sheet}
+              vitals={vitals}
+              isPrivileged={isMyCharacter || Boolean(account?.is_staff)}
+              onOpenEstate={isMyCharacter ? () => setSection('estate') : undefined}
+              worn={worn}
+            />
+          )}
+
+          {shown === 'ties' && (
+            <TiesPanel
+              sheetId={sheetId}
+              entryId={entryId}
+              isMyCharacter={isMyCharacter}
+              viewerPersonaId={viewerPersonaId}
+              titlesPersonaId={titlesPersonaId}
+              mentors={sheet?.mentors ?? []}
+              standing={sheet?.standing ?? { memberships: [], reputations: [] }}
+              covenants={sheet?.covenants ?? []}
+              ties={sheet?.ties ?? []}
+              tiesApThisWeek={sheet?.ties_ap_this_week ?? null}
+            />
+          )}
+
+          {shown === 'distinctions' && <DistinctionsPanel sheetId={sheetId} />}
+
+          {shown === 'magic' && <MagicPanel sheetId={sheetId} isMyCharacter={isMyCharacter} />}
+          {shown === 'gallery' && sheet && (
+            <GalleryPanel
+              entryId={entryId}
               sheetId={sheetId}
               characterName={entry.character.name}
-              isMyCharacter={isMyCharacter}
-              isStaff={Boolean(account?.is_staff)}
-              publicWorship={(sheet?.identity.worship as PublicWorshipRef | null) ?? null}
+              canManage={isMyCharacter || Boolean(account?.is_staff)}
+              isOwner={isMyCharacter}
+              viewerIsFriend={sheet.viewer_is_friend}
+              ink={sheet.plate_ink}
             />
-            <ApplicationSlot entry={entry} account={account} />
-          </Stack>
-        )}
+          )}
 
-        {shown === 'physical' && sheet && (
-          <PhysicalPanel
-            sheet={sheet}
-            vitals={vitals}
-            isPrivileged={isMyCharacter || Boolean(account?.is_staff)}
-            onOpenEstate={isMyCharacter ? () => setSection('estate') : undefined}
-            worn={worn}
-          />
-        )}
-
-        {shown === 'ties' && (
-          <TiesPanel
-            sheetId={sheetId}
-            entryId={entryId}
-            isMyCharacter={isMyCharacter}
-            viewerPersonaId={viewerPersonaId}
-            titlesPersonaId={titlesPersonaId}
-            mentors={sheet?.mentors ?? []}
-            standing={sheet?.standing ?? { memberships: [], reputations: [] }}
-            covenants={sheet?.covenants ?? []}
-            ties={sheet?.ties ?? []}
-            tiesApThisWeek={sheet?.ties_ap_this_week ?? null}
-          />
-        )}
-
-        {shown === 'distinctions' && <DistinctionsPanel sheetId={sheetId} />}
-
-        {shown === 'magic' && <MagicPanel sheetId={sheetId} isMyCharacter={isMyCharacter} />}
-        {shown === 'gallery' && sheet && (
-          <GalleryPanel
-            entryId={entryId}
-            sheetId={sheetId}
-            characterName={entry.character.name}
-            canManage={isMyCharacter || Boolean(account?.is_staff)}
-            isOwner={isMyCharacter}
-            viewerIsFriend={sheet.viewer_is_friend}
-            ink={sheet.plate_ink}
-          />
-        )}
-
-        {shown === 'knowledge' && isMyCharacter && (
-          <KnowledgePanel
-            sheetId={sheetId}
-            viewerEntryId={viewerEntryId}
-            isStaff={Boolean(account?.is_staff)}
-          />
-        )}
-
-        {shown === 'estate' && isMyCharacter && (
-          <EstatePanel
-            sheetId={sheetId}
-            viewedPersonaId={viewedPersonaId}
-            isActiveCharacter={isActiveCharacter}
-            viewerEntryId={viewerEntryId}
-            domains={sheet?.domains ?? []}
-            keyring={sheet?.keyring ?? []}
-          />
-        )}
-
-        {shown === 'growth' && isMyCharacter && (
-          <Stack wide>
-            <GrowthPanel
+          {shown === 'knowledge' && isMyCharacter && (
+            <KnowledgePanel
               sheetId={sheetId}
-              isMyCharacter={isMyCharacter}
-              isActiveCharacter={isActiveCharacter}
-              originStoryEditor={
-                sheet ? <OriginStoryEditorDialog characterId={sheetId} sheet={sheet} /> : undefined
-              }
-              pointsToPlace={
-                <>
-                  <StatPointPanel sheetId={sheetId} />
-                  <MaturationPanel sheetId={sheetId} />
-                </>
-              }
+              viewerEntryId={viewerEntryId}
+              isStaff={Boolean(account?.is_staff)}
             />
-            {/* Messages belongs here rather than on the front, per the spec's ledger:
+          )}
+
+          {shown === 'estate' && isMyCharacter && (
+            <EstatePanel
+              sheetId={sheetId}
+              viewedPersonaId={viewedPersonaId}
+              isActiveCharacter={isActiveCharacter}
+              viewerEntryId={viewerEntryId}
+              domains={sheet?.domains ?? []}
+              keyring={sheet?.keyring ?? []}
+            />
+          )}
+
+          {shown === 'growth' && isMyCharacter && (
+            <Stack wide>
+              <GrowthPanel
+                sheetId={sheetId}
+                isMyCharacter={isMyCharacter}
+                isActiveCharacter={isActiveCharacter}
+                originStoryEditor={
+                  sheet ? (
+                    <OriginStoryEditorDialog characterId={sheetId} sheet={sheet} />
+                  ) : undefined
+                }
+                pointsToPlace={
+                  <>
+                    <StatPointPanel sheetId={sheetId} />
+                    <MaturationPanel sheetId={sheetId} />
+                  </>
+                }
+              />
+              {/* Messages belongs here rather than on the front, per the spec's ledger:
                 it is the player's own correspondence about the character, which is a
                 Growth concern, not something a reader of the sheet came for. */}
-            <Stack>
-              <Heading>Messages</Heading>
-              <div id="messages">
-                <MessagesSection />
-              </div>
+              <Stack>
+                <Heading>Messages</Heading>
+                <div id="messages">
+                  <MessagesSection />
+                </div>
+              </Stack>
             </Stack>
-          </Stack>
-        )}
+          )}
+        </div>
       </div>
-    </div>
+    </StaffEditProvider>
   );
 }
 
