@@ -167,7 +167,7 @@ A realm's law deciding whether a newborn belongs to a parent's house — `HouseR
 _Avoid_: legitimacy check (wedlock is one input, not the concept), auto-enrollment.
 
 **Succession Law**:
-Candidate derivation + ordering for a title (`SuccessionLaw`): house default on the org, per-title override (Imperial Tanistry). Runs on the omniscient public record; an empty candidate list is a succession crisis — story fuel, deliberately unresolved.
+Candidate derivation + ordering for a title (`SuccessionLaw`): house default on the org, per-title override (Imperial Tanistry). The ordering rule ranks; `gender_tiebreak` (#4201) breaks a tie in the rule's measure and never outranks it. Runs on the omniscient public record; an empty candidate list is a succession crisis — story fuel, deliberately unresolved.
 _Avoid_: heir formula, inheritance rule (that's estates/wills, #1985).
 
 **Contested Title** (`Title.claimant_org`, #3983):

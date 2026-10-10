@@ -634,10 +634,31 @@ def _living_family_members(family: Family) -> list[Kinsperson]:
     return [m.kinsperson for m in memberships if not m.kinsperson.is_deceased]
 
 
-def _order_candidates(candidates: list[Kinsperson], ordering: str) -> list[Kinsperson]:
+def _ordering_key(ordering: str) -> Callable[[Kinsperson], int]:
+    """The ordering rule's measure, higher first: Gifted rating (the registered
+    rater, else age as the PLACEHOLDER fallback) or age."""
     if ordering == SuccessionOrdering.MOST_POWERFUL_GIFTED and _gifted_power_rater is not None:
-        return sorted(candidates, key=_gifted_power_rater, reverse=True)
-    return sorted(candidates, key=lambda p: p.age or 0, reverse=True)
+        return _gifted_power_rater
+    return lambda p: p.age or 0
+
+
+def _gender_tiebreak_rank(preference: str) -> Callable[[Kinsperson], int]:
+    """0 for the preferred gender, 1 for everyone else; constant when the law has
+    no preference, so the sort leaves ties in the order they came."""
+    if not preference:
+        return lambda _p: 0
+    return lambda p: 0 if _parent_gender_key(p) == preference else 1
+
+
+def _order_candidates(candidates: list[Kinsperson], law: SuccessionLaw) -> list[Kinsperson]:
+    """Rank by the law's ordering rule; on a tie, its gender preference (#4201).
+
+    One composite sort, so the preference can never outrank the measure: a
+    stronger son still precedes a weaker daughter under a daughters-first law.
+    """
+    measure = _ordering_key(law.ordering_rule)
+    tiebreak = _gender_tiebreak_rank(law.gender_tiebreak)
+    return sorted(candidates, key=lambda p: (-measure(p), tiebreak(p)))
 
 
 def _eligible_child_from_edge(
@@ -703,10 +724,10 @@ def derive_succession_candidates(title: Title) -> list[Kinsperson]:
     if holder is None:
         # Vacant seat with no line to walk: the recognized family pool, ordered.
         pool = _living_family_members(family) if family is not None else []
-        return _order_candidates(pool, law.ordering_rule)
+        return _order_candidates(pool, law)
 
     candidates = _eligible_succession_children(holder, law, family)
-    ordered = _order_candidates(candidates, law.ordering_rule)
+    ordered = _order_candidates(candidates, law)
     return _apply_enatic_tiebreak(ordered, law)
 
 

@@ -30,7 +30,11 @@ streams→treasury spine, and marriage pacts fire coded commitments. Lives in
 - **`SuccessionLaw`** — derivation (`PRIMOGENITURE_WEDLOCK`,
   `MATRILINEAL_RECOGNITION`, `FEMALE_LINE_CONSORTS_ENNOBLED`, `CHOSEN_HEIR`,
   `TANISTRY_ELECTION`) + ordering (`ELDEST`, `MOST_POWERFUL_GIFTED` — pluggable
-  rater, PLACEHOLDER falls back to eldest) + `require_wedlock`/`enatic_tiebreak`.
+  rater, PLACEHOLDER falls back to eldest) + `require_wedlock`/`enatic_tiebreak`, and
+  `gender_tiebreak` (#4201: who goes first when the ordering rule ties - equal age under
+  Eldest, equal rating under Most powerful Gifted; `SuccessionGenderTiebreak` none/female/
+  male. One composite sort, so the preference never outranks the measure. Umbros's
+  non-imperial titles: Gifted ordering, daughters first).
   House default on `Organization.default_succession_law`; per-title override on
   `Title.succession_law` (Imperial Tanistry). **Authored content (#2875):**
   carries `NaturalKeyMixin` (`name`) + `CreditedContent` and is registered in
