@@ -2,13 +2,14 @@
  * Character sheet React Query hooks (#1446).
  */
 
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 
 import { fetchProfileTextVersions } from '@/sheet_update_requests/api';
 import {
   STAFF_CHOICE_SOURCES,
   fetchCharacterSheet,
+  fetchStaffMagicOptions,
   fetchStaffOptions,
   runStaffRowAction,
   type StaffRowAction,
@@ -89,6 +90,23 @@ export function useStaffOptions(sheetId: number, enabled: boolean) {
     queryKey: ['character-sheets', sheetId, 'staff-options'],
     queryFn: () => fetchStaffOptions(sheetId),
     enabled: enabled && !!sheetId,
+    staleTime: 5 * 60_000,
+  });
+}
+
+/** What Grant magic offers (#4224) for the tradition and gift picked so far. */
+export function useStaffMagicOptions(
+  sheetId: number,
+  tradition: string,
+  gift: string,
+  enabled: boolean
+) {
+  return useQuery({
+    queryKey: ['character-sheets', sheetId, 'staff-magic-options', tradition, gift],
+    queryFn: () => fetchStaffMagicOptions(sheetId, tradition, gift),
+    enabled: enabled && !!sheetId,
+    // The stepper stays drawn while the next pick's options load.
+    placeholderData: keepPreviousData,
     staleTime: 5 * 60_000,
   });
 }

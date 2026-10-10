@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from django.contrib.auth.models import AbstractBaseUser, AnonymousUser
 from django.db import transaction
@@ -19,6 +19,9 @@ from world.character_sheets.types import ProfileTextField
 from world.roster.models import RosterEntry
 from world.scenes.constants import PersonaType
 from world.scenes.models import Persona
+
+if TYPE_CHECKING:
+    from world.magic.models import CharacterAura
 
 
 def can_edit_character_sheet(
@@ -135,6 +138,7 @@ def update_profile_text(
     ic_date = clock.get_ic_now() if clock else None
     era = Era.objects.get_active()
 
+    aura: CharacterAura | None = None
     # The physical description (#3988) is the one versioned field that lives on the
     # sheet owning the profile, not on the profile: the version rows still hang off
     # the profile, so one timeline covers every prose field of the character.
@@ -144,6 +148,9 @@ def update_profile_text(
             msg = "A description belongs to a sheet's true profile; this profile has no sheet."
             raise ValueError(msg)
         attribute = "additional_desc"
+    elif field == ProfileTextField.GLIMPSE:
+        holder = aura = _glimpse_holder(profile)
+        attribute = "glimpse_story"
     else:
         holder = profile
         attribute = field
@@ -162,6 +169,12 @@ def update_profile_text(
             _date_original_to_creation(original, profile)
         setattr(holder, attribute, text)
         holder.save(update_fields=[attribute])
+        if aura is not None:
+            # The Glimpse's state is a cache of its prose and tags; every write path
+            # (staff edit, restore, the aura services) has to move it (#4224).
+            from world.magic.services.glimpse import refresh_glimpse_state  # noqa: PLC0415
+
+            refresh_glimpse_state(aura)
         return ProfileTextVersion.objects.create(
             profile=profile,
             field=field,
@@ -190,6 +203,18 @@ def _date_original_to_creation(original: ProfileTextVersion, profile: Profile) -
         created_at=created,
     )
     original.created_at = created
+
+
+def _glimpse_holder(profile: Profile) -> CharacterAura:
+    """The aura a true profile's Glimpse lives on (#4224); a magicless sheet has none."""
+    from world.magic.models import CharacterAura  # noqa: PLC0415
+
+    sheet = profile.owning_sheet_or_none
+    aura = CharacterAura.objects.filter(character=sheet).first() if sheet is not None else None
+    if aura is None:
+        msg = "This character has no aura to hold a Glimpse."
+        raise StaffEditError(msg)
+    return aura
 
 
 def set_physical_description(

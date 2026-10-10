@@ -16,6 +16,7 @@ const restoreProfileTextVersion = vi.fn();
 const fetchProfileTextVersions = vi.fn();
 const fetchStaffOptions = vi.fn();
 const runStaffRowAction = vi.fn();
+const fetchStaffMagicOptions = vi.fn();
 
 vi.mock('@/character_sheets/api', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/character_sheets/api')>();
@@ -25,6 +26,7 @@ vi.mock('@/character_sheets/api', async (importOriginal) => {
     restoreProfileTextVersion: (...args: unknown[]) => restoreProfileTextVersion(...args),
     fetchStaffOptions: (...args: unknown[]) => fetchStaffOptions(...args),
     runStaffRowAction: (...args: unknown[]) => runStaffRowAction(...args),
+    fetchStaffMagicOptions: (...args: unknown[]) => fetchStaffMagicOptions(...args),
   };
 });
 vi.mock('@/sheet_update_requests/api', () => ({
@@ -45,6 +47,8 @@ const STORED: CharacterSheetStaffEdit = {
     public_being: null,
     secret_being: null,
     has_vitals: true,
+    has_gift: true,
+    has_aura: false,
   },
   prose: {
     description: '',
@@ -56,6 +60,7 @@ const STORED: CharacterSheetStaffEdit = {
     protect: '',
     fear: '',
     obituary: '',
+    glimpse: '',
   },
   name: 'Kathryn',
   ic_birth_year: null,
@@ -148,6 +153,7 @@ describe('staff edit mode', () => {
     runStaffRowAction.mockReset();
     fetchStaffOptions.mockReset();
     fetchStaffOptions.mockResolvedValue(OPTIONS);
+    fetchStaffMagicOptions.mockReset();
   });
   afterEach(() => sessionStorage.clear());
 
@@ -296,5 +302,62 @@ describe('staff edit mode', () => {
         body: { character_distinction: 77 },
       })
     );
+  });
+  it('grants magic to a giftless sheet, each pick narrowing the next (#4224)', async () => {
+    const user = userEvent.setup();
+    runStaffRowAction.mockResolvedValue(sheet());
+    fetchStaffMagicOptions.mockImplementation(
+      async (_sheet: number, tradition: string, gift: string) => ({
+        traditions: [{ id: 5, name: 'Lamplighters' }],
+        gifts: tradition ? [{ id: 6, name: 'Embers' }] : [],
+        techniques: gift
+          ? [
+              { id: 7, name: 'Kindle' },
+              { id: 8, name: 'Smother' },
+            ]
+          : [],
+        resonances: gift ? [{ id: 9, name: 'Warmth' }] : [],
+        stats: [{ id: 1, name: 'strength' }],
+        skills: [{ id: 2, name: 'Occult' }],
+        technique_limit: 1,
+      })
+    );
+    sessionStorage.setItem('arx.staffEditMode', '1');
+    renderSheet(sheet({ staff_edit: { ...STORED, rows: { ...STORED.rows, has_gift: false } } }));
+
+    const editor = await screen.findByTestId('staff-magic-editor');
+    await user.selectOptions(within(editor).getByRole('combobox', { name: 'Tradition' }), '5');
+    await user.selectOptions(await within(editor).findByRole('combobox', { name: 'Gift' }), '6');
+    await user.click(await within(editor).findByRole('checkbox', { name: 'Kindle' }));
+    expect(within(editor).getByRole('checkbox', { name: 'Smother' })).toBeDisabled();
+    await user.selectOptions(within(editor).getByRole('combobox', { name: 'Resonance' }), '9');
+    await user.selectOptions(within(editor).getByRole('combobox', { name: 'Anima stat' }), '1');
+    await user.selectOptions(within(editor).getByRole('combobox', { name: 'Anima skill' }), '2');
+    await user.type(within(editor).getByRole('textbox', { name: 'Glimpse' }), 'A spark.');
+    await user.click(within(editor).getByRole('button', { name: 'Grant magic' }));
+    await waitFor(() =>
+      expect(runStaffRowAction).toHaveBeenCalledWith(20, {
+        path: 'staff-magic',
+        method: 'POST',
+        body: {
+          tradition: 5,
+          gift: 6,
+          techniques: [7],
+          resonance: 9,
+          anima_stat: 1,
+          anima_skill: 2,
+          ritual_name: '',
+          glimpse: 'A spark.',
+        },
+      })
+    );
+  });
+
+  it('offers no Grant magic once the sheet holds a gift (#4224)', async () => {
+    sessionStorage.setItem('arx.staffEditMode', '1');
+    renderSheet(sheet());
+    await screen.findByTestId('staff-rows-band');
+    expect(screen.queryByTestId('staff-magic-editor')).not.toBeInTheDocument();
+    expect(fetchStaffMagicOptions).not.toHaveBeenCalled();
   });
 });

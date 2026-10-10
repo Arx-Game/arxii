@@ -42,6 +42,30 @@ def _rows_by_pk(queryset: Any, data: dict[str, int], label: str) -> dict[Any, in
     return {rows[pk]: value for pk, value in wanted.items()}
 
 
+def _tradition_queryset() -> Any:
+    from world.magic.models import Tradition  # noqa: PLC0415
+
+    return Tradition.objects.all()
+
+
+def _gift_queryset() -> Any:
+    from world.magic.models import Gift  # noqa: PLC0415
+
+    return Gift.objects.all()
+
+
+def _technique_queryset() -> Any:
+    from world.magic.models import Technique  # noqa: PLC0415
+
+    return Technique.objects.all()
+
+
+def _resonance_queryset() -> Any:
+    from world.magic.models import Resonance  # noqa: PLC0415
+
+    return Resonance.objects.all()
+
+
 class StaffStatsSerializer(serializers.Serializer):
     """``{"stats": {"<trait id>": <1 to 5>}}``."""
 
@@ -239,3 +263,32 @@ class StaffOptionsSerializer(serializers.Serializer):
     enemy_kinds = StaffChoiceSerializer(many=True)
     enemy_degrees = StaffChoiceSerializer(many=True)
     enemy_power_tiers = StaffChoiceSerializer(many=True)
+
+
+class StaffMagicSerializer(serializers.Serializer):
+    """Grant magic (#4224): the CG magic stage's picks, for a sheet with no gift."""
+
+    tradition = serializers.PrimaryKeyRelatedField(queryset=_tradition_queryset())
+    gift = serializers.PrimaryKeyRelatedField(queryset=_gift_queryset())
+    techniques = serializers.PrimaryKeyRelatedField(queryset=_technique_queryset(), many=True)
+    resonance = serializers.PrimaryKeyRelatedField(queryset=_resonance_queryset())
+    anima_stat = serializers.PrimaryKeyRelatedField(
+        queryset=Trait.objects.filter(trait_type=TraitType.STAT)
+    )
+    anima_skill = serializers.PrimaryKeyRelatedField(
+        queryset=Skill.objects.filter(is_active=True).select_related("trait")
+    )
+    ritual_name = serializers.CharField(max_length=200, required=False, allow_blank=True)
+    glimpse = serializers.CharField(required=False, allow_blank=True, default="")
+
+
+class StaffMagicOptionsSerializer(serializers.Serializer):
+    """What Grant magic picks from, narrowed by the tradition and gift picked so far."""
+
+    traditions = StaffOptionSerializer(many=True)
+    gifts = StaffOptionSerializer(many=True)
+    techniques = StaffOptionSerializer(many=True)
+    resonances = StaffOptionSerializer(many=True)
+    stats = StaffOptionSerializer(many=True)
+    skills = StaffOptionSerializer(many=True)
+    technique_limit = serializers.IntegerField()

@@ -6093,6 +6093,56 @@ paths:
       responses:
         '200':
           description: No response body
+  /api/character-sheets/{id}/staff-magic/:
+    post:
+      operationId: character_sheets_staff_magic_create
+      description: |-
+        Grant a giftless sheet its magic, as CG's magic stage would (#4224).
+
+        The CG stage's structural rules hold (a gift the tradition offers on the sheet's
+        path, available finished techniques within the pick limit, a resonance, an anima
+        stat and skill); its costs do not. Changing magic that exists is out of scope.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+        required: true
+      tags:
+      - character-sheets
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StaffMagicRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/character-sheets/{id}/staff-magic-options/:
+    get:
+      operationId: character_sheets_staff_magic_options_retrieve
+      description: What Grant magic offers, given ``?tradition=`` and ``?gift=`` picked
+        so far.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+        required: true
+      tags:
+      - character-sheets
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StaffMagicOptions'
+          description: ''
   /api/character-sheets/{id}/staff-marking-remove/:
     patch:
       operationId: character_sheets_staff_marking_remove_partial_update
@@ -54384,6 +54434,7 @@ components:
       - quote
       - obituary
       - description
+      - glimpse
       type: string
       description: |-
         * `background` - Background
@@ -54395,6 +54446,7 @@ components:
         * `quote` - Quote
         * `obituary` - Obituary
         * `description` - Physical description
+        * `glimpse` - Glimpse
     FixtureAffinity:
       type: object
       description: One axis a fixture kind mitigates (negative value = mitigation).
@@ -73673,6 +73725,8 @@ components:
           type: string
         obituary:
           type: string
+        glimpse:
+          type: string
         name:
           type: string
           minLength: 1
@@ -77374,6 +77428,7 @@ components:
             * `quote` - Quote
             * `obituary` - Obituary
             * `description` - Physical description
+            * `glimpse` - Glimpse
         text:
           type: string
           readOnly: true
@@ -82869,6 +82924,77 @@ components:
       - body
       - kind
       - title
+    StaffMagicOptions:
+      type: object
+      description: What Grant magic picks from, narrowed by the tradition and gift
+        picked so far.
+      properties:
+        traditions:
+          type: array
+          items:
+            $ref: '#/components/schemas/StaffOption'
+        gifts:
+          type: array
+          items:
+            $ref: '#/components/schemas/StaffOption'
+        techniques:
+          type: array
+          items:
+            $ref: '#/components/schemas/StaffOption'
+        resonances:
+          type: array
+          items:
+            $ref: '#/components/schemas/StaffOption'
+        stats:
+          type: array
+          items:
+            $ref: '#/components/schemas/StaffOption'
+        skills:
+          type: array
+          items:
+            $ref: '#/components/schemas/StaffOption'
+        technique_limit:
+          type: integer
+      required:
+      - gifts
+      - resonances
+      - skills
+      - stats
+      - technique_limit
+      - techniques
+      - traditions
+    StaffMagicRequest:
+      type: object
+      description: 'Grant magic (#4224): the CG magic stage''s picks, for a sheet
+        with no gift.'
+      properties:
+        tradition:
+          type: integer
+        gift:
+          type: integer
+        techniques:
+          type: array
+          items:
+            type: integer
+        resonance:
+          type: integer
+        anima_stat:
+          type: integer
+        anima_skill:
+          type: integer
+        ritual_name:
+          type: string
+          maxLength: 200
+        glimpse:
+          type: string
+          default: ''
+      required:
+      - anima_skill
+      - anima_stat
+      - gift
+      - resonance
+      - techniques
+      - tradition
     StaffMarkingAddRequest:
       type: object
       properties:

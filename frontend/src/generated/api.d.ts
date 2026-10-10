@@ -4138,6 +4138,46 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/character-sheets/{id}/staff-magic/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * @description Grant a giftless sheet its magic, as CG's magic stage would (#4224).
+     *
+     *     The CG stage's structural rules hold (a gift the tradition offers on the sheet's
+     *     path, available finished techniques within the pick limit, a resonance, an anima
+     *     stat and skill); its costs do not. Changing magic that exists is out of scope.
+     */
+    post: operations['character_sheets_staff_magic_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/character-sheets/{id}/staff-magic-options/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description What Grant magic offers, given ``?tradition=`` and ``?gift=`` picked so far. */
+    get: operations['character_sheets_staff_magic_options_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/character-sheets/{id}/staff-marking-remove/': {
     parameters: {
       query?: never;
@@ -31601,6 +31641,7 @@ export interface components {
      *     * `quote` - Quote
      *     * `obituary` - Obituary
      *     * `description` - Physical description
+     *     * `glimpse` - Glimpse
      * @enum {string}
      */
     FieldEnum:
@@ -31612,7 +31653,8 @@ export interface components {
       | 'real_concept'
       | 'quote'
       | 'obituary'
-      | 'description';
+      | 'description'
+      | 'glimpse';
     /** @description One axis a fixture kind mitigates (negative value = mitigation). */
     FixtureAffinity: {
       key: string;
@@ -42134,6 +42176,7 @@ export interface components {
       protect?: string;
       fear?: string;
       obituary?: string;
+      glimpse?: string;
       name?: string;
       ic_birth_year?: number | null;
       true_height_inches?: number | null;
@@ -44068,6 +44111,7 @@ export interface components {
        *     * `quote` - Quote
        *     * `obituary` - Obituary
        *     * `description` - Physical description
+       *     * `glimpse` - Glimpse
        */
       readonly field: components['schemas']['FieldEnum'];
       /** @description The full field text as of this version. */
@@ -46629,6 +46673,28 @@ export interface components {
       kind: components['schemas']['StaffIntroductionKindEnum'];
       title: string;
       body: string;
+    };
+    /** @description What Grant magic picks from, narrowed by the tradition and gift picked so far. */
+    StaffMagicOptions: {
+      traditions: components['schemas']['StaffOption'][];
+      gifts: components['schemas']['StaffOption'][];
+      techniques: components['schemas']['StaffOption'][];
+      resonances: components['schemas']['StaffOption'][];
+      stats: components['schemas']['StaffOption'][];
+      skills: components['schemas']['StaffOption'][];
+      technique_limit: number;
+    };
+    /** @description Grant magic (#4224): the CG magic stage's picks, for a sheet with no gift. */
+    StaffMagicRequest: {
+      tradition: number;
+      gift: number;
+      techniques: number[];
+      resonance: number;
+      anima_stat: number;
+      anima_skill: number;
+      ritual_name?: string;
+      /** @default  */
+      glimpse: string;
     };
     StaffMarkingAddRequest: {
       body_region: components['schemas']['BodyRegionEnum'];
@@ -55639,6 +55705,51 @@ export interface operations {
           [name: string]: unknown;
         };
         content?: never;
+      };
+    };
+  };
+  character_sheets_staff_magic_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['StaffMagicRequest'];
+      };
+    };
+    responses: {
+      /** @description No response body */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  character_sheets_staff_magic_options_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['StaffMagicOptions'];
+        };
       };
     };
   };

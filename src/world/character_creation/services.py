@@ -2167,91 +2167,35 @@ def can_create_character(account: AbstractBaseUser | AnonymousUser) -> tuple[boo
 
 
 def _finalize_gift_and_techniques(draft: CharacterDraft, sheet: CharacterSheet) -> None:
-    """Step 1: link the CG-chosen catalog Gift + Techniques to the character.
+    """Link the draft's catalog Gift and Techniques (the first step of ``provision_magic``)."""
+    from world.character_creation.magic_writer import (  # noqa: PLC0415
+        MagicPicks,
+        link_gift_and_techniques,
+        resolve_rows,
+    )
+    from world.magic.constants import AcquisitionOrigin  # noqa: PLC0415
+    from world.magic.models import Gift, Resonance, Technique  # noqa: PLC0415
 
-    Replaces the old CG-creates-a-new-technique path (#2426): the Gift and
-    Techniques are staff-authored catalog rows the player picked via the CG
-    option endpoints (``get_gift_options``/``get_technique_options``) —
-    finalize only links them, it never mints new ``Gift``/``Technique`` rows.
-    Techniques from a species-granted gift are linked with
-    ``AcquisitionOrigin.SPECIES_GRANT``.
-    Outcome-flavor consequence-pool selection is dropped entirely (spec
-    correction on #2426): catalog techniques must carry an authored
-    ``action_template`` before they are offered as CG picks. Staff can wire
-    unfinished rows in bulk through ``TechniqueAdmin``.
-
-    No-op when the draft has no selected gift (legacy/test-only draft_data —
-    ``compute_magic_errors`` requires ``selected_gift_id`` on any draft that
-    reaches submission).
-    """
-    gift_id = draft.draft_data.get("selected_gift_id")
+    data = draft.draft_data
+    gift_id = data.get("selected_gift_id")
     if not gift_id:
         return
-
-    from world.magic.constants import AcquisitionOrigin  # noqa: PLC0415
-    from world.magic.models import (  # noqa: PLC0415
-        CharacterTechnique,
-        Gift,
-        Resonance,
-        Technique,
+    resonance_id = data.get("selected_gift_resonance_id")
+    link_gift_and_techniques(
+        sheet,
+        MagicPicks(
+            tradition=draft.selected_tradition,
+            gift=Gift.objects.get(pk=gift_id),
+            techniques=resolve_rows(Technique, data.get("selected_technique_ids") or []),
+            resonance=Resonance.objects.filter(pk=resonance_id).first() if resonance_id else None,
+            anima_stat=None,
+            anima_skill=None,
+            ritual_name="",
+            account=draft.account,
+            origin=AcquisitionOrigin.CHARACTER_CREATION,
+            species=draft.selected_species,
+        ),
     )
-    from world.magic.services.cg_catalog import get_species_technique_options  # noqa: PLC0415
-    from world.magic.specialization.services import grant_gift_to_character  # noqa: PLC0415
-
-    gift = Gift.objects.get(pk=gift_id)
-
-    # Provision the CharacterGift link + the latent level-0 GIFT thread at the
-    # player's CG-chosen resonance (#1578, ADR-0055). Acquiring a gift IS
-    # weaving a (latent) thread.
-    resonance_id = draft.draft_data.get("selected_gift_resonance_id")
-    resonance = Resonance.objects.filter(pk=resonance_id).first() if resonance_id else None
-    grant_gift_to_character(
-        sheet, gift, resonance=resonance, origin=AcquisitionOrigin.CHARACTER_CREATION
-    )
-
-    technique_ids = draft.draft_data.get("selected_technique_ids") or []
-    techniques = list(Technique.objects.filter(pk__in=technique_ids))
-    species_technique_ids = {
-        technique.id
-        for technique in get_species_technique_options(draft.selected_species, include_unready=True)
-    }
-    species_techniques = [
-        technique for technique in techniques if technique.id in species_technique_ids
-    ]
-    major_techniques = [
-        technique for technique in techniques if technique.id not in species_technique_ids
-    ]
-    gained_techniques = []
-    for technique in major_techniques:
-        _, created = CharacterTechnique.objects.get_or_create(
-            character=sheet,
-            technique=technique,
-            defaults={"origin": AcquisitionOrigin.CHARACTER_CREATION},
-        )
-        if created:
-            gained_techniques.append(technique)
-    for technique in species_techniques:
-        link, created = CharacterTechnique.objects.get_or_create(
-            character=sheet,
-            technique=technique,
-            defaults={"origin": AcquisitionOrigin.SPECIES_GRANT},
-        )
-        if not created and link.origin != AcquisitionOrigin.SPECIES_GRANT:
-            link.origin = AcquisitionOrigin.SPECIES_GRANT
-            link.save(update_fields=["origin"])
-        if created:
-            gained_techniques.append(technique)
-
-    from world.achievements.constants import AccessChangeSource  # noqa: PLC0415
-    from world.achievements.discovery import announce_access_change  # noqa: PLC0415
-
-    if gained_techniques:
-        announce_access_change(
-            sheet,
-            gained=gained_techniques,
-            lost=[],
-            source=AccessChangeSource.CHARACTER_CREATION,
-        )
 
 
 def _grant_codex_entries(sheet: CharacterSheet, entry_ids: Iterable[int]) -> None:
@@ -2264,21 +2208,6 @@ def _grant_codex_entries(sheet: CharacterSheet, entry_ids: Iterable[int]) -> Non
     from world.character_creation.sheet_writers import grant_codex_entries  # noqa: PLC0415
 
     grant_codex_entries(sheet, entry_ids, require_roster_entry=True)
-
-
-def _finalize_tradition_codex_grants(draft: CharacterDraft, sheet: CharacterSheet) -> None:
-    """Step 3: apply tradition codex grants. No-op without a selected tradition."""
-    if not draft.selected_tradition:
-        return
-
-    from world.codex.models import TraditionCodexGrant  # noqa: PLC0415
-
-    _grant_codex_entries(
-        sheet,
-        TraditionCodexGrant.objects.filter(tradition=draft.selected_tradition).values_list(
-            "entry_id", flat=True
-        ),
-    )
 
 
 def _finalize_path_codex_grants(draft: CharacterDraft, sheet: CharacterSheet) -> None:
@@ -2302,7 +2231,7 @@ def _finalize_beginnings_codex_grants(draft: CharacterDraft, sheet: CharacterShe
 def _finalize_distinction_codex_grants(draft: CharacterDraft, sheet: CharacterSheet) -> None:
     """Apply Distinction codex grants for all selected distinctions.
 
-    Mirrors _finalize_tradition_codex_grants. Idempotent via get_or_create.
+    Idempotent via get_or_create.
     """
     distinctions_data = draft.draft_data.get("distinctions", [])
     if not distinctions_data:
@@ -2333,95 +2262,6 @@ def _finalize_species_codex(sheet: CharacterSheet) -> None:
     grant_species_codex(sheet, require_roster_entry=True)
 
 
-def _finalize_resonance_codex(draft: CharacterDraft, sheet: CharacterSheet) -> None:
-    """Grant the selected gift resonance's codex entry, if any.
-
-    The resonance is stored in draft_data['selected_gift_resonance_id'].
-    Idempotent via get_or_create.
-    """
-    resonance_id = draft.draft_data.get("selected_gift_resonance_id")
-    if not resonance_id:
-        return
-
-    from world.magic.models import Resonance  # noqa: PLC0415
-
-    try:
-        resonance = Resonance.objects.get(pk=resonance_id)
-    except Resonance.DoesNotExist:
-        return
-    if resonance.codex_entry_id is None:
-        return
-
-    _grant_codex_entries(sheet, [resonance.codex_entry_id])
-
-
-def _finalize_anima_ritual(draft: CharacterDraft, sheet: CharacterSheet) -> None:
-    """Step 5: create player anima Ritual + sidecar + CharacterRitualKnowledge.
-
-    The Ritual is authored by the player's account. Its stat + skill are the
-    player's explicit CG Anima Check pick (``anima_check_stat_id`` /
-    ``anima_check_skill_id`` — required by ``compute_magic_errors``, #2426);
-    when a draft has neither set (legacy/test-only draft_data),
-    ``provision_player_anima_ritual`` falls back to its Willpower +
-    highest-CG-skill defaults. Both are customisable post-CG.
-    CharacterRitualKnowledge is created so the ritual gate in the scene action
-    menu is satisfied.
-
-    The CG-picked gift resonance (``selected_gift_resonance_id``, resolved the
-    same way ``finalize_magic_data`` resolves it for the gift thread) is also
-    passed through: the anima ritual IS the character's magical identity, so
-    it carries the same resonance as the gift the ritual was built to recover
-    (#2971).
-
-    Guard: if the sheet has no RosterEntry yet (e.g. in isolated unit tests that
-    call finalize_magic_data directly), skip — the CharacterRitualKnowledge cannot
-    be created without a roster_entry FK. finalize_character always creates the
-    RosterEntry before calling this, so this guard only fires in test-only paths.
-    """
-    from world.roster.models import RosterEntry  # noqa: PLC0415
-
-    try:
-        roster_entry = sheet.roster_entry
-    except RosterEntry.DoesNotExist:
-        return
-
-    from world.magic.services.anima import provision_player_anima_ritual  # noqa: PLC0415
-
-    character_name = draft.draft_data.get("first_name", "Character")
-    ritual_name = draft.draft_data.get("anima_ritual_name") or f"{character_name}'s Anima Ritual"
-
-    stat = None
-    stat_id = draft.draft_data.get("anima_check_stat_id")
-    if stat_id:
-        from world.traits.models import Trait  # noqa: PLC0415
-
-        stat = Trait.objects.filter(pk=stat_id).first()
-
-    skill = None
-    skill_id = draft.draft_data.get("anima_check_skill_id")
-    if skill_id:
-        from world.skills.models import Skill  # noqa: PLC0415
-
-        skill = Skill.objects.filter(pk=skill_id).first()
-
-    resonance = None
-    resonance_id = draft.draft_data.get("selected_gift_resonance_id")
-    if resonance_id:
-        from world.magic.models import Resonance  # noqa: PLC0415
-
-        resonance = Resonance.objects.filter(pk=resonance_id).first()
-
-    provision_player_anima_ritual(
-        account=draft.account,
-        character_sheet=sheet,
-        roster_entry=roster_entry,
-        ritual_name=ritual_name,
-        stat=stat,
-        skill=skill,
-        resonance=resonance,
-    )
-
-
 def _finalize_technique_personalizations(draft: CharacterDraft, sheet: CharacterSheet) -> None:
     """Step 1d (#4099): seed the Motif from the gift resonance, then write the picks.
 
@@ -2449,105 +2289,75 @@ def _finalize_technique_personalizations(draft: CharacterDraft, sheet: Character
 
 
 @transaction.atomic
-def finalize_magic_data(draft: CharacterDraft, sheet: CharacterSheet) -> None:  # noqa: PLR0915
-    """Create magic models from the CG-chosen catalog Gift/Techniques during finalization.
+def finalize_magic_data(draft: CharacterDraft, sheet: CharacterSheet) -> None:
+    """Give the new character its magic from the draft's picks (``provision_magic``, #4224).
 
-    Called during finalize_character() after CharacterSheet is created.
-    Links CharacterGift + CharacterTechnique to the CG-chosen catalog Gift and
-    Techniques, creates CharacterTradition, applies tradition codex grants, and
-    creates CharacterAura — then recomputes it once so any resonance already
-    seeded earlier in finalize (e.g. distinction resonance grants, #1834) is
-    reflected in the starting aura.
+    Called during finalize_character() after the CharacterSheet exists. The shared
+    writer links the catalog Gift and Techniques, the species gifts and languages, the
+    tradition and its Academy obligation and codex, the aura and Glimpse, the anima and
+    fatigue pools and the anima ritual, in finalize's order. The draft-only steps run
+    as hooks where they always ran: the technique personalizations after the languages,
+    the other CG choices' codex grants after the tradition's, and the Glimpse-born
+    distinction links once the aura exists.
     """
-    from world.fatigue.services import get_or_create_fatigue_pool  # noqa: PLC0415
-    from world.magic.models import (  # noqa: PLC0415
-        CharacterAnima,
-        CharacterAura,
-        CharacterTradition,
+    from world.character_creation.magic_writer import (  # noqa: PLC0415
+        MagicHooks,
+        MagicPicks,
+        provision_magic,
+        resolve_rows,
     )
-    from world.magic.services.anima import recompute_max_anima  # noqa: PLC0415
+    from world.magic.constants import AcquisitionOrigin  # noqa: PLC0415
+    from world.magic.models import Gift, Resonance, Technique  # noqa: PLC0415
+    from world.skills.models import Skill  # noqa: PLC0415
+    from world.traits.models import Trait  # noqa: PLC0415
 
-    # 1. Link the CG-chosen catalog Gift + Techniques
-    _finalize_gift_and_techniques(draft, sheet)
+    data = draft.draft_data
 
-    # 1b. Provision species Minor Gift(s) + latent GIFT thread + any drawback (#1580).
-    #     Re-uses the player's CG-chosen resonance (same key as the Major-gift block)
-    #     so the species gift thread anchors to the same resonance the player picked.
-    #     When unset, `provision_species_gifts` passes resonance=None through to
-    #     `grant_gift_to_character`, whose shared `_resolve_grant_resonance` ladder
-    #     resolves one (#2971) — the Major-gift thread already exists by this point,
-    #     so its "existing thread covering this gift" / "main resonance" rungs anchor
-    #     the species gift to the same resonance rather than the gift's first
-    #     supported member.
-    from world.species.services import provision_species_gifts  # noqa: PLC0415
+    def by_id(model: Any, key: str) -> Any:
+        pk = data.get(key)
+        return model.objects.filter(pk=pk).first() if pk else None
 
-    _cg_resonance = None
-    _cg_resonance_id = draft.draft_data.get("selected_gift_resonance_id")
-    if _cg_resonance_id:
-        from world.magic.models import Resonance  # noqa: PLC0415
-
-        _cg_resonance = Resonance.objects.filter(pk=_cg_resonance_id).first()
-    provision_species_gifts(sheet, resonance=_cg_resonance)
-
-    # 1c. Grant CG starting languages (union of Beginnings' computed set - which
-    #     already folds in species racial languages - and every universal
-    #     language, e.g. Arvani Common) as fluent CharacterTraitValue rows (#2993).
-    from world.species.services import provision_starting_languages  # noqa: PLC0415
-
-    provision_starting_languages(sheet, beginnings=draft.selected_beginnings)
-
-    # 1d. Seed the Motif from the CG gift resonance, then write any creation-time
-    #     technique personalization picks (name/description/flourish/form/price, #4099).
-    _finalize_technique_personalizations(draft, sheet)
-
-    # 2. Create CharacterTradition — unconditional: compute_magic_errors requires
-    #    selected_tradition on any draft that reaches submission (#2426).
-    CharacterTradition.objects.create(
-        character=sheet,
+    # A stale gift id fails loudly, as it always has: the stage validated it, so a
+    # missing row means the catalog changed under the draft.
+    gift_id = data.get("selected_gift_id")
+    character_name = data.get("first_name", "Character")
+    picks = MagicPicks(
         tradition=draft.selected_tradition,
+        gift=Gift.objects.get(pk=gift_id) if gift_id else None,
+        techniques=resolve_rows(Technique, data.get("selected_technique_ids") or []),
+        resonance=by_id(Resonance, "selected_gift_resonance_id"),
+        anima_stat=by_id(Trait, "anima_check_stat_id"),
+        anima_skill=by_id(Skill, "anima_check_skill_id"),
+        ritual_name=data.get("anima_ritual_name") or f"{character_name}'s Anima Ritual",
+        account=draft.account,
+        origin=AcquisitionOrigin.CHARACTER_CREATION,
+        species=draft.selected_species,
+        beginnings=draft.selected_beginnings,
+        glimpse_story=data.get("glimpse_story", ""),
+        glimpse_tag_ids=data.get("glimpse_tag_ids", []),
     )
 
-    # 2b. Golden Hare CG entrance obligation (#2428) — Unbound Prospects start
-    #     owing Shroudwatch Academy a Hare; sponsored Prospects start
-    #     SETTLED_BY_SPONSOR (the sponsor spent a Hare on their behalf).
-    _finalize_academy_entrance_obligation(draft, sheet)
+    def other_codex() -> None:
+        _finalize_path_codex_grants(draft, sheet)
+        _finalize_beginnings_codex_grants(draft, sheet)
+        _finalize_distinction_codex_grants(draft, sheet)
+        _finalize_species_codex(sheet)
 
-    # 3. Apply tradition codex grants
-    _finalize_tradition_codex_grants(draft, sheet)
-
-    # 3b. Apply path codex grants (teaches which magic milestones exist)
-    _finalize_path_codex_grants(draft, sheet)
-
-    # 3c. Apply beginnings/distinction/species codex grants
-    _finalize_beginnings_codex_grants(draft, sheet)
-    _finalize_distinction_codex_grants(draft, sheet)
-    _finalize_species_codex(sheet)
-
-    # 4. Create CharacterAura, then persist the guided Glimpse picks (#2427)
-    #    through the glimpse services so glimpse_state stays consistent.
-    from world.magic.services.glimpse import (  # noqa: PLC0415
-        apply_glimpse_affinity_nudge,
-        link_distinction_to_glimpse,
-        set_glimpse_prose,
-        set_glimpse_tags,
+    provision_magic(
+        sheet,
+        picks,
+        hooks=MagicHooks(
+            after_languages=lambda: _finalize_technique_personalizations(draft, sheet),
+            after_tradition_codex=other_codex,
+            after_aura=lambda aura: _link_glimpse_distinctions(draft, sheet, aura),
+        ),
+        require_roster_entry=True,
     )
 
-    aura = CharacterAura(character=sheet)
-    aura.full_clean()
-    aura.save()
 
-    tag_ids = draft.draft_data.get("glimpse_tag_ids", [])
-    if tag_ids:
-        from world.magic.constants import GlimpseTagAxis  # noqa: PLC0415
-        from world.magic.models import GlimpseTag  # noqa: PLC0415
-
-        tags = list(GlimpseTag.objects.filter(pk__in=tag_ids, is_active=True))
-        for axis in GlimpseTagAxis:
-            axis_tags = [tag for tag in tags if tag.axis == axis]
-            if axis_tags:
-                set_glimpse_tags(aura, axis_tags, axis=axis)
-
-    set_glimpse_prose(aura, draft.draft_data.get("glimpse_story", ""))
+def _link_glimpse_distinctions(draft: CharacterDraft, sheet: CharacterSheet, aura: Any) -> None:
+    """Mark the distinctions the player took from Glimpse-tagged offers as born there."""
+    from world.magic.services.glimpse import link_distinction_to_glimpse  # noqa: PLC0415
 
     picked_offer_ids = {
         offer_id
@@ -2555,107 +2365,31 @@ def finalize_magic_data(draft: CharacterDraft, sheet: CharacterSheet) -> None:  
         for offer_id in entry.get("offer_ids", [])
         if isinstance(offer_id, int)
     }
-    if picked_offer_ids:
-        from world.character_creation.models import DistinctionOffer  # noqa: PLC0415
-        from world.distinctions.models import CharacterDistinction  # noqa: PLC0415
+    if not picked_offer_ids:
+        return
+    from world.character_creation.models import DistinctionOffer  # noqa: PLC0415
+    from world.distinctions.models import CharacterDistinction  # noqa: PLC0415
 
-        glimpse_distinction_ids = set(
-            DistinctionOffer.objects.filter(
-                pk__in=picked_offer_ids, glimpse_tag__isnull=False
-            ).values_list("distinction_id", flat=True)
-        )
-        if glimpse_distinction_ids:
-            linked = CharacterDistinction.objects.filter(
-                character=sheet, distinction_id__in=glimpse_distinction_ids
-            )
-            for character_distinction in linked:
-                link_distinction_to_glimpse(character_distinction, aura)
-
-    # 4b. Recompute aura now that CharacterAura exists. _apply_character_mechanics
-    # (distinctions, via reconcile_distinction_resonance_grants) runs earlier in
-    # finalize_character, before this row existed, so any resonance it seeded couldn't
-    # write through recompute_aura's no-CharacterAura no-op (#1834). This call catches
-    # the starting aura up to whatever resonance CG has granted so far.
-    from world.magic.services.aura import recompute_aura  # noqa: PLC0415
-
-    recompute_aura(sheet)
-
-    # 4c. Apply the Glimpse affinity nudge (#2694). recompute_aura set the
-    #     aura from resonance history; the TONE/TRIGGER tag nudge shifts it
-    #     slightly to reflect the emotional register and trigger of the
-    #     awakening.  This is a one-time CG adjustment — it is not re-applied
-    #     by later recompute_aura calls (which overwrite from resonance
-    #     history).  The nudge is small (±3% per tag) and only fires on tags
-    #     that carry an ``affinity`` FK.
-    apply_glimpse_affinity_nudge(aura)
-
-    # 5. Seed CharacterAnima + FatiguePool (idempotent — skip if already present).
-    #    These must exist for Soul Tether sineating/rescue deductions to apply.
-    CharacterAnima.objects.get_or_create(
-        character=sheet,
-        defaults={"current": 10, "maximum": 10},
+    glimpse_distinction_ids = set(
+        DistinctionOffer.objects.filter(
+            pk__in=picked_offer_ids, glimpse_tag__isnull=False
+        ).values_list("distinction_id", flat=True)
     )
-    get_or_create_fatigue_pool(sheet)
-    # #3001: maximum scales with level (100 x level for level >= 1). The stamped
-    # default class level (finalize step earlier) makes a fresh PC level 1, so
-    # this lifts the 10/10 default to 10/100 — current stays low by design:
-    # a new mage's first project is filling their pool.
-    recompute_max_anima(sheet)
-
-    # 6. Create player anima Ritual + sidecar + CharacterRitualKnowledge.
-    _finalize_anima_ritual(draft, sheet)
-
-    # 7. Grant the selected gift resonance's codex entry.
-    _finalize_resonance_codex(draft, sheet)
+    if not glimpse_distinction_ids:
+        return
+    for character_distinction in CharacterDistinction.objects.filter(
+        character=sheet, distinction_id__in=glimpse_distinction_ids
+    ):
+        link_distinction_to_glimpse(character_distinction, aura)
 
 
 def _finalize_academy_entrance_obligation(draft: CharacterDraft, sheet: CharacterSheet) -> None:
-    """Create the CG-finalize Golden Hare Academy obligation row (#2428).
+    """The Academy entrance obligation for the draft's tradition (shared writer)."""
+    from world.character_creation.magic_writer import academy_entrance_obligation  # noqa: PLC0415
 
-    Unbound Prospects (no Tradition sponsor) start CG owing Shroudwatch
-    Academy one Golden Hare (``OWED``); every other tradition is sponsored —
-    the sponsor literally spent a Hare on the Prospect's behalf at CG time,
-    so that row starts ``SETTLED_BY_SPONSOR`` with ``settled_at`` stamped and
-    ``settled_by_token`` left ``NULL`` (lore-recorded, not a minted item at CG
-    time — spec ruling on #2428).
-
-    The Academy is resolved by name (``SHROUDWATCH_ACADEMY_NAME``) rather than
-    a FK on the draft/sheet — a defensive, logged skip when it isn't seeded
-    mirrors ``seed_beginning_traditions``'s Unbound-tradition skip (#2444);
-    cluster ordering guarantees this can't happen via the Big Button.
-
-    "Unbound" is read via ``tradition_is_self_taught`` (the tradition's slate
-    ``state``, #3675), never the tradition's name.
-
-    Idempotent via ``get_or_create`` keyed on (debtor, creditor, origin) so
-    re-finalize test paths don't create a duplicate obligation row.
-    """
-    from world.character_creation.constants import SHROUDWATCH_ACADEMY_NAME  # noqa: PLC0415
-    from world.character_creation.offers import tradition_is_self_taught  # noqa: PLC0415
-    from world.societies.constants import ObligationOrigin, ObligationState  # noqa: PLC0415
-    from world.societies.models import Organization, OrganizationObligation  # noqa: PLC0415
-
-    academy = Organization.objects.filter(name=SHROUDWATCH_ACADEMY_NAME).first()
-    if academy is None:
-        logger.warning(
-            "Skipping Academy entrance obligation: %r org is not seeded.",
-            SHROUDWATCH_ACADEMY_NAME,
-        )
+    if draft.selected_tradition is None:
         return
-
-    tradition = draft.selected_tradition
-    is_unbound = tradition is not None and tradition_is_self_taught(tradition)
-    if is_unbound:
-        defaults = {"state": ObligationState.OWED}
-    else:
-        defaults = {"state": ObligationState.SETTLED_BY_SPONSOR, "settled_at": timezone.now()}
-
-    OrganizationObligation.objects.get_or_create(
-        debtor=sheet,
-        creditor=academy,
-        origin=ObligationOrigin.ACADEMY_ENTRANCE,
-        defaults=defaults,
-    )
+    academy_entrance_obligation(sheet, draft.selected_tradition)
 
 
 def _grant_beginnings_ritual_knowledge(draft: CharacterDraft, roster_entry: RosterEntry) -> None:

@@ -630,10 +630,29 @@ class CharacterAuraAdmin(admin.ModelAdmin):
 
         ``glimpse_state`` is service-maintained (see the model field's help_text);
         editing ``glimpse_story`` here would otherwise desync the cache from the
-        prose it's supposed to reflect.
+        prose it's supposed to reflect. A prose edit is versioned like every other prose
+        field (#4224): the earlier text comes from ``form.initial``, since the identity map
+        has already put the new text on the instance.
         """
+        from world.character_sheets.services import (  # noqa: PLC0415
+            ensure_true_profile,
+            update_profile_text,
+        )
+        from world.character_sheets.types import ProfileTextField  # noqa: PLC0415
+
+        prose_changed = change and "glimpse_story" in form.changed_data  # noqa: STRING_LITERAL - admin form field name
+        previous = (form.initial.get("glimpse_story") or "") if prose_changed else ""
         super().save_model(request, obj, form, change)
-        refresh_glimpse_state(obj)
+        if prose_changed:
+            update_profile_text(
+                ensure_true_profile(obj.character),
+                ProfileTextField.GLIMPSE,
+                obj.glimpse_story,
+                edited_by=request.user,
+                previous_text=previous,
+            )
+        else:
+            refresh_glimpse_state(obj)
 
 
 class GlimpseTagOfferFormSet(DistinctionOfferFormSetMixin, BaseInlineFormSet):

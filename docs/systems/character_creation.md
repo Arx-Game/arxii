@@ -177,6 +177,15 @@ reputation and heat stay in `_create_enemy`), the codex grants (`grant_codex_ent
 (`species_consequences`, `beginnings_consequences`, `path_consequences`). CG's private helpers
 delegate to them. A staff write raises `SheetWriteError` (with `user_message`) on a rule.
 
+**Magic (#4224, `world.character_creation.magic_writer`).** `provision_magic(sheet, picks, *,
+hooks, require_roster_entry)` gives a sheet its magic in finalize's order from a `MagicPicks`
+of rows: gift and technique links, species gifts, languages, tradition and Academy
+obligation, tradition codex, aura and Glimpse, aura recompute and affinity nudge, anima
+pools and the player anima ritual, resonance codex. `finalize_magic_data` builds the picks
+from the draft and passes its draft-only steps as `MagicHooks`; staff edit mode calls
+`validate_staff_magic` (the stage's structural rules, without costs) first.
+`technique_pick_limit(sheet)` reads the starting-technique bonus from held distinctions.
+
 ```python
 from world.character_creation.services import (
     finalize_character,           # Create Character from completed draft (atomic); stamps

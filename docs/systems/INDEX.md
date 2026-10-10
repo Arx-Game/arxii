@@ -473,7 +473,7 @@ Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Sc
     .from_glimpse` (nullable FK → `CharacterAura`, SET_NULL — provenance, mirrors
     `CharacterDistinction.secret`). Services (`services/glimpse.py`):
     `refresh_glimpse_state(aura) -> GlimpseState`, `set_glimpse_tags(aura, tags, *,
-    axis)`, `set_glimpse_prose(aura, text)`, `link_distinction_to_glimpse(character_distinction,
+    axis)`, `set_glimpse_prose(aura, text, *, edited_by)` (versioned, #4224), `link_distinction_to_glimpse(character_distinction,
     aura)` / `unlink_distinction_from_glimpse(character_distinction)`. CG finalize
     (`world.character_creation.services.finalize_magic_data`) consumes
     `draft_data["glimpse_tag_ids"/"glimpse_story"]` through these services;
@@ -2658,7 +2658,8 @@ Character identity, appearance, demographics, and guise system.
 - **Details:** [character_sheets.md](character_sheets.md)
 ### Character Creation
 Multi-stage character creation flow with draft system. The rows finalize writes are public
-services on a live sheet (`sheet_writers.py`, #4221), shared with staff edit mode.
+services on a live sheet (`sheet_writers.py`, #4221), shared with staff edit mode; magic's are
+`magic_writer.provision_magic` (#4224).
 
 - **Models:** `CharacterDraft`, `StartingArea` (`grants_residence_tenancy` BooleanField, default
   True, #2036 — an authored per-area toggle for whether finalizing a character there grants a
