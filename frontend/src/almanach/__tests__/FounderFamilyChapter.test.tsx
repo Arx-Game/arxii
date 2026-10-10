@@ -102,6 +102,7 @@ function baseDraft(kinRows: FounderKin[]): FounderDraft {
     lands: {},
     estate_name: '',
     estate_description: '',
+    observances: [],
   };
 }
 

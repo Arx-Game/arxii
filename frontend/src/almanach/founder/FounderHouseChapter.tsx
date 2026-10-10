@@ -27,6 +27,7 @@ import type { HouseTemplateOption } from '@/character-creation/api';
 
 import { DRAFT_NOTE } from '../copy';
 import { tierNoun } from '../ladder/tree';
+import { ObservanceRows } from '../ObservanceRows';
 import { useCharter } from '../queries';
 
 import type { FounderDraft, UseFounderDraftResult } from './founderDraft';
@@ -235,6 +236,11 @@ export function FounderHouseChapter({
           onChange={(event) => set('backstory', event.target.value)}
         />
       </div>
+      <ObservanceRows
+        idPrefix="founder-house"
+        rows={draft.observances}
+        onChange={(rows) => set('observances', rows)}
+      />
       {quiddity && (
         <div className="field">
           <span className="label">House Quiddity</span>

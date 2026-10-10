@@ -139,6 +139,18 @@ class AlmanachHouseOfficeSerializer(serializers.Serializer):
     holder_name = serializers.CharField(allow_blank=True)
 
 
+class AlmanachHouseObservanceSerializer(serializers.Serializer):
+    """A house's day of remembrance on the document (#4206). ``when`` is the
+    game's one IC date spelling (``format_ic_month_day``); the month and day
+    ride beside it so the chapter can edit the row."""
+
+    ic_month = serializers.IntegerField()
+    ic_day = serializers.IntegerField()
+    name = serializers.CharField()
+    lore = serializers.CharField(allow_blank=True)
+    when = serializers.CharField()
+
+
 class AlmanachHouseDocumentHouseSerializer(serializers.Serializer):
     """The document's ``house`` section (mirrors ``_house_payload``) — the
     only section given its own nested serializer, per the #3983 Task 5
@@ -158,6 +170,7 @@ class AlmanachHouseDocumentHouseSerializer(serializers.Serializer):
     aspects = AlmanachHouseAspectSerializer(many=True)
     features = AlmanachHouseFeatureSerializer(many=True)
     offices = AlmanachHouseOfficeSerializer(many=True)
+    observances = AlmanachHouseObservanceSerializer(many=True)
 
 
 class HouseDocumentSerializer(serializers.Serializer):

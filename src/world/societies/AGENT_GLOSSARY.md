@@ -444,3 +444,7 @@ _Avoid_: co-sign, endorse (Endorse is a separate scene-pose mechanic).
 **can_resolve_appeals**:
 The `OrganizationRank` capability flag gating who may grant or decline an Appeal for that organization — independent of `can_manage_ranks`; staff may always resolve regardless of rank.
 _Avoid_: appeal permission, resolver flag.
+
+**Day of Remembrance** (`OrganizationObservance`, #4206):
+A house's own recurring IC date (month and day, a name, the house's prose), the same shape as a god's feast day. One of the stylings, written by the founder beside the words and sigil (`HouseClaimObservance` on the claim until finalize), edited on the Almanach document, authorable in admin for staff-built houses. Free prose, no catalog, no mechanic on the day.
+_Avoid_: house feast day (that is a god's), founding aspect (an aspect is a catalog pick, ADR-0101), holiday (a realm's, #3638).

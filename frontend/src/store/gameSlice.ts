@@ -96,9 +96,11 @@ export interface Session {
    * stay zeroed. `null` before the baseline effect has run for this scene.
    */
   sceneBaselineId: number | null;
-  /** Ordered thread keys with an open conversation tab (#2165). Never contains 'room'. */
-  openThreadTabs: string[];
-  /** Active conversation tab's thread key; null = the room anchor tab (#2165). */
+  /**
+   * The conversation the rail has selected (#4129): a thread key, `room`, or a
+   * page row's `page:<persona id>`; null is All, the whole feed. One at a
+   * time; the composer's audience is derived from it every render.
+   */
   activeThreadTab: string | null;
   /** Server revision of the latest accepted room snapshot. */
   stateEpoch?: string;
@@ -191,8 +193,9 @@ function applySessionRoomUpdate(
   if (scene === undefined) return;
   if ((session.scene?.id ?? null) !== (scene?.id ?? null)) {
     session.sceneBaselineId = null;
-    session.openThreadTabs = [];
-    session.activeThreadTab = null;
+    // The selection is scene-contextual (#4129): last scene's whisper set is a
+    // mis-send vector. Only the room row survives a scene change.
+    if (session.activeThreadTab !== 'room') session.activeThreadTab = null;
     session.sceneInteractions = [];
     session.sceneRetention = { retained: 0, evicted: 0, warning: false, gap: false };
   }
@@ -220,7 +223,6 @@ export const gameSlice = createSlice({
           sceneInteractions: [],
           threadLastSeen: {},
           sceneBaselineId: null,
-          openThreadTabs: [],
           activeThreadTab: null,
         };
       }
@@ -550,10 +552,10 @@ export const gameSlice = createSlice({
         const nextId = scene?.id ?? null;
         if (previousId !== nextId) {
           session.sceneBaselineId = null;
-          // Tabs are scene-contextual (#2165): a stale tab pointing at last
-          // scene's table/whisper set is a mis-send vector.
-          session.openThreadTabs = [];
-          session.activeThreadTab = null;
+          // The selection is scene-contextual (#4129): a stale row pointing at
+          // last scene's table/whisper set is a mis-send vector. The room row
+          // survives, since the room is still the room.
+          if (session.activeThreadTab !== 'room') session.activeThreadTab = null;
           // The WS interaction buffer is scene-contextual too (2026-07 audit):
           // this clear used to be a separate unconditional dispatch on EVERY
           // room_state frame — and the backend broadcasts room_state to all
@@ -663,59 +665,18 @@ export const gameSlice = createSlice({
         }
       }
     },
-    openThreadTab: (
-      state,
-      action: PayloadAction<{ character: MyRosterEntry['name']; threadKey: string }>
-    ) => {
-      const { character, threadKey } = action.payload;
-      const session = state.sessions[character];
-      if (session) {
-        if (threadKey !== 'room' && !session.openThreadTabs.includes(threadKey)) {
-          session.openThreadTabs.push(threadKey);
-        }
-        session.activeThreadTab = threadKey === 'room' ? null : threadKey;
-      }
-    },
-    closeThreadTab: (
-      state,
-      action: PayloadAction<{ character: MyRosterEntry['name']; threadKey: string }>
-    ) => {
-      const { character, threadKey } = action.payload;
-      const session = state.sessions[character];
-      if (session) {
-        session.openThreadTabs = session.openThreadTabs.filter((k) => k !== threadKey);
-        if (session.activeThreadTab === threadKey) {
-          session.activeThreadTab = null;
-        }
-      }
-    },
+    // The rail's selection (#4129): any row's key, or null for All. Nothing
+    // checks the key against a list of open conversations any more; the rail
+    // offers only rows that exist, and a key whose thread has not backfilled
+    // yet still derives a safe, fail-closed composer mode.
     setActiveThreadTab: (
       state,
       action: PayloadAction<{ character: MyRosterEntry['name']; threadKey: string | null }>
     ) => {
       const { character, threadKey } = action.payload;
       const session = state.sessions[character];
-      if (session && (threadKey === null || session.openThreadTabs.includes(threadKey))) {
+      if (session) {
         session.activeThreadTab = threadKey;
-      }
-    },
-    // localStorage restore (#2165): only seeds a session that hasn't opened
-    // tabs yet — a live session's state always wins over a stale snapshot.
-    hydrateThreadTabs: (
-      state,
-      action: PayloadAction<{
-        character: MyRosterEntry['name'];
-        openThreadTabs: string[];
-        activeThreadTab: string | null;
-      }>
-    ) => {
-      const { character, openThreadTabs, activeThreadTab } = action.payload;
-      const session = state.sessions[character];
-      if (session && session.openThreadTabs.length === 0) {
-        const open = openThreadTabs.filter((k) => k !== 'room');
-        session.openThreadTabs = open;
-        session.activeThreadTab =
-          activeThreadTab !== null && open.includes(activeThreadTab) ? activeThreadTab : null;
       }
     },
     resetGame: () => initialState,
@@ -797,10 +758,7 @@ export const {
   clearSceneInteractions,
   markThreadSeen,
   setSceneBaseline,
-  openThreadTab,
-  closeThreadTab,
   setActiveThreadTab,
-  hydrateThreadTabs,
   resetGame,
   hydrateActiveCharacter,
   setBrowsingIdentity,

@@ -548,6 +548,7 @@ export function buildPiropaDocument(published: boolean): HouseDocument {
         { slug: 'steward-of-the-domains', title: 'Steward of the Domains', holder_name: '' },
         { slug: 'mistress-of-letters', title: 'Mistress of Letters', holder_name: '' },
       ],
+      observances: [],
     },
     family: {
       nodes: [

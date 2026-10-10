@@ -263,6 +263,20 @@ function HouseSection({ orgId, house }: { orgId: number; house: HouseDetail }) {
               </ul>
             </div>
           )}
+          {house.observances.length > 0 && (
+            <div>
+              <h3 className="mb-1 font-semibold">Days of Remembrance</h3>
+              <ul className="space-y-1">
+                {house.observances.map((day) => (
+                  <li key={`${day.ic_month}-${day.ic_day}-${day.name}`}>
+                    <span className="font-medium">{day.name}</span>{' '}
+                    <span className="text-muted-foreground">· {day.when}</span>
+                    {day.lore && <p className="text-muted-foreground">{day.lore}</p>}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
           {house.liege_name && (
             <p>
               <span className="text-muted-foreground">Sworn to</span> {house.liege_name}

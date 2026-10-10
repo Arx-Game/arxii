@@ -394,6 +394,23 @@ two shapes; see Recipe 7 in `docs/systems/family-authoring-recipes.md`.
   inputs. Land writing is a separate, structured surface: see "Founder
   claims" below (`HouseClaimLand`, #3983 Plan B — supersedes the old
   free-text `HouseClaim.lands_writeup` field, dropped in migration 0157).
+- **Days of remembrance** (`OrganizationObservance`, #4206) — a house's own
+  recurring IC date (`ic_month`, `ic_day`, a `name`, the house's `lore`,
+  `display_order`; unique per org on date + name), the same shape as a god's
+  `WorshipFeastDay`. A styling, not an aspect: free prose with no catalog
+  behind it, which is exactly where ADR-0101 confines free text. Zero or more
+  per house. The founder writes them on the House chapter beside the words and
+  sigil (`HouseClaimObservance` rows on the claim, `ClaimObservanceDraft` in
+  `types.py`, `observances` on the nested submit body; the claim gate
+  `validate_observances` requires a name, a month 1..12, a day 1..31 and no
+  same-named row on the same date), `materialize_house_claim` copies them onto
+  the org, `almanach_edit_house` replaces them wholesale with an `observances`
+  list, and staff author them directly in admin (Societies > Organization
+  observances) for staff-built houses. Shown on the org page's house block and
+  the Almanach house document, each spelled through `format_ic_month_day`
+  (`"Masquing 18 (10/18)"`, the `when` key beside the raw month and day). No
+  mechanic rides on the day; the calendar and tidings may read it later the way
+  they read birthdays and feast days.
 - **Materialization** — claim picks become `OrganizationAspect` rows and
   template features stamp `OrganizationFeature` rows (both also directly
   authorable for staff-seeded houses); stylings copy onto the org.
@@ -787,8 +804,9 @@ Ten REGISTRY actions, `category="almanach"`, `target_type=SELF`, all gated
 `StaffOnlyPrerequisite`: `AlmanachPlantRungAction` (`almanach_plant_rung`),
 `AlmanachBatchUnclaimedAction` (`almanach_batch_unclaimed`), `AlmanachNameRungAction`
 (`almanach_name_rung`), `AlmanachEditHouseAction` (`almanach_edit_house` — charter fields, house
-state, succession law default, and a wholesale `OrganizationAspect`/`OrganizationFeature`
-replace), `AlmanachSwearAction` (`almanach_swear`), `AlmanachDescribeDemesneAction`
+state, succession law default, and a wholesale `OrganizationAspect`/`OrganizationFeature`/
+`OrganizationObservance` replace; an `observances` row is `{ic_month, ic_day, name, lore}`,
+#4206), `AlmanachSwearAction` (`almanach_swear`), `AlmanachDescribeDemesneAction`
 (`almanach_describe_demesne`), `AlmanachAddHoldingAction` (`almanach_add_holding`),
 `AlmanachPlanEstateAction` (`almanach_plan_estate`), `AlmanachEditKinAction`
 (`almanach_edit_kin`), `AlmanachPublishAction` (`almanach_publish`).

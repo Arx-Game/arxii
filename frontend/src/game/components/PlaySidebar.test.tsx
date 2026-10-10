@@ -8,9 +8,6 @@ import type { ComponentProps } from 'react';
 vi.mock('./HistoryNavigator', () => ({
   HistoryNavigator: () => <div data-testid="history-navigator">History content</div>,
 }));
-vi.mock('./ConversationSidebar', () => ({
-  ConversationSidebar: () => <div data-testid="conversation-sidebar">Conversations content</div>,
-}));
 vi.mock('./DisplaySettings', () => ({ DisplaySettings: () => null }));
 
 /**
@@ -33,7 +30,7 @@ function ControlledPlaySidebar(
 describe('PlaySidebar', () => {
   it('keeps History mounted (hidden, not removed) when switching to Here', async () => {
     const user = userEvent.setup();
-    render(<ControlledPlaySidebar here={<div>Here content</div>} onThreadClick={vi.fn()} />);
+    render(<ControlledPlaySidebar here={<div>Here content</div>} />);
     await user.click(screen.getByRole('button', { name: /history/i }));
     expect(screen.getByTestId('history-navigator')).toBeVisible();
     await user.click(screen.getByRole('button', { name: /here/i }));
@@ -44,7 +41,7 @@ describe('PlaySidebar', () => {
 
   it("remembers each mode's own scroll position across a switch away and back", async () => {
     const user = userEvent.setup();
-    render(<ControlledPlaySidebar here={<div>Here content</div>} onThreadClick={vi.fn()} />);
+    render(<ControlledPlaySidebar here={<div>Here content</div>} />);
     const scrollEl = screen.getByTestId('play-sidebar-scroll');
 
     // Start on "Here" (the default mode with no threading prop) and scroll it.
@@ -73,14 +70,9 @@ describe('PlaySidebar', () => {
   it('renders the mode passed via the mode prop, not internal state', () => {
     const onModeChange = vi.fn();
     render(
-      <PlaySidebar
-        here={<div>here content</div>}
-        mode="conversations"
-        onModeChange={onModeChange}
-        onThreadClick={vi.fn()}
-      />
+      <PlaySidebar here={<div>here content</div>} mode="history" onModeChange={onModeChange} />
     );
-    expect(screen.getByRole('button', { name: /conversations/i })).toHaveAttribute(
+    expect(screen.getByRole('button', { name: /history/i })).toHaveAttribute(
       'aria-current',
       'page'
     );
@@ -89,25 +81,17 @@ describe('PlaySidebar', () => {
   it('calls onModeChange instead of managing mode internally', async () => {
     const user = userEvent.setup();
     const onModeChange = vi.fn();
-    render(
-      <PlaySidebar
-        here={<div>here content</div>}
-        mode="here"
-        onModeChange={onModeChange}
-        onThreadClick={vi.fn()}
-      />
-    );
+    render(<PlaySidebar here={<div>here content</div>} mode="here" onModeChange={onModeChange} />);
     await user.click(screen.getByRole('button', { name: /history/i }));
     expect(onModeChange).toHaveBeenCalledWith('history');
   });
 
-  it('shows a 4th Combat nav button only when hasActiveEncounter is true', () => {
+  it('shows a Combat nav button only when hasActiveEncounter is true', () => {
     const { rerender } = render(
       <PlaySidebar
         here={<div>here content</div>}
         mode="here"
         onModeChange={vi.fn()}
-        onThreadClick={vi.fn()}
         hasActiveEncounter={false}
       />
     );
@@ -116,9 +100,8 @@ describe('PlaySidebar', () => {
     rerender(
       <PlaySidebar
         here={<div>here content</div>}
-        mode="conversations"
+        mode="history"
         onModeChange={vi.fn()}
-        onThreadClick={vi.fn()}
         hasActiveEncounter={true}
         onJumpToCombat={vi.fn()}
       />
@@ -133,9 +116,8 @@ describe('PlaySidebar', () => {
     render(
       <PlaySidebar
         here={<div>here content</div>}
-        mode="conversations"
+        mode="history"
         onModeChange={onModeChange}
-        onThreadClick={vi.fn()}
         hasActiveEncounter={true}
         onJumpToCombat={onJumpToCombat}
       />

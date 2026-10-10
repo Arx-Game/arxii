@@ -182,6 +182,15 @@ describe('OrgPageInner', () => {
           being_name: 'The Chained Judge',
           codex_entry_id: 55,
         },
+        observances: [
+          {
+            ic_month: 10,
+            ic_day: 18,
+            name: 'Founding Night',
+            lore: 'The first fire on the hill.',
+            when: 'Masquing 18 (10/18)',
+          },
+        ],
       },
     };
     mockedUseOrganizationQuery.mockReturnValue({
@@ -213,6 +222,11 @@ describe('OrgPageInner', () => {
       'href',
       '/codex/55'
     );
+    // A day of remembrance (#4206) reads name, the server-spelled date, then the prose.
+    expect(screen.getByText(/Days of Remembrance/)).toBeInTheDocument();
+    expect(screen.getByText('Founding Night')).toBeInTheDocument();
+    expect(screen.getByText(/Masquing 18 \(10\/18\)/)).toBeInTheDocument();
+    expect(screen.getByText('The first fire on the hill.')).toBeInTheDocument();
   });
 
   it('renders an open domain crisis with its judgment-call options (#2238)', () => {
@@ -263,6 +277,7 @@ describe('OrgPageInner', () => {
         ],
         vacancies: [],
         patron: null,
+        observances: [],
       },
     };
     mockedUseOrganizationQuery.mockReturnValue({
@@ -309,6 +324,7 @@ describe('OrgPageInner', () => {
         },
         vacancies: [],
         patron: null,
+        observances: [],
       },
     };
     mockedUseOrganizationQuery.mockReturnValue({

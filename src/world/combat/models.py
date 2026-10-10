@@ -642,6 +642,10 @@ class CombatOpponent(SharedMemoryModel):
         "Persona-backed opponents resolve their portrait through the persona "
         "instead; this is the fallback when persona is None.",
     )
+    # noqa: OBJECTDB_FIELD
+    # ObjectDB by design (#2608): the opponent's own spawned object. A generic or
+    # ephemeral NPC has no CharacterSheet (persona-less by design, see the portrait
+    # fallback above), so the sheet is not a target it can point at.
     objectdb = models.ForeignKey(
         OBJECTS_OBJECTDB_MODEL,
         on_delete=models.SET_NULL,
@@ -1563,6 +1567,9 @@ class CombatRoundAction(RelatedCacheClearingMixin, CommittingDeclaration, Shared
             "(the universal fallback)."
         ),
     )
+    # noqa: OBJECTDB_FIELD
+    # ObjectDB by design (#2608): any object in the room may be volatile (the help
+    # text below says the same); a narrower model would exclude the prop case.
     redirect_object_target = models.ForeignKey(
         OBJECTS_OBJECTDB_MODEL,
         on_delete=models.SET_NULL,

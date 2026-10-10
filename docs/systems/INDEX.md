@@ -1880,7 +1880,10 @@ Noble/merchant/crime houses as first-class play — a house IS an `Organization`
 - **Founder mode (#3983 Plan B, ADR-0314/ADR-0315):** the CG-facing claim journey — the whole
   draft lives client-side (ADR-0314) until one submit, `POST
   /api/character-creation/drafts/{id}/house-claim/` (`HouseClaimSubmitSerializer`), nested
-  `HouseClaimKin`/`HouseClaimLand` rows and all. `claim_grants(title)` is what a claim actually
+  `HouseClaimKin`/`HouseClaimLand`/`HouseClaimObservance` rows and all (an observance is a
+  house's own day of remembrance, #4206: an IC month and day, a name and the house's prose,
+  copied onto the org as `OrganizationObservance` and shown on the org page and the Almanach
+  document through `format_ic_month_day`). `claim_grants(title)` is what a claim actually
   seats the house on: the seat chain plus the loose baronies inside it, never a vassal's own held
   seat (ADR-0315). `record_kin` is the shared kin-writing engine both the founder finalize path and
   staff's `AlmanachEditKinAction` place nodes through. See [houses.md](houses.md)'s "Founder mode"

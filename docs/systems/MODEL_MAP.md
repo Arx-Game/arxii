@@ -9322,6 +9322,7 @@
   - aspects <- societies.HouseClaimAspect
   - kin <- societies.HouseClaimKin
   - lands <- societies.HouseClaimLand
+  - observances <- societies.HouseClaimObservance
 
 ### HouseClaimAspect
 **Foreign Keys:**
@@ -9340,6 +9341,10 @@
   - claim -> societies.HouseClaim [FK]
   - title -> societies.Title [FK]
   - land_shapes -> societies.LandShape [M2M]
+
+### HouseClaimObservance
+**Foreign Keys:**
+  - claim -> societies.HouseClaim [FK]
 
 ### HouseFeature
 **Foreign Keys:**
@@ -9575,6 +9580,7 @@
   - house_templates <- societies.HouseTemplate
   - aspects <- societies.OrganizationAspect
   - features <- societies.OrganizationFeature
+  - observances <- societies.OrganizationObservance
   - stature <- societies.HouseStature
   - stature_shifts <- societies.StatureShift
   - prestige_rank_row <- societies.OrgPrestigeRank
@@ -9661,6 +9667,10 @@
   - debtor -> character_sheets.CharacterSheet [FK]
   - creditor -> societies.Organization [FK]
   - settled_by_token -> currency.FavorTokenDetails [FK] (nullable)
+
+### OrganizationObservance
+**Foreign Keys:**
+  - organization -> societies.Organization [FK]
 
 ### OrganizationOffice
 **Foreign Keys:**
