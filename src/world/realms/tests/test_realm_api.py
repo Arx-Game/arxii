@@ -126,6 +126,9 @@ class RealmOrganizationsTests(TestCase):
         self.assertEqual(response.status_code, 200)
         rows = response.json()
         self.assertEqual([r["name"] for r in rows], ["House Veyle"])
+        # The gate's fields only. ``family_id`` (#4209) is the Family a house is rooted
+        # in, so the hub can link the house to its public family page; it says nothing
+        # a member knows that a visitor does not, and is null for an org with no family.
         self.assertEqual(
             set(rows[0]),
             {
@@ -137,8 +140,10 @@ class RealmOrganizationsTests(TestCase):
                 "sigil_description",
                 "org_type_name",
                 "society_name",
+                "family_id",
             },
         )
+        self.assertIsNone(rows[0]["family_id"])
 
     def test_member_of_the_covert_row_sees_it_and_a_non_member_does_not(self):
         persona, entry = _persona_of_realm("Isolde", self.realm)
