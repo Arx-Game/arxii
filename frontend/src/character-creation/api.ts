@@ -940,6 +940,15 @@ export interface ClaimLandDraft {
   land_shapes: string[];
 }
 
+/** One founder-written day of remembrance (#4206): an IC month and day, a name,
+ * the house's prose. Mirrors `ClaimObservanceDraftSerializer`. */
+export interface ClaimObservanceDraft {
+  ic_month: number;
+  ic_day: number;
+  name: string;
+  lore: string;
+}
+
 export interface HouseClaimPayload {
   title: number;
   template: number;
@@ -948,6 +957,7 @@ export interface HouseClaimPayload {
   words: string;
   colors: string;
   sigil_description: string;
+  observances: ClaimObservanceDraft[];
   aspects: HouseAspectPick[];
   mercy: number;
   method: number;

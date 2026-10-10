@@ -37,6 +37,9 @@ const doc: HouseDocumentPayload = {
     aspects: [],
     features: [],
     offices: [],
+    observances: [
+      { ic_month: 10, ic_day: 18, name: 'Founding Night', lore: '', when: 'Masquing 18 (10/18)' },
+    ],
   },
   family: { nodes: [], parentage: [], unions: [] },
   household: [],
@@ -105,6 +108,36 @@ test('Gentry toggles like any other state when the realm theme is luxen', async 
 
   await userEvent.click(screen.getByRole('button', { name: 'Save' }));
   expect(mutate).toHaveBeenCalledWith({ org_id: 9, house_state: 'gentry' });
+});
+
+test('editing a day of remembrance saves the whole list, without the spelled date (#4206)', async () => {
+  const mutate = vi.fn();
+  vi.mocked(queries.useAlmanachMutation).mockReturnValue({
+    mutate,
+    mutateAsync: vi.fn(),
+  } as never);
+  vi.mocked(queries.useHouseDocument).mockReturnValue({
+    data: doc,
+    isLoading: false,
+  } as never);
+
+  renderWithProviders(<HouseDocument houseId={9} />);
+  const name = screen.getByLabelText('name', { selector: '#house-9-observance-0-name' });
+  expect(name).toHaveValue('Founding Night');
+  await userEvent.click(screen.getByRole('button', { name: 'Add a day of remembrance' }));
+  await userEvent.type(
+    screen.getByLabelText('name', { selector: '#house-9-observance-1-name' }),
+    'The Vigil'
+  );
+
+  await userEvent.click(screen.getByRole('button', { name: 'Save' }));
+  expect(mutate).toHaveBeenCalledWith({
+    org_id: 9,
+    observances: [
+      { ic_month: 10, ic_day: 18, name: 'Founding Night', lore: '' },
+      { ic_month: 1, ic_day: 1, name: 'The Vigil', lore: '' },
+    ],
+  });
 });
 
 test('Gentry stays disabled ("Luxen only") when the realm theme is not luxen', () => {

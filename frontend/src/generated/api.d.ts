@@ -25400,11 +25400,24 @@ export interface components {
       aspects: components['schemas']['AlmanachHouseAspect'][];
       features: components['schemas']['AlmanachHouseFeature'][];
       offices: components['schemas']['AlmanachHouseOffice'][];
+      observances: components['schemas']['AlmanachHouseObservance'][];
     };
     AlmanachHouseFeature: {
       name: string;
       slug: string;
       description: string;
+    };
+    /**
+     * @description A house's day of remembrance on the document (#4206). ``when`` is the
+     *     game's one IC date spelling (``format_ic_month_day``); the month and day
+     *     ride beside it so the chapter can edit the row.
+     */
+    AlmanachHouseObservance: {
+      ic_month: number;
+      ic_day: number;
+      name: string;
+      lore: string;
+      when: string;
     };
     AlmanachHouseOffice: {
       slug: string;
@@ -28092,6 +28105,18 @@ export interface components {
       /** @default  */
       hall_name: string;
       land_shapes?: string[];
+    };
+    /**
+     * @description One founder-written day of remembrance (#4206); converted to a
+     *     ``ClaimObservanceDraft`` by ``HouseClaimSubmitSerializer.validate()``.
+     *     Calendar bounds are checked by the service's shared gate.
+     */
+    ClaimObservanceDraftRequest: {
+      ic_month: number;
+      ic_day: number;
+      name: string;
+      /** @default  */
+      lore: string;
     };
     /** @description A vacant set-aside title open to CG house definition (#1884 Phase D). */
     ClaimableTitle: {
@@ -32593,6 +32618,14 @@ export interface components {
       hall_name?: string;
       readonly land_shapes: string[];
     };
+    /** @description One founder-written day of remembrance, as CG echoes it back (#4206). */
+    HouseClaimObservance: {
+      ic_month: number;
+      ic_day: number;
+      name: string;
+      lore?: string;
+      sort_order?: number;
+    };
     /** @description The draft's house claim, as CG shows it (#1884 Phase D, #2079, #3983 Plan B). */
     HouseClaimStatus: {
       readonly id: number;
@@ -32612,6 +32645,7 @@ export interface components {
       }[];
       readonly kin: components['schemas']['HouseClaimKin'][];
       readonly lands: components['schemas']['HouseClaimLand'][];
+      readonly observances: components['schemas']['HouseClaimObservance'][];
       estate_name?: string;
       estate_description?: string;
       readonly estate_district_id: number | null;
@@ -32675,6 +32709,7 @@ export interface components {
       kin?: components['schemas']['ClaimKinDraftRequest'][];
       lands?: components['schemas']['ClaimLandDraftRequest'][];
       estate?: components['schemas']['ClaimEstateRequest'] | null;
+      observances?: components['schemas']['ClaimObservanceDraftRequest'][];
     };
     /** @description An open DomainCrisis on the house block (#2238). */
     HouseCrisis: {
@@ -32713,6 +32748,7 @@ export interface components {
       open_crises: components['schemas']['HouseCrisis'][];
       stature: components['schemas']['HouseStature'] | null;
       vacancies: components['schemas']['VacancyOffer'][];
+      observances: components['schemas']['HouseObservance'][];
     };
     /**
      * @description The Almanach house document (mirrors ``almanach_reads.HouseDocument``).
@@ -32763,6 +32799,17 @@ export interface components {
       name: string;
       slug: string;
       description: string;
+    };
+    /**
+     * @description A house's day of remembrance as the house block shows it (#4206); ``when``
+     *     is the game's one IC date spelling.
+     */
+    HouseObservance: {
+      ic_month: number;
+      ic_day: number;
+      name: string;
+      lore: string;
+      when: string;
     };
     /**
      * @description * `standing` - Standing

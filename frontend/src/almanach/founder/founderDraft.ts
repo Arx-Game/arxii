@@ -11,7 +11,11 @@
  */
 import { useEffect, useRef, useState } from 'react';
 
-import type { HouseClaimPayload, HouseTemplateOption } from '@/character-creation/api';
+import type {
+  ClaimObservanceDraft,
+  HouseClaimPayload,
+  HouseTemplateOption,
+} from '@/character-creation/api';
 import type { ClaimKinRelation } from '@/character-creation/types';
 
 export interface FounderKin {
@@ -51,6 +55,8 @@ export interface FounderDraft {
   lands: Record<number, FounderLand>;
   estate_name: string;
   estate_description: string;
+  /** The house's days of remembrance (#4206), written on the House chapter. */
+  observances: ClaimObservanceDraft[];
 }
 
 function emptyDraft(): FounderDraft {
@@ -71,6 +77,7 @@ function emptyDraft(): FounderDraft {
     lands: {},
     estate_name: '',
     estate_description: '',
+    observances: [],
   };
 }
 
@@ -236,5 +243,11 @@ export function toClaimPayload(d: FounderDraft, template: HouseTemplateOption): 
       land_shapes: land.land_shape_names,
     })),
     estate: { name: d.estate_name, description: d.estate_description },
+    observances: d.observances.map((row) => ({
+      ic_month: row.ic_month,
+      ic_day: row.ic_day,
+      name: row.name,
+      lore: row.lore,
+    })),
   };
 }

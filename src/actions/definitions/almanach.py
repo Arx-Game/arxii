@@ -237,13 +237,56 @@ def _prepare_house_edit(*, org, kwargs):
         org.default_succession_law = law
         update_fields.append("default_succession_law")
 
-    aspect_options = _resolve_house_aspects(kwargs.get("aspect_option_ids"))
-    if isinstance(aspect_options, ActionResult):
-        return aspect_options
-    features = _resolve_house_features(kwargs.get("feature_ids"))
-    if isinstance(features, ActionResult):
-        return features
-    return update_fields, aspect_options, features
+    collections = _resolve_house_collections(kwargs)
+    if isinstance(collections, ActionResult):
+        return collections
+    return (update_fields, *collections)
+
+
+def _resolve_house_collections(kwargs):
+    """Resolve the replace-wholesale lists (aspects, features, observances) in
+    that order, or return the first refusal. ``None`` for a list the caller
+    did not send."""
+    resolved = []
+    for resolver, key in (
+        (_resolve_house_aspects, "aspect_option_ids"),
+        (_resolve_house_features, "feature_ids"),
+        (_resolve_house_observances, "observances"),
+    ):
+        value = resolver(kwargs.get(key))
+        if isinstance(value, ActionResult):
+            return value
+        resolved.append(value)
+    return tuple(resolved)
+
+
+def _resolve_house_observances(rows):
+    """Read the requested days of remembrance (#4206) through the claim gate's
+    own validator, or return its refusal. ``None`` leaves the house's rows alone;
+    a list (even ``[]``) replaces them."""
+    from world.societies.houses.creator import validate_observances  # noqa: PLC0415
+    from world.societies.houses.services import HousesServiceError  # noqa: PLC0415
+    from world.societies.houses.types import ClaimObservanceDraft  # noqa: PLC0415
+
+    if rows is None:
+        return None
+    try:
+        drafts = [
+            ClaimObservanceDraft(
+                ic_month=int(row.get("ic_month", 0)),
+                ic_day=int(row.get("ic_day", 0)),
+                name=str(row.get("name", "")),
+                lore=str(row.get("lore", "")),
+            )
+            for row in rows
+        ]
+    except (AttributeError, TypeError, ValueError):
+        return ActionResult(success=False, message="A day of remembrance needs a month and a day.")
+    try:
+        validate_observances(drafts)
+    except HousesServiceError as exc:
+        return ActionResult(success=False, message=exc.user_message)
+    return drafts
 
 
 def _resolve_house_aspects(aspect_option_ids):
@@ -277,10 +320,11 @@ class AlmanachEditHouseAction(_AlmanachAction):
     Kwargs: ``org_id``, optional ``name``/``words``/``colors``/
     ``sigil_description``/``description`` (absent leaves untouched),
     optional ``house_state``, optional ``default_succession_law_id`` (falsy
-    clears it), and optional ``aspect_option_ids``/``feature_ids`` lists —
-    each, when present (even ``[]``), REPLACES the house's
-    ``OrganizationAspect``/``OrganizationFeature`` rows wholesale (#3983
-    Decision 4).
+    clears it), and optional ``aspect_option_ids``/``feature_ids``/
+    ``observances`` lists — each, when present (even ``[]``), REPLACES the
+    house's ``OrganizationAspect``/``OrganizationFeature``/
+    ``OrganizationObservance`` rows wholesale (#3983 Decision 4; #4206). An
+    observance row is ``{ic_month, ic_day, name, lore}``.
     """
 
     key: str = "almanach_edit_house"
@@ -298,6 +342,7 @@ class AlmanachEditHouseAction(_AlmanachAction):
         from world.societies.houses.models import (  # noqa: PLC0415
             OrganizationAspect,
             OrganizationFeature,
+            OrganizationObservance,
         )
         from world.societies.models import Organization  # noqa: PLC0415
 
@@ -312,7 +357,7 @@ class AlmanachEditHouseAction(_AlmanachAction):
         prepared = _prepare_house_edit(org=org, kwargs=kwargs)
         if isinstance(prepared, ActionResult):
             return prepared
-        update_fields, aspect_options, features = prepared
+        update_fields, aspect_options, features, observances = prepared
 
         with transaction.atomic():
             if update_fields:
@@ -329,6 +374,19 @@ class AlmanachEditHouseAction(_AlmanachAction):
                 OrganizationFeature.objects.filter(organization=org).delete()
                 OrganizationFeature.objects.bulk_create(
                     OrganizationFeature(organization=org, feature=feature) for feature in features
+                )
+            if observances is not None:
+                OrganizationObservance.objects.filter(organization=org).delete()
+                OrganizationObservance.objects.bulk_create(
+                    OrganizationObservance(
+                        organization=org,
+                        ic_month=row.ic_month,
+                        ic_day=row.ic_day,
+                        name=row.name.strip(),
+                        lore=row.lore,
+                        display_order=index,
+                    )
+                    for index, row in enumerate(observances)
                 )
         return ActionResult(success=True, message=f"{org.name} updated.", data={"org_id": org.pk})
 

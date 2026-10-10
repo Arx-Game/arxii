@@ -35,3 +35,13 @@ class ClaimLandDraft:
     description: str = ""
     hall_name: str = ""
     land_shape_names: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
+class ClaimObservanceDraft:
+    """One day of remembrance the founder writes for the house (#4206)."""
+
+    ic_month: int
+    ic_day: int
+    name: str
+    lore: str = ""

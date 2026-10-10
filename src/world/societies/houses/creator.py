@@ -34,17 +34,27 @@ from world.societies.houses.almanach import (
     plan_estate,
     record_kin,
 )
-from world.societies.houses.constants import TITLE_TIER_RANK, ClaimKinRelation, HouseClaimStatus
+from world.societies.houses.constants import (
+    IC_DAY_MAX,
+    IC_DAY_MIN,
+    IC_MONTH_MAX,
+    IC_MONTH_MIN,
+    TITLE_TIER_RANK,
+    ClaimKinRelation,
+    HouseClaimStatus,
+)
 from world.societies.houses.models import (
     Domain,
     HouseClaim,
     HouseClaimAspect,
     HouseClaimKin,
     HouseClaimLand,
+    HouseClaimObservance,
     HouseTemplate,
     LandShape,
     OrganizationAspect,
     OrganizationFeature,
+    OrganizationObservance,
     Title,
 )
 from world.societies.houses.services import (
@@ -53,7 +63,7 @@ from world.societies.houses.services import (
     swear_fealty,
     sync_house_channel,
 )
-from world.societies.houses.types import ClaimKinDraft, ClaimLandDraft
+from world.societies.houses.types import ClaimKinDraft, ClaimLandDraft, ClaimObservanceDraft
 from world.societies.models import Organization
 
 if TYPE_CHECKING:
@@ -194,6 +204,7 @@ def _validate_claim(  # noqa: PLR0913 — keyword-only; one arg per gate input
     lands: list[ClaimLandDraft],
     estate_name: str,
     founder_relation: str,
+    observances: list[ClaimObservanceDraft],
 ) -> None:
     """The automated thematic gates. Staff review is the human gate after."""
     if HouseClaim.objects.filter(draft=draft).exists():
@@ -224,6 +235,7 @@ def _validate_claim(  # noqa: PLR0913 — keyword-only; one arg per gate input
         msg = "empty backstory"
         raise HousesServiceError(msg, user_message="The house needs its story.")
     _validate_stylings(words=words, colors=colors, sigil_description=sigil_description)
+    validate_observances(observances)
     _validate_aspect_picks(template=template, aspect_picks=aspect_picks)
     for axis in _PRINCIPLE_AXES:
         value = principles.get(axis, 0)
@@ -261,6 +273,34 @@ def _validate_stylings(*, words: str, colors: str, sigil_description: str) -> No
 
 
 _FOUNDER_NEEDS_HEAD = (ClaimKinRelation.CHILD, ClaimKinRelation.SIBLING, ClaimKinRelation.SPOUSE)
+
+
+def validate_observances(observances: list[ClaimObservanceDraft]) -> None:
+    """A day of remembrance needs a name and a date on the IC calendar (#4206).
+
+    Shared by the claim gate and the Almanach edit action, so a staff edit and a
+    founder's draft refuse the same rows. Two rows may share a date (a founding
+    and a vigil on the same day); the same name on the same date is one row
+    written twice.
+    """
+    seen: set[tuple[int, int, str]] = set()
+    for row in observances:
+        if not row.name.strip():
+            msg = "unnamed observance"
+            raise HousesServiceError(msg, user_message="Name the day of remembrance.")
+        if not (IC_MONTH_MIN <= row.ic_month <= IC_MONTH_MAX):
+            msg = f"observance month {row.ic_month} off the calendar"
+            raise HousesServiceError(msg, user_message="That month is not on the calendar.")
+        if not (IC_DAY_MIN <= row.ic_day <= IC_DAY_MAX):
+            msg = f"observance day {row.ic_day} off the calendar"
+            raise HousesServiceError(msg, user_message="That day is not on the calendar.")
+        key = (row.ic_month, row.ic_day, row.name.strip().casefold())
+        if key in seen:
+            msg = f"observance {row.name!r} on {row.ic_month}/{row.ic_day} written twice"
+            raise HousesServiceError(
+                msg, user_message="That day of remembrance is already written."
+            )
+        seen.add(key)
 
 
 def _validate_kin_and_lands(  # noqa: PLR0913 — one gate per rule, keyword-only
@@ -398,13 +438,15 @@ def submit_house_claim(  # noqa: PLR0913 — keyword-only; one arg per gate inpu
     estate_description: str = "",
     founder_relation: str = ClaimKinRelation.HEAD,
     founder_is_heir: bool = False,
+    observances: list[ClaimObservanceDraft] = (),
 ) -> HouseClaim:
-    """Run the automated gates and file the claim (+ its kin/land rows) for
-    staff review (#3983 Plan B)."""
+    """Run the automated gates and file the claim (+ its kin/land/observance
+    rows) for staff review (#3983 Plan B, #4206)."""
     principles = principles or {}
     aspect_picks = aspect_picks or {}
     kin = list(kin)
     lands = list(lands)
+    observances = list(observances)
     _validate_claim(
         draft=draft,
         title=title,
@@ -420,6 +462,7 @@ def submit_house_claim(  # noqa: PLR0913 — keyword-only; one arg per gate inpu
         lands=lands,
         estate_name=estate_name,
         founder_relation=founder_relation,
+        observances=observances,
     )
     field_values = {_CLAIM_FIELD[axis]: principles.get(axis, 0) for axis in _PRINCIPLE_AXES}
     with transaction.atomic():
@@ -476,6 +519,17 @@ def submit_house_claim(  # noqa: PLR0913 — keyword-only; one arg per gate inpu
             )
             if land.land_shape_names:
                 land_row.land_shapes.set(LandShape.objects.filter(name__in=land.land_shape_names))
+        HouseClaimObservance.objects.bulk_create(
+            HouseClaimObservance(
+                claim=claim,
+                ic_month=row.ic_month,
+                ic_day=row.ic_day,
+                name=row.name.strip(),
+                lore=row.lore,
+                sort_order=index,
+            )
+            for index, row in enumerate(observances)
+        )
     return claim
 
 
@@ -877,6 +931,20 @@ def materialize_house_claim(claim: HouseClaim, *, sheet: CharacterSheet) -> Orga
     org.allegiance_override = claim.allegiance
     org.power_override = claim.power
     org.save()
+    # The founder's days of remembrance (#4206) go onto the house the way the
+    # words and sigil just did: one styling row per claim row, in the order
+    # the founder wrote them.
+    OrganizationObservance.objects.bulk_create(
+        OrganizationObservance(
+            organization=org,
+            ic_month=row.ic_month,
+            ic_day=row.ic_day,
+            name=row.name,
+            lore=row.lore,
+            display_order=row.sort_order,
+        )
+        for row in claim.observances.all()
+    )
 
     # ``family`` is a forwarding property onto the sheet's true Profile
     # (#1270); a plain save() persists the profile first.
