@@ -12,7 +12,7 @@
  */
 
 import { useMemo } from 'react';
-import { useParams } from 'react-router-dom';
+import { Link, useParams } from 'react-router-dom';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
@@ -218,17 +218,36 @@ function HouseSection({ orgId, house }: { orgId: number; house: HouseDetail }) {
               ))}
             </div>
           )}
+          {house.patron && (
+            <p>
+              <span className="text-muted-foreground">Patron:</span> {house.patron.nickname}{' '}
+              {house.patron.codex_entry_id != null ? (
+                <Link to={`/codex/${house.patron.codex_entry_id}`} className="underline">
+                  ({house.patron.being_name})
+                </Link>
+              ) : (
+                <>({house.patron.being_name})</>
+              )}
+            </p>
+          )}
           {house.aspects.length > 0 && (
             <div className="flex flex-wrap gap-1">
-              {house.aspects.map((aspect) => (
-                <Badge
-                  key={`${aspect.definition}-${aspect.option}`}
-                  variant="secondary"
-                  title={aspect.description}
-                >
-                  {aspect.definition}: {aspect.option}
-                </Badge>
-              ))}
+              {house.aspects.map((aspect) => {
+                const badge = (
+                  <Badge variant="secondary" title={aspect.description}>
+                    {aspect.definition}: {aspect.option}
+                  </Badge>
+                );
+                const key = `${aspect.definition}-${aspect.option}`;
+                // A pick that IS a god, a totem or a lore entry opens it (#4205).
+                return aspect.target_entry_id != null ? (
+                  <Link key={key} to={`/codex/${aspect.target_entry_id}`}>
+                    {badge}
+                  </Link>
+                ) : (
+                  <span key={key}>{badge}</span>
+                );
+              })}
             </div>
           )}
           {house.features.length > 0 && (
@@ -239,6 +258,20 @@ function HouseSection({ orgId, house }: { orgId: number; house: HouseDetail }) {
                   <li key={feature.slug}>
                     <span className="font-medium">{feature.name}</span>{' '}
                     <span className="text-muted-foreground">- {feature.description}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+          {house.observances.length > 0 && (
+            <div>
+              <h3 className="mb-1 font-semibold">Days of Remembrance</h3>
+              <ul className="space-y-1">
+                {house.observances.map((day) => (
+                  <li key={`${day.ic_month}-${day.ic_day}-${day.name}`}>
+                    <span className="font-medium">{day.name}</span>{' '}
+                    <span className="text-muted-foreground">· {day.when}</span>
+                    {day.lore && <p className="text-muted-foreground">{day.lore}</p>}
                   </li>
                 ))}
               </ul>

@@ -41494,6 +41494,10 @@ components:
       - ap_amount
     AlmanachHouseAspect:
       type: object
+      description: |-
+        One picked aspect (mirrors ``almanach_reads.aspect_facet``): ``being_name``
+        is the god or totem the answer is (#4205), ``target_entry_id`` the one Codex
+        entry it opens.
       properties:
         definition:
           type: string
@@ -41501,10 +41505,17 @@ components:
           type: string
         description:
           type: string
+        being_name:
+          type: string
+        target_entry_id:
+          type: integer
+          nullable: true
       required:
+      - being_name
       - definition
       - description
       - option
+      - target_entry_id
     AlmanachHouseDocumentHouse:
       type: object
       description: |-
@@ -41536,6 +41547,10 @@ components:
           allOf:
           - $ref: '#/components/schemas/AlmanachSuccessionLaw'
           nullable: true
+        patron:
+          allOf:
+          - $ref: '#/components/schemas/AlmanachHousePatron'
+          nullable: true
         aspects:
           type: array
           items:
@@ -41548,6 +41563,10 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/AlmanachHouseOffice'
+        observances:
+          type: array
+          items:
+            $ref: '#/components/schemas/AlmanachHouseObservance'
       required:
       - aspects
       - colors
@@ -41557,8 +41576,10 @@ components:
       - house_state
       - id
       - name
+      - observances
       - offices
       - particle_example
+      - patron
       - published_at
       - sigil_description
       - words
@@ -41575,6 +41596,29 @@ components:
       - description
       - name
       - slug
+    AlmanachHouseObservance:
+      type: object
+      description: |-
+        A house's day of remembrance on the document (#4206). ``when`` is the
+        game's one IC date spelling (``format_ic_month_day``); the month and day
+        ride beside it so the chapter can edit the row.
+      properties:
+        ic_month:
+          type: integer
+        ic_day:
+          type: integer
+        name:
+          type: string
+        lore:
+          type: string
+        when:
+          type: string
+      required:
+      - ic_day
+      - ic_month
+      - lore
+      - name
+      - when
     AlmanachHouseOffice:
       type: object
       properties:
@@ -41588,6 +41632,23 @@ components:
       - holder_name
       - slug
       - title
+    AlmanachHousePatron:
+      type: object
+      description: |-
+        The house's patron by its own name for it (#4205; mirrors
+        ``almanach_reads.patron_payload``).
+      properties:
+        nickname:
+          type: string
+        being_name:
+          type: string
+        codex_entry_id:
+          type: integer
+          nullable: true
+      required:
+      - being_name
+      - codex_entry_id
+      - nickname
     AlmanachHouseSummary:
       type: object
       description: |-
@@ -47302,6 +47363,28 @@ components:
             minLength: 1
       required:
       - title
+    ClaimObservanceDraftRequest:
+      type: object
+      description: |-
+        One founder-written day of remembrance (#4206); converted to a
+        ``ClaimObservanceDraft`` by ``HouseClaimSubmitSerializer.validate()``.
+        Calendar bounds are checked by the service's shared gate.
+      properties:
+        ic_month:
+          type: integer
+        ic_day:
+          type: integer
+        name:
+          type: string
+          minLength: 1
+          maxLength: 120
+        lore:
+          type: string
+          default: ''
+      required:
+      - ic_day
+      - ic_month
+      - name
     ClaimableTitle:
       type: object
       description: A vacant set-aside title open to CG house definition (#1884 Phase
@@ -48041,9 +48124,13 @@ components:
         anchor:
           type: string
           nullable: true
+        href:
+          type: string
+          nullable: true
       required:
       - anchor
       - entry_id
+      - href
       - text
     CompanionOrderSummary:
       type: object
@@ -56853,7 +56940,10 @@ components:
       - prompt
     HouseAspectFacet:
       type: object
-      description: One picked identity facet on the house block (#2079).
+      description: |-
+        One picked identity facet on the house block (#2079; mirrors
+        ``almanach_reads.aspect_facet``). ``being_name`` is the god or totem the answer
+        is (#4205), ``target_entry_id`` the one Codex entry it opens.
       properties:
         definition:
           type: string
@@ -56861,17 +56951,27 @@ components:
           type: string
         description:
           type: string
+        being_name:
+          type: string
+        target_entry_id:
+          type: integer
+          nullable: true
       required:
+      - being_name
       - definition
       - description
       - option
+      - target_entry_id
     HouseAspectOption:
       type: object
       description: |-
         One authored answer in an aspect catalog (#2079).
 
         ``codex_entry_id`` (#2868) lets the CG option card link the option's lore
-        write-up — Inferna's House Quiddities each have one.
+        write-up — Inferna's House Quiddities each have one. ``being_id``/``being_name``
+        say what the option IS when it is a god or a totem (#4205), and
+        ``target_entry_id`` is the one entry the card opens: the option's own, else
+        the being's page.
       properties:
         id:
           type: integer
@@ -56886,10 +56986,25 @@ components:
           type: integer
           readOnly: true
           nullable: true
+        being_id:
+          type: integer
+          readOnly: true
+          nullable: true
+        being_name:
+          type: string
+          readOnly: true
+          default: ''
+        target_entry_id:
+          type: integer
+          readOnly: true
+          nullable: true
       required:
+      - being_id
+      - being_name
       - codex_entry_id
       - id
       - name
+      - target_entry_id
     HouseClaimKin:
       type: object
       description: One founder-written kin row, as CG echoes it back (#3983 Plan B).
@@ -56950,6 +57065,31 @@ components:
       required:
       - land_shapes
       - title_id
+    HouseClaimObservance:
+      type: object
+      description: One founder-written day of remembrance, as CG echoes it back (#4206).
+      properties:
+        ic_month:
+          type: integer
+          maximum: 12
+          minimum: 1
+        ic_day:
+          type: integer
+          maximum: 31
+          minimum: 1
+        name:
+          type: string
+          maxLength: 120
+        lore:
+          type: string
+        sort_order:
+          type: integer
+          maximum: 32767
+          minimum: 0
+      required:
+      - ic_day
+      - ic_month
+      - name
     HouseClaimStatus:
       type: object
       description: 'The draft''s house claim, as CG shows it (#1884 Phase D, #2079,
@@ -56996,6 +57136,11 @@ components:
           items:
             $ref: '#/components/schemas/HouseClaimLand'
           readOnly: true
+        observances:
+          type: array
+          items:
+            $ref: '#/components/schemas/HouseClaimObservance'
+          readOnly: true
         estate_name:
           type: string
           maxLength: 120
@@ -57029,6 +57174,7 @@ components:
       - id
       - kin
       - lands
+      - observances
       - title_name
     HouseClaimStatusStatusEnum:
       enum:
@@ -57108,6 +57254,10 @@ components:
           allOf:
           - $ref: '#/components/schemas/ClaimEstateRequest'
           nullable: true
+        observances:
+          type: array
+          items:
+            $ref: '#/components/schemas/ClaimObservanceDraftRequest'
       required:
       - backstory
       - house_name
@@ -57201,6 +57351,10 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/HouseDomain'
+        patron:
+          allOf:
+          - $ref: '#/components/schemas/HousePatron'
+          nullable: true
         aspects:
           type: array
           items:
@@ -57221,6 +57375,10 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/VacancyOffer'
+        observances:
+          type: array
+          items:
+            $ref: '#/components/schemas/HouseObservance'
       required:
       - aspects
       - demesne
@@ -57229,7 +57387,9 @@ components:
       - features
       - house_state
       - liege_name
+      - observances
       - open_crises
+      - patron
       - stature
       - titles
       - vacancies
@@ -57336,6 +57496,45 @@ components:
       - description
       - name
       - slug
+    HouseObservance:
+      type: object
+      description: |-
+        A house's day of remembrance as the house block shows it (#4206); ``when``
+        is the game's one IC date spelling.
+      properties:
+        ic_month:
+          type: integer
+        ic_day:
+          type: integer
+        name:
+          type: string
+        lore:
+          type: string
+        when:
+          type: string
+      required:
+      - ic_day
+      - ic_month
+      - lore
+      - name
+      - when
+    HousePatron:
+      type: object
+      description: |-
+        The house's patron by its own name for it (#4205; mirrors
+        ``almanach_reads.patron_payload``).
+      properties:
+        nickname:
+          type: string
+        being_name:
+          type: string
+        codex_entry_id:
+          type: integer
+          nullable: true
+      required:
+      - being_name
+      - codex_entry_id
+      - nickname
     HouseStateEnum:
       enum:
       - standing

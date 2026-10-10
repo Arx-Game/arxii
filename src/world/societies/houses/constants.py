@@ -3,6 +3,15 @@
 from django.db import models
 
 from world.areas.constants import AreaLevel
+from world.game_clock.constants import IC_MONTH_NAMES
+
+# The IC calendar a house observance can sit on (#4206): months are 1:1 with
+# the Gregorian layout (#4185), so a day runs to 31 like a feast day's. The
+# model validators and the claim gate both read these.
+IC_MONTH_MIN = 1
+IC_MONTH_MAX = len(IC_MONTH_NAMES)
+IC_DAY_MIN = 1
+IC_DAY_MAX = 31
 
 # --- Domain economics (#2238) — PLACEHOLDER magnitudes ---
 # Prosperity at which a domain's holdings yield their base gross (a neutral 1.0x).

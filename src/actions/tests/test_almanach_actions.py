@@ -254,6 +254,58 @@ class AlmanachActionTests(TestCase):
             )
         ) == [feature.pk]
 
+    def test_edit_house_replaces_observances_and_refuses_bad_rows(self) -> None:
+        """#4206: ``observances`` replaces the house's days wholesale through the
+        claim gate's own validator; an absent kwarg leaves them alone."""
+        from world.societies.houses.models import OrganizationObservance
+
+        result = AlmanachEditHouseAction().run(
+            self.staff,
+            org_id=self.crown.pk,
+            observances=[
+                {"ic_month": 10, "ic_day": 18, "name": "Founding Night", "lore": "The first fire."},
+                {"ic_month": 1, "ic_day": 2, "name": "The Vigil"},
+            ],
+        )
+        assert result.success, result.message
+        rows = list(OrganizationObservance.objects.filter(organization=self.crown))
+        assert [(r.ic_month, r.ic_day, r.name, r.display_order) for r in rows] == [
+            (1, 2, "The Vigil", 1),
+            (10, 18, "Founding Night", 0),
+        ]
+        assert rows[1].lore == "The first fire."
+
+        # A words-only edit leaves the days untouched.
+        result = AlmanachEditHouseAction().run(self.staff, org_id=self.crown.pk, words="Kept.")
+        assert result.success, result.message
+        assert OrganizationObservance.objects.filter(organization=self.crown).count() == 2
+
+        # Off the calendar, unnamed, or written twice: refused, nothing written.
+        for bad, message in (
+            ([{"ic_month": 13, "ic_day": 1, "name": "Nowhen"}], "month"),
+            ([{"ic_month": 1, "ic_day": 0, "name": "Nowhen"}], "day"),
+            ([{"ic_month": 1, "ic_day": 1, "name": "  "}], "Name"),
+            (
+                [
+                    {"ic_month": 1, "ic_day": 1, "name": "Twice"},
+                    {"ic_month": 1, "ic_day": 1, "name": "twice"},
+                ],
+                "already",
+            ),
+            ([{"ic_month": "ten", "ic_day": 1, "name": "Nowhen"}], "month"),
+        ):
+            result = AlmanachEditHouseAction().run(
+                self.staff, org_id=self.crown.pk, observances=bad
+            )
+            assert not result.success, bad
+            assert message in result.message, result.message
+        assert OrganizationObservance.objects.filter(organization=self.crown).count() == 2
+
+        # An empty list clears them.
+        result = AlmanachEditHouseAction().run(self.staff, org_id=self.crown.pk, observances=[])
+        assert result.success, result.message
+        assert not OrganizationObservance.objects.filter(organization=self.crown).exists()
+
     def test_swear(self) -> None:
         vassal = OrganizationFactory(name="House Vassal")
         result = AlmanachSwearAction().run(

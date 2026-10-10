@@ -2,6 +2,7 @@ import React, { useMemo } from 'react';
 
 import { type Segment, parseFormattedContent } from '@/lib/formatParser';
 import { cn } from '@/lib/utils';
+import { markMatches, useFeedFind } from '@/game/feedFind';
 
 /*
  * The index IS the identity of a segment here, not a fallback key.
@@ -29,20 +30,24 @@ export const FormattedContent = React.memo(function FormattedContent({
   className,
 }: FormattedContentProps) {
   const segments = useMemo(() => parseFormattedContent(content), [content]);
+  // Find in this session (#4129): the needle the rail's find box holds; each
+  // match is marked where the text is drawn, inside whatever styling it has.
+  const find = useFeedFind();
   return (
     <span className={cn('[overflow-wrap:anywhere]', className)}>
       {segments.map((segment: Segment, i: number) => {
+        const text = markMatches(segment.content, find);
         switch (segment.type) {
           case 'bold':
-            return <strong key={i}>{segment.content}</strong>;
+            return <strong key={i}>{text}</strong>;
           case 'italic':
-            return <em key={i}>{segment.content}</em>;
+            return <em key={i}>{text}</em>;
           case 'strikethrough':
-            return <del key={i}>{segment.content}</del>;
+            return <del key={i}>{text}</del>;
           case 'color':
             return (
               <span key={i} style={{ color: segment.hex }}>
-                {segment.content}
+                {text}
               </span>
             );
           case 'link':
@@ -54,11 +59,11 @@ export const FormattedContent = React.memo(function FormattedContent({
                 rel="noopener noreferrer"
                 className="text-blue-500 underline hover:text-blue-700"
               >
-                {segment.content}
+                {text}
               </a>
             );
           default:
-            return <span key={i}>{segment.content}</span>;
+            return <span key={i}>{text}</span>;
         }
       })}
     </span>

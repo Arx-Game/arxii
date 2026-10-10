@@ -820,6 +820,7 @@ class ItemInstance(SharedMemoryModel):
         related_name="instances",
         help_text="The archetype this item is based on.",
     )
+    # noqa: OBJECTDB_FIELD
     # ObjectDB by design (#2608): the item's own physical object — by definition a
     # non-character object with no more specific model.
     game_object = models.OneToOneField(

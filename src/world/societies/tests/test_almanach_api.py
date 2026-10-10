@@ -18,6 +18,7 @@ from world.societies.factories import OrganizationFactory
 from world.societies.houses.almanach import plant_rung, publish_house
 from world.societies.houses.almanach_reads import document_for_house
 from world.societies.houses.constants import SuccessionDerivation, TitleTier
+from world.societies.houses.factories import OrganizationObservanceFactory
 from world.societies.houses.models import (
     HouseAspectDefinition,
     HouseTemplate,
@@ -64,6 +65,28 @@ class AlmanachApiTests(TestCase):
         law_payload = res.data["house"]["default_succession_law"]
         assert law_payload["name"] == self.law.name
         assert law_payload["codex_entry_id"] is None
+
+    def test_document_carries_the_houses_days_of_remembrance(self) -> None:
+        """#4206: the house section lists its observances in calendar order,
+        each spelled with the game's one IC date formatter."""
+        OrganizationObservanceFactory(
+            organization=self.crown, ic_month=10, ic_day=18, name="Founding Night", lore="Fire."
+        )
+        OrganizationObservanceFactory(organization=self.crown, ic_month=1, ic_day=2, name="Vigil")
+        client = APIClient()
+        client.force_authenticate(self.staff)
+        res = client.get(f"/api/almanach/houses/{self.crown.pk}/document/")
+        assert res.status_code == 200
+        assert res.data["house"]["observances"] == [
+            {"ic_month": 1, "ic_day": 2, "name": "Vigil", "lore": "", "when": "Dreaming 2 (1/2)"},
+            {
+                "ic_month": 10,
+                "ic_day": 18,
+                "name": "Founding Night",
+                "lore": "Fire.",
+                "when": "Masquing 18 (10/18)",
+            },
+        ]
 
     def test_staff_document_read_passes_the_omniscient_viewer(self) -> None:
         # Review finding (#3983 Task 5): the document action must resolve the

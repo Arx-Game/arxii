@@ -107,9 +107,24 @@ class AlmanachSuccessionLawSerializer(serializers.Serializer):
 
 
 class AlmanachHouseAspectSerializer(serializers.Serializer):
+    """One picked aspect (mirrors ``almanach_reads.aspect_facet``): ``being_name``
+    is the god or totem the answer is (#4205), ``target_entry_id`` the one Codex
+    entry it opens."""
+
     definition = serializers.CharField()
     option = serializers.CharField()
     description = serializers.CharField(allow_blank=True)
+    being_name = serializers.CharField(allow_blank=True)
+    target_entry_id = serializers.IntegerField(allow_null=True)
+
+
+class AlmanachHousePatronSerializer(serializers.Serializer):
+    """The house's patron by its own name for it (#4205; mirrors
+    ``almanach_reads.patron_payload``)."""
+
+    nickname = serializers.CharField()
+    being_name = serializers.CharField()
+    codex_entry_id = serializers.IntegerField(allow_null=True)
 
 
 class AlmanachHouseFeatureSerializer(serializers.Serializer):
@@ -122,6 +137,18 @@ class AlmanachHouseOfficeSerializer(serializers.Serializer):
     slug = serializers.CharField()
     title = serializers.CharField()
     holder_name = serializers.CharField(allow_blank=True)
+
+
+class AlmanachHouseObservanceSerializer(serializers.Serializer):
+    """A house's day of remembrance on the document (#4206). ``when`` is the
+    game's one IC date spelling (``format_ic_month_day``); the month and day
+    ride beside it so the chapter can edit the row."""
+
+    ic_month = serializers.IntegerField()
+    ic_day = serializers.IntegerField()
+    name = serializers.CharField()
+    lore = serializers.CharField(allow_blank=True)
+    when = serializers.CharField()
 
 
 class AlmanachHouseDocumentHouseSerializer(serializers.Serializer):
@@ -139,9 +166,11 @@ class AlmanachHouseDocumentHouseSerializer(serializers.Serializer):
     published_at = serializers.DateTimeField(allow_null=True)
     particle_example = serializers.CharField(allow_blank=True)
     default_succession_law = AlmanachSuccessionLawSerializer(allow_null=True)
+    patron = AlmanachHousePatronSerializer(allow_null=True)
     aspects = AlmanachHouseAspectSerializer(many=True)
     features = AlmanachHouseFeatureSerializer(many=True)
     offices = AlmanachHouseOfficeSerializer(many=True)
+    observances = AlmanachHouseObservanceSerializer(many=True)
 
 
 class HouseDocumentSerializer(serializers.Serializer):

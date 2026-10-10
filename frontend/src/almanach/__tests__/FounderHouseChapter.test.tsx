@@ -48,6 +48,7 @@ function baseDraft(): FounderDraft {
     lands: {},
     estate_name: '',
     estate_description: '',
+    observances: [],
   };
 }
 
@@ -74,8 +75,19 @@ function template(overrides: Partial<HouseTemplateOption> = {}): HouseTemplateOp
             name: 'The Veiled',
             description: 'Deception as a way of life.',
             codex_entry_id: 4,
+            being_id: null,
+            being_name: '',
+            target_entry_id: 4,
           },
-          { id: 11, name: 'Glamour', description: 'Grandeur is the house due.', codex_entry_id: 5 },
+          {
+            id: 11,
+            name: 'Glamour',
+            description: 'Grandeur is the house due.',
+            codex_entry_id: null,
+            being_id: 9,
+            being_name: 'Calyx',
+            target_entry_id: 5,
+          },
         ],
       },
     ],
@@ -158,4 +170,37 @@ test('the range for an axis with window [-2, 3] renders min=-2 max=3', () => {
   const methodRange = screen.getByRole('slider', { name: 'Cunning to Honor' });
   expect(methodRange).toHaveAttribute('min', '-5');
   expect(methodRange).toHaveAttribute('max', '5');
+});
+
+test('an option opens the one entry it targets, named for the god when it is one (#4205)', () => {
+  renderWithProviders(<Harness initial={baseDraft()} tpl={template()} />);
+
+  // A lore answer links its own entry as "codex" (the succession line has one too, so
+  // match by target); a god answer links the god's page by name.
+  const codexLinks = screen.getAllByRole('link', { name: 'codex' });
+  expect(codexLinks.map((link) => link.getAttribute('href'))).toContain('/codex/4');
+  expect(screen.getByRole('link', { name: 'Calyx' })).toHaveAttribute('href', '/codex/5');
+});
+
+test('a day of remembrance is added, written and removed on the draft (#4206)', async () => {
+  renderWithProviders(<Harness initial={baseDraft()} tpl={template()} />);
+
+  await userEvent.click(screen.getByRole('button', { name: 'Add a day of remembrance' }));
+  const name = screen.getByLabelText('name', { selector: '#founder-house-observance-0-name' });
+  await userEvent.type(name, 'Founding Night');
+  const month = screen.getByLabelText('month');
+  await userEvent.clear(month);
+  await userEvent.type(month, '10');
+  const day = screen.getByLabelText('day');
+  await userEvent.clear(day);
+  await userEvent.type(day, '18');
+  await userEvent.type(screen.getByLabelText('the day'), 'The first fire.');
+
+  expect(name).toHaveValue('Founding Night');
+  expect(month).toHaveValue(10);
+  expect(day).toHaveValue(18);
+  expect(screen.getByLabelText('the day')).toHaveValue('The first fire.');
+
+  await userEvent.click(screen.getByRole('button', { name: 'Remove day of remembrance 1' }));
+  expect(screen.queryByLabelText('month')).not.toBeInTheDocument();
 });

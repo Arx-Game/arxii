@@ -218,16 +218,10 @@ async function openWhisperTab(page: Page, connection: Connection): Promise<void>
       },
     ])
   );
-  // The thread list lives behind the play sidebar's "Conversations" mode
-  // tab (not shown by default - "Here" is) - a divergence from an earlier
-  // reading of GamePage.tsx's source alone; confirmed empirically against
-  // the rendered page (#3760 Task 14 report).
-  await page
-    .getByRole('navigation', { name: 'Sidebar modes' })
-    .getByRole('button', { name: 'Conversations', exact: true })
-    .click();
-  const sidebar = page.getByRole('navigation', { name: 'Thread sidebar' });
-  await sidebar.getByRole('button', { name: 'Whisper: Nyx', exact: false }).click();
+  // The conversations live in the rail on the far left (#4129); a whisper's
+  // row is named after the other party.
+  const rail = page.getByRole('complementary', { name: 'Conversations' });
+  await rail.getByRole('button', { name: /^Nyx/ }).click();
 }
 
 test.describe('narrative play delivery (#3760) — fixture-backed journeys', () => {
@@ -501,7 +495,7 @@ test.describe('narrative play delivery (#3760) — fixture-backed journeys', () 
     // travel above: switching the open conversation TAB (room anchor vs. a
     // Place thread — Places are this codebase's in-room travel destinations,
     // see `PlaceBar`/`travel_to`) is a different draftScope axis
-    // (`GameWindow`'s `conversationTabs?.activeKey`) that was already wired
+    // (`GameWindow`'s `selectedConversation`) that was already wired
     // correctly before the #3760 Task 14 fix and is untouched by it — kept
     // here under its own honest title rather than folded into the room-travel
     // test above, which now tests the literal spec promise instead.
@@ -509,15 +503,10 @@ test.describe('narrative play delivery (#3760) — fixture-backed journeys', () 
     const connections = await reachReadySession(page);
 
     const editor = page.getByRole('textbox');
-    // The thread list lives behind the play sidebar's "Conversations" mode
-    // tab (see openWhisperTab's comment on this same divergence).
-    await page
-      .getByRole('navigation', { name: 'Sidebar modes' })
-      .getByRole('button', { name: 'Conversations', exact: true })
-      .click();
-    const sidebar = page.getByRole('navigation', { name: 'Thread sidebar' });
+    // The conversations live in the rail on the far left (#4129).
+    const sidebar = page.getByRole('complementary', { name: 'Conversations' });
 
-    // "Room A" — the room's own anchor conversation (no tab open yet).
+    // "Room A" — All, the whole feed (nothing picked yet).
     await editor.fill('Room A draft: the courtyard is quiet tonight.');
 
     // "Travel" to a different conversation tab (a Place within the same
@@ -546,8 +535,8 @@ test.describe('narrative play delivery (#3760) — fixture-backed journeys', () 
     await expect(editor).toHaveValue('');
     await editor.fill('Room B draft: something else entirely.');
 
-    // Back to room A ("All" re-anchors the composer to the room, mirroring
-    // GamePage.handleShowAll) — the original draft is restored verbatim.
+    // Back to room A (All re-anchors the composer to the room) — the
+    // original draft is restored verbatim.
     await sidebar.getByRole('button', { name: 'All', exact: true }).click();
     await expect(editor).toHaveValue('Room A draft: the courtyard is quiet tonight.');
 

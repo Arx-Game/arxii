@@ -137,19 +137,35 @@ repos:
         # the ones whose relation fields are fully triaged — every remaining
         # ObjectDB field in them carries a `noqa: OBJECTDB_FIELD` rationale, so
         # they cannot regress. Add an app's models.py here as its fields are
-        # triaged; scenes/models.py joins once Scene.location is retargeted.
+        # triaged. Tranche 4 (#2608): every keeper outside world/ (behaviors,
+        # evennia_extensions, flows triggers) and in character_sheets,
+        # companions, items, player_submissions and societies carries the token.
+        # Still outside the scope, each holding a field the audit marked for a
+        # retarget rather than a keeper: scenes/models.py (Scene.location ->
+        # RoomProfile), conditions/models.py (ConditionInstance.source_character
+        # -> CharacterSheet), combat/models.py (CombatEncounter.room and
+        # DuelChallenge.room -> RoomProfile) and areas/positioning/models.py
+        # (Position.room -> RoomProfile); each joins once its field is retargeted.
         files: |
-          (?x)^src/world/(
-            vitals/services\.py
-            |magic/services/capability_requirements\.py
-            |conditions/services\.py
-            |npc_services/services\.py
-            |dreams/models\.py
-            |instances/models\.py
-            |captivity/models\.py
-            |gm/models\.py
-            |character_creation/models\.py
-            |mechanics/models\.py
+          (?x)^src/(
+            behaviors/models\.py
+            |evennia_extensions/models\.py
+            |flows/models/triggers\.py
+            |world/vitals/services\.py
+            |world/magic/services/capability_requirements\.py
+            |world/conditions/services\.py
+            |world/npc_services/services\.py
+            |world/dreams/models\.py
+            |world/instances/models\.py
+            |world/captivity/models\.py
+            |world/gm/models\.py
+            |world/character_creation/models\.py
+            |world/mechanics/models\.py
+            |world/character_sheets/models\.py
+            |world/companions/models\.py
+            |world/items/models\.py
+            |world/player_submissions/models\.py
+            |world/societies/models\.py
           )$
       - id: lint-idmapper-mutation-order
         name: Reject mutate-then-save-then-raise inside an atomic block

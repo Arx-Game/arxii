@@ -97,6 +97,7 @@ function draft(): FounderDraft {
     },
     estate_name: 'Casa Candela',
     estate_description: 'A townhouse on the merchant terrace.',
+    observances: [],
   };
 }
 
@@ -122,6 +123,7 @@ function claimStatus(): HouseClaimStatus {
     aspects: [],
     kin: [],
     lands: [],
+    observances: [],
     estate_district_id: null,
   };
 }

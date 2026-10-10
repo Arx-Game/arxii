@@ -1775,6 +1775,14 @@ Noble/merchant/crime houses as first-class play — a house IS an `Organization`
 (`family` FK → `roster.Family`) on the kinship graph (#2062, ADR-0098).
 
 - **Models** (`world/societies/houses/`): `NobiliaryParticle`, `HouseRecognitionRule`, `FealtyEdge`, `SuccessionLaw`, `Title`, `LandShape`, `Domain`, `DomainGarrisonPost`, `HoldingKind`, `DomainHolding`, `DomainImprovementDetails`, `DomainCrisis`, `CrisisIntel`, `MarriagePact`, `PactCommitment`; plus `Organization.family` / `Organization.default_succession_law` / `Organization.house_state` / `Organization.published_at`
+- **Aspects point at real things (#4205, ADR-4205):** `HouseAspectOption.being` /
+  `being_nickname` (PROTECT, nullable) say an authored answer IS a god or a totem and
+  what a house calls it; `codex_entry` stays the lore target; `target_entry_id` is the
+  one entry a pick opens. `HouseAspectDefinition.sets_patron` marks the one question per
+  charter whose pick writes `Organization.patron_nickname` at founding
+  (`creator._stamp_aspects`). Every house read goes through
+  `almanach_reads.aspect_facet` / `patron_payload`; the deity's Codex companion lists
+  its sworn houses. Member effects (quiddity, totem bonuses) are a later issue.
 - **Developments (#4060 slice 2, ADR-0320):** a `DomainHolding` is the physical
   income-generating thing a family possesses: `HoldingKind.site_kind`
   (ABSTRACT/LAND/BUILDING), `units_required`, `requires_field` (a farm);
@@ -1872,7 +1880,10 @@ Noble/merchant/crime houses as first-class play — a house IS an `Organization`
 - **Founder mode (#3983 Plan B, ADR-0314/ADR-0315):** the CG-facing claim journey — the whole
   draft lives client-side (ADR-0314) until one submit, `POST
   /api/character-creation/drafts/{id}/house-claim/` (`HouseClaimSubmitSerializer`), nested
-  `HouseClaimKin`/`HouseClaimLand` rows and all. `claim_grants(title)` is what a claim actually
+  `HouseClaimKin`/`HouseClaimLand`/`HouseClaimObservance` rows and all (an observance is a
+  house's own day of remembrance, #4206: an IC month and day, a name and the house's prose,
+  copied onto the org as `OrganizationObservance` and shown on the org page and the Almanach
+  document through `format_ic_month_day`). `claim_grants(title)` is what a claim actually
   seats the house on: the seat chain plus the loose baronies inside it, never a vassal's own held
   seat (ADR-0315). `record_kin` is the shared kin-writing engine both the founder finalize path and
   staff's `AlmanachEditKinAction` place nodes through. See [houses.md](houses.md)'s "Founder mode"

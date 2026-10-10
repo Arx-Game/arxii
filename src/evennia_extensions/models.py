@@ -469,6 +469,7 @@ class ObjectDisplayData(SharedMemoryModel):
     of object presentation.
     """
 
+    # noqa: OBJECTDB_FIELD
     # ObjectDB by design (#2608): unified display data spans characters, rooms,
     # items, and exits alike — the one case where "any object" is the contract.
     object = models.OneToOneField(
@@ -608,8 +609,11 @@ class RoomSizeTier(NaturalKeyMixin, SharedMemoryModel):
         return f"{self.name} ({self.units} units)"
 
 
-def room_is_publicly_listed(room: ObjectDB) -> bool:
+def room_is_publicly_listed(room: ObjectDB) -> bool:  # noqa: OBJECTDB_PARAM - a room with no profile yet
     """Whether a room appears in public listings. Missing RoomProfile -> not public.
+
+    Takes the Evennia room, not a RoomProfile: callers hold the object, and "there
+    is no profile yet" is one of the answers this function exists to give.
 
     Single source of truth for the scene privacy<->room-publicness invariant:
     consumed by Scene validation, ensure_scene_for_location, and combat duels.
@@ -633,6 +637,7 @@ class RoomProfile(NaturalKeyMixin, SharedMemoryModel):
     (resonances, ownership, defenses) get their own models.
     """
 
+    # noqa: OBJECTDB_FIELD
     # ObjectDB by design (#2608): the canonical room↔ObjectDB extension bridge (room
     # analogue of CharacterSheet.character) — rooms have no concrete model besides
     # ObjectDB. Auto-created in Room.at_object_creation; room-valued FKs elsewhere
@@ -856,6 +861,7 @@ class ExitProfile(SharedMemoryModel):
     ``WINDOW``, which can be opened/closed to affect traversal and room comfort.
     """
 
+    # noqa: OBJECTDB_FIELD
     # ObjectDB by design (#2608): exit↔ObjectDB extension bridge — Evennia exits
     # have no concrete model besides ObjectDB.
     objectdb = models.OneToOneField(

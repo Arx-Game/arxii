@@ -1,5 +1,6 @@
 import { Fragment } from 'react';
 import ReactMarkdown from 'react-markdown';
+import { Link } from 'react-router-dom';
 import remarkGfm from 'remark-gfm';
 import type { CodexCompanionGroup, CodexCompanionItem, CodexCompanionSection } from '../types';
 
@@ -45,6 +46,9 @@ function RailItem({
         {item.text}
       </a>
     );
+  }
+  if (item.href) {
+    return <Link to={item.href}>{item.text}</Link>;
   }
   return <span>{item.text}</span>;
 }
