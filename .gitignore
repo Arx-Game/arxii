@@ -1,5 +1,9 @@
 *.py[cod]
 
+# Local AI editor configuration and generated rules
+/.cursor/
+/.windsurf/
+
 # C extensions
 *.so
 
