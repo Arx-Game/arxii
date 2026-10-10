@@ -489,3 +489,46 @@ class PatronFoundingTests(AspectTestData):
         org = self._found("Godlessmere")
         self.assertIsNone(org.patron_nickname)
         self.assertIsNone(OrganizationSerializer(org).data["house"]["patron"])
+
+
+class PatronQuestionShapeTests(TestCase):
+    """#4205 review fold-ins: a patron question is single-pick, and the template admin
+    refuses two patron questions on the selection it is about to save."""
+
+    def test_a_patron_question_takes_exactly_one_pick(self):
+        from django.core.exceptions import ValidationError
+
+        wide = HouseAspectDefinition(name="Patrons", prompt="Whom?", sets_patron=True, max_picks=2)
+        with self.assertRaises(ValidationError) as caught:
+            wide.full_clean()
+        self.assertIn("max_picks", caught.exception.message_dict)
+        HouseAspectDefinition(name="Patron", prompt="Whom?", sets_patron=True).full_clean()
+
+    def test_the_template_admin_refuses_two_patron_questions_before_the_m2m_save(self):
+        from world.societies.admin import HouseTemplateAdminForm
+        from world.societies.houses.factories import HouseTemplateFactory
+
+        template = HouseTemplateFactory()
+        first = HouseAspectDefinition.objects.create(
+            name="Patron", prompt="Whom?", sets_patron=True
+        )
+        second = HouseAspectDefinition.objects.create(
+            name="Totem", prompt="Which?", sets_patron=True
+        )
+        base = {
+            field: getattr(template, f"{field}_id", None) or getattr(template, field)
+            for field in ("name", "realm", "kind", "society", "org_type")
+        }
+        base.update(
+            {
+                "name_pattern": template.name_pattern,
+                "starting_kin_slots": template.starting_kin_slots,
+                "aspect_definitions": [first.pk, second.pk],
+            }
+        )
+        form = HouseTemplateAdminForm(data=base, instance=template)
+        self.assertFalse(form.is_valid())
+        self.assertIn("aspect_definitions", form.errors)
+        base["aspect_definitions"] = [first.pk]
+        form = HouseTemplateAdminForm(data=base, instance=template)
+        self.assertNotIn("aspect_definitions", form.errors)

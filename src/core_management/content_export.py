@@ -422,8 +422,12 @@ EXPORT_FIELD_EXCLUSIONS: dict[str, frozenset[str]] = {
     "societies.housetemplate": frozenset({"served_house_choices"}),
     # #4205: a god or totem an aspect option IS, and the name a house calls it by,
     # are installation rows (beings and nicknames carry no natural key), so the
-    # catalog exports without them and staff re-bind both in admin elsewhere.
+    # catalog exports without them and staff re-bind both in admin elsewhere. The
+    # question's patron flag travels with the bindings, not the catalog: exported
+    # alone it would mark a question whose options name no god, and every founding
+    # on it would refuse until the rebind.
     "societies.houseaspectoption": frozenset({"being", "being_nickname"}),
+    "societies.houseaspectdefinition": frozenset({"sets_patron"}),
 }
 
 

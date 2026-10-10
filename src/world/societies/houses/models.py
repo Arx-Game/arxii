@@ -1470,6 +1470,14 @@ class HouseAspectDefinition(NaturalKeyMixin, CreditedContent, SharedMemoryModel)
     def __str__(self) -> str:
         return self.name
 
+    def clean(self) -> None:
+        """A patron question names one god (#4205): a single pick, never a list."""
+        from django.core.exceptions import ValidationError  # noqa: PLC0415
+
+        super().clean()
+        if self.sets_patron and (self.max_picks != 1 or self.min_picks > 1):
+            raise ValidationError({"max_picks": "A patron question takes exactly one pick."})
+
 
 class HouseAspectOption(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
     """One authored answer in a definition's catalog (#2079).

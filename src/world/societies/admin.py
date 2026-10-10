@@ -6,6 +6,7 @@ organizations, memberships, reputations, and legend entries.
 Note: Realm admin is in the `realms` app.
 """
 
+from django import forms
 from django.contrib import admin, messages
 from django.core.exceptions import ValidationError
 from django.http import HttpRequest
@@ -1186,10 +1187,32 @@ class HoldingKindAdmin(admin.ModelAdmin):
     search_fields = ("name", "description")
 
 
+class HouseTemplateAdminForm(forms.ModelForm):
+    """One patron question per charter (#4205), checked against the questions this
+    save SELECTS: the model's own ``clean()`` reads the M2M from the database, which
+    on an admin save still holds the old set."""
+
+    class Meta:
+        model = HouseTemplate
+        # The ModelAdmin hands this form its real field list; the Meta only lets the
+        # form be built standalone (tests), and it must not silently drop a column.
+        fields = "__all__"  # noqa: DJ007
+
+    def clean(self):
+        cleaned = super().clean()
+        definitions = cleaned.get("aspect_definitions")
+        if definitions is not None and sum(1 for d in definitions if d.sets_patron) > 1:
+            raise ValidationError(
+                {"aspect_definitions": "Only one question on a charter may set the patron."}
+            )
+        return cleaned
+
+
 @admin.register(HouseTemplate)
 class HouseTemplateAdmin(admin.ModelAdmin):
     """#1884 Phase D — realm recipes for CG-defined houses."""
 
+    form = HouseTemplateAdminForm
     list_display = ("name", "realm", "kind", "org_type", "liege", "starting_kin_slots")
     list_select_related = ("realm", "liege", "org_type")
     list_filter = ("realm", "kind")
