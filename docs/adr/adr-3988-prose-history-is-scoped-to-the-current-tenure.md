@@ -15,15 +15,17 @@ field, the description and the concept included, which raises what is at stake.
 ## Decision
 
 Staff see every version. A player sees only the versions written on or after the start of
-their own current `RosterTenure` on that entry. A tenure with no start date shows none.
-There is no new column: the filter reads `ProfileTextVersion.created_at` against
-`RosterTenure.start_date`.
+their own current `RosterTenure` on that entry; the character's first player (tenure number
+1) wrote all of it and has no cutoff. A later tenure with no start date shows none. There
+is no new column: the filter reads `ProfileTextVersion.created_at` against
+`RosterTenure.start_date`. The original a first versioned write captures is dated to the
+character's creation, not to the capture, because its text was written before then,
+possibly by an earlier player. The real concept is staff's, so its history is too.
 
 ## Consequences
 
-A returning player who picks a character up again sees only their new era of it. The CG
-original of a character whose first tenure began after its creation is not shown to that
-player; staff still see it. Nothing is deleted, so a later ruling can widen the view again.
+A returning player who picks a character up again sees only their new era of it; staff
+still see everything. Nothing is deleted, so a later ruling can widen the view again.
 
 ## Alternatives rejected
 

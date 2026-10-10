@@ -44,6 +44,7 @@ from world.character_sheets.services import (
     restore_profile_text_version,
     staff_edit_sheet,
 )
+from world.character_sheets.types import ProfileTextField
 from world.scenes.block_services import sheet_blocked_for_viewer
 
 
@@ -313,13 +314,19 @@ class CharacterSheetViewSet(RetrieveModelMixin, GenericViewSet):
 
         versions_qs = sheet.true_profile.text_versions.select_related("era")
         if not request.user.is_staff:
+            # The real concept is staff's (#3988): its history is too.
+            versions_qs = versions_qs.exclude(field=ProfileTextField.REAL_CONCEPT)
             # Tenure-scoped (#3988, amends the #2631 ruling): a player sees only what was
             # written since their own current tenure began, so a new roster tenant never
-            # reads the previous player's prose. A tenure with no start date shows none.
+            # reads the previous player's prose. The character's first player wrote all of
+            # it, so their view has no cutoff. A later tenure with no start date shows none.
             tenure = sheet.roster_entry.current_tenure if sheet.roster_entry else None
-            if tenure is None or tenure.start_date is None:
+            if tenure is None:
                 return Response([])
-            versions_qs = versions_qs.filter(created_at__gte=tenure.start_date)
+            if tenure.player_number != 1:
+                if tenure.start_date is None:
+                    return Response([])
+                versions_qs = versions_qs.filter(created_at__gte=tenure.start_date)
         versions = list(versions_qs.order_by("field", "-created_at"))
         reasoning_by_version = {
             row.applied_version_id: row.request.player_reasoning

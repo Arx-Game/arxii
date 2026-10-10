@@ -240,7 +240,9 @@ weight, marital status, vocation, social rank). An empty field keeps a slot. A s
 - **Restore** writes a past version back as a new one; nothing is deleted.
 - **History is tenure-scoped for players** (ADR-3988, amending #2631): staff see every
   version; the current player sees those written since their own current tenure began, so
-  a new roster tenant never reads the previous player's prose.
+  a new roster tenant never reads the previous player's prose (the first player sees all of
+  it). A captured original is dated to the character's creation. The real concept's history
+  is staff-only. An admin edit of the description is versioned too.
 - **Rename** (`rename_character`) moves the key, the primary persona's name and the
   particled-name aliases together.
 - A sheet with no `true_profile` gets one on its first edit (`ensure_true_profile`).

@@ -152,13 +152,14 @@ def update_profile_text(
         current = previous_text if previous_text is not None else getattr(holder, attribute)
         has_versions = ProfileTextVersion.objects.filter(profile=profile, field=field).exists()
         if not has_versions and current:
-            ProfileTextVersion.objects.create(
+            original = ProfileTextVersion.objects.create(
                 profile=profile,
                 field=field,
                 text=current,
                 ic_date=ic_date,
                 era=era,
             )
+            _date_original_to_creation(original, profile)
         setattr(holder, attribute, text)
         holder.save(update_fields=[attribute])
         return ProfileTextVersion.objects.create(
@@ -169,6 +170,26 @@ def update_profile_text(
             era=era,
             edited_by=edited_by,
         )
+
+
+def _date_original_to_creation(original: ProfileTextVersion, profile: Profile) -> None:
+    """Stamp a captured original with the character's creation time (#3988).
+
+    The original is captured lazily, on the first versioned write, but its text was
+    written before that, possibly by an earlier player. Stamped with the write time,
+    it would fall inside a later tenant's tenure and show them the previous player's
+    prose; stamped with the character's creation, the tenure-scoped history keeps it
+    from anyone but the first player and staff. A cover profile keeps the write time.
+    """
+    sheet = profile.owning_sheet_or_none
+    created = sheet.character.db_date_created if sheet is not None else None
+    if created is None:
+        return
+    ProfileTextVersion.objects.filter(pk=original.pk).update_with_reason(
+        reason="a captured original predates its capture; date it to the character",
+        created_at=created,
+    )
+    original.created_at = created
 
 
 def set_physical_description(

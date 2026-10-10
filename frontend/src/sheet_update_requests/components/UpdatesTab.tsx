@@ -34,6 +34,7 @@ import { RecordedProfilesSection } from './RecordedProfilesSection';
 import {
   DISTINCTION_ACTIONS,
   PROFILE_TEXT_FIELDS,
+  PROSE_FIELD_LABELS,
   REQUEST_KINDS,
   REQUEST_STATUSES,
   type TableUpdateRequest,
@@ -116,7 +117,7 @@ function VersionTimeline({
       <h3 className="text-xl font-semibold">Sheet history</h3>
       {[...byField.entries()].map(([field, fieldVersions]) => (
         <section key={field} className="space-y-2">
-          <h4 className="text-lg font-semibold capitalize">{field}</h4>
+          <h4 className="text-lg font-semibold">{PROSE_FIELD_LABELS[field] ?? field}</h4>
           {fieldVersions.map((version) => (
             <Card key={version.id}>
               <CardContent className="space-y-2 py-4">

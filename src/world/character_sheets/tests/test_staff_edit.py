@@ -204,6 +204,9 @@ class TenureScopedHistoryTests(TestCase):
         cls.sheet = cls.entry.character_sheet
         cls.first = PlayerDataFactory()
         now = timezone.now()
+        # The character was made before either tenure, as a roster character is.
+        cls.sheet.character.db_date_created = now - timedelta(days=60)
+        cls.sheet.character.save(update_fields=["db_date_created"])
         RosterTenureFactory(
             player_data=cls.first,
             roster_entry=cls.entry,
@@ -240,6 +243,47 @@ class TenureScopedHistoryTests(TestCase):
         self.client.force_authenticate(user=AccountFactory(is_staff=True))
         texts = {row["text"] for row in self.client.get(self.url).data}
         assert texts == {"Tenant A's past.", "Tenant B's past."}
+
+    def test_a_late_captured_original_stays_with_the_previous_tenant(self) -> None:
+        # Tenant A's quote was never edited; staff edit it for the first time during
+        # tenant B's tenure, which captures A's text as the original right now.
+        profile = self.sheet.true_profile
+        profile.quote = "Tenant A's quote."
+        profile.save(update_fields=["quote"])
+        update_profile_text(profile, ProfileTextField.QUOTE, "Tenant B's quote.")
+
+        self.client.force_authenticate(user=self.second.account)
+        texts = {row["text"] for row in self.client.get(self.url).data}
+        assert "Tenant A's quote." not in texts
+        assert "Tenant B's quote." in texts
+
+    def test_the_real_concept_history_is_staff_only(self) -> None:
+        update_profile_text(self.sheet.true_profile, ProfileTextField.REAL_CONCEPT, "A spy.")
+        self.client.force_authenticate(user=self.second.account)
+        fields = {row["field"] for row in self.client.get(self.url).data}
+        assert "real_concept" not in fields
+        self.client.force_authenticate(user=AccountFactory(is_staff=True))
+        fields = {row["field"] for row in self.client.get(self.url).data}
+        assert "real_concept" in fields
+
+
+class FirstPlayerHistoryTests(TestCase):
+    def test_the_first_player_sees_the_original_from_before_their_tenure(self) -> None:
+        entry = RosterEntryFactory()
+        sheet = entry.character_sheet
+        player = PlayerDataFactory()
+        RosterTenureFactory(
+            player_data=player, roster_entry=entry, player_number=1, start_date=timezone.now()
+        )
+        sheet.true_profile.background = "Written at creation."
+        sheet.true_profile.save(update_fields=["background"])
+        update_profile_text(sheet.true_profile, ProfileTextField.BACKGROUND, "Rewritten.")
+
+        client = APIClient()
+        client.force_authenticate(user=player.account)
+        url = f"/api/character-sheets/{sheet.pk}/profile-text-versions/"
+        texts = {row["text"] for row in client.get(url).data}
+        assert texts == {"Written at creation.", "Rewritten."}
 
 
 class HeritageListTests(TestCase):
