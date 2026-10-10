@@ -249,8 +249,19 @@ weight, marital status, vocation, social rank). An empty field keeps a slot. A s
 - Table update requests still offer only the four player-requestable fields
   (`PLAYER_REQUESTABLE_TEXT_FIELDS`).
 
-This is piece A of #3988. The CG rows (B), magic (C), kinship and estate (D) and group fit
-(E) follow as their own PRs on the same issue.
+**Piece B, the CG rows (#4221).** In edit mode a rows band edits every family CG writes,
+each through a staff action on the sheet API (`staff_views.StaffSheetRowsMixin`, inputs in
+`staff_serializers.py`): `staff-stats` (display scale, `TraitChangeSource.STAFF_EDIT`; fills
+vitals if missing), `staff-skills`, `staff-distinctions` / `staff-distinction` (add, re-rank,
+remove), `staff-form`, `staff-beginnings`, `staff-path` (the first path only, plus the class
+level), `staff-goals` (revision limit bypassed), `staff-worship`, `staff-markings` /
+`staff-marking-remove`, `staff-enemy`, `staff-introductions`, `staff-vitals`, and
+`staff-options` (the pickers, the species' form palette included). A choice runs what CG runs
+for it: a gender edit sets the pronoun forms, a species its gifts, languages and codex, a
+beginning its rituals, codex and languages, a path its codex and Chosen patronage. The staff
+payload block carries the stored rows by id (`StaffEditRows`).
+
+Pieces C (magic), D (kinship and estate) and E (group fit) continue on #4221.
 
 ## Web Sheet Mechanics Display (#3042)
 
