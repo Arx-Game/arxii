@@ -39,6 +39,8 @@ function node(
     tier: 'name_only',
     family_id: FAMILY_ID,
     is_deceased: false,
+    is_missing: false,
+    obituary: '',
     is_appable: false,
     sheet_id: null,
     roster_entry_id: null,
@@ -242,7 +244,7 @@ describe('FamilyPage', () => {
     expect(within(roll).getAllByRole('list')).toHaveLength(2);
     expect(within(roll).getByText('Alarysa mar Katta')).toBeInTheDocument();
     expect(within(roll).getByText('Emperor Galleron ne Valeweep mal Katta')).toBeInTheDocument();
-    expect(within(roll).getByText('Princess Alyssa mar Katta †')).toBeInTheDocument();
+    expect(within(roll).getByText('Princess Alyssa mar Katta (RIP)')).toBeInTheDocument();
     expect(within(roll).getByRole('link', { name: 'Princess Kathryn mar Katta' })).toHaveAttribute(
       'href',
       `/characters/${KATHRYN_ENTRY_ID}`
@@ -256,7 +258,7 @@ describe('FamilyPage', () => {
     renderPage();
     const tree = screen.getByRole('region', { name: 'The tree' });
     expect(within(tree).getByText('Galleron ne Valeweep')).toBeInTheDocument();
-    expect(within(tree).getByText('Alyssa †')).toBeInTheDocument();
+    expect(within(tree).getByText('Alyssa (RIP)')).toBeInTheDocument();
     expect(within(tree).queryByText(/mar Katta/)).not.toBeInTheDocument();
     expect(within(tree).getByRole('link', { name: 'Kathryn' })).toHaveAttribute(
       'href',

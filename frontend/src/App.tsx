@@ -721,6 +721,36 @@ function App() {
             }
           />
           <Route
+            path="/staff/almanach/people/:personId"
+            element={
+              <StaffRoute>
+                <Suspense fallback={<Skeleton className="h-64 w-full" />}>
+                  <AlmanachPage />
+                </Suspense>
+              </StaffRoute>
+            }
+          />
+          <Route
+            path="/staff/almanach/titles/:titleId"
+            element={
+              <StaffRoute>
+                <Suspense fallback={<Skeleton className="h-64 w-full" />}>
+                  <AlmanachPage />
+                </Suspense>
+              </StaffRoute>
+            }
+          />
+          <Route
+            path="/staff/almanach/families/:familyId"
+            element={
+              <StaffRoute>
+                <Suspense fallback={<Skeleton className="h-64 w-full" />}>
+                  <AlmanachPage />
+                </Suspense>
+              </StaffRoute>
+            }
+          />
+          <Route
             path="/staff/flows-builder"
             element={
               <StaffRoute>

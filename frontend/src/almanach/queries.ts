@@ -12,12 +12,22 @@ import { useWorldBuilderActor } from '@/world-builder/useWorldBuilderActor';
 import {
   dispatchAlmanach,
   fetchCharter,
+  fetchFamilyDocument,
+  fetchFamilyKinds,
+  fetchFront,
   fetchGenders,
   fetchHouseDocument,
   fetchHouses,
   fetchLadder,
   fetchLandShapes,
+  fetchPersonDocument,
   fetchRealms,
+  fetchSearch,
+  fetchTemplates,
+  fetchTitleDocument,
+  fetchUnionKinds,
+  fetchRealmTitles,
+  fetchVacantTitles,
 } from './api';
 import type { AlmanachActionKey, LadderMode } from './types';
 
@@ -34,6 +44,18 @@ export const almanachKeys = {
   landShapes: () => [...almanachKeys.all, 'land-shapes'] as const,
   genders: () => [...almanachKeys.all, 'genders'] as const,
   charter: (realmId: number) => [...almanachKeys.all, 'charter', realmId] as const,
+  // #4239
+  front: (q: string) => [...almanachKeys.all, 'front', q] as const,
+  search: (q: string) => [...almanachKeys.all, 'search', q] as const,
+  person: (personId: number) => [...almanachKeys.all, 'person', personId] as const,
+  title: (titleId: number) => [...almanachKeys.all, 'title', titleId] as const,
+  family: (familyId: number) => [...almanachKeys.all, 'family', familyId] as const,
+  kinds: () => [...almanachKeys.all, 'kinds'] as const,
+  templates: (realmId: number, kindId: number | null) =>
+    [...almanachKeys.all, 'templates', realmId, kindId] as const,
+  unionKinds: (realmId: number | null) => [...almanachKeys.all, 'union-kinds', realmId] as const,
+  vacantTitles: (realmId: number) => [...almanachKeys.all, 'vacant-titles', realmId] as const,
+  realmTitles: (realmId: number) => [...almanachKeys.all, 'realm-titles', realmId] as const,
 };
 
 export function useRealms() {
@@ -155,5 +177,97 @@ export function useAlmanachMutation(key: AlmanachActionKey) {
     onError: (error: Error) => {
       toast.error(error.message);
     },
+  });
+}
+
+// --- #4239: every family, every person -------------------------------------
+
+export function useFront(q: string) {
+  return useQuery({
+    queryKey: almanachKeys.front(q),
+    queryFn: () => fetchFront(q),
+    staleTime: 15_000,
+  });
+}
+
+/** Search as you type; nothing is fetched under two characters (the server
+ * returns nothing for them either). */
+export function useSearch(q: string) {
+  const trimmed = q.trim();
+  return useQuery({
+    queryKey: almanachKeys.search(trimmed),
+    queryFn: () => fetchSearch(trimmed),
+    enabled: trimmed.length >= 2,
+    staleTime: 10_000,
+  });
+}
+
+export function usePersonDocument(personId: number | null | undefined) {
+  return useQuery({
+    queryKey: almanachKeys.person(personId ?? 0),
+    queryFn: () => fetchPersonDocument(personId!),
+    enabled: personId != null,
+    staleTime: 15_000,
+  });
+}
+
+export function useTitleDocument(titleId: number | null | undefined) {
+  return useQuery({
+    queryKey: almanachKeys.title(titleId ?? 0),
+    queryFn: () => fetchTitleDocument(titleId!),
+    enabled: titleId != null,
+    staleTime: 15_000,
+  });
+}
+
+export function useFamilyDocument(familyId: number | null | undefined) {
+  return useQuery({
+    queryKey: almanachKeys.family(familyId ?? 0),
+    queryFn: () => fetchFamilyDocument(familyId!),
+    enabled: familyId != null,
+    staleTime: 15_000,
+  });
+}
+
+export function useFamilyKinds() {
+  return useQuery({
+    queryKey: almanachKeys.kinds(),
+    queryFn: fetchFamilyKinds,
+    staleTime: 300_000,
+  });
+}
+
+export function useTemplates(realmId: number | null | undefined, kindId: number | null) {
+  return useQuery({
+    queryKey: almanachKeys.templates(realmId ?? 0, kindId),
+    queryFn: () => fetchTemplates(realmId!, kindId ?? undefined),
+    enabled: realmId != null,
+    staleTime: 60_000,
+  });
+}
+
+export function useUnionKinds(realmId: number | null | undefined) {
+  return useQuery({
+    queryKey: almanachKeys.unionKinds(realmId ?? null),
+    queryFn: () => fetchUnionKinds(realmId ?? undefined),
+    staleTime: 60_000,
+  });
+}
+
+export function useVacantTitles(realmId: number | null | undefined) {
+  return useQuery({
+    queryKey: almanachKeys.vacantTitles(realmId ?? 0),
+    queryFn: () => fetchVacantTitles(realmId!),
+    enabled: realmId != null,
+    staleTime: 15_000,
+  });
+}
+
+export function useRealmTitles(realmId: number | null | undefined) {
+  return useQuery({
+    queryKey: almanachKeys.realmTitles(realmId ?? 0),
+    queryFn: () => fetchRealmTitles(realmId!),
+    enabled: realmId != null,
+    staleTime: 15_000,
   });
 }

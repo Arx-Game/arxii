@@ -740,7 +740,7 @@
 }
 .almanach .tree .who {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto auto;
+  grid-template-columns: minmax(0, 1fr) auto auto auto;
   gap: 0.3rem 1rem;
   align-items: baseline;
 }
@@ -1002,4 +1002,164 @@
   padding: 0.1rem 0.8rem;
   font-size: 0.85rem;
   color: #e8e2d4;
+}
+
+/* ==========================================================================
+ * #4239: every family, every person. The front page's rolls, the picker that
+ * creates in place, the (RIP)/(Missing) mark, and kin names as links.
+ * ========================================================================== */
+.almanach .gone {
+  color: hsl(var(--muted-foreground));
+}
+.almanach .tree .who .nm a,
+.almanach .kin .nm a {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  color: inherit;
+}
+.almanach .ck {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  min-height: 2.2rem;
+  font-size: 0.95rem;
+}
+.almanach .rs {
+  font: inherit;
+  width: 100%;
+  box-sizing: border-box;
+  padding: 0.35rem 0.6rem;
+  border: 1px solid hsl(var(--border));
+  background: transparent;
+  color: inherit;
+  min-height: 2.4rem;
+}
+.almanach .pick {
+  position: relative;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem;
+}
+.almanach .pick .hits {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  border: 1px solid hsl(var(--border));
+  background: hsl(var(--popover));
+  color: hsl(var(--popover-foreground));
+}
+.almanach .pick .hits li {
+  border-bottom: 1px solid hsl(var(--border));
+}
+.almanach .pick .hits li.meta {
+  padding: 0.35rem 0.6rem;
+}
+.almanach .pick .hits button {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 0.35rem 0.6rem;
+}
+.almanach .pick .hits button:hover {
+  background: hsl(var(--muted));
+}
+.almanach .pick .new,
+.almanach .pick .hits .new {
+  color: hsl(var(--primary));
+  border-bottom: 1px dotted hsl(var(--primary));
+  font-size: 0.9rem;
+}
+.almanach .inline-new {
+  border: 1px solid hsl(var(--muted-foreground));
+  background: hsl(var(--popover));
+  padding: 0.8rem 1.1rem;
+  margin: 0.8rem 0;
+}
+.almanach .inline-new > .label {
+  display: block;
+  font-family: theme('fontFamily.display');
+  font-size: 0.7rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: hsl(var(--muted-foreground));
+  margin-bottom: 0.4rem;
+}
+.almanach .kinds {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1.4rem;
+  padding: 1.2rem 1.6rem 1.6rem;
+}
+@media (max-width: 900px) {
+  .almanach .kinds {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+.almanach .kinds h4 {
+  font-family: theme('fontFamily.display');
+  font-size: 0.78rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: hsl(var(--muted-foreground));
+  margin: 0 0 0.5rem;
+  padding-bottom: 0.3rem;
+  border-bottom: 1px solid hsl(var(--border));
+}
+.almanach .roll {
+  list-style: none;
+  margin: 0.5rem 0 0;
+  padding: 0;
+}
+.almanach .roll li {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.6rem;
+  padding: 0.35rem 0;
+  border-bottom: 1px dotted hsl(var(--border));
+}
+.almanach .roll li .meta {
+  white-space: nowrap;
+}
+.almanach .front-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.8rem;
+  align-items: center;
+  padding: 1.4rem 1.6rem 0;
+}
+.almanach .front-bar .rs {
+  width: auto;
+  min-width: 18rem;
+  flex: 1 1 18rem;
+}
+.almanach .front-bar .acts {
+  margin-left: auto;
+  display: flex;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+}
+.almanach .kin {
+  list-style: none;
+  margin: 0.4rem 0 0;
+  padding: 0;
+}
+.almanach .kin li {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: 0.3rem 1rem;
+  align-items: baseline;
+  border-top: 1px solid hsl(var(--border));
+  padding: 0.5rem 0;
+}
+.almanach .kin li .st {
+  font-size: 0.8rem;
+  color: hsl(var(--muted-foreground));
+  white-space: nowrap;
+}
+.almanach .tree .who .open-person {
+  color: hsl(var(--primary));
+  text-decoration: none;
+  font-size: 0.85rem;
 }

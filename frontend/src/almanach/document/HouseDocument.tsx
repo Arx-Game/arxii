@@ -50,6 +50,11 @@ import { LandsLeaf } from './LandsLeaf';
 import type { DescribeDemesneFields } from './BaronyPage';
 import { EstateLeaf, type PlanEstateFields } from './EstateLeaf';
 import { PublishBar } from './PublishBar';
+import { TurfChapter } from './TurfChapter';
+import { Books, Forces, Openings } from '../shared/chapters';
+import { PlantRungDialog } from '../ladder/PlantRungDialog';
+import { CreateFamilyForm } from '../front/CreateFamilyForm';
+import { orgUrl } from '../shared/tier';
 import {
   RecordRail,
   type RecordRailDoor,
@@ -58,7 +63,16 @@ import {
 } from './RecordRail';
 import '../almanach.css';
 
-type Leaf = 'house' | 'family' | 'realm' | 'lands' | 'estate' | 'publish';
+type Leaf =
+  | 'house'
+  | 'family'
+  | 'realm'
+  | 'lands'
+  | 'estate'
+  | 'publish'
+  | 'books'
+  | 'openings'
+  | 'turf';
 
 function Dash() {
   return <abbr title="none">—</abbr>;
@@ -72,7 +86,10 @@ interface LeafActions {
   onSwear: (fields: SwearFields) => void;
   onDescribeDemesne: (domainId: number, fields: DescribeDemesneFields) => void;
   onPlanEstate: (fields: PlanEstateFields) => void;
-  onPublish: (next: boolean) => void;
+  onPublish: (next: boolean) => void /** #4239: Add kin with only the family, under the tree. */;
+  familyFooter?: ReactNode;
+  /** #4239: Add title and Add vassal house, after the vassals table. */
+  titlesExtra?: ReactNode;
 }
 
 function stringOrDash(value: string) {
@@ -116,7 +133,10 @@ function leafPresentation(leaf: Leaf, houseId: number, doc: HouseDoc, actions: L
         { label: 'vassals', value: valueOrDash(realm.vassals.length) },
         { label: 'stature', value: <Dash /> },
       ];
-      recordDoors = [{ label: 'the house on the roster', small: 'as players read it' }];
+      recordDoors = [
+        { label: 'the organization', to: orgUrl(houseId) },
+        { label: 'the house on the roster', small: 'as players read it' },
+      ];
       break;
     case 'family':
       chapter = (
@@ -127,6 +147,8 @@ function leafPresentation(leaf: Leaf, houseId: number, doc: HouseDoc, actions: L
           household={household}
           onEdit={onEditKin}
           onCreate={onCreateKin}
+          footer={actions.familyFooter}
+          staff
         />
       );
       recordRows = [
@@ -146,7 +168,13 @@ function leafPresentation(leaf: Leaf, houseId: number, doc: HouseDoc, actions: L
       break;
     case 'realm':
       chapter = (
-        <RealmLeaf houseId={houseId} houseName={house.name} realm={realm} onSwear={onSwear} />
+        <RealmLeaf
+          houseId={houseId}
+          houseName={house.name}
+          realm={realm}
+          onSwear={onSwear}
+          extra={actions.titlesExtra}
+        />
       );
       recordRows = [
         { label: 'tier', value: <Dash /> },
@@ -177,6 +205,47 @@ function leafPresentation(leaf: Leaf, houseId: number, doc: HouseDoc, actions: L
       recordRows = [{ label: 'kind', value: <Dash /> }];
       recordDoors = [{ label: 'open on the Atlas' }];
       break;
+    case 'books':
+      chapter = (
+        <main className="chapter">
+          <h3>
+            Books and forces <span className="tier">{house.name}</span>
+          </h3>
+          <Books books={doc.books} />
+          <Forces forces={doc.forces} />
+        </main>
+      );
+      recordRows = [
+        { label: 'treasury', value: `${doc.books.treasury.toLocaleString()} c` },
+        { label: 'income', value: `${doc.books.income_week.toLocaleString()} c / cycle` },
+        { label: 'soldiers', value: doc.forces.reduce((n, f) => n + f.men, 0) },
+      ];
+      recordDoors = [{ label: 'the organization', to: orgUrl(houseId) }];
+      break;
+    case 'openings':
+      chapter = (
+        <main className="chapter">
+          <h3>
+            Openings <span className="tier">{house.name}</span>
+          </h3>
+          <Openings openings={doc.openings} />
+        </main>
+      );
+      recordRows = [
+        { label: 'appable kin', value: doc.openings.appable.length },
+        { label: 'household posts', value: doc.openings.posts.length },
+        { label: 'vacant seats', value: doc.openings.vacant_seats.length },
+      ];
+      break;
+    case 'turf':
+      chapter = <TurfChapter houseId={houseId} houseName={house.name} turf={doc.turf} />;
+      recordRows = [
+        { label: 'tier', value: doc.turf?.tier || <Dash /> },
+        { label: 'wards', value: doc.turf?.wards.length ?? 0 },
+        { label: 'gangs', value: doc.turf?.gangs.length ?? 0 },
+      ];
+      recordDoors = [{ label: 'the organization', to: orgUrl(houseId) }];
+      break;
     case 'publish':
       chapter = (
         <PublishBar
@@ -203,6 +272,11 @@ export function HouseDocument({ houseId }: { houseId: number }) {
   const describeDemesne = useAlmanachMutation('almanach_describe_demesne');
   const planEstate = useAlmanachMutation('almanach_plan_estate');
   const publish = useAlmanachMutation('almanach_publish');
+  const createKin = useAlmanachMutation('almanach_create_kin');
+  const plant = useAlmanachMutation('almanach_plant_rung');
+  const [kinName, setKinName] = useState('');
+  const [plantOpen, setPlantOpen] = useState(false);
+  const [vassalTitleId, setVassalTitleId] = useState<number | null>(null);
 
   if (!doc) {
     return (
@@ -226,6 +300,78 @@ export function HouseDocument({ houseId }: { houseId: number }) {
     planEstate.mutate({ org_id: houseId, ...fields });
   const onPublish = (next: boolean) => publish.mutate({ org_id: houseId, publish: next });
 
+  const familyId = doc.family.family_id ?? null;
+  const familyFooter = (
+    <div className="row2" style={{ marginTop: '0.8rem' }}>
+      <div className="field">
+        <label htmlFor="hd-kin-name">Add kin</label>
+        <input
+          id="hd-kin-name"
+          type="text"
+          value={kinName}
+          disabled={familyId == null}
+          onChange={(e) => setKinName(e.target.value)}
+        />
+      </div>
+      <div className="field">
+        <span className="label">&nbsp;</span>
+        <button
+          type="button"
+          className="btn sm quiet"
+          disabled={familyId == null || kinName.trim() === ''}
+          onClick={() => {
+            createKin.mutate({ family_id: familyId, name: kinName.trim() });
+            setKinName('');
+          }}
+        >
+          Add kin
+        </button>
+      </div>
+    </div>
+  );
+  const vacantVassals = doc.realm.vassals.filter((row) => row.held_by === '');
+  const vassalTitle = vacantVassals.find((row) => row.title_id === vassalTitleId) ?? null;
+  const titlesExtra = (
+    <>
+      <div className="field">
+        <button type="button" className="add" onClick={() => setPlantOpen(true)}>
+          Add title
+        </button>{' '}
+        {vacantVassals.length > 0 && (
+          <>
+            <span className="meta">·</span>{' '}
+            <select
+              aria-label="Add vassal house"
+              value={vassalTitleId ?? ''}
+              onChange={(e) =>
+                setVassalTitleId(e.target.value === '' ? null : Number(e.target.value))
+              }
+              style={{ width: 'auto', display: 'inline-block' }}
+            >
+              <option value="">Add vassal house</option>
+              {vacantVassals.map((row) => (
+                <option key={row.title_id} value={row.title_id}>
+                  {row.name || 'unnamed'}
+                </option>
+              ))}
+            </select>
+          </>
+        )}
+      </div>
+      {vassalTitle && doc.realm.realm_id != null && (
+        <CreateFamilyForm
+          vacantTitle={{
+            title_id: vassalTitle.title_id,
+            name: vassalTitle.name,
+            realm_id: doc.realm.realm_id,
+          }}
+          onCancel={() => setVassalTitleId(null)}
+          onCreated={() => setVassalTitleId(null)}
+        />
+      )}
+    </>
+  );
+
   const { chapter, recordRows, recordExtraSection, recordDoors } = leafPresentation(
     leaf,
     houseId,
@@ -238,6 +384,8 @@ export function HouseDocument({ houseId }: { houseId: number }) {
       onDescribeDemesne,
       onPlanEstate,
       onPublish,
+      familyFooter,
+      titlesExtra,
     }
   );
 
@@ -280,16 +428,16 @@ export function HouseDocument({ houseId }: { houseId: number }) {
             </ol>
           </div>
           <div className="mv">
-            <span className="label">Holdings</span>
+            <span className="label">Lands</span>
             <ol>
               <li className={leaf === 'realm' ? 'cur' : undefined}>
                 <button type="button" onClick={() => setLeaf('realm')}>
-                  Realm
+                  Titles
                 </button>
               </li>
               <li className={leaf === 'lands' ? 'cur' : undefined}>
                 <button type="button" onClick={() => setLeaf('lands')}>
-                  Lands <small>{lands.count} baronies</small>
+                  Domains <small>{lands.count} baronies</small>
                 </button>
                 {lands.baronies.length > 0 && (
                   <ol>
@@ -310,12 +458,61 @@ export function HouseDocument({ houseId }: { houseId: number }) {
               </li>
             </ol>
           </div>
+          {doc.turf && (
+            <div className="mv">
+              <span className="label">Turf</span>
+              <ol>
+                <li className={leaf === 'turf' ? 'cur' : undefined}>
+                  <button type="button" onClick={() => setLeaf('turf')}>
+                    Wards and gangs <small>{doc.turf.gangs.length} gangs</small>
+                  </button>
+                </li>
+              </ol>
+            </div>
+          )}
+          <div className="mv">
+            <span className="label">Books and forces</span>
+            <ol>
+              <li className={leaf === 'books' ? 'cur' : undefined}>
+                <button type="button" onClick={() => setLeaf('books')}>
+                  Books <small>{doc.books.income_week.toLocaleString()} c / cycle</small>
+                </button>
+              </li>
+              <li className={leaf === 'openings' ? 'cur' : undefined}>
+                <button type="button" onClick={() => setLeaf('openings')}>
+                  Openings{' '}
+                  <small>
+                    {doc.openings.appable.length +
+                      doc.openings.posts.length +
+                      doc.openings.vacant_seats.length}
+                  </small>
+                </button>
+              </li>
+            </ol>
+          </div>
         </aside>
         {chapter}
         {leaf !== 'publish' && (
           <RecordRail rows={recordRows} extraSection={recordExtraSection} doors={recordDoors} />
         )}
       </div>
+      {plantOpen && doc.realm.realm_id != null && (
+        <PlantRungDialog
+          parent={null}
+          open={plantOpen}
+          realmId={doc.realm.realm_id}
+          onClose={() => setPlantOpen(false)}
+          onConfirm={(payload) => {
+            setPlantOpen(false);
+            plant.mutate({
+              realm_id: doc.realm.realm_id,
+              tier: payload.tier,
+              name: payload.name,
+              held_by_org_id: houseId,
+            });
+          }}
+        />
+      )}
     </div>
   );
 }

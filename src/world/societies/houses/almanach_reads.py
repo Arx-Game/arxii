@@ -622,7 +622,7 @@ def observance_rows(house: Organization) -> list[dict]:
 
 def _family_payload(house: Organization, viewer: object, *, staff: bool) -> dict:
     if house.family_id is None:
-        return {"nodes": [], "parentage": [], "unions": []}
+        return {"family_id": None, "nodes": [], "parentage": [], "unions": []}
     payload = family_tree_for(house.family, OMNISCIENT if staff else viewer)
     # The staff cut's nodes already carry ``believed_deceased`` (the node
     # dict is viewer-aware since #3983's leak fix); this one query keeps the
@@ -635,7 +635,12 @@ def _family_payload(house: Organization, viewer: object, *, staff: bool) -> dict
     nodes = [
         {**node, "believed_deceased": believed.get(node["id"], False)} for node in payload.nodes
     ]
-    return {"nodes": nodes, "parentage": payload.parentage, "unions": payload.unions}
+    return {
+        "family_id": house.family_id,
+        "nodes": nodes,
+        "parentage": payload.parentage,
+        "unions": payload.unions,
+    }
 
 
 def _household_payload(house: Organization) -> list[dict]:

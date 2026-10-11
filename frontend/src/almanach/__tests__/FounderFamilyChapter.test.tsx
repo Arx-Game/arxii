@@ -191,7 +191,7 @@ test('a ward household row carries a holder; a position row is an open slot with
   expect(shape.family.nodes.some((node) => node.name === 'Master-at-arms')).toBe(false);
 });
 
-test('the rendered tree shows "your character" on the founder row and the mother\'s "deceased" status', () => {
+test('the rendered tree shows "your character" on the founder row and the mother\'s (RIP) mark', () => {
   const { container } = renderWithProviders(
     <FounderFamilyChapter
       draft={baseDraft(headMotherSpouse())}
@@ -206,7 +206,7 @@ test('the rendered tree shows "your character" on the founder row and the mother
   );
 
   expect(screen.getByText('your character')).toBeInTheDocument();
-  expect(screen.getByText('deceased')).toBeInTheDocument();
+  expect(screen.getByText('(RIP)')).toBeInTheDocument();
   // The founder plate's own relation vocabulary, not `FamilyChapter`'s
   // structural depth-based words.
   expect(screen.getByText('head of house')).toBeInTheDocument();

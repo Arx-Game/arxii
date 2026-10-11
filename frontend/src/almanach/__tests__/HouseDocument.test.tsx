@@ -50,7 +50,7 @@ const doc: HouseDocumentPayload = {
       { ic_month: 10, ic_day: 18, name: 'Founding Night', lore: '', when: 'Masquing 18 (10/18)' },
     ],
   },
-  family: { nodes: [], parentage: [], unions: [] },
+  family: { family_id: 4, nodes: [], parentage: [], unions: [] },
   household: [],
   realm: {
     sworn_to: '',
@@ -81,6 +81,10 @@ const doc: HouseDocumentPayload = {
     ],
   },
   estate: [],
+  books: { income_week: 0, uncollected: 0, treasury: 0, streams: 0 },
+  forces: [],
+  openings: { appable: [], posts: [], vacant_seats: [] },
+  turf: null,
 };
 
 test('opens on The House with the contents rail and the record rail', () => {
@@ -174,7 +178,7 @@ test("the ladder record door links to the realm's own ladder page when realm_id 
   vi.mocked(queries.useHouseDocument).mockReturnValue({ data: doc, isLoading: false } as never);
   vi.mocked(queries.useAllHouses).mockReturnValue({ data: { results: [] } } as never);
   renderWithProviders(<HouseDocument houseId={9} />);
-  await userEvent.click(screen.getByRole('button', { name: 'Realm' }));
+  await userEvent.click(screen.getByRole('button', { name: 'Titles' }));
   const door = screen.getByRole('link', { name: 'the ladder' });
   expect(door).toHaveAttribute('href', '/staff/almanach/realms/1');
 });
@@ -187,7 +191,7 @@ test("the ladder record door renders a labeled dash when the house's realm carri
   } as never);
   vi.mocked(queries.useAllHouses).mockReturnValue({ data: { results: [] } } as never);
   renderWithProviders(<HouseDocument houseId={9} />);
-  await userEvent.click(screen.getByRole('button', { name: 'Realm' }));
+  await userEvent.click(screen.getByRole('button', { name: 'Titles' }));
   expect(screen.queryByRole('link', { name: 'the ladder' })).not.toBeInTheDocument();
   expect(screen.getByText('the ladder')).toBeInTheDocument();
 });
@@ -196,8 +200,8 @@ test('swearing a house prefills the tithe percent from the realm default', async
   vi.mocked(queries.useHouseDocument).mockReturnValue({ data: doc, isLoading: false } as never);
   vi.mocked(queries.useAllHouses).mockReturnValue({ data: { results: [] } } as never);
   renderWithProviders(<HouseDocument houseId={9} />);
-  await userEvent.click(screen.getByRole('button', { name: 'Realm' }));
-  await userEvent.click(screen.getByRole('button', { name: 'swear a house' }));
+  await userEvent.click(screen.getByRole('button', { name: 'Titles' }));
+  await userEvent.click(screen.getByRole('button', { name: 'Swear a house' }));
   const dialog = screen.getByRole('dialog');
   expect(within(dialog).getByLabelText('tithe percent')).toHaveValue(10);
 });

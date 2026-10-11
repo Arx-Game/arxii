@@ -37,6 +37,8 @@ function node(
     tier: 'name_only',
     family_id: null,
     is_deceased: false,
+    is_missing: false,
+    obituary: '',
     is_appable: false,
     sheet_id: 900 + overrides.id,
     roster_entry_id: 500 + overrides.id,
