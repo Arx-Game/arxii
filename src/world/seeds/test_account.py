@@ -15,8 +15,9 @@ from dataclasses import dataclass
 
 #: Default credentials for the seeded test account. These are intentionally
 #: hardcoded and public — they exist solely for local dev / e2e testing and
-#: must never be used in production. The safety gate is ALLOW_INTEGRATION_TESTS
-#: in .env, checked by the CLI command that invokes this seed.
+#: must never be used in production. Nothing gates this seed: the
+#: `seed_test_account` management command runs it unconditionally, and
+#: ALLOW_INTEGRATION_TESTS gates only `arx integration-test`.
 DEFAULT_USERNAME = "e2e_test_account"
 DEFAULT_EMAIL = "e2e_test@example.com"
 DEFAULT_PASSWORD = "TestPass123!"  # noqa: S105
