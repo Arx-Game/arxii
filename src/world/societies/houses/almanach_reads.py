@@ -85,7 +85,7 @@ the omniscient viewer (mechanical truth); otherwise the caller's own
 from __future__ import annotations
 
 from collections import defaultdict
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
 from django.core.exceptions import ObjectDoesNotExist
@@ -154,7 +154,12 @@ class LadderPayload:
 
 @dataclass
 class HouseDocument:
-    """The Almanach's house document: plain dicts/lists per section."""
+    """The Almanach's house document: plain dicts/lists per section.
+
+    ``books``, ``forces``, ``openings`` and ``turf`` are the chapters #4239
+    added (``almanach_pages.house_chapters``); ``turf`` is ``None`` for a
+    house that holds none, so a noble document carries no turf key worth
+    drawing."""
 
     house: dict
     family: dict
@@ -162,6 +167,10 @@ class HouseDocument:
     realm: dict
     lands: dict
     estate: list[dict]
+    books: dict = field(default_factory=dict)
+    forces: list[dict] = field(default_factory=list)
+    openings: dict = field(default_factory=dict)
+    turf: dict | None = None
 
 
 @dataclass
@@ -806,6 +815,8 @@ def document_for_house(house: Organization, *, viewer: object, staff: bool) -> H
     """The Almanach's house document (#3983): the house's own charter block
     folded together with its family tree, household, realm standing, lands,
     and estate — one read for the whole house page."""
+    from world.societies.houses.almanach_pages import house_chapters  # noqa: PLC0415
+
     titles = _house_titles(house)
     all_rows: list[LadderRow] = []
     if titles:
@@ -817,6 +828,7 @@ def document_for_house(house: Organization, *, viewer: object, staff: bool) -> H
         realm=_realm_payload(house, titles, all_rows),
         lands=_lands_payload(house, titles),
         estate=_estate_payload(house),
+        **house_chapters(house),
     )
 
 
