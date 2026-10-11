@@ -24,10 +24,6 @@ on:
         description: "PR number to review"
         required: true
 
-concurrency:
-  group: evidence-challenge-${{ github.event.pull_request.number || github.event.issue.number || inputs.pr }}
-  cancel-in-progress: true
-
 permissions:
   contents: read
   pull-requests: write
@@ -56,13 +52,21 @@ jobs:
       || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    # On the job, not the workflow: issue_comment fires for every comment on
+    # every PR, and a workflow-level group would let a skipped run cancel a
+    # review in progress. Only runs that pass the `if:` hold the group.
+    concurrency:
+      group: evidence-challenge-${{ github.event.pull_request.number || github.event.issue.number || inputs.pr }}
+      cancel-in-progress: true
     steps:
       # The default branch, never the PR head: the reviewer reads project rules
-      # from here, and a PR cannot weaken its own reviewer.
+      # from here, and a PR cannot weaken its own reviewer. No persisted token:
+      # the model can read files, so nothing secret may sit in .git/config.
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           ref: ${{ github.event.repository.default_branch }}
           fetch-depth: 1
+          persist-credentials: false
 
       - name: Prepare round
         id: prep
@@ -100,8 +104,8 @@ jobs:
           if [ ! -f "$REVIEWER" ]; then
             echo "Reviewer not on the default branch yet; reading it from the PR head."
             head_ref=$(jq -r .headRefName <<<"$pr_json")
-            git fetch --depth=1 origin "$head_ref"
-            git show "FETCH_HEAD:$REVIEWER" > "$RUNNER_TEMP/reviewer.md"
+            gh api -H "Accept: application/vnd.github.raw" \
+              "repos/$REPO/contents/$REVIEWER?ref=$head_ref" > "$RUNNER_TEMP/reviewer.md"
           else
             cp "$REVIEWER" "$RUNNER_TEMP/reviewer.md"
           fi

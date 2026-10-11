@@ -120,7 +120,7 @@ fi
 # The plain real-testing report (tools/skills/real-testing, ADR-4246). A script
 # cannot judge its quality - the evidence challenger does that on the PR - but
 # it can refuse to open a PR that has no Verification section at all.
-if [[ -z "${VERIFICATION//[[:space:]]/}" || "$VERIFICATION" == *"not recorded"* ]]; then
+if [[ -z "${VERIFICATION//[[:space:]]/}" || "$VERIFICATION" =~ ^[[:space:]]*not\ recorded[[:space:]]*$ ]]; then
   echo "ERROR: PR_VERIFICATION must carry the real-testing report: what you did, what you expected, what you saw, and where the evidence is." >&2
   exit 1
 fi

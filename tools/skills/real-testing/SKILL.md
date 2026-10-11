@@ -29,8 +29,11 @@ when you have operated it and seen the promised result.
 ## 0. Check the machine first
 
 Before you start a server, a browser or a build, check that this machine can
-carry it. Use the machine test in CLAUDE.md ("Tool & Subagent Sequencing"):
-`grep MemTotal /proc/meminfo`. Under 8 GiB is the small laptop profile.
+carry it, and that you would not be taking something from another session.
+You already know the machine profile from the CLAUDE.md machine test ("Tool &
+Subagent Sequencing"); under 8 GiB is the small laptop. The devcontainer is
+shared: other sessions may have a server running (`ss -ltn` shows :4001 and
+:4002), tests running, or their own worktrees open.
 
 You do not need to measure memory or make a budget. Use judgment:
 
@@ -66,10 +69,31 @@ from somewhere else: a CI run, a run on a larger machine, or the maintainer.
 
 ## 2. Build and start the current program
 
-- Use the project's own commands (`docs/dev-commands.md`): `just start` /
-  `arx start` for the server (web on :4001, websocket on :4002); the built
-  frontend bundle served by the server, or `pnpm dev` (Vite on :3000) when the
-  machine has room.
+- **First check if a server is already running:** `ss -ltn | grep -E ':(4001|4002) '`.
+  - **Something is listening:** it is almost always another session's server,
+    started from another worktree, running that worktree's code, not yours.
+    **Do not run `just start`, `just stop` or `uv run arx start`.** `arx start`
+    kills every Evennia process in the container before it starts, so it
+    would take that session's server down. Do not operate your change through
+    that server either: it does not have your code. Record
+    `BLOCKED: shared server` and use the smaller form: drive the real URL,
+    view and serializer stack with Django's test client against real rows
+    made by factories, and read back the saved state. Say in the report that
+    this was the smaller form.
+  - **Nothing is listening and the machine has room:** start your own from
+    your worktree against your throwaway database:
+    `DATABASE_URL=postgres://arxii:arxii@db:5432/<your_db> just start` (web on
+    :4001, websocket on :4002), and stop it with `just stop` when you finish.
+    This works because a worktree has no `src/.env`, so settings read
+    `DATABASE_URL` from the environment. The main checkout has a `src/.env`,
+    and `arx` loads it over the environment, so there the server always uses
+    `arxiidev`: do not run this from the main checkout. On the solo laptop,
+    where the branch is checked out in the main checkout, a server you start
+    writes to `arxiidev`; use the smaller form above, or say in the report
+    exactly which rows the check created there. `arx` and `evennia`
+    run through `uv run`; they are not on the PATH. Use the built frontend
+    bundle served by the server; run `pnpm dev` (Vite on :3000) only when the
+    machine has room.
 - Make sure what you exercise contains your change: rebuild and restart after
   a fix. A stale bundle or an old server process is not evidence.
 - **Isolated data.** Use a throwaway database, for example one built by
@@ -77,9 +101,10 @@ from somewhere else: a CI run, a run on a larger machine, or the maintainer.
   (`ALLOW_INTEGRATION_TESTS=true`), or the scratch database of
   `reviewing-migrations` section 6. Do not run the test suite against the same
   database while you use it.
-- **Never touch production.** Never drop, flush or overwrite `arxiidev`
-  except through the sanctioned `just pull-prod yes`, and only when you mean
-  to replace it with a production copy.
+- **Never touch production, and never overwrite the shared `arxiidev`.**
+  Every session in the devcontainer uses it. `just pull-prod yes` restores
+  over it (it always targets the database in `src/.env`), so run it only with
+  the maintainer's go-ahead.
 - Watch startup for errors. A process that started is not a process that is
   ready.
 - If a dependency you need is missing, say which behaviors that blocks, test
@@ -94,7 +119,7 @@ from somewhere else: a CI run, a run on a larger machine, or the maintainer.
 | REST endpoint | Send real requests to the running server; check the response and the saved state it should change. |
 | Game action over WebSocket | Send the action the web client sends; check the response and the resulting state. |
 | Staff admin page | Load the page in the running server as a staff account; submit the form; read the row back. |
-| Migration on tables with data | Run it against a production copy (`just pull-prod yes`, or the scratch-database recipe of `reviewing-migrations` section 6); check the affected rows before and after. For a fix, show the old migration failing and the new one passing. |
+| Migration on tables with data | Copy `arxiidev` into a scratch database and migrate that (`reviewing-migrations` section 6); never migrate `arxiidev` itself. Say how old its production copy is: `pull-prod` drops and recreates the database, so its creation time is the pull time (`select (pg_stat_file('base/'||oid||'/PG_VERSION')).modification from pg_database where datname='arxiidev';`). If it is stale or was never pulled, ask the maintainer before a fresh `just pull-prod yes` (it overwrites the shared `arxiidev`), or record `BLOCKED: no current production copy`. Check the affected rows before and after. For a fix, show the old migration failing and the new one passing. |
 | Service function with no outside interface | Call it the way its real caller does, with real related rows, and read back the state. |
 
 - For anything that saves, read it back the normal way (reload the page,

@@ -591,6 +591,9 @@ The newest one's first line is `<!-- evidence-challenge round=R verdict=V -->`.
   expected, what you saw, and where the evidence is; `BLOCKED: <reason>` for
   what you cannot run. That comment starts the next round. Keep watching CI
   while it runs.
+- **`verdict=open`, but every open item is `BLOCKED` and you have nothing
+  new:** do not post another answer to use up a round. Go straight to the
+  round-3 handling below.
 - **`verdict=open` on round 3:** enqueue anyway. Add a
   `## Open evidence challenges` section to the PR body (REST PATCH, as in
   Step 8) that lists each open item and your last answer, for the maintainer.

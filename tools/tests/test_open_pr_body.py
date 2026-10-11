@@ -219,6 +219,13 @@ class OpenPrBodyTests(unittest.TestCase):
                 self.assertNotEqual(result.returncode, 0)
                 self.assertIn("PR_VERIFICATION", result.stderr)
 
+    def test_a_real_report_may_say_not_recorded(self) -> None:
+        report = "BLOCKED: the browser pass was not recorded; the machine has 6 GB."
+        body = _dry_run_body(
+            {"PR_EVIDENCE_FILE": "docs/reviews/1234.md", "PR_VERIFICATION": report}
+        )
+        self.assertIn(report, body)
+
     def test_verification_report_lands_in_its_own_section(self) -> None:
         body = _dry_run_body({"PR_EVIDENCE_FILE": "docs/reviews/1234.md"})
         _, _, after_heading = body.partition("## Verification\n\n")

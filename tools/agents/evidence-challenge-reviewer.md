@@ -108,11 +108,14 @@ what was seen, the explanation is probably not good enough.
 - Timestamps, row counts and error text agree with each other and with the
   diff.
 - For a migration that changes tables with rows: the evidence comes from a
-  copy of production data. Expect the `just pull-prod yes` output (the dump
-  name with its timestamp, a `showmigrations` listing with no unapplied
-  `[ ]` rows, and `restore verified (...)`), row counts for the affected
-  tables, and for a fix, the old error followed by a clean run. A migration
-  on an empty or test database is not evidence for this.
+  copy of production data. Expect either a scratch database copied from
+  `arxiidev` (`reviewing-migrations` section 6) with the age of that
+  production copy stated, or `just pull-prod yes` output (the dump name with
+  its timestamp, a `showmigrations` listing with no unapplied `[ ]` rows,
+  `restore verified (...)`). Then row counts for the affected tables, and for
+  a fix, the old error followed by a clean run. A migration on an empty or
+  test database is not evidence for this. A copy weeks older than the tables
+  the migration touches is weak evidence: say so.
 
 If evidence looks invented (output that does not match the diff, a commit that
 does not exist, numbers that contradict each other), say exactly what does not
@@ -123,7 +126,8 @@ match. Do not accuse; state the mismatch.
 When there are earlier rounds, read the agent's newest answer for each open
 item. Accept it only if it meets the bar above. If it does not, say in one or
 two plain sentences what is still missing. Do not repeat challenges that are
-already `PROVEN`.
+already `PROVEN`. An item still `BLOCKED` for the same honest reason stays
+`BLOCKED`; do not ask again for evidence the agent has said it cannot get.
 
 ## Output
 
