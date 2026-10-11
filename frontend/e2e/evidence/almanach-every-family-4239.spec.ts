@@ -347,9 +347,11 @@ const TEALE = {
 };
 
 async function installRoutes(page: Page): Promise<void> {
+  const base = buildPiropaDocument(false);
   const piropa = {
-    ...buildPiropaDocument(false),
-    family: { ...buildPiropaDocument(false).family, family_id: 1 },
+    ...base,
+    family: { ...base.family, family_id: 1 },
+    realm: { ...base.realm, holds_title_id: DUCHY_ID, holds_tier: 'duchy' },
     ...CHAPTERS,
   };
   await page.route('**/api/**', async (route) => {
@@ -483,6 +485,7 @@ test.describe('Almanach, every family (#4239)', () => {
     await page.screenshot({ path: shot('03-house-family-1280.png'), fullPage: true });
     await page.getByRole('button', { name: 'Titles' }).click();
     await expect(page.getByRole('button', { name: 'Add title' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Add vacant seats' })).toBeVisible();
     await page.screenshot({ path: shot('03b-house-titles-1280.png'), fullPage: true });
     await page.getByRole('button', { name: /^Books/ }).click();
     await expect(page.getByRole('heading', { name: 'Forces', exact: true })).toBeVisible();
