@@ -171,6 +171,14 @@ Never migrate `arxiidev` itself, and never point any of this at production.
 `CREATE DATABASE ... TEMPLATE arxiidev` fails whenever anything holds a
 connection to it; the `pg_dump` pipe above has no such problem.
 
+**Put the output in the PR's Verification section** (ADR-4246): which dump
+`arxiidev` came from (the `pull-prod` object name, which carries its
+timestamp), the old migration's error if you reproduced one, the clean run,
+and the row counts you checked. The `evidence-challenge-reviewer` asks for
+exactly this. "Tested against a copy of production" with no output is the
+claim it exists to challenge: agents have written that sentence about runs
+that never happened.
+
 ### Never commit a test for a one-off migration
 
 A data migration runs once per database and is then history: a committed test for it

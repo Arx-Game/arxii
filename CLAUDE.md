@@ -484,6 +484,14 @@ no-backwards-compat, `# noqa` policy + custom-linter tokens) live in `django_not
 
 ## Testing
 
+**Unit tests alone are not proof that a change works** (ADR-4246). Before a PR,
+operate the change through the interface a person or caller uses, against isolated
+data, and report in plain words what you did, expected, saw, and where the evidence
+is (`tools/skills/real-testing/`). An expected result never comes from the code's own
+output. A machine that cannot carry the pass gets `BLOCKED: resources`, never a
+pass. `evidence-challenge-reviewer` challenges every PR's claims; it is advisory and
+a maintainer approval overrides it, but its challenges get real answers.
+
 **Always use `arx test` or its `just` wrappers** — never `uv run python -m`,
 `python manage.py test`, or sourcing venvs. Two tiers: SQLite for fast local
 iteration (`just test-fast <app>`), Postgres for parity (`just test-parity` /

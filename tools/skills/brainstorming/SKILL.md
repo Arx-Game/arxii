@@ -128,7 +128,11 @@ You MUST work through these items in order:
 - Scale each section to its complexity: a few sentences if straightforward, up
   to 200-300 words if nuanced.
 - Ask after each section whether it looks right so far.
-- Cover: architecture, components, data flow, error handling, testing.
+- Cover: architecture, components, data flow, error handling, verification.
+- Verification means expected behavior (from the spec, never from the code's
+  output), how it will be operated for real, and what failure looks like, in
+  plain words (`docs/spec-template.md`, `tools/skills/real-testing/`). "Wrote
+  unit tests" is not a verification plan.
 - Use canonical vocabulary from `AGENT_GLOSSARY_MAP.md`; reference relevant
   ADRs.
 - Be ready to go back and clarify if something doesn't make sense.

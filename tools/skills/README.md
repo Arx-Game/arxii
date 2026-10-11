@@ -141,6 +141,15 @@ open fork as a control the reviewer answers, the rows finalize writes as the las
 screen), not off prose. Pairs with `review-artifacts` and `verify-against-code`.
 Trialled on #3660 for #3659.
 
+### real-testing
+
+Prove a change by operating the real program (web client, REST/WebSocket, admin
+page, a migration against a production copy) and reporting what was seen, in plain
+words; unit tests alone are not proof. Checks the machine first and records
+`BLOCKED: resources` instead of a pass it cannot carry. Adapted from an MIT skill
+(see its `LICENSE`). Its report fills the PR's Verification section, which the
+`evidence-challenge-reviewer` agent challenges on every PR (ADR-4246).
+
 ### domain-glossary-and-adr
 
 Keeps the `AGENT_GLOSSARY.md` files and `docs/adr/` log current and used: read
