@@ -157,6 +157,7 @@ export function PersonPage({ personId }: { personId: number }) {
   if (family && familyLink) doors.push({ label: family.name, to: familyLink });
   if (house) doors.push({ label: `${house.name} organization`, to: orgUrl(house.org_id) });
   for (const t of titles) doors.push({ label: t.name, to: titleUrl(t.title_id) });
+  if (family) doors.push({ label: 'Public tree', to: `/families/${family.id}` });
   for (const m of memberships) doors.push({ label: m.name, small: m.rank, to: orgUrl(m.org_id) });
 
   return (
@@ -189,6 +190,17 @@ export function PersonPage({ personId }: { personId: number }) {
               Sheet<small>{sheet.sheet_id ? sheet.sheet_id : 'none'}</small>
             </li>
           </ol>
+          <div className="mv">
+            <span className="label">also in</span>
+            <ol>
+              <li>
+                Roster<small>{sheet.is_appable ? 'appable' : 'not appable'}</small>
+              </li>
+              <li>
+                Public tree<small>{family ? 'with the family' : 'none'}</small>
+              </li>
+            </ol>
+          </div>
         </aside>
         <main className="chapter">
           <h3>
@@ -469,6 +481,7 @@ export function PersonPage({ personId }: { personId: number }) {
                   <tr key={t.title_id}>
                     <td>
                       <Link to={titleUrl(t.title_id)}>{t.name}</Link>
+                      {t.seat && <span className="meta"> seat: {t.seat}</span>}
                     </td>
                     <td>{t.realm}</td>
                     <td>holder, for {t.held_by}</td>

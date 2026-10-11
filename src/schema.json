@@ -881,6 +881,64 @@ paths:
               schema:
                 $ref: '#/components/schemas/FrontRolls'
           description: ''
+  /api/almanach/holding-kinds/:
+    get:
+      operationId: almanach_holding_kinds_list
+      description: The holding catalog, for Add holding.
+      parameters:
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - in: query
+        name: site_kind
+        schema:
+          type: string
+          enum:
+          - abstract
+          - building
+          - land
+        description: |-
+          What a holding of this kind sits on (#4060): land, a building, or nothing.
+
+          * `abstract` - No site
+          * `land` - Land (outdoor rooms)
+          * `building` - A building or ship
+      tags:
+      - almanach
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedAlmanachHoldingKindList'
+          description: ''
+  /api/almanach/holding-kinds/{id}/:
+    get:
+      operationId: almanach_holding_kinds_retrieve
+      description: The holding catalog, for Add holding.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this holding kind.
+        required: true
+      tags:
+      - almanach
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AlmanachHoldingKind'
+          description: ''
   /api/almanach/houses/:
     get:
       operationId: almanach_houses_list
@@ -42881,6 +42939,35 @@ components:
       - kind_name
       - name
       - origin_realm_id
+    AlmanachHoldingKind:
+      type: object
+      description: The holding catalog, for Add holding on a domain's page.
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        name:
+          type: string
+          maxLength: 80
+        description:
+          type: string
+        site_kind:
+          allOf:
+          - $ref: '#/components/schemas/SiteKindEnum'
+          description: |-
+            What a holding of this kind sits on (#4060): land, a building, or nothing.
+
+            * `abstract` - No site
+            * `land` - Land (outdoor rooms)
+            * `building` - A building or ship
+        requires_field:
+          type: boolean
+          description: 'A farm: the holding sits on a FIELD room feature (#4060),
+            so one farm grows food through agriculture and pays coin through this
+            holding''s stream.'
+      required:
+      - id
+      - name
     AlmanachHouseAspect:
       type: object
       description: |-
@@ -67704,6 +67791,29 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/AlmanachFamilySummary'
+    PaginatedAlmanachHoldingKindList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/AlmanachHoldingKind'
     PaginatedAlmanachHouseSummaryList:
       type: object
       required:
@@ -83276,6 +83386,16 @@ components:
       description: |-
         * `SINNER` - SINNER
         * `SINEATER` - SINEATER
+    SiteKindEnum:
+      enum:
+      - abstract
+      - land
+      - building
+      type: string
+      description: |-
+        * `abstract` - No site
+        * `land` - Land (outdoor rooms)
+        * `building` - A building or ship
     SituationChallengeLink:
       type: object
       description: Nested serializer for situation challenge links.

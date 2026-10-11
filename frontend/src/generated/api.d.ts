@@ -577,6 +577,40 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/almanach/holding-kinds/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description The holding catalog, for Add holding. */
+    get: operations['almanach_holding_kinds_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/almanach/holding-kinds/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description The holding catalog, for Add holding. */
+    get: operations['almanach_holding_kinds_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/almanach/houses/': {
     parameters: {
       query?: never;
@@ -26426,6 +26460,22 @@ export interface components {
       /** @description Whether players can select this family in character creation */
       is_playable?: boolean;
     };
+    /** @description The holding catalog, for Add holding on a domain's page. */
+    AlmanachHoldingKind: {
+      readonly id: number;
+      name: string;
+      description?: string;
+      /**
+       * @description What a holding of this kind sits on (#4060): land, a building, or nothing.
+       *
+       *     * `abstract` - No site
+       *     * `land` - Land (outdoor rooms)
+       *     * `building` - A building or ship
+       */
+      site_kind?: components['schemas']['SiteKindEnum'];
+      /** @description A farm: the holding sits on a FIELD room feature (#4060), so one farm grows food through agriculture and pays coin through this holding's stream. */
+      requires_field?: boolean;
+    };
     /**
      * @description One picked aspect (mirrors ``almanach_reads.aspect_facet``): ``being_name``
      *     is the god or totem the answer is (#4205), ``target_entry_id`` the one Codex
@@ -38424,6 +38474,21 @@ export interface components {
       previous?: string | null;
       results: components['schemas']['AlmanachFamilySummary'][];
     };
+    PaginatedAlmanachHoldingKindList: {
+      /** @example 123 */
+      count: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results: components['schemas']['AlmanachHoldingKind'][];
+    };
     PaginatedAlmanachHouseSummaryList: {
       /** @example 123 */
       count: number;
@@ -47127,6 +47192,13 @@ export interface components {
      * @enum {string}
      */
     SinnerRoleEnum: 'SINNER' | 'SINEATER';
+    /**
+     * @description * `abstract` - No site
+     *     * `land` - Land (outdoor rooms)
+     *     * `building` - A building or ship
+     * @enum {string}
+     */
+    SiteKindEnum: 'abstract' | 'land' | 'building';
     /** @description Nested serializer for situation challenge links. */
     SituationChallengeLink: {
       challenge_template: number;
@@ -52387,6 +52459,58 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['FrontRolls'];
+        };
+      };
+    };
+  };
+  almanach_holding_kinds_list: {
+    parameters: {
+      query?: {
+        /** @description A page number within the paginated result set. */
+        page?: number;
+        /**
+         * @description What a holding of this kind sits on (#4060): land, a building, or nothing.
+         *
+         *     * `abstract` - No site
+         *     * `land` - Land (outdoor rooms)
+         *     * `building` - A building or ship
+         */
+        site_kind?: 'abstract' | 'building' | 'land';
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedAlmanachHoldingKindList'];
+        };
+      };
+    };
+  };
+  almanach_holding_kinds_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this holding kind. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['AlmanachHoldingKind'];
         };
       };
     };

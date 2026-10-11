@@ -16,7 +16,7 @@ export function Books({ books }: { books: AlmanachBooks }) {
         <div className="field">
           <span className="label">income</span>
           <div className="val">
-            {books.income_week.toLocaleString()} c / cycle
+            {books.income_week.toLocaleString()} c / week
             <span className="meta"> {books.streams} streams</span>
           </div>
         </div>

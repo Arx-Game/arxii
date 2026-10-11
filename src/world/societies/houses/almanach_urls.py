@@ -8,6 +8,7 @@ from world.societies.houses.almanach_views import (
     AlmanachFamilyKindViewSet,
     AlmanachFamilyViewSet,
     AlmanachFrontView,
+    AlmanachHoldingKindViewSet,
     AlmanachHouseViewSet,
     AlmanachPersonViewSet,
     AlmanachRealmViewSet,
@@ -29,6 +30,7 @@ router.register(r"families", AlmanachFamilyViewSet, basename="almanach-family")
 router.register(r"kinds", AlmanachFamilyKindViewSet, basename="almanach-kind")
 router.register(r"templates", AlmanachTemplateViewSet, basename="almanach-template")
 router.register(r"union-kinds", AlmanachUnionKindViewSet, basename="almanach-union-kind")
+router.register(r"holding-kinds", AlmanachHoldingKindViewSet, basename="almanach-holding-kind")
 
 app_name = "almanach"
 urlpatterns = [

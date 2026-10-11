@@ -908,7 +908,7 @@ counts, or matching houses; Crime: cities with family, gang and crew-slot counts
 crime families; Commoner: families with no organization or whose organization holds neither a
 title nor turf), `search(q)` (people, families, organizations, titles; nothing under two
 characters), `person_document`, `rung_document`, `family_document` (works with no
-organization), and the chapters the house document grows: `books_for` (income per cycle,
+organization), and the chapters the house document grows: `books_for` (income per week,
 uncollected, treasury, from `OrgIncomeStream` and `OrganizationTreasury`; the full ledger is
 #4243), `forces_for` (`MilitaryUnit` by owner plus `DomainGarrisonPost`), `openings_for`
 (appable kin, open household posts, vacant seats sworn beneath), `turf_for` (`None` for a

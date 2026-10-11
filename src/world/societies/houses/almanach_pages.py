@@ -145,11 +145,41 @@ def life_status(person: Kinsperson) -> str:
     return LifeStatus.ALIVE
 
 
-def _person_row(person: Kinsperson, *, relation: str = "") -> dict:
+_WOMAN_WORDS = ("woman", "female", "girl")
+_MAN_WORDS = ("man", "male", "boy")
+_SIBLING = "sibling"
+_SPOUSE = "spouse"
+
+
+def _gendered(person: Kinsperson, *, she: str, he: str, other: str) -> str:
+    """A kin word by the person's gender: mother/father/parent, daughter/son/child."""
+    name = (person.gender.display_name if person.gender_id else "").strip().lower()
+    if name and any(name == w or name.startswith(w) for w in _WOMAN_WORDS):
+        return she
+    if name and any(name == w or name.startswith(w) for w in _MAN_WORDS):
+        return he
+    return other
+
+
+def kin_word(person: Kinsperson, link: str, label: str = "") -> str:
+    """The word a kin row prints for its relation to the page's person (#4239)."""
+    if link == KinLink.PARENT:
+        return _gendered(person, she="mother", he="father", other="parent")
+    if link == KinLink.CHILD:
+        return _gendered(person, she="daughter", he="son", other="child")
+    if link == KinLink.SPOUSE:
+        return _SPOUSE
+    if not label or label == _SIBLING:
+        return _gendered(person, she="sister", he="brother", other=_SIBLING)
+    return label
+
+
+def _person_row(person: Kinsperson, *, relation: str = "", link: str = "") -> dict:
     return {
         "id": person.pk,
         "name": person.display_name,
         "relation": relation,
+        "link": link,
         "tier": person.definition_tier,
         "tier_display": tier_display(person.definition_tier),
         "status": life_status(person),
@@ -281,7 +311,9 @@ def turf_for(house: Organization) -> dict | None:
     neighborhoods, the crews on rooms. ``None`` when the organization holds no
     turf, so a noble house's document carries no turf key."""
     wards = list(
-        Turf.objects.filter(controlling_org=house, area__isnull=False).select_related("area")
+        Turf.objects.filter(controlling_org=house, area__isnull=False).select_related(
+            "area", "income_stream"
+        )
     )
     gangs = list(
         Organization.objects.filter(
@@ -328,7 +360,13 @@ def turf_for(house: Organization) -> dict | None:
     return {
         "tier": _crime_tier_label(house),
         "wards": [
-            {"turf_id": t.pk, "area_id": t.area_id, "name": t.area.name, "grip": t.grip}
+            {
+                "turf_id": t.pk,
+                "area_id": t.area_id,
+                "name": t.area.name,
+                "grip": t.grip,
+                "base_value": t.income_stream.gross_amount if t.income_stream_id else 0,
+            }
             for t in wards
         ],
         "gangs": gang_rows,
@@ -540,17 +578,29 @@ def _kin_rows(node: Kinsperson) -> list[dict]:
     sibling_labels = siblings_of(node, OMNISCIENT)
     siblings = Kinsperson.objects.filter(pk__in=sibling_labels.keys()).order_by("name")
     return [
-        *(_person_row(e.parent, relation=KinLink.PARENT) for e in parents_of(node, OMNISCIENT)),
-        *(_person_row(e.child, relation=KinLink.CHILD) for e in children_of(node, OMNISCIENT)),
-        *(_person_row(s, relation=KinLink.SPOUSE) for s in spouses_of(node, OMNISCIENT)),
-        *(_person_row(s, relation=sibling_labels[s.pk]) for s in siblings),
+        *(
+            _person_row(e.parent, relation=kin_word(e.parent, KinLink.PARENT), link=KinLink.PARENT)
+            for e in parents_of(node, OMNISCIENT)
+        ),
+        *(
+            _person_row(e.child, relation=kin_word(e.child, KinLink.CHILD), link=KinLink.CHILD)
+            for e in children_of(node, OMNISCIENT)
+        ),
+        *(
+            _person_row(s, relation=kin_word(s, KinLink.SPOUSE), link=KinLink.SPOUSE)
+            for s in spouses_of(node, OMNISCIENT)
+        ),
+        *(
+            _person_row(s, relation=kin_word(s, _SIBLING, sibling_labels[s.pk]), link=_SIBLING)
+            for s in siblings
+        ),
     ]
 
 
 def _titles_held(node: Kinsperson) -> list[dict]:
     rows = []
     graphs: dict[int, object] = {}
-    for title in Title.objects.filter(holder=node).select_related("realm", "house"):
+    for title in Title.objects.filter(holder=node).select_related("realm", "house", "seat_domain"):
         graph = graphs.get(title.realm_id)
         if graph is None:
             graph = _realm_graph(title.realm_id)
@@ -563,6 +613,7 @@ def _titles_held(node: Kinsperson) -> list[dict]:
                 "tier": title.tier,
                 "realm": title.realm.name,
                 "held_by": title.house.name if title.house_id else "",
+                "seat": title.seat_domain.name if title.seat_domain_id else "",
                 "vassals": row.vassals if row is not None else 0,
             }
         )
@@ -668,9 +719,9 @@ def person_document(node: Kinsperson) -> PersonDocument:
         },
         memberships=_memberships(node),
         record={
-            "parents": sum(1 for k in kin if k["relation"] == KinLink.PARENT),
-            "children": sum(1 for k in kin if k["relation"] == KinLink.CHILD),
-            "siblings": sum(1 for k in kin if k["relation"] not in KinLink.values),
+            "parents": sum(1 for k in kin if k["link"] == KinLink.PARENT),
+            "children": sum(1 for k in kin if k["link"] == KinLink.CHILD),
+            "siblings": sum(1 for k in kin if k["link"] not in KinLink.values),
             "unions": unions,
             "hidden_truths": hidden,
         },

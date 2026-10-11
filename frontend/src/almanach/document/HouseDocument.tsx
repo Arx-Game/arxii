@@ -53,6 +53,7 @@ import { PublishBar } from './PublishBar';
 import { TurfChapter } from './TurfChapter';
 import { Books, Forces, Openings } from '../shared/chapters';
 import { PlantRungDialog } from '../ladder/PlantRungDialog';
+import { BatchUnclaimedDialog } from '../ladder/BatchUnclaimedDialog';
 import { CreateFamilyForm } from '../front/CreateFamilyForm';
 import { orgUrl } from '../shared/tier';
 import {
@@ -152,7 +153,7 @@ function leafPresentation(leaf: Leaf, houseId: number, doc: HouseDoc, actions: L
         />
       );
       recordRows = [
-        { label: 'kind', value: <Dash /> },
+        { label: 'type', value: <Dash /> },
         { label: 'influence', value: <Dash /> },
         { label: 'recognition', value: <Dash /> },
         { label: 'kin slots', value: <Dash /> },
@@ -217,7 +218,7 @@ function leafPresentation(leaf: Leaf, houseId: number, doc: HouseDoc, actions: L
       );
       recordRows = [
         { label: 'treasury', value: `${doc.books.treasury.toLocaleString()} c` },
-        { label: 'income', value: `${doc.books.income_week.toLocaleString()} c / cycle` },
+        { label: 'income', value: `${doc.books.income_week.toLocaleString()} c / week` },
         { label: 'soldiers', value: doc.forces.reduce((n, f) => n + f.men, 0) },
       ];
       recordDoors = [{ label: 'the organization', to: orgUrl(houseId) }];
@@ -274,6 +275,8 @@ export function HouseDocument({ houseId }: { houseId: number }) {
   const publish = useAlmanachMutation('almanach_publish');
   const createKin = useAlmanachMutation('almanach_create_kin');
   const plant = useAlmanachMutation('almanach_plant_rung');
+  const batch = useAlmanachMutation('almanach_batch_unclaimed');
+  const [batchOpen, setBatchOpen] = useState(false);
   const [kinName, setKinName] = useState('');
   const [plantOpen, setPlantOpen] = useState(false);
   const [vassalTitleId, setVassalTitleId] = useState<number | null>(null);
@@ -337,6 +340,14 @@ export function HouseDocument({ houseId }: { houseId: number }) {
         <button type="button" className="add" onClick={() => setPlantOpen(true)}>
           Add title
         </button>{' '}
+        {doc.realm.holds_title_id != null && (
+          <>
+            <span className="meta">·</span>{' '}
+            <button type="button" className="add" onClick={() => setBatchOpen(true)}>
+              Add vacant seats
+            </button>{' '}
+          </>
+        )}
         {vacantVassals.length > 0 && (
           <>
             <span className="meta">·</span>{' '}
@@ -427,37 +438,39 @@ export function HouseDocument({ houseId }: { houseId: number }) {
               </li>
             </ol>
           </div>
-          <div className="mv">
-            <span className="label">Lands</span>
-            <ol>
-              <li className={leaf === 'realm' ? 'cur' : undefined}>
-                <button type="button" onClick={() => setLeaf('realm')}>
-                  Titles
-                </button>
-              </li>
-              <li className={leaf === 'lands' ? 'cur' : undefined}>
-                <button type="button" onClick={() => setLeaf('lands')}>
-                  Domains <small>{lands.count} baronies</small>
-                </button>
-                {lands.baronies.length > 0 && (
-                  <ol>
-                    {lands.baronies.map((barony) => (
-                      <li key={barony.id}>
-                        <button type="button" onClick={() => setLeaf('lands')}>
-                          {barony.name}
-                        </button>
-                      </li>
-                    ))}
-                  </ol>
-                )}
-              </li>
-              <li className={leaf === 'estate' ? 'cur' : undefined}>
-                <button type="button" onClick={() => setLeaf('estate')}>
-                  Estate
-                </button>
-              </li>
-            </ol>
-          </div>
+          {!(doc.turf && doc.realm.holds === '') && (
+            <div className="mv">
+              <span className="label">Lands</span>
+              <ol>
+                <li className={leaf === 'realm' ? 'cur' : undefined}>
+                  <button type="button" onClick={() => setLeaf('realm')}>
+                    Titles
+                  </button>
+                </li>
+                <li className={leaf === 'lands' ? 'cur' : undefined}>
+                  <button type="button" onClick={() => setLeaf('lands')}>
+                    Domains <small>{lands.count} baronies</small>
+                  </button>
+                  {lands.baronies.length > 0 && (
+                    <ol>
+                      {lands.baronies.map((barony) => (
+                        <li key={barony.id}>
+                          <button type="button" onClick={() => setLeaf('lands')}>
+                            {barony.name}
+                          </button>
+                        </li>
+                      ))}
+                    </ol>
+                  )}
+                </li>
+                <li className={leaf === 'estate' ? 'cur' : undefined}>
+                  <button type="button" onClick={() => setLeaf('estate')}>
+                    Estate
+                  </button>
+                </li>
+              </ol>
+            </div>
+          )}
           {doc.turf && (
             <div className="mv">
               <span className="label">Turf</span>
@@ -475,7 +488,7 @@ export function HouseDocument({ houseId }: { houseId: number }) {
             <ol>
               <li className={leaf === 'books' ? 'cur' : undefined}>
                 <button type="button" onClick={() => setLeaf('books')}>
-                  Books <small>{doc.books.income_week.toLocaleString()} c / cycle</small>
+                  Books <small>{doc.books.income_week.toLocaleString()} c / week</small>
                 </button>
               </li>
               <li className={leaf === 'openings' ? 'cur' : undefined}>
@@ -496,6 +509,28 @@ export function HouseDocument({ houseId }: { houseId: number }) {
           <RecordRail rows={recordRows} extraSection={recordExtraSection} doors={recordDoors} />
         )}
       </div>
+      {batchOpen && doc.realm.holds_title_id != null && (
+        <BatchUnclaimedDialog
+          parent={{
+            title_id: doc.realm.holds_title_id,
+            name: doc.realm.holds,
+            tier: doc.realm.holds_tier ?? '',
+          }}
+          open={batchOpen}
+          onClose={() => setBatchOpen(false)}
+          onConfirm={(payload) => {
+            setBatchOpen(false);
+            batch.mutate({
+              parent_title_id: doc.realm.holds_title_id,
+              tier: payload.tier,
+              count: payload.count,
+              ...(payload.baronies_per_county != null
+                ? { baronies_per_county: payload.baronies_per_county }
+                : {}),
+            });
+          }}
+        />
+      )}
       {plantOpen && doc.realm.realm_id != null && (
         <PlantRungDialog
           parent={null}

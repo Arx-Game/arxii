@@ -379,6 +379,8 @@ class AlmanachPagesApiTests(TestCase):
         assert [r["name"] for r in res.data["results"]] == ["Umbral commoners"]
         res = client.get(f"/api/almanach/union-kinds/?realm={self.realm.pk}")
         assert [r["name"] for r in res.data["results"]] == ["Marriage"]
+        res = client.get("/api/almanach/holding-kinds/")
+        assert res.status_code == 200
         client = APIClient()
         client.force_authenticate(self.player)
         assert client.get("/api/almanach/kinds/").status_code == 403

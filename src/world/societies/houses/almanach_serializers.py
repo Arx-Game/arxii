@@ -16,7 +16,7 @@ from world.realms.models import Realm
 from world.roster.models import Family, FamilyKind, Kinsperson, UnionKind
 from world.societies.houses.almanach_reads import ladder_for_realm
 from world.societies.houses.constants import TitleTier
-from world.societies.houses.models import HouseTemplate, LandShape, Title
+from world.societies.houses.models import HoldingKind, HouseTemplate, LandShape, Title
 from world.societies.models import Organization
 
 
@@ -340,3 +340,11 @@ class AlmanachUnionKindSerializer(serializers.ModelSerializer):
     class Meta:
         model = UnionKind
         fields = ["id", "name", "realm_id", "confers_wedlock"]
+
+
+class AlmanachHoldingKindSerializer(serializers.ModelSerializer):
+    """The holding catalog, for Add holding on a domain's page."""
+
+    class Meta:
+        model = HoldingKind
+        fields = ["id", "name", "description", "site_kind", "requires_field"]

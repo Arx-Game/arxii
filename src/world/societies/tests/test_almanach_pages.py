@@ -165,6 +165,7 @@ class AlmanachPagesTests(TestCase):
         self.assertEqual(doc.house["name"], "House Katta")
         self.assertEqual(doc.titles[0]["name"], "Duchy of Katta")
         self.assertEqual(doc.titles[0]["held_by"], "House Katta")
+        self.assertEqual(doc.titles[0]["seat"], self.duchy.seat_domain.name)
         # The ladder's rule: an unclaimed child rung is not yet a vassal of a held one.
         self.assertEqual(doc.titles[0]["vassals"], 0)
         self.assertFalse(doc.sheet["is_appable"])

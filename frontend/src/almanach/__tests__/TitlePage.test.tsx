@@ -59,6 +59,13 @@ vi.mock('../queries', () => ({
   useTitleDocument: () => ({ data: doc }),
   useSearch: () => ({ data: undefined }),
   useHouses: () => ({ data: { results: [] } }),
+  useHoldingKinds: () => ({
+    data: {
+      results: [
+        { id: 1, name: 'Quarry', description: '', site_kind: 'LAND', requires_field: false },
+      ],
+    },
+  }),
   useAlmanachMutation: () => ({ mutate: vi.fn(), mutateAsync: vi.fn() }),
 }));
 
@@ -75,7 +82,7 @@ test('the rung page: holder, location, holdings, books, forces, vassals', () => 
   );
   expect(screen.getByRole('heading', { name: 'Location' })).toBeInTheDocument();
   expect(screen.getByRole('heading', { name: 'Books' })).toBeInTheDocument();
-  expect(screen.getByText('1,900 c / cycle')).toBeInTheDocument();
+  expect(screen.getByText('1,900 c / week')).toBeInTheDocument();
   expect(screen.getByRole('heading', { name: 'Forces' })).toBeInTheDocument();
   expect(screen.getByText('Katta household guard')).toBeInTheDocument();
   const vassals = screen.getByRole('heading', { name: 'Vassals' }).nextElementSibling!;

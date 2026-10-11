@@ -14,6 +14,8 @@ import { Picker } from '../shared/Picker';
 import { familyUrl, houseUrl, personUrl, titleUrl } from '../shared/tier';
 import '../almanach.css';
 
+const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
+
 function hitUrl(hit: SearchHit): string {
   if (hit.kind === 'person') return personUrl(hit.id);
   if (hit.kind === 'family') return familyUrl(hit.id);
@@ -62,7 +64,7 @@ function Roll({
             to = houseUrl(id);
             meta = (r.sub as string) ?? '';
           } else if (kind === 'city') {
-            meta = `${r.families} families · ${r.gangs} gangs · ${r.crew_slots} crew slots`;
+            meta = `${plural(r.families as number, 'family', 'families')} · ${plural(r.gangs as number, 'gang', 'gangs')} · ${plural(r.crew_slots as number, 'crew slot', 'crew slots')}`;
           } else if (kind === 'family' && 'on_record' in r) {
             to = familyUrl(id);
             meta = `${r.sub ? `${r.sub} · ` : ''}${r.on_record} on record${

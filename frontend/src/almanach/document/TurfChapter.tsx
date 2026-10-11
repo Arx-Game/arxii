@@ -44,7 +44,12 @@ export function TurfChapter({
           <span className="label">wards</span>
           <div className="val">
             {turf && turf.wards.length > 0 ? (
-              turf.wards.map((w) => `${w.name} (${w.grip})`).join(', ')
+              turf.wards
+                .map(
+                  (w) =>
+                    `${w.name} · grip ${w.grip}${w.base_value ? ` · ${w.base_value.toLocaleString()} c / week` : ''}`
+                )
+                .join(', ')
             ) : (
               <span className="meta">none</span>
             )}

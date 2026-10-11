@@ -1163,3 +1163,18 @@
   text-decoration: none;
   font-size: 0.85rem;
 }
+.almanach .inline-new input[type='text'],
+.almanach .inline-new input[type='number'],
+.almanach .inline-new select,
+.almanach .kin input[type='text'] {
+  width: 100%;
+  border: 0;
+  border-bottom: 1px solid hsl(var(--border));
+  background: transparent;
+  color: inherit;
+  padding: 0.2rem 0;
+  font: inherit;
+}
+.almanach .inline-new select {
+  width: auto;
+}

@@ -4,10 +4,10 @@
  * Forces, and the Vassals beneath with Create vassal domain and Add vacant
  * seats. A vacant title offers Create Family, which takes it.
  */
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 
-import { useAlmanachMutation, useTitleDocument } from '../queries';
+import { useAlmanachMutation, useHoldingKinds, useTitleDocument } from '../queries';
 import { RecordRail, type RecordRailDoor, type RecordRailRow } from '../document/RecordRail';
 import { PlantRungDialog } from '../ladder/PlantRungDialog';
 import { BatchUnclaimedDialog } from '../ladder/BatchUnclaimedDialog';
@@ -22,9 +22,23 @@ export function TitlePage({ titleId }: { titleId: number }) {
   const plant = useAlmanachMutation('almanach_plant_rung');
   const batch = useAlmanachMutation('almanach_batch_unclaimed');
   const setHolder = useAlmanachMutation('almanach_set_holder');
+  const describe = useAlmanachMutation('almanach_describe_demesne');
+  const addHolding = useAlmanachMutation('almanach_add_holding');
+  const { data: holdingKinds } = useHoldingKinds();
+  const [description, setDescription] = useState('');
+  const [holdingKindId, setHoldingKindId] = useState<number | null>(null);
+  const [holdingName, setHoldingName] = useState('');
   const [plantOpen, setPlantOpen] = useState(false);
   const [batchOpen, setBatchOpen] = useState(false);
   const [createFamily, setCreateFamily] = useState(false);
+
+  useEffect(() => {
+    setDescription(doc?.demesne?.description ?? '');
+  }, [doc]);
+  useEffect(() => {
+    const list = holdingKinds?.results ?? [];
+    if (holdingKindId == null && list.length > 0) setHoldingKindId(list[0].id);
+  }, [holdingKinds, holdingKindId]);
 
   if (!doc) {
     return (
@@ -75,6 +89,14 @@ export function TitlePage({ titleId }: { titleId: number }) {
       </div>
       <div className="almanac">
         <aside className="contents">
+          {title.sworn_to && (
+            <div className="mv">
+              <span className="label">Above</span>
+              <ol>
+                <li>{title.sworn_to}</li>
+              </ol>
+            </div>
+          )}
           <div className="mv">
             <span className="label">This rung</span>
             <ol>
@@ -164,10 +186,13 @@ export function TitlePage({ titleId }: { titleId: number }) {
           {demesne && (
             <>
               <div className="field">
-                <span className="label">demesne</span>
-                <p className={demesne.description ? 'prose' : 'prose empty'}>
-                  {demesne.description || 'none'}
-                </p>
+                <label htmlFor="d-desc">demesne</label>
+                <textarea
+                  id="d-desc"
+                  className="prose"
+                  value={description}
+                  onChange={(e) => setDescription(e.target.value)}
+                />
               </div>
               <div className="row3">
                 <div className="field">
@@ -210,6 +235,60 @@ export function TitlePage({ titleId }: { titleId: number }) {
                   <tr>
                     <td colSpan={4} className="meta">
                       none
+                    </td>
+                  </tr>
+                )}
+                {demesne && (
+                  <tr>
+                    <td colSpan={4}>
+                      <div className="row3">
+                        <div className="field">
+                          <label htmlFor="h-kind">Add holding</label>
+                          <select
+                            id="h-kind"
+                            value={holdingKindId ?? ''}
+                            onChange={(e) =>
+                              setHoldingKindId(
+                                e.target.value === '' ? null : Number(e.target.value)
+                              )
+                            }
+                          >
+                            {(holdingKinds?.results ?? []).map((k) => (
+                              <option key={k.id} value={k.id}>
+                                {k.name}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                        <div className="field">
+                          <label htmlFor="h-name">name</label>
+                          <input
+                            id="h-name"
+                            type="text"
+                            value={holdingName}
+                            onChange={(e) => setHoldingName(e.target.value)}
+                          />
+                        </div>
+                        <div className="field">
+                          <span className="label">&nbsp;</span>
+                          <button
+                            type="button"
+                            className="btn sm quiet"
+                            disabled={holdingKindId == null}
+                            onClick={() => {
+                              addHolding.mutate({
+                                domain_id: demesne.domain_id,
+                                holding_kind_id: holdingKindId,
+                                name: holdingName.trim(),
+                                unsited: true,
+                              });
+                              setHoldingName('');
+                            }}
+                          >
+                            Add holding
+                          </button>
+                        </div>
+                      </div>
                     </td>
                   </tr>
                 )}
@@ -260,6 +339,17 @@ export function TitlePage({ titleId }: { titleId: number }) {
               </tbody>
             </table>
           </div>
+          {demesne && (
+            <div className="savebar">
+              <button
+                type="button"
+                className="btn"
+                onClick={() => describe.mutate({ domain_id: demesne.domain_id, description })}
+              >
+                Save
+              </button>
+            </div>
+          )}
         </main>
         <RecordRail rows={rows} doors={doors} />
       </div>

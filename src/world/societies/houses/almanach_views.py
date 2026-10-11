@@ -35,6 +35,7 @@ from world.societies.houses.almanach_reads import (
 from world.societies.houses.almanach_serializers import (
     AlmanachFamilyKindSerializer,
     AlmanachFamilySummarySerializer,
+    AlmanachHoldingKindSerializer,
     AlmanachHouseSummarySerializer,
     AlmanachPersonSummarySerializer,
     AlmanachRealmSerializer,
@@ -51,7 +52,7 @@ from world.societies.houses.almanach_serializers import (
     RungDocumentSerializer,
     SearchHitSerializer,
 )
-from world.societies.houses.models import HouseTemplate, LandShape, Title
+from world.societies.houses.models import HoldingKind, HouseTemplate, LandShape, Title
 from world.societies.models import Organization
 from world.societies.views import SocietiesPagination
 
@@ -283,3 +284,14 @@ class AlmanachUnionKindViewSet(viewsets.ReadOnlyModelViewSet):
     pagination_class = SocietiesPagination
     filter_backends = [DjangoFilterBackend]
     filterset_fields = ["realm"]
+
+
+class AlmanachHoldingKindViewSet(viewsets.ReadOnlyModelViewSet):
+    """The holding catalog, for Add holding."""
+
+    queryset = HoldingKind.objects.all().order_by("name")
+    serializer_class = AlmanachHoldingKindSerializer
+    permission_classes = _STAFF
+    pagination_class = SocietiesPagination
+    filter_backends = [DjangoFilterBackend]
+    filterset_fields = ["site_kind"]

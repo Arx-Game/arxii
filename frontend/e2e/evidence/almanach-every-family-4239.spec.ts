@@ -122,9 +122,9 @@ const KATHRYN = {
     organization_id: PIROPA_HOUSE_ID,
   },
   kin: [
-    person(12, 'Mother mar Katta', 'parent', 'name_only', 'alive'),
-    person(13, 'Father mar Katta', 'parent', 'name_only', 'rip'),
-    person(14, 'Sister mar Katta', 'sibling', 'name_only', 'alive', true),
+    person(12, 'Mother mar Katta', 'mother', 'name_only', 'alive'),
+    person(13, 'Father mar Katta', 'father', 'name_only', 'rip'),
+    person(14, 'Sister mar Katta', 'sister', 'name_only', 'alive', true),
   ],
   house: {
     org_id: PIROPA_HOUSE_ID,
@@ -414,6 +414,13 @@ async function installRoutes(page: Page): Promise<void> {
         json: paginated([{ id: 1, name: 'Marriage', realm_id: REALM_ID, confers_wedlock: true }]),
       });
     if (p === '/api/almanach/titles/') return route.fulfill({ json: paginated([]) });
+    if (p === '/api/almanach/holding-kinds/') {
+      return route.fulfill({
+        json: paginated([
+          { id: 1, name: 'Quarry', description: '', site_kind: 'LAND', requires_field: false },
+        ]),
+      });
+    }
     if (p === '/api/character-creation/genders/') return route.fulfill({ json: GENDERS });
     if (p.startsWith('/api/actions/characters/') && p.endsWith('/dispatch/') && method === 'POST') {
       return route.fulfill({ json: { message: 'Done.', success: true, data: null } });
@@ -460,6 +467,10 @@ test.describe('Almanach, every family (#4239)', () => {
       page.getByRole('group', { name: 'NPC tier' }).getByRole('button', { name: '2' })
     ).toHaveAttribute('aria-pressed', 'true');
     await page.screenshot({ path: shot('02-person-1280.png'), fullPage: true });
+    await page.getByRole('button', { name: 'Add kin' }).click();
+    await page.getByLabel('link').selectOption('spouse');
+    await expect(page.getByRole('group', { name: 'Search people' })).toBeVisible();
+    await page.screenshot({ path: shot('02b-person-add-spouse-1280.png'), fullPage: true });
     expect(errors, errors.join('\n')).toEqual([]);
   });
 
@@ -500,6 +511,11 @@ test.describe('Almanach, every family (#4239)', () => {
     await expect(page.getByRole('link', { name: 'Ashfingers' })).toBeVisible();
     await expect(page.getByRole('button', { name: 'Add gang' })).toBeVisible();
     await page.screenshot({ path: shot('05-crime-1280.png'), fullPage: true });
+    await page.getByRole('button', { name: 'The Family' }).click();
+    await page.screenshot({ path: shot('05b-crime-family-1280.png'), fullPage: true });
+    await page.getByRole('button', { name: /^Books/ }).click();
+    await expect(page.getByRole('heading', { name: 'Forces', exact: true })).toBeVisible();
+    await page.screenshot({ path: shot('05c-crime-books-1280.png'), fullPage: true });
     expect(errors, errors.join('\n')).toEqual([]);
   });
 

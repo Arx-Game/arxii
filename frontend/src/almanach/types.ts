@@ -123,7 +123,9 @@ export interface AlmanachDocumentRealm {
   vassals: AlmanachRealmRowSummary[];
   realm_id: number | null;
   default_tithe_pct: number;
-  realm_theme: string;
+  realm_theme: string /** #4239: the house's own top rung, for Add vacant seats from the house page. */;
+  holds_title_id?: number | null;
+  holds_tier?: string;
 }
 
 /** One `document.lands.baronies` entry (`_lands_payload`, `almanach_reads.py`). */
@@ -205,6 +207,8 @@ export interface AlmanachPersonRow {
   id: number;
   name: string;
   relation: string;
+  /** parent / child / spouse / sibling: what the row counts as; `relation` is the word. */
+  link?: string;
   tier: string;
   tier_display: { number: number | null; label: string };
   status: 'alive' | 'rip' | 'missing';
@@ -222,7 +226,7 @@ export interface AlmanachOpenings {
 
 export interface AlmanachTurf {
   tier: string;
-  wards: { turf_id: number; area_id: number; name: string; grip: number }[];
+  wards: { turf_id: number; area_id: number; name: string; grip: number; base_value?: number }[];
   gangs: {
     org_id: number;
     name: string;
@@ -245,6 +249,7 @@ export type AlmanachFamilyKind = components['schemas']['AlmanachFamilyKind'];
 export type AlmanachTemplate = components['schemas']['AlmanachTemplate'];
 export type AlmanachUnionKind = components['schemas']['AlmanachUnionKind'];
 export type AlmanachTitleSummary = components['schemas']['AlmanachTitleSummary'];
+export type AlmanachHoldingKind = components['schemas']['AlmanachHoldingKind'];
 
 export interface PersonDocument {
   person: {
@@ -283,6 +288,7 @@ export interface PersonDocument {
     tier: string;
     realm: string;
     held_by: string;
+    seat?: string;
     vassals: number;
   }[];
   sheet: {

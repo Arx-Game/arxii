@@ -59,6 +59,18 @@ export interface RealmLeafProps {
   extra?: ReactNode;
 }
 
+function TitheCell({ realm }: { realm: AlmanachDocumentRealm }) {
+  if (realm.obligation_pct != null) return <>{realm.obligation_pct}%</>;
+  if (realm.default_tithe_pct != null) {
+    return (
+      <>
+        {realm.default_tithe_pct}% <span className="meta">realm default</span>
+      </>
+    );
+  }
+  return <abbr title="none">—</abbr>;
+}
+
 function NumCell({ value }: { value: number }) {
   return <td className="n">{value > 0 ? value : <abbr title="none">—</abbr>}</td>;
 }
@@ -117,6 +129,12 @@ export function RealmLeaf({ houseId, houseName, realm, onSwear, extra }: RealmLe
             <span className="label">holds</span>
             <div className="val">
               {realm.holds !== '' ? realm.holds : <abbr title="none">—</abbr>}
+            </div>
+          </div>
+          <div className="field">
+            <span className="label">tithe</span>
+            <div className="val">
+              <TitheCell realm={realm} />
             </div>
           </div>
           <div className="field">

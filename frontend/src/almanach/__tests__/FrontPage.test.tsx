@@ -43,7 +43,7 @@ test('three rolls, three Create buttons, and the realm opens its ladder', () => 
     '/staff/almanach/realms/1'
   );
   expect(screen.getByText('3 titles · 2 held · 1 unclaimed')).toBeInTheDocument();
-  expect(screen.getByText('1 families · 2 gangs · 3 crew slots')).toBeInTheDocument();
+  expect(screen.getByText('1 family · 2 gangs · 3 crew slots')).toBeInTheDocument();
   expect(screen.getByRole('link', { name: 'Teale' })).toHaveAttribute(
     'href',
     '/staff/almanach/families/4'

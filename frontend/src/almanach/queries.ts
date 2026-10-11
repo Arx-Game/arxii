@@ -16,6 +16,7 @@ import {
   fetchFamilyKinds,
   fetchFront,
   fetchGenders,
+  fetchHoldingKinds,
   fetchHouseDocument,
   fetchHouses,
   fetchLadder,
@@ -56,6 +57,7 @@ export const almanachKeys = {
   unionKinds: (realmId: number | null) => [...almanachKeys.all, 'union-kinds', realmId] as const,
   vacantTitles: (realmId: number) => [...almanachKeys.all, 'vacant-titles', realmId] as const,
   realmTitles: (realmId: number) => [...almanachKeys.all, 'realm-titles', realmId] as const,
+  holdingKinds: () => [...almanachKeys.all, 'holding-kinds'] as const,
 };
 
 export function useRealms() {
@@ -269,5 +271,13 @@ export function useRealmTitles(realmId: number | null | undefined) {
     queryFn: () => fetchRealmTitles(realmId!),
     enabled: realmId != null,
     staleTime: 15_000,
+  });
+}
+
+export function useHoldingKinds() {
+  return useQuery({
+    queryKey: almanachKeys.holdingKinds(),
+    queryFn: fetchHoldingKinds,
+    staleTime: 300_000,
   });
 }

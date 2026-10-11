@@ -18,6 +18,7 @@ import type { components } from '@/generated/api';
 import type {
   AlmanachActionKey,
   AlmanachFamilyKind,
+  AlmanachHoldingKind,
   AlmanachTemplate,
   AlmanachTitleSummary,
   AlmanachUnionKind,
@@ -175,4 +176,8 @@ export function fetchVacantTitles(realmId: number): Promise<Paginated<AlmanachTi
 export function fetchRealmTitles(realmId: number): Promise<Paginated<AlmanachTitleSummary>> {
   const qs = new URLSearchParams({ realm: String(realmId) }).toString();
   return getJson(withQuery('/api/almanach/titles/', qs), 'Failed to load titles.');
+}
+
+export function fetchHoldingKinds(): Promise<Paginated<AlmanachHoldingKind>> {
+  return getJson('/api/almanach/holding-kinds/', 'Failed to load holding kinds.');
 }

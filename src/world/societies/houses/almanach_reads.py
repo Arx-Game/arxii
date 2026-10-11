@@ -697,6 +697,8 @@ def _realm_payload(house: Organization, titles: list[Title], all_rows: list[Ladd
             "sworn_to": "",
             "obligation_pct": None,
             "holds": "",
+            "holds_title_id": None,
+            "holds_tier": "",
             "demesne": [],
             "vassals": [],
             **facts,
@@ -731,6 +733,10 @@ def _realm_payload(house: Organization, titles: list[Title], all_rows: list[Ladd
         "sworn_to": sworn_to,
         "obligation_pct": obligation_pct,
         "holds": top.name,
+        # #4239: the house's own top rung, so the house page can batch vacant
+        # seats beneath it without a trip to the ladder.
+        "holds_title_id": top.pk,
+        "holds_tier": top.tier,
         "demesne": demesne,
         "vassals": vassals,
         **facts,
