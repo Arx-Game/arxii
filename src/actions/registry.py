@@ -11,15 +11,28 @@ from actions.definitions.accusations import (
 )
 from actions.definitions.allegiance import SendAwayAction
 from actions.definitions.almanach import (
+    AlmanachAddGangAction,
     AlmanachAddHoldingAction,
+    AlmanachAttachSheetAction,
     AlmanachBatchUnclaimedAction,
+    AlmanachClaimWardAction,
+    AlmanachCorrectKinAction,
+    AlmanachCreateFamilyAction,
+    AlmanachCreateKinAction,
     AlmanachDescribeDemesneAction,
     AlmanachEditHouseAction,
     AlmanachEditKinAction,
+    AlmanachFoundOrganizationAction,
+    AlmanachLinkKinAction,
     AlmanachNameRungAction,
+    AlmanachOpenCrewSlotAction,
     AlmanachPlanEstateAction,
     AlmanachPlantRungAction,
+    AlmanachPromoteKinAction,
     AlmanachPublishAction,
+    AlmanachSetAppableAction,
+    AlmanachSetHolderAction,
+    AlmanachSetStatusAction,
     AlmanachSwearAction,
 )
 from actions.definitions.alterations import ResolveAlterationAction
@@ -1218,6 +1231,22 @@ _ALL_ACTIONS: list[Action] = [
     AlmanachPlanEstateAction(),
     AlmanachEditKinAction(),
     AlmanachPublishAction(),
+    # #4239 every family, every person: create a family (with or without its
+    # organization and holding), kin from nothing, links, status, tier,
+    # appable, sheet, holder; the crime ladder's ward, gangs and crew slots.
+    AlmanachCreateFamilyAction(),
+    AlmanachFoundOrganizationAction(),
+    AlmanachCreateKinAction(),
+    AlmanachLinkKinAction(),
+    AlmanachCorrectKinAction(),
+    AlmanachSetStatusAction(),
+    AlmanachPromoteKinAction(),
+    AlmanachSetAppableAction(),
+    AlmanachAttachSheetAction(),
+    AlmanachSetHolderAction(),
+    AlmanachClaimWardAction(),
+    AlmanachAddGangAction(),
+    AlmanachOpenCrewSlotAction(),
     # #2450 — GM story builder: create/edit/remove story areas + dig/edit story rooms.
     CreateStoryAreaAction(),
     EditStoryAreaAction(),
