@@ -62,6 +62,12 @@ only by `world.societies.houses.almanach.record_public_belief`; renders as
 parentage secret) makes a row's public face diverge from what actually
 happened. See ADR-0312.
 
+**`is_missing`** and **`obituary`** (#4239) are the record's two further facts. A missing
+person is missing to everyone, and the obituary is what the record says of a death, true or
+not, so both ride the node dict for every viewer. `is_missing` and `is_deceased` are never
+both true (`set_life_status` refuses). Player surfaces mark a name "(RIP)" or "(Missing)" and
+print the obituary under the selected person; staff surfaces also show the tier, long.
+
 **Reading it is viewer-gated like every other kinship fact** (`_node_dict`,
 #3983): an ordinary viewer's tree node reports
 `is_deceased = is_deceased or believed_deceased` and carries no

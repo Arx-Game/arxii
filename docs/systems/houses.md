@@ -859,6 +859,83 @@ Founder-facing house-claim endpoints live under `/api/character-creation/` inste
 mode" above): `GET`/`POST /api/character-creation/drafts/{id}/house-claim/` and `GET
 /api/character-creation/house-titles/` (`ClaimableTitleViewSet`).
 
+### Every family, every person (#4239, ADR-4239)
+
+The Almanach is the one place every family lives, noble, crime or commoner, and a browser of
+the world's graph: a page per person, per house or family, per realm (the ladder) and per
+domain (a rung), every link on a page a slot, and a slot whose other end does not exist yet
+creates it in place. The admin stays as an escape hatch and nothing is removed from it.
+
+**Services** (`almanach.py` unless noted; keyword-only, atomic, `HousesServiceError` with a
+`user_message` on refusal):
+
+- `create_family(*, kind, name, realm, created_by, template, holding, title_tier, title_name,
+  parent_title, holder, home_domain) -> CreatedFamily`. A family type that does not style as
+  a house, with `HoldingChoice.NONE`, makes a `Family` row and nothing else: an orphan's dozen
+  NPC relatives need no organization (ADR-0268: standing is expressed through organization
+  mechanisms, so a family with none needs none). A template, a holding, or a kind that styles
+  as a house builds the organization through `build_family_org`; `CREATE` then plants a
+  domain and title under `parent_title` held by the new house (`plant_rung`), `VACANT` assigns
+  the unclaimed `parent_title` to it (`assign_holder`), and `holder` becomes the title's
+  personal holder (`set_personal_holder`) and, if not yet of the family, its head.
+- `found_organization(*, family, template, created_by)`: `build_family_org` with
+  `existing_family`, for the day a family with people takes standing.
+- `create_kin(*, family, name, tier, gender, age, created_by)`: `create_person` plus a BORN
+  membership; needs no organization and no relation. `link_kin(*, node, other, link,
+  union_kind, is_public_record)`: `KinLink.PARENT`/`CHILD` write a `ParentageEdge`, `SPOUSE` a
+  `Union` both families' trees read, with a MARRIED_IN membership when the kind confers
+  wedlock. `correct_parentage(*, edge, new_parent)` replaces an edge and keeps its kind,
+  record, truth and secret; nobody is ever deleted from this surface.
+- `set_life_status(*, node, status, record_accurate, obituary)`: `LifeStatus.ALIVE`/`RIP`/
+  `MISSING` writes `is_deceased` and `is_missing`; `believed_deceased` equals the truth when
+  the record is accurate and its inverse otherwise; `obituary` is what the record says of a
+  death, true or not, and is public by nature (the kinship node dict carries it for every
+  viewer). A player character's death is recorded from play, never here.
+- `promote_kin(*, node, tier, gm_account)`: tier only rises, PC is never set; at SHEETED
+  with no sheet, `mint_story_npc` (a Story NPC on the NPC shelf; never `mint_gm_character`,
+  which mints the staffer's own OOC character) then `attach_sheet`. `attach_sheet(*, node,
+  sheet)`: a sheet on a player shelf makes the node a PC (through `claim_appable_node` when
+  appable), any other sheet makes it SHEETED. `set_appable(*, node, appable, age_min, age_max,
+  allowed_genders, name_locked)`; `set_personal_holder(*, title, node)` (one of the holding
+  house's family).
+- The crime ladder's authoring (`turf_services.claim_ward`, `add_gang`;
+  `crew_slots.open_crew_slot`): a ward or city held outright at full grip, never a flip; a gang
+  as an organization of the gang type under the family with its oath and its neighborhood; a
+  crew slot on outdoor rooms. This is #4081, folded in.
+
+**Reads** (`almanach_pages.py`, plain dicts): `front_rolls(q)` (Noble: realms with ladder
+counts, or matching houses; Crime: cities with family, gang and crew-slot counts, or matching
+crime families; Commoner: families with no organization or whose organization holds neither a
+title nor turf), `search(q)` (people, families, organizations, titles; nothing under two
+characters), `person_document`, `rung_document`, `family_document` (works with no
+organization), and the chapters the house document grows: `books_for` (income per cycle,
+uncollected, treasury, from `OrgIncomeStream` and `OrganizationTreasury`; the full ledger is
+#4243), `forces_for` (`MilitaryUnit` by owner plus `DomainGarrisonPost`), `openings_for`
+(appable kin, open household posts, vacant seats sworn beneath), `turf_for` (`None` for a
+house holding no turf).
+
+**Actions** (`actions/definitions/almanach.py`, staff-only): `almanach_create_family`,
+`almanach_found_organization`, `almanach_create_kin`, `almanach_link_kin`,
+`almanach_correct_kin`, `almanach_set_status`, `almanach_promote_kin`, `almanach_set_appable`,
+`almanach_attach_sheet`, `almanach_set_holder`, `almanach_claim_ward`, `almanach_add_gang`,
+`almanach_open_crew_slot`, `almanach_edit_person` (plain fields; a PC's name is refused).
+
+**API**, all `IsAuthenticated, IsAdminUser`: `GET /api/almanach/people/{id}/document/`,
+`titles/{id}/document/`, `families/{id}/document/`, `front/?q=`, `search/?q=`, and the
+catalogs the create forms read: `kinds/`, `templates/?realm=&kind=`, `union-kinds/?realm=`.
+
+**Words follow the code** (ADR-4239): a Title is the rung, a Domain is its land, a Holding is
+one work on a domain, Vassals are the rungs beneath; the person who holds a title is its
+holder, and "seat" means only a domain's seat barony. Staff pages show a kinsperson's tier as
+0/1/2/3 and spelled long after the name (`NPC_TIER_NUMBER`/`NPC_TIER_LABEL`,
+`houses/constants.py`): (Offscreen Reference), (Functionary NPC), (Standing NPC), (Sheeted
+NPC); players never see a tier word (ADR-4209). The dead and the missing carry (RIP) and
+(Missing) after the name in the muted color, never a strikethrough. Create Family for a noble
+house carries its holding by default with None yet as the opt-out; a family with no title or
+turf may be given a home (the domain its holdings stand on, `build_family_org`'s
+`home_domain`), never automatically. Location on a domain's page is realm, tier and seat until
+the map (#4242) links it into the Atlas.
+
 ### Land shapes
 
 `LandShape` (`models.py`) is the authored catalog of what a demesne's ground looks like — Coast,

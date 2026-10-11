@@ -1877,6 +1877,26 @@ Noble/merchant/crime houses as first-class play — a house IS an `Organization`
   `IsAuthenticated` (Plan B Task 3 opened the founder-facing reads). `LandShape`: authored
   land-shape catalog, `CONTENT_MODELS`. `Title.claimant_org`: contested-title schema, no
   resolution service yet.
+- **Almanach, every family (#4239, ADR-4239):** the Almanach as the one place every family
+  lives (noble, crime, commoner), a browser of the graph with Create in place on every slot.
+  `world.societies.houses.almanach`: `create_family` (a Family row alone for a background
+  family; `build_family_org` only when it takes standing, with its holding by default via
+  `plant_rung`/`assign_holder` and `set_personal_holder`), `found_organization`
+  (`build_family_org(existing_family=...)`), `create_kin` (`create_person`, no organization
+  needed), `link_kin` (parentage or union to anyone in any family), `correct_parentage`,
+  `set_life_status` (`Kinsperson.is_deceased`/`is_missing`/`believed_deceased`/`obituary`),
+  `promote_kin` (tier only rises; SHEETED mints a Story NPC via `mint_story_npc` and
+  `attach_sheet`), `attach_sheet`, `set_appable`, `set_personal_holder`.
+  `world.societies.turf_services.claim_ward`/`add_gang`, `crew_slots.open_crew_slot` (the
+  crime ladder's authoring, #4081 folded in). Reads (`almanach_pages.py`): `front_rolls`,
+  `search`, `person_document`, `rung_document`, `family_document`, `books_for`, `forces_for`,
+  `openings_for`, `turf_for`; `document_for_house` grows `books`/`forces`/`openings`/`turf`.
+  Fourteen more REGISTRY actions (`almanach_create_family` ... `almanach_edit_person`,
+  staff-only). API `/api/almanach/` adds `people`, `titles`, `families` (`/document/`),
+  `front/?q=`, `search/?q=`, `kinds`, `templates`, `union-kinds`, all `IsAdminUser`. React:
+  `frontend/src/almanach/{front,person,title,family,shared}/`, routes
+  `/staff/almanach` (front), `/people/:id`, `/titles/:id`, `/families/:id`. Staff pages
+  show NPC tier as 0/1/2/3 and long after the name (`NPC_TIER_LABEL`); players never see it.
 - **Founder mode (#3983 Plan B, ADR-0314/ADR-0315):** the CG-facing claim journey — the whole
   draft lives client-side (ADR-0314) until one submit, `POST
   /api/character-creation/drafts/{id}/house-claim/` (`HouseClaimSubmitSerializer`), nested
@@ -2976,7 +2996,7 @@ Secrets, souls with per-life-knowledge reincarnation chains, app-in slots/pools.
   `styles_as_house`), `Kinsperson` (5 definition tiers; heredity stubs
   `species`/`power_band`, #2815; `believed_deceased` — the public record's
   belief about a death, independent of `is_deceased` the private truth,
-  #3983), `FamilyMembership`, `UnionKind`/`Union`,
+  #3983; `is_missing` and `obituary`, the record's two further facts, #4239), `FamilyMembership`, `UnionKind`/`Union`,
   `ParentageEdge` (6 kinds; step/in-law DERIVED; `is_ritual_invoker` marks the
   Tree of Souls dominant line), `KinspersonTraitValue` (lazily-pinned parent
   colors), `Soul`/`SoulIncarnation`, `KinSlotPool`; `Secret.subject_aware` delta
