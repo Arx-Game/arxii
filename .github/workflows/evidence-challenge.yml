@@ -1,0 +1,133 @@
+name: Evidence challenge
+
+# An advisory reviewer that asks each PR "did you actually test this?" (#4246,
+# ADR-4246). It runs tools/agents/evidence-challenge-reviewer.md on Haiku 5.5
+# and posts one plain-language comment per round. The coding agent answers with
+# a PR comment that starts with `<!-- evidence-answer -->`, which runs the next
+# round, up to MAX_ROUNDS.
+#
+# ADVISORY BY DESIGN: this workflow is never a required check and never posts
+# review threads (the ruleset requires resolved threads, so a thread would
+# block a merge). A maintainer approval always overrides it.
+#
+# SUPPLY CHAIN: third-party actions are pinned to a full commit SHA, as in
+# validate.yml. Re-pin via: gh api repos/<owner>/<repo>/commits/<tag> --jq .sha
+
+on:
+  pull_request:
+    types: [opened, reopened, ready_for_review]
+  issue_comment:
+    types: [created]
+  workflow_dispatch:
+    inputs:
+      pr:
+        description: "PR number to review"
+        required: true
+
+concurrency:
+  group: evidence-challenge-${{ github.event.pull_request.number || github.event.issue.number || inputs.pr }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+
+env:
+  MAX_ROUNDS: "3"
+  REVIEWER: tools/agents/evidence-challenge-reviewer.md
+
+jobs:
+  challenge:
+    # pull_request: same-repo, non-draft PRs only. Fork PRs get no secrets;
+    # never switch to pull_request_target to work around that.
+    # issue_comment: only an answer comment on a PR, from a member. The
+    # reviewer's own comments carry no answer marker and are posted with
+    # GITHUB_TOKEN, which never starts a workflow, so it cannot trigger itself.
+    if: >-
+      (github.event_name == 'pull_request'
+        && github.event.pull_request.draft == false
+        && github.event.pull_request.head.repo.full_name == github.repository
+        && github.actor != 'dependabot[bot]')
+      || (github.event_name == 'issue_comment'
+        && github.event.issue.pull_request
+        && startsWith(github.event.comment.body, '<!-- evidence-answer -->')
+        && contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.comment.author_association))
+      || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      # The default branch, never the PR head: the reviewer reads project rules
+      # from here, and a PR cannot weaken its own reviewer.
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          fetch-depth: 1
+
+      - name: Prepare round
+        id: prep
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number || github.event.issue.number || inputs.pr }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          pr_json=$(gh pr view "$PR" --repo "$REPO" --json state,isDraft,isCrossRepository,headRefName)
+          if [ "$(jq -r .state <<<"$pr_json")" != "OPEN" ] \
+            || [ "$(jq -r .isDraft <<<"$pr_json")" = "true" ] \
+            || [ "$(jq -r .isCrossRepository <<<"$pr_json")" = "true" ]; then
+            echo "PR #$PR is closed, a draft, or from a fork: no review."
+            echo "run=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          # Rounds already posted = bot comments that carry the challenge marker.
+          done_rounds=$(gh api "repos/$REPO/issues/$PR/comments" --paginate \
+            --jq '[.[] | select(.user.type == "Bot")
+                       | select(.body | startswith("<!-- evidence-challenge "))] | length' \
+            | jq -s 'add // 0')
+          if [ "$done_rounds" -ge "$MAX_ROUNDS" ]; then
+            echo "PR #$PR already had $done_rounds rounds: the maintainer decides."
+            echo "run=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          round=$((done_rounds + 1))
+          last=no
+          [ "$round" -eq "$MAX_ROUNDS" ] && last=yes
+
+          # Bootstrap only: before the reviewer exists on the default branch
+          # (the PR that adds it), read it from the PR head.
+          if [ ! -f "$REVIEWER" ]; then
+            echo "Reviewer not on the default branch yet; reading it from the PR head."
+            head_ref=$(jq -r .headRefName <<<"$pr_json")
+            git fetch --depth=1 origin "$head_ref"
+            git show "FETCH_HEAD:$REVIEWER" > "$RUNNER_TEMP/reviewer.md"
+          else
+            cp "$REVIEWER" "$RUNNER_TEMP/reviewer.md"
+          fi
+
+          {
+            echo "prompt<<__EVIDENCE_PROMPT__"
+            cat "$RUNNER_TEMP/reviewer.md"
+            echo
+            echo "## This run"
+            echo
+            echo "- Repository: $REPO"
+            echo "- PR number: $PR"
+            echo "- Round: $round of $MAX_ROUNDS"
+            echo "- Last round: $last"
+            echo "__EVIDENCE_PROMPT__"
+            echo "run=true"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Run the evidence challenger
+        if: steps.prep.outputs.run == 'true'
+        uses: anthropics/claude-code-action@1d6de8cb0c237e7c15e9e1bdf973826ebae490cc # v1
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          github_token: ${{ github.token }}
+          prompt: ${{ steps.prep.outputs.prompt }}
+          claude_args: >-
+            --model claude-haiku-5-5
+            --max-turns 30
+            --allowed-tools "Read,Grep,Glob,Bash(gh pr view:*),Bash(gh pr diff:*),Bash(gh issue view:*),Bash(gh pr comment:*)"
