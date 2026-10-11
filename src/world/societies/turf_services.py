@@ -165,3 +165,103 @@ def _open_retaliation(
             f"PLACEHOLDER: {holder_name} answers the push into {turf.site_name} - knives out."
         ),
     )
+
+
+# ---------------------------------------------------------------------------
+# #4239: staff authoring of the crime ladder from the Almanach. Entry points
+# over the push arithmetic above; nothing here lands money or flips a rival.
+# ---------------------------------------------------------------------------
+
+GANG_ORG_TYPE_NAME = "gang"
+
+
+class TurfAuthoringError(ValueError):
+    """A refusal with a player-safe message, the shape the Almanach actions relay."""
+
+    def __init__(self, message: str, *, user_message: str) -> None:
+        super().__init__(message)
+        self.user_message = user_message
+
+
+def claim_ward(*, organization: Organization, area: Area) -> Turf:
+    """Give ``organization`` a ward (or a city) outright, at full grip (#4239).
+
+    Staff authoring, not a push: contested or rival-held ground refuses, so a
+    flip is never a side effect of filling in a page.
+    """
+    from world.areas.constants import AreaLevel  # noqa: PLC0415
+    from world.societies.models import Turf  # noqa: PLC0415
+
+    if area.level not in (AreaLevel.WARD, AreaLevel.BARONY):
+        msg = f"area {area.pk} is level {area.level}, not a ward"
+        raise TurfAuthoringError(msg, user_message="A family's turf is a ward or a city.")
+    held = Turf.objects.filter(area=area).exclude(controlling_org__isnull=True).first()
+    if held is not None and held.controlling_org_id != organization.pk:
+        msg = f"area {area.pk} held by org {held.controlling_org_id}"
+        raise TurfAuthoringError(msg, user_message="Somebody already holds that ground.")
+    return apply_turf_push(organization, area, GRIP_MAX)
+
+
+def _under(area: Area, ancestors: set[int]) -> bool:
+    node = area
+    seen = 0
+    while node is not None and seen < 12:  # noqa: PLR2004 - defensive walk cap
+        if node.pk in ancestors:
+            return True
+        node = node.parent
+        seen += 1
+    return False
+
+
+def add_gang(
+    *,
+    family_org: Organization,
+    name: str,
+    neighborhood: Area,
+) -> Organization:
+    """A gang beneath a crime family: its organization, its oath, its ground (#4239).
+
+    The gang is an Organization of the gang type under ``family_org``
+    (``parent_org`` and a FealtyEdge, the way a vassal house hangs under a
+    liege), with a rank ladder, holding ``neighborhood`` at full grip. When
+    the family holds a ward, the neighborhood must lie under it.
+    """
+    from django.db import transaction  # noqa: PLC0415
+
+    from world.areas.constants import AreaLevel  # noqa: PLC0415
+    from world.societies.houses.services import HousesServiceError, swear_fealty  # noqa: PLC0415
+    from world.societies.membership_services import ensure_default_rank_ladder  # noqa: PLC0415
+    from world.societies.models import Organization, OrganizationType, Turf  # noqa: PLC0415
+
+    name = (name or "").strip()
+    if not name:
+        msg = "blank gang name"
+        raise TurfAuthoringError(msg, user_message="A gang needs a name.")
+    if neighborhood.level != AreaLevel.NEIGHBORHOOD:
+        msg = f"area {neighborhood.pk} is not a neighborhood"
+        raise TurfAuthoringError(msg, user_message="A gang's ground is a neighborhood.")
+    wards = set(
+        Turf.objects.filter(controlling_org=family_org, area__isnull=False).values_list(
+            "area_id", flat=True
+        )
+    )
+    if wards and not _under(neighborhood, wards):
+        msg = f"neighborhood {neighborhood.pk} outside the family's wards"
+        raise TurfAuthoringError(
+            msg, user_message="That neighborhood is not in any ward this family holds."
+        )
+    gang_type = OrganizationType.objects.filter(name=GANG_ORG_TYPE_NAME).first()
+    if gang_type is None:
+        msg = "no gang org type"
+        raise TurfAuthoringError(msg, user_message="The gang organization type is not seeded.")
+    with transaction.atomic():
+        gang = Organization.objects.create(
+            name=name, org_type=gang_type, parent_org=family_org, society=family_org.society
+        )
+        ensure_default_rank_ladder(gang)
+        try:
+            swear_fealty(vassal=gang, liege=family_org)
+        except HousesServiceError as exc:
+            raise TurfAuthoringError(str(exc), user_message=exc.user_message) from exc
+        apply_turf_push(gang, neighborhood, GRIP_MAX)
+    return gang
