@@ -598,8 +598,14 @@ def build_family_org(  # noqa: PLR0913 - keyword-only; one arg per package input
     home_domain: Domain | None = None,
     standing: int | None = None,
     crew_slot: CrewSlot | None = None,
+    existing_family: Family | None = None,
 ) -> tuple[Family, Organization]:
     """Family + org + rank ladder + fealty + aspects + features, from a Family Template.
+
+    ``existing_family`` (#4239): a family whose people already exist and that
+    now takes standing. The organization, ranks, fealty, aspects, features
+    and holdings attach to it; no second Family row is made, and ``name``
+    is read from it.
 
     ``home_domain`` (#4060 slice 4): the land the new family's businesses stand
     on when the family has no seat of its own, the city's domain for a commoner
@@ -619,16 +625,23 @@ def build_family_org(  # noqa: PLR0913 - keyword-only; one arg per package input
     if org_type is None:
         msg = f"template {template.pk} has no org_type and no liege to derive one from"
         raise HousesServiceError(msg, user_message="That family template is not ready.")
-    family = Family.objects.create(
-        name=name,
-        kind=template.kind,
-        description=description,
-        is_playable=True,
-        influence=influence,
-        created_by_cg=created_by is not None,
-        created_by=created_by,
-        origin_realm=origin_realm,
-    )
+    if existing_family is not None:
+        family = existing_family
+        name = family.name
+        if family.origin_realm_id is None and origin_realm is not None:
+            family.origin_realm = origin_realm
+            family.save(update_fields=["origin_realm"])
+    else:
+        family = Family.objects.create(
+            name=name,
+            kind=template.kind,
+            description=description,
+            is_playable=True,
+            influence=influence,
+            created_by_cg=created_by is not None,
+            created_by=created_by,
+            origin_realm=origin_realm,
+        )
     org_name = f"House {name}" if template.kind.styles_as_house else name
     org = Organization.objects.create(
         name=org_name,

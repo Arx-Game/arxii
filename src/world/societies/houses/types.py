@@ -10,6 +10,12 @@ data without touching the ORM.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from world.roster.models import Family
+    from world.societies.houses.models import Title
+    from world.societies.models import Organization
 
 
 @dataclass(frozen=True)
@@ -45,3 +51,13 @@ class ClaimObservanceDraft:
     ic_day: int
     name: str
     lore: str = ""
+
+
+@dataclass(frozen=True)
+class CreatedFamily:
+    """What ``create_family`` made (#4239): always a Family; an Organization
+    only when the family took standing; a Title only when it took land."""
+
+    family: Family
+    organization: Organization | None
+    title: Title | None

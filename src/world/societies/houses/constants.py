@@ -450,3 +450,28 @@ class HoldingSiteKind(models.TextChoices):
     ABSTRACT = "abstract", "No site"
     LAND = "land", "Land (outdoor rooms)"
     BUILDING = "building", "A building or ship"
+
+
+class HoldingChoice(models.TextChoices):
+    """What Create Family does about land (#4239): plant a domain and title
+    under a rung, assign an unclaimed title, or nothing yet."""
+
+    CREATE = "create", "Create"
+    VACANT = "vacant", "Vacant title"
+    NONE = "none", "None yet"
+
+
+class LifeStatus(models.TextChoices):
+    """The person page's Status (#4239): the truth about a kinsperson's life."""
+
+    ALIVE = "alive", "Alive"
+    RIP = "rip", "RIP"
+    MISSING = "missing", "Missing"
+
+
+class KinLink(models.TextChoices):
+    """How ``link_kin`` relates one person to another (#4239)."""
+
+    PARENT = "parent", "Parent"
+    CHILD = "child", "Child"
+    SPOUSE = "spouse", "Spouse"
