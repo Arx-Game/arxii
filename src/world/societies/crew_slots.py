@@ -87,3 +87,25 @@ def claim_crew_slot(slot: CrewSlot, org: Organization) -> CrewSlot:
     slot.save(update_fields=["claimed_by", "claimed_at"])
     logger.info("crew slot %s claimed by %s", slot.pk, org.name)
     return slot
+
+
+@transaction.atomic
+def open_crew_slot(*, gang: Organization, name: str, rooms) -> CrewSlot:
+    """Staff mark outdoor rooms under a gang's ground as a claimable corner (#4239)."""
+    from world.societies.models import CrewSlot  # noqa: PLC0415
+
+    name = (name or "").strip()
+    rooms = list(rooms)
+    if not name:
+        msg = "blank slot name"
+        raise CrewSlotError(msg, user_message="A crew slot needs a name.")
+    if not rooms:
+        msg = "no rooms"
+        raise CrewSlotError(msg, user_message="A crew slot needs at least one room.")
+    for room in rooms:
+        if not room.is_outdoor:
+            msg = f"room {room.pk} is indoors"
+            raise CrewSlotError(msg, user_message="A crew holds outdoor rooms only.")
+    slot = CrewSlot.objects.create(gang=gang, name=name)
+    slot.rooms.set(rooms)
+    return slot

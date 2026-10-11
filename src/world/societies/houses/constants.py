@@ -450,3 +450,47 @@ class HoldingSiteKind(models.TextChoices):
     ABSTRACT = "abstract", "No site"
     LAND = "land", "Land (outdoor rooms)"
     BUILDING = "building", "A building or ship"
+
+
+class HoldingChoice(models.TextChoices):
+    """What Create Family does about land (#4239): plant a domain and title
+    under a rung, assign an unclaimed title, or nothing yet."""
+
+    CREATE = "create", "Create"
+    VACANT = "vacant", "Vacant title"
+    NONE = "none", "None yet"
+
+
+class LifeStatus(models.TextChoices):
+    """The person page's Status (#4239): the truth about a kinsperson's life."""
+
+    ALIVE = "alive", "Alive"
+    RIP = "rip", "RIP"
+    MISSING = "missing", "Missing"
+
+
+class KinLink(models.TextChoices):
+    """How ``link_kin`` relates one person to another (#4239)."""
+
+    PARENT = "parent", "Parent"
+    CHILD = "child", "Child"
+    SPOUSE = "spouse", "Spouse"
+
+
+# #4239: how staff surfaces show a kinsperson's definition tier. Numbered up
+# the code ladder (``DefinitionTier``: promotion only rises) and spelled long
+# after the name; players never see either (no tier words on player surfaces).
+NPC_TIER_NUMBER: dict[str, int | None] = {
+    "name_only": 0,
+    "functionary": 1,
+    "standing": 2,
+    "sheeted": 3,
+    "pc": None,
+}
+NPC_TIER_LABEL: dict[str, str] = {
+    "name_only": "Offscreen Reference",
+    "functionary": "Functionary NPC",
+    "standing": "Standing NPC",
+    "sheeted": "Sheeted NPC",
+    "pc": "Player Character",
+}

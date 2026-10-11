@@ -25,7 +25,7 @@
  * rows carry names, not house ids, so the house link has to resolve by name
  * against the full house list regardless of realm scoping.
  */
-import { useMemo, useState } from 'react';
+import { useMemo, useState, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 
 import { Button } from '@/components/ui/button';
@@ -55,6 +55,20 @@ export interface RealmLeafProps {
   houseName: string;
   realm: AlmanachDocumentRealm;
   onSwear: (fields: SwearFields) => void;
+  /** Rendered after the vassals table (#4239): Add title, Add vassal house. */
+  extra?: ReactNode;
+}
+
+function TitheCell({ realm }: { realm: AlmanachDocumentRealm }) {
+  if (realm.obligation_pct != null) return <>{realm.obligation_pct}%</>;
+  if (realm.default_tithe_pct != null) {
+    return (
+      <>
+        {realm.default_tithe_pct}% <span className="meta">realm default</span>
+      </>
+    );
+  }
+  return <abbr title="none">—</abbr>;
 }
 
 function NumCell({ value }: { value: number }) {
@@ -67,7 +81,7 @@ function HeldByCell({ heldBy, heldById }: { heldBy: string; heldById: number | u
   return <>{heldBy}</>;
 }
 
-export function RealmLeaf({ houseId, houseName, realm, onSwear }: RealmLeafProps) {
+export function RealmLeaf({ houseId, houseName, realm, onSwear, extra }: RealmLeafProps) {
   const [swearOpen, setSwearOpen] = useState(false);
   const { data: housesPayload } = useAllHouses();
   const houses = useMemo(
@@ -102,7 +116,7 @@ export function RealmLeaf({ houseId, houseName, realm, onSwear }: RealmLeafProps
     <>
       <main className="chapter">
         <h3>
-          Realm <span className="tier">{houseName}</span>
+          Titles <span className="tier">{houseName}</span>
         </h3>
         <div className="row3">
           <div className="field">
@@ -115,6 +129,12 @@ export function RealmLeaf({ houseId, houseName, realm, onSwear }: RealmLeafProps
             <span className="label">holds</span>
             <div className="val">
               {realm.holds !== '' ? realm.holds : <abbr title="none">—</abbr>}
+            </div>
+          </div>
+          <div className="field">
+            <span className="label">tithe</span>
+            <div className="val">
+              <TitheCell realm={realm} />
             </div>
           </div>
           <div className="field">
@@ -167,10 +187,11 @@ export function RealmLeaf({ houseId, houseName, realm, onSwear }: RealmLeafProps
             </table>
           </div>
         </div>
+        {extra}
         <div className="savebar">
           <span className="note">{DRAFT_NOTE}</span>
           <button type="button" className="btn quiet" onClick={openSwear}>
-            swear a house
+            Swear a house
           </button>
         </div>
       </main>

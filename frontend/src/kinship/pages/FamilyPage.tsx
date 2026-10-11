@@ -25,6 +25,7 @@ import { urls } from '@/utils/urls';
 import type { KinSlot, KinSlotPool } from '@/character-creation/types';
 import { KinTreeGraph } from '../components/KinTreeGraph';
 import { computeGenerations } from '../generations';
+import { recordMark } from '../recordMark';
 import { useFamilySlots, useFamilyTree, useKinRelationship } from '../queries';
 import type { KinspersonNode, ParentageEdge } from '../types';
 import '../family.css';
@@ -51,9 +52,9 @@ function rollRows(nodes: KinspersonNode[], parentage: ParentageEdge[]): Kinspers
     );
 }
 
-/** A person's full-formal name with the dagger; a link when a sheet page exists. */
+/** A person's full-formal name with the record's mark; a link when a sheet page exists. */
 function PersonName({ node }: { node: KinspersonNode }) {
-  const label = `${node.full_name}${node.is_deceased ? ' †' : ''}`;
+  const label = `${node.full_name}${recordMark(node)}`;
   if (node.roster_entry_id != null) {
     return (
       <Link className="family-name" to={urls.character(node.roster_entry_id)}>
@@ -85,6 +86,7 @@ function SelectedEntry({ node, viewerSheetId }: SelectedEntryProps) {
   return (
     <section className="family-selected" aria-label="Selected">
       <PersonName node={node} />
+      {node.obituary && <p className="family-gloss">{node.obituary}</p>}
       {node.description && <p className="family-gloss">{node.description}</p>}
       {label && <p className="family-ledger">Related as {label.replace(/_/g, ' ')}.</p>}
     </section>

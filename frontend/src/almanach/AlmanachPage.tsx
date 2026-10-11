@@ -26,7 +26,7 @@
  * planting under a selected rung is otherwise unchanged.
  */
 import { useEffect, useMemo, useState } from 'react';
-import { Link, Navigate, useNavigate, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams } from 'react-router-dom';
 
 import { useAlmanachMutation, useCharter, useHouses, useLadder, useRealms } from './queries';
 import { buildLadderTree, crownSwornTo, defaultPressedTier, levelBarTiers } from './ladder/tree';
@@ -35,6 +35,10 @@ import { LadderTable } from './ladder/LadderTable';
 import { PlantRungDialog } from './ladder/PlantRungDialog';
 import { BatchUnclaimedDialog } from './ladder/BatchUnclaimedDialog';
 import { HouseDocument } from './document/HouseDocument';
+import { FrontPage } from './front/FrontPage';
+import { PersonPage } from './person/PersonPage';
+import { TitlePage } from './title/TitlePage';
+import { StaffFamilyPage } from './family/StaffFamilyPage';
 import type { AlmanachRealm } from './types';
 import './almanach.css';
 
@@ -321,26 +325,38 @@ function RealmLadderPage({ realmId, realms }: { realmId: number; realms: Almanac
 }
 
 export function AlmanachPage() {
-  const { realmId: realmIdParam, houseId } = useParams<{ realmId?: string; houseId?: string }>();
+  const {
+    realmId: realmIdParam,
+    houseId,
+    personId,
+    titleId,
+    familyId,
+  } = useParams<{
+    realmId?: string;
+    houseId?: string;
+    personId?: string;
+    titleId?: string;
+    familyId?: string;
+  }>();
   const { data: realmsPayload } = useRealms();
 
   if (houseId) {
     return <HouseDocument houseId={Number(houseId)} />;
   }
+  if (personId) {
+    return <PersonPage personId={Number(personId)} />;
+  }
+  if (titleId) {
+    return <TitlePage titleId={Number(titleId)} />;
+  }
+  if (familyId) {
+    return <StaffFamilyPage familyId={Number(familyId)} />;
+  }
 
+  // The front page (#4239): every family in three rolls, search, and the
+  // three Create buttons. The realm ladder is one roll down.
   if (!realmIdParam) {
-    if (realmsPayload == null) {
-      return <div className="almanach" />;
-    }
-    const realms = realmsPayload.results;
-    if (realms.length > 0) {
-      return <Navigate to={`/staff/almanach/realms/${realms[0].id}`} replace />;
-    }
-    return (
-      <div className="almanach">
-        <div className="wrap p-6 text-sm text-muted-foreground">No realms on record yet.</div>
-      </div>
-    );
+    return <FrontPage />;
   }
 
   return <RealmLadderPage realmId={Number(realmIdParam)} realms={realmsPayload?.results ?? []} />;

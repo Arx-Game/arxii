@@ -85,7 +85,7 @@ the omniscient viewer (mechanical truth); otherwise the caller's own
 from __future__ import annotations
 
 from collections import defaultdict
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
 from django.core.exceptions import ObjectDoesNotExist
@@ -154,7 +154,12 @@ class LadderPayload:
 
 @dataclass
 class HouseDocument:
-    """The Almanach's house document: plain dicts/lists per section."""
+    """The Almanach's house document: plain dicts/lists per section.
+
+    ``books``, ``forces``, ``openings`` and ``turf`` are the chapters #4239
+    added (``almanach_pages.house_chapters``); ``turf`` is ``None`` for a
+    house that holds none, so a noble document carries no turf key worth
+    drawing."""
 
     house: dict
     family: dict
@@ -162,6 +167,10 @@ class HouseDocument:
     realm: dict
     lands: dict
     estate: list[dict]
+    books: dict = field(default_factory=dict)
+    forces: list[dict] = field(default_factory=list)
+    openings: dict = field(default_factory=dict)
+    turf: dict | None = None
 
 
 @dataclass
@@ -613,7 +622,7 @@ def observance_rows(house: Organization) -> list[dict]:
 
 def _family_payload(house: Organization, viewer: object, *, staff: bool) -> dict:
     if house.family_id is None:
-        return {"nodes": [], "parentage": [], "unions": []}
+        return {"family_id": None, "nodes": [], "parentage": [], "unions": []}
     payload = family_tree_for(house.family, OMNISCIENT if staff else viewer)
     # The staff cut's nodes already carry ``believed_deceased`` (the node
     # dict is viewer-aware since #3983's leak fix); this one query keeps the
@@ -626,7 +635,12 @@ def _family_payload(house: Organization, viewer: object, *, staff: bool) -> dict
     nodes = [
         {**node, "believed_deceased": believed.get(node["id"], False)} for node in payload.nodes
     ]
-    return {"nodes": nodes, "parentage": payload.parentage, "unions": payload.unions}
+    return {
+        "family_id": house.family_id,
+        "nodes": nodes,
+        "parentage": payload.parentage,
+        "unions": payload.unions,
+    }
 
 
 def _household_payload(house: Organization) -> list[dict]:
@@ -683,6 +697,8 @@ def _realm_payload(house: Organization, titles: list[Title], all_rows: list[Ladd
             "sworn_to": "",
             "obligation_pct": None,
             "holds": "",
+            "holds_title_id": None,
+            "holds_tier": "",
             "demesne": [],
             "vassals": [],
             **facts,
@@ -717,6 +733,10 @@ def _realm_payload(house: Organization, titles: list[Title], all_rows: list[Ladd
         "sworn_to": sworn_to,
         "obligation_pct": obligation_pct,
         "holds": top.name,
+        # #4239: the house's own top rung, so the house page can batch vacant
+        # seats beneath it without a trip to the ladder.
+        "holds_title_id": top.pk,
+        "holds_tier": top.tier,
         "demesne": demesne,
         "vassals": vassals,
         **facts,
@@ -806,6 +826,8 @@ def document_for_house(house: Organization, *, viewer: object, staff: bool) -> H
     """The Almanach's house document (#3983): the house's own charter block
     folded together with its family tree, household, realm standing, lands,
     and estate — one read for the whole house page."""
+    from world.societies.houses.almanach_pages import house_chapters  # noqa: PLC0415
+
     titles = _house_titles(house)
     all_rows: list[LadderRow] = []
     if titles:
@@ -817,6 +839,7 @@ def document_for_house(house: Organization, *, viewer: object, staff: bool) -> H
         realm=_realm_payload(house, titles, all_rows),
         lands=_lands_payload(house, titles),
         estate=_estate_payload(house),
+        **house_chapters(house),
     )
 
 

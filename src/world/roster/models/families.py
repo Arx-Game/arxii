@@ -213,6 +213,14 @@ class Kinsperson(SharedMemoryModel):
         default=False,
         help_text="What the public record says; is_deceased is the truth (#3983).",
     )
+    is_missing = models.BooleanField(
+        default=False,
+        help_text="Whereabouts unknown; never true together with is_deceased (#4239).",
+    )
+    obituary = models.TextField(
+        blank=True,
+        help_text="What the public record says of this person's death, true or not (#4239).",
+    )
     gifted_rating = models.PositiveSmallIntegerField(
         default=0,
         help_text=(

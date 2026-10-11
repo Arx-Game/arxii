@@ -220,6 +220,16 @@ itself, a house holds).
 _Avoid_: capital (implies a city, not a landed parcel); the title's own Area (a mid-chain title's
 own rung `Area` is found by walking UP from the shared seat — the seat itself is always the barony
 at the chain's bottom, never the title's own tier's Area).
+Never a verb: "seating a house" is not a term (ApostateCD, #4239). The code word is **Holder**.
+
+**Holder** (#1884, #4239):
+Who holds a title: the house (`Title.house`, set by `assign_holder`, which also marks the title
+unclaimable and writes the fealty edge) and the person in that house's family who holds it in
+person (`Title.holder`, set by `set_personal_holder`). A vacant title has neither. "Create Family"
+with a holding makes the new house the holder and the chosen person its personal holder in one
+stroke.
+_Avoid_: seat (the title's seat barony); owner (the domain's `owner_org`, kept in step by
+`assign_holder`).
 
 **Hall** (`Domain.hall`, #3983):
 A title's own seat building — a `BUILDING`-level `Area` distinct from the demesne `Domain` it

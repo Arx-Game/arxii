@@ -37,10 +37,12 @@
  * this chapter renders no outer savebar at all (unlike House/Lands/Estate).
  */
 import { useState, type ReactNode } from 'react';
+import { Link } from 'react-router-dom';
 
 import type { AlmanachFamily, AlmanachFamilyNode, AlmanachHouseholdMember } from '../types';
 import { PersonPanel, type PersonPanelSaveFields, type PersonPanelSubject } from './PersonPanel';
 import { AddKinDialog, type CreateKinFields, type KinRelation } from './AddKinDialog';
+import { personUrl, statusFromFlags, statusMark, tierMark } from '../shared/tier';
 
 export interface FamilyChapterProps {
   houseId: number;
@@ -104,6 +106,10 @@ export interface FamilyChapterProps {
    * the plate's CSS grid expects, not as a trailing sibling. Omitted keeps
    * today's no-footer shape. */
   footer?: ReactNode;
+  /** The staff house document passes `true` (#4239): tier words on the status
+   * column and a link from every row to the person's own page. The founder
+   * (a player surface) leaves it off. */
+  staff?: boolean;
 }
 
 /** A household row, repackaged as the shape `renderPanel` takes — lets one
@@ -130,6 +136,11 @@ function nodeFromHousehold(row: AlmanachHouseholdMember): AlmanachFamilyNode {
 
 const HIDDEN_TRUTH = 'hidden truth';
 
+function statusClass(hidden: boolean, appable: boolean): string {
+  if (hidden) return 'st hid';
+  return appable ? 'st open' : 'st';
+}
+
 /** Whether any `parentage` edge touching `nodeId` (as parent or child) is
  * marked untrue or gated by a secret. */
 function hasParentageSecret(nodeId: number, parentage: AlmanachFamily['parentage']): boolean {
@@ -139,15 +150,19 @@ function hasParentageSecret(nodeId: number, parentage: AlmanachFamily['parentage
   );
 }
 
-function nodeStatusText(node: AlmanachFamilyNode, family: AlmanachFamily): string {
+/** The status column (#4239): a hidden truth; appable; else, for staff only,
+ * the tier spelled long ("(Standing NPC)"). Players see no tier word. Death
+ * and absence are a separate mark, never a strikethrough. */
+function nodeStatusText(node: AlmanachFamilyNode, family: AlmanachFamily, staff: boolean): string {
   if (node.believed_deceased || hasParentageSecret(node.id, family.parentage)) return HIDDEN_TRUTH;
-  if (node.is_deceased) return 'deceased';
-  return node.tier;
+  if (node.is_appable) return 'appable';
+  return staff ? tierMark(node.tier) : '';
 }
 
 function householdStatusText(row: AlmanachHouseholdMember): string {
   if (row.believed_deceased) return HIDDEN_TRUTH;
-  return row.is_deceased ? 'deceased' : 'household';
+  const mark = statusMark(statusFromFlags(row.is_deceased, false));
+  return mark ? `${mark} household` : 'household';
 }
 
 function relationLabel(depth: number): string {
@@ -264,6 +279,7 @@ export function FamilyChapter({
   relationOverrides,
   statusOverrides,
   footer,
+  staff = false,
 }: FamilyChapterProps) {
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [addOpen, setAddOpen] = useState<'kin' | 'household' | null>(null);
@@ -329,18 +345,25 @@ export function FamilyChapter({
     const hasChildList = outsiders.length > 0 || childIds.length > 0;
     const hidden = node.believed_deceased || hasParentageSecret(node.id, family.parentage);
     const status = statusOverrides?.[node.id];
+    const mark = statusMark(statusFromFlags(node.is_deceased, node.is_missing ?? false));
     return (
       <li key={node.id} className={selected ? 'sel' : undefined}>
         <div className="who">
-          <span className={node.is_deceased ? 'nm dead' : 'nm'}>
+          <span className="nm">
             <button type="button" aria-expanded={selected} onClick={() => select(node.id)}>
               {node.name}
             </button>
           </span>
           <span className="rel">{relation}</span>
-          <span className={status?.className ?? (hidden ? 'st hid' : 'st')}>
-            {status?.text ?? nodeStatusText(node, family)}
+          <span className={status?.className ?? statusClass(hidden, node.is_appable)}>
+            {mark && <span className="gone">{mark} </span>}
+            {status?.text ?? nodeStatusText(node, family, staff)}
           </span>
+          {staff && (
+            <Link to={personUrl(node.id)} className="open-person" aria-label={`Open ${node.name}`}>
+              ↗
+            </Link>
+          )}
         </div>
         {selected &&
           (renderPanel ? (
@@ -418,7 +441,7 @@ export function FamilyChapter({
                   className={selectedId === row.holder_id ? 'sel' : undefined}
                 >
                   <div className="who">
-                    <span className={row.is_deceased ? 'nm dead' : 'nm'}>
+                    <span className="nm">
                       <button
                         type="button"
                         aria-expanded={selectedId === row.holder_id}

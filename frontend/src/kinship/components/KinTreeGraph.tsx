@@ -25,6 +25,7 @@ import { cn } from '@/lib/utils';
 import { urls } from '@/utils/urls';
 
 import { computeGenerations } from '../generations';
+import { recordMark } from '../recordMark';
 import type { KinspersonNode, ParentageEdge, UnionEdge } from '../types';
 
 interface Props {
@@ -170,7 +171,7 @@ export function KinTreeGraph({ nodes, parentage, unions, selectedNodeId, onSelec
           const pos = positions.get(node.id);
           if (!pos) return null;
           const isSelected = node.id === selectedNodeId;
-          const label = `${node.short_name}${node.is_deceased ? ' †' : ''}`;
+          const label = `${node.short_name}${recordMark(node)}`;
           const sheetUrl =
             node.roster_entry_id != null ? urls.character(node.roster_entry_id) : null;
           return (
@@ -195,8 +196,7 @@ export function KinTreeGraph({ nodes, parentage, unions, selectedNodeId, onSelec
                 ry={8}
                 strokeWidth={2}
                 className={cn(
-                  isSelected ? 'fill-primary/10 stroke-primary' : 'fill-card stroke-border',
-                  node.is_deceased && 'opacity-60'
+                  isSelected ? 'fill-primary/10 stroke-primary' : 'fill-card stroke-border'
                 )}
               />
               {sheetUrl ? (

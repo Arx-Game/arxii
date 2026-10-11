@@ -15,23 +15,44 @@ from rest_framework import permissions, viewsets
 from rest_framework.decorators import action
 from rest_framework.exceptions import PermissionDenied
 from rest_framework.response import Response
+from rest_framework.views import APIView
 
 from world.realms.models import Realm
+from world.roster.models import Family, FamilyKind, Kinsperson, UnionKind
 from world.roster.views.family_views import _viewer_entry
+from world.societies.houses.almanach_pages import (
+    family_document,
+    front_rolls,
+    person_document,
+    rung_document,
+    search,
+)
 from world.societies.houses.almanach_reads import (
     charter_for_realm,
     document_for_house,
     ladder_for_realm,
 )
 from world.societies.houses.almanach_serializers import (
+    AlmanachFamilyKindSerializer,
+    AlmanachFamilySummarySerializer,
+    AlmanachHoldingKindSerializer,
     AlmanachHouseSummarySerializer,
+    AlmanachPersonSummarySerializer,
     AlmanachRealmSerializer,
+    AlmanachTemplateSerializer,
+    AlmanachTitleSummarySerializer,
+    AlmanachUnionKindSerializer,
+    FamilyDocumentSerializer,
+    FrontRollsSerializer,
     HouseDocumentSerializer,
     LadderPayloadSerializer,
     LandShapeSerializer,
+    PersonDocumentSerializer,
     RealmCharterSerializer,
+    RungDocumentSerializer,
+    SearchHitSerializer,
 )
-from world.societies.houses.models import LandShape
+from world.societies.houses.models import HoldingKind, HouseTemplate, LandShape, Title
 from world.societies.models import Organization
 from world.societies.views import SocietiesPagination
 
@@ -137,3 +158,140 @@ class LandShapeViewSet(viewsets.ReadOnlyModelViewSet):
     pagination_class = SocietiesPagination
     filter_backends = [DjangoFilterBackend]
     filterset_fields = ["name"]
+
+
+# ---------------------------------------------------------------------------
+# #4239: every family, every person. Staff-only reads for the person, title
+# and family pages, the front page's rolls, and search.
+# ---------------------------------------------------------------------------
+
+_STAFF = [permissions.IsAuthenticated, permissions.IsAdminUser]
+
+
+class AlmanachPersonViewSet(viewsets.ReadOnlyModelViewSet):
+    """List/retrieve people, plus each person's page (``/document/``)."""
+
+    queryset = Kinsperson.objects.all().order_by("name")
+    serializer_class = AlmanachPersonSummarySerializer
+    permission_classes = _STAFF
+    pagination_class = SocietiesPagination
+    filter_backends = [DjangoFilterBackend]
+    filterset_fields = ["family", "is_appable", "definition_tier"]
+
+    @extend_schema(responses=PersonDocumentSerializer)
+    @action(detail=True, methods=["get"], url_path="document")
+    def document(self, request, pk=None):
+        """GET /api/almanach/people/{id}/document/"""
+        return Response(PersonDocumentSerializer(person_document(self.get_object())).data)
+
+
+class AlmanachTitleViewSet(viewsets.ReadOnlyModelViewSet):
+    """List/retrieve titles, plus each rung's page (``/document/``)."""
+
+    queryset = Title.objects.all().order_by("realm__name", "name")
+    serializer_class = AlmanachTitleSummarySerializer
+    permission_classes = _STAFF
+    pagination_class = SocietiesPagination
+    filter_backends = [DjangoFilterBackend]
+    filterset_fields = ["realm", "house", "tier", "is_claimable"]
+
+    @extend_schema(responses=RungDocumentSerializer)
+    @action(detail=True, methods=["get"], url_path="document")
+    def document(self, request, pk=None):
+        """GET /api/almanach/titles/{id}/document/"""
+        return Response(RungDocumentSerializer(rung_document(self.get_object())).data)
+
+
+class AlmanachFamilyViewSet(viewsets.ReadOnlyModelViewSet):
+    """List/retrieve families, plus each family's page (``/document/``): the
+    family half of the house document, which works with no organization."""
+
+    queryset = Family.objects.all().select_related("kind").order_by("name")
+    serializer_class = AlmanachFamilySummarySerializer
+    permission_classes = _STAFF
+    pagination_class = SocietiesPagination
+    filter_backends = [DjangoFilterBackend]
+    filterset_fields = ["kind", "origin_realm", "is_playable"]
+
+    @extend_schema(responses=FamilyDocumentSerializer)
+    @action(detail=True, methods=["get"], url_path="document")
+    def document(self, request, pk=None):
+        """GET /api/almanach/families/{id}/document/"""
+        viewer = _viewer_entry(request)
+        payload = family_document(self.get_object(), viewer=viewer, staff=request.user.is_staff)
+        return Response(FamilyDocumentSerializer(payload).data)
+
+
+class AlmanachFrontView(APIView):
+    """GET /api/almanach/front/?q=: the three rolls, narrowed by ``q``."""
+
+    permission_classes = _STAFF
+
+    @extend_schema(
+        parameters=[OpenApiParameter(name="q", type=str, required=False)],
+        responses=FrontRollsSerializer,
+    )
+    def get(self, request):
+        # A free-text narrowing of a computed payload, not a queryset filter;
+        # there is no queryset for a FilterSet to attach to.
+        q = request.query_params.get("q", "")  # noqa: USE_FILTERSET
+        return Response(FrontRollsSerializer(front_rolls(q=q)).data)
+
+
+class AlmanachSearchView(APIView):
+    """GET /api/almanach/search/?q=: people, families, organizations, titles."""
+
+    permission_classes = _STAFF
+
+    @extend_schema(
+        parameters=[OpenApiParameter(name="q", type=str, required=True)],
+        responses=SearchHitSerializer(many=True),
+    )
+    def get(self, request):
+        # Four tables, one capped name search; a FilterSet binds to one queryset.
+        q = request.query_params.get("q", "")  # noqa: USE_FILTERSET
+        return Response(SearchHitSerializer(search(q), many=True).data)
+
+
+class AlmanachFamilyKindViewSet(viewsets.ReadOnlyModelViewSet):
+    """The family types Create Family offers."""
+
+    queryset = FamilyKind.objects.filter(is_active=True).order_by("sort_order", "name")
+    serializer_class = AlmanachFamilyKindSerializer
+    permission_classes = _STAFF
+    pagination_class = SocietiesPagination
+    filter_backends = [DjangoFilterBackend]
+    filterset_fields = ["styles_as_house"]
+
+
+class AlmanachTemplateViewSet(viewsets.ReadOnlyModelViewSet):
+    """Family Templates, filtered by realm and kind for the Create Family form."""
+
+    queryset = HouseTemplate.objects.all().order_by("realm__name", "kind__name", "name")
+    serializer_class = AlmanachTemplateSerializer
+    permission_classes = _STAFF
+    pagination_class = SocietiesPagination
+    filter_backends = [DjangoFilterBackend]
+    filterset_fields = ["realm", "kind"]
+
+
+class AlmanachUnionKindViewSet(viewsets.ReadOnlyModelViewSet):
+    """Union kinds, filtered by realm for Add spouse."""
+
+    queryset = UnionKind.objects.all().order_by("realm__name", "name")
+    serializer_class = AlmanachUnionKindSerializer
+    permission_classes = _STAFF
+    pagination_class = SocietiesPagination
+    filter_backends = [DjangoFilterBackend]
+    filterset_fields = ["realm"]
+
+
+class AlmanachHoldingKindViewSet(viewsets.ReadOnlyModelViewSet):
+    """The holding catalog, for Add holding."""
+
+    queryset = HoldingKind.objects.all().order_by("name")
+    serializer_class = AlmanachHoldingKindSerializer
+    permission_classes = _STAFF
+    pagination_class = SocietiesPagination
+    filter_backends = [DjangoFilterBackend]
+    filterset_fields = ["site_kind"]

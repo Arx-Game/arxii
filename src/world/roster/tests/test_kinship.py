@@ -445,3 +445,13 @@ class EndUnionTests(TestCase):
         kinship.end_union(union)
         union.refresh_from_db()
         assert union.ended_at == first_ended_at
+
+
+class KinspersonLifeFieldsTests(TestCase):
+    """The two public-record columns #4239 adds: missing, and the obituary."""
+
+    def test_missing_and_obituary_default_empty(self):
+        node = KinspersonFactory(name="Kathryn")
+        node.refresh_from_db()
+        self.assertFalse(node.is_missing)
+        self.assertEqual(node.obituary, "")

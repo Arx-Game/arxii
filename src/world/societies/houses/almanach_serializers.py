@@ -13,9 +13,10 @@ from __future__ import annotations
 from rest_framework import serializers
 
 from world.realms.models import Realm
+from world.roster.models import Family, FamilyKind, Kinsperson, UnionKind
 from world.societies.houses.almanach_reads import ladder_for_realm
 from world.societies.houses.constants import TitleTier
-from world.societies.houses.models import LandShape
+from world.societies.houses.models import HoldingKind, HouseTemplate, LandShape, Title
 from world.societies.models import Organization
 
 
@@ -188,6 +189,12 @@ class HouseDocumentSerializer(serializers.Serializer):
     realm = serializers.DictField()
     lands = serializers.DictField()
     estate = serializers.ListField(child=serializers.DictField())
+    # #4239: the chapters every family page carries. ``turf`` is null for a
+    # house that holds none.
+    books = serializers.DictField()
+    forces = serializers.ListField(child=serializers.DictField())
+    openings = serializers.DictField()
+    turf = serializers.DictField(allow_null=True)
 
 
 class LandShapeSerializer(serializers.ModelSerializer):
@@ -213,3 +220,131 @@ class RealmCharterSerializer(serializers.Serializer):
     particle = RealmCharterParticleSerializer()
     quiddity_prompt = serializers.CharField(allow_blank=True)
     capital_name = serializers.CharField(allow_blank=True)
+
+
+# ---------------------------------------------------------------------------
+# #4239: every family, every person. The summary rows the new viewsets list
+# and the document payloads ``almanach_pages`` builds (plain dicts and lists,
+# so they ride DictField/ListField like the house document's sections).
+# ---------------------------------------------------------------------------
+
+
+class AlmanachPersonSummarySerializer(serializers.ModelSerializer):
+    """A person row in the people list; the document is ``/document/``."""
+
+    family_id = serializers.IntegerField(read_only=True, allow_null=True)
+    sheet_id = serializers.IntegerField(read_only=True, allow_null=True)
+
+    class Meta:
+        model = Kinsperson
+        fields = ["id", "name", "definition_tier", "family_id", "sheet_id", "is_appable"]
+
+
+class AlmanachTitleSummarySerializer(serializers.ModelSerializer):
+    """A title row in the titles list; the document is ``/document/``."""
+
+    realm_id = serializers.IntegerField(read_only=True)
+    house_id = serializers.IntegerField(read_only=True, allow_null=True)
+    holder_id = serializers.IntegerField(read_only=True, allow_null=True)
+
+    class Meta:
+        model = Title
+        fields = ["id", "name", "tier", "realm_id", "house_id", "holder_id", "is_claimable"]
+
+
+class AlmanachFamilySummarySerializer(serializers.ModelSerializer):
+    """A family row in the families list; the document is ``/document/``."""
+
+    kind_name = serializers.CharField(source="kind.name", read_only=True)
+    origin_realm_id = serializers.IntegerField(read_only=True, allow_null=True)
+
+    class Meta:
+        model = Family
+        fields = ["id", "name", "kind_name", "origin_realm_id", "is_playable"]
+
+
+class FrontRollsSerializer(serializers.Serializer):
+    """Mirrors ``almanach_pages.FrontRolls``."""
+
+    noble = serializers.ListField(child=serializers.DictField())
+    crime = serializers.ListField(child=serializers.DictField())
+    commoner = serializers.ListField(child=serializers.DictField())
+
+
+class SearchHitSerializer(serializers.Serializer):
+    """Mirrors ``almanach_pages.SearchHit``."""
+
+    kind = serializers.CharField()
+    id = serializers.IntegerField()
+    name = serializers.CharField()
+    sub = serializers.CharField(allow_blank=True)
+
+
+class PersonDocumentSerializer(serializers.Serializer):
+    """Mirrors ``almanach_pages.PersonDocument``."""
+
+    person = serializers.DictField()
+    family = serializers.DictField(allow_null=True)
+    kin = serializers.ListField(child=serializers.DictField())
+    house = serializers.DictField(allow_null=True)
+    titles = serializers.ListField(child=serializers.DictField())
+    sheet = serializers.DictField()
+    memberships = serializers.ListField(child=serializers.DictField())
+    record = serializers.DictField()
+
+
+class RungDocumentSerializer(serializers.Serializer):
+    """Mirrors ``almanach_pages.RungDocument``."""
+
+    title = serializers.DictField()
+    demesne = serializers.DictField(allow_null=True)
+    holdings = serializers.ListField(child=serializers.DictField())
+    books = serializers.DictField()
+    forces = serializers.ListField(child=serializers.DictField())
+    vassals = serializers.ListField(child=serializers.DictField())
+
+
+class FamilyDocumentSerializer(serializers.Serializer):
+    """Mirrors ``almanach_pages.FamilyDocument``."""
+
+    family = serializers.DictField()
+    organization_id = serializers.IntegerField(allow_null=True)
+    tree = serializers.DictField()
+    openings = serializers.DictField()
+
+
+class AlmanachFamilyKindSerializer(serializers.ModelSerializer):
+    """The family types Create Family offers (``FamilyKind`` rows, ADR-0268)."""
+
+    class Meta:
+        model = FamilyKind
+        fields = ["id", "name", "styles_as_house", "sort_order"]
+
+
+class AlmanachTemplateSerializer(serializers.ModelSerializer):
+    """A Family Template (``HouseTemplate``): the recipe an organization is built from."""
+
+    realm_id = serializers.IntegerField(read_only=True, allow_null=True)
+    kind_id = serializers.IntegerField(read_only=True, allow_null=True)
+
+    class Meta:
+        model = HouseTemplate
+        fields = ["id", "name", "realm_id", "kind_id", "tier", "founds_a_crew"]
+
+
+class AlmanachUnionKindSerializer(serializers.ModelSerializer):
+    """A union kind, for Add spouse."""
+
+    realm_id = serializers.IntegerField(read_only=True, allow_null=True)
+
+    class Meta:
+        model = UnionKind
+        fields = ["id", "name", "realm_id", "confers_wedlock"]
+
+
+class AlmanachHoldingKindSerializer(serializers.ModelSerializer):
+    """The holding catalog, for Add holding on a domain's page."""
+
+    class Meta:
+        model = HoldingKind
+        fields = ["id", "name", "description", "site_kind", "requires_field"]

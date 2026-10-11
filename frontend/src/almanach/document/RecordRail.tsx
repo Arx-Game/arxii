@@ -97,7 +97,7 @@ export function RecordRail({ rows, extraSection, doors = [] }: RecordRailProps) 
       {extraSection && <Section heading={extraSection.heading} rows={extraSection.rows} />}
       {doors.length > 0 && (
         <>
-          <h4>doors</h4>
+          <h4>links</h4>
           <ul className="doors">
             {doors.map((door) => (
               <li key={door.label}>

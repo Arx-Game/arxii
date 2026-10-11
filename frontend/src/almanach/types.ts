@@ -70,11 +70,17 @@ export interface AlmanachFamilyNode {
   age: number | null;
   description: string;
   believed_deceased: boolean;
+  /** The record's own facts (#4239): missing, and what it says of a death. */
+  is_missing?: boolean;
+  obituary?: string;
 }
 
 /** `document.family` — the house's kinship graph, viewer-gated like every
  * other kinship read (`_family_payload`, `almanach_reads.py`). */
 export interface AlmanachFamily {
+  /** The Family pk (#4239), what Create Kin needs; null for a house with no family row.
+   * Optional so the founder's draft shape, which has no row yet, still fits. */
+  family_id?: number | null;
   nodes: AlmanachFamilyNode[];
   parentage: components['schemas']['ParentageEdge'][];
   unions: components['schemas']['UnionEdge'][];
@@ -117,7 +123,9 @@ export interface AlmanachDocumentRealm {
   vassals: AlmanachRealmRowSummary[];
   realm_id: number | null;
   default_tithe_pct: number;
-  realm_theme: string;
+  realm_theme: string /** #4239: the house's own top rung, for Add vacant seats from the house page. */;
+  holds_title_id?: number | null;
+  holds_tier?: string;
 }
 
 /** One `document.lands.baronies` entry (`_lands_payload`, `almanach_reads.py`). */
@@ -165,6 +173,195 @@ export interface HouseDocument {
   realm: AlmanachDocumentRealm;
   lands: AlmanachDocumentLands;
   estate: AlmanachEstateEntry[];
+  /** #4239: the chapters every family page carries. `turf` is null for a
+   * house that holds none. */
+  books: AlmanachBooks;
+  forces: AlmanachForceRow[];
+  openings: AlmanachOpenings;
+  turf: AlmanachTurf | null;
+}
+
+/** `books` (#4239, `almanach_pages.books_for`): coppers per cycle, what is
+ * pooled uncollected, and the treasury. The full ledger is #4243. */
+export interface AlmanachBooks {
+  income_week: number;
+  uncollected: number;
+  treasury: number;
+  streams: number;
+}
+
+/** One unit row (#4239, `almanach_pages.forces_for`). */
+export interface AlmanachForceRow {
+  unit_id: number;
+  name: string;
+  owner: string;
+  quality: string;
+  men: number;
+  strength: number;
+  morale: number;
+  posted_here: boolean;
+}
+
+/** A person as the #4239 pages list them: kin rows, appable kin, search. */
+export interface AlmanachPersonRow {
+  id: number;
+  name: string;
+  relation: string;
+  /** parent / child / spouse / sibling: what the row counts as; `relation` is the word. */
+  link?: string;
+  tier: string;
+  tier_display: { number: number | null; label: string };
+  status: 'alive' | 'rip' | 'missing';
+  is_pc: boolean;
+  sheet_id: number | null;
+  is_appable: boolean;
+  family_id: number | null;
+}
+
+export interface AlmanachOpenings {
+  appable: AlmanachPersonRow[];
+  posts: { vacancy_id: number; position: string }[];
+  vacant_seats: AlmanachRealmRowSummary[];
+}
+
+export interface AlmanachTurf {
+  tier: string;
+  wards: { turf_id: number; area_id: number; name: string; grip: number; base_value?: number }[];
+  gangs: {
+    org_id: number;
+    name: string;
+    boss: string;
+    neighborhood: string;
+    crews: {
+      crew_slot_id: number;
+      name: string;
+      rooms: number;
+      claimed_by: string;
+      is_open: boolean;
+    }[];
+  }[];
+}
+
+/** The #4239 documents, typed over the generated schema's dict sections. */
+export type FrontRolls = components['schemas']['FrontRolls'];
+export type SearchHit = components['schemas']['SearchHit'];
+export type AlmanachFamilyKind = components['schemas']['AlmanachFamilyKind'];
+export type AlmanachTemplate = components['schemas']['AlmanachTemplate'];
+export type AlmanachUnionKind = components['schemas']['AlmanachUnionKind'];
+export type AlmanachTitleSummary = components['schemas']['AlmanachTitleSummary'];
+export type AlmanachHoldingKind = components['schemas']['AlmanachHoldingKind'];
+
+export interface PersonDocument {
+  person: {
+    id: number;
+    name: string;
+    display_name: string;
+    gender_id: number | null;
+    gender: string;
+    age: number | null;
+    tier: string;
+    tier_display: { number: number | null; label: string };
+    status: 'alive' | 'rip' | 'missing';
+    record_accurate: boolean;
+    obituary: string;
+    is_pc: boolean;
+    description: string;
+  };
+  family: {
+    id: number;
+    name: string;
+    kind: string;
+    basis: string;
+    organization_id: number | null;
+  } | null;
+  kin: AlmanachPersonRow[];
+  house: {
+    org_id: number;
+    name: string;
+    role: string;
+    rank: number | null;
+    household_post: string;
+  } | null;
+  titles: {
+    title_id: number;
+    name: string;
+    tier: string;
+    realm: string;
+    held_by: string;
+    seat?: string;
+    vassals: number;
+  }[];
+  sheet: {
+    sheet_id: number | null;
+    is_appable: boolean;
+    name_locked: boolean;
+    age_min: number | null;
+    age_max: number | null;
+    allowed_gender_ids: number[];
+  };
+  memberships: { org_id: number; name: string; rank: string }[];
+  record: {
+    parents: number;
+    children: number;
+    siblings: number;
+    unions: number;
+    hidden_truths: number;
+  };
+}
+
+export interface RungDocument {
+  title: {
+    title_id: number;
+    name: string;
+    tier: string;
+    realm_id: number;
+    realm: string;
+    house_id: number | null;
+    held_by: string;
+    holder_id: number | null;
+    holder: string;
+    sworn_to: string;
+    succession: string;
+    seat: string;
+    is_claimable: boolean;
+    chain_top_id: number;
+  };
+  demesne: {
+    domain_id: number;
+    name: string;
+    description: string;
+    hall: string;
+    population: number;
+    prosperity: number;
+    unrest: number;
+    defenses: number;
+  } | null;
+  holdings: {
+    holding_id: number;
+    name: string;
+    kind: string;
+    site: string;
+    standing: number;
+    unsited: boolean;
+  }[];
+  books: AlmanachBooks;
+  forces: AlmanachForceRow[];
+  vassals: AlmanachRealmRowSummary[];
+}
+
+export interface FamilyDocument {
+  family: {
+    id: number;
+    name: string;
+    kind: string;
+    realm_id: number | null;
+    realm: string;
+    is_playable: boolean;
+    description: string;
+  };
+  organization_id: number | null;
+  tree: AlmanachFamily;
+  openings: AlmanachOpenings;
 }
 
 /** Registry keys of the ten staff Almanach actions (#3983 Task 6). */
@@ -178,4 +375,19 @@ export type AlmanachActionKey =
   | 'almanach_add_holding'
   | 'almanach_plan_estate'
   | 'almanach_edit_kin'
-  | 'almanach_publish';
+  | 'almanach_publish'
+  // #4239: every family, every person.
+  | 'almanach_create_family'
+  | 'almanach_found_organization'
+  | 'almanach_create_kin'
+  | 'almanach_link_kin'
+  | 'almanach_correct_kin'
+  | 'almanach_set_status'
+  | 'almanach_promote_kin'
+  | 'almanach_set_appable'
+  | 'almanach_attach_sheet'
+  | 'almanach_set_holder'
+  | 'almanach_claim_ward'
+  | 'almanach_add_gang'
+  | 'almanach_open_crew_slot'
+  | 'almanach_edit_person';

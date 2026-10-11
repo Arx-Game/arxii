@@ -142,6 +142,10 @@ class KinspersonNodeSerializer(serializers.Serializer):
     tier = serializers.CharField()
     family_id = serializers.IntegerField(allow_null=True)
     is_deceased = serializers.BooleanField()
+    # The public record's two further facts (#4239): whereabouts unknown, and
+    # what the record says of a death, true or not. Both are public by nature.
+    is_missing = serializers.BooleanField()
+    obituary = serializers.CharField(allow_blank=True)
     is_appable = serializers.BooleanField()
     # CharacterSheet pk this node is bound to, or null for an unplayed NPC
     # (#3003 Task 8): the tree's own ``id`` is a Kinsperson pk, a different id

@@ -17,7 +17,17 @@ import type { components } from '@/generated/api';
 
 import type {
   AlmanachActionKey,
+  AlmanachFamilyKind,
+  AlmanachHoldingKind,
+  AlmanachTemplate,
+  AlmanachTitleSummary,
+  AlmanachUnionKind,
+  FamilyDocument,
+  FrontRolls,
   HouseDocument,
+  PersonDocument,
+  RungDocument,
+  SearchHit,
   LadderMode,
   LadderPayload,
   PaginatedAlmanachHouseSummaryList,
@@ -108,4 +118,66 @@ export function dispatchAlmanach(
   kwargs: Record<string, unknown>
 ): Promise<DispatchResult> {
   return dispatchCanvasAction(characterId, key, kwargs);
+}
+
+// --- #4239: every family, every person -------------------------------------
+
+interface Paginated<T> {
+  results: T[];
+}
+
+export function fetchFront(q: string): Promise<FrontRolls> {
+  const qs = q ? new URLSearchParams({ q }).toString() : '';
+  return getJson(withQuery('/api/almanach/front/', qs), 'Failed to load the Almanach.');
+}
+
+export function fetchSearch(q: string): Promise<SearchHit[]> {
+  const qs = new URLSearchParams({ q }).toString();
+  return getJson(withQuery('/api/almanach/search/', qs), 'Search failed.');
+}
+
+export function fetchPersonDocument(personId: number): Promise<PersonDocument> {
+  return getJson(`/api/almanach/people/${personId}/document/`, 'Failed to load the person.');
+}
+
+export function fetchTitleDocument(titleId: number): Promise<RungDocument> {
+  return getJson(`/api/almanach/titles/${titleId}/document/`, 'Failed to load the domain.');
+}
+
+export function fetchFamilyDocument(familyId: number): Promise<FamilyDocument> {
+  return getJson(`/api/almanach/families/${familyId}/document/`, 'Failed to load the family.');
+}
+
+export function fetchFamilyKinds(): Promise<Paginated<AlmanachFamilyKind>> {
+  return getJson('/api/almanach/kinds/', 'Failed to load family types.');
+}
+
+export function fetchTemplates(
+  realmId: number,
+  kindId?: number
+): Promise<Paginated<AlmanachTemplate>> {
+  const params = new URLSearchParams({ realm: String(realmId) });
+  if (kindId != null) params.set('kind', String(kindId));
+  return getJson(withQuery('/api/almanach/templates/', params), 'Failed to load family templates.');
+}
+
+export function fetchUnionKinds(realmId?: number): Promise<Paginated<AlmanachUnionKind>> {
+  const qs = realmId != null ? new URLSearchParams({ realm: String(realmId) }).toString() : '';
+  return getJson(withQuery('/api/almanach/union-kinds/', qs), 'Failed to load union kinds.');
+}
+
+/** Unclaimed titles in a realm, for Create Family's Vacant title and Add vassal house. */
+export function fetchVacantTitles(realmId: number): Promise<Paginated<AlmanachTitleSummary>> {
+  const qs = new URLSearchParams({ realm: String(realmId), is_claimable: 'true' }).toString();
+  return getJson(withQuery('/api/almanach/titles/', qs), 'Failed to load titles.');
+}
+
+/** Every title in a realm, for the "under" pick when creating a domain. */
+export function fetchRealmTitles(realmId: number): Promise<Paginated<AlmanachTitleSummary>> {
+  const qs = new URLSearchParams({ realm: String(realmId) }).toString();
+  return getJson(withQuery('/api/almanach/titles/', qs), 'Failed to load titles.');
+}
+
+export function fetchHoldingKinds(): Promise<Paginated<AlmanachHoldingKind>> {
+  return getJson('/api/almanach/holding-kinds/', 'Failed to load holding kinds.');
 }

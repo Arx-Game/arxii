@@ -254,3 +254,133 @@ class AlmanachApiTests(TestCase):
             401,
             403,
         )
+
+
+class AlmanachPagesApiTests(TestCase):
+    """#4239: the people, titles and families documents, the front rolls and
+    search. Every route is staff-only."""
+
+    @classmethod
+    def setUpTestData(cls):
+        from world.roster.constants import DefinitionTier
+        from world.roster.factories import KinspersonFactory
+        from world.societies.houses.almanach import create_family, create_kin
+        from world.societies.houses.constants import HoldingChoice
+        from world.societies.houses.factories import HouseTemplateFactory
+
+        cls.staff = AccountFactory(username="pages_staff", is_staff=True)
+        cls.player = AccountFactory(username="pages_player", is_staff=False)
+        cls.realm = RealmFactory(name="Umbros")
+        noble = FamilyKindFactory(name=NOBLE_KIND_NAME)
+        cls.commoners = FamilyKindFactory(name="Commoner")
+        crown = OrganizationFactory(
+            name="The Umbral Crown", family=FamilyFactory(name="House Crown", kind=noble)
+        )
+        throne = plant_rung(realm=cls.realm, tier=TitleTier.KINGDOM, name="Umbros", held_by=crown)
+        cls.kathryn = KinspersonFactory(
+            name="Kathryn mar Katta", definition_tier=DefinitionTier.STANDING
+        )
+        made = create_family(
+            kind=noble,
+            name="Katta",
+            realm=cls.realm,
+            template=HouseTemplateFactory(realm=cls.realm, kind=noble),
+            holding=HoldingChoice.CREATE,
+            title_tier=TitleTier.DUCHY,
+            title_name="Duchy of Katta",
+            parent_title=throne,
+            holder=cls.kathryn,
+        )
+        cls.house = made.organization
+        cls.duchy = made.title
+        cls.teale = create_family(kind=cls.commoners, name="Teale", realm=cls.realm).family
+        create_kin(family=cls.teale, name="Mara Teale")
+
+    def _staff(self) -> APIClient:
+        client = APIClient()
+        client.force_authenticate(self.staff)
+        return client
+
+    def test_every_route_is_staff_only(self) -> None:
+        client = APIClient()
+        client.force_authenticate(self.player)
+        for url in (
+            "/api/almanach/front/",
+            "/api/almanach/search/?q=Katt",
+            f"/api/almanach/people/{self.kathryn.pk}/document/",
+            f"/api/almanach/titles/{self.duchy.pk}/document/",
+            f"/api/almanach/families/{self.teale.pk}/document/",
+            "/api/almanach/people/",
+        ):
+            assert client.get(url).status_code == 403, url
+        client = APIClient()
+        assert client.get("/api/almanach/front/").status_code in (401, 403)
+
+    def test_front_and_search(self) -> None:
+        client = self._staff()
+        res = client.get("/api/almanach/front/")
+        assert res.status_code == 200
+        # The organization factory seeds a realm through its society, so more
+        # than Umbros is listed; Umbros is the one with rungs.
+        umbros = next(r for r in res.data["noble"] if r["name"] == "Umbros")
+        assert umbros["titles"] >= 2
+        assert [r["name"] for r in res.data["commoner"]] == ["Teale"]
+        res = client.get("/api/almanach/front/?q=tea")
+        assert [r["name"] for r in res.data["commoner"]] == ["Teale"]
+        assert client.get("/api/almanach/search/?q=K").data == []
+        hits = client.get("/api/almanach/search/?q=Katt").data
+        assert {h["kind"] for h in hits} == {"person", "family", "organization", "title"}
+
+    def test_person_title_and_family_documents(self) -> None:
+        client = self._staff()
+        res = client.get(f"/api/almanach/people/{self.kathryn.pk}/document/")
+        assert res.status_code == 200
+        assert res.data["person"]["tier_display"]["label"] == "Standing NPC"
+        assert res.data["titles"][0]["name"] == "Duchy of Katta"
+        assert res.data["house"]["name"] == "House Katta"
+        res = client.get(f"/api/almanach/titles/{self.duchy.pk}/document/")
+        assert res.status_code == 200
+        assert res.data["title"]["holder"] == "Kathryn mar Katta"
+        assert res.data["books"]["treasury"] == 0
+        assert res.data["vassals"] == []
+        res = client.get(f"/api/almanach/families/{self.teale.pk}/document/")
+        assert res.status_code == 200
+        assert res.data["organization_id"] is None
+        assert [n["name"] for n in res.data["tree"]["nodes"]] == ["Mara Teale"]
+        assert res.data["tree"]["nodes"][0]["is_missing"] is False
+        assert res.data["tree"]["nodes"][0]["obituary"] == ""
+        res = client.get(f"/api/almanach/houses/{self.house.pk}/document/")
+        assert res.status_code == 200
+        assert res.data["turf"] is None
+        assert res.data["books"]["streams"] >= 0
+        assert "openings" in res.data
+
+    def test_lists_filter(self) -> None:
+        client = self._staff()
+        res = client.get(f"/api/almanach/people/?family={self.teale.pk}")
+        assert [r["name"] for r in res.data["results"]] == ["Mara Teale"]
+        res = client.get(f"/api/almanach/titles/?realm={self.realm.pk}&tier={TitleTier.DUCHY}")
+        # The kingdom's own chain carries an unnamed duchy-tier rung too.
+        assert "Duchy of Katta" in [r["name"] for r in res.data["results"]]
+        res = client.get(f"/api/almanach/families/?kind={self.commoners.pk}")
+        assert [r["name"] for r in res.data["results"]] == ["Teale"]
+
+    def test_catalog_lists(self) -> None:
+        from world.roster.factories import UnionKindFactory
+        from world.societies.houses.factories import HouseTemplateFactory
+
+        UnionKindFactory(name="Marriage", realm=self.realm)
+        HouseTemplateFactory(realm=self.realm, kind=self.commoners, name="Umbral commoners")
+        client = self._staff()
+        res = client.get("/api/almanach/kinds/")
+        assert res.status_code == 200
+        assert "Commoner" in [r["name"] for r in res.data["results"]]
+        res = client.get(f"/api/almanach/templates/?realm={self.realm.pk}&kind={self.commoners.pk}")
+        assert [r["name"] for r in res.data["results"]] == ["Umbral commoners"]
+        res = client.get(f"/api/almanach/union-kinds/?realm={self.realm.pk}")
+        assert [r["name"] for r in res.data["results"]] == ["Marriage"]
+        res = client.get("/api/almanach/holding-kinds/")
+        assert res.status_code == 200
+        client = APIClient()
+        client.force_authenticate(self.player)
+        assert client.get("/api/almanach/kinds/").status_code == 403

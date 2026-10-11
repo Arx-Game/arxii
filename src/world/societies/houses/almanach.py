@@ -23,13 +23,30 @@ from world.areas.models import Area
 from world.locations.constants import HolderType, LocationParentType
 from world.locations.models import LocationOwnership
 from world.roster.constants import DefinitionTier, MembershipBasis
-from world.roster.models import Family, FamilyMembership, Kinsperson, UnionKind
-from world.roster.services.kinship import add_membership, record_parentage, record_union
+from world.roster.models import (
+    Family,
+    FamilyMembership,
+    Kinsperson,
+    ParentageEdge,
+    Union,
+    UnionKind,
+)
+from world.roster.services.kinship import (
+    KinshipServiceError,
+    add_membership,
+    claim_appable_node,
+    create_person,
+    record_parentage,
+    record_union,
+)
 from world.scenes.constants import PersonaType
 from world.societies.houses.constants import (
     TIER_TO_AREA_LEVEL,
     TITLE_TIER_RANK,
     ClaimKinRelation,
+    HoldingChoice,
+    KinLink,
+    LifeStatus,
     TitleTier,
 )
 from world.societies.houses.models import Domain, FealtyEdge, LandShape, Title
@@ -41,6 +58,7 @@ from world.societies.houses.services import (
     swear_fealty,
     sync_house_channel,
 )
+from world.societies.houses.types import CreatedFamily
 from world.societies.membership_services import active_membership_for_persona, join_organization
 from world.societies.models import Organization, OrganizationRank, Vacancy
 
@@ -759,3 +777,418 @@ def record_kin(  # noqa: PLR0913 — keyword-only public service API
         record_public_belief(node, believed_deceased=True)
 
     return node, vacancy
+
+
+# ---------------------------------------------------------------------------
+# #4239: every family, every person. Entry points that compose the services
+# above and the kinship writers, so staff never open the admin for the next
+# linked part. Each refusal carries a ``user_message``; each runs atomically.
+# ---------------------------------------------------------------------------
+
+_TIER_ORDER = [
+    DefinitionTier.NAME_ONLY,
+    DefinitionTier.FUNCTIONARY,
+    DefinitionTier.STANDING,
+    DefinitionTier.SHEETED,
+    DefinitionTier.PC,
+]
+_PC_LOCKED = "A player character's name, tier and death are recorded from play, not here."
+
+
+def _as_houses_error(exc: KinshipServiceError) -> HousesServiceError:
+    return HousesServiceError(str(exc), user_message=exc.user_message)
+
+
+def _family_org(family: Family) -> Organization | None:
+    """The organization standing behind ``family``, if it has taken any (#4239).
+
+    Lowest pk, the same choice the player family page makes
+    (``roster/views/family_views.py``), so the two surfaces agree on which
+    organization is the house.
+    """
+    return Organization.objects.filter(family=family).order_by("pk").first()
+
+
+@transaction.atomic
+def create_family(  # noqa: PLR0913 — keyword-only; one arg per form field
+    *,
+    kind,
+    name: str,
+    realm: Realm | None,
+    created_by=None,
+    template=None,
+    holding: str = HoldingChoice.NONE,
+    title_tier: str | None = None,
+    title_name: str | None = None,
+    parent_title: Title | None = None,
+    holder: Kinsperson | None = None,
+    home_domain: Domain | None = None,
+) -> CreatedFamily:
+    """Create Family (#4239): a Family row, and standing only when asked for.
+
+    With no template and no holding the family stands alone: an orphan's
+    dozen NPC relatives need no organization. A family type that styles as
+    a house, a template, or any holding choice builds the organization through
+    ``build_family_org`` (ADR-0268). ``holding``: CREATE plants a domain and
+    title under ``parent_title`` held by the new house; VACANT assigns the
+    unclaimed ``parent_title`` to it; NONE adds no land. ``holder`` becomes the
+    title's personal holder and, if not yet of the family, its head.
+    """
+    from world.societies.houses.creator import build_family_org  # noqa: PLC0415
+
+    name = (name or "").strip()
+    if not name:
+        msg = "blank family name"
+        raise HousesServiceError(msg, user_message="A family needs a name.")
+    if Family.objects.filter(name=name).exists():
+        msg = f"family {name!r} exists"
+        raise HousesServiceError(msg, user_message="A family of that name already exists.")
+    needs_org = template is not None or holding != HoldingChoice.NONE or bool(kind.styles_as_house)
+    if not needs_org:
+        family = Family.objects.create(
+            name=name, kind=kind, origin_realm=realm, created_by=created_by
+        )
+        return CreatedFamily(family=family, organization=None, title=None)
+    if template is None:
+        msg = "template required"
+        raise HousesServiceError(msg, user_message="Pick a family type for this realm.")
+    family, org = build_family_org(
+        template, name, origin_realm=realm, created_by=created_by, home_domain=home_domain
+    )
+    title = _take_holding(
+        org,
+        realm=realm,
+        holding=holding,
+        title_tier=title_tier,
+        title_name=title_name,
+        parent_title=parent_title,
+    )
+    if title is not None and holder is not None:
+        if not FamilyMembership.objects.filter(
+            kinsperson=holder, family=family, ended_at__isnull=True
+        ).exists():
+            record_kin(house=org, name=holder.name, relation=ClaimKinRelation.HEAD, node=holder)
+        set_personal_holder(title=title, node=holder)
+    return CreatedFamily(family=family, organization=org, title=title)
+
+
+def _take_holding(  # noqa: PLR0913 — keyword-only; the holding block's fields
+    org: Organization,
+    *,
+    realm: Realm | None,
+    holding: str,
+    title_tier: str | None,
+    title_name: str | None,
+    parent_title: Title | None,
+) -> Title | None:
+    """The holding block of Create Family (#4239): plant, assign, or nothing."""
+    if holding == HoldingChoice.CREATE:
+        if realm is None or not title_tier or not title_name:
+            msg = "holding incomplete"
+            raise HousesServiceError(
+                msg, user_message="A new domain needs a realm, a tier and a name."
+            )
+        return plant_rung(
+            realm=realm, tier=title_tier, name=title_name, parent_title=parent_title, held_by=org
+        )
+    if holding == HoldingChoice.VACANT:
+        if (
+            parent_title is None
+            or parent_title.house_id is not None
+            or (realm is not None and parent_title.realm_id != realm.pk)
+        ):
+            msg = "bad vacant title"
+            raise HousesServiceError(msg, user_message="That title is not open in this realm.")
+        return assign_holder(parent_title, org)
+    return None
+
+
+@transaction.atomic
+def found_organization(*, family: Family, template, created_by=None) -> Organization:
+    """Give a family that already has people its organization (#4239)."""
+    from world.societies.houses.creator import build_family_org  # noqa: PLC0415
+
+    existing = _family_org(family)
+    if existing is not None:
+        msg = f"family {family.pk} already has organization {existing.pk}"
+        raise HousesServiceError(msg, user_message="That family already has an organization.")
+    _family, org = build_family_org(
+        template,
+        family.name,
+        origin_realm=family.origin_realm,
+        created_by=created_by,
+        existing_family=family,
+    )
+    return org
+
+
+@transaction.atomic
+def create_kin(  # noqa: PLR0913 — keyword-only; one arg per form field
+    *,
+    family: Family,
+    name: str,
+    tier: str = DefinitionTier.NAME_ONLY,
+    gender=None,
+    age: int | None = None,
+    created_by=None,
+) -> Kinsperson:
+    """Create Kin (#4239): a person with nothing but a family.
+
+    Writes the node and a BORN membership through ``create_person``; needs
+    no organization and no relation. Links come afterwards (``link_kin``).
+    """
+    if tier not in (DefinitionTier.NAME_ONLY, DefinitionTier.FUNCTIONARY, DefinitionTier.STANDING):
+        msg = "bad tier"
+        raise HousesServiceError(
+            msg, user_message="A new person is tier 0, 1 or 2; a sheet comes later."
+        )
+    return create_person(
+        name=(name or "").strip(),
+        tier=tier,
+        family=family,
+        gender=gender,
+        age=age,
+        created_by=created_by,
+    )
+
+
+@transaction.atomic
+def link_kin(
+    *,
+    node: Kinsperson,
+    other: Kinsperson,
+    link: str,
+    union_kind: UnionKind | None = None,
+    is_public_record: bool = True,
+) -> ParentageEdge | Union:
+    """Relate ``node`` to anyone in any family (#4239).
+
+    PARENT: ``other`` is ``node``'s parent. CHILD: ``node`` is ``other``'s
+    parent. SPOUSE: one Union both families' trees read; when the kind
+    confers wedlock and ``node``'s family has an organization, ``other`` joins
+    that family MARRIED_IN unless already of it.
+    """
+    if node.pk == other.pk:
+        msg = "self link"
+        raise HousesServiceError(msg, user_message="A person cannot be linked to themself.")
+    try:
+        if link == KinLink.PARENT:
+            return record_parentage(child=node, parent=other, is_public_record=is_public_record)
+        if link == KinLink.CHILD:
+            return record_parentage(child=other, parent=node, is_public_record=is_public_record)
+        if link == KinLink.SPOUSE:
+            if union_kind is None:
+                msg = "union kind required"
+                raise HousesServiceError(msg, user_message="Pick the kind of union.")
+            union = record_union(
+                kind=union_kind, members=[node, other], is_public_record=is_public_record
+            )
+            if (
+                union_kind.confers_wedlock
+                and node.family_id is not None
+                and other.family_id != node.family_id
+                and not FamilyMembership.objects.filter(
+                    kinsperson=other, family_id=node.family_id, ended_at__isnull=True
+                ).exists()
+            ):
+                add_membership(
+                    kinsperson=other,
+                    family=node.family,
+                    basis=MembershipBasis.MARRIED_IN,
+                    is_primary=False,
+                )
+            return union
+    except KinshipServiceError as exc:
+        raise _as_houses_error(exc) from exc
+    msg = "bad link"
+    raise HousesServiceError(msg, user_message="A link is parent, child or spouse.")
+
+
+@transaction.atomic
+def correct_parentage(*, edge: ParentageEdge, new_parent: Kinsperson) -> ParentageEdge:
+    """Replace a wrong parentage edge with the right parent (#4239).
+
+    The child, the kind, the record and truth flags and any secret carry
+    over; nobody is deleted.
+    """
+    if new_parent.pk == edge.child_id:
+        msg = "self parent"
+        raise HousesServiceError(msg, user_message="A person cannot be their own parent.")
+    kept = {
+        "kind": edge.kind,
+        "is_public_record": edge.is_public_record,
+        "is_true": edge.is_true,
+        "born_within_union": edge.born_within_union,
+        "secret": edge.secret,
+    }
+    child = edge.child
+    edge.delete()
+    try:
+        return record_parentage(child=child, parent=new_parent, **kept)
+    except KinshipServiceError as exc:
+        raise _as_houses_error(exc) from exc
+
+
+@transaction.atomic
+def set_life_status(
+    *,
+    node: Kinsperson,
+    status: str,
+    record_accurate: bool = True,
+    obituary: str = "",
+) -> Kinsperson:
+    """Status Alive / RIP / Missing, what the record says, and in what words (#4239).
+
+    The truth is ``is_deceased`` / ``is_missing``; the record is
+    ``believed_deceased`` (equal to the truth when accurate, its inverse
+    otherwise) and ``obituary``. A PC's death is recorded from play.
+    """
+    if status not in LifeStatus.values:
+        msg = "bad status"
+        raise HousesServiceError(msg, user_message="Status is Alive, RIP or Missing.")
+    is_rip = status == LifeStatus.RIP
+    if node.definition_tier == DefinitionTier.PC and is_rip != node.is_deceased:
+        msg = "pc death from almanach"
+        raise HousesServiceError(msg, user_message=_PC_LOCKED)
+    node.is_deceased = is_rip
+    node.is_missing = status == LifeStatus.MISSING
+    node.believed_deceased = is_rip if record_accurate else not is_rip
+    node.obituary = (obituary or "").strip()
+    node.save(update_fields=["is_deceased", "is_missing", "believed_deceased", "obituary"])
+    return node
+
+
+def _tier_index(tier: str) -> int:
+    try:
+        return _TIER_ORDER.index(tier)
+    except ValueError as exc:
+        msg = "bad tier"
+        raise HousesServiceError(msg, user_message="No such tier.") from exc
+
+
+@transaction.atomic
+def attach_sheet(*, node: Kinsperson, sheet) -> Kinsperson:
+    """Tie a sheet to a node from the node's side (#4239).
+
+    A sheet on a player shelf makes the node a PC: through
+    ``claim_appable_node`` when the node is appable (its constraints hold),
+    else by staff fiat. Any other sheet (a Story NPC's) makes it SHEETED.
+    """
+    from world.roster.models import RosterEntry  # noqa: PLC0415
+    from world.roster.models.choices import RosterType  # noqa: PLC0415
+
+    if node.sheet_id is not None:
+        msg = "node has sheet"
+        raise HousesServiceError(msg, user_message="That person already has a sheet.")
+    if Kinsperson.objects.filter(sheet=sheet).exists():
+        msg = "sheet has node"
+        raise HousesServiceError(msg, user_message="That sheet is already someone in the tree.")
+    is_player_sheet = (
+        RosterEntry.objects.filter(character_sheet=sheet)
+        .exclude(roster__roster_type=RosterType.NPC)
+        .exists()
+    )
+    if is_player_sheet and node.is_appable:
+        try:
+            return claim_appable_node(node=node, sheet=sheet)
+        except KinshipServiceError as exc:
+            raise _as_houses_error(exc) from exc
+    node.sheet = sheet
+    node.definition_tier = DefinitionTier.PC if is_player_sheet else DefinitionTier.SHEETED
+    node.is_appable = False
+    node.save(update_fields=["sheet", "definition_tier", "is_appable"])
+    return node
+
+
+@transaction.atomic
+def promote_kin(*, node: Kinsperson, tier: str, gm_account) -> Kinsperson:
+    """Raise a node's tier (#4239). Tier only rises; PC is never set here.
+
+    At SHEETED with no sheet, a Story NPC is minted for ``gm_account`` and
+    bound to the node (``mint_story_npc`` then ``attach_sheet``); the staffer's
+    own OOC character (``mint_gm_character``) is never the tool.
+    """
+    from world.roster.services.staff_characters import (  # noqa: PLC0415
+        StaffMintError,
+        mint_story_npc,
+    )
+
+    if node.definition_tier == DefinitionTier.PC:
+        msg = "pc tier"
+        raise HousesServiceError(msg, user_message=_PC_LOCKED)
+    if tier == DefinitionTier.PC:
+        msg = "pc by fiat"
+        raise HousesServiceError(
+            msg, user_message="A player character is made by an application, not here."
+        )
+    if _tier_index(tier) <= _tier_index(node.definition_tier):
+        msg = "tier only rises"
+        raise HousesServiceError(msg, user_message="Tier only rises.")
+    if tier == DefinitionTier.SHEETED:
+        if node.sheet_id is None:
+            if not node.name:
+                msg = "nameless sheet"
+                raise HousesServiceError(
+                    msg, user_message="Name the person before giving them a sheet."
+                )
+            try:
+                character = mint_story_npc(gm_account=gm_account, name=node.name)
+            except StaffMintError as exc:
+                # StaffMintError carries a player-safe message and nothing else.
+                raise HousesServiceError(str(exc), user_message=str(exc)) from exc
+            return attach_sheet(node=node, sheet=character.sheet_data)
+        node.definition_tier = DefinitionTier.SHEETED
+    else:
+        node.definition_tier = tier
+    node.save(update_fields=["definition_tier"])
+    return node
+
+
+@transaction.atomic
+def set_appable(  # noqa: PLR0913 — keyword-only; one arg per slot constraint
+    *,
+    node: Kinsperson,
+    appable: bool,
+    age_min: int | None = None,
+    age_max: int | None = None,
+    allowed_genders=(),
+    name_locked: bool = False,
+) -> Kinsperson:
+    """Open or close a node to applicants, with its constraints (#4239).
+
+    Read by the roster (``open_slots_for``) and CG (``claim_appable_node``)
+    exactly as today; a node with a sheet is never appable.
+    """
+    if node.sheet_id is not None and appable:
+        msg = "sheeted appable"
+        raise HousesServiceError(
+            msg, user_message="A person with a sheet is not open for claiming."
+        )
+    if age_min is not None and age_max is not None and age_min > age_max:
+        msg = "age range"
+        raise HousesServiceError(msg, user_message="The age range is upside down.")
+    node.is_appable = appable
+    node.age_min = age_min
+    node.age_max = age_max
+    node.name_locked = name_locked
+    node.save(update_fields=["is_appable", "age_min", "age_max", "name_locked"])
+    node.allowed_genders.set(list(allowed_genders))
+    return node
+
+
+@transaction.atomic
+def set_personal_holder(*, title: Title, node: Kinsperson) -> Title:
+    """Name who holds ``title`` in person (#4239): one of the holding house's family."""
+    if title.house_id is None or title.house.family_id is None:
+        msg = "unheld title"
+        raise HousesServiceError(
+            msg, user_message="Give the title to a house before naming its holder."
+        )
+    if not FamilyMembership.objects.filter(
+        kinsperson=node, family_id=title.house.family_id, ended_at__isnull=True
+    ).exists():
+        msg = "holder outside family"
+        raise HousesServiceError(msg, user_message="The holder must be of the holding family.")
+    title.holder = node
+    title.save(update_fields=["holder"])
+    return title

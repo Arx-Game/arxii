@@ -844,6 +844,10 @@ def _node_dict(
         "is_deceased": (
             person.is_deceased if omniscient else (person.is_deceased or person.believed_deceased)
         ),
+        # The record's own facts (#4239): a missing person is missing to
+        # everyone, and the obituary is what the record says by definition.
+        "is_missing": person.is_missing,
+        "obituary": person.obituary,
         "is_appable": person.is_appable and person.sheet_id is None,
         # CharacterSheet pk when this node is sheet-bound, else null (#3003
         # Task 8) — a distinct id space from ``person.pk`` above; the web
