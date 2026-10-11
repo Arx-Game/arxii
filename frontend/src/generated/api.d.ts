@@ -503,6 +503,80 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/almanach/families/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description List/retrieve families, plus each family's page (``/document/``): the
+     *     family half of the house document, which works with no organization.
+     */
+    get: operations['almanach_families_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/almanach/families/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description List/retrieve families, plus each family's page (``/document/``): the
+     *     family half of the house document, which works with no organization.
+     */
+    get: operations['almanach_families_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/almanach/families/{id}/document/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description GET /api/almanach/families/{id}/document/ */
+    get: operations['almanach_families_document_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/almanach/front/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description GET /api/almanach/front/?q=: the three rolls, narrowed by ``q``. */
+    get: operations['almanach_front_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/almanach/houses/': {
     parameters: {
       query?: never;
@@ -594,6 +668,57 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/almanach/people/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description List/retrieve people, plus each person's page (``/document/``). */
+    get: operations['almanach_people_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/almanach/people/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description List/retrieve people, plus each person's page (``/document/``). */
+    get: operations['almanach_people_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/almanach/people/{id}/document/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description GET /api/almanach/people/{id}/document/ */
+    get: operations['almanach_people_document_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/almanach/realms/': {
     parameters: {
       query?: never;
@@ -660,6 +785,74 @@ export interface paths {
     };
     /** @description GET /api/almanach/realms/{id}/ladder/?for=staff|founder */
     get: operations['almanach_realms_ladder_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/almanach/search/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description GET /api/almanach/search/?q=: people, families, organizations, titles. */
+    get: operations['almanach_search_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/almanach/titles/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description List/retrieve titles, plus each rung's page (``/document/``). */
+    get: operations['almanach_titles_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/almanach/titles/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description List/retrieve titles, plus each rung's page (``/document/``). */
+    get: operations['almanach_titles_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/almanach/titles/{id}/document/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description GET /api/almanach/titles/{id}/document/ */
+    get: operations['almanach_titles_document_retrieve'];
     put?: never;
     post?: never;
     delete?: never;
@@ -26113,6 +26306,16 @@ export interface components {
       target_companion_id?: number;
       ap_amount: number;
     };
+    /** @description A family row in the families list; the document is ``/document/``. */
+    AlmanachFamilySummary: {
+      readonly id: number;
+      /** @description Family/house name */
+      name: string;
+      readonly kind_name: string;
+      readonly origin_realm_id: number | null;
+      /** @description Whether players can select this family in character creation */
+      is_playable?: boolean;
+    };
     /**
      * @description One picked aspect (mirrors ``almanach_reads.aspect_facet``): ``being_name``
      *     is the god or totem the answer is (#4205), ``target_entry_id`` the one Codex
@@ -26209,6 +26412,26 @@ export interface components {
       published_at?: string | null;
       readonly family_id: number | null;
     };
+    /** @description A person row in the people list; the document is ``/document/``. */
+    AlmanachPersonSummary: {
+      readonly id: number;
+      /** @description Display name for unbound nodes (sheet-bound nodes read the sheet). */
+      name?: string;
+      /**
+       * @description How defined this person is; services promote up-tier only.
+       *
+       *     * `name_only` - Name Only
+       *     * `functionary` - Functionary
+       *     * `standing` - Standing NPC
+       *     * `sheeted` - Sheeted NPC
+       *     * `pc` - Player Character
+       */
+      definition_tier?: components['schemas']['DefinitionTierEnum'];
+      readonly family_id: number | null;
+      readonly sheet_id: number | null;
+      /** @description Whether an OC in CG may claim this node (binds their new sheet). */
+      is_appable?: boolean;
+    };
     /**
      * @description A realm as the Almanach's realm picker lists it, plus its unclaimed
      *     counts. Computing a full ladder per row is one extra Title+Area query
@@ -26233,6 +26456,17 @@ export interface components {
     AlmanachSuccessionLaw: {
       name: string;
       codex_entry_id: number | null;
+    };
+    /** @description A title row in the titles list; the document is ``/document/``. */
+    AlmanachTitleSummary: {
+      readonly id: number;
+      name?: string;
+      tier: components['schemas']['TierE4cEnum'];
+      readonly realm_id: number;
+      readonly house_id: number | null;
+      readonly holder_id: number | null;
+      /** @description Vacant slot set aside for the Phase D house creator. */
+      is_claimable?: boolean;
     };
     /** @description Write serializer for resolving a PendingAlteration. */
     AlterationResolutionRequest: {
@@ -30249,6 +30483,15 @@ export interface components {
       project_id: number;
     };
     /**
+     * @description * `name_only` - Name Only
+     *     * `functionary` - Functionary
+     *     * `standing` - Standing NPC
+     *     * `sheeted` - Sheeted NPC
+     *     * `pc` - Player Character
+     * @enum {string}
+     */
+    DefinitionTierEnum: 'name_only' | 'functionary' | 'standing' | 'sheeted' | 'pc';
+    /**
      * @description * `annoyed` - They want you annoyed
      *     * `thwarted` - They want you thwarted
      *     * `ruined` - They want you ruined
@@ -31849,6 +32092,19 @@ export interface components {
       };
       readonly standing: number | null;
     };
+    /** @description Mirrors ``almanach_pages.FamilyDocument``. */
+    FamilyDocument: {
+      family: {
+        [key: string]: unknown;
+      };
+      organization_id: number | null;
+      tree: {
+        [key: string]: unknown;
+      };
+      openings: {
+        [key: string]: unknown;
+      };
+    };
     /**
      * @description * `heart` - Heart
      *     * `company` - Company
@@ -32255,6 +32511,18 @@ export interface components {
       friend: number;
       /** @default false */
       all_characters: boolean;
+    };
+    /** @description Mirrors ``almanach_pages.FrontRolls``. */
+    FrontRolls: {
+      noble: {
+        [key: string]: unknown;
+      }[];
+      crime: {
+        [key: string]: unknown;
+      }[];
+      commoner: {
+        [key: string]: unknown;
+      }[];
     };
     /**
      * @description * `damage_buff_self` - Self Damage Buff
@@ -33590,6 +33858,18 @@ export interface components {
       estate: {
         [key: string]: unknown;
       }[];
+      books: {
+        [key: string]: unknown;
+      };
+      forces: {
+        [key: string]: unknown;
+      }[];
+      openings: {
+        [key: string]: unknown;
+      };
+      turf: {
+        [key: string]: unknown;
+      } | null;
     };
     HouseDomain: {
       name?: string;
@@ -34663,6 +34943,8 @@ export interface components {
       tier: string;
       family_id: number | null;
       is_deceased: boolean;
+      is_missing: boolean;
+      obituary: string;
       is_appable: boolean;
       sheet_id: number | null;
       roster_entry_id: number | null;
@@ -37974,6 +38256,21 @@ export interface components {
       previous?: string | null;
       results: components['schemas']['AggregateBeatContribution'][];
     };
+    PaginatedAlmanachFamilySummaryList: {
+      /** @example 123 */
+      count: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results: components['schemas']['AlmanachFamilySummary'][];
+    };
     PaginatedAlmanachHouseSummaryList: {
       /** @example 123 */
       count: number;
@@ -37989,6 +38286,21 @@ export interface components {
       previous?: string | null;
       results: components['schemas']['AlmanachHouseSummary'][];
     };
+    PaginatedAlmanachPersonSummaryList: {
+      /** @example 123 */
+      count: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results: components['schemas']['AlmanachPersonSummary'][];
+    };
     PaginatedAlmanachRealmList: {
       /** @example 123 */
       count: number;
@@ -38003,6 +38315,21 @@ export interface components {
        */
       previous?: string | null;
       results: components['schemas']['AlmanachRealm'][];
+    };
+    PaginatedAlmanachTitleSummaryList: {
+      /** @example 123 */
+      count: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results: components['schemas']['AlmanachTitleSummary'][];
     };
     PaginatedAlternateSelfList: {
       /** @example 123 */
@@ -43657,6 +43984,33 @@ export interface components {
       /** @description Currency cost of the permit (approval fee — distinct from construction cost). Charged to the PC's account at grant time. */
       permit_cost_currency?: number;
     };
+    /** @description Mirrors ``almanach_pages.PersonDocument``. */
+    PersonDocument: {
+      person: {
+        [key: string]: unknown;
+      };
+      family: {
+        [key: string]: unknown;
+      } | null;
+      kin: {
+        [key: string]: unknown;
+      }[];
+      house: {
+        [key: string]: unknown;
+      } | null;
+      titles: {
+        [key: string]: unknown;
+      }[];
+      sheet: {
+        [key: string]: unknown;
+      };
+      memberships: {
+        [key: string]: unknown;
+      }[];
+      record: {
+        [key: string]: unknown;
+      };
+    };
     Persona: {
       readonly id: number;
       /** @description The character sheet this persona belongs to. */
@@ -45800,6 +46154,27 @@ export interface components {
       bypass_soak: boolean;
       slots: components['schemas']['ComboSlotFill'][];
     };
+    /** @description Mirrors ``almanach_pages.RungDocument``. */
+    RungDocument: {
+      title: {
+        [key: string]: unknown;
+      };
+      demesne: {
+        [key: string]: unknown;
+      } | null;
+      holdings: {
+        [key: string]: unknown;
+      }[];
+      books: {
+        [key: string]: unknown;
+      };
+      forces: {
+        [key: string]: unknown;
+      }[];
+      vassals: {
+        [key: string]: unknown;
+      }[];
+    };
     /**
      * @description Read-shape for SanctumDetails surfaced on the player's "My Sanctums" view.
      *
@@ -46261,6 +46636,13 @@ export interface components {
     };
     SeanceManifestationOfferRequest: {
       status?: components['schemas']['Status7baEnum'];
+    };
+    /** @description Mirrors ``almanach_pages.SearchHit``. */
+    SearchHit: {
+      kind: string;
+      id: number;
+      name: string;
+      sub: string;
     };
     /**
      * @description * `spring` - Spring
@@ -51736,6 +52118,96 @@ export interface operations {
       };
     };
   };
+  almanach_families_list: {
+    parameters: {
+      query?: {
+        is_playable?: boolean;
+        kind?: number;
+        origin_realm?: number;
+        /** @description A page number within the paginated result set. */
+        page?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedAlmanachFamilySummaryList'];
+        };
+      };
+    };
+  };
+  almanach_families_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this Family. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['AlmanachFamilySummary'];
+        };
+      };
+    };
+  };
+  almanach_families_document_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this Family. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['FamilyDocument'];
+        };
+      };
+    };
+  };
+  almanach_front_retrieve: {
+    parameters: {
+      query?: {
+        q?: string;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['FrontRolls'];
+        };
+      };
+    };
+  };
   almanach_houses_list: {
     parameters: {
       query?: {
@@ -51848,6 +52320,84 @@ export interface operations {
       };
     };
   };
+  almanach_people_list: {
+    parameters: {
+      query?: {
+        /**
+         * @description How defined this person is; services promote up-tier only.
+         *
+         *     * `name_only` - Name Only
+         *     * `functionary` - Functionary
+         *     * `standing` - Standing NPC
+         *     * `sheeted` - Sheeted NPC
+         *     * `pc` - Player Character
+         */
+        definition_tier?: 'functionary' | 'name_only' | 'pc' | 'sheeted' | 'standing';
+        family?: number;
+        is_appable?: boolean;
+        /** @description A page number within the paginated result set. */
+        page?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedAlmanachPersonSummaryList'];
+        };
+      };
+    };
+  };
+  almanach_people_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this Kinsperson. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['AlmanachPersonSummary'];
+        };
+      };
+    };
+  };
+  almanach_people_document_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this Kinsperson. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PersonDocument'];
+        };
+      };
+    };
+  };
   almanach_realms_list: {
     parameters: {
       query?: {
@@ -51936,6 +52486,105 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['LadderPayload'];
+        };
+      };
+    };
+  };
+  almanach_search_list: {
+    parameters: {
+      query: {
+        q: string;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['SearchHit'][];
+        };
+      };
+    };
+  };
+  almanach_titles_list: {
+    parameters: {
+      query?: {
+        house?: number;
+        is_claimable?: boolean;
+        /** @description A page number within the paginated result set. */
+        page?: number;
+        realm?: number;
+        /**
+         * @description * `empire` - Empire
+         *     * `kingdom` - Kingdom
+         *     * `duchy` - Duchy
+         *     * `march` - March
+         *     * `county` - County
+         *     * `barony` - Barony
+         */
+        tier?: 'barony' | 'county' | 'duchy' | 'empire' | 'kingdom' | 'march';
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedAlmanachTitleSummaryList'];
+        };
+      };
+    };
+  };
+  almanach_titles_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this title. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['AlmanachTitleSummary'];
+        };
+      };
+    };
+  };
+  almanach_titles_document_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this title. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['RungDocument'];
         };
       };
     };

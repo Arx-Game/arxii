@@ -779,6 +779,108 @@ paths:
       responses:
         '200':
           description: No response body
+  /api/almanach/families/:
+    get:
+      operationId: almanach_families_list
+      description: |-
+        List/retrieve families, plus each family's page (``/document/``): the
+        family half of the house document, which works with no organization.
+      parameters:
+      - in: query
+        name: is_playable
+        schema:
+          type: boolean
+      - in: query
+        name: kind
+        schema:
+          type: integer
+      - in: query
+        name: origin_realm
+        schema:
+          type: integer
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      tags:
+      - almanach
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedAlmanachFamilySummaryList'
+          description: ''
+  /api/almanach/families/{id}/:
+    get:
+      operationId: almanach_families_retrieve
+      description: |-
+        List/retrieve families, plus each family's page (``/document/``): the
+        family half of the house document, which works with no organization.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this Family.
+        required: true
+      tags:
+      - almanach
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AlmanachFamilySummary'
+          description: ''
+  /api/almanach/families/{id}/document/:
+    get:
+      operationId: almanach_families_document_retrieve
+      description: GET /api/almanach/families/{id}/document/
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this Family.
+        required: true
+      tags:
+      - almanach
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FamilyDocument'
+          description: ''
+  /api/almanach/front/:
+    get:
+      operationId: almanach_front_retrieve
+      description: 'GET /api/almanach/front/?q=: the three rolls, narrowed by ``q``.'
+      parameters:
+      - in: query
+        name: q
+        schema:
+          type: string
+      tags:
+      - almanach
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FrontRolls'
+          description: ''
   /api/almanach/houses/:
     get:
       operationId: almanach_houses_list
@@ -903,6 +1005,98 @@ paths:
               schema:
                 $ref: '#/components/schemas/LandShape'
           description: ''
+  /api/almanach/people/:
+    get:
+      operationId: almanach_people_list
+      description: List/retrieve people, plus each person's page (``/document/``).
+      parameters:
+      - in: query
+        name: definition_tier
+        schema:
+          type: string
+          enum:
+          - functionary
+          - name_only
+          - pc
+          - sheeted
+          - standing
+        description: |-
+          How defined this person is; services promote up-tier only.
+
+          * `name_only` - Name Only
+          * `functionary` - Functionary
+          * `standing` - Standing NPC
+          * `sheeted` - Sheeted NPC
+          * `pc` - Player Character
+      - in: query
+        name: family
+        schema:
+          type: integer
+      - in: query
+        name: is_appable
+        schema:
+          type: boolean
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      tags:
+      - almanach
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedAlmanachPersonSummaryList'
+          description: ''
+  /api/almanach/people/{id}/:
+    get:
+      operationId: almanach_people_retrieve
+      description: List/retrieve people, plus each person's page (``/document/``).
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this Kinsperson.
+        required: true
+      tags:
+      - almanach
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AlmanachPersonSummary'
+          description: ''
+  /api/almanach/people/{id}/document/:
+    get:
+      operationId: almanach_people_document_retrieve
+      description: GET /api/almanach/people/{id}/document/
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this Kinsperson.
+        required: true
+      tags:
+      - almanach
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PersonDocument'
+          description: ''
   /api/almanach/realms/:
     get:
       operationId: almanach_realms_list
@@ -1009,6 +1203,126 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/LadderPayload'
+          description: ''
+  /api/almanach/search/:
+    get:
+      operationId: almanach_search_list
+      description: 'GET /api/almanach/search/?q=: people, families, organizations,
+        titles.'
+      parameters:
+      - in: query
+        name: q
+        schema:
+          type: string
+        required: true
+      tags:
+      - almanach
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/SearchHit'
+          description: ''
+  /api/almanach/titles/:
+    get:
+      operationId: almanach_titles_list
+      description: List/retrieve titles, plus each rung's page (``/document/``).
+      parameters:
+      - in: query
+        name: house
+        schema:
+          type: integer
+      - in: query
+        name: is_claimable
+        schema:
+          type: boolean
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - in: query
+        name: realm
+        schema:
+          type: integer
+      - in: query
+        name: tier
+        schema:
+          type: string
+          enum:
+          - barony
+          - county
+          - duchy
+          - empire
+          - kingdom
+          - march
+        description: |-
+          * `empire` - Empire
+          * `kingdom` - Kingdom
+          * `duchy` - Duchy
+          * `march` - March
+          * `county` - County
+          * `barony` - Barony
+      tags:
+      - almanach
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedAlmanachTitleSummaryList'
+          description: ''
+  /api/almanach/titles/{id}/:
+    get:
+      operationId: almanach_titles_retrieve
+      description: List/retrieve titles, plus each rung's page (``/document/``).
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this title.
+        required: true
+      tags:
+      - almanach
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AlmanachTitleSummary'
+          description: ''
+  /api/almanach/titles/{id}/document/:
+    get:
+      operationId: almanach_titles_document_retrieve
+      description: GET /api/almanach/titles/{id}/document/
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this title.
+        required: true
+      tags:
+      - almanach
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RungDocument'
           description: ''
   /api/areas/:
     get:
@@ -42370,6 +42684,32 @@ components:
           minimum: 0
       required:
       - ap_amount
+    AlmanachFamilySummary:
+      type: object
+      description: A family row in the families list; the document is ``/document/``.
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        name:
+          type: string
+          description: Family/house name
+          maxLength: 100
+        kind_name:
+          type: string
+          readOnly: true
+        origin_realm_id:
+          type: integer
+          readOnly: true
+          nullable: true
+        is_playable:
+          type: boolean
+          description: Whether players can select this family in character creation
+      required:
+      - id
+      - kind_name
+      - name
+      - origin_realm_id
     AlmanachHouseAspect:
       type: object
       description: |-
@@ -42569,6 +42909,44 @@ components:
       - family_id
       - id
       - name
+    AlmanachPersonSummary:
+      type: object
+      description: A person row in the people list; the document is ``/document/``.
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        name:
+          type: string
+          description: Display name for unbound nodes (sheet-bound nodes read the
+            sheet).
+          maxLength: 100
+        definition_tier:
+          allOf:
+          - $ref: '#/components/schemas/DefinitionTierEnum'
+          description: |-
+            How defined this person is; services promote up-tier only.
+
+            * `name_only` - Name Only
+            * `functionary` - Functionary
+            * `standing` - Standing NPC
+            * `sheeted` - Sheeted NPC
+            * `pc` - Player Character
+        family_id:
+          type: integer
+          readOnly: true
+          nullable: true
+        sheet_id:
+          type: integer
+          readOnly: true
+          nullable: true
+        is_appable:
+          type: boolean
+          description: Whether an OC in CG may claim this node (binds their new sheet).
+      required:
+      - family_id
+      - id
+      - sheet_id
     AlmanachRealm:
       type: object
       description: |-
@@ -42616,6 +42994,38 @@ components:
       required:
       - codex_entry_id
       - name
+    AlmanachTitleSummary:
+      type: object
+      description: A title row in the titles list; the document is ``/document/``.
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        name:
+          type: string
+          maxLength: 120
+        tier:
+          $ref: '#/components/schemas/TierE4cEnum'
+        realm_id:
+          type: integer
+          readOnly: true
+        house_id:
+          type: integer
+          readOnly: true
+          nullable: true
+        holder_id:
+          type: integer
+          readOnly: true
+          nullable: true
+        is_claimable:
+          type: boolean
+          description: Vacant slot set aside for the Phase D house creator.
+      required:
+      - holder_id
+      - house_id
+      - id
+      - realm_id
+      - tier
     AlterationResolutionRequest:
       type: object
       description: Write serializer for resolving a PendingAlteration.
@@ -51208,6 +51618,20 @@ components:
           type: integer
       required:
       - project_id
+    DefinitionTierEnum:
+      enum:
+      - name_only
+      - functionary
+      - standing
+      - sheeted
+      - pc
+      type: string
+      description: |-
+        * `name_only` - Name Only
+        * `functionary` - Functionary
+        * `standing` - Standing NPC
+        * `sheeted` - Sheeted NPC
+        * `pc` - Player Character
     DegreeEnum:
       enum:
       - annoyed
@@ -54634,6 +55058,27 @@ components:
       - name
       - standing
       - taken_in_particle
+    FamilyDocument:
+      type: object
+      description: Mirrors ``almanach_pages.FamilyDocument``.
+      properties:
+        family:
+          type: object
+          additionalProperties: {}
+        organization_id:
+          type: integer
+          nullable: true
+        tree:
+          type: object
+          additionalProperties: {}
+        openings:
+          type: object
+          additionalProperties: {}
+      required:
+      - family
+      - openings
+      - organization_id
+      - tree
     FamilyEnum:
       enum:
       - heart
@@ -55392,6 +55837,29 @@ components:
       required:
       - friend
       - viewer
+    FrontRolls:
+      type: object
+      description: Mirrors ``almanach_pages.FrontRolls``.
+      properties:
+        noble:
+          type: array
+          items:
+            type: object
+            additionalProperties: {}
+        crime:
+          type: array
+          items:
+            type: object
+            additionalProperties: {}
+        commoner:
+          type: array
+          items:
+            type: object
+            additionalProperties: {}
+      required:
+      - commoner
+      - crime
+      - noble
     FunctionEnum:
       enum:
       - damage_buff_self
@@ -58346,13 +58814,32 @@ components:
           items:
             type: object
             additionalProperties: {}
+        books:
+          type: object
+          additionalProperties: {}
+        forces:
+          type: array
+          items:
+            type: object
+            additionalProperties: {}
+        openings:
+          type: object
+          additionalProperties: {}
+        turf:
+          type: object
+          additionalProperties: {}
+          nullable: true
       required:
+      - books
       - estate
       - family
+      - forces
       - house
       - household
       - lands
+      - openings
       - realm
+      - turf
     HouseDomain:
       type: object
       properties:
@@ -60478,6 +60965,10 @@ components:
           nullable: true
         is_deceased:
           type: boolean
+        is_missing:
+          type: boolean
+        obituary:
+          type: string
         is_appable:
           type: boolean
         sheet_id:
@@ -60506,7 +60997,9 @@ components:
       - id
       - is_appable
       - is_deceased
+      - is_missing
       - name
+      - obituary
       - roster_entry_id
       - sheet_id
       - short_name
@@ -66931,6 +67424,29 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/AggregateBeatContribution'
+    PaginatedAlmanachFamilySummaryList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/AlmanachFamilySummary'
     PaginatedAlmanachHouseSummaryList:
       type: object
       required:
@@ -66954,6 +67470,29 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/AlmanachHouseSummary'
+    PaginatedAlmanachPersonSummaryList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/AlmanachPersonSummary'
     PaginatedAlmanachRealmList:
       type: object
       required:
@@ -66977,6 +67516,29 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/AlmanachRealm'
+    PaginatedAlmanachTitleSummaryList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/AlmanachTitleSummary'
     PaginatedAlternateSelfList:
       type: object
       required:
@@ -76223,6 +76785,51 @@ components:
             cost). Charged to the PC's account at grant time.
       required:
       - offer
+    PersonDocument:
+      type: object
+      description: Mirrors ``almanach_pages.PersonDocument``.
+      properties:
+        person:
+          type: object
+          additionalProperties: {}
+        family:
+          type: object
+          additionalProperties: {}
+          nullable: true
+        kin:
+          type: array
+          items:
+            type: object
+            additionalProperties: {}
+        house:
+          type: object
+          additionalProperties: {}
+          nullable: true
+        titles:
+          type: array
+          items:
+            type: object
+            additionalProperties: {}
+        sheet:
+          type: object
+          additionalProperties: {}
+        memberships:
+          type: array
+          items:
+            type: object
+            additionalProperties: {}
+        record:
+          type: object
+          additionalProperties: {}
+      required:
+      - family
+      - house
+      - kin
+      - memberships
+      - person
+      - record
+      - sheet
+      - titles
     Persona:
       type: object
       properties:
@@ -80690,6 +81297,42 @@ components:
       - known_by_participant
       - slot_count
       - slots
+    RungDocument:
+      type: object
+      description: Mirrors ``almanach_pages.RungDocument``.
+      properties:
+        title:
+          type: object
+          additionalProperties: {}
+        demesne:
+          type: object
+          additionalProperties: {}
+          nullable: true
+        holdings:
+          type: array
+          items:
+            type: object
+            additionalProperties: {}
+        books:
+          type: object
+          additionalProperties: {}
+        forces:
+          type: array
+          items:
+            type: object
+            additionalProperties: {}
+        vassals:
+          type: array
+          items:
+            type: object
+            additionalProperties: {}
+      required:
+      - books
+      - demesne
+      - forces
+      - holdings
+      - title
+      - vassals
     SanctumDetails:
       type: object
       description: |-
@@ -81681,6 +82324,23 @@ components:
       properties:
         status:
           $ref: '#/components/schemas/Status7baEnum'
+    SearchHit:
+      type: object
+      description: Mirrors ``almanach_pages.SearchHit``.
+      properties:
+        kind:
+          type: string
+        id:
+          type: integer
+        name:
+          type: string
+        sub:
+          type: string
+      required:
+      - id
+      - kind
+      - name
+      - sub
     SeasonEnum:
       enum:
       - spring
