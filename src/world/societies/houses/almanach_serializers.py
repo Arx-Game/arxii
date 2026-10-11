@@ -13,10 +13,10 @@ from __future__ import annotations
 from rest_framework import serializers
 
 from world.realms.models import Realm
-from world.roster.models import Family, Kinsperson
+from world.roster.models import Family, FamilyKind, Kinsperson, UnionKind
 from world.societies.houses.almanach_reads import ladder_for_realm
 from world.societies.houses.constants import TitleTier
-from world.societies.houses.models import LandShape, Title
+from world.societies.houses.models import HouseTemplate, LandShape, Title
 from world.societies.models import Organization
 
 
@@ -311,3 +311,32 @@ class FamilyDocumentSerializer(serializers.Serializer):
     organization_id = serializers.IntegerField(allow_null=True)
     tree = serializers.DictField()
     openings = serializers.DictField()
+
+
+class AlmanachFamilyKindSerializer(serializers.ModelSerializer):
+    """The family types Create Family offers (``FamilyKind`` rows, ADR-0268)."""
+
+    class Meta:
+        model = FamilyKind
+        fields = ["id", "name", "styles_as_house", "sort_order"]
+
+
+class AlmanachTemplateSerializer(serializers.ModelSerializer):
+    """A Family Template (``HouseTemplate``): the recipe an organization is built from."""
+
+    realm_id = serializers.IntegerField(read_only=True, allow_null=True)
+    kind_id = serializers.IntegerField(read_only=True, allow_null=True)
+
+    class Meta:
+        model = HouseTemplate
+        fields = ["id", "name", "realm_id", "kind_id", "tier", "founds_a_crew"]
+
+
+class AlmanachUnionKindSerializer(serializers.ModelSerializer):
+    """A union kind, for Add spouse."""
+
+    realm_id = serializers.IntegerField(read_only=True, allow_null=True)
+
+    class Meta:
+        model = UnionKind
+        fields = ["id", "name", "realm_id", "confers_wedlock"]

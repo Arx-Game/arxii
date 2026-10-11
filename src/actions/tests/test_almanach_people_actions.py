@@ -14,6 +14,7 @@ from actions.definitions.almanach import (
     AlmanachCorrectKinAction,
     AlmanachCreateFamilyAction,
     AlmanachCreateKinAction,
+    AlmanachEditPersonAction,
     AlmanachFoundOrganizationAction,
     AlmanachLinkKinAction,
     AlmanachOpenCrewSlotAction,
@@ -288,3 +289,17 @@ class AlmanachPeopleActionTests(TestCase):
             self.staff, organization_id=family.pk, area_id=neighborhood.pk
         )
         self.assertEqual(refused.message, "A family's turf is a ward or a city.")
+
+    def test_edit_person(self):
+        node = KinspersonFactory(name="Kathryn", age=24)
+        result = AlmanachEditPersonAction().run(
+            self.staff, node_id=node.pk, name="Kathryn mar Katta", age="25"
+        )
+        self.assertTrue(result.success, result.message)
+        node.refresh_from_db()
+        self.assertEqual((node.name, node.age), ("Kathryn mar Katta", 25))
+        pc = KinspersonFactory(name="A PC", definition_tier=DefinitionTier.PC, age=30)
+        refused = AlmanachEditPersonAction().run(self.staff, node_id=pc.pk, name="Renamed")
+        self.assertFalse(refused.success)
+        ok = AlmanachEditPersonAction().run(self.staff, node_id=pc.pk, age="31")
+        self.assertTrue(ok.success, ok.message)

@@ -5,13 +5,16 @@ from django.urls import path
 from rest_framework.routers import DefaultRouter
 
 from world.societies.houses.almanach_views import (
+    AlmanachFamilyKindViewSet,
     AlmanachFamilyViewSet,
     AlmanachFrontView,
     AlmanachHouseViewSet,
     AlmanachPersonViewSet,
     AlmanachRealmViewSet,
     AlmanachSearchView,
+    AlmanachTemplateViewSet,
     AlmanachTitleViewSet,
+    AlmanachUnionKindViewSet,
     LandShapeViewSet,
 )
 
@@ -23,6 +26,9 @@ router.register(r"land-shapes", LandShapeViewSet, basename="almanach-land-shape"
 router.register(r"people", AlmanachPersonViewSet, basename="almanach-person")
 router.register(r"titles", AlmanachTitleViewSet, basename="almanach-title")
 router.register(r"families", AlmanachFamilyViewSet, basename="almanach-family")
+router.register(r"kinds", AlmanachFamilyKindViewSet, basename="almanach-kind")
+router.register(r"templates", AlmanachTemplateViewSet, basename="almanach-template")
+router.register(r"union-kinds", AlmanachUnionKindViewSet, basename="almanach-union-kind")
 
 app_name = "almanach"
 urlpatterns = [

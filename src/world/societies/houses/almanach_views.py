@@ -18,7 +18,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from world.realms.models import Realm
-from world.roster.models import Family, Kinsperson
+from world.roster.models import Family, FamilyKind, Kinsperson, UnionKind
 from world.roster.views.family_views import _viewer_entry
 from world.societies.houses.almanach_pages import (
     family_document,
@@ -33,11 +33,14 @@ from world.societies.houses.almanach_reads import (
     ladder_for_realm,
 )
 from world.societies.houses.almanach_serializers import (
+    AlmanachFamilyKindSerializer,
     AlmanachFamilySummarySerializer,
     AlmanachHouseSummarySerializer,
     AlmanachPersonSummarySerializer,
     AlmanachRealmSerializer,
+    AlmanachTemplateSerializer,
     AlmanachTitleSummarySerializer,
+    AlmanachUnionKindSerializer,
     FamilyDocumentSerializer,
     FrontRollsSerializer,
     HouseDocumentSerializer,
@@ -48,7 +51,7 @@ from world.societies.houses.almanach_serializers import (
     RungDocumentSerializer,
     SearchHitSerializer,
 )
-from world.societies.houses.models import LandShape, Title
+from world.societies.houses.models import HouseTemplate, LandShape, Title
 from world.societies.models import Organization
 from world.societies.views import SocietiesPagination
 
@@ -247,3 +250,36 @@ class AlmanachSearchView(APIView):
         # Four tables, one capped name search; a FilterSet binds to one queryset.
         q = request.query_params.get("q", "")  # noqa: USE_FILTERSET
         return Response(SearchHitSerializer(search(q), many=True).data)
+
+
+class AlmanachFamilyKindViewSet(viewsets.ReadOnlyModelViewSet):
+    """The family types Create Family offers."""
+
+    queryset = FamilyKind.objects.filter(is_active=True).order_by("sort_order", "name")
+    serializer_class = AlmanachFamilyKindSerializer
+    permission_classes = _STAFF
+    pagination_class = SocietiesPagination
+    filter_backends = [DjangoFilterBackend]
+    filterset_fields = ["styles_as_house"]
+
+
+class AlmanachTemplateViewSet(viewsets.ReadOnlyModelViewSet):
+    """Family Templates, filtered by realm and kind for the Create Family form."""
+
+    queryset = HouseTemplate.objects.all().order_by("realm__name", "kind__name", "name")
+    serializer_class = AlmanachTemplateSerializer
+    permission_classes = _STAFF
+    pagination_class = SocietiesPagination
+    filter_backends = [DjangoFilterBackend]
+    filterset_fields = ["realm", "kind"]
+
+
+class AlmanachUnionKindViewSet(viewsets.ReadOnlyModelViewSet):
+    """Union kinds, filtered by realm for Add spouse."""
+
+    queryset = UnionKind.objects.all().order_by("realm__name", "name")
+    serializer_class = AlmanachUnionKindSerializer
+    permission_classes = _STAFF
+    pagination_class = SocietiesPagination
+    filter_backends = [DjangoFilterBackend]
+    filterset_fields = ["realm"]

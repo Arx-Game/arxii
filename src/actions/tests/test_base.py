@@ -723,6 +723,7 @@ class ActionRegistryTests(TestCase):
             "almanach_claim_ward",
             "almanach_add_gang",
             "almanach_open_crew_slot",
+            "almanach_edit_person",
             # #2450 — GM story builder.
             "create_story_area",
             "edit_story_area",

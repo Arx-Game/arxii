@@ -22,6 +22,7 @@ from actions.definitions.almanach import (
     AlmanachDescribeDemesneAction,
     AlmanachEditHouseAction,
     AlmanachEditKinAction,
+    AlmanachEditPersonAction,
     AlmanachFoundOrganizationAction,
     AlmanachLinkKinAction,
     AlmanachNameRungAction,
@@ -1247,6 +1248,7 @@ _ALL_ACTIONS: list[Action] = [
     AlmanachClaimWardAction(),
     AlmanachAddGangAction(),
     AlmanachOpenCrewSlotAction(),
+    AlmanachEditPersonAction(),
     # #2450 — GM story builder: create/edit/remove story areas + dig/edit story rooms.
     CreateStoryAreaAction(),
     EditStoryAreaAction(),

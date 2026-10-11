@@ -364,3 +364,21 @@ class AlmanachPagesApiTests(TestCase):
         assert "Duchy of Katta" in [r["name"] for r in res.data["results"]]
         res = client.get(f"/api/almanach/families/?kind={self.commoners.pk}")
         assert [r["name"] for r in res.data["results"]] == ["Teale"]
+
+    def test_catalog_lists(self) -> None:
+        from world.roster.factories import UnionKindFactory
+        from world.societies.houses.factories import HouseTemplateFactory
+
+        UnionKindFactory(name="Marriage", realm=self.realm)
+        HouseTemplateFactory(realm=self.realm, kind=self.commoners, name="Umbral commoners")
+        client = self._staff()
+        res = client.get("/api/almanach/kinds/")
+        assert res.status_code == 200
+        assert "Commoner" in [r["name"] for r in res.data["results"]]
+        res = client.get(f"/api/almanach/templates/?realm={self.realm.pk}&kind={self.commoners.pk}")
+        assert [r["name"] for r in res.data["results"]] == ["Umbral commoners"]
+        res = client.get(f"/api/almanach/union-kinds/?realm={self.realm.pk}")
+        assert [r["name"] for r in res.data["results"]] == ["Marriage"]
+        client = APIClient()
+        client.force_authenticate(self.player)
+        assert client.get("/api/almanach/kinds/").status_code == 403

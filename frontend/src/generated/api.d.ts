@@ -634,6 +634,40 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/almanach/kinds/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description The family types Create Family offers. */
+    get: operations['almanach_kinds_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/almanach/kinds/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description The family types Create Family offers. */
+    get: operations['almanach_kinds_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/almanach/land-shapes/': {
     parameters: {
       query?: never;
@@ -810,6 +844,40 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/almanach/templates/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description Family Templates, filtered by realm and kind for the Create Family form. */
+    get: operations['almanach_templates_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/almanach/templates/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description Family Templates, filtered by realm and kind for the Create Family form. */
+    get: operations['almanach_templates_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/almanach/titles/': {
     parameters: {
       query?: never;
@@ -853,6 +921,40 @@ export interface paths {
     };
     /** @description GET /api/almanach/titles/{id}/document/ */
     get: operations['almanach_titles_document_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/almanach/union-kinds/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description Union kinds, filtered by realm for Add spouse. */
+    get: operations['almanach_union_kinds_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/almanach/union-kinds/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description Union kinds, filtered by realm for Add spouse. */
+    get: operations['almanach_union_kinds_retrieve'];
     put?: never;
     post?: never;
     delete?: never;
@@ -26306,6 +26408,14 @@ export interface components {
       target_companion_id?: number;
       ap_amount: number;
     };
+    /** @description The family types Create Family offers (``FamilyKind`` rows, ADR-0268). */
+    AlmanachFamilyKind: {
+      readonly id: number;
+      name: string;
+      /** @description Orgs rooted in this kind are styled 'House <name>' and wear particles. */
+      styles_as_house?: boolean;
+      sort_order?: number;
+    };
     /** @description A family row in the families list; the document is ``/document/``. */
     AlmanachFamilySummary: {
       readonly id: number;
@@ -26457,6 +26567,26 @@ export interface components {
       name: string;
       codex_entry_id: number | null;
     };
+    /** @description A Family Template (``HouseTemplate``): the recipe an organization is built from. */
+    AlmanachTemplate: {
+      readonly id: number;
+      name: string;
+      readonly realm_id: number | null;
+      readonly kind_id: number | null;
+      /**
+       * @description The seat tier this template builds (#3983); blank = the realm's fallback.
+       *
+       *     * `empire` - Empire
+       *     * `kingdom` - Kingdom
+       *     * `duchy` - Duchy
+       *     * `march` - March
+       *     * `county` - County
+       *     * `barony` - Barony
+       */
+      tier?: components['schemas']['TierE4cEnum'] | components['schemas']['BlankEnum'];
+      /** @description A crew template (#4061): the family the player names claims an authored CrewSlot, a corner under a gang, and swears to that gang; no liege choice is offered. */
+      founds_a_crew?: boolean;
+    };
     /** @description A title row in the titles list; the document is ``/document/``. */
     AlmanachTitleSummary: {
       readonly id: number;
@@ -26467,6 +26597,14 @@ export interface components {
       readonly holder_id: number | null;
       /** @description Vacant slot set aside for the Phase D house creator. */
       is_claimable?: boolean;
+    };
+    /** @description A union kind, for Add spouse. */
+    AlmanachUnionKind: {
+      readonly id: number;
+      name: string;
+      readonly realm_id: number | null;
+      /** @description Whether births within this union count as in-wedlock for law. */
+      confers_wedlock?: boolean;
     };
     /** @description Write serializer for resolving a PendingAlteration. */
     AlterationResolutionRequest: {
@@ -38256,6 +38394,21 @@ export interface components {
       previous?: string | null;
       results: components['schemas']['AggregateBeatContribution'][];
     };
+    PaginatedAlmanachFamilyKindList: {
+      /** @example 123 */
+      count: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results: components['schemas']['AlmanachFamilyKind'][];
+    };
     PaginatedAlmanachFamilySummaryList: {
       /** @example 123 */
       count: number;
@@ -38316,6 +38469,21 @@ export interface components {
       previous?: string | null;
       results: components['schemas']['AlmanachRealm'][];
     };
+    PaginatedAlmanachTemplateList: {
+      /** @example 123 */
+      count: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results: components['schemas']['AlmanachTemplate'][];
+    };
     PaginatedAlmanachTitleSummaryList: {
       /** @example 123 */
       count: number;
@@ -38330,6 +38498,21 @@ export interface components {
        */
       previous?: string | null;
       results: components['schemas']['AlmanachTitleSummary'][];
+    };
+    PaginatedAlmanachUnionKindList: {
+      /** @example 123 */
+      count: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results: components['schemas']['AlmanachUnionKind'][];
     };
     PaginatedAlternateSelfList: {
       /** @example 123 */
@@ -52275,6 +52458,51 @@ export interface operations {
       };
     };
   };
+  almanach_kinds_list: {
+    parameters: {
+      query?: {
+        /** @description A page number within the paginated result set. */
+        page?: number;
+        styles_as_house?: boolean;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedAlmanachFamilyKindList'];
+        };
+      };
+    };
+  };
+  almanach_kinds_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this Family Kind. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['AlmanachFamilyKind'];
+        };
+      };
+    };
+  };
   almanach_land_shapes_list: {
     parameters: {
       query?: {
@@ -52511,6 +52739,52 @@ export interface operations {
       };
     };
   };
+  almanach_templates_list: {
+    parameters: {
+      query?: {
+        kind?: number;
+        /** @description A page number within the paginated result set. */
+        page?: number;
+        realm?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedAlmanachTemplateList'];
+        };
+      };
+    };
+  };
+  almanach_templates_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this Family Template. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['AlmanachTemplate'];
+        };
+      };
+    };
+  };
   almanach_titles_list: {
     parameters: {
       query?: {
@@ -52585,6 +52859,51 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['RungDocument'];
+        };
+      };
+    };
+  };
+  almanach_union_kinds_list: {
+    parameters: {
+      query?: {
+        /** @description A page number within the paginated result set. */
+        page?: number;
+        realm?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedAlmanachUnionKindList'];
+        };
+      };
+    };
+  };
+  almanach_union_kinds_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this union kind. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['AlmanachUnionKind'];
         };
       };
     };

@@ -947,6 +947,7 @@ class AlmanachPublishAction(_AlmanachAction):
 # ---------------------------------------------------------------------------
 
 _NO_SUCH_PERSON = "No such person."
+_PC_LOCKED_MESSAGE = "A player character's name, tier and death are recorded from play, not here."
 _NO_SUCH_FAMILY = "No such family."
 _NO_SUCH_TITLE = "No such title."
 
@@ -1441,3 +1442,32 @@ class AlmanachOpenCrewSlotAction(_AlmanachAction):
             message=f"{slot.name} is open.",
             data={"crew_slot_id": slot.pk, "gang_id": gang.pk},
         )
+
+
+@dataclass
+class AlmanachEditPersonAction(_AlmanachAction):
+    """Save a person's plain fields from their own page: ``node_id`` plus any of
+    ``name``, ``gender_id``, ``age`` (an absent kwarg leaves the field alone).
+    A player character's name is never edited from here."""
+
+    key: str = "almanach_edit_person"
+    name: str = "Edit Person"
+    icon: str = "family"
+
+    def execute(
+        self, actor: ObjectDB, context: ActionContext | None = None, **kwargs: Any
+    ) -> ActionResult:
+        from world.roster.constants import DefinitionTier  # noqa: PLC0415
+
+        node = _person(kwargs)
+        if node is None:
+            return ActionResult(success=False, message=_NO_SUCH_PERSON)
+        if node.definition_tier == DefinitionTier.PC and "name" in kwargs:  # noqa: STRING_LITERAL
+            return ActionResult(success=False, message=_PC_LOCKED_MESSAGE)
+        prepared = _prepare_existing_kin_fields(node, kwargs)
+        if isinstance(prepared, ActionResult):
+            return prepared
+        gender, age = prepared
+        allowed = {k: v for k, v in kwargs.items() if k in ("name", "gender_id", "age")}
+        _apply_existing_kin_fields(node, allowed, gender, age)
+        return ActionResult(success=True, message="Saved.", data={"kinsperson_id": node.pk})
