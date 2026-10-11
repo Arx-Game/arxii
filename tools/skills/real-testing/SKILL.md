@@ -68,7 +68,17 @@ from somewhere else: a CI run, a run on a larger machine, or the maintainer.
 
 ## 2. Choose the form, then start it
 
-There are two forms. Check which one you can use: `ss -ltn | grep -E ':(4001|4002) '`.
+There are two forms. Check which one you can use, by process, not only by
+port: `arx start` kills every process whose command line names `evennia`,
+`twistd`, `server.py` or `portal.py`, on any port.
+
+```bash
+pgrep -af 'evennia|twistd|server\.py|portal\.py' | grep -v defunct
+ss -ltn | grep -E ':(4001|4002) '
+```
+
+Any live match from either command means Form A. Only when both print nothing
+may you use Form B.
 
 **Never touch production, and never overwrite the shared `arxiidev`.** Every
 session in the devcontainer uses it. `just pull-prod yes` restores over it (it
@@ -81,7 +91,7 @@ on the PATH.
 Use it when :4001 or :4002 is already in use, on the small machine, or on the
 solo laptop. Something listening there is almost always another session's
 server, running another worktree's code, not yours. **Do not run
-`just start` there, and never `just stop --hard`**: `arx start` and
+`just start`, and never `uv run arx stop --hard`**: `arx start` and
 `arx stop --hard` kill every Evennia process in the container. Do not operate
 your change through that server either; it does not have your code.
 
@@ -106,10 +116,15 @@ the server would use `arxiidev`.
 
    ```bash
    PGPASSWORD=arxii createdb -h db -U arxii rt_4246
-   export DATABASE_URL=postgres://arxii:arxii@db:5432/rt_4246
-   uv run python tools/build_schema.py
-   uv run arx manage seed_test_account   # e2e_test_account / TestPass123!
+   DATABASE_URL=postgres://arxii:arxii@db:5432/rt_4246 uv run python tools/build_schema.py
+   DATABASE_URL=postgres://arxii:arxii@db:5432/rt_4246 uv run arx manage seed_test_account
    ```
+
+   The seed makes `e2e_test_account` / `TestPass123!`. The container already
+   sets `DATABASE_URL` to `arxiidev`, and each of your tool calls starts a
+   fresh shell, so put `DATABASE_URL=...` in front of **every** command that
+   must use your database, including `just start`. An `export` does not carry
+   over to the next call.
 
    Do not use `just build-test-schema` here: it reads `src/.env` and rebuilds
    the shared `test_arxiidev` that other sessions' parity tests use.
@@ -117,13 +132,18 @@ the server would use `arxiidev`.
    `pnpm --dir frontend install`, then `just fe-build` (it also collects
    static files). Chromium for Playwright: `just fe-e2e-install`, once per
    container.
-3. Start: `just start` (with `DATABASE_URL` still exported). Web is on
+3. Start: `DATABASE_URL=postgres://arxii:arxii@db:5432/rt_4246 just start`.
+   Web is on
    :4001, the websocket on :4002. Watch the startup output and the server log
    for errors: a process that started is not a process that is ready.
-4. After a fix: `just stop`, rebuild if the frontend changed, `just start`
-   again. A stale bundle or an old server process is not evidence. Never
+4. Drive the UI with Playwright against your server, one worker:
+   `just fe-e2e <spec> --workers=1` (`frontend/e2e.backend.config.ts` targets
+   :4001). Write a spec for your scenario in `frontend/e2e/` if none exists;
+   keep it only if it found a failure (section 6).
+5. After a fix: `just stop`, rebuild if the frontend changed, and start
+   again as in step 3. A stale bundle or an old server process is not evidence. Never
    build while the server and a browser are both up on a small machine.
-5. When you finish: `just stop` (never `--hard`), then drop only the database
+6. When you finish: `just stop` (never `uv run arx stop --hard`), then drop only the database
    you created: `PGPASSWORD=arxii dropdb -h db -U arxii rt_4246`.
 
 If a dependency you need is missing, say which behaviors that blocks, test the
@@ -135,7 +155,7 @@ rest, and never replace the missing part with a mock and call it verified.
 |---|---|
 | Web client page or control | Open the running app (Playwright against the server, one worker), do what a player does, check what the page shows and what was saved. A direct API call can add to this; it cannot prove the UI works. |
 | REST endpoint | Send real requests to the running server; check the response and the saved state it should change. |
-| Game action over WebSocket | Send the action the web client sends; check the response and the resulting state. |
+| Game action over WebSocket | Do the action in the web client with Playwright (Form B, step 4); that is the real path the action takes. There is no standalone WebSocket driver in the repo: if you cannot run the browser, record the WebSocket part as `BLOCKED` and prove the action's service and state change with Form A. |
 | Staff admin page | Load the page in the running server as a staff account; submit the form; read the row back. |
 | Migration on tables with data | Copy `arxiidev` into a scratch database and migrate that (`reviewing-migrations` section 6, with a name of your own in place of `arx_migcheck` so two sessions do not collide); never migrate `arxiidev` itself. Say how old its production copy is: `pull-prod` drops and recreates the database, so its creation time is the pull time (`select (pg_stat_file('base/'||oid||'/PG_VERSION')).modification from pg_database where datname='arxiidev';`). If it is stale or was never pulled, ask the maintainer before a fresh `just pull-prod yes` (it overwrites the shared `arxiidev`), or record `BLOCKED: no current production copy`. Check the affected rows before and after. For a fix, show the old migration failing and the new one passing. |
 | Service function with no outside interface | Call it the way its real caller does, with real related rows, and read back the state. |
@@ -163,7 +183,8 @@ that still fails.
 
 ## 5. Fix and repeat
 
-Mark each scenario `PASS`, `FAIL` or `BLOCKED`. On a failure, fix the cause,
+Mark each scenario `PASS`, `FAIL` or `BLOCKED: <reason>` (for example
+`BLOCKED: resources`, `BLOCKED: shared server`). On a failure, fix the cause,
 restart, and run the scenario again with the checks next to it. Never loosen
 an expectation just to get a pass. If an expectation was wrong, say why, with
 the source that says so.
