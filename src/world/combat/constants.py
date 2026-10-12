@@ -549,8 +549,10 @@ MINDLESS_MORALE_RESISTANCE: int = 30
 
 # Success-level thresholds for social-combat verb outcomes (#2015).
 RALLY_GREAT_SUCCESS_LEVEL: int = 3  # great success: restore ally morale
-PARLEY_DECISIVE_SUCCESS_LEVEL: int = 3  # decisive: calm the opponent
-PARLEY_CRITICAL_SUCCESS_LEVEL: int = 5  # critical + broken: NPC yields
+# Parley thresholds sit on the canonical check outcome scale (seeds/checks.py _OUTCOMES):
+# Failure -1, Partial 0, Success 1, Critical Success 2 (#4149).
+PARLEY_DECISIVE_SUCCESS_LEVEL: int = 1  # Success (SL 1): calm the opponent
+PARLEY_CRITICAL_SUCCESS_LEVEL: int = 2  # Critical Success (SL 2): a broken foe yields
 
 
 class SpectacleKind(models.TextChoices):
@@ -813,7 +815,7 @@ PACING_FLOOR_ROUND_PADDING: int = 2
 
 # Boss sway resistance (#2642): a BOSS-tier opponent resists a decisive Parley
 # calm by requiring one success-level step above the normal decisive threshold
-# (court-tier NPCs calm at the normal threshold; the boss does not).
+# (court-tier NPCs calm on Success, SL 1; a boss needs Critical Success, SL 2).
 BOSS_PARLEY_RESISTANCE_STEP: int = 1
 
 
