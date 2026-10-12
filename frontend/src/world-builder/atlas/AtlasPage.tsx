@@ -52,6 +52,7 @@ import { areaViewKind } from './constants';
 import { FolioCrumb, type FolioCrumbEntry } from './FolioCrumb';
 import { IndexRail } from './IndexRail';
 import { InsertLevelDialog } from './InsertLevelDialog';
+import { RegionMapPage } from './RegionMapPage';
 import { useAtlasState, type AtlasView } from './useAtlasState';
 
 /** A crumb entry plus where it sits on its parent's map, for the insert chain. */
@@ -86,6 +87,8 @@ export function AtlasPage({ lens = 'warrant' }: AtlasPageProps) {
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [highlightRoomId, setHighlightRoomId] = useState<number | null>(null);
+  // The footprint the region map opens on, from an area page's On the map (#4242).
+  const [mapFocusAreaId, setMapFocusAreaId] = useState<number | null>(null);
 
   useEffect(() => {
     if (highlightRoomId == null) return;
@@ -190,12 +193,19 @@ export function AtlasPage({ lens = 'warrant' }: AtlasPageProps) {
   const handleNavigateRoom = (roomId: number) => handleSelect({ kind: 'roomdoc', id: roomId });
 
   const renderView = () => {
+    if (view?.kind === 'regionmap') {
+      return <RegionMapPage regionId={view.id} focusAreaId={mapFocusAreaId} />;
+    }
     if (view?.kind === 'area' || view?.kind === 'roomgrid') {
       return (
         <AreaPage
           areaId={view.id}
           onDescend={handleSelect}
           onOpenAreaDoc={(id) => handleSelect({ kind: 'areadoc', id })}
+          onOpenMap={(regionId, areaId) => {
+            setMapFocusAreaId(areaId);
+            handleSelect({ kind: 'regionmap', id: regionId });
+          }}
           highlightRoomId={highlightRoomId}
         />
       );

@@ -26,16 +26,19 @@ import { cn } from '@/lib/utils';
 import {
   useAreaManagerQuery,
   useMyGrantsQuery,
+  useRegionMapsQuery,
   useWorldBuilderAction,
   useWorldBuilderAreasQuery,
 } from '../queries';
 import type { WorldBuilderActionKey, WorldBuilderArea, WorldBuilderRoom } from '../types';
 import { useWorldBuilderActor } from '../useWorldBuilderActor';
-import { areaViewKind, BUILDING_LEVEL, childLevelOf } from './constants';
+import { areaViewKind, BARONY_LEVEL, BUILDING_LEVEL, childLevelOf } from './constants';
 import { Lattice, type LatticeTile } from './Lattice';
 import type { AtlasView } from './useAtlasState';
 
 export interface AreaPageProps {
+  /** Open the region map on this area's footprint (#4242); absent where no map is wired. */
+  onOpenMap?: (regionId: number, areaId: number) => void;
   areaId: number;
   onDescend: (next: AtlasView) => void;
   onOpenAreaDoc: (areaId: number) => void;
@@ -92,11 +95,14 @@ export function AreaPage({
   areaId,
   onDescend,
   onOpenAreaDoc,
+  onOpenMap,
   highlightRoomId = null,
 }: AreaPageProps) {
   const { data: manager, isLoading } = useAreaManagerQuery(areaId);
   const area = manager?.area;
   const isBuilding = area?.level === BUILDING_LEVEL;
+  const { data: regionMaps } = useRegionMapsQuery(Boolean(onOpenMap));
+  const firstRegionMap = regionMaps?.[0] ?? null;
 
   const { data: childrenPage } = useWorldBuilderAreasQuery(
     { parent: areaId },
@@ -167,6 +173,18 @@ export function AreaPage({
         >
           ✎ Edit
         </Button>
+        {onOpenMap && area.level >= BARONY_LEVEL && firstRegionMap && (
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="text-muted-foreground"
+            onClick={() => onOpenMap(firstRegionMap.id, areaId)}
+            data-testid="area-on-the-map"
+          >
+            On the map
+          </Button>
+        )}
       </header>
       <p className="mt-1 font-body text-sm italic text-muted-foreground">
         {area.description || 'Nothing written yet.'}

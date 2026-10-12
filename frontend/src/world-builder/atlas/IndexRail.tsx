@@ -27,10 +27,19 @@ import { useState } from 'react';
 import { ChevronDown, ChevronRight } from 'lucide-react';
 
 import { Plate, PlateHead } from '@/components/folio';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { cn } from '@/lib/utils';
 import { useAccount } from '@/store/hooks';
 
-import { useAreaManagerQuery, useUnfiledRoomsQuery, useWorldBuilderAreasQuery } from '../queries';
+import {
+  useAreaManagerQuery,
+  useRegionMapsQuery,
+  useUnfiledRoomsQuery,
+  useWorldBuilderAction,
+  useWorldBuilderAreasQuery,
+} from '../queries';
+import { useWorldBuilderActor } from '../useWorldBuilderActor';
 import type { WorldBuilderArea, WorldBuilderGrant } from '../types';
 import { AREA_LEVELS } from '../types';
 import { areaViewKind, BUILDING_LEVEL, childLevelOf } from './constants';
@@ -109,6 +118,7 @@ export function IndexRail({ current, onSelect, pinned, recents, grants = [] }: I
 
         <UnpublishedJump current={current} onSelect={onSelect} />
         <UnfiledRooms current={current} onSelect={onSelect} />
+        <MapsSection current={current} onSelect={onSelect} isStaff={Boolean(account?.is_staff)} />
         <IndexSection
           title="Pinned"
           testId="index-pinned"
@@ -344,6 +354,115 @@ function IndexSection({ title, testId, entries, onSelect, empty }: IndexSectionP
           {entry.name}
         </button>
       ))}
+    </div>
+  );
+}
+
+interface MapsSectionProps {
+  current: AtlasView | null;
+  onSelect: (view: AtlasView, name: string) => void;
+  isStaff: boolean;
+}
+
+/** The world map's regions (#4242), and a form to place a new one. Staff only. */
+function MapsSection({ current, onSelect, isStaff }: MapsSectionProps) {
+  const { data: regions } = useRegionMapsQuery(isStaff);
+  const characterId = useWorldBuilderActor();
+  const { mutateAsync: runAction } = useWorldBuilderAction(characterId ?? 0, null);
+  const [open, setOpen] = useState(false);
+  const [name, setName] = useState('');
+  const [anchorX, setAnchorX] = useState('0');
+  const [anchorY, setAnchorY] = useState('0');
+  const [width, setWidth] = useState('20');
+  if (!isStaff) return null;
+  const place = async (event: React.FormEvent) => {
+    event.preventDefault();
+    try {
+      const result = await runAction({
+        key: 'atlas_create_region_map',
+        kwargs: {
+          name,
+          anchor_x: Number(anchorX),
+          anchor_y: Number(anchorY),
+          width_cells: Number(width),
+        },
+      });
+      const regionId = result?.data?.region_id;
+      if (typeof regionId === 'number') {
+        setOpen(false);
+        setName('');
+        onSelect({ kind: 'regionmap', id: regionId }, name);
+      }
+    } catch {
+      // toasted by the mutation
+    }
+  };
+  return (
+    <div className="border-t px-2 py-2" data-testid="index-maps">
+      <div className="flex items-center justify-between px-2">
+        <PlateHead as="div">Maps</PlateHead>
+        <button
+          type="button"
+          className="text-xs text-muted-foreground hover:text-primary"
+          onClick={() => setOpen((prev) => !prev)}
+          aria-expanded={open}
+        >
+          {open ? 'Close' : 'New region'}
+        </button>
+      </div>
+      {(regions ?? []).map((region) => (
+        <button
+          key={region.id}
+          type="button"
+          className={cn(
+            'block w-full truncate px-2 py-1 text-left text-sm hover:bg-accent',
+            current?.kind === 'regionmap' && current.id === region.id && 'bg-background'
+          )}
+          onClick={() => onSelect({ kind: 'regionmap', id: region.id }, region.name)}
+        >
+          {region.name}
+          <span className="ml-1 font-body text-xs italic text-muted-foreground">
+            {region.width_cells} cells
+          </span>
+        </button>
+      ))}
+      {open && (
+        <form className="grid gap-1 px-2 pt-1" onSubmit={place} data-testid="new-region-form">
+          <Input
+            value={name}
+            onChange={(event) => setName(event.target.value)}
+            placeholder="Name"
+            aria-label="region name"
+            className="h-7 text-xs"
+          />
+          <div className="flex gap-1">
+            <Input
+              value={anchorX}
+              onChange={(event) => setAnchorX(event.target.value)}
+              aria-label="anchor x"
+              className="h-7 text-xs"
+              inputMode="numeric"
+            />
+            <Input
+              value={anchorY}
+              onChange={(event) => setAnchorY(event.target.value)}
+              aria-label="anchor y"
+              className="h-7 text-xs"
+              inputMode="numeric"
+            />
+            <Input
+              value={width}
+              onChange={(event) => setWidth(event.target.value)}
+              aria-label="width in cells"
+              className="h-7 text-xs"
+              inputMode="numeric"
+            />
+          </div>
+          <Button type="submit" size="sm" variant="outline" disabled={!name.trim()}>
+            Place
+          </Button>
+        </form>
+      )}
     </div>
   );
 }

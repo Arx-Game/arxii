@@ -187,6 +187,12 @@ def _rung_area(title: Title) -> Area:
     return area
 
 
+def rung_area_for_title(title: Title) -> Area:
+    """The Area a title's own rung decorates (``_rung_area``), for callers outside
+    this module such as the world map's carve (#4242)."""
+    return _rung_area(title)
+
+
 def _make_area(*, name: str, tier: str, parent: Area | None, realm: Realm | None) -> Area:
     area = Area(
         name=_area_name(name),

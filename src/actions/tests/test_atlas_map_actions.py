@@ -18,6 +18,9 @@ from world.areas.tests.test_worldmap import tiny_map
 from world.areas.worldmap.constants import PipSource, Terrain
 from world.areas.worldmap.models import AreaFootprintPip, RegionMap, TerrainPip
 from world.areas.worldmap.services import create_region_map, import_region_map_file
+from world.character_creation.factories import RealmFactory
+from world.societies.houses.almanach import plant_rung
+from world.societies.houses.constants import TitleTier
 
 
 def _actor(db_key: str, *, staff: bool) -> ObjectDB:
@@ -85,3 +88,16 @@ class AtlasMapActionTests(TestCase):
             self.staff, region_id=self.region.pk, pips=[[3, 3]], terrain="lava"
         )
         assert not refused.success
+
+    def test_carve_by_title_walks_to_the_rungs_own_area(self) -> None:
+        realm = RealmFactory(name="Luxen")
+        county = plant_rung(realm=realm, tier=TitleTier.COUNTY, name="Salvation")
+        result = AtlasCarveFootprintAction().run(
+            self.staff, title_id=county.pk, add=[[1, 1], [2, 1]]
+        )
+        assert result.success, result.message
+        area = AreaFootprintPip.objects.get(x=1, y=1).area
+        assert area.level == AreaLevel.COUNTY
+        assert area.name == "Salvation"
+        missing = AtlasCarveFootprintAction().run(self.staff, title_id=999999, add=[[1, 1]])
+        assert not missing.success

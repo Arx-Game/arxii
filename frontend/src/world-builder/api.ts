@@ -10,6 +10,9 @@ import type {
   WorldBuilderRoomDetail,
   WorldBuilderGrants,
   WorldBuilderRoomHit,
+  RegionMapPips,
+  RegionMapSummary,
+  RegionMapUploadResult,
 } from './types';
 
 export type { DispatchResult };
@@ -82,4 +85,34 @@ export async function fetchMyGrants(): Promise<WorldBuilderGrants> {
   const res = await apiFetch('/api/world-builder/areas/grants/');
   if (!res.ok) throw new Error('Failed to load build grants');
   return res.json() as Promise<WorldBuilderGrants>;
+}
+
+/** The world map (#4242): every region map on the world grid. */
+export function fetchRegionMaps(): Promise<RegionMapSummary[]> {
+  return getJson('/api/world-builder/region-maps/', 'Failed to load the maps.');
+}
+
+/** A region's terrain pips and the footprints that touch it. */
+export function fetchRegionMapPips(regionId: number): Promise<RegionMapPips> {
+  return getJson(`/api/world-builder/region-maps/${regionId}/pips/`, 'Failed to load the map.');
+}
+
+/** Upload a generator `.map` file for a region; the server rasterizes it. */
+export async function uploadRegionMapFile(
+  regionId: number,
+  file: File
+): Promise<RegionMapUploadResult> {
+  const body = new FormData();
+  body.append('file', file);
+  const res = await apiFetch(`/api/world-builder/region-maps/${regionId}/upload/`, {
+    method: 'POST',
+    body,
+  });
+  if (!res.ok) await throwApiError(res, 'The upload failed.');
+  return (await res.json()) as RegionMapUploadResult;
+}
+
+/** Where the latest uploaded file downloads from. */
+export function regionMapFileUrl(regionId: number): string {
+  return `/api/world-builder/region-maps/${regionId}/file/`;
 }

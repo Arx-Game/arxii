@@ -47,6 +47,24 @@ def _pip_list(value: Any) -> list[tuple[int, int]] | None:
     return out
 
 
+def _carve_target(kwargs: dict[str, Any]) -> Any:
+    """The area a carve names: by ``area_id``, or by ``title_id`` through the rung walk."""
+    from world.areas.models import Area  # noqa: PLC0415
+    from world.societies.houses.almanach import rung_area_for_title  # noqa: PLC0415
+    from world.societies.houses.models import Title  # noqa: PLC0415
+    from world.societies.houses.services import HousesServiceError  # noqa: PLC0415
+
+    if kwargs.get("title_id"):
+        title = Title.objects.filter(pk=kwargs["title_id"]).first()
+        if title is None:
+            return None
+        try:
+            return rung_area_for_title(title)
+        except HousesServiceError:
+            return None
+    return Area.objects.filter(pk=kwargs.get("area_id")).first()
+
+
 @dataclass
 class _AtlasMapAction(Action):
     """Shared shape for the staff world-map verbs (#4242)."""
@@ -116,7 +134,8 @@ class AtlasCreateRegionMapAction(_AtlasMapAction):
 class AtlasCarveFootprintAction(_AtlasMapAction):
     """Grow or shrink a domain's footprint on the map.
 
-    Kwargs: ``area_id``, ``add`` and ``remove`` as lists of ``[x, y]`` world pips.
+    Kwargs: ``area_id`` or ``title_id`` (the rung's own area, the walk the Almanach
+    does), ``add`` and ``remove`` as lists of ``[x, y]`` world pips.
     """
 
     key: str = "atlas_carve_footprint"
@@ -129,13 +148,12 @@ class AtlasCarveFootprintAction(_AtlasMapAction):
         context: ActionContext | None = None,
         **kwargs: Any,
     ) -> ActionResult:
-        from world.areas.models import Area  # noqa: PLC0415
         from world.areas.worldmap.services import (  # noqa: PLC0415
             WorldMapServiceError,
             set_footprint,
         )
 
-        area = Area.objects.filter(pk=kwargs.get("area_id")).first()
+        area = _carve_target(kwargs)
         if area is None:
             return ActionResult(success=False, message=_NO_SUCH_AREA)
         add, remove = _pip_list(kwargs.get("add")), _pip_list(kwargs.get("remove"))

@@ -10,6 +10,9 @@ import {
   fetchRoomDetail,
   searchWorldBuilderRooms,
   fetchUnfiledRooms,
+  fetchRegionMapPips,
+  fetchRegionMaps,
+  uploadRegionMapFile,
   type AreaListParams,
 } from './api';
 import type { WorldBuilderActionKey } from './types';
@@ -20,6 +23,9 @@ export const worldBuilderKeys = {
   areas: (params: AreaListParams = {}) => [...worldBuilderKeys.all, 'areas', params] as const,
   area: (areaId: number) => [...worldBuilderKeys.all, 'area', areaId] as const,
   manager: (areaId: number) => [...worldBuilderKeys.all, 'manager', areaId] as const,
+  regionMaps: () => [...worldBuilderKeys.all, 'region-maps'] as const,
+  regionMapPips: (regionId: number) =>
+    [...worldBuilderKeys.all, 'region-map-pips', regionId] as const,
 };
 
 export function useWorldBuilderAreasQuery(params: AreaListParams = {}, enabled = true) {
@@ -94,6 +100,13 @@ export interface WorldBuilderActionInput {
 }
 
 /** Actions that reshape the area tree itself, not just one area's manager payload. */
+/** Actions that redraw the world map (#4242). */
+const REGION_MAP_KEYS: ReadonlySet<WorldBuilderActionKey> = new Set([
+  'atlas_create_region_map',
+  'atlas_carve_footprint',
+  'atlas_paint_terrain',
+]);
+
 const AREA_TREE_KEYS: ReadonlySet<WorldBuilderActionKey> = new Set([
   'create_area',
   'edit_area',
@@ -131,6 +144,43 @@ export function useWorldBuilderAction(characterId: number, areaId: number | null
         queryClient.invalidateQueries({ queryKey: [...worldBuilderKeys.all, 'areas'] });
         queryClient.invalidateQueries({ queryKey: [...worldBuilderKeys.all, 'area'] });
       }
+      if (REGION_MAP_KEYS.has(key)) {
+        queryClient.invalidateQueries({ queryKey: [...worldBuilderKeys.all, 'region-maps'] });
+        queryClient.invalidateQueries({ queryKey: [...worldBuilderKeys.all, 'region-map-pips'] });
+      }
+    },
+    onError: (error: Error) => {
+      toast.error(error.message);
+    },
+  });
+}
+
+export function useRegionMapsQuery(enabled = true) {
+  return useQuery({
+    queryKey: worldBuilderKeys.regionMaps(),
+    queryFn: fetchRegionMaps,
+    enabled,
+  });
+}
+
+export function useRegionMapPipsQuery(regionId: number | null) {
+  return useQuery({
+    queryKey: worldBuilderKeys.regionMapPips(regionId ?? 0),
+    queryFn: () => fetchRegionMapPips(regionId as number),
+    enabled: regionId != null,
+    staleTime: 60_000,
+  });
+}
+
+/** Upload a generator file for a region; on success the map redraws. */
+export function useRegionMapUpload(regionId: number) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (file: File) => uploadRegionMapFile(regionId, file),
+    onSuccess: ({ pip_count }) => {
+      toast.success(`${pip_count} pips rasterized.`);
+      queryClient.invalidateQueries({ queryKey: worldBuilderKeys.regionMaps() });
+      queryClient.invalidateQueries({ queryKey: worldBuilderKeys.regionMapPips(regionId) });
     },
     onError: (error: Error) => {
       toast.error(error.message);

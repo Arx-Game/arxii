@@ -8,6 +8,7 @@ import { AreaPage } from '../AreaPage';
 import type { LatticeProps } from '../Lattice';
 
 vi.mock('../../queries', () => ({
+  useRegionMapsQuery: vi.fn(() => ({ data: [] })),
   useAreaManagerQuery: vi.fn(),
   useWorldBuilderAreasQuery: vi.fn(),
   useWorldBuilderAction: vi.fn(() => ({ mutate: vi.fn() })),
