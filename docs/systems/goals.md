@@ -96,7 +96,7 @@ breakdown = get_goal_bonuses_breakdown(character_sheet)
 
 # Replace a character's goal allocations (weekly revision-gated). First-time
 # setup skips the revision gate. Raises GoalError on revision-too-soon /
-# over-cap (MAX_GOAL_POINTS=30) / duplicate-domain.
+# over-cap (MAX_GOAL_POINTS=30). Goals may share a domain (#3621).
 created = set_character_goals(character=character, goals=[{"domain": 1, "points": 10, "notes": ""}])
 
 # Create a goal-progress journal entry and grant weekly-capped XP to the
@@ -108,7 +108,7 @@ journal = log_goal_progress(character=character, domain=None, title="T", content
 
 `GoalError` (`world/goals/types.py`) is the user-safe exception class for the
 write services — class-level message constants (`REVISION_TOO_SOON`,
-`OVER_POINT_CAP`, `DUPLICATE_DOMAIN`) + a `user_message` property, mirroring
+`OVER_POINT_CAP`) + a `user_message` property, mirroring
 `world.journals.types.JournalError`. Responses surface `exc.user_message`,
 never `str(exc)`.
 
@@ -147,7 +147,7 @@ Requires `X-Character-ID` header. Weekly revision limit enforced (first-time set
 
 **Validation:**
 - Total points cannot exceed `MAX_GOAL_POINTS` (30)
-- No duplicate domains allowed
+- Any number of goals may share a domain (#3621); they are numbered in order
 - Domain IDs must be valid ModifierTarget entries with category='goal'
 
 ### Journals

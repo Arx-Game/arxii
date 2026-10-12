@@ -60,6 +60,10 @@ from somewhere else: a CI run, a run on a larger machine, or the maintainer.
   **before** you run anything.
 - **Never take the expected result from the code's own output.** If the code
   printed it, that does not make it correct.
+- If two sources disagree (a doc says one thing, a spec or ADR another), do
+  not pick one quietly. Name both in the report. When the issue or a newer
+  ADR settles it, fix the stale doc in the same PR; when nothing does, ask
+  the maintainer.
 - Include the ordinary case and the one failure or edge case that matters
   most for this change (a bad input, a permission refusal, an empty state).
   Add more only for different ways it can fail. No case-count quota.
@@ -72,13 +76,19 @@ There are two forms. Check which one you can use, by process, not only by
 port: `arx start` kills every process whose command line names `evennia`,
 `twistd`, `server.py` or `portal.py`, on any port.
 
+Run these as two separate commands (a compound command is refused):
+
 ```bash
-pgrep -af 'evennia|twistd|server\.py|portal\.py' | grep -v defunct
+pgrep -af '[e]vennia|[t]wistd|[s]erver\.py|[p]ortal\.py' | grep -v defunct
+```
+
+```bash
 ss -ltn | grep -E ':(4001|4002) '
 ```
 
-Any live match from either command means Form A. Only when both print nothing
-may you use Form B.
+The brackets stop the pattern from matching the shell that runs it, and
+`grep -v defunct` drops dead processes, which are many. Any line from either
+command means Form A. Only when both print nothing may you use Form B.
 
 **Never touch production, and never overwrite the shared `arxiidev`.** Every
 session in the devcontainer uses it. `just pull-prod yes` restores over it (it
@@ -97,9 +107,14 @@ your change through that server either; it does not have your code.
 
 Write a short test that drives the real URL, view, serializer and service
 stack with Django's test client (`self.client`) against rows made by
-factories, the way a request would, and reads the saved state back. Run it
-with `just test-fast <dotted.path>`; the test runner makes its own isolated
-database. Keep the test only if it found a failure (section 6).
+factories, the way a request would, and reads the saved state back. Do not
+mock the parts a request goes through. For an endpoint that acts as a
+character (`X-Character-ID`), make the account the character's player with a
+real roster tenure, as `src/world/journals/tests/test_offscreen_gate_web.py`
+does, and pass `headers={"X-Character-ID": ...}`. Run it with
+`just test-fast <dotted.path>`; the test runner makes its own isolated
+database. Keep the test only if it found a failure (section 6); otherwise
+paste its output into the report before you delete it.
 
 Record the browser or server part as `BLOCKED: shared server` (or
 `BLOCKED: resources`) and say in the report that this was the smaller form.
