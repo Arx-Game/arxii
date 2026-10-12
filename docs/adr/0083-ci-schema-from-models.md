@@ -1,5 +1,9 @@
 # CI and test databases build schema from model state; migration replay runs nightly only
 
+> **Amended by ADR-4250 (#4250, 2026-10-12):** the nightly replay workflow below was retired.
+> Empty-database replay now runs only at chain regeneration (`just verify-regeneration`,
+> ADR-0276); the per-PR drift gate is unchanged.
+
 **Decision:** CI and local test databases (both the SQLite fast tier and the Postgres parity
 tier) build their schema directly from current model state via `tools/build_schema.py` —
 `migrate --run-syncdb` plus the standalone partition/composite-FK/materialized-view SQL and the

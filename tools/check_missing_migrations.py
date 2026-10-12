@@ -3,7 +3,7 @@
 Scopes makemigrations --check to LOCAL apps (those under src/) so the
 pre-existing phantom Evennia-library proxy-model changes — which
 core_management's custom makemigrations filters only at write time — can't
-trip the gate. Used by CI (ty job) and the nightly migration-replay workflow.
+trip the gate. Used by CI (ty job).
 """
 
 import os

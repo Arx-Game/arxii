@@ -572,8 +572,8 @@ jobs:
       # Build the default DB's schema straight from model state — no migration
       # replay (12.5-14 min of Python-side state rendering; see ADR
       # ci-schema-from-models). Migration-chain validity is gated by the
-      # makemigrations --check step (ty job) and the nightly migration-replay
-      # workflow, not here.
+      # makemigrations --check step (ty job) here and by `just
+      # verify-regeneration` at each chain regeneration (ADR-4250).
       - name: Build schema from model state
         run: uv run python tools/build_schema.py
       - uses: pnpm/action-setup@0e279bb959325dab635dd2c09392533439d90093 # v6

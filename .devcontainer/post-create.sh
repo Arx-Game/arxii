@@ -211,10 +211,10 @@ uv run arx manage migrate --fake
 # Escape hatch: to exercise the real migration chain locally (e.g.
 # reproducing a migration-only bug), point DATABASE_URL at a fresh empty
 # database and run `uv run arx manage migrate` directly instead of the two
-# commands above. CI's nightly workflow
-# (.github/workflows/nightly-migration-replay.yml) is the standing coverage
-# for that path; this script no longer exercises it on every container
-# create.
+# commands above. Nothing exercises that path on a schedule any more
+# (ADR-4250): each chain regeneration replays it via
+# `just verify-regeneration`, and this script no longer exercises it on
+# every container create.
 
 # Install required plugins idempotently. claude plugin commands are CLI-
 # safe (no Claude Code session needed). The named volume at

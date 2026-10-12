@@ -129,7 +129,11 @@ fresh worktree (cherry-pick the tooling commits, run the recipe, force-push),
 never rebase. Review the inliner's `--check` counts (`deferred_addfield_cycle`
 must not rise without a named cycle), the three tails in full, the drop report
 and the `verify-regeneration` output; the hundred chunk files are generated.
-When to run it: the nightly replay workflow warns past 30 minutes.
+When to run it: `.github/workflows/migration-regeneration-due.yml` opens a
+"Migration chain regeneration due" issue on the 1st of the month once
+`tools/check_regeneration_due.py` counts 100 or more incremental migrations
+since the current generation (ADR-4250). Run the script by hand for the count
+at any time.
 
 ### loaddata Cannot UPDATE SharedMemoryModel Rows (#946)
 
@@ -247,7 +251,7 @@ If the merge commit itself times out on pre-commit (ty/ruff over hundreds of fil
 
 ### Phantom `objects` migration dependency (CI-only, invisible locally)
 
-**Symptom:** `NodeNotFoundError: Migration <app>.NNNN dependencies reference nonexistent parent node ('objects', '0014_defaultobject_...')`. Backend shards and `api-types-drift` build their schema from model state (`tools/build_schema.py`, migrations disabled entirely) so they don't hit this; it now surfaces at the `ty` job's "Check migrations match models" step, `pre-commit`'s "Check Django migrations" hook, and the nightly migration-replay workflow's migrate/check steps. Local SQLite tests pass because the dev venv happens to have the phantom migration.
+**Symptom:** `NodeNotFoundError: Migration <app>.NNNN dependencies reference nonexistent parent node ('objects', '0014_defaultobject_...')`. Backend shards and `api-types-drift` build their schema from model state (`tools/build_schema.py`, migrations disabled entirely) so they don't hit this; it now surfaces at the `ty` job's "Check migrations match models" step and in `pre-commit`'s "Check Django migrations" hook. Local SQLite tests pass because the dev venv happens to have the phantom migration.
 
 **Cause:** `.venv/.../evennia/objects/migrations/0014_*` is a venv-only phantom (not git-tracked). CI's clean Evennia install only ships `objects` migrations up to **0013**, so a dependency on 0014 dangles.
 
@@ -273,8 +277,8 @@ to build the dependency graph, which means it needs a **reachable** database
 even when the check is nominally offline/static. There's no way to make this
 check truly DB-free without patching Evennia's vendored migration; CI jobs
 that only run `ty`/`makemigrations --check` still need a `postgres:` service
-container for this reason (see the `ty` job in `.github/workflows/ci.yml` and
-the nightly migration-replay workflow). See ADR-0083 for how this interacts
+container for this reason (see the `ty` job in `.github/workflows/ci.yml`).
+See ADR-0083 for how this interacts
 with the CI schema-from-models decision.
 
 ### A new standalone-SQL migration must be mirrored into `tools/build_schema.py`
@@ -301,12 +305,14 @@ months (#2982) because the per-PR drift gate compares models to *migrations* and
 resulting *schema*. `*_reverse.sql` files are exempt from the `SQL_FILES` direction, since
 `build_schema.py` is forward-only by construction.
 
-Nightly full migration replay (`nightly-migration-replay.yml`) exercises the real migration and will
+A full migration replay exercises the real migration and will
 build the object correctly; CI and local test/dev DBs built via `build_schema.py` will not, and,
 unless a test actually exercises that object, the omission fails silently rather than loudly: no
-error, just an object that's simply never there in any schema-from-models DB. The nightly workflow
-now also diffs the two resulting schemas directly (`tools/compare_schemas.py`), so a divergence
-fails there even if the wiring hook is somehow satisfied.
+error, just an object that's simply never there in any schema-from-models DB. `just
+verify-regeneration` also diffs the two resulting schemas directly (`tools/compare_schemas.py`) at
+each chain regeneration, so a divergence fails there even if the wiring hook is somehow satisfied.
+Between regenerations nothing diffs them on a schedule (ADR-4250), so diff by hand with the same
+tool when a change touches standalone SQL.
 
 ### `RenameModel` leaves the sequence named after the OLD model
 
@@ -342,6 +348,6 @@ This is an Evennia library bug, not repo code — don't try to "fix" it in the c
 1. **A new column that can only be added by a later migration** (e.g. an FK to a model created after the partition migration) does not exist on the pre-partition `_old` table, so the partition SQL's `INSERT ... SELECT <col> ... FROM _old` fails with `UndefinedColumn`. All backend shards + `api-types-drift` fail at the `migrate` step; the SQLite fast tier never runs the partition SQL, so it's invisible locally. Fix: keep the post-partition column OUT of both partition SQL files (forward and reverse) so they represent the schema *at partition time*; a later `AddField` cascades via `ALTER TABLE` to all partitions. Add the column name to the `POST_PARTITION_COLUMNS` exclusion set in `tools/check_partition_sql_drift.py`.
 2. **A new FK on another model referencing `scenes.Interaction`** fails Postgres `migrate` with `InvalidForeignKey: there is no unique constraint matching given keys` — a FK to a partitioned table can't reference the plain PK. Counter-intuitively, "a FK *to* the partitioned table is the safe direction" is wrong on PG. Fix: add `db_constraint=False` to the field (mirror `SceneActionRequest.result_interaction`) — the ORM relation is unaffected, and `db_constraint=False` fields don't trip the drift hook.
 
-Always verify a migration touching `Interaction` on a real throwaway Postgres DB (host `db`, user/pass `arxii`/`arxii`) before pushing. The nightly replay now also asserts the partition exists and diffs both construction paths, so a regression here fails nightly even if it slips past a local check.
+Always verify a migration touching `Interaction` on a real throwaway Postgres DB (host `db`, user/pass `arxii`/`arxii`) before pushing. `just verify-regeneration` asserts the partition exists and diffs both construction paths at each chain regeneration; nothing does so between regenerations (ADR-4250), so the local check is the gate.
 
 **Related runtime trap (not migration-time):** annotating a per-row aggregate onto the partitioned `Interaction` queryset — e.g. `.annotate(reaction_count=Count("reactions"))` — 500s on Postgres (the full-row SELECT forces a `GROUP BY` PG rejects, since PG's real PK is composite `(id, timestamp)` while Django groups by `id` alone) but passes the SQLite fast tier, which doesn't enforce `GROUP BY` strictness. Fix: don't aggregate on the partitioned model directly — pull visible row ids with `.values_list("pk", "timestamp")`, aggregate counts on the **child** table grouped by its plain FK column, and rank in Python. Verify any reel/ranking/aggregate query touching a partitioned table with `just test-parity` on real Postgres before pushing.

@@ -4,8 +4,9 @@
 > operations from cross-app FK cycles), not file count, so a squash doesn't help.
 > See ADR-0083 (`docs/adr/0083-ci-schema-from-models.md`): CI and test databases
 > now build schema directly from model state (`tools/build_schema.py`), and full
-> migration replay runs only in the nightly workflow
-> (`.github/workflows/nightly-migration-replay.yml`). The reset PR that would
+> migration replay runs only at chain regeneration (`just verify-regeneration`,
+> ADR-0276; the nightly workflow that also ran it was retired by ADR-4250).
+> The reset PR that would
 > have executed this plan (#1801) was closed. Retained below for historical
 > reference only — do not follow it.
 >
