@@ -143,7 +143,10 @@ already `PROVEN`. An item still `BLOCKED` for the same honest reason stays
 
 ## Output
 
-Post exactly one PR comment with `gh pr comment <N> --body "<text>"`. Its
+Post exactly one PR comment: write it with the Write tool to
+`/tmp/evidence-challenge-<N>.md`, then run
+`gh pr comment <N> --body-file /tmp/evidence-challenge-<N>.md`. Do not put a
+multi-line comment in `--body`; that form is refused. Its
 first line is the marker, with the round number you were given and the
 verdict:
 

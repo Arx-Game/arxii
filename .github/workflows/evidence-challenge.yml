@@ -133,11 +133,13 @@ jobs:
           github_token: ${{ github.token }}
           prompt: ${{ steps.prep.outputs.prompt }}
           # Read-only commands only, one per call (a compound is refused).
-          # Not `gh api`: it can write with this token's permissions.
+          # Not `gh api`: it can write with this token's permissions. Write is
+          # for the comment file (posted with --body-file); the runner is
+          # throwaway and nothing runs the checkout after this step.
           claude_args: >-
             --model claude-haiku-5-5
             --max-turns 30
-            --allowed-tools "Read,Grep,Glob,Bash(gh pr view:*),Bash(gh pr diff:*),Bash(gh issue view:*),Bash(gh pr comment:*),Bash(git fetch:*),Bash(git log:*),Bash(git show:*),Bash(git diff:*),Bash(git cat-file:*)"
+            --allowed-tools "Read,Grep,Glob,Write,Bash(gh run view:*),Bash(gh pr view:*),Bash(gh pr diff:*),Bash(gh issue view:*),Bash(gh pr comment:*),Bash(git fetch:*),Bash(git log:*),Bash(git show:*),Bash(git diff:*),Bash(git cat-file:*)"
 
       # The action hides the model's output, so a refused tool call is
       # invisible except as a count. Print only the refused calls (tool and
