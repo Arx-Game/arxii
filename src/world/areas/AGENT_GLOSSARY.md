@@ -172,13 +172,15 @@ The set of pips a domain covers. A pip has one row naming its lowest holder (a c
 open ground between its baronies is the county's row, a barony's seat is the barony's), and
 every ancestor's footprint is derived by walking `Area.parent` from the holders, so a child
 lies within its parent by construction. Carving inside an ancestor moves the row down,
-shrinking hands it back up; a parent cannot take back a pip a child stands on; water is
-never in one. Carved and grown by `atlas_carve_footprint`, never by the generator.
+shrinking hands it back up; a parent cannot take back a pip a child stands on; a drag
+skips what it cannot take and says so (#4317). Water is in one like land: a realm's
+footprint includes its territorial waters (ruling, 2026-10-12). Carved and grown by
+`atlas_carve_footprint`, never by the generator.
 _Avoid_: territory (the control stat axis, ADR-0319), bounds, extent.
 
 **Open ground** (#4242):
-A land pip no footprint holds. Real rows, claimable later; an unexplored or veiled state
-is a later column on the pip, not a re-rasterize.
+A pip no footprint holds, water included. Real rows, claimable later; an unexplored or
+veiled state is a later column on the pip, not a re-rasterize.
 _Avoid_: unowned, wilderness (a terrain word), fog.
 
 **Holder of a pip** (#4242):

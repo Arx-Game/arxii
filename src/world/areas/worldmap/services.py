@@ -28,7 +28,6 @@ from world.areas.worldmap.azgaar import (
 )
 from world.areas.worldmap.constants import (
     PIPS_PER_CELL,
-    WATER_TERRAINS,
     PipSource,
     Terrain,
 )
@@ -304,32 +303,47 @@ def _is_ancestor(candidate: Area, area: Area) -> bool:
     return False
 
 
+@dataclass(frozen=True)
+class FootprintChange:
+    """What one carve wrote (#4317): pips taken or moved into the area, pips given up,
+    and the pips it left alone because another domain held them (on add) or a
+    descendant stood on them (on remove), with those holders' names for the message."""
+
+    added: int = 0
+    removed: int = 0
+    skipped: int = 0
+    skipped_holders: tuple[str, ...] = ()
+
+
 def set_footprint(
     *,
     area: Area,
     add: Iterable[Pip] = (),
     remove: Iterable[Pip] = (),
-) -> tuple[int, int]:
+) -> FootprintChange:
     """Grow or shrink an area's footprint. A pip row names its lowest holder, so
     carving a barony inside a county moves the county's row to the barony, and
-    shrinking the barony hands the row back to the county. Refuses water, a pip
-    another domain holds (one that is not an ancestor of ``area``), and taking
-    back a pip a descendant stands on. Returns ``(added, removed)``."""
+    shrinking the barony hands the row back to the county. A drag takes what it may
+    and skips the rest (#4317): on add, a pip another domain holds (one that is not an
+    ancestor of ``area``); on remove, a pip a descendant stands on. Water is taken
+    like land: a realm's footprint includes its waters (ApostateCD, 2026-10-12)."""
     to_add = _unique_pips(add, MAX_FOOTPRINT_PIPS_PER_CALL)
     to_remove = _unique_pips(remove, MAX_FOOTPRINT_PIPS_PER_CALL)
     if not to_add and not to_remove:
-        return 0, 0
+        return FootprintChange()
     if area.level < AreaLevel.BARONY:
         msg = "Only a barony or a larger domain has a footprint."
         raise WorldMapServiceError(msg)
-    added = removed = 0
+    skipped: dict[str, int] = {}
     with transaction.atomic():
-        if to_add:
-            _refuse_water(to_add)
-            added = _claim(area, to_add)
-        if to_remove:
-            removed = _release(area, to_remove)
-    return added, removed
+        added = _claim(area, to_add, skipped) if to_add else 0
+        removed = _release(area, to_remove, skipped) if to_remove else 0
+    return FootprintChange(
+        added=added,
+        removed=removed,
+        skipped=sum(skipped.values()),
+        skipped_holders=tuple(sorted(skipped)),
+    )
 
 
 def _rows_at(pips: set[Pip]) -> dict[Pip, AreaFootprintPip]:
@@ -339,13 +353,18 @@ def _rows_at(pips: set[Pip]) -> dict[Pip, AreaFootprintPip]:
     return {(r.x, r.y): r for r in rows if (r.x, r.y) in pips}
 
 
-def _claim(area: Area, pips: set[Pip]) -> int:
+def _skip(skipped: dict[str, int], holder: Area, fallback: str) -> None:
+    name = holder.name or fallback
+    skipped[name] = skipped.get(name, 0) + 1
+
+
+def _claim(area: Area, pips: set[Pip], skipped: dict[str, int]) -> int:
     """Give ``pips`` to ``area``: open ground is taken; an ancestor's pip moves
     down to this area; a pip held by this area or a descendant is already inside;
-    any other holder refuses."""
+    any other holder's pip is skipped and counted against that holder's name."""
     held = _rows_at(pips)
     moving: list[AreaFootprintPip] = []
-    for pip, row in held.items():
+    for row in held.values():
         holder = row.area
         if holder.pk == area.pk or _is_ancestor(area, holder):
             continue  # already inside this footprint
@@ -353,9 +372,7 @@ def _claim(area: Area, pips: set[Pip]) -> int:
             row.area = area
             moving.append(row)
             continue
-        x, y = pip
-        msg = f"Pip ({x}, {y}) is in {holder.name or 'another domain'}'s footprint."
-        raise WorldMapServiceError(msg)
+        _skip(skipped, holder, "another domain")
     if moving:
         AreaFootprintPip.objects.bulk_update_with_reason(
             moving, ["area"], batch_size=5000, reason="carve moves rows loaded in this transaction"
@@ -365,14 +382,15 @@ def _claim(area: Area, pips: set[Pip]) -> int:
     return len(fresh) + len(moving)
 
 
-def _release(area: Area, pips: set[Pip]) -> int:
+def _release(area: Area, pips: set[Pip], skipped: dict[str, int]) -> int:
     """Take ``pips`` out of ``area``: its own rows go to its ladder parent, or to open
-    ground when it has none; a descendant's row is refused; anyone else's is left alone."""
+    ground when it has none; a descendant's row is skipped and counted against that
+    descendant's name; anyone else's is left alone."""
     held = _rows_at(pips)
     parent = _ladder_parent(area)
     to_parent: list[AreaFootprintPip] = []
     to_open: list[int] = []
-    for pip, row in held.items():
+    for row in held.values():
         holder = row.area
         if holder.pk == area.pk:
             if parent is not None:
@@ -382,12 +400,7 @@ def _release(area: Area, pips: set[Pip]) -> int:
                 to_open.append(row.pk)
             continue
         if _is_ancestor(area, holder):
-            x, y = pip
-            msg = (
-                f"Pip ({x}, {y}) is in {holder.name or 'a child domain'}'s footprint; "
-                "shrink that first."
-            )
-            raise WorldMapServiceError(msg)
+            _skip(skipped, holder, "a child domain")
     if to_parent:
         AreaFootprintPip.objects.bulk_update_with_reason(
             to_parent,
@@ -398,15 +411,6 @@ def _release(area: Area, pips: set[Pip]) -> int:
     if to_open:
         AreaFootprintPip.objects.filter(pk__in=to_open).delete()
     return len(to_parent) + len(to_open)
-
-
-def _refuse_water(pips: set[Pip]) -> None:
-    rows = TerrainPip.objects.filter(x__in={p[0] for p in pips}, y__in={p[1] for p in pips})
-    wet = [(r.x, r.y) for r in rows if (r.x, r.y) in pips and r.terrain in WATER_TERRAINS]
-    if wet:
-        x, y = wet[0]
-        msg = f"Pip ({x}, {y}) is water; a footprint is land."
-        raise WorldMapServiceError(msg)
 
 
 def holder_at(x: int, y: int) -> Area | None:

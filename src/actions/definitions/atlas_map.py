@@ -163,14 +163,23 @@ class AtlasCarveFootprintAction(_AtlasMapAction):
         if add is None or remove is None:
             return ActionResult(success=False, message="Pips are lists of [x, y] pairs.")
         try:
-            added, removed = set_footprint(area=area, add=add, remove=remove)
+            change = set_footprint(area=area, add=add, remove=remove)
         except WorldMapServiceError as exc:
             return ActionResult(success=False, message=exc.user_message)
         name = area.name or "The domain"
+        message = f"{name}: {change.added} pips added, {change.removed} removed."
+        if change.skipped:
+            holders = ", ".join(change.skipped_holders)
+            message += f" {change.skipped} skipped ({holders})."
         return ActionResult(
             success=True,
-            message=f"{name}: {added} pips added, {removed} removed.",
-            data={"area_id": area.pk, "added": added, "removed": removed},
+            message=message,
+            data={
+                "area_id": area.pk,
+                "added": change.added,
+                "removed": change.removed,
+                "skipped": change.skipped,
+            },
         )
 
 

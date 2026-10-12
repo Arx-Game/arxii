@@ -215,7 +215,7 @@ create_region_map(*, name, anchor_x, anchor_y, width_cells, area=None, new_conti
 import_region_map_file(*, region, file_name, data, actor=None)  # parse, keep, rasterize
 rasterize_upload(upload)  # re-run the rasterize step from a kept file
 paint_terrain(*, region, pips, terrain)  # staff pips, survive every upload
-set_footprint(*, area, add=(), remove=())  # water refused; carving inside an ancestor moves its row down, shrinking hands it back up; another domain's pip refused; a descendant's pip cannot be taken back
+set_footprint(*, area, add=(), remove=()) -> FootprintChange  # takes what it may and skips the rest: carving inside an ancestor moves its row down, shrinking hands it back up; another domain's pip and a descendant's pip are skipped and counted by holder name; water is taken like land
 footprint_of(area)  # every pip inside an area: its own rows and its descendants'
 holder_at(x, y)  # the area whose row holds the pip, or None (open ground)
 region_read(region)  # the pips payload: terrain rows + footprints with holder, title, seat
@@ -225,7 +225,11 @@ A re-rasterize deletes the region's generator pips and writes the new raster, sk
 any square a staff pip holds (ruling 5 on #4242). A footprint below BARONY is refused. A pip has one row naming its lowest holder: a barony
 carved inside a county takes the county's row, and the county's footprint still contains the pip
 because ancestors are derived from the holders; a barony claiming open ground grows every
-ancestor with it.
+ancestor with it. A carve is a drag, and a drag takes what it may (#4317): a pip another domain
+holds, or one a descendant stands on when shrinking, is skipped rather than refusing the whole
+sweep, and the `FootprintChange` names the holders skipped so the action's message can say so.
+Water is a pip like any other: a realm's footprint includes its territorial waters (ApostateCD,
+2026-10-12, reversing the spec's land-only rule on #4242).
 
 **Actions** (`actions/definitions/atlas_map.py`, `category="almanach"`, staff only):
 `atlas_create_region_map`, `atlas_carve_footprint` (`area_id`, `add`/`remove` as `[x, y]`

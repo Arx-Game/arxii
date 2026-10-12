@@ -240,8 +240,8 @@ class FootprintServiceTests(TestCase):
         cls.barony = AreaFactory(name="Barony", level=AreaLevel.BARONY, parent=cls.county)
 
     def test_carve_grow_and_shrink_with_one_holder_per_pip(self) -> None:
-        added, removed = set_footprint(area=self.county, add=[(1, 1), (2, 1), (1, 2)])
-        assert (added, removed) == (3, 0)
+        change = set_footprint(area=self.county, add=[(1, 1), (2, 1), (1, 2)])
+        assert (change.added, change.removed, change.skipped) == (3, 0, 0)
         # carving the barony moves the county's row down; the county's footprint still has it
         set_footprint(area=self.barony, add=[(2, 1)])
         assert holder_at(2, 1) == self.barony
@@ -252,23 +252,31 @@ class FootprintServiceTests(TestCase):
         # a barony claiming open ground grows the county with it: containment by construction
         set_footprint(area=self.barony, add=[(2, 7)])
         assert footprint_of(self.county) >= {(2, 7)}
-        # the county cannot take back a pip its barony stands on
-        with self.assertRaises(WorldMapServiceError):
-            set_footprint(area=self.county, remove=[(2, 1)])
+        # the county cannot take back a pip its barony stands on: the drag skips it (#4317)
+        change = set_footprint(area=self.county, remove=[(2, 1), (1, 1)])
+        assert (change.removed, change.skipped, change.skipped_holders) == (1, 1, ("Barony",))
+        assert holder_at(2, 1) == self.barony
+        assert holder_at(1, 1) == self.kingdom
         # shrinking the barony hands the pip back to the county
-        added, removed = set_footprint(area=self.barony, remove=[(2, 7)])
-        assert (added, removed) == (0, 1)
+        change = set_footprint(area=self.barony, remove=[(2, 7)])
+        assert (change.added, change.removed) == (0, 1)
         assert holder_at(2, 7) == self.county
         # shrinking the county hands its own pip to the kingdom above it
-        added, removed = set_footprint(area=self.county, remove=[(1, 2)])
-        assert (added, removed) == (0, 1)
+        change = set_footprint(area=self.county, remove=[(1, 2)])
+        assert (change.added, change.removed) == (0, 1)
         assert holder_at(1, 2) == self.kingdom
-        # another domain's pip is refused; water is refused; a ward has no footprint
+        # another domain's pip is skipped, not refused, and the rest of the drag lands (#4317)
         other = AreaFactory(name="Other", level=AreaLevel.COUNTY, parent=self.kingdom)
-        with self.assertRaises(WorldMapServiceError):
-            set_footprint(area=other, add=[(1, 1)])
-        with self.assertRaises(WorldMapServiceError):
-            set_footprint(area=self.county, add=[(15, 15)])
+        change = set_footprint(area=other, add=[(2, 1), (2, 7), (5, 5)])
+        assert (change.added, change.skipped) == (1, 2)
+        assert change.skipped_holders == ("Barony", "County")
+        assert holder_at(5, 5) == other
+        assert holder_at(2, 1) == self.barony
+        # water is taken like land: a realm's footprint includes its waters (ruling, #4317)
+        change = set_footprint(area=self.county, add=[(15, 15)])
+        assert change.added == 1
+        assert holder_at(15, 15) == self.county
+        # a ward has no footprint
         ward = AreaFactory(name="Ward", level=AreaLevel.WARD, parent=self.barony)
         with self.assertRaises(WorldMapServiceError):
             set_footprint(area=ward, add=[(2, 1)])
