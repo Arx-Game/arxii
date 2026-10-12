@@ -25774,6 +25774,91 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/world-builder/region-maps/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description Region maps for the Atlas (#4242). Staff only. */
+    get: operations['world_builder_region_maps_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/world-builder/region-maps/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description Region maps for the Atlas (#4242). Staff only. */
+    get: operations['world_builder_region_maps_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/world-builder/region-maps/{id}/file/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description Region maps for the Atlas (#4242). Staff only. */
+    get: operations['world_builder_region_maps_file_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/world-builder/region-maps/{id}/pips/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description Region maps for the Atlas (#4242). Staff only. */
+    get: operations['world_builder_region_maps_pips_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/world-builder/region-maps/{id}/upload/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** @description Region maps for the Atlas (#4242). Staff only. */
+    post: operations['world_builder_region_maps_upload_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/worship/admin/beings/': {
     parameters: {
       query?: never;
@@ -45603,6 +45688,72 @@ export interface components {
      * @enum {string}
      */
     ReferencedMilestoneTypeEnum: 'story_resolved' | 'chapter_reached' | 'episode_reached';
+    RegionMap: {
+      readonly id: number;
+      readonly name: string;
+      /** @description The continent-level Area this map is the geography of, once one exists. */
+      readonly area: number | null;
+      /** @default  */
+      area_name: string;
+      /** @description West edge, in world cells. */
+      readonly anchor_x: number;
+      /** @description North edge, in world cells. */
+      readonly anchor_y: number;
+      /** @description The uploaded map is scaled to this many 100-mile cells across. */
+      readonly width_cells: number;
+      /** @description Set from the first upload's aspect ratio; 0 until a file is uploaded. */
+      readonly height_cells: number;
+      readonly pips_per_cell: number;
+      /** Format: date-time */
+      readonly created_at: string;
+      readonly latest_upload: {
+        [key: string]: unknown;
+      } | null;
+    };
+    RegionMapFootprint: {
+      area_id: number;
+      name: string;
+      level: number;
+      level_display: string;
+      parent_id: number | null;
+      realm_id: number | null;
+      holder_org_id: number | null;
+      holder_name: string;
+      title_id: number | null;
+      seat: number[] | null;
+      pips: number[][];
+    };
+    /** @description The region-map view's payload: ``pips`` rows are ``[x, y, terrain, river]``. */
+    RegionMapPips: {
+      region: components['schemas']['RegionMap'];
+      terrains: string[];
+      pips: unknown[][];
+      footprints: components['schemas']['RegionMapFootprint'][];
+    };
+    RegionMapUpload: {
+      readonly id: number;
+      readonly file_name: string;
+      /** @description Size of the file as uploaded. */
+      readonly byte_size: number;
+      readonly generator_version: string;
+      readonly source_width_px: number;
+      readonly source_height_px: number;
+      /** @default  */
+      uploaded_by_name: string;
+      /** Format: date-time */
+      readonly uploaded_at: string;
+      /** Format: date-time */
+      readonly rasterized_at: string | null;
+    };
+    RegionMapUploadInputRequest: {
+      /** Format: binary */
+      file: string;
+    };
+    RegionMapUploadResult: {
+      upload: components['schemas']['RegionMapUpload'];
+      pip_count: number;
+      region: components['schemas']['RegionMap'];
+    };
     /**
      * @description * `head` - Head of house
      *     * `mother` - Mother
@@ -87054,6 +87205,118 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['PaginatedWorldBuilderRoomHitList'];
+        };
+      };
+    };
+  };
+  world_builder_region_maps_list: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['RegionMap'][];
+        };
+      };
+    };
+  };
+  world_builder_region_maps_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this region map. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['RegionMap'];
+        };
+      };
+    };
+  };
+  world_builder_region_maps_file_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this region map. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/octet-stream': string;
+        };
+      };
+    };
+  };
+  world_builder_region_maps_pips_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this region map. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['RegionMapPips'];
+        };
+      };
+    };
+  };
+  world_builder_region_maps_upload_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this region map. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'multipart/form-data': components['schemas']['RegionMapUploadInputRequest'];
+        'application/x-www-form-urlencoded': components['schemas']['RegionMapUploadInputRequest'];
+      };
+    };
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['RegionMapUploadResult'];
         };
       };
     };
