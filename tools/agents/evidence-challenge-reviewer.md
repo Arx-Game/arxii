@@ -44,7 +44,13 @@ green tests.
 3. The conversation: `gh pr view <N> --comments`. Find your own earlier
    challenges (comments that start with `<!-- evidence-challenge`) and the
    agent's answers (comments that start with `<!-- evidence-answer -->`).
-4. Project rules you may need, in this checkout:
+4. Commits the evidence names. The checkout is the default branch only, so
+   first run `git fetch origin pull/<N>/head:pr-<N>`. Then use
+   `git log pr-<N>`, `git show --stat <sha>`, `git diff --stat <a> <b>` and
+   `git cat-file -t <sha>`. **One command per tool call:** no `;`, `&&`,
+   pipes or redirects. A compound command is refused, and so is any command
+   not in that list.
+5. Project rules you may need, in this checkout:
    `tools/skills/real-testing/SKILL.md` (what counts as operating the real
    program here) and section 6 of `tools/skills/reviewing-migrations/SKILL.md`
    (proving a migration against production data).
