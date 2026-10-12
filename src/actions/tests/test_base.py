@@ -699,6 +699,9 @@ class ActionRegistryTests(TestCase):
             "staff_place_portal_anchor",
             "staff_remove_portal_anchor",
             # #3983 — Almanach de Catenys: staff house builder.
+            "atlas_create_region_map",
+            "atlas_carve_footprint",
+            "atlas_paint_terrain",
             "almanach_plant_rung",
             "almanach_batch_unclaimed",
             "almanach_name_rung",

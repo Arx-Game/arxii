@@ -12,6 +12,7 @@ import type {
 import { AtlasPage } from '../AtlasPage';
 
 vi.mock('../../queries', () => ({
+  useRegionMapsQuery: vi.fn(() => ({ data: [] })),
   useWorldBuilderAreasQuery: vi.fn(),
   useMyGrantsQuery: vi.fn(),
   useAreaManagerQuery: vi.fn(),

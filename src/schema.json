@@ -41621,6 +41621,121 @@ paths:
               schema:
                 $ref: '#/components/schemas/PaginatedWorldBuilderRoomHitList'
           description: ''
+  /api/world-builder/region-maps/:
+    get:
+      operationId: world_builder_region_maps_list
+      description: Region maps for the Atlas (#4242). Staff only.
+      tags:
+      - world-builder
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/RegionMap'
+          description: ''
+  /api/world-builder/region-maps/{id}/:
+    get:
+      operationId: world_builder_region_maps_retrieve
+      description: Region maps for the Atlas (#4242). Staff only.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this region map.
+        required: true
+      tags:
+      - world-builder
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RegionMap'
+          description: ''
+  /api/world-builder/region-maps/{id}/file/:
+    get:
+      operationId: world_builder_region_maps_file_retrieve
+      description: Region maps for the Atlas (#4242). Staff only.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this region map.
+        required: true
+      tags:
+      - world-builder
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+          description: ''
+  /api/world-builder/region-maps/{id}/pips/:
+    get:
+      operationId: world_builder_region_maps_pips_retrieve
+      description: Region maps for the Atlas (#4242). Staff only.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this region map.
+        required: true
+      tags:
+      - world-builder
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RegionMapPips'
+          description: ''
+  /api/world-builder/region-maps/{id}/upload/:
+    post:
+      operationId: world_builder_region_maps_upload_create
+      description: Region maps for the Atlas (#4242). Staff only.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this region map.
+        required: true
+      tags:
+      - world-builder
+      requestBody:
+        content:
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/RegionMapUploadInputRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/RegionMapUploadInputRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RegionMapUploadResult'
+          description: ''
   /api/worship/admin/beings/:
     get:
       operationId: worship_admin_beings_list
@@ -80058,6 +80173,201 @@ components:
         * `story_resolved` - Story resolved
         * `chapter_reached` - Chapter reached or passed
         * `episode_reached` - Episode reached or passed
+    RegionMap:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        name:
+          type: string
+          readOnly: true
+        area:
+          type: integer
+          readOnly: true
+          nullable: true
+          description: The continent-level Area this map is the geography of, once
+            one exists.
+        area_name:
+          type: string
+          default: ''
+        anchor_x:
+          type: integer
+          readOnly: true
+          description: West edge, in world cells.
+        anchor_y:
+          type: integer
+          readOnly: true
+          description: North edge, in world cells.
+        width_cells:
+          type: integer
+          readOnly: true
+          description: The uploaded map is scaled to this many 100-mile cells across.
+        height_cells:
+          type: integer
+          readOnly: true
+          description: Set from the first upload's aspect ratio; 0 until a file is
+            uploaded.
+        pips_per_cell:
+          type: integer
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        latest_upload:
+          type: object
+          additionalProperties: {}
+          nullable: true
+          readOnly: true
+      required:
+      - anchor_x
+      - anchor_y
+      - area
+      - created_at
+      - height_cells
+      - id
+      - latest_upload
+      - name
+      - pips_per_cell
+      - width_cells
+    RegionMapFootprint:
+      type: object
+      properties:
+        area_id:
+          type: integer
+        name:
+          type: string
+        level:
+          type: integer
+        level_display:
+          type: string
+        parent_id:
+          type: integer
+          nullable: true
+        realm_id:
+          type: integer
+          nullable: true
+        holder_org_id:
+          type: integer
+          nullable: true
+        holder_name:
+          type: string
+        title_id:
+          type: integer
+          nullable: true
+        seat:
+          type: array
+          items:
+            type: integer
+          nullable: true
+        pips:
+          type: array
+          items:
+            type: array
+            items:
+              type: integer
+      required:
+      - area_id
+      - holder_name
+      - holder_org_id
+      - level
+      - level_display
+      - name
+      - parent_id
+      - pips
+      - realm_id
+      - seat
+      - title_id
+    RegionMapPips:
+      type: object
+      description: 'The region-map view''s payload: ``pips`` rows are ``[x, y, terrain,
+        river]``.'
+      properties:
+        region:
+          $ref: '#/components/schemas/RegionMap'
+        terrains:
+          type: array
+          items:
+            type: string
+        pips:
+          type: array
+          items:
+            type: array
+            items: {}
+        footprints:
+          type: array
+          items:
+            $ref: '#/components/schemas/RegionMapFootprint'
+      required:
+      - footprints
+      - pips
+      - region
+      - terrains
+    RegionMapUpload:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        file_name:
+          type: string
+          readOnly: true
+        byte_size:
+          type: integer
+          readOnly: true
+          description: Size of the file as uploaded.
+        generator_version:
+          type: string
+          readOnly: true
+        source_width_px:
+          type: integer
+          readOnly: true
+        source_height_px:
+          type: integer
+          readOnly: true
+        uploaded_by_name:
+          type: string
+          default: ''
+        uploaded_at:
+          type: string
+          format: date-time
+          readOnly: true
+        rasterized_at:
+          type: string
+          format: date-time
+          readOnly: true
+          nullable: true
+      required:
+      - byte_size
+      - file_name
+      - generator_version
+      - id
+      - rasterized_at
+      - source_height_px
+      - source_width_px
+      - uploaded_at
+    RegionMapUploadInputRequest:
+      type: object
+      properties:
+        file:
+          type: string
+          format: binary
+      required:
+      - file
+    RegionMapUploadResult:
+      type: object
+      properties:
+        upload:
+          $ref: '#/components/schemas/RegionMapUpload'
+        pip_count:
+          type: integer
+        region:
+          $ref: '#/components/schemas/RegionMap'
+      required:
+      - pip_count
+      - region
+      - upload
     RelationEnum:
       enum:
       - head

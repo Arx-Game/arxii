@@ -9,6 +9,8 @@ import type { AtlasViewKind } from './useAtlasState';
 
 /** Mirrors `world.areas.constants.AreaLevel.BUILDING` (see `../types.ts`'s `AREA_LEVELS`). */
 export const BUILDING_LEVEL = 10;
+/** Mirrors `AreaLevel.BARONY`: the smallest area with a footprint on the world map (#4242). */
+export const BARONY_LEVEL = 40;
 
 /**
  * A BUILDING-level area holds rooms directly — its Atlas view is the room

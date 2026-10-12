@@ -9,6 +9,7 @@ from world.areas.positioning.models import (
     RampartElementProfile,
     RampartElementResistance,
 )
+from world.areas.worldmap.models import RegionMap, RegionMapUpload
 
 
 @admin.register(Area)
@@ -116,3 +117,38 @@ class RampartElementResistanceAdmin(admin.ModelAdmin):
     search_fields = ["profile__name"]
     list_select_related = ["profile", "damage_type"]
     autocomplete_fields = ["profile", "damage_type"]
+
+
+# ---------------------------------------------------------------------------
+# #4242 - the world map: region maps and their kept uploads (pips are not
+# browsed here; the Atlas's region-map view is their surface)
+# ---------------------------------------------------------------------------
+
+
+class RegionMapUploadInline(admin.TabularInline):
+    model = RegionMapUpload
+    extra = 0
+    can_delete = False
+    fields = [
+        "file_name",
+        "byte_size",
+        "generator_version",
+        "source_width_px",
+        "source_height_px",
+        "uploaded_by",
+        "uploaded_at",
+        "rasterized_at",
+    ]
+    readonly_fields = fields
+
+    def has_add_permission(self, request, obj=None) -> bool:  # noqa: ARG002
+        return False
+
+
+@admin.register(RegionMap)
+class RegionMapAdmin(admin.ModelAdmin):
+    list_display = ["name", "area", "anchor_x", "anchor_y", "width_cells", "height_cells"]
+    search_fields = ["name"]
+    autocomplete_fields = ["area", "created_by"]
+    readonly_fields = ["height_cells", "created_at"]
+    inlines = [RegionMapUploadInline]

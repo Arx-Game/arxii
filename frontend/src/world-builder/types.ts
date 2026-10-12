@@ -55,7 +55,10 @@ export type WorldBuilderActionKey =
   | 'staff_place_clue_trigger'
   | 'staff_remove_clue_trigger'
   | 'staff_place_portal_anchor'
-  | 'staff_remove_portal_anchor';
+  | 'staff_remove_portal_anchor'
+  | 'atlas_create_region_map'
+  | 'atlas_carve_footprint'
+  | 'atlas_paint_terrain';
 
 /** Selection-time room detail (#3269) — mirrors WorldBuilderRoomDetailSerializer. */
 export type WorldBuilderBreadcrumbEntry = components['schemas']['WorldBuilderBreadcrumb'];
@@ -136,3 +139,60 @@ export const TIME_PHASES: { value: string; label: string }[] = [
   { value: 'dusk', label: 'Dusk' },
   { value: 'night', label: 'Night' },
 ];
+
+/** The world map (#4242): a region on the world grid of 10-mile pips. */
+export interface RegionMapUploadSummary {
+  id: number;
+  file_name: string;
+  byte_size: number;
+  generator_version: string;
+  source_width_px: number;
+  source_height_px: number;
+  uploaded_by_name: string;
+  uploaded_at: string;
+  rasterized_at: string | null;
+}
+
+export interface RegionMapSummary {
+  id: number;
+  name: string;
+  area: number | null;
+  area_name: string;
+  anchor_x: number;
+  anchor_y: number;
+  width_cells: number;
+  height_cells: number;
+  pips_per_cell: number;
+  created_at: string;
+  latest_upload: RegionMapUploadSummary | null;
+}
+
+/** One pip row of the pips payload: `[x, y, terrain, river]`. */
+export type RegionMapPipRow = [number, number, string, boolean];
+
+export interface RegionMapFootprint {
+  area_id: number;
+  name: string;
+  level: number;
+  level_display: string;
+  parent_id: number | null;
+  realm_id: number | null;
+  holder_org_id: number | null;
+  holder_name: string;
+  title_id: number | null;
+  seat: [number, number] | null;
+  pips: [number, number][];
+}
+
+export interface RegionMapPips {
+  region: RegionMapSummary;
+  terrains: string[];
+  pips: RegionMapPipRow[];
+  footprints: RegionMapFootprint[];
+}
+
+export interface RegionMapUploadResult {
+  upload: RegionMapUploadSummary;
+  pip_count: number;
+  region: RegionMapSummary;
+}

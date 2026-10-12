@@ -21,7 +21,13 @@ vi.mock('@/store/hooks', async (importOriginal) => {
   };
 });
 
+vi.mock('../../useWorldBuilderActor', () => ({
+  useWorldBuilderActor: () => 7,
+}));
+
 vi.mock('../../queries', () => ({
+  useRegionMapsQuery: vi.fn(() => ({ data: [] })),
+  useWorldBuilderAction: vi.fn(() => ({ mutateAsync: vi.fn() })),
   useWorldBuilderAreasQuery: vi.fn(),
   useAreaManagerQuery: vi.fn(),
   useUnfiledRoomsQuery: vi.fn(),

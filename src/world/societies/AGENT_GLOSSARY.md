@@ -245,7 +245,7 @@ roster glossary — a different concept entirely).
 The authored catalog of what a demesne's ground looks like (Coast, Reefs, Hills, Volcanic, Marsh,
 Forest) — `NaturalKeyMixin` + `CreditedContent`, in `CONTENT_MODELS`, M2M on `Domain.land_shapes`,
 picked via `describe_demesne`'s `land_shape_names`.
-_Avoid_: terrain type, biome (no mechanical weight — flavor only, unlike e.g. domain crisis types).
+_Avoid_: terrain type, biome (no mechanical weight — flavor only, unlike e.g. domain crisis types). The world map's per-pip `Terrain` (`world.areas.worldmap`, #4242) is geography, a different thing.
 
 **Demesne** (#3983):
 How much land a house directly holds and rules in person — on a ladder row, the COUNT of

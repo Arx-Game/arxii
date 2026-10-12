@@ -1284,6 +1284,16 @@ buildings up to entire planes. A `Room` is not its own `Area` level — it hangs
 rooms through the Atlas's Unfiled rooms listing (`unfiled-rooms`); owner and story links stay
 symmetric.
 
+- **World map (#4242, ADR-0328):** `RegionMap` (a region on the one world grid: anchor cell,
+  width in cells), `RegionMapUpload` (every uploaded Fantasy Map Generator file, kept whole as
+  gzip bytes), `TerrainPip` (one 10-mile pip: `Terrain`, height, river, `PipSource`
+  generator/staff) and `AreaFootprintPip` (one row per pip naming its lowest holder; every
+  ancestor's footprint is derived by walking `Area.parent`, so containment holds by construction). `worldmap/azgaar.py` rasterizes the file's
+  grid arrays and river paths; `worldmap/services.py` carries `create_region_map`,
+  `import_region_map_file`, `paint_terrain`, `set_footprint`, `holder_at`, `region_read`;
+  actions `atlas_create_region_map`/`atlas_carve_footprint`/`atlas_paint_terrain`; the staff
+  `region-maps` API (upload, pips, file) on the world-builder router; the Atlas's region-map
+  view. See `docs/systems/areas.md` "World map".
 - **Models:** `Area` (nullable `grid_x`/`grid_y` parent-local rendering coordinates,
   #2223; `slug` unique `SlugField` + `NaturalKeyMixin` (`NaturalKeyConfig.fields =
   ["slug"]`) + `origin` (`GridOrigin`), #2436/#2448), `AreaClosure` (unmanaged,

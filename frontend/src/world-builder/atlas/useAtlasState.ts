@@ -16,7 +16,7 @@ import { useCallback, useEffect, useState } from 'react';
 
 import { useAccount } from '@/store/hooks';
 
-export type AtlasViewKind = 'area' | 'roomgrid' | 'roomdoc' | 'areadoc';
+export type AtlasViewKind = 'area' | 'roomgrid' | 'roomdoc' | 'areadoc' | 'regionmap';
 
 export interface AtlasView {
   kind: AtlasViewKind;

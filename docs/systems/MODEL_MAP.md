@@ -460,6 +460,8 @@
   - children <- areas.Area
   - quality <- areas.AreaQuality
   - cleanup_projects <- areas.CleanupProjectDetails
+  - region_maps <- areas.RegionMap
+  - footprint <- areas.AreaFootprintPip
   - weather_state <- weather.RegionWeatherState
   - battles <- battles.Battle
   - city_defense_projects <- battles.CityDefenseDetails
@@ -503,6 +505,10 @@
   - descendant -> areas.Area [FK]
 
 ### AreaElevationRequirement
+
+### AreaFootprintPip
+**Foreign Keys:**
+  - area -> areas.Area [FK]
 
 ### AreaQuality
 **Foreign Keys:**
@@ -604,6 +610,23 @@
 **Foreign Keys:**
   - profile -> areas.RampartElementProfile [FK]
   - damage_type -> conditions.DamageType [FK]
+
+### RegionMap
+**Foreign Keys:**
+  - area -> areas.Area [FK] (nullable)
+  - created_by -> evennia.AccountDB [FK] (nullable)
+**Pointed to by:**
+  - uploads <- areas.RegionMapUpload
+  - pips <- areas.TerrainPip
+
+### RegionMapUpload
+**Foreign Keys:**
+  - region -> areas.RegionMap [FK]
+  - uploaded_by -> evennia.AccountDB [FK] (nullable)
+
+### TerrainPip
+**Foreign Keys:**
+  - region -> areas.RegionMap [FK]
 
 ### Service Functions
 - `area_for_scene(scene: 'Scene | None') -> 'Area | None' - Resolve the Area for a scene's location, or None.`
