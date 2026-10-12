@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable, Iterator
 from dataclasses import dataclass
 from typing import Any, ClassVar
 
+from django.db.models import Q
 from evennia.objects.models import ObjectDB
 
 from actions.base import Action
@@ -64,6 +66,7 @@ from flows.service_functions.inventory import (
     validate_take_out,
     validate_unequip,
 )
+from world.forms.models import FormTraitOption
 from world.gm.constants import GMLevel
 from world.items.constants import ContainerAccessPolicy
 from world.items.exceptions import (
@@ -161,7 +164,7 @@ class EquipAction(_EquipmentAction):
     objectdb_target_kwargs: ClassVar[frozenset[str]] = frozenset({"target"})
     missing_target_message: ClassVar[str] = "Equip what?"
     invalid_target_message: ClassVar[str] = "That can't be equipped."
-    validate = staticmethod(validate_equip)
+    validate: ClassVar[Callable[[CharacterState, ItemState], None]] = staticmethod(validate_equip)
 
     def is_applicable(self, actor: ObjectDB, *, kwargs: dict[str, Any]) -> bool:
         item = _equipment_item(actor, kwargs)
@@ -194,7 +197,7 @@ class UnequipAction(_EquipmentAction):
     objectdb_target_kwargs: ClassVar[frozenset[str]] = frozenset({"target"})
     missing_target_message: ClassVar[str] = "Remove what?"
     invalid_target_message: ClassVar[str] = "That can't be removed."
-    validate = staticmethod(validate_unequip)
+    validate: ClassVar[Callable[[CharacterState, ItemState], None]] = staticmethod(validate_unequip)
 
     def is_applicable(self, actor: ObjectDB, *, kwargs: dict[str, Any]) -> bool:
         item = _equipment_item(actor, kwargs)
@@ -615,7 +618,7 @@ class StealAction(_TakingAction):
     allowed_target_kinds: ClassVar[frozenset[MenuTargetKind]] = _STEAL_TARGET_KINDS
     missing_target_message: ClassVar[str] = "Steal what?"
     invalid_target_message: ClassVar[str] = "That can't be stolen."
-    validate = staticmethod(validate_steal)
+    validate: ClassVar[Callable[[CharacterState, ItemState], None]] = staticmethod(validate_steal)
 
     def get_prerequisites(self) -> list[Prerequisite]:
         return [*super().get_prerequisites(), CanStealPrerequisite()]
@@ -901,7 +904,7 @@ class UseItemAction(Action):
             "blend": blend,
         }
 
-    def use_candidate_page(  # noqa: C901, PLR0912, PLR0915
+    def use_candidate_page(
         self,
         actor: ObjectDB,
         *,
@@ -910,10 +913,6 @@ class UseItemAction(Action):
         page_size: int,
     ) -> tuple[tuple[dict[str, Any], ...], tuple[int, int, int] | None]:
         """Read a bounded target/option product page in lexicographic ID order."""
-        from django.db.models import Q  # noqa: PLC0415
-
-        from world.forms.models import FormTraitOption  # noqa: PLC0415
-
         if MENU_TARGET_KEY not in kwargs:
             return (), None
         item = use_source(actor, kwargs)
@@ -929,142 +928,79 @@ class UseItemAction(Action):
             else (set(), set())
         )
 
-        effect = item.template.appearance_effects.filter(target_option__isnull=True).first()
-        if effect is None:
-            option_ids = None
-        elif OPTION_ID_KEY in kwargs:
-            option_id = kwargs[OPTION_ID_KEY]
-            if type(option_id) is not int or option_id <= 0:
-                return (), None
-            option = (
-                FormTraitOption.objects.filter(pk=option_id, trait_id=effect.trait_id)
-                .values_list("pk", "sort_order", "display_name")
-                .first()
-            )
-            if option is None:
-                return (), None
-            option_ids = (option,)
-        else:
-            option_ids = (
-                FormTraitOption.objects.filter(trait_id=effect.trait_id)
-                .order_by("sort_order", "pk")
-                .values_list("pk", "sort_order", "display_name")
-            )
+        option_ids = _use_candidate_option_ids(item, kwargs)
 
-        page_option_rows = None
-        cursor_option_rows = None
-        if option_ids is not None and not isinstance(option_ids, tuple):
-            page_option_rows = tuple(option_ids[: page_size + 1])
-            if not page_option_rows:
-                return (), None
-            if after is not None:
-                cursor_option_rows = tuple(
-                    option_ids.filter(
-                        Q(sort_order__gt=after[1]) | Q(sort_order=after[1], pk__gt=after[2])
-                    )[: page_size + 1]
-                )
-
-        fixed_target = USE_TARGET_KEY in kwargs or kind is None
-        target_kind = kind
-        if fixed_target:
-            wire = kwargs.get(USE_TARGET_KEY)
-            target_id = wire.get("target_id", 0) if isinstance(wire, dict) else 0
-            target_ids = (target_id,)
-        elif kind == TargetKind.ITEM:
-            scope = Q(game_object__db_location=actor)
-            if actor.location is not None:
-                scope |= Q(game_object__db_location=actor.location)
-            target_ids = (
-                ItemInstance.objects.in_play()
-                .filter(scope, contained_in__isnull=True, game_object__isnull=False)
-                .order_by("pk")
-                .values_list("pk", flat=True)
-            )
-        elif actor.location is not None:
-            scope = Q(db_location=actor.location)
-            if kind == TargetKind.ROOM:
-                scope |= Q(pk=actor.location.pk)
-            target_ids = ObjectDB.objects.filter(scope).order_by("pk").values_list("pk", flat=True)
-        else:
+        option_window = _use_option_window(option_ids, after, page_size)
+        if option_window is None:
             return (), None
 
-        if fixed_target:
-            target_iterator = iter(target_ids)
-        else:
-            if after is not None and after[0] > 0:
-                target_ids = target_ids.filter(pk__gte=after[0])
-            target_iterator = target_ids.iterator(chunk_size=page_size)
+        target_iterator = _use_candidate_target_ids(
+            actor, kwargs, kind, after=after, page_size=page_size
+        )
 
         rows = []
-        raw_count = 0
         last_pair = after
         has_more = False
-        for raw_target_id in target_iterator:
-            target_id = int(raw_target_id)
-            if option_ids is None:
-                if after is not None and after[0] == target_id:
-                    continue
-                page_options = ((None, 0, ""),)
-            elif isinstance(option_ids, tuple):
-                page_options = tuple(
-                    option
-                    for option in option_ids
-                    if after is None
-                    or target_id != after[0]
-                    or (option[1], option[0]) > (after[1], after[2])
-                )
-            else:
-                remaining = page_size - raw_count
-                options = (
-                    cursor_option_rows
-                    if after is not None and target_id == after[0]
-                    else page_option_rows
-                )
-                page_options = options[: remaining + 1]
-            if not page_options:
-                continue
-            for option_id, option_sort_order, option_name in page_options:
-                if raw_count >= page_size:
-                    has_more = True
-                    break
-                raw_count += 1
-                last_pair = (target_id, option_sort_order, option_id or 0)
-                if fixed_target:
-                    wire = kwargs.get(USE_TARGET_KEY)
-                elif target_kind == TargetKind.ITEM:
-                    wire = {"kind": "items", "target_id": target_id}
-                else:
-                    wire = {"kind": "objects", "target_id": target_id}
-                values = dict(kwargs)
-                if wire is not None:
-                    values[USE_TARGET_KEY] = dict(wire)
-                if option_id is not None:
-                    values[OPTION_ID_KEY] = option_id
-                target, reason = use_target(actor, values, item)
-                if reason:
-                    continue
-                checked = self.check_availability(
-                    actor, context={"kwargs": values}, pending_inputs=frozenset()
-                )
-                rows.append(
-                    {
-                        "use_target": wire,
-                        "target_name": (
-                            "Yourself"
-                            if target is None
-                            else target_label(actor, target, viewer_context=viewer_context)
-                        ),
-                        "option_id": option_id,
-                        "option_name": option_name,
-                        "available": checked.available,
-                        "reasons": list(checked.reasons),
-                    }
-                )
-            if has_more:
+        pairs = _raw_use_pairs(
+            target_iterator,
+            option_ids,
+            after,
+            option_window=option_window,
+            page_size=page_size,
+        )
+        for raw_count, (target_id, option_id, option_sort_order, option_name) in enumerate(pairs):
+            if raw_count >= page_size:
+                has_more = True
                 break
-            if fixed_target:
-                break
+            last_pair = (target_id, option_sort_order, option_id or 0)
+            row = self._checked_use_candidate(
+                actor, item, kwargs, (target_id, option_id, option_name), viewer_context
+            )
+            if row is not None:
+                rows.append(row)
         return tuple(rows), last_pair if has_more else None
+
+    def _checked_use_candidate(
+        self,
+        actor: ObjectDB,
+        item: ItemInstance,
+        kwargs: dict[str, Any],
+        pair: tuple[int, int | None, str],
+        viewer_context: tuple[set[int], set[int]],
+    ) -> dict[str, Any] | None:
+        """Resolve and check one raw pair without changing pagination accounting."""
+        target_id, option_id, option_name = pair
+        kind = item.template.on_use_target_kind
+        fixed_target = USE_TARGET_KEY in kwargs or kind is None
+        if fixed_target:
+            wire = kwargs.get(USE_TARGET_KEY)
+        elif kind == TargetKind.ITEM:
+            wire = {"kind": "items", "target_id": target_id}
+        else:
+            wire = {"kind": "objects", "target_id": target_id}
+        values = dict(kwargs)
+        if wire is not None:
+            values[USE_TARGET_KEY] = dict(wire)
+        if option_id is not None:
+            values[OPTION_ID_KEY] = option_id
+        target, reason = use_target(actor, values, item)
+        if reason:
+            return None
+        checked = self.check_availability(
+            actor, context={"kwargs": values}, pending_inputs=frozenset()
+        )
+        return {
+            "use_target": wire,
+            "target_name": (
+                "Yourself"
+                if target is None
+                else target_label(actor, target, viewer_context=viewer_context)
+            ),
+            "option_id": option_id,
+            "option_name": option_name,
+            "available": checked.available,
+            "reasons": list(checked.reasons),
+        }
 
     def use_candidates(
         self, actor: ObjectDB, *, kwargs: dict[str, Any]
@@ -1139,47 +1075,18 @@ class UseItemAction(Action):
                     success=False, message=intent.cancel_message or "Something prevents you."
                 )
             source_context.kwargs["target"] = intent.item_target
-            if intent.use_target is not original_wire:
-                context.kwargs["use_target"] = intent.use_target
-            elif intent.target is not effect_target:
-                redirected = intent.target
-                if type(redirected) is int and redirected > 0:
-                    redirected = ObjectDB.objects.filter(pk=redirected).first()
-                if isinstance(redirected, ObjectDB):
-                    redirected_item = resolve_item_instance(redirected)
-                    is_item = (
-                        item is not None and item.template.on_use_target_kind == TargetKind.ITEM
-                    )
-                    context.kwargs["use_target"] = (
-                        {"kind": "items", "target_id": redirected_item.pk}
-                        if is_item and redirected_item is not None
-                        else {"kind": "objects", "target_id": redirected.pk}
-                    )
-                else:
-                    context.kwargs["use_target"] = None
-            for name, value in (
-                ("option_id", intent.option_id),
-                ("descriptor", intent.descriptor),
-                ("blend", intent.blend),
-            ):
-                if (
-                    name in context.kwargs
-                    or (value is not None and name != BLEND_KEY)
-                    or (name == BLEND_KEY and value is not False)
-                ):
-                    context.kwargs[name] = value
+            _apply_use_target_redirect(context, intent, original_wire, effect_target, item)
+            _apply_use_intent_fields(context, intent)
             return None
 
         cancelled = emit_typed_item_intent(bound_context, actor, emit_use_intent)
         context.kwargs[MENU_TARGET_KEY] = bound_context.kwargs.get(MENU_TARGET_KEY)
         return cancelled
 
-    def execute(
-        self,
-        actor: ObjectDB,
-        context: ActionContext | None = None,
-        **kwargs: Any,
-    ) -> ActionResult:
+    def _checked_use_execution(
+        self, actor: ObjectDB, context: ActionContext | None, kwargs: dict[str, Any]
+    ) -> ActionResult | None:
+        """Check before and after actor initialization, without spending the item."""
         for initialize in (False, True):
             checked = self.check_availability(
                 actor,
@@ -1192,6 +1099,17 @@ class UseItemAction(Action):
             if not initialize:
                 sdm = context.scene_data if context else SceneDataManager()
                 sdm.initialize_state_for_object(actor)
+        return None
+
+    def execute(
+        self,
+        actor: ObjectDB,
+        context: ActionContext | None = None,
+        **kwargs: Any,
+    ) -> ActionResult:
+        refusal = self._checked_use_execution(actor, context, kwargs)
+        if refusal is not None:
+            return refusal
         item_instance = use_source(actor, kwargs)
         if item_instance is None:
             return ActionResult(success=False, message=UNAVAILABLE)
@@ -1377,3 +1295,184 @@ class GrantItemAction(Action):
             character_sheet=sheet, template=template, granted_by=granted_by
         )
         return ActionResult(success=True, message=f"Granted '{template.name}' to {target.key}.")
+
+
+def _use_candidate_option_ids(item: ItemInstance, kwargs: dict[str, Any]) -> Any:
+    """Read an explicit cosmetic option or the ordered authored option query."""
+    effect = item.template.appearance_effects.filter(target_option__isnull=True).first()
+    if effect is None:
+        option_ids = None
+    elif OPTION_ID_KEY in kwargs:
+        option_id = kwargs[OPTION_ID_KEY]
+        if type(option_id) is not int or option_id <= 0:
+            return ()
+        option = (
+            FormTraitOption.objects.filter(pk=option_id, trait_id=effect.trait_id)
+            .values_list("pk", "sort_order", "display_name")
+            .first()
+        )
+        if option is None:
+            return ()
+        option_ids = (option,)
+    else:
+        option_ids = (
+            FormTraitOption.objects.filter(trait_id=effect.trait_id)
+            .order_by("sort_order", "pk")
+            .values_list("pk", "sort_order", "display_name")
+        )
+
+    return option_ids
+
+
+def _use_candidate_target_ids(
+    actor: ObjectDB,
+    kwargs: dict[str, Any],
+    kind: str | None,
+    *,
+    after: tuple[int, int, int] | None,
+    page_size: int,
+) -> Iterator[int]:
+    """Stream current source-scope IDs, retaining the cursor target for remaining options."""
+    fixed_target = USE_TARGET_KEY in kwargs or kind is None
+    if fixed_target:
+        wire = kwargs.get(USE_TARGET_KEY)
+        target_id = wire.get("target_id", 0) if isinstance(wire, dict) else 0
+        return iter((target_id,))
+    if kind == TargetKind.ITEM:
+        scope = Q(game_object__db_location=actor)
+        if actor.location is not None:
+            scope |= Q(game_object__db_location=actor.location)
+        target_ids = (
+            ItemInstance.objects.in_play()
+            .filter(scope, contained_in__isnull=True, game_object__isnull=False)
+            .order_by("pk")
+            .values_list("pk", flat=True)
+        )
+    elif actor.location is not None:
+        scope = Q(db_location=actor.location)
+        if kind == TargetKind.ROOM:
+            scope |= Q(pk=actor.location.pk)
+        target_ids = ObjectDB.objects.filter(scope).order_by("pk").values_list("pk", flat=True)
+    else:
+        return iter(())
+
+    if after is not None and after[0] > 0:
+        target_ids = target_ids.filter(pk__gte=after[0])
+    return target_ids.iterator(chunk_size=page_size)
+
+
+def _use_options_for_target(
+    option_ids: Any,
+    target_id: int,
+    after: tuple[int, int, int] | None,
+    *,
+    option_window: tuple[Any, Any],
+    remaining: int,
+) -> Any:
+    """Read only the bounded option window after this target's lexicographic cursor."""
+    page_option_rows, cursor_option_rows = option_window
+    if option_ids is None:
+        if after is not None and after[0] == target_id:
+            return ()
+        page_options = ((None, 0, ""),)
+    elif isinstance(option_ids, tuple):
+        page_options = tuple(
+            option
+            for option in option_ids
+            if after is None
+            or target_id != after[0]
+            or (option[1], option[0]) > (after[1], after[2])
+        )
+    else:
+        options = (
+            cursor_option_rows if after is not None and target_id == after[0] else page_option_rows
+        )
+        page_options = options[: remaining + 1]
+    return page_options
+
+
+def _apply_use_target_redirect(
+    context: ActionContext,
+    intent: UseIntentPayload,
+    original_wire: Any,
+    effect_target: ObjectDB | None,
+    item: ItemInstance | None,
+) -> None:
+    """Give an explicit changed wire precedence over an event's ObjectDB redirect."""
+    if intent.use_target is not original_wire:
+        context.kwargs["use_target"] = intent.use_target
+    elif intent.target is not effect_target:
+        redirected = intent.target
+        if type(redirected) is int and redirected > 0:
+            redirected = ObjectDB.objects.filter(pk=redirected).first()
+        if isinstance(redirected, ObjectDB):
+            redirected_item = resolve_item_instance(redirected)
+            is_item = item is not None and item.template.on_use_target_kind == TargetKind.ITEM
+            context.kwargs["use_target"] = (
+                {"kind": "items", "target_id": redirected_item.pk}
+                if is_item and redirected_item is not None
+                else {"kind": "objects", "target_id": redirected.pk}
+            )
+        else:
+            context.kwargs["use_target"] = None
+
+
+def _raw_use_pairs(
+    target_iterator: Iterator[int],
+    option_ids: Any,
+    after: tuple[int, int, int] | None,
+    *,
+    option_window: tuple[Any, Any],
+    page_size: int,
+) -> Iterator[tuple[int, int | None, int, str]]:
+    """Yield one lookahead pair without scanning past the bounded raw page."""
+    raw_count = 0
+    for raw_target_id in target_iterator:
+        target_id = int(raw_target_id)
+        options = _use_options_for_target(
+            option_ids,
+            target_id,
+            after,
+            option_window=option_window,
+            remaining=page_size - raw_count,
+        )
+        for option_id, sort_order, name in options:
+            yield target_id, option_id, sort_order, name
+            raw_count += 1
+
+
+def _use_option_window(
+    option_ids: Any, after: tuple[int, int, int] | None, page_size: int
+) -> tuple[Any, Any] | None:
+    """Read bounded first-target and continuation windows, once per menu page."""
+    if isinstance(option_ids, tuple) and not option_ids:
+        return None
+    page_option_rows = None
+    cursor_option_rows = None
+    if option_ids is not None and not isinstance(option_ids, tuple):
+        page_option_rows = tuple(option_ids[: page_size + 1])
+        if not page_option_rows:
+            return None
+        if after is not None:
+            cursor_option_rows = tuple(
+                option_ids.filter(
+                    Q(sort_order__gt=after[1]) | Q(sort_order=after[1], pk__gt=after[2])
+                )[: page_size + 1]
+            )
+
+    return page_option_rows, cursor_option_rows
+
+
+def _apply_use_intent_fields(context: ActionContext, intent: UseIntentPayload) -> None:
+    """Retain explicit optional fields and meaningful event changes to defaults."""
+    for name, value in (
+        ("option_id", intent.option_id),
+        ("descriptor", intent.descriptor),
+        ("blend", intent.blend),
+    ):
+        if (
+            name in context.kwargs
+            or (value is not None and name != BLEND_KEY)
+            or (name == BLEND_KEY and value is not False)
+        ):
+            context.kwargs[name] = value

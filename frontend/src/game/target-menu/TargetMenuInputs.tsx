@@ -225,61 +225,19 @@ export function TargetMenuInputs({
         <DialogHeader>
           <DialogTitle>{presentation.title}</DialogTitle>
           <DialogDescription>{presentation.description}</DialogDescription>
-          {isLoading ? <p role="status">Loading current choices…</p> : null}
-          {error ? <p role="alert">{choiceErrorMessage(error)}</p> : null}
-          {!isLoading && !error && !activeEntry ? (
-            <p role="alert">These choices are no longer available. Close and reopen the menu.</p>
-          ) : null}
+          <ChoiceReadStatus isLoading={isLoading} error={error} activeEntry={activeEntry} />
         </DialogHeader>
         <div className="space-y-4">
           {requiredInputs.length > 0 ? (
             <div className="space-y-2">
-              <fieldset className="max-h-60 space-y-2 overflow-y-auto" aria-label={choiceLabel}>
-                <legend className="sr-only">{choiceLabel}</legend>
-                {candidatePages
-                  .filter(
-                    (candidate) =>
-                      !candidate.available ||
-                      eligibleCandidates.some((eligible) => eligible.key === candidate.key)
-                  )
-                  .map((candidate) => {
-                    const isEligible = eligibleCandidates.some(
-                      (eligible) => eligible.key === candidate.key
-                    );
-                    const isSelected = isEligible && candidate.key === candidateKey;
-                    return (
-                      <label
-                        key={candidate.key}
-                        className={[
-                          'flex w-full items-start gap-3 rounded-md border px-3 py-2 text-sm',
-                          isEligible ? 'cursor-pointer' : 'cursor-not-allowed opacity-60',
-                          isSelected ? 'border-primary bg-primary/5' : '',
-                          isEligible && !isSelected ? 'hover:bg-muted/50' : '',
-                        ]
-                          .filter(Boolean)
-                          .join(' ')}
-                      >
-                        <input
-                          type="radio"
-                          name={`target-menu-${entry.key}`}
-                          value={candidate.key}
-                          checked={isSelected}
-                          disabled={!isEligible}
-                          onChange={() => setSelectedKey(candidate.key)}
-                          className="mt-0.5"
-                        />
-                        <span className="min-w-0">
-                          <span className="block">{candidate.label}</span>
-                          {!isEligible && candidate.reasons.length > 0 ? (
-                            <span className="block text-xs text-muted-foreground">
-                              {candidate.reasons.join('; ')}
-                            </span>
-                          ) : null}
-                        </span>
-                      </label>
-                    );
-                  })}
-              </fieldset>
+              <CandidateChoices
+                candidates={candidatePages}
+                eligibleCandidates={eligibleCandidates}
+                candidateKey={candidateKey}
+                entryKey={entry.key}
+                choiceLabel={choiceLabel}
+                onSelect={setSelectedKey}
+              />
               {nextCandidateCursor !== null ? (
                 <Button
                   type="button"
@@ -298,40 +256,22 @@ export function TargetMenuInputs({
               ) : null}
             </div>
           ) : null}
-          {optionalInputs.some((input) => input.name === 'descriptor') ? (
-            <label className="block space-y-1 text-sm">
-              <span>Appearance description (optional)</span>
-              <input
-                className="min-h-10 w-full rounded-md border bg-background px-3"
-                value={descriptor}
-                onChange={(event) => setDescriptor(event.target.value)}
-              />
-            </label>
-          ) : null}
-          {optionalInputs.some((input) => input.name === 'blend') ? (
-            <label className="flex items-center gap-2 text-sm">
-              <input
-                type="checkbox"
-                checked={blend}
-                onChange={(event) => setBlend(event.target.checked)}
-              />
-              Blend with existing appearance
-            </label>
-          ) : null}
-          {!isLoading &&
-          !error &&
-          activeEntry &&
-          requiredInputs.length > 0 &&
-          eligibleCandidates.length === 0 ? (
-            <p role="status" className="text-sm text-muted-foreground">
-              {candidatePages
-                .flatMap((candidate: TargetMenuCandidate) => candidate.reasons)
-                .join(' ') ||
-                (nextCandidateCursor !== null
-                  ? 'More choices may be available.'
-                  : 'No choices are available.')}
-            </p>
-          ) : null}
+          <OptionalUseFields
+            inputs={optionalInputs}
+            descriptor={descriptor}
+            blend={blend}
+            onDescriptor={setDescriptor}
+            onBlend={setBlend}
+          />
+          <ChoiceAvailability
+            isLoading={isLoading}
+            error={error}
+            activeEntry={activeEntry}
+            requiredCount={requiredInputs.length}
+            eligibleCount={eligibleCandidates.length}
+            candidates={candidatePages}
+            nextCursor={nextCandidateCursor}
+          />
         </div>
         <DialogFooter>
           <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
@@ -343,5 +283,156 @@ export function TargetMenuInputs({
         </DialogFooter>
       </DialogContent>
     </Dialog>
+  );
+}
+
+function CandidateChoices({
+  candidates,
+  eligibleCandidates,
+  candidateKey,
+  entryKey,
+  choiceLabel,
+  onSelect,
+}: {
+  candidates: TargetMenuCandidate[];
+  eligibleCandidates: TargetMenuCandidate[];
+  candidateKey: string;
+  entryKey: string;
+  choiceLabel: string;
+  onSelect: (key: string) => void;
+}) {
+  return (
+    <fieldset className="max-h-60 space-y-2 overflow-y-auto" aria-label={choiceLabel}>
+      <legend className="sr-only">{choiceLabel}</legend>
+      {candidates
+        .filter(
+          (candidate) =>
+            !candidate.available ||
+            eligibleCandidates.some((eligible) => eligible.key === candidate.key)
+        )
+        .map((candidate) => {
+          const isEligible = eligibleCandidates.some((eligible) => eligible.key === candidate.key);
+          const isSelected = isEligible && candidate.key === candidateKey;
+          return (
+            <label
+              key={candidate.key}
+              className={[
+                'flex w-full items-start gap-3 rounded-md border px-3 py-2 text-sm',
+                isEligible ? 'cursor-pointer' : 'cursor-not-allowed opacity-60',
+                isSelected ? 'border-primary bg-primary/5' : '',
+                isEligible && !isSelected ? 'hover:bg-muted/50' : '',
+              ]
+                .filter(Boolean)
+                .join(' ')}
+            >
+              <input
+                type="radio"
+                name={`target-menu-${entryKey}`}
+                value={candidate.key}
+                checked={isSelected}
+                disabled={!isEligible}
+                onChange={() => onSelect(candidate.key)}
+                className="mt-0.5"
+              />
+              <span className="min-w-0">
+                <span className="block">{candidate.label}</span>
+                {!isEligible && candidate.reasons.length > 0 ? (
+                  <span className="block text-xs text-muted-foreground">
+                    {candidate.reasons.join('; ')}
+                  </span>
+                ) : null}
+              </span>
+            </label>
+          );
+        })}
+    </fieldset>
+  );
+}
+
+function ChoiceReadStatus({
+  isLoading,
+  error,
+  activeEntry,
+}: {
+  isLoading: boolean;
+  error: unknown;
+  activeEntry: TargetMenuEntry | null;
+}) {
+  return (
+    <>
+      {isLoading ? <p role="status">Loading current choices…</p> : null}
+      {error ? <p role="alert">{choiceErrorMessage(error)}</p> : null}
+      {!isLoading && !error && !activeEntry ? (
+        <p role="alert">These choices are no longer available. Close and reopen the menu.</p>
+      ) : null}
+    </>
+  );
+}
+
+function OptionalUseFields({
+  inputs,
+  descriptor,
+  blend,
+  onDescriptor,
+  onBlend,
+}: {
+  inputs: TargetMenuEntry['inputs'];
+  descriptor: string;
+  blend: boolean;
+  onDescriptor: (value: string) => void;
+  onBlend: (value: boolean) => void;
+}) {
+  return (
+    <>
+      {inputs.some((input) => input.name === 'descriptor') ? (
+        <label className="block space-y-1 text-sm">
+          <span>Appearance description (optional)</span>
+          <input
+            className="min-h-10 w-full rounded-md border bg-background px-3"
+            value={descriptor}
+            onChange={(event) => onDescriptor(event.target.value)}
+          />
+        </label>
+      ) : null}
+      {inputs.some((input) => input.name === 'blend') ? (
+        <label className="flex items-center gap-2 text-sm">
+          <input
+            type="checkbox"
+            checked={blend}
+            onChange={(event) => onBlend(event.target.checked)}
+          />
+          Blend with existing appearance
+        </label>
+      ) : null}
+    </>
+  );
+}
+
+function ChoiceAvailability({
+  isLoading,
+  error,
+  activeEntry,
+  requiredCount,
+  eligibleCount,
+  candidates,
+  nextCursor,
+}: {
+  isLoading: boolean;
+  error: unknown;
+  activeEntry: TargetMenuEntry | null;
+  requiredCount: number;
+  eligibleCount: number;
+  candidates: TargetMenuCandidate[];
+  nextCursor: string | null;
+}) {
+  return (
+    <>
+      {!isLoading && !error && activeEntry && requiredCount > 0 && eligibleCount === 0 ? (
+        <p role="status" className="text-sm text-muted-foreground">
+          {candidates.flatMap((candidate: TargetMenuCandidate) => candidate.reasons).join(' ') ||
+            (nextCursor !== null ? 'More choices may be available.' : 'No choices are available.')}
+        </p>
+      ) : null}
+    </>
   );
 }

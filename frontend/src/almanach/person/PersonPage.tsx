@@ -78,7 +78,7 @@ export function PersonPage({ personId }: { personId: number }) {
       </div>
     );
   }
-  const { person, family, kin, house, titles, sheet, memberships, record: counts } = doc;
+  const { person, family, kin, house, titles, sheet } = doc;
   const currentTier = NPC_TIERS.indexOf(person.tier as (typeof NPC_TIERS)[number]);
 
   const save = () => {
@@ -131,34 +131,7 @@ export function PersonPage({ personId }: { personId: number }) {
     family &&
     (family.organization_id != null ? houseUrl(family.organization_id) : familyUrl(family.id));
 
-  const rows: RecordRailRow[] = [
-    {
-      label: 'NPC tier',
-      value: person.is_pc ? 'PC' : `${person.tier_display.number} · ${person.tier_display.label}`,
-    },
-    { label: 'status', value: statusMark(person.status) || 'Alive' },
-    {
-      label: 'family',
-      value: family ? `${family.name}${family.basis ? `, ${family.basis}` : ''}` : 'none',
-    },
-    {
-      label: 'house',
-      value: house ? `${house.name}${house.role ? `, ${house.role}` : ''}` : 'none',
-    },
-    { label: 'holds', value: titles.map((t) => t.name).join(', ') || 'none' },
-    { label: 'parents', value: counts.parents },
-    { label: 'siblings', value: counts.siblings },
-    { label: 'children', value: counts.children },
-    { label: 'unions', value: counts.unions },
-    { label: 'sheet', value: sheet.sheet_id ?? 'none' },
-    { label: 'hidden truths', value: counts.hidden_truths },
-  ];
-  const doors: RecordRailDoor[] = [];
-  if (family && familyLink) doors.push({ label: family.name, to: familyLink });
-  if (house) doors.push({ label: `${house.name} organization`, to: orgUrl(house.org_id) });
-  for (const t of titles) doors.push({ label: t.name, to: titleUrl(t.title_id) });
-  if (family) doors.push({ label: 'Public tree', to: `/families/${family.id}` });
-  for (const m of memberships) doors.push({ label: m.name, small: m.rank, to: orgUrl(m.org_id) });
+  const { rows, doors } = personRecordRail(doc);
 
   return (
     <div className="almanach">
@@ -174,34 +147,7 @@ export function PersonPage({ personId }: { personId: number }) {
         </span>
       </div>
       <div className="almanac">
-        <aside className="contents">
-          <ol>
-            <li className="cur">Person</li>
-            <li>
-              Family<small>{family ? family.name : 'none'}</small>
-            </li>
-            <li>
-              House<small>{house ? house.role || house.name : 'none'}</small>
-            </li>
-            <li>
-              Titles<small>{titles.length}</small>
-            </li>
-            <li>
-              Sheet<small>{sheet.sheet_id ? sheet.sheet_id : 'none'}</small>
-            </li>
-          </ol>
-          <div className="mv">
-            <span className="label">also in</span>
-            <ol>
-              <li>
-                Roster<small>{sheet.is_appable ? 'appable' : 'not appable'}</small>
-              </li>
-              <li>
-                Public tree<small>{family ? 'with the family' : 'none'}</small>
-              </li>
-            </ol>
-          </div>
-        </aside>
+        <PersonContents family={family} house={house} titles={titles} sheet={sheet} />
         <main className="chapter">
           <h3>
             {person.display_name}{' '}
@@ -588,4 +534,79 @@ export function PersonPage({ personId }: { personId: number }) {
       </div>
     </div>
   );
+}
+
+function PersonContents({
+  family,
+  house,
+  titles,
+  sheet,
+}: Pick<PersonDocument, 'family' | 'house' | 'titles' | 'sheet'>) {
+  return (
+    <aside className="contents">
+      <ol>
+        <li className="cur">Person</li>
+        <li>
+          Family<small>{family ? family.name : 'none'}</small>
+        </li>
+        <li>
+          House<small>{house ? house.role || house.name : 'none'}</small>
+        </li>
+        <li>
+          Titles<small>{titles.length}</small>
+        </li>
+        <li>
+          Sheet<small>{sheet.sheet_id ? sheet.sheet_id : 'none'}</small>
+        </li>
+      </ol>
+      <div className="mv">
+        <span className="label">also in</span>
+        <ol>
+          <li>
+            Roster<small>{sheet.is_appable ? 'appable' : 'not appable'}</small>
+          </li>
+          <li>
+            Public tree<small>{family ? 'with the family' : 'none'}</small>
+          </li>
+        </ol>
+      </div>
+    </aside>
+  );
+}
+
+function personRecordRail(doc: PersonDocument) {
+  const { person, family, house, titles, sheet, memberships, record: counts } = doc;
+  const familyLink =
+    family &&
+    (family.organization_id != null ? houseUrl(family.organization_id) : familyUrl(family.id));
+  const rows: RecordRailRow[] = [
+    {
+      label: 'NPC tier',
+      value: person.is_pc ? 'PC' : `${person.tier_display.number} · ${person.tier_display.label}`,
+    },
+    { label: 'status', value: statusMark(person.status) || 'Alive' },
+    {
+      label: 'family',
+      value: family ? `${family.name}${family.basis ? `, ${family.basis}` : ''}` : 'none',
+    },
+    {
+      label: 'house',
+      value: house ? `${house.name}${house.role ? `, ${house.role}` : ''}` : 'none',
+    },
+    { label: 'holds', value: titles.map((t) => t.name).join(', ') || 'none' },
+    { label: 'parents', value: counts.parents },
+    { label: 'siblings', value: counts.siblings },
+    { label: 'children', value: counts.children },
+    { label: 'unions', value: counts.unions },
+    { label: 'sheet', value: sheet.sheet_id ?? 'none' },
+    { label: 'hidden truths', value: counts.hidden_truths },
+  ];
+  const doors: RecordRailDoor[] = [];
+  if (family && familyLink) doors.push({ label: family.name, to: familyLink });
+  if (house) doors.push({ label: `${house.name} organization`, to: orgUrl(house.org_id) });
+  for (const t of titles) doors.push({ label: t.name, to: titleUrl(t.title_id) });
+  if (family) doors.push({ label: 'Public tree', to: `/families/${family.id}` });
+  for (const m of memberships) doors.push({ label: m.name, small: m.rank, to: orgUrl(m.org_id) });
+
+  return { rows, doors };
 }

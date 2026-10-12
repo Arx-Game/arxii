@@ -6,9 +6,8 @@ additionally checks the viewer's readable scope; actions still enforce their rul
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
-
 from django.db.models import Q
+from evennia.objects.models import ObjectDB
 
 from actions.target_menu_types import MenuTargetKind, MenuTargetRequest, ResolvedMenuTarget
 from flows.object_states.base_state import project_display_name
@@ -19,9 +18,6 @@ from world.items.services.appearance import visible_worn_items_for
 from world.scenes.models import Persona
 from world.scenes.place_services import active_places
 from world.scenes.services import active_persona_for_sheet
-
-if TYPE_CHECKING:
-    from evennia.objects.models import ObjectDB
 
 
 def resolve_persona_pk_to_character(persona_id: object) -> ObjectDB | None:
@@ -44,39 +40,35 @@ def resolve_persona_pk_to_character(persona_id: object) -> ObjectDB | None:
 
 
 # Keep typed context rejection and existing ITEMS routing explicit at this boundary.
-def resolve_menu_target(  # noqa: C901
-    actor: ObjectDB,
-    request: MenuTargetRequest,
+def resolve_menu_target(actor: ObjectDB, request: MenuTargetRequest) -> ResolvedMenuTarget | None:
+    """Resolve a typed target in the actor's current readable scope."""
+    if not isinstance(request.kind, MenuTargetKind) or not _positive_id(request.target_id):
+        return None
+    if request.kind is MenuTargetKind.ITEMS:
+        return _resolve_contextual_menu_item(actor, request)
+    if request.owner_persona_id is not None or request.container_item_id is not None:
+        return None
+    if request.kind is MenuTargetKind.PLACES:
+        return _resolve_menu_place(actor, request)
+    if request.kind in (MenuTargetKind.OBJECTS, MenuTargetKind.EXITS):
+        return _resolve_room_menu_object(actor, request)
+    return None
+
+
+def _positive_id(value: object) -> bool:
+    return type(value) is int and value > 0
+
+
+def _resolve_contextual_menu_item(
+    actor: ObjectDB, request: MenuTargetRequest
 ) -> ResolvedMenuTarget | None:
-    """Resolve a supported target in the actor's current readable scope.
-
-    Args:
-        actor: The server-selected viewing character.
-        request: A typed ID and any asserted owner/container context.
-
-    Returns:
-        The readable target, or None for unsupported or unavailable targets.
-    """
-    if not isinstance(request.kind, MenuTargetKind):
-        return None
-    if type(request.target_id) is not int or request.target_id <= 0:
-        return None
-    if request.kind is not MenuTargetKind.ITEMS:
-        if request.owner_persona_id is not None or request.container_item_id is not None:
-            return None
-        if request.kind is MenuTargetKind.PLACES:
-            return _resolve_menu_place(actor, request)
-        if request.kind in (MenuTargetKind.OBJECTS, MenuTargetKind.EXITS):
-            return _resolve_room_menu_object(actor, request)
-        return None
+    """Keep owner and container assertions exclusive, with exact integer identities."""
     if request.container_item_id is not None:
-        if request.owner_persona_id is not None:
-            return None
-        if type(request.container_item_id) is not int or request.container_item_id <= 0:
+        if request.owner_persona_id is not None or not _positive_id(request.container_item_id):
             return None
         return _resolve_contained_menu_item(actor, request)
     if request.owner_persona_id is not None:
-        if type(request.owner_persona_id) is not int or request.owner_persona_id <= 0:
+        if not _positive_id(request.owner_persona_id):
             return None
         return _resolve_worn_menu_item(actor, request)
     return _resolve_menu_item(actor, request)
@@ -163,13 +155,11 @@ def _resolve_menu_item(
 
 
 # Keep kind, perception and attached-item checks together before projecting a label.
-def _resolve_room_menu_object(  # noqa: C901, PLR0912
+def _resolve_room_menu_object(
     actor: ObjectDB,
     request: MenuTargetRequest,
 ) -> ResolvedMenuTarget | None:
     """Resolve an ordinary room object or exit by its ObjectDB identity."""
-    from evennia.objects.models import ObjectDB  # noqa: PLC0415
-
     room = actor.location
     if room is None or not room.is_typeclass("typeclasses.rooms.Room", exact=False):
         return None
@@ -188,38 +178,9 @@ def _resolve_room_menu_object(  # noqa: C901, PLR0912
             return None
         item = None
     else:
-        # Reject identity-bearing/sibling types even with multiple inheritance.
-        if any(
-            game_object.is_typeclass(path, exact=False)
-            for path in (
-                "typeclasses.characters.Character",
-                "typeclasses.rooms.Room",
-                "typeclasses.exits.Exit",
-            )
-        ):
+        valid, item = _ordinary_room_item(actor, game_object)
+        if not valid:
             return None
-        if not game_object.is_typeclass("typeclasses.objects.Object", exact=False):
-            return None
-        if not can_perceive(actor, game_object):
-            return None
-        # Use the real one-to-one relation; no cross-domain integer conversion.
-        try:
-            attached_item = game_object.item_instance
-        except ObjectDB.item_instance.RelatedObjectDoesNotExist:
-            attached_item = None
-        item = None
-        if attached_item is not None:
-            item = (
-                ItemInstance.objects.in_play()
-                .filter(
-                    pk=attached_item.pk,
-                    game_object=game_object,
-                    contained_in__isnull=True,
-                )
-                .first()
-            )
-            if item is None:
-                return None
     return ResolvedMenuTarget(
         request=request,
         label=_room_menu_label(room, game_object, actor, item),
@@ -328,3 +289,40 @@ def _resolve_contained_menu_item(
         item=item,
         game_object=game_object,
     )
+
+
+def _ordinary_room_item(actor: ObjectDB, game_object: ObjectDB) -> tuple[bool, ItemInstance | None]:
+    """Reject sibling identities and validate any real attached item relation."""
+    # Reject identity-bearing/sibling types even with multiple inheritance.
+    if any(
+        game_object.is_typeclass(path, exact=False)
+        for path in (
+            "typeclasses.characters.Character",
+            "typeclasses.rooms.Room",
+            "typeclasses.exits.Exit",
+        )
+    ):
+        return False, None
+    if not game_object.is_typeclass("typeclasses.objects.Object", exact=False):
+        return False, None
+    if not can_perceive(actor, game_object):
+        return False, None
+    # Use the real one-to-one relation; no cross-domain integer conversion.
+    try:
+        attached_item = game_object.item_instance
+    except ObjectDB.item_instance.RelatedObjectDoesNotExist:
+        attached_item = None
+    item = None
+    if attached_item is not None:
+        item = (
+            ItemInstance.objects.in_play()
+            .filter(
+                pk=attached_item.pk,
+                game_object=game_object,
+                contained_in__isnull=True,
+            )
+            .first()
+        )
+        if item is None:
+            return False, None
+    return True, item

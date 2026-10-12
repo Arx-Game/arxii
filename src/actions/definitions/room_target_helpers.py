@@ -146,14 +146,22 @@ def emit_room_intent(
     if changed_wire:
         context.kwargs["menu_target"] = None
         return None
+    _redirect_room_target(context, request, redirected)
+    return None
+
+
+def _redirect_room_target(
+    context: ActionContext, request: MenuTargetRequest, redirected: object
+) -> None:
+    """Translate an intent redirect only within its original room-target domain."""
     model = Place if request.kind is MenuTargetKind.PLACES else ObjectDB
     if type(redirected) is int and redirected > 0:
         redirected = model.objects.filter(pk=redirected).first()
     if not isinstance(redirected, model):
         context.kwargs["menu_target"] = None
-        return None
+        return
     context.kwargs["menu_target"] = {"kind": request.kind.value, "target_id": redirected.pk}
-    return None
+    return
 
 
 def blocking_exit_challenges(exit_obj: ObjectDB) -> QuerySet[ChallengeInstance]:

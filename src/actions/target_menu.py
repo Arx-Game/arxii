@@ -153,6 +153,13 @@ def _choices(
         return [_input("container_item_id", "container")], rows, cursor_data
     if action.key != ACTION_USE_ITEM:
         return [], [], None
+    return _use_choices(actor, action, values, after=after)
+
+
+def _use_choices(
+    actor: Any, action: Any, values: dict[str, Any], *, after: tuple[int, int, int] | None
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]], dict[str, Any] | None]:
+    """Project Use's input dimensions and bounded candidate page."""
     spec = action.use_input_spec(actor, kwargs=values)
     inputs = [
         _input(
@@ -173,16 +180,7 @@ def _choices(
             actor, kwargs=values, after=after, page_size=CANDIDATE_PAGE_SIZE
         )
         next_offset = {CURSOR_POSITION: next_after} if next_after is not None else None
-        for row in page:
-            extra = {}
-            if row["use_target"] is not None:
-                extra["use_target"] = row["use_target"]
-            if row["option_id"] is not None:
-                extra["option_id"] = row["option_id"]
-            label = " · ".join(part for part in (row["target_name"], row["option_name"]) if part)
-            target_id = row["use_target"]["target_id"] if row["use_target"] else 0
-            stable_key = f"{target_id}:{row['option_id'] or 0}"
-            rows.append(_candidate(stable_key, label, extra, row))
+        rows = [_use_candidate(row) for row in page]
     return inputs, rows, next_offset
 
 
@@ -364,7 +362,7 @@ def _authored_entries(actor: Any, resolved: Any) -> list[dict[str, Any]]:
     return result
 
 
-def build_target_menu(  # noqa: C901, PLR0912, PLR0915
+def build_target_menu(
     actor: Any,
     request: MenuTargetRequest,
     *,
@@ -376,7 +374,6 @@ def build_target_menu(  # noqa: C901, PLR0912, PLR0915
     resolved = resolve_menu_target(actor, request)
     if resolved is None:
         return None
-    values = {"menu_target": target_wire(request)}
     outer_target = target_wire(request)
     effective_source = (
         target_wire(
@@ -390,89 +387,16 @@ def build_target_menu(  # noqa: C901, PLR0912, PLR0915
         if resolved.item is not None
         else outer_target
     )
-    after = None
-    after_pk = None
-    if candidate_cursor is not None:
-        if len(candidate_cursor) > MAX_CANDIDATE_CURSOR_LENGTH:
-            raise InvalidCandidateCursor
-        if inputs_for is None:
-            raise InvalidCandidateCursor
-        try:
-            payload = signing.loads(candidate_cursor, salt=CURSOR_SALT)
-        except signing.BadSignature as exc:
-            raise InvalidCandidateCursor from exc
-        if (
-            payload.get("action"),
-            payload.get("input_mode"),
-            payload.get("account"),
-            payload.get("actor"),
-            payload.get("outer_target"),
-            payload.get("effective_source"),
-        ) != (
-            inputs_for,
-            inputs_for,
-            account_id,
-            actor.pk,
-            outer_target,
-            effective_source,
-        ):
-            raise InvalidCandidateCursor
-        if CURSOR_POSITION in payload:
-            position = payload[CURSOR_POSITION]
-            if (
-                not isinstance(position, list)
-                or len(position) != CURSOR_TUPLE_SIZE
-                or any(type(value) is not int or value < 0 for value in position)
-            ):
-                raise InvalidCandidateCursor
-            after = (position[0], position[1], position[2])
-        elif CURSOR_ITEM_PK in payload:
-            if type(payload[CURSOR_ITEM_PK]) is not int or payload[CURSOR_ITEM_PK] < 1:
-                raise InvalidCandidateCursor
-            after_pk = payload[CURSOR_ITEM_PK]
-        else:
-            raise InvalidCandidateCursor
-    entries = []
-    if resolved.item is not None:
-        # OBJECTS item binding uses the real relation, never an equal integer assumption.
-        item_request = MenuTargetRequest(
-            MenuTargetKind.ITEMS,
-            resolved.item.pk,
-            request.owner_persona_id,
-            request.container_item_id,
-        )
-        item_values = {"menu_target": target_wire(item_request)}
-        item_actions = (
-            ("look_at_item", "Look", "perception"),
-            *((key, label, "items") for key, label in ORDINARY),
-        )
-        if inputs_for is not None:
-            item_actions = tuple(row for row in item_actions if row[0] == inputs_for)
-        for key, label, group in item_actions:
-            entry = _ordinary_entry(
-                actor,
-                key,
-                label,
-                group,
-                item_values,
-                after_pk=after_pk if key == inputs_for else None,
-                after=after if key == inputs_for else None,
-            )
-            if entry is not None:
-                entries.append(entry)
-    elif request.kind in (MenuTargetKind.OBJECTS, MenuTargetKind.EXITS):
-        entry = _ordinary_entry(actor, "look", "Look", "perception", values)
-        if entry is not None:
-            entries.append(entry)
-    if request.kind is MenuTargetKind.PLACES:
-        for key, label in (("join_place", "Join"), ("leave_place", "Leave")):
-            entry = _ordinary_entry(actor, key, label, "movement", values)
-            if entry is not None:
-                entries.append(entry)
-    elif request.kind is MenuTargetKind.EXITS:
-        entry = _ordinary_entry(actor, "traverse_exit", "Go", "movement", values)
-        if entry is not None:
-            entries.append(entry)
+    binding = {
+        "action": inputs_for,
+        "input_mode": inputs_for,
+        "account": account_id,
+        "actor": actor.pk,
+        "outer_target": outer_target,
+        "effective_source": effective_source,
+    }
+    after, after_pk = _candidate_position(candidate_cursor, binding)
+    entries = _ordinary_menu_entries(actor, resolved, inputs_for, after, after_pk)
     if inputs_for is None:
         entries.extend(_authored_entries(actor, resolved))
     if inputs_for is not None and not any(entry["key"] == inputs_for for entry in entries):
@@ -508,3 +432,120 @@ def build_target_menu(  # noqa: C901, PLR0912, PLR0915
         ],
         "entries": entries,
     }
+
+
+def _use_candidate(row: dict[str, Any]) -> dict[str, Any]:
+    """Keep complete target/option values together under their stable pair key."""
+    extra = {}
+    if row["use_target"] is not None:
+        extra["use_target"] = row["use_target"]
+    if row["option_id"] is not None:
+        extra["option_id"] = row["option_id"]
+    label = " · ".join(part for part in (row["target_name"], row["option_name"]) if part)
+    target_id = row["use_target"]["target_id"] if row["use_target"] else 0
+    stable_key = f"{target_id}:{row['option_id'] or 0}"
+    return _candidate(stable_key, label, extra, row)
+
+
+def _candidate_position(
+    candidate_cursor: str | None, binding: dict[str, Any]
+) -> tuple[tuple[int, int, int] | None, int | None]:
+    """Validate the signed menu binding before decoding its pagination position."""
+    after = None
+    after_pk = None
+    if candidate_cursor is None:
+        return after, after_pk
+    if len(candidate_cursor) > MAX_CANDIDATE_CURSOR_LENGTH:
+        raise InvalidCandidateCursor
+    if binding["action"] is None:
+        raise InvalidCandidateCursor
+    try:
+        payload = signing.loads(candidate_cursor, salt=CURSOR_SALT)
+    except signing.BadSignature as exc:
+        raise InvalidCandidateCursor from exc
+    if tuple(payload.get(key) for key in binding) != tuple(binding.values()):
+        raise InvalidCandidateCursor
+    if CURSOR_POSITION in payload:
+        position = payload[CURSOR_POSITION]
+        if (
+            not isinstance(position, list)
+            or len(position) != CURSOR_TUPLE_SIZE
+            or any(type(value) is not int or value < 0 for value in position)
+        ):
+            raise InvalidCandidateCursor
+        after = (position[0], position[1], position[2])
+    elif CURSOR_ITEM_PK in payload:
+        if type(payload[CURSOR_ITEM_PK]) is not int or payload[CURSOR_ITEM_PK] < 1:
+            raise InvalidCandidateCursor
+        after_pk = payload[CURSOR_ITEM_PK]
+    else:
+        raise InvalidCandidateCursor
+    return after, after_pk
+
+
+def _ordinary_menu_entries(
+    actor: Any,
+    resolved: Any,
+    inputs_for: str | None,
+    after: tuple[int, int, int] | None,
+    after_pk: int | None,
+) -> list[dict[str, Any]]:
+    """Compose ordinary item, room, place, and exit actions in their original order."""
+    request = resolved.request
+    values = {"menu_target": target_wire(request)}
+    entries = []
+    if resolved.item is not None:
+        entries.extend(_item_menu_entries(actor, resolved, inputs_for, after, after_pk))
+    elif request.kind in (MenuTargetKind.OBJECTS, MenuTargetKind.EXITS):
+        entry = _ordinary_entry(actor, "look", "Look", "perception", values)
+        if entry is not None:
+            entries.append(entry)
+    if request.kind is MenuTargetKind.PLACES:
+        for key, label in (("join_place", "Join"), ("leave_place", "Leave")):
+            entry = _ordinary_entry(actor, key, label, "movement", values)
+            if entry is not None:
+                entries.append(entry)
+    elif request.kind is MenuTargetKind.EXITS:
+        entry = _ordinary_entry(actor, "traverse_exit", "Go", "movement", values)
+        if entry is not None:
+            entries.append(entry)
+    return entries
+
+
+def _item_menu_entries(
+    actor: Any,
+    resolved: Any,
+    inputs_for: str | None,
+    after: tuple[int, int, int] | None,
+    after_pk: int | None,
+) -> list[dict[str, Any]]:
+    """Bind Object-backed items through their real relation before collecting actions."""
+    request = resolved.request
+    entries = []
+    # OBJECTS item binding uses the real relation, never an equal integer assumption.
+    item_request = MenuTargetRequest(
+        MenuTargetKind.ITEMS,
+        resolved.item.pk,
+        request.owner_persona_id,
+        request.container_item_id,
+    )
+    item_values = {"menu_target": target_wire(item_request)}
+    item_actions = (
+        ("look_at_item", "Look", "perception"),
+        *((key, label, "items") for key, label in ORDINARY),
+    )
+    if inputs_for is not None:
+        item_actions = tuple(row for row in item_actions if row[0] == inputs_for)
+    for key, label, group in item_actions:
+        entry = _ordinary_entry(
+            actor,
+            key,
+            label,
+            group,
+            item_values,
+            after_pk=after_pk if key == inputs_for else None,
+            after=after if key == inputs_for else None,
+        )
+        if entry is not None:
+            entries.append(entry)
+    return entries

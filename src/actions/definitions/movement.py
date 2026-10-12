@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, ClassVar
 import uuid
@@ -33,6 +34,7 @@ from actions.types import ActionContext, ActionResult, TargetType
 from commands.exceptions import CommandError
 from evennia_extensions.models import room_is_publicly_listed
 from flows.events.payloads import ActionIntentPayload
+from flows.object_states.base_state import BaseState
 from flows.object_states.character_state import CharacterState
 from flows.object_states.item_state import ItemState
 from flows.scene_data_manager import SceneDataManager
@@ -55,6 +57,7 @@ from world.scenes.services import active_persona_for_sheet
 
 if TYPE_CHECKING:
     from actions.models import ActionEnhancement
+    from world.room_features.models import VaultDetails
 
 _GET_DROP_KINDS = frozenset({MenuTargetKind.ITEMS, MenuTargetKind.OBJECTS})
 _GET_DROP_UNAVAILABLE = "That isn't available."
@@ -196,7 +199,9 @@ class DropAction(_ItemMovementAction):
 
     missing_target_message: ClassVar[str] = "Drop what?"
     invalid_target_message: ClassVar[str] = "That can't be dropped."
-    validate = staticmethod(validate_drop)
+    validate: ClassVar[Callable[[CharacterState, ItemState], VaultDetails | None]] = staticmethod(
+        validate_drop
+    )
 
     def is_applicable(self, actor: ObjectDB, *, kwargs: dict[str, Any]) -> bool:
         item = _movement_item(actor, kwargs)
@@ -540,22 +545,32 @@ class TraverseExitAction(Action):
     def _emit_intent(self, context: ActionContext, actor: ObjectDB | None) -> ActionResult | None:
         return emit_room_intent(context, actor, super()._emit_intent, self.menu_kinds)
 
+    def _traversal_target(
+        self, actor: ObjectDB, kwargs: dict[str, Any], sdm: SceneDataManager
+    ) -> tuple[ObjectDB | None, str | None]:
+        """Resolve the current typed exit, retaining the legacy target path."""
+        typed = MENU_TARGET_KEY in kwargs
+        if typed:
+            reason = room_target_refusal(self, actor, kwargs, scene_data=sdm)
+            if reason:
+                return None, reason
+            resolved = room_target(actor, kwargs, self.menu_kinds)
+            if resolved is None:
+                return None, UNAVAILABLE
+            target = resolved.game_object
+        else:
+            target = kwargs.get("target")
+        return target, None
+
     # Repeat the full typed gate at each authored initialization/permission boundary.
-    def execute(  # noqa: C901, PLR0912
+    def execute(
         self, actor: ObjectDB, context: ActionContext | None = None, **kwargs: Any
     ) -> ActionResult:
         typed = MENU_TARGET_KEY in kwargs
         sdm = context.scene_data if context else SceneDataManager()
-        if typed:
-            reason = room_target_refusal(self, actor, kwargs, scene_data=sdm)
-            if reason:
-                return ActionResult(success=False, message=reason)
-            resolved = room_target(actor, kwargs, self.menu_kinds)
-            if resolved is None:
-                return ActionResult(success=False, message=UNAVAILABLE)
-            target = resolved.game_object
-        else:
-            target = kwargs.get("target")
+        target, reason = self._traversal_target(actor, kwargs, sdm)
+        if reason is not None:
+            return ActionResult(success=False, message=reason)
         if target is None:
             return ActionResult(success=False, message="Go where?")
         blocking = blocking_exit_challenges(target)
@@ -577,40 +592,15 @@ class TraverseExitAction(Action):
         caller_state = sdm.initialize_state_for_object(actor)
         exit_state = sdm.initialize_state_for_object(target)
 
-        def current_refusal(destination: ObjectDB | None = None) -> str | None:
-            fresh = room_target(actor, kwargs, self.menu_kinds)
-            if fresh is None or fresh.game_object != target:
-                return UNAVAILABLE
-            if destination is not None and target.destination != destination:
-                return UNAVAILABLE
-            return room_target_refusal(self, actor, kwargs, scene_data=sdm)
-
-        if typed:
-            reason = current_refusal()
-            if reason:
-                return ActionResult(success=False, message=reason)
-        try:
-            check_exit_traversal(caller_state, exit_state)
-        except CommandError as error:
-            if not typed:
-                raise
-            return ActionResult(success=False, message=str(error))
-        if typed:
-            reason = current_refusal()
-            if reason:
-                return ActionResult(success=False, message=reason)
+        checks = _ExitTraversalChecks(self, actor, target, sdm, kwargs)
+        reason = checks.permission(caller_state, exit_state)
+        if reason is not None:
+            return ActionResult(success=False, message=reason)
         destination = target.destination
         dest_state = sdm.initialize_state_for_object(destination)
         if typed:
-            reason = current_refusal(destination)
-            if reason:
-                return ActionResult(success=False, message=reason)
-            try:
-                check_exit_traversal(caller_state, exit_state)
-            except CommandError as error:
-                return ActionResult(success=False, message=str(error))
-            reason = current_refusal(destination)
-            if reason:
+            reason = checks.permission(caller_state, exit_state, destination)
+            if reason is not None:
                 return ActionResult(success=False, message=reason)
         try:
             traverse_exit(caller_state, exit_state, dest_state)
@@ -842,3 +832,37 @@ class HomeAction(Action):
         send_room_state(actor_state)
 
         return ActionResult(success=True)
+
+
+@dataclass
+class _ExitTraversalChecks:
+    """Re-read exit scope on both sides of each authored permission boundary."""
+
+    action: TraverseExitAction
+    actor: ObjectDB
+    target: ObjectDB
+    manager: SceneDataManager
+    kwargs: dict[str, Any]
+
+    def current_refusal(self, destination: ObjectDB | None = None) -> str | None:
+        fresh = room_target(self.actor, self.kwargs, self.action.menu_kinds)
+        if fresh is None or fresh.game_object != self.target:
+            return UNAVAILABLE
+        if destination is not None and self.target.destination != destination:
+            return UNAVAILABLE
+        return room_target_refusal(self.action, self.actor, self.kwargs, scene_data=self.manager)
+
+    def permission(
+        self, caller_state: BaseState, exit_state: BaseState, destination: ObjectDB | None = None
+    ) -> str | None:
+        if MENU_TARGET_KEY not in self.kwargs:
+            check_exit_traversal(caller_state, exit_state)
+            return None
+        reason = self.current_refusal(destination)
+        if reason is not None:
+            return reason
+        try:
+            check_exit_traversal(caller_state, exit_state)
+        except CommandError as error:
+            return str(error)
+        return self.current_refusal(destination)

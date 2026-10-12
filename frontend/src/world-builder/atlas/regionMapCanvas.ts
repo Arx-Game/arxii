@@ -121,12 +121,29 @@ export function drawRegionMap(
   ctx.fillStyle = TERRAIN_COLORS.water;
   ctx.fillRect(0, 0, W, H);
 
+  const terrainAt = drawTerrain(ctx, data, b);
+  drawRivers(ctx, data, b);
+  drawCoast(ctx, data, b, terrainAt);
+  drawCellLines(ctx, b);
+  const footprints = [...data.footprints].sort((a, c) => c.level - a.level);
+  drawFootprints(ctx, footprints, b, options);
+  drawSeatsAndNames(ctx, footprints, b, options);
+  drawPendingPips(ctx, b, options);
+}
+
+type RegionBounds = ReturnType<typeof regionBounds>;
+
+function drawTerrain(ctx: CanvasRenderingContext2D, data: RegionMapPips, b: RegionBounds) {
   const terrainAt = new Map<string, string>();
   for (const [x, y, terrain] of data.pips) {
     terrainAt.set(pipKey(x, y), terrain);
     ctx.fillStyle = TERRAIN_COLORS[terrain] ?? '#c0c0c0';
     ctx.fillRect((x - b.x0) * PIP_PX, (y - b.y0) * PIP_PX, PIP_PX, PIP_PX);
   }
+  return terrainAt;
+}
+
+function drawRivers(ctx: CanvasRenderingContext2D, data: RegionMapPips, b: RegionBounds) {
   // rivers: a stroke across the pip
   ctx.fillStyle = RIVER_COLOR;
   for (const [x, y, , river] of data.pips) {
@@ -138,6 +155,14 @@ export function drawRegionMap(
       PIP_PX / 3
     );
   }
+}
+
+function drawCoast(
+  ctx: CanvasRenderingContext2D,
+  data: RegionMapPips,
+  b: RegionBounds,
+  terrainAt: Map<string, string>
+) {
   // the coast: land pips with water to the east or south get an edge, read from neighbours
   ctx.strokeStyle = COAST_COLOR;
   ctx.lineWidth = 1;
@@ -158,6 +183,11 @@ export function drawRegionMap(
     }
   }
   ctx.stroke();
+}
+
+function drawCellLines(ctx: CanvasRenderingContext2D, b: RegionBounds) {
+  const W = b.width * PIP_PX;
+  const H = b.height * PIP_PX;
   // cell lines every ten pips
   ctx.strokeStyle = CELL_LINE_COLOR;
   ctx.beginPath();
@@ -170,41 +200,64 @@ export function drawRegionMap(
     ctx.lineTo(W, cy * PIP_PX + 0.5);
   }
   ctx.stroke();
+}
 
+function drawFootprints(
+  ctx: CanvasRenderingContext2D,
+  footprints: RegionMapFootprint[],
+  b: RegionBounds,
+  options: DrawOptions
+) {
   // footprints: largest first so a barony draws over its county
-  const footprints = [...data.footprints].sort((a, c) => c.level - a.level);
   for (const footprint of footprints) {
     const selected = options.selectedAreaId === footprint.area_id;
     ctx.fillStyle = holderColor(footprint.holder_org_id, selected ? 0.65 : 0.45);
     for (const [x, y] of footprint.pips) {
       ctx.fillRect((x - b.x0) * PIP_PX, (y - b.y0) * PIP_PX, PIP_PX, PIP_PX);
     }
-    const own = new Set(footprint.pips.map(([x, y]) => pipKey(x, y)));
-    ctx.strokeStyle = selected ? '#1a140c' : 'rgba(26, 20, 12, 0.75)';
-    ctx.lineWidth = selected ? 2 : 1;
-    ctx.beginPath();
-    for (const [x, y] of footprint.pips) {
-      const px = (x - b.x0) * PIP_PX;
-      const py = (y - b.y0) * PIP_PX;
-      if (!own.has(pipKey(x, y - 1))) {
-        ctx.moveTo(px, py);
-        ctx.lineTo(px + PIP_PX, py);
-      }
-      if (!own.has(pipKey(x, y + 1))) {
-        ctx.moveTo(px, py + PIP_PX);
-        ctx.lineTo(px + PIP_PX, py + PIP_PX);
-      }
-      if (!own.has(pipKey(x - 1, y))) {
-        ctx.moveTo(px, py);
-        ctx.lineTo(px, py + PIP_PX);
-      }
-      if (!own.has(pipKey(x + 1, y))) {
-        ctx.moveTo(px + PIP_PX, py);
-        ctx.lineTo(px + PIP_PX, py + PIP_PX);
-      }
-    }
-    ctx.stroke();
+    drawFootprintOutline(ctx, footprint, b, selected);
   }
+}
+
+function drawFootprintOutline(
+  ctx: CanvasRenderingContext2D,
+  footprint: RegionMapFootprint,
+  b: RegionBounds,
+  selected: boolean
+) {
+  const own = new Set(footprint.pips.map(([x, y]) => pipKey(x, y)));
+  ctx.strokeStyle = selected ? '#1a140c' : 'rgba(26, 20, 12, 0.75)';
+  ctx.lineWidth = selected ? 2 : 1;
+  ctx.beginPath();
+  for (const [x, y] of footprint.pips) {
+    const px = (x - b.x0) * PIP_PX;
+    const py = (y - b.y0) * PIP_PX;
+    if (!own.has(pipKey(x, y - 1))) {
+      ctx.moveTo(px, py);
+      ctx.lineTo(px + PIP_PX, py);
+    }
+    if (!own.has(pipKey(x, y + 1))) {
+      ctx.moveTo(px, py + PIP_PX);
+      ctx.lineTo(px + PIP_PX, py + PIP_PX);
+    }
+    if (!own.has(pipKey(x - 1, y))) {
+      ctx.moveTo(px, py);
+      ctx.lineTo(px, py + PIP_PX);
+    }
+    if (!own.has(pipKey(x + 1, y))) {
+      ctx.moveTo(px + PIP_PX, py);
+      ctx.lineTo(px + PIP_PX, py + PIP_PX);
+    }
+  }
+  ctx.stroke();
+}
+
+function drawSeatsAndNames(
+  ctx: CanvasRenderingContext2D,
+  footprints: RegionMapFootprint[],
+  b: RegionBounds,
+  options: DrawOptions
+) {
   // seats and names
   for (const footprint of footprints) {
     if (footprint.seat) {
@@ -234,6 +287,9 @@ export function drawRegionMap(
       ctx.fillText(footprint.name, lx, ly);
     }
   }
+}
+
+function drawPendingPips(ctx: CanvasRenderingContext2D, b: RegionBounds, options: DrawOptions) {
   // the drag in progress
   if (options.pending && options.pending.size > 0) {
     ctx.save();

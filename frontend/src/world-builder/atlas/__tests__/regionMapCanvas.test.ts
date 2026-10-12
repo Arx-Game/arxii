@@ -1,9 +1,11 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
-import type { RegionMapFootprint, RegionMapSummary } from '../../types';
+import type { RegionMapFootprint, RegionMapPips, RegionMapSummary } from '../../types';
 import { DEFAULT_VIEW } from '../latticeState';
 import {
   centroid,
+  drawRegionMap,
+  TERRAIN_COLORS,
   footprintAt,
   holderColor,
   PIP_PX,
@@ -91,5 +93,90 @@ describe('regionMapCanvas', () => {
   it('centres a label on the footprint', () => {
     expect(centroid(footprints[0].pips)).toEqual([51 + 1 / 3, 31 + 1 / 3]);
     expect(centroid([])).toEqual([0, 0]);
+  });
+});
+
+function recordingCanvas() {
+  const paints: { style: string; rect: number[] }[] = [];
+  const context = {
+    fillStyle: '',
+    strokeStyle: '',
+    lineWidth: 1,
+    font: '',
+    textAlign: 'start',
+    textBaseline: 'alphabetic',
+    clearRect: vi.fn(),
+    fillRect: vi.fn(),
+    beginPath: vi.fn(),
+    moveTo: vi.fn(),
+    lineTo: vi.fn(),
+    stroke: vi.fn(),
+    arc: vi.fn(),
+    fill: vi.fn(),
+    strokeText: vi.fn(),
+    fillText: vi.fn(),
+    save: vi.fn(),
+    restore: vi.fn(),
+    setLineDash: vi.fn(),
+    strokeRect: vi.fn(),
+  };
+  context.fillRect.mockImplementation((...rect: number[]) => {
+    paints.push({ style: context.fillStyle, rect });
+  });
+  return { context, paints, ctx: context as unknown as CanvasRenderingContext2D };
+}
+
+const drawingData: RegionMapPips = {
+  region,
+  terrains: ['plain', 'water'],
+  pips: [
+    [51, 31, 'plain', true],
+    [52, 31, 'water', false],
+  ],
+  // Deliberately child first: painting must still put its county underneath.
+  footprints: [footprints[1], footprints[0]],
+};
+
+describe('region map drawing', () => {
+  it('paints terrain, rivers, parent holdings and selected child holdings in order', () => {
+    const { ctx, context, paints } = recordingCanvas();
+    drawRegionMap(ctx, drawingData, { selectedAreaId: 11 });
+    expect(context.clearRect).toHaveBeenCalledWith(0, 0, 120, 120);
+    expect(paints[0]).toEqual({ style: TERRAIN_COLORS.water, rect: [0, 0, 120, 120] });
+    expect(paints[1]).toEqual({ style: TERRAIN_COLORS.plain, rect: [6, 6, 6, 6] });
+    expect(paints[2].style).toBe(TERRAIN_COLORS.water);
+    expect(paints[3]).toEqual({ style: '#3f6ea8', rect: [8, 8, 2, 2] });
+    expect(paints.slice(4, 7).map((paint) => paint.style)).toEqual([
+      holderColor(4),
+      holderColor(4),
+      holderColor(4),
+    ]);
+    expect(paints[7]).toEqual({ style: holderColor(4, 0.65), rect: [12, 6, 6, 6] });
+    expect(context.arc).toHaveBeenCalledTimes(2);
+    expect(context.fillText).toHaveBeenCalledWith('County', expect.any(Number), expect.any(Number));
+    expect(context.fillText).not.toHaveBeenCalledWith(
+      'Barony',
+      expect.any(Number),
+      expect.any(Number)
+    );
+  });
+
+  it('hides labels on request and draws a removal preview after the seated holdings', () => {
+    const { ctx, context } = recordingCanvas();
+    drawRegionMap(ctx, drawingData, {
+      showLabels: false,
+      pending: new Set(['51,31']),
+      pendingRemove: true,
+    });
+    expect(context.arc).toHaveBeenCalledTimes(2);
+    expect(context.fillText).not.toHaveBeenCalled();
+    expect(context.save).toHaveBeenCalledOnce();
+    expect(context.setLineDash).toHaveBeenCalledWith([3, 2]);
+    expect(context.strokeStyle).toBe('#a0121b');
+    expect(context.strokeRect).toHaveBeenCalledWith(7, 7, 4, 4);
+    expect(context.strokeRect.mock.invocationCallOrder[0]).toBeGreaterThan(
+      context.fill.mock.invocationCallOrder[1]
+    );
+    expect(context.restore).toHaveBeenCalledOnce();
   });
 });

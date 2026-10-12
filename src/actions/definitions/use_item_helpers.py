@@ -83,30 +83,10 @@ def use_source(actor: ObjectDB, kwargs: dict[str, Any]) -> ItemInstance | None:
 
 def scalar_values(kwargs: dict[str, Any]) -> tuple[int | None, str | None, bool]:
     """Normalize presentation fields, keeping legacy coercion off typed wire."""
-    if MENU_TARGET_KEY in kwargs:
-        if COMPETING_FIELDS.intersection(kwargs) or set(kwargs).difference(
-            {MENU_TARGET_KEY, "use_target", "option_id", "descriptor", "blend"}
-        ):
-            raise ValueError(UNAVAILABLE)
-        option = kwargs.get("option_id")
-        if OPTION_ID_KEY in kwargs and (type(option) is not int or option <= 0):
-            raise ValueError(OPTION_INVALID)
-        descriptor = kwargs.get("descriptor")
-        if descriptor is not None and not isinstance(descriptor, str):
-            raise ValueError(DESCRIPTOR_INVALID)
-        blend = kwargs.get("blend", False)
-        if type(blend) is not bool:
-            raise ValueError(BLEND_INVALID)
-    else:
-        raw = kwargs.get("option_id")
-        try:
-            option = int(raw) if raw is not None else None
-        except (TypeError, ValueError) as exc:
-            raise ValueError(OPTION_INVALID) from exc
-        descriptor = kwargs.get("descriptor") or ""
-        if not isinstance(descriptor, str):
-            raise ValueError(DESCRIPTOR_INVALID)
-        blend = bool(kwargs.get("blend"))
+    values = (
+        _typed_scalar_values(kwargs) if MENU_TARGET_KEY in kwargs else _legacy_scalar_values(kwargs)
+    )
+    option, descriptor, blend = values
     return option, (descriptor or "").strip() or None, blend
 
 
@@ -130,6 +110,14 @@ def use_target(
     pk = wire["target_id"]
     if type(pk) is not int or pk <= 0:
         return None, UNAVAILABLE
+    return _resolve_use_wire(actor, wire, kind)
+
+
+def _resolve_use_wire(
+    actor: ObjectDB, wire: dict[str, Any], kind: str
+) -> tuple[ObjectDB | None, str]:
+    """Resolve a validated wire through its declared item or object domain."""
+    pk = wire["target_id"]
     if kind == TargetKind.ITEM:
         if wire["kind"] != MenuTargetKind.ITEMS:
             return None, UNAVAILABLE
@@ -388,3 +376,35 @@ class _UseBlend(Prerequisite):
         except ItemError as exc:
             return False, exc.user_message
         return True, ""
+
+
+def _typed_scalar_values(kwargs: dict[str, Any]) -> tuple[int | None, str | None, bool]:
+    """Validate typed wire scalars without coercing their types."""
+    if COMPETING_FIELDS.intersection(kwargs) or set(kwargs).difference(
+        {MENU_TARGET_KEY, "use_target", "option_id", "descriptor", "blend"}
+    ):
+        raise ValueError(UNAVAILABLE)
+    option = kwargs.get("option_id")
+    if OPTION_ID_KEY in kwargs and (type(option) is not int or option <= 0):
+        raise ValueError(OPTION_INVALID)
+    descriptor = kwargs.get("descriptor")
+    if descriptor is not None and not isinstance(descriptor, str):
+        raise ValueError(DESCRIPTOR_INVALID)
+    blend = kwargs.get("blend", False)
+    if type(blend) is not bool:
+        raise ValueError(BLEND_INVALID)
+    return option, descriptor, blend
+
+
+def _legacy_scalar_values(kwargs: dict[str, Any]) -> tuple[int | None, str, bool]:
+    """Keep the telnet scalar coercions at their existing boundary."""
+    raw = kwargs.get("option_id")
+    try:
+        option = int(raw) if raw is not None else None
+    except (TypeError, ValueError) as exc:
+        raise ValueError(OPTION_INVALID) from exc
+    descriptor = kwargs.get("descriptor") or ""
+    if not isinstance(descriptor, str):
+        raise ValueError(DESCRIPTOR_INVALID)
+    blend = bool(kwargs.get("blend"))
+    return option, descriptor, blend

@@ -25,28 +25,39 @@ def _actor_lacks_room_standing(actor_obj: "ObjectDB", room: "ObjectDB") -> bool:
 
 def builtin_traversal_allowed(exit_obj: "ObjectDB", actor_obj: "ObjectDB | None" = None) -> bool:
     """Check the existing window, lock, bars and publication gates in order."""
-    from world.room_features.models import ExitBarsDetails  # noqa: PLC0415
-
     profile = ExitProfile.objects.filter(objectdb=exit_obj).first()
     if profile and profile.exit_kind == ExitKind.WINDOW and not profile.is_open:
         return False
-    if exit_obj.db.locked and actor_obj is not None:
+    if actor_obj is None:
+        return True
+    if _standing_gate_refuses(exit_obj, actor_obj, profile):
+        return False
+    if actor_obj.is_story_runner:
+        return True
+    destination = exit_obj.destination
+    if destination is None:
+        return True
+    destination_profile = destination.room_profile_or_none
+    return destination_profile is None or destination_profile.published_at is not None
+
+
+def _standing_gate_refuses(
+    exit_obj: "ObjectDB", actor_obj: "ObjectDB", profile: ExitProfile | None
+) -> bool:
+    """Retain lock-before-bars evaluation and each gate's current room lookup."""
+    from world.room_features.models import ExitBarsDetails  # noqa: PLC0415
+
+    if exit_obj.db.locked:
         room = exit_obj.location
         if room is not None and _actor_lacks_room_standing(actor_obj, room):
-            return False
-    if profile is not None and actor_obj is not None:
-        bars = ExitBarsDetails.objects.filter(exit_profile=profile).active().first()
-        if bars is not None:
-            room = exit_obj.location
-            if room is not None and _actor_lacks_room_standing(actor_obj, room):
-                return False
-    if actor_obj is not None and not actor_obj.is_story_runner:
-        destination = exit_obj.destination
-        if destination is not None:
-            destination_profile = destination.room_profile_or_none
-            if destination_profile is not None and destination_profile.published_at is None:
-                return False
-    return True
+            return True
+    if profile is None:
+        return False
+    bars = ExitBarsDetails.objects.filter(exit_profile=profile).active().first()
+    if bars is None:
+        return False
+    room = exit_obj.location
+    return room is not None and _actor_lacks_room_standing(actor_obj, room)
 
 
 class ExitState(BaseState):

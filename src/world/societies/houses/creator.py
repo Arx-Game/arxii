@@ -72,7 +72,8 @@ if TYPE_CHECKING:
 
     from world.character_creation.models import CharacterDraft, OriginTemplate
     from world.character_sheets.models import CharacterSheet
-    from world.societies.models import CrewSlot
+    from world.realms.models import Realm
+    from world.societies.models import CrewSlot, OrganizationType
 
 _PRINCIPLE_AXES = ("mercy", "method", "status", "change", "allegiance", "power")
 # HouseClaim stores the status axis as ``status_principle`` (``status`` is the
@@ -621,16 +622,11 @@ def build_family_org(  # noqa: PLR0913 - keyword-only; one arg per package input
     from world.roster.models import KinSlotPool  # noqa: PLC0415
     from world.societies.membership_services import ensure_default_rank_ladder  # noqa: PLC0415
 
-    org_type = template.org_type or (template.liege.org_type if template.liege_id else None)
-    if org_type is None:
-        msg = f"template {template.pk} has no org_type and no liege to derive one from"
-        raise HousesServiceError(msg, user_message="That family template is not ready.")
+    org_type = _template_org_type(template)
     if existing_family is not None:
         family = existing_family
         name = family.name
-        if family.origin_realm_id is None and origin_realm is not None:
-            family.origin_realm = origin_realm
-            family.save(update_fields=["origin_realm"])
+        _set_missing_family_origin(family, origin_realm)
     else:
         family = Family.objects.create(
             name=name,
@@ -1039,3 +1035,19 @@ def materialize_house_claim(claim: HouseClaim, *, sheet: CharacterSheet) -> Orga
 
     sync_house_channel(org)
     return org
+
+
+def _set_missing_family_origin(family: Family, origin_realm: Realm | None) -> None:
+    """Set the package origin only when this authored family has none."""
+    if family.origin_realm_id is None and origin_realm is not None:
+        family.origin_realm = origin_realm
+        family.save(update_fields=["origin_realm"])
+
+
+def _template_org_type(template: HouseTemplate) -> OrganizationType:
+    """Require the template org type or its existing liege-derived fallback."""
+    org_type = template.org_type or (template.liege.org_type if template.liege_id else None)
+    if org_type is None:
+        msg = f"template {template.pk} has no org_type and no liege to derive one from"
+        raise HousesServiceError(msg, user_message="That family template is not ready.")
+    return org_type

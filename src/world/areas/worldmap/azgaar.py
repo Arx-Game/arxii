@@ -124,21 +124,25 @@ class GeneratorMap:
         """Per grid cell, the generator's moisture before any river bonus: the
         baseline plus the mean precipitation of the cell and its land neighbours."""
         out = [0] * len(self.heights)
-        for row in range(self.cells_y):
-            for col in range(self.cells_x):
-                idx = row * self.cells_x + col
-                if self.heights[idx] < GENERATOR_SEA_LEVEL:
-                    continue
-                total, count = self.precipitation[idx], 1
-                for dx, dy in _NEIGHBOUR_OFFSETS:
-                    c, r = col + dx, row + dy
-                    if 0 <= c < self.cells_x and 0 <= r < self.cells_y:
-                        n = r * self.cells_x + c
-                        if self.heights[n] >= GENERATOR_SEA_LEVEL:
-                            total += self.precipitation[n]
-                            count += 1
-                out[idx] = _MOISTURE_BASELINE + round(total / count)
+        for idx, height in enumerate(self.heights):
+            if height < GENERATOR_SEA_LEVEL:
+                continue
+            row, col = divmod(idx, self.cells_x)
+            samples = [self.precipitation[idx]]
+            samples.extend(self.precipitation[n] for n in self._land_neighbours(row, col))
+            out[idx] = _MOISTURE_BASELINE + round(sum(samples) / len(samples))
         return out
+
+    def _land_neighbours(self, row: int, col: int) -> list[int]:
+        """Read only in-bounds land neighbours; water contributes no precipitation."""
+        neighbours = []
+        for dx, dy in _NEIGHBOUR_OFFSETS:
+            c, r = col + dx, row + dy
+            if 0 <= c < self.cells_x and 0 <= r < self.cells_y:
+                n = r * self.cells_x + c
+                if self.heights[n] >= GENERATOR_SEA_LEVEL:
+                    neighbours.append(n)
+        return neighbours
 
 
 @dataclass(frozen=True)
@@ -298,23 +302,14 @@ def flatten_path(d: str) -> list[tuple[float, float]]:
             if command == "Z" and start is not None:
                 points.append(start)
             continue
-        if command == "C":
-            if i + 5 >= len(tokens) or not points:
-                break
-            nums = [float(t) for t in tokens[i : i + 6]]
-            points.extend(
-                _cubic(points[-1], (nums[0], nums[1]), (nums[2], nums[3]), (nums[4], nums[5]))
-            )
-            i += 6
-            continue
-        if i + 1 >= len(tokens):
+        segment, consumed = _path_segment(command, tokens, i, points)
+        if not consumed:
             break
-        pt = (float(tokens[i]), float(tokens[i + 1]))
-        points.append(pt)
+        points.extend(segment)
         if command == "M":
-            start = pt
+            start = segment[-1]
             command = "L"
-        i += 2
+        i += consumed
     return points
 
 
@@ -358,3 +353,19 @@ def rasterize(gmap: GeneratorMap, width_cells: int, height_cells: int) -> list[R
                 )
             )
     return out
+
+
+def _path_segment(
+    command: str, tokens: list[str], offset: int, points: list[tuple[float, float]]
+) -> tuple[list[tuple[float, float]], int]:
+    """Consume one absolute line or cubic segment, stopping on incomplete coordinates."""
+    if command == "C":
+        if offset + 5 >= len(tokens) or not points:
+            return [], 0
+        nums = [float(t) for t in tokens[offset : offset + 6]]
+        return list(
+            _cubic(points[-1], (nums[0], nums[1]), (nums[2], nums[3]), (nums[4], nums[5]))
+        ), 6
+    if offset + 1 >= len(tokens):
+        return [], 0
+    return [(float(tokens[offset]), float(tokens[offset + 1]))], 2
