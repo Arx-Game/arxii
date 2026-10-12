@@ -57,6 +57,16 @@ class AtlasMapActionTests(TestCase):
         )
         assert not refused.success
 
+    def test_create_region_map_with_a_new_continent(self) -> None:
+        result = AtlasCreateRegionMapAction().run(
+            self.staff, name="Catenys", anchor_x=20, anchor_y=0, width_cells=2, new_continent=True
+        )
+        assert result.success, result.message
+        region = RegionMap.objects.get(pk=result.data["region_id"])
+        assert region.area is not None
+        assert region.area.name == "Catenys"
+        assert region.area.level == AreaLevel.CONTINENT
+
     def test_carve_and_shrink(self) -> None:
         result = AtlasCarveFootprintAction().run(
             self.staff, area_id=self.county.pk, add=[[1, 1], [2, 1]]

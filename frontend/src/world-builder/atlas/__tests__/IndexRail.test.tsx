@@ -33,9 +33,12 @@ vi.mock('../../queries', () => ({
   useUnfiledRoomsQuery: vi.fn(),
 }));
 
-const { useWorldBuilderAreasQuery, useAreaManagerQuery, useUnfiledRoomsQuery } = await import(
-  '../../queries'
-);
+const {
+  useWorldBuilderAreasQuery,
+  useWorldBuilderAction,
+  useAreaManagerQuery,
+  useUnfiledRoomsQuery,
+} = await import('../../queries');
 
 function makeArea(overrides: Partial<WorldBuilderArea> = {}): WorldBuilderArea {
   return {
@@ -335,5 +338,52 @@ describe('IndexRail', () => {
     expect(block).toHaveTextContent('3 of 8 rooms');
     await userEvent.click(within(block).getByText('Central Ward'));
     expect(onSelect).toHaveBeenCalledWith({ kind: 'area', id: 5 }, 'Central Ward');
+  });
+
+  it('places a new region as the geography of a new continent by default (#4242)', async () => {
+    const mutateAsync = vi.fn().mockResolvedValue({ success: true, data: { region_id: 11 } });
+    vi.mocked(useWorldBuilderAction).mockReturnValue({ mutateAsync } as never);
+    const onSelect = vi.fn();
+    renderWithProviders(<IndexRail current={null} onSelect={onSelect} pinned={[]} recents={[]} />);
+
+    await userEvent.click(within(screen.getByTestId('index-maps')).getByText('New region'));
+    await userEvent.type(screen.getByLabelText('region name'), 'Catenys');
+    expect(screen.getByTestId('new-region-continent')).toHaveValue('new');
+    await userEvent.click(screen.getByText('Place'));
+
+    expect(mutateAsync).toHaveBeenCalledWith({
+      key: 'atlas_create_region_map',
+      kwargs: { name: 'Catenys', anchor_x: 0, anchor_y: 0, width_cells: 20, new_continent: true },
+    });
+    expect(onSelect).toHaveBeenCalledWith({ kind: 'regionmap', id: 11 }, 'Catenys');
+  });
+
+  it('offers the continents already on the ladder and links the picked one (#4242)', async () => {
+    const continent = makeArea({ id: 9, name: 'Catenys', level: 70, level_display: 'Continent' });
+    vi.mocked(useWorldBuilderAreasQuery).mockImplementation(
+      (params = {}) =>
+        (params.hasParent === false
+          ? { data: { results: [continent, ward], count: 2 }, isLoading: false }
+          : { data: { results: [], count: 0 }, isLoading: false }) as never
+    );
+    const mutateAsync = vi.fn().mockResolvedValue({ success: true, data: { region_id: 12 } });
+    vi.mocked(useWorldBuilderAction).mockReturnValue({ mutateAsync } as never);
+    renderWithProviders(<IndexRail current={null} onSelect={vi.fn()} pinned={[]} recents={[]} />);
+
+    await userEvent.click(within(screen.getByTestId('index-maps')).getByText('New region'));
+    await userEvent.type(screen.getByLabelText('region name'), 'The Deadlands');
+    const picker = screen.getByTestId('new-region-continent');
+    expect(
+      within(picker)
+        .getAllByRole('option')
+        .map((o) => o.textContent)
+    ).toEqual(['New continent: The Deadlands', 'Catenys', 'No continent']);
+    await userEvent.selectOptions(picker, '9');
+    await userEvent.click(screen.getByText('Place'));
+
+    expect(mutateAsync).toHaveBeenCalledWith({
+      key: 'atlas_create_region_map',
+      kwargs: { name: 'The Deadlands', anchor_x: 0, anchor_y: 0, width_cells: 20, area_id: 9 },
+    });
   });
 });

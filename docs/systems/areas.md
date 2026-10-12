@@ -211,7 +211,7 @@ provinces and burgs are ignored by ruling.
 **Services** (`worldmap/services.py`), each refusing with `WorldMapServiceError.user_message`:
 
 ```python
-create_region_map(*, name, anchor_x, anchor_y, width_cells, area=None, actor=None)  # refuses overlap
+create_region_map(*, name, anchor_x, anchor_y, width_cells, area=None, new_continent=False, actor=None)  # refuses overlap; new_continent links the CONTINENT rung by the region's name, creating an authored one when there is none
 import_region_map_file(*, region, file_name, data, actor=None)  # parse, keep, rasterize
 rasterize_upload(upload)  # re-run the rasterize step from a kept file
 paint_terrain(*, region, pips, terrain)  # staff pips, survive every upload
@@ -242,7 +242,10 @@ upload, decompressed, under its original name).
 **Frontend:** the Atlas's region-map view (`frontend/src/world-builder/atlas/RegionMapPage.tsx`,
 view kind `regionmap`, reached from the index rail's Maps section): pips on one canvas
 in flat colour, cell lines every ten pips, footprints as holder-coloured fills, the seat
-as a dot; modes select, carve and paint; writes dispatch through `runAction`.
+as a dot; modes select, carve and paint; writes dispatch through `runAction`. The rail's
+New region form carries a continent choice: a new CONTINENT rung by the region's name
+(the default, `new_continent`), an existing continent (`area_id`), or none; an area page's
+On the map prefers the region linked to that area.
 
 ## AreaClosure Materialized View
 

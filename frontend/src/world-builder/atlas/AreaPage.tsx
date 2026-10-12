@@ -102,7 +102,9 @@ export function AreaPage({
   const area = manager?.area;
   const isBuilding = area?.level === BUILDING_LEVEL;
   const { data: regionMaps } = useRegionMapsQuery(Boolean(onOpenMap));
-  const firstRegionMap = regionMaps?.[0] ?? null;
+  // the region this area is the geography of (a continent's own map), else the first
+  const firstRegionMap =
+    regionMaps?.find((region) => region.area === areaId) ?? regionMaps?.[0] ?? null;
 
   const { data: childrenPage } = useWorldBuilderAreasQuery(
     { parent: areaId },
