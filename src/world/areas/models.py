@@ -354,3 +354,9 @@ from world.areas.positioning.models import (  # noqa: E402,F401
     Position,
     PositionEdge,
 )
+from world.areas.worldmap.models import (  # noqa: E402,F401
+    AreaFootprintPip,
+    RegionMap,
+    RegionMapUpload,
+    TerrainPip,
+)
