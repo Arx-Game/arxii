@@ -177,6 +177,70 @@ none, so a grant holder gets `[]`), and the Atlas's index rail shows them under 
 rooms" (`atlas/IndexRail.tsx`), each opening the room's document. The room search already
 found them by name; the rail is how a staffer reaches one without knowing to search.
 
+## World map (`worldmap/`, #4242, ADR-0328)
+
+The continent at pip resolution. A **pip** is a 10-mile square; ten a side make the
+100-mile **cell** the Atlas views the map through. Everything stored is pips; the cell is
+only a lens. A **barony is one pip**; a county is roughly a hundred and may spill over a
+cell edge; boundaries and coastlines are never cell-shaped.
+
+| Model | Role | Key fields |
+|---|---|---|
+| `RegionMap` | A region on the one world grid | `name`, `area` (nullable FK to the CONTINENT-level Area it is the geography of), `anchor_x`/`anchor_y` (world cells), `width_cells`, `height_cells` (from the first upload's aspect), `created_by`/`created_at`; `pip_x0`/`pip_y0` properties give the first pip |
+| `RegionMapUpload` | One uploaded generator file, kept whole | `region`, `file_name`, `file_bytes` (gzip `BinaryField`), `byte_size`, `generator_version`, `source_width_px`/`source_height_px`, `uploaded_by`/`uploaded_at`, `rasterized_at`. Append-only: every file is kept |
+| `TerrainPip` | One pip of ground | `region` (PROTECT), `x`/`y` (world pips, unique together), `terrain` (`Terrain`), `height` (the generator's 0-100), `has_river`, `source` (`PipSource`: generator or staff) |
+| `AreaFootprintPip` | One pip of one area's footprint | `area` (CASCADE), `x`/`y`; unique per area; every tier stores its own pips |
+
+**Enums** (`worldmap/constants.py`): `Terrain` (water, lake, plain, forest, hill,
+mountain, marsh, desert, tundra, glacier; the coast is derived from neighbours, never
+stored) and `PipSource` (generator, staff). `PIPS_PER_CELL = 10`, `MILES_PER_PIP = 10`.
+`Terrain` is geography; `battles.TerrainType` is a battlefield's tactical shape and the
+two share nothing. `LandShape` on a domain is flavour prose, not this.
+
+**The rasterizer** (`worldmap/azgaar.py`): `parse_map(text)` reads a Fantasy Map
+Generator `.map` file by content (the params line, then the grid block beginning
+`{"spacing":` and the five grid arrays after it, then the feature list; rivers from the
+SVG's river layer); `rasterize(gmap, width_cells, height_cells)` returns one `RasterPip`
+per pip, scaling the file to the region's width and finding each pip's grid cell the
+generator's own way. Terrain: sea below height 20 (lake when the feature is a lake),
+mountain from 71, hill from 50, otherwise the generator's biome matrix over temperature
+and moisture (its own rule: four plus the mean precipitation of the cell and its land
+neighbours, plus two on a river). Only the grid arrays are read; the generator's states,
+provinces and burgs are ignored by ruling.
+
+**Services** (`worldmap/services.py`), each refusing with `WorldMapServiceError.user_message`:
+
+```python
+create_region_map(*, name, anchor_x, anchor_y, width_cells, area=None, actor=None)  # refuses overlap
+import_region_map_file(*, region, file_name, data, actor=None)  # parse, keep, rasterize
+rasterize_upload(upload)  # re-run the rasterize step from a kept file
+paint_terrain(*, region, pips, terrain)  # staff pips, survive every upload
+set_footprint(*, area, add=(), remove=())  # water refused; a child's pip lies in its parent's footprint; a parent cannot drop a pip a child uses
+holder_at(x, y)  # the lowest area whose footprint holds the pip, or None (open ground)
+region_read(region)  # the pips payload: terrain rows + footprints with holder, title, seat
+```
+
+A re-rasterize deletes the region's generator pips and writes the new raster, skipping
+any square a staff pip holds (ruling 5 on #4242). A footprint below BARONY is refused; an
+area at KINGDOM or above with no footprint yet constrains its children not at all.
+
+**Actions** (`actions/definitions/atlas_map.py`, `category="almanach"`, staff only):
+`atlas_create_region_map`, `atlas_carve_footprint` (`area_id`, `add`/`remove` as `[x, y]`
+lists), `atlas_paint_terrain` (`region_id`, `pips`, `terrain`). Create Domain from the
+map is `almanach_plant_rung` then `atlas_carve_footprint`; nothing here mints a rung.
+
+**API** (`worldmap/views.py`, on the world-builder router, `IsAdminUser`):
+`GET /api/world-builder/region-maps/`, `GET .../<id>/`, `GET .../<id>/pips/` (the
+`region_read` payload: `pips` rows are `[x, y, terrain, river]`, `footprints` carry
+`holder_org_id`, `title_id` for the Almanach link, `seat`), `POST .../<id>/upload/`
+(multipart `file`; the one write that is not an action), `GET .../<id>/file/` (the latest
+upload, decompressed, under its original name).
+
+**Frontend:** the Atlas's region-map view (`frontend/src/world-builder/atlas/RegionMapPage.tsx`,
+view kind `regionmap`, reached from the index rail's Maps section): pips on one canvas
+in flat colour, cell lines every ten pips, footprints as holder-coloured fills, the seat
+as a dot; modes select, carve and paint; writes dispatch through `runAction`.
+
 ## AreaClosure Materialized View
 
 The `AreaClosure` model is backed by a Postgres materialized view that stores every ancestor-descendant pair with depth. This enables efficient ancestry and descendant queries without recursive CTEs at query time.

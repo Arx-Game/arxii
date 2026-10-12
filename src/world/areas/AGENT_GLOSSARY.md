@@ -143,3 +143,42 @@ designated CITY-level `Area` (`areas_one_capital_per_realm` constraint, one
 per realm).
 _Avoid_: see that entry's own `_Avoid_` line — "capital" is never the right
 word for a title's own barony-level **Seat**.
+
+**Pip** (#4242, ADR-0328):
+One 10-mile square of the world map, the unit everything on the overland map is stored
+in (`TerrainPip`, `AreaFootprintPip`, world `x`/`y`). Ten a side make a **cell**, the
+100-mile square the Atlas views the map through; the cell is only a lens, never a storage
+unit, so boundaries and coastlines are never cell-shaped. A barony is one pip.
+_Avoid_: tile, square, hex.
+
+**Region map** (`RegionMap`, #4242):
+A region of the world map on the one world grid: an anchor cell, a width in cells, and
+the generator files uploaded for it (`RegionMapUpload`, every one kept). Catenys is the
+first; later regions tile beside it, their seams stitched by staff paint.
+_Avoid_: world map (the grid is the world; a map is a region of it), map file (that is
+the upload).
+
+**Terrain pip** (`TerrainPip`, `Terrain`, #4242):
+What one pip of ground is: water, lake, plain, forest, hill, mountain, marsh, desert,
+tundra or glacier, with the generator's height and whether a river runs through it, and
+its **source**: the generator's or a staff member's paint. A re-rasterize rewrites only
+the generator's pips. The coast is land beside water and is read from neighbours, never
+stored. Geography, distinct from `battles.TerrainType` (a battlefield's tactical shape)
+and from a domain's `LandShape` (flavour prose on the record).
+_Avoid_: biome (the generator's word for the input), land shape.
+
+**Footprint** (`AreaFootprintPip`, #4242):
+The set of pips a domain covers, one row per pip per area at every tier (a county's open
+ground between its baronies is still the county's). A child's pip lies within its
+parent's footprint; a parent cannot drop a pip a child stands on; water is never in one.
+Carved and grown by `atlas_carve_footprint`, never by the generator.
+_Avoid_: territory (the control stat axis, ADR-0319), bounds, extent.
+
+**Open ground** (#4242):
+A land pip no footprint holds. Real rows, claimable later; an unexplored or veiled state
+is a later column on the pip, not a re-rasterize.
+_Avoid_: unowned, wilderness (a terrain word), fog.
+
+**Holder of a pip** (#4242):
+The lowest-level area whose footprint contains the pip (`holder_at`), and through its
+`Domain.owner_org` the house that holds it. Derived on read; never a column.

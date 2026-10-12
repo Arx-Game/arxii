@@ -40,6 +40,11 @@ from actions.definitions.alterations import ResolveAlterationAction
 from actions.definitions.appetites import DrainAction, FeedAction
 from actions.definitions.areas import DeclareElevationAction
 from actions.definitions.assets import IntroduceAssetAction
+from actions.definitions.atlas_map import (
+    AtlasCarveFootprintAction,
+    AtlasCreateRegionMapAction,
+    AtlasPaintTerrainAction,
+)
 from actions.definitions.battles import (
     BeginBattleRoundAction,
     BrowseBattleCatalogAction,
@@ -1222,6 +1227,10 @@ _ALL_ACTIONS: list[Action] = [
     # #3983 Almanach de Catenys: staff house builder — plant/name/batch rungs,
     # edit the house record, swear fealty, describe demesnes, add holdings,
     # plan estates, author kin, publish/unpublish.
+    # #4242 the world map: region maps, footprints, paint (the upload is an endpoint).
+    AtlasCreateRegionMapAction(),
+    AtlasCarveFootprintAction(),
+    AtlasPaintTerrainAction(),
     AlmanachPlantRungAction(),
     AlmanachBatchUnclaimedAction(),
     AlmanachNameRungAction(),
