@@ -22,8 +22,8 @@ locally, plus the existing CI shard matrix at ``ci.yml:46-76``) runs
 against a test DB built from current model state by
 ``tools/build_schema.py`` (see ``test_settings.py``'s ``MIGRATE=False``)
 and the real refresh implementations; migration-chain validity is
-gated separately by `makemigrations --check` and the nightly full-replay
-workflow.
+gated separately by `makemigrations --check` and, at each chain
+regeneration, `just verify-regeneration` (ADR-4250).
 """
 
 import server.conf.test_settings as _base_test_settings
@@ -71,8 +71,8 @@ TEST_RUNNER = "server.conf.sqlite_test_runner.SqliteTestRunner"
 # state via ``tools/build_schema.py`` + ``MIGRATE=False`` (see
 # ``test_settings.py``) rather than replaying the migration chain, so the
 # carve-out here only affects the inner-loop fast tier's mechanism, not
-# migration-chain coverage — that's gated by `makemigrations --check` and
-# the nightly full-replay workflow.
+# migration-chain coverage — that's gated by `makemigrations --check` and,
+# at each chain regeneration, `just verify-regeneration` (ADR-4250).
 #
 # Caveat: the idempotent seed functions (``world.progression.seeds``,
 # ``world.magic.seeds_soul_tether``) only run via ``tools/build_schema.py``

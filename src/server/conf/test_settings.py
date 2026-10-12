@@ -24,7 +24,8 @@ PASSWORD_HASHERS = [
 # `just build-test-schema`. MIGRATE=False stops Django's create_test_db from
 # replaying the migration chain on top (12+ min of pure Python model-state
 # rendering; see ADR ci-schema-from-models). Migration-chain validity is
-# gated by `makemigrations --check` on PRs + the nightly full-replay workflow.
+# gated by `makemigrations --check` on PRs + `just verify-regeneration` at each
+# chain regeneration (ADR-4250).
 DATABASES["default"].setdefault("TEST", {})["MIGRATE"] = False
 
 # Reduce logging verbosity during tests

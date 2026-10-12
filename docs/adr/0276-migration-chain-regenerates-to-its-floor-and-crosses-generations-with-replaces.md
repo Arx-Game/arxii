@@ -54,9 +54,12 @@ applied name forever and would skip a repeat silently, and any module outside
 the package that still names a dropped migration (a test of a dropped
 `RunPython` has no subject left; two such tests went with generation 1).
 
-**Trigger:** regenerate when the nightly replay workflow reports more than 30
-minutes (it now records wall time and emits a warning past that), or before any
-release that will replay on a fresh environment. A regeneration PR is
+**Trigger:** regenerate when `.github/workflows/migration-regeneration-due.yml`
+opens its "Migration chain regeneration due" issue (monthly; due at 100 incremental
+migrations since the current generation, counted by `tools/check_regeneration_due.py`
+with no database), or before any release that will replay on a fresh environment.
+This replaced a 30-minute wall-time warning from the nightly replay workflow, retired
+by ADR-4250. A regeneration PR is
 regenerated on the tip of `main` in a fresh worktree before it is enqueued, never
 rebased: a migration that lands after the branch was cut would depend on a node
 the branch deleted. **That tip must already be deployed to production** (the

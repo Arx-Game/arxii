@@ -185,7 +185,7 @@ def _is_django_migrations_object(line: str) -> bool:
     keys on the owning table ('django_migrations'), which the equality arm
     catches, but if that ownership link is ever absent the row falls back to the
     sequence's own name ('django_migrations_id_seq') and only the prefix arm
-    catches it. Cheap insurance against this filter re-reddening the nightly.
+    catches it. Cheap insurance against this filter re-reddening a regeneration's verify step.
     """
     object_name = line.split("|", 2)[1]
     return object_name == "django_migrations" or object_name.startswith("django_migrations_")

@@ -132,9 +132,8 @@ non-empty and wasn't built by `build_schema.py`, `post-create.sh` refuses instea
 grafting onto it - see "Stale bootstrap database" in Troubleshooting below. To
 exercise the real migration chain locally instead (e.g. reproducing a
 migration-only bug), point `DATABASE_URL` at a fresh empty database and run `uv run
-arx manage migrate` directly; CI's nightly workflow
-(`.github/workflows/nightly-migration-replay.yml`) is the standing coverage for that
-path.)
+arx manage migrate` directly. Nothing runs that path on a schedule (ADR-4250);
+each chain regeneration replays it with `just verify-regeneration`.)
 
 **Get a shell inside the container:**
 
