@@ -4,6 +4,10 @@ Closes #{{issue_number}}
 
 {{summary}}
 
+## Verification
+
+{{verification}}
+
 ## Follow-ups filed
 
 {{followup_list}}

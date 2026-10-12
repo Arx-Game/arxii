@@ -130,12 +130,23 @@ The spec body: models, service functions, actions, flows, API/UI surfaces, and h
 they fit the existing architecture. Reference the canonical terms and the relevant
 ADRs. Note any new ADR this work should add.
 
-### Testing
+### Verification
 
-The test plan and tier: SQLite fast tier (`just test-fast <app>`) for local
-iteration, Postgres parity (CI) for the gate. Prefer big journey/E2E tests over
-fine-grained unit tests; add focused unit tests only for fiddly parse/error paths the
-E2E doesn't reach.
+How we will know the change works, in plain words a person who does not know the
+code can follow (ADR-4246; procedure in `tools/skills/real-testing/`). For each
+behavior the change promises:
+
+1. **Expected behavior**, and where the expectation comes from (this spec, the
+   demo, an ADR, a documented contract). Never from what the code outputs.
+2. **How it will be operated for real**: the page, request, game action, admin
+   form or migration run (against a production copy for a migration on tables
+   with data), and what will be seen.
+3. **What a failure looks like**, so a reviewer can tell if it happened.
+
+"Wrote unit tests" is not a verification plan. Tests may support it: the SQLite
+fast tier (`just test-fast <app>`) for local iteration, Postgres parity (CI) for
+the gate, journey/E2E tests over fine-grained unit tests, and focused unit tests
+only for fiddly parse/error paths. They do not replace operating the change.
 
 ### Scope / follow-ups
 

@@ -87,6 +87,12 @@ _STUBS = {
 }
 
 
+_VERIFICATION = (
+    "I opened the settings page as a player and saved a new display name; "
+    "the page reloaded with the new name. Screenshot: <link>."
+)
+
+
 def _run_dry_run(evidence_env: dict[str, str]) -> subprocess.CompletedProcess[str]:
     with tempfile.TemporaryDirectory() as directory:
         for name, script in _STUBS.items():
@@ -99,6 +105,7 @@ def _run_dry_run(evidence_env: dict[str, str]) -> subprocess.CompletedProcess[st
                 "PR_DISCOVERY_LANE": "standard: stakeholder-approved packet",
                 "PR_BRAINSTORM_DEMO": "decision: no visual demo; product brief recorded",
                 "PR_QUALITY_REVIEW": "selected: contract; skipped: visual; disposition: pass",
+                "PR_VERIFICATION": _VERIFICATION,
             }
         )
         env.update(evidence_env)
@@ -183,6 +190,7 @@ class OpenPrBodyTests(unittest.TestCase):
                     "PR_DISCOVERY_LANE": "standard: stakeholder-approved packet",
                     "PR_BRAINSTORM_DEMO": "decision: no visual demo; product brief recorded",
                     "PR_QUALITY_REVIEW": "selected: contract; skipped: visual; disposition: pass",
+                    "PR_VERIFICATION": _VERIFICATION,
                 }
             )
             env["PATH"] = f"{directory}{os.pathsep}{env['PATH']}"
@@ -201,6 +209,27 @@ class OpenPrBodyTests(unittest.TestCase):
         url = "https://github.com/Arx-Game/arxii/issues/1234#issuecomment-1"
         body = _dry_run_body({"PR_EVIDENCE_URL": url})
         self.assert_report_line(body, f"- Report: {url}")
+
+    def test_open_pr_requires_a_verification_report(self) -> None:
+        for missing in ("", "   ", "not recorded"):
+            with self.subTest(verification=missing):
+                result = _run_dry_run(
+                    {"PR_EVIDENCE_FILE": "docs/reviews/1234.md", "PR_VERIFICATION": missing}
+                )
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn("PR_VERIFICATION", result.stderr)
+
+    def test_a_real_report_may_say_not_recorded(self) -> None:
+        report = "BLOCKED: the browser pass was not recorded; the machine has 6 GB."
+        body = _dry_run_body(
+            {"PR_EVIDENCE_FILE": "docs/reviews/1234.md", "PR_VERIFICATION": report}
+        )
+        self.assertIn(report, body)
+
+    def test_verification_report_lands_in_its_own_section(self) -> None:
+        body = _dry_run_body({"PR_EVIDENCE_FILE": "docs/reviews/1234.md"})
+        _, _, after_heading = body.partition("## Verification\n\n")
+        self.assertTrue(after_heading.startswith(_VERIFICATION), body)
 
 
 if __name__ == "__main__":

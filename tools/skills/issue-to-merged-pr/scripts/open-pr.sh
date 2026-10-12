@@ -5,7 +5,8 @@
 # whose body is composed from templates/pr-body.md with substitutions:
 #   {{issue_number}}, {{spec_gate_status}}, {{summary}}, {{followup_list}},
 #   {{ran_or_skipped}}, {{discovery_lane}}, {{brainstorm_demo_summary}},
-#   {{quality_review_summary}}, {{sync_summary}}, {{evidence_file}}
+#   {{quality_review_summary}}, {{sync_summary}}, {{evidence_file}},
+#   {{verification}}
 #
 # Required env vars (set exactly one):
 #   PR_EVIDENCE_URL  - GitHub issue/PR comment containing the review report
@@ -18,6 +19,8 @@
 #
 # Optional env vars (used as substitution sources if set):
 #   PR_SUMMARY              - replaces {{summary}} (default: "(no summary provided)")
+#   PR_VERIFICATION         - required plain real-testing report: what was done,
+#                             expected, seen, and where the evidence is (#4246)
 #   PR_RAN_OR_SKIPPED       - replaces {{ran_or_skipped}} (default: "ran")
 #   PR_DISCOVERY_LANE       - optional rationale note; lane is derived and checked
 #   PR_BRAINSTORM_DEMO      - required concise PRD/demo decision note
@@ -66,6 +69,7 @@ TEMPLATE="$SCRIPT_DIR/../templates/pr-body.md"
 [[ -f "$TEMPLATE" ]] || { echo "ERROR: template not found: $TEMPLATE" >&2; exit 1; }
 
 SUMMARY="${PR_SUMMARY:-(no summary provided)}"
+VERIFICATION="${PR_VERIFICATION:-}"
 RAN_OR_SKIPPED="${PR_RAN_OR_SKIPPED:-ran}"
 DISCOVERY_LANE="${PR_DISCOVERY_LANE:-}"
 BRAINSTORM_DEMO_SUMMARY="${PR_BRAINSTORM_DEMO:-}"
@@ -111,6 +115,13 @@ if [[ -z "$BRAINSTORM_DEMO_SUMMARY" || "$BRAINSTORM_DEMO_SUMMARY" == *"not recor
 fi
 if [[ -z "$QUALITY_REVIEW_SUMMARY" || "$QUALITY_REVIEW_SUMMARY" != *"selected:"* || "$QUALITY_REVIEW_SUMMARY" != *"skipped:"* || "$QUALITY_REVIEW_SUMMARY" != *"disposition:"* ]]; then
   echo "ERROR: PR_QUALITY_REVIEW must include selected:, skipped:, and disposition: entries." >&2
+  exit 1
+fi
+# The plain real-testing report (tools/skills/real-testing, ADR-4246). A script
+# cannot judge its quality - the evidence challenger does that on the PR - but
+# it can refuse to open a PR that has no Verification section at all.
+if [[ -z "${VERIFICATION//[[:space:]]/}" || "$VERIFICATION" =~ ^[[:space:]]*not\ recorded[[:space:]]*$ ]]; then
+  echo "ERROR: PR_VERIFICATION must carry the real-testing report: what you did, what you expected, what you saw, and where the evidence is." >&2
   exit 1
 fi
 if has_issue_label spec:approved; then
@@ -195,6 +206,7 @@ BODY=$(cat "$TEMPLATE")
 BODY=${BODY//\{\{issue_number\}\}/$ISSUE}
 BODY=${BODY//\{\{spec_gate_status\}\}/$SPEC_GATE_STATUS}
 BODY=${BODY//\{\{summary\}\}/$SUMMARY}
+BODY=${BODY//\{\{verification\}\}/$VERIFICATION}
 BODY=${BODY//\{\{followup_list\}\}/$FOLLOWUP_LIST}
 BODY=${BODY//\{\{ran_or_skipped\}\}/$RAN_OR_SKIPPED}
 BODY=${BODY//\{\{discovery_lane\}\}/$DISCOVERY_LANE}

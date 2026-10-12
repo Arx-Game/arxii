@@ -26,6 +26,11 @@ class WorkflowParityTests(unittest.TestCase):
             "intent-ambiguity-critic",
             "scope-simplicity-critic",
             "selected/skipped",
+            "tools/skills/real-testing/",
+            "PR_VERIFICATION",
+            "### 6a. Evidence challenge",
+            "<!-- evidence-answer -->",
+            "`## Open evidence challenges`",
         }
         for path, text in zip(RECIPES, texts, strict=True):
             missing = sorted(token for token in required if token not in text)
@@ -44,6 +49,7 @@ class WorkflowParityTests(unittest.TestCase):
             "enumerated-set-reviewer",
             "portal-code-deploy-reviewer",
             "demo-fidelity-reviewer",
+            "evidence-challenge-reviewer",
         }
         for reviewer in reviewers:
             self.assertTrue(all(reviewer in text for text in texts), reviewer)
