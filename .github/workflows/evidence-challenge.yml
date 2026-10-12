@@ -125,6 +125,7 @@ jobs:
           } >> "$GITHUB_OUTPUT"
 
       - name: Run the evidence challenger
+        id: claude
         if: steps.prep.outputs.run == 'true'
         uses: anthropics/claude-code-action@1d6de8cb0c237e7c15e9e1bdf973826ebae490cc # v1
         with:
@@ -135,3 +136,15 @@ jobs:
             --model claude-haiku-5-5
             --max-turns 30
             --allowed-tools "Read,Grep,Glob,Bash(gh pr view:*),Bash(gh pr diff:*),Bash(gh issue view:*),Bash(gh pr comment:*)"
+
+      # The action hides the model's output, so a refused tool call is
+      # invisible except as a count. Print only the refused calls (tool and
+      # input), so the allow list above can be tuned from evidence.
+      - name: List refused tool calls
+        if: always() && steps.claude.outputs.execution_file != ''
+        env:
+          EXECUTION_FILE: ${{ steps.claude.outputs.execution_file }}
+        run: |
+          jq -c '.[] | select(.type == "result") | .permission_denials[]?
+                 | {tool: .tool_name, input: .tool_input}' "$EXECUTION_FILE" \
+            || echo "No execution file to read."
