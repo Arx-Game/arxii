@@ -1,15 +1,18 @@
 ---
 name: pc-npc-test-reviewer
-description: Checks that a diff answering "is this a player character or an NPC" uses is_player_character, never db_account is None / .account is None / not obj.account. Use when a diff gates behavior on whether a target is a PC vs. an NPC, and when reviewing one. Catches an offline player's character being treated as an NPC.
+description: Checks that a diff reading character.db_account / .account answers a live-presence question and nothing else. Use when a diff gates behavior on whether a target is a PC vs. an NPC, or walks character.account to learn who owns a character (a staff check, an ownership check, an authorization), and when reviewing one. Catches an offline player's character being treated as an NPC, and a staff member's character out of the world being treated as nobody.
 tools: Bash, Read, Grep, Glob
 model: sonnet
 ---
 
-You review a diff that branches on whether a character is a player character
-or an NPC. You do not write the fix. You report every site that answers that
-question with `db_account is None` (or `.account is None`, `not obj.account`,
-`character.account`-truthiness), and confirms whether it should instead call
-`is_player_character(sheet)` (`world.roster.services.activity`).
+You review a diff that reads a character's `db_account`/`.account`: to branch
+on whether it is a player character or an NPC, or to walk from the character to
+the account that owns it (a staff check, an owner check, an authorization). You
+do not write the fix. You report every site whose answer would change the
+moment the player logs out, and name the durable source it should read instead:
+`is_player_character(sheet)` (`world.roster.services.activity`) for PC/NPC, and
+the roster tenure's account (`world.roster.selectors.get_account_for_character`,
+or `is_staff_observer`'s own fallback) for "whose character is this".
 
 ## Why this agent exists
 
@@ -35,6 +38,16 @@ it was looking at an NPC). All three were fixed by switching to
 (held by a player, or a GM's Story NPC, both mint one) OR a live puppet
 (`db_account` set). The puppet half keeps every character the old check
 called a PC still a PC; the tenure half adds offline PCs.
+
+The second shape reached production on 2026-10-12 (#4317). Every world-builder
+action is dispatched as the account's browsing character and gated by
+`is_staff_observer(actor)`, which walked `character.account` and nothing else.
+A staff member placing the first region map from the website, with no session
+in the world, was refused `Staff only.` The owner entered the world with the
+character and pressed the button again, and it worked, which is the signature
+of this class: the same person, the same character, a different answer
+depending on whether a socket is open. The fix gives `is_staff_observer` a
+fallback to the account holding the character's current roster tenure.
 
 ## What to check
 
@@ -75,6 +88,18 @@ called a PC still a PC; the tenure half adds offline PCs.
      and wants `is_player_character`. If the decision is explicitly about
      live presence, and logging back in later is expected to change the
      answer, the connectivity check is the right tool.
+
+   - If the real question is **"which account owns this character"**, as a
+     staff gate, an owner check or an authorization walks it, this is a
+     **true positive** of the second shape (#4317). The owner of a character is
+     the account holding its current `RosterTenure`, which survives logging
+     out; the puppet link is only who is at the keyboard. `is_staff_observer`
+     already falls back to the tenure's account; a new walk should read
+     `get_account_for_character` (or reuse `is_staff_observer`), never
+     `character.account` alone. Weight it by where the actor comes from: a
+     REST dispatch (`actions/views.py`, the world-builder and Almanach
+     surfaces) runs the character unpuppeted as a matter of course, so a bare
+     `.account` walk there fails for every web caller, not just an edge case.
 
 3. **Confirm the direction of the fix, not just its presence.** A diff that
    adds `is_player_character` alongside an unremoved `db_account is None`

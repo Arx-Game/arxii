@@ -44,6 +44,36 @@ class AtlasMapActionTests(TestCase):
         result = AtlasCarveFootprintAction().run(self.player, area_id=self.county.pk, add=[[1, 1]])
         assert not result.success
 
+    def test_staff_place_a_region_from_the_website_with_their_character_out_of_the_world(
+        self,
+    ) -> None:
+        """The production failure on #4317: every world-builder action is dispatched over
+        REST as the account's browsing character, which nobody is puppeting, so
+        ``character.account`` is empty and the staff gate used to answer "Staff only."."""
+        from django.urls import reverse
+        from rest_framework.test import APIClient
+
+        from world.character_sheets.factories import CharacterSheetFactory
+        from world.roster.factories import grant_test_tenure
+
+        account = AccountFactory(username="apostate_on_the_web", is_staff=True)
+        character = CharacterFactory(db_key="Apostate")
+        grant_test_tenure(CharacterSheetFactory(character=character), account)
+        assert character.account is None
+        client = APIClient()
+        client.force_authenticate(user=account)
+        response = client.post(
+            reverse("actions:dispatch-action", kwargs={"character_id": character.pk}),
+            {
+                "ref": {"backend": "registry", "registry_key": "atlas_create_region_map"},
+                "kwargs": {"name": "Catenys", "anchor_x": 40, "anchor_y": 0, "width_cells": 20},
+            },
+            format="json",
+        )
+        assert response.status_code == 200, response.content
+        assert response.json()["success"] is True, response.json()
+        assert RegionMap.objects.filter(name="Catenys").exists()
+
     def test_create_region_map(self) -> None:
         result = AtlasCreateRegionMapAction().run(
             self.staff, name="Eastland", anchor_x=2, anchor_y=0, width_cells=3
@@ -72,17 +102,24 @@ class AtlasMapActionTests(TestCase):
             self.staff, area_id=self.county.pk, add=[[1, 1], [2, 1]]
         )
         assert result.success, result.message
-        assert result.data == {"area_id": self.county.pk, "added": 2, "removed": 0}
+        assert result.data == {"area_id": self.county.pk, "added": 2, "removed": 0, "skipped": 0}
         result = AtlasCarveFootprintAction().run(
             self.staff, area_id=self.county.pk, remove=[[1, 1]]
         )
         assert result.success
         assert AreaFootprintPip.objects.filter(area=self.county).count() == 1
-        refused = AtlasCarveFootprintAction().run(
-            self.staff, area_id=self.county.pk, add=[[15, 15]]
+        # water is taken like land (#4317)
+        wet = AtlasCarveFootprintAction().run(self.staff, area_id=self.county.pk, add=[[15, 15]])
+        assert wet.success, wet.message
+        assert wet.data["added"] == 1
+        # a neighbour's pip is skipped and named, and the rest of the drag lands (#4317)
+        other = AreaFactory(name="Other", level=AreaLevel.COUNTY)
+        partial = AtlasCarveFootprintAction().run(
+            self.staff, area_id=other.pk, add=[[2, 1], [3, 1]]
         )
-        assert not refused.success
-        assert "water" in refused.message
+        assert partial.success, partial.message
+        assert partial.data == {"area_id": other.pk, "added": 1, "removed": 0, "skipped": 1}
+        assert partial.message == "Other: 1 pips added, 0 removed. 1 skipped (County)."
         bad = AtlasCarveFootprintAction().run(self.staff, area_id=self.county.pk, add="nope")
         assert not bad.success
 

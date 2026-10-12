@@ -46,6 +46,40 @@ class IsStaffObserverTests(TestCase):
         self.assertFalse(is_staff_observer(observer))
 
 
+class IsStaffObserverOutOfTheWorldTests(TestCase):
+    """A staff member's character with nobody puppeting it (#4317): Evennia deletes
+    ``character.account`` on the last unpuppet, so the gate falls back to the
+    account holding the character's current roster tenure."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        from evennia_extensions.factories import AccountFactory, CharacterFactory
+        from world.character_sheets.factories import CharacterSheetFactory
+        from world.roster.factories import grant_test_tenure
+
+        cls.staff_char = CharacterFactory(db_key="OffWorldStaff")
+        grant_test_tenure(
+            CharacterSheetFactory(character=cls.staff_char),
+            AccountFactory(username="offworld_staff", is_staff=True),
+        )
+        cls.player_char = CharacterFactory(db_key="OffWorldPlayer")
+        grant_test_tenure(
+            CharacterSheetFactory(character=cls.player_char),
+            AccountFactory(username="offworld_player", is_staff=False),
+        )
+        cls.nobody_char = CharacterFactory(db_key="Nobody")
+
+    def test_staff_tenure_counts_without_a_puppet(self) -> None:
+        assert self.staff_char.account is None
+        self.assertTrue(is_staff_observer(self.staff_char))
+
+    def test_player_tenure_is_not_staff(self) -> None:
+        self.assertFalse(is_staff_observer(self.player_char))
+
+    def test_no_tenure_and_no_puppet_is_nobody(self) -> None:
+        self.assertFalse(is_staff_observer(self.nobody_char))
+
+
 class PlayerOnlyPermissionTests(TestCase):
     """Staff get NO bypass on writes; SAFE_METHODS pass for any authenticated user."""
 

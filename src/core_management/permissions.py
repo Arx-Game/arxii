@@ -21,9 +21,16 @@ def is_staff_observer(observer: object) -> bool:
     """Whether ``observer`` represents a staff user.
 
     Accepts any of: ObjectDB (character), AccountDB, Django User-like.
-    For ObjectDB, walks ``character.account.is_staff``. Returns False if
-    ``observer`` is None, has no ``is_staff`` attr and no associated
-    account, or the associated account isn't staff.
+    For ObjectDB, walks ``character.account.is_staff``; when that link is
+    empty it falls back to the account holding the character's current roster
+    tenure (#4317). Returns False if ``observer`` is None, has no ``is_staff``
+    attr and no account either way, or the account isn't staff.
+
+    The fallback exists because Evennia fills ``character.account`` only while
+    the character is puppeted (``unpuppet_object`` runs ``del obj.account`` on
+    the last session). A staff member acting from the website with their
+    character out of the world, as every world-builder action is dispatched,
+    would otherwise read as nobody.
 
     The helper is policy-free — it only answers the yes/no question.
     Callers that need a staff bypass call this and decide their own
@@ -39,8 +46,21 @@ def is_staff_observer(observer: object) -> bool:
         return bool(is_staff)
     account = getattr(observer, "account", None)  # noqa: GETATTR_LITERAL
     if account is None:
+        account = _tenure_account(observer)
+    if account is None:
         return False
     return bool(account.is_staff)
+
+
+def _tenure_account(observer: object):
+    """The account holding a character's current roster tenure, for a character nobody
+    is puppeting: the way ``BuildWarrantPrerequisite`` and ``MinimumGMLevelPrerequisite``
+    already resolve an actor. None for anything that is not a character."""
+    from typeclasses.characters import Character  # noqa: PLC0415
+
+    if not isinstance(observer, Character):
+        return None
+    return observer.active_account
 
 
 class PlayerOnlyPermission(IsAuthenticated):
