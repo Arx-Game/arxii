@@ -171,13 +171,17 @@ Await-approval, and Implementation.
   cd "$(jq -r '.worktree_path' <<<"$START_JSON")"
   ```
 - **Model selection.** Read the `model` and `complexity` fields from the
-  emitted JSON. If `model` is non-empty, switch now — before any design,
-  planning, or implementation work:
-  - `complexity:high` → `claude-sonnet-5` — run `/model claude-sonnet-5`
-  - `complexity:medium` → `claude-sonnet-5` — run `/model claude-sonnet-5`
-  - `complexity:low` → `claude-sonnet-5` as the session model; leaf subagents
-    in workflow scripts also use `opts.model: "sonnet"` (user preference:
-    Sonnet 5 for all subagents).
+  emitted JSON. Any model at Haiku 5.5 or higher is acceptable (`claude-haiku-5-5`,
+  `claude-sonnet-5-5`, `claude-opus-5-5`, `claude-fable-5-1`, and later). If the
+  session is already on one of those, keep it and proceed. Otherwise, before any
+  design, planning, or implementation work, switch to the tier for the label:
+  - `complexity:high` → `claude-sonnet-5-5` or higher — run `/model claude-sonnet-5-5`
+  - `complexity:medium` → `claude-sonnet-5-5` or `claude-haiku-5-5` — run `/model <choice>`
+  - `complexity:low` → `claude-haiku-5-5` is enough as the session model
+  - Mechanical work with a settled plan (a refactor, a rename, a move) may stay on
+    `claude-haiku-5-5` at any complexity; Haiku 5.5 is a capable implementer.
+  - Leaf subagents in workflow scripts use `opts.model` at or above the session's
+    tier, and may use `"haiku"` for narrow read-only fan-out.
   - No `complexity:*` label → no change; proceed on the current model.
   In workflow scripts (`agent()` calls), set `opts.model` consistently with
   the above mapping so subagents inherit the right tier.
@@ -523,11 +527,11 @@ agent has uncommitted work in the worktree.
 
 ### 6. CI watch
 
-> ⚠️ **NEVER use a top-tier model for CI watch or any looping/polling phase.**
+> ⚠️ **Do not spend a heavy model on CI watch or any looping/polling phase.**
 > The watch loop runs up to 25 minutes at 60-second intervals — potentially
 > 25+ model calls for pure polling work. If the session is on a heavier model,
-> switch to Sonnet (`/model claude-sonnet-5`) before running `watch-ci.sh`.
-> Top-tier models are for design and implementation, not waiting.
+> switch to `claude-haiku-5-5` (or `claude-sonnet-5-5`) before running
+> `watch-ci.sh`. Use the heavier models for design and implementation, not waiting.
 
 > ⚠️ **Probe any poll command once in the foreground before arming a loop.**
 > Before you wrap a `gh`/`git`/status query in a `Monitor` or a background
