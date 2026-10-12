@@ -22,7 +22,12 @@ import { useAppSelector } from '@/store/hooks';
 import { TargetMenuInputs } from './TargetMenuInputs';
 import { isDispatchFailure, type ActionRef } from '@/combat/types';
 import { useTargetMenuSnapshot } from './useTargetMenuSnapshot';
-import { TargetMenuFetchError, type TargetMenuEntry, type TargetMenuTarget } from './targetMenuApi';
+import {
+  TargetMenuFetchError,
+  type TargetMenuData,
+  type TargetMenuEntry,
+  type TargetMenuTarget,
+} from './targetMenuApi';
 
 interface TargetMenuProps {
   partition: string;
@@ -165,48 +170,21 @@ export function TargetMenu({ partition, actorId, target, children }: TargetMenuP
       <ContextMenu onOpenChange={setOpen}>
         <ContextMenuTrigger asChild>{children}</ContextMenuTrigger>
         <ContextMenuContent className="max-h-[min(32rem,80vh)] min-w-56 overflow-y-auto">
-          {!data && isLoading ? <ContextMenuLabel>Loading actions…</ContextMenuLabel> : null}
-          {!data && error ? (
-            <ContextMenuLabel className="text-muted-foreground">
-              {fetchErrorMessage(error)}
-            </ContextMenuLabel>
-          ) : null}
-          {data ? (
-            <ContextMenuLabel
-              className="text-xs font-normal text-muted-foreground"
-              data-testid="target-menu-label"
-            >
-              {data.label}
-            </ContextMenuLabel>
-          ) : null}
-          {data && data.entries.length === 0 ? (
-            <ContextMenuLabel className="text-muted-foreground">
-              No actions available.
-            </ContextMenuLabel>
-          ) : null}
-          {data?.groups.map((group, index) => {
-            const entries = data.entries.filter((entry) => entry.group === group.key);
-            if (entries.length === 0) return null;
-            return (
-              <Fragment key={group.key}>
-                {index > 0 ? <ContextMenuSeparator /> : null}
-                <MenuEntries
-                  actorId={data.actor_id}
-                  entries={entries}
-                  actorIsCurrent={activeCharacterId === actorId}
-                  targetIsCurrent={openingIdentity === currentIdentity}
-                  onConfirmAuthored={(entry) => {
-                    chooserIdentity.current = openingIdentity;
-                    setAuthoredEntry(entry);
-                  }}
-                  onChooseInputs={(entry) => {
-                    chooserIdentity.current = openingIdentity;
-                    setInputEntry(entry);
-                  }}
-                />
-              </Fragment>
-            );
-          })}
+          <TargetMenuBody
+            data={data}
+            error={error}
+            isLoading={isLoading}
+            actorIsCurrent={activeCharacterId === actorId}
+            targetIsCurrent={openingIdentity === currentIdentity}
+            onConfirmAuthored={(entry) => {
+              chooserIdentity.current = openingIdentity;
+              setAuthoredEntry(entry);
+            }}
+            onChooseInputs={(entry) => {
+              chooserIdentity.current = openingIdentity;
+              setInputEntry(entry);
+            }}
+          />
         </ContextMenuContent>
       </ContextMenu>
       {authoredEntry && actorId !== null ? (
@@ -223,41 +201,9 @@ export function TargetMenu({ partition, actorId, target, children }: TargetMenuP
                 {authoredEntry.action?.description ||
                   'Review the possible outcomes before continuing.'}
               </DialogDescription>
-              {authoredEntry.action?.difficulty ? (
-                <p className="text-sm">
-                  <span className="font-medium">Difficulty:</span> {authoredEntry.action.difficulty}
-                </p>
-              ) : null}
-              {authoredEntry.action?.prerequisite_reasons.length ? (
-                <p className="text-sm">
-                  <span className="font-medium">Requirement:</span>{' '}
-                  {authoredEntry.action.prerequisite_reasons.join(' · ')}
-                </p>
-              ) : null}
+              <AuthoredRequirements entry={authoredEntry} />
             </DialogHeader>
-            {authoredEntry.risk ? (
-              <div className="space-y-2 text-sm">
-                {authoredEntry.risk.known ? (
-                  <>
-                    <p>
-                      {authoredEntry.risk.character_loss_possible
-                        ? 'Character loss is possible.'
-                        : 'No character-loss outcome is listed.'}
-                    </p>
-                    <ul className="list-disc space-y-1 pl-5">
-                      {authoredEntry.risk.outcomes.map((outcome, index) => (
-                        <li key={`${outcome.stage}-${outcome.tier}-${index}`}>
-                          {outcome.stage}: {outcome.tier.replace(/_/g, ' ').toLowerCase()}
-                          {outcome.character_loss ? ' (character loss)' : ''}
-                        </li>
-                      ))}
-                    </ul>
-                  </>
-                ) : (
-                  <p>The possible outcomes have not been described.</p>
-                )}
-              </div>
-            ) : null}
+            <AuthoredRisk entry={authoredEntry} />
             <DialogFooter>
               <Button type="button" variant="outline" onClick={() => setAuthoredEntry(null)}>
                 Cancel
@@ -350,6 +296,115 @@ export function TargetMenu({ partition, actorId, target, children }: TargetMenuP
             return true;
           }}
         />
+      ) : null}
+    </>
+  );
+}
+
+function TargetMenuBody({
+  data,
+  error,
+  isLoading,
+  actorIsCurrent,
+  targetIsCurrent,
+  onConfirmAuthored,
+  onChooseInputs,
+}: {
+  data: TargetMenuData | null;
+  error: unknown;
+  isLoading: boolean;
+  actorIsCurrent: boolean;
+  targetIsCurrent: boolean;
+  onConfirmAuthored: (entry: TargetMenuEntry) => void;
+  onChooseInputs: (entry: TargetMenuEntry) => void;
+}) {
+  return (
+    <>
+      {!data && isLoading ? <ContextMenuLabel>Loading actions…</ContextMenuLabel> : null}
+      {!data && error ? (
+        <ContextMenuLabel className="text-muted-foreground">
+          {fetchErrorMessage(error)}
+        </ContextMenuLabel>
+      ) : null}
+      {data ? (
+        <ContextMenuLabel
+          className="text-xs font-normal text-muted-foreground"
+          data-testid="target-menu-label"
+        >
+          {data.label}
+        </ContextMenuLabel>
+      ) : null}
+      {data && data.entries.length === 0 ? (
+        <ContextMenuLabel className="text-muted-foreground">No actions available.</ContextMenuLabel>
+      ) : null}
+      {data?.groups.map((group, index) => {
+        const entries = data.entries.filter((entry) => entry.group === group.key);
+        if (entries.length === 0) return null;
+        return (
+          <Fragment key={group.key}>
+            {index > 0 ? <ContextMenuSeparator /> : null}
+            <MenuEntries
+              actorId={data.actor_id}
+              entries={entries}
+              actorIsCurrent={actorIsCurrent}
+              targetIsCurrent={targetIsCurrent}
+              onConfirmAuthored={(entry) => {
+                onConfirmAuthored(entry);
+              }}
+              onChooseInputs={(entry) => {
+                onChooseInputs(entry);
+              }}
+            />
+          </Fragment>
+        );
+      })}
+    </>
+  );
+}
+
+function AuthoredRequirements({ entry }: { entry: TargetMenuEntry }) {
+  return (
+    <>
+      {entry.action?.difficulty ? (
+        <p className="text-sm">
+          <span className="font-medium">Difficulty:</span> {entry.action.difficulty}
+        </p>
+      ) : null}
+      {entry.action?.prerequisite_reasons.length ? (
+        <p className="text-sm">
+          <span className="font-medium">Requirement:</span>{' '}
+          {entry.action.prerequisite_reasons.join(' · ')}
+        </p>
+      ) : null}
+    </>
+  );
+}
+
+function AuthoredRisk({ entry }: { entry: TargetMenuEntry }) {
+  return (
+    <>
+      {entry.risk ? (
+        <div className="space-y-2 text-sm">
+          {entry.risk.known ? (
+            <>
+              <p>
+                {entry.risk.character_loss_possible
+                  ? 'Character loss is possible.'
+                  : 'No character-loss outcome is listed.'}
+              </p>
+              <ul className="list-disc space-y-1 pl-5">
+                {entry.risk.outcomes.map((outcome, index) => (
+                  <li key={`${outcome.stage}-${outcome.tier}-${index}`}>
+                    {outcome.stage}: {outcome.tier.replace(/_/g, ' ').toLowerCase()}
+                    {outcome.character_loss ? ' (character loss)' : ''}
+                  </li>
+                ))}
+              </ul>
+            </>
+          ) : (
+            <p>The possible outcomes have not been described.</p>
+          )}
+        </div>
       ) : null}
     </>
   );

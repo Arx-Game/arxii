@@ -85,15 +85,7 @@ class TargetMenuView(APIView):
             INPUT_CANDIDATE_CURSOR
         ):
             raise ValidationError({INPUT_CANDIDATE_CURSOR: ["Enter a valid cursor."]})
-        values = {}
-        for name in (INPUT_OWNER_PERSONA, INPUT_CONTAINER_ITEM):
-            value = cleaned.get(name)
-            if value is not None:
-                if value != value.to_integral_value():
-                    raise ValidationError({name: ["Enter a whole number."]})
-                values[name] = int(value)
-        if INPUT_OWNER_PERSONA in values and INPUT_CONTAINER_ITEM in values:
-            raise ValidationError({"detail": "Choose owner or container context, not both."})
+        values = _menu_context_ids(cleaned)
         actor = get_object_or_404(ObjectDB, pk=character_id)
         try:
             menu = build_target_menu(
@@ -108,3 +100,17 @@ class TargetMenuView(APIView):
         if menu is None:
             raise NotFound(UNAVAILABLE)
         return Response(TargetMenuSerializer(menu).data)
+
+
+def _menu_context_ids(cleaned: dict[str, Any]) -> dict[str, int]:
+    """Validate exact integral and exclusive owner/container assertions."""
+    values = {}
+    for name in (INPUT_OWNER_PERSONA, INPUT_CONTAINER_ITEM):
+        value = cleaned.get(name)
+        if value is not None:
+            if value != value.to_integral_value():
+                raise ValidationError({name: ["Enter a whole number."]})
+            values[name] = int(value)
+    if INPUT_OWNER_PERSONA in values and INPUT_CONTAINER_ITEM in values:
+        raise ValidationError({"detail": "Choose owner or container context, not both."})
+    return values

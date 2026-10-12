@@ -55,7 +55,8 @@ from world.societies.models import (
 )
 
 if TYPE_CHECKING:
-    from world.societies.houses.almanach_reads import LadderRow
+    from world.societies.houses.almanach_reads import LadderRow, _RealmGraph
+    from world.societies.houses.models import SuccessionLaw
 
 SEARCH_MIN_CHARS = 2
 SEARCH_LIMIT = 20
@@ -767,29 +768,9 @@ def rung_document(title: Title) -> RungDocument:
                 "kind", "room_profile", "building", "field"
             )
         ]
-    vassals = []
-    if graph is not None:
-        for child in graph.children_by_parent_title.get(title.pk, []):
-            if child.seat_domain_id == title.seat_domain_id:
-                continue
-            vassals.append(_row_summary(_row_for(child, graph)))
+    vassals = _rung_vassals(title, graph)
     return RungDocument(
-        title={
-            "title_id": title.pk,
-            "name": title.name,
-            "tier": title.tier,
-            "realm_id": title.realm_id,
-            "realm": title.realm.name,
-            "house_id": title.house_id,
-            "held_by": title.house.name if title.house_id else "",
-            "holder_id": title.holder_id,
-            "holder": title.holder.display_name if title.holder_id else "",
-            "sworn_to": liege.name if liege is not None else (row.sworn_to if row else ""),
-            "succession": law.name if law is not None else "",
-            "seat": title.seat_domain.name if title.seat_domain_id else "",
-            "is_claimable": title.is_claimable,
-            "chain_top_id": row.chain_top_id if row is not None else title.pk,
-        },
+        title=_rung_title_details(title, row, liege, law),
         demesne=(
             {
                 "domain_id": domain.pk,
@@ -859,3 +840,36 @@ def house_chapters(house: Organization) -> dict:
         "openings": _openings_dict(openings_for(house)),
         "turf": turf_for(house),
     }
+
+
+def _rung_title_details(
+    title: Title, row: LadderRow | None, liege: Organization | None, law: SuccessionLaw | None
+) -> dict:
+    """Project holder, succession and fealty labels for one rung."""
+    return {
+        "title_id": title.pk,
+        "name": title.name,
+        "tier": title.tier,
+        "realm_id": title.realm_id,
+        "realm": title.realm.name,
+        "house_id": title.house_id,
+        "held_by": title.house.name if title.house_id else "",
+        "holder_id": title.holder_id,
+        "holder": title.holder.display_name if title.holder_id else "",
+        "sworn_to": liege.name if liege is not None else (row.sworn_to if row else ""),
+        "succession": law.name if law is not None else "",
+        "seat": title.seat_domain.name if title.seat_domain_id else "",
+        "is_claimable": title.is_claimable,
+        "chain_top_id": row.chain_top_id if row is not None else title.pk,
+    }
+
+
+def _rung_vassals(title: Title, graph: _RealmGraph | None) -> list[dict]:
+    """Exclude internal chain rungs sharing the title seat from its vassal roll."""
+    vassals = []
+    if graph is not None:
+        for child in graph.children_by_parent_title.get(title.pk, []):
+            if child.seat_domain_id == title.seat_domain_id:
+                continue
+            vassals.append(_row_summary(_row_for(child, graph)))
+    return vassals

@@ -122,27 +122,42 @@ def inspect_exit_traversal(
     """
     if not builtin_traversal_allowed(exit_obj, actor):
         raise CommandError(_TRAVERSAL_REFUSAL)
-    traversal_packages = (pkg for pkg in _packages(exit_obj) if pkg.hook == _TRAVERSE_HOOK)
-    for pkg in traversal_packages:
-        kind = SUPPORTED_TRAVERSAL.get((pkg.hook, pkg.definition.service_function_path))
-        if kind is None:
-            _unavailable()
-        if kind == _MATCHING_KIND:
-
-            def values(pkg: BehaviorPackageInstance = pkg) -> Iterator[object]:
-                attr = pkg.get_from_data("attribute")
-                yield _attribute(cast("ObjectDB", actor), attr, scene_data)
-                for item in actor.contents:
-                    yield _attribute(item, attr, scene_data)
-
-            reason = matching_value_refusal(pkg, actor is not None, values())
-            if reason is not None:
-                raise CommandError(reason)
-            # Matching-value execution returns None, so keep walking packages.
-        else:
-            if not run_admits(exit_obj.destination, actor):
-                raise CommandError(_TRAVERSAL_REFUSAL)
+    for pkg in _packages(exit_obj):
+        if pkg.hook == _TRAVERSE_HOOK and _inspect_traversal_package(
+            pkg, actor, exit_obj, scene_data
+        ):
             break
     if actor is None:
         raise CommandError(_TRAVERSAL_REFUSAL)
     check_exit_traversal_after_permission(actor, exit_obj, read_only=True)
+
+
+def _matching_values(
+    pkg: BehaviorPackageInstance, actor: ObjectDB, scene_data: SceneDataManager | None
+) -> Iterator[object]:
+    attr = pkg.get_from_data("attribute")
+    yield _attribute(actor, attr, scene_data)
+    for item in actor.contents:
+        yield _attribute(item, attr, scene_data)
+
+
+def _inspect_traversal_package(
+    pkg: BehaviorPackageInstance,
+    actor: ObjectDB | None,
+    exit_obj: ObjectDB,
+    scene_data: SceneDataManager | None,
+) -> bool:
+    """Inspect one supported package; True terminates the ordered hook walk."""
+    kind = SUPPORTED_TRAVERSAL.get((pkg.hook, pkg.definition.service_function_path))
+    if kind is None:
+        _unavailable()
+    if kind == _MATCHING_KIND:
+        reason = matching_value_refusal(
+            pkg, actor is not None, _matching_values(pkg, cast("ObjectDB", actor), scene_data)
+        )
+        if reason is not None:
+            raise CommandError(reason)
+        return False
+    if not run_admits(exit_obj.destination, actor):
+        raise CommandError(_TRAVERSAL_REFUSAL)
+    return True

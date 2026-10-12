@@ -603,9 +603,7 @@ def standoff_press(
         sheet, approach, graded, technique, confirm_soulfray_risk=confirm_soulfray_risk
     )
     if result is None:
-        if use is not None and use.soulfray_warning is not None:
-            return _soulfray_refusal(use.soulfray_warning)
-        return _refuse("The display falters before it begins.")
+        return _failed_press(use)
     _share_shifting_sparks(group, sheet, targeted)
     tier = result.success_level
     message = "Your words do not move them."
@@ -620,19 +618,8 @@ def standoff_press(
         )
         morale_line = display_line or ""
         if approach.damages_morale and display_line is None:
-            before = [morale_state_for(member) for member in members]
-            for member in members:
-                apply_morale_damage(member, tier * DEMORALIZE_MORALE_PER_LEVEL)
-            morale_line = _morale_shift_line(
-                group, sheet, before, [morale_state_for(m) for m in members]
-            )
-        revealed_ids = {
-            drive_id for kind, drive_id, _ in _revealed_set(group) if kind == RevealKind.DRIVE
-        }
-        named = [hit.label for drive, hit in hits if drive.pk in revealed_ids]
-        message = "They soften." if not named else f"They soften: {', '.join(named)}."
-        steps = group.terms_ease
-        message += f" Terms are now {steps} {'step' if steps == 1 else 'steps'} easier."
+            morale_line = _press_morale_damage(group, sheet, members, tier)
+        message = _press_terms_message(group, hits)
     elif tier <= BOTCH_LEVEL:
         _embolden_on_botch(group, config)
         message = "It goes badly; they grow bolder."
@@ -819,3 +806,32 @@ def standoff_share_spark(
     # No evaluate_causes here: sharing a spark changes none of a cause's inputs (force,
     # emboldening), and the suppression check reads the party's own regard, not shares.
     return StandoffActionResult(True, "You share what you feel.")
+
+
+def _press_morale_damage(
+    group: StandoffGroup, sheet: CharacterSheet, members: list[CombatOpponent], tier: int
+) -> str:
+    """Apply ordinary press morale damage and report its before/after shift."""
+    before = [morale_state_for(member) for member in members]
+    for member in members:
+        apply_morale_damage(member, tier * DEMORALIZE_MORALE_PER_LEVEL)
+    return _morale_shift_line(group, sheet, before, [morale_state_for(m) for m in members])
+
+
+def _press_terms_message(group: StandoffGroup, hits: list[tuple[CreatureDrive, DriveHit]]) -> str:
+    """Name only revealed drives and report the updated terms ease."""
+    revealed_ids = {
+        drive_id for kind, drive_id, _ in _revealed_set(group) if kind == RevealKind.DRIVE
+    }
+    named = [hit.label for drive, hit in hits if drive.pk in revealed_ids]
+    message = "They soften." if not named else f"They soften: {', '.join(named)}."
+    steps = group.terms_ease
+    message += f" Terms are now {steps} {'step' if steps == 1 else 'steps'} easier."
+    return message
+
+
+def _failed_press(use: TechniqueUseResult | None) -> StandoffActionResult:
+    """Preserve the soulfray warning or ordinary display failure without spending."""
+    if use is not None and use.soulfray_warning is not None:
+        return _soulfray_refusal(use.soulfray_warning)
+    return _refuse("The display falters before it begins.")

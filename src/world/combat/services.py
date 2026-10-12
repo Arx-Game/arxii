@@ -8815,10 +8815,7 @@ def _maybe_apply_spectacle_for_action(
             )
             cast_technique = technique
     if kind is None:
-        damage: dict[int, int] = {}
-        for dealt in outcome.damage_results:
-            if isinstance(dealt, OpponentDamageResult) and dealt.opponent_id is not None:
-                damage[dealt.opponent_id] = damage.get(dealt.opponent_id, 0) + (dealt.damage_dealt)
+        damage = _opponent_damage_totals(outcome)
         if is_devastating(damage_by_opponent=damage, health_before=health_before, config=config):
             kind = SpectacleKind.DEVASTATING_ACTION
     if kind is None:
@@ -13165,3 +13162,12 @@ def _wear_equipped_weapon(character: Character) -> None:
     from world.items.services.durability import decrement_item_durability  # noqa: PLC0415
 
     decrement_item_durability(item_instance=weapon_inst)
+
+
+def _opponent_damage_totals(outcome: ActionOutcome) -> dict[int, int]:
+    """Aggregate only opponent damage, including repeated hits on the same opponent."""
+    damage: dict[int, int] = {}
+    for dealt in outcome.damage_results:
+        if isinstance(dealt, OpponentDamageResult) and dealt.opponent_id is not None:
+            damage[dealt.opponent_id] = damage.get(dealt.opponent_id, 0) + (dealt.damage_dealt)
+    return damage

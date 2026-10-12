@@ -806,16 +806,8 @@ export function GameWindow({
 
   const sessionNames = Object.keys(sessions);
   const awaitingRoom = !session.room && !sceneFeed;
-  const effectiveLifecycle =
-    lifecycleState ??
-    session.lifecycleState ??
-    (!session.isConnected && session.room ? 'reconnecting' : undefined);
+  const { effectiveLifecycle, playReady } = gameWindowReadiness(session, lifecycleState);
   const visibleDiagnostics = diagnostics ?? session.diagnostics ?? [];
-  const playReady =
-    session.isConnected &&
-    Boolean(session.room) &&
-    (!effectiveLifecycle ||
-      ['ready-no-scene', 'ready-scene', 'encounter', 'aftermath'].includes(effectiveLifecycle));
 
   const handleTabClick = async (name: MyRosterEntry['name']) => {
     // #3479 decision 4: a puppet-tab switch is tab-local. It writes THIS
@@ -995,4 +987,18 @@ export function GameWindow({
       </FeedFindContext.Provider>
     </FeedBlockControlsContext.Provider>
   );
+}
+
+function gameWindowReadiness(session: Session, lifecycleState: GameLifecycleState | undefined) {
+  const effectiveLifecycle =
+    lifecycleState ??
+    session.lifecycleState ??
+    (!session.isConnected && session.room ? 'reconnecting' : undefined);
+  const playReady =
+    session.isConnected &&
+    Boolean(session.room) &&
+    (!effectiveLifecycle ||
+      ['ready-no-scene', 'ready-scene', 'encounter', 'aftermath'].includes(effectiveLifecycle));
+
+  return { effectiveLifecycle, playReady };
 }
