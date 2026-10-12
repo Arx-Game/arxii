@@ -80,7 +80,7 @@ def _execute_npc_attack(  # noqa: PLR0913
         actions: The accumulator list to append created actions to.
     """
     weights = [e.weight for e in eligible]
-    chosen = random.choices(eligible, weights=weights, k=1)[0]  # noqa: S311
+    chosen = random.choices(eligible, weights=weights, k=1)[0]  # noqa: S311 # NOSONAR game RNG, not crypto
 
     # Telegraphed wind-up (#2637 design 2-3): a windup_rounds entry commits
     # to a PendingOpponentAttack instead of a same-round CombatOpponentAction.

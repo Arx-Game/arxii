@@ -95,7 +95,7 @@ def _release_and_delete_withheld_majora_offers(offers: QuerySet[PendingAudereMaj
     """
     from world.magic.audere_majora import release_and_delete_withheld_offer  # noqa: PLC0415
 
-    for offer_id in list(offers.filter(manifestation_withheld=True).values_list("pk", flat=True)):
+    for offer_id in offers.filter(manifestation_withheld=True).values_list("pk", flat=True):
         release_and_delete_withheld_offer(offer_id)
 
 
