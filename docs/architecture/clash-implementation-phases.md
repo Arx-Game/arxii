@@ -17,7 +17,7 @@
 - **Migrations:** every model-adding task generates its own migration **in the same commit** — the `check-migrations` pre-commit hook rejects a commit that adds/changes a model without its migration. Run `arx manage makemigrations combat` (and `magic` / `conditions` where the task touches those apps) and `arx manage migrate` within the task; uses the project's custom `makemigrations`.
 - **Models:** all concrete models subclass `SharedMemoryModel` (`from evennia.utils.idmapper.models import SharedMemoryModel`). No `JSONField`. No `Meta.ordering` unless sequential. Constants/TextChoices go in `src/world/combat/constants.py`.
 - **Type annotations:** annotate all new functions (args + returns). Run `ruff check` on touched files; the pre-commit hook enforces ANN rules.
-- **Combat is flat-file:** models → `src/world/combat/models.py`, services → `src/world/combat/services.py`, types/dataclasses → `src/world/combat/types.py`, constants → `src/world/combat/constants.py`, factories → `src/world/combat/factories.py`, serializers → `src/world/combat/serializers.py`, admin → `src/world/combat/admin.py`. Tests are flat files in `src/world/combat/tests/test_clash_*.py` — there is **no** `tests/integration/` subdir.
+- **Combat is flat-file:** models → `src/world/combat/models.py`, services → `src/world/combat/services/`, types/dataclasses → `src/world/combat/types.py`, constants → `src/world/combat/constants.py`, factories → `src/world/combat/factories.py`, serializers → `src/world/combat/serializers.py`, admin → `src/world/combat/admin.py`. Tests are flat files in `src/world/combat/tests/test_clash_*.py` — there is **no** `tests/integration/` subdir.
 - **Commits:** one per task, present-tense conventional style (`feat(clash): ...`, `test(clash): ...`). Stage only the files the task touches — never `git add -A`.
 - **Branch:** `clash-design` (already created; spec + positioning notes already committed there).
 - **Pattern references** below point to exact `file:line` from the codebase map — open them and mirror the pattern rather than inventing a new one.
@@ -33,7 +33,7 @@
 | `src/world/combat/admin.py` | admin registration for the new models | 1 |
 | `src/world/combat/types.py` | `ClashContributionResult`, `ClashRoundResult`, `ClashResolutionResult` dataclasses | 2, 3 |
 | `src/world/combat/clash.py` *(new flat file)* | clash service layer — strain conversion, clash-commit, per-round resolution, NPC contribution, affinity tilt, opportunity detection, resolution | 2–5 |
-| `src/world/combat/services.py` | `resolve_round` clash post-pass; `declare_action` clash-contribution path | 5, 7 |
+| `src/world/combat/services/` | `resolve_round` clash post-pass; `declare_action` clash-contribution path | 5, 7 |
 | `src/world/combat/serializers.py` | clash-contribution declaration serializer; clash read serializers | 7 |
 | `src/world/combat/tests/test_clash_*.py` | unit + integration tests | all |
 | `src/integration_tests/game_content/clash.py` *(new)* | `ClashContent` seed factory | 8 |
@@ -235,7 +235,7 @@ Produces: aggregation, NPC contribution, affinity tilt, meter update, threshold 
 
 - [ ] **Step 1: Write the failing test** — `test_clash_resolution.py` (new): `npc_round_contribution(clash, round_number)` returns the NPC delta — for `CLASH`/`WARD`/`LOCK` derived from `clash.npc_opponent` threat data + boss phase, for `BREAK` returns 0.
 - [ ] **Step 2: red.**
-- [ ] **Step 3: Implement** `npc_round_contribution(*, clash, round_number) -> int` — `BREAK` → 0; `WARD` → the sustained attack's per-round pressure; `CLASH` → threat-pattern attack power + boss-phase modifier + small variance; `LOCK` → the authored break-free / maintenance force. Pull authored values from `ThreatPoolEntry.clash_npc_pressure` / `clash_break_free_force` / `CombatOpponent` boss phase. **Before inventing the variance roll:** Grep `world/combat/services.py` for how `_resolve_npc_action` / NPC damage already applies variance — reuse that convention rather than a new RNG pattern.
+- [ ] **Step 3: Implement** `npc_round_contribution(*, clash, round_number) -> int` — `BREAK` → 0; `WARD` → the sustained attack's per-round pressure; `CLASH` → threat-pattern attack power + boss-phase modifier + small variance; `LOCK` → the authored break-free / maintenance force. Pull authored values from `ThreatPoolEntry.clash_npc_pressure` / `clash_break_free_force` / `CombatOpponent` boss phase. **Before inventing the variance roll:** Grep `world/combat/services/` for how `_resolve_npc_action` / NPC damage already applies variance — reuse that convention rather than a new RNG pattern.
 - [ ] **Step 4: green.**
 - [ ] **Step 5: Commit** — `feat(clash): NPC per-round contribution`.
 
@@ -323,7 +323,7 @@ Produces: clash opportunities formed from declared/threat content, and the clash
 
 ### Task 5.3: `resolve_round` clash post-pass
 
-**Files:** Modify `src/world/combat/services.py`
+**Files:** Modify `src/world/combat/services/`
 
 - [ ] **Step 1: Write the failing test** — `test_clash_round_integration.py`: a full `resolve_round` with a declared clash contribution runs the clash post-pass; assert `RoundResolutionResult` carries clash outcomes and the meter advanced.
 - [ ] **Step 2: red.**
@@ -339,7 +339,7 @@ Produces: `ComboDefinition` clash-prerequisite enforcement. Testable via combo-e
 
 ### Task 6.1: Clash-prerequisite combo gating
 
-**Files:** Modify `src/world/combat/services.py` (`detect_available_combos` at line 1405)
+**Files:** Modify `src/world/combat/services/` (`detect_available_combos` at line 1405)
 
 - [ ] **Step 1: Write the failing test** — `test_clash_combo.py`: a `ComboDefinition` with `required_clash_window_condition` set is excluded from `detect_available_combos` unless the opponent carries that `ConditionInstance`; a combo with `required_clash_flavor` is gated on an active `Clash` of that flavor.
 - [ ] **Step 2: red.**
@@ -355,7 +355,7 @@ Produces: PCs can declare clash contributions; clashes surface in the action lis
 
 ### Task 7.1: Declare a clash contribution
 
-**Files:** Modify `src/world/combat/services.py`, `src/world/combat/serializers.py`
+**Files:** Modify `src/world/combat/services/`, `src/world/combat/serializers.py`
 
 - [ ] **Step 1: Write the failing test** — `test_clash_declare.py`: a service `declare_clash_contribution(participant, clash, action_slot, technique, strain_commitment)` records the intent (a `CombatRoundAction`-adjacent record or a dedicated `ClashContributionDeclaration` row — see note); one contribution per PC per round; passive `strain_commitment` capped at `ClashConfig.passive_anima_cap`.
 - [ ] **Step 2: red.**
@@ -365,7 +365,7 @@ Produces: PCs can declare clash contributions; clashes surface in the action lis
 
 ### Task 7.2: Surface clashes in the action list
 
-**Files:** Modify `src/world/combat/services.py` / the unified-actions integration point
+**Files:** Modify `src/world/combat/services/` / the unified-actions integration point
 
 - [ ] **Step 1: Write the failing test** — when a `Clash` is `ACTIVE` in a participant's encounter, `get_player_actions` (or the combat backend feeding it) includes a `COMBAT`-backend `PlayerAction` for committing/lending to that clash.
 - [ ] **Step 2: red.**

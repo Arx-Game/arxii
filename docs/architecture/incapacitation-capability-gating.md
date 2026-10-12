@@ -20,7 +20,7 @@ Two coupled problems:
 1. **`CharacterVitals.status`** (`ALIVE→UNCONSCIOUS→DYING→DEAD` + a
    `dying_final_round` boolean) conflates **mortality** with
    **consciousness/ability to act**, so *dying + conscious* is unrepresentable
-   and "fight while dying" is a hack (`combat/services.py:794-801`).
+   and "fight while dying" is a hack (`combat/services/`).
 2. **Combat action-eligibility is hardcoded on `vitals.status`** and bypasses
    the capability/condition system entirely. A condition that should
    incapacitate does not stop a combat declaration today.
@@ -39,7 +39,7 @@ Code-verified 2026-05-29 (the architecture doc was stale):
   actions.
 - **[GAP] Combat bypasses this** — `_combat_actions` surfaces techniques
   directly; eligibility is hardcoded on `vitals.status`
-  (`combat/services.py:565, 794, 1236, 2495`). Combat techniques are not gated
+  (`combat/services/ 794, 1236, 2495`). Combat techniques are not gated
   by capability impairment.
 - **[GAP] Presence-only gating** — capabilities gate by `value > 0`; there is
   **no `min_value` threshold** on `Application`/`ChallengeApproach`/`Technique`.
@@ -146,7 +146,7 @@ techniques stay available while movement techniques drop.
 
 ### 3. Combat uses capabilities for eligibility
 
-Replace the hardcoded `vitals.status` gates (`combat/services.py:565, 794-801,
+Replace the hardcoded `vitals.status` gates (`combat/services/ 794-801,
 1236-1238, 2495-2509`):
 - `_combat_actions` (player_interface) filters surfaced techniques by
   `technique_performable`.

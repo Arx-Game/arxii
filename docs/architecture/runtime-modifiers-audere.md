@@ -401,7 +401,7 @@ from the existing condition-expiry seam
 (`_resolve_deferred_death_on_expiry`, `world/conditions/services.py`) when the LAST
 deferring condition on the character ends - ordinarily Audere's own end at the
 encounter's close - and backstopped by `cleanup_completed_encounter`
-(`world/combat/services.py`) for every participant at encounter completion, in case
+(`world/combat/services/`) for every participant at encounter completion, in case
 the condition never expired cleanly through the normal path. Both the defer and the
 resolution check `is_death_prevented_by_story` first, so an active story-protected
 dependency still blocks the death and clears the pending flag with no death.
@@ -413,7 +413,7 @@ encounter's, so an early dispel is an early death rather than a held one.
 
 **An ABANDONED encounter cancels the pending death instead of resolving it**
 (#4098 owner ruling, 2026-10-01): a GM closing a broken fight shouldn't kill anyone.
-`cleanup_completed_encounter` (`world/combat/services.py`) checks
+`cleanup_completed_encounter` (`world/combat/services/`) checks
 `encounter.outcome == EncounterOutcome.ABANDONED` and, when true, calls the new
 `clear_pending_certain_death(character_sheet) -> bool` (`world/vitals/services.py` -
 clears `death_certain_pending` without ever applying the death, unlike

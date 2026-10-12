@@ -70,8 +70,8 @@ in-fiction trigger is plausible.
 | Damage technique cast at an NPC → health drops | ✅ PROVEN | `test_combat_cast_telnet_e2e.py` (check mocked) | done |
 | DEFEND halves / INTERPOSE zeroes incoming damage | ✅ PROVEN | `test_defend_stance.py`, `test_interpose_damage_path.py` | done |
 | Escalation → Audere offer → accept → power change | ✅ PROVEN | `test_escalation_integration.py`, `test_audere_telnet_e2e.py` | done |
-| Apply a condition to an **enemy NPC** (and it's consumed) | 🟨 WIRED-UNPROVEN | `combat/services.py:471-520`; only ally tested | prove-it |
-| Combo attack **full journey** | 🟨 WIRED-UNPROVEN | `services.py:3356-3367`; pieces unit-tested only | prove-it |
+| Apply a condition to an **enemy NPC** (and it's consumed) | 🟨 WIRED-UNPROVEN | `combat/services/`; only ally tested | prove-it |
+| Combo attack **full journey** | 🟨 WIRED-UNPROVEN | `services/`; pieces unit-tested only | prove-it |
 | Thread pull changes a cast/clash **final outcome** | 🟨 WIRED-UNPROVEN | reaches check input; final outcome not asserted | prove-it |
 | **Remove / dispel** a condition (cleanse) | ✅ PROVEN | `TechniqueRemovedCondition` payload + `remove_technique_conditions` (`world/magic/services/condition_application.py`) wired into the cast seam; honors `can_be_dispelled` + opposed `cure_check_type`/`cure_difficulty`; E2E `world/magic/tests/integration/test_dispel_cast_e2e.py` (#1585, ADR-0064) | done |
 | **Charm / switch-sides** an enemy NPC | ✅ PROVEN | `derive_allegiance` → `select_npc_actions` (#1590, ADR-0058) | MVP |

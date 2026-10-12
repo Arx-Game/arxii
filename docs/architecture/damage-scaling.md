@@ -561,7 +561,7 @@ def apply_damage_to_participant(
     ...
 ```
 
-Caller updates inside `world/combat/services.py`:
+Caller updates inside `world/combat/services/`:
 
 - `_resolve_npc_action` (the direct path, currently passing
   `damage_type=npc_action.threat_entry.attack_category`) → pass
@@ -829,4 +829,4 @@ Single branch. Commits in this order so reviewers can step through:
 - `docs/architecture/combat-conditions.md` — predecessor (TechniqueAppliedCondition, compute_effective_intensity, CombatOpponent → ObjectDB).
 - `src/world/magic/models/techniques.py` — Technique, TechniqueCapabilityGrant, TechniqueAppliedCondition.
 - `src/world/conditions/models.py` — DamageType, ConditionResistanceModifier, ConditionInstance.
-- `src/world/combat/services.py` — CombatTechniqueResolver, apply_damage_to_opponent, _resolve_npc_action.
+- `src/world/combat/services/` — CombatTechniqueResolver, apply_damage_to_opponent, _resolve_npc_action.

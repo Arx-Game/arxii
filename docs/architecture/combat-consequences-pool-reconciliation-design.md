@@ -33,8 +33,8 @@ resolution is still the parallel implementation #595 left for PR B:
 | `filter_character_loss`, `select_weighted`, `build_outcome_display` | BUILT & WIRED | `world/checks/outcome_utils.py:43-123` |
 | `ConsequencePool`/`Entry`, `Consequence`/`ConsequenceEffect.condition_template` | BUILT & WIRED | `actions/models/consequence_pools.py:14-142`; `world/checks/models.py:129-287` |
 | `DamageType`, `ConditionTemplate(PERMANENT)`, `ConditionStage` resist | BUILT & WIRED | `world/conditions/models.py` (DamageType 114; DurationType.PERMANENT; stage resist 400-410) |
-| death → DEAD via Bleeding-Out + `advance_bleed_out` | BUILT & WIRED | `world/vitals/services.py` (`advance_bleed_out`, `_mark_dead`); called `world/combat/services.py:2490` |
-| `process_damage_consequences` binary/ad-hoc internals + dormant checks | BUILT, NOT WIRED | `world/vitals/services.py:161-260`; call sites omit check_type kwargs (`combat/services.py:1969`, `mechanics/effect_handlers.py:187`) |
+| death → DEAD via Bleeding-Out + `advance_bleed_out` | BUILT & WIRED | `world/vitals/services.py` (`advance_bleed_out`, `_mark_dead`); called `world/combat/services/` |
+| `process_damage_consequences` binary/ad-hoc internals + dormant checks | BUILT, NOT WIRED | `world/vitals/services.py:161-260`; call sites omit check_type kwargs (`combat/services/`, `mechanics/effect_handlers.py:187`) |
 | `_select_and_apply_wound` | BUILT (stub) | `world/vitals/services.py:433` returns None |
 | `DamageType.wound_pool` / `death_pool` FK | ABSENT | not on the model |
 | `VitalsConsequenceConfig` singleton | ABSENT | grep 0 hits |
@@ -90,7 +90,7 @@ constants — `perform_check` converts points → rank as today. Not re-tuned he
 
 ## Call-site wiring
 
-- `combat/services.py:_resolve_npc_action` (~1969): pass the threat's real
+- `combat/services/:_resolve_npc_action` (~1969): pass the threat's real
   `damage_type` (currently `None`) and the seeded CheckTypes.
 - `mechanics/effect_handlers.py:_apply_deal_damage` (~187): same.
 
