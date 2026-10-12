@@ -188,7 +188,7 @@ def test_an_int_vs_bigint_sequence_still_diffs_under_the_owner_anchored_key():
 def test_allowlisted_sequence_entries_are_owner_anchored():
     # A name-keyed entry ('SEQUENCE|auth_group_permissions_id_seq|bigint') would
     # silently never match after the re-keying, so the vendored through-table
-    # divergence it exists to tolerate would resurface as a red nightly. Owner-
+    # divergence it exists to tolerate would resurface as a red verify step. Owner-
     # anchored rows carry four fields; name-keyed ones carried three.
     sequence_entries = [e for e in ALLOWED_DIFFERENCES if e.startswith("SEQUENCE|")]
     assert sequence_entries, "the vendored PK-width entries must still be present"

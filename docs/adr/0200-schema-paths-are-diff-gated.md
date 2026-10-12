@@ -1,5 +1,9 @@
 # ADR-0200: Schema-construction paths are held equivalent by a nightly diff, names excluded
 
+> **Amended by ADR-4250 (#4250, 2026-10-12):** the diff no longer runs nightly. It runs at each
+> chain regeneration (`just verify-regeneration`) and by hand when a change touches standalone
+> SQL; the name-exclusion rules below are unchanged.
+
 **Decision:** the two supported schema-construction paths (`arx manage migrate`, production's
 path, and `tools/build_schema.py`, used by CI, the Postgres parity tier, and the devcontainer)
 are held equivalent by a nightly `pg_catalog` diff (`tools/compare_schemas.py`), and constraint,

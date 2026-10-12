@@ -330,8 +330,8 @@ jobs:
       # ci-schema-from-models). Also satisfies #990: Evennia's test runner
       # queries server_serverconfig on the DEFAULT connection, so the default
       # DB must have tables before `arx test` runs. Migration-chain validity
-      # is gated by the makemigrations --check step (ty job) and the nightly
-      # migration-replay workflow, not per-shard.
+      # is gated by the makemigrations --check step (ty job) here and by
+      # `just verify-regeneration` at each chain regeneration (ADR-4250).
       # ~30s. It was ~6min until build_schema.py passed verbosity=0 to
       # migrate: at verbosity>=1 migrate runs the migration autodetector +
       # optimizer over all ~1,200 (migration-less) models just to print a
