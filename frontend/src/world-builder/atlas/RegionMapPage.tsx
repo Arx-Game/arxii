@@ -25,6 +25,7 @@ import type { RegionMapFootprint } from '../types';
 import { regionMapFileUrl } from '../api';
 import { useWorldBuilderActor } from '../useWorldBuilderActor';
 import {
+  DEFAULT_VIEW,
   fitView,
   readLatticeView,
   writeLatticeView,
@@ -119,6 +120,18 @@ export function RegionMapPage({ regionId, focusAreaId = null }: RegionMapPagePro
   const bounds = data ? regionBounds(data.region) : null;
   const canvasW = bounds ? bounds.width * PIP_PX : 0;
   const canvasH = bounds ? bounds.height * PIP_PX : 0;
+
+  // A region never looked at before opens fitted to the viewport; a remembered view stays.
+  const fittedRef = useRef<number | null>(null);
+  useEffect(() => {
+    if (!canvasW || fittedRef.current === regionId) return;
+    fittedRef.current = regionId;
+    const stored = readLatticeView(accountId, nodeId);
+    if (stored.zoom !== DEFAULT_VIEW.zoom || stored.panX !== 0 || stored.panY !== 0) return;
+    const viewport = viewportRef.current;
+    if (!viewport) return;
+    setView(fitView(canvasW, canvasH, viewport.clientWidth, viewport.clientHeight));
+  }, [accountId, canvasH, canvasW, nodeId, regionId]);
 
   const fitToMap = () => {
     const viewport = viewportRef.current;
