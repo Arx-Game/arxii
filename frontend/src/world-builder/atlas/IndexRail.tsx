@@ -42,7 +42,7 @@ import {
 import { useWorldBuilderActor } from '../useWorldBuilderActor';
 import type { WorldBuilderArea, WorldBuilderGrant } from '../types';
 import { AREA_LEVELS } from '../types';
-import { areaViewKind, BUILDING_LEVEL, childLevelOf } from './constants';
+import { areaViewKind, BUILDING_LEVEL, childLevelOf, CONTINENT_LEVEL } from './constants';
 import type { AtlasHistoryEntry, AtlasView } from './useAtlasState';
 
 export interface IndexRailProps {
@@ -364,9 +364,15 @@ interface MapsSectionProps {
   isStaff: boolean;
 }
 
+/** The continent choice on the New region form: a new rung by the region's name, an
+ * existing continent's id, or none. */
+const NEW_CONTINENT = 'new';
+
 /** The world map's regions (#4242), and a form to place a new one. Staff only. */
 function MapsSection({ current, onSelect, isStaff }: MapsSectionProps) {
   const { data: regions } = useRegionMapsQuery(isStaff);
+  const { data: rootsPage } = useWorldBuilderAreasQuery({ hasParent: false }, isStaff);
+  const continents = (rootsPage?.results ?? []).filter((area) => area.level === CONTINENT_LEVEL);
   const characterId = useWorldBuilderActor();
   const { mutateAsync: runAction } = useWorldBuilderAction(characterId ?? 0, null);
   const [open, setOpen] = useState(false);
@@ -374,7 +380,13 @@ function MapsSection({ current, onSelect, isStaff }: MapsSectionProps) {
   const [anchorX, setAnchorX] = useState('0');
   const [anchorY, setAnchorY] = useState('0');
   const [width, setWidth] = useState('20');
+  const [continent, setContinent] = useState(NEW_CONTINENT);
   if (!isStaff) return null;
+  const continentKwargs = () => {
+    if (continent === NEW_CONTINENT) return { new_continent: true };
+    if (continent) return { area_id: Number(continent) };
+    return {};
+  };
   const place = async (event: React.FormEvent) => {
     event.preventDefault();
     try {
@@ -385,6 +397,7 @@ function MapsSection({ current, onSelect, isStaff }: MapsSectionProps) {
           anchor_x: Number(anchorX),
           anchor_y: Number(anchorY),
           width_cells: Number(width),
+          ...continentKwargs(),
         },
       });
       const regionId = result?.data?.region_id;
@@ -458,6 +471,23 @@ function MapsSection({ current, onSelect, isStaff }: MapsSectionProps) {
               inputMode="numeric"
             />
           </div>
+          <select
+            className="h-7 rounded-md border bg-background px-2 text-xs"
+            value={continent}
+            onChange={(event) => setContinent(event.target.value)}
+            aria-label="continent"
+            data-testid="new-region-continent"
+          >
+            <option value={NEW_CONTINENT}>
+              New continent{name.trim() ? `: ${name.trim()}` : ''}
+            </option>
+            {continents.map((area) => (
+              <option key={area.id} value={String(area.id)}>
+                {area.name}
+              </option>
+            ))}
+            <option value="">No continent</option>
+          </select>
           <Button type="submit" size="sm" variant="outline" disabled={!name.trim()}>
             Place
           </Button>

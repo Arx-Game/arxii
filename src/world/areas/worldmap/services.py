@@ -13,11 +13,12 @@ from dataclasses import dataclass
 import gzip
 from typing import TYPE_CHECKING
 
-from django.core.exceptions import ObjectDoesNotExist
+from django.core.exceptions import ObjectDoesNotExist, ValidationError
 from django.db import transaction
 from django.utils import timezone
+from django.utils.text import slugify
 
-from world.areas.constants import AreaLevel
+from world.areas.constants import AreaLevel, GridOrigin
 from world.areas.models import Area
 from world.areas.worldmap.azgaar import (
     MapFileError,
@@ -70,10 +71,16 @@ def create_region_map(  # noqa: PLR0913
     anchor_y: int,
     width_cells: int,
     area: Area | None = None,
+    new_continent: bool = False,
     actor: AccountDB | None = None,
 ) -> RegionMap:
     """A new region on the world grid. Refuses a blank name, a silly width, and an
-    anchor box that overlaps a region already placed (seams touch, never overlap)."""
+    anchor box that overlaps a region already placed (seams touch, never overlap).
+
+    ``new_continent`` makes the region the geography of a CONTINENT rung by the same
+    name: an existing one is linked, otherwise an authored one is created in the same
+    transaction (ApostateCD, 2026-10-12: Catenys the map is Catenys the continent).
+    """
     name = name.strip()
     if not name:
         msg = "A region needs a name."
@@ -98,14 +105,38 @@ def create_region_map(  # noqa: PLR0913
             raise WorldMapServiceError(
                 msg, user_message=f"That anchor and width overlap {other.name}."
             )
-    return RegionMap.objects.create(
+    with transaction.atomic():
+        if new_continent:
+            area = _continent_named(name)
+        return RegionMap.objects.create(
+            name=name,
+            anchor_x=anchor_x,
+            anchor_y=anchor_y,
+            width_cells=width_cells,
+            area=area,
+            created_by=actor,
+        )
+
+
+def _continent_named(name: str) -> Area:
+    """The CONTINENT rung a region is the geography of: the one already named so,
+    else a new authored one (``Area.save`` runs ``full_clean``; a slug another area
+    holds is the one way that fails)."""
+    existing = Area.objects.filter(level=AreaLevel.CONTINENT, name__iexact=name).first()
+    if existing is not None:
+        return existing
+    continent = Area(
         name=name,
-        anchor_x=anchor_x,
-        anchor_y=anchor_y,
-        width_cells=width_cells,
-        area=area,
-        created_by=actor,
+        slug=slugify(name)[:100],
+        level=AreaLevel.CONTINENT,
+        origin=GridOrigin.AUTHORED,
     )
+    try:
+        continent.save()
+    except ValidationError as exc:
+        msg = f"continent {name!r} could not be created: {exc.messages}"
+        raise WorldMapServiceError(msg, user_message="; ".join(exc.messages)) from exc
+    return continent
 
 
 # --------------------------------------------------------------------------- uploads

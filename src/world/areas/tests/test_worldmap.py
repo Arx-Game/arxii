@@ -20,6 +20,7 @@ from rest_framework.test import APIClient
 from evennia_extensions.factories import AccountFactory
 from world.areas.constants import AreaLevel
 from world.areas.factories import AreaFactory
+from world.areas.models import Area
 from world.areas.worldmap.azgaar import (
     MapFileError,
     flatten_path,
@@ -28,7 +29,12 @@ from world.areas.worldmap.azgaar import (
     terrain_for,
 )
 from world.areas.worldmap.constants import PipSource, Terrain
-from world.areas.worldmap.models import AreaFootprintPip, RegionMapUpload, TerrainPip
+from world.areas.worldmap.models import (
+    AreaFootprintPip,
+    RegionMap,
+    RegionMapUpload,
+    TerrainPip,
+)
 from world.areas.worldmap.services import (
     WorldMapServiceError,
     create_region_map,
@@ -163,6 +169,30 @@ class RegionServiceTests(TestCase):
             create_region_map(name="Overlap", anchor_x=6, anchor_y=3, width_cells=2)
         beside = create_region_map(name="Beside", anchor_x=7, anchor_y=3, width_cells=2)
         assert beside.pip_x0 == 70
+
+    def test_new_continent_creates_the_rung_once_and_links_it(self) -> None:
+        first = create_region_map(
+            name="Catenys", anchor_x=20, anchor_y=0, width_cells=2, new_continent=True
+        )
+        continent = first.area
+        assert continent is not None
+        assert continent.level == AreaLevel.CONTINENT
+        assert continent.slug == "catenys"
+        assert continent.parent is None
+        # a continent already on the ladder is linked, never twinned
+        staged = AreaFactory(name="Luxen", slug="luxen", level=AreaLevel.CONTINENT)
+        again = create_region_map(
+            name="luxen", anchor_x=30, anchor_y=0, width_cells=2, new_continent=True
+        )
+        assert again.area_id == staged.pk
+        assert Area.objects.filter(level=AreaLevel.CONTINENT).count() == 2
+        # a slug another area holds refuses the whole placement
+        AreaFactory(name="Umbros", slug="umbros", level=AreaLevel.KINGDOM)
+        with self.assertRaises(WorldMapServiceError):
+            create_region_map(
+                name="Umbros", anchor_x=40, anchor_y=0, width_cells=2, new_continent=True
+            )
+        assert not RegionMap.objects.filter(name="Umbros").exists()
 
     def test_upload_rasterizes_to_world_pips_and_keeps_the_file(self) -> None:
         upload = import_region_map_file(

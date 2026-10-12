@@ -11,6 +11,8 @@ import type { AtlasViewKind } from './useAtlasState';
 export const BUILDING_LEVEL = 10;
 /** Mirrors `AreaLevel.BARONY`: the smallest area with a footprint on the world map (#4242). */
 export const BARONY_LEVEL = 40;
+/** Mirrors `AreaLevel.CONTINENT`: the rung a region map is the geography of (#4242). */
+export const CONTINENT_LEVEL = 70;
 
 /**
  * A BUILDING-level area holds rooms directly — its Atlas view is the room

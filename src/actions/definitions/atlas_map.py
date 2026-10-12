@@ -82,7 +82,9 @@ class AtlasCreateRegionMapAction(_AtlasMapAction):
     """Place a region on the world grid, ready for its first upload.
 
     Kwargs: ``name``, ``anchor_x``, ``anchor_y`` (world cells), ``width_cells``,
-    optional ``area_id`` (the continent-level Area it is the geography of).
+    optional ``area_id`` (the continent-level Area it is the geography of) or
+    ``new_continent`` (link the CONTINENT rung by the region's name, creating it
+    when there is none).
     """
 
     key: str = "atlas_create_region_map"
@@ -119,6 +121,7 @@ class AtlasCreateRegionMapAction(_AtlasMapAction):
                 anchor_y=anchor_y,
                 width_cells=width_cells,
                 area=area,
+                new_continent=bool(kwargs.get("new_continent")),
                 actor=actor.db_account,
             )
         except WorldMapServiceError as exc:
