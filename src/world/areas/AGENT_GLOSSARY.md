@@ -168,10 +168,12 @@ and from a domain's `LandShape` (flavour prose on the record).
 _Avoid_: biome (the generator's word for the input), land shape.
 
 **Footprint** (`AreaFootprintPip`, #4242):
-The set of pips a domain covers, one row per pip per area at every tier (a county's open
-ground between its baronies is still the county's). A child's pip lies within its
-parent's footprint; a parent cannot drop a pip a child stands on; water is never in one.
-Carved and grown by `atlas_carve_footprint`, never by the generator.
+The set of pips a domain covers. A pip has one row naming its lowest holder (a county's
+open ground between its baronies is the county's row, a barony's seat is the barony's), and
+every ancestor's footprint is derived by walking `Area.parent` from the holders, so a child
+lies within its parent by construction. Carving inside an ancestor moves the row down,
+shrinking hands it back up; a parent cannot take back a pip a child stands on; water is
+never in one. Carved and grown by `atlas_carve_footprint`, never by the generator.
 _Avoid_: territory (the control stat axis, ADR-0319), bounds, extent.
 
 **Open ground** (#4242):
@@ -180,5 +182,5 @@ is a later column on the pip, not a re-rasterize.
 _Avoid_: unowned, wilderness (a terrain word), fog.
 
 **Holder of a pip** (#4242):
-The lowest-level area whose footprint contains the pip (`holder_at`), and through its
-`Domain.owner_org` the house that holds it. Derived on read; never a column.
+The area whose row holds the pip (`holder_at`), the lowest on the ladder, and through its
+`Domain.owner_org` the house that holds it.

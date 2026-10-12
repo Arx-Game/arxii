@@ -1287,8 +1287,8 @@ symmetric.
 - **World map (#4242, ADR-0328):** `RegionMap` (a region on the one world grid: anchor cell,
   width in cells), `RegionMapUpload` (every uploaded Fantasy Map Generator file, kept whole as
   gzip bytes), `TerrainPip` (one 10-mile pip: `Terrain`, height, river, `PipSource`
-  generator/staff) and `AreaFootprintPip` (one pip of one area's footprint; a pip's holder is
-  the lowest area containing it, derived on read). `worldmap/azgaar.py` rasterizes the file's
+  generator/staff) and `AreaFootprintPip` (one row per pip naming its lowest holder; every
+  ancestor's footprint is derived by walking `Area.parent`, so containment holds by construction). `worldmap/azgaar.py` rasterizes the file's
   grid arrays and river paths; `worldmap/services.py` carries `create_region_map`,
   `import_region_map_file`, `paint_terrain`, `set_footprint`, `holder_at`, `region_read`;
   actions `atlas_create_region_map`/`atlas_carve_footprint`/`atlas_paint_terrain`; the staff

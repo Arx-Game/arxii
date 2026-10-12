@@ -31,6 +31,9 @@ from world.areas.worldmap.services import (
     upload_text,
 )
 
+_UPLOADED_BY_NAME = "uploaded_by_name"
+_UPLOADED_BY_USERNAME = "uploaded_by__username"
+
 
 class RegionMapUploadSerializer(serializers.ModelSerializer):
     uploaded_by_name = serializers.CharField(source="uploaded_by.username", default="")
@@ -77,8 +80,13 @@ class RegionMapSerializer(serializers.ModelSerializer):
         return PIPS_PER_CELL
 
     def get_latest_upload(self, obj: RegionMap) -> dict[str, Any] | None:
-        upload = obj.uploads.order_by("-uploaded_at").first()
-        return RegionMapUploadSerializer(upload).data if upload is not None else None
+        # a projection, never the row: a loaded upload carries its 12 MB file into the identity map
+        fields = [f for f in RegionMapUploadSerializer.Meta.fields if f != _UPLOADED_BY_NAME]
+        row = obj.uploads.order_by("-uploaded_at").values(*fields, "uploaded_by__username").first()
+        if row is None:
+            return None
+        row[_UPLOADED_BY_NAME] = row.pop(_UPLOADED_BY_USERNAME) or ""
+        return row
 
 
 class RegionMapFootprintSerializer(serializers.Serializer):

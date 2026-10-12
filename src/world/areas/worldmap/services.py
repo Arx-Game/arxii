@@ -256,15 +256,34 @@ def paint_terrain(
 # --------------------------------------------------------------------------- footprints
 
 
+def _ladder_parent(area: Area) -> Area | None:
+    """The nearest ancestor that can hold a footprint (BARONY or above), or None."""
+    parent = area.parent
+    while parent is not None and parent.level < AreaLevel.BARONY:
+        parent = parent.parent
+    return parent
+
+
+def _is_ancestor(candidate: Area, area: Area) -> bool:
+    node: Area | None = area.parent
+    while node is not None:
+        if node.pk == candidate.pk:
+            return True
+        node = node.parent
+    return False
+
+
 def set_footprint(
     *,
     area: Area,
     add: Iterable[Pip] = (),
     remove: Iterable[Pip] = (),
 ) -> tuple[int, int]:
-    """Grow or shrink an area's footprint. Refuses water, a pip outside the parent's
-    footprint (when the parent has one), and removing a pip a child still uses.
-    Returns ``(added, removed)``."""
+    """Grow or shrink an area's footprint. A pip row names its lowest holder, so
+    carving a barony inside a county moves the county's row to the barony, and
+    shrinking the barony hands the row back to the county. Refuses water, a pip
+    another domain holds (one that is not an ancestor of ``area``), and taking
+    back a pip a descendant stands on. Returns ``(added, removed)``."""
     to_add = _unique_pips(add, MAX_FOOTPRINT_PIPS_PER_CALL)
     to_remove = _unique_pips(remove, MAX_FOOTPRINT_PIPS_PER_CALL)
     if not to_add and not to_remove:
@@ -272,37 +291,82 @@ def set_footprint(
     if area.level < AreaLevel.BARONY:
         msg = "Only a barony or a larger domain has a footprint."
         raise WorldMapServiceError(msg)
+    added = removed = 0
     with transaction.atomic():
         if to_add:
             _refuse_water(to_add)
-            _refuse_outside_parent(area, to_add)
+            added = _claim(area, to_add)
         if to_remove:
-            _refuse_used_by_child(area, to_remove)
-        have = set(AreaFootprintPip.objects.filter(area=area).values_list("x", "y"))
-        new_rows = [
-            AreaFootprintPip(area=area, x=x, y=y) for (x, y) in to_add if (x, y) not in have
-        ]
-        AreaFootprintPip.objects.bulk_create(new_rows, batch_size=5000)
-        removed = 0
-        if to_remove:
-            removed, _ = (
-                AreaFootprintPip.objects.filter(
-                    area=area, x__in={p[0] for p in to_remove}, y__in={p[1] for p in to_remove}
-                )
-                .filter(pk__in=_pks_at(area, to_remove))
-                .delete()
-            )
-    return len(new_rows), removed
+            removed = _release(area, to_remove)
+    return added, removed
 
 
-def _pks_at(area: Area, pips: set[Pip]) -> list[int]:
-    return [
-        row.pk
-        for row in AreaFootprintPip.objects.filter(
-            area=area, x__in={p[0] for p in pips}, y__in={p[1] for p in pips}
+def _rows_at(pips: set[Pip]) -> dict[Pip, AreaFootprintPip]:
+    rows = AreaFootprintPip.objects.filter(
+        x__in={p[0] for p in pips}, y__in={p[1] for p in pips}
+    ).select_related("area")
+    return {(r.x, r.y): r for r in rows if (r.x, r.y) in pips}
+
+
+def _claim(area: Area, pips: set[Pip]) -> int:
+    """Give ``pips`` to ``area``: open ground is taken; an ancestor's pip moves
+    down to this area; a pip held by this area or a descendant is already inside;
+    any other holder refuses."""
+    held = _rows_at(pips)
+    moving: list[AreaFootprintPip] = []
+    for pip, row in held.items():
+        holder = row.area
+        if holder.pk == area.pk or _is_ancestor(area, holder):
+            continue  # already inside this footprint
+        if _is_ancestor(holder, area):
+            row.area = area
+            moving.append(row)
+            continue
+        x, y = pip
+        msg = f"Pip ({x}, {y}) is in {holder.name or 'another domain'}'s footprint."
+        raise WorldMapServiceError(msg)
+    if moving:
+        AreaFootprintPip.objects.bulk_update_with_reason(
+            moving, ["area"], batch_size=5000, reason="carve moves rows loaded in this transaction"
         )
-        if (row.x, row.y) in pips
-    ]
+    fresh = [AreaFootprintPip(area=area, x=x, y=y) for (x, y) in pips if (x, y) not in held]
+    AreaFootprintPip.objects.bulk_create(fresh, batch_size=5000)
+    return len(fresh) + len(moving)
+
+
+def _release(area: Area, pips: set[Pip]) -> int:
+    """Take ``pips`` out of ``area``: its own rows go to its ladder parent, or to open
+    ground when it has none; a descendant's row is refused; anyone else's is left alone."""
+    held = _rows_at(pips)
+    parent = _ladder_parent(area)
+    to_parent: list[AreaFootprintPip] = []
+    to_open: list[int] = []
+    for pip, row in held.items():
+        holder = row.area
+        if holder.pk == area.pk:
+            if parent is not None:
+                row.area = parent
+                to_parent.append(row)
+            else:
+                to_open.append(row.pk)
+            continue
+        if _is_ancestor(area, holder):
+            x, y = pip
+            msg = (
+                f"Pip ({x}, {y}) is in {holder.name or 'a child domain'}'s footprint; "
+                "shrink that first."
+            )
+            raise WorldMapServiceError(msg)
+    if to_parent:
+        AreaFootprintPip.objects.bulk_update_with_reason(
+            to_parent,
+            ["area"],
+            batch_size=5000,
+            reason="shrink moves rows loaded in this transaction",
+        )
+    if to_open:
+        AreaFootprintPip.objects.filter(pk__in=to_open).delete()
+    return len(to_parent) + len(to_open)
 
 
 def _refuse_water(pips: set[Pip]) -> None:
@@ -314,44 +378,26 @@ def _refuse_water(pips: set[Pip]) -> None:
         raise WorldMapServiceError(msg)
 
 
-def _refuse_outside_parent(area: Area, pips: set[Pip]) -> None:
-    parent = area.parent
-    while parent is not None and parent.level < AreaLevel.BARONY:
-        parent = parent.parent
-    if parent is None:
-        return
-    parent_pips = set(AreaFootprintPip.objects.filter(area=parent).values_list("x", "y"))
-    if not parent_pips:
-        return  # an unbounded parent (a realm not yet carved) constrains nothing
-    outside = sorted(pips - parent_pips)
-    if outside:
-        x, y = outside[0]
-        msg = f"Pip ({x}, {y}) lies outside {parent.name}'s footprint."
-        raise WorldMapServiceError(msg)
-
-
-def _refuse_used_by_child(area: Area, pips: set[Pip]) -> None:
-    rows = AreaFootprintPip.objects.filter(
-        area__parent=area, x__in={p[0] for p in pips}, y__in={p[1] for p in pips}
-    ).select_related("area")
-    for row in rows:
-        if (row.x, row.y) in pips:
-            msg = (
-                f"Pip ({row.x}, {row.y}) is in {row.area.name or 'a child domain'}'s "
-                "footprint; shrink that first."
-            )
-            raise WorldMapServiceError(msg)
-
-
 def holder_at(x: int, y: int) -> Area | None:
-    """The lowest-level area whose footprint holds the pip, or None for open ground."""
-    row = (
-        AreaFootprintPip.objects.filter(x=x, y=y)
-        .select_related("area")
-        .order_by("area__level")
-        .first()
-    )
+    """The area whose footprint holds the pip, or None for open ground."""
+    row = AreaFootprintPip.objects.filter(x=x, y=y).select_related("area").first()
     return row.area if row is not None else None
+
+
+def footprint_of(area: Area) -> set[Pip]:
+    """Every pip inside an area: its own rows and every descendant's. The descendants
+    are walked by ``parent`` a rung at a time (the ladder is a handful deep), so the
+    read is the same on the SQLite tier, where the closure view is absent."""
+    ids = {area.pk}
+    frontier = [area.pk]
+    while frontier:
+        frontier = list(
+            Area.objects.filter(parent_id__in=frontier)
+            .exclude(pk__in=ids)
+            .values_list("pk", flat=True)
+        )
+        ids.update(frontier)
+    return set(AreaFootprintPip.objects.filter(area_id__in=ids).values_list("x", "y"))
 
 
 # --------------------------------------------------------------------------- reads
@@ -387,19 +433,27 @@ def region_read(region: RegionMap) -> RegionRead:
     pips = list(
         TerrainPip.objects.filter(region=region).values_list("x", "y", "terrain", "has_river")
     )
-    by_area: dict[int, list[Pip]] = {}
-    for area_id, x, y in (
+    rows = list(
         AreaFootprintPip.objects.filter(x__gte=x0, x__lt=x1, y__gte=y0, y__lt=y1)
-        .order_by("area_id", "y", "x")
+        .order_by("y", "x")
         .values_list("area_id", "x", "y")
-    ):
-        by_area.setdefault(area_id, []).append((x, y))
-    areas = {
+    )
+    holders = {
         a.pk: a
-        for a in Area.objects.filter(pk__in=by_area).select_related(
+        for a in Area.objects.filter(pk__in={r[0] for r in rows}).select_related(
             "domain_profile__owner_org", "parent"
         )
     }
+    # a pip belongs to its holder and to every ancestor of the holder on the ladder
+    by_area: dict[int, list[Pip]] = {}
+    areas: dict[int, Area] = {}
+    for area_id, x, y in rows:
+        node: Area | None = holders[area_id]
+        while node is not None:
+            if node.level >= AreaLevel.BARONY:
+                by_area.setdefault(node.pk, []).append((x, y))
+                areas[node.pk] = node
+            node = node.parent
     titles = _title_by_area(areas.values())
     seats = _seat_by_area(areas, by_area)
     footprints = []

@@ -32,6 +32,7 @@ from world.areas.worldmap.models import AreaFootprintPip, RegionMapUpload, Terra
 from world.areas.worldmap.services import (
     WorldMapServiceError,
     create_region_map,
+    footprint_of,
     holder_at,
     import_region_map_file,
     paint_terrain,
@@ -208,29 +209,39 @@ class FootprintServiceTests(TestCase):
         cls.county = AreaFactory(name="County", level=AreaLevel.COUNTY, parent=cls.kingdom)
         cls.barony = AreaFactory(name="Barony", level=AreaLevel.BARONY, parent=cls.county)
 
-    def test_carve_grow_and_shrink_with_containment(self) -> None:
+    def test_carve_grow_and_shrink_with_one_holder_per_pip(self) -> None:
         added, removed = set_footprint(area=self.county, add=[(1, 1), (2, 1), (1, 2)])
         assert (added, removed) == (3, 0)
-        # a barony pip must lie in the county
-        with self.assertRaises(WorldMapServiceError):
-            set_footprint(area=self.barony, add=[(5, 5)])
+        # carving the barony moves the county's row down; the county's footprint still has it
         set_footprint(area=self.barony, add=[(2, 1)])
         assert holder_at(2, 1) == self.barony
         assert holder_at(1, 1) == self.county
         assert holder_at(9, 9) is None
-        # the county cannot drop a pip its barony stands on
+        assert footprint_of(self.county) == {(1, 1), (2, 1), (1, 2)}
+        assert AreaFootprintPip.objects.filter(x=2, y=1).count() == 1
+        # a barony claiming open ground grows the county with it: containment by construction
+        set_footprint(area=self.barony, add=[(2, 7)])
+        assert footprint_of(self.county) >= {(2, 7)}
+        # the county cannot take back a pip its barony stands on
         with self.assertRaises(WorldMapServiceError):
             set_footprint(area=self.county, remove=[(2, 1)])
+        # shrinking the barony hands the pip back to the county
+        added, removed = set_footprint(area=self.barony, remove=[(2, 7)])
+        assert (added, removed) == (0, 1)
+        assert holder_at(2, 7) == self.county
+        # shrinking the county hands its own pip to the kingdom above it
         added, removed = set_footprint(area=self.county, remove=[(1, 2)])
         assert (added, removed) == (0, 1)
-        # water is refused; a ward is too small to have a footprint
+        assert holder_at(1, 2) == self.kingdom
+        # another domain's pip is refused; water is refused; a ward has no footprint
+        other = AreaFactory(name="Other", level=AreaLevel.COUNTY, parent=self.kingdom)
+        with self.assertRaises(WorldMapServiceError):
+            set_footprint(area=other, add=[(1, 1)])
         with self.assertRaises(WorldMapServiceError):
             set_footprint(area=self.county, add=[(15, 15)])
         ward = AreaFactory(name="Ward", level=AreaLevel.WARD, parent=self.barony)
         with self.assertRaises(WorldMapServiceError):
             set_footprint(area=ward, add=[(2, 1)])
-        # an uncarved kingdom constrains nothing
-        assert AreaFootprintPip.objects.filter(area=self.kingdom).count() == 0
 
     def test_region_read_groups_footprints_with_holder_and_seat(self) -> None:
         set_footprint(area=self.county, add=[(1, 1), (2, 1)])
@@ -238,7 +249,7 @@ class FootprintServiceTests(TestCase):
         read = region_read(self.region)
         assert len(read.pips) == 400
         names = [f.name for f in read.footprints]
-        assert names == ["Barony", "County"]
+        assert names == ["Barony", "County", "Kingdom"]  # the ancestors are derived
         county = next(f for f in read.footprints if f.name == "County")
         assert county.pips == [(1, 1), (2, 1)]
         assert county.seat == (2, 1)

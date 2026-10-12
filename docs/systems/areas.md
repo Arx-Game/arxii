@@ -189,7 +189,7 @@ cell edge; boundaries and coastlines are never cell-shaped.
 | `RegionMap` | A region on the one world grid | `name`, `area` (nullable FK to the CONTINENT-level Area it is the geography of), `anchor_x`/`anchor_y` (world cells), `width_cells`, `height_cells` (from the first upload's aspect), `created_by`/`created_at`; `pip_x0`/`pip_y0` properties give the first pip |
 | `RegionMapUpload` | One uploaded generator file, kept whole | `region`, `file_name`, `file_bytes` (gzip `BinaryField`), `byte_size`, `generator_version`, `source_width_px`/`source_height_px`, `uploaded_by`/`uploaded_at`, `rasterized_at`. Append-only: every file is kept |
 | `TerrainPip` | One pip of ground | `region` (PROTECT), `x`/`y` (world pips, unique together), `terrain` (`Terrain`), `height` (the generator's 0-100), `has_river`, `source` (`PipSource`: generator or staff) |
-| `AreaFootprintPip` | One pip of one area's footprint | `area` (CASCADE), `x`/`y`; unique per area; every tier stores its own pips |
+| `AreaFootprintPip` | One pip of ground and the lowest area holding it | `area` (CASCADE), `x`/`y` (unique together: one holder per pip); every ancestor's footprint is derived by walking `Area.parent` from the holders, so containment holds by construction |
 
 **Enums** (`worldmap/constants.py`): `Terrain` (water, lake, plain, forest, hill,
 mountain, marsh, desert, tundra, glacier; the coast is derived from neighbours, never
@@ -215,14 +215,17 @@ create_region_map(*, name, anchor_x, anchor_y, width_cells, area=None, actor=Non
 import_region_map_file(*, region, file_name, data, actor=None)  # parse, keep, rasterize
 rasterize_upload(upload)  # re-run the rasterize step from a kept file
 paint_terrain(*, region, pips, terrain)  # staff pips, survive every upload
-set_footprint(*, area, add=(), remove=())  # water refused; a child's pip lies in its parent's footprint; a parent cannot drop a pip a child uses
-holder_at(x, y)  # the lowest area whose footprint holds the pip, or None (open ground)
+set_footprint(*, area, add=(), remove=())  # water refused; carving inside an ancestor moves its row down, shrinking hands it back up; another domain's pip refused; a descendant's pip cannot be taken back
+footprint_of(area)  # every pip inside an area: its own rows and its descendants'
+holder_at(x, y)  # the area whose row holds the pip, or None (open ground)
 region_read(region)  # the pips payload: terrain rows + footprints with holder, title, seat
 ```
 
 A re-rasterize deletes the region's generator pips and writes the new raster, skipping
-any square a staff pip holds (ruling 5 on #4242). A footprint below BARONY is refused; an
-area at KINGDOM or above with no footprint yet constrains its children not at all.
+any square a staff pip holds (ruling 5 on #4242). A footprint below BARONY is refused. A pip has one row naming its lowest holder: a barony
+carved inside a county takes the county's row, and the county's footprint still contains the pip
+because ancestors are derived from the holders; a barony claiming open ground grows every
+ancestor with it.
 
 **Actions** (`actions/definitions/atlas_map.py`, `category="almanach"`, staff only):
 `atlas_create_region_map`, `atlas_carve_footprint` (`area_id`, `add`/`remove` as `[x, y]`

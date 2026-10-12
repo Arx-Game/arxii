@@ -130,10 +130,12 @@ class TerrainPip(SharedMemoryModel):
 
 
 class AreaFootprintPip(SharedMemoryModel):
-    """One pip of one area's footprint. Every tier stores its own pips (a
-    county's open ground between its baronies is still the county's), and the
-    containment rule (a child's pip lies in its parent's footprint) is enforced
-    by ``set_footprint``, since it spans rows.
+    """One pip of ground and the lowest area holding it. A pip has one row, so a
+    county's open ground between its baronies is the county's row and a barony's
+    seat is the barony's; every ancestor's footprint is derived by walking
+    ``Area.parent`` from the holders, which is what makes containment hold by
+    construction (ADR-0328). Carving a barony inside a county moves the row down;
+    shrinking it hands the row back up.
     """
 
     area = models.ForeignKey("arxii.Area", on_delete=models.CASCADE, related_name="footprint")
@@ -143,9 +145,8 @@ class AreaFootprintPip(SharedMemoryModel):
     class Meta:
         ordering = ["y", "x"]
         constraints = [
-            models.UniqueConstraint(fields=["area", "x", "y"], name="worldmap_one_pip_per_area"),
+            models.UniqueConstraint(fields=["x", "y"], name="worldmap_one_holder_per_pip"),
         ]
-        indexes = [models.Index(fields=["x", "y"], name="worldmap_footprint_xy")]
 
     def __str__(self) -> str:
         return f"{self.area_id} @ ({self.x}, {self.y})"
