@@ -59,6 +59,12 @@ ALLOWED_MIGRATIONS: set[str] = {
     # claim's own title before 0157 drops the column. No authored content is
     # invented: every HouseClaimLand row it get_or_creates mirrors a writeup
     # that already existed on the claim, in a different shape.
+    "world/migrations/0221_carry_desc_attribute_text.py",
+    # #4329: ADR-0237 restructure backfill, carries description text from
+    # Evennia's `desc` Attribute (which nothing renders once the stock post-move
+    # look is gone) into ObjectDisplayData.permanent_description. The display
+    # row it get_or_creates holds text that already existed on the object, in a
+    # different store; nothing is invented and nothing is overwritten.
 }
 
 # Patterns that suggest seed data in migrations
