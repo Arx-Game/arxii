@@ -5525,8 +5525,13 @@ captivity's RANSOM ownership).
 - **Instant-completion kinds (#1500):** `register_instant_completion_kind` marks a kind
   (RANSOM, PROPAGANDA) that resolves the moment its threshold is funded —
   `maybe_complete_immediately` fires the kind handler post-contribution instead of
-  waiting for the cron resolver. (The generic RESOLVING→COMPLETED cron driver is not
-  built yet; `scan_active_projects` only marks projects RESOLVING.)
+  waiting for the cron resolver. Every other SINGLE_THRESHOLD kind is finalized by
+  `scan_active_projects` in the tick that completes it (#4325): target met resolves
+  with the canonical "Success" `CheckOutcome`, time limit lapsed with the target unmet
+  with "Failure", through `resolve_project`; projects already stranded in RESOLVING are
+  recovered on the next tick. `register_kind_handler(..., success_only=True)` marks a
+  handler that ignores the tier (buildings, ships, room features, ransom, item
+  refinement, org capability), so it never runs for a failure.
 - **Propaganda campaigns (#1621):** `PropagandaCampaignTier` + `PropagandaDetails`
   (both inherit `RenownAwardConfig`; live in `world/societies/models.py`),
   `launch_propaganda_campaign` / `resolve_propaganda_project`

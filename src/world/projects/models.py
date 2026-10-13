@@ -32,6 +32,13 @@ class Project(SharedMemoryModel):
 
     Lifecycle (cron-driven, see services.scan_active_projects):
       PLANNING -> ACTIVE -> RESOLVING -> (COMPLETED | FAILED | CANCELLED)
+
+    The tick finalizes a completion-ready project in the same pass that marks it
+    RESOLVING (#4325): SINGLE_THRESHOLD resolves with the canonical "Success"
+    outcome when the target was met and "Failure" when the time limit lapsed with
+    it unmet; TIERED_PERIOD runs its kind's registered tiered resolver. Projects
+    stranded in RESOLVING by an earlier tick are picked up on the next one. A kind
+    with no handler / resolver stays RESOLVING.
     """
 
     kind = models.CharField(

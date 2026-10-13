@@ -18,6 +18,7 @@ from world.projects.services import (
     scan_active_projects,
     snapshot_registries,
 )
+from world.traits.factories import CheckOutcomeFactory
 
 
 class SingleThresholdLifecycleTests(TestCase):
@@ -27,8 +28,10 @@ class SingleThresholdLifecycleTests(TestCase):
         self.addCleanup(restore_registries, snapshot_registries())
         clear_kind_handlers()
         register_kind_handler(ProjectKind.TEST_KIND, lambda _project, _tier: None)
+        CheckOutcomeFactory(name="Success", success_level=1)
+        CheckOutcomeFactory(name="Failure", success_level=-1)
 
-    def test_threshold_hit_schedules_resolution(self) -> None:
+    def test_threshold_hit_resolves_as_success(self) -> None:
         project = ProjectFactory(
             kind=ProjectKind.TEST_KIND,
             completion_mode=CompletionMode.SINGLE_THRESHOLD,
@@ -39,9 +42,9 @@ class SingleThresholdLifecycleTests(TestCase):
         )
         scan_active_projects()
         project.refresh_from_db()
-        self.assertEqual(project.status, ProjectStatus.RESOLVING)
+        self.assertEqual(project.status, ProjectStatus.COMPLETED)
 
-    def test_time_limit_passed_schedules_resolution(self) -> None:
+    def test_time_limit_passed_unfunded_resolves_as_failure(self) -> None:
         project = ProjectFactory(
             kind=ProjectKind.TEST_KIND,
             completion_mode=CompletionMode.SINGLE_THRESHOLD,
@@ -52,7 +55,7 @@ class SingleThresholdLifecycleTests(TestCase):
         )
         scan_active_projects()
         project.refresh_from_db()
-        self.assertEqual(project.status, ProjectStatus.RESOLVING)
+        self.assertEqual(project.status, ProjectStatus.FAILED)
 
     def test_under_threshold_within_time_stays_active(self) -> None:
         project = ProjectFactory(

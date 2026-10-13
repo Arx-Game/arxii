@@ -38,6 +38,7 @@ def ready() -> None:
     register_kind_handler(
         ProjectKind.ORGANIZATION_CAPABILITY,
         resolve_organization_capability,
+        success_only=True,
     )
 
     # #1884 — register the DOMAIN_IMPROVEMENT kind handler.

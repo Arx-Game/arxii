@@ -18,7 +18,9 @@ def ready() -> None:
         complete_ship_upgrade,
     )
 
-    register_kind_handler(ProjectKind.SHIP_CONSTRUCTION, complete_ship_construction)
-    register_kind_handler(ProjectKind.SHIP_UPGRADE, complete_ship_upgrade)
-    register_kind_handler(ProjectKind.SHIP_REPAIR, complete_ship_repair)
+    register_kind_handler(
+        ProjectKind.SHIP_CONSTRUCTION, complete_ship_construction, success_only=True
+    )
+    register_kind_handler(ProjectKind.SHIP_UPGRADE, complete_ship_upgrade, success_only=True)
+    register_kind_handler(ProjectKind.SHIP_REPAIR, complete_ship_repair, success_only=True)
     register_battle_conclusion_hook(apply_ship_battle_outcome)
