@@ -22,7 +22,7 @@ disagree. #4329, on production:
   `self.msg(text=(self.at_look(self.location), {"type": "look"}))`. That stock look
   reads Evennia's `desc` Attribute, which nothing of ours writes, so every room the
   world builder made arrived as **"This is a room."** with Evennia's
-  `Characters:`/`You see:` list and no exits, while `look` in the same room showed the
+  `Characters:`/`You see:` list instead of its description, while `look` in the same room showed the
   authored description.
 - Evennia's `desc` command stayed in `CharacterCmdSet`. Staff ran it, read
   **"The description was set on Limbo."**, and `look` never changed: it wrote the
@@ -72,6 +72,14 @@ catches the one Attribute that bit. You catch the shape everywhere else.
 - **A stock writer to a store Arx does not read.** A command, seed, admin action or
   service that writes an Attribute while the Arx renderer reads a model field. It
   reports success and changes nothing on screen.
+- **A hook that "types" a command.** `execute_cmd("look")` from a hook is player input:
+  it goes to whichever cmdset is on top, so inside the line editor or an EvMenu the word
+  joins the buffer and nothing runs (the first #4329 fix did this, and its own
+  `desc/edit` would have eaten the look). Call the Action directly and send its result
+  typed, as `Character._send_arrival_look` does.
+- **A stock command any player can run.** `setdesc` (`cmd:all()`) wrote the Attribute for
+  every player and answered "You set your description." Check the lock, not just the
+  name, of every stock command the cmdset still carries.
 - **Two writers or two readers of one datum.** Even when both stores are Arx's, a
   second copy drifts (`set_room_display_data` keeps `db_key` and `longname` in step
   for exactly this reason).

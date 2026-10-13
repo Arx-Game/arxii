@@ -10,10 +10,14 @@ Core game objects (characters, rooms, exits, etc.) with Arx II customizations ex
 - **Walking into a room runs our `look`, never Evennia's** (#4329, ADR-4329).
   `DefaultCharacter.at_post_move`'s only work is a stock look over Evennia's `desc`
   Attribute, which nothing of ours writes, so builder rooms arrived as "This is a
-  room." with no exits. `at_post_move` passes over exactly that hook with
-  `super(DefaultCharacter, self)` and `_send_arrival_look` runs the `look` command
-  (every window, typed `look`, through `run_safely` so a failure never skips the
-  room state and triggers after it; skipped for a character nobody plays).
+  room." instead of their description. `at_post_move` resumes the MRO after it with
+  `super(DefaultCharacter, self)` (which also passes over `ObjectParent`, so
+  `ObjectParent` must not grow an `at_post_move`; `test_move_look` pins that), and
+  `_send_arrival_look` runs `LookAction` at the room exactly as bare `look` does,
+  typed `look` (`error` on a refusal), to every window, through `run_safely` so a
+  failure never skips the room state and triggers after it; skipped for a character
+  nobody plays. **Never `execute_cmd("look")` from a hook**: typed input goes to the
+  top cmdset, and in the line editor or a menu the word joins the buffer.
   `CompanionObject.at_post_move` passes over the same hook. Before adding a
   `super()` call into an Evennia hook, read what that hook sends: the
   `evennia-stock-path-reviewer` agent exists for this shape.

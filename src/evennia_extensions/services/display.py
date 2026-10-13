@@ -1,10 +1,10 @@
-"""The one writer of an object's look description (#4329).
+"""The shared writer of a room's, object's or exit's look description (#4329).
 
-An object's description lives in ``ObjectDisplayData.permanent_description``:
-``look`` reads it for a room, a character, an item and an exit alike (through the
-data handler's ``get_display_description()``). Evennia's ``desc`` Attribute is a
-second store that nothing renders, so anything that sets a description comes here
-instead.
+Their description lives in ``ObjectDisplayData.permanent_description``, which
+``look`` reads through the data handler's ``get_display_description()``. (A
+character's lives on its sheet, an item's on its ``ItemInstance``.) Evennia's ``desc``
+Attribute is a second store that nothing renders, so code that sets one of these
+descriptions comes here instead.
 """
 
 from __future__ import annotations
