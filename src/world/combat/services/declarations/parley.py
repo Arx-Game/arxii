@@ -138,7 +138,8 @@ def _resolve_parley(
     Rolls the Parley check (charm + Persuasion + Seduction) against the target's
     Composure (+ mindless resistance — a breakthrough grants a fleeting mind). On
     success, routes through ``apply_social_disposition_delta_for_level``. On a decisive
-    success (SL>=3), calms the opponent. On a critical success (SL>=5) against a
+    success (SL>=PARLEY_DECISIVE_SUCCESS_LEVEL, Success), calms the opponent. On a
+    critical success (SL>=PARLEY_CRITICAL_SUCCESS_LEVEL, Critical Success) against a
     broken opponent, the NPC yields (FLED).
     """
     from world.combat.constants import (  # noqa: PLC0415

@@ -168,6 +168,101 @@ class ResolveSocialVerbTests(TestCase):
             ConditionInstance.objects.filter(target=self.opponent.objectdb, condition=calm).exists()
         )
 
+    def _calm_template(self):
+        from world.conditions.charm_content import ensure_charm_content
+        from world.conditions.constants import CALM_CONDITION_NAME
+        from world.conditions.models import ConditionTemplate
+
+        ensure_charm_content()
+        return ConditionTemplate.objects.get(name=CALM_CONDITION_NAME)
+
+    def _is_calmed(self, target, calm) -> bool:
+        from world.conditions.models import ConditionInstance
+
+        return ConditionInstance.objects.filter(target=target.objectdb, condition=calm).exists()
+
+    def test_parley_success_calms_a_court_opponent(self) -> None:
+        """Success (SL 1) is the decisive calm threshold for a non-boss foe (#4149)."""
+        calm = self._calm_template()
+        # A second, untouched foe keeps the fight open so cleanup leaves the body.
+        CombatOpponentFactory(encounter=self.encounter, threat_pool=ThreatPoolFactory())
+        self.opponent.morale = FALTER_MORALE_THRESHOLD
+        self.opponent.save()
+        declare_parley(self.participant, self.opponent)
+
+        with force_check_outcome(self.success):
+            resolve_round(self.encounter)
+
+        self.assertTrue(self._is_calmed(self.opponent, calm))
+
+    def test_parley_success_does_not_calm_a_boss(self) -> None:
+        """A boss adds BOSS_PARLEY_RESISTANCE_STEP, so Success (SL 1) is not enough (#4149)."""
+        from world.combat.factories import BossOpponentFactory
+
+        calm = self._calm_template()
+        CombatOpponentFactory(encounter=self.encounter, threat_pool=ThreatPoolFactory())
+        boss = BossOpponentFactory(encounter=self.encounter, threat_pool=ThreatPoolFactory())
+        boss.morale = FALTER_MORALE_THRESHOLD
+        boss.save()
+        declare_parley(self.participant, boss)
+
+        with force_check_outcome(self.success):
+            resolve_round(self.encounter)
+
+        self.assertFalse(self._is_calmed(boss, calm))
+
+    def test_parley_critical_calms_a_boss(self) -> None:
+        """Critical (SL 2) clears the boss's one-step resistance and calms it (#4149)."""
+        from world.combat.factories import BossOpponentFactory
+
+        calm = self._calm_template()
+        CombatOpponentFactory(encounter=self.encounter, threat_pool=ThreatPoolFactory())
+        boss = BossOpponentFactory(encounter=self.encounter, threat_pool=ThreatPoolFactory())
+        boss.morale = FALTER_MORALE_THRESHOLD
+        boss.save()
+        declare_parley(self.participant, boss)
+        critical = CheckOutcomeFactory(name="ParleyBossCritical", success_level=2)
+
+        with force_check_outcome(critical):
+            resolve_round(self.encounter)
+
+        self.assertTrue(self._is_calmed(boss, calm))
+
+    def _resolve_broken_foe_parley(self, outcome) -> None:
+        """Resolve one parley against a broken foe, outside resolve_round.
+
+        resolve_round auto-selects NPC actions first, and a BREAK opponent already
+        flees there (select_npc_actions), so the rout branch in _resolve_parley is
+        only observable when called directly.
+        """
+        from world.combat.services import _resolve_parley
+
+        CombatOpponentFactory(encounter=self.encounter, threat_pool=ThreatPoolFactory())
+        self.opponent.morale = BREAK_MORALE_THRESHOLD
+        self.opponent.save()
+        action = declare_parley(self.participant, self.opponent)
+
+        with force_check_outcome(outcome):
+            _resolve_parley(self.participant, action)
+
+    def test_parley_critical_routs_a_broken_foe(self) -> None:
+        """Critical (SL 2) against a broken foe makes it yield (FLED) (#4149)."""
+        from world.combat.constants import OpponentStatus
+
+        self._resolve_broken_foe_parley(CheckOutcomeFactory(name="ParleyRout", success_level=2))
+
+        self.opponent.refresh_from_db()
+        self.assertEqual(self.opponent.status, OpponentStatus.FLED)
+
+    def test_parley_success_does_not_rout_a_broken_foe(self) -> None:
+        """Success (SL 1) is below the rout threshold, so a broken foe stays put (#4149)."""
+        from world.combat.constants import OpponentStatus
+
+        self._resolve_broken_foe_parley(self.success)
+
+        self.opponent.refresh_from_db()
+        self.assertNotEqual(self.opponent.status, OpponentStatus.FLED)
+
     def test_parley_success_raises_the_persona_backed_opponents_affection(self) -> None:
         """#4145: a parley success reaches NPCStanding through the real combat dispatch."""
         from world.npc_services.models import NPCStanding
