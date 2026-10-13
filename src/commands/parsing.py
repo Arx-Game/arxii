@@ -34,6 +34,10 @@ def parse_targets_from_text(
     work correctly; manual typing of multi-word @targets is not supported.
     Hyphens and underscores are accepted within tokens (``@Crucible-Mundi``).
 
+    A leading ``@@`` is an escape (#4346): the text keeps one ``@`` and targets
+    nobody, so ``@@everyone`` reads "@everyone" instead of losing the word. It
+    is the same escape the web composer offers (``//`` for a literal slash).
+
     Args:
         text: The raw command text, e.g. "@bob,@carol waves hello".
         location: The room to resolve names against.
@@ -44,6 +48,8 @@ def parse_targets_from_text(
     """
     if not text.startswith("@"):
         return text, []
+    if text.startswith("@@"):
+        return text[1:], []
 
     match = _TARGET_PREFIX_RE.match(text)
     if not match:
