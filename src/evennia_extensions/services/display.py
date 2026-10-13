@@ -27,4 +27,4 @@ def set_permanent_description(obj: ObjectDB, description: str) -> None:
     """
     display, _ = ObjectDisplayData.objects.get_or_create(object=obj)
     display.permanent_description = normalize_mush_markup(description)
-    display.save(update_fields=["permanent_description"])
+    display.save(update_fields=["permanent_description", "updated_date"])

@@ -12,9 +12,29 @@
 
 from django.db import migrations
 
-from server.conf.mush_markup import normalize_mush_markup
-
 STOCK_LIMBO_OPENING = "Welcome to your new |wEvennia|n-based game!"
+
+_MARKUP = {"r": "\n", "R": "\n", "t": "\t", "T": "\t", "b": "\N{NO-BREAK SPACE}", "%": "%"}
+_MARKUP["B"] = _MARKUP["b"]
+
+
+def _normalize_markup(text):
+    """A frozen copy of ``server.conf.mush_markup.normalize_mush_markup`` as of #4329.
+
+    Frozen so this migration never imports live code: a rename there must not break
+    every ``migrate``, and an edit there must not change what this one does on replay.
+    Text staff typed into the web client's ``desc`` was never normalized at input.
+    """
+    out = []
+    i = 0
+    while i < len(text):
+        if text[i] == "%" and i + 1 < len(text):
+            out.append(_MARKUP.get(text[i + 1], text[i : i + 2]))
+            i += 2
+            continue
+        out.append(text[i])
+        i += 1
+    return "".join(out)
 
 
 def carry_desc_attribute_text(apps, schema_editor):
@@ -36,8 +56,8 @@ def carry_desc_attribute_text(apps, schema_editor):
         display, _ = ObjectDisplayData.objects.get_or_create(object=obj)
         if display.permanent_description:
             continue
-        display.permanent_description = normalize_mush_markup(text)
-        display.save(update_fields=["permanent_description"])
+        display.permanent_description = _normalize_markup(text)
+        display.save(update_fields=["permanent_description", "updated_date"])
 
 
 def noop(apps, schema_editor):
