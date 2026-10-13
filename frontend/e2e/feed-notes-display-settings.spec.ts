@@ -29,7 +29,19 @@ const SCENE = {
   has_unseen_observer: false,
 };
 
-const NOTE_KINDS = ['look', 'item', 'system', 'error', 'arrive', 'move', 'ambience'] as const;
+// Every kind classifyText (game/feedKinds.ts) can give a text frame; an unknown
+// or untyped frame is `system`, so these are all the non-pose lines in the column.
+const NOTE_KINDS = [
+  'look',
+  'item',
+  'system',
+  'error',
+  'page',
+  'arrive',
+  'move',
+  'ambience',
+  'vision',
+] as const;
 
 async function mockRestRoutes(page: Page): Promise<void> {
   await page.route('**/api/**', async (route) => {
@@ -115,6 +127,13 @@ function sendEveryNote(socket: WebSocketRoute): void {
   socket.send(text("Command 'lok' is not available.", { type: 'error' }));
   socket.send(text('Nyx arrives from the west.', { type: 'arrive' }));
   socket.send(text('Nyx leaves, heading east.', { type: 'move' }));
+  socket.send(text('Nyx pages: Meet me by the east gate.', { type: 'page' }));
+  socket.send(
+    text('A voice like falling water: the gate will not hold.', {
+      type: 'narrative',
+      category: 'visions',
+    })
+  );
   socket.send(text('A cold wind moves through the courtyard.', { type: 'narrative' }));
 }
 

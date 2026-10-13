@@ -57,7 +57,17 @@ describe('FeedNoteBlock (#3856)', () => {
     expect(block.className).not.toContain('bg-muted');
   });
 
-  it.each(['look', 'item', 'system', 'error', 'arrive', 'move', 'ambience', 'vision'] as const)(
+  it.each([
+    'look',
+    'item',
+    'system',
+    'error',
+    'page',
+    'arrive',
+    'move',
+    'ambience',
+    'vision',
+  ] as const)(
     'a %s note sets no size, face or width of its own, so Display settings reach it (#4330)',
     (kind) => {
       render(<FeedNoteBlock note={note(kind, 'Rain rests on the stones.', 'Courtyard')} />);
