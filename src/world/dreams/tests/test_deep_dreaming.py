@@ -22,6 +22,18 @@ class DeepDreamingAreaTests(TestCase):
         room = ObjectDB.objects.filter(db_key=DEEP_DREAMING_STARTER_ROOM_KEY).first()
         assert room is not None
 
+    def test_starter_room_description_is_the_one_look_reads(self):
+        """The seed writes ObjectDisplayData, not the desc Attribute nothing renders (#4329)."""
+        from evennia.objects.models import ObjectDB
+
+        from world.dreams.constants import DEEP_DREAMING_STARTER_ROOM_KEY
+
+        ensure_deep_dreaming_area()
+        room = ObjectDB.objects.get(db_key=DEEP_DREAMING_STARTER_ROOM_KEY)
+
+        assert "Wisps of grey mist" in room.item_data.get_display_description()
+        assert room.attributes.get("desc") is None
+
     def test_starter_room_has_room_profile(self):
         from evennia_extensions.models import RoomProfile
 

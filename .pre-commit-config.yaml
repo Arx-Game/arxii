@@ -310,6 +310,21 @@ repos:
         # and container, unequips, spills contents and writes the exit OwnershipEvent.
         # Tests are excluded: they stage destroyed rows on purpose. Suppress with
         # `# noqa: DESTROYED_AT <reason>`; a bare token is still a finding.
+      - id: evennia-desc-attribute
+        name: Reject Evennia's desc Attribute (nothing renders it)
+        entry: uv run python tools/lint_evennia_desc_attribute.py
+        language: system
+        pass_filenames: true
+        types: [python]
+        files: ^src/.*\.py$
+        exclude: (/tests/|/migrations/)
+        # #4329 (2026-10-13): staff `desc` wrote the Attribute and reported success
+        # while `look` never changed, two dream-room seeds wrote text that never
+        # showed, and Evennia's stock post-move look read it, so every builder room
+        # arrived as "This is a room.". A description lives in ObjectDisplayData
+        # (a character's on its sheet). Tests are excluded: they set the Attribute
+        # to prove nothing reads it; migrations, to carry it across. Suppress with
+        # `# noqa: EVENNIA_DESC <reason>`; a bare token is still a finding.
       - id: check-migrations
         name: Check Django migrations
         entry: uv run python tools/check_migrations.py

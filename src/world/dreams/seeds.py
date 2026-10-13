@@ -46,15 +46,20 @@ def ensure_deep_dreaming_area() -> Area:
     if room is None:
         from evennia.utils import create as evennia_create  # noqa: PLC0415
 
+        from evennia_extensions.services.display import (  # noqa: PLC0415
+            set_permanent_description,
+        )
+
         room = evennia_create.create_object(
             typeclass="typeclasses.rooms.Room",
             key=DEEP_DREAMING_STARTER_ROOM_KEY,
             nohome=True,
         )
-        room.db.desc = (
+        set_permanent_description(
+            room,
             "Wisps of grey mist curl around your feet, obscuring the ground. "
             "The air tastes of forgotten memories. Exits appear and dissolve "
-            "in the corner of your eye, leading to places that may not exist."
+            "in the corner of your eye, leading to places that may not exist.",
         )
 
     # Link the starter room to the deep dreaming area via RoomProfile

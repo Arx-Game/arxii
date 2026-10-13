@@ -287,11 +287,13 @@ class PerformPortalTravelTests(TestCase):
         self.assertNotIn("You steps", departure_text)
 
         arrival_text = greeter_msg.call_args.kwargs["text"][0]
-        # index 2, not 1: move_object's non-quiet arrival auto-look sends an
-        # intervening "text" call (index 1) between the departure (0) and
-        # arrival (2) broadcasts.
-        traveler_arrival_text = traveler_msg.call_args_list[2].kwargs["text"][0]
-        self.assertEqual(traveler_arrival_text, arrival_text)
+        # Text frames only: the traveler also gets a room_state call. An arrival
+        # look sits between the two broadcasts only for a character someone is
+        # playing (#4329), and this one has no session.
+        traveler_texts = [
+            call.kwargs["text"][0] for call in traveler_msg.call_args_list if "text" in call.kwargs
+        ]
+        self.assertEqual(traveler_texts, [departure_text, arrival_text])
         self.assertTrue(arrival_text.endswith("steps out of a dusty hand mirror."))
         self.assertNotIn("You steps", arrival_text)
 

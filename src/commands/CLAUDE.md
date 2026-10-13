@@ -1022,6 +1022,15 @@ actions, backends, and service functions.
   (room/when/name/desc values may contain spaces — they run to the next `key=`). No consent gate
   (ADR-0024 — events are calendaring; an invitation does not compel behavior).
 - **`evennia_overrides/builder.py`**: `CmdDig`, `CmdOpen`, `CmdLink`, `CmdUnlink` (Evennia overrides)
+  and `CmdDesc` (#4329, ADR-4329): Evennia's `desc` wrote the `desc` Attribute, which
+  nothing renders, and still answered "The description was set on ...". The override
+  keeps Evennia's permission checks (`control` or `edit` access) and `/edit` line
+  editor but writes through `write_description`: a character's text to its sheet via the
+  versioned `set_physical_description` (edited_by = the staff account), an item's to its
+  `ItemInstance.custom_description`, any other object's to `ObjectDisplayData` via
+  `set_permanent_description`. Evennia's `setdesc` (any player, own character) is removed
+  from `CharacterCmdSet` for the same reason. `CmdSet.remove` matches the key exactly, so
+  the removal tuple must spell Evennia's key (`"@desc"`, not `"desc"`).
 
 ### Account Commands (`account/`)
 - **`account_info.py`**: `CmdAccount` (`@account`/`account`) — bare shows account information

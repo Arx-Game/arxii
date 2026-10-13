@@ -474,10 +474,6 @@ class Character(ObjectParent, DefaultCharacter):
             return False
         return persona.legend_murmur.has_murmurable_deeds
 
-    def do_look(self, target):
-        desc = self.at_look(target)
-        self.msg(desc)
-
     def at_pre_puppet(self, account, session=None, **kwargs):
         """Give a character with nowhere to be a home before Evennia restores them (#3818).
 
@@ -756,16 +752,52 @@ class Character(ObjectParent, DefaultCharacter):
             state_sequence=state_sequence,
         )
 
+    def _send_arrival_look(self) -> None:
+        """The mover's look at the room they arrived in, through our ``look`` (#4329).
+
+        Bare ``look`` exactly as the ``look`` command runs it (``LookAction`` at the
+        room, typed ``look``, or ``error`` on a refusal), so the description,
+        exits and contents come from the one renderer. Called directly rather than
+        through ``execute_cmd``: a typed line goes to whatever cmdset is on top,
+        and inside the line editor (``desc/edit``) or a menu the word "look" would
+        land in the buffer. Sent to every window, since each of them moved.
+        Skipped for a character nobody is playing. Run through ``run_safely`` like
+        the other arrival side effects, so a failing look never skips the room
+        state and triggers that follow it.
+        """
+        if self.location is None or not self.has_account:
+            return
+        from actions.definitions.perception import LookAction
+        from world.player_submissions.services import run_safely
+
+        def look() -> None:
+            result = LookAction().run(actor=self, target=self.location)
+            if result.message:
+                kind = TextFrameType.LOOK if result.success else TextFrameType.ERROR
+                self.msg((result.message, {"type": kind.value}))
+
+        run_safely("arrival_look", look, actor=self)
+
     def at_post_move(self, source_location, move_type="move", **kwargs):
         """Handle actions after moving to a new location.
 
-        Sends updated room state to the frontend after movement.
+        Shows the mover the room through our ``look``, then sends updated room
+        state to the frontend after movement.
         Reconciles the presence-tied resonance-alignment buff for the new location.
         Emits EventName.MOVED so reactive triggers (e.g. scar-gated presence
         escalation) can respond to character arrival.
+
+        ``DefaultCharacter.at_post_move`` is skipped on purpose (#4329): its only
+        work is a stock look over Evennia's ``desc`` Attribute, which nothing of
+        ours writes, so every room the builder made arrived as "This is a room."
+        with Evennia's own contents list instead of the authored description.
+        ``super(DefaultCharacter, self)`` resumes the MRO after
+        ``DefaultCharacter``, so it also passes over ``ObjectParent``; that is safe
+        only while ``ObjectParent`` defines no ``at_post_move``, which
+        ``test_move_look`` pins.
         """
-        # Call parent method to handle trigger registration
-        super().at_post_move(source_location, move_type=move_type, **kwargs)
+        super(DefaultCharacter, self).at_post_move(source_location, move_type=move_type, **kwargs)
+        self._send_arrival_look()
 
         # Send room state to frontend
         self.send_room_state()

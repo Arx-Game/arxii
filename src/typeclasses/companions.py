@@ -24,5 +24,9 @@ class CompanionObject(Character):
         triggers, sunlight exposure, resonance-alignment reconciliation) that
         assume a real story participant — a companion arriving in a room
         shouldn't spring any of them (#672 spec, Decision #9).
+
+        ``DefaultCharacter``'s own hook is passed over too, as on ``Character``
+        (#4329): its only work is a stock look over Evennia's ``desc`` Attribute,
+        and a companion has no window to read it.
         """
-        DefaultCharacter.at_post_move(self, source_location, move_type=move_type, **kwargs)
+        super(DefaultCharacter, self).at_post_move(source_location, move_type=move_type, **kwargs)

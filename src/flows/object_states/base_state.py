@@ -217,11 +217,25 @@ class BaseState:
 
     @cached_property
     def description(self) -> str:
-        # Use item_data instead of .db to get the description.
+        """The object's description, from the store its kind keeps it in (#4329).
+
+        An item's game object reads its ``ItemInstance`` (``custom_description``,
+        else the template's), the text a drilled ``look cup in bag`` already
+        showed. Anything else reads ``ObjectDisplayData`` through the data
+        handler's ``get_display_description()`` (an event's temporary description
+        first, then the permanent one; a character's handler falls back to the
+        sheet's ``additional_desc``). This used to read ``item_data.desc``, which
+        no handler has ever defined, so every plain object, exit and item fell
+        through to the fallback below. Evennia's ``desc`` Attribute is never read.
+        """
+        fallback = "You see nothing of note."
         try:
-            return self.obj.item_data.desc or "You see nothing of note."
+            instance = self.obj.item_instance_or_none
+            if instance is not None:
+                return instance.display_description or fallback
+            return self.obj.item_data.get_display_description() or fallback
         except AttributeError:
-            return "You see nothing of note."
+            return fallback
 
     @property
     def template(self) -> str:

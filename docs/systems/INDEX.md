@@ -1353,6 +1353,16 @@ symmetric.
   `flows/object_states/room_state.py`). Contributors earn celestial resonance (via
   `ProjectKindResonanceAward`) and society reputation (via `bump_society_reputation`
   with `area.dominant_society`).
+- **One description store per kind (#4329, ADR-4329):** a room's, plain object's or exit's
+  base description is `ObjectDisplayData.permanent_description` (shared writer:
+  `evennia_extensions.services.display.set_permanent_description`; read through the data
+  handler's `get_display_description()`); a character's is its sheet's `additional_desc`; an
+  item's is its `ItemInstance.display_description`. `BaseState.description` reads the right
+  one. Walking into a room runs `LookAction` at the room (`Character._send_arrival_look`),
+  never Evennia's stock look, and staff `desc` (`commands.evennia_overrides.builder.CmdDesc`)
+  writes each kind's store. Evennia's `desc` Attribute is retired (`evennia-desc-attribute`
+  hook); `setdesc` is removed, and the Builder-only `@set .../desc`, `@spawn` and `@copy`
+  still touch the Attribute (ADR-4329).
 - **Room Description Variants (#3291):** `evennia_extensions.RoomDescVariant`
   (`room_profile` FK, nullable `season`/`phase` TextChoices reusing
   `world.game_clock.constants.Season`/`TimePhase`, `description` text, unique on

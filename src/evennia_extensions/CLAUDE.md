@@ -21,6 +21,18 @@ Extends Evennia's functionality with additional models and data handlers while p
 - **`room_data.py`**: `RoomItemDataHandler` - room data access
 - **`exit_data.py`**: `ExitItemDataHandler` - exit data handling
 
+### `services/display.py`
+- `set_permanent_description(obj, description)` (#4329, ADR-4329) - the shared writer of
+  a room's, plain object's or exit's look description,
+  `ObjectDisplayData.permanent_description` (`%r`/`%t` normalized). Used by the world
+  builder's `create_room`, staff `desc`, and the dream-room seeds; new code writes through
+  it (`set_room_display_data` and grid import still write the field directly). **One store
+  per kind**: `look` reads this one through the data handler's `get_display_description()`;
+  a character's description is its sheet's `additional_desc`
+  (`world.character_sheets.services.set_physical_description`), an item's its
+  `ItemInstance.display_description`. Evennia's `desc` Attribute is never read or written;
+  the `evennia-desc-attribute` hook rejects it in `src/`.
+
 ### `mixins.py`
 - Shared functionality for extending Evennia objects
 - Common patterns for data handler integration

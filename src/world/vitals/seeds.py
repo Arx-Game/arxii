@@ -709,6 +709,8 @@ def ensure_dream_room() -> ObjectDB:
     from evennia.utils import create as evennia_create  # noqa: PLC0415
     from evennia.utils.search import search_tag  # noqa: PLC0415
 
+    from evennia_extensions.services.display import set_permanent_description  # noqa: PLC0415
+
     existing = search_tag(key=DREAM_ROOM_TAG, category=DREAM_ROOM_TAG_CATEGORY)
     if existing:
         return existing[0]
@@ -717,7 +719,7 @@ def ensure_dream_room() -> ObjectDB:
         key=DREAM_ROOM_KEY,
         nohome=True,
     )
-    room.db.desc = _DREAM_ROOM_DESC
+    set_permanent_description(room, _DREAM_ROOM_DESC)
     room.tags.add(DREAM_ROOM_TAG, category=DREAM_ROOM_TAG_CATEGORY)
     return room
 

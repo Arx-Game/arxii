@@ -1,6 +1,5 @@
 from typing import TYPE_CHECKING
 
-from django.utils.functional import cached_property
 from evennia.utils.utils import iter_to_str
 
 from flows.object_states.base_state import BaseState
@@ -31,22 +30,6 @@ class CharacterState(BaseState):
     def get_categories(self) -> dict:
         # For now, no extra character-specific categories.
         return {}
-
-    @cached_property
-    def description(self) -> str:
-        """The character's live physical description (#4030).
-
-        ``BaseState.description`` reads ``item_data.desc``, an attribute that has
-        never existed on ``CharacterItemDataHandler`` (dead since the project's
-        initial setup) — every character look silently fell through to the
-        generic fallback. The real read is ``get_display_description()`` (the
-        event-disguise overlay, else the sheet's ``additional_desc``), the same
-        source ``CharacterSerializer`` uses.
-        """
-        try:
-            return self.obj.item_data.get_display_description() or "You see nothing of note."
-        except AttributeError:
-            return "You see nothing of note."
 
     # ------------------------------------------------------------------
     # Identity rendering (#1109) — the look / room-contents / examine name
