@@ -38,23 +38,27 @@ const NYX = { dbref: '#50', name: 'Nyx', thumbnail_url: null, commands: [] as st
 
 /** Repo-relative `docs/reviews/3859/`, from `frontend/` where Playwright runs. */
 const SHOTS = path.join('..', 'docs', 'reviews', '3859');
-/** #4321's evidence, beside the other journeys' shots. */
-const SHOTS_4321 = path.join('evidence', '4321');
+/** #4321's evidence, in the review-evidence tree (never merged; see the evidence reference). */
+const SHOTS_4321 = path.join('..', 'docs', 'reviews', '4321');
 
 /**
  * `mine` as the server reports it; #4321 journeys pass a character puppeted
- * elsewhere (`session_count`, `room_name`) and read the disconnect request.
+ * elsewhere (`session_count`, `room_name`) and read the disconnect request,
+ * after which the fixture reports the sessions gone, as the server would.
  */
 async function mockRestRoutes(
   page: Page,
   character: typeof CHARACTER = CHARACTER,
   onDisconnect?: () => void
 ): Promise<void> {
+  let current = character;
   await page.route('**/api/**', async (route) => {
     const pathname = new URL(route.request().url()).pathname;
     if (pathname === '/api/roster/entries/1/disconnect/') {
       onDisconnect?.();
-      await route.fulfill({ json: { closed: character.session_count } });
+      const closed = current.session_count;
+      current = { ...current, session_count: 0, room_name: null };
+      await route.fulfill({ json: { closed } });
     } else if (pathname === '/api/user/') {
       await route.fulfill({
         json: {
@@ -70,11 +74,11 @@ async function mockRestRoutes(
           available_characters: [],
           pending_applications: [],
           selected_entry_id: 1,
-          selected_entry: character,
+          selected_entry: current,
         },
       });
     } else if (pathname === '/api/roster/entries/mine/') {
-      await route.fulfill({ json: [character] });
+      await route.fulfill({ json: [current] });
     } else if (pathname === '/api/interactions/') {
       await route.fulfill({ json: { results: [], next: null } });
     } else if (pathname === '/api/magic/character-resonances/') {
@@ -109,7 +113,10 @@ async function reachReadySession(page: Page): Promise<Socket> {
 
   await page.goto('/game');
   await expect(page.getByRole('textbox')).toBeEnabled();
-  await expect(page.getByText('Waiting for location', { exact: true })).toBeVisible();
+  // Since #3760's readiness milestones the bar says "Disconnected" until the
+  // puppet confirmation and the room snapshot both land; "Waiting for location"
+  // is the connected-but-roomless state, which a fixture socket never reaches.
+  await expect(page.getByText('Disconnected', { exact: true })).toBeVisible();
 
   sockets[0].route.send(
     JSON.stringify([
@@ -243,6 +250,15 @@ test.describe('selected character chip (#3859) — fixture-backed presence journ
     await header.getByRole('button', { name: /disconnect character/i }).click();
     await expect(page.getByRole('menuitem')).toHaveCount(0);
     await expect.poll(() => disconnects).toBe(1);
+    // The roster list is refetched and the server now reports no session: the
+    // chip and the card flip to the no-session state without a reload.
+    await expect(header.getByRole('link', { name: /enter the world/i })).toHaveAttribute(
+      'href',
+      '/game'
+    );
+    await expect(header.getByText(/Not in the world/)).toBeVisible();
+    await expect(header.getByRole('button', { name: /disconnect character/i })).toHaveCount(0);
+    await expect(page.getByText('Not in the world', { exact: true })).toBeVisible();
     await page.screenshot({
       path: path.join(SHOTS_4321, 'fresh-tab-after-disconnect-1280.png'),
       fullPage: false,
