@@ -307,7 +307,7 @@ def _apply_route_payouts(
     """Money/clue payouts land on the handler; spy payouts (#2833) apply per
     target kind. Returns extra report lines from the spy payouts."""
     from world.assets.services import draw_clue_from_pool  # noqa: PLC0415
-    from world.clues.services import acquire_clue  # noqa: PLC0415
+    from world.clues.services import find_clue  # noqa: PLC0415
     from world.currency.services import deliver_mission_money  # noqa: PLC0415
     from world.roster.models import RosterEntry  # noqa: PLC0415
     from world.tasking.spy_payouts import apply_spy_payouts  # noqa: PLC0415
@@ -325,7 +325,7 @@ def _apply_route_payouts(
         if roster_entry is not None:
             drawn = draw_clue_from_pool(route.clue_pool, roster_entry)
             if drawn is not None:
-                acquire_clue(roster_entry, drawn)
+                find_clue(roster_entry, drawn)
     lines = apply_spy_payouts(route, task, fulfillment)
     if route.collection_success_level is not None:
         lines.extend(_land_route_collection(route, task, handler_sheet))

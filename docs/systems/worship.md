@@ -264,8 +264,8 @@ not a mechanic; three independent, stackable conditions make one count.
   `VisionRecipientUnrostered`), then in one transaction spends
   `VISION_RESONANCE_POOL_COST` from the being's pool through `spend_worship_pool`
   (`VisionPoolInsufficient`), records the `Vision` and hands a clue over through
-  `clues.services.acquire_clue`, then `grant_clue_target` when the clue is AUTOMATIC
-  (#4327, as room search does; a RESEARCH clue is only held); only after that commit does it deliver the prose as a
+  `clues.services.find_clue` (held, then `grant_clue_target` when the clue is AUTOMATIC;
+  #4327, #4331; a RESEARCH clue is only held); only after that commit does it deliver the prose as a
   VISIONS `NarrativeMessage` (`send_narrative_message`: live push when online, login
   catch-up otherwise; `related_story` from the episode) and link it on the row, so a
   push never precedes a record that could roll back. A revealed source appends

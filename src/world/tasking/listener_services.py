@@ -216,7 +216,7 @@ def collect_harvest(post: ListenerPost, collector: Persona) -> Clue | None:
     """
     from world.clues.constants import ClueResolution, ClueTargetKind  # noqa: PLC0415
     from world.clues.models import Clue  # noqa: PLC0415
-    from world.clues.services import acquire_clue, grant_clue_target  # noqa: PLC0415
+    from world.clues.services import find_clue  # noqa: PLC0415
     from world.roster.models import RosterEntry  # noqa: PLC0415
 
     if collector.pk != post.handler_id:
@@ -253,6 +253,5 @@ def collect_harvest(post: ListenerPost, collector: Persona) -> Clue | None:
 
     roster_entry = RosterEntry.objects.filter(character_sheet=collector.character_sheet).first()
     if roster_entry is not None:
-        acquire_clue(roster_entry, clue)
-        grant_clue_target(clue, roster_entry)
+        find_clue(roster_entry, clue)
     return clue

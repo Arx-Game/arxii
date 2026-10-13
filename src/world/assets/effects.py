@@ -140,9 +140,9 @@ def run_asset_intel_task(offer: NPCServiceOffer, persona: Persona) -> EffectResu
 
     Resolves the active NPCAsset owned by the interacting persona, rolls
     the offer's check, and on success draws a clue from the pool (excluding
-    clues the promoter already holds) and grants a CharacterClue. The PC
-    rolls the check (they're directing the task; the check models how well
-    they've cultivated the asset's cooperation).
+    clues the promoter already holds) and finds it (``find_clue``: held, and
+    resolved on the spot when AUTOMATIC). The PC rolls the check (they're directing
+    the task; the check models how well they've cultivated the asset's cooperation).
 
     Requires the offer to have an AssetTaskIntelDetails row pointing at the
     CluePool to draw from. Returns a failure EffectResult if the asset is
@@ -157,7 +157,7 @@ def run_asset_intel_task(offer: NPCServiceOffer, persona: Persona) -> EffectResu
         NPCAsset,
     )
     from world.checks.services import perform_check_with_modifiers  # noqa: PLC0415
-    from world.clues.models import CharacterClue  # noqa: PLC0415
+    from world.clues.services import find_clue  # noqa: PLC0415
     from world.roster.models import RosterEntry  # noqa: PLC0415
 
     try:
@@ -209,10 +209,7 @@ def run_asset_intel_task(offer: NPCServiceOffer, persona: Persona) -> EffectResu
             message="Your asset has nothing new to report. They've told you everything they know.",
         )
 
-    CharacterClue.objects.get_or_create(
-        roster_entry=roster_entry,
-        clue=drawn_clue,
-    )
+    find_clue(roster_entry, drawn_clue)
 
     return EffectResult(
         kind=offer.kind,

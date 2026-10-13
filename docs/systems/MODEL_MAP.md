@@ -2172,6 +2172,7 @@
 
 ### Service Functions
 - `acquire_clue(roster_entry: 'RosterEntry', clue: 'Clue') -> 'CharacterClue' - Record that a character has found a clue (idempotent).`
+- `find_clue(roster_entry: 'RosterEntry', clue: 'Clue') -> 'CharacterClue' - A character finds a clue: hold it, and resolve it on the spot if AUTOMATIC (#4331).`
 - `clear_rescue_clues(captivity: 'Captivity') -> 'None' - Delete a captivity's rescue clues (and their placements) when it resolves (#931).`
 - `clue_target_kind_allowed(account: 'object', target_kind: 'str') -> 'bool' - The clue authoring policy (#3432) as one callable (#3566).`
 - `create_accusation_counter_clue(secret: 'Secret', *, area: 'Area', difficulty: 'int') -> 'Clue' - Plant the investigable trail an accusation leaves behind (#1825). Idempotent.`
