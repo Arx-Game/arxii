@@ -6,6 +6,7 @@ import {
   fetchRosterEntries,
   fetchRosterEntry,
   fetchRosters,
+  postDisconnectEntry,
   postFreezeEntry,
   postGiveUpEntry,
   postRosterApplication,
@@ -163,6 +164,23 @@ export function useSelectCharacterMutation() {
     // save" — never blocking, never re-thrown.
     onError: (err) =>
       toast.error(err instanceof Error ? err.message : "Couldn't save your character selection."),
+  });
+}
+
+/**
+ * Disconnect a character everywhere (#4321). Refetches the roster list, which
+ * carries the server's `session_count`, so the chip and the Hall card stop
+ * saying "In the world" as soon as the sessions are gone.
+ */
+export function useDisconnectEverywhereMutation() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (entryId: number) => postDisconnectEntry(entryId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['my-roster-entries'] });
+    },
+    onError: (err) =>
+      toast.error(err instanceof Error ? err.message : 'Could not disconnect that character.'),
   });
 }
 

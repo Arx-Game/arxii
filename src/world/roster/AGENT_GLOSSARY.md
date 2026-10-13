@@ -245,17 +245,34 @@ around the portrait, not a subtle text badge.
 _Avoid_: taken up (retired); Playing: Not In World (superseded); subtle
 text-only state indicators.
 
-**Log out / quit / Clear Active Character** (the exit triad, Apostate
-2026-08-28): three distinct exits that must never share a label. **Log out** =
-leave the ACCOUNT (site logout; lives in the account menu). **quit** = the
-standard-MU telnet verb: the character stops being actively in the world
-(state 3 → 2.5) but STAYS selected on the website. **Clear Active Character** =
-drop the selection entirely (state 2.5 → 2): logged in on the account with no
-character — the control lives with the character list (the Hall's "Your
-Characters" band), NOT in the header chip. Use case: browsing journals/events
-while certain nothing gets posted as the wrong character.
+**Log Out Account / Disconnect Character / Clear Active Character** (the exit
+triad, Apostate 2026-08-28; labels ruled 2026-10-13, #4321): three distinct exits
+that must never share a label. **Log Out Account** = leave the ACCOUNT (site
+logout; lives in the account menu and the world menu). **Disconnect Character**
+= telnet's `quit`: the character stops being actively in the world (state 3 →
+2.5) but STAYS selected on the website; from a tab with no socket of its own it
+closes every session through `POST /api/roster/entries/{id}/disconnect/`, and
+with a socket and another session it offers "This connection" / "Every
+connection" (never a prompt when there is only one session). **Clear Active
+Character** = drop the selection entirely (state 2.5 → 2): logged in on the
+account with no character — the control lives with the character list (the
+Hall's "Your Characters" band), NOT in the header chip. Use case: browsing
+journals/events while certain nothing gets posted as the wrong character.
 _Avoid_: step away (retired — read as logout when placed next to "Enter the
-world"); using any one of the three where another is meant.
+world"); Log out / Logout (read as leaving the world, renamed 2026-10-13);
+Leave the world (renamed 2026-10-13); using any one of the three where another
+is meant.
+
+**Presence** (In the world):
+Whether a character is puppeted right now, by any session on any tab or device
+(#4321, ADR-4321). A server fact: `world.roster.services.presence.session_count`
+reads Evennia's session handler, and the roster `mine` payload carries it as
+`session_count` with `room_name`. The web client's one rule is
+`useCharacterPresence` (this tab's socket first, the server's count when it has
+none); the header chip and the Hall card say "In the world, <room>" from either.
+Distinct from Selection (state 2.5) and from Browsing identity (per tab).
+_Avoid_: online (the Who tab's word for everyone); connected (one socket, not
+the character); reading `gameSlice.sessions` directly for a presence claim.
 
 **Offscreen act**:
 A "2.5 act" (#3412 slice 3, ADR-0246) — one of a narrow set of action keys

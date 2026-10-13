@@ -3,13 +3,19 @@ import { DoorClosed, DoorOpen } from 'lucide-react';
 
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import { PersonaSwitcher } from '@/game/components/PersonaSwitcher';
 import { useCharacterPersonasQuery } from '@/game/personaQueries';
-import { useGameSocket } from '@/hooks/useGameSocket';
 import { cn } from '@/lib/utils';
 import type { MyRosterEntry } from '@/roster/types';
 import { dockedStateLabel } from '@/roster/lifecycleDisplay';
-import { useAppSelector } from '@/store/hooks';
+import { useCharacterPresence } from '@/roster/useCharacterPresence';
+import { useDisconnectCharacter } from '@/roster/useDisconnectCharacter';
 
 interface SelectedCharacterChipProps {
   entry: MyRosterEntry;
@@ -32,21 +38,25 @@ function getInitials(name: string): string {
  * when there's none the header renders exactly as it did before this chip
  * existed.
  *
- * Selection is NOT presence, and the chip shows both (#3859). Presence is the
- * character's live game session in the store (`sessions[name].isConnected`,
- * the same fact `GatefoldPage`'s `/` redirect and `GameTopBar`'s connection
- * dot read). Sockets live at module scope and `GamePage` has no teardown
+ * Selection is NOT presence, and the chip shows both (#3859, #4321). Presence
+ * is one fact the server owns: a character is in the world while a session
+ * puppets it, from this tab or any other. `useCharacterPresence` reads this
+ * tab's own socket first (`sessions[name].isConnected`, the same fact
+ * `GatefoldPage`'s `/` redirect and `GameTopBar`'s connection dot read) and
+ * the roster payload's `session_count`/`room_name` when the tab opened no
+ * socket. Sockets live at module scope and `GamePage` has no teardown
  * (ADR-0295), so a player who opens the Hall or the roster from the world
- * menu is still in the world; the chip used to say "Enter the world" and
- * "Playing: Currently Offscreen" on that page regardless, which was a false
- * fact on every page the header renders. Now:
+ * menu is still in the world; and a second tab, or a second computer, is no
+ * different (ADR-4321). Before #4321 that second tab said "Not in the world"
+ * about a character standing in a room. Now:
  *
- * - live session: the sub-line reads "In the world" (with the room's name
- *   when the session has one), the primary button is "Return to the world",
- *   and a "Leave the world" button closes that character's socket — the same
- *   `useGameSocket().disconnect(name)` the world menu's item calls, so the
- *   server unpuppets them and nobody stands unpiloted on the grid;
- * - no session: "Enter the world" into `/game` (the ONE deliberate
+ * - in the world: the sub-line reads "In the world" (with the room's name
+ *   when one is known), the primary button is "Return to the world" (a second
+ *   socket joins the same character), and "Disconnect Character" takes the
+ *   character off the grid: this tab's socket when it has one, every session
+ *   through the disconnect endpoint when it has none, and a two-item choice
+ *   when it has one and the character has another (`useDisconnectCharacter`);
+ * - not in the world: "Enter the world" into `/game` (the ONE deliberate
  *   selection->presence crossing — `GamePage`'s own mount-path effect does the
  *   actual auto-puppeting, not this component), and the sub-line says "Not in
  *   the world".
@@ -54,10 +64,10 @@ function getInitials(name: string): string {
  * The chip deliberately carries NO clear-selection control (Apostate ruling,
  * 2026-08-28: "step away" next to Enter-the-world read as logout). Clearing
  * lives with the character list — the Hall's "Your Characters" band gains a
- * "Clear Active Character" control in slice 2. Ruled vocabulary: "Log out" =
- * account; "quit" (telnet) = leave the world but stay selected; "Clear Active
- * Character" = no selection, still logged in. "Leave the world" is that same
- * quit: presence ends, selection stays.
+ * "Clear Active Character" control in slice 2. Ruled vocabulary (2026-10-13):
+ * "Log Out Account" = account; "Disconnect Character" = the character leaves
+ * the grid, the account stays signed in and selected (telnet's "quit");
+ * "Clear Active Character" = no selection, still logged in.
  *
  * Portrait-forward restyle (#3412 slice 2, Direction B "Commonplace Book" —
  * ratified 2026-08-28): the portrait is the load-bearing state signal, so it
@@ -84,10 +94,7 @@ export function SelectedCharacterChip({ entry }: SelectedCharacterChipProps) {
     personas[0];
   const wornName = worn?.name ?? entry.name;
 
-  const session = useAppSelector((state) => state.game.sessions[entry.name]);
-  const live = Boolean(session?.isConnected);
-  const roomName = session?.room?.name ?? null;
-  const { disconnect } = useGameSocket();
+  const { inWorld, roomName } = useCharacterPresence(entry);
 
   // On /game the top bar already carries the connection state, and the header
   // is not rendered there at all (Layout's full-viewport routes); the guard
@@ -96,7 +103,7 @@ export function SelectedCharacterChip({ entry }: SelectedCharacterChipProps) {
   const onGamePage = pathname.startsWith('/game');
 
   let presence: string;
-  if (live) {
+  if (inWorld) {
     presence = roomName ? `In the world, ${roomName}` : 'In the world';
   } else {
     presence = dockedStateLabel(entry.lifecycle_state);
@@ -134,22 +141,50 @@ export function SelectedCharacterChip({ entry }: SelectedCharacterChipProps) {
       >
         <Link to="/game">
           <DoorOpen className="h-3.5 w-3.5" />
-          {live ? 'Return to the world' : 'Enter the world'}
+          {inWorld ? 'Return to the world' : 'Enter the world'}
         </Link>
       </Button>
-      {live && (
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          className="rounded-none uppercase tracking-[0.08em]"
-          title={`Leave the world as ${entry.name}: your character leaves the grid; you stay signed in and selected`}
-          onClick={() => disconnect(entry.name)}
-        >
-          <DoorClosed className="h-3.5 w-3.5" />
-          Leave the world
-        </Button>
-      )}
+      {inWorld && <DisconnectControl entry={entry} />}
     </div>
+  );
+}
+
+const DISCONNECT_BUTTON = 'rounded-none uppercase tracking-[0.08em]';
+
+/**
+ * "Disconnect Character" (#4321): a plain button when there is nothing to
+ * choose, a two-item menu while this tab holds a socket and the character has
+ * another session somewhere (the choice the owner asked for, and only then).
+ */
+function DisconnectControl({ entry }: SelectedCharacterChipProps) {
+  const { needsChoice, disconnect, disconnectThis, disconnectEverywhere } =
+    useDisconnectCharacter(entry);
+  if (!needsChoice) {
+    return (
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        className={DISCONNECT_BUTTON}
+        onClick={disconnect}
+      >
+        <DoorClosed className="h-3.5 w-3.5" />
+        Disconnect Character
+      </Button>
+    );
+  }
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button type="button" variant="outline" size="sm" className={DISCONNECT_BUTTON}>
+          <DoorClosed className="h-3.5 w-3.5" />
+          Disconnect Character
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end">
+        <DropdownMenuItem onClick={disconnectThis}>This connection</DropdownMenuItem>
+        <DropdownMenuItem onClick={disconnectEverywhere}>Every connection</DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }

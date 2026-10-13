@@ -30,17 +30,32 @@ const CHARACTER = {
   lifecycle_state: 'ALIVE',
   roster_type: 'Active',
   character_type: 'PC',
+  session_count: 0,
+  room_name: null as string | null,
 };
 
 const NYX = { dbref: '#50', name: 'Nyx', thumbnail_url: null, commands: [] as string[] };
 
 /** Repo-relative `docs/reviews/3859/`, from `frontend/` where Playwright runs. */
 const SHOTS = path.join('..', 'docs', 'reviews', '3859');
+/** #4321's evidence, beside the other journeys' shots. */
+const SHOTS_4321 = path.join('evidence', '4321');
 
-async function mockRestRoutes(page: Page): Promise<void> {
+/**
+ * `mine` as the server reports it; #4321 journeys pass a character puppeted
+ * elsewhere (`session_count`, `room_name`) and read the disconnect request.
+ */
+async function mockRestRoutes(
+  page: Page,
+  character: typeof CHARACTER = CHARACTER,
+  onDisconnect?: () => void
+): Promise<void> {
   await page.route('**/api/**', async (route) => {
     const pathname = new URL(route.request().url()).pathname;
-    if (pathname === '/api/user/') {
+    if (pathname === '/api/roster/entries/1/disconnect/') {
+      onDisconnect?.();
+      await route.fulfill({ json: { closed: character.session_count } });
+    } else if (pathname === '/api/user/') {
       await route.fulfill({
         json: {
           id: 1,
@@ -55,11 +70,11 @@ async function mockRestRoutes(page: Page): Promise<void> {
           available_characters: [],
           pending_applications: [],
           selected_entry_id: 1,
-          selected_entry: CHARACTER,
+          selected_entry: character,
         },
       });
     } else if (pathname === '/api/roster/entries/mine/') {
-      await route.fulfill({ json: [CHARACTER] });
+      await route.fulfill({ json: [character] });
     } else if (pathname === '/api/interactions/') {
       await route.fulfill({ json: { results: [], next: null } });
     } else if (pathname === '/api/magic/character-resonances/') {
@@ -144,7 +159,7 @@ test.describe('selected character chip (#3859) — fixture-backed presence journ
       'href',
       '/game'
     );
-    await expect(header.getByRole('button', { name: /leave the world/i })).toBeVisible();
+    await expect(header.getByRole('button', { name: /disconnect character/i })).toBeVisible();
     await expect(header.getByRole('link', { name: /enter the world/i })).toHaveCount(0);
     await expect(header.getByText(/Currently Offscreen/)).toHaveCount(0);
 
@@ -152,17 +167,17 @@ test.describe('selected character chip (#3859) — fixture-backed presence journ
     await expect(page.getByText('In the world', { exact: true })).toBeVisible();
     await page.screenshot({ path: path.join(SHOTS, 'hall-live-1280.png'), fullPage: false });
 
-    // Leave the world from the chip: that character's socket closes (the
-    // server unpuppets on the last close), selection stays, the chip and the
-    // card flip to the no-session state.
-    await header.getByRole('button', { name: /leave the world/i }).click();
+    // Disconnect Character from the chip (#4321 wording): that character's
+    // socket closes (the server unpuppets on the last close), selection stays,
+    // the chip and the card flip to the no-session state.
+    await header.getByRole('button', { name: /disconnect character/i }).click();
     await expect.poll(() => socket.closedByPage).toBe(true);
     await expect(header.getByRole('link', { name: /enter the world/i })).toHaveAttribute(
       'href',
       '/game'
     );
     await expect(header.getByText(/Not in the world/)).toBeVisible();
-    await expect(header.getByRole('button', { name: /leave the world/i })).toHaveCount(0);
+    await expect(header.getByRole('button', { name: /disconnect character/i })).toHaveCount(0);
     await expect(page.getByText('Not in the world', { exact: true })).toBeVisible();
     await expect(header.getByText('Tehom', { exact: true })).toBeVisible();
     await page.screenshot({ path: path.join(SHOTS, 'hall-after-leave-1280.png'), fullPage: false });
@@ -183,7 +198,86 @@ test.describe('selected character chip (#3859) — fixture-backed presence journ
       '/game'
     );
     await expect(header.getByText(/Not in the world/)).toBeVisible();
-    await expect(header.getByRole('button', { name: /leave the world/i })).toHaveCount(0);
+    await expect(header.getByRole('button', { name: /disconnect character/i })).toHaveCount(0);
     await page.screenshot({ path: path.join(SHOTS, 'hall-no-session-1280.png'), fullPage: false });
+  });
+
+  // #4321: presence is a server fact. This is the journey ApostateCD hit: the
+  // sheet opened from the top bar lands in a NEW tab, which holds no socket and
+  // used to say "Not in the world" about a character standing in a room in the
+  // tab next to it. A cold /hall load with `mine` reporting one session is
+  // that tab.
+  test('a fresh tab says In the world from the server and disconnects everywhere', async ({
+    page,
+  }) => {
+    let disconnects = 0;
+    await mockRestRoutes(
+      page,
+      { ...CHARACTER, session_count: 1, room_name: 'Quiet courtyard' },
+      () => {
+        disconnects += 1;
+      }
+    );
+    await page.routeWebSocket('**', () => {
+      /* No socket is expected to open on a cold /hall load. */
+    });
+    await page.goto('/hall');
+
+    const header = page.getByRole('banner');
+    await expect(header.getByText(/In the world, Quiet courtyard/)).toBeVisible();
+    await expect(header.getByText(/Not in the world/)).toHaveCount(0);
+    await expect(header.getByRole('link', { name: /return to the world/i })).toHaveAttribute(
+      'href',
+      '/game'
+    );
+    await expect(header.getByRole('link', { name: /enter the world/i })).toHaveCount(0);
+    // The Hall's card says the same thing from the same fact.
+    await expect(page.getByText('In the world', { exact: true })).toBeVisible();
+    await page.screenshot({
+      path: path.join(SHOTS_4321, 'fresh-tab-in-the-world-1280.png'),
+      fullPage: false,
+    });
+
+    // No socket here means no "this connection" to close: one press, every
+    // session, no prompt, and the request goes to the disconnect endpoint.
+    await header.getByRole('button', { name: /disconnect character/i }).click();
+    await expect(page.getByRole('menuitem')).toHaveCount(0);
+    await expect.poll(() => disconnects).toBe(1);
+    await page.screenshot({
+      path: path.join(SHOTS_4321, 'fresh-tab-after-disconnect-1280.png'),
+      fullPage: false,
+    });
+  });
+
+  // #4321: the two-item choice appears only while this tab holds a socket AND
+  // the server says the character has another session somewhere.
+  test('with a local socket and a second session, Disconnect offers the two connections', async ({
+    page,
+  }) => {
+    let disconnects = 0;
+    await mockRestRoutes(
+      page,
+      { ...CHARACTER, session_count: 2, room_name: 'Quiet courtyard' },
+      () => {
+        disconnects += 1;
+      }
+    );
+    const socket = await reachReadySession(page);
+    await openHallFromWorldMenu(page);
+
+    const header = page.getByRole('banner');
+    await header.getByRole('button', { name: /disconnect character/i }).click();
+    await expect(page.getByRole('menuitem', { name: 'This connection' })).toBeVisible();
+    await page.screenshot({
+      path: path.join(SHOTS_4321, 'hall-disconnect-choice-1280.png'),
+      fullPage: false,
+    });
+    await page.getByRole('menuitem', { name: 'Every connection' }).click();
+
+    await expect.poll(() => disconnects).toBe(1);
+    // The server closes this tab's socket too; the fixture socket is not the
+    // server, so the local socket stays open here. What this journey proves is
+    // the choice and which request each item makes.
+    expect(socket.closedByPage).toBe(false);
   });
 });

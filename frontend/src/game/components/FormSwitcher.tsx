@@ -42,6 +42,9 @@ function subLabel(alt: SwitchableAlternateSelf): string {
  *
  * Shows the active alternate self (or "True self") and lets the player shift or revert.
  * Revert is attempted on click; if blocked (e.g., rage), the server message is surfaced.
+ * Drawn only once the character has an alternate self to shift into (#4321): with
+ * nothing to switch to, the "True self" dropdown is not shown at all, the same rule
+ * `PersonaSwitcher` applies to a single face.
  */
 export function FormSwitcher({ characterSheetId }: FormSwitcherProps) {
   const { data: alternates = [] } = useAlternateSelvesQuery(characterSheetId);
@@ -51,6 +54,8 @@ export function FormSwitcher({ characterSheetId }: FormSwitcherProps) {
 
   const worn = useMemo(() => alternates.find((alt) => alt.is_active) ?? null, [alternates]);
   const isShiftingOrReverting = shift.isPending || revert.isPending;
+
+  if (alternates.length === 0) return null;
 
   return (
     <div className="flex items-center gap-2">

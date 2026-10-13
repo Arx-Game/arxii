@@ -2985,6 +2985,16 @@ Character lifecycle management with web-first applications and player anonymity.
   band (`CharactersBand`) carries an extra grid tile for a staff/GM account
   (`account.is_gm`/`is_staff`) — `GMSlot` (#3478), the Hall's GM onboarding/edit
   surface; see the GM section's "GM onboarding lives on the Hall" entry.
+- **Presence is a server fact (#4321, ADR-4321):** `GET /api/roster/entries/mine/`
+  also carries `session_count` and `room_name`, read from the sessions puppeting each
+  character (`world.roster.services.presence`), and
+  `POST /api/roster/entries/{id}/disconnect/` closes every session on the account's
+  own character with the `quit` reason. The header chip, the Hall card and the world
+  menu state presence through one client rule (`useCharacterPresence`: this tab's
+  socket first, the server's count when it has none), so a second tab or device never
+  says "Not in the world" about a character in a room; "Disconnect Character" offers
+  "This connection" / "Every connection" only with a local socket and another session
+  (`useDisconnectCharacter`). See [roster.md](roster.md)'s API Endpoints section.
 - **The offscreen-act gate (#3412 slice 3, ADR-0246):** `MyRosterEntrySerializer` also
   exposes `lifecycle_state` (plain read-only `CharField` mirror of
   `CharacterSheet.lifecycle_state`, no annotation, no migration), letting the Hall's

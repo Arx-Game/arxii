@@ -20659,6 +20659,32 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/roster/entries/{id}/disconnect/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * @description Disconnect the character everywhere (#4321): close every session puppeting it.
+     *
+     *     The web's way to take a character off the grid from a tab that holds no
+     *     socket of its own (the character is in the world from another tab or
+     *     device), and the "every connection" choice from a tab that does. Each
+     *     session is closed with the ``quit`` reason, which every web tab already
+     *     reads as leaving the world. The account stays signed in and the durable
+     *     selection is untouched; a foreign or unknown id is refused like ``select``.
+     */
+    post: operations['roster_entries_disconnect_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/roster/entries/{id}/freeze/': {
     parameters: {
       query?: never;
@@ -30821,6 +30847,10 @@ export interface components {
      * @enum {string}
      */
     DirectionEnum: 'favor' | 'disfavor';
+    /** @description Result of disconnecting a character everywhere (#4321): how many sessions closed. */
+    DisconnectResult: {
+      readonly closed: number;
+    };
     /** @description Serializer for discovery records. */
     Discovery: {
       /**
@@ -37028,6 +37058,10 @@ export interface components {
       readonly creation_provenance: string;
       /** Format: date-time */
       readonly thaw_available_at: string | null;
+      /** @description Sessions puppeting the character right now (#4321); 0 means not in the world. */
+      readonly session_count: number;
+      /** @description The room the character stands in while puppeted (#4321), else None. */
+      readonly room_name: string | null;
     };
     /**
      * @description A player's own story-room access grants (#2450 Fix 2 — spec Decision 1 web surface).
@@ -80073,6 +80107,28 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['RosterApplication'];
+        };
+      };
+    };
+  };
+  roster_entries_disconnect_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this Roster Entry. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['DisconnectResult'];
         };
       };
     };

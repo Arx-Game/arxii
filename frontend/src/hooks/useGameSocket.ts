@@ -244,7 +244,27 @@ function markConnectionReady(
   reconnectAttempts[character] = 0;
   dispatch(setSessionConnectionStatus({ character, status: true }));
   queryClient.invalidateQueries({ queryKey: ['scene-interactions'] }).catch(() => {});
+  // #4321: the roster payload carries the server's session count, which every
+  // tab's chip and Hall card read; this tab just added a session to it.
+  refetchPresence();
 }
+
+/**
+ * Refetch the roster list that carries `session_count`/`room_name` (#4321),
+ * now and once more a moment later: the server unpuppets on the Portal's
+ * disconnect, a beat after the browser's close event, so the first refetch
+ * after a close can still see the session. The chip reads this tab's own
+ * socket first, so the gap is only ever visible to another tab.
+ */
+function refetchPresence(): void {
+  queryClient.invalidateQueries({ queryKey: ['my-roster-entries'] }).catch(() => {});
+  setTimeout(() => {
+    queryClient.invalidateQueries({ queryKey: ['my-roster-entries'] }).catch(() => {});
+  }, PRESENCE_SETTLE_MS);
+}
+
+/** How long after a socket closes before the server has surely unpuppeted. */
+const PRESENCE_SETTLE_MS = 1500;
 
 function markEntryFailure(character: MyRosterEntry['name'], dispatch: AppDispatch): void {
   // A refusal is actionable, not a transient transport loss. Prevent a later
@@ -818,6 +838,7 @@ export function useGameSocket() {
         finishGenerationResyncs(character, generation, dispatch);
         delete sockets[character];
         delete connectionReadiness[character];
+        refetchPresence();
         if (wasLocalClose || wasServerQuit) {
           clearReconnect(character);
           // The rest of "Leave the world" (#3818), which `disconnect` and its

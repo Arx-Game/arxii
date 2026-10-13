@@ -15,10 +15,14 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuSeparator,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import type { MyRosterEntry } from '@/roster/types';
+import { useDisconnectCharacter } from '@/roster/useDisconnectCharacter';
 import { WeatherWidget } from '@/weather/components/WeatherWidget';
 import { ComfortWidget } from '@/comfort/components/ComfortWidget';
 import { characterAttention } from '@/game/attention';
@@ -139,8 +143,10 @@ export function GameTopBar({
   onJumpToCombat,
 }: GameTopBarProps) {
   const dispatch = useAppDispatch();
-  const { connect, disconnect } = useGameSocket();
+  const { connect } = useGameSocket();
   const { sessions, active } = useAppSelector((state) => state.game);
+  const activeEntry = characters.find((c) => c.name === active) ?? null;
+  const disconnectCharacter = useDisconnectCharacter(activeEntry);
   // The chips decide what wakes (#3856): a kind under a chip that is off or
   // silent never badges an avatar here either.
   const accountId = useAppSelector((state) => state.auth.account?.id ?? null);
@@ -151,14 +157,17 @@ export function GameTopBar({
   const logout = useLogout();
   const navigate = useNavigate();
 
-  // #3818 "Leave the world": drop this character's socket so the server
-  // unpuppets them (nobody left standing unpiloted on the grid), keep the
-  // account signed in and the selection intact for offscreen play, and go to
-  // character select. The account refetch re-hydrates the selection mirror
-  // if this was the last open session (the close handler resets game state).
-  const leaveTheWorld = () => {
+  // #3818 "Disconnect Character" (renamed from "Leave the world", #4321):
+  // drop this character's socket so the server unpuppets them (nobody left
+  // standing unpiloted on the grid), keep the account signed in and the
+  // selection intact for offscreen play, and go to character select. The
+  // account refetch re-hydrates the selection mirror if this was the last
+  // open session (the close handler resets game state). "Every connection"
+  // (#4321) asks the server to close the character's other sessions too; the
+  // close handler then does all of this for this tab when its own socket goes.
+  const disconnectThisConnection = () => {
     if (!active) return;
-    disconnect(active);
+    disconnectCharacter.disconnectThis();
     void queryClient.invalidateQueries({ queryKey: ['account'] });
     navigate('/hall');
   };
@@ -247,12 +256,25 @@ export function GameTopBar({
               <Link to="/profile/settings">Settings</Link>
             </DropdownMenuItem>
             <DropdownMenuSeparator />
-            {active && sessions[active] && (
-              <DropdownMenuItem onClick={leaveTheWorld}>
-                Leave the world as {active}
+            {active && sessions[active] && disconnectCharacter.needsChoice && (
+              <DropdownMenuSub>
+                <DropdownMenuSubTrigger>Disconnect Character</DropdownMenuSubTrigger>
+                <DropdownMenuSubContent>
+                  <DropdownMenuItem onClick={disconnectThisConnection}>
+                    This connection
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={disconnectCharacter.disconnectEverywhere}>
+                    Every connection
+                  </DropdownMenuItem>
+                </DropdownMenuSubContent>
+              </DropdownMenuSub>
+            )}
+            {active && sessions[active] && !disconnectCharacter.needsChoice && (
+              <DropdownMenuItem onClick={disconnectThisConnection}>
+                Disconnect Character
               </DropdownMenuItem>
             )}
-            <DropdownMenuItem onClick={() => logout.mutate()}>Log out</DropdownMenuItem>
+            <DropdownMenuItem onClick={() => logout.mutate()}>Log Out Account</DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
         <span className="text-sm font-bold tracking-wide text-foreground">ARX II</span>

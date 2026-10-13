@@ -22,6 +22,8 @@ function makeEntry(overrides: Partial<MyRosterEntry> & { character_id: number })
     activity_requirement: 'NONE',
     creation_provenance: 'player',
     thaw_available_at: null,
+    session_count: 0,
+    room_name: null,
     ...overrides,
   };
 }

@@ -34,6 +34,8 @@ export type MyRosterEntry = components['schemas']['MyRosterEntry'];
 export type SelectedEntryResult = components['schemas']['SelectedEntryResult'];
 /** Result of giving up a roster character (#3996): its id and new shelf. */
 export type ReleasedEntryResult = components['schemas']['ReleasedEntryResult'];
+/** Result of disconnecting a character everywhere (#4321): how many sessions closed. */
+export type DisconnectResult = components['schemas']['DisconnectResult'];
 
 export interface RaceData {
   id: number;

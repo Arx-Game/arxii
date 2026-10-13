@@ -395,6 +395,23 @@ RosterTenure.objects.for_player(player_data)                 # For specific play
   OffscreenActsPlate can branch on a degraded state (CAPTURED/DEAD/RETIRED/UNKNOWN)
   without a new endpoint. Deliberately does NOT expose the unconscious overlay (a
   conditions-system read, not a sheet column) — recorded as an open seam, not built.
+  Also exposes presence (#4321, ADR-4321): `session_count` (sessions puppeting the
+  character right now, read from Evennia's session handler through
+  `world.roster.services.presence.session_count`, never a column) and `room_name`
+  (the character's location's key while `session_count > 0`, else null; the view
+  joins `character_sheet__character__db_location` so it costs no query per row).
+  Presence is a server fact: a browser tab knows only the socket it opened, so a
+  second tab or device used to say "Not in the world" about a character standing in
+  a room. The header chip and the Hall card read these through
+  `useCharacterPresence` when the tab holds no socket.
+- `POST /api/roster/entries/{id}/disconnect/` - Disconnect the character everywhere
+  (#4321): `world.roster.services.presence.disconnect_everywhere` closes every session
+  puppeting the account's own entry with the `quit` reason, which the web client
+  already reads as leaving the world (`SERVER_QUIT_CLOSE_REASONS`), so each tab that
+  held one ends its session and goes to the Hall as a typed `quit` does. Response
+  `{"closed": n}`. The way a tab with no socket of its own takes the character off
+  the grid, and the "Every connection" choice from a tab that has one. Foreign or
+  unknown ids are refused like `select`.
 - `POST /api/roster/entries/{id}/apply/` - Apply for a character (requires verified email)
 - `POST /api/roster/entries/{id}/set_profile_picture/` - Wear a look (`tenure_media_id`), through `wear_look`: only a look that is not NSFW, not hidden, and is the current tenure's upload or the character's art. Its player or staff only
 - `POST /api/roster/entries/select/` - Set/clear the account's durable character selection

@@ -65,6 +65,8 @@ const rosterEntry: MyRosterEntry = {
   activity_requirement: 'NONE',
   creation_provenance: 'player',
   thaw_available_at: null,
+  session_count: 0,
+  room_name: null,
 };
 
 // A second puppet (#2156 review fix — multi-puppet threading/baseline tests
@@ -88,6 +90,8 @@ const rosterEntry2: MyRosterEntry = {
   activity_requirement: 'NONE',
   creation_provenance: 'player',
   thaw_available_at: null,
+  session_count: 0,
+  room_name: null,
 };
 
 vi.mock('@/roster/queries', () => ({
@@ -96,6 +100,8 @@ vi.mock('@/roster/queries', () => ({
     isLoading: false,
     isError: false,
   })),
+  // #4321: the world menu's Disconnect Character reads this; not exercised here.
+  useDisconnectEverywhereMutation: vi.fn(() => ({ mutate: vi.fn(), isPending: false })),
   // The character-card drawer (#2156 Task 7) always mounts (persona is null
   // unless an avatar was clicked) and calls these — stub them out since this
   // test suite isn't exercising the drawer's own identity resolution.

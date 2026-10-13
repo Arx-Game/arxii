@@ -59,6 +59,8 @@ function makeRosterEntries(): MyRosterEntry[] {
       activity_requirement: 'NONE',
       creation_provenance: 'player',
       thaw_available_at: null,
+      session_count: 0,
+      room_name: null,
     },
     {
       id: 2,
@@ -78,6 +80,8 @@ function makeRosterEntries(): MyRosterEntry[] {
       activity_requirement: 'NONE',
       creation_provenance: 'player',
       thaw_available_at: null,
+      session_count: 0,
+      room_name: null,
     },
   ];
 }
