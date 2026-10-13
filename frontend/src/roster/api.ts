@@ -1,5 +1,6 @@
 import type {
   CharacterData,
+  DisconnectResult,
   MyRosterEntry,
   PlayerMedia,
   ReleasedEntryResult,
@@ -90,6 +91,17 @@ async function postSlotAction<T>(entryId: number, path: string, fallback: string
     throw new Error(await refusalMessage(res, fallback));
   }
   return res.json();
+}
+
+/**
+ * Disconnect a character everywhere (#4321): the server closes every session
+ * puppeting it with the `quit` reason, so each tab that holds one leaves the
+ * world the way a typed `quit` does. The way a tab with no socket of its own
+ * takes the character off the grid, and the "Every connection" choice from one
+ * that has a socket.
+ */
+export function postDisconnectEntry(entryId: number): Promise<DisconnectResult> {
+  return postSlotAction(entryId, 'disconnect', 'Could not disconnect that character.');
 }
 
 /** Freeze an original character, freeing its slot (#3996). */

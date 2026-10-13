@@ -53,6 +53,8 @@ const aria: MyRosterEntry = {
   activity_requirement: 'NONE',
   creation_provenance: 'player',
   thaw_available_at: null,
+  session_count: 0,
+  room_name: null,
 };
 
 const bianca: MyRosterEntry = {
@@ -73,6 +75,8 @@ const bianca: MyRosterEntry = {
   activity_requirement: 'NONE',
   creation_provenance: 'player',
   thaw_available_at: null,
+  session_count: 0,
+  room_name: null,
 };
 
 describe('CharactersBand', () => {
@@ -126,6 +130,18 @@ describe('CharactersBand', () => {
     store.dispatch(startSession('Aria'));
     store.dispatch(setSessionConnectionStatus({ character: 'Aria', status: true }));
     renderWithProviders(<CharactersBand characters={[aria]} />);
+
+    expect(screen.getByText('In the world')).toBeInTheDocument();
+    expect(screen.queryByText('Not in the world')).not.toBeInTheDocument();
+  });
+
+  // #4321: presence is a server fact. A second tab holds no socket for the
+  // character and still says "In the world" from the roster payload.
+  it('shows "In the world" for a docked character puppeted from another tab or device', () => {
+    store.dispatch(setBrowsingIdentity(1));
+    renderWithProviders(
+      <CharactersBand characters={[{ ...aria, session_count: 1, room_name: 'Quiet courtyard' }]} />
+    );
 
     expect(screen.getByText('In the world')).toBeInTheDocument();
     expect(screen.queryByText('Not in the world')).not.toBeInTheDocument();

@@ -1,6 +1,8 @@
 import { useMemo } from 'react';
 import { toast } from 'sonner';
 import { FormattedContent } from '@/components/FormattedContent';
+import { AccountMenuContent } from '@/components/ProfileDropdown';
+import { DropdownMenu, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { PersonaMenu } from '@/scenes/components/PersonaMenu';
 import { usePresence } from '@/presence/queries';
 import { useAppSelector } from '@/store/hooks';
@@ -12,7 +14,12 @@ import { isDispatchFailure } from '@/combat/types';
  * Right-sidebar "Who" tab (#1463): online presence for the web game view.
  *
  * - **Online** — every online character by active persona, with a *coarse* idle marker
- *   (active / idle / away; never exact, so identical idle times can't out alts).
+ *   (active / idle / away; never exact, so identical idle times can't out alts). The
+ *   viewer's own characters (a row whose persona is one of their roster entries' worn
+ *   faces) open the account menu instead of the persona menu (#4321): the way out of
+ *   the game to the sheet, the Hall, the roster or settings in the same tab, with the
+ *   socket kept (ADR-0295). The match is made against the viewer's own `mine` list,
+ *   client-side; nothing new is sent to anyone.
  * - **Where** — characters in public rooms with their coloured area path (rendered through
  *   `FormattedContent`, which parses the Evennia colour codes the backend emits), plus a
  *   "Go there" affordance (#2163) that dispatches the `travel_to` registry action.
@@ -21,7 +28,12 @@ export function PresencePanel() {
   const { data, isLoading, isError } = usePresence();
 
   const activeCharacterName = useAppSelector((state) => state.game.active);
+  const account = useAppSelector((state) => state.auth.account);
   const { data: myRosterEntries = [] } = useMyRosterEntriesQuery();
+  const ownPersonaIds = useMemo(
+    () => new Set(myRosterEntries.map((e) => e.active_persona_id)),
+    [myRosterEntries]
+  );
   const characterId = useMemo(
     () => myRosterEntries.find((e) => e.name === activeCharacterName)?.character_id ?? null,
     [myRosterEntries, activeCharacterName]
@@ -65,9 +77,18 @@ export function PresencePanel() {
           <ul className="space-y-0.5">
             {data.who.map((entry, i) => (
               <li key={`${entry.name}-${i}`} className="flex items-center justify-between gap-2">
-                <PersonaMenu personaId={entry.persona_id} personaName={entry.name} leftClick>
-                  <span>{entry.name}</span>
-                </PersonaMenu>
+                {account && ownPersonaIds.has(entry.persona_id) ? (
+                  <DropdownMenu>
+                    <DropdownMenuTrigger className="rounded px-1 hover:bg-accent focus:outline-none">
+                      {entry.name}
+                    </DropdownMenuTrigger>
+                    <AccountMenuContent account={account} />
+                  </DropdownMenu>
+                ) : (
+                  <PersonaMenu personaId={entry.persona_id} personaName={entry.name} leftClick>
+                    <span>{entry.name}</span>
+                  </PersonaMenu>
+                )}
                 {entry.idle && <span className="text-xs text-muted-foreground">{entry.idle}</span>}
               </li>
             ))}

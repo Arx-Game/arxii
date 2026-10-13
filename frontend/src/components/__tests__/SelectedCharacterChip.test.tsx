@@ -4,7 +4,7 @@
  * `PersonaSwitcher` works from this mount point (not just inside `/game`'s
  * `GameTopBar`), the buttons follow the character's LIVE session in the store
  * rather than the route ("Enter the world" with no session, "Return to the
- * world" + "Leave the world" with one), and the sub-line states presence as a
+ * world" + "Disconnect Character" with one), and the sub-line states presence as a
  * fact the store can back. The chip deliberately has NO clear-selection
  * control (Apostate ruling 2026-08-28 — "step away" read as logout; "Clear
  * Active Character" lands in the Hall's "Your Characters" band in slice 2).
@@ -33,11 +33,12 @@ import {
   startSession,
 } from '@/store/gameSlice';
 
-const { state, setActiveMutate, selectMutate, disconnectMock } = vi.hoisted(() => ({
+const { state, setActiveMutate, selectMutate, disconnectMock, everywhereMock } = vi.hoisted(() => ({
   state: { personas: [] as SwitchablePersona[] },
   setActiveMutate: vi.fn(),
   selectMutate: vi.fn(),
   disconnectMock: vi.fn(),
+  everywhereMock: vi.fn(),
 }));
 
 vi.mock('@/game/personaQueries', () => ({
@@ -54,6 +55,7 @@ vi.mock('@/game/personaQueries', () => ({
 
 vi.mock('@/roster/queries', () => ({
   useSelectCharacterMutation: () => ({ mutate: selectMutate, isPending: false }),
+  useDisconnectEverywhereMutation: () => ({ mutate: everywhereMock, isPending: false }),
 }));
 
 vi.mock('@/hooks/useGameSocket', () => ({
@@ -99,6 +101,8 @@ const aria: MyRosterEntry = {
   activity_requirement: 'NONE',
   creation_provenance: 'player',
   thaw_available_at: null,
+  session_count: 0,
+  room_name: null,
 };
 
 function makeStore() {
@@ -152,6 +156,7 @@ function Wrapper({
 describe('SelectedCharacterChip (#3412, #3859)', () => {
   beforeEach(() => {
     disconnectMock.mockClear();
+    everywhereMock.mockClear();
     setActiveMutate.mockClear();
     selectMutate.mockClear();
   });
@@ -171,7 +176,7 @@ describe('SelectedCharacterChip (#3412, #3859)', () => {
     // name, same as most characters' own primary face.
     expect(screen.getAllByText('Aria')).toHaveLength(2);
     expect(screen.getByRole('link', { name: /enter the world/i })).toHaveAttribute('href', '/game');
-    expect(screen.queryByRole('button', { name: /leave the world/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /disconnect character/i })).not.toBeInTheDocument();
   });
 
   it('lets the player switch which face the character presents as, from this mount point', async () => {
@@ -218,7 +223,7 @@ describe('SelectedCharacterChip (#3412, #3859)', () => {
   // #3859 — the fact the chip used to get wrong: navigating from /game to the
   // Hall keeps the character's socket open (ADR-0295), and the chip claimed
   // "Enter the world" / "Currently Offscreen" over a live session.
-  it('reads the live session: "In the world" with the room, a Return link, and a Leave button', () => {
+  it('reads the live session: "In the world" with the room, a Return link, and a Disconnect button', () => {
     state.personas = [persona(7, 'Aria', 'primary')];
 
     render(
@@ -234,7 +239,7 @@ describe('SelectedCharacterChip (#3412, #3859)', () => {
       '/game'
     );
     expect(screen.queryByRole('link', { name: /enter the world/i })).not.toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /leave the world/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /disconnect character/i })).toBeInTheDocument();
   });
 
   it('says "In the world" without a room while the session is still entering', () => {
@@ -249,7 +254,7 @@ describe('SelectedCharacterChip (#3412, #3859)', () => {
     expect(screen.getByText(/· In the world$/)).toBeInTheDocument();
   });
 
-  it('"Leave the world" closes that character\'s socket and nothing else', async () => {
+  it('"Disconnect Character" with one session closes that character\'s socket and nothing else', async () => {
     state.personas = [persona(7, 'Aria', 'primary')];
     const user = userEvent.setup();
 
@@ -259,14 +264,62 @@ describe('SelectedCharacterChip (#3412, #3859)', () => {
       </Wrapper>
     );
 
-    await user.click(screen.getByRole('button', { name: /leave the world/i }));
+    await user.click(screen.getByRole('button', { name: /disconnect character/i }));
 
     expect(disconnectMock).toHaveBeenCalledTimes(1);
     expect(disconnectMock).toHaveBeenCalledWith('Aria');
-    // Leaving the world never clears the selection (ruled vocabulary: "quit"
+    expect(everywhereMock).not.toHaveBeenCalled();
+    // Disconnecting never clears the selection (ruled vocabulary: "quit"
     // leaves the grid but stays selected; "Clear Active Character" is the
     // character list's control).
     expect(selectMutate).not.toHaveBeenCalled();
+  });
+
+  // #4321: presence is a server fact. A tab that opened no socket reads the
+  // roster payload's session_count/room_name, so a second tab or device never
+  // says "Not in the world" about a character standing in a room elsewhere.
+  it('states presence from the server when this tab holds no socket, and disconnects everywhere', async () => {
+    state.personas = [persona(7, 'Aria', 'primary')];
+    const user = userEvent.setup();
+    const elsewhere: MyRosterEntry = { ...aria, session_count: 1, room_name: 'Quiet courtyard' };
+
+    render(
+      <Wrapper path="/hall">
+        <SelectedCharacterChip entry={elsewhere} />
+      </Wrapper>
+    );
+
+    expect(screen.getByText(/In the world, Quiet courtyard/)).toBeInTheDocument();
+    expect(screen.queryByText(/Not in the world/)).not.toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /return to the world/i })).toHaveAttribute(
+      'href',
+      '/game'
+    );
+
+    // No socket here means no "this connection" to close: one press, every
+    // session, no prompt.
+    await user.click(screen.getByRole('button', { name: /disconnect character/i }));
+    expect(screen.queryByRole('menuitem')).not.toBeInTheDocument();
+    expect(everywhereMock).toHaveBeenCalledWith(1);
+    expect(disconnectMock).not.toHaveBeenCalled();
+  });
+
+  it('offers This connection or Every connection only with a local socket and another session', async () => {
+    state.personas = [persona(7, 'Aria', 'primary')];
+    const user = userEvent.setup();
+
+    render(
+      <Wrapper store={storeWithAriaLive()} path="/hall">
+        <SelectedCharacterChip entry={{ ...aria, session_count: 2 }} />
+      </Wrapper>
+    );
+
+    await user.click(screen.getByRole('button', { name: /disconnect character/i }));
+    expect(screen.getByRole('menuitem', { name: 'This connection' })).toBeInTheDocument();
+    await user.click(screen.getByRole('menuitem', { name: 'Every connection' }));
+
+    expect(everywhereMock).toHaveBeenCalledWith(1);
+    expect(disconnectMock).not.toHaveBeenCalled();
   });
 
   it('shows the degraded state label instead of a presence claim for a CAPTURED character (#3412 review IMPORTANT-1)', () => {

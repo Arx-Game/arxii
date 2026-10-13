@@ -41,12 +41,13 @@ describe('ProfileDropdown', () => {
     expect(screen.getByText('Profile')).toBeInTheDocument();
   });
 
-  it('shows Logout option for all users', async () => {
+  it('shows Log Out Account for all users (#4321: the account, not the character)', async () => {
     const user = userEvent.setup();
     renderWithProviders(<ProfileDropdown account={mockAccount} />);
 
     await user.click(screen.getByText(mockAccount.display_name));
 
-    expect(screen.getByText('Logout')).toBeInTheDocument();
+    expect(screen.getByText('Log Out Account')).toBeInTheDocument();
+    expect(screen.queryByText('Logout')).not.toBeInTheDocument();
   });
 });

@@ -69,6 +69,11 @@ kind}))`), whose dict becomes the frame's kwargs; a sibling keyword would leave 
   **The server side pins this:** `src/web/tests/test_message_type_parity.py` fails
   when a `WebsocketMessageType` member is not named in `types.ts`, so adding a
   server frame type forces a client case.
+- **Presence refetch** (#4321): when a session becomes ready and when a socket closes,
+  `refetchPresence` invalidates `['my-roster-entries']`, now and again 1.5 s later,
+  because the roster payload's `session_count`/`room_name` is what every other tab's
+  chip and Hall card read, and the server unpuppets a beat after the browser's close
+  event. This tab's own chip reads its socket first, so the gap is never visible here.
 - **`handleCommandPayload.ts`**: Processes command-related message payloads
 - **`handleRoomStatePayload.ts`**: Updates room state from server messages
 - **`handleScenePayload.ts`**: Processes scene-related updates

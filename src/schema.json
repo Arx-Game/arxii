@@ -33191,6 +33191,36 @@ paths:
               schema:
                 $ref: '#/components/schemas/RosterApplication'
           description: ''
+  /api/roster/entries/{id}/disconnect/:
+    post:
+      operationId: roster_entries_disconnect_create
+      description: |-
+        Disconnect the character everywhere (#4321): close every session puppeting it.
+
+        The web's way to take a character off the grid from a tab that holds no
+        socket of its own (the character is in the world from another tab or
+        device), and the "every connection" choice from a tab that does. Each
+        session is closed with the ``quit`` reason, which every web tab already
+        reads as leaving the world. The account stays signed in and the durable
+        selection is untouched; a foreign or unknown id is refused like ``select``.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this Roster Entry.
+        required: true
+      tags:
+      - roster
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DisconnectResult'
+          description: ''
   /api/roster/entries/{id}/freeze/:
     post:
       operationId: roster_entries_freeze_create
@@ -52167,6 +52197,16 @@ components:
       description: |-
         * `favor` - Favor
         * `disfavor` - Disfavor
+    DisconnectResult:
+      type: object
+      description: 'Result of disconnecting a character everywhere (#4321): how many
+        sessions closed.'
+      properties:
+        closed:
+          type: integer
+          readOnly: true
+      required:
+      - closed
     Discovery:
       type: object
       description: Serializer for discovery records.
@@ -64904,6 +64944,17 @@ components:
           format: date-time
           readOnly: true
           nullable: true
+        session_count:
+          type: integer
+          description: Sessions puppeting the character right now (#4321); 0 means
+            not in the world.
+          readOnly: true
+        room_name:
+          type: string
+          nullable: true
+          description: The room the character stands in while puppeted (#4321), else
+            None.
+          readOnly: true
       required:
       - active_persona_id
       - activity_requirement
@@ -64918,7 +64969,9 @@ components:
       - name
       - primary_persona_id
       - profile_picture_url
+      - room_name
       - roster_type
+      - session_count
       - thaw_available_at
       - unread_direct
       - unread_narrative_count

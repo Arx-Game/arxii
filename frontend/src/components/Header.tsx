@@ -18,6 +18,9 @@ import { navigationMenuTriggerStyle } from '@/components/ui/navigation-menu-trig
 import { useAppSelector } from '@/store/hooks';
 import { useOpenSubmissionCount } from '@/staff/queries';
 import { useMyRosterEntriesQuery } from '@/roster/queries';
+
+/** How often a tab without a socket re-reads the server's presence (#4321). */
+const PRESENCE_REFETCH_MS = 30_000;
 import { UnreadNarrativeBadge } from '@/narrative/components/UnreadNarrativeBadge';
 import { UnreadMailBadge } from '@/mail/components/UnreadMailBadge';
 import { useRitualSessionInbox } from '@/rituals/queries';
@@ -84,7 +87,12 @@ export function Header() {
   // there's no selection: no empty chip, no placeholder slot — the header
   // renders exactly as it did before this existed.
   const activeCharacterName = useAppSelector((state) => state.game.active);
-  const { data: characters } = useMyRosterEntriesQuery();
+  // #4321: the chip states presence from the server's `session_count` when
+  // this tab holds no socket, so while a chip is up the list is refetched at
+  // the presence panel's own cadence; a tab's own socket updates it at once.
+  const { data: characters } = useMyRosterEntriesQuery(
+    activeCharacterName ? { refetchInterval: PRESENCE_REFETCH_MS } : true
+  );
   const selectedEntry = characters?.find((c) => c.name === activeCharacterName) ?? null;
 
   return (

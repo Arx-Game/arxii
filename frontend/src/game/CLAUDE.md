@@ -191,18 +191,31 @@ chips, dismissed?)` counts unread per waking chip for the strip's "new" pills,
   `GamePage` (#3761, `jumpToCombat` sets `'room'`), and each section still mounts
   lazily on first open. Nothing was dropped: every section keeps its panel and
   fallback text.
+- **`PresencePanel.tsx`**: The Who tab (#1463): Online (by worn face, coarse idle) and
+  Where (public rooms, "Go there"). The viewer's own rows, matched client-side against
+  their own `mine` list's `active_persona_id`, open the account menu
+  (`AccountMenuContent`) instead of the persona menu (#4321): the way out of the game
+  to the sheet, the Hall, the roster or settings in the same tab, socket kept.
 - **`GameTopBar.tsx`**: Character avatars, connection status, character
   switching, and the world menu (#3818): the leading button opens a
-  `DropdownMenu` (Your characters → `/hall`, Roster, Settings, "Leave the world
-  as <active>", Log out). It was a `<Link to="/">`, and `/` (`GatefoldPage`)
-  redirects an in-world player straight back to `/game`, so it flickered and
-  did nothing; `/hall` is the Hall on a route that never redirects. Navigating
-  away keeps every character tab connected (sessions and sockets live in
-  Redux/module scope, and `GamePage` has no teardown); "Leave the world" is
-  `useGameSocket().disconnect(name)`, which closes that one socket so the
-  server unpuppets the character (nobody stands unpiloted on the grid) and
-  drops the session, while the account stays signed in with its selection
-  intact. `useLogout` already closes every socket. Every non-active
+  `DropdownMenu` (Your characters → `/hall`, Roster, Settings, "Disconnect
+  Character", "Log Out Account"; the two names ruled 2026-10-13, #4321, so
+  logging out never reads as leaving the world). It was a `<Link to="/">`, and
+  `/` (`GatefoldPage`) redirects an in-world player straight back to `/game`, so
+  it flickered and did nothing; `/hall` is the Hall on a route that never
+  redirects. Navigating away keeps every character tab connected (sessions and
+  sockets live in Redux/module scope, and `GamePage` has no teardown);
+  "Disconnect Character" is `useGameSocket().disconnect(name)`, which closes
+  that one socket so the server unpuppets the character (nobody stands
+  unpiloted on the grid) and drops the session, while the account stays signed
+  in with its selection intact. While the server says the character has another
+  session (`session_count > 1` on the roster payload), the item is a sub-menu,
+  "This connection" / "Every connection", the second through
+  `POST /api/roster/entries/{id}/disconnect/` (`roster/useDisconnectCharacter.ts`);
+  with one session there is nothing to choose and no prompt. `useLogout` already
+  closes every socket. `FormSwitcher`, beside the name, is drawn only once the
+  character has an alternate self to shift into (#4321); `PersonaSwitcher`
+  collapses to the worn name for a single face. Every non-active
   character's avatar carries a two-tier attention
   indicator (#2166, `characterAttention` from `attention.ts` since #3774):
   a red numeric badge for _direct_ attention (an unseen whisper or @-target

@@ -32,15 +32,20 @@ Character-specific UI components:
 - **`Header.tsx`**: Application header with navigation
 - **`SelectedCharacterChip.tsx`**: The docked-portrait chip the header renders when the
   account has a selected character (#3412). Selection is not presence, and the chip
-  shows both (#3859): it reads the character's live session from the store
-  (`sessions[name].isConnected`, the same fact `GatefoldPage`'s redirect and
-  `GameTopBar`'s dot read). With a live session the sub-line says "In the world" plus
-  the room, the button is "Return to the world", and "Leave the world" calls
-  `useGameSocket().disconnect(name)`, the world menu's own item, so the server unpuppets
-  the character; without one it offers "Enter the world" and says "Not in the world".
-  Navigating away from `/game` keeps the socket open (ADR-0295), which is why the chip
-  must read the store and never the route. Degraded lifecycle states show
-  `dockedStateLabel` instead of a presence claim.
+  shows both (#3859, #4321): presence comes from `roster/useCharacterPresence.ts`, which
+  reads this tab's socket first (`sessions[name].isConnected`, the same fact
+  `GatefoldPage`'s redirect and `GameTopBar`'s dot read) and the roster payload's
+  `session_count`/`room_name` when the tab opened no socket, so a second tab or device
+  tells the truth too (ADR-4321). In the world, the sub-line says "In the world" plus
+  the room, the button is "Return to the world" (a second socket joins the same
+  character), and "Disconnect Character" (`roster/useDisconnectCharacter.ts`) closes
+  this tab's socket, or asks the disconnect endpoint to close every session when the
+  tab has none, or offers "This connection" / "Every connection" when it has one and
+  the character has another; not in the world, it offers "Enter the world" and says
+  "Not in the world". Navigating away from `/game` keeps the socket open (ADR-0295),
+  which is why the chip must never read the route. `Header` refetches the roster list
+  every 30 s while a chip is up. Degraded lifecycle states show `dockedStateLabel`
+  instead of a presence claim.
 - **`Footer.tsx`**: Application footer
 - **`AuthProvider.tsx`**: Authentication context provider
 
@@ -69,7 +74,11 @@ Character-specific UI components:
 
 - **`ModeToggle.tsx`**: Dark/light mode toggle
 - **`ErrorBoundary.tsx`**: Error handling wrapper
-- **`ProfileDropdown.tsx`**: User profile menu
+- **`ProfileDropdown.tsx`**: The account menu behind the header's far-right control, and
+  `AccountMenuContent`, its items for any `DropdownMenu` trigger (#4321): the Who tab's
+  Online list opens the same menu from the player's own name, so the game reaches the
+  sheet, the Hall, the roster and settings in the same tab. Its last item is "Log Out
+  Account" (ruled 2026-10-13: the account, never the character).
 - **`SubmitButton.tsx`**: Form submission button
 
 ## Component Patterns

@@ -39,6 +39,8 @@ function entry(id: number, name: string, provenance: string): MyRosterEntry {
     activity_requirement: provenance === 'player' ? 'NONE' : 'HIGH',
     creation_provenance: provenance,
     thaw_available_at: null,
+    session_count: 0,
+    room_name: null,
   };
 }
 

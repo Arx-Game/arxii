@@ -2,10 +2,11 @@
  * "Your Characters" band (#3412 slice 2) — the Hall's portrait-forward roster
  * of the account's playable characters. Clicking a card sets the account's
  * durable server-side selection (`useSelectCharacterMutation`); the docked
- * card gets a primary top rule + a presence meta line that reads the
- * character's live session from the store (#3859: "In the world" while the
- * socket is open, else `dockedStateLabel`, the same fact and the same helper
- * `SelectedCharacterChip` uses). "Clear Active Character" lives once,
+ * card gets a primary top rule + a presence meta line that states the
+ * character's presence (#3859, #4321: "In the world" while a session puppets
+ * the character, from this tab's socket or the server's count, else
+ * `dockedStateLabel`, the same `useCharacterPresence` rule and the same label
+ * helper `SelectedCharacterChip` uses). "Clear Active Character" lives once,
  * bottom-right of the whole band — disabled (not hidden) when nothing is
  * docked, so the control stays discoverable per the ruling.
  *
@@ -38,8 +39,9 @@ import { cn } from '@/lib/utils';
 import { useSelectCharacterMutation } from '@/roster/queries';
 import type { MyRosterEntry } from '@/roster/types';
 import { dockedStateLabel } from '@/roster/lifecycleDisplay';
+import { useCharacterPresence } from '@/roster/useCharacterPresence';
 import { useBrowsingIdentity } from '@/roster/useBrowsingIdentity';
-import { useAccount, useAppDispatch, useAppSelector } from '@/store/hooks';
+import { useAccount, useAppDispatch } from '@/store/hooks';
 import {
   hydrateActiveCharacter,
   setBrowsingIdentity,
@@ -66,10 +68,11 @@ interface CharacterCardProps {
 }
 
 function CharacterCard({ entry, isDocked, onSelect }: CharacterCardProps) {
-  // #3859: the meta line states presence from the store, the same fact the
-  // header chip reads. Sockets survive navigation (ADR-0295), so a docked
-  // character can be live in the world while the player reads this page.
-  const live = useAppSelector((state) => Boolean(state.game.sessions[entry.name]?.isConnected));
+  // #3859, #4321: the meta line states presence through the one rule the
+  // header chip reads (`useCharacterPresence`): this tab's socket first, the
+  // server's session count when the tab has none. Sockets survive navigation
+  // (ADR-0295), and a second tab or device is no different (ADR-4321).
+  const { inWorld } = useCharacterPresence(entry);
   return (
     <Plate
       className={cn('relative overflow-hidden p-3', isDocked && 'border-t-2 border-t-primary')}
@@ -96,7 +99,7 @@ function CharacterCard({ entry, isDocked, onSelect }: CharacterCardProps) {
         </span>
         {isDocked && (
           <span className="font-body text-xs text-muted-foreground">
-            {live ? 'In the world' : dockedStateLabel(entry.lifecycle_state)}
+            {inWorld ? 'In the world' : dockedStateLabel(entry.lifecycle_state)}
           </span>
         )}
         {entry.activity_state === 'FROZEN' && (

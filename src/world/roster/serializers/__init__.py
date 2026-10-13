@@ -49,6 +49,7 @@ from world.roster.serializers.npc_presets import (
 )
 from world.roster.serializers.roster_core import (
     CharacterSlotsSerializer,
+    DisconnectResultSerializer,
     MyRosterEntrySerializer,
     ReleasedEntryResultSerializer,
     RosterEntryListSerializer,
@@ -69,6 +70,7 @@ __all__ = [
     # Character serializers
     "CharacterSerializer",
     "CharacterSlotsSerializer",
+    "DisconnectResultSerializer",
     # Family serializers
     "FamilySerializer",
     "FamilyTreeSerializer",

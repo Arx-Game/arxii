@@ -22,7 +22,8 @@ vi.mock('sonner', () => ({
   },
 }));
 
-// Mock the roster query — component resolves active character → characterId (#2163)
+// Mock the roster query — component resolves active character → characterId (#2163);
+// #4321 matches the viewer's own Online rows by the worn face (active_persona_id).
 vi.mock('@/roster/queries', () => ({
   useMyRosterEntriesQuery: vi.fn(() => ({
     data: [
@@ -31,18 +32,35 @@ vi.mock('@/roster/queries', () => ({
         name: 'TestChar',
         character_id: 42,
         profile_picture_url: null,
-        primary_persona_id: null,
-        active_persona_id: null,
+        primary_persona_id: 7,
+        active_persona_id: 7,
       },
     ],
   })),
 }));
 
-// Mock the Redux selector — return the active character name used above
+// Mock the Redux selector — return the active character name used above, and
+// the signed-in account the account menu (#4321) renders for.
 vi.mock('@/store/hooks', () => ({
   useAppSelector: vi.fn((selector: (state: unknown) => unknown) =>
-    selector({ game: { active: 'TestChar' }, auth: {} })
+    selector({
+      game: { active: 'TestChar' },
+      auth: {
+        account: {
+          id: 1,
+          username: 'tester',
+          display_name: 'Tester',
+          avatar_url: null,
+          is_staff: false,
+          can_create_characters: true,
+        },
+      },
+    })
   ),
+}));
+
+vi.mock('@/evennia_replacements/queries', () => ({
+  useLogout: () => ({ mutate: vi.fn() }),
 }));
 
 // Mock the combat dispatch hook (Go there travel affordance, #2163)
@@ -65,6 +83,33 @@ describe('PresencePanel', () => {
     renderWithProviders(<PresencePanel />);
     expect(await screen.findByText('Bram')).toBeInTheDocument();
     expect(screen.getByText('idle')).toBeInTheDocument();
+  });
+
+  // #4321: your own name in the Online list is the way out of the game to the
+  // account menu, in this tab, with the socket kept. Everyone else's row keeps
+  // the persona menu.
+  it('opens the account menu from your own row and the persona menu from others', async () => {
+    const user = userEvent.setup();
+    vi.mocked(getPresence).mockResolvedValue({
+      who: [
+        { name: 'TestChar', idle: '', persona_id: 7 },
+        { name: 'Bram', idle: 'idle', persona_id: 11 },
+      ],
+      where: [],
+    });
+    renderWithProviders(<PresencePanel />);
+
+    await user.click(await screen.findByRole('button', { name: 'TestChar' }));
+    expect(screen.getByRole('menuitem', { name: 'Profile' })).toHaveAttribute('href', '/profile');
+    expect(screen.getByRole('menuitem', { name: 'Log Out Account' })).toBeInTheDocument();
+    expect(screen.getByRole('menuitem', { name: 'Create Character' })).toHaveAttribute(
+      'href',
+      '/characters/create'
+    );
+    await user.keyboard('{Escape}');
+
+    await user.click(screen.getByText('Bram'));
+    expect(screen.queryByRole('menuitem', { name: 'Profile' })).not.toBeInTheDocument();
   });
 
   it('renders where entries with their location', async () => {

@@ -209,6 +209,8 @@ describe('Header', () => {
       activity_requirement: 'NONE',
       creation_provenance: 'player',
       thaw_available_at: null,
+      session_count: 0,
+      room_name: null,
     };
 
     it("renders no chip when there is no selection (byte-for-byte today's header)", () => {

@@ -1,6 +1,6 @@
 # ADR-0295: Leaving the world is explicit; navigation keeps presence; nobody enters nowhere
 
-**Status:** Accepted (#3818, 2026-09-13). Amends ADR-0241 (selection is not presence)
+**Status:** Accepted (#3818, 2026-09-13); amended by ADR-4321 (#4321, 2026-10-13: the menu item is "Disconnect Character", presence is a server fact and a tab's socket is its fast path). Amends ADR-0241 (selection is not presence)
 and ADR-0294 (puppeting records selection); related ADR-0247 (state-3 mode coherence,
 the `/` redirect), #2121 (guaranteed starting room), #3813.
 

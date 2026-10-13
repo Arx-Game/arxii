@@ -27,10 +27,11 @@ interface ProfileDropdownProps {
   account: AccountData;
 }
 
+/**
+ * The account menu behind the header's far-right control. Interface chrome is
+ * OOC: everything here is the account's, whichever character is selected.
+ */
 export function ProfileDropdown({ account }: ProfileDropdownProps) {
-  const logout = useLogout();
-  const { data: characters } = useMyRosterEntriesQuery(true);
-
   return (
     <DropdownMenu>
       <DropdownMenuTrigger className="flex items-center gap-2 font-medium focus:outline-none">
@@ -42,93 +43,108 @@ export function ProfileDropdown({ account }: ProfileDropdownProps) {
         </Avatar>
         {account.display_name}
       </DropdownMenuTrigger>
-      <DropdownMenuContent>
-        <DropdownMenuLabel>Characters</DropdownMenuLabel>
-        {characters?.length ? (
-          <>
-            {characters.map((c) => (
-              <DropdownMenuItem key={c.id} asChild inset>
-                <CharacterLink id={c.id}>{c.name}</CharacterLink>
-              </DropdownMenuItem>
-            ))}
-          </>
-        ) : (
-          <DropdownMenuItem disabled inset>
-            <span className="text-sm text-muted-foreground">No characters yet</span>
-          </DropdownMenuItem>
-        )}
-        {account.can_create_characters && (
-          <DropdownMenuItem asChild inset>
-            <Link to="/characters/create" className="flex items-center gap-2">
-              <PlusCircle className="h-4 w-4" />
-              Create Character
+      <AccountMenuContent account={account} />
+    </DropdownMenu>
+  );
+}
+
+/**
+ * The account menu's items, for any `DropdownMenu` trigger (#4321): the header
+ * control above, and the player's own name in the Who tab's Online list
+ * (`PresencePanel`), so the game reaches the account menu in the same tab
+ * instead of opening a new window.
+ */
+export function AccountMenuContent({ account }: ProfileDropdownProps) {
+  const logout = useLogout();
+  const { data: characters } = useMyRosterEntriesQuery(true);
+
+  return (
+    <DropdownMenuContent>
+      <DropdownMenuLabel>Characters</DropdownMenuLabel>
+      {characters?.length ? (
+        <>
+          {characters.map((c) => (
+            <DropdownMenuItem key={c.id} asChild inset>
+              <CharacterLink id={c.id}>{c.name}</CharacterLink>
+            </DropdownMenuItem>
+          ))}
+        </>
+      ) : (
+        <DropdownMenuItem disabled inset>
+          <span className="text-sm text-muted-foreground">No characters yet</span>
+        </DropdownMenuItem>
+      )}
+      {account.can_create_characters && (
+        <DropdownMenuItem asChild inset>
+          <Link to="/characters/create" className="flex items-center gap-2">
+            <PlusCircle className="h-4 w-4" />
+            Create Character
+          </Link>
+        </DropdownMenuItem>
+      )}
+      <DropdownMenuSeparator />
+      <DropdownMenuItem asChild>
+        <Link to="/roster">Browse Roster</Link>
+      </DropdownMenuItem>
+      <DropdownMenuSeparator />
+      <DropdownMenuItem asChild>
+        <Link to="/profile">Profile</Link>
+      </DropdownMenuItem>
+      <DropdownMenuItem asChild>
+        <Link to="/xp-kudos" className="flex items-center gap-2">
+          <Sparkles className="h-4 w-4" />
+          XP / Kudos
+        </Link>
+      </DropdownMenuItem>
+      <DropdownMenuItem asChild>
+        <Link to="/story-rooms" className="flex items-center gap-2">
+          <DoorOpen className="h-4 w-4" />
+          Story Rooms
+        </Link>
+      </DropdownMenuItem>
+      <DropdownMenuSeparator />
+      <DropdownMenuLabel>Help / Contact</DropdownMenuLabel>
+      <DropdownMenuItem asChild>
+        <Link to="/feedback" className="flex items-center gap-2">
+          <MessageSquare className="h-4 w-4" />
+          Send Feedback
+        </Link>
+      </DropdownMenuItem>
+      <DropdownMenuItem asChild>
+        <Link to="/bug-report" className="flex items-center gap-2">
+          <Bug className="h-4 w-4" />
+          Report a Bug
+        </Link>
+      </DropdownMenuItem>
+      <DropdownMenuItem asChild>
+        <Link to="/petition" className="flex items-center gap-2">
+          <Siren className="h-4 w-4" />
+          Petition Staff (Emergency)
+        </Link>
+      </DropdownMenuItem>
+      {account.is_staff && (
+        <>
+          <DropdownMenuSeparator />
+          <DropdownMenuItem asChild>
+            <Link to="/staff/world-builder" className="flex items-center gap-2">
+              <Map className="h-4 w-4" />
+              World Builder
             </Link>
           </DropdownMenuItem>
-        )}
-        <DropdownMenuSeparator />
-        <DropdownMenuItem asChild>
-          <Link to="/roster">Browse Roster</Link>
-        </DropdownMenuItem>
-        <DropdownMenuSeparator />
-        <DropdownMenuItem asChild>
-          <Link to="/profile">Profile</Link>
-        </DropdownMenuItem>
-        <DropdownMenuItem asChild>
-          <Link to="/xp-kudos" className="flex items-center gap-2">
-            <Sparkles className="h-4 w-4" />
-            XP / Kudos
-          </Link>
-        </DropdownMenuItem>
-        <DropdownMenuItem asChild>
-          <Link to="/story-rooms" className="flex items-center gap-2">
-            <DoorOpen className="h-4 w-4" />
-            Story Rooms
-          </Link>
-        </DropdownMenuItem>
-        <DropdownMenuSeparator />
-        <DropdownMenuLabel>Help / Contact</DropdownMenuLabel>
-        <DropdownMenuItem asChild>
-          <Link to="/feedback" className="flex items-center gap-2">
-            <MessageSquare className="h-4 w-4" />
-            Send Feedback
-          </Link>
-        </DropdownMenuItem>
-        <DropdownMenuItem asChild>
-          <Link to="/bug-report" className="flex items-center gap-2">
-            <Bug className="h-4 w-4" />
-            Report a Bug
-          </Link>
-        </DropdownMenuItem>
-        <DropdownMenuItem asChild>
-          <Link to="/petition" className="flex items-center gap-2">
-            <Siren className="h-4 w-4" />
-            Petition Staff (Emergency)
-          </Link>
-        </DropdownMenuItem>
-        {account.is_staff && (
-          <>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem asChild>
-              <Link to="/staff/world-builder" className="flex items-center gap-2">
-                <Map className="h-4 w-4" />
-                World Builder
-              </Link>
-            </DropdownMenuItem>
-            <DropdownMenuItem asChild>
-              <a
-                href="/admin/"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex items-center gap-2"
-              >
-                <Shield className="h-4 w-4" />
-                Django Admin
-              </a>
-            </DropdownMenuItem>
-          </>
-        )}
-        <DropdownMenuItem onClick={() => logout.mutate()}>Logout</DropdownMenuItem>
-      </DropdownMenuContent>
-    </DropdownMenu>
+          <DropdownMenuItem asChild>
+            <a
+              href="/admin/"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-2"
+            >
+              <Shield className="h-4 w-4" />
+              Django Admin
+            </a>
+          </DropdownMenuItem>
+        </>
+      )}
+      <DropdownMenuItem onClick={() => logout.mutate()}>Log Out Account</DropdownMenuItem>
+    </DropdownMenuContent>
   );
 }

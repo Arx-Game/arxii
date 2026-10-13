@@ -12,13 +12,24 @@ import { describe, it, expect, afterEach, vi } from 'vitest';
 import { GameTopBar } from './GameTopBar';
 import { renderWithProviders } from '@/test/utils/renderWithProviders';
 import { store } from '@/store/store';
-import { resetGame, setActiveSession, startSession } from '@/store/gameSlice';
+import {
+  resetGame,
+  setActiveSession,
+  setSessionConnectionStatus,
+  startSession,
+} from '@/store/gameSlice';
 import type { MyRosterEntry } from '@/roster/types';
 
 const logoutMutate = vi.fn();
 vi.mock('@/evennia_replacements/queries', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/evennia_replacements/queries')>()),
   useLogout: () => ({ mutate: logoutMutate }),
+}));
+
+const everywhereMock = vi.fn();
+vi.mock('@/roster/queries', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/roster/queries')>()),
+  useDisconnectEverywhereMutation: () => ({ mutate: everywhereMock, isPending: false }),
 }));
 
 const disconnectMock = vi.fn();
@@ -51,6 +62,8 @@ const aria: MyRosterEntry = {
   activity_requirement: 'NONE',
   creation_provenance: 'player',
   thaw_available_at: null,
+  session_count: 0,
+  room_name: null,
 };
 
 vi.mock('@/home/hall/queries', () => ({
@@ -63,7 +76,7 @@ describe('GameTopBar world menu (#3818)', () => {
     vi.clearAllMocks();
   });
 
-  it('opens a menu with character select, roster, settings and log out', async () => {
+  it('opens a menu with character select, roster, settings and Log Out Account', async () => {
     const user = userEvent.setup();
     renderWithProviders(<GameTopBar characters={[]} />);
 
@@ -78,7 +91,7 @@ describe('GameTopBar world menu (#3818)', () => {
       'href',
       '/profile/settings'
     );
-    expect(screen.getByRole('menuitem', { name: 'Log out' })).toBeInTheDocument();
+    expect(screen.getByRole('menuitem', { name: 'Log Out Account' })).toBeInTheDocument();
   });
 
   it('logs out through the shared logout mutation', async () => {
@@ -86,24 +99,49 @@ describe('GameTopBar world menu (#3818)', () => {
     renderWithProviders(<GameTopBar characters={[]} />);
 
     await user.click(screen.getByRole('button', { name: 'Open world menu' }));
-    await user.click(screen.getByRole('menuitem', { name: 'Log out' }));
+    await user.click(screen.getByRole('menuitem', { name: 'Log Out Account' }));
 
     expect(logoutMutate).toHaveBeenCalledTimes(1);
   });
 
-  it('offers to leave the world as the active character, and only then', async () => {
+  it('offers Disconnect Character for the active character, and only then', async () => {
     const user = userEvent.setup();
     renderWithProviders(<GameTopBar characters={[aria]} />);
     await user.click(screen.getByRole('button', { name: 'Open world menu' }));
+    expect(screen.queryByRole('menuitem', { name: /disconnect character/i })).toBeNull();
     expect(screen.queryByRole('menuitem', { name: /leave the world/i })).toBeNull();
     await user.keyboard('{Escape}');
 
     store.dispatch(startSession('Aria'));
     store.dispatch(setActiveSession('Aria'));
     await user.click(screen.getByRole('button', { name: 'Open world menu' }));
-    await user.click(screen.getByRole('menuitem', { name: 'Leave the world as Aria' }));
+    await user.click(screen.getByRole('menuitem', { name: 'Disconnect Character' }));
 
+    // One session: no choice to make, this tab's socket closes (#4321).
     expect(disconnectMock).toHaveBeenCalledWith('Aria');
+    expect(everywhereMock).not.toHaveBeenCalled();
+  });
+
+  // #4321: the choice appears only while this tab holds a socket AND the
+  // server says the character has another session somewhere.
+  it('offers This connection or Every connection only with a second session', async () => {
+    const user = userEvent.setup();
+    store.dispatch(startSession('Aria'));
+    store.dispatch(setActiveSession('Aria'));
+    store.dispatch(setSessionConnectionStatus({ character: 'Aria', status: true }));
+    renderWithProviders(<GameTopBar characters={[{ ...aria, session_count: 2 }]} />);
+
+    await user.click(screen.getByRole('button', { name: 'Open world menu' }));
+    // The sub-menu by keyboard: ArrowRight opens it on its first item, ArrowDown
+    // moves to the second, Enter selects (a pointer leaving the trigger would
+    // close it again under jsdom's pointer geometry).
+    screen.getByRole('menuitem', { name: 'Disconnect Character' }).focus();
+    await user.keyboard('{ArrowRight}');
+    expect(await screen.findByRole('menuitem', { name: 'This connection' })).toBeInTheDocument();
+    await user.keyboard('{ArrowDown}{Enter}');
+
+    expect(everywhereMock).toHaveBeenCalledWith(1);
+    expect(disconnectMock).not.toHaveBeenCalled();
   });
 
   it('is a button, not a link to the redirecting front page', () => {
