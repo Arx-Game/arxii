@@ -33,7 +33,9 @@ their owner between rooms. `CompanionObject.at_post_move` itself overrides
 `Character.at_post_move` to skip the narrative-agent side effects (mission
 triggers, trap detection, fame reactions, clue triggers, sunlight exposure,
 resonance-alignment reconciliation) that assume a real story participant —
-a companion arriving in a room shouldn't spring any of them.
+a companion arriving in a room shouldn't spring any of them. It passes over
+`DefaultCharacter.at_post_move` too (#4329, ADR-4329): that hook's only work is a
+stock look over Evennia's `desc` Attribute, and a companion has no window to read it.
 
 ## Binding
 

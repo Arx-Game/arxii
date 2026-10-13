@@ -7,6 +7,16 @@ Core game objects (characters, rooms, exits, etc.) with Arx II customizations ex
 ### `characters.py`
 - **`Character`**: Extends `DefaultCharacter`
 - Traits handler, item_data interface, roster integration, scene state management
+- **Walking into a room runs our `look`, never Evennia's** (#4329, ADR-4329).
+  `DefaultCharacter.at_post_move`'s only work is a stock look over Evennia's `desc`
+  Attribute, which nothing of ours writes, so builder rooms arrived as "This is a
+  room." with no exits. `at_post_move` passes over exactly that hook with
+  `super(DefaultCharacter, self)` and `_send_arrival_look` runs the `look` command
+  (every window, typed `look`, through `run_safely` so a failure never skips the
+  room state and triggers after it; skipped for a character nobody plays).
+  `CompanionObject.at_post_move` passes over the same hook. Before adding a
+  `super()` call into an Evennia hook, read what that hook sends: the
+  `evennia-stock-path-reviewer` agent exists for this shape.
 - **A character with nowhere to be lands in the fallback starting room** (#3818).
   Evennia's `at_pre_puppet` restores `prelogout_location` or `home` and, with
   both empty, leaves the character nowhere — which on the web is a screen that
