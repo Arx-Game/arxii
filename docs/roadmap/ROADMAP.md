@@ -217,7 +217,17 @@ limits, IC-vs-UI placement, etc. — see [`design-tenets.md`](design-tenets.md).
   screen; puppeting records the selection back (ADR-0241 amended); sessions share a
   character (`MULTISESSION_MODE = 3`, unlimited simultaneous puppets); and accounts
   that skipped first-save setup (`createsuperuser`, pre-adapter signup) heal on server
-  start, at login, and at creation. Degradation sweep + hygiene fold-ins done in
+  start, at login, and at creation. **#4321 (ADR-4321) made presence a server
+  fact:** `GET /api/roster/entries/mine/` carries `session_count`/`room_name` read
+  from the session handler, `POST /api/roster/entries/{id}/disconnect/` closes every
+  session with the `quit` reason, and one client rule (`useCharacterPresence`: this
+  tab's socket first, the server's count when it has none) feeds the chip, the Hall
+  card and the world menu, so a second tab or device never says "Not in the world"
+  about a character in a room; "Disconnect Character" offers "This connection" /
+  "Every connection" only with a local socket and another session; the words are
+  "Log Out Account" and "Disconnect Character" everywhere; the Who tab's Online list
+  opens the account menu from your own name; the form switcher hides with no form to
+  switch to. Degradation sweep + hygiene fold-ins done in
   the same slice (fold in, don't file): tidings/wardrobe loading states, a mute-settings
   link, three message-tab fixes, notification badge routing, nine feed-kind labels,
   consent-notifier gating, and a second remedy on `RequireCharacter`'s zero-character
