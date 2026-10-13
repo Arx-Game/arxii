@@ -49,6 +49,13 @@ class DreamRoomTests(TestCase):
         room = ensure_dream_room()
         self.assertEqual(get_dream_room().pk, room.pk)
 
+    def test_seeded_room_description_is_the_one_look_reads(self) -> None:
+        """The seed writes ObjectDisplayData, not the desc Attribute nothing renders (#4329)."""
+        room = ensure_dream_room()
+
+        self.assertIn("A shoreless gray hush", room.item_data.get_display_description())
+        self.assertIsNone(room.attributes.get("desc"))
+
     def test_unconscious_look_shows_dream_room(self) -> None:
         from evennia.utils import create as evennia_create
 
