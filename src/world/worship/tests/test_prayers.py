@@ -10,9 +10,12 @@ from evennia.accounts.models import AccountDB
 from actions.definitions.worship import PrayAction, SendVisionAction
 from evennia_extensions.factories import ObjectDBFactory, RoomProfileFactory
 from world.character_sheets.factories import CharacterSheetFactory
-from world.clues.constants import ClueTargetKind
+from world.clues.constants import ClueResolution, ClueTargetKind
 from world.clues.factories import ClueFactory
 from world.clues.models import CharacterClue
+from world.codex.constants import CodexKnowledgeStatus
+from world.codex.factories import CodexEntryFactory
+from world.codex.models import CharacterCodexKnowledge
 from world.conditions.factories import ConditionTemplateFactory
 from world.conditions.models import ConditionInstance
 from world.narrative.constants import NarrativeCategory
@@ -225,6 +228,32 @@ class SendVisionTests(PrayerTestBase):
         self.assertEqual(vision.clue, clue)
         self.assertTrue(
             CharacterClue.objects.filter(roster_entry=self.sheet.roster_entry, clue=clue).exists()
+        )
+
+    def test_an_automatic_codex_clue_grants_its_entry_with_the_vision(self) -> None:
+        entry = CodexEntryFactory(learn_threshold=5)
+        clue = ClueFactory(target_codex_entry=entry, resolution_mode=ClueResolution.AUTOMATIC)
+
+        send_vision(recipient=self.sheet, being=self.being, body="A name, half heard.", clue=clue)
+
+        knowledge = CharacterCodexKnowledge.objects.get(
+            roster_entry=self.sheet.roster_entry, entry=entry
+        )
+        self.assertEqual(knowledge.status, CodexKnowledgeStatus.KNOWN)
+
+    def test_a_research_codex_clue_is_only_held_by_the_vision(self) -> None:
+        entry = CodexEntryFactory(learn_threshold=5)
+        clue = ClueFactory(target_codex_entry=entry, resolution_mode=ClueResolution.RESEARCH)
+
+        send_vision(recipient=self.sheet, being=self.being, body="A name, half heard.", clue=clue)
+
+        self.assertTrue(
+            CharacterClue.objects.filter(roster_entry=self.sheet.roster_entry, clue=clue).exists()
+        )
+        self.assertFalse(
+            CharacterCodexKnowledge.objects.filter(
+                roster_entry=self.sheet.roster_entry, entry=entry
+            ).exists()
         )
 
     def test_only_a_codex_clue_rides_a_vision(self) -> None:

@@ -78,16 +78,21 @@ A `Clue` is a pointer defined by three orthogonal things:
   `get_or_create`d for the finder's character sheet — the **only in-game producer** of
   `PersonaDiscovery`. Piercing stays GM-authored per ADR-0033: a linking clue must exist
   and be planted (Search / triggers / research all work, like any clue kind); there is
-  no direct "study persona" roll against an arbitrary masked character.
+  no direct "study persona" roll against an arbitrary masked character. MISSION →
+  the finder is handed the target mission through `grant_clue_mission` (#4327), the
+  same grant RESEARCH makes per contributor; it grants silently, skips a holder of an
+  ACTIVE instance, and logs rather than raises on a failed grant. The surfaces that
+  follow acquire-then-grant for AUTOMATIC clues are room search and clue triggers
+  (`clues/services.py`), visions (`send_vision`, #4327; a vision's clue is always CODEX,
+  `VisionClueNotCodex`), NPC effects, tasking listeners, spy payouts and stake resolution.
 - **RESEARCH** (`world/clues/research.py`): a `ProjectKind.RESEARCH` project (on the shared
   `world/projects` framework) targeting a clue. Contributors spend AP to make Research rolls
   (`contribute_research`); progress scales with the outcome, **floored at 0** (a failed help
   never detracts). A weekly cron setback (`apply_research_setbacks`) is the only negative.
   On completion, `resolve_research` grants the clue's target to every distinct
   contributor: CODEX (`grant_codex_entry`), SECRET (`grant_secret_knowledge`, plus
-  accusation nullification), and MISSION (#3429 — `staff_assign_mission`, skipping a
-  contributor who already holds an ACTIVE instance of the target mission, with a
-  per-contributor STORY notification via `send_narrative_message`) are wired; RESCUE /
+  accusation nullification), and MISSION (#3429 — `grant_clue_mission`, the shared grant
+  AUTOMATIC clues use (#4327), with a per-contributor STORY notification) are wired; RESCUE /
   PERSONA_LINK / ITEM targets remain a documented RESEARCH-resolution extension point
   (#1143) — their AUTOMATIC-mode grants above are unaffected.
 

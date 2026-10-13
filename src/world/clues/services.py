@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import logging
 from typing import TYPE_CHECKING
 
 from django.core.exceptions import ObjectDoesNotExist
+from django.db import transaction
 
 from world.clues.constants import ClueResolution, ClueTargetKind
 from world.clues.models import CharacterClue, Clue, ClueTrigger, ItemClueTrigger, RoomClue
@@ -19,9 +21,12 @@ if TYPE_CHECKING:
     from world.captivity.models import Captivity
     from world.checks.models import CheckType
     from world.items.models import ItemInstance
+    from world.missions.models import MissionTemplate
     from world.predicates.predicates import CharacterPredicateContext
     from world.roster.models import RosterEntry
     from world.secrets.models import Secret
+
+logger = logging.getLogger(__name__)
 
 
 def acquire_clue(roster_entry: RosterEntry, clue: Clue) -> CharacterClue:
@@ -164,10 +169,11 @@ def grant_clue_target(clue: Clue, roster_entry: RosterEntry) -> None:
     - RESCUE: the character is handed the rescue mission for the held captive.
     - SECRET: the character learns the secret's fact (#1334).
     - PERSONA_LINK: the character pierces the masked-identity pair (#2120).
+    - MISSION: the character is handed the target mission, silently (#4327); the same
+      grant RESEARCH resolution makes per contributor (``grant_clue_mission``).
     - ITEM: no-op (#2540) — the clue IS the knowledge; ``character_has_item_pointer``
       (``world.scenes.boon_services``) reads the held ``CharacterClue`` directly, there
       is nothing further to grant.
-    The MISSION target kind is a documented extension point.
     """
     if clue.target_kind == ClueTargetKind.CODEX:
         _grant_codex_target(clue, roster_entry)
@@ -177,6 +183,62 @@ def grant_clue_target(clue: Clue, roster_entry: RosterEntry) -> None:
         _grant_secret_target(clue, roster_entry)
     elif clue.target_kind == ClueTargetKind.PERSONA_LINK:
         _grant_persona_link_target(clue, roster_entry)
+    elif clue.target_kind == ClueTargetKind.MISSION and clue.target_mission is not None:
+        grant_clue_mission(clue.target_mission, roster_entry)
+
+
+def grant_clue_mission(
+    template: MissionTemplate,
+    roster_entry: RosterEntry,
+    *,
+    message: str | None = None,
+    ooc_note: str = "",
+) -> None:
+    """Hand ``template`` to one character as a clue's payoff (#3429, #4327).
+
+    The single mission grant shared by AUTOMATIC clue discovery (``grant_clue_target``)
+    and RESEARCH resolution (``resolve_research``). A character already holding an ACTIVE
+    instance of the mission is skipped without error. Each grant runs in its own savepoint
+    and a failure is logged, not raised, so one bad grant never aborts a search, a vision
+    or a sibling contributor's grant (the ``external_acts.py`` pattern).
+
+    ``message``, when given, is delivered as a STORY narrative message to the character;
+    ``None`` grants silently, as the codex, secret and rescue grants do.
+    """
+    from world.missions.constants import MissionStatus  # noqa: PLC0415
+    from world.missions.models import MissionInstance  # noqa: PLC0415
+    from world.missions.services.run import staff_assign_mission  # noqa: PLC0415
+    from world.narrative.constants import NarrativeCategory  # noqa: PLC0415
+    from world.narrative.services import send_narrative_message  # noqa: PLC0415
+    from world.scenes.services import active_persona_for_sheet  # noqa: PLC0415
+
+    sheet = roster_entry.character_sheet
+    character = sheet.character
+    already_holds = MissionInstance.objects.filter(
+        template=template,
+        status=MissionStatus.ACTIVE,
+        participants__character_id=character.pk,
+        participants__is_contract_holder=True,
+    ).exists()
+    if already_holds:
+        return
+    try:
+        with transaction.atomic():
+            persona = active_persona_for_sheet(sheet)
+            staff_assign_mission(template, character, persona=persona)
+            if message is not None:
+                send_narrative_message(
+                    recipients=[sheet],
+                    body=message,
+                    category=NarrativeCategory.STORY,
+                    ooc_note=ooc_note,
+                )
+    except Exception:  # log-and-continue; one grant failure must not abort the caller
+        logger.exception(
+            "MISSION clue grant failed for roster_entry=%s template=%s",
+            roster_entry.pk,
+            template.pk,
+        )
 
 
 def _grant_codex_target(clue: Clue, roster_entry: RosterEntry) -> None:

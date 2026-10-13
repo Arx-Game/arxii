@@ -20,6 +20,7 @@ from django.utils import timezone
 
 from world.clues.constants import ClueTargetKind
 from world.clues.models import ResearchProjectDetails
+from world.clues.services import grant_clue_mission
 from world.projects.constants import (
     CompletionMode,
     ContributionKind,
@@ -176,54 +177,19 @@ def _resolve_secret_research(project: Project, clue: Clue) -> None:
 def _resolve_mission_research(project: Project, clue: Clue) -> None:
     """MISSION-target research payoff (#3429): grant the mission to each contributor.
 
-    Mirrors the CODEX branch's shape (distinct contributors, log-and-continue per
-    contributor, no bystander fan-out) but the grant path is
-    ``staff_assign_mission`` (``missions/services/run.py``) rather than an idempotent
-    knowledge-row helper, so each contributor's grant runs in its own savepoint —
-    the ``external_acts.py`` pattern — and a failure for one contributor never
-    aborts the others or the research resolution itself. A contributor who already
-    holds an ACTIVE instance of this mission (inline query; see the private, narrower
-    ``trigger_dispatch._holds_active_trigger_mission`` for the sibling pattern this
-    deliberately does not reuse) is skipped without error.
+    Each contributor gets the shared ``grant_clue_mission`` grant (the same one an
+    AUTOMATIC clue makes, #4327), plus the research narrative message.
     """
-    from world.missions.constants import MissionStatus  # noqa: PLC0415
-    from world.missions.models import MissionInstance  # noqa: PLC0415
-    from world.missions.services.run import staff_assign_mission  # noqa: PLC0415
-    from world.narrative.constants import NarrativeCategory  # noqa: PLC0415
-    from world.narrative.services import send_narrative_message  # noqa: PLC0415
-    from world.scenes.services import active_persona_for_sheet  # noqa: PLC0415
-
     template = clue.target_mission
     if template is None:
         return
     for roster_entry in _distinct_contributor_roster_entries(project):
-        sheet = roster_entry.character_sheet
-        character = sheet.character
-        already_holds = MissionInstance.objects.filter(
-            template=template,
-            status=MissionStatus.ACTIVE,
-            participants__character_id=character.pk,
-            participants__is_contract_holder=True,
-        ).exists()
-        if already_holds:
-            continue
-        try:
-            with transaction.atomic():
-                persona = active_persona_for_sheet(sheet)
-                staff_assign_mission(template, character, persona=persona)
-                send_narrative_message(
-                    recipients=[sheet],
-                    body=f"Your research pays off: {template.name} is now open to you.",
-                    category=NarrativeCategory.STORY,
-                    ooc_note=f"Research project #{project.pk} resolved (clue #{clue.pk}).",
-                )
-        except Exception:  # log-and-continue; one grant failure must not
-            # abort the others or the research resolution (mirrors external_acts.py).
-            logger.exception(
-                "MISSION research grant failed for roster_entry=%s clue=%s",
-                roster_entry.pk,
-                clue.pk,
-            )
+        grant_clue_mission(
+            template,
+            roster_entry,
+            message=f"Your research pays off: {template.name} is now open to you.",
+            ooc_note=f"Research project #{project.pk} resolved (clue #{clue.pk}).",
+        )
 
 
 def _distinct_contributor_roster_entries(project: Project) -> list[RosterEntry]:
