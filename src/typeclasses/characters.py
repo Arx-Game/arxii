@@ -756,16 +756,39 @@ class Character(ObjectParent, DefaultCharacter):
             state_sequence=state_sequence,
         )
 
+    def _send_arrival_look(self) -> None:
+        """The mover's look at the room they arrived in, through our ``look`` (#4329).
+
+        The same command a player types, so the description, exits and contents
+        come from the one renderer ``LookAction`` uses, as at login (#3933). Sent
+        to every window: each of them moved. Skipped for a character nobody is
+        playing, whose output no one would read. Run through ``run_safely`` like
+        the other arrival side effects, so a failing look never skips the room
+        state and triggers that follow it.
+        """
+        if self.location is None or not self.has_account:
+            return
+        from world.player_submissions.services import run_safely
+
+        run_safely("arrival_look", lambda: self.execute_cmd("look"), actor=self)
+
     def at_post_move(self, source_location, move_type="move", **kwargs):
         """Handle actions after moving to a new location.
 
-        Sends updated room state to the frontend after movement.
+        Shows the mover the room through our ``look``, then sends updated room
+        state to the frontend after movement.
         Reconciles the presence-tied resonance-alignment buff for the new location.
         Emits EventName.MOVED so reactive triggers (e.g. scar-gated presence
         escalation) can respond to character arrival.
+
+        ``DefaultCharacter.at_post_move`` is skipped on purpose (#4329): its only
+        work is a stock look over Evennia's ``desc`` Attribute, which nothing of
+        ours writes, so every room the builder made arrived as "This is a room."
+        with Evennia's own contents list and no exits. ``super(DefaultCharacter,
+        self)`` passes over exactly that one hook and keeps the rest of the chain.
         """
-        # Call parent method to handle trigger registration
-        super().at_post_move(source_location, move_type=move_type, **kwargs)
+        super(DefaultCharacter, self).at_post_move(source_location, move_type=move_type, **kwargs)
+        self._send_arrival_look()
 
         # Send room state to frontend
         self.send_room_state()
