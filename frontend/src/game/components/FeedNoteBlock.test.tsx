@@ -57,6 +57,33 @@ describe('FeedNoteBlock (#3856)', () => {
     expect(block.className).not.toContain('bg-muted');
   });
 
+  it.each([
+    'look',
+    'item',
+    'system',
+    'error',
+    'page',
+    'arrive',
+    'move',
+    'ambience',
+    'vision',
+  ] as const)(
+    'a %s note sets no size, face or width of its own, so Display settings reach it (#4330)',
+    (kind) => {
+      render(<FeedNoteBlock note={note(kind, 'Rain rests on the stones.', 'Courtyard')} />);
+
+      // jsdom has no Tailwind, so this pins the classes; the e2e spec pins the
+      // computed size, face and width in a real browser.
+      const block = screen.getByTestId('feed-note');
+      const classes = [block, ...Array.from(block.querySelectorAll('*'))]
+        .map((element) => element.getAttribute('class') ?? '')
+        .join(' ');
+      expect(classes).not.toMatch(
+        /\btext-(xs|sm|base|lg)\b|text-\[\d|\bfont-(sans|serif|mono)\b|max-w-/
+      );
+    }
+  );
+
   it('keeps Evennia colour markup in the body and drops anything unsafe', () => {
     render(
       <FeedNoteBlock

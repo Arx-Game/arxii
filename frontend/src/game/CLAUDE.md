@@ -364,7 +364,12 @@ chips, dismissed?)` counts unread per waking chip for the strip's "new" pills,
   for `ambience`. Every body renders through `EvenniaMessage` in prose
   presentation, since the server sends Evennia's HTML (colour spans, `<br>`).
   There is no separate system strip any more: `SystemLane` was removed with
-  #3856, since every text frame is a note in the column now.
+  #3856, since every text frame is a note in the column now. **No note sets its
+  own size, face or width** (#4330): every kind inherits the reader's Display
+  settings (`--play-prose-size`, `--play-prose-family`, the column's line length)
+  like a pose, and is told apart by glyph, frame, italics and colour. #3856's demo
+  sized notes at 12px sans in a 64ch box, which became a narrow strip once the
+  column filled the pane; its sizes and widths are superseded.
 - **`ChatWindow.tsx`**: Retained legacy component for isolated compatibility tests; `/game` now uses `ExplorationReader` —
   the fallback center feed when there's no active scene to structure into
   prose lines.

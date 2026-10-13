@@ -1,7 +1,9 @@
 /**
  * The one treatment reserved for visions (#3779), used nowhere else: the feed line at the
- * delivery moment and the sheet's persistent card share it, the way Arx 1's green did on
- * telnet (where `|G[VISION]|n` still is). Emerald is otherwise unused in the palette.
+ * delivery moment and the sheet's persistent card share the glyph and the frame, the way
+ * Arx 1's green did on telnet (where `|G[VISION]|n` still is). Emerald is otherwise unused
+ * in the palette. The feed line takes the reader's Display settings for its text (#4330),
+ * so only the sheet and the pantheon read `VISION_TEXT_CLASS`.
  */
 export const VISION_GLYPH = '✧';
 
