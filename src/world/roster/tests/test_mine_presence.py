@@ -22,6 +22,14 @@ from world.roster.seeds import ensure_rosters
 from world.roster.services.presence import QUIT_REASON, disconnect_everywhere, session_count
 
 
+class _FakeSession:
+    """What the handler hands back for a registered id: the object the real
+    ``SESSION_HANDLER.disconnect`` reads ``.sessid`` from."""
+
+    def __init__(self, sessid: int) -> None:
+        self.sessid = sessid
+
+
 def _puppet(test, entry, *sessids: int):
     """Fake ``sessids`` puppeting the entry's character. ObjectSessionHandler only
     trusts session ids the server handler knows (test_release_tenure does the same),
@@ -32,7 +40,7 @@ def _puppet(test, entry, *sessids: int):
 
     character = ObjectDB.objects.get(pk=entry.character_sheet.character_id)
     for sessid in sessids:
-        evennia.SESSION_HANDLER[sessid] = object()
+        evennia.SESSION_HANDLER[sessid] = _FakeSession(sessid)
         test.addCleanup(evennia.SESSION_HANDLER.pop, sessid, None)
         character.sessions.add(sessid)
     test.addCleanup(character.sessions.clear)
@@ -110,17 +118,20 @@ class DisconnectEverywhereTests(TestCase):
 
     def test_closes_every_session_with_the_quit_reason(self):
         character = self._puppet(42, 43)
-        with patch("evennia.SESSION_HANDLER.disconnect") as disconnect:
+        # autospec: a wrong keyword or a missing argument raises here instead of
+        # passing silently; the fake sessions are what the handler hands back.
+        with patch("evennia.SESSION_HANDLER.disconnect", autospec=True) as disconnect:
             closed = disconnect_everywhere(character)
         assert closed == 2
         assert disconnect.call_count == 2
+        assert sorted(call.args[0].sessid for call in disconnect.call_args_list) == [42, 43]
         for call in disconnect.call_args_list:
             assert call.kwargs["reason"] == QUIT_REASON
         assert QUIT_REASON == "quit"
 
     def test_the_endpoint_reports_what_it_closed(self):
         self._puppet(42)
-        with patch("evennia.SESSION_HANDLER.disconnect"):
+        with patch("evennia.SESSION_HANDLER.disconnect", autospec=True):
             response = self.client.post(f"/api/roster/entries/{self.entry.pk}/disconnect/")
         assert response.status_code == 200, response.content
         assert response.data == {"closed": 1}
@@ -134,7 +145,7 @@ class DisconnectEverywhereTests(TestCase):
     def test_a_strangers_character_is_refused(self):
         self._puppet(42)
         self.client.force_authenticate(user=self.stranger)
-        with patch("evennia.SESSION_HANDLER.disconnect") as disconnect:
+        with patch("evennia.SESSION_HANDLER.disconnect", autospec=True) as disconnect:
             response = self.client.post(f"/api/roster/entries/{self.entry.pk}/disconnect/")
         assert response.status_code == 400
         assert "one of your characters" in response.content.decode()
