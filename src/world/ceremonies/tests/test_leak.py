@@ -7,8 +7,8 @@ from django.test import TestCase
 from world.ceremonies.leak import _observer_senses_twist
 from world.checks.factories import CheckTypeFactory
 from world.checks.test_helpers import force_check_outcome
-from world.clues.constants import ClueResolution
-from world.clues.models import CharacterClue
+from world.clues.constants import ClueResolution, ClueTargetKind
+from world.clues.models import CharacterClue, Clue
 from world.roster.factories import RosterEntryFactory
 from world.secrets.factories import SecretFactory
 from world.secrets.models import SecretKnowledge
@@ -38,5 +38,29 @@ class TwistedRiteLeakTests(TestCase):
 
         self.assertTrue(sensed)
         held = CharacterClue.objects.get(roster_entry=self.observer_entry)
+        self.assertEqual(held.clue.resolution_mode, ClueResolution.RESEARCH)
+        self.assertFalse(SecretKnowledge.objects.filter(secret=self.secret).exists())
+
+    def test_a_leak_clue_stored_automatic_before_the_fix_never_reveals_the_secret(self) -> None:
+        old = Clue.objects.create(
+            target_kind=ClueTargetKind.SECRET,
+            target_secret=self.secret,
+            name="Something off about the rite",
+            description="old",
+            resolution_mode=ClueResolution.AUTOMATIC,
+        )
+        sheet = self.observer_entry.character_sheet
+        with force_check_outcome(self.success):
+            _observer_senses_twist(
+                observer=sheet.character,
+                observer_sheet=sheet,
+                officiant_sheet=self.officiant_entry.character_sheet,
+                check_type=self.check_type,
+                difficulty=1,
+                worship_secret=self.secret,
+            )
+
+        held = CharacterClue.objects.get(roster_entry=self.observer_entry)
+        self.assertNotEqual(held.clue, old)
         self.assertEqual(held.clue.resolution_mode, ClueResolution.RESEARCH)
         self.assertFalse(SecretKnowledge.objects.filter(secret=self.secret).exists())

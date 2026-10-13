@@ -32,10 +32,11 @@ A `Clue` is a pointer defined by three orthogonal things:
    action) or a passive **trigger** (`ClueTrigger`, fired on room entry). Both record the
    holding via `CharacterClue` (roster-scoped, idempotent `acquire_clue`). Every surface that
    hands a clue to a character (search, triggers, visions, asset intel, org-task clue pools,
-   spy payouts, listener rewards, the twisted-rite leak) calls the one entry point
+   spy payouts, listener real catches, the twisted-rite leak) calls the one entry point
    `find_clue(roster_entry, clue)` (#4331): `acquire_clue`, then `grant_clue_target` when the
    clue is AUTOMATIC. `acquire_clue` alone stays the hold-only primitive (research evidence,
-   the accusation counter-clue). The twisted-rite leak mints a RESEARCH clue: a witness's
+   the accusation counter-clue). A listener's planted red herring grants whatever its mode, so
+   it collects like a real catch. The twisted-rite leak mints a RESEARCH clue: a witness's
    hunch is a lead to investigate, never an on-the-spot reveal.
 3. **Resolution** — *how holding it becomes having the target.* `resolution_mode` ∈
    `AUTOMATIC` (granted on acquisition — `grant_clue_target`) or `RESEARCH` (won through a

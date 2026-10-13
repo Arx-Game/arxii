@@ -116,19 +116,25 @@ def _observer_senses_twist(  # noqa: PLR0913
     entry = RosterEntry.objects.filter(character_sheet=observer_sheet).first()
     if entry is None:
         return False
-    clue, _ = Clue.objects.get_or_create(
+    # A hunch that something is off, not proof (#4331): a RESEARCH lead the witness
+    # can investigate, never an on-the-spot reveal of the secret. The mode is part of
+    # the lookup, so a leak clue stored AUTOMATIC before this fix is left alone and a
+    # RESEARCH one is used (or created) beside it.
+    clue = Clue.objects.filter(
         target_kind=ClueTargetKind.SECRET,
         target_secret=worship_secret,
-        defaults={
-            # A hunch that something is off, not proof (#4331): a RESEARCH lead the
-            # witness can investigate, never an on-the-spot reveal of the secret.
-            "resolution_mode": ClueResolution.RESEARCH,
-            "name": "Something off about the rite",
-            "description": (
+        resolution_mode=ClueResolution.RESEARCH,
+    ).first()
+    if clue is None:
+        clue = Clue.objects.create(
+            target_kind=ClueTargetKind.SECRET,
+            target_secret=worship_secret,
+            resolution_mode=ClueResolution.RESEARCH,
+            name="Something off about the rite",
+            description=(
                 "PLACEHOLDER — the liturgy's forms bent subtly away from the "
                 "god they were spoken for."
             ),
-        },
-    )
+        )
     find_clue(entry, clue)
     return True
