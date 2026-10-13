@@ -274,7 +274,7 @@ entry — kept in tandem there rather than duplicated here.
   `IsClearanceRequesterGM`, `IsStaffForCustodyResolution`, `IsClearanceCustodianOrStaff`,
   `user_owns_or_leads_story`
 
-Cross-app: `world/combat/services.py` (`add_opponent` gate),
+Cross-app: `world/combat/services/` (`add_opponent` gate),
 `world/combat/scaling.py` (`NPCUnderCustodyError`), `src/commands/story.py` (telnet),
 `frontend/src/stories/components/{ProtectedSubjectsPanel,ClearanceInbox,
 SubjectRefFields,ProtectedSubjectFormDialog,RequestClearanceDialog,

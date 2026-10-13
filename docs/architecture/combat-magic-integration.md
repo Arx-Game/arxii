@@ -12,7 +12,7 @@ scene-cast one: anima deduction, soulfray accumulation, mishap rolls,
 TECHNIQUE_PRE_CAST / TECHNIQUE_CAST event emission, reactive scar interception,
 thread-pull bonuses, and corruption checks.
 
-Today, `_resolve_pc_action` in `src/world/combat/services.py` reads
+Today, `_resolve_pc_action` in `src/world/combat/services/` reads
 `technique.effect_type.base_power` directly and calls
 `apply_damage_to_opponent`. Combat bypasses the magic system entirely, so
 none of the above side effects fire on a combat-cast technique. This spec
@@ -59,7 +59,7 @@ a conditions-from-techniques resolver.
 
 Aim for ~600 lines diff total including tests. The combat-side delta in
 `_resolve_pc_action` is intentionally small (~8 lines deleted, ~4 lines
-added) so that any concurrent work on `combat/services.py` from the
+added) so that any concurrent work on `combat/services/` from the
 combat-iterating developer remains merge-friendly.
 
 ## Architecture
@@ -67,11 +67,11 @@ combat-iterating developer remains merge-friendly.
 ### Boundary
 
 ```
-world/combat/services.py
+world/combat/services/
 ├── resolve_combat_technique(...)        ← NEW: orchestrates the adapter
 └── _resolve_pc_action(...)              ← CHANGED: damage path delegates
 
-world/combat/services.py (or sibling submodule)
+world/combat/services/ (or sibling submodule)
 └── CombatAttackResolver                 ← NEW: dataclass resolver, __call__'d
                                             by use_technique as resolve_fn
 
@@ -221,7 +221,7 @@ future consumers that want to surface mishap text, soulfray warnings, or
 overburn flags into the round narration — none of which this PR wires up,
 but keeping the field avoids re-extracting later.
 
-### `_build_combat_result` (new — `world/combat/services.py`)
+### `_build_combat_result` (new — `world/combat/services/`)
 
 ```python
 def _build_combat_result(
@@ -248,7 +248,7 @@ def _build_combat_result(
     )
 ```
 
-### `_sum_active_flat_bonuses` (new — `world/combat/services.py`)
+### `_sum_active_flat_bonuses` (new — `world/combat/services/`)
 
 ```python
 def _sum_active_flat_bonuses(
@@ -272,7 +272,7 @@ def _sum_active_flat_bonuses(
     return total
 ```
 
-### `CombatAttackResolver` (new — `world/combat/services.py`)
+### `CombatAttackResolver` (new — `world/combat/services/`)
 
 ```python
 @dataclass
@@ -320,7 +320,7 @@ Each step is its own method so subclasses (next PR's
 `CombatBuffResolver` etc.) can override what differs without
 re-implementing the orchestration.
 
-### `resolve_combat_technique` (new — `world/combat/services.py`)
+### `resolve_combat_technique` (new — `world/combat/services/`)
 
 ```python
 def resolve_combat_technique(
@@ -463,7 +463,7 @@ damage outcomes, which the new path produces equivalently.
 ## References
 
 - `src/world/magic/services/techniques.py:use_technique`
-- `src/world/combat/services.py:_resolve_pc_action`
+- `src/world/combat/services/:_resolve_pc_action`
 - `src/world/magic/tests/test_reactive_integration.py` (cancel-path pattern)
 - `docs/architecture/scene-magic-enhancement.md`
   (the social-action wrapper pattern this spec mirrors for combat)

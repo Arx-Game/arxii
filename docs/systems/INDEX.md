@@ -588,7 +588,7 @@ Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Sc
     targeting precondition; enforced symmetrically in both cast paths — non-combat
     (`validate_cast_target`/`resolve_targets`, `world/magic/services/targeting.py`) and combat
     (`_check_combat_target_prerequisites`/`_filter_by_target_prerequisites` under
-    `resolve_combat_technique`, `world/combat/services.py`): SINGLE and SELF raise
+    `resolve_combat_technique`, `world/combat/services/`): SINGLE and SELF raise
     `InvalidCastTarget` pre-flight (SELF checks the caster directly); AREA/FILTERED_GROUP get NO
     pre-flight check and instead silently filter ineligible targets out of the resolved set.
   - Dramatic moment tagging (#1139):
@@ -4466,7 +4466,7 @@ gains a discoverable content item for the first time.
   called once per achievement with that set, so the first crossing sheet takes the primary
   Discovery slot and the rest share it. A sheet that doesn't cross this increment earns the
   achievement solo, non-shared, later. Wired callers: combat encounter completion
-  (`world/combat/services.py::_increment_completion_counters`, bucketed by outcome via
+  (`world/combat/services/::_increment_completion_counters`, bucketed by outcome via
   `world/combat/achievement_counters.py::increment_combat_counter_for_group`) and relationship
   reciprocation (`world/relationships/services.py::create_first_impression`).
 - **Access-change + discovery surface (`world/achievements/discovery.py` — ADR-0061):**
@@ -4879,7 +4879,7 @@ register as additional kinds.
   flip in the same request instead of waiting for the character's next login
   (#3570)
   - **Four authoring paths:** (1) combat auto-hooks in
-    `world/combat/services.py`'s `_resolve_pc_action`/`_resolve_npc_action_on_target`
+    `world/combat/services/`'s `_resolve_pc_action`/`_resolve_npc_action_on_target`
     fire on a genuine defeat/critical-hit against a persona-backed opponent; (2) the
     structured-consequence `EffectType.SHIFT_NPC_REGARD` +
     `ConsequenceEffect.npc_regard_amount` + `_shift_npc_regard` handler
@@ -6510,11 +6510,11 @@ Unified modifier system — categories, types, sources, and per-character modifi
     Traps only; does not mint ChallengeInstances (see mechanics.md Situation System).
   - `property_damage_bonus(target, damage_type) -> int` (#1793) — sums `PropertyDamageModifier`
     rows for a target's active `Property` set; folded into combat technique damage in
-    `CombatTechniqueResolver._profile_damage` (`world/combat/services.py`)
+    `CombatTechniqueResolver._profile_damage` (`world/combat/services/`)
   - `volatile_object_property(target) -> ObjectProperty | None` (#2210) — the
     `ObjectProperty` row making `target` "volatile" (its `Property` carries a
     `PropertyDetonation`), or `None`. Consumed by combat redirect resolution
-    (`world/combat/services.py`'s `_try_technique_interpose` REDIRECT branch) — see
+    (`world/combat/services/`'s `_try_technique_interpose` REDIRECT branch) — see
     combat.md's Redirect section.
   - `get_modifier_total(sheet, modifier_target) -> int` — Spec D PR1: invokes equipment
     walk (`passive_facet_bonuses` + `covenant_role_bonus`) when category is in
@@ -7680,7 +7680,7 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
   (bool, default False) — stamped when a hostile Technique Entrance (see magic.md
   "Technique Entrance") seeds/feeds an encounter (`world.combat.cast_seed
   .seed_or_feed_encounter_from_cast(..., from_entrance=True)`); read at round resolution
-  by `_maybe_suggest_entrance_dramatic_moment` (`world/combat/services.py`) to fire the
+  by `_maybe_suggest_entrance_dramatic_moment` (`world/combat/services/`) to fire the
   Dramatic Moment Suggestion check once the declared cast's real success level is known
   (the entrance's own recognition hooks fired flourish-only at declaration time — the
   suggestion was deferred). `world.combat.cast_seed
@@ -7813,7 +7813,7 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
     `targets` (M2M → `CombatParticipant`) or `opponent_targets` is populated per action.
 - **Rampart interception (#2209, epic #2040 decision 3; see `docs/systems/areas.md`'s
   "Rampart — Living Barriers" for the model and ADR-0125 for the design rationale):**
-  `apply_rampart_interception` (`world/combat/services.py`) chips a position-covering
+  `apply_rampart_interception` (`world/combat/services/`) chips a position-covering
   `Rampart`'s `integrity` — via the shared `damage_rampart` seam — at the top of both
   `apply_damage_to_participant` and `_resolve_opponent_pre_apply`, **before**
   `DAMAGE_PRE_APPLY` emits. Firing order: Rampart → personal reactive interceptors → Guardian
@@ -7825,7 +7825,7 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
   through the same `damage_rampart` seam, so interception (paused while that clash is
   ACTIVE) and clash-progress never drift apart.
 - **Boss-fight structure — diversity-weighted break accrual, lieutenant gate, pacing floor
-  (#2642, ADR-0160):** `assess_break_bar` (`world/combat/services.py`) persists a
+  (#2642, ADR-0160):** `assess_break_bar` (`world/combat/services/`) persists a
   `BreakBarContribution` row (mirrors `ClashContribution`'s per-round audit shape; `opponent`,
   `participant` nullable, `round_number`, `kind` — `BreakContributionKind`: DAMAGE / COMBO /
   HOLD / DEBUFF / SUPPRESSION, `effect_type` nullable, `amount`) for each qualifying feed. Round
@@ -7856,7 +7856,7 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
   (`world.locations.services.felt_exposure`, `StatKey.WIND`; provider is #1522).
   `wind_penalty(felt: int) -> int` (`world/combat/constants.py`) bands felt WIND into a check
   modifier — CALM (<15) → 0, BREEZY (15-39) → -5, WINDY (40-69) → -10, GALE (70+) → -20.
-  On the PC offense side, `CombatTechniqueResolver._roll_check` (`world/combat/services.py`)
+  On the PC offense side, `CombatTechniqueResolver._roll_check` (`world/combat/services/`)
   appends a `ModifierContribution(source_kind=SCENE, label="Wind", ...)` when the attacker's
   strongest equipped weapon (`_select_equipped_weapon`, the same pick the damage path uses)
   has `gear_archetype` RANGED or THROWN and the encounter has a room; melee/lance attacks skip
@@ -7966,7 +7966,7 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
   Force Grip/telekinesis — previously placeholder `destination_position_id=0` at seed
   time, see `docs/systems/magic.md`), wired end-to-end for combat declaration:
   - `resolve_cast_position_params(participant, technique, position_params)`
-    (`world/combat/services.py`) — validates a declared `destination_position_id` (single)
+    (`world/combat/services/`) — validates a declared `destination_position_id` (single)
     or `position_a_id`/`position_b_id` (pair) against the encounter's own room and the
     technique's `reach`/`reach_hops`; raises `ActionDispatchError` (`UNKNOWN_ACTION_REF`) on
     a foreign-room position or a half-supplied pair, `TARGET_OUT_OF_REACH` when the caster
@@ -7975,8 +7975,8 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
     `position_params` kwarg into the round-declaration kwargs; `CombatRoundContext
     ._resolve_cast_positions` (`world/combat/round_context.py`) calls
     `resolve_cast_position_params` and persists the resolved FKs onto the
-    `CombatRoundAction` at declaration time (`declare_action`, `world/combat/services.py`).
-  - `CombatTechniqueResolver._apply_conditions` (`world/combat/services.py`) reads the three
+    `CombatRoundAction` at declaration time (`declare_action`, `world/combat/services/`).
+  - `CombatTechniqueResolver._apply_conditions` (`world/combat/services/`) reads the three
     FKs back off the declared action and forwards them as `position_params` to
     `apply_technique_conditions` (`world/magic/services/condition_application.py`), the same
     shared seam the non-combat cast path already used.
@@ -8026,7 +8026,7 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
     anima at the price of Soulfray; stamped by `_create_instance_from_context` from both
     `apply_technique_conditions` and `apply_signature_bonus_conditions`, never changes
     after creation. Read by `_try_spend_reactive` and `drain_reactive_upkeep`.
-- **Key Services (`world/combat/services.py`):**
+- **Key Services (`world/combat/services/`):**
   - `resolve_round(encounter)` — full round orchestrator: passives → refresh triggers →
     interpose challenges → focused actions → post-passes (challenges, clashes, bleed-out)
   - `declare_interpose(participant, ally=None, technique=None, redirect_opponent_target=None, redirect_object_target=None)`
@@ -8147,7 +8147,7 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
   - `morale_state_for(opponent)` / `apply_morale_damage(opponent, amount)` /
     `tier_has_morale(opponent)` (`world/combat/morale.py`) — derived state + mutation
   - `declare_rally` / `declare_demoralize` / `declare_taunt` / `declare_parley`
-    (`world/combat/services.py`) — arm the four social-combat `CombatRoundAction`s
+    (`world/combat/services/`) — arm the four social-combat `CombatRoundAction`s
   - `_resolve_rally` / `_resolve_demoralize` / `_resolve_taunt` / `_resolve_parley` —
     round-tick resolution in `_resolve_pc_action`; roll stat+skill(+spec) checks via
     `collect_check_modifiers` + `perform_check`, with Composure defense
@@ -8204,7 +8204,7 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
   - `ThreatPoolEntry.hit_narration` / `miss_narration` (#3554, ADR-0272): authored OUTCOME
     head for an NPC attack, `{actor}`/`{target}` required, spliced by
     `render_action_outcome_narration(hit_text=, miss_text=)` from the NPC resolution path
-    in `combat/services.py`; blank = default sentence.
+    in `combat/services/`; blank = default sentence.
   - `PendingOpponentAttack` (`world/combat/models.py`) — clones the deferred-then-reactive
     shape of `world.scenes.models.PendingSuddenHarm` (#1316) rather than importing it (that
     model is single-round out-of-combat; this one is multi-round, combat-native, with its
@@ -8212,7 +8212,7 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
     `target` (nullable FK → `CombatParticipant`, v1 single-target — null when the entry is
     room-targeting), `declared_round`/`resolves_round` (CheckConstraint `resolves_round >
     declared_round`), `called_out` (bool), `downgrades` (PositiveSmallInt).
-  - **Declaration:** `_build_opponent_round_actions` (`world/combat/services.py`) creates a
+  - **Declaration:** `_build_opponent_round_actions` (`world/combat/services/`) creates a
     `PendingOpponentAttack` INSTEAD OF a same-round `CombatOpponentAction` when the chosen
     entry's `windup_rounds > 0`; `_batch_fetch_cooldown_data` also reads
     `PendingOpponentAttack.declared_round` so a wind-up commits to its entry's cooldown
@@ -8437,7 +8437,7 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
     changed.
   - **Broadcasts:** `_broadcast_sustained_telegraph`/`_broadcast_sustained_erosion`/
     `_broadcast_sustained_broken`/`_broadcast_sustained_held`
-    (`world/combat/services.py`) — PC wrappers alongside the existing `_broadcast_
+    (`world/combat/services/`) — PC wrappers alongside the existing `_broadcast_
     windup_*` NPC ones, both funneling into a shared `_broadcast_commitment_line`
     core (`_dual_dispatch_combat_narration`); the two rows carry different subjects
     (`opponent.name` vs a participant's character + `subject_name`), so only the
@@ -8458,7 +8458,7 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
     `ROUNDS`/1, despite the design doc's "1-round marker" shorthand; see ADR-0162) reusing
     Plummeting's own `Falling` `ConditionCategory`, plus a dedicated "Physical"
     `DamageType` for the hard-landing impact.
-  - **Trigger:** `_trigger_sent_flying` (`world/combat/services.py`), called from
+  - **Trigger:** `_trigger_sent_flying` (`world/combat/services/`), called from
     `_resolve_npc_action_on_target` whenever `threat_entry.sends_flying` and the landed
     `dmg_result.damage_dealt > 0` — applies the marker, stamps the damage carrier,
     dual-dispatches the produced-moment narration, then immediately consults the catch seam.
@@ -8569,7 +8569,7 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
 - **Engagement locks — foil duels (#2020, player surface #3386):** `EngagementLock`
   (`world/combat/models.py`) pairs one PC to one opponent; while ACTIVE the locked
   opponent's targeting narrows to just that PC (`_build_opponent_round_actions`,
-  `world/combat/services.py`). #2020 shipped the whole mechanic (threat tracking,
+  `world/combat/services/`). #2020 shipped the whole mechanic (threat tracking,
   autonomous lock formation past `auto_lock_threshold`, boss-suppression consumer —
   see the break-bar entry above) but left its two player entry points unreachable
   until #3386: `EngageAction`/`DisengageAction` (`actions/definitions/
@@ -8596,7 +8596,7 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
   show the hop count (`hopDistance` in `combat/reach.ts`, "2 positions away" /
   "no path"). See [areas.md](areas.md#frontend-built--wired).
   **Lock-lifecycle close-out (#3386):** fleeing while locked now breaks
-  the lock (`LockBreakReason.FLEE`, `_resolve_flee` in `world/combat/services.py`)
+  the lock (`LockBreakReason.FLEE`, `_resolve_flee` in `world/combat/services/`)
   alongside the pre-existing defeat-breaks-lock and disengage-breaks-lock paths —
   a PC who flees no longer leaves a phantom pairing behind.
   **Interference beat armed (#3447):** `trigger_interference_drama`
@@ -9528,7 +9528,7 @@ Database-driven game logic engine for complex branching sequences, plus the reac
 - **Typeclass Hooks:** `Character.at_attacked`, `Character/Room/Object.at_pre_move`/`at_post_move` — wired in `typeclasses/` to call `emit_event`. The `trigger_handler` cached property is installed via `ObjectParent` mixin. EXAMINE_PRE/EXAMINED are the one exception — they emit from the action layer (`actions.definitions.examine_extras.gather_examine_extras`, the `LookAction` seam), not a typeclass hook; see ADR-0213.
 - **Object States:** `BaseState`, `CharacterState`, `RoomState`, `ExitState` — ephemeral wrappers with permission methods (`can_move`, `can_traverse`) and appearance rendering
 - **Service Functions:** `send_message(recipient, text, caller=None, target=None, mapping=None, echo_of=None)`, `message_location(caller, text, target=None, mapping=None, location_state=None, echo_of=None)`, `send_room_state`, `move_object`, `check_exit_traversal`, `traverse_exit`, `get_formatted_description`, `show_inventory` — accept `BaseState` directly (no `FlowExecution` dependency). `echo_of` is an `InteractionMode` set by a caller that also records the line as an Interaction (#3933, ADR-0306): the frame then carries `{"type": <mode>, "interaction_echo": True}` so telnet prints the text and the web client drops the duplicate note. A place-scoped pose or emit passes `None`, because its Interaction is receiver-scoped to the Place while the room line is not.
-- **Where events are emitted:** `world/combat/services.py` (damage/attack/incap/death), `world/conditions/services.py` (apply/stage-change/remove), `world/magic/services.py` (technique pre-cast/cast/affected), and the typeclass move/examine hooks
+- **Where events are emitted:** `world/combat/services/` (damage/attack/incap/death), `world/conditions/services.py` (apply/stage-change/remove), `world/magic/services.py` (technique pre-cast/cast/affected), and the typeclass move/examine hooks
 - **Critical Note:** `FlowDefinition`/`FlowStepDefinition`/`TriggerDefinition` are content-exportable via `NaturalKeyMixin` + `CONTENT_MODELS` (#2663), so the lore repo can author the trigger→flow→step wiring that `ConditionTemplate.reactive_triggers` references. The `ensure_*` palette seeds in `world/magic/effect_palette_content.py` remain test/E2E fixtures only; real content ships as lore-repo fixtures. Flow step parameters use name-based lookups (e.g. `threat_pool_name`) rather than raw PKs so they are identity-stable across environments.
 - **Authoring API (#3417):** `flows.catalog` (`STEP_ACTION_SPECS`, `event_catalog()`, `service_function_catalog()`, `FILTER_OPS`) is the hand-declared single source of truth for the step-parameter schemas that only exist implicitly in handler bodies; `flows.step_validation.validate_step_tree` (no DRF import) enforces it against an authored step tree. DRF CRUD mounted at `api/flows/` (`catalog/`, `flows/`, `trigger-definitions/`, `triggers/`) via `FlowDefinitionViewSet`/`TriggerDefinitionViewSet`/`TriggerViewSet`/`DslCatalogViewSet`; reads are `IsGMOrStaff`, writes `IsAdminUser` (staff-only v1). `FlowDefinitionWriteSerializer.steps` does a full-tree replace keyed on author-chosen `client_id`/`parent_client_id` (not DB pks); zero-step drafts and exactly-one-root are the only shape rules. `FlowDefinitionDetailSerializer.interactions` (`flows.interactions.flow_interactions`) cross-references what runs a flow, what it emits and who listens, and what it calls. Staff wire `ConditionTemplate.reactive_triggers` via `PATCH api/conditions/templates/{id}/set_reactive_triggers/`. Frontend: `/staff/flows-builder`. Zero new models. Details: [flows.md](flows.md#authoring-api-3417).
 - **Source:** `src/flows/`

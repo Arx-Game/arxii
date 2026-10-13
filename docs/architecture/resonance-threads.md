@@ -1112,7 +1112,7 @@ matters, which drives action choice. So the pull declaration is a
    `VITAL_BONUS` rows route per §5.8 (max-health recompute,
    damage-pre-apply subscriber) and remain in effect until expiry.
 4. **Round advance.** When `start_next_round(encounter)`
-   (`world/combat/services.py:248`) increments `encounter.round_number`,
+   (`world/combat/services/`) increments `encounter.round_number`,
    it also calls `expire_pulls_for_round(encounter)` (§7.4) which
    deletes every `CombatPull` row with `round_number < new round_number`
    for the encounter. The cascading delete drops the
@@ -2096,7 +2096,7 @@ Service functions to add in `world/magic/services.py`:
   reduces incoming damage by the sum (clamped at 0). Cache hit on every
   call after the first per scene.
 - `expire_pulls_for_round(encounter)` — called from
-  `world/combat/services.py:248` (`start_next_round`) immediately after
+  `world/combat/services/` (`start_next_round`) immediately after
   `enc.round_number += 1`. Deletes every `CombatPull` row in the encounter
   with `round_number < enc.round_number` (cascading-deletes the
   resolved-effect children). Then for each affected participant, calls

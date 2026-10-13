@@ -149,7 +149,7 @@ never used the modifier seam at all. #750 closes that consumer-side gap:
 - **Every participant combat check derives its perceiving society from scene
   context** — offense, penetration, flee, and environmental checks pass
   `scene=encounter.scene`; the clash contribution passes `scene=clash.encounter.scene`
-  (`world/combat/services.py`, `world/combat/clash.py`). No signature/plumbing
+  (`world/combat/services/`, `world/combat/clash.py`). No signature/plumbing
   changes — each site reads the scene from its in-scope encounter/clash.
 - **Defense now joins the seam (the headline).** `resolve_npc_attack` previously
   rolled the defender's check with **zero modifiers**; it now routes through

@@ -158,7 +158,7 @@ needed. Example: `Character.at_attacked(attacker, weapon, result)` emits
 casting, condition application). The service function calls
 `emit_event(event_name, payload, personal_target=..., room=...)`.
 
-Combat already owns the attack pipeline in `world/combat/services.py`. The
+Combat already owns the attack pipeline in `world/combat/services/`. The
 reactive layer adds hook calls inside combat's existing resolution — it
 does not duplicate damage/attack logic. Specifically:
 
@@ -551,7 +551,7 @@ All tests use FactoryBoy — no fixture data required. Tests live in
 - AE attacks produce N parallel FlowStacks (one per PERSONAL target) plus
   one ROOM FlowStack; depth cap applies per-stack.
 - Combat arithmetic is NOT duplicated in the reactive layer — all damage
-  flows through existing `world/combat/services.py` service functions.
+  flows through existing `world/combat/services/` service functions.
 - PRE-event cancellation at ROOM scope prevents per-target PRE events
   from firing.
 - Player prompts suspend via in-memory Deferreds; no `FlowExecution` DB

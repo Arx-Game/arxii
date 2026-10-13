@@ -40,7 +40,7 @@ surfaces**, each grown independently:
 3. **`world/scenes/action_availability.get_available_scene_actions`** — a third
    availability path, DB-driven via `ActionTemplate.objects.filter(category="social")`.
 4. **Combat** — entirely bespoke: `declare_action` service
-   (`src/world/combat/services.py:757`), ~~`DeclareActionSerializer`~~
+   (`src/world/combat/services/`), ~~`DeclareActionSerializer`~~
    (retired in #987 — see below), `resolve_round` view
    (`src/world/combat/views.py:140`).
 
@@ -49,8 +49,8 @@ surfaces**, each grown independently:
 - **#1 — magic-in-combat sever.** `resolve_round` view calls
   `services.resolve_round(encounter)` with **no kwargs**
   (`src/world/combat/views.py:149`). The service signature defaults
-  `offense_check_type=None` (`src/world/combat/services.py:1977`).
-  `_resolve_pc_action` (`src/world/combat/services.py:1720`) only calls
+  `offense_check_type=None` (`src/world/combat/services/`).
+  `_resolve_pc_action` (`src/world/combat/services/`) only calls
   `resolve_combat_technique` when `offense_check_type is not None`
   (the guard at `:1764-1773`); otherwise it **silently skips technique
   resolution** and applies only fatigue. Through the real API every declared
@@ -287,7 +287,7 @@ them costs a round is pre-existing combat-design, not this interface's concern.
 
 ## 5. The #1 Fix (Concrete)
 
-- In `_resolve_pc_action` (`src/world/combat/services.py:1764`),
+- In `_resolve_pc_action` (`src/world/combat/services/`),
   `offense_check_type` is derived from
   `action.focused_action.action_template.check_type` — not received as `None`.
   (Superseded 2026-07-06, #2014, ADR-0096: now derived from
@@ -451,9 +451,9 @@ correct seam differs by family; "use `action.run()`" is *not* the universal answ
 | `ChallengeApproach` (`application`, `check_type`, `action_template`) | `src/world/mechanics/models.py:784-834` |
 | `ChallengeInstance` | `src/world/mechanics/models.py:984-1015` |
 | `resolve_challenge` | `src/world/mechanics/challenge_resolution.py:46-51` |
-| `declare_action` | `src/world/combat/services.py:757` |
-| `resolve_round` service / `_resolve_pc_action` gate | `src/world/combat/services.py:1977`, `:1720`, `:1764-1773` |
-| `resolve_combat_technique` | `src/world/combat/services.py:431-483` |
+| `declare_action` | `src/world/combat/services/` |
+| `resolve_round` service / `_resolve_pc_action` gate | `src/world/combat/services/`, `:1720`, `:1764-1773` |
+| `resolve_combat_technique` | `src/world/combat/services/` |
 | `resolve_round` view / hardcoded `focused_ally_target` | `src/world/combat/views.py:140-149`, `:290` (hardcoded `None` removed in #987) |
 | ~~`DeclareActionSerializer`~~ (retired in #987) | ~~`src/world/combat/serializers.py:355-386`~~ — deleted |
 | `dispatch_player_action` → `CombatRoundContext.record_declaration` → `_record_combat_declaration` (sole declaration authority) [BUILT & WIRED] | `src/actions/dispatch.py`, `src/world/combat/round_context.py` |

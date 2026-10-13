@@ -155,7 +155,7 @@ below) and lands on one of three outcomes:
 Two seams call it, one per scale, each after its own aftermath handling and before
 cleanup:
 
-- **Encounter scale**: `_resolve_companion_defeats` (`world/combat/services.py`),
+- **Encounter scale**: `_resolve_companion_defeats` (`world/combat/services/`),
   called from `complete_encounter` right after `_apply_opponent_aftermath_pools`,
   inside the `outcome != ABANDONED` branch (a GM closing a scene administratively does
   not kill anyone's companion) and before `cleanup_completed_encounter` (the `die`

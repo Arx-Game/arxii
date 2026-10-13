@@ -249,7 +249,7 @@ outcome clause into the combat outcome line; `render_cast_outcome_narration`
 | `get_modifier_breakdown` | `world/mechanics/services.py` |
 | `get_condition_modifier_breakdown` | `world/conditions/services.py` |
 | `get_penetration_factor`, `PenetrationOutcomeFactor` | `world/conditions/services.py`, `world/conditions/models.py` |
-| `CombatTechniqueResolver` (`__call__`, `_apply_penetration`) | `world/combat/services.py` |
+| `CombatTechniqueResolver` (`__call__`, `_apply_penetration`) | `world/combat/services/` |
 | `power_outcome_clause`, `_penetration_clause`, `_environment_clause`, `render_cast_outcome_narration` | `world/magic/narration.py` |
 | `render_action_outcome_narration` | `world/combat/interaction_services.py` |
 | `evaluate_resonance_environment` | `world/magic/services/resonance_environment.py` |

@@ -784,7 +784,7 @@ Lives on `world/conditions/models.py:ConditionCategory`.
 | `validate_cast_target(*, technique, initiator_persona, target_personas)` | Raises `InvalidCastTarget` on cardinality or relationship violations |
 | `resolve_targets(*, technique, initiator_persona, scene, supplied_personas) -> list[Persona]` | Expands target_type to concrete personas: SELF→caster; SINGLE→one; AREA→all eligible in scene; FILTERED_GROUP→supplied ∩ eligible |
 | `protective_condition_and_flavor(technique) -> tuple[ConditionTemplate, str] \| None` (#2207) | Classifies a technique's reactive-trigger handler into `barrier`/`blink`/`redirect` by walking `condition_applications → condition.reactive_triggers → flow_definition.steps` (one batched Prefetch query); returns the matched `ConditionTemplate` too, since combat's guardian resolution needs its `reactive_anima_cost`. No new authored field — derives from the existing effect-palette data. |
-| `protective_flavor(technique) -> str \| None` (#2207) | Thin wrapper over `protective_condition_and_flavor` returning only the flavor string; used by `declare_interpose`'s declaration-time gate (combat, `world/combat/services.py`) |
+| `protective_flavor(technique) -> str \| None` (#2207) | Thin wrapper over `protective_condition_and_flavor` returning only the flavor string; used by `declare_interpose`'s declaration-time gate (combat, `world/combat/services/`) |
 
 **`PlayerAction.reactive_anima_cost` / `CastableTechniqueSerializer.reactive_anima_cost`** (#3573)
 both carry the protective condition's flat fee (`ConditionTemplate.reactive_anima_cost`), resolved
@@ -1119,7 +1119,7 @@ and DB `CheckConstraint("thread_signature_bonus_technique_only")`. Migrations: 0
 |----------|---------|
 | `signature_intensity_delta(character, technique) -> int` | Returns `bonus.flat_intensity_delta` or 0; added to `use_technique(power_intensity_bonus=…)` on both cast paths |
 | `apply_signature_bonus_conditions(*, character, technique, success_level, eff_intensity, targets_by_kind, source_character)` | Applies `bonus.cached_condition_applications` through the SHARED `apply_technique_conditions` seam (`applied_condition_rows=` param) — NO parallel apply path |
-| `signature_damage_profiles(character, technique) -> list` | (#1728) Returns `bonus.cached_damage_profiles` or `[]`; `CombatTechniqueResolver._apply_damage` (`world/combat/services.py`) appends these to the technique's own profiles before resolving damage |
+| `signature_damage_profiles(character, technique) -> list` | (#1728) Returns `bonus.cached_damage_profiles` or `[]`; `CombatTechniqueResolver._apply_damage` (`world/combat/services/`) appends these to the technique's own profiles before resolving damage |
 | `resolve_signature_snippet(character, technique) -> str \| None` | (#1728) Resolves the cosmetic clause — prefers `bonus.narrative_snippet`, falls back to the first Motif facet name; shared by the non-combat cast pose and the combat OUTCOME narration |
 
 `apply_technique_conditions` gained an optional `applied_condition_rows` param (default
@@ -1135,7 +1135,7 @@ cosmetic em-dash clause from the bonus's `narrative_snippet`. Used in
 param. (#1728) Combat-path cosmetic narration now shares the same snippet resolution via
 `resolve_signature_snippet` (`services/signature_effects.py`), surfaced in
 `render_action_outcome_narration` + `_record_and_broadcast_pc_action`
-(`world/combat/services.py`).
+(`world/combat/services/`).
 
 **Web surface (#1728)** (`views_signature.py`): `SignatureViewSet` dispatches
 `SignatureListAction` / `SignatureSetAction` / `SignatureClearAction` through the shared
@@ -2667,7 +2667,7 @@ technique is a limited form, a high-tier option on an ultimate is the full arriv
 | `CharacterManifestation` (`models/manifestation.py`) | [BUILT & WIRED] | Per-character choice: `character` (`CharacterSheet`), `technique`, `option`, nullable `companion` (for an archetype option, the character's own `Companion`). Unique per (character, technique). Keyed by (character, technique) rather than hung on `CharacterTechnique` because an ultimate has no `CharacterTechnique` row. Set by GM or staff in the admin (`CharacterManifestationAdmin`). |
 | `CharacterManifestation.bond_is_active()` | [BUILT & WIRED] | A being option holds while `active_patronage_for(character)` includes that being. An archetype option holds while the companion is the character's own, matches the archetype, and has no `released_at`. |
 | `CharacterManifestation.clean()` | [BUILT & WIRED] | The option must belong to the technique; a being option takes no companion; an archetype option needs one; the bond must be active. |
-| `manifest_bound_entity(participant, technique)` (`services/effect_handlers.py`) | [BUILT & WIRED] | Called from `CombatTechniqueResolver` (`world/combat/services.py`) after conditions apply, on a successful, unbounced cast only (check `success_level >= 1`; a failed roll or a ward bounce manifests nothing). Returns the new ally `CombatOpponent` or None. |
+| `manifest_bound_entity(participant, technique)` (`services/effect_handlers.py`) | [BUILT & WIRED] | Called from `CombatTechniqueResolver` (`world/combat/services/`) after conditions apply, on a successful, unbounced cast only (check `success_level >= 1`; a failed roll or a ward bounce manifests nothing). Returns the new ally `CombatOpponent` or None. |
 
 `manifest_bound_entity` returns None (manifests nothing) when the caster is no longer
 ACTIVE in the fight or has no location, has no `CharacterManifestation` for the technique
@@ -3143,7 +3143,7 @@ value is now only ever a fallback — for **combat**, the player picks a real po
 declaration time. `CombatRoundAction` carries three nullable FKs to `areas.Position`:
 `cast_destination` (Phase Jump / Force Grip — single point) and `cast_position_a`/
 `cast_position_b` (Barricade — an endpoint pair). `resolve_cast_position_params`
-(`world/combat/services.py`) validates the declared position(s) against the encounter's
+(`world/combat/services/`) validates the declared position(s) against the encounter's
 own battlefield room and the technique's `reach`/`reach_hops` at declaration; a foreign-room
 position or a half-supplied pair is rejected outright. `position_target_shape(technique)`
 (`services/targeting.py`) classifies which shape (`pair`/`single`/`none`) a technique's

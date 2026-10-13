@@ -180,7 +180,7 @@ it too (`_graded_scene_difficulty`, passing the defender's increment, which keep
 resist-effort development award and fatigue at the scene call sites; relationship-gated
 Allure stays at scenes' check-modifier time, `perceiver_sheet` is not passed there, and
 combat and standoffs do not apply it yet). Combat's
-`_social_combat_difficulty` (`world/combat/services.py`, backing Demoralize/Taunt/Parley)
+`_social_combat_difficulty` (`world/combat/services/`, backing Demoralize/Taunt/Parley)
 and the standoff verbs call it with `level_override`, because a `CombatOpponent`'s authored
 `level` isn't reachable through its `objectdb`'s class-level rows (an ephemeral NPC has
 none). Without the override, a boss's morale defense always floored at level 1 even though

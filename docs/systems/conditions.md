@@ -157,7 +157,7 @@ have a specific reason not to.
 | Value | When it fires | Notes |
 |-------|---------------|-------|
 | `END_OF_ROUND` | After the round's actions resolve (`status == RESOLVING` in combat; the only tick scene rounds fire) | **Default.** Shieldable by Succor/Interpose; ticks in both combat and non-combat scene rounds. |
-| `START_OF_ROUND` | Top of the round, during `DECLARING`, *before any action resolves* | Deliberate "unpreventable top-of-round damage" opt-in. **Intentionally un-shieldable** by Succor/Interpose (no ally has acted yet). **Inert in non-combat scene rounds** — the scene-round lifecycle only ever ticks `timing="end"` (`scenes/round_services.py`); no `timing="start"` path exists outside `combat/services.py:begin_declaration_phase`. A hazard that needs to actually damage in scene rounds would have to build that scene-round START tick first. |
+| `START_OF_ROUND` | Top of the round, during `DECLARING`, *before any action resolves* | Deliberate "unpreventable top-of-round damage" opt-in. **Intentionally un-shieldable** by Succor/Interpose (no ally has acted yet). **Inert in non-combat scene rounds** — the scene-round lifecycle only ever ticks `timing="end"` (`scenes/round_services.py`); no `timing="start"` path exists outside `combat/services/:begin_declaration_phase`. A hazard that needs to actually damage in scene rounds would have to build that scene-round START tick first. |
 | `ON_ACTION` | When the bearer takes an action (`process_action_tick`) | — |
 
 Choosing `START_OF_ROUND` is guarded: `world/conditions/tests/test_tick_timing_guard.py`

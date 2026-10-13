@@ -270,7 +270,7 @@ outcome** (a closed issue or a "SHIPPED" line is not proof). See the ledger's go
   normal declared hostile cast, additionally stamping `CombatRoundAction.from_entrance`
   so round resolution can fire the GM-facing Dramatic Moment Suggestion check once the
   real success level is known (`_maybe_suggest_entrance_dramatic_moment`,
-  `world/combat/services.py`; journey test:
+  `world/combat/services/`; journey test:
   `world/scenes/tests/test_entrance_cast_threading.py`
   ::`test_accepted_hostile_entrance_declaration_marked_from_entrance`). A *benign*
   entrance cast that lands on an already-embattled ally seats the caster into the fight

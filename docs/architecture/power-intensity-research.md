@@ -35,7 +35,7 @@ There are **two independent functions** producing "effective intensity," at diff
 
 This is the **only** place `CharacterModifier` intensity/control bonuses and `IntensityTier` penalties are applied. It feeds `calculate_effective_anima_cost` via the control-delta formula (`effective_cost = max(base_cost − (runtime_control − runtime_intensity), 0)`, `:211-238`), mishap-pool selection (`control_deficit = intensity − control`), per-resonance corruption attribution, and the `TECHNIQUE_PRE_CAST`/`TECHNIQUE_CAST` event payloads.
 
-**`compute_effective_intensity(participant, action)`** — `world/combat/services.py:332-358` (verified). Returns `int`. Reads `technique.intensity` as base and adds only `INTENSITY_BUMP` `scaled_value`s from active `CombatPull` rows. **Does not** consult `CharacterModifier`, `IntensityTier`, `CharacterEngagement`, or social safety. Feeds `compute_damage_budget`, `compute_severity`, `compute_duration_rounds` in `CombatTechniqueResolver`.
+**`compute_effective_intensity(participant, action)`** — `world/combat/services/` (verified). Returns `int`. Reads `technique.intensity` as base and adds only `INTENSITY_BUMP` `scaled_value`s from active `CombatPull` rows. **Does not** consult `CharacterModifier`, `IntensityTier`, `CharacterEngagement`, or social safety. Feeds `compute_damage_budget`, `compute_severity`, `compute_duration_rounds` in `CombatTechniqueResolver`.
 
 The combat function's own docstring (`:342-345`) advertises "Future hooks (additive, no signature change required): Condition-derived… Item-derived… Environmental modifiers" — i.e., it is *intended* as the extension point for world-side scaling, but it is narrower than the magic path and silently ignores identity bonuses.
 
@@ -80,7 +80,7 @@ The single most important invariant the user stated: **a ward reduces power, not
 - `TECHNIQUE_PRE_CAST` / `TECHNIQUE_CAST` payloads (audit/reactive signal)
 
 **World-side (should read POWER, the modifiable value):**
-- `compute_damage_budget(effective_intensity, success_level)` (`combat/services.py:206`)
+- `compute_damage_budget(effective_intensity, success_level)` (`combat/services/`)
 - `compute_severity` / `compute_duration_rounds` for applied conditions (`:251-265`)
 - `TechniqueCapabilityGrant` value formula (`base + intensity_mult × intensity`)
 - clash gating via `compute_effective_intensity` (`clash.py:1176`)
@@ -179,7 +179,7 @@ Four distinct architectures. **No winner is selected.** Each is evaluated on: me
 
 **How it works.** Take the combat function at its own word (its docstring already promises additive world-side hooks) and grow it into `compute_effective_power(caster, technique, action, environment)`: base intensity + combat-pull bumps + power-scoped `CharacterModifier` totals + pre-cast amp/ward deltas + environment. Rename to reflect that it returns *power*. The magic envelope's `get_runtime_technique_stats` keeps owning intensity/control (caster-side), and resolution calls the new function for the world-side number. Soulfray/mishap/cost stay on `get_runtime_technique_stats.intensity`.
 
-**Modifier-system reuse.** Medium. The function would call `get_modifier_total` for power-scoped targets and reuse scoping FKs — but it currently lives in `combat/services.py` and is combat-shaped (takes `CombatParticipant`/`CombatRoundAction`). Generalizing it to non-combat casts (social, scene actions, environment-only) means broadening the signature away from combat types.
+**Modifier-system reuse.** Medium. The function would call `get_modifier_total` for power-scoped targets and reuse scoping FKs — but it currently lives in `combat/services/` and is combat-shaped (takes `CombatParticipant`/`CombatRoundAction`). Generalizing it to non-combat casts (social, scene actions, environment-only) means broadening the signature away from combat types.
 
 **Use-case coverage.** Combat intensity ramp: native (it already sums pulls). Damage/severity/capability already call it. Persistent/element buffs and amps: add via modifier totals. Pre-cast ward: a negative term. Spell-tier scaling: a `f(technique.level)` term. The non-combat magic paths would need it wired in (they currently use intensity directly for cost only and don't scale world-side magnitude outside combat).
 
@@ -252,4 +252,4 @@ This sequence lets the cheap, high-value wins (read-back wire, formula unificati
 
 ---
 
-*Relevant code anchors for the design conversation: `src/world/magic/services/techniques.py:156-238` (runtime stats + anima cost), `src/world/combat/services.py:332-358` (compute_effective_intensity), `src/world/mechanics/models.py:120-158` (ModifierTarget scoping FKs — including the present `target_damage_type`), `src/world/mechanics/constants.py:9-16,82-90` (category names + equipment-relevant set), `src/flows/models/flows.py:541-554` (MODIFY_PAYLOAD ops).*
+*Relevant code anchors for the design conversation: `src/world/magic/services/techniques.py:156-238` (runtime stats + anima cost), `src/world/combat/services/` (compute_effective_intensity), `src/world/mechanics/models.py:120-158` (ModifierTarget scoping FKs — including the present `target_damage_type`), `src/world/mechanics/constants.py:9-16,82-90` (category names + equipment-relevant set), `src/flows/models/flows.py:541-554` (MODIFY_PAYLOAD ops).*
