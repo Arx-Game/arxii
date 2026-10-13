@@ -7,12 +7,14 @@
 # #4329 removes that, so text still held only there would vanish from every view with
 # this release. It is copied, never over a description already set, and the Attribute
 # is left in place. Characters are skipped: a character's description is its sheet's,
-# and a permanent_description would mask it. Evennia's install welcome on Limbo is not
-# authored and is skipped too.
+# and a permanent_description would mask it. Evennia's install text is not authored and
+# is skipped too: Limbo's welcome, and "This is User #1." on the superuser's character,
+# which can outlive its sheet.
 
 from django.db import migrations
 
 STOCK_LIMBO_OPENING = "Welcome to your new |wEvennia|n-based game!"
+STOCK_SUPERUSER_DESC = "This is User #1."
 
 _MARKUP = {"r": "\n", "R": "\n", "t": "\t", "T": "\t", "b": "\N{NO-BREAK SPACE}", "%": "%"}
 _MARKUP["B"] = _MARKUP["b"]
@@ -51,7 +53,9 @@ def carry_desc_attribute_text(apps, schema_editor):
             continue
         attribute = obj.db_attributes.filter(db_key="desc", db_category__isnull=True).first()
         text = attribute.db_value if attribute is not None else None
-        if not isinstance(text, str) or not text.strip() or text.startswith(STOCK_LIMBO_OPENING):
+        if not isinstance(text, str) or not text.strip():
+            continue
+        if text.startswith(STOCK_LIMBO_OPENING) or text.strip() == STOCK_SUPERUSER_DESC:
             continue
         display, _ = ObjectDisplayData.objects.get_or_create(object=obj)
         if display.permanent_description:
