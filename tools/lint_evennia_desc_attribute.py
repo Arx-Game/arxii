@@ -93,12 +93,13 @@ def main(argv: list[str]) -> int:
             failed = True
             print(
                 f"{filename}:{lineno}:{col + 1}: uses Evennia's `desc` Attribute, which "
-                "nothing renders (#4329). An object's description is "
+                "nothing renders (#4329). A room's, object's or exit's description is "
                 "ObjectDisplayData.permanent_description: write it with "
                 "evennia_extensions.services.display.set_permanent_description and read it "
                 "with item_data.get_display_description(). A character's is its sheet's "
-                "(world.character_sheets.services.set_physical_description). Suppress only "
-                "with `# noqa: EVENNIA_DESC <reason>`."
+                "(world.character_sheets.services.set_physical_description); an item's is "
+                "its ItemInstance's custom_description. Suppress only with "
+                "`# noqa: EVENNIA_DESC <reason>`."
             )
     return 1 if failed else 0
 
