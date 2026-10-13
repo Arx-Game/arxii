@@ -17,6 +17,7 @@ from django.utils import timezone
 from django.utils.text import slugify
 
 from evennia_extensions.models import RoomProfile, RoomSizeTier
+from evennia_extensions.services.display import set_permanent_description
 from world.areas.constants import GridOrigin
 
 if TYPE_CHECKING:
@@ -40,17 +41,6 @@ class GridServiceError(Exception):
     def __init__(self, user_message: str) -> None:
         super().__init__(user_message)
         self.user_message = user_message
-
-
-def _set_room_description(room: DefaultObject, description: str) -> None:
-    from evennia_extensions.models import ObjectDisplayData  # noqa: PLC0415
-    from server.conf.mush_markup import normalize_mush_markup  # noqa: PLC0415
-
-    display, _ = ObjectDisplayData.objects.get_or_create(object=room)
-    # %r/%t normalization (#3269) — web-authored prose gets the same linebreak
-    # convention telnet input already applies.
-    display.permanent_description = normalize_mush_markup(description)
-    display.save()
 
 
 def create_room(  # noqa: PLR0913 — mirrors dig_room's full room-creation surface
@@ -103,7 +93,7 @@ def create_room(  # noqa: PLR0913 — mirrors dig_room's full room-creation surf
             "published_at": None if origin == GridOrigin.AUTHORED else timezone.now(),
         },
     )
-    _set_room_description(room, description)
+    set_permanent_description(room, description)
     return profile
 
 

@@ -75,7 +75,7 @@ from commands.duels import CmdDuel
 from commands.durance import CmdDurance
 from commands.encounter import CmdEncounter
 from commands.endorse import CmdEndorse, CmdPoses
-from commands.evennia_overrides.builder import CmdDig, CmdLink, CmdOpen, CmdUnlink
+from commands.evennia_overrides.builder import CmdDesc, CmdDig, CmdLink, CmdOpen, CmdUnlink
 from commands.evennia_overrides.communication import (
     CmdEmit,
     CmdMutter,
@@ -227,6 +227,8 @@ class CharacterCmdSet(default_cmds.CharacterCmdSet):
             "open",
             "link",
             "unlink",
+            # #4329: Evennia's desc writes the desc Attribute, which nothing renders.
+            "desc",
         ):
             self.remove(cmdname)
 
@@ -331,6 +333,7 @@ class CharacterCmdSet(default_cmds.CharacterCmdSet):
             CmdOpen,
             CmdLink,
             CmdUnlink,
+            CmdDesc,
             # #1278 — block/mute social controls (the telnet face of the persona menu).
             CmdBlock,
             CmdUnblock,
