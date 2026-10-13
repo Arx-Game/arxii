@@ -29,7 +29,7 @@ from django.utils.functional import cached_property
 from evennia.accounts.accounts import DefaultAccount, DefaultGuest
 from evennia.utils.utils import make_iter
 
-from commands.utils import serialize_cmdset
+from commands.utils import commands_frame
 from core.descriptors import ReverseOneToOneOrNone
 from core.wire_options import LifecycleEvent, TextFrameType
 from evennia_extensions.account_setup import heal_account_setup
@@ -622,9 +622,9 @@ class Account(DefaultAccount):
             session.msg(logged_in={})
         self._send_to_connect_channel(f"|G{self.key} connected|n")
 
-        payload = serialize_cmdset(self)
+        frame = commands_frame(self)
         for sess in self.sessions.all():
-            sess.msg(commands=(payload, {}))
+            sess.msg(commands=frame)
         if session is None:
             return
 

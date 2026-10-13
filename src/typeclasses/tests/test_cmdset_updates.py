@@ -11,6 +11,9 @@ from evennia_extensions.factories import (
 )
 from world.roster.models import Roster, RosterEntry, RosterType
 
+# A whole `commands` frame: the web-form descriptors, and every name the character can type.
+FRAME = (["cmd"], {"names": ["cmd"]})
+
 
 class CommandUpdateTests(TestCase):
     def test_at_post_login_sends_commands(self):
@@ -18,10 +21,10 @@ class CommandUpdateTests(TestCase):
         account = AccountFactory(typeclass="typeclasses.accounts.Account")
         account.sessions.all = MagicMock(return_value=[session])
         account.get_available_characters = MagicMock(return_value=[])
-        with patch("typeclasses.accounts.serialize_cmdset", return_value=["cmd"]):
+        with patch("typeclasses.accounts.commands_frame", return_value=FRAME):
             with patch("typeclasses.accounts.DefaultAccount.at_post_login"):
                 account.at_post_login(session=session)
-        session.msg.assert_any_call(commands=(["cmd"], {}))
+        session.msg.assert_any_call(commands=FRAME)
 
     def test_at_post_login_characterless_message_points_to_web(self):
         """#2122 — the no-characters login message signposts the web app."""
@@ -29,7 +32,7 @@ class CommandUpdateTests(TestCase):
         account = AccountFactory(typeclass="typeclasses.accounts.Account")
         account.sessions.all = MagicMock(return_value=[session])
         account.get_available_characters = MagicMock(return_value=[])
-        with patch("typeclasses.accounts.serialize_cmdset", return_value=["cmd"]):
+        with patch("typeclasses.accounts.commands_frame", return_value=FRAME):
             with patch("typeclasses.accounts.DefaultAccount.at_post_login"):
                 account.at_post_login(session=session)
 
@@ -57,11 +60,11 @@ class CommandUpdateTests(TestCase):
         account.sessions.all = MagicMock(return_value=[session])
         account.get_available_characters = MagicMock(return_value=[])
 
-        with patch("typeclasses.accounts.serialize_cmdset", return_value=["cmd"]):
+        with patch("typeclasses.accounts.commands_frame", return_value=FRAME):
             with patch("typeclasses.accounts.DefaultAccount.at_post_login"):
                 account.at_post_login(session=session)
 
-        session.msg.assert_any_call(commands=(["cmd"], {}))
+        session.msg.assert_any_call(commands=FRAME)
 
     def test_at_post_login_leaves_portal_side_autologin_to_evennia(self):
         """Never call the Portal's ``at_login()`` from this Server-side hook.
@@ -80,7 +83,7 @@ class CommandUpdateTests(TestCase):
         account.sessions.all = MagicMock(return_value=[session])
         account.get_available_characters = MagicMock(return_value=[])
 
-        with patch("typeclasses.accounts.serialize_cmdset", return_value=["cmd"]):
+        with patch("typeclasses.accounts.commands_frame", return_value=FRAME):
             with patch("typeclasses.accounts.DefaultAccount.at_post_login"):
                 account.at_post_login(session=session)
 
@@ -92,11 +95,11 @@ class CommandUpdateTests(TestCase):
         char = ObjectDBFactory(db_typeclass_path="typeclasses.characters.Character")
         char.sessions.all = MagicMock(return_value=[session1, session2])
         char.send_room_state = MagicMock()
-        with patch("typeclasses.characters.serialize_cmdset", return_value=["cmd"]):
+        with patch("typeclasses.characters.commands_frame", return_value=FRAME):
             with patch("typeclasses.characters.DefaultCharacter.at_post_puppet"):
                 char.at_post_puppet()
-        session1.msg.assert_called_with(commands=(["cmd"], {}))
-        session2.msg.assert_called_with(commands=(["cmd"], {}))
+        session1.msg.assert_called_with(commands=FRAME)
+        session2.msg.assert_called_with(commands=FRAME)
         # The newest session (last in sessions.all()) is the one that just
         # joined; only it gets the room state (#3812).
         char.send_room_state.assert_called_once_with(session=session2)
@@ -118,7 +121,7 @@ class CommandUpdateTests(TestCase):
         entry = RosterEntry.objects.create(character_sheet=sheet, roster=roster)
         now = timezone.now()
         with (
-            patch("typeclasses.characters.serialize_cmdset", return_value=["cmd"]),
+            patch("typeclasses.characters.commands_frame", return_value=FRAME),
             patch("typeclasses.characters.timezone.now", return_value=now),
         ):
             char.at_post_puppet()

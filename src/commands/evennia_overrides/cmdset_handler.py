@@ -5,7 +5,7 @@ from typing import Any
 from evennia.commands.cmdsethandler import CmdSetHandler as EvenniaCmdSetHandler
 from twisted.internet import reactor
 
-from commands.utils import serialize_cmdset
+from commands.utils import commands_frame
 
 
 class CmdSetHandler(EvenniaCmdSetHandler):
@@ -18,9 +18,9 @@ class CmdSetHandler(EvenniaCmdSetHandler):
     def _send_update(self) -> None:
         """Send serialized commands to all sessions."""
         self._update_handle = None
-        payload = serialize_cmdset(self.obj)
+        frame = commands_frame(self.obj)
         for session in self.obj.sessions.all():
-            session.msg(commands=(payload, {}))
+            session.msg(commands=frame)
 
     def _schedule_update(self) -> None:
         """Debounce cmdset updates to only send once."""
