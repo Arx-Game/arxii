@@ -217,9 +217,18 @@ class BaseState:
 
     @cached_property
     def description(self) -> str:
-        # Use item_data instead of .db to get the description.
+        """The object's description, from ``ObjectDisplayData`` (#4329).
+
+        The one description store: the world builder, staff ``desc`` and the
+        sheet all write it, and the data handler's ``get_display_description()``
+        reads it (an event's temporary description first, then the permanent
+        one; a character's handler adds the sheet's ``additional_desc``). This
+        used to read ``item_data.desc``, which no handler has ever defined, so
+        every plain object and exit fell through to the fallback below.
+        Evennia's ``desc`` Attribute is never read.
+        """
         try:
-            return self.obj.item_data.desc or "You see nothing of note."
+            return self.obj.item_data.get_display_description() or "You see nothing of note."
         except AttributeError:
             return "You see nothing of note."
 
