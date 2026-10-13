@@ -227,8 +227,12 @@ class CharacterCmdSet(default_cmds.CharacterCmdSet):
             "open",
             "link",
             "unlink",
-            # #4329: Evennia's desc writes the desc Attribute, which nothing renders.
-            "desc",
+            # #4329: Evennia's desc and setdesc write the desc Attribute, which
+            # nothing renders. `remove` matches the key exactly, and Evennia keys
+            # desc as "@desc"; our CmdDesc replaces it below. setdesc (any player,
+            # their own character) goes: a character's description is its sheet's.
+            "@desc",
+            "setdesc",
         ):
             self.remove(cmdname)
 

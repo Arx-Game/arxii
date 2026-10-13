@@ -11,6 +11,8 @@ from django.test import TestCase
 from evennia_extensions.factories import ObjectDBFactory
 from evennia_extensions.models import ObjectDisplayData
 from flows.factories import SceneDataManagerFactory
+from world.items.factories import ItemInstanceFactory, ItemTemplateFactory
+from world.items.services.materialize import materialize_item_game_object_in_room
 
 
 class ObjectStateDescriptionTests(TestCase):
@@ -47,3 +49,34 @@ class ObjectStateDescriptionTests(TestCase):
     def test_look_appearance_carries_the_description(self):
         appearance = self._state(self.rock).return_appearance()
         assert "A rock worn smooth by the river." in appearance
+
+
+class ItemObjectDescriptionTests(TestCase):
+    """An item's game object describes itself from its ItemInstance (#4329).
+
+    ``look cup`` renders the cup's game object through ``BaseState``; the item's
+    text lives on the instance (``custom_description``, else the template's), the
+    same text ``look cup in bag`` already showed.
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.room = ObjectDBFactory(db_key="cuproom", db_typeclass_path="typeclasses.rooms.Room")
+        template = ItemTemplateFactory(name="Copper cup", description="A dented copper cup.")
+        cls.plain = ItemInstanceFactory(template=template)
+        cls.plain_object = materialize_item_game_object_in_room(cls.plain, cls.room)
+        cls.engraved = ItemInstanceFactory(
+            template=template, custom_description="A copper cup engraved with a heron."
+        )
+        cls.engraved_object = materialize_item_game_object_in_room(cls.engraved, cls.room)
+
+    def _state(self, obj):
+        return SceneDataManagerFactory().initialize_state_for_object(obj)
+
+    def test_item_reads_its_template_description(self):
+        assert self._state(self.plain_object).description == "A dented copper cup."
+
+    def test_a_custom_description_wins(self):
+        assert self._state(self.engraved_object).description == (
+            "A copper cup engraved with a heron."
+        )

@@ -18,6 +18,7 @@ from commands.frontend import FrontendMetadataMixin
 from commands.frontend_types import UsageEntry
 from evennia_extensions.models import ObjectDisplayData
 from evennia_extensions.services.display import set_permanent_description
+from server.conf.mush_markup import normalize_mush_markup
 from world.character_sheets.services import set_physical_description
 
 if TYPE_CHECKING:
@@ -32,22 +33,31 @@ def write_description(obj: ObjectDB, text: str, *, edited_by: AccountDB | None) 
     """Set ``obj``'s description in the store ``look`` reads for it (#4329).
 
     A character's is its sheet's physical description, written through the
-    versioned seam so the text it replaces stays in the sheet's history. Every
-    other object's is ``ObjectDisplayData.permanent_description``. Evennia's
-    ``desc`` Attribute, which the stock command wrote, is read by nothing.
+    versioned seam so the text it replaces stays in the sheet's history. An
+    item's is its instance's ``custom_description``, which overrides the
+    template's. Every other object's is ``ObjectDisplayData.permanent_description``.
+    Evennia's ``desc`` Attribute, which the stock command wrote, is read by nothing.
     """
     sheet = obj.character_sheet
     if sheet is not None:
         set_physical_description(sheet, text, edited_by=edited_by)
-    else:
-        set_permanent_description(obj, text)
+        return
+    instance = obj.item_instance_or_none
+    if instance is not None:
+        instance.custom_description = normalize_mush_markup(text)
+        instance.save(update_fields=["custom_description"])
+        return
+    set_permanent_description(obj, text)
 
 
 def read_description(obj: ObjectDB) -> str:
-    """The description ``write_description`` would replace, for the line editor."""
+    """The description ``look`` shows for ``obj``, for the line editor to start from."""
     sheet = obj.character_sheet
     if sheet is not None:
         return sheet.additional_desc or ""
+    instance = obj.item_instance_or_none
+    if instance is not None:
+        return instance.display_description
     display = ObjectDisplayData.objects.filter(object=obj).first()
     return display.permanent_description if display else ""
 

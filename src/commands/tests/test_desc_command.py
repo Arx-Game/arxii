@@ -19,6 +19,8 @@ from evennia_extensions.models import ObjectDisplayData
 from flows.factories import SceneDataManagerFactory
 from world.character_sheets.factories import CharacterSheetFactory
 from world.character_sheets.models import ProfileTextVersion
+from world.items.factories import ItemInstanceFactory, ItemTemplateFactory
+from world.items.services.materialize import materialize_item_game_object_in_room
 
 
 def _permanent_description(obj) -> str:
@@ -115,8 +117,42 @@ class DescCommandTests(TestCase):
         assert _permanent_description(self.rock) == "Edited in the line editor."
         assert _desc_load(self.staffer) == "Edited in the line editor."
 
+    def test_item_description_goes_to_its_instance(self):
+        template = ItemTemplateFactory(name="Desc cup", description="A dented copper cup.")
+        instance = ItemInstanceFactory(template=template)
+        cup = materialize_item_game_object_in_room(instance, self.room)
+
+        self._run(self.staffer, "Desc cup = A copper cup engraved%rwith a heron.")
+
+        instance.refresh_from_db()
+        assert instance.custom_description == "A copper cup engraved\nwith a heron."
+        state = SceneDataManagerFactory().initialize_state_for_object(cup)
+        assert state.description == "A copper cup engraved\nwith a heron."
+        assert _permanent_description(cup) == ""
+
+    def test_desc_edit_opens_the_line_editor_on_what_look_shows(self):
+        # A fresh staffer: the editor adds a persistent cmdset to its caller,
+        # which must not ride the identity map into other tests.
+        editor_staffer = CharacterFactory(db_key="DescEditor", location=self.room)
+        editor_staffer.db_account = self.staff_account
+        editor_staffer.save()
+        self._run(self.staffer, "DescRock = A rock worn smooth by the river.")
+
+        self._run(editor_staffer, "/edit DescRock")
+
+        editor = editor_staffer.ndb._eveditor
+        assert editor.get_buffer() == "A rock worn smooth by the river."
+        editor.update_buffer("A rock split down the middle.")
+        with patch.object(editor_staffer, "msg"):
+            editor.save_buffer()
+        assert _permanent_description(self.rock) == "A rock split down the middle."
+
     def test_character_cmdset_carries_this_desc(self):
         matches = [cmd for cmd in CharacterCmdSet().commands if cmd.key == "@desc"]
 
         assert len(matches) == 1
         assert isinstance(matches[0], CmdDesc)
+
+    def test_evennias_setdesc_is_gone(self):
+        """setdesc wrote the desc Attribute for any player; a character's text is the sheet's."""
+        assert [cmd for cmd in CharacterCmdSet().commands if cmd.key == "setdesc"] == []
