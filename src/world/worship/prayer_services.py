@@ -51,6 +51,7 @@ if TYPE_CHECKING:
     from world.character_sheets.models import CharacterSheet
     from world.clues.models import Clue
     from world.game_clock.models import GameWeek
+    from world.roster.models import RosterEntry
     from world.stories.models import Episode
 
 
@@ -205,6 +206,20 @@ def _vision_text(being: WorshippedBeing, body: str, *, reveal_source: bool) -> s
     return body
 
 
+def _hand_over_clue(clue: Clue, roster_entry: RosterEntry) -> None:
+    """Hold a vision's clue; an AUTOMATIC one also grants its target (#4327).
+
+    The same acquire-then-grant rule room search follows (``search_room``), so a clue
+    reaches a character the same way whichever surface surfaces it.
+    """
+    from world.clues.constants import ClueResolution  # noqa: PLC0415
+    from world.clues.services import acquire_clue, grant_clue_target  # noqa: PLC0415
+
+    acquire_clue(roster_entry, clue)
+    if clue.resolution_mode == ClueResolution.AUTOMATIC:
+        grant_clue_target(clue, roster_entry)
+
+
 def send_vision(  # noqa: PLR0913 - the attachments are keyword-only and each optional
     *,
     recipient: CharacterSheet,
@@ -221,11 +236,12 @@ def send_vision(  # noqa: PLR0913 - the attachments are keyword-only and each op
     Spends ``VISION_RESONANCE_POOL_COST`` from the being's pool (the same spend
     a miracle makes), delivers the prose as a VISIONS narrative message (live
     push when the recipient is online, login catch-up otherwise), and records
-    the ``Vision``. A Codex ``clue`` is handed to the recipient on the spot; an
-    ``episode`` links the vision to a story the recipient participates in.
+    the ``Vision``. A Codex ``clue`` is handed to the recipient on the spot: it is
+    always held, and an AUTOMATIC clue also grants its target (``grant_clue_target``,
+    as room search does, #4327). A RESEARCH clue is only held. An ``episode`` links
+    the vision to a story the recipient participates in.
     """
     from world.clues.constants import ClueTargetKind  # noqa: PLC0415
-    from world.clues.services import acquire_clue  # noqa: PLC0415
     from world.stories.models import StoryParticipation  # noqa: PLC0415
     from world.worship.services import spend_worship_pool  # noqa: PLC0415
 
@@ -269,7 +285,7 @@ def send_vision(  # noqa: PLR0913 - the attachments are keyword-only and each op
             resonance_spent=VISION_RESONANCE_POOL_COST,
         )
         if clue is not None and roster_entry is not None:
-            acquire_clue(roster_entry, clue)
+            _hand_over_clue(clue, roster_entry)
     message = send_narrative_message(
         recipients=[recipient],
         body=_vision_text(being, prose, reveal_source=reveal_source),
