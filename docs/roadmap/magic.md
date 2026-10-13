@@ -21,7 +21,7 @@ the one specialization engine, fall/redemption, Covenant of the Court.
 |-------|--------|-------|
 | Cast initiation — REST `POST /api/action-requests/cast/`, WebSocket, `ActionPanel` UI | ✅ wired | `world/scenes/cast_services.py:request_technique_cast`; `frontend/src/scenes/actionQueries.ts:castTechnique` |
 | Check resolution — anima, soulfray, mishap, corruption, environment | ✅ wired | `world/magic/services/techniques.py:use_technique` |
-| Effects / outcome — conditions, combat damage, thread pulls, mage scars | ✅ wired | `world/combat/services.py`; `world/magic/services/` |
+| Effects / outcome — conditions, combat damage, thread pulls, mage scars | ✅ wired | `world/combat/services/`; `world/magic/services/` |
 | Pose / narration into the scene | ✅ wired | `world/scenes/cast_services.py:create_cast_outcome_pose` → `world/magic/narration.py` |
 | Logging — `SceneActionRequest` + `Interaction` + power ledger | ✅ wired | `world/scenes/action_models.py`; `cast_services.py:persist_power_ledger` |
 | Resonance / progression feedback | ✅ by design | earned from RP perception (endorsements), **not** from casting — see "By design" below |

@@ -57,7 +57,7 @@ The PC rolls a defense check; the success level scales incoming damage.
 A `Rampart` (#2209) covering the target's `Position` chips first — upstream of every
 personal defense above, and before `DAMAGE_PRE_APPLY` even emits.
 
-- **Handler:** `apply_rampart_interception` (`world/combat/services.py`), called at the top
+- **Handler:** `apply_rampart_interception` (`world/combat/services/`), called at the top
   of `apply_damage_to_participant` and `_resolve_opponent_pre_apply`.
 - **Content seed:** `ensure_rampart_content()` in `world/magic/effect_palette_content.py`
   (Stone/Wind/Fire/Thorn elemental profiles).
@@ -90,7 +90,7 @@ numbers.
 
 | Event | Where | Who is told |
 |---|---|---|
-| Technique-guardian cannot pay `reactive_anima_cost` | `_narrate_technique_interpose_fizzle` (`world/combat/services.py`) | guardian (private, names the unguarded ally); room (soft line) |
+| Technique-guardian cannot pay `reactive_anima_cost` | `_narrate_technique_interpose_fizzle` (`world/combat/services/`) | guardian (private, names the unguarded ally); room (soft line) |
 | Reaction declined by `REACTIONS_PER_ROUND` / `ABSORPTION_CAP_PER_MOMENT` | `_narrate_reaction_declined` (`_dispatch_interpose_action`, `_try_catch_sent_flying`) | guardian only (private) |
 | Ward lapses at upkeep | `_narrate_upkeep_lapse` (`drain_reactive_upkeep`) | payer (private, why); bearer if different (private, that); room |
 | Standing ward cannot pay its fee | `_narrate_reactive_fizzle` (`world/magic/services/effect_handlers.py`, from `_try_spend_reactive`) | payer (private, why); bearer if different (private, that); room only inside an encounter |
@@ -106,7 +106,7 @@ Flat damage reduction applied after evasion and barrier.
   (`world/magic/services/threads.py`). Subtracts a survivability baseline
   derived from thread investment.
 - **Armor soak:** `apply_equipped_armor_soak`
-  (`world/combat/services.py`). Role-gated — compatible covenant-role armor
+  (`world/combat/services/`). Role-gated — compatible covenant-role armor
   adds on top; incompatible armor competes with a resonant pool via `max`.
   As of #2533, the compatible bucket is scaled once by
   `gear_additive_fraction(character)` (`world.covenants.services`) — the MAX

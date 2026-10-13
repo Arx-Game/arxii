@@ -748,7 +748,7 @@ def bulk_apply_conditions(
 ```
 
 **Caller migration** within this PR:
-- `_resolve_npc_action` in `world/combat/services.py` constructs
+- `_resolve_npc_action` in `world/combat/services/` constructs
   `BulkConditionApplication` rows from `(target_obj, ct)` tuples with
   `severity=1, duration_rounds=None` (preserving today's behavior).
 - `CombatTechniqueResolver._apply_conditions` constructs them with the
@@ -962,7 +962,7 @@ These are tuning decisions, not architecture:
 ## References
 
 - `docs/architecture/combat-magic-integration.md` — predecessor.
-- `src/world/combat/services.py` — existing `CombatAttackResolver`, `_resolve_pc_action`.
+- `src/world/combat/services/` — existing `CombatAttackResolver`, `_resolve_pc_action`.
 - `src/world/conditions/services.py` — `bulk_apply_conditions`, `process_round_start`, `process_round_end`.
 - `src/world/magic/services/techniques.py` — `use_technique`, event emission.
 - `src/world/magic/models/techniques.py` — `Technique`, `TechniqueCapabilityGrant` (pattern for formula-based scaling).

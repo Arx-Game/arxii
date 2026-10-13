@@ -54,7 +54,7 @@ drive and regard-rule inlines on the creature template.
 
 - **One difficulty function**: `social_target_difficulty` (`world/checks/social_target.py:48`)
   returns `SocialDifficulty`. Four paths call it: the standoff verbs, combat's
-  `_social_combat_difficulty` (`combat/services.py`), and both scene overrides
+  `_social_combat_difficulty` (`combat/services/`), and both scene overrides
   (`_compute_difficulty_override_for_primary` / `_compute_target_difficulty_override` in
   `scenes/action_services.py`, through `_graded_scene_difficulty`). Scenes pass the
   defender's already-computed increment (a PC's declared effort, with its development award

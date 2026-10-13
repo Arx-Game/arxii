@@ -1299,7 +1299,7 @@ implementation, surface it before charging ahead.
 
 ### resolve_round ordering change
 
-`resolve_round` in `world/combat/services.py` now runs three steps **before** the
+`resolve_round` in `world/combat/services/` now runs three steps **before** the
 focused-action loop:
 
 ```

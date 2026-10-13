@@ -66,7 +66,7 @@ are enforced at the entry layer, before `use_technique` runs.
 | Path | Entry | Notes |
 |------|-------|-------|
 | **Scene cast (non-combat)** | `request_technique_cast` → `_resolve_cast` (`world/scenes/cast_services.py`) | Routes to immediate (self/room/no-target), benign (PENDING consent), or hostile (seeds/feeds a combat encounter). |
-| **Combat round** | `_resolve_pc_action` → `resolve_combat_technique` (`world/combat/services.py`) | Builds a `CombatTechniqueResolver` and passes it as the resolve function. |
+| **Combat round** | `_resolve_pc_action` → `resolve_combat_technique` (`world/combat/services/`) | Builds a `CombatTechniqueResolver` and passes it as the resolve function. |
 | **Clash contribution** | `commit_to_clash` (`world/combat/clash.py`) | Check-only resolve function — no damage; power drives `outcome_to_delta` → clash progress. |
 | **Battle technique resolution** | `resolve_battle_technique` (`world/battles/resolution.py`) | Casts a `BattleActionDeclaration`'s technique through the real magic envelope — converges on `use_technique` like the others, so anima/Soulfray/mishap and Audere escalation apply normally; the result routes to unit attrition / VP. |
 
@@ -220,7 +220,7 @@ costs the caster.
 |---------|-----------|--------|
 | Canonical lifecycle | `use_technique`, `get_runtime_technique_stats`, `calculate_effective_anima_cost`, `_derive_power`, `_reconcile_precast_ledger`, `_emit_cast_events` | `world/magic/services/techniques.py` |
 | Scene entry | `request_technique_cast`, `_resolve_cast`, `render_cast_outcome_narration` | `world/scenes/cast_services.py`, `world/magic/narration.py` |
-| Combat entry & resolver | `_resolve_pc_action`, `resolve_combat_technique`, `CombatTechniqueResolver`, `apply_damage_to_opponent` | `world/combat/services.py` |
+| Combat entry & resolver | `_resolve_pc_action`, `resolve_combat_technique`, `CombatTechniqueResolver`, `apply_damage_to_opponent` | `world/combat/services/` |
 | Clash | `commit_to_clash`, `strain_to_intensity`, `outcome_to_delta` | `world/combat/clash.py` |
 | Anima | `deduct_anima` | `world/magic/services/anima.py` |
 | Soulfray / mishap | `calculate_soulfray_severity`, `select_mishap_pool` | `world/magic/services/soulfray.py` |

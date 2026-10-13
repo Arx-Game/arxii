@@ -71,7 +71,7 @@ hook. The Narrator approach changes no `Interaction` schema and touches no parti
 |---|---|---|
 | `push_interaction`, `_broadcast_to_location`, `_build_interaction_payload` | BUILT & WIRED | `scenes/interaction_services.py:180-299` |
 | `create_interaction` (persona-required) | BUILT & WIRED | `scenes/interaction_services.py` |
-| `create_action_interaction` (ACTION row, never pushed) | BUILT, NOT WIRED | `combat/interaction_services.py:28-81`; called `combat/services.py:1899-1907` |
+| `create_action_interaction` (ACTION row, never pushed) | BUILT, NOT WIRED | `combat/interaction_services.py:28-81`; called `combat/services/` |
 | `render_action_declaration_label` (sibling renderer) | BUILT & WIRED | `combat/interaction_services.py:84-104` |
 | `ActionOutcome` (damage/conditions/defeat/combo) | BUILT & WIRED | `combat/types.py:84-93`; vitals `types.py:13-24` |
 | NPC data (`ThreatPoolEntry.name/attack_category/damage_type/conditions_applied`) | BUILT & WIRED | `combat/models.py` ThreatPoolEntry |
@@ -87,12 +87,12 @@ hook. The Narrator approach changes no `Interaction` schema and touches no parti
 
 ## Architecture / data flow
 
-All changes hang off `resolve_round` (`combat/services.py`), inside its existing
+All changes hang off `resolve_round` (`combat/services/`), inside its existing
 `@transaction.atomic`. The loop already builds an `ActionOutcome` per action and already creates
-the ACTION Interaction for PC actions in `_resolve_pc_action` (`combat/services.py:1899-1907`).
+the ACTION Interaction for PC actions in `_resolve_pc_action` (`combat/services/`).
 
 1. **ACTION broadcast.** Two sites create ACTION interactions today and neither pushes:
-   `_resolve_pc_action` (`combat/services.py:1899`) and the clash-contribution loop
+   `_resolve_pc_action` (`combat/services/`) and the clash-contribution loop
    (`combat/clash.py:289`). At each, after the `create_action_interaction(...)` call, push the
    returned interaction with `push_interaction(interaction)` when it is not None. (OUTCOME
    narration, below, covers PC + NPC *action* outcomes only; clash *outcomes* are a separate
@@ -172,7 +172,7 @@ as before #4101. See `docs/systems/scenes.md`'s "GM narration of mechanical even
 
 Beside the per-action OUTCOME line this doc describes, `complete_encounter` also broadcasts one
 ceremonial, encounter-level OUTCOME line through the same `broadcast_action_outcome` seam:
-`_broadcast_encounter_outcome` (`world/combat/services.py`) assembles active/fled/defeated side
+`_broadcast_encounter_outcome` (`world/combat/services/`) assembles active/fled/defeated side
 labels and calls `render_encounter_outcome_narration` (`world/combat/interaction_services.py`,
 #876) to build the headline ("The party stands victorious.", etc.).
 
