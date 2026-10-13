@@ -11,6 +11,7 @@ from world.roster.models import Roster, RosterEntry
 from world.roster.serializers.characters import CharacterSerializer
 from world.roster.serializers.tenures import RosterTenureSerializer
 from world.roster.services.gallery import portrait_url
+from world.roster.services.presence import room_name, session_count
 
 
 class RosterEntrySerializer(serializers.ModelSerializer):
@@ -143,6 +144,15 @@ class MyRosterEntrySerializer(serializers.ModelSerializer):
     thaw_available_at = serializers.DateTimeField(
         source="character_sheet.activity_state_until", read_only=True, allow_null=True
     )
+    # Presence is a server fact (#4321). A tab knows only the socket it opened,
+    # so a second tab or device used to call a character who was standing in a
+    # room "Not in the world". These two read the sessions puppeting the
+    # character (``world.roster.services.presence``), never a column, and the
+    # header chip, the Hall card and the world menu state presence from them
+    # when the tab has no socket of its own. ``room_name`` is null while no
+    # session puppets the character, whatever location Evennia left it in.
+    session_count = serializers.SerializerMethodField()
+    room_name = serializers.SerializerMethodField()
 
     class Meta:
         model = RosterEntry
@@ -164,11 +174,21 @@ class MyRosterEntrySerializer(serializers.ModelSerializer):
             "activity_requirement",
             "creation_provenance",
             "thaw_available_at",
+            "session_count",
+            "room_name",
         )
         read_only_fields: ClassVar[tuple[str, ...]] = fields
 
     def get_character_type(self, obj: RosterEntry) -> str:
         return derive_character_type(obj.character_sheet.character)
+
+    def get_session_count(self, obj: RosterEntry) -> int:
+        """Sessions puppeting the character right now (#4321); 0 means not in the world."""
+        return session_count(obj.character_sheet.character)
+
+    def get_room_name(self, obj: RosterEntry) -> str | None:
+        """The room the character stands in while puppeted (#4321), else None."""
+        return room_name(obj.character_sheet.character)
 
     def get_profile_picture_url(self, obj: RosterEntry) -> str | None:
         """The worn look's cropped URL, or None (#4151)."""
@@ -287,6 +307,12 @@ class ReleasedEntryResultSerializer(serializers.Serializer):
 
     id = serializers.IntegerField(read_only=True)
     roster_type = serializers.CharField(source="roster.roster_type", read_only=True)
+
+
+class DisconnectResultSerializer(serializers.Serializer):
+    """Result of disconnecting a character everywhere (#4321): how many sessions closed."""
+
+    closed = serializers.IntegerField(read_only=True)
 
 
 class SelectEntryRequestSerializer(serializers.Serializer):

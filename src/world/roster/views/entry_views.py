@@ -23,6 +23,7 @@ from world.roster.models import RosterEntry, RosterTenure, TenureMedia
 from world.roster.models.choices import RosterType
 from world.roster.permissions import IsPlayerOrStaff
 from world.roster.serializers import (
+    DisconnectResultSerializer,
     MyRosterEntrySerializer,
     ReleasedEntryResultSerializer,
     RosterApplicationCreateSerializer,
@@ -39,6 +40,7 @@ from world.roster.services.activity import (
     unfreeze_character,
 )
 from world.roster.services.gallery import GalleryError, can_manage_gallery, wear_look
+from world.roster.services.presence import disconnect_everywhere
 from world.roster.services.selection import SelectionError, set_selected_entry
 
 
@@ -147,6 +149,9 @@ class RosterEntryViewSet(viewsets.ReadOnlyModelViewSet):
             .select_related(
                 "roster",
                 "character_sheet__character",
+                # #4321 -- ``room_name`` reads the character's location; one join,
+                # not a query per row.
+                "character_sheet__character__db_location",
                 "profile_picture__media",
                 "profile_picture__tenure",
             )
@@ -271,6 +276,22 @@ class RosterEntryViewSet(viewsets.ReadOnlyModelViewSet):
             raise serializers.ValidationError(exc.user_message) from exc
         entry.refresh_from_db()
         return Response(ReleasedEntryResultSerializer(entry).data)
+
+    @extend_schema(request=None, responses={200: DisconnectResultSerializer}, tags=["roster"])
+    @action(detail=True, methods=[HTTPMethod.POST], permission_classes=[IsAuthenticated])
+    def disconnect(self, request: Request, pk: int | None = None) -> Response:
+        """Disconnect the character everywhere (#4321): close every session puppeting it.
+
+        The web's way to take a character off the grid from a tab that holds no
+        socket of its own (the character is in the world from another tab or
+        device), and the "every connection" choice from a tab that does. Each
+        session is closed with the ``quit`` reason, which every web tab already
+        reads as leaving the world. The account stays signed in and the durable
+        selection is untouched; a foreign or unknown id is refused like ``select``.
+        """
+        entry = self._held_entry(request, pk)
+        closed = disconnect_everywhere(entry.character_sheet.character)
+        return Response(DisconnectResultSerializer({"closed": closed}).data)
 
     @action(
         detail=True,
