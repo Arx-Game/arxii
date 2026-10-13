@@ -49,11 +49,25 @@ def ready() -> None:
     from world.projects.services import register_kind_handler  # noqa: PLC0415
 
     register_offer_effect_handler(OfferKind.PERMIT.value, issue_permit)
-    register_kind_handler(ProjectKind.BUILDING_ACTIVATION, complete_building_activation)
-    register_kind_handler(ProjectKind.BUILDING_CONSTRUCTION, complete_building_construction)
-    register_kind_handler(ProjectKind.BUILDING_EXTENSION, complete_building_extension)
-    register_kind_handler(ProjectKind.BUILDING_PREPARATION, complete_building_preparation)
-    register_kind_handler(ProjectKind.BUILDING_RENOVATION, complete_building_renovation)
-    register_kind_handler(ProjectKind.BUILDING_UPGRADE, complete_building_upgrade)
-    register_kind_handler(ProjectKind.INTERIOR_DESIGN, complete_interior_design)
-    register_kind_handler(ProjectKind.FORTIFICATION_UPGRADE, complete_fortification_upgrade)
+    register_kind_handler(
+        ProjectKind.BUILDING_ACTIVATION, complete_building_activation, success_only=True
+    )
+    register_kind_handler(
+        ProjectKind.BUILDING_CONSTRUCTION, complete_building_construction, success_only=True
+    )
+    register_kind_handler(
+        ProjectKind.BUILDING_EXTENSION, complete_building_extension, success_only=True
+    )
+    register_kind_handler(
+        ProjectKind.BUILDING_PREPARATION, complete_building_preparation, success_only=True
+    )
+    register_kind_handler(
+        ProjectKind.BUILDING_RENOVATION, complete_building_renovation, success_only=True
+    )
+    register_kind_handler(
+        ProjectKind.BUILDING_UPGRADE, complete_building_upgrade, success_only=True
+    )
+    register_kind_handler(ProjectKind.INTERIOR_DESIGN, complete_interior_design, success_only=True)
+    register_kind_handler(
+        ProjectKind.FORTIFICATION_UPGRADE, complete_fortification_upgrade, success_only=True
+    )

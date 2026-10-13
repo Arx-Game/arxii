@@ -1375,7 +1375,7 @@ def start_domain_improvement(  # noqa: PLR0913 — keyword-only; each arg is a d
     return project
 
 
-def complete_domain_improvement(project) -> None:
+def complete_domain_improvement(project, outcome_tier=None) -> None:
     """Kind handler for DOMAIN_IMPROVEMENT (registered at societies app-ready).
 
     Success applies the improvement; a failed resolution (negative outcome
@@ -1395,7 +1395,7 @@ def complete_domain_improvement(project) -> None:
     )
     if details is None or details.applied_at is not None:
         return
-    outcome = project.outcome_tier
+    outcome = outcome_tier if outcome_tier is not None else project.outcome_tier
     failed = outcome is not None and outcome.success_level < 0
     if failed:
         from world.societies.houses.constants import CrisisOrigin  # noqa: PLC0415

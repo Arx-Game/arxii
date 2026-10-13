@@ -17,7 +17,6 @@ from world.projects.constants import ProjectKind, ProjectStatus
 from world.projects.services import (
     get_kind_handler,
     register_kind_handler,
-    resolve_project,
     scan_active_projects,
 )
 from world.roster.factories import RosterEntryFactory
@@ -126,7 +125,7 @@ class ResearchHandlerRegistrationTests(TestCase):
     def test_research_handler_resolves_to_resolve_research(self) -> None:
         assert get_kind_handler(ProjectKind.RESEARCH) is resolve_research
 
-    def test_end_to_end_scan_then_resolve_grants_the_target(self) -> None:
+    def test_end_to_end_scan_resolves_and_grants_the_target(self) -> None:
         roster, persona = _contributor()
         entry = CodexEntryFactory(learn_threshold=5)
         project = start_research_project(
@@ -135,9 +134,8 @@ class ResearchHandlerRegistrationTests(TestCase):
         contribute_research(project, persona, CheckOutcomeFactory(success_level=3))
         contribute_research(project, persona, CheckOutcomeFactory(success_level=3))  # 6 >= 5
 
-        assert scan_active_projects() >= 1  # completion-ready → RESOLVING
-        project.refresh_from_db()
-        resolve_project(project, outcome_tier=CheckOutcomeFactory(success_level=3))
+        CheckOutcomeFactory(name="Success", success_level=1)
+        assert scan_active_projects() >= 1  # completion-ready -> resolved in the same tick
 
         project.refresh_from_db()
         assert project.status == ProjectStatus.COMPLETED

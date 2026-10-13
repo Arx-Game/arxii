@@ -12,5 +12,5 @@ def ready() -> None:
         register_kind_handler,
     )
 
-    register_kind_handler(ProjectKind.RANSOM, resolve_ransom_project)
+    register_kind_handler(ProjectKind.RANSOM, resolve_ransom_project, success_only=True)
     register_instant_completion_kind(ProjectKind.RANSOM)

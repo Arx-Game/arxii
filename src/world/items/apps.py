@@ -29,7 +29,7 @@ def ready() -> None:
         register_kind_handler,
     )
 
-    register_kind_handler(ProjectKind.ITEM_REFINEMENT, resolve_item_refinement)
+    register_kind_handler(ProjectKind.ITEM_REFINEMENT, resolve_item_refinement, success_only=True)
     register_instant_completion_kind(ProjectKind.ITEM_REFINEMENT)
 
     # Telnet `accept makeover` / `decline makeover` for a pending restyle ask (#4187).

@@ -324,11 +324,31 @@ def _increment_contribution_stat(persona: Persona) -> None:
 KindHandler = Callable[[Project, "CheckOutcome | None"], None]
 
 _KIND_HANDLERS: dict[str, KindHandler] = {}
+# Kinds whose handler ignores the outcome tier; resolve_project never runs them for a failure.
+_SUCCESS_ONLY_KINDS: set[str] = set()
 
 
-def register_kind_handler(kind: str, handler: KindHandler) -> None:
-    """Register a per-kind resolution handler. Re-registration overwrites."""
+def register_kind_handler(kind: str, handler: KindHandler, *, success_only: bool = False) -> None:
+    """Register a per-kind resolution handler. Re-registration overwrites.
+
+    ``success_only=True`` is for a handler that applies its effect unconditionally and
+    ignores ``outcome_tier`` (it was written assuming a funded threshold, e.g. "build the
+    building"). Since #4325 a SINGLE_THRESHOLD project that runs out of time unfunded
+    resolves with a failure tier, and such a handler must not run for it:
+    ``resolve_project`` skips it for any tier with ``success_level < 0``. A handler that grades or
+    unwinds a failure itself (research, frame jobs, domain improvement) registers
+    without the flag and receives the failure tier.
+    """
     _KIND_HANDLERS[kind] = handler
+    if success_only:
+        _SUCCESS_ONLY_KINDS.add(kind)
+    else:
+        _SUCCESS_ONLY_KINDS.discard(kind)
+
+
+def has_kind_handler(kind: str) -> bool:
+    """True when a handler is registered for ``kind``."""
+    return kind in _KIND_HANDLERS
 
 
 def get_kind_handler(kind: str) -> KindHandler:
@@ -350,20 +370,24 @@ def clear_kind_handlers() -> None:
     snapshot_registries()/restore_registries() via addCleanup.
     """
     _KIND_HANDLERS.clear()
+    _SUCCESS_ONLY_KINDS.clear()
 
 
-def snapshot_registries() -> tuple[dict[str, KindHandler], dict[str, TieredResolver]]:
-    """Test-only: copy both registries for restore_registries()."""
-    return dict(_KIND_HANDLERS), dict(_TIERED_RESOLVERS)
+RegistrySnapshot = tuple[dict[str, KindHandler], dict[str, "TieredResolver"], set[str]]
 
 
-def restore_registries(
-    snapshot: tuple[dict[str, KindHandler], dict[str, TieredResolver]],
-) -> None:
-    """Test-only: reset both registries to a snapshot_registries() copy."""
-    kind_handlers, tiered_resolvers = snapshot
+def snapshot_registries() -> RegistrySnapshot:
+    """Test-only: copy the registries for restore_registries()."""
+    return dict(_KIND_HANDLERS), dict(_TIERED_RESOLVERS), set(_SUCCESS_ONLY_KINDS)
+
+
+def restore_registries(snapshot: RegistrySnapshot) -> None:
+    """Test-only: reset the registries to a snapshot_registries() copy."""
+    kind_handlers, tiered_resolvers, success_only_kinds = snapshot
     _KIND_HANDLERS.clear()
     _KIND_HANDLERS.update(kind_handlers)
+    _SUCCESS_ONLY_KINDS.clear()
+    _SUCCESS_ONLY_KINDS.update(success_only_kinds)
     _TIERED_RESOLVERS.clear()
     _TIERED_RESOLVERS.update(tiered_resolvers)
 
@@ -371,8 +395,10 @@ def restore_registries(
 # ---------------------------------------------------------------------------
 # Instant-completion kinds (#1500)
 # ---------------------------------------------------------------------------
-# Most kinds resolve on a cron tick (scan_active_projects -> RESOLVING -> a
-# generic resolver). A few — RANSOM — must resolve the *instant* their
+# Most kinds resolve on a cron tick: scan_active_projects moves a
+# completion-ready project to RESOLVING and finalizes it in the same tick
+# (SINGLE_THRESHOLD via _resolve_single_threshold, TIERED_PERIOD via its
+# registered tiered resolver). A few — RANSOM — must resolve the *instant* their
 # threshold is funded: a ransom that's fully paid frees the captive now, not on
 # the next 15-minute tick. A kind registered here is checked after every
 # progress-advancing contribution; when it crosses its SINGLE_THRESHOLD it runs
@@ -464,7 +490,8 @@ def maybe_complete_immediately(project: Project) -> bool:
 def resolve_project(project: Project, *, outcome_tier: CheckOutcome) -> None:
     """Finalize a RESOLVING project: dispatch to per-kind handler, set outcome.
 
-    Marks COMPLETED if outcome_tier.success_level >= 0, otherwise FAILED.
+    Marks COMPLETED if outcome_tier.success_level >= 0, otherwise FAILED. A handler
+    registered ``success_only`` is skipped for a failure tier.
     Per-kind handlers run BEFORE status is updated so they can read the
     pre-resolution state.
     """
@@ -476,7 +503,8 @@ def resolve_project(project: Project, *, outcome_tier: CheckOutcome) -> None:
         raise ValueError(msg)
 
     handler = get_kind_handler(project.kind)
-    handler(project, outcome_tier)
+    if outcome_tier.success_level >= 0 or project.kind not in _SUCCESS_ONLY_KINDS:
+        handler(project, outcome_tier)
 
     project.outcome_tier = outcome_tier
     project.status = (
@@ -501,43 +529,93 @@ def _project_is_completion_ready(project: Project, now: datetime) -> bool:
     return False
 
 
-def scan_active_projects() -> int:
-    """Cron tick: scan ACTIVE projects, transition completion-ready ones to RESOLVING.
+_SUCCESS_OUTCOME_NAME = "Success"
+_FAILURE_OUTCOME_NAME = "Failure"
 
-    Returns count of projects transitioned. Resolution itself (handler call +
-    outcome_tier set) is done by resolve_project, called separately.
+
+def _resolve_single_threshold(project: Project) -> None:
+    """Finalize a RESOLVING SINGLE_THRESHOLD project with the canonical outcome (#4325).
+
+    A funded target is a success, a lapsed time limit with the target unmet is a
+    failure. The canonical "Success" / "Failure" ``CheckOutcome`` rows (seeded by
+    ``world.seeds.checks``) carry the verdict into the kind handler via
+    ``resolve_project``.
+    """
+    from world.traits.models import CheckOutcome  # noqa: PLC0415
+
+    funded = (
+        project.threshold_target is not None
+        and project.current_progress >= project.threshold_target
+    )
+    outcome = CheckOutcome.objects.get(
+        name=_SUCCESS_OUTCOME_NAME if funded else _FAILURE_OUTCOME_NAME
+    )
+    resolve_project(project, outcome_tier=outcome)
+
+
+def _finalize_resolving(project: Project) -> None:
+    """Run the same-tick resolution for a project already in RESOLVING.
+
+    TIERED_PERIOD runs its registered tiered resolver; SINGLE_THRESHOLD resolves via
+    :func:`_resolve_single_threshold`. A kind with no handler / resolver (a
+    not-yet-implemented future kind) is left RESOLVING untouched.
+    """
+    if project.completion_mode == CompletionMode.TIERED_PERIOD:
+        resolver = _TIERED_RESOLVERS.get(project.kind)
+        if resolver is not None:
+            resolver(project)
+    elif project.completion_mode == CompletionMode.SINGLE_THRESHOLD and has_kind_handler(
+        project.kind
+    ):
+        _resolve_single_threshold(project)
+
+
+def _resolve_isolated(project: Project, *, entering: bool) -> bool:
+    """Run one project's tick work atomically; a failure rolls it back and is logged.
+
+    ``entering`` is True for an ACTIVE project being moved to RESOLVING (a failure
+    leaves it ACTIVE for retry next tick) and False for one already stranded in
+    RESOLVING (a failure leaves it RESOLVING). A kind with no registered handler /
+    tiered resolver is left RESOLVING. Returns True if the work committed.
+    """
+    try:
+        with transaction.atomic():
+            if entering:
+                project.status = ProjectStatus.RESOLVING
+                project.save(update_fields=["status", "updated_at"])
+            _finalize_resolving(project)
+    except Exception:
+        # The atomic rollback restored the DB; reset the stale in-memory instance to
+        # match (SharedMemoryModel's identity map would otherwise keep the
+        # rolled-back value on this reference).
+        project.status = ProjectStatus.ACTIVE if entering else ProjectStatus.RESOLVING
+        logger.exception(
+            "Resolution failed for project #%s; leaving it %s for retry.",
+            project.pk,
+            project.status,
+        )
+        return False
+    return True
+
+
+def scan_active_projects() -> int:
+    """Cron tick: move completion-ready ACTIVE projects to RESOLVING and finalize them.
+
+    Resolution happens in the same tick (#4325): TIERED_PERIOD via its registered
+    tiered resolver, SINGLE_THRESHOLD via :func:`_resolve_single_threshold`. Projects
+    already stranded in RESOLVING by an earlier tick (before single-threshold kinds
+    resolved in-tick) are finalized too, so nothing stays stuck. Each project runs in
+    its own atomic block (:func:`_resolve_isolated`), so one failure never affects
+    the rest of the tick.
+
+    Returns count of ACTIVE projects transitioned.
     """
     now = timezone.now()
     transitioned = 0
-    active = Project.objects.filter(status=ProjectStatus.ACTIVE)
-    for project in active:
-        if not _project_is_completion_ready(project, now):
-            continue
-        # Per-project atomic + try/except isolation: a handler failure rolls the
-        # project back to ACTIVE (retryable next tick) rather than stranding it in
-        # RESOLVING, which scan never revisits (it only scans ACTIVE). Other
-        # projects in the same tick are unaffected. TIERED_PERIOD projects are
-        # graded in the same tick via their registered resolver; a kind with no
-        # registered resolver is left RESOLVING (today's behavior — no regression).
-        try:
-            with transaction.atomic():
-                project.status = ProjectStatus.RESOLVING
-                project.save(update_fields=["status", "updated_at"])
-                if project.completion_mode == CompletionMode.TIERED_PERIOD:
-                    resolver = _TIERED_RESOLVERS.get(project.kind)
-                    if resolver is not None:
-                        resolver(project)
-                transitioned += 1
-        except Exception:
-            # The atomic rollback restored the DB to ACTIVE; reset the stale
-            # in-memory instance to match. SharedMemoryModel's identity map
-            # would otherwise keep the rolled-back RESOLVING value on this
-            # reference (refresh_from_db does not reliably re-fetch it — see
-            # the note on save() vs .update() above).
-            project.status = ProjectStatus.ACTIVE
-            logger.exception(
-                "Resolution failed for project #%s; leaving it ACTIVE for retry.",
-                project.pk,
-            )
-
+    stranded = list(Project.objects.filter(status=ProjectStatus.RESOLVING))
+    for project in Project.objects.filter(status=ProjectStatus.ACTIVE):
+        if _project_is_completion_ready(project, now) and _resolve_isolated(project, entering=True):
+            transitioned += 1
+    for project in stranded:
+        _resolve_isolated(project, entering=False)
     return transitioned

@@ -21,6 +21,7 @@ def ready() -> None:
     register_kind_handler(
         ProjectKind.ROOM_FEATURE_PROGRESSION,
         complete_room_feature_progression,
+        success_only=True,
     )
 
     # COMMAND_CENTER (#930) is a generic feature — this app IS its home,
@@ -149,4 +150,5 @@ def ready() -> None:
     register_kind_handler(
         ProjectKind.ROOM_DEFENSE_INSTALLATION,
         complete_defense_installation,
+        success_only=True,
     )
