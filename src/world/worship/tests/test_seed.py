@@ -46,3 +46,26 @@ class WorshipSeedTests(TestCase):
         seed_worship_content()
         for tradition in WorshipTradition.objects.all():
             self.assertEqual(tradition.rites_specialization.parent_skill.trait.name, "Rites")
+
+    def test_seed_sets_the_favor_terms_and_being_targets(self) -> None:
+        """#4333: the invocation check, the example bonuses, two targets per being."""
+        from world.mechanics.models import ModifierTarget
+        from world.worship.invocation_services import get_devotion_config
+        from world.worship.models import FavorOutcomeAward
+
+        seed_worship_content()
+        seed_worship_content()
+
+        config = get_devotion_config()
+        self.assertEqual(config.invocation_check_type.name, CEREMONY_CHECK_TYPE)
+        bonuses = dict(
+            FavorOutcomeAward.objects.filter(kind="invocation").values_list(
+                "outcome_tier__name", "amount"
+            )
+        )
+        self.assertEqual(bonuses["Success"], 10)
+        self.assertEqual(len(bonuses), 5)
+        self.assertEqual(
+            ModifierTarget.objects.filter(target_being__isnull=False).count(),
+            2 * WorshippedBeing.objects.count(),
+        )
