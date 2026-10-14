@@ -156,6 +156,7 @@ class ActionRegistryTests(TestCase):
             "search",
             "identify",
             "say",
+            "ooc",
             "pose",
             "emit",
             "whisper",

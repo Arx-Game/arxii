@@ -52,6 +52,25 @@ def ooc_muted_persona_ids_for_viewer(*, viewer_account: Any) -> set[int]:
     )
 
 
+def ooc_muter_account_ids(*, persona: Persona) -> set[int]:
+    """Account ids that have OOC-muted ``persona``, by this face or account-wide (#4337).
+
+    The speaker-side twin of ``ooc_muted_persona_ids_for_viewer``: a room-wide OOC line asks
+    once who to leave out rather than once per listener. An account-level mute counts when it
+    names the player behind ``persona`` now (the ``muted_player`` snapshot) and covers OOC.
+    One query, plus the persona's current player.
+    """
+    from django.db.models import Q  # noqa: PLC0415
+
+    muted = Q(muted_persona=persona)
+    player = _persona_player(persona)
+    if player is not None:
+        muted |= Q(account_level=True, muted_player=player)
+    return set(
+        Mute.objects.filter(muted, mute_ooc=True).values_list("owner__account_id", flat=True)
+    )
+
+
 def _persona_player(persona: Persona) -> PlayerData | None:
     """The PlayerData currently playing this persona's character, or None (#2996).
 

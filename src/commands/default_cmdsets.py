@@ -88,6 +88,7 @@ from commands.evennia_overrides.builder import (
 from commands.evennia_overrides.communication import (
     CmdEmit,
     CmdMutter,
+    CmdOOC,
     CmdPage,
     CmdPemit,
     CmdPose,
@@ -281,6 +282,8 @@ class CharacterCmdSet(default_cmds.CharacterCmdSet):
             CmdHome,
             CmdInventory,
             CmdSay,
+            # #4337 — OOC speech to the room; replaces Evennia's unpuppeting `ooc`.
+            CmdOOC,
             CmdWhisper,
             CmdPose,
             CmdEmit,
@@ -609,7 +612,18 @@ class AccountCmdSet(default_cmds.AccountCmdSet):
         super().at_cmdset_creation()
         # charcreate/chardelete (#3996): Evennia's stock character mint bypasses
         # sheets, rosters and the slot ledger. Characters are made on the web.
-        for cmdname in ("ic", "characters", "account", "page", "charcreate", "chardelete"):
+        # ooc (#4337): Evennia's unpuppets into its stock account screen, and there
+        # is no out-of-character state (login always puppets, ADR-0294). `ooc` is
+        # now OOC speech to the room, CharacterCmdSet's CmdOOC.
+        for cmdname in (
+            "ic",
+            "characters",
+            "account",
+            "page",
+            "charcreate",
+            "chardelete",
+            "ooc",
+        ):
             self.remove(cmdname)
 
         self.add(CmdIC())

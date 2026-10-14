@@ -28,6 +28,7 @@ describe('FeedChipStrip (#3856)', () => {
       'Movement',
       'Ambience',
       'Visions',
+      'OOC',
       'System',
       '+',
       'All',
@@ -128,6 +129,7 @@ describe('FeedChipStrip (#3856)', () => {
       'wh',
       'am',
       'vi',
+      'oc',
       'sy',
     ]);
   });

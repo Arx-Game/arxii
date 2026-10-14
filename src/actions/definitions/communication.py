@@ -605,6 +605,85 @@ class SayAction(Action):
         return ActionResult(success=True)
 
 
+#: What ``ooc`` with nothing to say answers, on telnet and the web alike.
+OOC_USAGE = "Usage: ooc <message>"
+
+
+def _ooc_muters_in(location: ObjectDB, speaker: ObjectDB) -> list[ObjectDB]:
+    """Who in ``location`` has OOC-muted the face ``speaker`` is wearing, or its player (#2087)."""
+    from world.scenes.models import Persona  # noqa: PLC0415
+    from world.scenes.mute_services import ooc_muter_account_ids  # noqa: PLC0415
+    from world.scenes.services import active_persona_for_sheet  # noqa: PLC0415
+
+    sheet = speaker.character_sheet
+    if sheet is None:
+        return []
+    try:
+        persona = active_persona_for_sheet(sheet)
+    except Persona.DoesNotExist:
+        return []
+    muters = ooc_muter_account_ids(persona=persona)
+    if not muters:
+        return []
+    return [obj for obj in location.contents if obj.db_account_id in muters]
+
+
+@dataclass
+class OOCSayAction(Action):
+    """Speak out of character to everyone in the room (#4337).
+
+    Arx 1's ``ooc``: ``<OOC> Name says: text``, the unmistakable way to tell a room
+    something that is not the character talking (a hello, a question about the
+    scene, a call for a GM). It replaced Evennia's ``ooc``, which unpuppeted the
+    character into the stock account screen; there is no out-of-character state
+    to go to (ADR-0294).
+
+    The audience is ``say``'s: the room, through the broadcast-exclusion seam, so
+    a dreamside occupant does not hear the waking room. Anyone who has OOC-muted
+    the speaker's face or player is left out, as a page leaves them out. Each
+    listener sees their own name for the speaker, so a mask shows the mask. The
+    line is typed ``ooc`` for the web feed and is not written to the scene log.
+    """
+
+    key: str = "ooc"
+    name: str = "OOC"
+    icon: str = "chat"
+    category: str = "communication"
+    action_category: ActionCategory = ActionCategory.SOCIAL
+    target_type: TargetType = TargetType.AREA
+
+    def execute(
+        self,
+        actor: ObjectDB,
+        context: ActionContext | None = None,
+        **kwargs: Any,
+    ) -> ActionResult:
+        from core.wire_options import TextFrameType  # noqa: PLC0415
+        from flows.service_functions.perception_registry import (  # noqa: PLC0415
+            resolve_broadcast_exclusions,
+        )
+
+        text = (kwargs.get("text") or "").strip()
+        if not text:
+            return ActionResult(success=False, message=OOC_USAGE)
+        location = actor.location
+        if location is None:
+            return ActionResult(success=False, message="There is nobody here to hear you.")
+        options = {"type": TextFrameType.OOC.value}
+        location.msg_contents(
+            ("<OOC> {name} says: {message}", options),
+            exclude=[
+                actor,
+                *resolve_broadcast_exclusions(location),
+                *_ooc_muters_in(location, actor),
+            ],
+            from_obj=actor,
+            mapping={"name": actor, "message": text},
+        )
+        actor.msg((f"<OOC> You say: {text}", options))
+        return ActionResult(success=True)
+
+
 @dataclass
 class PoseAction(Action):
     """Pose/emote to the room."""

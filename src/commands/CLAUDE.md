@@ -64,6 +64,15 @@ actions, backends, and service functions.
   frame the web client could not place, so it was silent there; this reproduces
   Evennia's wording (near-miss suggestions via `string_suggestions`, double-quoted,
   joined with "or") and sends it typed `error`. Telnet output is byte-identical.
+- **`CmdOOC`** (`ooc <message>`, `evennia_overrides/communication.py`, #4337): out-of-character
+  speech to the room through `OOCSayAction` (key `ooc`): `<OOC> Name says: text`, typed `ooc`
+  for the web feed, sent to the `say` audience (the broadcast-exclusion seam) minus anyone who
+  has OOC-muted the speaker's face or player (`mute_services.ooc_muter_account_ids`), named per
+  listener so a mask shows the mask, never written to the scene log. It replaced Evennia's
+  `ooc` (alias `unpuppet`), which `AccountCmdSet` now removes: that one unpuppeted into the
+  stock account screen, and there is no out-of-character state (ADR-0294). `ooc` is in
+  `DEAD_ALLOWED_ACTION_KEYS`, since the player talking is never the character acting. `@ic`
+  stays as the telnet way to switch characters.
 - **`evennia_overrides/communication.py`**: `CmdSay`, `CmdWhisper`, `CmdPose`, `CmdPage`,
   `CmdPemit` (`pemit <name>[,<name>...]=<text>`, `cmd:all()`, #906/#2117 — private GM narration to
   specific characters via `PemitAction`, gated on `MinimumGMLevelPrerequisite(GMLevel.STARTING)`,

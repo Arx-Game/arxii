@@ -30,6 +30,8 @@ class TextFrameType(str, Enum):
     # A departure. Evennia's own movement broadcast sends its move_type, `move`;
     # the logout line is a departure too and uses the same kind (#4336).
     MOVE = "move"
+    # Out-of-character speech to the room, `ooc <message>` (#4337).
+    OOC = "ooc"
     # A look result and a refusal (#3856's feed kinds); the arrival look sends
     # them outside a command (#4329), where ArxCommand.send_result is not in reach.
     LOOK = "look"

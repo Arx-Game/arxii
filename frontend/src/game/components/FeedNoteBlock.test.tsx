@@ -48,6 +48,19 @@ describe('FeedNoteBlock (#3856)', () => {
     expect(block.className).not.toContain('destructive');
   });
 
+  it('renders an ooc line in full ink with its own rule, never as a muted note (#4337)', () => {
+    // Evennia's text2html escapes the brackets on the way out, so this is the wire form.
+    render(<FeedNoteBlock note={note('ooc', '&lt;OOC&gt; Apostate says: We need a GM.')} />);
+
+    const block = screen.getByTestId('feed-note');
+    expect(block).toHaveAttribute('data-kind', 'ooc');
+    expect(block.className).toContain('text-foreground');
+    expect(block.className).toContain('border-sky-500/70');
+    expect(block.className).not.toContain('italic');
+    expect(block.className).not.toContain('bg-muted');
+    expect(screen.getByText('<OOC> Apostate says: We need a GM.')).toBeInTheDocument();
+  });
+
   it.each(['arrive', 'move', 'ambience'] as const)('renders %s as a bare italic line', (kind) => {
     render(<FeedNoteBlock note={note(kind, 'Corvin arrives from the east.')} />);
 
