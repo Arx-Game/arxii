@@ -1,1 +1,0 @@
-"Ysmay Dunhollow calls on Ombrin: [player line]\nYsmay Dunhollow's invocation: Failure.\nPerception + Investigation\n35\nInvocation\nno bonus\nTotal\n35, rank Competent\nDifficulty\nrank Incompetent\nRank difference\n2\nSuccess\n\nPLACEHOLDER — [mission name] for Ysmay: you commit to '[option label]'. The outcome: Success. The thread of the story moves on.\n\nContinue"
