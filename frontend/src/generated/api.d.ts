@@ -6138,6 +6138,23 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/combat/{id}/open-standoff/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** @description GM: open a standoff on an encounter that has not begun round one (#4354). */
+    post: operations['combat_open_standoff_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/combat/{id}/opponent-defaults/': {
     parameters: {
       query?: never;
@@ -6361,6 +6378,23 @@ export interface paths {
      *     stays ``/api/combat/{id}/settings/`` via ``url_path``.
      */
     patch: operations['combat_settings_partial_update'];
+    trace?: never;
+  };
+  '/api/combat/{id}/standoff-morale/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** @description GM: shake or steady one standoff group by one morale state, with a reason (#4354). */
+    post: operations['combat_standoff_morale_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
     trace?: never;
   };
   '/api/combat/{id}/taunt/': {
@@ -10759,6 +10793,23 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/gm/prompts/{id}/hold/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** @description Hold a standoff proposal for one action (#4354). */
+    post: operations['gm_prompts_hold_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/gm/prompts/{id}/narrate/': {
     parameters: {
       query?: never;
@@ -10784,6 +10835,23 @@ export interface paths {
      *     dispatch plumbing only.
      */
     post: operations['gm_prompts_narrate_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/gm/prompts/{id}/override/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** @description Override a standoff proposal; the body's ``reason`` is required (#4354). */
+    post: operations['gm_prompts_override_create'];
     delete?: never;
     options?: never;
     head?: never;
@@ -27466,6 +27534,8 @@ export interface components {
       /** @description Authored position hint, resolved by name against the run-time room's Position set. Blank = no position. */
       position_name?: string;
       order?: number;
+      /** @description When any line on the beat has this set, running the beat opens a standoff before round one instead of starting the fight. */
+      opens_as_standoff?: boolean;
     };
     /**
      * @description One authored opponent line on an ENCOUNTER beat (#3425).
@@ -27485,6 +27555,8 @@ export interface components {
       /** @description Authored position hint, resolved by name against the run-time room's Position set. Blank = no position. */
       position_name?: string;
       order?: number;
+      /** @description When any line on the beat has this set, running the beat opens a standoff before round one instead of starting the fight. */
+      opens_as_standoff?: boolean;
     };
     /** @description Read-only mirror of :class:`world.missions.types.BeatOption`. */
     BeatOption: {
@@ -31612,6 +31684,8 @@ export interface components {
       readonly sustained_actions: components['schemas']['SustainedAction'][];
       readonly protection_commitments: components['schemas']['ProtectionCommitment'][];
       readonly standoff: components['schemas']['StandoffView'] | null;
+      readonly gm_standoff: components['schemas']['GMStandoffView'] | null;
+      readonly standoff_summary: components['schemas']['StandoffSummary'] | null;
       readonly is_lethal: boolean;
       readonly duel_winner: components['schemas']['DuelWinner'] | null;
     };
@@ -32922,6 +32996,11 @@ export interface components {
       /** @description Why player wants this character */
       readonly application_text: string;
     };
+    GMDriveView: {
+      label: string;
+      strength: string;
+      revealed: boolean;
+    };
     /** @description Read-only view of ``world.gm.types.GMEvidenceSummary`` for staff review (#2000). */
     GMEvidenceSummary: {
       profile_id: number;
@@ -32936,6 +33015,42 @@ export interface components {
       };
       feedback_by_category: components['schemas']['CategoryFeedback'][];
       level_changes: components['schemas']['GMLevelChange'][];
+    };
+    GMFactionRuleView: {
+      faction_rule_id: number;
+      label: string;
+      angle_text: string;
+      difficulty_shift_bands: number;
+      suppresses_cause: boolean;
+      matched_by: string[];
+      revealed: boolean;
+    };
+    GMGroupView: {
+      group_id: number;
+      name: string;
+      state: string;
+      member_count: number;
+      cause: string;
+      cause_revealed: boolean;
+      cause_fires: boolean;
+      cause_reason: string;
+      cause_margin_percent: number;
+      proposal_reason: string;
+      pending_prompt_id: number | null;
+      override_standing: boolean;
+      emboldened_bands: number;
+      terms_ease: number;
+      has_morale: boolean;
+      morale_state: string;
+      /** Format: double */
+      party_force: number;
+      /** Format: double */
+      effective_party_force: number;
+      /** Format: double */
+      group_force: number;
+      drives: components['schemas']['GMDriveView'][];
+      faction_rules: components['schemas']['GMFactionRuleView'][];
+      members: components['schemas']['GMMemberView'][];
     };
     /** @description Read-only audit row for a staff-driven GM trust-level change (#2000). */
     GMLevelChange: {
@@ -32952,6 +33067,12 @@ export interface components {
       readonly reason: string;
       /** Format: date-time */
       readonly created_at: string;
+    };
+    GMMemberView: {
+      opponent_id: number;
+      name: string;
+      morale: number;
+      morale_state: string;
     };
     /** @description Read-only serializer for GM profiles. */
     GMProfile: {
@@ -33000,6 +33121,7 @@ export interface components {
        *     * `miracle` - Miracle
        *     * `death` - Death
        *     * `stake_outcome` - Stake outcome
+       *     * `standoff_cause` - Standoff
        * @default dramatic_moment
        */
       readonly kind: components['schemas']['GMPromptKindEnum'];
@@ -33019,6 +33141,16 @@ export interface components {
       readonly technique_name: string;
       /** @default  */
       readonly stake_summary: string;
+      /** @description The standoff group a standoff_cause prompt proposes to start the fight. */
+      readonly standoff_group: number | null;
+      /** @default  */
+      readonly standoff_group_name: string;
+      /** @description The proposed group's cause, by label (Orders, Predation); blank on other kinds. */
+      readonly standoff_cause_label: string;
+      /** @default  */
+      readonly standoff_reason: string;
+      /** @description What the GM decided on a decision prompt, with their reason when they gave one (a standoff Override's reason is recorded here). */
+      readonly resolution_note: string;
       /** @description Resolved authored room line offered in the composer (may be blank). */
       readonly room_text: string;
       /** @description Resolved authored private line for the character this concerns, e.g. the Crossing vision. Spoiler-private: shown only to the addressed GM. */
@@ -33040,9 +33172,16 @@ export interface components {
      *     * `miracle` - Miracles
      *     * `death` - Deaths
      *     * `stake_outcome` - Stake outcomes
+     *     * `standoff` - Standoffs
      * @enum {string}
      */
-    GMPromptFilterGroupEnum: 'dramatic_moment' | 'audere' | 'miracle' | 'death' | 'stake_outcome';
+    GMPromptFilterGroupEnum:
+      | 'dramatic_moment'
+      | 'audere'
+      | 'miracle'
+      | 'death'
+      | 'stake_outcome'
+      | 'standoff';
     /** @description One per-group row of a GM's prompt-filter switches (#4101; demo Screen 5). */
     GMPromptFilterRequest: {
       group: components['schemas']['GMPromptFilterGroupEnum'];
@@ -33056,6 +33195,7 @@ export interface components {
      *     * `miracle` - Miracle
      *     * `death` - Death
      *     * `stake_outcome` - Stake outcome
+     *     * `standoff_cause` - Standoff
      * @enum {string}
      */
     GMPromptKindEnum:
@@ -33065,7 +33205,8 @@ export interface components {
       | 'crossing'
       | 'miracle'
       | 'death'
-      | 'stake_outcome';
+      | 'stake_outcome'
+      | 'standoff_cause';
     /**
      * @description * `pending` - Pending
      *     * `confirmed` - Confirmed
@@ -33102,6 +33243,12 @@ export interface components {
       is_public?: boolean;
       /** Format: email */
       invited_email?: string;
+    };
+    /** @description Everything a GM sees of a standoff (``services/gm_view.py``). GM and staff only. */
+    GMStandoffView: {
+      place: string;
+      participants: string[];
+      groups: components['schemas']['GMGroupView'][];
     };
     /** @description Full GM story rail response. */
     GMStoryRail: {
@@ -33813,6 +33960,7 @@ export interface components {
       read_grade_label: string;
       morale_state: string;
       terms_morale_ease: number;
+      emboldened: boolean;
     };
     /** @description POST body for the #1036 group-vote endpoint. */
     GroupVoteRequestRequest: {
@@ -48562,6 +48710,24 @@ export interface components {
      * @enum {string}
      */
     StandingEnum: 'core' | 'minor';
+    /**
+     * @description * `shake` - Shake
+     *     * `steady` - Steady
+     * @enum {string}
+     */
+    StandoffMoraleRequestDirectionEnum: 'shake' | 'steady';
+    /** @description Body for the GM morale control (#4354): which group, which way, and why. */
+    StandoffMoraleRequestRequest: {
+      group_id: number;
+      direction: components['schemas']['StandoffMoraleRequestDirectionEnum'];
+      reason: string;
+    };
+    /** @description The public standoff summary an onlooker sees (``services/gm_view.py``). */
+    StandoffSummary: {
+      place: string;
+      participants: string[];
+      groups: components['schemas']['SummaryGroupView'][];
+    };
     StandoffView: {
       place: string;
       groups: components['schemas']['GroupView'][];
@@ -49217,6 +49383,14 @@ export interface components {
      * @enum {string}
      */
     SumTierEnum: 'minor' | 'fair' | 'great';
+    SummaryGroupView: {
+      group_id: number;
+      name: string;
+      member_count: number;
+      state: string;
+      morale_state: string;
+      emboldened: boolean;
+    };
     SummaryWriteRequest: {
       target_persona_id?: number;
       target_companion_id?: number;
@@ -59510,6 +59684,28 @@ export interface operations {
       };
     };
   };
+  combat_open_standoff_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this combat encounter. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['EncounterDetail'];
+        };
+      };
+    };
+  };
   combat_opponent_defaults_retrieve: {
     parameters: {
       query: {
@@ -59781,6 +59977,32 @@ export interface operations {
     requestBody?: {
       content: {
         'application/json': components['schemas']['PatchedEncounterDetailRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['EncounterDetail'];
+        };
+      };
+    };
+  };
+  combat_standoff_morale_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this combat encounter. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['StandoffMoraleRequestRequest'];
       };
     };
     responses: {
@@ -66057,6 +66279,7 @@ export interface operations {
          *     * `miracle` - Miracle
          *     * `death` - Death
          *     * `stake_outcome` - Stake outcome
+         *     * `standoff_cause` - Standoff
          */
         kind?:
           | 'audere_surge'
@@ -66065,7 +66288,8 @@ export interface operations {
           | 'death'
           | 'dramatic_moment'
           | 'miracle'
-          | 'stake_outcome';
+          | 'stake_outcome'
+          | 'standoff_cause';
         /** @description A page number within the paginated result set. */
         page?: number;
         /** @description Number of results to return per page. */
@@ -66131,7 +66355,51 @@ export interface operations {
       };
     };
   };
+  gm_prompts_hold_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this GM Prompt. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['GMPrompt'];
+        };
+      };
+    };
+  };
   gm_prompts_narrate_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this GM Prompt. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['GMPrompt'];
+        };
+      };
+    };
+  };
+  gm_prompts_override_create: {
     parameters: {
       query?: never;
       header?: never;

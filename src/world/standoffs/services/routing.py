@@ -6,6 +6,24 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from world.combat.models import CombatEncounter
+    from world.traits.models import CheckOutcome
+
+
+def settled_tier(encounter: CombatEncounter) -> CheckOutcome | None:
+    """The weakest outcome among the encounter's settled groups (the terms it had to accept).
+
+    None when no group was settled by terms (every group emptied, or no standoff), so the
+    ordinary battle mapping grades the encounter instead. Missions and story beats both
+    route a terms-settled standoff on this tier.
+    """
+    outcomes = [
+        group.settled_outcome
+        for group in encounter.standoff_groups.select_related("settled_outcome")
+        if group.settled_outcome is not None
+    ]
+    if not outcomes:
+        return None
+    return min(outcomes, key=lambda outcome: outcome.success_level)
 
 
 def complete_standoff(encounter: CombatEncounter) -> None:

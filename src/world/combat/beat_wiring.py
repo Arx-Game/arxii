@@ -191,6 +191,16 @@ def encounter_completed_beat_handler(*, payload: object) -> None:
         resolve_stakes_for_withdrawal(beat, progress, _participant_personas(encounter))
         return
 
+    from world.standoffs.services.routing import settled_tier  # noqa: PLC0415
+
+    # A standoff the party ended with terms grades the beat on the weakest terms it had to
+    # accept, as a mission routes its option (#4354); otherwise the battle mapping.
+    standoff_tier = (
+        settled_tier(encounter) if encounter.outcome == EncounterOutcome.VICTORY else None
+    )
+    if standoff_tier is not None:
+        record_outcome_tier_completion(progress=progress, beat=beat, outcome_tier=standoff_tier)
+        return
     try:
         tier = classify_battle_outcome(encounter)
     except EncounterOutcomeMapping.DoesNotExist:

@@ -256,6 +256,13 @@ from actions.definitions.gm_combat import (
 )
 from actions.definitions.gm_npcs import MintStoryNPCAction
 from actions.definitions.gm_props import StagePropAction, StagePropertyAction
+from actions.definitions.gm_standoff import (
+    GMOpenStandoffAction,
+    GMStandoffConfirmAction,
+    GMStandoffHoldAction,
+    GMStandoffMoraleAction,
+    GMStandoffOverrideAction,
+)
 from actions.definitions.gm_stories import (
     ClaimGroupStoryRequestAction,
     CompleteStoryAction,
@@ -832,6 +839,11 @@ _ALL_ACTIONS: list[Action] = [
     StandoffTermsAction(),
     StandoffFightAction(),
     StandoffShareAngleAction(),
+    GMStandoffConfirmAction(),
+    GMStandoffHoldAction(),
+    GMStandoffOverrideAction(),
+    GMStandoffMoraleAction(),
+    GMOpenStandoffAction(),
     ReadyAction(),
     UpgradeComboAction(),
     RevertComboAction(),

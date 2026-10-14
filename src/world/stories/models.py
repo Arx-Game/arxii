@@ -1082,6 +1082,13 @@ class BeatOpponentLine(SharedMemoryModel):
         ),
     )
     order = models.PositiveIntegerField(default=0)
+    opens_as_standoff = models.BooleanField(
+        default=False,
+        help_text=(
+            "When any line on the beat has this set, running the beat opens a standoff "
+            "before round one instead of starting the fight."
+        ),
+    )
 
     class Meta:
         ordering = ["beat", "order"]

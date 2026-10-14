@@ -2,8 +2,6 @@
 
 from django.db import models
 
-from world.combat.constants import CauseKind
-
 
 class DriveStrength(models.IntegerChoices):
     """How hard a drive pulls on a creature. Larger numbers pull harder."""
@@ -17,6 +15,7 @@ class StandoffGroupState(models.TextChoices):
     """Where one group of creatures stands in a standoff."""
 
     OPEN = "open", "Open"
+    PROPOSED = "proposed", "Proposed"
     SETTLED = "settled", "Settled"
     FIGHTING = "fighting", "Fighting"
 
@@ -38,11 +37,30 @@ class TermsEffect(models.TextChoices):
     TOLL = "toll", "Pay us"
 
 
-# Placeholder one-line gloss shown under a revealed cause. Staff-authored prose is a later
-# slice; this is keyed by CauseKind so each kind carries its own line.
-CAUSE_GLOSSES: dict[str, str] = {
-    CauseKind.PREDATION: "They think you're prey.",
-}
+# The group states in which a group is still part of a live standoff: the party may act on
+# it and its cause is tested. PROPOSED is OPEN with a GM decision pending (#4354).
+LIVE_GROUP_STATES: tuple[str, ...] = (StandoffGroupState.OPEN, StandoffGroupState.PROPOSED)
+
+
+class MoraleDirection(models.TextChoices):
+    """Which way the GM morale control moves a group (#4354)."""
+
+    SHAKE = "shake", "Shake"
+    STEADY = "steady", "Steady"
+
+
+class ProposalResolution(models.TextChoices):
+    """What a GM did with a standoff proposal (#4354)."""
+
+    CONFIRM = "confirm", "Confirm"
+    HOLD = "hold", "Hold for one action"
+    OVERRIDE = "override", "Override"
+
+
+# System strings: why a cause fired, stated on the GM's proposal (#4354).
+REASON_OUTWEIGHED = "The party does not outweigh them by their margin."
+REASON_PROVOKED_PRESS = "Critical failure on a press (counts as a provocation)."
+REASON_PROVOKED_TERMS = "Critical failure on terms (counts as a provocation)."
 
 # The five check tiers, by ``success_level``, as one plain word each.
 SUCCESS_LEVEL_WORDS: dict[int, str] = {

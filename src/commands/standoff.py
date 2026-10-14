@@ -19,8 +19,9 @@ if TYPE_CHECKING:
     from collections.abc import Callable
 
     from actions.types import ActionRef, DispatchResult
-    from world.combat.models import CombatParticipant
+    from world.combat.models import CombatEncounter, CombatParticipant
     from world.standoffs.models import StandoffGroup
+    from world.standoffs.services.gm_view import GMStandoffView
     from world.standoffs.services.view import GroupView, LeverView, StandoffView
 
 _SUBVERBS: dict[str, str] = {
@@ -295,20 +296,124 @@ class CmdStandoff(DispatchCommand):
     # -- summary ---------------------------------------------------------------
 
     def _show_summary(self) -> None:
-        """Print the standoff as the caller may see it, from the shared view builder."""
+        """Print the standoff as the caller may see it: as a participant, a GM or an onlooker.
+
+        A participant gets their own view. Anyone else in a room whose encounter is in its
+        standoff gets the GM view when they GM that scene (or are staff), else the public
+        summary (#4354).
+        """
         from actions.definitions.standoff import _standoff_participant  # noqa: PLC0415
         from world.standoffs.services.view import build_standoff_view  # noqa: PLC0415
 
         participant = _standoff_participant(self.caller)
-        view = (
-            None
-            if participant is None
-            else build_standoff_view(participant.encounter, participant.character_sheet)
-        )
-        if view is None:
+        if participant is not None:
+            view = build_standoff_view(participant.encounter, participant.character_sheet)
+            if view is not None:
+                self.msg("\n".join(_render_view(view)))
+                return
+        encounter = _room_standoff_encounter(self.caller)
+        if encounter is None:
             self.msg(_NOT_IN_STANDOFF)
             return
-        self.msg("\n".join(_render_view(view)))
+        self.msg("\n".join(_render_outside_view(self.caller, encounter)))
+
+
+def _room_standoff_encounter(caller: Any) -> CombatEncounter | None:
+    """The newest encounter in the caller's room that is in its standoff, if any."""
+    from world.combat.models import CombatEncounter  # noqa: PLC0415
+    from world.standoffs.services.state import is_in_standoff  # noqa: PLC0415
+
+    room = caller.location
+    if room is None:
+        return None
+    candidates = CombatEncounter.objects.filter(room=room, round_number=0).order_by("-created_at")
+    return next((e for e in candidates if is_in_standoff(e)), None)
+
+
+def _render_outside_view(caller: Any, encounter: CombatEncounter) -> list[str]:
+    """The GM view for a scene GM or staff; the public summary for anyone else."""
+    from commands.utils.gm_resolution import resolve_account_or_none  # noqa: PLC0415
+    from world.standoffs.services.gm_view import (  # noqa: PLC0415
+        build_gm_standoff_view,
+        build_standoff_summary,
+    )
+
+    # A puppeting session sets ``account``; a character played off a tenure resolves
+    # through ``active_account``.
+    account = caller.account or resolve_account_or_none(caller)
+    is_gm = account is not None and (
+        account.is_staff or (encounter.scene is not None and encounter.scene.is_gm(account))
+    )
+    if is_gm:
+        gm_view = build_gm_standoff_view(encounter)
+        if gm_view is not None:
+            return _render_gm_view(gm_view)
+    summary = build_standoff_summary(encounter)
+    if summary is None:
+        return [_NOT_IN_STANDOFF]
+    lines = [f"Standoff at {summary.place}:" if summary.place else "Standoff:"]
+    lines.extend(
+        f"  {group.name} ({group.member_count}) - "
+        + _state_words(group.state, group.morale_state, emboldened=group.emboldened)
+        for group in summary.groups
+    )
+    if summary.participants:
+        lines.append(f"In the standoff: {', '.join(summary.participants)}.")
+    return lines
+
+
+def _render_gm_view(view: GMStandoffView) -> list[str]:
+    """The GM's whole view of a standoff, as plain text."""
+    lines = [f"Standoff at {view.place} (GM):" if view.place else "Standoff (GM):"]
+    for group in view.groups:
+        lines.append(
+            f"  [{group.group_id}] {group.name} ({group.member_count}) - "
+            + _state_words(group.state, group.morale_state, emboldened=group.emboldened_bands > 0)
+        )
+        status = f"fires: {group.cause_reason}" if group.cause_fires else "holds"
+        lines.append(f"    Cause: {group.cause} ({status})")
+        if group.pending_prompt_id is not None:
+            lines.append(
+                f"    Proposal [{group.pending_prompt_id}]: {group.proposal_reason} "
+                f"(gm prompt confirm|hold|override {group.pending_prompt_id})"
+            )
+        lines.extend(
+            f"    Drive: {drive.label} ({drive.strength}){' - read' if drive.revealed else ''}"
+            for drive in group.drives
+        )
+        lines.extend(
+            f"    Faction rule: {rule.label} - matches "
+            f"{', '.join(rule.matched_by) or 'nobody'}{' - read' if rule.revealed else ''}"
+            for rule in group.faction_rules
+        )
+        lines.append(
+            f"    Force: party {group.effective_party_force}, them {group.group_force} "
+            f"(margin {group.cause_margin_percent}%)"
+        )
+        lines.append(
+            "    Morale: "
+            + ", ".join(f"{m.name} {m.morale} ({m.morale_state})" for m in group.members)
+        )
+    lines.append("GM: gm standoff shake|steady <group id> <reason>")
+    return lines
+
+
+def _state_words(state: str, morale_state: str, *, emboldened: bool) -> str:
+    """A group's state for a reader: PROPOSED reads as open plus deciding."""
+    from world.combat.morale import OpponentMoraleState  # noqa: PLC0415
+    from world.standoffs.constants import StandoffGroupState  # noqa: PLC0415
+
+    deciding = state == StandoffGroupState.PROPOSED
+    words = [StandoffGroupState.OPEN.label if deciding else StandoffGroupState(state).label]
+    if emboldened:
+        words.append("emboldened")
+    if morale_state == OpponentMoraleState.FALTER:
+        words.append("faltering")
+    elif morale_state == OpponentMoraleState.BREAK:
+        words.append("broken")
+    if deciding:
+        words.append("deciding")
+    return ", ".join(words)
 
 
 def _render_view(view: StandoffView) -> list[str]:
@@ -322,9 +427,10 @@ def _render_view(view: StandoffView) -> list[str]:
 
 def _render_group(view: StandoffView, group: GroupView) -> list[str]:
     """Render one group's visible lines in the summary."""
-    from world.standoffs.constants import StandoffGroupState  # noqa: PLC0415
-
-    lines = [f"  {group.name} ({group.member_count}) - {StandoffGroupState(group.state).label}"]
+    lines = [
+        f"  {group.name} ({group.member_count}) - "
+        + _state_words(group.state, group.morale_state, emboldened=group.emboldened)
+    ]
     if group.read_grade_label:
         lines.append(f"    read ({group.read_check}): {group.read_grade_label}")
     if group.hidden_count:

@@ -4,6 +4,7 @@ import factory
 from factory import django as factory_django
 
 from world.checks.factories import CheckTypeFactory
+from world.combat.constants import CauseKind
 from world.combat.factories import CombatEncounterFactory, CreatureTemplateFactory
 from world.conditions.factories import CapabilityTypeFactory
 from world.mechanics.factories import PropertyFactory
@@ -12,6 +13,7 @@ from world.standoffs.models import (
     CreatureDrive,
     FactionRule,
     StandoffApproach,
+    StandoffCauseGloss,
     StandoffGroup,
     StandoffReactionLine,
     StandoffReveal,
@@ -54,6 +56,15 @@ class StandoffTermsFactory(factory_django.DjangoModelFactory):
 
     name = factory.Sequence(lambda n: f"Terms {n}")
     effect = TermsEffect.PASS
+
+
+class StandoffCauseGlossFactory(factory_django.DjangoModelFactory):
+    class Meta:
+        model = StandoffCauseGloss
+        django_get_or_create = ("cause",)
+
+    cause = CauseKind.PREDATION
+    text = "PLACEHOLDER cause gloss"
 
 
 class StandoffGroupFactory(factory_django.DjangoModelFactory):

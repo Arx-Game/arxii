@@ -21,11 +21,12 @@ from world.combat.tests.test_views import CombatEncounterViewSetTestBase
 from world.mechanics.constants import DifficultyIndicator
 from world.mechanics.factories import ApplicationFactory, ModifierTargetFactory
 from world.species.factories import SpeciesFactory
-from world.standoffs.constants import CAUSE_GLOSSES, DriveStrength, RevealKind
+from world.standoffs.constants import DriveStrength, RevealKind
 from world.standoffs.factories import (
     CreatureDriveFactory,
     FactionRuleFactory,
     StandoffApproachFactory,
+    StandoffCauseGlossFactory,
     StandoffGroupFactory,
     StandoffRevealFactory,
     StandoffTermsFactory,
@@ -224,12 +225,20 @@ class PresentationTests(ViewBase):
     def test_cause_gloss_only_once_the_cause_is_revealed(self) -> None:
         self.template.cause = CauseKind.PREDATION
         self.template.save(update_fields=["cause"])
+        StandoffCauseGlossFactory(cause=CauseKind.PREDATION, text="PLACEHOLDER predation gloss")
         self.assertIsNone(self.view_for(self.sheet_b).groups[0].cause_gloss)
         StandoffRevealFactory(group=self.group, kind=RevealKind.CAUSE)
         self.assertEqual(
-            self.view_for(self.sheet_b).groups[0].cause_gloss,
-            CAUSE_GLOSSES[CauseKind.PREDATION],
+            self.view_for(self.sheet_b).groups[0].cause_gloss, "PLACEHOLDER predation gloss"
         )
+
+    def test_a_revealed_cause_with_no_authored_gloss_shows_none(self) -> None:
+        self.template.cause = CauseKind.PREDATION
+        self.template.save(update_fields=["cause"])
+        StandoffRevealFactory(group=self.group, kind=RevealKind.CAUSE)
+        group = self.view_for(self.sheet_b).groups[0]
+        self.assertEqual(group.cause, "Predation")
+        self.assertIsNone(group.cause_gloss)
 
     def test_terms_carry_their_authored_description(self) -> None:
         StandoffTermsFactory(description="PLACEHOLDER what happens")

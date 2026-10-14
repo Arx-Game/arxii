@@ -88,7 +88,11 @@ _USAGE_SUMMON = (
     " (consent-prompted -- the character must `accept summon`/`decline summon`)"
 )
 _USAGE_NPC = "Usage: gm npc <name>[=<description>] [preset=<name>] (requires Junior GM+)"
-_USAGE_PROMPT = "Usage: gm prompt send <id> | gm prompt dismiss <id> | gm prompt done <id>"
+_USAGE_PROMPT = (
+    "Usage: gm prompt send <id> | gm prompt dismiss <id> | gm prompt done <id>"
+    " | gm prompt confirm <id> | gm prompt hold <id> | gm prompt override <id> <reason>"
+)
+_USAGE_STANDOFF = "Usage: gm standoff shake <group> <reason> | gm standoff steady <group> <reason>"
 _SUBVERB_LIST = "list"
 _SUBVERB_ARM = "arm"
 _SUBVERB_DISARM = "disarm"
@@ -96,6 +100,12 @@ _SUBVERB_REMOVE = "remove"
 _PROMPT_SEND = "send"
 _PROMPT_DISMISS = "dismiss"
 _PROMPT_DONE = "done"
+# Standoff proposal decisions (#4354): verb -> registry action key.
+_PROMPT_STANDOFF_VERBS: dict[str, str] = {
+    "confirm": "gm_standoff_confirm",
+    "hold": "gm_standoff_hold",
+    "override": "gm_standoff_override",
+}
 
 # parse_kv_and_flags key names -- module constants so the STRING_LITERAL lint's
 # comparison/membership check doesn't see bare identifier-shaped literals.
@@ -136,6 +146,11 @@ class CmdGMDashboard(ArxCommand):
       gm prompt send <id>
       gm prompt dismiss <id>
       gm prompt done <id>
+      gm prompt confirm <id>                    (standoff: they attack)
+      gm prompt hold <id>                       (standoff: test again after the next action)
+      gm prompt override <id> <reason>          (standoff: they stay in the standoff)
+      gm standoff shake <group> <reason>        (one morale state down)
+      gm standoff steady <group> <reason>       (one morale state up)
     """
 
     key = "gm"
@@ -168,6 +183,7 @@ class CmdGMDashboard(ArxCommand):
                 "npc": self._handle_npc,
                 "prompts": self._list_prompts,
                 "prompt": self._handle_prompt,
+                "standoff": self._handle_standoff,
             }
             handler = handlers.get(first)
             if handler is None:
@@ -510,6 +526,12 @@ class CmdGMDashboard(ArxCommand):
             )
             status_tag = " (narrated)" if p.status == GMPromptStatus.NARRATED else ""
             self.msg(f"[{p.pk}] {p.get_kind_display()}{status_tag}: {subject}")
+            if p.standoff_group_id is not None:
+                from world.standoffs.services.proposals import (  # noqa: PLC0415
+                    proposal_summary,
+                )
+
+                self.msg(f"  {proposal_summary(p.standoff_group)}")
             if p.private_text:
                 self.msg(f"  private: {p.private_text}")
             if p.room_text:
@@ -525,6 +547,9 @@ class CmdGMDashboard(ArxCommand):
         verb, _, raw_id = rest.partition(" ")
         verb = verb.strip().lower()
         raw_id = raw_id.strip()
+        if verb in _PROMPT_STANDOFF_VERBS:
+            self._decide_standoff_prompt(verb, raw_id)
+            return
         if verb not in (_PROMPT_SEND, _PROMPT_DISMISS, _PROMPT_DONE) or not raw_id.isdigit():
             raise CommandError(_USAGE_PROMPT)
         prompt_id = int(raw_id)
@@ -532,6 +557,67 @@ class CmdGMDashboard(ArxCommand):
             self._dismiss_prompt(prompt_id)
             return
         self._send_prompt_defaults(prompt_id)
+
+    def _decide_standoff_prompt(self, verb: str, rest: str) -> None:
+        """``gm prompt confirm|hold <id>`` / ``gm prompt override <id> <reason>`` (#4354)."""
+        from actions.registry import get_action  # noqa: PLC0415
+
+        raw_id, _, reason = rest.partition(" ")
+        if not raw_id.isdigit():
+            raise CommandError(_USAGE_PROMPT)
+        action = get_action(_PROMPT_STANDOFF_VERBS[verb])
+        result = action.run(
+            actor=None,
+            account=self.caller.account,
+            prompt_id=int(raw_id),
+            reason=reason.strip(),
+        )
+        self.msg(result.message or "Done.")
+
+    def _handle_standoff(self, rest: str) -> None:
+        """``gm standoff shake|steady <group> <reason>`` (#4354): the GM morale control.
+
+        ``<group>`` is the group's id (shown by ``standoff``) or its creature's name, scoped
+        to the standoff in the caller's room.
+        """
+        from actions.definitions.gm_standoff import GMStandoffMoraleAction  # noqa: PLC0415
+        from commands.standoff import _room_standoff_encounter  # noqa: PLC0415
+        from world.standoffs.constants import MoraleDirection  # noqa: PLC0415
+
+        direction, _, tail = rest.partition(" ")
+        direction = direction.strip().lower()
+        if direction not in MoraleDirection.values or not tail.strip():
+            raise CommandError(_USAGE_STANDOFF)
+        encounter = _room_standoff_encounter(self.caller)
+        if encounter is None:
+            msg = "There is no standoff here."
+            raise CommandError(msg)
+        group, reason = self._standoff_group_and_reason(encounter, tail.strip())
+        result = GMStandoffMoraleAction().run(
+            actor=None,
+            account=self.caller.account,
+            group_id=group.pk,
+            direction=direction,
+            reason=reason,
+        )
+        self.msg(result.message or "Done.")
+
+    @staticmethod
+    def _standoff_group_and_reason(encounter: Any, text: str) -> tuple[Any, str]:
+        """Split ``<group> <reason>``: a leading id, or the longest leading group name."""
+        groups = list(encounter.standoff_groups.select_related("creature_template"))
+        head, _, tail = text.partition(" ")
+        if head.isdigit():
+            match = next((g for g in groups if g.pk == int(head)), None)
+            if match is not None:
+                return match, tail.strip()
+        words = text.split()
+        for cut in range(len(words) - 1, 0, -1):
+            name = " ".join(words[:cut]).lower()
+            match = next((g for g in groups if g.creature_template.name.lower() == name), None)
+            if match is not None:
+                return match, " ".join(words[cut:])
+        raise CommandError(_USAGE_STANDOFF)
 
     def _dismiss_prompt(
         self,

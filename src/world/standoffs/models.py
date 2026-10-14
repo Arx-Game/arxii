@@ -14,9 +14,11 @@ from django.db import models
 from core.managers import ArxSharedMemoryManager
 from core.models import ArxSharedMemoryModel as SharedMemoryModel
 from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
+from world.combat.constants import CauseKind
 from world.predicates.validation import validate_predicate_tree
 from world.standoffs.constants import (
     DriveStrength,
+    MoraleDirection,
     RevealKind,
     StandoffGroupState,
     TermsEffect,
@@ -333,6 +335,36 @@ class StandoffConfig(SharedMemoryModel):
         return "Standoff settings"
 
 
+class StandoffCauseGloss(NaturalKeyMixin, SharedMemoryModel):
+    """The one-line player-facing gloss shown under a revealed cause (author in admin).
+
+    One row per ``CauseKind``. A cause with no row shows no gloss; the Required content
+    dashboard lists the kinds still missing one.
+    """
+
+    cause = models.CharField(
+        max_length=20,
+        choices=CauseKind.choices,
+        unique=True,
+        help_text="The cause this gloss explains.",
+    )
+    text = models.CharField(
+        max_length=200,
+        help_text="Shown to the party under the cause once a read reveals it (author in admin).",
+    )
+
+    objects = NaturalKeyManager()
+
+    class Meta:
+        ordering = ["cause"]
+
+    class NaturalKeyConfig:
+        fields = ["cause"]
+
+    def __str__(self) -> str:
+        return f"{self.get_cause_display()} gloss"
+
+
 class StandoffGroup(SharedMemoryModel):
     """One creature kind's opponents in an encounter, treated as a single side of a standoff."""
 
@@ -367,6 +399,24 @@ class StandoffGroup(SharedMemoryModel):
         blank=True,
         related_name="+",
         help_text="The outcome that settled the group, once it is settled.",
+    )
+    proposal_reason = models.CharField(
+        max_length=255,
+        blank=True,
+        help_text="Why the cause last fired, shown on the GM's proposal (system text).",
+    )
+    override_party_force = models.FloatField(
+        null=True,
+        blank=True,
+        help_text=(
+            "Party force when a GM overrode the cause; the cause is not tested again until "
+            "force moves off this value or a botch lands. Null when no override stands."
+        ),
+    )
+    override_group_force = models.FloatField(
+        null=True,
+        blank=True,
+        help_text="Group force when a GM overrode the cause (see override_party_force).",
     )
 
     class Meta:
@@ -531,3 +581,33 @@ class StandoffReactionLine(SharedMemoryModel):
 
     def __str__(self) -> str:
         return f"Reaction line #{self.pk} (>= {self.min_success_level})"
+
+
+class StandoffMoraleRuling(SharedMemoryModel):
+    """A GM moved a group's morale one state, and why (#4354). The GM's own record."""
+
+    group = models.ForeignKey(
+        StandoffGroup,
+        on_delete=models.CASCADE,
+        related_name="morale_rulings",
+        help_text="The group whose morale the GM moved.",
+    )
+    ruled_by = models.ForeignKey(
+        "accounts.AccountDB",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="+",
+        help_text="The GM account that made the ruling.",
+    )
+    direction = models.CharField(
+        max_length=10, choices=MoraleDirection.choices, help_text="Shake or steady."
+    )
+    reason = models.TextField(help_text="The GM's stated reason (required).")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["group", "-created_at"]
+
+    def __str__(self) -> str:
+        return f"{self.get_direction_display()} on {self.group}"

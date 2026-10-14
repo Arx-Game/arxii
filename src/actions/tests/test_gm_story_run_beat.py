@@ -151,6 +151,30 @@ class RunBeatActionEncounterJourneyTests(RunBeatActionTestBase):
         self.assertIn("opponents", result.data)
         self.assertTrue(all(o["success"] for o in result.data["opponents"]))
 
+    def test_a_line_that_opens_as_a_standoff_holds_round_one(self) -> None:
+        """#4354: a beat line with the standoff switch opens a standoff, not a fight."""
+        from world.standoffs.constants import StandoffGroupState
+        from world.standoffs.services.state import is_in_standoff
+
+        self.mook_line.opens_as_standoff = True
+        self.mook_line.save(update_fields=["opens_as_standoff"])
+        result = RunBeatAction().run(self.lead_gm_actor, beat_id=self.beat.pk)
+        self.assertTrue(result.success, result.message)
+        encounter = CombatEncounter.objects.get(scene=self.scene)
+        self.assertTrue(is_in_standoff(encounter))
+        self.assertEqual(
+            sorted(g.creature_template_id for g in encounter.standoff_groups.all()),
+            sorted([self.boss_template.pk, self.mook_template.pk]),
+        )
+        self.assertTrue(
+            all(g.state == StandoffGroupState.OPEN for g in encounter.standoff_groups.all())
+        )
+
+    def test_without_the_switch_no_standoff_opens(self) -> None:
+        RunBeatAction().run(self.lead_gm_actor, beat_id=self.beat.pk)
+        encounter = CombatEncounter.objects.get(scene=self.scene)
+        self.assertFalse(encounter.standoff_groups.exists())
+
     def test_prepared_opponents_scale_against_seated_party(self) -> None:
         """RunBeat seats the scene party before freezing opponent stats."""
         result = RunBeatAction().run(self.lead_gm_actor, beat_id=self.beat.pk)

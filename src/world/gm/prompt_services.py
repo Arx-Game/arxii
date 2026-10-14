@@ -18,6 +18,8 @@ from django.db import DatabaseError, transaction
 from django.db.models import Exists, OuterRef, Q, QuerySet
 
 from world.gm.constants import (
+    ADDRESSED_PROMPT_KINDS,
+    DECISION_PROMPT_KINDS,
     NARRATION_PROMPT_KINDS,
     PROMPT_GROUP_FOR_KIND,
     GMPromptKind,
@@ -107,7 +109,7 @@ def _prompt_visibility_query(account: AccountDB, scene: Scene | None) -> Q:
     ``account_can_gm_scene`` against, so it contributes nothing when ``scene``
     is ``None``.
     """
-    narration = Q(kind__in=NARRATION_PROMPT_KINDS, addressed_to=account)
+    narration = Q(kind__in=ADDRESSED_PROMPT_KINDS, addressed_to=account)
     if scene is not None:
         narration &= Q(scene=scene) | Q(scene__isnull=True)
     else:
@@ -151,6 +153,7 @@ def visible_prompts_for(account: AccountDB, *, scene: Scene | None) -> QuerySet[
             "moment_type",
             "technique",
             "stake_outcome__stake",
+            "standoff_group__creature_template",
             "scene",
         )
         .order_by("-created_at")
@@ -206,7 +209,7 @@ def prompt_visible_to(account: AccountDB, prompt: GMPrompt) -> bool:
     if prompt.scene_id is not None:
         query = _prompt_visibility_query(account, prompt.scene)
         return GMPrompt.objects.filter(query, pk=prompt.pk).exists()
-    return prompt.kind in NARRATION_PROMPT_KINDS and prompt.addressed_to_id == account.pk
+    return prompt.kind in ADDRESSED_PROMPT_KINDS and prompt.addressed_to_id == account.pk
 
 
 def prompt_recipients(
@@ -332,6 +335,7 @@ def route_narratable_event(
                 prepared_for_character=event.prepared_for_character,
                 technique=event.technique,
                 stake_outcome=event.stake_outcome,
+                standoff_group=event.standoff_group,
             )
             for account in recipients
         ]
@@ -494,6 +498,11 @@ def prompt_telnet_commands(prompt: GMPrompt) -> str:
     """
     if prompt.kind == GMPromptKind.DRAMATIC_MOMENT:
         return f"moment confirm {prompt.pk} | moment dismiss {prompt.pk}"
+    if prompt.kind == GMPromptKind.STANDOFF_CAUSE:
+        return (
+            f"gm prompt confirm {prompt.pk} | gm prompt hold {prompt.pk}"
+            f" | gm prompt override {prompt.pk} <reason>"
+        )
     return (
         f"emit/prompt {prompt.pk} <text> | pemit/prompt {prompt.pk} <names>=<text>"
         f" | gm prompt send {prompt.pk} | gm prompt dismiss {prompt.pk}"
@@ -502,6 +511,11 @@ def prompt_telnet_commands(prompt: GMPrompt) -> str:
 
 
 def _telnet_line(prompt: GMPrompt) -> str:
+    if prompt.kind == GMPromptKind.STANDOFF_CAUSE and prompt.standoff_group is not None:
+        from world.standoffs.services.proposals import proposal_summary  # noqa: PLC0415
+
+        head = f"GM prompt [{prompt.pk}] {prompt.get_kind_display()}: "
+        return f"{head}{proposal_summary(prompt.standoff_group)} {prompt_telnet_commands(prompt)}"
     subject = prompt_subject_name(prompt)
     head = f"GM prompt [{prompt.pk}] {prompt.get_kind_display()}"
     head = f"{head}: {subject}." if subject else f"{head}."
@@ -977,6 +991,14 @@ def expire_scene_prompts(scene: Scene) -> int:
             dismiss_gm_prompt(prompt, resolver=None)
         except GMPromptError:
             continue
+        expired += 1
+    # A decision prompt (a standoff proposal) has no default to release: it just closes.
+    for prompt in GMPrompt.objects.filter(
+        scene=scene, status=GMPromptStatus.PENDING, kind__in=DECISION_PROMPT_KINDS
+    ):
+        prompt.status = GMPromptStatus.DISMISSED
+        prompt.resolution_note = "The scene ended before a decision."
+        prompt.save(update_fields=["status", "resolution_note"])
         expired += 1
     return expired
 

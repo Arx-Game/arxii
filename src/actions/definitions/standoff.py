@@ -140,6 +140,8 @@ def _read_result(
     from world.standoffs.services.describe import describe_reveals  # noqa: PLC0415
 
     lines = describe_reveals(group, outcome.revealed, participant.character_sheet)
+    if outcome.fight_started:
+        lines.append("They attack!")
     return ActionResult(success=outcome.success, message="\n".join([outcome.message, *lines]))
 
 

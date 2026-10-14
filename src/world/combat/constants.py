@@ -40,6 +40,7 @@ class CauseKind(models.TextChoices):
 
     NONE = "none", "None"
     PREDATION = "predation", "Predation"
+    ORDERS = "orders", "Orders"
 
 
 class EncounterType(models.TextChoices):

@@ -1289,6 +1289,22 @@ class GMPrompt(RelatedCacheClearingMixin, SharedMemoryModel):
         related_name="source_suggestion",
         help_text="The DramaticMomentTag minted on confirmation, if any.",
     )
+    standoff_group = models.ForeignKey(
+        "arxii.StandoffGroup",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="gm_prompts",
+        help_text="The standoff group a standoff_cause prompt proposes to start the fight.",
+    )
+    resolution_note = models.TextField(
+        blank=True,
+        default="",
+        help_text=(
+            "What the GM decided on a decision prompt, with their reason when they gave one "
+            "(a standoff Override's reason is recorded here)."
+        ),
+    )
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:

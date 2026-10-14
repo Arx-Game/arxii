@@ -21,14 +21,14 @@ from world.combat.morale import OpponentMoraleState, morale_state_for
 from world.mechanics.constants import DifficultyIndicator
 from world.mechanics.services import difficulty_indicator_for_rank_difference
 from world.standoffs.constants import (
-    CAUSE_GLOSSES,
+    LIVE_GROUP_STATES,
     DriveStrength,
     RevealKind,
-    StandoffGroupState,
 )
 from world.standoffs.models import (
     StandoffAngleShare,
     StandoffApproach,
+    StandoffCauseGloss,
     StandoffConfig,
     StandoffGroup,
     StandoffReveal,
@@ -76,6 +76,7 @@ class GroupView:
     read_grade_label: str
     morale_state: str = OpponentMoraleState.STEADY
     terms_morale_ease: int = 0
+    emboldened: bool = False
 
 
 @dataclass(frozen=True)
@@ -233,7 +234,7 @@ def _group_view(  # noqa: PLR0913 - one viewer-and-group context, built once per
         state=group.state,
         terms_ease=group.terms_ease,
         cause=CauseKind(template.cause).label if cause_known else None,
-        cause_gloss=CAUSE_GLOSSES.get(template.cause) if cause_known else None,
+        cause_gloss=_cause_gloss(template.cause) if cause_known else None,
         hidden_count=hidden_count,
         drives=drives,
         revealed_faction_rules=describe_reveals(
@@ -248,7 +249,14 @@ def _group_view(  # noqa: PLR0913 - one viewer-and-group context, built once per
         read_grade_label=grade_label(read[1]),
         morale_state=morale_state,
         terms_morale_ease=terms_morale_ease,
+        emboldened=group.emboldened_bands > 0,
     )
+
+
+def _cause_gloss(cause: str) -> str | None:
+    """The staff-authored gloss for a cause, or None when none is authored."""
+    row = StandoffCauseGloss.objects.filter(cause=cause).first()
+    return row.text if row is not None and row.text else None
 
 
 def _levers(facts: _GroupFacts, hits: list, targeted: set[int]) -> tuple[list[LeverView], bool]:
@@ -396,7 +404,7 @@ def _append_group_views(  # noqa: PLR0913 - inputs are the per-view and per-grou
     hidden = hidden_things(
         group, participants, revealed=facts.revealed_set, known_matches={viewer.pk: matches}
     )
-    is_open = group.state == StandoffGroupState.OPEN and bool(members)
+    is_open = group.state in LIVE_GROUP_STATES and bool(members)
     ctx = (
         build_grading_context(group, viewer, members=members, matches=matches) if is_open else None
     )

@@ -478,8 +478,10 @@ class ResultMessageTests(VerbBase):
         self.assertEqual(botched.message, "Critical failure. It goes badly; they grow bolder.")
 
     def test_read_names_the_outcome(self) -> None:
+        # A cause to read, which the party outweighs: a read also tests the cause.
         self.template.cause = CauseKind.PREDATION
-        self.template.save(update_fields=["cause"])
+        self.template.cause_margin_percent = -99
+        self.template.save(update_fields=["cause", "cause_margin_percent"])
         with patch(CHECK, return_value=forced(-1)):
             missed = standoff_read(self.participant, self.group)
         self.assertEqual(missed.message, "You study them. Failure. You learn nothing.")

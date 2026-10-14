@@ -6,6 +6,7 @@ from world.standoffs.models import (
     CreatureDrive,
     FactionRule,
     StandoffApproach,
+    StandoffCauseGloss,
     StandoffConfig,
     StandoffReactionLine,
     StandoffTerms,
@@ -93,3 +94,10 @@ class StandoffConfigAdmin(admin.ModelAdmin):
     ) -> bool:
         """The singleton cannot be deleted."""
         return False
+
+
+@admin.register(StandoffCauseGloss)
+class StandoffCauseGlossAdmin(admin.ModelAdmin):
+    """One player-facing line per cause, shown under it once a read reveals it."""
+
+    list_display = ("cause", "text")

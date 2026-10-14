@@ -46,6 +46,9 @@ from world.magic.services.ultimates import floor_ultimate_check, readied_ultimat
 from world.mechanics.models import Application
 from world.standoffs.constants import (
     FIGHT_BEGINS_MESSAGE,
+    LIVE_GROUP_STATES,
+    REASON_PROVOKED_PRESS,
+    REASON_PROVOKED_TERMS,
     SUCCESS_LEVEL_WORDS,
     RevealKind,
     StandoffGroupState,
@@ -67,7 +70,8 @@ from world.standoffs.services.faction_rules import (
     drive_strength_from,
     faction_rule_matches,
 )
-from world.standoffs.services.force import evaluate_causes
+from world.standoffs.services.force import clear_override, evaluate_causes
+from world.standoffs.services.proposals import close_group_prompts
 from world.standoffs.services.routing import complete_standoff
 from world.standoffs.services.state import (
     active_members,
@@ -116,7 +120,7 @@ def _lock(
 def _refusal(encounter: CombatEncounter, group: StandoffGroup | None) -> str | None:
     if not is_in_standoff(encounter):
         return _MSG_OVER
-    if group is not None and group.state != StandoffGroupState.OPEN:
+    if group is not None and group.state not in LIVE_GROUP_STATES:
         return _MSG_SETTLED
     return None
 
@@ -253,8 +257,14 @@ def standoff_read(  # noqa: PLR0913 - the focus kwargs are the read verb's whole
     )
     tier = result.success_level
     if tier < 0:
+        attack_lines: list[str] = []
+        fight_started = evaluate_causes(encounter, attack_lines)
         return StandoffActionResult(
-            False, f"You study them. {_word(tier)}. You learn nothing.", success_level=tier
+            False,
+            f"You study them. {_word(tier)}. You learn nothing.",
+            success_level=tier,
+            fight_started=fight_started,
+            attack_line=attack_lines[0] if attack_lines else "",
         )
     if tier >= 2:  # noqa: PLR2004 - critical: everything
         chosen = hidden
@@ -270,10 +280,17 @@ def standoff_read(  # noqa: PLR0913 - the focus kwargs are the read verb's whole
     else:
         chosen = [random.choice(hidden)]  # noqa: S311 # NOSONAR game RNG, not crypto
     revealed = [_reveal(group, thing) for thing in chosen]
-    # No evaluate_causes here: a read changes none of a cause's inputs (force, emboldening,
-    # suppressing faction rules), so the cause cannot newly fire.
+    # A read changes none of a cause's inputs, but every action is a point where the cause
+    # is tested: a GM's "hold for one action" is tested again after the next one.
+    attack_lines = []
+    fight_started = evaluate_causes(encounter, attack_lines)
     return StandoffActionResult(
-        True, f"You study them. {_word(tier)}.", success_level=tier, revealed=revealed
+        True,
+        f"You study them. {_word(tier)}.",
+        success_level=tier,
+        revealed=revealed,
+        fight_started=fight_started,
+        attack_line=attack_lines[0] if attack_lines else "",
     )
 
 
@@ -431,8 +448,10 @@ def terms_difficulty(
 
 
 def _embolden_on_botch(group: StandoffGroup, config: StandoffConfig) -> None:
+    """A botch emboldens the group and ends any GM override of its cause."""
     group.emboldened_bands += config.botch_force_bands
     group.save(update_fields=["emboldened_bands"])
+    clear_override(group)
 
 
 def _share_shifting_angles(
@@ -624,7 +643,12 @@ def standoff_press(
         _embolden_on_botch(group, config)
         message = "It goes badly; they grow bolder."
     attack_lines: list[str] = []
-    fight_started = evaluate_causes(encounter, attack_lines)
+    fight_started = evaluate_causes(
+        encounter,
+        attack_lines,
+        provoked=group if tier <= BOTCH_LEVEL else None,
+        provocation=REASON_PROVOKED_PRESS,
+    )
     return StandoffActionResult(
         success=tier >= 1,
         message=f"{_word(tier)}. {message}",
@@ -730,7 +754,12 @@ def standoff_terms(
         if tier <= BOTCH_LEVEL:
             _embolden_on_botch(group, config)
         attack_lines: list[str] = []
-        fight_started = evaluate_causes(encounter, attack_lines)
+        fight_started = evaluate_causes(
+            encounter,
+            attack_lines,
+            provoked=group if tier <= BOTCH_LEVEL else None,
+            provocation=REASON_PROVOKED_TERMS,
+        )
         return StandoffActionResult(
             False,
             f"{_word(tier)}. They refuse your terms.",
@@ -742,6 +771,7 @@ def standoff_terms(
     group.state = StandoffGroupState.SETTLED
     group.settled_outcome = result.outcome
     group.save(update_fields=["state", "settled_outcome"])
+    close_group_prompts(group, "They accepted terms.")
     settle_empty_groups(encounter)
     attack_lines = []
     fight_started = False
@@ -803,9 +833,15 @@ def standoff_share_angle(
     StandoffAngleShare.objects.get_or_create(
         group=group, character_sheet=sheet, faction_rule=faction_rule
     )
-    # No evaluate_causes here: sharing an angle changes none of a cause's inputs (force,
-    # emboldening), and the suppression check reads the party's own matches, not shares.
-    return StandoffActionResult(True, "You share what you feel.")
+    # Sharing changes none of a cause's inputs, but it is an action: a held cause is tested.
+    attack_lines: list[str] = []
+    fight_started = evaluate_causes(encounter, attack_lines)
+    return StandoffActionResult(
+        True,
+        "You share what you feel.",
+        fight_started=fight_started,
+        attack_line=attack_lines[0] if attack_lines else "",
+    )
 
 
 def _press_morale_damage(

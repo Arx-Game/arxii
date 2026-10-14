@@ -18,6 +18,7 @@ if TYPE_CHECKING:
     from world.magic.models import Technique
     from world.mechanics.models import ChallengeTemplate, SituationTemplate
     from world.scenes.models import Scene
+    from world.standoffs.models import StandoffGroup
     from world.stories.models import StakeOutcome
 
 
@@ -87,3 +88,4 @@ class NarratableEvent:
     prepared_for_character: bool = False
     technique: Technique | None = None
     stake_outcome: StakeOutcome | None = None
+    standoff_group: StandoffGroup | None = None

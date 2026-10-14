@@ -989,7 +989,7 @@ class BeatOpponentLineSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = BeatOpponentLine
-        fields = ["id", "creature_template", "count", "position_name", "order"]
+        fields = ["id", "creature_template", "count", "position_name", "order", "opens_as_standoff"]
 
 
 class BeatStagedTemplateSerializer(serializers.ModelSerializer):

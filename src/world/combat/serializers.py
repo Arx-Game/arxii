@@ -51,7 +51,12 @@ from world.conditions.services import get_active_conditions
 from world.fatigue.services import get_fatigue_capacity
 from world.magic.models import CharacterTechnique, Technique
 from world.scenes.constants import PersonaType, RoundStatus
-from world.standoffs.serializers import StandoffViewSerializer
+from world.standoffs.serializers import (
+    GMStandoffViewSerializer,
+    StandoffSummarySerializer,
+    StandoffViewSerializer,
+)
+from world.standoffs.services.gm_view import build_gm_standoff_view, build_standoff_summary
 from world.standoffs.services.view import build_standoff_view
 
 if TYPE_CHECKING:
@@ -1268,6 +1273,8 @@ class EncounterDetailSerializer(serializers.ModelSerializer):
     sustained_actions = serializers.SerializerMethodField(required=False)
     protection_commitments = serializers.SerializerMethodField(required=False)
     standoff = serializers.SerializerMethodField()
+    gm_standoff = serializers.SerializerMethodField()
+    standoff_summary = serializers.SerializerMethodField()
     escalation_curve = serializers.PrimaryKeyRelatedField(
         queryset=EscalationCurve.objects.all(),
         required=False,
@@ -1337,6 +1344,8 @@ class EncounterDetailSerializer(serializers.ModelSerializer):
             "sustained_actions",
             "protection_commitments",
             "standoff",
+            "gm_standoff",
+            "standoff_summary",
             "is_lethal",
             "duel_winner",
         ]
@@ -1383,6 +1392,41 @@ class EncounterDetailSerializer(serializers.ModelSerializer):
                 view = build_standoff_view(obj, participant.character_sheet)
                 return None if view is None else StandoffViewSerializer(view).data
         return None
+
+    @extend_schema_field(GMStandoffViewSerializer(allow_null=True))
+    def get_gm_standoff(self, obj: CombatEncounter) -> dict[str, Any] | None:
+        """The whole standoff for the scene's GMs and staff; None for anyone else (#4354).
+
+        Carries every group's cause, drives, faction rules and matches, so it must never
+        reach a player or an onlooker.
+        """
+        if obj.round_number != 0:
+            return None
+        request = self.context.get("request")
+        if request is None or not request.user.is_authenticated:
+            return None
+        if not (self.context.get("is_gm", False) or request.user.is_staff):
+            return None
+        view = build_gm_standoff_view(obj)
+        return None if view is None else GMStandoffViewSerializer(view).data
+
+    @extend_schema_field(StandoffSummarySerializer(allow_null=True))
+    def get_standoff_summary(self, obj: CombatEncounter) -> dict[str, Any] | None:
+        """Public facts about the standoff for an onlooker (#4354).
+
+        A participant gets their own ``standoff`` view and a GM gets ``gm_standoff``, so
+        this is built only for a viewer who has neither.
+        """
+        if obj.round_number != 0 or self.context.get("is_gm", False):
+            return None
+        viewer_ids = self.context.get("viewer_character_ids", set())
+        if any(
+            participant.character_sheet.character_id in viewer_ids
+            for participant in obj.participants_cached  # type: ignore[attr-defined]
+        ):
+            return None
+        summary = build_standoff_summary(obj)
+        return None if summary is None else StandoffSummarySerializer(summary).data
 
     @extend_schema_field(PendingSelectionSerializer(many=True))
     def get_pending_selections(self, obj: CombatEncounter) -> list[dict[str, Any]]:

@@ -138,6 +138,7 @@ class GMPromptKind(models.TextChoices):
     MIRACLE = "miracle", "Miracle"
     DEATH = "death", "Death"
     STAKE_OUTCOME = "stake_outcome", "Stake outcome"
+    STANDOFF_CAUSE = "standoff_cause", "Standoff"
 
 
 class GMPromptGroup(models.TextChoices):
@@ -148,6 +149,7 @@ class GMPromptGroup(models.TextChoices):
     MIRACLE = "miracle", "Miracles"
     DEATH = "death", "Deaths"
     STAKE_OUTCOME = "stake_outcome", "Stake outcomes"
+    STANDOFF = "standoff", "Standoffs"
 
 
 PROMPT_GROUP_FOR_KIND: dict[str, str] = {
@@ -158,9 +160,20 @@ PROMPT_GROUP_FOR_KIND: dict[str, str] = {
     GMPromptKind.MIRACLE: GMPromptGroup.MIRACLE,
     GMPromptKind.DEATH: GMPromptGroup.DEATH,
     GMPromptKind.STAKE_OUTCOME: GMPromptGroup.STAKE_OUTCOME,
+    GMPromptKind.STANDOFF_CAUSE: GMPromptGroup.STANDOFF,
 }
 
-# Every kind a GM narrates (everything but the confirm-only dramatic moment).
+# Kinds a GM decides rather than narrates: addressed to one GM like a narration prompt,
+# resolved by their own actions (#4354: a standoff proposal's Confirm, Hold, Override).
+DECISION_PROMPT_KINDS: frozenset[str] = frozenset({GMPromptKind.STANDOFF_CAUSE})
+
+# Every kind a GM narrates (everything but the confirm-only dramatic moment and the
+# decision kinds).
 NARRATION_PROMPT_KINDS: frozenset[str] = frozenset(
-    k for k in GMPromptKind.values if k != GMPromptKind.DRAMATIC_MOMENT
+    k
+    for k in GMPromptKind.values
+    if k != GMPromptKind.DRAMATIC_MOMENT and k not in DECISION_PROMPT_KINDS
 )
+
+# Every kind addressed to one GM: the narration kinds plus the decision kinds.
+ADDRESSED_PROMPT_KINDS: frozenset[str] = NARRATION_PROMPT_KINDS | DECISION_PROMPT_KINDS

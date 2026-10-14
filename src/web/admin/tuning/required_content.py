@@ -844,6 +844,21 @@ def _probe_soulfray_death_risk() -> ProbeResult:
     )
 
 
+def _probe_standoff_cause_glosses() -> ProbeResult:
+    """Every cause other than None has an authored gloss (#4354)."""
+    from world.combat.constants import CauseKind  # noqa: PLC0415
+    from world.standoffs.models import StandoffCauseGloss  # noqa: PLC0415
+
+    authored = set(StandoffCauseGloss.objects.exclude(text="").values_list("cause", flat=True))
+    missing = tuple(
+        CauseKind(kind).label
+        for kind in CauseKind.values
+        if kind != CauseKind.NONE and kind not in authored
+    )
+    detail = f"No gloss for: {', '.join(missing)}." if missing else ""
+    return ProbeResult(present=not missing, missing=missing, detail=detail)
+
+
 def _probe_surrounded_condition_bundle() -> ProbeResult:
     """All three rows `_apply_surrounded_isolation` needs, not just the template.
 
@@ -3659,6 +3674,15 @@ def _declarations() -> tuple[ContentDependency, ...]:
             consequence="Players see PLACEHOLDER text on the Gift stage's make-it-yours panel.",
             probe=CustomProbe(fn=_probe_personalization_copy),
             admin_model="CGExplanation",
+        ),
+        ContentDependency(
+            key="standoff-cause-glosses",
+            label="Standoff cause glosses",
+            tier=DependencyTier.TUNING,
+            consumer="world/standoffs/services/view.py _cause_gloss()",
+            consequence=("A revealed cause shows its name with no one-line explanation under it."),
+            probe=CustomProbe(fn=_probe_standoff_cause_glosses),
+            admin_model="StandoffCauseGloss",
         ),
         ContentDependency(
             key="standoff-config",
