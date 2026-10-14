@@ -14,6 +14,7 @@ author can try the creature against a different party without saving anything.
     level, against one level {{ preview_level }} member, average effort, no faction rule matched.</p>
   {% if preview %}
   <table class="tuning-table sp-rail-table">
+    <thead><tr><th scope="col">Approach or terms</th><th scope="col">Grade</th></tr></thead>
     <tbody>
       {% for line in preview %}
       <tr><td>{{ line.name }}</td>

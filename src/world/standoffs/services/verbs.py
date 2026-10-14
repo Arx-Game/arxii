@@ -88,6 +88,7 @@ if TYPE_CHECKING:
     from world.combat.models import CombatEncounter, CombatOpponent, CombatParticipant
     from world.magic.models import Technique
     from world.magic.types.techniques import SoulfrayWarning, TechniqueUseResult
+    from world.traits.models import CheckOutcome
 
 BOTCH_LEVEL = -2
 CRITICAL_LEVEL = 2
@@ -751,29 +752,48 @@ def standoff_terms(
     )
     tier = result.success_level
     if tier < 0:
-        if tier <= BOTCH_LEVEL:
-            _embolden_on_botch(group, config)
-        attack_lines: list[str] = []
-        fight_started = evaluate_causes(
-            encounter,
-            attack_lines,
-            provoked=group if tier <= BOTCH_LEVEL else None,
-            provocation=REASON_PROVOKED_TERMS,
-        )
-        return StandoffActionResult(
-            False,
-            f"{_word(tier)}. They refuse your terms.",
-            success_level=tier,
-            fight_started=fight_started,
-            attack_line=attack_lines[0] if attack_lines else "",
-        )
+        return _terms_refused(encounter, group, config, tier)
     _apply_terms(members, terms, config, sheet, tier)
+    return _terms_accepted(encounter, group, terms, result.outcome, tier)
+
+
+def _terms_refused(
+    encounter: CombatEncounter, group: StandoffGroup, config: StandoffConfig, tier: int
+) -> StandoffActionResult:
+    """Terms failed: a botch emboldens the group and counts as a provocation."""
+    botched = tier <= BOTCH_LEVEL
+    if botched:
+        _embolden_on_botch(group, config)
+    attack_lines: list[str] = []
+    fight_started = evaluate_causes(
+        encounter,
+        attack_lines,
+        provoked=group if botched else None,
+        provocation=REASON_PROVOKED_TERMS,
+    )
+    return StandoffActionResult(
+        False,
+        f"{_word(tier)}. They refuse your terms.",
+        success_level=tier,
+        fight_started=fight_started,
+        attack_line=attack_lines[0] if attack_lines else "",
+    )
+
+
+def _terms_accepted(
+    encounter: CombatEncounter,
+    group: StandoffGroup,
+    terms: StandoffTerms,
+    outcome: CheckOutcome,
+    tier: int,
+) -> StandoffActionResult:
+    """Terms held: the group settles; the last settle completes the standoff."""
     group.state = StandoffGroupState.SETTLED
-    group.settled_outcome = result.outcome
+    group.settled_outcome = outcome
     group.save(update_fields=["state", "settled_outcome"])
     close_group_prompts(group, "They accepted terms.")
     settle_empty_groups(encounter)
-    attack_lines = []
+    attack_lines: list[str] = []
     fight_started = False
     if not encounter.standoff_groups.exclude(state=StandoffGroupState.SETTLED).exists():
         complete_standoff(encounter)
