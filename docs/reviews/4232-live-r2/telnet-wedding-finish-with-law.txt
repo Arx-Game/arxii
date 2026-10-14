@@ -1,0 +1,63 @@
+
+=== [e2e_orrin] > connect e2e_orrin TestPass123!
+You become Father Orrin.
+The Wanderer's Rest
+This is a room.
+Characters: Father Orrin
+Now controlling Father Orrin.
+
+=== [e2e_orrin] > ceremony
+Wedding  in the name of The Lantern
+Officiant: Father Orrin (Primary)
+Honoring: Sheet for Rowan Ashby, Sheet for Lisbet Crane
+Offerings: 0
+Speeches: 0
+
+=== [e2e_orrin] > ceremony/finish
+The rite concludes; its honors are spoken and recorded.
+
+=== [e2e_test_account] > connect e2e_test_account TestPass123!
+[MudInfo] [2026-10-14(02:51)]: e2e_test_account connected
+You become Rowan Ashby.
+The Wanderer's Rest
+This is a room.
+Characters: Father Orrin and Rowan Ashby
+Now controlling Rowan Ashby.
+
+=== [e2e_test_account] > sheet
+Character Sheet for Rowan Ashby
+===============================
+
+Basic Information
+--------------------
+Age: 18
+Gender:
+Concept: None
+Social Rank: 10
+Marital Status: Married
+
+Physical Characteristics
+-------------------------
+No physical characteristics set.
+
+
+Sections (sheet/<section>):
+  secret, renown, relationship, standing, covenant, title, crime,
+  distinction, magic, family, house, status
+
+=== [e2e_test_account] > sheet/family
+Family
+  Parents: unknown
+  Spouse: Lisbet Crane
+
+=== [e2e_orrin] > quit
+Rowan Ashby (GM) has entered the game.
+Quitting. Hope to see you again, soon.
+quit
+
+=== [e2e_test_account] > quit
+Father Orrin has left the game.
+[MudInfo] [2026-10-14(02:52)]: e2e_orrin disconnected (quit)
+Quitting. Hope to see you again, soon.
+[MudInfo] [2026-10-14(02:52)]: e2e_test_account disconnected (quit)
+quit

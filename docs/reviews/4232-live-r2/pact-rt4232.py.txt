@@ -1,0 +1,28 @@
+"""Round 2: MODE=kind creates the Marriage kind; MODE=pact signs a pact + records a birth on Rowan's open union."""
+import os, sys
+os.environ.setdefault("DJANGO_SETTINGS_MODULE", "server.conf.settings")
+import django
+django.setup()
+from django.conf import settings
+if settings.DATABASES["default"]["NAME"] != "rt_4232":
+    sys.exit("refusing: not rt_4232")
+import evennia
+evennia._init()
+mode = os.environ.get("MODE", "kind")
+if mode == "kind":  # noqa: STRING_LITERAL
+    from world.roster.models import UnionKind
+    kind, created = UnionKind.objects.get_or_create(name="Marriage", defaults={"confers_wedlock": True})
+    print("Marriage kind", kind.pk, "created" if created else "existed")
+else:
+    from world.roster.models import Kinsperson, Union
+    from world.roster.services.kinship import create_person, record_parentage
+    from world.societies.factories import OrganizationFactory
+    from world.societies.houses.models import MarriagePact
+    rowan = Kinsperson.objects.get(pk=1)
+    union = Union.objects.filter(members=rowan, ended_at__isnull=True).get()
+    senior = OrganizationFactory(name="House Ashby")
+    junior = OrganizationFactory(name="House Crane")
+    pact = MarriagePact.objects.create(union=union, senior_house=senior, junior_house=junior)
+    child = create_person(name="Wren Ashby")
+    edge = record_parentage(child=child, parent=rowan, born_within_union=union)
+    print("pact", pact.pk, "birth", edge.pk, "on union", union.pk)

@@ -1,0 +1,142 @@
+
+=== [Father Orrin] > connect e2e_orrin TestPass123!
+You become Father Orrin.
+The Wanderer's Rest
+This is a room.
+Characters: Lisbet Crane and Father Orrin
+Now controlling Father Orrin.
+
+=== [Rowan Ashby] > connect e2e_test_account TestPass123!
+[MudInfo] [2026-10-14(02:50)]: e2e_test_account connected
+You become Rowan Ashby.
+The Wanderer's Rest
+This is a room.
+Characters: Lisbet Crane, Father Orrin, and Rowan Ashby
+Now controlling Rowan Ashby.
+
+=== [Lisbet Crane] > connect e2e_lisbet TestPass123!
+You become Lisbet Crane.
+The Wanderer's Rest
+This is a room.
+Characters: Lisbet Crane, Father Orrin, and Rowan Ashby
+Now controlling Lisbet Crane.
+
+=== [Rowan Ashby] > sheet
+[MudInfo] [2026-10-14(02:50)]: e2e_lisbet connected
+Lisbet Crane has entered the game.
+Character Sheet for Rowan Ashby
+===============================
+
+Basic Information
+--------------------
+Age: 18
+Gender:
+Concept: None
+Social Rank: 10
+Marital Status: Single
+
+Physical Characteristics
+-------------------------
+No physical characteristics set.
+
+
+Sections (sheet/<section>):
+  secret, renown, relationship, standing, covenant, title, crime,
+  distinction, magic, family, house, status
+
+=== [Father Orrin] > look
+Rowan Ashby (GM) has entered the game.
+Lisbet Crane has entered the game.
+The Wanderer's Rest
+This is a room.
+Characters: Lisbet Crane, Father Orrin, and Rowan Ashby
+
+=== [Father Orrin] > ceremony/wedding Rowan Ashby,Lisbet Crane
+You open a wedding in the name of The Lantern.
+
+=== [Father Orrin] > ceremony
+Wedding  in the name of The Lantern
+Officiant: Father Orrin (Primary)
+Honoring: Sheet for Rowan Ashby, Sheet for Lisbet Crane
+Offerings: 0
+Speeches: 0
+
+=== [Rowan Ashby] > wedding
+Pending wedding consent offers:
+  [1] Rowan Ashby, wedding at The Wanderer's Rest
+
+=== [Rowan Ashby] > wedding accept 1
+You accept the wedding.
+
+=== [Lisbet Crane] > wedding
+Pending wedding consent offers:
+  [2] Lisbet Crane, wedding at The Wanderer's Rest
+
+=== [Lisbet Crane] > wedding accept 2
+You accept the wedding.
+
+=== [Father Orrin] > ceremony/finish
+No law of marriage exists to wed under.
+
+=== [Rowan Ashby] > sheet
+Character Sheet for Rowan Ashby
+===============================
+
+Basic Information
+--------------------
+Age: 18
+Gender:
+Concept: None
+Social Rank: 10
+Marital Status: Single
+
+Physical Characteristics
+-------------------------
+No physical characteristics set.
+
+
+Sections (sheet/<section>):
+  secret, renown, relationship, standing, covenant, title, crime,
+  distinction, magic, family, house, status
+
+=== [Lisbet Crane] > sheet
+Character Sheet for Lisbet Crane
+================================
+
+Basic Information
+--------------------
+Age: 18
+Gender:
+Concept: None
+Social Rank: 10
+Marital Status: Single
+
+Physical Characteristics
+-------------------------
+No physical characteristics set.
+
+
+Sections (sheet/<section>):
+  secret, renown, relationship, standing, covenant, title, crime,
+  distinction, magic, family, house, status
+
+=== [Rowan Ashby] > sheet/family
+Family
+  Parents: unknown
+
+=== [Father Orrin] > quit
+Quitting. Hope to see you again, soon.
+quit
+
+=== [Rowan Ashby] > quit
+Father Orrin has left the game.
+[MudInfo] [2026-10-14(02:50)]: e2e_orrin disconnected (quit)
+Quitting. Hope to see you again, soon.
+[MudInfo] [2026-10-14(02:50)]: e2e_test_account disconnected (quit)
+quit
+
+=== [Lisbet Crane] > quit
+Father Orrin has left the game.
+Rowan Ashby (GM) has left the game.
+Quitting. Hope to see you again, soon.
+quit
