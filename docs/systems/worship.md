@@ -513,8 +513,9 @@ carry the scene) → finish (or abandon). No Scene/Event required — nullable F
 to both; normally it runs inside them.
 
 **Models**: `CeremonyType` (data rows: Funeral full handler; Blessing/Sermon
-renown-only; Seance the third ghost-window handler, #2393; Wedding solemnizes
-an active Betrothal on finish gated on WeddingConsentOffers, #2358/#2999;
+renown-only; Seance the third ghost-window handler, #2393; Wedding marries the
+honorees on finish gated on WeddingConsentOffers, with or without a Betrothal,
+#2358/#2999/#4232;
 Conversion repoints public worship on finish, #2361; Coronation solemnizes an
 already-held title, #2358; Rite holds a tier 3 worship rite as a ceremony,
 #3777), `Ceremony` (officiant
@@ -557,7 +558,8 @@ being; devotion follows belief — Decision 11), `record_speech` (Performance/Or
 honoree deeds via the legend engine's `create_solo_deed`; offering legend
 total added to honoree prestige base — #2359; officiant lesser
 cut; funeral handler calls the `execute_will` **no-op seam** for #1985; WEDDING
-handler solemnizes the honorees' active Betrothal; CONVERSION handler calls
+handler marries the honorees (`solemnize_wedding` when an active Betrothal stands
+between them, else `record_marriage`, #4232); CONVERSION handler calls
 `convert_public_worship` per confirmed honoree — see below),
 `abandon_ceremony` (awards nothing), `open_funeral_for` (the ghost-container
 lookup).
@@ -618,15 +620,22 @@ officiant's worship Secret. Failures silent.
 `steal`, unless the dead player's tenure friended the taker (friends-list
 trusted handler; direction matters — trust flows from the dead).
 
-**Wedding & Coronation (#2358).** WEDDING solemnizes a pre-existing
-`Betrothal` (`world/societies/houses/pact_services.solemnize_wedding`) —
-consent is gated at the CEREMONY, not the proposal: `open_ceremony` mints a
-`WeddingConsentOffer` per spouse honoree at START (mirrors
+**Wedding & Coronation (#2358, #4232).** WEDDING marries the honorees. A
+betrothal is optional for everyone (ADR-4232): when an active `Betrothal`
+stands between the honorees' nodes the rite lands everything it negotiated
+(`world/societies/houses/pact_services.solemnize_wedding`: union, marriage pact,
+tier prestige, `wed_at`); otherwise `world.roster.services.kinship.record_marriage`
+records the union under the realm's wedlock `UnionKind` and nothing else, so two
+commoners, or a noble and a commoner, marry as surely as two houses. An honoree
+with no `Kinsperson` node gets one first (`ensure_node_for_sheet`); a pair who
+already share an open wedlock union get no second one; a world with no
+wedlock-conferring kind refuses the rite ("No law of marriage exists to wed
+under.", a `CeremonyError`). Consent is gated at the CEREMONY, not the proposal:
+`open_ceremony` mints a `WeddingConsentOffer` per spouse honoree at START (mirrors
 `SeanceManifestationOffer`'s shape, shares `SeanceOfferStatus`);
-`finish_ceremony`'s WEDDING branch refuses to solemnize (union + marriage
-pact mint) until every offer is ACCEPTED, and a DECLINE
-(`respond_to_wedding_consent_offer`, account-scoped) aborts the whole
-ceremony via `abandon_ceremony`. CORONATION solemnizes an ALREADY-HELD
+`finish_ceremony`'s WEDDING branch refuses to marry until every offer is
+ACCEPTED, and a DECLINE (`respond_to_wedding_consent_offer`, account-scoped)
+aborts the whole ceremony via `abandon_ceremony`. CORONATION solemnizes an ALREADY-HELD
 `Title` — no title-passing mechanics: `open_ceremony`'s precondition
 requires exactly one honoree who holds `title` (or staff/GM fiat — a
 non-holder without fiat is the contested-claim case, rejected rather than
@@ -687,8 +696,8 @@ bound entity".
 
 ## Deferred (filed)
 
-Coronation type (Wedding **shipped** — #2358/#2999, solemnizes `Betrothal` →
-`Union`/`MarriagePact` on finish), event
+Coronation type (Wedding **shipped** — #2358/#2999, marries the honorees on
+finish; a `Betrothal` adds its `MarriagePact`, #4232), event
 grandeur/prestige investment (#2357), item legend value at offerings (#2359,
 **shipped** — `ItemInstance.legend_deeds` M2M + `CeremonyOffering.item_legend_value`
 + finish-tally wiring), miracles +

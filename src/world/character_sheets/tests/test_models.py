@@ -18,7 +18,6 @@ from world.character_sheets.factories import (
     ObjectDisplayDataFactory,
 )
 from world.character_sheets.models import CharacterSheet, MoodOption
-from world.character_sheets.types import MaritalStatus
 from world.classes.factories import CharacterClassLevelFactory
 from world.conditions.factories import CapabilityTypeFactory
 from world.conditions.services import get_effective_capability_value
@@ -41,7 +40,6 @@ class CharacterSheetModelTests(TestCase):
         assert self.sheet.matured_years >= 18  # From factory range
         # Gender is a nullable FK - factory creates without gender
         assert self.sheet.gender is None
-        assert self.sheet.marital_status == MaritalStatus.SINGLE
 
     def test_character_sheet_with_gender(self):
         """Test creating a character sheet with gender FK."""

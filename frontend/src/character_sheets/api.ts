@@ -518,7 +518,6 @@ export interface CharacterSheetStaffEdit {
   ic_birth_year: number | null;
   true_height_inches: number | null;
   weight_pounds: number | null;
-  marital_status: string;
   vocation: string;
   social_rank: number;
   build: number | null;

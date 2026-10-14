@@ -35624,14 +35624,6 @@ export interface components {
      * @enum {string}
      */
     ManagerTenancyKindEnum: 'guest' | 'tenant' | 'trustee';
-    /**
-     * @description * `single` - Single
-     *     * `married` - Married
-     *     * `widowed` - Widowed
-     *     * `divorced` - Divorced
-     * @enum {string}
-     */
-    MaritalStatusEnum: 'single' | 'married' | 'widowed' | 'divorced';
     MarketSquare: {
       readonly id: number;
       readonly name: string;
@@ -43255,7 +43247,6 @@ export interface components {
       ic_birth_year?: number | null;
       true_height_inches?: number | null;
       weight_pounds?: number | null;
-      marital_status?: components['schemas']['MaritalStatusEnum'];
       vocation?: string;
       social_rank?: number;
       build?: number | null;

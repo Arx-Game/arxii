@@ -220,11 +220,16 @@ def break_betrothal(betrothal: Betrothal, *, breaking_house: Organization) -> Be
 def solemnize_wedding(betrothal: Betrothal):
     """The rite lands everything at once (#2999): union, pact, tier prestige.
 
-    First in-play caller of ``record_union``; the negotiated BetrothalTerms
-    become real, executing PactCommitments through ``sign_marriage_pact``.
+    What a betrothal adds to a wedding (#4232): the union a pactless wedding
+    also records, plus the marriage pact with the negotiated BetrothalTerms
+    (executed as PactCommitments through ``sign_marriage_pact``), the tier
+    prestige, and ``wed_at`` on the promise itself.
     """
-    from world.roster.models import UnionKind  # noqa: PLC0415
-    from world.roster.services.kinship import record_union  # noqa: PLC0415
+    from world.roster.services.kinship import (  # noqa: PLC0415
+        KinshipServiceError,
+        record_union,
+        wedlock_union_kind,
+    )
     from world.societies.houses.stature_services import (  # noqa: PLC0415
         award_marriage_tier_prestige,
     )
@@ -232,13 +237,10 @@ def solemnize_wedding(betrothal: Betrothal):
     if not betrothal.is_active:
         msg = f"betrothal {betrothal.pk} is not active"
         raise HousesServiceError(msg, user_message="That promise no longer stands.")
-    marriage_kind = (
-        UnionKind.objects.filter(confers_wedlock=True, realm__isnull=True).first()
-        or UnionKind.objects.filter(confers_wedlock=True).first()
-    )
-    if marriage_kind is None:
-        msg = "no wedlock-conferring UnionKind exists"
-        raise HousesServiceError(msg, user_message="No law of marriage exists to wed under.")
+    try:
+        marriage_kind = wedlock_union_kind()
+    except KinshipServiceError as exc:
+        raise HousesServiceError(str(exc), user_message=exc.user_message) from exc
     union = record_union(
         kind=marriage_kind,
         members=[betrothal.kinsperson_a, betrothal.kinsperson_b],

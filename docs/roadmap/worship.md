@@ -19,7 +19,8 @@ Vitals (#2287 ghost containers), Events/Scenes (optional chassis)
   Princess/Prince/Chosen achievements (top-devotion reach/tie per being).
 - **Ceremonies (#2289):** framework (`CeremonyType` rows: Funeral full handler,
   Blessing/Sermon renown-only, Seance third ghost-window handler #2393, Wedding
-  solemnizes an active Betrothal #2358/#2999, Conversion repoints public worship
+  marries the honorees, with or without a Betrothal #2358/#2999/#4232, Conversion
+  repoints public worship
   #2361) with open/offering/speech/finish/abandon actions,
   telnet `ceremony` family, read API + game-view room card. Funerals re-open the
   ghost's emit window (third ADR-0131 container), award posthumous prestige through
@@ -119,6 +120,12 @@ Vitals (#2287 ghost containers), Events/Scenes (optional chassis)
 ## Not built (filed)
 
 - Coronation ceremony type + divorce/murder prestige hits for Wedding (#2358)
+- **Marriage without a betrothal (#4232, 2026-10-14):** a betrothal is optional for
+  everyone; a consented WEDDING with none records the `Union` alone
+  (`kinship.record_marriage`), a betrothal adds its pact, terms, tier prestige and
+  `wed_at`. Staff add and end a marriage from the Kinsperson admin page's Spouses
+  section; `CharacterSheet.marital_status` is dropped and telnet `sheet` derives the
+  status from the unions (`kinship.marital_status_of`). ADR-4232.
 - **Wedding consent + Coronation + divorce prestige (#2358, 2026-08-15):** WEDDING
   solemnizes a pre-existing `Betrothal` at FINISH, gated on a `WeddingConsentOffer`
   per spouse honoree minted at ceremony START (both must ACCEPT; a DECLINE aborts the

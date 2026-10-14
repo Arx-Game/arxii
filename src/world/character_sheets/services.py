@@ -310,7 +310,6 @@ STAFF_IDENTITY_SCALARS: tuple[str, ...] = (
     "ic_birth_year",
     "true_height_inches",
     "weight_pounds",
-    "marital_status",
     "vocation",
     "social_rank",
 )

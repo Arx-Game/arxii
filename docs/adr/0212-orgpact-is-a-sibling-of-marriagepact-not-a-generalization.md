@@ -1,6 +1,6 @@
 # ADR-0212: OrgPact is a sibling of MarriagePact, not a generalization
 
-**Status:** Accepted (#2999, 2026-08-10)
+**Status:** Accepted (#2999, 2026-08-10). Amended by ADR-4232 (#4232, 2026-10-14): a wedding no longer requires a betrothal; the betrothal adds its pact to a marriage the rite records anyway.
 
 The general diplomacy instrument (`OrgPact` + authored `PactKind` levers —
 allied stature share, income tithe, non-aggression, mutual defense; ADR-0178's

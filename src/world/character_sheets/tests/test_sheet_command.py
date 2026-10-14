@@ -106,7 +106,27 @@ class SheetCommandTests(TestCase):
         assert "Family: Stormwind" in output
         assert "Vocation: Knight" in output
         assert "Social Rank: 3" in output
+        assert "Marital Status: Single" in output
         assert "Birthday: Thawing 15 (3/15)" in output
+
+    def test_sheet_marital_status_is_derived_from_the_marriages(self):
+        """The line reads the kinship graph, never a stored field (#4232)."""
+        from world.roster.factories import RosterEntryFactory, UnionKindFactory
+        from world.roster.services import kinship
+
+        RosterEntryFactory(character_sheet=self.sheet)
+        node = kinship.ensure_node_for_sheet(self.sheet)
+        spouse = kinship.create_person(name="Beloved")
+        union = kinship.record_union(kind=UnionKindFactory(name="Marriage"), members=[node, spouse])
+        cmd, mock_caller = self._create_command_with_caller()
+
+        cmd.func()
+        assert "Marital Status: Married" in mock_caller.msg.call_args[0][0]
+
+        kinship.end_union(union)
+        cmd, mock_caller = self._create_command_with_caller()
+        cmd.func()
+        assert "Marital Status: Divorced" in mock_caller.msg.call_args[0][0]
 
     def test_sheet_command_physical_characteristics(self):
         """Test that physical characteristics are displayed."""

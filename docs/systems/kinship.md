@@ -37,7 +37,14 @@ facts from #1884.
   law input.
 - **`UnionKind`** (authorable vocabulary, `confers_wedlock`) + **`Union`**
   (M2M members, 2+, any composition) — in-laws and step-parents derive from
-  these; births stamp `born_within_union` for legitimacy law.
+  these; births stamp `born_within_union` for legitimacy law. **A `Union` is
+  the only record of a marriage (#4232, ADR-4232):** the wedding rite writes
+  it for any consenting pair, staff write and end it from the Kinsperson
+  admin page's **Spouses** section (`SpouseInline` over the members through
+  table; new rows go through `record_union`, an end date through `end_union`,
+  a delete is refused while a `MarriagePact` or a `born_within_union` birth
+  points at the union), and **marital status is derived** from the unions
+  (`marital_status_of`); `CharacterSheet.marital_status` is gone.
 - **`ParentageEdge`** — typed child→parent facts (`BIOLOGICAL /
   TREE_OF_SOULS / VAMPIRIC_EMBRACE / ADOPTIVE / FOSTER / ACKNOWLEDGED`),
   N per child. Step-parents are DERIVED, never stored. `is_ritual_invoker`
@@ -100,7 +107,11 @@ Named "heredity" — NOT "lineage" (that word is taken three other ways).
 ## Services (`world.roster.services.kinship`)
 
 Writers: `create_person`, `record_parentage` (mints subject-unaware
-GM-authored Secrets for hidden edges), `record_union`,
+GM-authored Secrets for hidden edges), `record_union`, `record_marriage`
+(#4232: marries under `wedlock_union_kind()`, the universal wedlock kind
+else any, refusing with "No law of marriage exists to wed under." when
+there is none; returns the pair's existing open wedlock union,
+`open_wedlock_union_among`, instead of a second), `end_union`,
 `record_incarnation`, `add_membership`/`end_membership` (denorm
 maintenance), `mint_from_pool`, `claim_appable_node` (CG bind,
 constraint-checked), `ensure_node_for_sheet`, `define_deferred`
@@ -109,6 +120,14 @@ constraint-checked), `ensure_node_for_sheet`, `define_deferred`
 Readers (all viewer-aware; `viewer` = RosterEntry, `None` = public-only,
 `OMNISCIENT` sentinel = staff): `parents_of`, `children_of`, `siblings_of`
 (full/half), `spouses_of`, `step_parents_of`, `unions_of`,
+`marital_status_of` (#4232: `world.roster.constants.MaritalStatus` from the
+viewer's visible wedlock-conferring unions — Married, an open union with a
+partner the viewer sees alive, over Widowed, an open union whose partners
+the viewer sees dead, over Divorced, an ended union, over Single; a paramour
+or consort kind is not a marriage; telnet `sheet` prints it with the
+character's own roster entry as viewer), `viewer_sees_deceased` (the one
+dead fold the tree and the status share: truth for `OMNISCIENT`, truth or
+public belief otherwise, #3983),
 `incarnation_chain_of` (per-life knowledge), `derive_relationship` (labeled
 precedence walk incl. foster/step/in-law/soul), `family_tree_for` (graph
 payload for a `Family`: every active member, their union partners, and

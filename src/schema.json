@@ -62262,18 +62262,6 @@ components:
         * `guest` - Guest
         * `tenant` - Tenant
         * `trustee` - Trustee
-    MaritalStatusEnum:
-      enum:
-      - single
-      - married
-      - widowed
-      - divorced
-      type: string
-      description: |-
-        * `single` - Single
-        * `married` - Married
-        * `widowed` - Widowed
-        * `divorced` - Divorced
     MarketSquare:
       type: object
       properties:
@@ -75419,8 +75407,6 @@ components:
           maximum: 32767
           minimum: 0
           nullable: true
-        marital_status:
-          $ref: '#/components/schemas/MaritalStatusEnum'
         vocation:
           type: string
           maxLength: 255
