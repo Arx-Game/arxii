@@ -131,6 +131,8 @@ class GMStandoffTelnetTests(TestCase):
         text = self._run(CmdStandoff, "")
         self.assertIn("(GM)", text)
         self.assertIn("Cause: Orders (holds)", text)
+        # "|" starts a telnet colour code, so the GM hint carries none.
+        self.assertIn("gm standoff shake <group id> <reason> (or steady)", text)
 
     def test_standoff_shows_the_public_summary_to_an_onlooker(self) -> None:
         onlooker = CharacterSheetFactory().character

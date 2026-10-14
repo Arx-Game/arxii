@@ -375,7 +375,7 @@ def _render_gm_view(view: GMStandoffView) -> list[str]:
         if group.pending_prompt_id is not None:
             lines.append(
                 f"    Proposal [{group.pending_prompt_id}]: {group.proposal_reason} "
-                f"(gm prompt confirm|hold|override {group.pending_prompt_id})"
+                f"(gm prompt confirm, hold or override {group.pending_prompt_id})"
             )
         lines.extend(
             f"    Drive: {drive.label} ({drive.strength}){' - read' if drive.revealed else ''}"
@@ -394,7 +394,8 @@ def _render_gm_view(view: GMStandoffView) -> list[str]:
             "    Morale: "
             + ", ".join(f"{m.name} {m.morale} ({m.morale_state})" for m in group.members)
         )
-    lines.append("GM: gm standoff shake|steady <group id> <reason>")
+    # No pipe characters: on telnet "|" starts a colour code.
+    lines.append("GM: gm standoff shake <group id> <reason> (or steady)")
     return lines
 
 
