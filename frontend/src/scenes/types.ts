@@ -398,7 +398,8 @@ export type GMPromptKind =
   | 'crossing'
   | 'miracle'
   | 'death'
-  | 'stake_outcome';
+  | 'stake_outcome'
+  | 'standoff_cause';
 
 /**
  * One row of the GM prompt queue (#4101; was the #2183 dramatic-moment
@@ -419,6 +420,12 @@ export interface GMPrompt {
   moment_type_label: string;
   technique_name: string;
   stake_summary: string;
+  /** standoff_cause prompts: the proposed group, its cause, and why it fires (#4354). */
+  standoff_group?: number | null;
+  standoff_group_name?: string;
+  standoff_cause_label?: string;
+  standoff_reason?: string;
+  resolution_note?: string;
   room_text: string;
   private_text: string;
   prepared_for_character: boolean;

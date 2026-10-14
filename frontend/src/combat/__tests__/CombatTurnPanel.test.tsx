@@ -160,6 +160,8 @@ function mockEncounter(overrides?: Partial<EncounterDetail>) {
     is_gm: false,
     objective: null,
     standoff: null,
+    gm_standoff: null,
+    standoff_summary: null,
     participants: [],
     opponents: [],
     current_round_actions: [],
@@ -384,6 +386,35 @@ describe('CombatTurnPanel — Phase 8 rail sections', () => {
     expect(within(panel).queryByTestId('vital-pools-section')).toBeNull();
     expect(within(panel).queryByTestId('combatants-list-section')).toBeNull();
     expect(within(panel).queryByTestId('round-flow-section')).toBeNull();
+  });
+
+  it('shows the standoff summary and Standoff header to an onlooker', () => {
+    mockEncounter({
+      round_number: 0,
+      is_participant: false,
+      standoff_summary: {
+        place: 'the Corle gate',
+        participants: ['Aubrin Rennick'],
+        groups: [
+          {
+            group_id: 1,
+            name: 'Sellswords',
+            member_count: 6,
+            state: 'open',
+            morale_state: 'steady',
+            emboldened: false,
+          },
+        ],
+      },
+    });
+    render(<CombatTurnPanel encounterId={1} characterId={10} characterSheetId={100} />, {
+      wrapper: createWrapper(),
+    });
+    const panel = screen.getByTestId('combat-turn-panel');
+    expect(within(panel).getByTestId('standoff-summary-card')).toBeInTheDocument();
+    expect(within(panel).getByRole('heading', { name: 'Standoff' })).toBeInTheDocument();
+    expect(within(panel).queryByText(/Round 0/)).toBeNull();
+    expect(within(panel).getByText('Observer')).toBeInTheDocument();
   });
 
   it('renders all six sections in spec order', () => {

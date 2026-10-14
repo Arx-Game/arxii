@@ -48,6 +48,7 @@ const STANDOFF: StandoffView = {
       read_grade_label: 'Moderate',
       morale_state: 'steady',
       terms_morale_ease: 0,
+      emboldened: false,
     },
   ],
   approaches: [
@@ -437,5 +438,15 @@ describe('StandoffCard', () => {
       kwargs: { group_id: 11, approach_id: 22, technique_id: 77, confirm_soulfray_risk: true },
     });
     await waitFor(() => expect(screen.queryByTestId('standoff-soulfray-gate')).toBeNull());
+  });
+
+  it('shows a deciding chip for a proposed group without naming the proposal', () => {
+    renderCard(withGroup({ state: 'proposed', emboldened: true }));
+    expect(screen.getByTestId('standoff-group-chip')).toHaveTextContent('emboldened, deciding');
+  });
+
+  it('shows emboldened alone when the group is not proposed', () => {
+    renderCard(withGroup({ emboldened: true }));
+    expect(screen.getByTestId('standoff-group-chip')).toHaveTextContent(/^emboldened$/);
   });
 });

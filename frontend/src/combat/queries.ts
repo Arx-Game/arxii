@@ -380,6 +380,24 @@ export function useEndEncounter(encounterId: number) {
 }
 
 // ---------------------------------------------------------------------------
+// Standoff GM controls (#4354)
+// ---------------------------------------------------------------------------
+
+/** POST /api/combat/{id}/standoff-morale/ - shake or steady a group, with a reason. */
+export function useStandoffMorale(encounterId: number) {
+  return useEncounterMutation(
+    encounterId,
+    (body: { group_id: number; direction: 'shake' | 'steady'; reason: string }) =>
+      api.postStandoffMorale(encounterId, body)
+  );
+}
+
+/** POST /api/combat/{id}/open-standoff/ - open the round-zero encounter as a standoff. */
+export function useOpenStandoff(encounterId: number) {
+  return useEncounterMutation(encounterId, () => api.postOpenStandoff(encounterId));
+}
+
+// ---------------------------------------------------------------------------
 // Cover mutation hook
 // ---------------------------------------------------------------------------
 

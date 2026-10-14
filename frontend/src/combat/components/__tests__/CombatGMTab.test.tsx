@@ -5,11 +5,15 @@
  * combat tab set.
  */
 import { render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 
 const mockUseCombatEncounter = vi.fn();
+const mockOpenStandoff = vi.fn();
 vi.mock('@/combat/queries', () => ({
   useCombatEncounter: () => mockUseCombatEncounter(),
+  useOpenStandoff: () => ({ mutate: mockOpenStandoff, isPending: false, error: null }),
+  useStandoffMorale: () => ({ mutate: vi.fn(), isPending: false, error: null, reset: vi.fn() }),
 }));
 
 vi.mock('@/combat/sections/GMEncounterControls', () => ({
@@ -73,5 +77,36 @@ describe('CombatGMTab', () => {
     expect(controls).toHaveAttribute('data-encounter-id', '7');
     expect(controls).toHaveAttribute('data-scene-id', '1');
     expect(controls).toHaveAttribute('data-viewer-can-gm', 'true');
+  });
+
+  it('offers Open a standoff at round zero when no standoff is open', async () => {
+    mockUseCombatEncounter.mockReturnValue({
+      data: { id: 7, is_gm: true, round_number: 0, gm_standoff: null },
+    });
+    render(<CombatGMTab sceneId={1} encounterId={7} scene={scene} viewerCanGm />);
+    await userEvent.setup().click(screen.getByRole('button', { name: 'Open a standoff' }));
+    expect(mockOpenStandoff).toHaveBeenCalled();
+  });
+
+  it('hides Open a standoff after round one and shows the panel when a standoff is open', () => {
+    mockUseCombatEncounter.mockReturnValue({
+      data: { id: 7, is_gm: true, round_number: 2, gm_standoff: null },
+    });
+    const { unmount } = render(
+      <CombatGMTab sceneId={1} encounterId={7} scene={scene} viewerCanGm />
+    );
+    expect(screen.queryByRole('button', { name: 'Open a standoff' })).toBeNull();
+    unmount();
+    mockUseCombatEncounter.mockReturnValue({
+      data: {
+        id: 7,
+        is_gm: true,
+        round_number: 0,
+        gm_standoff: { place: 'x', participants: [], groups: [] },
+      },
+    });
+    render(<CombatGMTab sceneId={1} encounterId={7} scene={scene} viewerCanGm />);
+    expect(screen.getByTestId('gm-standoff-panel')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Open a standoff' })).toBeNull();
   });
 });

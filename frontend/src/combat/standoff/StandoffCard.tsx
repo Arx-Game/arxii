@@ -264,9 +264,22 @@ function GroupSection({
           <span className="font-display text-sm font-semibold">{group.name}</span>
           <span className="text-xs text-muted-foreground">x{group.member_count}</span>
         </div>
-        {group.morale_state !== 'steady' && (
-          <div>
+        {(group.morale_state !== 'steady' || group.emboldened || group.state === 'proposed') && (
+          <div className="flex flex-wrap items-center gap-1">
             <MoraleStateChip state={group.morale_state} />
+            {(group.emboldened || group.state === 'proposed') && (
+              <span
+                data-testid="standoff-group-chip"
+                className="rounded bg-destructive/15 px-1 py-0.5 text-[10px] text-destructive"
+              >
+                {[
+                  group.emboldened ? 'emboldened' : null,
+                  group.state === 'proposed' ? 'deciding' : null,
+                ]
+                  .filter(Boolean)
+                  .join(', ')}
+              </span>
+            )}
           </div>
         )}
 

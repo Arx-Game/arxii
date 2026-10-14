@@ -8,6 +8,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiFetch } from '@/evennia_replacements/api';
 import { throwApiError } from '@/lib/errors';
+import { combatKeys } from '@/combat/queries';
 import type { GMPrompt } from './types';
 
 export const gmPromptKeys = {
@@ -29,7 +30,7 @@ export function useGMPrompts(sceneId: string) {
   });
 }
 
-function usePromptPost(sceneId: string, verb: 'confirm' | 'dismiss') {
+function usePromptPost(sceneId: string, verb: 'confirm' | 'dismiss' | 'hold') {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (promptId: number): Promise<GMPrompt> => {
@@ -40,6 +41,7 @@ function usePromptPost(sceneId: string, verb: 'confirm' | 'dismiss') {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: gmPromptKeys.scene(sceneId) });
       queryClient.invalidateQueries({ queryKey: ['scene-interactions', sceneId] });
+      queryClient.invalidateQueries({ queryKey: combatKeys.all });
     },
     // A refused confirm/dismiss usually means the row moved on server-side (another GM
     // closed it, the scene ended): refetch so the queue stops offering a stale row.
@@ -51,8 +53,29 @@ function usePromptPost(sceneId: string, verb: 'confirm' | 'dismiss') {
 
 /** Mints the tag for a `dramatic_moment` prompt (the one kind `confirm` resolves). */
 export const useConfirmGMPrompt = (sceneId: string) => usePromptPost(sceneId, 'confirm');
+/** Holds a `standoff_cause` prompt for one more action (#4354). */
+export const useHoldGMPrompt = (sceneId: string) => usePromptPost(sceneId, 'hold');
 /** Closes a prompt — PENDING (never narrated) or NARRATED (the GM is done sending lines). */
 export const useDismissGMPrompt = (sceneId: string) => usePromptPost(sceneId, 'dismiss');
+
+/** Overrides a `standoff_cause` prompt; the reason is required server-side (#4354). */
+export function useOverrideGMPrompt(sceneId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ promptId, reason }: { promptId: number; reason: string }) => {
+      const res = await apiFetch(`/api/gm/prompts/${promptId}/override/`, {
+        method: 'POST',
+        body: JSON.stringify({ reason }),
+      });
+      if (!res.ok) await throwApiError(res, 'Failed to override prompt');
+      return (await res.json()) as GMPrompt;
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: gmPromptKeys.scene(sceneId) });
+      queryClient.invalidateQueries({ queryKey: combatKeys.all });
+    },
+  });
+}
 
 export interface NarrateBody {
   promptId: number;

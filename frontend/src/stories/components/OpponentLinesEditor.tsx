@@ -27,15 +27,24 @@ export interface OpponentLineDraft {
   creature_template: string;
   count: string;
   position_name: string;
+  /** Beat lines only (#4354): the line opens the encounter as a standoff. */
+  opens_as_standoff?: boolean;
 }
 
 export interface OpponentLinesEditorProps {
   lines: OpponentLineDraft[];
   onChange: (lines: OpponentLineDraft[]) => void;
   rowErrors: Record<string, string[]>[] | undefined;
+  /** Show the per-line "Opens as a standoff" checkbox (beats only, not mission options). */
+  showStandoffSwitch?: boolean;
 }
 
-export function OpponentLinesEditor({ lines, onChange, rowErrors }: OpponentLinesEditorProps) {
+export function OpponentLinesEditor({
+  lines,
+  onChange,
+  rowErrors,
+  showStandoffSwitch = false,
+}: OpponentLinesEditorProps) {
   const [search, setSearch] = useState('');
   const { data: creatureTemplates = [] } = useCreatureTemplates(search);
 
@@ -44,7 +53,10 @@ export function OpponentLinesEditor({ lines, onChange, rowErrors }: OpponentLine
   }
 
   function addRow() {
-    onChange([...lines, { creature_template: '', count: '1', position_name: '' }]);
+    onChange([
+      ...lines,
+      { creature_template: '', count: '1', position_name: '', opens_as_standoff: false },
+    ]);
   }
 
   function removeRow(index: number) {
@@ -116,6 +128,17 @@ export function OpponentLinesEditor({ lines, onChange, rowErrors }: OpponentLine
             >
               Remove
             </Button>
+            {showStandoffSwitch && (
+              <label className="col-span-full flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={line.opens_as_standoff ?? false}
+                  onChange={(e) => updateRow(index, { opens_as_standoff: e.target.checked })}
+                  data-testid={`beat-opponent-line-standoff-${index}`}
+                />
+                Opens as a standoff
+              </label>
+            )}
           </div>
         );
       })}

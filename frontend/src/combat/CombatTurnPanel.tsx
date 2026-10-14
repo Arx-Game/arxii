@@ -39,6 +39,7 @@ import { SpecialistChoicePanel } from './components/SpecialistChoicePanel';
 import { CommitmentPanel } from './components/CommitmentPanel';
 import { OutcomeRoulette } from './OutcomeRoulette';
 import { StandoffCard } from './standoff/StandoffCard';
+import { StandoffSummaryCard } from './standoff/StandoffSummaryCard';
 import type { components } from '@/generated/api';
 import type { EncounterDetail } from './types';
 import type { CastPosition, PositionTargetShape } from '@/actions/types';
@@ -208,7 +209,9 @@ export function CombatTurnPanel({
       {/* Panel header — round number + observer badge */}
       <div className="flex items-center justify-between">
         <h2 className="text-sm font-bold text-foreground">
-          {encounter.standoff ? 'Standoff' : `Your Turn: Round ${roundNumber}`}
+          {encounter.standoff || encounter.standoff_summary
+            ? 'Standoff'
+            : `Your Turn: Round ${roundNumber}`}
         </h2>
         {!isParticipant && (
           <span className="rounded border border-border bg-muted px-2 py-0.5 text-[10px] uppercase tracking-wide text-muted-foreground">
@@ -319,8 +322,13 @@ export function CombatTurnPanel({
         />
       ) : null}
 
+      {/* An onlooker (#4354) sees the public summary instead of the per-player card. */}
+      {encounter.standoff_summary ? (
+        <StandoffSummaryCard summary={encounter.standoff_summary} />
+      ) : null}
+
       {/* A standoff is pre-round: its card is the whole panel until round one begins. */}
-      {encounter.standoff ? null : (
+      {encounter.standoff || encounter.standoff_summary ? null : (
         <>
           {/* §2 — Section order: YourTurn → ResonanceBudget → VitalPools →
             CombatantsList → ActiveState → RoundFlow */}
