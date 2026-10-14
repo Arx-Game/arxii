@@ -1,0 +1,65 @@
+== BEFORE
+ sheet |       being        | favor
+-------+--------------------+-------
+     4 | Ombrin             |    44
+     5 | River Spirit       |     0
+     5 | The Fenwright Dead |    12
+(3 rows)
+
+== AFTER
+ sheet |       being        | favor
+-------+--------------------+-------
+     4 | Ombrin             |    46
+     5 | Ombrin             |     1
+     5 | River Spirit       |     0
+     5 | The Fenwright Dead |    12
+(4 rows)
+
+ id | sheet |       being        | outcome | bonus | scene | mission | action_request
+----+-------+--------------------+---------+-------+-------+---------+----------------
+  1 |     4 | Ombrin             | Failure |     0 |       |       1 |
+  2 |     5 | The Fenwright Dead | Success |    10 |       |       1 |
+  3 |     5 | The Fenwright Dead | Success |    10 |     1 |         |              1
+  4 |     4 | Ombrin             | Success |    10 |     1 |         |
+  5 |     4 | Ombrin             | Success |    10 |     1 |         |
+(5 rows)
+
+ id | sheet | being  | devotion_granted
+----+-------+--------+------------------
+  1 |     4 | Ombrin |                2
+  2 |     5 | Ombrin |                1
+(2 rows)
+
+ id |  status  | invoke_being_id |  invoke_line
+----+----------+-----------------+---------------
+  1 | resolved |               2 | [tobiah line]
+(1 row)
+
+ id |  mode   |                                     content
+----+---------+---------------------------------------------------------------------------------
+  1 | outcome | Tobiah Fenwright calls on The Fenwright Dead: [tobiah line]
+  2 | outcome | Tobiah Fenwright's invocation: Success.
+  3 | action  | Tobiah Fenwright attempts to persuade Ysmay Dunhollow: Partial Success
+  4 | outcome | Ysmay Dunhollow calls on something.
+  5 | outcome | Ysmay Dunhollow's invocation: Success.
+  6 | outcome | Ysmay Dunhollow attempts Perception + Investigation (Hard) and fails (Failure).
+  7 | outcome | Ysmay Dunhollow calls on something.
+  8 | outcome | Ysmay Dunhollow's invocation: Success.
+  9 | outcome | Ysmay Dunhollow attempts Perception + Investigation (Hard) and fails (Failure).
+(9 rows)
+
+ sheet |                                                                        body
+-------+----------------------------------------------------------------------------------------------------------------------------------------------------
+     4 | Ysmay Dunhollow calls on Ombrin: [ysmay line]                                                                                                     +
+       | Ysmay Dunhollow's invocation: Failure.                                                                                                            +
+       | Perception + Investigation: 35 (no bonus) = 35, rank Competent against Incompetent (rank difference 2).
+     5 | Ysmay Dunhollow calls on something.                                                                                                               +
+       | Ysmay Dunhollow's invocation: Failure.
+     5 | Tobiah Fenwright calls on The Fenwright Dead: [tobiah line]                                                                                       +
+       | Tobiah Fenwright's invocation: Success.                                                                                                           +
+       | Perception + Investigation: 35 + 10 The Fenwright Dead's favor (invocation: Success) = 45, rank Competent against Incompetent (rank difference 2).
+     4 | Tobiah Fenwright calls on The Fenwright Dead: [tobiah line]                                                                                       +
+       | Tobiah Fenwright's invocation: Success.
+     4 | PLACEHOLDER — [group mission name]: you commit to '[option label]'. The outcome: Failure. The thread of the story moves on.
+     5 | PLACEHOLDER — [group mission name]: you commit to '[option label]'. The outcome: Failure. The thread of the story moves on.
+(6 rows)

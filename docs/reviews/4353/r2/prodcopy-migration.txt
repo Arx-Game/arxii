@@ -1,0 +1,28 @@
+# item 13: latest production dump restored to scratch DB prodcopy_4353, then migrated by this branch
+Installed 10 packages in 699ms
+dump object: arxii-20261014T033006Z.sql.gz
+NOTICE:  database "prodcopy_4353" does not exist, skipping
+== restored. production's newest recorded arxii migrations:
+0220_worldmap_region_pips_footprints|2026-10-12 18:06:48.116121+00
+0219_kinsperson_is_missing_obituary|2026-10-12 18:06:38.254575+00
+0218_relationship_label_staff_seeded|2026-10-10 23:47:32.632258+00
+== before
+beings=6 modifier_targets=59 modifier_categories=15 favor_categories=0 devotion_standings=0
+== migrate (branch)
+  Applying arxii.0221_carry_desc_attribute_text... OK
+  Applying arxii.0222_drop_sheet_marital_status... OK
+  Applying arxii.0223_favor_invocation... OK
+  Applying arxii.0224_being_favor_targets... OK
+== pending after migrate: 0
+== after
+beings=6 modifier_targets=73 modifier_categories=17 favor_categories=2 devotion_standings=0
+favor_invocation_targets: 7 favor_earning_targets: 7 per-being: 12 any-being: 2
+beings without both targets: 0
+devotionconfig rows=0 favorinvocation rows=0 outcome awards=0
+== reverse to 0222 and forward again
+  Unapplying arxii.0224_being_favor_targets... OK
+  Unapplying arxii.0223_favor_invocation... OK
+  Applying arxii.0223_favor_invocation... OK
+  Applying arxii.0224_being_favor_targets... OK
+per-being after round trip: 12 favor targets total: 14
+== .env restored: 0 mentions of prodcopy_4353

@@ -1,0 +1,59 @@
+>>> connect e2e_test_account <password>
+You become Ysmay Dunhollow.
+Shrine of Ombrin
+This is a room.
+Characters: Tobiah Fenwright and Ysmay Dunhollow
+Now controlling Ysmay Dunhollow.
+
+>>> ic Ysmay Dunhollow
+Already controlling Ysmay Dunhollow.
+
+>>> invoke
+Call on favor
+  Ombrin (favor 44): 30, Easy; 1 of 3 left this week
+Bonus to the next check, by result: Critical Success +15 · Success +10 · Partial Success +5 · Failure: none · Critical Failure: none
+Add '/invoke <being>[=<line>]' to a check to call on one.
+
+>>> pray Ombrin=[prayer words]
+You pray to Ombrin. An act of devotion: +2 favor.
+
+>>> check Perception + Investigation at hard /invoke Ombrin=[ysmay telnet line]
+Ysmay Dunhollow calls on something.
+Ysmay Dunhollow's invocation: Success.
+Ysmay Dunhollow calls on Ombrin: [ysmay telnet line]
+Ombrin's favor (invocation: Success): +10
+Ysmay Dunhollow attempts Perception + Investigation (Hard) and fails (Failure).
+
+>>> invoke
+Call on favor
+  Ombrin (favor 46): You have called on Ombrin 3 times this week already.
+Bonus to the next check, by result: Critical Success +15 · Success +10 · Partial Success +5 · Failure: none · Critical Failure: none
+Add '/invoke <being>[=<line>]' to a check to call on one.
+
+>>> ic Tobiah Fenwright
+Switching from Ysmay Dunhollow to Tobiah Fenwright.
+You become Tobiah Fenwright.
+[NARRATIVE] Ysmay Dunhollow calls on something.
+Ysmay Dunhollow's invocation: Failure.
+[NARRATIVE] Tobiah Fenwright calls on The Fenwright Dead: [tobiah line]
+Tobiah Fenwright's invocation: Success.
+Perception + Investigation: 35 + 10 The Fenwright Dead's favor (invocation: Success) = 45, rank Competent against Incompetent (rank difference 2).
+[NARRATIVE] PLACEHOLDER — [group mission name]: you commit to '[option label]'. The outcome: Failure. The thread of the story moves on.
+Shrine of Ombrin
+This is a room.
+Characters: Tobiah Fenwright
+
+>>> pray Ombrin=[prayer words]
+You pray to Ombrin. An act of devotion: +1 favor.
+
+>>> invoke
+Call on favor
+  The Fenwright Dead (favor 12): 75, Daunting; 1 of 3 left this week
+  Ombrin (favor 1): 75, Daunting; 3 of 3 left this week
+  River Spirit (favor 0): You have no favor with River Spirit to call on.
+Bonus to the next check, by result: Critical Success +15 · Success +10 · Partial Success +5 · Failure: none · Critical Failure: none
+Add '/invoke <being>[=<line>]' to a check to call on one.
+
+>>> quit
+Quitting. Hope to see you again, soon.
+quit

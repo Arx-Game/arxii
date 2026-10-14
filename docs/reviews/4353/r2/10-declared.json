@@ -1,0 +1,27 @@
+{
+  "status": 201,
+  "body": {
+    "id": 1,
+    "scene": 1,
+    "initiator_persona": 2,
+    "initiator_name": "Tobiah Fenwright",
+    "target_persona": 1,
+    "target_name": "Ysmay Dunhollow",
+    "action_key": "persuade",
+    "action_template": 1,
+    "technique": null,
+    "technique_name": null,
+    "delivery": "",
+    "status": "pending",
+    "difficulty_choice": "normal",
+    "resolved_difficulty": null,
+    "result_interaction": null,
+    "action_interaction": null,
+    "strain_commitment": 0,
+    "combat_risk_level": null,
+    "combat_stakes": null,
+    "boon": null,
+    "created_at": "2026-10-14T17:51:05.765881Z",
+    "resolved_at": null
+  }
+}
