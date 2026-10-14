@@ -13,6 +13,7 @@ line through Evennia's command handler instead.
 from __future__ import annotations
 
 import inspect
+import re
 from unittest.mock import Mock, patch
 
 from django.test import TestCase
@@ -40,6 +41,7 @@ class _SwitchProbe(ArxCommand):
     """Echoes what the parser handed it."""
 
     key = "switchprobe"
+    takes_switches = True
     locks = "cmd:all()"
 
     def func(self) -> None:
@@ -129,28 +131,90 @@ class TypedSwitchTests(TestCase):
         assert mute.account_level is False
         assert replies == ["Muted Linden (IC/OOC, this character only)."]
 
+    def test_a_command_without_switches_keeps_the_slash(self) -> None:
+        """Dropping an unread switch would run the rest: ``+unmute/x Linden`` would unmute."""
+        _played("Linden", self.room)
 
-def _reads_switches(command_class: type) -> bool:
-    """True when our own code in the command's class chain reads ``switches``."""
+        replies = _typed(self.speaker, "+unmute/x Linden")
+
+        # Evennia's search says it, then the command's error repeats it.
+        assert set(replies) == {"Could not find '/x Linden'."}
+
+    def test_an_unmatched_line_keeps_its_slash(self) -> None:
+        """``CMD_NOMATCH`` is handed the whole typed line as its arguments."""
+        replies = _typed(self.speaker, "/zzqxv now")
+
+        assert replies == [
+            ("Command '/zzqxv now' is not available. Type \"help\" for help.", {"type": "error"})
+        ]
+
+    def test_an_unknown_sheet_section_is_refused(self) -> None:
+        """A mistyped section is refused, never answered with the overview instead."""
+        replies = _typed(self.speaker.account, "sheet/typo")
+
+        assert len(replies) == 1
+        assert replies[0].startswith("No sheet section 'typo'.")
+
+
+_READS_SWITCHES = re.compile(r"\.switches\b")
+
+
+def _own_sources(command_class: type) -> list[str]:
+    """Our code behind ``command_class``: its classes and the module helpers they call.
+
+    Evennia's classes are left out, and so are the two bases, which define the parse
+    rather than rely on it. A module helper counts when the class calls it by name:
+    ``+mute`` reads its switches in ``_account_scope_from_switches(self)``.
+    """
+    sources = []
     for klass in command_class.__mro__:
         if klass.__module__.split(".")[0] in {"evennia", "builtins"}:
             continue
-        # The bases define the parse; what matters is a command that relies on it.
         if klass in (ArxCommand, DispatchCommand):
             continue
-        if "switches" in inspect.getsource(klass):
-            return True
-    return False
+        source = inspect.getsource(klass)
+        sources.append(source)
+        module = inspect.getmodule(klass)
+        for name, value in vars(module).items():
+            if (
+                inspect.isfunction(value)
+                and value.__module__ == module.__name__
+                and re.search(rf"\b{name}\(", source)
+            ):
+                sources.append(inspect.getsource(value))
+    return sources
+
+
+def _reads_switches(command_class: type) -> bool:
+    """True when our own code behind the command reads ``.switches``."""
+    return any(_READS_SWITCHES.search(source) for source in _own_sources(command_class))
+
+
+def _game_commands() -> dict[type, object]:
+    """Every command class in the game's cmdsets, with one instance of each."""
+    cmdsets = (CharacterCmdSet(), AccountCmdSet(), SessionCmdSet(), UnloggedinCmdSet())
+    return {type(cmd): cmd for cmdset in cmdsets for cmd in cmdset.commands}
 
 
 class EveryCommandThatReadsSwitchesParsesThemTests(TestCase):
     """The guard for the class of bug: a command reading switches its parser never set."""
 
-    def test_the_switch_never_stays_in_the_arguments(self) -> None:
-        cmdsets = (CharacterCmdSet(), AccountCmdSet(), SessionCmdSet(), UnloggedinCmdSet())
-        commands = {type(cmd): cmd for cmdset in cmdsets for cmd in cmdset.commands}
+    def test_an_arx_command_takes_switches_exactly_when_it_reads_them(self) -> None:
+        """Both ways: a reader that never opts in crashes or takes the wrong branch, and a
+        command that opts in without reading them drops what was typed (``retire/x``
+        would retire)."""
+        mismatched = [
+            command_class.__name__
+            for command_class in _game_commands()
+            if issubclass(command_class, ArxCommand)
+            and command_class.takes_switches != _reads_switches(command_class)
+        ]
+
+        assert mismatched == []
+
+    def test_every_reader_has_the_switch_split_off_its_arguments(self) -> None:
         checked, unparsed = [], []
-        for command_class, command in commands.items():
+        for command_class, command in _game_commands().items():
             if not _reads_switches(command_class):
                 continue
             cmd = command_class()
@@ -165,6 +229,5 @@ class EveryCommandThatReadsSwitchesParsesThemTests(TestCase):
             if "/probe" in cmd.args:
                 unparsed.append(command_class.__name__)
 
-        assert "CmdMarket" in checked
-        assert "CmdSheet" in checked
+        assert {"CmdMarket", "CmdEmit", "CmdMute", "CmdSheet"} <= set(checked)
         assert unparsed == []

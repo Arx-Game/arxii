@@ -35,6 +35,7 @@ class CmdMarket(ArxCommand):
     """Trade in the market square: stock, unfinished wares, crafting services."""
 
     key = "market"
+    takes_switches = True
     locks = "cmd:all()"
     help_category = "Economy"
     action = None  # routes to multiple actions

@@ -47,6 +47,11 @@ class CmdSheet(Command):  # ty: ignore[invalid-base]
     def func(self) -> None:
         """Dispatch to a section (``sheet/<section>``) or show the overview."""
         section = next((switch for switch in self.switches if switch in SHEET_SECTIONS), None)
+        if self.switches and section is None:
+            self.caller.msg(
+                f"No sheet section '{self.switches[0]}'. Sections: {', '.join(SECTION_NAMES)}."
+            )
+            return
         if section is not None:
             try:
                 output = SHEET_SECTIONS[section](self)

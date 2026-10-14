@@ -104,6 +104,7 @@ class CmdHome(ArxCommand):
     """
 
     key = "home"
+    takes_switches = True
     aliases: ClassVar[list[str]] = ["recall"]
     locks = "cmd:all()"
     action = HomeAction()

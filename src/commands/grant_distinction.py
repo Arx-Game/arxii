@@ -43,6 +43,7 @@ class CmdGrantDistinction(ArxCommand):
     """
 
     key = "grant_distinction"
+    takes_switches = True
     aliases = ["grantdistinction"]
     locks = "cmd:all()"
     help_category = "Staff"

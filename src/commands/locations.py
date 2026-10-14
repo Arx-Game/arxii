@@ -85,6 +85,7 @@ class CmdRoom(ArxCommand):
     """
 
     key = "room"
+    takes_switches = True
     aliases = ("build", "manageroom")
     locks = "cmd:all()"
     help_category = "Building"

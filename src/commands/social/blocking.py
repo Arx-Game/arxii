@@ -55,6 +55,7 @@ class CmdBlock(ArxCommand):
     """
 
     key = "+block"
+    takes_switches = True
     locks = _LOCK_ALL
     action = None
 
@@ -167,6 +168,7 @@ class CmdMute(ArxCommand):
     """
 
     key = "+mute"
+    takes_switches = True
     locks = _LOCK_ALL
     action = None
 

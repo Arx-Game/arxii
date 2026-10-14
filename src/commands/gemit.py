@@ -43,6 +43,7 @@ class CmdGemit(ArxCommand):
     """
 
     key = "gemit"
+    takes_switches = True
     locks = "cmd:perm(Admin)"
     help_category = "Staff"
     action = None

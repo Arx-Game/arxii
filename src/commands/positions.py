@@ -43,6 +43,7 @@ class CmdPosition(ArxCommand):
     """
 
     key = "position"
+    takes_switches = True
     locks = "cmd:all()"
 
     def func(self) -> None:

@@ -455,6 +455,7 @@ class CmdPemit(ArxCommand):
     """
 
     key = "pemit"
+    takes_switches = True
     locks = _CMD_ALL_LOCK
     action = PemitAction()
 
@@ -505,6 +506,7 @@ class CmdEmit(ArxCommand):
     """
 
     key = "emit"
+    takes_switches = True
     locks = _CMD_ALL_LOCK
     action = EmitAction()
 

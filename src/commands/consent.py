@@ -254,6 +254,7 @@ class _RespondCommand(ArxCommand):
 
     decision: ClassVar[str] = ""
     locks = "cmd:all()"
+    takes_switches = True
     action = None
 
     def _execute(self) -> None:

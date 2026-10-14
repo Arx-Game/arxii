@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 import re
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, ClassVar
 
 from evennia.commands.command import Command
 
@@ -105,6 +105,10 @@ class ArxCommand(Command):
     account: Any = None
     raw_string: str | None = None
     obj: Any | None = None
+    # A command that reads ``self.switches`` sets this. Every other command gets its
+    # typed line untouched: dropping an unread switch would turn ``retire/x`` into a
+    # bare ``retire``, and ``CMD_NOMATCH`` receives the whole unmatched line as ``args``.
+    takes_switches: ClassVar[bool] = False
     # Set by ``parse()``; the empty default covers a command built and run by hand.
     switches: Sequence[str] = ()
 
@@ -115,7 +119,8 @@ class ArxCommand(Command):
         switches. Without this, ``self.switches`` was never set on a typed command and
         ``/finish`` stayed at the front of ``self.args``.
         """
-        self.switches, self.args = split_switches(self.args or "")
+        if self.takes_switches:
+            self.switches, self.args = split_switches(self.args or "")
 
     def msg(self, *args: object, **kwargs: Any) -> None:
         """Send a message to the caller.

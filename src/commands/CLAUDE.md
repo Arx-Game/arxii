@@ -28,19 +28,24 @@ SCENE_ADAPTIVE backend.
   - `action`: The Action instance this command delegates to
   - `resolve_action_args()`: Override to parse telnet text into action kwargs
   - `func()`: Calls `resolve_action_args()` → `action.run()` → sends result to caller
-  - `parse()` splits typed switches off the arguments through `split_switches`:
-    `market/finish 12` gives `switches == ["finish"]` (lower-cased) and `args == " 12"`,
-    the leading space being the shape `args` has with no switch. Evennia's base
-    `Command.parse` does nothing; only its `MuxCommand` reads switches, so before this
-    every `ArxCommand` that read `self.switches` raised `AttributeError` when typed, and
-    the ones that read it defensively ran their switch-less branch (`home/set` recalled the
-    character home). `switches` defaults to `()` for a command built and run by hand, so
-    read `self.switches` directly, never through `getattr`. A command on Evennia's bare
-    `Command` that takes switches needs the same `parse()` (`CmdSheet` has it).
-    `tests/test_command_switches.py` types lines through Evennia's command handler, and
-    its guard fails for any command in the game's cmdsets whose code reads `switches`
-    while its `parse()` leaves `/switch` in the arguments. A test that sets
-    `cmd.switches` by hand never runs the parser, which is how this went unnoticed.
+  - **Switches are opt-in: a command that reads `self.switches` sets
+    `takes_switches = True`.** `parse()` then splits them off the arguments through
+    `split_switches`: `market/finish 12` gives `switches == ["finish"]` (lower-cased) and
+    `args == " 12"`, the leading space being the shape `args` has with no switch. Every
+    other command gets its typed line untouched. Splitting for all of them would drop an
+    unread switch and run the rest (`retire/x` would retire), and `CmdNoMatch` is handed
+    the whole unmatched line as `args`, slash included. Evennia's base `Command.parse`
+    does nothing; only its `MuxCommand` reads switches, so before #4352 every `ArxCommand`
+    that read `self.switches` raised `AttributeError` when typed (`emit` among them, and
+    with it the web composer's Emit mode), and the ones that read it through `getattr`
+    ran their switch-less branch (`home/set` recalled the character home). `switches`
+    defaults to `()` for a command built and run by hand, so read `self.switches`
+    directly, never through `getattr`. A command on Evennia's bare `Command` that takes
+    switches needs the same `parse()` (`CmdSheet` has it, and refuses an unknown
+    section). `tests/test_command_switches.py` types lines through Evennia's command
+    handler, and its guard fails when an `ArxCommand`'s `takes_switches` disagrees with
+    whether its code reads `.switches`, either way. A test that sets `cmd.switches` by
+    hand never runs the parser, which is how this went unnoticed.
   - `feed_kind` / `send_result()` (#3856): a command that declares `feed_kind = "look"`
     or `"item"` sends its result through Evennia's tuple form,
     `msg((text, {"type": kind}))`, whose dict becomes the `text` frame's kwargs on the

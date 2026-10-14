@@ -51,6 +51,7 @@ class CmdAccuse(ArxCommand):
     """
 
     key = "accuse"
+    takes_switches = True
     locks = "cmd:all()"
     action = MintAccusationAction()
 

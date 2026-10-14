@@ -95,6 +95,7 @@ class CmdRelationship(ArxCommand):
     """
 
     key = "relationship"
+    takes_switches = True
     aliases = ["relation", "rel"]
     locks = "cmd:all()"
     action = None  # routed per-subverb in func()

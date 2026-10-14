@@ -55,6 +55,7 @@ class CmdVision(ArxCommand):
     """
 
     key = "vision"
+    takes_switches = True
     locks = "cmd:perm(Admin)"
     help_category = "GM"
     action = None
