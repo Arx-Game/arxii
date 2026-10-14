@@ -53,6 +53,16 @@ Core game objects (characters, rooms, exits, etc.) with Arx II customizations ex
     the frame because the room panel already shows the room.
 
   `tests/test_puppet_session_hooks.py` pins the tags and the first-session rule.
+- **Logging out sends our line, never Evennia's** (#4336). `at_post_unpuppet` passes over
+  `DefaultCharacter.at_post_unpuppet` with `super(DefaultCharacter, self)` (so
+  `ObjectParent` must not grow an `at_post_unpuppet`; `tests/test_logout_line.py` pins
+  that). The stock hook's only work was taking the character off the grid with an untyped
+  "has left the game." to the whole room, dreamside included. When the last session
+  leaves, `_leave_the_grid` keeps that step (`prelogout_location`, `location = None`) and
+  `_announce_departure` sends "<name> has left the game<reason>." typed `move` (the kind
+  every departure carries; `TextFrameType.MOVE`) through `resolve_broadcast_exclusions`,
+  named per listener so a mask shows the mask, and says nothing while the character
+  sneaks (#3288: departures are silent). Evennia's lost-connection `reason` rides along.
 
 ### `rooms.py`
 - **`Room`**: Extends `DefaultRoom`

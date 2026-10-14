@@ -4976,7 +4976,7 @@ surfaces via the #1225 `Concealed` condition (sneak-sourced instances only —
 magical concealment is untouched), while every room they occupy discloses an
 identity-free unseen presence. Disclosure is one-way: arrivals always announce
 (anonymous echo + `room_state` flag), departures are silent (normal "X leaves"
-broadcast suppressed while sneaking). One concealment roll per room per visit
+broadcast suppressed while sneaking, and the logout line too, #4336). One concealment roll per room per visit
 (`.ndb` anti-spam token); arriving re-rolls automatically — failure strips the
 stance quietly and the arrival is a normal visible one.
 

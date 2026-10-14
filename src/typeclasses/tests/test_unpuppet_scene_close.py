@@ -9,46 +9,6 @@ from world.character_sheets.factories import CharacterSheetFactory
 from world.scenes.factories import SceneFactory
 
 
-def _find_unpuppet_owner(character):
-    """Return the MRO class that directly defines at_post_unpuppet.
-
-    Character inherits (ObjectParent, DefaultCharacter); ObjectParent is a
-    plain mixin (see typeclasses/mixins.py) that does not define
-    at_post_unpuppet, so the simple `__mro__[1]` used by the analogous
-    `_patch_super_puppet` in typeclasses/tests/test_account_puppet_broadcast.py
-    (which works there because Account has single inheritance straight to
-    DefaultAccount) lands on the wrong class here. Walk the MRO to find the
-    actual owner (DefaultCharacter) instead.
-    """
-    for klass in type(character).__mro__[1:]:
-        if "at_post_unpuppet" in klass.__dict__:
-            return klass
-    msg = "at_post_unpuppet not found in MRO"
-    raise AttributeError(msg)
-
-
-def _patch_super_unpuppet(character, fake):
-    """Replace the parent class's at_post_unpuppet with `fake`; return the original.
-
-    Character.at_post_unpuppet calls `super().at_post_unpuppet(...)`, which is
-    Evennia's base DefaultCharacter implementation — it relocates the character
-    to a null location only when this is the last connected session
-    (`self.sessions.count() == 0`). Rather than fighting real Evennia session
-    plumbing to simulate "still connected," stub the parent method directly on
-    the MRO, mirroring the existing `_patch_super_puppet` pattern in
-    typeclasses/tests/test_account_puppet_broadcast.py.
-    """
-    parent = _find_unpuppet_owner(character)
-    original = parent.at_post_unpuppet
-    parent.at_post_unpuppet = fake
-    return original
-
-
-def _restore_super_unpuppet(character, original):
-    parent = _find_unpuppet_owner(character)
-    parent.at_post_unpuppet = original
-
-
 class UnpuppetFinishesEmptySceneTests(TestCase):
     _PATCH_BASE = "world.scenes.scene_admin_services"
 
@@ -58,51 +18,25 @@ class UnpuppetFinishesEmptySceneTests(TestCase):
         self.character = CharacterFactory(db_key="Solo", location=self.room)
         CharacterSheetFactory(character=self.character)
 
-    def test_disconnect_that_relocates_finishes_the_scene(self):
-        """super().at_post_unpuppet relocating the character (last session out)
-        must trigger maybe_finish_empty_scene for the room it just vacated."""
+    def test_another_open_window_does_not_close_scene(self):
+        """A character still played in another window stays on the grid (#3812),
+        so the scene-close check must not run at all."""
+        self.character.sessions.all = mock.MagicMock(return_value=[mock.MagicMock()])
 
-        def fake_relocate(char_self, account=None, session=None, **kwargs):
-            char_self.location = None  # mimics the real base behavior
-
-        original = _patch_super_unpuppet(self.character, fake_relocate)
-        try:
-            with (
-                mock.patch(f"{self._PATCH_BASE}.on_scene_finished"),
-                mock.patch(f"{self._PATCH_BASE}.process_deferred_fatigue_resets"),
-                mock.patch(f"{self._PATCH_BASE}.broadcast_scene_message"),
-            ):
-                self.character.at_post_unpuppet()
-        finally:
-            _restore_super_unpuppet(self.character, original)
-
-        self.scene.refresh_from_db()
-        assert self.scene.is_finished is True
-
-    def test_disconnect_that_does_not_relocate_does_not_close_scene(self):
-        """A still-connected session (base class no-ops) must not trigger the
-        scene-close check at all."""
-
-        def fake_noop(char_self, account=None, session=None, **kwargs):
-            pass  # mimics "still has another session" — location unchanged
-
-        original = _patch_super_unpuppet(self.character, fake_noop)
-        try:
-            with mock.patch(
-                "world.scenes.round_services.maybe_finish_empty_scene"
-            ) as mock_maybe_finish:
-                self.character.at_post_unpuppet()
-        finally:
-            _restore_super_unpuppet(self.character, original)
+        with mock.patch(
+            "world.scenes.round_services.maybe_finish_empty_scene"
+        ) as mock_maybe_finish:
+            self.character.at_post_unpuppet(session=mock.MagicMock())
 
         mock_maybe_finish.assert_not_called()
+        assert self.character.location == self.room
         self.scene.refresh_from_db()
         assert self.scene.is_finished is False
 
-    def test_real_evennia_relocation_finishes_the_scene_end_to_end(self):
-        """No mocking of super() at all — a freshly-created CharacterFactory has
-        zero attached sessions, so Evennia's real DefaultCharacter.at_post_unpuppet
-        takes its `not self.sessions.count()` branch and relocates for real."""
+    def test_real_relocation_finishes_the_scene_end_to_end(self):
+        """No mocking of the hook at all: a freshly-created CharacterFactory has
+        zero attached sessions, so the last-session-out step (``_leave_the_grid``,
+        #4336) relocates for real."""
         with (
             mock.patch(f"{self._PATCH_BASE}.on_scene_finished"),
             mock.patch(f"{self._PATCH_BASE}.process_deferred_fatigue_resets"),
@@ -139,9 +73,9 @@ class UnpuppetPausesCombatBattleMissionTests(TestCase):
 
     def setUp(self) -> None:
         # A location is required: at_post_unpuppet captures `origin = self.location`
-        # before calling super(), and only runs the guarded block (scene-close +
+        # before leaving the grid, and only runs the guarded block (scene-close +
         # pause calls) `if origin is not None and self.location is None` — i.e. only
-        # when the base hook's own "last session out" relocation actually fires. A
+        # when the "last session out" relocation (_leave_the_grid) actually fires. A
         # character created with no location at all (origin already None) never
         # takes that branch, so the pause calls would never run regardless of
         # wiring. Mirrors the room setup `UnpuppetFinishesEmptySceneTests` uses above.

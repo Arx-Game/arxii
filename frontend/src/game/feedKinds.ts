@@ -40,8 +40,9 @@ export function classifyInteraction(mode: string): FeedKind {
  * The server sends the type through Evennia's tuple form
  * (`msg((text, {"type": kind}))`), whose dict becomes the frame's kwargs:
  * commands send `look`, `item` and `error` (`ArxCommand.send_result`), Evennia's
- * own movement announcements send `move` for a departure and, through our
- * `Character.announce_move_to`, `arrive` for an arrival, and the narrative
+ * own movement announcements send `move` for a departure (the logout line too,
+ * #4336) and, through our `Character.announce_move_to`, `arrive` for an arrival
+ * (the login line too), and the narrative
  * service sends `narrative` or `gemit`, both ambience here. A narrative frame
  * also carries its `category` (#3779); the `visions` category is the one lane
  * with its own kind, `vision`, so the treatment reserved for a god's message
