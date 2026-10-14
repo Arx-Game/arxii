@@ -44,7 +44,7 @@ from world.combat.models import (
     ThreatPoolEntry,
     ThreatRecord,
 )
-from world.standoffs.admin import CreatureDriveInline, RegardRuleInline
+from world.standoffs.admin import CreatureDriveInline, FactionRuleInline
 
 
 class CombatOpponentInline(admin.TabularInline):
@@ -438,7 +438,7 @@ class CreatureTemplateAdmin(admin.ModelAdmin):
     list_display = ("name", "tier", "threat_pool")
     list_filter = ("tier",)
     search_fields = ("name",)
-    inlines = [CreaturePhaseTemplateInline, CreatureDriveInline, RegardRuleInline]
+    inlines = [CreaturePhaseTemplateInline, CreatureDriveInline, FactionRuleInline]
 
 
 @admin.register(CreaturePhaseTemplate)

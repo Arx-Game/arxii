@@ -1,7 +1,7 @@
 """What one participant may see of a standoff.
 
 Privacy is the point of this module. Everything is built for a single viewer: their own
-sparks, regard detail only where it applies to them or was shared, and unread causes,
+angles, faction rule detail only where it applies to them or was shared, and unread causes,
 drives and rules only as a count. A hidden drive still shapes every grade (it is the real
 roll math) but is never named.
 """
@@ -27,15 +27,15 @@ from world.standoffs.constants import (
     StandoffGroupState,
 )
 from world.standoffs.models import (
+    StandoffAngleShare,
     StandoffApproach,
     StandoffConfig,
     StandoffGroup,
     StandoffReveal,
-    StandoffSparkShare,
     StandoffTerms,
 )
 from world.standoffs.services.describe import describe_reveals
-from world.standoffs.services.regard import MatchedRegard, regard_matches
+from world.standoffs.services.faction_rules import MatchedFactionRule, faction_rule_matches
 from world.standoffs.services.state import active_members, is_in_standoff
 from world.standoffs.services.verbs import (
     build_grading_context,
@@ -70,7 +70,7 @@ class GroupView:
     cause_gloss: str | None
     hidden_count: int
     drives: list[DriveView]
-    revealed_regard: list[str]
+    revealed_faction_rules: list[str]
     read_check: str
     read_grade: str
     read_grade_label: str
@@ -80,10 +80,10 @@ class GroupView:
 
 @dataclass(frozen=True)
 class LeverView:
-    """One line saying why an approach may work; ``is_spark`` marks the viewer's own spark."""
+    """One line saying why an approach may work; ``is_angle`` marks the viewer's own angle."""
 
     text: str
-    is_spark: bool
+    is_angle: bool
 
 
 @dataclass(frozen=True)
@@ -100,9 +100,9 @@ class ApproachView:
 
 
 @dataclass(frozen=True)
-class SparkView:
+class AngleView:
     group_id: int
-    regard_rule_id: int
+    faction_rule_id: int
     text: str
     shared: bool
 
@@ -132,8 +132,8 @@ class StandoffView:
     groups: list[GroupView] = field(default_factory=list)
     approaches: list[ApproachView] = field(default_factory=list)
     terms: list[TermsView] = field(default_factory=list)
-    sparks: list[SparkView] = field(default_factory=list)
-    shared_sparks: list[SparkView] = field(default_factory=list)
+    angles: list[AngleView] = field(default_factory=list)
+    shared_angles: list[AngleView] = field(default_factory=list)
     display_techniques: list[DisplayTechniqueView] = field(default_factory=list)
 
 
@@ -178,8 +178,8 @@ class _GroupFacts:
 
     group: StandoffGroup
     reveals: list[StandoffReveal]
-    matches: list[MatchedRegard]
-    shares: list[StandoffSparkShare]
+    matches: list[MatchedFactionRule]
+    shares: list[StandoffAngleShare]
 
     @property
     def revealed_drive_property_ids(self) -> set[int]:
@@ -191,18 +191,18 @@ class _GroupFacts:
 
     @property
     def revealed_set(self) -> set[tuple[str, int | None, int | None]]:
-        return {(r.kind, r.drive_id, r.regard_rule_id) for r in self.reveals}
+        return {(r.kind, r.drive_id, r.faction_rule_id) for r in self.reveals}
 
     @property
     def shared_rule_ids(self) -> set[int]:
-        return {s.regard_rule_id for s in self.shares}
+        return {s.faction_rule_id for s in self.shares}
 
     @property
     def revealed_rule_ids(self) -> set[int]:
         return {
-            r.regard_rule_id
+            r.faction_rule_id
             for r in self.reveals
-            if r.kind == RevealKind.REGARD and r.regard_rule_id is not None
+            if r.kind == RevealKind.FACTION_RULE and r.faction_rule_id is not None
         }
 
 
@@ -225,7 +225,7 @@ def _group_view(  # noqa: PLR0913 - one viewer-and-group context, built once per
         for r in facts.reveals
         if r.kind == RevealKind.DRIVE and r.drive is not None
     ]
-    regard = [r for r in facts.reveals if r.kind == RevealKind.REGARD]
+    faction_reveals = [r for r in facts.reveals if r.kind == RevealKind.FACTION_RULE]
     return GroupView(
         group_id=group.pk,
         name=template.name,
@@ -236,9 +236,9 @@ def _group_view(  # noqa: PLR0913 - one viewer-and-group context, built once per
         cause_gloss=CAUSE_GLOSSES.get(template.cause) if cause_known else None,
         hidden_count=hidden_count,
         drives=drives,
-        revealed_regard=describe_reveals(
+        revealed_faction_rules=describe_reveals(
             group,
-            regard,
+            faction_reveals,
             viewer,
             matching_rule_ids={m.rule.pk for m in facts.matches},
             shared_rule_ids=facts.shared_rule_ids,
@@ -252,18 +252,18 @@ def _group_view(  # noqa: PLR0913 - one viewer-and-group context, built once per
 
 
 def _levers(facts: _GroupFacts, hits: list, targeted: set[int]) -> tuple[list[LeverView], bool]:
-    """Revealed drives the approach hits, and regard text only once that rule was read.
+    """Revealed drives the approach hits, and faction rule text only once that rule was read.
 
     Returns the lever lines and whether any is a revealed drive hit. Drives read
-    "hits <Drive> (<Strength>)"; a regard lever is always the viewer's own spark
-    (``facts.matches`` are their rules), so it reads "your spark: <revealed text>".
+    "hits <Drive> (<Strength>)"; a faction rule lever is always the viewer's own angle
+    (``facts.matches`` are their rules), so it reads "your angle: <revealed text>".
 
-    A shared spark is not a read: auto-sharing after a press must not expose detail the
+    A shared angle is not a read: auto-sharing after a press must not expose detail the
     group never revealed, and describe_reveals (telnet) gates on the reveal too.
     """
     revealed_props = facts.revealed_drive_property_ids
     hit_levers = [
-        LeverView(f"hits {hit.label} ({DriveStrength(drive.strength).label})", is_spark=False)
+        LeverView(f"hits {hit.label} ({DriveStrength(drive.strength).label})", is_angle=False)
         for drive, hit in hits
         if drive.property_id in revealed_props
     ]
@@ -275,7 +275,7 @@ def _levers(facts: _GroupFacts, hits: list, targeted: set[int]) -> tuple[list[Le
             rule.drive_shift != 0 and rule.drive_id in targeted
         )
         if shifts and rule.pk in revealed_rules and rule.revealed_text:
-            levers.append(LeverView(f"your spark: {rule.revealed_text}", is_spark=True))
+            levers.append(LeverView(f"your angle: {rule.revealed_text}", is_angle=True))
     return levers, bool(hit_levers)
 
 
@@ -286,22 +286,22 @@ def _approach_caption(approach: StandoffApproach) -> str:
     return f"{approach.check_type.name} + {approach.sway_target.name}"
 
 
-def _sparks(facts: _GroupFacts, viewer: CharacterSheet) -> tuple[list[SparkView], list[SparkView]]:
+def _angles(facts: _GroupFacts, viewer: CharacterSheet) -> tuple[list[AngleView], list[AngleView]]:
     group_id = facts.group.pk
-    mine_shared = {s.regard_rule_id for s in facts.shares if s.character_sheet_id == viewer.pk}
+    mine_shared = {s.faction_rule_id for s in facts.shares if s.character_sheet_id == viewer.pk}
     own = [
-        SparkView(group_id, m.rule.pk, m.rule.spark_text, m.rule.pk in mine_shared)
+        AngleView(group_id, m.rule.pk, m.rule.angle_text, m.rule.pk in mine_shared)
         for m in facts.matches
     ]
-    own_ids = {s.regard_rule_id for s in own}
+    own_ids = {s.faction_rule_id for s in own}
     seen: set[int] = set()
-    others: list[SparkView] = []
+    others: list[AngleView] = []
     for share in facts.shares:
-        rule = share.regard_rule
+        rule = share.faction_rule
         if share.character_sheet_id == viewer.pk or rule.pk in own_ids or rule.pk in seen:
             continue
         seen.add(rule.pk)
-        others.append(SparkView(group_id, rule.pk, rule.spark_text, True))
+        others.append(AngleView(group_id, rule.pk, rule.angle_text, True))
     return own, others
 
 
@@ -388,9 +388,9 @@ def _append_group_views(  # noqa: PLR0913 - inputs are the per-view and per-grou
     grader: _Grader,
 ) -> None:
     """Add one group's summary, approaches, and terms to the viewer's view."""
-    reveals = list(group.reveals.select_related("drive__property", "regard_rule"))
-    shares = list(group.spark_shares.select_related("regard_rule"))
-    matches = regard_matches(group, viewer)
+    reveals = list(group.reveals.select_related("drive__property", "faction_rule"))
+    shares = list(group.angle_shares.select_related("faction_rule"))
+    matches = faction_rule_matches(group, viewer)
     facts = _GroupFacts(group, reveals, matches, shares)
     members = active_members(group)
     hidden = hidden_things(
@@ -412,9 +412,9 @@ def _append_group_views(  # noqa: PLR0913 - inputs are the per-view and per-grou
             terms_morale_ease=morale_terms_ease(members, config),
         )
     )
-    own, others = _sparks(facts, viewer)
-    view.sparks.extend(own)
-    view.shared_sparks.extend(others)
+    own, others = _angles(facts, viewer)
+    view.angles.extend(own)
+    view.shared_angles.extend(others)
     if ctx is None:
         return
     targeted = targeted_properties_by_capability(

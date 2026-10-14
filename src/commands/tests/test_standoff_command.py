@@ -23,13 +23,13 @@ from world.mechanics.factories import PropertyFactory
 from world.standoffs.constants import DriveStrength, RevealKind
 from world.standoffs.factories import (
     CreatureDriveFactory,
-    RegardRuleFactory,
+    FactionRuleFactory,
     StandoffApproachFactory,
     StandoffGroupFactory,
     StandoffRevealFactory,
     StandoffTermsFactory,
 )
-from world.standoffs.models import StandoffConfig, StandoffSparkShare
+from world.standoffs.models import StandoffAngleShare, StandoffConfig
 from world.standoffs.services.state import open_standoff
 
 _DISPATCH = "commands.command.dispatch_player_action"
@@ -157,11 +157,11 @@ class CmdStandoffTests(TestCase):
         _, kwargs = self._dispatched("read Road Bandits unheld property")
         self.assertEqual(kwargs["focus_property_id"], other.pk)
 
-    def test_share_resolves_own_spark(self) -> None:
-        rule = RegardRuleFactory(creature_template=self.template, rule={}, spark_text="a pang")
+    def test_share_resolves_own_angle(self) -> None:
+        rule = FactionRuleFactory(creature_template=self.template, rule={}, angle_text="a pang")
         key, kwargs = self._dispatched("share Road Bandits a pang")
-        self.assertEqual(key, "standoff_share_spark")
-        self.assertEqual(kwargs["regard_rule_id"], rule.pk)
+        self.assertEqual(key, "standoff_share_angle")
+        self.assertEqual(kwargs["faction_rule_id"], rule.pk)
 
     def test_unknown_group_is_a_command_error(self) -> None:
         cmd = self._cmd("press Hard Stare Nobody")
@@ -169,12 +169,12 @@ class CmdStandoffTests(TestCase):
         with self.assertRaises(CommandError):
             cmd.resolve_action_args()
 
-    def test_summary_lists_groups_and_own_sparks_only(self) -> None:
-        RegardRuleFactory(creature_template=self.template, rule={}, spark_text="a pang")
-        RegardRuleFactory(
+    def test_summary_lists_groups_and_own_angles_only(self) -> None:
+        FactionRuleFactory(creature_template=self.template, rule={}, angle_text="a pang")
+        FactionRuleFactory(
             creature_template=self.template,
             rule={"leaf": "has_species", "params": {"species_id": 999999}},
-            spark_text="SOMEONE ELSES SPARK",
+            angle_text="SOMEONE ELSES SPARK",
         )
         CreatureDriveFactory(creature_template=self.template, strength=DriveStrength.MINOR)
         cmd = self._cmd("")
@@ -199,15 +199,15 @@ class CmdStandoffTests(TestCase):
         self.assertIn(f"Drive: {shown.property.name} (Major).", text)
         self.assertNotIn(hidden.property.name, text)
 
-    def test_summary_lists_approach_and_terms_names_and_never_unshared_sparks(self) -> None:
+    def test_summary_lists_approach_and_terms_names_and_never_unshared_angles(self) -> None:
         config = StandoffConfig.load()
         config.terms_check_type = CheckTypeFactory()
         config.save()
-        RegardRuleFactory(creature_template=self.template, rule={}, spark_text="my own pang")
-        RegardRuleFactory(
+        FactionRuleFactory(creature_template=self.template, rule={}, angle_text="my own pang")
+        FactionRuleFactory(
             creature_template=self.template,
             rule={"leaf": "has_species", "params": {"species_id": 999999}},
-            spark_text="SOMEONE ELSES SPARK",
+            angle_text="SOMEONE ELSES SPARK",
             revealed_text="SOMEONE ELSES DETAIL",
         )
         cmd = self._cmd("")
@@ -234,15 +234,17 @@ class CmdStandoffTests(TestCase):
         self.assertRegex(text, r"terms Let Us Pass: \w+ \(on a critical: Turn\)")
         self.assertNotRegex(text, r"terms Plain Terms: \w+ \(on a critical")
 
-    def test_summary_shows_a_spark_another_character_shared(self) -> None:
+    def test_summary_shows_an_angle_another_character_shared(self) -> None:
         other = CharacterSheetFactory()
         CombatParticipantFactory(encounter=self.encounter, character_sheet=other)
-        rule = RegardRuleFactory(
+        rule = FactionRuleFactory(
             creature_template=self.template,
             rule={"leaf": "has_species", "params": {"species_id": 999999}},
-            spark_text="a shared pang",
+            angle_text="a shared pang",
         )
-        StandoffSparkShare.objects.create(group=self.group, character_sheet=other, regard_rule=rule)
+        StandoffAngleShare.objects.create(
+            group=self.group, character_sheet=other, faction_rule=rule
+        )
         cmd = self._cmd("")
         cmd.func()
         self.assertIn("Shared: a shared pang", cmd.msg.call_args.args[0])

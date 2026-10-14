@@ -20,8 +20,8 @@ term is chosen and the rest are listed under `_Avoid_`.
   (ADR-4091): Allegiance (stored vs effective), Turned, Won over, Bind window; (ADR-4120)
   Settled round; and (ADR-4147) Spectacle, Spectacle kind
 - [standoffs](src/world/standoffs/AGENT_GLOSSARY.md) (#4145, ADR-4145-A): Standoff, Group,
-  Drive, Cause, Regard rule, Spark, Terms, Approach, Read/Press (_Avoid_: motive, reaction,
-  ask, hook, aura, sway)
+  Drive, Cause, Faction, Faction rule, Angle, Association, Proposal, Terms, Approach,
+  Read/Press (_Avoid_: motive, reaction, regard rule, spark, ask, hook, aura, sway)
 - [battles](src/world/battles/AGENT_GLOSSARY.md)
 - [conditions](src/world/conditions/AGENT_GLOSSARY.md), also holds the #4091 settle terms
   (ADR-4091): Settle, Settle pool, Hold strength; and (ADR-4120) Settled round / Settle round
@@ -330,7 +330,8 @@ framing in [covenants AGENT_GLOSSARY](src/world/covenants/AGENT_GLOSSARY.md).
 Which side a `CombatOpponent` fights on — `ENEMY` (hostile to PCs, the default) or
 `ALLY` (fights for the party). Mutable: summons create `ALLY` opponents; future charm
 or switch-sides flips an existing `ENEMY`. One `CombatOpponent` model covers both cases
-(ADR-0059). _Avoid_: faction, team (as model-attribute names).
+(ADR-0059). _Avoid_: faction, team (as names for which side a `CombatOpponent` fights
+on). Faction is a standoffs term: how a group views a character (see the standoffs glossary).
 
 **Summon** (in-combat):
 An `ALLY` `CombatOpponent` conjured during combat by a technique

@@ -10,7 +10,7 @@ from world.mechanics.factories import PropertyFactory
 from world.standoffs.constants import DriveStrength, RevealKind, TermsEffect
 from world.standoffs.models import (
     CreatureDrive,
-    RegardRule,
+    FactionRule,
     StandoffApproach,
     StandoffGroup,
     StandoffReactionLine,
@@ -28,12 +28,12 @@ class CreatureDriveFactory(factory_django.DjangoModelFactory):
     strength = DriveStrength.MINOR
 
 
-class RegardRuleFactory(factory_django.DjangoModelFactory):
+class FactionRuleFactory(factory_django.DjangoModelFactory):
     class Meta:
-        model = RegardRule
+        model = FactionRule
 
     creature_template = factory.SubFactory(CreatureTemplateFactory)
-    spark_text = "PLACEHOLDER spark"
+    angle_text = "PLACEHOLDER angle"
     revealed_text = "PLACEHOLDER revealed"
 
 

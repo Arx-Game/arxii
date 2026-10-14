@@ -17,7 +17,7 @@ from world.combat.factories import (
     CreatureTemplateFactory,
     OpponentTierTemplateFactory,
 )
-from world.standoffs.factories import RegardRuleFactory
+from world.standoffs.factories import FactionRuleFactory
 from world.standoffs.models import StandoffConfig
 from world.standoffs.services.force import (
     cause_fires,
@@ -106,7 +106,7 @@ class ForceTests(TestCase):
             self.assertTrue(cause_fires(group, self.config))
 
     def test_suppressing_rule_prevents_firing(self) -> None:
-        RegardRuleFactory(creature_template=self.template, rule={}, suppresses_cause=True)
+        FactionRuleFactory(creature_template=self.template, rule={}, suppresses_cause=True)
         with patch(LEVEL_PATH, return_value=1):
             self.assertFalse(cause_fires(self._group(), self.config))
 

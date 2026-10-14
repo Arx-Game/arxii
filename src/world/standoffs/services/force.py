@@ -11,7 +11,7 @@ from world.combat.models import OpponentTierTemplate
 from world.combat.morale import OpponentMoraleState, morale_state_for
 from world.covenants.mentorship import effective_combat_level
 from world.standoffs.constants import StandoffGroupState
-from world.standoffs.services.regard import suppressed_for_all_participants
+from world.standoffs.services.faction_rules import suppressed_for_all_participants
 from world.standoffs.services.state import (
     active_members,
     end_standoff_into_fight,

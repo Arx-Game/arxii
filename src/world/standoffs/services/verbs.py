@@ -1,4 +1,4 @@
-"""The standoff verbs: read, press, name terms, fight and share a spark.
+"""The standoff verbs: read, press, name terms, fight and share an angle.
 
 Every verb is one transaction that locks the encounter row, then the group row, and
 re-reads state before it rolls anything: a verb dispatched after the standoff ended
@@ -53,21 +53,21 @@ from world.standoffs.constants import (
 )
 from world.standoffs.models import (
     CreatureDrive,
-    RegardRule,
+    FactionRule,
+    StandoffAngleShare,
     StandoffApproach,
     StandoffConfig,
     StandoffGroup,
     StandoffReveal,
-    StandoffSparkShare,
     StandoffTerms,
 )
-from world.standoffs.services.force import evaluate_causes
-from world.standoffs.services.regard import (
-    MatchedRegard,
+from world.standoffs.services.faction_rules import (
+    MatchedFactionRule,
     band_shift_from,
     drive_strength_from,
-    regard_matches,
+    faction_rule_matches,
 )
+from world.standoffs.services.force import evaluate_causes
 from world.standoffs.services.routing import complete_standoff
 from world.standoffs.services.state import (
     active_members,
@@ -137,7 +137,7 @@ def _roll_inputs(
 
 
 def _revealed_set(group: StandoffGroup) -> set[tuple[str, int | None, int | None]]:
-    return set(group.reveals.values_list("kind", "drive_id", "regard_rule_id"))
+    return set(group.reveals.values_list("kind", "drive_id", "faction_rule_id"))
 
 
 def hidden_things(
@@ -145,9 +145,9 @@ def hidden_things(
     participants: list[CombatParticipant],
     *,
     revealed: set[tuple[str, int | None, int | None]] | None = None,
-    known_matches: dict[int, list[MatchedRegard]] | None = None,
-) -> list[tuple[str, CreatureDrive | None, RegardRule | None]]:
-    """Cause, then drives by strength desc, then regard rules by pk, that are not yet read.
+    known_matches: dict[int, list[MatchedFactionRule]] | None = None,
+) -> list[tuple[str, CreatureDrive | None, FactionRule | None]]:
+    """Cause, then drives by strength desc, then faction rules by pk, that are not yet read.
 
     A caller that already holds the reveal set, or some sheets' matched rules (keyed by
     sheet pk), passes them in so they are not read again.
@@ -156,7 +156,7 @@ def hidden_things(
         revealed = _revealed_set(group)
     known = known_matches or {}
     template = group.creature_template
-    hidden: list[tuple[str, CreatureDrive | None, RegardRule | None]] = []
+    hidden: list[tuple[str, CreatureDrive | None, FactionRule | None]] = []
     if template.cause != CauseKind.NONE and (RevealKind.CAUSE, None, None) not in revealed:
         hidden.append((RevealKind.CAUSE, None, None))
     hidden.extend(
@@ -164,29 +164,29 @@ def hidden_things(
         for drive in template.drives.order_by("-strength", "pk")
         if (RevealKind.DRIVE, drive.pk, None) not in revealed
     )
-    rules = list(template.regard_rules.order_by("pk"))
+    rules = list(template.faction_rules.order_by("pk"))
     matching_ids = {
         match.rule.pk
         for participant in participants
         for match in (
             known[participant.character_sheet.pk]
             if participant.character_sheet.pk in known
-            else regard_matches(group, participant.character_sheet, rules)
+            else faction_rule_matches(group, participant.character_sheet, rules)
         )
     }
     hidden.extend(
-        (RevealKind.REGARD, None, rule)
+        (RevealKind.FACTION_RULE, None, rule)
         for rule in rules
-        if rule.pk in matching_ids and (RevealKind.REGARD, None, rule.pk) not in revealed
+        if rule.pk in matching_ids and (RevealKind.FACTION_RULE, None, rule.pk) not in revealed
     )
     return hidden
 
 
 def _focus_matches(
-    thing: tuple[str, CreatureDrive | None, RegardRule | None],
+    thing: tuple[str, CreatureDrive | None, FactionRule | None],
     focus_kind: str | None,
     focus_drive_id: int | None,
-    focus_regard_rule_id: int | None,
+    focus_faction_rule_id: int | None,
     focus_property_id: int | None = None,
 ) -> bool:
     kind, drive, rule = thing
@@ -200,17 +200,17 @@ def _focus_matches(
             drive.pk == focus_drive_id
             or (focus_property_id is not None and drive.property_id == focus_property_id)
         )
-    if kind == RevealKind.REGARD:
-        return rule is not None and rule.pk == focus_regard_rule_id
+    if kind == RevealKind.FACTION_RULE:
+        return rule is not None and rule.pk == focus_faction_rule_id
     return True
 
 
 def _reveal(
-    group: StandoffGroup, thing: tuple[str, CreatureDrive | None, RegardRule | None]
+    group: StandoffGroup, thing: tuple[str, CreatureDrive | None, FactionRule | None]
 ) -> StandoffReveal:
     kind, drive, rule = thing
     reveal, _ = StandoffReveal.objects.get_or_create(
-        group=group, kind=kind, drive=drive, regard_rule=rule
+        group=group, kind=kind, drive=drive, faction_rule=rule
     )
     return reveal
 
@@ -223,7 +223,7 @@ def standoff_read(  # noqa: PLR0913 - the focus kwargs are the read verb's whole
     *,
     focus_kind: str | None = None,
     focus_drive_id: int | None = None,
-    focus_regard_rule_id: int | None = None,
+    focus_faction_rule_id: int | None = None,
     focus_property_id: int | None = None,
 ) -> StandoffActionResult:
     """Read a group: a partial reveals one hidden thing, a success the one looked for."""
@@ -263,7 +263,7 @@ def standoff_read(  # noqa: PLR0913 - the focus kwargs are the read verb's whole
             t
             for t in hidden
             if _focus_matches(
-                t, focus_kind, focus_drive_id, focus_regard_rule_id, focus_property_id
+                t, focus_kind, focus_drive_id, focus_faction_rule_id, focus_property_id
             )
         ]
         chosen = (focused or hidden)[:1]
@@ -271,7 +271,7 @@ def standoff_read(  # noqa: PLR0913 - the focus kwargs are the read verb's whole
         chosen = [random.choice(hidden)]  # noqa: S311 # NOSONAR game RNG, not crypto
     revealed = [_reveal(group, thing) for thing in chosen]
     # No evaluate_causes here: a read changes none of a cause's inputs (force, emboldening,
-    # suppressing regard), so the cause cannot newly fire.
+    # suppressing faction rules), so the cause cannot newly fire.
     return StandoffActionResult(
         True, f"You study them. {_word(tier)}.", success_level=tier, revealed=revealed
     )
@@ -291,7 +291,7 @@ class GradingContext:
 
     members: list[CombatOpponent]
     drives: list[CreatureDrive]
-    matches: list[MatchedRegard]
+    matches: list[MatchedFactionRule]
     mindless_resistance: int
     resist_increment: int
 
@@ -313,7 +313,7 @@ def build_grading_context(
     sheet: CharacterSheet,
     *,
     members: list[CombatOpponent] | None = None,
-    matches: list[MatchedRegard] | None = None,
+    matches: list[MatchedFactionRule] | None = None,
 ) -> GradingContext:
     """Read a group's members, drives and the viewer's matched rules once."""
     members = active_members(group) if members is None else members
@@ -329,7 +329,7 @@ def build_grading_context(
     return GradingContext(
         members=members,
         drives=list(group.creature_template.drives.select_related("property")),
-        matches=regard_matches(group, sheet) if matches is None else matches,
+        matches=faction_rule_matches(group, sheet) if matches is None else matches,
         mindless_resistance=0 if has_morale else MINDLESS_MORALE_RESISTANCE,
         resist_increment=resist,
     )
@@ -435,11 +435,11 @@ def _embolden_on_botch(group: StandoffGroup, config: StandoffConfig) -> None:
     group.save(update_fields=["emboldened_bands"])
 
 
-def _share_shifting_sparks(
+def _share_shifting_angles(
     group: StandoffGroup, sheet: CharacterSheet, targeted_property_ids: set[int]
 ) -> None:
-    """Acting on a spark reveals it: share every matched rule that shifted this roll."""
-    for match in regard_matches(group, sheet):
+    """Acting on an angle reveals it: share every matched rule that shifted this roll."""
+    for match in faction_rule_matches(group, sheet):
         rule = match.rule
         # A drive shift counts when the press aims at that drive, even if the shift took
         # its strength to zero and it no longer registers as a hit.
@@ -447,8 +447,8 @@ def _share_shifting_sparks(
             rule.drive_shift != 0 and rule.drive_id in targeted_property_ids
         )
         if shifted:
-            StandoffSparkShare.objects.get_or_create(
-                group=group, character_sheet=sheet, regard_rule=rule
+            StandoffAngleShare.objects.get_or_create(
+                group=group, character_sheet=sheet, faction_rule=rule
             )
 
 
@@ -604,7 +604,7 @@ def standoff_press(
     )
     if result is None:
         return _failed_press(use)
-    _share_shifting_sparks(group, sheet, targeted)
+    _share_shifting_angles(group, sheet, targeted)
     tier = result.success_level
     message = "Your words do not move them."
     morale_line = ""
@@ -713,7 +713,7 @@ def standoff_terms(
     )
     if result.outcome is None:
         return _refuse(_MSG_UNCONFIGURED)
-    _share_shifting_sparks(group, sheet, set())
+    _share_shifting_angles(group, sheet, set())
     faces, selected = check_outcome_faces(result)
     transaction.on_commit(
         partial(
@@ -789,22 +789,22 @@ def standoff_fight(
 
 @flush_cache_on_error(lambda participant, *_, **__: participant.encounter)
 @transaction.atomic
-def standoff_share_spark(
-    participant: CombatParticipant, group: StandoffGroup, regard_rule: RegardRule
+def standoff_share_angle(
+    participant: CombatParticipant, group: StandoffGroup, faction_rule: FactionRule
 ) -> StandoffActionResult:
-    """Share what your character feels about this group, if a regard rule applies to you."""
+    """Share what your character feels about this group, if a faction rule applies to you."""
     encounter, group = _lock(participant.encounter, group)
     refusal = _refusal(encounter, group)
     if refusal:
         return _refuse(refusal)
     sheet = participant.character_sheet
-    if regard_rule.pk not in {m.rule.pk for m in regard_matches(group, sheet)}:
+    if faction_rule.pk not in {m.rule.pk for m in faction_rule_matches(group, sheet)}:
         return _refuse("That does not apply to you.")
-    StandoffSparkShare.objects.get_or_create(
-        group=group, character_sheet=sheet, regard_rule=regard_rule
+    StandoffAngleShare.objects.get_or_create(
+        group=group, character_sheet=sheet, faction_rule=faction_rule
     )
-    # No evaluate_causes here: sharing a spark changes none of a cause's inputs (force,
-    # emboldening), and the suppression check reads the party's own regard, not shares.
+    # No evaluate_causes here: sharing an angle changes none of a cause's inputs (force,
+    # emboldening), and the suppression check reads the party's own matches, not shares.
     return StandoffActionResult(True, "You share what you feel.")
 
 

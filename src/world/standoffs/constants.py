@@ -26,7 +26,7 @@ class RevealKind(models.TextChoices):
 
     CAUSE = "cause", "Cause"
     DRIVE = "drive", "Drive"
-    REGARD = "regard", "Regard"
+    FACTION_RULE = "faction_rule", "Faction rule"
 
 
 class TermsEffect(models.TextChoices):

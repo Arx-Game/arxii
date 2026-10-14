@@ -527,7 +527,7 @@ from actions.definitions.standoff import (
     StandoffFightAction,
     StandoffPressAction,
     StandoffReadAction,
-    StandoffShareSparkAction,
+    StandoffShareAngleAction,
     StandoffTermsAction,
 )
 from actions.definitions.stealth import SneakAction, UnsneakAction
@@ -831,7 +831,7 @@ _ALL_ACTIONS: list[Action] = [
     StandoffPressAction(),
     StandoffTermsAction(),
     StandoffFightAction(),
-    StandoffShareSparkAction(),
+    StandoffShareAngleAction(),
     ReadyAction(),
     UpgradeComboAction(),
     RevertComboAction(),

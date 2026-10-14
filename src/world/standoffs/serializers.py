@@ -18,7 +18,7 @@ class GroupViewSerializer(serializers.Serializer):
     cause_gloss = serializers.CharField(allow_null=True)
     hidden_count = serializers.IntegerField()
     drives = DriveViewSerializer(many=True)
-    revealed_regard = serializers.ListField(child=serializers.CharField())
+    revealed_faction_rules = serializers.ListField(child=serializers.CharField())
     read_check = serializers.CharField()
     read_grade = serializers.CharField()
     read_grade_label = serializers.CharField()
@@ -28,7 +28,7 @@ class GroupViewSerializer(serializers.Serializer):
 
 class LeverViewSerializer(serializers.Serializer):
     text = serializers.CharField()
-    is_spark = serializers.BooleanField()
+    is_angle = serializers.BooleanField()
 
 
 class ApproachViewSerializer(serializers.Serializer):
@@ -43,9 +43,9 @@ class ApproachViewSerializer(serializers.Serializer):
     casts_technique = serializers.BooleanField()
 
 
-class SparkViewSerializer(serializers.Serializer):
+class AngleViewSerializer(serializers.Serializer):
     group_id = serializers.IntegerField()
-    regard_rule_id = serializers.IntegerField()
+    faction_rule_id = serializers.IntegerField()
     text = serializers.CharField()
     shared = serializers.BooleanField()
 
@@ -70,6 +70,6 @@ class StandoffViewSerializer(serializers.Serializer):
     groups = GroupViewSerializer(many=True)
     approaches = ApproachViewSerializer(many=True)
     terms = TermsViewSerializer(many=True)
-    sparks = SparkViewSerializer(many=True)
-    shared_sparks = SparkViewSerializer(many=True)
+    angles = AngleViewSerializer(many=True)
+    shared_angles = AngleViewSerializer(many=True)
     display_techniques = DisplayTechniqueSerializer(many=True)

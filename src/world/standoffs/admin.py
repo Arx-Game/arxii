@@ -1,10 +1,10 @@
-"""Django admin for standoffs: creature drives and regard rules, approaches, terms, config."""
+"""Django admin for standoffs: creature drives and faction rules, approaches, terms, config."""
 
 from django.contrib import admin
 
 from world.standoffs.models import (
     CreatureDrive,
-    RegardRule,
+    FactionRule,
     StandoffApproach,
     StandoffConfig,
     StandoffReactionLine,
@@ -20,10 +20,10 @@ class CreatureDriveInline(admin.TabularInline):
     autocomplete_fields = ("property",)
 
 
-class RegardRuleInline(admin.StackedInline):
-    """Regard rules edited on the creature template page (stacked: they carry prose)."""
+class FactionRuleInline(admin.StackedInline):
+    """Faction rules edited on the creature template page (stacked: they carry prose)."""
 
-    model = RegardRule
+    model = FactionRule
     extra = 0
     autocomplete_fields = ("drive", "deed_archetype")
 

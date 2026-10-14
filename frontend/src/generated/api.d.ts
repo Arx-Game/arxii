@@ -26830,6 +26830,12 @@ export interface components {
      * @enum {string}
      */
     AnchorSourceEnum: 'pool' | 'listed' | 'same_as' | 'served_house' | 'own_family';
+    AngleView: {
+      group_id: number;
+      faction_rule_id: number;
+      text: string;
+      shared: boolean;
+    };
     /**
      * @description Request serializer for POST /api/magic/applicable-pulls/.
      *
@@ -33801,7 +33807,7 @@ export interface components {
       cause_gloss: string | null;
       hidden_count: number;
       drives: components['schemas']['DriveView'][];
-      revealed_regard: string[];
+      revealed_faction_rules: string[];
       read_check: string;
       read_grade: string;
       read_grade_label: string;
@@ -35448,7 +35454,7 @@ export interface components {
     LevelE58Enum: 'starting' | 'junior' | 'gm' | 'experienced' | 'senior';
     LeverView: {
       text: string;
-      is_spark: boolean;
+      is_angle: boolean;
     };
     /** @description Read-only serializer for library browse cards. */
     LibraryEntry: {
@@ -47637,12 +47643,6 @@ export interface components {
       readonly stage_description: string;
       readonly has_death_risk: boolean;
     };
-    SparkView: {
-      group_id: number;
-      regard_rule_id: number;
-      text: string;
-      shared: boolean;
-    };
     SpeakerQueue: {
       readonly id: number;
       /** @description Room the queue belongs to. */
@@ -48567,8 +48567,8 @@ export interface components {
       groups: components['schemas']['GroupView'][];
       approaches: components['schemas']['ApproachView'][];
       terms: components['schemas']['TermsView'][];
-      sparks: components['schemas']['SparkView'][];
-      shared_sparks: components['schemas']['SparkView'][];
+      angles: components['schemas']['AngleView'][];
+      shared_angles: components['schemas']['AngleView'][];
       display_techniques: components['schemas']['DisplayTechnique'][];
     };
     /**

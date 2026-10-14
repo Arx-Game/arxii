@@ -1,6 +1,6 @@
 """Standoff actions on the shared dispatch seam (#4145).
 
-Read, press, name terms, fight and share a spark are registry ``Action`` verbs. Telnet
+Read, press, name terms, fight and share an angle are registry ``Action`` verbs. Telnet
 (``CmdStandoff``) and the web reach them through ``dispatch_player_action``; each
 ``execute()`` resolves the actor's participant in a standoff, scopes the group to that
 encounter and calls the ``world.standoffs.services.verbs`` service. No game logic lives here.
@@ -161,7 +161,7 @@ class StandoffReadAction(Action):
         group_id: int | None = None,
         focus_kind: str | None = None,
         focus_drive_id: int | None = None,
-        focus_regard_rule_id: int | None = None,
+        focus_faction_rule_id: int | None = None,
         focus_property_id: int | None = None,
         **kwargs: Any,
     ) -> ActionResult:
@@ -178,7 +178,7 @@ class StandoffReadAction(Action):
             group,
             focus_kind=focus_kind,
             focus_drive_id=focus_drive_id,
-            focus_regard_rule_id=focus_regard_rule_id,
+            focus_faction_rule_id=focus_faction_rule_id,
             focus_property_id=focus_property_id,
         )
         _announce(
@@ -312,11 +312,11 @@ class StandoffFightAction(Action):
 
 
 @dataclass
-class StandoffShareSparkAction(Action):
-    """Share what your character feels about a group (wraps ``standoff_share_spark``)."""
+class StandoffShareAngleAction(Action):
+    """Share what your character feels about a group (wraps ``standoff_share_angle``)."""
 
-    key: str = "standoff_share_spark"
-    name: str = "Share a spark"
+    key: str = "standoff_share_angle"
+    name: str = "Share an angle"
     icon: str = "sparkles"
     category: str = "combat"
     action_category: ActionCategory = ActionCategory.SOCIAL
@@ -327,11 +327,11 @@ class StandoffShareSparkAction(Action):
         actor: ObjectDB,
         context: ActionContext | None = None,
         group_id: int | None = None,
-        regard_rule_id: int | None = None,
+        faction_rule_id: int | None = None,
         **kwargs: Any,
     ) -> ActionResult:
-        from world.standoffs.models import RegardRule  # noqa: PLC0415
-        from world.standoffs.services.verbs import standoff_share_spark  # noqa: PLC0415
+        from world.standoffs.models import FactionRule  # noqa: PLC0415
+        from world.standoffs.services.verbs import standoff_share_angle  # noqa: PLC0415
 
         participant = _standoff_participant(actor)
         if participant is None:
@@ -339,12 +339,12 @@ class StandoffShareSparkAction(Action):
         group = _resolve_group(participant, group_id)
         if group is None:
             return ActionResult(success=False, message=_NO_SUCH_GROUP_MSG)
-        rule = RegardRule.objects.filter(
-            pk=regard_rule_id, creature_template_id=group.creature_template_id
+        rule = FactionRule.objects.filter(
+            pk=faction_rule_id, creature_template_id=group.creature_template_id
         ).first()
         if rule is None:
             return ActionResult(success=False, message="That does not apply to you.")
-        outcome = standoff_share_spark(participant, group, rule)
+        outcome = standoff_share_angle(participant, group, rule)
         _announce(
             participant,
             f"{_actor_label(participant)} shares what they feel about "

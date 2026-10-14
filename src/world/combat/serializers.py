@@ -1369,7 +1369,7 @@ class EncounterDetailSerializer(serializers.ModelSerializer):
     def get_standoff(self, obj: CombatEncounter) -> dict[str, Any] | None:
         """The standoff as the viewer's own participant sees it; None for anyone else.
 
-        Built per viewer (sparks, regard detail and unread things are private), so a
+        Built per viewer (angles, faction rule detail and unread things are private), so a
         viewer who is not a participant, or an encounter past its standoff, gets None.
         A user playing two characters in the encounter gets the first one's view.
         """

@@ -1,4 +1,4 @@
-"""Standoff verbs: read, press, terms, fight and share a spark."""
+"""Standoff verbs: read, press, terms, fight and share an angle."""
 
 from types import SimpleNamespace
 from unittest.mock import patch
@@ -21,12 +21,12 @@ from world.mechanics.factories import ApplicationFactory
 from world.standoffs.constants import DriveStrength, RevealKind, StandoffGroupState, TermsEffect
 from world.standoffs.factories import (
     CreatureDriveFactory,
-    RegardRuleFactory,
+    FactionRuleFactory,
     StandoffApproachFactory,
     StandoffRevealFactory,
     StandoffTermsFactory,
 )
-from world.standoffs.models import StandoffConfig, StandoffReveal, StandoffSparkShare
+from world.standoffs.models import StandoffAngleShare, StandoffConfig, StandoffReveal
 from world.standoffs.services.force import evaluate_causes
 from world.standoffs.services.state import is_in_standoff, open_standoff
 from world.standoffs.services.verbs import (
@@ -34,7 +34,7 @@ from world.standoffs.services.verbs import (
     standoff_fight,
     standoff_press,
     standoff_read,
-    standoff_share_spark,
+    standoff_share_angle,
     standoff_terms,
 )
 from world.traits.factories import CheckOutcomeFactory
@@ -125,15 +125,15 @@ class ReadTests(VerbBase):
         self.assertFalse(result.success)
         roll.assert_not_called()
 
-    def test_unmatched_regard_rule_is_not_hidden_for_the_party(self) -> None:
+    def test_unmatched_faction_rule_is_not_hidden_for_the_party(self) -> None:
         # A rule needing a species no participant has never shows up as readable.
-        RegardRuleFactory(
+        FactionRuleFactory(
             creature_template=self.template,
             rule={"leaf": "has_species", "params": {"species_id": 999999}},
         )
         with patch(CHECK, return_value=forced(2)):
             result = standoff_read(self.participant, self.group)
-        self.assertNotIn(RevealKind.REGARD, {r.kind for r in result.revealed})
+        self.assertNotIn(RevealKind.FACTION_RULE, {r.kind for r in result.revealed})
 
 
 class PressTests(VerbBase):
@@ -357,24 +357,24 @@ class FightTests(VerbBase):
         roll.assert_not_called()
 
 
-class ShareSparkTests(VerbBase):
+class ShareAngleTests(VerbBase):
     def test_matching_rule_is_shared_once(self) -> None:
-        rule = RegardRuleFactory(creature_template=self.template, rule={})
-        self.assertTrue(standoff_share_spark(self.participant, self.group, rule).success)
-        standoff_share_spark(self.participant, self.group, rule)
-        self.assertEqual(StandoffSparkShare.objects.count(), 1)
+        rule = FactionRuleFactory(creature_template=self.template, rule={})
+        self.assertTrue(standoff_share_angle(self.participant, self.group, rule).success)
+        standoff_share_angle(self.participant, self.group, rule)
+        self.assertEqual(StandoffAngleShare.objects.count(), 1)
 
     def test_rule_that_does_not_match_is_refused(self) -> None:
-        rule = RegardRuleFactory(
+        rule = FactionRuleFactory(
             creature_template=self.template,
             rule={"leaf": "has_species", "params": {"species_id": 999999}},
         )
-        self.assertFalse(standoff_share_spark(self.participant, self.group, rule).success)
-        self.assertFalse(StandoffSparkShare.objects.exists())
+        self.assertFalse(standoff_share_angle(self.participant, self.group, rule).success)
+        self.assertFalse(StandoffAngleShare.objects.exists())
 
 
-class ActingOnASparkRevealsItTests(VerbBase):
-    """A press or terms that a regard rule shifted shares that spark with the group."""
+class ActingOnAnAngleRevealsItTests(VerbBase):
+    """A press or terms that a faction rule shifted shares that angle with the group."""
 
     def setUp(self) -> None:
         super().setUp()
@@ -382,20 +382,20 @@ class ActingOnASparkRevealsItTests(VerbBase):
         self.terms = StandoffTermsFactory(effect=TermsEffect.PASS)
 
     def _shares(self) -> int:
-        return StandoffSparkShare.objects.filter(group=self.group).count()
+        return StandoffAngleShare.objects.filter(group=self.group).count()
 
     def test_press_shifted_by_a_rule_shares_it(self) -> None:
-        rule = RegardRuleFactory(
+        rule = FactionRuleFactory(
             creature_template=self.template, rule={}, difficulty_shift_bands=-1
         )
         with patch(CHECK, return_value=forced(1)):
             standoff_press(self.participant, self.group, self.approach)
-        share = StandoffSparkShare.objects.get(group=self.group)
-        self.assertEqual(share.regard_rule, rule)
+        share = StandoffAngleShare.objects.get(group=self.group)
+        self.assertEqual(share.faction_rule, rule)
         self.assertEqual(share.character_sheet, self.participant.character_sheet)
 
     def test_press_with_an_inert_rule_shares_nothing(self) -> None:
-        RegardRuleFactory(creature_template=self.template, rule={})
+        FactionRuleFactory(creature_template=self.template, rule={})
         with patch(CHECK, return_value=forced(1)):
             standoff_press(self.participant, self.group, self.approach)
         self.assertEqual(self._shares(), 0)
@@ -403,29 +403,29 @@ class ActingOnASparkRevealsItTests(VerbBase):
     def test_press_hitting_a_rules_drive_shares_it(self) -> None:
         drive = CreatureDriveFactory(creature_template=self.template, strength=DriveStrength.MINOR)
         ApplicationFactory(capability=self.approach.capability, target_property=drive.property)
-        rule = RegardRuleFactory(
+        rule = FactionRuleFactory(
             creature_template=self.template, rule={}, drive=drive.property, drive_shift=1
         )
         with patch(CHECK, return_value=forced(1)):
             standoff_press(self.participant, self.group, self.approach)
-        shared = list(StandoffSparkShare.objects.values_list("regard_rule", flat=True))
+        shared = list(StandoffAngleShare.objects.values_list("faction_rule", flat=True))
         self.assertEqual(shared, [rule.pk])
 
     def test_press_aimed_at_a_drive_the_rule_weakened_to_zero_still_shares(self) -> None:
         drive = CreatureDriveFactory(creature_template=self.template, strength=DriveStrength.MINOR)
         ApplicationFactory(capability=self.approach.capability, target_property=drive.property)
-        rule = RegardRuleFactory(
+        rule = FactionRuleFactory(
             creature_template=self.template, rule={}, drive=drive.property, drive_shift=-1
         )
         with patch(CHECK, return_value=forced(1)):
             standoff_press(self.participant, self.group, self.approach)
-        shared = list(StandoffSparkShare.objects.values_list("regard_rule", flat=True))
+        shared = list(StandoffAngleShare.objects.values_list("faction_rule", flat=True))
         self.assertEqual(shared, [rule.pk])
 
     def test_a_rule_naming_a_drive_with_no_shift_shares_nothing(self) -> None:
         drive = CreatureDriveFactory(creature_template=self.template, strength=DriveStrength.MINOR)
         ApplicationFactory(capability=self.approach.capability, target_property=drive.property)
-        RegardRuleFactory(
+        FactionRuleFactory(
             creature_template=self.template, rule={}, drive=drive.property, drive_shift=0
         )
         with patch(CHECK, return_value=forced(1)):
@@ -434,7 +434,7 @@ class ActingOnASparkRevealsItTests(VerbBase):
 
     def test_press_missing_a_rules_drive_shares_nothing(self) -> None:
         drive = CreatureDriveFactory(creature_template=self.template, strength=DriveStrength.MINOR)
-        RegardRuleFactory(
+        FactionRuleFactory(
             creature_template=self.template, rule={}, drive=drive.property, drive_shift=1
         )
         with patch(CHECK, return_value=forced(1)):
@@ -442,13 +442,13 @@ class ActingOnASparkRevealsItTests(VerbBase):
         self.assertEqual(self._shares(), 0)
 
     def test_terms_shifted_by_a_rule_shares_it(self) -> None:
-        RegardRuleFactory(creature_template=self.template, rule={}, difficulty_shift_bands=1)
+        FactionRuleFactory(creature_template=self.template, rule={}, difficulty_shift_bands=1)
         with patch(CHECK, return_value=forced(-1)):
             standoff_terms(self.participant, self.group, self.terms)
         self.assertEqual(self._shares(), 1)
 
     def test_a_refused_verb_shares_nothing(self) -> None:
-        RegardRuleFactory(creature_template=self.template, rule={}, difficulty_shift_bands=1)
+        FactionRuleFactory(creature_template=self.template, rule={}, difficulty_shift_bands=1)
         standoff_fight(self.participant, self.encounter)
         standoff_press(self.participant, self.group, self.approach)
         self.assertEqual(self._shares(), 0)

@@ -1,7 +1,7 @@
 /**
  * StandoffCard: the pre-round standoff (#4145). Per group it shows what the party has
  * learned (face-down tiles for what is still hidden, revealed cause and drives), the
- * viewer's own sparks, the approaches to press, the terms to name, a Read control and
+ * viewer's own angles, the approaches to press, the terms to name, a Read control and
  * a Fight button. Every control dispatches a registry action and then refreshes the
  * encounter so the card redraws from the server's view.
  */
@@ -57,7 +57,7 @@ const TOAST_OPTIONS = { className: 'whitespace-pre-line' };
 const NO_FOCUS = 'none';
 const FOCUS_CAUSE = 'cause';
 const FOCUS_DRIVE = 'drive';
-const SPARK_PREFIX = 'spark:';
+const ANGLE_PREFIX = 'angle:';
 
 const GRADE_TONES: Record<string, string> = {
   easy: 'text-emerald-700 dark:text-emerald-300',
@@ -86,11 +86,11 @@ function plural(count: number, one: string, many: string): string {
 function readKwargs(groupId: number, focus: string): Record<string, unknown> {
   if (focus === FOCUS_CAUSE) return { group_id: groupId, focus_kind: 'cause' };
   if (focus === FOCUS_DRIVE) return { group_id: groupId, focus_kind: 'drive' };
-  if (focus.startsWith(SPARK_PREFIX)) {
+  if (focus.startsWith(ANGLE_PREFIX)) {
     return {
       group_id: groupId,
-      focus_kind: 'regard',
-      focus_regard_rule_id: Number(focus.slice(SPARK_PREFIX.length)),
+      focus_kind: 'faction_rule',
+      focus_faction_rule_id: Number(focus.slice(ANGLE_PREFIX.length)),
     };
   }
   return { group_id: groupId };
@@ -142,23 +142,24 @@ export function StandoffCard({ standoff, encounterId, characterId }: StandoffCar
         ) : null}
       </h3>
 
-      {standoff.sparks.length > 0 && (
+      {standoff.angles.length > 0 && (
         <div
           className="rounded-md border border-primary/40 bg-primary/10 px-3 py-2"
-          data-testid="standoff-sparks"
+          data-testid="standoff-angles"
         >
           <p className="text-[10px] font-semibold uppercase tracking-wide text-primary">
-            Your spark here
+            Your angle here
           </p>
-          {standoff.sparks.map((spark) => {
-            const unread = (groupById.get(spark.group_id)?.revealed_regard.length ?? 0) === 0;
+          {standoff.angles.map((angle) => {
+            const unread =
+              (groupById.get(angle.group_id)?.revealed_faction_rules.length ?? 0) === 0;
             return (
               <div
-                key={`${spark.group_id}-${spark.regard_rule_id}`}
+                key={`${angle.group_id}-${angle.faction_rule_id}`}
                 className="mt-1 flex flex-col items-start gap-1.5 text-sm"
               >
                 <p className="min-w-0">
-                  <b>{spark.text}</b>
+                  <b>{angle.text}</b>
                   {unread ? (
                     <span className="text-muted-foreground">
                       {' '}
@@ -166,7 +167,7 @@ export function StandoffCard({ standoff, encounterId, characterId }: StandoffCar
                     </span>
                   ) : null}
                 </p>
-                {spark.shared ? (
+                {angle.shared ? (
                   <Badge variant="secondary">Shared</Badge>
                 ) : (
                   <Button
@@ -174,9 +175,9 @@ export function StandoffCard({ standoff, encounterId, characterId }: StandoffCar
                     variant="outline"
                     disabled={isPending}
                     onClick={() =>
-                      fire('standoff_share_spark', {
-                        group_id: spark.group_id,
-                        regard_rule_id: spark.regard_rule_id,
+                      fire('standoff_share_angle', {
+                        group_id: angle.group_id,
+                        faction_rule_id: angle.faction_rule_id,
                       })
                     }
                   >
@@ -189,12 +190,12 @@ export function StandoffCard({ standoff, encounterId, characterId }: StandoffCar
         </div>
       )}
 
-      {standoff.shared_sparks.map((spark) => (
+      {standoff.shared_angles.map((angle) => (
         <p
-          key={`shared-${spark.group_id}-${spark.regard_rule_id}`}
+          key={`shared-${angle.group_id}-${angle.faction_rule_id}`}
           className="rounded-md border border-border bg-card px-3 py-1.5 text-sm"
         >
-          {spark.text}
+          {angle.text}
         </p>
       ))}
 
@@ -248,12 +249,12 @@ function GroupSection({
 }: GroupSectionProps) {
   const approaches = standoff.approaches.filter((a) => a.group_id === group.group_id);
   const terms = standoff.terms.filter((t) => t.group_id === group.group_id);
-  const sparks = standoff.sparks.filter((s) => s.group_id === group.group_id);
+  const angles = standoff.angles.filter((s) => s.group_id === group.group_id);
   const [chosenTermsId, setChosenTermsId] = useState<number | null>(null);
   const chosenTerms = terms.find((t) => t.terms_id === chosenTermsId) ?? null;
   const isOpen = group.state === 'open';
   const wasRead =
-    group.cause !== null || group.drives.length > 0 || group.revealed_regard.length > 0;
+    group.cause !== null || group.drives.length > 0 || group.revealed_faction_rules.length > 0;
   const selectId = `standoff-focus-${group.group_id}`;
 
   return (
@@ -303,7 +304,7 @@ function GroupSection({
             </div>
           ))}
         </div>
-        {group.revealed_regard.map((line) => (
+        {group.revealed_faction_rules.map((line) => (
           <p key={line} className="text-xs text-muted-foreground">
             {line}
           </p>
@@ -325,12 +326,12 @@ function GroupSection({
               <SelectItem value={NO_FOCUS}>Anything</SelectItem>
               <SelectItem value={FOCUS_CAUSE}>Why would they fight?</SelectItem>
               <SelectItem value={FOCUS_DRIVE}>What moves them?</SelectItem>
-              {sparks.map((spark) => (
+              {angles.map((angle) => (
                 <SelectItem
-                  key={spark.regard_rule_id}
-                  value={`${SPARK_PREFIX}${spark.regard_rule_id}`}
+                  key={angle.faction_rule_id}
+                  value={`${ANGLE_PREFIX}${angle.faction_rule_id}`}
                 >
-                  {spark.text}
+                  {angle.text}
                 </SelectItem>
               ))}
             </SelectContent>
@@ -443,7 +444,7 @@ function ApproachButton({
                 key={lever.text}
                 className={cn(
                   'text-xs font-normal italic',
-                  lever.is_spark ? 'text-primary' : 'text-foreground'
+                  lever.is_angle ? 'text-primary' : 'text-foreground'
                 )}
               >
                 {lever.text}

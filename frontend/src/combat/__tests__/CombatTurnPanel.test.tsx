@@ -366,8 +366,8 @@ describe('CombatTurnPanel — Phase 8 rail sections', () => {
         groups: [],
         approaches: [],
         terms: [],
-        sparks: [],
-        shared_sparks: [],
+        angles: [],
+        shared_angles: [],
         display_techniques: [],
       },
     });

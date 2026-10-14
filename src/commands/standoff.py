@@ -1,7 +1,7 @@
 """Standoff telnet command: the ``standoff <subverb>`` namespace (#4145).
 
 Reaches the standoff registry actions through the shared ``dispatch_player_action`` seam,
-the same path the web uses. Names typed by the player (group, approach, terms, drive, spark)
+the same path the web uses. Names typed by the player (group, approach, terms, drive, angle)
 are looked up by ``iexact`` against rows scoped to the caller's standoff; nothing is
 designated by name in code.
 """
@@ -29,7 +29,7 @@ _SUBVERBS: dict[str, str] = {
     "display": "standoff_press",
     "terms": "standoff_terms",
     "fight": "standoff_fight",
-    "share": "standoff_share_spark",
+    "share": "standoff_share_angle",
 }
 _NOT_IN_STANDOFF = "You are not in a standoff."
 _CAUSE_WORD = "cause"
@@ -55,13 +55,13 @@ class CmdStandoff(DispatchCommand):
     """Act in a standoff before a fight begins.
 
     Usage:
-        standoff                         - the groups here, your sparks and what you can do
-        standoff read <group> [cause|<drive>|<spark>] - read a group for what moves it
+        standoff                         - the groups here, your angles and what you can do
+        standoff read <group> [cause|<drive>|<angle>] - read a group for what moves it
         standoff press <approach> <group> - press a group with an approach
         standoff display <technique> <group> [soulfray] - cast a technique as a display
                                            of power; 'soulfray' accepts the Soulfray risk
         standoff terms <terms> <group>   - name terms to a group
-        standoff share <group> <spark>   - share what you feel about a group
+        standoff share <group> <angle>   - share what you feel about a group
         standoff fight                   - break the standoff and begin the fight
     """
 
@@ -153,9 +153,9 @@ class CmdStandoff(DispatchCommand):
         return matches[0]
 
     def _own_matches(self, group: StandoffGroup) -> list[Any]:
-        from world.standoffs.services.regard import regard_matches  # noqa: PLC0415
+        from world.standoffs.services.faction_rules import faction_rule_matches  # noqa: PLC0415
 
-        return regard_matches(group, self.caller.sheet_data)
+        return faction_rule_matches(group, self.caller.sheet_data)
 
     def _split(self, text: str, first: Callable[[str], Any], second: Callable[[str], Any]) -> Any:
         """Resolve ``<first> <second>`` where either may be several words."""
@@ -195,8 +195,11 @@ class CmdStandoff(DispatchCommand):
         if focus.lower() == _CAUSE_WORD:
             return {"focus_kind": RevealKind.CAUSE}
         for match in self._own_matches(group):
-            if match.rule.spark_text.lower() == focus.lower():
-                return {"focus_kind": RevealKind.REGARD, "focus_regard_rule_id": match.rule.pk}
+            if match.rule.angle_text.lower() == focus.lower():
+                return {
+                    "focus_kind": RevealKind.FACTION_RULE,
+                    "focus_faction_rule_id": match.rule.pk,
+                }
         prop = Property.objects.filter(name__iexact=focus).first()
         if prop is not None:
             return {"focus_kind": RevealKind.DRIVE, "focus_property_id": prop.pk}
@@ -268,12 +271,12 @@ class CmdStandoff(DispatchCommand):
         return {"group_id": group.pk, "terms_id": terms.pk}
 
     def _share_args(self, text: str) -> dict[str, Any]:
-        def spark_for(group: StandoffGroup) -> Callable[[str], Any]:
+        def angle_for(group: StandoffGroup) -> Callable[[str], Any]:
             def find(name: str) -> Any:
                 for match in self._own_matches(group):
-                    if match.rule.spark_text.lower() == name.lower():
+                    if match.rule.angle_text.lower() == name.lower():
                         return match.rule
-                msg = f"You have no spark '{name}'."
+                msg = f"You have no angle '{name}'."
                 raise CommandError(msg)
 
             return find
@@ -281,12 +284,12 @@ class CmdStandoff(DispatchCommand):
         for lead, tail in _name_splits(text):
             try:
                 group = self._group(lead)
-                return {"group_id": group.pk, "regard_rule_id": spark_for(group)(tail).pk}
+                return {"group_id": group.pk, "faction_rule_id": angle_for(group)(tail).pk}
             except AmbiguousNameError:
                 raise
             except CommandError:
                 continue
-        msg = "Usage: standoff share <group> <spark>."
+        msg = "Usage: standoff share <group> <angle>."
         raise CommandError(msg)
 
     # -- summary ---------------------------------------------------------------
@@ -330,16 +333,16 @@ def _render_group(view: StandoffView, group: GroupView) -> list[str]:
         gloss = f" {group.cause_gloss}" if group.cause_gloss else ""
         lines.append(f"    Cause: {group.cause}.{gloss}")
     lines.extend(f"    Drive: {drive.label} ({drive.strength})." for drive in group.drives)
-    lines.extend(f"    {line}" for line in group.revealed_regard)
+    lines.extend(f"    {line}" for line in group.revealed_faction_rules)
     lines.extend(
-        f"    You feel: {spark.text}{' (shared)' if spark.shared else ''}"
-        for spark in view.sparks
-        if spark.group_id == group.group_id and spark.text
+        f"    You feel: {angle.text}{' (shared)' if angle.shared else ''}"
+        for angle in view.angles
+        if angle.group_id == group.group_id and angle.text
     )
     lines.extend(
-        f"    Shared: {spark.text}"
-        for spark in view.shared_sparks
-        if spark.group_id == group.group_id and spark.text
+        f"    Shared: {angle.text}"
+        for angle in view.shared_angles
+        if angle.group_id == group.group_id and angle.text
     )
     lines.extend(
         f"    press {approach.name}: {approach.grade_label}" + _lever_suffix(approach.levers)

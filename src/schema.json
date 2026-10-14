@@ -43628,6 +43628,22 @@ components:
         * `same_as` - The same group as an earlier question
         * `served_house` - The house the character's family served
         * `own_family` - The character's own family
+    AngleView:
+      type: object
+      properties:
+        group_id:
+          type: integer
+        faction_rule_id:
+          type: integer
+        text:
+          type: string
+        shared:
+          type: boolean
+      required:
+      - faction_rule_id
+      - group_id
+      - shared
+      - text
     ApplicablePullsRequestRequest:
       type: object
       description: |-
@@ -58476,7 +58492,7 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/DriveView'
-        revealed_regard:
+        revealed_faction_rules:
           type: array
           items:
             type: string
@@ -58502,7 +58518,7 @@ components:
       - read_check
       - read_grade
       - read_grade_label
-      - revealed_regard
+      - revealed_faction_rules
       - state
       - terms_ease
       - terms_morale_ease
@@ -61868,10 +61884,10 @@ components:
       properties:
         text:
           type: string
-        is_spark:
+        is_angle:
           type: boolean
       required:
-      - is_spark
+      - is_angle
       - text
     LibraryEntry:
       type: object
@@ -84330,22 +84346,6 @@ components:
       - has_death_risk
       - stage_description
       - stage_name
-    SparkView:
-      type: object
-      properties:
-        group_id:
-          type: integer
-        regard_rule_id:
-          type: integer
-        text:
-          type: string
-        shared:
-          type: boolean
-      required:
-      - group_id
-      - regard_rule_id
-      - shared
-      - text
     SpeakerQueue:
       type: object
       properties:
@@ -86360,25 +86360,25 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/TermsView'
-        sparks:
+        angles:
           type: array
           items:
-            $ref: '#/components/schemas/SparkView'
-        shared_sparks:
+            $ref: '#/components/schemas/AngleView'
+        shared_angles:
           type: array
           items:
-            $ref: '#/components/schemas/SparkView'
+            $ref: '#/components/schemas/AngleView'
         display_techniques:
           type: array
           items:
             $ref: '#/components/schemas/DisplayTechnique'
       required:
+      - angles
       - approaches
       - display_techniques
       - groups
       - place
-      - shared_sparks
-      - sparks
+      - shared_angles
       - terms
     StartingArea:
       type: object

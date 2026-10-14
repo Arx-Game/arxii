@@ -24,20 +24,20 @@ from world.species.factories import SpeciesFactory
 from world.standoffs.constants import CAUSE_GLOSSES, DriveStrength, RevealKind
 from world.standoffs.factories import (
     CreatureDriveFactory,
-    RegardRuleFactory,
+    FactionRuleFactory,
     StandoffApproachFactory,
     StandoffGroupFactory,
     StandoffRevealFactory,
     StandoffTermsFactory,
 )
 from world.standoffs.models import (
+    StandoffAngleShare,
     StandoffApproach,
     StandoffConfig,
     StandoffGroup,
-    StandoffSparkShare,
     StandoffTerms,
 )
-from world.standoffs.services.describe import HIDDEN_REGARD_LINE
+from world.standoffs.services.describe import HIDDEN_FACTION_RULE_LINE
 from world.standoffs.services.state import open_standoff
 from world.standoffs.services.view import build_standoff_view
 from world.standoffs.tests.test_verbs import VerbBase
@@ -58,10 +58,10 @@ class ViewBase(VerbBase):
         self.part_b = CombatParticipantFactory(
             encounter=self.encounter, character_sheet=self.sheet_b
         )
-        self.rule = RegardRuleFactory(
+        self.rule = FactionRuleFactory(
             creature_template=self.template,
             rule={"leaf": "has_species", "params": {"species_id": self.species.pk}},
-            spark_text="PLACEHOLDER spark A",
+            angle_text="PLACEHOLDER angle A",
             revealed_text="PLACEHOLDER detail A",
         )
 
@@ -69,24 +69,24 @@ class ViewBase(VerbBase):
         return build_standoff_view(self.encounter, sheet)
 
 
-class SparkPrivacyTests(ViewBase):
-    def test_own_spark_shown_to_its_owner_only(self) -> None:
+class AnglePrivacyTests(ViewBase):
+    def test_own_angle_shown_to_its_owner_only(self) -> None:
         view_a = self.view_for(self.sheet_a)
         view_b = self.view_for(self.sheet_b)
-        self.assertEqual([s.text for s in view_a.sparks], ["PLACEHOLDER spark A"])
-        self.assertFalse(view_a.sparks[0].shared)
-        self.assertEqual(view_b.sparks, [])
-        self.assertEqual(view_b.shared_sparks, [])
+        self.assertEqual([s.text for s in view_a.angles], ["PLACEHOLDER angle A"])
+        self.assertFalse(view_a.angles[0].shared)
+        self.assertEqual(view_b.angles, [])
+        self.assertEqual(view_b.shared_angles, [])
 
-    def test_shared_spark_reaches_the_other_participant_as_spark_text_only(self) -> None:
-        StandoffSparkShare.objects.create(
-            group=self.group, character_sheet=self.sheet_a, regard_rule=self.rule
+    def test_shared_angle_reaches_the_other_participant_as_angle_text_only(self) -> None:
+        StandoffAngleShare.objects.create(
+            group=self.group, character_sheet=self.sheet_a, faction_rule=self.rule
         )
         view_a = self.view_for(self.sheet_a)
         view_b = self.view_for(self.sheet_b)
-        self.assertTrue(view_a.sparks[0].shared)
-        self.assertEqual(view_a.shared_sparks, [])
-        self.assertEqual([s.text for s in view_b.shared_sparks], ["PLACEHOLDER spark A"])
+        self.assertTrue(view_a.angles[0].shared)
+        self.assertEqual(view_a.shared_angles, [])
+        self.assertEqual([s.text for s in view_b.shared_angles], ["PLACEHOLDER angle A"])
         self.assertNotIn("detail", repr(view_b))
 
     def test_none_after_the_fight_starts(self) -> None:
@@ -108,8 +108,8 @@ class HiddenInformationTests(ViewBase):
         group = self.view_for(self.sheet_a).groups[0]
         self.assertIsNone(group.cause)
         self.assertEqual(group.drives, [])
-        self.assertEqual(group.revealed_regard, [])
-        # cause + drive + A's matching regard rule
+        self.assertEqual(group.revealed_faction_rules, [])
+        # cause + drive + A's matching faction rule
         self.assertEqual(group.hidden_count, 3)
         # relevant to the party, so B's count includes A's rule but never names it
         self.assertEqual(self.view_for(self.sheet_b).groups[0].hidden_count, 3)
@@ -122,21 +122,23 @@ class HiddenInformationTests(ViewBase):
         self.assertEqual(
             [(d.label, d.strength) for d in group.drives], [(self.drive.property.name, "Major")]
         )
-        self.assertEqual(group.hidden_count, 1)  # A's unread regard rule
+        self.assertEqual(group.hidden_count, 1)  # A's unread faction rule
 
-    def test_regard_detail_goes_to_the_matched_viewer_until_shared(self) -> None:
-        StandoffRevealFactory(group=self.group, kind=RevealKind.REGARD, regard_rule=self.rule)
-        self.assertEqual(
-            self.view_for(self.sheet_a).groups[0].revealed_regard, ["PLACEHOLDER detail A"]
+    def test_faction_rule_detail_goes_to_the_matched_viewer_until_shared(self) -> None:
+        StandoffRevealFactory(
+            group=self.group, kind=RevealKind.FACTION_RULE, faction_rule=self.rule
         )
         self.assertEqual(
-            self.view_for(self.sheet_b).groups[0].revealed_regard, [HIDDEN_REGARD_LINE]
-        )
-        StandoffSparkShare.objects.create(
-            group=self.group, character_sheet=self.sheet_a, regard_rule=self.rule
+            self.view_for(self.sheet_a).groups[0].revealed_faction_rules, ["PLACEHOLDER detail A"]
         )
         self.assertEqual(
-            self.view_for(self.sheet_b).groups[0].revealed_regard, ["PLACEHOLDER detail A"]
+            self.view_for(self.sheet_b).groups[0].revealed_faction_rules, [HIDDEN_FACTION_RULE_LINE]
+        )
+        StandoffAngleShare.objects.create(
+            group=self.group, character_sheet=self.sheet_a, faction_rule=self.rule
+        )
+        self.assertEqual(
+            self.view_for(self.sheet_b).groups[0].revealed_faction_rules, ["PLACEHOLDER detail A"]
         )
 
     def test_hidden_drive_is_never_named_in_levers_but_still_counts_in_the_grade(self) -> None:
@@ -151,30 +153,32 @@ class HiddenInformationTests(ViewBase):
         with patch(PREVIEW, return_value=0):
             revealed = self.view_for(self.sheet_b).approaches[0]
         self.assertEqual(
-            [(lever.text, lever.is_spark) for lever in revealed.levers],
+            [(lever.text, lever.is_angle) for lever in revealed.levers],
             [(f"hits {self.drive.property.name} (Major)", False)],
         )
         self.assertTrue(revealed.hits_revealed_drive)
 
 
 class LeverLeakTests(ViewBase):
-    def test_a_shared_spark_without_a_read_does_not_expose_detail_in_levers(self) -> None:
+    def test_a_shared_angle_without_a_read_does_not_expose_detail_in_levers(self) -> None:
         self.rule.difficulty_shift_bands = 1
         self.rule.save(update_fields=["difficulty_shift_bands"])
         StandoffApproachFactory()
-        # What a press does after it shifts: share the spark. No REGARD reveal exists.
-        StandoffSparkShare.objects.create(
-            group=self.group, character_sheet=self.sheet_a, regard_rule=self.rule
+        # What a press does after it shifts: share the angle. No FACTION_RULE reveal exists.
+        StandoffAngleShare.objects.create(
+            group=self.group, character_sheet=self.sheet_a, faction_rule=self.rule
         )
         with patch(PREVIEW, return_value=0):
             before = self.view_for(self.sheet_a).approaches[0].levers
         self.assertNotIn("PLACEHOLDER detail A", [lever.text for lever in before])
-        StandoffRevealFactory(group=self.group, kind=RevealKind.REGARD, regard_rule=self.rule)
+        StandoffRevealFactory(
+            group=self.group, kind=RevealKind.FACTION_RULE, faction_rule=self.rule
+        )
         with patch(PREVIEW, return_value=0):
             after = self.view_for(self.sheet_a).approaches[0].levers
         self.assertEqual(
-            [(lever.text, lever.is_spark) for lever in after],
-            [("your spark: PLACEHOLDER detail A", True)],
+            [(lever.text, lever.is_angle) for lever in after],
+            [("your angle: PLACEHOLDER detail A", True)],
         )
 
 
