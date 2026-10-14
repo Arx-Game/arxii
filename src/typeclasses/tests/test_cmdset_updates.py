@@ -21,10 +21,24 @@ class CommandUpdateTests(TestCase):
         account = AccountFactory(typeclass="typeclasses.accounts.Account")
         account.sessions.all = MagicMock(return_value=[session])
         account.get_available_characters = MagicMock(return_value=[])
-        with patch("typeclasses.accounts.commands_frame", return_value=FRAME):
+        with patch("typeclasses.accounts.commands_frame", return_value=FRAME) as build_frame:
             with patch("typeclasses.accounts.DefaultAccount.at_post_login"):
                 account.at_post_login(session=session)
+        build_frame.assert_called_once_with(account)
         session.msg.assert_any_call(commands=FRAME)
+
+    def test_at_post_login_leaves_a_sibling_tab_s_commands_alone(self):
+        """#4346: the account's frame has no character commands; a tab already
+        playing someone must keep its own, or its composer holds `@desc`."""
+        playing, joining = MagicMock(), MagicMock()
+        account = AccountFactory(typeclass="typeclasses.accounts.Account")
+        account.sessions.all = MagicMock(return_value=[playing, joining])
+        account.get_available_characters = MagicMock(return_value=[])
+        with patch("typeclasses.accounts.commands_frame", return_value=FRAME):
+            with patch("typeclasses.accounts.DefaultAccount.at_post_login"):
+                account.at_post_login(session=joining)
+        joining.msg.assert_any_call(commands=FRAME)
+        assert not [call for call in playing.msg.call_args_list if "commands" in call.kwargs]
 
     def test_at_post_login_characterless_message_points_to_web(self):
         """#2122 — the no-characters login message signposts the web app."""
@@ -95,9 +109,10 @@ class CommandUpdateTests(TestCase):
         char = ObjectDBFactory(db_typeclass_path="typeclasses.characters.Character")
         char.sessions.all = MagicMock(return_value=[session1, session2])
         char.send_room_state = MagicMock()
-        with patch("typeclasses.characters.commands_frame", return_value=FRAME):
+        with patch("typeclasses.characters.commands_frame", return_value=FRAME) as build_frame:
             with patch("typeclasses.characters.DefaultCharacter.at_post_puppet"):
                 char.at_post_puppet()
+        build_frame.assert_called_once_with(char)
         session1.msg.assert_called_with(commands=FRAME)
         session2.msg.assert_called_with(commands=FRAME)
         # The newest session (last in sessions.all()) is the one that just

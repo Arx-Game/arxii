@@ -113,3 +113,24 @@ class CommandNamesTests(TestCase):
 
         assert descriptors == serialize_cmdset(self.player)
         assert kwargs == {"names": command_names(self.player)}
+
+    def test_the_wire_frame_is_descriptors_then_names(self):
+        """Through Evennia's own serializer and the webclient protocol, as the client reads it."""
+        import json
+
+        from evennia.server.portal.webclient import WebSocketClient
+        from evennia.server.sessionhandler import ServerSessionHandler
+
+        session = MagicMock(protocol_flags={"ENCODING": "utf-8"})
+        messages = ServerSessionHandler().clean_senddata(
+            session, {"commands": commands_frame(self.player)}
+        )
+        portal = MagicMock()
+        for message_type, (args, kwargs) in messages.items():
+            WebSocketClient.send_default(portal, message_type, *args, **kwargs)
+
+        frame = json.loads(portal.sendLine.call_args.args[0])
+        assert frame[0] == "commands"
+        assert isinstance(frame[1], list)
+        assert frame[1]
+        assert frame[2]["names"] == command_names(self.player)

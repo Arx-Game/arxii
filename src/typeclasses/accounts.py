@@ -622,11 +622,14 @@ class Account(DefaultAccount):
             session.msg(logged_in={})
         self._send_to_connect_channel(f"|G{self.key} connected|n")
 
-        frame = commands_frame(self)
-        for sess in self.sessions.all():
-            sess.msg(commands=frame)
         if session is None:
             return
+        # Only the window that just logged in (#4346): the account's own frame
+        # lacks every character command, and a sibling tab playing a character
+        # would lose its command names (and the composer would hold its
+        # `@desc` lines) until its next puppet. The puppet below sends this
+        # window the character's full frame.
+        session.msg(commands=commands_frame(self))
 
         available = self.get_available_characters()
         if not available:

@@ -24,6 +24,9 @@ from world.roster.factories import RosterEntryFactory, RosterFactory, RosterTenu
 from world.roster.models import RosterType
 from world.roster.services.selection import set_selected_entry
 
+# A whole `commands` frame: the web-form descriptors, and every name the character can type.
+FRAME = (["cmd"], {"names": ["cmd"]})
+
 
 def _session() -> Mock:
     """A ServerSession-shaped mock: real signatures, no ``__iter__`` (typeclasses/CLAUDE.md)."""
@@ -72,7 +75,7 @@ class LoginEntryTestCase(TestCase):
         return entry, character
 
     def _login(self) -> None:
-        with patch("typeclasses.accounts.serialize_cmdset", return_value=["cmd"]):
+        with patch("typeclasses.accounts.commands_frame", return_value=FRAME):
             self.account.at_post_login(session=self.session)
 
 
@@ -223,7 +226,7 @@ class LoginNeverShowsTheOOCScreenTests(LoginEntryTestCase):
 
         self.session.update_flags.assert_called_once_with(SCREENWIDTH={0: 100})
         self.session.msg.assert_any_call(logged_in={})
-        self.session.msg.assert_any_call(commands=(["cmd"], {}))
+        self.session.msg.assert_any_call(commands=FRAME)
         announce.assert_called_once()
         self.assertIn(self.account.key, announce.call_args.args[0])
 
