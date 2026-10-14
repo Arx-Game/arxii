@@ -501,7 +501,7 @@ class AndCompositionAndRungLadderTests(TestCase):
         )
 
     def _negotiating(self) -> None:
-        SceneFactory(location=self.room)
+        SceneFactory(room=self.room)
 
     def _distracted(self) -> None:
         ConditionInstanceFactory(

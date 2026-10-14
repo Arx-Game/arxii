@@ -46,7 +46,7 @@ class ConcealmentOOCWiringTests(TestCase):
         # CharacterFactory creates with nohome=True (location=None); a real room is
         # required for get_active_scene to resolve anything (mirrors test_can_perceive.py).
         self.character.location = _create_room()
-        self.scene = SceneFactory(location=self.character.location, is_active=True)
+        self.scene = SceneFactory(room=self.character.location, is_active=True)
         cat = ConditionCategoryFactory(conceals_from_perception=True)
         self.template = ConditionTemplateFactory(category=cat)
 

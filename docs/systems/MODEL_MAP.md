@@ -241,6 +241,7 @@
   - tenancy_records <- locations.LocationTenancy
   - ambient_emote_lines <- narrative.AmbientEmoteLine
   - ambient_emits <- narrative.AmbientEmit
+  - scenes_held <- scenes.Scene
   - scene_rounds <- scenes.SceneRound
   - places <- scenes.Place
   - speaker_queues <- scenes.SpeakerQueue
@@ -8748,7 +8749,7 @@
 
 ### Scene
 **Foreign Keys:**
-  - location -> evennia.ObjectDB [FK] (nullable)
+  - location -> evennia_extensions.RoomProfile [FK] (nullable)
   - event -> events.Event [FK] (nullable)
   - running_beat -> stories.Beat [FK] (nullable)
   - participants -> evennia.AccountDB [M2M]

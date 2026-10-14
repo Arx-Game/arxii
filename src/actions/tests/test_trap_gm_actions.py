@@ -40,7 +40,7 @@ class GMTrapActionTestBase(TestCase):
         tenure = RosterTenureFactory(roster_entry=entry, end_date=None)
         account = tenure.player_data.account
         GMProfileFactory(account=account, level=level)
-        scene = SceneFactory(location=self.room)
+        scene = SceneFactory(room=self.room)
         SceneParticipationFactory(scene=scene, account=account, is_gm=True)
         invalidate_active_scene_cache(self.room)
         return character

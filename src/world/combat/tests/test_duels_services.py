@@ -160,7 +160,7 @@ class CreateLethalDuelTests(TestCase):
         # encounter_requiring_risk_acknowledgement as long as the encounter is
         # in a feedable status and they haven't acknowledged.
         bystander = CharacterSheetFactory()
-        scene = SceneFactory(location=self.room)
+        scene = SceneFactory(room=self.room)
         enc.scene = scene
         enc.save(update_fields=["scene"])
         self.assertEqual(encounter_requiring_risk_acknowledgement(scene, bystander), enc)

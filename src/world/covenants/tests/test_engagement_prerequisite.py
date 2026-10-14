@@ -113,7 +113,7 @@ class EngagementPrerequisiteBranchesTests(TestCase):
             del room._active_scene_cache
 
         # Active scene at room, but char_b is not in this room
-        SceneFactory(location=room, is_active=True)
+        SceneFactory(room=room, is_active=True)
 
         self.assertFalse(can_engage_membership(self.mem_a_durance))
 
@@ -134,7 +134,7 @@ class EngagementPrerequisiteBranchesTests(TestCase):
         if hasattr(room, "_active_scene_cache"):
             del room._active_scene_cache
 
-        SceneFactory(location=room, is_active=True)
+        SceneFactory(room=room, is_active=True)
 
         self.assertTrue(can_engage_membership(self.mem_a_durance))
 
@@ -158,7 +158,7 @@ class EngagementPrerequisiteBranchesTests(TestCase):
         if hasattr(room, "_active_scene_cache"):
             del room._active_scene_cache
 
-        SceneFactory(location=room, is_active=True)
+        SceneFactory(room=room, is_active=True)
 
         # Only char_a is in the room — self must not be counted
         self.assertFalse(can_engage_membership(self.mem_a_durance))

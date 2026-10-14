@@ -38,7 +38,7 @@ class EvidenceGenerationTests(TestCase):
     def setUpTestData(cls):
         cls.crime = CrimeKindFactory(slug="theft", name="Theft")
         cls.room = RoomProfileFactory()
-        cls.scene = SceneFactory(location=cls.room.objectdb)
+        cls.scene = SceneFactory(location=cls.room)
 
     def test_tagging_a_scened_deed_generates_evidence_at_the_scene(self):
         deed = LegendEntryFactory(scene=self.scene)
@@ -77,7 +77,7 @@ class EvidenceCheckFixture(TestCase):
         cls.success = CheckOutcomeFactory(name="ev_success", success_level=1)
         cls.failure = CheckOutcomeFactory(name="ev_failure", success_level=-1)
         cls.room = RoomProfileFactory()
-        cls.scene = SceneFactory(location=cls.room.objectdb)
+        cls.scene = SceneFactory(location=cls.room)
         cls.sheet = CharacterSheetFactory()
         cls.character = set_character_location(cls.sheet.character, cls.room.objectdb)
         cls.crime = CrimeKindFactory(slug="theft", name="Theft")
@@ -171,7 +171,7 @@ class DisposedHeatDampenerTests(TestCase):
         cls.crime = CrimeKindFactory(slug="theft", name="Theft")
         AreaLawFactory(area=cls.kingdom, crime_kind=cls.crime, heat_weight=DEFAULT_HEAT_WEIGHT)
         cls.room = RoomProfileFactory(area=cls.kingdom)
-        cls.scene = SceneFactory(location=cls.room.objectdb)
+        cls.scene = SceneFactory(location=cls.room)
 
     def _tagged_deed(self):
         deed = LegendEntryFactory(scene=self.scene)

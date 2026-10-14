@@ -97,7 +97,7 @@ class TableOwningGMAutoEnrollmentJourneyTest(TestCase):
         """``scene start`` auto-flags the table-owning GM's participation."""
         _run_scene_cmd(self.gm_actor, "start")
 
-        scene = Scene.objects.get(location=self.room, is_active=True)
+        scene = Scene.objects.get(location_id=self.room.pk, is_active=True)
         self.assertTrue(
             SceneParticipation.objects.filter(
                 scene=scene, account=self.gm_account, is_gm=True
@@ -107,7 +107,7 @@ class TableOwningGMAutoEnrollmentJourneyTest(TestCase):
     def test_actor_may_gm_encounter_passes_for_enrolled_gm(self) -> None:
         """The real permission gate combat surfaces use now passes (was the whole bug)."""
         _run_scene_cmd(self.gm_actor, "start")
-        scene = Scene.objects.get(location=self.room, is_active=True)
+        scene = Scene.objects.get(location_id=self.room.pk, is_active=True)
 
         encounter = CombatEncounterFactory(room=self.room, scene=scene)
 
@@ -116,7 +116,7 @@ class TableOwningGMAutoEnrollmentJourneyTest(TestCase):
     def test_encounter_begin_and_add_succeed_via_telnet(self) -> None:
         """``encounter begin`` and ``encounter add`` succeed for the auto-enrolled GM."""
         _run_scene_cmd(self.gm_actor, "start")
-        scene = Scene.objects.get(location=self.room, is_active=True)
+        scene = Scene.objects.get(location_id=self.room.pk, is_active=True)
 
         seed_scaling_defaults()
         threat_pool = ThreatPoolFactory(name="soldiers")
@@ -163,7 +163,7 @@ class GMAloneInStrangersRoomTest(TestCase):
         """``scene start`` leaves the GM's participation is_gm=False."""
         _run_scene_cmd(self.gm_actor, "start")
 
-        scene = Scene.objects.get(location=self.room, is_active=True)
+        scene = Scene.objects.get(location_id=self.room.pk, is_active=True)
         self.assertFalse(
             SceneParticipation.objects.filter(
                 scene=scene, account=self.gm_account, is_gm=True
@@ -173,7 +173,7 @@ class GMAloneInStrangersRoomTest(TestCase):
     def test_actor_may_gm_encounter_still_refuses(self) -> None:
         """Combat-GM permission stays refused — no member-present, no auto-grant."""
         _run_scene_cmd(self.gm_actor, "start")
-        scene = Scene.objects.get(location=self.room, is_active=True)
+        scene = Scene.objects.get(location_id=self.room.pk, is_active=True)
 
         encounter = CombatEncounterFactory(room=self.room, scene=scene)
 
@@ -182,7 +182,7 @@ class GMAloneInStrangersRoomTest(TestCase):
     def test_encounter_begin_refused_via_telnet(self) -> None:
         """``encounter begin`` refuses the un-enrolled GM through the real telnet path."""
         _run_scene_cmd(self.gm_actor, "start")
-        scene = Scene.objects.get(location=self.room, is_active=True)
+        scene = Scene.objects.get(location_id=self.room.pk, is_active=True)
         CombatEncounterFactory(room=self.room, scene=scene)
 
         msgs = _run_encounter_cmd(self.gm_actor, "begin")

@@ -143,7 +143,7 @@ class ConcludeBattleTests(TestCase):
             db_key="ConcludeCacheRoom",
             db_typeclass_path="typeclasses.rooms.Room",
         )
-        self.battle.scene.location = room
+        self.battle.scene.room = room
         self.battle.scene.save(update_fields=["location"])
 
         # Prime the cache the way any room-scoped resolver does.

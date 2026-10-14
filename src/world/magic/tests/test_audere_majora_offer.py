@@ -169,7 +169,7 @@ class AudereMajoraOfferServiceTests(TestCase):
     def test_scene_emit_interaction_created_on_first_call(self) -> None:
         # Create an active scene at the character's location
         room = self.character.location
-        scene = SceneFactory(location=room, is_active=True)
+        scene = SceneFactory(room=room, is_active=True)
 
         maybe_create_audere_majora_offer(self.character, self.passing_intensity)
 
@@ -179,7 +179,7 @@ class AudereMajoraOfferServiceTests(TestCase):
 
     def test_scene_emit_not_repeated_on_refresh(self) -> None:
         room = self.character.location
-        scene = SceneFactory(location=room, is_active=True)
+        scene = SceneFactory(room=room, is_active=True)
 
         maybe_create_audere_majora_offer(self.character, self.passing_intensity)
         maybe_create_audere_majora_offer(self.character, self.passing_intensity)
@@ -201,7 +201,7 @@ class AudereMajoraOfferServiceTests(TestCase):
         from world.scenes.models import Persona
 
         room = self.character.location
-        SceneFactory(location=room, is_active=True)
+        SceneFactory(room=room, is_active=True)
         Persona.objects.filter(character_sheet=self.sheet).delete()
 
         offer = maybe_create_audere_majora_offer(self.character, self.passing_intensity)

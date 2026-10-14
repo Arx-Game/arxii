@@ -376,7 +376,7 @@ class ReplyToWebSocketPayloadTest(TestCase):
         cls.room = ObjectDBFactory(
             db_key="The Long Gallery", db_typeclass_path="typeclasses.rooms.Room"
         )
-        cls.scene = SceneFactory(location=cls.room)
+        cls.scene = SceneFactory(room=cls.room)
         character = CharacterFactory(location=cls.room)
         sheet = CharacterSheetFactory(character=character)
         cls.persona = PersonaFactory(character_sheet=sheet)

@@ -62,7 +62,7 @@ class TestSelfBuffAppliesConditionToCaster(CastScenarioMixin):
         grant_technique(self.caster, technique)
 
         caster_char = self.caster.character_sheet.character
-        caster_char.location = self.scene.location
+        caster_char.location = self.scene.room
         caster_char.save()
 
         # Force a successful cast roll so the SL gate (minimum_success_level=0) is met
@@ -106,11 +106,11 @@ class TestBenignNonConsentBuffAtOtherPC(CastScenarioMixin):
         grant_technique(self.caster, technique)
 
         caster_char = self.caster.character_sheet.character
-        caster_char.location = self.scene.location
+        caster_char.location = self.scene.room
         caster_char.save()
 
         target_char = self.target.character_sheet.character
-        target_char.location = self.scene.location
+        target_char.location = self.scene.room
         target_char.save()
 
         # Force a successful cast roll so the SL gate (minimum_success_level=0) is met
@@ -260,7 +260,7 @@ class TestFilteredGroupBenignCast(CastScenarioMixin):
         # All characters in the scene so _collect_scene_personas finds them.
         for persona in (self.caster, self.target, self.third_ally):
             char = persona.character_sheet.character
-            char.location = self.scene.location
+            char.location = self.scene.room
             char.save()
 
         success = CheckOutcome.objects.get(name="Success")

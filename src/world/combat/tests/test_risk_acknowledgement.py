@@ -27,7 +27,7 @@ class _RiskAckTestBase(EvenniaTestCase):
         from world.scenes.factories import SceneFactory
 
         room = create_object("typeclasses.rooms.Room", key="Risk Room", nohome=True)
-        scene = SceneFactory(location=room)
+        scene = SceneFactory(room=room)
         return scene, room
 
     @staticmethod

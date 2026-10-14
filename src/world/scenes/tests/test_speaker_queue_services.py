@@ -43,7 +43,7 @@ class SpeakerQueueServiceTests(TestCase):
             open_queue(self.room, self.persona_b)
 
     def test_open_queue_stamps_scene_if_active(self):
-        scene = SceneFactory(location=self.room, is_active=True)
+        scene = SceneFactory(room=self.room, is_active=True)
         queue = open_queue(self.room, self.persona_a)
         self.assertEqual(queue.scene, scene)
 
@@ -120,7 +120,7 @@ class SpeakerQueueServiceTests(TestCase):
         self.assertIsNone(get_active_queue(self.room))
 
     def test_clear_queue_on_scene_finish_closes_queue(self):
-        scene = SceneFactory(location=self.room, is_active=True)
+        scene = SceneFactory(room=self.room, is_active=True)
         queue = open_queue(self.room, self.persona_a)
         join_queue(queue, self.persona_a)
         clear_queue_on_scene_finish(scene)
@@ -128,7 +128,7 @@ class SpeakerQueueServiceTests(TestCase):
         self.assertFalse(queue.is_active)
 
     def test_clear_queue_on_scene_finish_noop_if_no_queue(self):
-        scene = SceneFactory(location=self.room, is_active=True)
+        scene = SceneFactory(room=self.room, is_active=True)
         # Should not raise
         clear_queue_on_scene_finish(scene)
 

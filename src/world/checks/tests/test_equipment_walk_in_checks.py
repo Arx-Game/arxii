@@ -212,7 +212,7 @@ class EquipmentWalkInChecksTests(TestCase):
         from evennia_extensions.models import RoomProfile
 
         RoomProfile.objects.update_or_create(objectdb=cls.room_obj, defaults={"area": cls.area})
-        cls.scene = SceneFactory(location=cls.room_obj)
+        cls.scene = SceneFactory(room=cls.room_obj)
 
     def setUp(self) -> None:
         # Handler caches live on the idmapper-shared Character and leak across

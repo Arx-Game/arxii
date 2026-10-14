@@ -23,7 +23,7 @@ class GMPromptTelnetTest(TestCase):
         cls.gm = AccountFactory()
         GMProfileFactory(account=cls.gm)
         cls.room = ObjectDBFactory(db_typeclass_path="typeclasses.rooms.Room")
-        cls.scene = SceneFactory(location=cls.room)
+        cls.scene = SceneFactory(room=cls.room)
         SceneGMParticipationFactory(scene=cls.scene, account=cls.gm)
         cls.crosser = CharacterSheetFactory()
         # Fix round 1, finding 1: the private leg checks the subject is

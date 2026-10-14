@@ -53,7 +53,7 @@ class RiteTestBase(TestCase):
         cls.room = ObjectDBFactory(db_key="Chapel", db_typeclass_path="typeclasses.rooms.Room")
         cls.character.db_location = cls.room
         cls.character.save(update_fields=["db_location"])
-        cls.scene = SceneFactory(location=cls.room, is_active=True)
+        cls.scene = SceneFactory(room=cls.room, is_active=True)
         SceneParticipationFactory(scene=cls.scene, account=cls.account)
         cls.pool = ActionPointPoolFactory(character=cls.sheet, current=10, maximum=10)
 

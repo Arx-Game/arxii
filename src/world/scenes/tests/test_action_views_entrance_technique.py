@@ -84,7 +84,7 @@ class EntranceTechniqueRestDispatchTests(CastScenarioMixin):
         # full-app run (#2183 CI fix; see the DbHolder note in
         # world/buildings/tests/test_manager_api.py for the same trap).
         character = self.caster.character_sheet.character
-        character.db_location = self.scene.location
+        character.db_location = self.scene.room
         self.account = AccountFactory()
         entry = RosterEntryFactory(character_sheet=character.sheet_data)
         tenure = RosterTenureFactory(player_data__account=self.account, roster_entry=entry)

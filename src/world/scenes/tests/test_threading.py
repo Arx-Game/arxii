@@ -251,7 +251,7 @@ class TestPoseActionReplyFromPlaceTelnetParity(TestCase):
         room = ObjectDBFactory(db_key="War Room", db_typeclass_path="typeclasses.rooms.Room")
         room_profile = RoomProfileFactory(objectdb=room)
         place = PlaceFactory(room=room_profile, name="the war room table")
-        scene = SceneFactory(location=room)
+        scene = SceneFactory(room=room)
 
         char = CharacterFactory(db_key="Alice", location=room)
         roster_entry = RosterEntryFactory(character_sheet__character=char)

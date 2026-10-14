@@ -1,8 +1,8 @@
 from django.core.exceptions import ObjectDoesNotExist
 from drf_spectacular.utils import extend_schema_field
-from evennia.objects.models import ObjectDB
 from rest_framework import serializers
 
+from evennia_extensions.models import RoomProfile
 from world.areas.positioning.serializers import (
     PersonaPositionSerializer,
     PositionAdjacencyItemSerializer,
@@ -205,7 +205,7 @@ class SceneListSerializer(serializers.ModelSerializer):
     participants = serializers.SerializerMethodField()
     location = serializers.SerializerMethodField()
     location_id = serializers.PrimaryKeyRelatedField(
-        queryset=ObjectDB.objects.all(),
+        queryset=RoomProfile.objects.all(),
         write_only=True,
         required=False,
         allow_null=True,
@@ -231,8 +231,9 @@ class SceneListSerializer(serializers.ModelSerializer):
         ]
 
     def get_location(self, obj):
-        if obj.location:
-            return {"id": obj.location.id, "name": obj.location.db_key}
+        room = obj.room
+        if room is not None:
+            return {"id": room.id, "name": room.db_key}
         return None
 
     def get_participants(self, obj: Scene) -> list[dict]:
@@ -296,7 +297,7 @@ class SceneListSerializer(serializers.ModelSerializer):
         ):
             from evennia_extensions.models import room_is_publicly_listed  # noqa: PLC0415
 
-            if room_is_publicly_listed(location):
+            if room_is_publicly_listed(location.objectdb):
                 raise serializers.ValidationError(
                     {
                         "privacy_mode": (
@@ -418,7 +419,7 @@ class SceneDetailSerializer(SceneListSerializer):
             return []
         from world.areas.positioning.models import Position  # noqa: PLC0415
 
-        positions = Position.objects.filter(room=obj.location)
+        positions = Position.objects.filter(room_id=obj.location_id)
         return PositionSummarySerializer(positions, many=True).data  # type: ignore[return-value]
 
     @extend_schema_field(PositionAdjacencyItemSerializer(many=True))
@@ -432,7 +433,7 @@ class SceneDetailSerializer(SceneListSerializer):
             return []
         from world.areas.positioning.services import room_position_adjacency  # noqa: PLC0415
 
-        entries = room_position_adjacency(obj.location)
+        entries = room_position_adjacency(obj.room)
         return PositionAdjacencyItemSerializer(entries, many=True).data  # type: ignore[return-value]
 
     @extend_schema_field(PositionNodeSerializer(many=True))
@@ -446,7 +447,7 @@ class SceneDetailSerializer(SceneListSerializer):
             return []
         from world.areas.positioning.services import position_graph  # noqa: PLC0415
 
-        graph = position_graph(obj.location)
+        graph = position_graph(obj.room)
         return PositionNodeSerializer(graph.nodes, many=True).data  # type: ignore[return-value]
 
     @extend_schema_field(PositionEdgeSerializer(many=True))
@@ -461,7 +462,7 @@ class SceneDetailSerializer(SceneListSerializer):
             return []
         from world.areas.positioning.services import position_graph  # noqa: PLC0415
 
-        graph = position_graph(obj.location)
+        graph = position_graph(obj.room)
         return PositionEdgeSerializer(graph.edges, many=True).data  # type: ignore[return-value]
 
     @extend_schema_field(PersonaPositionSerializer(many=True))
@@ -494,7 +495,7 @@ class SceneDetailSerializer(SceneListSerializer):
             return None
         from world.scenes.round_services import active_round_for_room  # noqa: PLC0415
 
-        rnd = active_round_for_room(obj.location)
+        rnd = active_round_for_room(obj.room)
         return SceneRoundSerializer(rnd).data if rnd is not None else None
 
     @extend_schema_field(SceneClockSerializer(allow_null=True))
@@ -538,14 +539,9 @@ class SceneDetailSerializer(SceneListSerializer):
         """
         if obj.location is None:
             return None
-        from evennia_extensions.models import RoomProfile  # noqa: PLC0415
         from world.locations.services import resolve_area_art  # noqa: PLC0415
 
-        try:
-            room_profile = obj.location.room_profile
-        except RoomProfile.DoesNotExist:
-            return None
-        return resolve_area_art(room_profile)
+        return resolve_area_art(obj.location)
 
     @staticmethod
     def _resolve_declared_risk(obj: Scene) -> str | None:

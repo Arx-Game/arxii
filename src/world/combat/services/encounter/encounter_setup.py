@@ -21,6 +21,6 @@ def finalize_new_encounter(encounter: CombatEncounter) -> None:
     from world.combat.escalation import assign_default_escalation_curve  # noqa: PLC0415
 
     if encounter.room_id is None and encounter.scene.location_id is not None:
-        encounter.room = encounter.scene.location
+        encounter.room = encounter.scene.room
         encounter.save(update_fields=["room"])
     assign_default_escalation_curve(encounter)

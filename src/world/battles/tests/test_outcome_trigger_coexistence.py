@@ -68,7 +68,7 @@ class OutcomeTriggerCoexistenceTests(TestCase):
             "typeclasses.rooms.Room", key="Coexistence Wiring Room", nohome=True
         )
         self.battle = BattleFactory()
-        self.battle.scene.location = self.room
+        self.battle.scene.room = self.room
         self.battle.scene.save(update_fields=["location"])
         self.covenant = CovenantFactory(covenant_type=CovenantType.BATTLE)
         self.attacker_side = BattleSideFactory(

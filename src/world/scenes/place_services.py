@@ -66,7 +66,7 @@ def ensure_scene_for_location(
     scene_name = name or f"Scene at {room.key}"
     scene = Scene.objects.create(
         name=scene_name,
-        location=room,
+        room=room,
         privacy_mode=privacy_mode,
     )
 

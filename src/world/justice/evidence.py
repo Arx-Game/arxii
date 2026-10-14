@@ -52,12 +52,11 @@ def generate_crime_evidence(deed: LegendEntry) -> CrimeEvidence | None:
     Called by ``tag_deed_crimes``. A deed without a located scene leaves no
     evidence — there is no "there" for it to lie at.
     """
-    from world.areas.services import get_room_profile  # noqa: PLC0415
 
     scene = deed.scene
     if scene is None or scene.location is None:
         return None
-    room_profile = get_room_profile(scene.location)
+    room_profile = scene.location
     evidence, _ = CrimeEvidence.objects.get_or_create(deed=deed, room_profile=room_profile)
     return evidence
 

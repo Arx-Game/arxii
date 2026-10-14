@@ -1347,8 +1347,7 @@ class ConditionInstance(SharedMemoryModel):
     # noqa: OBJECTDB_FIELD
     # ObjectDB by design (#2608): a condition lands on a character, a room, an
     # item or an exit alike (a door can be Jammed, a vase Burning), so the bearer
-    # is any game object. ``source_character`` below is NOT a keeper: it is a
-    # character-only fact that belongs on CharacterSheet (audit verdict b).
+    # is any game object.
     target = models.ForeignKey(
         "objects.ObjectDB",
         on_delete=models.CASCADE,
@@ -1442,6 +1441,16 @@ class ConditionInstance(SharedMemoryModel):
     )
 
     # === Source Tracking ===
+    # noqa: OBJECTDB_FIELD
+    # ObjectDB by design (#4217, reversing #2608's "retarget at CharacterSheet"
+    # verdict): the source is whichever body applied the condition, and a
+    # generic or ephemeral combat NPC has no CharacterSheet by design
+    # (``CombatOpponent.objectdb``), yet ``npc_action`` records it here as the
+    # source of the damage it deals. ``death_is_permitted`` refuses a None
+    # source and ``is_pc_source`` reads a sheetless source as an NPC, so a
+    # sheet-typed FK would null every mook's source and make its kills
+    # impossible (ADR-0023 is PvP-only). A character-shaped reader uses
+    # ``source_character.character_sheet`` (None for a mook).
     source_character = models.ForeignKey(
         "objects.ObjectDB",
         on_delete=models.SET_NULL,

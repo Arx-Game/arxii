@@ -525,7 +525,7 @@ def narrate_companion_loss(companion_name: str, scene, *, fallback_recipients=No
         scene=scene,
     )
 
-    room = scene.location
+    room = scene.room
     payload = _build_interaction_payload(
         interaction_id=interaction.pk,
         persona=narrator,

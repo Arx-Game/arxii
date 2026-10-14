@@ -86,7 +86,7 @@ def stage_battle(  # noqa: PLR0913 - each param is a distinct staging facet
         battle.save(update_fields=["region"])
 
     if location is not None:
-        battle.scene.location = location
+        battle.scene.room = location
         battle.scene.save(update_fields=["location"])
 
     add_side(battle=battle, role=BattleSideRole.ATTACKER)

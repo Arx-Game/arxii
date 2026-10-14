@@ -464,7 +464,7 @@ class CreateEncounterTest(CombatEncounterViewSetTestBase):
     def test_create_as_gm_defaults_room_from_scene_location(self) -> None:
         """room is unset in the payload; perform_create fills it from scene.location."""
         room = ObjectDBFactory()
-        scene = SceneFactory(location=room)
+        scene = SceneFactory(room=room)
         SceneParticipationFactory(scene=scene, account=self.gm_account, is_gm=True)
         client = APIClient()
         client.force_authenticate(user=self.gm_account)
@@ -544,7 +544,7 @@ class ProposeLethalDuelTest(CombatEncounterViewSetTestBase):
         # out of setUpTestData; mirrors CreateEncounterTest's own-scene pattern
         # rather than mutating the shared class-level self.scene.
         room = ObjectDBFactory()
-        self.lethal_scene = SceneFactory(location=room)
+        self.lethal_scene = SceneFactory(room=room)
         SceneParticipationFactory(scene=self.lethal_scene, account=self.gm_account, is_gm=True)
         self.threat_pool = ThreatPoolFactory()
 

@@ -55,7 +55,7 @@ class RoomStateTests(TestCase):
         assert payload["scene"] is None
 
     def test_build_room_state_payload_uses_cached_scene(self):
-        scene = SceneFactory(location=self.room)
+        scene = SceneFactory(room=self.room)
         self.room.active_scene = scene
         with patch("world.scenes.models.Scene.objects.filter") as mock_filter:
             payload = build_room_state_payload(self.char_state, self.room_state)

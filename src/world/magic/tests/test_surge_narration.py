@@ -28,7 +28,7 @@ def _placed_sheet():
     sheet = CharacterSheetFactory()
     sheet.character.location = room
     sheet.character.save()
-    return sheet, SceneFactory(location=room)
+    return sheet, SceneFactory(room=room)
 
 
 class SurgeNarrationTest(TestCase):

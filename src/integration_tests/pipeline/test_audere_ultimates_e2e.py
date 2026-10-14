@@ -471,7 +471,7 @@ class BoundBeingTurnsBattleTests(_LethalAudereFixture):
         super().setUp()
         # The scene at the character's room, run by a GM who is not the player.
         self.gm = AccountFactory()
-        scene = SceneFactory(location=self.character.location)
+        scene = SceneFactory(room=self.character.location)
         SceneGMParticipationFactory(scene=scene, account=self.gm)
 
         # A being the character is devoted to: its avatar body, an ultimate it grants,

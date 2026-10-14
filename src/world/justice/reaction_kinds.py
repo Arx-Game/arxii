@@ -62,7 +62,7 @@ def _on_witness_reaction(window: ReactionWindow, reaction: WindowReaction) -> No
     target = WitnessReactionTarget.objects.select_related("legend_entry").get(window=window)
     entry = target.legend_entry
     persona = entry.persona
-    room = window.interaction.scene.location
+    room = window.interaction.scene.room
     if room is None:
         # Unlike flag_crime (whose caller skips the CRIME_WATCH line entirely
         # when it has no room context), a WITNESS window always has a persona

@@ -156,7 +156,7 @@ class WitnessedDuranceTelnetTests(TestCase):
         self.friend.save()
 
         # Active scene at the shared room.
-        self.scene = SceneFactory(location=self.room, is_active=True)
+        self.scene = SceneFactory(room=self.room, is_active=True)
         Interaction.objects.create(
             scene=self.scene,
             persona=self.friend_sheet.primary_persona,
@@ -288,7 +288,7 @@ class SiteDuranceTelnetTests(TestCase):
         self.friend.save()
 
         # Active scene at the room.
-        self.scene = SceneFactory(location=self.room, is_active=True)
+        self.scene = SceneFactory(room=self.room, is_active=True)
         Interaction.objects.create(
             scene=self.scene,
             persona=self.friend_sheet.primary_persona,

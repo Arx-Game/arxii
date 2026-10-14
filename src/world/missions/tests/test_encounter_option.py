@@ -57,7 +57,7 @@ class EncounterOptionTestBase(TestCase):
         self.sheet = CharacterSheetFactory(character=self.character)
 
         self.beat = BeatFactory(kind=BeatKind.ENCOUNTER)
-        self.scene = SceneFactory(location=self.room, is_active=True, running_beat=self.beat)
+        self.scene = SceneFactory(room=self.room, is_active=True, running_beat=self.beat)
 
         self.template = MissionTemplateFactory()
         self.entry = MissionNodeFactory(template=self.template, key="entry", is_entry=True)
@@ -170,7 +170,7 @@ class CompleteEncounterOptionTests(TestCase):
         self.sheet = CharacterSheetFactory(character=self.character)
 
         self.beat = BeatFactory(kind=BeatKind.ENCOUNTER)
-        self.scene = SceneFactory(location=self.room, is_active=True, running_beat=self.beat)
+        self.scene = SceneFactory(room=self.room, is_active=True, running_beat=self.beat)
         # An active StoryProgress is required for on_mission_complete_for_beat to
         # actually grade the beat on a terminal route (test_fled_...).
         story = self.beat.episode.chapter.story

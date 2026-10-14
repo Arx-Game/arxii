@@ -295,7 +295,7 @@ class OpenChampionDuelTests(TestCase):
 
     def setUp(self):
         self.room = create_object("typeclasses.rooms.Room", key="Champion Duel Room", nohome=True)
-        self.battle.scene.location = self.room
+        self.battle.scene.room = self.room
         self.battle.scene.save(update_fields=["location"])
         self.sheet = CharacterSheetFactory()
         self.participant = BattleParticipantFactory(
@@ -400,7 +400,7 @@ class OpenSiegeEngineEncounterTests(TestCase):
         self.room = create_object(
             "typeclasses.rooms.Room", key="Siege Engine Skirmish Room", nohome=True
         )
-        self.battle.scene.location = self.room
+        self.battle.scene.room = self.room
         self.battle.scene.save(update_fields=["location"])
         self.sheet = CharacterSheetFactory()
         self.participant = BattleParticipantFactory(
@@ -455,7 +455,7 @@ class OpenPlaceEncounterTests(TestCase):
 
     def setUp(self):
         self.room = create_object("typeclasses.rooms.Room", key="Front Fight Room", nohome=True)
-        self.battle.scene.location = self.room
+        self.battle.scene.room = self.room
         self.battle.scene.save(update_fields=["location"])
 
     def test_opens_bare_party_combat_encounter_and_binds_place(self) -> None:

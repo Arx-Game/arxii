@@ -97,7 +97,7 @@ class ScenarioJourneyTests(APITestCase):
             "journey_player2_actor", self.room, self.player2_account
         )
 
-        self.scene = SceneFactory(location=self.room, is_active=True)
+        self.scene = SceneFactory(room=self.room, is_active=True)
         SceneParticipationFactory(scene=self.scene, account=self.gm_account, is_gm=True)
         SceneParticipationFactory(scene=self.scene, account=self.player1_account, is_gm=False)
         SceneParticipationFactory(scene=self.scene, account=self.player2_account, is_gm=False)

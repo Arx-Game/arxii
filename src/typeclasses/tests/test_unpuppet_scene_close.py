@@ -14,7 +14,7 @@ class UnpuppetFinishesEmptySceneTests(TestCase):
 
     def setUp(self):
         self.room = ObjectDBFactory(db_typeclass_path="typeclasses.rooms.Room")
-        self.scene = SceneFactory(location=self.room, is_active=True)
+        self.scene = SceneFactory(room=self.room, is_active=True)
         self.character = CharacterFactory(db_key="Solo", location=self.room)
         CharacterSheetFactory(character=self.character)
 

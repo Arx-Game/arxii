@@ -57,8 +57,8 @@ class PrecaptureConsentRequestSerializer(serializers.ModelSerializer):
         read_only_fields = fields
 
     def get_room_name(self, obj: PrecaptureConsentRequest) -> str | None:
-        location = obj.scene.location
-        return location.db_key if location is not None else None
+        room = obj.scene.room
+        return room.db_key if room is not None else None
 
     def get_candidates(self, obj: PrecaptureConsentRequest) -> Any:
         return PrecapturePreviewInteractionSerializer(

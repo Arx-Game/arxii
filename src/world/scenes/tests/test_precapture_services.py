@@ -57,7 +57,7 @@ class CapturePrescreneInteractionsTests(TestCase):
         )
         _backdate(interaction, timezone.now() - timedelta(minutes=10))
 
-        scene = SceneFactory(location=room, is_active=True)
+        scene = SceneFactory(room=room, is_active=True)
         result = capture_prescene_interactions(scene, room)
 
         interaction.refresh_from_db()
@@ -75,7 +75,7 @@ class CapturePrescreneInteractionsTests(TestCase):
         )
         _backdate(interaction, timezone.now() - timedelta(minutes=10))
 
-        scene = SceneFactory(location=room, is_active=True)
+        scene = SceneFactory(room=room, is_active=True)
         result = capture_prescene_interactions(scene, room)
 
         interaction.refresh_from_db()
@@ -94,7 +94,7 @@ class CapturePrescreneInteractionsTests(TestCase):
         )
         _backdate(interaction, timezone.now() - PRECAPTURE_WINDOW - timedelta(minutes=1))
 
-        scene = SceneFactory(location=room, is_active=True)
+        scene = SceneFactory(room=room, is_active=True)
         result = capture_prescene_interactions(scene, room)
 
         interaction.refresh_from_db()
@@ -110,7 +110,7 @@ class CapturePrescreneInteractionsTests(TestCase):
         )
         _backdate(interaction, timezone.now() - timedelta(minutes=5))
 
-        scene = SceneFactory(location=room, is_active=True)
+        scene = SceneFactory(room=room, is_active=True)
         result = capture_prescene_interactions(scene, room)
 
         interaction.refresh_from_db()
@@ -133,7 +133,7 @@ class RespondToPrecaptureConsentTests(TestCase):
             persona=absent_sheet.primary_persona, writer_account=absent_account, scene=None
         )
         _backdate(interaction, timezone.now() - timedelta(minutes=minutes_ago))
-        scene = SceneFactory(location=room, is_active=True)
+        scene = SceneFactory(room=room, is_active=True)
         capture_prescene_interactions(scene, room)
         request = PrecaptureConsentRequest.objects.get(scene=scene, account=absent_account)
         return request, interaction
@@ -178,7 +178,7 @@ class TruncatePrecapturedTests(TestCase):
     def _captured_scene(self):
         room = _make_room("Ballroom")
         _actor, sheet, account = _pc_with_account("Helen", location=room)
-        scene = SceneFactory(location=room, is_active=True)
+        scene = SceneFactory(room=room, is_active=True)
         interactions = []
         for i in range(3):
             ia = InteractionFactory(persona=sheet.primary_persona, writer_account=account)
@@ -252,6 +252,6 @@ class TruncatePrecapturedTests(TestCase):
 
     def test_truncate_with_nothing_captured_returns_zero(self):
         room = _make_room("EmptyRoom")
-        scene = SceneFactory(location=room, is_active=True)
+        scene = SceneFactory(room=room, is_active=True)
 
         assert truncate_precaptured(scene, position=1) == 0

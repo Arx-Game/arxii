@@ -35,7 +35,7 @@ class CastTechniqueActionTests(TestCase):
         CheckSystemSetupFactory.create()
 
         self.room = create_object("typeclasses.rooms.Room", key="CastActionTestRoom", nohome=True)
-        self.scene = SceneFactory(location=self.room)
+        self.scene = SceneFactory(room=self.room)
 
         self.persona = PersonaFactory()
         self.character = self.persona.character_sheet.character
@@ -342,7 +342,7 @@ class CastTechniqueActionPullTests(TestCase):
         self.room = create_object(
             "typeclasses.rooms.Room", key="CastPullActionTestRoom", nohome=True
         )
-        self.scene = SceneFactory(location=self.room)
+        self.scene = SceneFactory(room=self.room)
 
         self.persona = PersonaFactory()
         self.character = self.persona.character_sheet.character

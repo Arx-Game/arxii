@@ -146,7 +146,7 @@ class TreatmentCandidateViewTests(TestCase):
     ) -> None:
         """Helper & target in an active scene -> 200 with one condition candidate."""
         self._bust_scene_cache()
-        SceneFactory(is_active=True, location=self.room)
+        SceneFactory(is_active=True, room=self.room)
 
         response = self._get()
         assert response.status_code == status.HTTP_200_OK, response.data

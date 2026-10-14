@@ -21,7 +21,7 @@ class TestEnsureSceneForLocation(TestCase):
         scene = ensure_scene_for_location(room)
         assert scene.pk is not None
         assert scene.is_active is True
-        assert scene.location == room
+        assert scene.room == room
         assert scene.privacy_mode == ScenePrivacyMode.PUBLIC
 
     def test_returns_existing_active_scene(self) -> None:

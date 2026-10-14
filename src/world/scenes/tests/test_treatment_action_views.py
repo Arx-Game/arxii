@@ -77,7 +77,7 @@ class TreatConditionActionViewTests(TestCase):
         self.account = AccountFactory()
         _give_account_character(self.account, self.helper_char)
 
-        self.scene = SceneFactory(is_active=True, location=self.room)
+        self.scene = SceneFactory(is_active=True, room=self.room)
         # Bust the per-location active-scene cache.
         if hasattr(self.room, "_active_scene_cache"):
             del self.room._active_scene_cache

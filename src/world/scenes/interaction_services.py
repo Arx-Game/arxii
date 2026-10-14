@@ -247,7 +247,7 @@ def broadcast_scene_emit(
         receiver_persona_ids=[],
         target_persona_ids=[],
         receiver_characters=[],
-        location=scene.location,
+        location=scene.room,
     )
 
 
@@ -1387,10 +1387,11 @@ def _ensure_scene_participation(scene: Scene, character: ObjectDB) -> None:
     # Auto-engage covenant for the participant (Slice B §4.10). Fires even when
     # the character has no account yet, matching prior behavior.
     sheet = character.character_sheet
-    if sheet is not None and scene.location is not None:
+    room = scene.room
+    if sheet is not None and room is not None:
         from world.covenants.services import evaluate_scene_engagement  # noqa: PLC0415
 
-        evaluate_scene_engagement(character_sheet=sheet, room=scene.location)
+        evaluate_scene_engagement(character_sheet=sheet, room=room)
 
 
 def mark_very_private(
@@ -1670,7 +1671,7 @@ def _open_entrance(interaction: Interaction, scene: Scene, *, entrance: bool) ->
     if not entrance:
         return
     open_reaction_window(interaction=interaction, kind=ReactionWindowKind.ENTRANCE)
-    room = scene.location
+    room = scene.room
     if room is None:
         return
     # The room typeclass's own occupant refresh, as the speaker queue calls it; a
@@ -2085,7 +2086,7 @@ def broadcast_scene_outcome(
 def _break_lie_low_for_interaction(persona: Persona, scene: Scene | None) -> None:
     """End any active lie-low in the scene's area (#1826) and, at hunted tier,
     roll public-interaction guard pressure (#2378). Cheap no-op path."""
-    location = scene.location if scene is not None else None
+    location = scene.room if scene is not None else None
     if location is None:
         return
     from world.justice.constants import GuardTrigger  # noqa: PLC0415

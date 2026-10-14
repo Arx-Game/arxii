@@ -224,7 +224,7 @@ def _room_profile_for(*, scene: Scene | None, ceremony: Ceremony | None) -> Room
     if ceremony is not None:
         return ceremony.location
     if scene is not None and scene.location is not None:
-        return scene.location.room_profile_or_none
+        return scene.location
     return None
 
 

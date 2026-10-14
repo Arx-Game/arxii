@@ -29,7 +29,7 @@ class PoseEndorseActionTests(TestCase):
             db_key="TestRoom",
             db_typeclass_path="typeclasses.rooms.Room",
         )
-        self.scene = SceneFactory(location=self.room, is_active=True)
+        self.scene = SceneFactory(room=self.room, is_active=True)
 
         self.endorser_char, self.endorser_sheet, self.endorser_account = _char_with_account()
         self.endorsee_char, self.endorsee_sheet, self.endorsee_account = _char_with_account()

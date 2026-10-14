@@ -95,7 +95,7 @@ class EncounterGMLifecycleE2ETest(TestCase):
         )
 
         # Active scene in the room with the GM flagged as GM and player as participant.
-        self.scene = SceneFactory(location=self.room, is_active=True)
+        self.scene = SceneFactory(room=self.room, is_active=True)
         SceneParticipationFactory(scene=self.scene, account=self.gm_account, is_gm=True)
         SceneParticipationFactory(scene=self.scene, account=self.player_account)
 
@@ -215,7 +215,7 @@ class EncounterCreateE2ETest(TestCase):
             room=self.room,
         )
 
-        self.scene = SceneFactory(location=self.room, is_active=True)
+        self.scene = SceneFactory(room=self.room, is_active=True)
         SceneParticipationFactory(scene=self.scene, account=self.gm_account, is_gm=True)
         SceneParticipationFactory(scene=self.scene, account=self.player_account)
 

@@ -48,7 +48,7 @@ class BattlePerilRescueE2EJourneyTest(TestCase):
         self.gm_char = _make_gm_actor("peril_e2e_gm_char", self.room, self.gm_account)
 
         self.battle = create_battle(name="Peril Rescue E2E Battle")
-        self.battle.scene.location = self.room
+        self.battle.scene.room = self.room
         self.battle.scene.save(update_fields=["location"])
         self.battle.afk_peril_override = True
         self.battle.save(update_fields=["afk_peril_override"])

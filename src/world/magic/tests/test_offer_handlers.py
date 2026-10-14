@@ -144,7 +144,7 @@ class SoulfrayPendingHandlerAcceptEntranceTests(CastScenarioMixin):
         super().setUpTestData()
         for persona in (cls.caster, cls.target):
             character = persona.character_sheet.character
-            character.db_location = cls.scene.location
+            character.db_location = cls.scene.room
             character.save()
         ActionTemplateFactory(name="Entrance", grants_entry_flourish=True)
         # "Grand Entrance" carries no resonance of its own since #2967, and

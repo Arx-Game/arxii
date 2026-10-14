@@ -110,7 +110,7 @@ class ConsentTelnetE2ETests(TestCase):
         self.action_template = ActionTemplateFactory(name="Intimidate")
 
         # Scene located in the room and active, so it is the room's active scene.
-        self.scene = SceneFactory(location=self.room, is_active=True)
+        self.scene = SceneFactory(room=self.room, is_active=True)
 
         # --- Initiator: character + sheet + primary persona, placed in the room ---
         self.initiator_char = _make_character_in_room(self.room)

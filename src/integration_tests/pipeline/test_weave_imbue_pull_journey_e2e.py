@@ -192,7 +192,7 @@ class WeaveImbulePullJourneyE2ETests(TestCase):
             db_key="JourneyPullTestRoom",
             db_typeclass_path="typeclasses.rooms.Room",
         )
-        self.scene = SceneFactory(location=self.room)
+        self.scene = SceneFactory(room=self.room)
         self.sheet.character.db_location = self.room
         self.sheet.character.save()
 

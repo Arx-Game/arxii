@@ -113,7 +113,7 @@ class DuranceAutoFireOnJoinTests(TestCase):
         )
 
         # Active scene at inductee's location so the testament POSE can be posted.
-        SceneFactory(location=self.inductee_char.location, is_active=True)
+        SceneFactory(room=self.inductee_char.location, is_active=True)
 
         self.ritual = RitualOfTheDuranceFactory()
 
@@ -286,7 +286,7 @@ class DuranceHandleFireAdvancementErrorTests(TestCase):
 
         # Unlock must EXIST for check_requirements_for_unlock to be reached.
         ClassLevelUnlock.objects.create(character_class=self.inductee_class, target_level=3)
-        SceneFactory(location=self.inductee_char.location, is_active=True)
+        SceneFactory(room=self.inductee_char.location, is_active=True)
 
         self.ritual = RitualOfTheDuranceFactory()
 

@@ -787,7 +787,7 @@ class WhisperActionEphemeralPrivacyTests(TestCase):
         CharacterSheetFactory(character=self.target)
         self.bystander = CharacterFactory(db_key="Bystander", location=self.room)
         CharacterSheetFactory(character=self.bystander)
-        SceneFactory(location=self.room, privacy_mode=ScenePrivacyMode.EPHEMERAL, is_active=True)
+        SceneFactory(room=self.room, privacy_mode=ScenePrivacyMode.EPHEMERAL, is_active=True)
 
     @patch("world.scenes.interaction_services._broadcast_to_location")
     @patch("world.scenes.interaction_services._send_to_objects")

@@ -22,26 +22,22 @@ class TestScenePrivacyInvariant(TestCase):
     def test_private_scene_in_public_room_raises(self) -> None:
         room = self._room(public=True)
         with self.assertRaises(ValidationError):
-            Scene.objects.create(name="Leak", location=room, privacy_mode=ScenePrivacyMode.PRIVATE)
+            Scene.objects.create(name="Leak", room=room, privacy_mode=ScenePrivacyMode.PRIVATE)
 
     def test_ephemeral_scene_in_public_room_raises(self) -> None:
         room = self._room(public=True)
         with self.assertRaises(ValidationError):
-            Scene.objects.create(
-                name="Leak", location=room, privacy_mode=ScenePrivacyMode.EPHEMERAL
-            )
+            Scene.objects.create(name="Leak", room=room, privacy_mode=ScenePrivacyMode.EPHEMERAL)
 
     def test_public_scene_in_public_room_ok(self) -> None:
         room = self._room(public=True)
-        scene = Scene.objects.create(
-            name="Fine", location=room, privacy_mode=ScenePrivacyMode.PUBLIC
-        )
+        scene = Scene.objects.create(name="Fine", room=room, privacy_mode=ScenePrivacyMode.PUBLIC)
         self.assertEqual(scene.privacy_mode, ScenePrivacyMode.PUBLIC)
 
     def test_private_scene_in_non_public_room_ok(self) -> None:
         room = self._room(public=False)
         scene = Scene.objects.create(
-            name="Chambers", location=room, privacy_mode=ScenePrivacyMode.PRIVATE
+            name="Chambers", room=room, privacy_mode=ScenePrivacyMode.PRIVATE
         )
         self.assertEqual(scene.privacy_mode, ScenePrivacyMode.PRIVATE)
 
@@ -51,6 +47,6 @@ class TestScenePrivacyInvariant(TestCase):
 
     def test_clean_also_raises(self) -> None:
         room = self._room(public=True)
-        scene = Scene(name="Leak", location=room, privacy_mode=ScenePrivacyMode.PRIVATE)
+        scene = Scene(name="Leak", room=room, privacy_mode=ScenePrivacyMode.PRIVATE)
         with self.assertRaises(ValidationError):
             scene.clean()

@@ -62,7 +62,7 @@ class GMPlaceInPositionActionTests(TestCase):
             "gmplace_player_actor", self.room, self.player_account
         )
 
-        self.scene = SceneFactory(location=self.room)
+        self.scene = SceneFactory(room=self.room)
         SceneParticipationFactory(scene=self.scene, account=self.gm_account, is_gm=True)
         SceneParticipationFactory(scene=self.scene, account=self.player_account, is_gm=False)
 

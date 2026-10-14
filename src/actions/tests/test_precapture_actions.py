@@ -66,7 +66,7 @@ class StartSceneActionCaptureIntegrationTests(TestCase):
         result = StartSceneAction().run(actor=starter)
 
         assert result.success is True
-        scene = Scene.objects.get(location=room, is_active=True)
+        scene = Scene.objects.get(location_id=room.pk, is_active=True)
         member_pose.refresh_from_db()
         non_member_pose.refresh_from_db()
         assert member_pose.scene_id == scene.pk
@@ -116,7 +116,7 @@ class TruncatePrecaptureActionTests(TestCase):
             interactions.append(ia)
 
         StartSceneAction().run(actor=starter)
-        scene = Scene.objects.get(location=room, is_active=True)
+        scene = Scene.objects.get(location_id=room.pk, is_active=True)
         return room, scene, starter, interactions
 
     def test_non_owner_cannot_truncate(self):

@@ -141,7 +141,7 @@ class BattleTelnetE2EJourneyTest(TestCase):
 
         # Battle located in the test room.
         self.battle = create_battle(name="E2E Test Battle")
-        self.battle.scene.location = self.room
+        self.battle.scene.room = self.room
         self.battle.scene.save(update_fields=["location"])
 
         # Two sides: enemy attackers, defender PCs.

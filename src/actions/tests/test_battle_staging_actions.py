@@ -100,7 +100,7 @@ class CreateBattleActionTests(BattleStagingActionsTestBase):
         self.assertTrue(result.success, result.message)
         battle = Battle.objects.get(pk=result.data["battle_id"])
         battle.scene.refresh_from_db()
-        self.assertEqual(battle.scene.location, self.room)
+        self.assertEqual(battle.scene.room, self.room)
 
     def test_create_from_blueprint_stages_places(self) -> None:
         result = CreateBattleAction().run(

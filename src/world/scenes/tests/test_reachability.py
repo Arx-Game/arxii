@@ -49,7 +49,7 @@ class TestPersonaCanReceiveRoomHeard(TestCase):
 
     def test_persona_present_in_room_is_reachable(self) -> None:
         room = ObjectDBFactory(db_key="Hall", db_typeclass_path="typeclasses.rooms.Room")
-        scene = SceneFactory(location=room)
+        scene = SceneFactory(room=room)
         persona = _persona_in(room, scene)
 
         assert persona_can_receive(
@@ -64,7 +64,7 @@ class TestPersonaCanReceiveRoomHeard(TestCase):
     def test_persona_elsewhere_is_not_reachable(self) -> None:
         room = ObjectDBFactory(db_key="Hall", db_typeclass_path="typeclasses.rooms.Room")
         other_room = ObjectDBFactory(db_key="Cellar", db_typeclass_path="typeclasses.rooms.Room")
-        scene = SceneFactory(location=room)
+        scene = SceneFactory(room=room)
         persona = _persona_at(other_room)
 
         assert not persona_can_receive(
@@ -101,7 +101,7 @@ class TestPersonaCanReceiveRoomHeard(TestCase):
         must agree, not just presence-check the shape.
         """
         room = ObjectDBFactory(db_key="Hall", db_typeclass_path="typeclasses.rooms.Room")
-        scene = SceneFactory(location=room)
+        scene = SceneFactory(room=room)
         persona = _persona_at(room)
 
         assert not persona_can_receive(
@@ -122,7 +122,7 @@ class TestPersonaCanReceiveRoomHeard(TestCase):
         not mirror; see the module docstring).
         """
         room = ObjectDBFactory(db_key="Hall", db_typeclass_path="typeclasses.rooms.Room")
-        scene = SceneFactory(location=room)
+        scene = SceneFactory(room=room)
         persona = _persona_at(room)
 
         assert not persona_can_receive(
@@ -140,7 +140,7 @@ class TestThreshold(TestCase):
 
     def setUp(self) -> None:
         self.room = ObjectDBFactory(db_key="Hall", db_typeclass_path="typeclasses.rooms.Room")
-        self.scene = SceneFactory(location=self.room)
+        self.scene = SceneFactory(room=self.room)
         self.reader = _persona_at(self.room)
 
     def test_a_threshold_persona_is_not_reachable_room_heard(self) -> None:
@@ -357,7 +357,7 @@ class TestEmptyReceiversMeansNoExplicitReceivers(TestCase):
 
     def test_room_heard_persona_is_reachable_with_an_empty_receiver_list(self) -> None:
         room = ObjectDBFactory(db_key="Hall", db_typeclass_path="typeclasses.rooms.Room")
-        scene = SceneFactory(location=room)
+        scene = SceneFactory(room=room)
         persona = _persona_in(room, scene)
 
         assert persona_can_receive(
@@ -373,7 +373,7 @@ class TestEmptyReceiversMeansNoExplicitReceivers(TestCase):
         """The normalization widens nothing: room-heard presence still decides."""
         room = ObjectDBFactory(db_key="Hall", db_typeclass_path="typeclasses.rooms.Room")
         cellar = ObjectDBFactory(db_key="Cellar", db_typeclass_path="typeclasses.rooms.Room")
-        scene = SceneFactory(location=room)
+        scene = SceneFactory(room=room)
         persona = _persona_at(cellar)
 
         assert not persona_can_receive(
@@ -436,7 +436,7 @@ class TestAgreesWithVisibleTo(TestCase):
 
     def _present_persona_and_scene(self):
         room = ObjectDBFactory(db_key="Hall", db_typeclass_path="typeclasses.rooms.Room")
-        scene = SceneFactory(location=room)
+        scene = SceneFactory(room=room)
         # Present AND in the scene: the two predicates only agree once the viewer
         # has entered (#3867); the threshold is the one case they part on purpose.
         persona = _persona_in(room, scene)

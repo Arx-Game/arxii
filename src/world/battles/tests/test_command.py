@@ -67,7 +67,7 @@ class CmdBattleDeclareTests(TestCase):
 
         # Battle in the room.
         self.battle = BattleFactory(name="Cmd Test Battle")
-        self.battle.scene.location = self.room
+        self.battle.scene.room = self.room
         self.battle.scene.save(update_fields=["location"])
 
         # Two sides.
@@ -534,7 +534,7 @@ class CmdBattleDuelTests(TestCase):
         self.player_sheet = CharacterSheetFactory(character=self.player_char)
 
         self.battle = BattleFactory(name="Duel Cmd Test Battle")
-        self.battle.scene.location = self.room
+        self.battle.scene.room = self.room
         self.battle.scene.save(update_fields=["location"])
 
         self.covenant = CovenantFactory(covenant_type=CovenantType.BATTLE)
@@ -591,7 +591,7 @@ class CmdBattleEncounterTests(TestCase):
         GMProfileFactory(account=self.account, level=GMLevel.JUNIOR)
 
         self.battle = BattleFactory(name="Encounter Cmd Test Battle")
-        self.battle.scene.location = self.room
+        self.battle.scene.room = self.room
         self.battle.scene.save(update_fields=["location"])
         # Scene-GM standing so _actor_may_gm_battle recognizes this account as
         # this battle's own GM -- same mechanism as Task 4, applied telnet-level.

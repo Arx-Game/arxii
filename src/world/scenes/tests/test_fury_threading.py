@@ -92,7 +92,7 @@ def _setup_fury_fixture(*, tier_depth: int = 2, bond_tier_number: int = 2):
     """
     CheckSystemSetupFactory.create()
     room = create_object("typeclasses.rooms.Room", key=_next_room_key(), nohome=True)
-    scene = SceneFactory(location=room)
+    scene = SceneFactory(room=room)
     initiator = PersonaFactory()
     anchor = PersonaFactory()
 

@@ -68,7 +68,7 @@ class StartScenarioForSceneTestBase(TestCase):
             "scenario_actor_b", self.room, self.account_b
         )
 
-        self.scene = SceneFactory(location=self.room, is_active=True)
+        self.scene = SceneFactory(room=self.room, is_active=True)
         SceneParticipationFactory(scene=self.scene, account=self.account_a, is_gm=False)
         SceneParticipationFactory(scene=self.scene, account=self.account_b, is_gm=False)
 
@@ -127,7 +127,7 @@ class StartScenarioForSceneTests(StartScenarioForSceneTestBase):
             start_scenario_for_scene(beat, self.scene)
 
     def test_scene_with_no_participants_raises(self) -> None:
-        empty_scene = SceneFactory(location=self.room, is_active=True)
+        empty_scene = SceneFactory(room=self.room, is_active=True)
 
         with self.assertRaises(ValueError):
             start_scenario_for_scene(self.beat, empty_scene)

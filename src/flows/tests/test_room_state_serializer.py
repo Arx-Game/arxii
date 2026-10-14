@@ -480,7 +480,7 @@ class RoomStateThresholdTests(TestCase):
         )
         self.caller_sheet = CharacterSheetFactory(character=self.caller)
         self.other_sheet = CharacterSheetFactory(character=self.other)
-        self.scene = SceneFactory(location=self.room)
+        self.scene = SceneFactory(room=self.room)
         # The room's live scene is the ndb cache the scene services keep (Room.active_scene).
         self.room.active_scene = self.scene
         self.context = SceneDataManagerFactory()

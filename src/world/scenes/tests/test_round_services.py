@@ -876,7 +876,7 @@ class MaybeFinishEmptySceneTests(TestCase):
         from world.scenes.factories import SceneFactory
 
         self.room = ObjectDBFactory(db_typeclass_path="typeclasses.rooms.Room")
-        self.scene = SceneFactory(location=self.room, is_active=True)
+        self.scene = SceneFactory(room=self.room, is_active=True)
         self.CharacterFactory = CharacterFactory
 
     def _pc_in_room(self, db_key):
@@ -963,7 +963,7 @@ class MaybeFinishEmptySceneTests(TestCase):
         from world.scenes.round_services import maybe_finish_empty_scene
 
         other_room = ObjectDBFactory(db_typeclass_path="typeclasses.rooms.Room")
-        other_scene = SceneFactory(location=other_room, is_active=True)
+        other_scene = SceneFactory(room=other_room, is_active=True)
         pc = self._pc_in_room("Solo")
 
         with (
@@ -1031,7 +1031,7 @@ class MaybeFinishEmptySceneTests(TestCase):
         from world.scenes.round_services import maybe_finish_empty_scene
 
         battle = BattleFactory()  # auto-creates its own backing Scene
-        battle.scene.location = self.room
+        battle.scene.room = self.room
         battle.scene.save(update_fields=["location"])
         pc = self._pc_in_room("Solo")
 
@@ -1056,7 +1056,7 @@ class RoomAtObjectLeaveFinishesEmptySceneTests(TestCase):
         from world.scenes.factories import SceneFactory
 
         self.room = ObjectDBFactory(db_typeclass_path="typeclasses.rooms.Room")
-        self.scene = SceneFactory(location=self.room, is_active=True)
+        self.scene = SceneFactory(room=self.room, is_active=True)
         self.CharacterFactory = CharacterFactory
 
     def _pc_in_room(self, db_key):

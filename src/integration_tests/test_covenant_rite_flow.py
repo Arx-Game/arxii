@@ -98,7 +98,7 @@ class CovenantRiteFlowIntegrationTest(TestCase):
         _place_character_in_room(self.mem2.character_sheet.character, self.room)
 
         # ===== Phase 3: Active CombatEncounter with a Scene in the room =====
-        self.scene = SceneFactory(location=self.room, is_active=True)
+        self.scene = SceneFactory(room=self.room, is_active=True)
         self.encounter = CombatEncounterFactory(
             room=self.room,
             scene=self.scene,
@@ -371,7 +371,7 @@ class CovenantRiteRolePackageFlowIntegrationTest(TestCase):
         _place_character_in_room(self.shield_mem.character_sheet.character, self.room)
 
         # Active scene + encounter.
-        self.scene = SceneFactory(location=self.room, is_active=True)
+        self.scene = SceneFactory(room=self.room, is_active=True)
         self.encounter = CombatEncounterFactory(
             room=self.room,
             scene=self.scene,

@@ -140,12 +140,14 @@ repos:
         # triaged. Tranche 4 (#2608): every keeper outside world/ (behaviors,
         # evennia_extensions, flows triggers) and in character_sheets,
         # companions, items, player_submissions and societies carries the token.
-        # Still outside the scope, each holding a field the audit marked for a
-        # retarget rather than a keeper: scenes/models.py (Scene.location ->
-        # RoomProfile), conditions/models.py (ConditionInstance.source_character
-        # -> CharacterSheet), combat/models.py (CombatEncounter.room and
-        # DuelChallenge.room -> RoomProfile) and areas/positioning/models.py
-        # (Position.room -> RoomProfile); each joins once its field is retargeted.
+        # #4217: scenes/models.py joined once Scene.location was retargeted at
+        # RoomProfile, and conditions/models.py once the audit's verdict on
+        # ConditionInstance.source_character was reversed to a keeper (a
+        # sheetless ephemeral mook is a real source). Still outside the scope,
+        # each holding a field the audit marked for TehomCD's ruling:
+        # combat/models.py (CombatEncounter.room and DuelChallenge.room ->
+        # RoomProfile) and areas/positioning/models.py (Position.room ->
+        # RoomProfile); each joins once its field is retargeted or tokened.
         files: |
           (?x)^src/(
             behaviors/models\.py
@@ -166,6 +168,8 @@ repos:
             |world/items/models\.py
             |world/player_submissions/models\.py
             |world/societies/models\.py
+            |world/scenes/models\.py
+            |world/conditions/models\.py
           )$
       - id: lint-idmapper-mutation-order
         name: Reject mutate-then-save-then-raise inside an atomic block

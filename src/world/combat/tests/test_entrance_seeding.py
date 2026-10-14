@@ -189,7 +189,7 @@ class SeedOrFeedEncounterFromCastEntranceMarkerTests(EvenniaTestCase):
         from world.scenes.factories import SceneFactory
 
         room = create_object("typeclasses.rooms.Room", key="Entrance Cast Room", nohome=True)
-        scene = SceneFactory(location=room)
+        scene = SceneFactory(room=room)
         return scene, room
 
     def test_hostile_seed_marks_from_entrance(self):

@@ -354,7 +354,7 @@ class AdvanceViaSessionTests(TestCase):
 
         unlock = ClassLevelUnlock.objects.create(character_class=character_class, target_level=3)
         _purchase_unlock(inductee, unlock)
-        SceneFactory(location=inductee.character.location, is_active=True)
+        SceneFactory(room=inductee.character.location, is_active=True)
         with mock.patch(_CHECK_PATH, return_value=(True, [])):
             advance_class_level_via_session(session=session)
         posed = Interaction.objects.filter(content__startswith="I have earned this.")
@@ -532,7 +532,7 @@ class AdvanceViaSessionMultiInducteeTests(TestCase):
     def test_two_inductees_two_receipts_same_scene(self) -> None:
         from world.scenes.factories import SceneFactory
 
-        SceneFactory(location=self.officiant.character.location, is_active=True)
+        SceneFactory(room=self.officiant.character.location, is_active=True)
         with mock.patch(_CHECK_PATH, return_value=(True, [])):
             receipts = advance_class_level_via_session(session=self.session)
         assert len(receipts) == 2

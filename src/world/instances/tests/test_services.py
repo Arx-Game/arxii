@@ -280,7 +280,7 @@ class CompleteInstancedRoomTests(TestCase):
             owner=self.sheet,
             return_location=self.return_room,
         )
-        SceneFactory(name="Test Scene", location=room)
+        SceneFactory(name="Test Scene", room=room)
 
         complete_instanced_room(room)
 
@@ -299,7 +299,7 @@ class CompleteInstancedRoomTests(TestCase):
         )
         # Create a scene so the room is preserved (not deleted) after completion,
         # isolating the relocation logic from Evennia's delete-moves-contents behavior.
-        SceneFactory(name="Occupant Scene", location=room)
+        SceneFactory(name="Occupant Scene", room=room)
 
         # Create a mock occupant with an active session
         mock_occupant = MagicMock()
@@ -331,7 +331,7 @@ class CompleteInstancedRoomTests(TestCase):
             owner=self.sheet,
             return_location=self.return_room,
         )
-        SceneFactory(name="Preserve Scene", location=room)
+        SceneFactory(name="Preserve Scene", room=room)
 
         complete_instanced_room(room)
         first_completed_at = InstancedRoom.objects.get(room_id=room.pk).completed_at

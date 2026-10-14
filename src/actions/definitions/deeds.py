@@ -145,7 +145,7 @@ class SpreadTaleAction(Action):
 
         main = result.action_resolution.main_result
         outcome = main.check_result.outcome_name if main and main.check_result else "Unknown"
-        band = room_activity_band(scene.location).label
+        band = room_activity_band(scene.room).label
         return ActionResult(
             success=True,
             message=f"You spread the tale of {deed.title}.",

@@ -258,7 +258,7 @@ class CastScenarioMixin(TestCase):
     def _setup_cast_scenario(cls, *, room_key: str = "Cast Test Room") -> None:
         CheckSystemSetupFactory.create()
         room = create_object("typeclasses.rooms.Room", key=room_key, nohome=True)
-        cls.scene = SceneFactory(location=room)
+        cls.scene = SceneFactory(room=room)
 
         cls.caster = PersonaFactory()
         cls.target = PersonaFactory()

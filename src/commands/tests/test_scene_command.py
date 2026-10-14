@@ -77,7 +77,7 @@ class CmdSceneStartTests(TestCase):
     def test_start_creates_active_scene(self):
         """``scene start`` creates an active Scene in the room."""
         _run_cmd(self.caller, "start")
-        self.assertTrue(Scene.objects.filter(location=self.room, is_active=True).exists())
+        self.assertTrue(Scene.objects.filter(location_id=self.room.pk, is_active=True).exists())
 
     def test_start_messages_caller(self):
         """Caller receives the action's result message after start."""
@@ -87,7 +87,7 @@ class CmdSceneStartTests(TestCase):
     def test_start_with_name_passes_name(self):
         """``scene start My Scene Name`` still creates the scene (name kwarg forwarded)."""
         _run_cmd(self.caller, "start My Scene Name")
-        self.assertTrue(Scene.objects.filter(location=self.room, is_active=True).exists())
+        self.assertTrue(Scene.objects.filter(location_id=self.room.pk, is_active=True).exists())
 
 
 # ---------------------------------------------------------------------------
@@ -105,7 +105,7 @@ class CmdSceneFinishTests(TestCase):
         self.room = _make_room("FinishRoom")
         self.caller, self.account = _create_pc_with_account("SceneFinisher", location=self.room)
         self.caller.msg = MagicMock()
-        self.scene = SceneFactory(location=self.room, is_active=True)
+        self.scene = SceneFactory(room=self.room, is_active=True)
         SceneOwnerParticipationFactory(scene=self.scene, account=self.account)
 
     def test_finish_closes_scene(self):
@@ -144,7 +144,7 @@ class CmdSceneGmTests(TestCase):
         self.owner, self.owner_account = _create_pc_with_account("GmOwner", location=self.room)
         self.owner.msg = MagicMock()
         self.target, self.target_account = _create_pc_with_account("GmTarget", location=self.room)
-        self.scene = SceneFactory(location=self.room, is_active=True)
+        self.scene = SceneFactory(room=self.room, is_active=True)
         SceneOwnerParticipationFactory(scene=self.scene, account=self.owner_account)
 
     def test_gm_grants_to_present_approved_gm(self):
@@ -209,7 +209,7 @@ class CmdSceneRoundTests(TestCase):
         self.room = _make_room("RoundRoom")
         self.caller, self.account = _create_pc_with_account("RoundOwner", location=self.room)
         self.caller.msg = MagicMock()
-        self.scene = SceneFactory(location=self.room, is_active=True)
+        self.scene = SceneFactory(room=self.room, is_active=True)
         SceneOwnerParticipationFactory(scene=self.scene, account=self.account)
         self.rnd = SceneRound.objects.create(
             room=RoomProfileFactory(objectdb=self.room),
@@ -281,7 +281,7 @@ class CmdSceneInterposeTests(TestCase):
         self.room = _make_room("InterposeRoom")
         self.caller, self.account = _create_pc_with_account("Interposer", location=self.room)
         self.caller.msg = MagicMock()
-        self.scene = SceneFactory(location=self.room, is_active=True)
+        self.scene = SceneFactory(room=self.room, is_active=True)
         SceneOwnerParticipationFactory(scene=self.scene, account=self.account)
         self.rnd = SceneRound.objects.create(
             room=RoomProfileFactory(objectdb=self.room),
@@ -344,7 +344,7 @@ class CmdSceneStatusTests(TestCase):
 
     def test_status_shows_scene_name(self):
         """With an active scene, status line contains the scene name."""
-        SceneFactory(location=self.room, is_active=True, name="The Great Hall")
+        SceneFactory(room=self.room, is_active=True, name="The Great Hall")
         messages = _run_cmd(self.caller, "")
         self.assertTrue(
             any("Great Hall" in m for m in messages),
@@ -353,7 +353,7 @@ class CmdSceneStatusTests(TestCase):
 
     def test_status_shows_round_info_when_active(self):
         """With an active round, status line includes round number and mode."""
-        scene = SceneFactory(location=self.room, is_active=True, name="Round Test")
+        scene = SceneFactory(room=self.room, is_active=True, name="Round Test")
         SceneRound.objects.create(
             room=RoomProfileFactory(objectdb=self.room),
             status=RoundStatus.DECLARING,

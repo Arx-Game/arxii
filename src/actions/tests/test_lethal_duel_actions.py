@@ -50,7 +50,7 @@ class ProposeLethalDuelActionGMGateTests(django.test.TestCase):
         self.target_actor, self.target_sheet, self.target_account = _make_pc(
             "TargetChar", self.room
         )
-        self.scene = SceneFactory(location=self.room)
+        self.scene = SceneFactory(room=self.room)
         SceneParticipationFactory(scene=self.scene, account=self.gm_account, is_gm=True)
         self.threat_pool = ThreatPoolFactory()
 
@@ -123,7 +123,7 @@ class ProposeLethalDuelAcceptDeclineLoopTests(django.test.TestCase):
         self.target_actor, self.target_sheet, self.target_account = _make_pc(
             "TargetChar2", self.room
         )
-        self.scene = SceneFactory(location=self.room)
+        self.scene = SceneFactory(room=self.room)
         SceneParticipationFactory(scene=self.scene, account=self.gm_account, is_gm=True)
         self.threat_pool = ThreatPoolFactory()
         # accept_challenge's opponent_kwargs carries no max_health — auto-scale

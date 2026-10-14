@@ -189,7 +189,7 @@ class ApplyCompanionBattleOutcomeTests(TestCase):
             db_key="ApplyCompanionBattleOutcomeRoom",
             db_typeclass_path="typeclasses.rooms.Room",
         )
-        scene = SceneFactory(location=room)
+        scene = SceneFactory(room=room)
         companion = CompanionFactory()
         owner_character = companion.owner.character
 

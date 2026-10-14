@@ -82,7 +82,7 @@ class AudereSurgeBroadcastTests(TestCase):
         self.character = _make_lifecycle_character("surge_bc_char")
 
     def test_accept_broadcasts_substituted_text_to_active_scene(self) -> None:
-        scene = SceneFactory(location=self.character.location, is_active=True)
+        scene = SceneFactory(room=self.character.location, is_active=True)
         persona_name = self.character.sheet_data.primary_persona.name
 
         result = offer_audere(self.character, accept=True)
@@ -93,7 +93,7 @@ class AudereSurgeBroadcastTests(TestCase):
         assert emits.first().content == f"{persona_name} answers the surge."
 
     def test_decline_stays_silent(self) -> None:
-        scene = SceneFactory(location=self.character.location, is_active=True)
+        scene = SceneFactory(room=self.character.location, is_active=True)
 
         result = offer_audere(self.character, accept=False)
 
@@ -116,7 +116,7 @@ class AudereSurgeBlankTextTests(TestCase):
 
     def test_blank_text_stays_silent(self) -> None:
         character = _make_lifecycle_character("surge_blank_char")
-        scene = SceneFactory(location=character.location, is_active=True)
+        scene = SceneFactory(room=character.location, is_active=True)
 
         result = offer_audere(character, accept=True)
 
@@ -150,7 +150,7 @@ class AudereSurgeRoutingFailureTests(TestCase):
         same nesting; a further write inside the SAME block proves the
         connection is still usable afterward (a Postgres-aborted transaction
         would refuse it with "current transaction is aborted")."""
-        scene = SceneFactory(location=self.character.location, is_active=True)
+        scene = SceneFactory(room=self.character.location, is_active=True)
         persona_name = self.character.sheet_data.primary_persona.name
 
         with mock.patch(
@@ -180,7 +180,7 @@ class AudereSurgeRoutingFailureTests(TestCase):
         old code's ``except DatabaseError``, so it would pass against the old,
         buggy code too -- it has to be a ``DatabaseError`` to actually exercise
         (and fail against) the double-delivery bug this test guards."""
-        SceneFactory(location=self.character.location, is_active=True)
+        SceneFactory(room=self.character.location, is_active=True)
         boom = DatabaseError("boom")
 
         with mock.patch(
@@ -219,7 +219,7 @@ class AudereSurgePostgresSavepointTests(TestCase):
 
     def test_real_query_failure_inside_routing_leaves_outer_transaction_usable(self) -> None:
         character = _make_lifecycle_character("surge_pg_savepoint_char")
-        scene = SceneFactory(location=character.location, is_active=True)
+        scene = SceneFactory(room=character.location, is_active=True)
         persona_name = character.sheet_data.primary_persona.name
 
         def _break_query(*args, **kwargs):

@@ -167,7 +167,7 @@ class StageCommandEndToEndTests(TestCase):
         self.gm_account = AccountFactory(username="stagecmd_gm", is_staff=True)
         self.gm_actor, _ = _make_actor_with_account("stagecmd_gm_actor", self.room, self.gm_account)
 
-        self.scene = SceneFactory(location=self.room)
+        self.scene = SceneFactory(room=self.room)
         SceneParticipationFactory(scene=self.scene, account=self.gm_account, is_gm=True)
 
         self.template = ItemTemplateFactory(name="Command Torch")
@@ -217,7 +217,7 @@ class StageCommandAffordanceChainTests(TestCase):
         self.gm_account = AccountFactory(username="stageaff_gm", is_staff=True)
         self.gm_actor, _ = _make_actor_with_account("stageaff_gm_actor", self.room, self.gm_account)
 
-        self.scene = SceneFactory(location=self.room)
+        self.scene = SceneFactory(room=self.room)
         SceneParticipationFactory(scene=self.scene, account=self.gm_account, is_gm=True)
 
         self.template = ItemTemplateFactory(name="Affordance Chain Torch")
