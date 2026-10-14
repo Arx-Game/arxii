@@ -77,6 +77,8 @@ test.describe('feed filter chips (#3856)', () => {
       'Whispers',
       'Movement',
       'Ambience',
+      'Visions',
+      'OOC',
       'System',
       '+',
       'All',

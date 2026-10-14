@@ -62,7 +62,7 @@ Deliberately NOT here: standing "stay here until recalled" postings — those ar
   asset persona's character (promotion created a real sheet) with the handler
   margin as extra modifier. Route payouts land on the handler
   (`deliver_mission_money` reason "task reward"; `draw_clue_from_pool` +
-  `acquire_clue`). Risk: `select_consequence_from_result` + `apply_resolution`
+  `find_clue`, so an AUTOMATIC clue is resolved, #4331). Risk: `select_consequence_from_result` + `apply_resolution`
   over the template's pool with `ResolutionContext(npc_asset=...)` — ASSET_STATUS
   effects hit the dispatched asset only. Writes the report; COMPLETED when
   `success_level > 0`, else FAILED.

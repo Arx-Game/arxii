@@ -34,6 +34,7 @@ class CmdProject(ArxCommand):
     """
 
     key = "project"
+    takes_switches = True
     aliases = ("+project",)
     locks = "cmd:all()"
     help_category = "Projects"

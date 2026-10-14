@@ -28,6 +28,24 @@ SCENE_ADAPTIVE backend.
   - `action`: The Action instance this command delegates to
   - `resolve_action_args()`: Override to parse telnet text into action kwargs
   - `func()`: Calls `resolve_action_args()` → `action.run()` → sends result to caller
+  - **Switches are opt-in: a command that reads `self.switches` sets
+    `takes_switches = True`.** `parse()` then splits them off the arguments through
+    `split_switches`: `market/finish 12` gives `switches == ["finish"]` (lower-cased) and
+    `args == " 12"`, the leading space being the shape `args` has with no switch. Every
+    other command gets its typed line untouched. Splitting for all of them would drop an
+    unread switch and run the rest (`retire/x` would retire), and `CmdNoMatch` is handed
+    the whole unmatched line as `args`, slash included. Evennia's base `Command.parse`
+    does nothing; only its `MuxCommand` reads switches, so before #4352 every `ArxCommand`
+    that read `self.switches` raised `AttributeError` when typed (`emit` among them, and
+    with it the web composer's Emit mode), and the ones that read it through `getattr`
+    ran their switch-less branch (`home/set` recalled the character home). `switches`
+    defaults to `()` for a command built and run by hand, so read `self.switches`
+    directly, never through `getattr`. A command on Evennia's bare `Command` that takes
+    switches needs the same `parse()` (`CmdSheet` has it, and refuses an unknown
+    section). `tests/test_command_switches.py` types lines through Evennia's command
+    handler, and its guard fails when an `ArxCommand`'s `takes_switches` disagrees with
+    whether its code reads `.switches`, either way. A test that sets `cmd.switches` by
+    hand never runs the parser, which is how this went unnoticed.
   - `feed_kind` / `send_result()` (#3856): a command that declares `feed_kind = "look"`
     or `"item"` sends its result through Evennia's tuple form,
     `msg((text, {"type": kind}))`, whose dict becomes the `text` frame's kwargs on the
@@ -64,6 +82,19 @@ actions, backends, and service functions.
   frame the web client could not place, so it was silent there; this reproduces
   Evennia's wording (near-miss suggestions via `string_suggestions`, double-quoted,
   joined with "or") and sends it typed `error`. Telnet output is byte-identical.
+- **`CmdOOC`** (`ooc <message>`, `evennia_overrides/communication.py`, #4337): out-of-character
+  speech to the room through `OOCSayAction` (key `ooc`): `<OOC> Name says: text`, typed `ooc`
+  for the web feed, sent to the `say` audience (the broadcast-exclusion seam) minus anyone who
+  has OOC-muted the face the speaker is wearing (`mute_services.ooc_muter_account_ids`; an
+  account-level mute does not follow the player to another face here, because the room
+  would see the gap and link the faces, ADR-0204), named per listener so a mask shows the
+  mask, never written to the scene log. It replaced Evennia's `ooc` (alias `unpuppet`), which
+  `AccountCmdSet` now removes: that one unpuppeted into the stock account screen, and nobody
+  steps out of character on purpose any more (login always puppets, ADR-0294). A session can
+  still be left with no character (a retirement, a refused puppet, several characters and none
+  chosen), and there Evennia's account `look` (`CmdOOCLook`) still draws the stock screen.
+  `ooc` is in `DEAD_ALLOWED_ACTION_KEYS`, since the player talking is never the character
+  acting. `@ic` stays as the telnet way to switch characters.
 - **`evennia_overrides/communication.py`**: `CmdSay`, `CmdWhisper`, `CmdPose`, `CmdPage`,
   `CmdPemit` (`pemit <name>[,<name>...]=<text>`, `cmd:all()`, #906/#2117 — private GM narration to
   specific characters via `PemitAction`, gated on `MinimumGMLevelPrerequisite(GMLevel.STARTING)`,
@@ -985,7 +1016,8 @@ actions, backends, and service functions.
   namespace. One `ArxCommand` routes a leading subverb (`declare <name>=<type>[,awareness]` /
   `shift <name>=<from>,<to>[,note]` / `end <name>=<type>` / `reveal <name>=<type>,<awareness>` /
   `ap <name>=<n>` / `advance <name>=<journal entry id>` / `summary <name>=<text>` / `plus`/`neg
-  <name>`) and runs the matching tie Action via `action.run()` directly — the same seam the web
+  <name>`; any subverb may also be typed as a switch, `rel/plus <name>`) and runs the matching
+  tie Action via `action.run()` directly — the same seam the web
   tie panel uses (plain REGISTRY actions, not the dispatcher). Bare `relationship` / `relationship
   list` renders one line per side (labels, depth, tier); `relationship show <name|#>` adds
   gauges/AP/summary. Relationship types resolve by name (iexact); `advance` looks the named
@@ -1031,6 +1063,28 @@ actions, backends, and service functions.
   `set_permanent_description`. Evennia's `setdesc` (any player, own character) is removed
   from `CharacterCmdSet` for the same reason. `CmdSet.remove` matches the key exactly, so
   the removal tuple must spell Evennia's key (`"@desc"`, not `"desc"`).
+  The rest of the stock builder commands that wrote only Evennia's stores (#4338):
+  - `CmdName` (`@name`/`@rename`) renames through `write_name`: a character through
+    `rename_character` (key, primary persona name, particled-name aliases), a room through
+    `set_room_display_data(bypass_ownership=True)` (key and `longname`, which `where` and the
+    area path read), an item through `items.services.materialize.set_item_name`
+    (`custom_name`, which the inventory reads, and the game object's key, which `look`
+    reads), a companion through `companions.services.rename_companion` (`Companion.name`
+    and the key), anything else by key with an existing `longname` kept in step. Aliases
+    after `;` stay Evennia aliases; `*account` renames stay Evennia's.
+  - `CmdSetHome` (`@sethome`) on a character calls `set_primary_home` for the character's
+    active persona, so Evennia's `home`, `CharacterSheet.current_residence` and the tenancy's
+    `is_primary_home` agree; it refuses a room the persona has no tenancy standing in, so
+    staff grant the tenancy first. Any other object keeps Evennia's `home`.
+  - `CmdSetAttribute` (`@set`) sends `<obj>/desc` on a game object (view, set, clear and
+    `/edit`) to `read_description`/`write_description`; `set <obj>/desc = <text>` skips
+    Evennia's Python-literal parsing, so prose is stored as typed, and `desc` among several
+    attributes (`set rock/desc/weight = ...`) is refused rather than parsed. Every other
+    attribute, and any account, script or channel, is stock.
+  - `@spawn` and `@copy` are removed: they made objects without the `ObjectDisplayData` and
+    `RoomProfile` Arx reads, and nobody uses them. `@wipe`, `@cpattr` and `@mvattr` remain
+    stock and still act on Evennia's retired `desc` Attribute, not on the description `look`
+    shows; nobody ruled on them.
 
 ### Account Commands (`account/`)
 - **`account_info.py`**: `CmdAccount` (`@account`/`account`) — bare shows account information
@@ -1164,12 +1218,31 @@ actions, backends, and service functions.
 
 ### Frontend Integration
 - **`frontend.py`**: `FrontendMetadataMixin` — for non-action commands (builder, page)
-- **`utils.py`**: `serialize_cmdset()` — serializes cmdset for frontend
+- **`utils/__init__.py`**: `serialize_cmdset()` — serializes cmdset for frontend (only
+  commands with a web form). `command_names()` (#4346) — every key and alias the
+  object and its account can run (the `cmd` lock checked), lowercased with
+  `CMD_IGNORE_PREFIXES` stripped the way Evennia's parser matches them, Evennia's
+  `__` system commands left out (the session cmdset is not read, so `@sessions`
+  is held on the web; `/sessions` reaches it). `commands_frame()` builds the
+  `commands` frame from both: `session.msg(commands=commands_frame(obj))`,
+  descriptors as args, `names` in kwargs. It is sent on puppet, to the
+  character's sessions, and on login, to the logging-in window only (#4346: the
+  account's frame has no character commands, and sent to every window it emptied
+  a sibling tab's list). `CmdSetHandler` (`evennia_overrides/cmdset_handler.py`)
+  re-sends it on a cmdset change but is not installed on any typeclass, so the
+  names are as of the last puppet. The web composer reads them to tell `@desc`
+  from `@Nyx`.
 - **`serializers.py`**: `CommandSerializer` — DRF serializer for command payloads
 
 ### Other
 - **`default_cmdsets.py`**: Command set registration
 - **`exceptions.py`**: `CommandError` — raised for invalid input
+- **`parsing.py`**: `parse_targets_from_text` — the leading `@Nyx,@Bob` target list
+  `say`, `pose` and `emit` read, resolved by key against the room's contents. The list
+  is stripped even when no name resolves (telnet keeps that, per the #4346 ruling; the
+  web composer holds such a line before it is sent). A leading `@@` is the escape
+  (#4346): one `@` is kept and nobody is targeted. `parse_kv_and_flags` — the shared
+  `key=value` / bare-flag tokenizer.
 - **`descriptors.py`**: Serializable command/dispatcher descriptors
 
 ## Adding a New Command

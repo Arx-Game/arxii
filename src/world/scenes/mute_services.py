@@ -52,6 +52,25 @@ def ooc_muted_persona_ids_for_viewer(*, viewer_account: Any) -> set[int]:
     )
 
 
+def ooc_muter_account_ids(*, persona: Persona) -> set[int]:
+    """Account ids that have OOC-muted this very face, ``persona`` (#4337).
+
+    The speaker-side twin of ``ooc_muted_persona_ids_for_viewer``: a room-wide OOC line asks
+    once who to leave out rather than once per listener. One query.
+
+    Only a mute naming the face being worn counts, even when the mute is account-level. A room
+    line has an audience, so leaving a listener out is observable: the others answer a line the
+    muter never saw. Following an account-level mute to the player's other faces would make
+    that silence a tell linking a mask or an alt to the face that was muted, the reason
+    ADR-0204 keeps IC room channels flag-only. Muting a face hides only what that face says.
+    """
+    return set(
+        Mute.objects.filter(muted_persona=persona, mute_ooc=True).values_list(
+            "owner__account_id", flat=True
+        )
+    )
+
+
 def _persona_player(persona: Persona) -> PlayerData | None:
     """The PlayerData currently playing this persona's character, or None (#2996).
 

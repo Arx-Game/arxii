@@ -9,8 +9,10 @@ from evennia import Command
 from evennia.utils import search
 
 from actions.definitions.communication import (
+    OOC_USAGE,
     EmitAction,
     MutterAction,
+    OOCSayAction,
     PemitAction,
     PoseAction,
     SayAction,
@@ -165,6 +167,26 @@ class CmdSay(ArxCommand):
         if language_id is not None:
             result["language_id"] = language_id
         return result
+
+
+class CmdOOC(ArxCommand):
+    """
+    speak out of character to the room
+
+    Usage:
+      ooc <message>
+
+    Everyone here sees "<OOC> Name says: <message>": for anything that is
+    not your character talking, like a hello, a question about the scene or
+    a call for a GM.
+    """
+
+    key = "ooc"
+    locks = _CMD_ALL_LOCK
+    action = OOCSayAction()
+
+    def resolve_action_args(self) -> dict[str, Any]:
+        return {"text": self.require_args(OOC_USAGE)}
 
 
 class CmdWhisper(ArxCommand):
@@ -433,6 +455,7 @@ class CmdPemit(ArxCommand):
     """
 
     key = "pemit"
+    takes_switches = True
     locks = _CMD_ALL_LOCK
     action = PemitAction()
 
@@ -483,6 +506,7 @@ class CmdEmit(ArxCommand):
     """
 
     key = "emit"
+    takes_switches = True
     locks = _CMD_ALL_LOCK
     action = EmitAction()
 

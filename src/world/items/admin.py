@@ -1,6 +1,8 @@
 """Django admin configuration for items."""
 
 from django.contrib import admin
+from django.forms import ModelForm
+from django.http import HttpRequest
 
 from world.contributors.admin import CREDIT_FIELDSET
 from world.items.crafting.models import (
@@ -389,6 +391,21 @@ class ItemInstanceAdmin(admin.ModelAdmin):
         "image",
     ]
     inlines = [ItemStyleInline]
+
+    def save_model(
+        self, request: HttpRequest, obj: ItemInstance, form: ModelForm, change: bool
+    ) -> None:
+        """Keep the game object's key on the name the instance shows (#4338).
+
+        A staff edit of ``custom_name``, or of the template when there is no custom
+        name, changes what the inventory shows; ``look`` reads the key. Imported
+        here because the services package pulls in checks and magic, which import
+        back into items at admin autodiscovery.
+        """
+        from world.items.services.materialize import sync_item_object_key  # noqa: PLC0415
+
+        super().save_model(request, obj, form, change)
+        sync_item_object_key(obj)
 
     @admin.display(description="Last holder")
     def last_holder(self, obj: ItemInstance) -> str:

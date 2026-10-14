@@ -90,17 +90,35 @@ lastSeenByThread, sceneBaselineId})` returns `{here, pages}`: **Here** is the
   matches in `<mark data-find-match>`; `FeedFindContext`/`useFeedFind` carry the
   needle from `GameWindow` to `FormattedContent`, `ActorLine` and `EvenniaMessage`
   without a prop through every reader. History's search is a different thing.
+- **`composerLine.ts`**: How the composer reads a line's opening (#4346, ruled
+  2026-10-13). `readComposerLine(trimmed, {people, commandNames, addressing})`
+  returns a `command` (sent as `line`), `prose` (`socketText` for after a parsing
+  verb, `spoken` with every escape removed, and the leading `@` `targets`, each
+  once) or `held` (`reason`, `hint`, `settled`). `people` is `null` until the room
+  is known and `addressing` is false outside pose and emit; either way nobody is
+  held for being absent. People are matched on the names the room list shows
+  (every word of each, so the first word of an autocompleted multi-word name
+  counts, or the whole name hyphenated), never on keys, which the client does not
+  have: on the web, `@RealName` for someone in a mask is held. `uniqueNames`
+  dedupes target names without case. The target-list pattern mirrors the
+  server's `_TARGET_PREFIX_RE` (`src/commands/parsing.py`) with Unicode name
+  characters, as Python's `\w` is. The ruling's table is in the module docstring.
 - **`feedKinds.ts`**: The closed `FeedKind` union (#3856) every feed entry carries,
   the list the filter chips will offer. `classifyText(kwargs.type, kwargs.category)`
   maps a `text` frame's wire type (`look`, `item`, `error`, `move`, `arrive`;
   `narrative` and `gemit` to `ambience`, except a `narrative` frame in the `visions`
-  category, which is the `vision` kind (#3779); anything else `system`) and `classifyInteraction(mode)`
+  category, which is the `vision` kind (#3779); `page` and `ooc` as themselves, `ooc` being
+  `ooc <message>`, a player talking out of character to the room (#4337); anything else
+  `system`) and `classifyInteraction(mode)`
   maps an interaction's mode. A new kind is a deliberate addition here, never an ad
   hoc string.
 - **`feedChips.ts`**: The filter chips' pure model (#3856 PR 2). `FeedChip {id, label,
 kinds, on, wake, custom}`; a kind belongs to at most one chip; `DEFAULT_FEED_CHIPS`
-  are the demo's five plus Visions (#3779) (Roleplay, Whispers and Visions wake;
-  Movement, Ambience, System do not). **System owns the `system` kind** (#3933): it is
+  are the demo's five plus Visions (#3779) and OOC (#4337) (Roleplay, Whispers, Visions
+  and OOC carry the wake flag; Movement, Ambience, System do not). **Wake only reaches
+  interactions today:** `attention.ts` classifies interactions alone, so the flag on a
+  note kind (`vision`, `ooc`) lights nothing yet. A layout stored before OOC existed
+  has no chip owning `ooc`, so it shows (an unowned kind always does). **System owns the `system` kind** (#3933): it is
   the hide-system button, so pressing it has to hide login and connection chatter, not
   just look/item/error. `normalizeFeedChips` migrates a stored layout once, and only
   under both guards: the `sy` chip still has exactly the pre-#3933 default kinds
@@ -361,7 +379,8 @@ chips, dismissed?)` counts unread per waking chip for the strip's "new" pills,
   by `FeedKind` after the approved demo: a boxed note for `look` (subject title +
   prose body), `item` and `system`; the destructive tokens and `role="alert"` for
   `error`; a bare italic line for `arrive`/`move`; the italic line with a hairline
-  for `ambience`. Every body renders through `EvenniaMessage` in prose
+  for `ambience`; full ink with a sky rule for `ooc` (#4337), a person talking, so
+  never muted like a system note. Every body renders through `EvenniaMessage` in prose
   presentation, since the server sends Evennia's HTML (colour spans, `<br>`).
   There is no separate system strip any more: `SystemLane` was removed with
   #3856, since every text frame is a note in the column now. **No note sets its
@@ -378,10 +397,24 @@ chips, dismissed?)` counts unread per waking chip for the strip's "new" pills,
   `effectiveComposerMode` derives Pose for the room anchor whenever no mode is
   chosen (a fresh connection, the reset on every character or scene change), so a
   typed line is `pose <line>` and never a raw command by accident; picking a mode
-  works before any was set. A line starting with `/` is the command after the
-  slash, sent as typed whatever the mode (`slashEscape`); `//` poses a literal
-  slash; a typed speech verb or `page` (`KNOWN_COMMANDS`) still passes through,
-  and any other word is prose (`look` on its own is the pose "look"). Staff
+  works before any was set. **How a line opens decides what it is**
+  (`composerLine.ts`'s `readComposerLine`, #3857/#4346): `/` is the command after
+  the slash; `+` and a letter, and `@` with a command the character has
+  (`Session.commandNames`), are commands sent as typed, whatever the mode; `@` with
+  someone in the room addresses them, outside a scene through `pose @Nyx ...` and
+  in a scene by sending the names as the pose endpoint's `target_names` while
+  **keeping them in the text** (the server matches names by key, which the room
+  list does not show, so a worn face or a multi-word name would otherwise vanish
+  from the pose); in pose or emit mode, once the room is known, `@` with anything
+  else is **held**: nothing is sent, the line stays, and a `line-held` note in
+  `tagRefusal`'s style says why (a lone `@word` at the end of the line waits for a
+  send attempt, since it may be mid-word). A page, a whisper or a say never holds
+  for a name. A person present wins over a command of the same name; `/` still
+  reaches the command. `//`, `@@` and `++` post one literal character (`@@` stays
+  doubled only where the server's target parser opens the arguments: pose, emit
+  or say with no picked target). A typed speech verb or `page` (`KNOWN_COMMANDS`)
+  still passes through, and any other word is prose (`look` on its own is the
+  pose "look"). Staff
   (`isStaff`, from `account.is_staff` via `GameWindow`) get a Commands entry in
   `ModeSelector`; in that mode the formatting controls, the companion selector and
   the scene controls step aside, the box takes the monospace face, and every line

@@ -26,6 +26,8 @@ const BOX_GLYPHS: Partial<Record<FeedNote['kind'], string>> = { look: '◎', err
  * - `ambience`: the italic line with a hairline on the left.
  * - `vision` (#3779): the emerald frame and glyph shared with the sheet's
  *   `VisionCard`.
+ * - `ooc` (#4337): a player talking out of character, in full ink like speech
+ *   and set off by a sky rule, so it never reads as a pose or a system note.
  *
  * **No note sets its own size, face or width** (#4330): every one inherits the
  * reader's Display settings (`--play-prose-size`, `--play-prose-family`, the
@@ -78,6 +80,22 @@ function FeedNoteBody({ note, time }: { note: FeedNote; time: string }) {
             className="leading-relaxed text-foreground"
           />
         </div>
+        <span className="sr-only">{time}</span>
+      </div>
+    );
+  }
+
+  if (kind === 'ooc') {
+    return (
+      <div
+        data-testid="feed-note"
+        data-kind={kind}
+        className={cn(
+          'border-l-2 border-sky-500/70 pl-2.5 text-foreground',
+          'dark:border-sky-400/70'
+        )}
+      >
+        <EvenniaMessage content={note.content} presentation="prose" />
         <span className="sr-only">{time}</span>
       </div>
     );

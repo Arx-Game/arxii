@@ -18,8 +18,12 @@ from evennia.utils.test_resources import EvenniaTestCase
 from world.assets.constants import AssetStatus
 from world.assets.factories import CluePoolEntryFactory, CluePoolFactory, NPCAssetFactory
 from world.assets.models import AssetTaskIntelDetails
+from world.clues.constants import ClueResolution
 from world.clues.factories import ClueFactory
 from world.clues.models import CharacterClue
+from world.codex.constants import CodexKnowledgeStatus
+from world.codex.factories import CodexEntryFactory
+from world.codex.models import CharacterCodexKnowledge
 from world.npc_services.constants import OfferKind
 from world.npc_services.effects import dispatch_offer_effect, reset_offer_effect_handlers
 from world.npc_services.factories import NPCRoleFactory
@@ -85,6 +89,37 @@ class AssetTaskIntelHandlerTests(EvenniaTestCase):
         pool_clue_ids = {self.clue_a.pk, self.clue_b.pk, self.clue_c.pk}
         self.assertTrue(granted_clue_ids.issubset(pool_clue_ids))
         self.assertEqual(len(granted_clue_ids), 1)
+
+    def test_automatic_codex_clue_from_pool_leaves_the_promoter_knowing_the_entry(self) -> None:
+        """An AUTOMATIC clue is resolved, not just held (#4331)."""
+        pool = CluePoolFactory()
+        entry = CodexEntryFactory(learn_threshold=5)
+        CluePoolEntryFactory(
+            pool=pool,
+            clue=ClueFactory(target_codex_entry=entry, resolution_mode=ClueResolution.AUTOMATIC),
+        )
+        self.offer.asset_task_intel_details.clue_pool = pool
+        self.offer.asset_task_intel_details.save()
+
+        dispatch_offer_effect(self.offer, self.promoter)
+
+        knowledge = CharacterCodexKnowledge.objects.get(roster_entry=self.roster_entry, entry=entry)
+        self.assertEqual(knowledge.status, CodexKnowledgeStatus.KNOWN)
+
+    def test_research_clue_from_pool_is_only_held(self) -> None:
+        pool = CluePoolFactory()
+        entry = CodexEntryFactory(learn_threshold=5)
+        clue = ClueFactory(target_codex_entry=entry, resolution_mode=ClueResolution.RESEARCH)
+        CluePoolEntryFactory(pool=pool, clue=clue)
+        self.offer.asset_task_intel_details.clue_pool = pool
+        self.offer.asset_task_intel_details.save()
+
+        dispatch_offer_effect(self.offer, self.promoter)
+
+        self.assertTrue(CharacterClue.objects.filter(roster_entry=self.roster_entry, clue=clue))
+        self.assertFalse(
+            CharacterCodexKnowledge.objects.filter(roster_entry=self.roster_entry, entry=entry)
+        )
 
     def test_no_active_asset_returns_failure(self) -> None:
         """When the promoter has no active asset, the handler returns a failure."""

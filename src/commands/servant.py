@@ -32,6 +32,7 @@ class CmdServant(ArxCommand):
     """
 
     key = "servant"
+    takes_switches = True
     aliases = ("servants",)
     locks = "cmd:all()"
     help_category = "Building"

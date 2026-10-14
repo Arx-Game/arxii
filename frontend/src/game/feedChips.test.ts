@@ -27,7 +27,7 @@ const defaults = (): FeedChipState => ({
 });
 
 describe('default chips (#3856)', () => {
-  it('match the demo: Roleplay, Whispers, Movement, Ambience, Visions, System; Roleplay, Whispers and Visions wake', () => {
+  it('match the demo: Roleplay, Whispers, Movement, Ambience, Visions, OOC, System; Roleplay, Whispers, Visions and OOC carry wake', () => {
     expect(DEFAULT_FEED_CHIPS.map((c) => [c.label, c.kinds.join(','), c.wake])).toEqual([
       ['Roleplay', 'pose,say,emit', true],
       ['Whispers', 'whisper', true],
@@ -35,6 +35,9 @@ describe('default chips (#3856)', () => {
       ['Ambience', 'ambience', false],
       // A vision is rare and prized (#3779): it shows and it wakes.
       ['Visions', 'vision', true],
+      // Players talking out of character to the room (#4337): it shows; its wake
+      // flag is set like Visions', though only interactions drive attention today.
+      ['OOC', 'ooc', true],
       // Pages (#4129) are OOC lines, so the hide-system button hides them too.
       ['System', 'look,item,error,page,system', false],
     ]);
@@ -68,6 +71,7 @@ describe('show rules', () => {
       ['mv', false],
       ['am', false],
       ['vi', false],
+      ['oc', false],
       ['sy', false],
     ]);
   });
@@ -103,7 +107,7 @@ describe('editing', () => {
 
   it('deleting a chip leaves its kinds unowned, and a default chip may be deleted too', () => {
     const state = deleteChip(defaults(), 'sy');
-    expect(state.chips.map((c) => c.id)).toEqual(['rp', 'wh', 'mv', 'am', 'vi']);
+    expect(state.chips.map((c) => c.id)).toEqual(['rp', 'wh', 'mv', 'am', 'vi', 'oc']);
     expect(isKindShown('look', state)).toBe(true);
   });
 
@@ -116,10 +120,10 @@ describe('editing', () => {
   it('wake is per chip', () => {
     const state = setChipWake(defaults(), 'am', true);
     expect(wakingKinds(state.chips)).toEqual(
-      new Set(['pose', 'say', 'emit', 'whisper', 'ambience', 'vision'])
+      new Set(['pose', 'say', 'emit', 'whisper', 'ambience', 'vision', 'ooc'])
     );
     expect(wakingKinds(toggleChip(state, 'rp').chips)).toEqual(
-      new Set(['whisper', 'ambience', 'vision'])
+      new Set(['whisper', 'ambience', 'vision', 'ooc'])
     );
   });
 });

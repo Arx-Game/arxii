@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 import re
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, ClassVar
 
 from evennia.commands.command import Command
 
@@ -47,19 +48,26 @@ def parse_greedy_kwargs(args: str, *, greedy_key: str | None = None) -> dict[str
     return out
 
 
-def split_switches(args: str | None) -> tuple[list[str], str]:
-    """``"/wedding a,b"`` becomes ``(["wedding"], "a,b")``; a plain line keeps its text.
+# ``/one/two`` straight after the command name. Evennia's default ``arg_regex`` only
+# matches a command followed by a space, a ``/`` or nothing, so a ``/`` here always
+# opens switches and never begins the text of a ``say``.
+_SWITCHES = re.compile(r"^/(?P<switches>\S+)(?P<rest>.*)$", re.DOTALL)
 
-    Evennia's cmdhandler hands ``cmd/switch rest`` to the command keyed ``cmd``
-    with ``args`` of ``/switch rest`` and parses nothing further; only its
-    ``MuxCommand`` splits the switches. ``ArxCommand.parse`` and the sheet
-    command share this split (#4232 fix-on-sight).
+
+def split_switches(args: str) -> tuple[list[str], str]:
+    """Split ``/finish/all Heron Plate`` into ``(["finish", "all"], " Heron Plate")``.
+
+    Switches come back lower-cased. The rest keeps its leading space, the shape
+    ``args`` has when no switch was typed, so a command reads both the same way.
+    Input with no switch comes back unchanged.
     """
-    text = args or ""
-    if not text.startswith("/"):
-        return [], text
-    head, _, rest = text[1:].partition(" ")
-    return [switch for switch in head.split("/") if switch], rest
+    match = _SWITCHES.match(args)
+    if match is None:
+        return [], args
+    switches = [switch.lower() for switch in match["switches"].split("/") if switch]
+    if not switches:
+        return [], args
+    return switches, match["rest"]
 
 
 class ArxCommand(Command):
@@ -97,23 +105,22 @@ class ArxCommand(Command):
     account: Any = None
     raw_string: str | None = None
     obj: Any | None = None
-    # The ``/switch`` words between the command name and its arguments, set by
-    # ``parse`` (#4232 fix-on-sight). Evennia's base ``Command`` never parses
-    # them (only its ``MuxCommand`` does), so every subclass here that read
-    # ``self.switches`` raised on a real telnet line like ``ceremony/wedding a,b``
-    # while its tests, which set the attribute by hand, stayed green.
-    switches: list[str] = []  # replaced per instance by parse()
+    # A command that reads ``self.switches`` sets this. Every other command gets its
+    # typed line untouched: dropping an unread switch would turn ``retire/x`` into a
+    # bare ``retire``, and ``CMD_NOMATCH`` receives the whole unmatched line as ``args``.
+    takes_switches: ClassVar[bool] = False
+    # Set by ``parse()``; the empty default covers a command built and run by hand.
+    switches: Sequence[str] = ()
 
     def parse(self) -> None:
-        """Split a leading ``/switch[/switch...]`` off the arguments.
+        """Split typed switches off the arguments: ``market/finish 12``.
 
-        Evennia hands ``ceremony/wedding Rowan,Lisbet`` to the command keyed
-        ``ceremony`` with ``args`` of ``/wedding Rowan,Lisbet``. The switches
-        land in ``self.switches`` and ``self.args`` keeps only the arguments,
-        the shape ``MuxCommand`` gives and every subclass expects.
+        Evennia's base ``Command.parse`` does nothing; only its ``MuxCommand`` reads
+        switches. Without this, ``self.switches`` was never set on a typed command and
+        ``/finish`` stayed at the front of ``self.args``.
         """
-        super().parse()
-        self.switches, self.args = split_switches(self.args)
+        if self.takes_switches:
+            self.switches, self.args = split_switches(self.args or "")
 
     def msg(self, *args: object, **kwargs: Any) -> None:
         """Send a message to the caller.

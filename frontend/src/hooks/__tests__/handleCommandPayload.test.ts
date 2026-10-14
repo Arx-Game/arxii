@@ -50,6 +50,7 @@ describe('handleCommandPayload', () => {
       expect(setSessionCommands).toHaveBeenCalledWith({
         character: 'TestCharacter',
         commands,
+        commandNames: [],
       });
       expect(store.dispatch).toHaveBeenCalledTimes(1);
     });
@@ -66,6 +67,7 @@ describe('handleCommandPayload', () => {
       expect(setSessionCommands).toHaveBeenCalledWith({
         character: 'TestCharacter',
         commands,
+        commandNames: [],
       });
     });
 
@@ -197,6 +199,7 @@ describe('handleCommandPayload', () => {
       expect(setSessionCommands).toHaveBeenCalledWith({
         character: 'TestCharacter',
         commands: [],
+        commandNames: [],
       });
     });
 
@@ -210,6 +213,7 @@ describe('handleCommandPayload', () => {
       expect(setSessionCommands).toHaveBeenCalledWith({
         character: 'TestCharacter',
         commands: [command],
+        commandNames: [],
       });
     });
 
@@ -226,6 +230,7 @@ describe('handleCommandPayload', () => {
       expect(setSessionCommands).toHaveBeenCalledWith({
         character: 'TestCharacter',
         commands,
+        commandNames: [],
       });
       expect(
         (setSessionCommands as unknown as ReturnType<typeof vi.fn>).mock.calls[0][0].commands
@@ -274,6 +279,7 @@ describe('handleCommandPayload', () => {
             help: 'Use this command to give an item to another character.',
           },
         ],
+        commandNames: [],
       });
     });
 
@@ -291,6 +297,7 @@ describe('handleCommandPayload', () => {
             params_schema: {},
           }),
         ],
+        commandNames: [],
       });
     });
 
@@ -323,6 +330,7 @@ describe('handleCommandPayload', () => {
             params_schema: paramsSchema,
           }),
         ],
+        commandNames: [],
       });
     });
 
@@ -337,6 +345,7 @@ describe('handleCommandPayload', () => {
       expect(setSessionCommands).toHaveBeenCalledWith({
         character: 'TestCharacter',
         commands,
+        commandNames: [],
       });
       expect(
         (setSessionCommands as unknown as ReturnType<typeof vi.fn>).mock.calls[0][0].commands
@@ -359,6 +368,7 @@ describe('handleCommandPayload', () => {
       expect(setSessionCommands).toHaveBeenCalledWith({
         character: 'TestCharacter',
         commands: [command],
+        commandNames: [],
       });
     });
 
@@ -386,6 +396,7 @@ describe('handleCommandPayload', () => {
             help: 'This is a complete help text for the command.',
           }),
         ],
+        commandNames: [],
       });
     });
 
@@ -454,6 +465,7 @@ describe('handleCommandPayload', () => {
       expect(setSessionCommands).toHaveBeenCalledWith({
         character: 'Adventurer',
         commands,
+        commandNames: [],
       });
     });
 
@@ -496,8 +508,16 @@ describe('handleCommandPayload', () => {
       handleCommandPayload('Warrior', char2Commands);
 
       const calls = (setSessionCommands as unknown as ReturnType<typeof vi.fn>).mock.calls;
-      expect(calls[0][0]).toEqual({ character: 'Wizard', commands: char1Commands });
-      expect(calls[1][0]).toEqual({ character: 'Warrior', commands: char2Commands });
+      expect(calls[0][0]).toEqual({
+        character: 'Wizard',
+        commands: char1Commands,
+        commandNames: [],
+      });
+      expect(calls[1][0]).toEqual({
+        character: 'Warrior',
+        commands: char2Commands,
+        commandNames: [],
+      });
     });
   });
 
@@ -524,6 +544,34 @@ describe('handleCommandPayload', () => {
 
       const payload = (setSessionCommands as unknown as ReturnType<typeof vi.fn>).mock.calls[0][0];
       expect(payload.commands).toBe(commands);
+    });
+  });
+
+  describe('the names the character can type (#4346)', () => {
+    it('reads the frame kwargs names list', () => {
+      handleCommandPayload('TestCharacter', [], { names: ['desc', 'friend', 'who'] });
+
+      expect(setSessionCommands).toHaveBeenCalledWith({
+        character: 'TestCharacter',
+        commands: [],
+        commandNames: ['desc', 'friend', 'who'],
+      });
+    });
+
+    it('clears the names when the frame carries none', () => {
+      handleCommandPayload('TestCharacter', [], {});
+
+      expect(setSessionCommands).toHaveBeenCalledWith(
+        expect.objectContaining({ commandNames: [] })
+      );
+    });
+
+    it('keeps only the strings from a malformed list', () => {
+      handleCommandPayload('TestCharacter', [], { names: ['who', 7, null, 'pose'] });
+
+      expect(setSessionCommands).toHaveBeenCalledWith(
+        expect.objectContaining({ commandNames: ['who', 'pose'] })
+      );
     });
   });
 });

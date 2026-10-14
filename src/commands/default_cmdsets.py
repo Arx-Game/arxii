@@ -75,10 +75,20 @@ from commands.duels import CmdDuel
 from commands.durance import CmdDurance
 from commands.encounter import CmdEncounter
 from commands.endorse import CmdEndorse, CmdPoses
-from commands.evennia_overrides.builder import CmdDesc, CmdDig, CmdLink, CmdOpen, CmdUnlink
+from commands.evennia_overrides.builder import (
+    CmdDesc,
+    CmdDig,
+    CmdLink,
+    CmdName,
+    CmdOpen,
+    CmdSetAttribute,
+    CmdSetHome,
+    CmdUnlink,
+)
 from commands.evennia_overrides.communication import (
     CmdEmit,
     CmdMutter,
+    CmdOOC,
     CmdPage,
     CmdPemit,
     CmdPose,
@@ -233,6 +243,16 @@ class CharacterCmdSet(default_cmds.CharacterCmdSet):
             # their own character) goes: a character's description is its sheet's.
             "@desc",
             "setdesc",
+            # #4338: @name, @sethome and @set wrote only Evennia's stores (the key,
+            # `home`, Attributes) while look, where and the sheet read ours; the
+            # overrides below go through the owning services. @spawn and @copy
+            # made objects without the display data and room profile Arx reads,
+            # and nobody uses them, so they go.
+            "@name",
+            "@sethome",
+            "@set",
+            "@spawn",
+            "@copy",
         ):
             self.remove(cmdname)
 
@@ -262,6 +282,8 @@ class CharacterCmdSet(default_cmds.CharacterCmdSet):
             CmdHome,
             CmdInventory,
             CmdSay,
+            # #4337 — OOC speech to the room; replaces Evennia's unpuppeting `ooc`.
+            CmdOOC,
             CmdWhisper,
             CmdPose,
             CmdEmit,
@@ -338,6 +360,9 @@ class CharacterCmdSet(default_cmds.CharacterCmdSet):
             CmdLink,
             CmdUnlink,
             CmdDesc,
+            CmdName,
+            CmdSetHome,
+            CmdSetAttribute,
             # #1278 — block/mute social controls (the telnet face of the persona menu).
             CmdBlock,
             CmdUnblock,
@@ -587,7 +612,20 @@ class AccountCmdSet(default_cmds.AccountCmdSet):
         super().at_cmdset_creation()
         # charcreate/chardelete (#3996): Evennia's stock character mint bypasses
         # sheets, rosters and the slot ledger. Characters are made on the web.
-        for cmdname in ("ic", "characters", "account", "page", "charcreate", "chardelete"):
+        # ooc (#4337): Evennia's unpuppets into its stock account screen, and nobody
+        # steps out of character on purpose any more (login always puppets,
+        # ADR-0294). `ooc` is now OOC speech to the room, CharacterCmdSet's CmdOOC.
+        # A session can still be left with no character (a retirement, a refused
+        # puppet), and there Evennia's account `look` still draws its stock screen.
+        for cmdname in (
+            "ic",
+            "characters",
+            "account",
+            "page",
+            "charcreate",
+            "chardelete",
+            "ooc",
+        ):
             self.remove(cmdname)
 
         self.add(CmdIC())

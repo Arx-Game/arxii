@@ -36,6 +36,7 @@ class CmdPortalAnchor(ArxCommand):
     """
 
     key = "portal"
+    takes_switches = True
     locks = "cmd:all()"
 
     def func(self) -> None:

@@ -25,6 +25,7 @@ class CmdGuard(ArxCommand):
     """
 
     key = "guard"
+    takes_switches = True
     aliases = ("guards",)
     locks = "cmd:all()"
     help_category = "Building"

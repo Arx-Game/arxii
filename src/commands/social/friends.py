@@ -60,6 +60,7 @@ class CmdFriend(ArxCommand):
     """
 
     key = "+friend"
+    takes_switches = True
     aliases = ["friend"]
     locks = _LOCK_ALL
 

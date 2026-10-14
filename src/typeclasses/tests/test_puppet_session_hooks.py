@@ -18,6 +18,10 @@ from evennia.objects.models import ObjectDB
 from evennia_extensions.factories import ObjectDBFactory
 from flows.types import RoomStateSendResult
 
+# A whole `commands` frame: the web-form descriptors, and every name the character can type.
+FRAME = (["cmd"], {"names": ["cmd"]})
+
+
 CHARACTER = "typeclasses.characters.Character"
 
 
@@ -29,7 +33,7 @@ class FirstSessionArrivesTests(TestCase):
         char.send_room_state = MagicMock()
         char.execute_cmd = MagicMock()
         with (
-            patch("typeclasses.characters.serialize_cmdset", return_value=["cmd"]),
+            patch("typeclasses.characters.commands_frame", return_value=FRAME),
             patch.object(ObjectDB, "location", new_callable=PropertyMock, return_value=MagicMock()),
             patch("world.scenes.friend_services.notify_friends_of_status") as friends,
             patch("world.stories.services.login.catch_up_character_stories") as catch_up,
@@ -62,7 +66,7 @@ class FirstSessionArrivesTests(TestCase):
         char.send_room_state = MagicMock()
         char.execute_cmd = MagicMock()
         with (
-            patch("typeclasses.characters.serialize_cmdset", return_value=["cmd"]),
+            patch("typeclasses.characters.commands_frame", return_value=FRAME),
             patch.object(ObjectDB, "location", new_callable=PropertyMock, return_value=MagicMock()),
             patch("world.scenes.friend_services.notify_friends_of_status"),
             patch("world.stories.services.login.catch_up_character_stories"),
@@ -79,8 +83,8 @@ class FirstSessionArrivesTests(TestCase):
 
         char.send_room_state.assert_called_once_with(session=second)
         char.execute_cmd.assert_called_once_with("look", session=second)
-        first.msg.assert_called_with(commands=(["cmd"], {}))
-        second.msg.assert_called_with(commands=(["cmd"], {}))
+        first.msg.assert_called_with(commands=FRAME)
+        second.msg.assert_called_with(commands=FRAME)
 
 
 class LastSessionLeavesTests(TestCase):
@@ -140,7 +144,7 @@ class LifecycleOutputTests(TestCase):
         char.execute_cmd = MagicMock(side_effect=fake_look)
         room = MagicMock()
         with (
-            patch("typeclasses.characters.serialize_cmdset", return_value=["cmd"]),
+            patch("typeclasses.characters.commands_frame", return_value=FRAME),
             patch.object(ObjectDB, "location", new_callable=PropertyMock, return_value=room),
             patch("world.scenes.friend_services.notify_friends_of_status"),
             patch("world.stories.services.login.catch_up_character_stories"),
@@ -160,7 +164,7 @@ class LifecycleOutputTests(TestCase):
         )
         char.execute_cmd = MagicMock()
         with (
-            patch("typeclasses.characters.serialize_cmdset", return_value=["cmd"]),
+            patch("typeclasses.characters.commands_frame", return_value=FRAME),
             patch.object(ObjectDB, "location", new_callable=PropertyMock, return_value=MagicMock()),
             patch("world.scenes.friend_services.notify_friends_of_status"),
             patch("world.stories.services.login.catch_up_character_stories"),
@@ -188,7 +192,7 @@ class LifecycleOutputTests(TestCase):
         )
         char.execute_cmd = MagicMock()
         with (
-            patch("typeclasses.characters.serialize_cmdset", side_effect=RuntimeError("broken")),
+            patch("typeclasses.characters.commands_frame", side_effect=RuntimeError("broken")),
             patch.object(ObjectDB, "location", new_callable=PropertyMock, return_value=MagicMock()),
             patch("world.scenes.friend_services.notify_friends_of_status"),
             patch("world.stories.services.login.catch_up_character_stories"),
@@ -214,7 +218,7 @@ class LifecycleOutputTests(TestCase):
         char.send_room_state = MagicMock(return_value=RoomStateSendResult(sent=True))
         char.execute_cmd = MagicMock()
         with (
-            patch("typeclasses.characters.serialize_cmdset", return_value=["cmd"]),
+            patch("typeclasses.characters.commands_frame", return_value=FRAME),
             patch.object(char, "_announce_arrival", side_effect=RuntimeError("broken")),
             patch.object(ObjectDB, "location", new_callable=PropertyMock, return_value=MagicMock()),
             patch("world.scenes.friend_services.notify_friends_of_status"),
@@ -283,7 +287,7 @@ class LifecycleOutputTests(TestCase):
         room = MagicMock()
         excluded = MagicMock()
         with (
-            patch("typeclasses.characters.serialize_cmdset", return_value=["cmd"]),
+            patch("typeclasses.characters.commands_frame", return_value=FRAME),
             patch.object(ObjectDB, "location", new_callable=PropertyMock, return_value=room),
             patch("world.scenes.friend_services.notify_friends_of_status"),
             patch("world.stories.services.login.catch_up_character_stories"),

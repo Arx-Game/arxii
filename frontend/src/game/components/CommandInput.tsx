@@ -7,6 +7,8 @@ import { useActionResult } from '@/hooks/actionResultBus';
 import type { ActionResultPayload } from '@/hooks/types';
 import { useDraftStore, readStoredDraft } from '@/game/useDraftStore';
 import type { DraftKey, DraftMode, DraftScopeSettling } from '@/game/useDraftStore';
+import { readComposerLine, uniqueNames } from '@/game/composerLine';
+import type { ComposerLine } from '@/game/composerLine';
 import { dbrefToId } from '@/lib/dbref';
 import { RichTextInput } from '@/components/RichTextInput';
 import { PersonaAvatar } from '@/components/PersonaAvatar';
@@ -47,7 +49,9 @@ export interface ComposerMode {
 // (no `tell`), so it's the only addition here. Without it, `page
 // <name>=<message>` typed while a composer mode is set (pose/say/etc.) gets
 // wrapped by buildFullCommand into IC prose instead of reaching CmdPage
-// verbatim as OOC.
+// verbatim as OOC. `ooc` (#4337) is here for the same reason: `ooc <message>`
+// is OOC speech to the room, and wrapped into a pose it would be the very IC
+// line it exists not to be.
 const KNOWN_COMMANDS: ReadonlySet<string> = new Set([
   'pose',
   'say',
@@ -57,6 +61,7 @@ const KNOWN_COMMANDS: ReadonlySet<string> = new Set([
   'tt',
   'tabletalk',
   'page',
+  'ooc',
 ]);
 
 // #2993 — the language selector only makes sense for speech modes (comprehension
@@ -72,37 +77,49 @@ const MAX_POSE_LENGTH = 10_000;
 // `send()` path rather than risk broadcasting room-wide.
 const EXECUTE_ACTION_SPEECH_MODES = new Set(['say', 'whisper', 'tt']);
 
-/** A line that starts with `/` (not `//`) is a command, sent as typed without the slash (#3857). */
-function slashEscape(trimmed: string): string | null {
-  if (!trimmed.startsWith('/') || trimmed.startsWith('//')) return null;
-  return trimmed.slice(1).trim();
-}
+/** No command names yet (before the first `commands` frame): one stable empty list. */
+const NO_COMMAND_NAMES: readonly string[] = [];
+/** Modes where a leading `@Nyx` addresses someone here (#4346); elsewhere it is just text. */
+const ADDRESSING_MODES: ReadonlySet<string> = new Set(['pose', 'emit']);
+/**
+ * Verbs whose telnet command runs the server's target parser, which reads a
+ * leading `@@` as the escape (`parse_targets_from_text`). Tabletalk, whisper
+ * and page do not, so they are sent the spoken text instead.
+ */
+const PARSING_VERBS: ReadonlySet<string> = new Set(['pose', 'emit', 'say']);
 
 /**
- * Builds the full command string for a trimmed input given the active composer
- * mode. A `/` line is the command after the slash (#3857); `//` poses a literal
- * slash. When the input already starts with an explicit known command, or there
- * is no composer mode, the input is sent verbatim.
+ * Builds the socket line for a read composer line given the active composer
+ * mode. A command (`/look`, `@desc ...`, `+friend ...`, #3857/#4346) goes as
+ * read; prose goes through the mode. When the prose already starts with an
+ * explicit known command, or there is no composer mode, it is sent verbatim.
  */
-function buildFullCommand(trimmed: string, composerMode?: ComposerMode): string {
-  const escaped = slashEscape(trimmed);
-  if (escaped !== null) return escaped;
-  if (trimmed.startsWith('//')) trimmed = trimmed.slice(1);
-  if (!composerMode) return trimmed;
+function buildFullCommand(
+  line: Exclude<ComposerLine, { kind: 'held' }>,
+  composerMode?: ComposerMode
+): string {
+  if (line.kind === 'command') return line.line;
+  if (!composerMode) return line.socketText;
 
-  const firstWord = trimmed.split(' ')[0].toLowerCase();
+  const firstWord = line.socketText.split(' ')[0].toLowerCase();
   const hasExplicitCommand = KNOWN_COMMANDS.has(firstWord);
-  if (hasExplicitCommand) return trimmed;
+  if (hasExplicitCommand) return line.socketText;
 
   if (composerMode.command === 'whisper' && composerMode.targets.length > 0) {
-    return `whisper ${composerMode.targets[0]}=${trimmed}`;
+    return `whisper ${composerMode.targets[0]}=${line.spoken}`;
   }
   // A page row in the rail (#4129) addresses the composer to its correspondent.
   if (composerMode.command === 'page' && composerMode.targets.length > 0) {
-    return `page ${composerMode.targets[0]}=${trimmed}`;
+    return `page ${composerMode.targets[0]}=${line.spoken}`;
   }
-  const targetStr = composerMode.targets.length > 0 ? ` @${composerMode.targets.join(',@')} ` : ' ';
-  return `${composerMode.command}${targetStr}${trimmed}`;
+  // The server unescapes only a LEADING `@@`, so the doubled form is right only
+  // when the typed text opens the command's arguments: a parsing verb with no
+  // picked targets in front of it (#4346).
+  const targets = composerMode.targets;
+  const text =
+    PARSING_VERBS.has(composerMode.command) && targets.length === 0 ? line.socketText : line.spoken;
+  const targetStr = targets.length > 0 ? ` @${targets.join(',@')} ` : ' ';
+  return `${composerMode.command}${targetStr}${text}`;
 }
 
 interface CommandInputProps {
@@ -238,6 +255,17 @@ export function CommandInput({
     const room = state.game.sessions[activeCharacter]?.room;
     return room?.characters ?? [];
   });
+  // #4346 — every name this character can type a command by, so `@desc` reads as
+  // a command and `@Nyx` as someone to address.
+  const commandNames = useAppSelector((state) => {
+    if (!activeCharacter) return NO_COMMAND_NAMES;
+    return state.game.sessions[activeCharacter]?.commandNames ?? NO_COMMAND_NAMES;
+  });
+  // Before a `room_state` (or on a page with no live session) nobody is known to
+  // be here, so nobody can be called absent either.
+  const roomKnown = useAppSelector((state) =>
+    activeCharacter ? Boolean(state.game.sessions[activeCharacter]?.room) : false
+  );
   // #3867 — the entrance is the first pose, not a toggle: a state the composer
   // shows until the room's own `room_state` says this character has entered
   // the live scene. The server marks the pose whatever is sent; `pose_kind`
@@ -526,6 +554,38 @@ export function CommandInput({
     [composerMode, roomCharacters, isAtPlace, currentPlaceId, currentPlaceName]
   );
 
+  // #4346 — how the line's opening reads: a command (`/`, `+`, `@` and a command
+  // this character has), prose, possibly addressed (`@` and someone here), or held
+  // (`@` and neither). Commands mode (staff) sends every line as typed instead.
+  const composerLine = useMemo(
+    () =>
+      isCommandsMode
+        ? null
+        : readComposerLine(draft.content.trim(), {
+            people: roomKnown
+              ? [...roomCharacters.map((occupant) => occupant.name), character]
+              : null,
+            commandNames,
+            addressing: !composerMode || ADDRESSING_MODES.has(composerMode.command),
+          }),
+    [
+      isCommandsMode,
+      draft.content,
+      roomKnown,
+      roomCharacters,
+      character,
+      commandNames,
+      composerMode,
+    ]
+  );
+  // A lone `@wor` at the end of the line may still be mid-word, so its note waits
+  // for a send; this is the text that send was refused for.
+  const [heldSendFor, setHeldSendFor] = useState<string | null>(null);
+  const heldNote =
+    composerLine?.kind === 'held' && (composerLine.settled || heldSendFor === draft.content)
+      ? composerLine
+      : null;
+
   const handleSubmit = useCallback(() => {
     if (!ready || submittingRef.current) return;
     if (replyRefusal && !replyRefusal.reachable) return;
@@ -554,14 +614,22 @@ export function CommandInput({
       return;
     }
 
+    // #4346 — an `@` word naming nobody here and no command of this character's is
+    // never sent: the line stays, with the note saying why.
+    if (!composerLine || composerLine.kind === 'held') {
+      setHeldSendFor(draft.content);
+      return;
+    }
+
     const firstWord = trimmed.split(' ')[0].toLowerCase();
-    // A `/` line is a command (#3857): never a speech dispatch, whatever the mode.
+    // A `/`, `+` or `@command` line is a command (#3857, #4346): never a speech
+    // dispatch, whatever the mode.
     const hasExplicitCommandOverride =
-      KNOWN_COMMANDS.has(firstWord) || slashEscape(trimmed) !== null;
-    // What the line SAYS once the escape is read: `//` is a literal slash
-    // (#3857). The structured dispatches below carry this; history and the
-    // in-flight record keep the line as typed.
-    const spoken = trimmed.startsWith('//') ? trimmed.slice(1) : trimmed;
+      KNOWN_COMMANDS.has(firstWord) || composerLine.kind === 'command';
+    // What the line SAYS once the escape is read: `//`, `@@` and `++` leave one
+    // literal character (#3857, #4346). The structured dispatches below carry
+    // this; history and the in-flight record keep the line as typed.
+    const spoken = composerLine.kind === 'prose' ? composerLine.spoken : trimmed;
     const liveSpeechMode: DraftMode | null =
       !hasExplicitCommandOverride &&
       composerMode &&
@@ -644,7 +712,7 @@ export function CommandInput({
     // fall through AS THE ORIGINAL MODE (e.g. `whisper <name>=...`), not as
     // whatever the live ModeSelector currently shows.
     const fullCommand = buildFullCommand(
-      trimmed,
+      composerLine,
       dispatchMode
         ? { command: dispatchMode.command, targets: dispatchMode.targets, label: '' }
         : undefined
@@ -760,7 +828,13 @@ export function CommandInput({
       // reuse) must not silently eat the player's text; the composer keeps
       // it and the server's error surfaces via toast so a retry doesn't mean
       // retyping the whole pose.
-      const composerTargets = composerMode?.targets ?? [];
+      // #4346 — a typed leading `@Nyx,@Bob` addresses them here too: the names
+      // join the picked targets (the endpoint reads only `target_names`, by key)
+      // and stay in the text, since a name the key match misses (a worn face, a
+      // multi-word name) would otherwise vanish from the pose. Once each, without
+      // case: two spellings of one person would write the same target row twice.
+      const typedTargets = composerLine.kind === 'prose' ? composerLine.targets : [];
+      const composerTargets = uniqueNames([...(composerMode?.targets ?? []), ...typedTargets]);
       const clientRequestId = beginSend(liveSpeechMode);
       pendingSpeechRef.current = { clientRequestId, text: trimmed };
       submitPose({
@@ -894,6 +968,7 @@ export function CommandInput({
     onCancelReply,
     replyRefusal,
     tagRefusal,
+    composerLine,
   ]);
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -1147,6 +1222,17 @@ export function CommandInput({
           {tagRefusal.hint && <span className="text-muted-foreground">{tagRefusal.hint}</span>}
         </div>
       )}
+      {heldNote && (
+        <div
+          className="flex flex-col gap-0.5 border-l-2 border-destructive bg-destructive/10 px-3 py-1.5 text-xs"
+          data-testid="line-held"
+          role="status"
+          aria-live="polite"
+        >
+          <strong className="text-destructive">{heldNote.reason}</strong>
+          <span className="text-muted-foreground">{heldNote.hint}</span>
+        </div>
+      )}
       <RichTextInput
         value={draft.content}
         onChange={handleChange}
@@ -1159,7 +1245,8 @@ export function CommandInput({
         submitDisabled={
           !ready ||
           Boolean(replyRefusal && !replyRefusal.reachable) ||
-          Boolean(tagRefusal && !tagRefusal.reachable)
+          Boolean(tagRefusal && !tagRefusal.reachable) ||
+          heldNote !== null
         }
         disabled={draft.status === 'pending'}
         leftSlot={

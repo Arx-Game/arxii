@@ -61,6 +61,16 @@ vi.mock('sonner', () => ({
   toast: mockToast,
 }));
 
+// The `commands` frame's handler writes to the app store; these tests only pin
+// what the socket hands it (#4346).
+const { mockHandleCommandPayload } = vi.hoisted(() => ({
+  mockHandleCommandPayload: vi.fn(),
+}));
+
+vi.mock('./handleCommandPayload', () => ({
+  handleCommandPayload: mockHandleCommandPayload,
+}));
+
 import {
   PAGE_RESUME_CLOSE_CODE,
   useGameSocket,
@@ -869,6 +879,18 @@ describe('useGameSocket text frames become feed notes (#3856)', () => {
 
     expect(noteDispatches()).toEqual([]);
     expect(dispatchedTypes()).toContain('game/addSessionMessage');
+  });
+
+  it('hands a commands frame its descriptors and its kwargs, names included (#4346)', async () => {
+    const descriptor = { action: 'look', prompt: 'Look', params_schema: {}, icon: 'eye' };
+    // The wire shape Evennia sends: descriptors as args, `names` (and its own
+    // `options`) in kwargs.
+    await deliver(['commands', [descriptor], { names: ['look', 'who'], options: {} }]);
+
+    expect(mockHandleCommandPayload).toHaveBeenCalledWith('Aria', [descriptor], {
+      names: ['look', 'who'],
+      options: {},
+    });
   });
 });
 

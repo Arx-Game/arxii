@@ -150,6 +150,19 @@ def bind_companion(
     )
 
 
+def rename_companion(companion: Companion, name: str) -> None:
+    """Rename a companion: its row and its in-world object's key together (#4338).
+
+    ``bind_companion`` copies the name onto the object's key once, at bind; the
+    companion surfaces read ``Companion.name`` and ``look`` reads the key, so a
+    rename has to carry both or they show different names.
+    """
+    companion.name = name
+    companion.save(update_fields=["name"])
+    if companion.objectdb is not None:
+        companion.objectdb.key = name
+
+
 def release_companion(companion: Companion) -> None:
     """Release a bonded companion: destroy its live object, keep the row.
 

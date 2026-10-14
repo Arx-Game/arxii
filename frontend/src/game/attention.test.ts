@@ -32,6 +32,7 @@ function makeSession(overrides: Partial<Session> = {}): Session {
     dismissedFeed: [],
     unread: 0,
     commands: [],
+    commandNames: [],
     room: null,
     scene: null,
     sceneInteractions: [],

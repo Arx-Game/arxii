@@ -295,6 +295,10 @@ def finish_ware(
             "designer_persona_display",
         ]
     )
+    # A new name reaches the game object too, or look keeps the old one (#4338).
+    from world.items.services.materialize import sync_item_object_key  # noqa: PLC0415
+
+    sync_item_object_key(instance)
     finishing_pass.consumed_at = timezone.now()
     finishing_pass.save(update_fields=["consumed_at"])
     return instance

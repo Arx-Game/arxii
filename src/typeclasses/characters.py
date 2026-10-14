@@ -17,7 +17,7 @@ from django.utils import timezone
 from django.utils.functional import cached_property
 from evennia.objects.objects import DefaultCharacter
 
-from commands.utils import serialize_cmdset
+from commands.utils import commands_frame
 from core.wire_options import LifecycleEvent, TextFrameOption, TextFrameType
 from flows.constants import EventName
 from flows.emit import emit_event
@@ -584,9 +584,9 @@ class Character(ObjectParent, DefaultCharacter):
         self._run_entry_step("roster", update_roster, joining)
 
         def send_commands():
-            payload = serialize_cmdset(self)
+            frame = commands_frame(self)
             for session in sessions:
-                session.msg(commands=(payload, {}))
+                session.msg(commands=frame)
 
         self._run_entry_step("commands", send_commands, joining)
 
@@ -665,6 +665,54 @@ class Character(ObjectParent, DefaultCharacter):
             exclude=[self, *resolve_broadcast_exclusions(self.location)],
             from_obj=self,
             mapping={"name": self},
+        )
+
+    def _leave_the_grid(self, *, reason: str = "") -> None:
+        """Take the character off the grid when its last session leaves (#4336).
+
+        Evennia's ``DefaultCharacter.at_post_unpuppet`` step, kept: the room hears
+        the character go, ``prelogout_location`` remembers where it was (Evennia's
+        ``at_pre_puppet`` puts it back there on the next login), and its location
+        empties so nobody is left standing in a room with no player behind them.
+
+        The line goes first, as Evennia's did, because naming the character for
+        each listener reads its room. It runs through ``run_safely``: a failure
+        there is reported, never allowed to leave the character on the grid or
+        skip the rest of ``at_post_unpuppet``, which also runs for every account
+        on a reload (#3195).
+        """
+        from world.player_submissions.services import run_safely
+
+        location = self.location
+        if location is None:
+            return
+        run_safely(
+            "logout_line",
+            lambda: self._announce_departure(location, reason=reason),
+        )
+        self.db.prelogout_location = location
+        self.location = None
+
+    def _announce_departure(self, location, *, reason: str) -> None:
+        """The room's went-offline line, the logout twin of ``_announce_arrival``.
+
+        Evennia's line was untyped, so the web client filed it as a system note,
+        and it went to every occupant, dreamside included. This one is typed
+        ``move``, the kind every departure carries, and goes through the
+        broadcast-exclusion seam (#2997). A sneaking character leaves without a
+        word, as it does walking out (#3288: departures are silent). The name is
+        each listener's own display name for the character, so a mask shows the
+        mask.
+        """
+        from world.stealth.services import is_sneaking
+
+        if is_sneaking(self):
+            return
+        location.msg_contents(
+            ("{name} has left the game{reason}.", {"type": TextFrameType.MOVE.value}),
+            exclude=[self, *resolve_broadcast_exclusions(location)],
+            from_obj=self,
+            mapping={"name": self, "reason": reason},
         )
 
     def announce_move_from(self, destination, msg=None, mapping=None, **kwargs):
@@ -1085,22 +1133,32 @@ class Character(ObjectParent, DefaultCharacter):
     def at_post_unpuppet(self, account=None, session=None, **kwargs):
         """Handle cleanup after a session stops puppeting this character.
 
+        ``DefaultCharacter.at_post_unpuppet`` is skipped on purpose (#4336): its
+        only work is taking the character off the grid when the last session
+        leaves, and the line it sends the room is untyped and reaches dreamside
+        occupants. ``_leave_the_grid`` does the same step with our line.
+        ``super(DefaultCharacter, self)`` resumes the MRO after
+        ``DefaultCharacter``, so it also passes over ``ObjectParent``; that is safe
+        only while ``ObjectParent`` defines no ``at_post_unpuppet``, which
+        ``test_logout_line`` pins.
+
         Args:
             account: Account associated with the unpuppeting session, if any.
             session: Session that was puppeting this character, if any.
-            **kwargs: Arbitrary, optional arguments passed by Evennia.
+            **kwargs: Arbitrary, optional arguments passed by Evennia; ``reason``
+                (" (connection lost)") rides into the room's line.
         """
         origin = self.location
-        super().at_post_unpuppet(account=account, session=session, **kwargs)
+        super(DefaultCharacter, self).at_post_unpuppet(account=account, session=session, **kwargs)
         target = [session] if session else self.sessions.all()
         for sess in target:
             sess.msg(commands=([], {}))
 
         if self.sessions.all():
             # Another window still has this character (#3812): closing one of
-            # two tabs is not going offline. Evennia's own hook applies the same
-            # rule to leaving the grid.
+            # two tabs is not going offline, and the character stays on the grid.
             return
+        self._leave_the_grid(reason=kwargs.get("reason", ""))
 
         # Clear presence-tied resonance buff on logout; character is no longer present.
         with contextlib.suppress(RosterEntry.DoesNotExist, ObjectDoesNotExist):
@@ -1111,10 +1169,8 @@ class Character(ObjectParent, DefaultCharacter):
 
         notify_friends_of_status(self, online=False)
 
-        # #1361: the base at_post_unpuppet call above already relocated this
-        # character off-grid if that was its last session — finish the room's
-        # scene if it's now empty. Guard mirrors Evennia's own last-session-out
-        # check rather than re-implementing it.
+        # #1361: _leave_the_grid above took this character off the grid, since
+        # that was its last session — finish the room's scene if it's now empty.
         if origin is not None and self.location is None:
             from world.scenes.round_services import maybe_finish_empty_scene
 

@@ -43,14 +43,11 @@ class CmdPosition(ArxCommand):
     """
 
     key = "position"
+    takes_switches = True
     locks = "cmd:all()"
 
     def func(self) -> None:
-        # Suppression justified: Evennia cmdhandler sets .switches at parse time; hand-built
-        # test instances that call func() directly never set it.
-        raw_switches = getattr(self, "switches", None) or []  # noqa: GETATTR_LITERAL
-        switches = {s.lower() for s in raw_switches}
-        if _SWITCH_PLACE in switches:
+        if _SWITCH_PLACE in self.switches:
             try:
                 self._do_place()
             except CommandError as err:

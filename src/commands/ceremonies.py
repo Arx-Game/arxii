@@ -36,6 +36,7 @@ class CmdCeremony(ArxCommand):
     """
 
     key = "ceremony"
+    takes_switches = True
     aliases = ["ceremonies"]
     locks = "cmd:all()"
     help_category = "Social"
