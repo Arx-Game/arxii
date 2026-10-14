@@ -104,7 +104,6 @@ _ERR_OPTION_NOT_LIVE = (
     "you may need to be somewhere else."
 )
 _ERR_NO_ROLL_TO_INVOKE = "That option rolls no check, so there is nothing to call on favor for."
-_ERR_NO_SUCH_BEING = "There is no such being to call on."
 _ERR_PAUSED_FOR_ENCOUNTER = "A fight is in progress; the scenario continues when it ends."
 _ERR_RUN_NOT_TERMINAL = (
     "This mission hasn't ended yet — you can only tell the tale of a completed or abandoned run."
@@ -330,19 +329,15 @@ def _invocation_request(
     """
     if choice is None:
         return None
-    from world.worship.invocation_services import invocation_refusal  # noqa: PLC0415
-    from world.worship.models import WorshippedBeing  # noqa: PLC0415
+    from world.worship.exceptions import FavorInvocationRefused  # noqa: PLC0415
+    from world.worship.invocation_services import resolve_invocation_choice  # noqa: PLC0415
 
     if not option_rolls_check(presented):
         raise BeatActionError(_ERR_NO_ROLL_TO_INVOKE)
-    being = WorshippedBeing.objects.filter(pk=choice.being_id).first()
-    sheet = character.character_sheet
-    if being is None or sheet is None:
-        raise BeatActionError(_ERR_NO_SUCH_BEING)
-    refusal = invocation_refusal(sheet, being)
-    if refusal:
-        raise BeatActionError(refusal)
-    return InvocationRequest(being=being, player_line=choice.player_line.strip())
+    try:
+        return resolve_invocation_choice(character.character_sheet, choice)
+    except FavorInvocationRefused as exc:
+        raise BeatActionError(exc.user_message) from exc
 
 
 def resolve_beat_option(

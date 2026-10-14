@@ -204,7 +204,7 @@ from commands.wedding import CmdWedding
 from commands.where import CmdWhere
 from commands.who import CmdWho
 from commands.windows import CmdCloseWindow, CmdOpenWindow
-from commands.worship import CmdPray, CmdVision
+from commands.worship import CmdInvoke, CmdPray, CmdVision
 
 
 class CharacterCmdSet(default_cmds.CharacterCmdSet):
@@ -527,6 +527,8 @@ class CharacterCmdSet(default_cmds.CharacterCmdSet):
             # #3779 — freeform prayer, and the staff-only vision that may answer one.
             CmdPray,
             CmdVision,
+            # #4333 — which beings a character can call on before a check, and how hard.
+            CmdInvoke,
             # #1511 — organization membership lifecycle.
             CmdOrg,
             # #3293 — appeals to organizations.

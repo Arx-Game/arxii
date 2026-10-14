@@ -34,10 +34,12 @@ from world.worship.exceptions import FavorInvocationRefused
 from world.worship.favor_services import active_patronage_of, favor_modifier_total
 from world.worship.types import (
     InvocationBonusRow,
+    InvocationChoice,
     InvocationDifficulty,
     InvocationEase,
     InvocationOption,
     InvocationOutcome,
+    InvocationRequest,
 )
 
 if TYPE_CHECKING:
@@ -48,12 +50,13 @@ if TYPE_CHECKING:
     from world.scenes.action_models import SceneActionRequest
     from world.scenes.models import Scene
     from world.traits.models import CheckOutcome
-    from world.worship.models import DevotionConfig, WorshippedBeing
+    from world.worship.models import DevotionConfig, FavorInvocation, WorshippedBeing
 
 MSG_NO_FAVOR = "You have no favor with {being} to call on."
 MSG_NO_USES = "You have called on {being} {uses} times this week already."
 MSG_NOT_CONFIGURED = "Calling on favor is not set up yet; tell staff."
 MSG_BEING_INACTIVE = "{being} cannot be called on."
+MSG_NO_SUCH_BEING = "There is no such being to call on."
 CHOSEN_EASE_LABEL = "You are {being}'s Chosen"
 FAVOR_EASE_LABEL = "Favor {favor} ({threshold} or more)"
 MODIFIER_EASE_LABEL = "Favor invocation modifiers for {being}"
@@ -210,6 +213,40 @@ def check_can_invoke(sheet: CharacterSheet, being: WorshippedBeing) -> None:
         raise FavorInvocationRefused(refusal)
 
 
+def find_being_to_invoke(sheet: CharacterSheet, name: str) -> WorshippedBeing | None:
+    """The being a typed name means, for telnet: one the character holds a standing
+    with first (exact name, then a name that starts with it), else any being with
+    exactly that name, so the refusal can name it."""
+    from world.worship.models import DevotionStanding, WorshippedBeing  # noqa: PLC0415
+
+    name = name.strip()
+    if not name:
+        return None
+    standings = DevotionStanding.objects.filter(character_sheet=sheet).select_related("being")
+    exact = standings.filter(being__name__iexact=name).first()
+    if exact is not None:
+        return exact.being
+    prefixed = standings.filter(being__name__istartswith=name).order_by("being__name").first()
+    if prefixed is not None:
+        return prefixed.being
+    return WorshippedBeing.objects.filter(name__iexact=name).first()
+
+
+def resolve_invocation_choice(sheet: CharacterSheet, choice: InvocationChoice) -> InvocationRequest:
+    """Turn a request's or command's Call on favor choice into a checked request.
+
+    Raises ``FavorInvocationRefused`` when the being does not exist or the
+    character cannot invoke it now. The invocation rolls later, with its check.
+    """
+    from world.worship.models import WorshippedBeing  # noqa: PLC0415
+
+    being = WorshippedBeing.objects.filter(pk=choice.being_id).first()
+    if being is None:
+        raise FavorInvocationRefused(MSG_NO_SUCH_BEING)
+    check_can_invoke(sheet, being)
+    return InvocationRequest(being=being, player_line=choice.player_line.strip())
+
+
 def invocation_options(sheet: CharacterSheet) -> list[InvocationOption]:
     """Every being ``sheet`` holds a standing with, for the Call on favor picker.
 
@@ -319,13 +356,7 @@ def invoke_favor(  # noqa: PLR0913 - the check's context is co-equal keyword dat
             mission_instance=mission_instance,
             scene_action_request=scene_action_request,
         )
-    contribution = None
-    if bonus:
-        contribution = ModifierContribution(
-            source_kind=ModifierSourceKind.FAVOR,
-            source_label=f"{being.name}'s favor (invocation: {result.outcome_name})",
-            value=bonus,
-        )
+    contribution = invocation_contribution(invocation)
     public, private, outcome_line = invocation_lines(
         actor_name=actor_name,
         being=being,
@@ -341,6 +372,19 @@ def invoke_favor(  # noqa: PLR0913 - the check's context is co-equal keyword dat
         call_line=public,
         private_call_line=private,
         outcome_line=outcome_line,
+    )
+
+
+def invocation_contribution(invocation: FavorInvocation) -> ModifierContribution | None:
+    """The labelled FAVOR line a recorded invocation adds to its check, or None
+    when its tier gives no bonus."""
+    if not invocation.bonus:
+        return None
+    being, outcome = invocation.being.name, invocation.outcome_tier.name
+    return ModifierContribution(
+        source_kind=ModifierSourceKind.FAVOR,
+        source_label=f"{being}'s favor (invocation: {outcome})",
+        value=invocation.bonus,
     )
 
 

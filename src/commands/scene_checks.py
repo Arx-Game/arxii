@@ -12,22 +12,34 @@ directly rather than round-tripping through an Action.
 
 from __future__ import annotations
 
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from commands.command import ArxCommand
 from commands.exceptions import CommandError
 from commands.utils.gm_resolution import resolve_character_sheet_in_room
+from commands.utils.invocation import invocation_choice_for, split_invocation
 from world.scenes.action_constants import DifficultyChoice
 
+if TYPE_CHECKING:
+    from world.worship.types import InvocationChoice
+
 _USAGE_CHECK = (
-    "Usage: check [find <term>] | check <name> [at <band>] | check propose <name>=<intent>"
-    " | check answer <call-id> | check decline <call-id>"
+    "Usage: check [find <term>] | check <name> [at <band>] [/invoke <being>[=<line>]]"
+    " | check propose <name>=<intent> | check answer <call-id> [/invoke <being>[=<line>]]"
+    " | check decline <call-id>"
 )
 _USAGE_CALLCHECK = "Usage: callcheck <name>=<target1>,<target2>,... [at <band>]"
 _SUBVERB_FIND = "find"
 _SUBVERB_PROPOSE = "propose"
 _SUBVERB_ANSWER = "answer"
 _SUBVERB_DECLINE = "decline"
+
+
+def _invoke_kwargs(invoke: InvocationChoice | None) -> dict[str, Any]:
+    """The self-check actions' Call on favor kwargs (#4333), empty when none."""
+    if invoke is None:
+        return {}
+    return {"invoke_being_id": invoke.being_id, "invoke_line": invoke.player_line}
 
 
 def _default_band(raw: str) -> str:
@@ -50,9 +62,9 @@ class CmdCheck(ArxCommand):
     Usage:
       check
       check find <term>
-      check <name> [at <band>]
+      check <name> [at <band>] [/invoke <being>[=<line>]]
       check propose <name>=<intent>
-      check answer <call-id>
+      check answer <call-id> [/invoke <being>[=<line>]]
       check decline <call-id>
 
     Bands: trivial, easy, normal, hard, daunting, harrowing. Every check is an
@@ -96,6 +108,8 @@ class CmdCheck(ArxCommand):
     def _invoke(self, raw: str) -> None:
         from actions.definitions.scene_checks import SceneSelfCheckAction  # noqa: PLC0415
 
+        raw, being_name, line = split_invocation(raw)
+        invoke = invocation_choice_for(self.caller, being_name, line)
         name_part, _, band_part = raw.rpartition(" at ")
         check_type_ref = (name_part or raw).strip()
         if not check_type_ref:
@@ -105,6 +119,7 @@ class CmdCheck(ArxCommand):
             actor=self.caller,
             check_type_ref=check_type_ref,
             difficulty=_default_band(band_part),
+            **_invoke_kwargs(invoke),
         )
         if result.message:
             self.msg(result.message)
@@ -130,9 +145,13 @@ class CmdCheck(ArxCommand):
     def _answer(self, rest: str) -> None:
         from actions.definitions.scene_checks import AnswerCheckCallAction  # noqa: PLC0415
 
+        rest, being_name, line = split_invocation(rest)
+        invoke = invocation_choice_for(self.caller, being_name, line)
         if not rest.isdigit():
             raise CommandError(_USAGE_CHECK)
-        result = AnswerCheckCallAction().run(actor=self.caller, call_id=int(rest))
+        result = AnswerCheckCallAction().run(
+            actor=self.caller, call_id=int(rest), **_invoke_kwargs(invoke)
+        )
         if result.message:
             self.msg(result.message)
 

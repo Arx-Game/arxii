@@ -29,6 +29,7 @@ from world.scenes.action_constants import (
     DifficultyChoice,
 )
 from world.scenes.action_models import SceneActionRequest, SceneActionTarget
+from world.worship.constants import FAVOR_INVOCATION_LINE_MAX_LENGTH
 
 if TYPE_CHECKING:
     from world.scenes.models import Scene
@@ -652,6 +653,12 @@ class SceneActionRequestCreateSerializer(serializers.Serializer):
     # #2540: the structured-ask payload — only meaningful when action_key == "boon".
     # Eligibility (dial 1) is validated by create_action_request before any row exists.
     boon = BoonAskSerializer(required=False, allow_null=True)
+    # #4333: call on a being's favor before this action's check. Eligibility (favor
+    # above zero, a use left this week) is checked by create_action_request.
+    invoke_being_id = serializers.IntegerField(required=False, allow_null=True, default=None)
+    invoke_line = serializers.CharField(
+        max_length=FAVOR_INVOCATION_LINE_MAX_LENGTH, required=False, allow_blank=True, default=""
+    )
 
     def validate(self, attrs: dict) -> dict:
         """Normalize target fields into ``target_ids``; cap strain and fury.

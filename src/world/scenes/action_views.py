@@ -52,6 +52,7 @@ from world.scenes.services import active_persona_for_sheet
 if TYPE_CHECKING:
     from world.magic.models import Technique
     from world.scenes.boon_services import BoonAsk
+    from world.worship.types import InvocationChoice
 
 # Repeated API error detail strings. Centralized to avoid the duplicated-literal
 # SonarCloud smell (python:S1192).
@@ -80,6 +81,16 @@ def _build_pull_from_validated(validated_data: dict) -> CastPullDeclaration | No
         tier=pull_data["tier"],
         threads=tuple(pull_data["threads"]),
     )
+
+
+def _build_invoke_from_validated(validated_data: dict) -> InvocationChoice | None:
+    """The Call on favor choice from validated serializer data (#4333), or None."""
+    being_id = validated_data.get("invoke_being_id")
+    if being_id is None:
+        return None
+    from world.worship.types import InvocationChoice  # noqa: PLC0415
+
+    return InvocationChoice(being_id=being_id, player_line=validated_data.get("invoke_line", ""))
 
 
 def _build_boon_from_validated(validated_data: dict) -> BoonAsk | None:
@@ -448,6 +459,7 @@ class SceneActionRequestViewSet(PuppetActorMixin, viewsets.ModelViewSet):
             additional=additional,
             pull=_build_pull_from_validated(serializer.validated_data),
             boon=_build_boon_from_validated(serializer.validated_data),
+            invoke=_build_invoke_from_validated(serializer.validated_data),
             treat_condition_kwargs=treat_condition_kwargs,
         )
         if isinstance(action_request_or_error, Response):
@@ -478,6 +490,7 @@ class SceneActionRequestViewSet(PuppetActorMixin, viewsets.ModelViewSet):
         additional: list[Persona],
         pull: CastPullDeclaration | None,
         boon: BoonAsk | None,
+        invoke: InvocationChoice | None,
         treat_condition_kwargs: dict[str, Any],
     ) -> SceneActionRequest | Response:
         """Call ``create_action_request``, mapping its two failure exceptions to a
@@ -508,6 +521,7 @@ class SceneActionRequestViewSet(PuppetActorMixin, viewsets.ModelViewSet):
                 additional_target_personas=additional,
                 pull=pull,
                 boon=boon,
+                invoke=invoke,
                 **treat_condition_kwargs,
             )
         except BoonUnavailable as exc:

@@ -24,6 +24,7 @@ from typing import TYPE_CHECKING, Any
 
 from commands.command import ArxCommand
 from commands.exceptions import CommandError
+from commands.utils.invocation import invocation_choice_for, split_invocation
 
 if TYPE_CHECKING:
     from world.missions.models import MissionInstance
@@ -49,13 +50,34 @@ _SUBVERBS = frozenset(
     }
 )
 _USAGE = (
-    "Usage: mission | mission beat <id> | mission resolve <id> <n> | "
+    "Usage: mission | mission beat <id> | mission resolve <id> <n>[/invoke <being>[=<line>]] | "
     "mission abandon <id> | mission pick <id> <n> | mission vote <id> <n> | "
     "mission report <id> <style> | mission tale <id> <text> | "
     "mission invite <id> <name> | mission accept <invite-id> | "
     "mission decline <invite-id> | mission take <n> | mission opportunities"
 )
 _ERR_NOT_PARTICIPANT = "You are not part of that mission."
+_INVOKE_HINT = (
+    "To call on a being's favor before a check: 'mission resolve {pk} <n>/invoke "
+    "<being>[=<line>]'. 'invoke' lists the beings you can call on."
+)
+
+
+def _invocation_breakdown(invocation: Any) -> str:
+    """The acting player's one-line check breakdown with the favor bonus (#4333)."""
+    ranks = ""
+    if invocation.roller_rank and invocation.target_rank:
+        ranks = (
+            f", rank {invocation.roller_rank} against {invocation.target_rank}"
+            f" (rank difference {invocation.rank_difference})"
+        )
+    bonus = f" + {invocation.bonus} {invocation.bonus_label}" if invocation.bonus else " (no bonus)"
+    return (
+        f"{invocation.check_type_name}: {invocation.points_before_bonus}{bonus}"
+        f" = {invocation.total_points}{ranks}."
+    )
+
+
 _ERR_CHOOSE_NUMBER = "Choose an option by its number, e.g. 'mission resolve <id> 1'."
 
 
@@ -68,11 +90,14 @@ class CmdMission(ArxCommand):
 
     **Single-player:**
         ``mission resolve <id> <n>``     - choose option n at the current beat
+        ``mission resolve <id> <n>/invoke <being>[=<line>]`` - call on a being's
+                                           favor before that option's check
         ``mission abandon <id>``         - abandon an ACTIVE run (contract holder)
         ``mission tale <id> <text>``     - write your epilogue for a completed run
 
     **Group decision (two stages):**
-        ``mission pick <id> <n>``        - submit your stage-1 pick
+        ``mission pick <id> <n>``        - submit your stage-1 pick (also takes
+                                           ``/invoke <being>[=<line>]``)
         ``mission vote <id> <n>``        - cast your stage-2 vote
     """
 
@@ -221,6 +246,8 @@ class CmdMission(ArxCommand):
         )
 
         instance, remainder = self._instance_or_raise(rest)
+        remainder, being_name, line = split_invocation(remainder)
+        invoke = invocation_choice_for(self.caller, being_name, line)
         node = instance.current_node
         if node is not None and self._is_group_beat(instance, node):
             msg = (
@@ -240,6 +267,7 @@ class CmdMission(ArxCommand):
                 self.caller,
                 option_id=option.option_id,
                 approach_id=option.approach_id,
+                invoke=invoke,
             )
         except BeatActionError as exc:
             raise CommandError(exc.user_message) from exc
@@ -371,6 +399,8 @@ class CmdMission(ArxCommand):
         )
 
         instance, remainder = self._require_group_beat(rest)
+        remainder, being_name, line = split_invocation(remainder)
+        invoke = invocation_choice_for(self.caller, being_name, line)
         ordinal = self._choice_ordinal(remainder)
         try:
             option = self._group_option_at(instance, group_beat, ordinal)
@@ -379,6 +409,7 @@ class CmdMission(ArxCommand):
                 self.caller,
                 option_id=option.option_id,
                 approach_id=option.approach_id,
+                invoke=invoke,
             )
         except BeatActionError as exc:
             raise CommandError(exc.user_message) from exc
@@ -514,10 +545,16 @@ class CmdMission(ArxCommand):
             lines.append(f"  {i}) {opt.label}{suffix}")
         if beat.options:
             lines.append(f"Use 'mission resolve {instance.pk} <n>' to choose.")
+        if any(opt.rolls_check for opt in beat.options):
+            lines.append(_INVOKE_HINT.format(pk=instance.pk))
         self.msg("\n".join(lines))
 
     def _render_resolved(self, instance: MissionInstance, resolved: Any) -> None:
-        lines = [resolved.story_text]
+        lines = []
+        invocation = resolved.invocation
+        if invocation is not None:
+            lines.append(_invocation_breakdown(invocation))
+        lines.append(resolved.story_text)
         if resolved.outcome_name:
             lines.append(f"Outcome: {resolved.outcome_name}.")
         if resolved.is_terminal:
