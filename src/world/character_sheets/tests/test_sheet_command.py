@@ -109,6 +109,23 @@ class SheetCommandTests(TestCase):
         assert "Marital Status: Single" in output
         assert "Birthday: Thawing 15 (3/15)" in output
 
+    def test_sheet_while_puppeting_reads_the_puppet(self):
+        """In the game Evennia hands the command the character as caller and the account
+        beside it; the overview must not ask the character for a roster (#4232)."""
+        cmd = CmdSheet()
+        cmd.caller = self.character
+        cmd.account = MagicMock(is_staff=False)
+        cmd.account.get_available_characters.return_value = [self.character]
+        cmd.args = ""
+        self.character.msg = MagicMock()
+
+        cmd.func()
+
+        assert self.character.msg.called
+        output = self.character.msg.call_args[0][0]
+        assert "Character Sheet for" in output
+        assert "Social Rank: 3" in output
+
     def test_sheet_marital_status_is_derived_from_the_marriages(self):
         """The line reads the kinship graph, never a stored field (#4232)."""
         from world.roster.factories import RosterEntryFactory, UnionKindFactory
