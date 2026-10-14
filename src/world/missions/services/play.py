@@ -41,6 +41,7 @@ from world.missions.models import (
     MissionParticipant,
     MissionTrackProgress,
 )
+from world.missions.services.invocation import beat_invocation, option_rolls_check
 from world.missions.services.multiplayer import build_group_option_list, resolve_group_node
 from world.missions.services.resolution import build_option_list, resolve_option
 from world.missions.types import (
@@ -49,6 +50,7 @@ from world.missions.types import (
     GroupBallotState,
     GroupBeatResult,
     GroupBeatView,
+    OptionRollReport,
     PresentedOption,
     ResolvedBeat,
     SupportDeclarationView,
@@ -57,6 +59,7 @@ from world.missions.types import (
 )
 from world.narrative.constants import NarrativeCategory
 from world.narrative.services import emit_ambient_room_stir, send_narrative_message
+from world.worship.types import InvocationChoice, InvocationRequest
 
 if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
@@ -100,6 +103,8 @@ _ERR_OPTION_NOT_LIVE = (
     "That option isn't available to you here — it may have moved on, or "
     "you may need to be somewhere else."
 )
+_ERR_NO_ROLL_TO_INVOKE = "That option rolls no check, so there is nothing to call on favor for."
+_ERR_NO_SUCH_BEING = "There is no such being to call on."
 _ERR_PAUSED_FOR_ENCOUNTER = "A fight is in progress; the scenario continues when it ends."
 _ERR_RUN_NOT_TERMINAL = (
     "This mission hasn't ended yet — you can only tell the tale of a completed or abandoned run."
@@ -308,7 +313,36 @@ def _beat_option(presented: PresentedOption, viewer: ObjectDB | None = None) -> 
         check_type_name=presented.check_type.name if presented.check_type else None,
         base_risk=presented.base_risk,
         reasons=presented.reasons if own else (),
+        rolls_check=option_rolls_check(presented),
     )
+
+
+def _invocation_request(
+    character: ObjectDB,
+    presented: PresentedOption,
+    choice: InvocationChoice | None,
+) -> InvocationRequest | None:
+    """Validate a Call on favor choice for ``presented`` (#4333); None when absent.
+
+    Refused (``BeatActionError``) when the option rolls no check, the being does
+    not exist, or the character cannot invoke it now (no favor above zero, the
+    week's invocations used, nothing configured).
+    """
+    if choice is None:
+        return None
+    from world.worship.invocation_services import invocation_refusal  # noqa: PLC0415
+    from world.worship.models import WorshippedBeing  # noqa: PLC0415
+
+    if not option_rolls_check(presented):
+        raise BeatActionError(_ERR_NO_ROLL_TO_INVOKE)
+    being = WorshippedBeing.objects.filter(pk=choice.being_id).first()
+    sheet = character.character_sheet
+    if being is None or sheet is None:
+        raise BeatActionError(_ERR_NO_SUCH_BEING)
+    refusal = invocation_refusal(sheet, being)
+    if refusal:
+        raise BeatActionError(refusal)
+    return InvocationRequest(being=being, player_line=choice.player_line.strip())
 
 
 def resolve_beat_option(
@@ -317,8 +351,13 @@ def resolve_beat_option(
     *,
     option_id: int,
     approach_id: int | None = None,
+    invoke: InvocationChoice | None = None,
 ) -> ResolvedBeat:
     """Resolve the chosen option for ``character``; deliver both narratives.
+
+    ``invoke`` (#4333): call on that being's favor before the option's check.
+    The invocation rolls first; its bonus is added to the option's roll and
+    shown in the result's breakdown.
 
     Re-verifies liveness (the option must be in the CURRENT live set for
     this character, matching ``approach_id`` for CHALLENGE fan-outs), then
@@ -349,13 +388,17 @@ def resolve_beat_option(
     )
     if presented is None:
         raise BeatActionError(_ERR_OPTION_NOT_LIVE)
+    invocation = _invocation_request(character, presented, invoke)
 
+    report = OptionRollReport()
     deed = resolve_option(
         instance,
         node,
         presented.option,
         participant,
         chosen_approach=presented.approach,
+        invocation=invocation,
+        roll_report=report,
     )
 
     # #2048: engagement-armed stakes — arm on the first player action, not
@@ -391,6 +434,11 @@ def resolve_beat_option(
         is_terminal=is_terminal,
         next_beat=None if is_terminal else beat_for(instance, character),
         epilogue=instance.template.epilogue if is_terminal else "",
+        invocation=(
+            beat_invocation(report.invocation, report.check_result)
+            if report.invocation is not None and report.check_result is not None
+            else None
+        ),
     )
 
 
@@ -676,8 +724,14 @@ def submit_group_pick(
     *,
     option_id: int,
     approach_id: int | None = None,
+    invoke: InvocationChoice | None = None,
 ) -> GroupBeatResult:
-    """Record ``character``'s stage-1 pick (must be one of their own live options)."""
+    """Record ``character``'s stage-1 pick (must be one of their own live options).
+
+    ``invoke`` (#4333) is checked now and stored on the ballot; the invocation
+    rolls when the node resolves, and only if this participant's attempt rolls
+    (their pick wins, or the node is JOINT).
+    """
     participant = participant_for(instance, character)
     node = _group_node(instance)
     if _resolve_if_expired(instance, node) is not None:
@@ -695,6 +749,7 @@ def submit_group_pick(
     )
     if entry is None:
         raise BeatActionError(_ERR_OPTION_NOT_LIVE)
+    invocation = _invocation_request(character, entry, invoke)
     MissionGroupBallot.objects.update_or_create(
         instance=instance,
         node=node,
@@ -703,6 +758,8 @@ def submit_group_pick(
             "picked_option": entry.option,
             "picked_approach": entry.approach,
             "voted_option": None,
+            "invoke_being": invocation.being if invocation is not None else None,
+            "invoke_line": invocation.player_line if invocation is not None else "",
         },
     )
     # JOINT has no vote stage — the last pick resolves it (GROUP_VOTE returns

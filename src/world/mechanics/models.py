@@ -200,6 +200,18 @@ class ModifierTarget(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
         related_name="modifier_target",
         help_text="The damage type this target represents (resistance category only).",
     )
+    target_being = models.ForeignKey(
+        "arxii.WorshippedBeing",
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="modifier_targets",
+        help_text=(
+            "The being this favor target belongs to (favor_invocation and favor_earning "
+            "categories only, #4333). Null in those categories means any being. A plain "
+            "FK, not one-to-one: a being has one target in each favor category."
+        ),
+    )
     # Future target FKs — added when their systems are built:
     # target_condition: FK to conditions.ConditionTemplate — condition modifier system
     # See TECH_DEBT.md §"Future Target FKs" for full tracking list.
@@ -218,6 +230,17 @@ class ModifierTarget(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
     class Meta:
         unique_together = ["category", "name"]
         ordering = ["category__display_order", "display_order", "name"]
+        constraints = [
+            # One target per (favor category, being) (#4333). The single "any being"
+            # target per favor category is held unique by (category, name) above:
+            # a partial index on a null target_being cannot be scoped to the two
+            # favor categories, and every other category's targets are null here.
+            models.UniqueConstraint(
+                fields=["category", "target_being"],
+                condition=models.Q(target_being__isnull=False),
+                name="unique_modifier_target_category_being",
+            ),
+        ]
 
     class NaturalKeyConfig:
         fields = ["category", "name"]

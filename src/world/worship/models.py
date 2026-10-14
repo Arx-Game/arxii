@@ -17,11 +17,14 @@ from world.magic.models.techniques import (
     AbstractAppliedCondition,
     AbstractDamageProfile,
 )
+from world.scenes.action_constants import DifficultyChoice
 from world.worship.constants import (
+    FAVOR_INVOCATION_LINE_MAX_LENGTH,
     BeingRelationshipValence,
     BeingResonanceTier,
     ConsecrationScope,
     DireStraitsKind,
+    FavorAwardKind,
     MiracleTrigger,
     RiteTier,
 )
@@ -140,6 +143,17 @@ class WorshippedBeing(SharedMemoryModel):
         help_text=(
             "#4098: ultimates this being makes available to its Chosen (an active "
             "patronage) at Audere. The being makes them available; the Chosen pays."
+        ),
+    )
+    invocation_check_type = models.ForeignKey(
+        "arxii.CheckType",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="invocation_for_beings",
+        help_text=(
+            "Optional override of Devotion config's default invocation check type for "
+            "this being (#4333). Blank uses the default."
         ),
     )
 
@@ -677,6 +691,20 @@ class ChosenFavorConfig(SharedMemoryModel):
         default=1,
         help_text="DEFERRED — bonus weight added to the Devotion aspect. Inert until wired.",
     )
+    earn_bonus_percent = models.PositiveIntegerField(
+        default=100,
+        help_text=(
+            "Added to the 100% base earning rate for a character whose active patronage "
+            "is this being (#4333). Adds with favor earning modifiers."
+        ),
+    )
+    invocation_ease_points = models.PositiveIntegerField(
+        default=30,
+        help_text=(
+            "Difficulty points eased when a character invokes their own patron (#4333); "
+            "15 points is one band. Adds with favor eases and favor invocation modifiers."
+        ),
+    )
 
     class Meta:
         verbose_name = CHOSEN_FAVOR_CONFIG_VERBOSE
@@ -684,6 +712,169 @@ class ChosenFavorConfig(SharedMemoryModel):
 
     def __str__(self) -> str:
         return CHOSEN_FAVOR_CONFIG_VERBOSE
+
+
+class DevotionConfig(SharedMemoryModel):
+    """Singleton of the favor terms that apply to every character (#4333).
+
+    Lazy-created via ``get_devotion_config()``. Slice 1 holds the invocation
+    check terms; the Chosen terms stay on ``ChosenFavorConfig``. Every number
+    is example tuning.
+    """
+
+    objects = ArxSharedMemoryManager()
+
+    invocation_check_type = models.ForeignKey(
+        "arxii.CheckType",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="+",
+        help_text=(
+            "Used when a being has no override of its own. Rolled with the being's "
+            "tradition specialization, as worship rites are. Invoking is refused until "
+            "this is set."
+        ),
+    )
+    base_difficulty = models.CharField(
+        max_length=20,
+        choices=DifficultyChoice.choices,
+        default=DifficultyChoice.DAUNTING,
+        help_text="The invocation check's difficulty before any ease.",
+    )
+    favor_ease_low_threshold = models.PositiveIntegerField(
+        default=30, help_text="Favor at which the first favor ease applies."
+    )
+    favor_ease_low_points = models.PositiveIntegerField(
+        default=15, help_text="Points eased at the first favor threshold (15 is one band)."
+    )
+    favor_ease_high_threshold = models.PositiveIntegerField(
+        default=60, help_text="Favor at which the second favor ease applies instead."
+    )
+    favor_ease_high_points = models.PositiveIntegerField(
+        default=30, help_text="Points eased at the second favor threshold."
+    )
+    invocations_per_week = models.PositiveIntegerField(
+        default=3,
+        help_text=(
+            "Per being, per character, per game week. A failed invocation counts. "
+            "Favor is not spent."
+        ),
+    )
+
+    class Meta:
+        verbose_name = "Devotion config"
+        verbose_name_plural = "Devotion config"
+
+    def __str__(self) -> str:
+        return "Devotion config"
+
+    def clean(self) -> None:
+        super().clean()
+        if self.favor_ease_high_threshold <= self.favor_ease_low_threshold:
+            msg = "The second favor threshold must be above the first."
+            raise ValidationError({"favor_ease_high_threshold": msg})
+
+
+class FavorOutcomeAward(SharedMemoryModel):
+    """One scalar per (kind, outcome tier) of favor terms (#4333).
+
+    Not a subclass of ``checks.OutcomeTierAward``: that base's one-to-one on the
+    outcome allows one row per outcome, and this table holds two kinds per
+    outcome. A missing INVOCATION row reads as no bonus.
+    """
+
+    config = models.ForeignKey(
+        DevotionConfig, on_delete=models.CASCADE, related_name="outcome_awards"
+    )
+    kind = models.CharField(max_length=20, choices=FavorAwardKind.choices)
+    outcome_tier = models.ForeignKey(
+        "arxii.CheckOutcome", on_delete=models.PROTECT, related_name="favor_outcome_awards"
+    )
+    amount = models.PositiveIntegerField(
+        help_text=(
+            "Invocation: check points added to the check the invocation was declared on. "
+            "Closing: base favor paid when a closing rite resolves a pledge."
+        )
+    )
+
+    class Meta:
+        ordering = ["kind", "-outcome_tier__success_level"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["config", "kind", "outcome_tier"], name="unique_favor_outcome_award"
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.get_kind_display()} / {self.outcome_tier}: {self.amount}"
+
+
+class FavorInvocation(SharedMemoryModel):
+    """One invocation of a being's favor before a check (#4333): the weekly
+    counter and the log.
+
+    Written when the invocation check rolls. Favor is never spent; the row's
+    existence is what uses one of the week's invocations, whatever the outcome.
+    ``player_line`` is the one line of player text an invocation stores.
+    """
+
+    character_sheet = models.ForeignKey(
+        CHARACTER_SHEET_MODEL, on_delete=models.CASCADE, related_name="favor_invocations"
+    )
+    being = models.ForeignKey(
+        WorshippedBeing, on_delete=models.CASCADE, related_name="favor_invocations"
+    )
+    game_week = models.ForeignKey(
+        "arxii.GameWeek", on_delete=models.PROTECT, related_name="favor_invocations"
+    )
+    outcome_tier = models.ForeignKey(
+        "arxii.CheckOutcome", on_delete=models.PROTECT, related_name="favor_invocations"
+    )
+    bonus = models.PositiveIntegerField(
+        default=0, help_text="Check points added to the check the invocation was declared on."
+    )
+    player_line = models.CharField(
+        max_length=FAVOR_INVOCATION_LINE_MAX_LENGTH,
+        blank=True,
+        default="",
+        help_text="The player's optional one-line description of how it shows.",
+    )
+    scene = models.ForeignKey(
+        "arxii.Scene",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="favor_invocations",
+    )
+    mission_instance = models.ForeignKey(
+        "arxii.MissionInstance",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="favor_invocations",
+    )
+    scene_action_request = models.OneToOneField(
+        "arxii.SceneActionRequest",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="favor_invocation",
+        help_text="The scene action whose check this invocation was declared on.",
+    )
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        indexes = [
+            models.Index(
+                fields=["character_sheet", "being", "game_week"],
+                name="favor_invocation_sheet_week",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.character_sheet} invoked {self.being} ({self.outcome_tier})"
 
 
 class RiteKind(SharedMemoryModel):

@@ -20,11 +20,13 @@ if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
 
     from world.checks.models import CheckType
+    from world.checks.types import CheckResult
     from world.mechanics.models import ChallengeApproach
     from world.missions.models import (
         MissionOption,
         MissionRewardQueue,
     )
+    from world.worship.types import InvocationOutcome
 
 
 @dataclass(frozen=True)
@@ -196,6 +198,9 @@ class BeatOption:
     check_type_name: str | None
     base_risk: int
     reasons: tuple[str, ...] = ()  # why this character qualifies; viewer-owned options only
+    # #4333: the option rolls a check, so a being's favor may be invoked on it
+    # (False for branches, encounters, external acts and auto-succeeding approaches).
+    rolls_check: bool = False
 
 
 @dataclass(frozen=True)
@@ -220,6 +225,41 @@ class BeatView:
 
 
 @dataclass(frozen=True)
+class BeatInvocation:
+    """An invocation of favor made on a resolved option's check (#4333), as the
+    acting player sees it: the mission log lines and the check's breakdown.
+
+    ``call_line`` is the player's own version (with their line even for a secret
+    faith). ``points_before_bonus``/``total_points`` and the ranks show whether
+    the bonus moved the total across a rank threshold. Never the d100 roll.
+    """
+
+    call_line: str
+    outcome_line: str
+    bonus: int
+    bonus_label: str
+    check_type_name: str
+    points_before_bonus: int
+    total_points: int
+    roller_rank: str | None
+    target_rank: str | None
+    rank_difference: int
+
+
+@dataclass
+class OptionRollReport:
+    """What ``resolve_option`` rolled, filled in for a caller that asks (#4333).
+
+    Mutable on purpose: ``resolve_option`` returns the deed, and a caller that
+    shows the roll (the solo result view) passes one of these to read the
+    invocation and the check result back.
+    """
+
+    invocation: InvocationOutcome | None = None
+    check_result: CheckResult | None = None
+
+
+@dataclass(frozen=True)
 class ResolvedBeat:
     """Typed result of resolving one beat option (#885).
 
@@ -234,6 +274,7 @@ class ResolvedBeat:
     is_terminal: bool
     next_beat: BeatView | None
     epilogue: str
+    invocation: BeatInvocation | None = None
 
 
 @dataclass(frozen=True)
