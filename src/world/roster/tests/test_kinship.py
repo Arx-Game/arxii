@@ -9,6 +9,7 @@ from world.character_sheets.factories import CharacterSheetFactory
 from world.roster.constants import (
     NOBLE_KIND_NAME,
     DefinitionTier,
+    MaritalStatus,
     MembershipBasis,
     ParentageKind,
     RelationshipType,
@@ -455,3 +456,174 @@ class KinspersonLifeFieldsTests(TestCase):
         node.refresh_from_db()
         self.assertFalse(node.is_missing)
         self.assertEqual(node.obituary, "")
+
+
+class MaritalStatusTests(TestCase):
+    """Marital status is derived from the unions a viewer can see (#4232)."""
+
+    def setUp(self) -> None:
+        self.marriage = UnionKindFactory(name="Marriage")
+        self.person, self.entry, self.sheet = _pc_with_entry("Wedded")
+
+    def test_no_node_and_no_union_read_single(self) -> None:
+        assert kinship.marital_status_of(None, OMNISCIENT) == MaritalStatus.SINGLE
+        assert kinship.marital_status_of(self.person, OMNISCIENT) == MaritalStatus.SINGLE
+
+    def test_an_open_union_with_a_living_partner_reads_married(self) -> None:
+        kinship.record_union(kind=self.marriage, members=[self.person, _person("Spouse")])
+        assert kinship.marital_status_of(self.person, self.entry) == MaritalStatus.MARRIED
+
+    def test_an_ended_union_reads_divorced(self) -> None:
+        union = kinship.record_union(kind=self.marriage, members=[self.person, _person("Ex")])
+        kinship.end_union(union)
+        assert kinship.marital_status_of(self.person, self.entry) == MaritalStatus.DIVORCED
+
+    def test_an_open_union_whose_partner_is_dead_reads_widowed(self) -> None:
+        kinship.record_union(
+            kind=self.marriage, members=[self.person, _person("Late", is_deceased=True)]
+        )
+        assert kinship.marital_status_of(self.person, self.entry) == MaritalStatus.WIDOWED
+
+    def test_married_beats_widowed_beats_divorced(self) -> None:
+        ended = kinship.record_union(kind=self.marriage, members=[self.person, _person("Ex")])
+        kinship.end_union(ended)
+        assert kinship.marital_status_of(self.person, self.entry) == MaritalStatus.DIVORCED
+        kinship.record_union(
+            kind=self.marriage, members=[self.person, _person("Late", is_deceased=True)]
+        )
+        assert kinship.marital_status_of(self.person, self.entry) == MaritalStatus.WIDOWED
+        kinship.record_union(kind=self.marriage, members=[self.person, _person("Second")])
+        assert kinship.marital_status_of(self.person, self.entry) == MaritalStatus.MARRIED
+
+    def test_a_union_that_confers_no_wedlock_is_not_a_marriage(self) -> None:
+        paramour = UnionKindFactory(name="Paramour", confers_wedlock=False)
+        kinship.record_union(kind=paramour, members=[self.person, _person("Lover")])
+        assert kinship.marital_status_of(self.person, self.entry) == MaritalStatus.SINGLE
+
+    def test_a_secret_union_reads_single_to_a_stranger_and_married_to_a_knower(self) -> None:
+        from world.secrets.factories import SecretFactory
+        from world.secrets.services import grant_secret_knowledge
+
+        secret = SecretFactory(subject_sheet=self.sheet)
+        kinship.record_union(
+            kind=self.marriage,
+            members=[self.person, _person("Hidden Spouse")],
+            is_public_record=False,
+            secret=secret,
+        )
+        _node, stranger, _sheet = _pc_with_entry("Stranger")
+        assert kinship.marital_status_of(self.person, stranger) == MaritalStatus.SINGLE
+        assert kinship.marital_status_of(self.person, None) == MaritalStatus.SINGLE
+        grant_secret_knowledge(roster_entry=stranger, secret=secret)
+        assert kinship.marital_status_of(self.person, stranger) == MaritalStatus.MARRIED
+        assert kinship.marital_status_of(self.person, OMNISCIENT) == MaritalStatus.MARRIED
+
+    def test_a_believed_death_widows_the_viewer_but_not_staff(self) -> None:
+        spouse = _person("Reported Dead")
+        spouse.believed_deceased = True
+        spouse.save(update_fields=["believed_deceased"])
+        kinship.record_union(kind=self.marriage, members=[self.person, spouse])
+        assert kinship.marital_status_of(self.person, self.entry) == MaritalStatus.WIDOWED
+        assert kinship.marital_status_of(self.person, OMNISCIENT) == MaritalStatus.MARRIED
+
+
+class RecordMarriageTests(TestCase):
+    """``record_marriage`` is what a wedding without a betrothal writes (#4232)."""
+
+    def test_marries_under_the_universal_wedlock_kind_first(self) -> None:
+        from world.character_creation.factories import RealmFactory
+
+        realm_kind = UnionKindFactory(name="Handfasting", realm=RealmFactory())
+        universal = UnionKindFactory(name="Marriage")
+        a, b = _person("A"), _person("B")
+        union = kinship.record_marriage([a, b])
+        assert union.kind == universal
+        assert union.kind != realm_kind
+        assert set(union.members.all()) == {a, b}
+
+    def test_an_existing_open_marriage_is_returned_not_duplicated(self) -> None:
+        UnionKindFactory(name="Marriage")
+        a, b = _person("A"), _person("B")
+        first = kinship.record_marriage([a, b])
+        assert kinship.record_marriage([b, a]) == first
+        assert a.unions.count() == 1
+
+    def test_an_ended_marriage_does_not_count(self) -> None:
+        UnionKindFactory(name="Marriage")
+        a, b = _person("A"), _person("B")
+        first = kinship.record_marriage([a, b])
+        kinship.end_union(first)
+        assert kinship.record_marriage([a, b]) != first
+
+    def test_no_wedlock_kind_refuses(self) -> None:
+        UnionKindFactory(name="Paramour", confers_wedlock=False)
+        with self.assertRaises(kinship.KinshipServiceError) as caught:
+            kinship.wedlock_union_kind()
+        assert caught.exception.user_message == "No law of marriage exists to wed under."
+
+
+class MarriageBindsTests(TestCase):
+    """A marriage must end, by death or dissolution, before either party marries again
+    (ruling on #4232); ended marriages stay on the record."""
+
+    def setUp(self) -> None:
+        UnionKindFactory(name="Marriage")
+        self.a, self.b, self.c = _person("A"), _person("B"), _person("C")
+
+    def test_a_person_a_marriage_still_binds_is_refused(self) -> None:
+        first = kinship.record_marriage([self.a, self.b])
+        with self.assertRaises(kinship.KinshipServiceError) as caught:
+            kinship.record_marriage([self.a, self.c])
+        expected = "A is already married; that marriage must end first."
+        assert caught.exception.user_message == expected
+        with self.assertRaises(kinship.KinshipServiceError):
+            kinship.record_marriage([self.c, self.b])
+        assert kinship.binding_marriage_of(self.a) == first
+        assert self.a.unions.count() == 1
+
+    def test_a_dissolved_marriage_frees_both_and_stays_on_the_record(self) -> None:
+        first = kinship.record_marriage([self.a, self.b])
+        kinship.end_union(first)
+        second = kinship.record_marriage([self.a, self.c])
+        assert second != first
+        assert kinship.binding_marriage_of(self.a) == second
+        assert set(self.a.unions.all()) == {first, second}
+
+    def test_a_dead_spouse_frees_the_survivor_without_ending_the_union(self) -> None:
+        first = kinship.record_marriage([self.a, self.b])
+        self.b.is_deceased = True
+        self.b.save(update_fields=["is_deceased"])
+        assert kinship.binding_marriage_of(self.a) is None
+        kinship.record_marriage([self.a, self.c])
+        first.refresh_from_db()
+        assert first.ended_at is None
+
+    def test_a_spouse_the_world_believes_dead_still_binds_while_alive(self) -> None:
+        """Death is the truth, not the belief: a plot that wants the widow free has
+        staff end the marriage on the record."""
+        first = kinship.record_marriage([self.a, self.b])
+        self.b.believed_deceased = True
+        self.b.save(update_fields=["believed_deceased"])
+        assert kinship.binding_marriage_of(self.a) == first
+        with self.assertRaises(kinship.KinshipServiceError):
+            kinship.record_marriage([self.a, self.c])
+        kinship.end_union(first)
+        kinship.record_marriage([self.a, self.c])
+
+    def test_a_marriage_is_between_exactly_two_people(self) -> None:
+        with self.assertRaises(kinship.KinshipServiceError) as caught:
+            kinship.record_marriage([self.a, self.b, self.c])
+        assert caught.exception.user_message == "A marriage is between two people."
+        marriage = kinship.wedlock_union_kind()
+        with self.assertRaises(kinship.KinshipServiceError):
+            kinship.record_union(kind=marriage, members=[self.a, self.b, self.c])
+        # A non-wedlock union may still hold a polycule.
+        bond = UnionKindFactory(name="Bond", confers_wedlock=False)
+        union = kinship.record_union(kind=bond, members=[self.a, self.b, self.c])
+        assert union.members.count() == len([self.a, self.b, self.c])
+
+    def test_a_consort_kind_does_not_bind(self) -> None:
+        consort = UnionKindFactory(name="Consort", confers_wedlock=False)
+        kinship.record_union(kind=consort, members=[self.a, self.b])
+        assert kinship.binding_marriage_of(self.a) is None
+        kinship.record_marriage([self.a, self.c])

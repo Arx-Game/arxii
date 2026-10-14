@@ -234,7 +234,9 @@ glance's identity choices (Kind, From, House, Tarot, Gender) and the description
 background into in-place fields (`StaffEditable`), and adds a **Staff edit** band for the
 fields the sheet never draws or draws only when filled (real concept, the Actor's Sheet
 answers, obituary, heritage, build, pronouns, tarot reversed, birth year, exact height and
-weight, marital status, vocation, social rank). An empty field keeps a slot. A save calls
+weight, vocation, social rank). Marital status is not here: it is derived from the kinship
+graph's unions (#4232), and staff record a marriage on the Kinsperson admin page's Spouses
+section. An empty field keeps a slot. A save calls
 `PATCH /api/character-sheets/{id}/staff-edit/` and the answer replaces the sheet cache.
 
 - **Every prose field is versioned.** `ProfileTextField` covers background, the three
@@ -410,8 +412,8 @@ flirty, PLACEHOLDER-extendable) arrive via the lore repo's content round trip.
 ## Enums (types.py)
 
 ```python
-from world.character_sheets.types import MaritalStatus
-# Values: SINGLE, MARRIED, WIDOWED, DIVORCED
+# Marital status is no longer a sheet enum (#4232): ``world.roster.constants.MaritalStatus``
+# is derived by ``world.roster.services.kinship.marital_status_of`` from the unions.
 
 from world.character_sheets.types import Gender as GenderChoices
 # Values: MALE, FEMALE, NON_BINARY, OTHER
@@ -439,7 +441,7 @@ Appearance traits are NOT here: the legacy `Characteristic`/`CharacteristicValue
 
 | Model | Purpose | Key Fields |
 |-------|---------|------------|
-| `CharacterSheet` | Primary character demographics, identity, and source-of-truth anchor | `character` (OneToOne to ObjectDB, primary_key), **age axes (#2756, ADR-0172)**: `matured_years` (the maturation meter), `withered_years` (curse overlay), `aging_paused`, `ic_birth_year` (nullable; chronological derives vs `get_ic_now()`), `birthday_month`/`birthday_day` (celebrated date; Sleeper waking day) + derived `biological_age`/`apparent_age`/`chronological_age` properties (the old `age`/`real_age`/`birthday` columns are retired), `gender`, `pronouns`, pronoun fields, `species`, `social_rank`, `marital_status`, `additional_desc`, `true_profile` (OneToOne → Profile). Narrative bio (`concept`/`quote`/`background`/…) **and lineage** (`family`/`heritage`/`tarot_card`/`tarot_reversed`/`origin_realm`) are read/written through forwarding properties → `true_profile` (#1270). |
+| `CharacterSheet` | Primary character demographics, identity, and source-of-truth anchor | `character` (OneToOne to ObjectDB, primary_key), **age axes (#2756, ADR-0172)**: `matured_years` (the maturation meter), `withered_years` (curse overlay), `aging_paused`, `ic_birth_year` (nullable; chronological derives vs `get_ic_now()`), `birthday_month`/`birthday_day` (celebrated date; Sleeper waking day) + derived `biological_age`/`apparent_age`/`chronological_age` properties (the old `age`/`real_age`/`birthday` columns are retired), `gender`, `pronouns`, pronoun fields, `species`, `social_rank`, `additional_desc`, `true_profile` (OneToOne → Profile). (`marital_status` was dropped in #4232; the status derives from the kinship graph's unions.) Narrative bio (`concept`/`quote`/`background`/…) **and lineage** (`family`/`heritage`/`tarot_card`/`tarot_reversed`/`origin_realm`) are read/written through forwarding properties → `true_profile` (#1270). |
 | `Profile` | The narrative bio + lineage a persona presents (#1270) | `concept`, `real_concept`, `quote`, `never_do`, `protect`, `fear` (the Actor's Sheet, #3621), `background`, `obituary`, `family` (FK roster.Family), `heritage` (FK), `tarot_card` (FK), `tarot_reversed`, `origin_realm` (FK realms.Realm), `beginnings` (M2M to `character_creation.Beginnings` through `ProfileBeginnings`, #3775). Referenced by `CharacterSheet.true_profile` and `Persona.profile`. `owning_sheet_or_none` is the reverse of `CharacterSheet.true_profile`, None for a cover profile no sheet owns as its real bio. |
 | `ProfileBeginnings` | One origin a Profile holds, and why (#3775, ADR-0303) | `profile` (FK), `beginnings` (FK `character_creation.Beginnings`), `source` (`ProfileBeginningsSource`: `character_creation` / `recovered_memory` / `past_life`), `note`, `gained_at` (auto). Unique per `(profile, beginnings)`; a partial unique constraint allows only one `character_creation` row per profile. The set only grows - deleting a row revokes nothing. |
 

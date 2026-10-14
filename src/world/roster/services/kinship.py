@@ -24,6 +24,7 @@ from django.utils import timezone
 
 from world.roster.constants import (
     DefinitionTier,
+    MaritalStatus,
     MembershipBasis,
     MembershipEndReason,
     ParentageKind,
@@ -222,11 +223,19 @@ def record_union(  # noqa: PLR0913 — keyword-only
     is_true: bool = True,
     secret: Secret | None = None,
 ) -> Union:
-    """Record a union between two or more people."""
+    """Record a union between two or more people; a marriage between exactly two.
+
+    Marriages are one to one (ApostateCD, 2026-10-14): polycules exist in play
+    as relationships and as non-wedlock unions, but a wedlock-conferring union
+    never holds a third member. ``MARRIAGE_MEMBERS`` is the whole of that rule.
+    """
     min_members = 2
     if len(members) < min_members:
         msg = f"a union needs at least {min_members} members, got {len(members)}"
         raise KinshipServiceError(msg, user_message="A union needs at least two members.")
+    if kind.confers_wedlock and len(members) != MARRIAGE_MEMBERS:
+        msg = f"a marriage is between two people, got {len(members)}"
+        raise KinshipServiceError(msg, user_message=MARRIAGE_IS_TWO_MESSAGE)
     union = Union.objects.create(
         kind=kind,
         started_at=started_at,
@@ -250,6 +259,87 @@ def end_union(union: Union, *, ended_at: object | None = None) -> Union:
     union.ended_at = ended_at or timezone.now()
     union.save(update_fields=["ended_at"])
     return union
+
+
+def wedlock_union_kind() -> UnionKind:
+    """The ``UnionKind`` a wedding marries under: the universal wedlock kind, else any.
+
+    One lookup for every marriage writer (#4232): the wedding rite with and
+    without a betrothal, and the admin Spouses section's default. Refuses when
+    no kind confers wedlock, with the message the wedding has always given.
+    """
+    kind = (
+        UnionKind.objects.filter(confers_wedlock=True, realm__isnull=True).first()
+        or UnionKind.objects.filter(confers_wedlock=True).first()
+    )
+    if kind is None:
+        msg = "no wedlock-conferring UnionKind exists"
+        raise KinshipServiceError(msg, user_message="No law of marriage exists to wed under.")
+    return kind
+
+
+def open_wedlock_union_among(members: list[Kinsperson]) -> Union | None:
+    """The open wedlock union every one of ``members`` belongs to, if there is one."""
+    unions = Union.objects.filter(ended_at__isnull=True, kind__confers_wedlock=True)
+    for member in members:
+        unions = unions.filter(members=member)
+    return unions.first()
+
+
+def binding_marriage_of(person: Kinsperson) -> Union | None:
+    """The open marriage that still binds ``person``, if any (#4232 ruling).
+
+    Marriages are one to one. A marriage ends by death or by dissolution, and
+    only then may either party marry again; the ended union stays on the
+    record. Death is the truth, not the belief: a spouse the world believes
+    dead still binds while they live, so a plot that wants the widow free to
+    remarry has staff end the marriage on the record (the admin's end date).
+    A real death needs no writer to end the union: the record keeps it, and
+    the status reads Widowed off it.
+    """
+    unions = (
+        person.unions.filter(ended_at__isnull=True, kind__confers_wedlock=True)
+        .select_related("kind")
+        .prefetch_related("members")  # noqa: PREFETCH_STRING — no to_attr on SharedMemoryModel (leak)
+    )
+    for union in unions:
+        if any(not m.is_deceased for m in union.members.all() if m.pk != person.pk):
+            return union
+    return None
+
+
+#: Marriages are one to one (ApostateCD, 2026-10-14): a wedlock union holds exactly two.
+MARRIAGE_MEMBERS = 2
+MARRIAGE_IS_TWO_MESSAGE = "A marriage is between two people."
+
+
+def already_married_message(person: Kinsperson) -> str:
+    """The refusal a wedding or the admin gives for a person a marriage still binds."""
+    return f"{person.display_name} is already married; that marriage must end first."
+
+
+@transaction.atomic
+def record_marriage(members: list[Kinsperson], *, started_at: object | None = None) -> Union:
+    """Marry ``members`` under the realm's wedlock kind (#4232).
+
+    What a wedding records when no betrothal stands between the honorees: the
+    union and nothing else. No pact, no prestige, no change of family or name.
+    A pair who already share an open wedlock union get that union back, so a
+    second wedding between the same people records nothing new; a member whom
+    another marriage still binds (``binding_marriage_of``) is refused, since a
+    marriage must end before either party marries again (ruling on #4232).
+    """
+    if len(members) != MARRIAGE_MEMBERS:
+        msg = f"a marriage is between two people, got {len(members)}"
+        raise KinshipServiceError(msg, user_message=MARRIAGE_IS_TWO_MESSAGE)
+    existing = open_wedlock_union_among(members)
+    if existing is not None:
+        return existing
+    for member in members:
+        if binding_marriage_of(member) is not None:
+            msg = already_married_message(member)
+            raise KinshipServiceError(msg, user_message=msg)
+    return record_union(kind=wedlock_union_kind(), members=members, started_at=started_at)
 
 
 @transaction.atomic
@@ -504,6 +594,19 @@ def children_of(
     return edges
 
 
+def viewer_sees_deceased(person: Kinsperson, viewer: object) -> bool:
+    """Whether ``viewer`` is entitled to see ``person`` as dead (#3983).
+
+    The one dead fold the tree and the marital status share: the truth for
+    ``OMNISCIENT`` (staff), and otherwise the truth or the public belief, since
+    a house can put it about that someone died and until the viewer knows
+    better the world reads that way.
+    """
+    if viewer is OMNISCIENT:
+        return person.is_deceased
+    return person.is_deceased or person.believed_deceased
+
+
 def unions_of(person: Kinsperson, viewer: object) -> list[Union]:
     """Visible unions ``person`` belongs to."""
     unions = person.unions.select_related("kind", "secret").prefetch_related("members")  # noqa: PREFETCH_STRING — no to_attr on SharedMemoryModel (leak)
@@ -517,6 +620,41 @@ def spouses_of(person: Kinsperson, viewer: object) -> list[Kinsperson]:
         if union.ended_at is None:
             partners.extend(m for m in union.members.all() if m.pk != person.pk)
     return partners
+
+
+def marital_status_of(person: Kinsperson | None, viewer: object) -> MaritalStatus:
+    """What ``person``'s marriages add up to, as ``viewer`` may see them (#4232).
+
+    Only a union whose kind ``confers_wedlock`` is a marriage; a paramour or a
+    consort kind is a union and not one. Precedence when the unions disagree:
+    Married (an open union with a partner the viewer sees alive) over Widowed
+    (an open union whose every partner the viewer sees dead) over Divorced (an
+    ended union) over Single. A person with no node has no marriages.
+    """
+    if person is None:
+        return MaritalStatus.SINGLE
+    status = MaritalStatus.SINGLE
+    for union in unions_of(person, viewer):
+        if not union.kind.confers_wedlock:
+            continue
+        if union.ended_at is not None:
+            status = max(status, MaritalStatus.DIVORCED, key=_MARITAL_PRECEDENCE.index)
+            continue
+        partners = [m for m in union.members.all() if m.pk != person.pk]
+        if partners and all(viewer_sees_deceased(p, viewer) for p in partners):
+            status = max(status, MaritalStatus.WIDOWED, key=_MARITAL_PRECEDENCE.index)
+        else:
+            return MaritalStatus.MARRIED
+    return status
+
+
+#: Lowest to highest: the status a person reads is the highest any union earns.
+_MARITAL_PRECEDENCE: tuple[MaritalStatus, ...] = (
+    MaritalStatus.SINGLE,
+    MaritalStatus.DIVORCED,
+    MaritalStatus.WIDOWED,
+    MaritalStatus.MARRIED,
+)
 
 
 def siblings_of(person: Kinsperson, viewer: object) -> dict[int, str]:
@@ -841,9 +979,7 @@ def _node_dict(
         "name": person.display_name,
         "tier": person.definition_tier,
         "family_id": person.family_id,
-        "is_deceased": (
-            person.is_deceased if omniscient else (person.is_deceased or person.believed_deceased)
-        ),
+        "is_deceased": viewer_sees_deceased(person, viewer),
         # The record's own facts (#4239): a missing person is missing to
         # everyone, and the obituary is what the record says by definition.
         "is_missing": person.is_missing,

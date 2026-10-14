@@ -486,7 +486,13 @@ their authored share alongside marriage pacts). `Betrothal` + `BetrothalTerm`
 `break_betrothal` costs standing) and `solemnize_wedding` — the WEDDING
 `CeremonyTypeKey` resolves the honorees' active betrothal at
 `finish_ceremony` and lands union + marriage pact + tier prestige in one
-rite (first in-play caller of `record_union`). **Consent lives at the
+rite (first in-play caller of `record_union`). **A betrothal is optional
+(#4232, ADR-4232):** a consented wedding with no betrothal between the
+honorees records the marriage alone through
+`world.roster.services.kinship.record_marriage` (no pact, no prestige, no
+change of family or name); the betrothal adds exactly what it negotiated.
+`solemnize_wedding` reads the wedlock kind through the shared
+`wedlock_union_kind()`. **Consent lives at the
 ceremony, not the proposal** (#2358 ratified 2026-08-15): the officiant's
 `open_ceremony` call mints a `WeddingConsentOffer` per spouse honoree at
 ceremony START; `finish_ceremony`'s WEDDING branch refuses to solemnize until

@@ -392,8 +392,11 @@ class WeddingConsentTests(TestCase):
     @classmethod
     def setUpTestData(cls) -> None:
         from evennia_extensions.factories import RoomProfileFactory
+        from world.roster.factories import UnionKindFactory
 
         CeremonyTypeFactory(key=CeremonyTypeKey.WEDDING, name="Wedding")
+        # Every consented wedding marries now (#4232), so the world needs a law of marriage.
+        UnionKindFactory(name="Marriage")
         cls.location = RoomProfileFactory()
 
     def _sheet_with_account(self):
@@ -504,6 +507,158 @@ class WeddingConsentTests(TestCase):
         finish_ceremony(ceremony=ceremony)
 
         self.assertTrue(Union.objects.filter(members=bride).filter(members=groom).exists())
+
+
+class WeddingWithoutBetrothalTests(TestCase):
+    """A wedding needs no betrothal (#4232): any consenting pair is married at FINISH.
+
+    The seam is the one the consent tests use: an open WEDDING whose offers are
+    both accepted, then ``finish_ceremony``.
+    """
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        from evennia_extensions.factories import RoomProfileFactory
+
+        CeremonyTypeFactory(key=CeremonyTypeKey.WEDDING, name="Wedding")
+        cls.location = RoomProfileFactory()
+
+    def _sheet_with_account(self):
+        from world.roster.factories import (
+            PlayerDataFactory,
+            RosterEntryFactory,
+            RosterTenureFactory,
+        )
+
+        sheet = CharacterSheetFactory()
+        player_data = PlayerDataFactory()
+        entry = RosterEntryFactory(character_sheet=sheet)
+        RosterTenureFactory(roster_entry=entry, player_data=player_data)
+        return sheet, player_data.account
+
+    def _consented_wedding(self, sheets_and_accounts):
+        persona, officiant_sheet = _persona_with_sheet()
+        being = WorshippedBeingFactory()
+        WorshipDeclaration.objects.create(character_sheet=officiant_sheet, public_being=being)
+        ceremony = open_ceremony(
+            officiant_persona=persona,
+            type_key=CeremonyTypeKey.WEDDING,
+            honoree_sheets=[sheet for sheet, _ in sheets_and_accounts],
+            location_profile=self.location,
+        )
+        for sheet, account in sheets_and_accounts:
+            offer = ceremony.honorees.get(honoree_sheet=sheet).wedding_consent_offer
+            respond_to_wedding_consent_offer(offer, account=account, accept=True)
+        return ceremony
+
+    def test_two_commoners_with_no_betrothal_are_married_and_nothing_else(self) -> None:
+        from world.roster.factories import KinspersonFactory, UnionKindFactory
+        from world.roster.models import Union
+        from world.societies.houses.models import MarriagePact
+
+        kind = UnionKindFactory(name="Marriage")
+        sheet_a, account_a = self._sheet_with_account()
+        sheet_b, account_b = self._sheet_with_account()
+        bride = KinspersonFactory(sheet=sheet_a)
+        groom = KinspersonFactory(sheet=sheet_b)
+        ceremony = self._consented_wedding([(sheet_a, account_a), (sheet_b, account_b)])
+
+        finish_ceremony(ceremony=ceremony)
+
+        union = Union.objects.filter(members=bride).filter(members=groom).get()
+        self.assertEqual(union.kind, kind)
+        self.assertIsNotNone(union.started_at)
+        self.assertIsNone(union.ended_at)
+        self.assertTrue(union.is_public_record)
+        self.assertFalse(MarriagePact.objects.filter(union=union).exists())
+        # Families and names do not change (ruling 3).
+        bride.refresh_from_db()
+        groom.refresh_from_db()
+        self.assertIsNone(bride.family)
+        self.assertIsNone(groom.family)
+
+    def test_an_honoree_with_no_node_gets_one_at_the_altar(self) -> None:
+        from world.roster.factories import UnionKindFactory
+        from world.roster.models import Kinsperson, Union
+
+        UnionKindFactory(name="Marriage")
+        sheet_a, account_a = self._sheet_with_account()
+        sheet_b, account_b = self._sheet_with_account()
+        self.assertFalse(Kinsperson.objects.filter(sheet__in=[sheet_a, sheet_b]).exists())
+        ceremony = self._consented_wedding([(sheet_a, account_a), (sheet_b, account_b)])
+
+        finish_ceremony(ceremony=ceremony)
+
+        node_a = Kinsperson.objects.get(sheet=sheet_a)
+        node_b = Kinsperson.objects.get(sheet=sheet_b)
+        self.assertTrue(Union.objects.filter(members=node_a).filter(members=node_b).exists())
+
+    def test_a_second_wedding_between_spouses_records_no_second_union(self) -> None:
+        from world.roster.factories import KinspersonFactory, UnionKindFactory
+        from world.roster.models import Union
+
+        UnionKindFactory(name="Marriage")
+        sheet_a, account_a = self._sheet_with_account()
+        sheet_b, account_b = self._sheet_with_account()
+        bride = KinspersonFactory(sheet=sheet_a)
+        groom = KinspersonFactory(sheet=sheet_b)
+        first = self._consented_wedding([(sheet_a, account_a), (sheet_b, account_b)])
+        finish_ceremony(ceremony=first)
+        second = self._consented_wedding([(sheet_a, account_a), (sheet_b, account_b)])
+
+        finish_ceremony(ceremony=second)
+
+        self.assertEqual(Union.objects.filter(members=bride).filter(members=groom).count(), 1)
+
+    def test_an_honoree_a_marriage_still_binds_is_refused(self) -> None:
+        from world.roster.factories import KinspersonFactory, UnionKindFactory
+        from world.roster.models import Union
+        from world.roster.services.kinship import record_marriage
+
+        UnionKindFactory(name="Marriage")
+        sheet_a, account_a = self._sheet_with_account()
+        sheet_b, account_b = self._sheet_with_account()
+        bride = KinspersonFactory(sheet=sheet_a)
+        KinspersonFactory(sheet=sheet_b)
+        record_marriage([bride, KinspersonFactory(name="First Spouse")])
+        ceremony = self._consented_wedding([(sheet_a, account_a), (sheet_b, account_b)])
+
+        with self.assertRaises(CeremonyError) as caught:
+            finish_ceremony(ceremony=ceremony)
+
+        self.assertIn(
+            "is already married; that marriage must end first.", caught.exception.user_message
+        )
+        self.assertEqual(Union.objects.count(), 1)
+
+    def test_three_honorees_are_refused_a_marriage_is_two_people(self) -> None:
+        from world.roster.factories import KinspersonFactory, UnionKindFactory
+        from world.roster.models import Union
+
+        UnionKindFactory(name="Marriage")
+        trio = [self._sheet_with_account() for _ in range(3)]
+        for sheet, _ in trio:
+            KinspersonFactory(sheet=sheet)
+        ceremony = self._consented_wedding(trio)
+
+        with self.assertRaises(CeremonyError) as caught:
+            finish_ceremony(ceremony=ceremony)
+
+        self.assertEqual(caught.exception.user_message, "A marriage is between two people.")
+        self.assertFalse(Union.objects.exists())
+
+    def test_no_law_of_marriage_refuses_the_rite(self) -> None:
+        from world.roster.models import Union
+
+        sheet_a, account_a = self._sheet_with_account()
+        sheet_b, account_b = self._sheet_with_account()
+        ceremony = self._consented_wedding([(sheet_a, account_a), (sheet_b, account_b)])
+
+        with self.assertRaises(CeremonyError) as caught:
+            finish_ceremony(ceremony=ceremony)
+
+        self.assertEqual(caught.exception.user_message, "No law of marriage exists to wed under.")
+        self.assertFalse(Union.objects.exists())
 
 
 class CeremonyFlowTests(TestCase):

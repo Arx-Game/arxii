@@ -134,12 +134,6 @@ class CharacterItemDataHandler(BaseItemDataHandler):
         return sheet.real_concept or ""
 
     @property
-    def marital_status(self) -> str:
-        """Character's marital status from sheet data."""
-        sheet = self._get_sheet()
-        return sheet.marital_status or "single"
-
-    @property
     def family(self) -> str:
         """Character's family name from sheet data."""
         sheet = self._get_sheet()

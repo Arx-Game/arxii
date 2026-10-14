@@ -223,7 +223,6 @@ class CharacterSheetAdmin(admin.ModelAdmin):
     ]
     list_filter = [
         "gender",
-        "marital_status",
         "activity_state",
         "lifecycle_state",
     ]
@@ -272,7 +271,6 @@ class CharacterSheetAdmin(admin.ModelAdmin):
                     "true_profile",
                     "vocation",
                     "social_rank",
-                    "marital_status",
                 ),
                 "description": "Narrative bio (concept/quote/background/…) AND lineage "
                 "(family/heritage/tarot/origin) live on the linked Profile (#1270) — "

@@ -20,7 +20,7 @@ from world.character_sheets.models import (
     ProfileBeginnings,
     Pronouns,
 )
-from world.character_sheets.types import MaritalStatus, ProfileBeginningsSource
+from world.character_sheets.types import ProfileBeginningsSource
 
 
 class ProfileFactory(factory_django.DjangoModelFactory):
@@ -86,7 +86,6 @@ class CharacterSheetFactory(factory_django.DjangoModelFactory):
     character = factory.SubFactory(CharacterFactory)
     matured_years = factory.Faker("random_int", min=18, max=50)
     # gender and pronouns are now FKs - leave null for basic factory
-    marital_status = MaritalStatus.SINGLE
     vocation = factory.Faker("job")
     social_rank = factory.Faker("random_int", min=1, max=20)
     birthday_month = factory.Faker("random_int", min=1, max=12)

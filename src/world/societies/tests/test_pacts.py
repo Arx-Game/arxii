@@ -267,9 +267,10 @@ class WeddingCeremonyResolutionTests(TestCase):
             senior_house=senior,
             junior_house=junior,
         )
+        # The handler reads ``honoree_sheet`` the way a ``CeremonyHonoree`` row carries it.
         honorees = [
-            SimpleNamespace(honoree_sheet_id=sheet_a.pk),
-            SimpleNamespace(honoree_sheet_id=sheet_b.pk),
+            SimpleNamespace(honoree_sheet=sheet_a, honoree_sheet_id=sheet_a.pk),
+            SimpleNamespace(honoree_sheet=sheet_b, honoree_sheet_id=sheet_b.pk),
         ]
         _solemnize_wedding_honorees(honorees)
         betrothal = Betrothal.objects.get()

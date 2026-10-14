@@ -606,24 +606,33 @@ def revoke_seance_manifestations(ceremony: Ceremony) -> None:
 
 
 def _solemnize_wedding_honorees(honorees) -> None:
-    """WEDDING rite (#2999, #2358): find the honorees' active betrothal and land it.
+    """WEDDING rite: marry the honorees, with or without a betrothal (#4232).
 
-    The two honorees' kinsperson nodes must share an active Betrothal; the
-    rite then solemnizes in one stroke — union, marriage pact with the
-    negotiated commitments, and the marrying-up prestige award. Honorees
-    with no betrothal between them are honored (renown fired above) but
-    nothing legal happens: the rite needs the promise first.
+    Every consenting wedding records the marriage. An active Betrothal between
+    the honorees' kinsperson nodes lands everything it negotiated in one
+    stroke (``solemnize_wedding``: union, marriage pact, tier prestige);
+    without one the rite records the union and nothing else, so two
+    commoners, or a noble and a commoner, marry as surely as two houses. An
+    honoree with no node yet gets one first, so nobody is dropped at the
+    altar for having been made before every sheet got a node (#2062). A
+    refusal from either path (no law of marriage, a promise no longer
+    standing) reaches the officiant as a ``CeremonyError``.
     """
     from django.db.models import Q  # noqa: PLC0415
 
-    from world.roster.models import Kinsperson  # noqa: PLC0415
+    from world.roster.services.kinship import (  # noqa: PLC0415
+        KinshipServiceError,
+        ensure_node_for_sheet,
+        record_marriage,
+    )
     from world.societies.houses.models import Betrothal  # noqa: PLC0415
     from world.societies.houses.pact_services import solemnize_wedding  # noqa: PLC0415
+    from world.societies.houses.services import HousesServiceError  # noqa: PLC0415
 
-    sheet_ids = [h.honoree_sheet_id for h in honorees]
-    kin_ids = set(Kinsperson.objects.filter(sheet_id__in=sheet_ids).values_list("pk", flat=True))
-    if len(kin_ids) < 2:  # noqa: PLR2004 — a wedding takes two
+    nodes = {ensure_node_for_sheet(h.honoree_sheet) for h in honorees}
+    if len(nodes) < 2:  # noqa: PLR2004 — a wedding takes two
         return
+    kin_ids = {node.pk for node in nodes}
     betrothal = (
         Betrothal.objects.filter(
             Q(kinsperson_a__in=kin_ids) & Q(kinsperson_b__in=kin_ids),
@@ -633,9 +642,13 @@ def _solemnize_wedding_honorees(honorees) -> None:
         .order_by("created_at")
         .first()
     )
-    if betrothal is None or not betrothal.is_active:
-        return
-    solemnize_wedding(betrothal)
+    try:
+        if betrothal is not None and betrothal.is_active:
+            solemnize_wedding(betrothal)
+            return
+        record_marriage(sorted(nodes, key=lambda node: node.pk), started_at=timezone.now())
+    except (HousesServiceError, KinshipServiceError) as exc:
+        raise CeremonyError(str(exc), user_message=exc.user_message) from exc
 
 
 def _record_coronation(ceremony: Ceremony, honoree: CeremonyHonoree) -> None:

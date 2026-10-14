@@ -15,6 +15,26 @@ from commands.command import split_switches
 from commands.exceptions import CommandError
 
 
+def _marital_status_line(target: Any) -> str:
+    """The character's marital status as the character knows it (#4232).
+
+    Derived from the marriages in the kinship graph, never a stored field, and read
+    with the character's own roster entry as the viewer, the way ``sheet/family``
+    reads kin: a secret marriage the character has not learned of stays off the
+    sheet, and a spouse the world believes dead reads as a widowing.
+    """
+    from world.roster.models import Kinsperson, RosterEntry  # noqa: PLC0415
+    from world.roster.services.kinship import marital_status_of  # noqa: PLC0415
+
+    sheet = target.character_sheet
+    node = Kinsperson.objects.filter(sheet=sheet).first()
+    try:
+        viewer = sheet.roster_entry
+    except RosterEntry.DoesNotExist:
+        viewer = None
+    return marital_status_of(node, viewer).label
+
+
 class CmdSheet(Command):  # ty: ignore[invalid-base]
     """
     Display character sheet information (OOC).
@@ -85,21 +105,41 @@ class CmdSheet(Command):  # ty: ignore[invalid-base]
         names = textwrap.wrap(", ".join(SECTION_NAMES), width=72)
         return ["", "|wSections|n (sheet/<section>):", *(f"  {line}" for line in names)]
 
+    def _account(self) -> Any:
+        """The account behind the command.
+
+        While a session puppets a character, Evennia hands every command the
+        character as ``caller`` and the account as ``self.account``; out of
+        character, ``caller`` is the account itself (#4232 fix-on-sight: the
+        overview answered "You don't have any characters" to a puppeting
+        player, since it read the puppet and the roster off the caller).
+        """
+        try:
+            account = self.account
+        except AttributeError:  # a test-built command with no session behind it
+            account = None
+        return account if account is not None else self.caller
+
     def _get_target_character(self) -> Any:
         """Get the target character for the sheet command."""
+        from evennia.objects.models import ObjectDB  # noqa: PLC0415
+
         if self.args.strip():
             # Looking at another character
             return self.caller.search(self.args.strip(), global_search=True)
-        # Looking at own character - get from account's current puppet
+        # Looking at own character: the puppet when there is one.
+        if isinstance(self.caller, ObjectDB):
+            return self.caller
+        account = self._account()
         try:
-            puppet = self.caller.puppet
+            puppet = account.puppet
         except AttributeError:
             puppet = None
         if puppet:
             return puppet
         # Try to get available characters if no current puppet
         try:
-            get_available_characters = self.caller.get_available_characters
+            get_available_characters = account.get_available_characters
         except AttributeError:
             get_available_characters = None
         available_chars = get_available_characters() if get_available_characters else []
@@ -125,10 +165,11 @@ class CmdSheet(Command):  # ty: ignore[invalid-base]
         # Permission check - accounts can view sheets of their own characters
         # Staff can view any character's sheet
         # TODO: Add proper permission checking when trust system is implemented
-        if not self.caller.is_staff:
+        account = self._account()
+        if not account.is_staff:
             # Non-staff can only view their own characters
             try:
-                get_available_characters = self.caller.get_available_characters
+                get_available_characters = account.get_available_characters
             except AttributeError:
                 get_available_characters = None
             account_chars = get_available_characters() if get_available_characters else []
@@ -147,7 +188,7 @@ class CmdSheet(Command):  # ty: ignore[invalid-base]
         output.extend(self._build_header(target, sheet_data))
 
         # Basic Information
-        output.extend(self._build_basic_info(sheet_data))
+        output.extend(self._build_basic_info(target, sheet_data))
 
         # Physical Characteristics
         output.extend(self._build_physical_characteristics(sheet_data))
@@ -168,7 +209,7 @@ class CmdSheet(Command):  # ty: ignore[invalid-base]
         output.extend(self._build_actor_sheet_background(sheet_data))
 
         # Staff-only sections
-        if self.caller.is_staff:
+        if self._account().is_staff:
             output.extend(self._build_staff_sections(sheet_data))
 
         return output
@@ -183,7 +224,7 @@ class CmdSheet(Command):  # ty: ignore[invalid-base]
 
         return [header, "=" * len(header), ""]
 
-    def _build_basic_info(self, sheet_data: Any) -> list[str]:
+    def _build_basic_info(self, target: Any, sheet_data: Any) -> list[str]:
         """Build the basic information section."""
         output = ["|wBasic Information|n", "-" * 20]
 
@@ -191,7 +232,7 @@ class CmdSheet(Command):  # ty: ignore[invalid-base]
 
         output.append(f"Gender: {sheet_data.gender.title()}")
         output.append(f"Concept: {sheet_data.concept or 'None'}")
-        if sheet_data.real_concept and self.caller.is_staff:
+        if sheet_data.real_concept and self._account().is_staff:
             output.append(f"Real Concept: {sheet_data.real_concept} |r(staff only)|n")
 
         if sheet_data.family:
@@ -200,7 +241,7 @@ class CmdSheet(Command):  # ty: ignore[invalid-base]
             output.append(f"Vocation: {sheet_data.vocation}")
 
         output.append(f"Social Rank: {sheet_data.social_rank}")
-        output.append(f"Marital Status: {sheet_data.marital_status.title()}")
+        output.append(f"Marital Status: {_marital_status_line(target)}")
 
         if sheet_data.birthday:
             output.append(f"Birthday: {sheet_data.birthday}")

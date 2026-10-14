@@ -104,3 +104,17 @@ class MembershipEndReason(models.TextChoices):
     MARRIED_OUT = "married_out", "Married Out"
     RENOUNCED = "renounced", "Renounced"
     ANNULLED = "annulled", "Annulled"
+
+
+class MaritalStatus(models.TextChoices):
+    """What a person's visible marriages add up to (#4232).
+
+    Never stored: ``world.roster.services.kinship.marital_status_of`` derives it
+    from the wedlock-conferring unions a viewer can see. Married wins over
+    Widowed, Widowed over Divorced, Divorced over Single.
+    """
+
+    SINGLE = "single", "Single"
+    MARRIED = "married", "Married"
+    WIDOWED = "widowed", "Widowed"
+    DIVORCED = "divorced", "Divorced"

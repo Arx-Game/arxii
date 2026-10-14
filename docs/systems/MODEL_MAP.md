@@ -2176,6 +2176,7 @@
 - `clear_rescue_clues(captivity: 'Captivity') -> 'None' - Delete a captivity's rescue clues (and their placements) when it resolves (#931).`
 - `clue_target_kind_allowed(account: 'object', target_kind: 'str') -> 'bool' - The clue authoring policy (#3432) as one callable (#3566).`
 - `create_accusation_counter_clue(secret: 'Secret', *, area: 'Area', difficulty: 'int') -> 'Clue' - Plant the investigable trail an accusation leaves behind (#1825). Idempotent.`
+- `grant_clue_mission(template: 'MissionTemplate', roster_entry: 'RosterEntry', *, message: 'str | None' = None, ooc_note: 'str' = '') -> 'None' - Hand ``template`` to one character as a clue's payoff (#3429, #4327).`
 - `grant_clue_target(clue: 'Clue', roster_entry: 'RosterEntry') -> 'None' - AUTOMATIC resolution — grant a clue's target to the character on the spot.`
 - `maybe_grant_clue_triggers(character: 'ObjectDB', room: 'ObjectDB') -> 'list[Clue]' - Grant clues triggered passively by entering ``room`` (#1160).`
 - `maybe_grant_item_acquisition_clues(character: 'ObjectDB', item: 'ItemInstance') -> 'list[Clue]' - Grant clues triggered passively by ``character`` acquiring ``item`` (#1160).`
@@ -2715,14 +2716,12 @@
 - `apply_damage_to_opponent(opponent: 'CombatOpponent', raw_damage: 'int', *, bypass_soak: 'bool' = False, bypass_pre_apply: 'bool' = False, damage_type: 'DamageType | None' = None, source_sheet: 'CharacterSheet | None' = None, skip_guardian_shield: 'bool' = False, execute_missing_health_multiplier: 'Decimal' = Decimal('0')) -> 'OpponentDamageResult' - Apply damage to an NPC opponent, accounting for soak, probing,`
 - `apply_damage_to_participant(participant: 'CombatParticipant', damage: 'int', *, force_death: 'bool' = False, bypass_pre_apply: 'bool' = False, damage_type: 'DamageType | None' = None, source: 'object | None' = None, source_sheet: 'CharacterSheet | None' = None, on_hit_pool: 'ConsequencePool | None' = None, delivery: 'str' = StrikeDelivery.MELEE, is_area: 'bool' = False, execute_missing_health_multiplier: 'Decimal' = Decimal('0')) -> 'ParticipantDamageResult' - Apply damage to a PC via their CharacterVitals.`
 - `apply_equipped_armor_soak(character: 'Character', damage: 'int') -> 'int' - Reduce ``damage`` by role-gated equipped-armor soak (#1174, #2533).`
-- `apply_fatigue(character_sheet: 'CharacterSheet', category: 'str', base_cost: 'int', effort_level: 'str') -> 'int' - Add fatigue to the pool.`
 - `apply_interpose_outcome(pre_payload: 'DamagePreApplyPayload', result: 'ChallengeResolutionResult', *, interposer: 'object | None' = None) -> 'None' - Map a graded interpose resolution onto *pre_payload*.`
 - `apply_position_cover(character: 'Character', damage: 'int', damage_type: 'DamageType | None') -> 'int' - Subtract attack-cover from damage.`
 - `apply_rampart_interception(character_or_opponent: 'Character', damage: 'int', damage_type: 'DamageType | None', *, attacker_ref: 'object | None', delivery: 'str' = StrikeDelivery.MELEE, is_area: 'bool' = False) -> 'int' - Intercept a strike against a rampart-covered position (#2209).`
 - `assess_break_bar(encounter: 'CombatEncounter', action_outcomes: 'list[ActionOutcome]') -> 'None' - Assess break-bar depletion for all boss opponents with a break bar (#2642).`
 - `begin_declaration_phase(encounter: 'CombatEncounter') -> 'None' - Advance round_number by 1 and set status to DECLARING.`
 - `check_and_advance_boss_phase(opponent: 'CombatOpponent') -> 'BossPhase | None' - Check whether a boss should advance to the next phase and apply it.`
-- `classify_source(source: object | None) -> flows.events.payloads.DamageSource - Return a ``DamageSource`` describing *source*'s origin.`
 - `cleanup_completed_encounter(encounter: 'CombatEncounter') -> 'None' - Delete encounter-ephemeral CombatNPC ObjectDBs. Persistent NPCs and PCs`
 - `collect_check_modifiers(character_sheet: 'CharacterSheet', check_type: 'CheckType', *, scene: 'Scene | None' = None, extra_contributions: list[world.checks.types.ModifierContribution] | None = None, skip_fashion: bool = False) -> world.checks.types.ModifierBreakdown - Aggregate all modifier contributions for a check into a ModifierBreakdown.`
 - `combatants_hostile_to(actor: 'CombatParticipant | CombatOpponent', *, allegiances: 'dict[int, Allegiance] | None' = None, opponents: 'list[CombatOpponent] | None' = None) -> 'dict[str, list]' - Return the combatants *actor* may attack, grouped by kind (#1584, #4091).`
@@ -2742,7 +2741,6 @@
 - `declare_succor(participant: 'CombatParticipant', ally: 'CombatParticipant') -> 'CombatRoundAction' - Declare a sheltering maneuver for a specific ally — passives-only, auto-ready.`
 - `declare_taunt(participant: 'CombatParticipant', opponent: 'CombatOpponent') -> 'CombatRoundAction' - Declare a taunting maneuver — draw an NPC's aggro, auto-ready (#2015).`
 - `declare_use_item(participant: 'CombatParticipant', item_instance: 'ItemInstance', *, target: 'CombatParticipant | CombatOpponent | None' = None) -> 'CombatRoundAction' - Declare using a held on-use item as this round's action (#2023, #2120).`
-- `deduct_anima(character: 'ObjectDB', effective_cost: 'int', *, lethal: 'bool' = True) -> 'int' - Deduct anima from character, returning the overburn deficit.`
 - `delete_ephemeral_npc(opponent: 'CombatOpponent') -> 'bool' - Guarded delete of one ephemeral combat NPC's ``ObjectDB``.`
 - `detect_available_combos(encounter: 'CombatEncounter', round_number: 'int') -> 'list[AvailableCombo]' - Scan declared actions to find combos whose slots are all satisfied.`
 - `dispatch_interpose(interposer: 'ObjectDB', protected: 'ObjectDB', pre_payload: 'DamagePreApplyPayload', *, approach: 'str | None', extra_modifiers: 'int' = 0, select_best_check_rating: 'bool' = False) -> 'ChallengeResolutionResult | None' - Resolve *interposer*'s interpose attempt and apply the graded outcome.`
@@ -2757,7 +2755,6 @@
 - `finalize_new_encounter(encounter: 'CombatEncounter') -> 'None' - Apply the post-creation defaults every "scene-anchored, no explicit room" creation`
 - `get_clash_config() -> 'ClashConfig' - Get-or-create the ClashConfig singleton (pk=1).`
 - `get_concentration_check_type() -> 'CheckType' - Return the seeded 'Concentration' CheckType rolled at sustained-action`
-- `get_fatigue_penalty(character_sheet: 'CharacterSheet', category: 'str') -> 'int' - Return the check penalty for the current fatigue zone.`
 - `get_flee_config() -> 'FleeConfig' - Return the seeded FleeConfig singleton (#878).`
 - `get_or_create_threat_record(encounter: 'CombatEncounter', opponent: 'CombatOpponent', participant: 'CombatParticipant') -> 'ThreatRecord' - Get or create the ThreatRecord for an (opponent, participant) pairing (#2020).`
 - `get_penetration_check_type() -> 'CheckType' - Return the seeded 'penetration' CheckType for the ward contest (#639).`
@@ -2768,12 +2765,10 @@
 - `is_combat_npc_typeclass(objectdb: 'ObjectDB') -> 'bool' - Return True iff the ObjectDB's typeclass is the CombatNPC class.`
 - `join_encounter(encounter: 'CombatEncounter', character_sheet: 'CharacterSheet', *, covenant_role: 'CovenantRole | None' = None) -> 'CombatParticipant' - Allow a PC to join an active combat encounter.`
 - `leave_encounter(participant: 'CombatParticipant') -> 'None' - Allow a participant to voluntarily leave an Open Encounter between rounds.`
-- `level_opposition(check_type: 'CheckType', *, level: int, character: 'ObjectDB | None' = None) -> int - Difficulty an opposing entity of *level* adds to *check_type* (#2707).`
 - `maybe_pause_encounter_for_disconnect(character_sheet: 'CharacterSheet') -> 'None' - Pause the character's live CombatEncounter, if any, on disconnect (#1899).`
 - `maybe_resolve_on_ready(encounter: 'CombatEncounter') -> 'RoundResolutionResult | None' - Resolve the round early when every ACTIVE participant is ready (#2120).`
 - `minimum_break_bar_threshold() -> 'int' - Pacing floor for a boss's break-bar threshold (#2642, batch-3 F-7a).`
 - `perform_check(character: 'ObjectDB', check_type: 'CheckType', target_difficulty: int = 0, extra_modifiers: int = 0, effort_level: str | None = None, fatigue_penalty: int = 0, specialization: 'Specialization | None' = None, *, situation_ctx: 'SituationContext | None' = None, level_override: int | None = None, stat_override: str | int | None = None) -> world.checks.types.CheckResult - Main check resolution function.`
-- `perform_check_with_modifiers(character: 'ObjectDB', check_type: 'CheckType', target_difficulty: int = 0, extra_modifiers: int = 0, effort_level: str | None = None, fatigue_penalty: int = 0, specialization: 'Specialization | None' = None, *, situation_ctx: 'SituationContext | None' = None, level_override: int | None = None, scene: 'Scene | None' = None, extra_contributions: 'list[ModifierContribution] | None' = None, skip_fashion: bool = False, stat_override: str | int | None = None) -> world.checks.types.CheckResult - Run a check with all character modifiers gathered automatically.`
 - `remove_opponent(opponent: 'CombatOpponent') -> 'None' - Pull an opponent out of a live encounter (GM action, #3382).`
 - `remove_participant(participant: 'CombatParticipant') -> 'None' - Remove a participant: status write + combat engagement teardown (#872).`
 - `resolve_cast_position_params(participant: 'CombatParticipant', technique: 'Technique', position_params: 'dict[str, int]') -> 'dict[str, Position | None]' - Validate declared cast positions against the encounter's room + technique reach.`
@@ -2784,7 +2779,6 @@
 - `roll_sustained_absorption_budget(participant: 'CombatParticipant') -> 'tuple[int, CheckOutcome | None]' - Roll Concentration once to set a sustained action's absorption budget (#2705).`
 - `scan_round_combos(encounter: 'CombatEncounter', round_number: 'int') -> 'list[RoundCombo]' - List every combo taking shape in this round's declared actions (#3553).`
 - `select_npc_actions(encounter: 'CombatEncounter') -> 'list[CombatOpponentAction]' - Select and create NPC actions for the current round.`
-- `social_target_difficulty(*, actor_sheet: 'CharacterSheet', target_character: 'ObjectDB | None', check_type: 'CheckType | None', base_difficulty: 'int' = 0, target_level: 'int | None' = None, resist_effort: 'str' = EffortLevel.MEDIUM, drive_hits: 'Sequence[DriveHit]' = (), sway_target: 'ModifierTarget | None' = None, mindless_resistance: 'int' = 0, extra_bands: 'int' = 0, perceiver_sheet: 'CharacterSheet | None' = None, resist_increment: 'int | None' = None) -> 'SocialDifficulty' - Grade a social check on a character. See the module docstring for the terms.`
 - `spawn_from_creature_template(encounter: 'CombatEncounter', template: 'CreatureTemplate', *, position: 'Position | None' = None, acting_account: 'AccountDB | None' = None) -> 'CombatOpponent' - Spawn a CombatOpponent from a CreatureTemplate bestiary entry (#2016).`
 - `swarm_attack_count(swarm_count: 'int', bodies_per_attack: 'int', active_pc_count: 'int') -> 'int' - Attacks a swarm makes this round — scales with remaining bodies (#875).`
 - `swarm_kills(raw_damage: 'int', body_toughness: 'int') -> 'int' - Bodies a single landing attack clears from a swarm (#875).`
@@ -2792,7 +2786,6 @@
 - `try_declare_sustained_ritual(*, sheet: 'CharacterSheet', ritual: 'Ritual', kwargs: 'dict[str, Any]') -> 'SustainedAction | None' - Defer a combat-cast ritual across rounds instead of dispatching now (#2705, Task 5).`
 - `update_encounter_settings(encounter: 'CombatEncounter', *, stakes_level: 'str | None' = None, risk_level: 'str | None' = None, pace_mode: 'str | None' = None, pace_timer_minutes: 'int | None' = None, escalation_curve: 'EscalationCurve | None | object' = <object object>) -> 'CombatEncounter' - GM-driven mid-encounter settings change (#3383, curve #3552).`
 - `upgrade_action_to_combo(action: 'CombatRoundAction', combo: 'ComboDefinition') -> 'None' - Mark a currently eligible PC action as upgraded to a combo.`
-- `wind_penalty(felt: int) -> int - The missile check penalty for a room's felt WIND exposure (#1555).`
 - `windup_damage_scale(downgrades: 'int') -> 'float' - The downgrade ladder: x(1 - 0.25*downgrades), floored at x0.25 (#2637 design 3).`
 
 
@@ -7872,15 +7865,16 @@
 - `donate_to_project(project: 'Project', *, donor_persona: 'Persona', amount: 'int') -> 'Contribution' - Debit ``amount`` coppers from the donor's purse and record a MONEY contribution.`
 - `get_kind_handler(kind: 'str') -> 'KindHandler' - Return the registered handler for `kind`, or raise LookupError.`
 - `get_tiered_resolver(kind: 'str') -> 'TieredResolver' - Return the registered tiered resolver for ``kind``, or raise LookupError.`
+- `has_kind_handler(kind: 'str') -> 'bool' - True when a handler is registered for ``kind``.`
 - `maybe_complete_immediately(project: 'Project') -> 'bool' - Resolve an instant-completion project the moment its threshold is funded (#1500).`
 - `register_instant_completion_kind(kind: 'str') -> 'None' - Mark a ProjectKind as completing immediately on threshold (re-register safe).`
-- `register_kind_handler(kind: 'str', handler: 'KindHandler') -> 'None' - Register a per-kind resolution handler. Re-registration overwrites.`
+- `register_kind_handler(kind: 'str', handler: 'KindHandler', *, success_only: 'bool' = False) -> 'None' - Register a per-kind resolution handler. Re-registration overwrites.`
 - `register_tiered_resolver(kind: 'str', resolver: 'TieredResolver') -> 'None' - Register a TIERED_PERIOD kind's tier-grading resolver. Re-registration overwrites.`
 - `resolve_project(project: 'Project', *, outcome_tier: 'CheckOutcome') -> 'None' - Finalize a RESOLVING project: dispatch to per-kind handler, set outcome.`
-- `restore_registries(snapshot: 'tuple[dict[str, KindHandler], dict[str, TieredResolver]]') -> 'None' - Test-only: reset both registries to a snapshot_registries() copy.`
-- `scan_active_projects() -> 'int' - Cron tick: scan ACTIVE projects, transition completion-ready ones to RESOLVING.`
+- `restore_registries(snapshot: 'RegistrySnapshot') -> 'None' - Test-only: reset the registries to a snapshot_registries() copy.`
+- `scan_active_projects() -> 'int' - Cron tick: move completion-ready ACTIVE projects to RESOLVING and finalize them.`
 - `set_contribution_story(project: 'Project', *, contributor_persona: 'Persona', text: 'str') -> 'Contribution | None' - Attach the narrative of how a contributor helped to their most recent contribution (#1574).`
-- `snapshot_registries() -> 'tuple[dict[str, KindHandler], dict[str, TieredResolver]]' - Test-only: copy both registries for restore_registries().`
+- `snapshot_registries() -> 'RegistrySnapshot' - Test-only: copy the registries for restore_registries().`
 
 
 ## world.realms

@@ -47,7 +47,6 @@ from world.character_sheets.types import (
     EnemyPowerTier,
     EnemyStatus,
     LifecycleState,
-    MaritalStatus,
     PlateInk,
     PosthumousJournalDisposition,
     ProfileBeginningsSource,
@@ -610,12 +609,6 @@ class CharacterSheet(SharedMemoryModel):
         on_delete=models.SET_NULL,
         related_name="owning_sheet",
         help_text="This character's real bio (presented by the PRIMARY persona).",
-    )
-    marital_status = models.CharField(
-        max_length=20,
-        choices=MaritalStatus.choices,
-        default=MaritalStatus.SINGLE,
-        help_text="Character's marital status",
     )
     # family / tarot_card / tarot_reversed lineage moved to Profile (#1270 slice 3);
     # read/written through the forwarding properties below.

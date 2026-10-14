@@ -21,7 +21,7 @@ and the web serializer). The legacy `Characteristic`/`CharacteristicValue`/
 - **`create_character_with_sheet()`**: The blessed character creation path. Atomically creates the Character typeclass, CharacterSheet, and PRIMARY Persona in a single transaction. Factories and the character_creation app both use this.
 
 ### `types.py`
-- Type definitions and TextChoices enums (MaritalStatus, Gender choices, etc.)
+- Type definitions and TextChoices enums (Gender choices, etc.; marital status is derived from the kinship graph, `world.roster.constants.MaritalStatus`, #4232)
 
 ## Primary Persona Invariant
 

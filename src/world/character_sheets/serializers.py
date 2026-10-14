@@ -53,7 +53,6 @@ from world.character_sheets.types import (
     KnownUltimateEntry,
     LookEntry,
     MagicSection,
-    MaritalStatus,
     MentorBondEntry,
     MotifResonanceEntry,
     MotifSection,
@@ -2323,7 +2322,6 @@ def _build_staff_edit(sheet: CharacterSheet) -> StaffEditFields:
         ic_birth_year=sheet.ic_birth_year,
         true_height_inches=sheet.true_height_inches,
         weight_pounds=sheet.weight_pounds,
-        marital_status=sheet.marital_status,
         vocation=sheet.vocation,
         social_rank=sheet.social_rank,
         build=sheet.build_id,
@@ -2666,7 +2664,6 @@ class StaffEditSerializer(serializers.Serializer):
     weight_pounds = serializers.IntegerField(
         required=False, allow_null=True, min_value=0, max_value=32767
     )
-    marital_status = serializers.ChoiceField(choices=MaritalStatus.choices, required=False)
     vocation = serializers.CharField(allow_blank=True, required=False, max_length=255)
     social_rank = serializers.IntegerField(required=False, min_value=1, max_value=20)
     build = serializers.PrimaryKeyRelatedField(

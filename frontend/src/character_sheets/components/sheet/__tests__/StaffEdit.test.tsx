@@ -82,7 +82,6 @@ const STORED: CharacterSheetStaffEdit = {
   ic_birth_year: null,
   true_height_inches: null,
   weight_pounds: null,
-  marital_status: 'single',
   vocation: '',
   social_rank: 10,
   build: null,

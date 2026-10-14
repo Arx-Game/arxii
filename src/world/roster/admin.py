@@ -2,7 +2,12 @@
 Django admin configuration for roster models.
 """
 
+import contextlib
+
+from django import forms
 from django.contrib import admin
+from django.contrib.admin.widgets import AutocompleteSelect, ForeignKeyRawIdWidget
+from django.core.exceptions import ValidationError
 from django.forms import BaseInlineFormSet, ModelForm
 from django.http import HttpRequest
 from django.utils.html import format_html
@@ -28,9 +33,20 @@ from world.roster.models import (
     SoulIncarnation,
     TenureDisplaySettings,
     TenureMedia,
+    Union,
     UnionKind,
 )
-from world.roster.services.kinship import create_person
+from world.roster.services.kinship import (
+    KinshipServiceError,
+    already_married_message,
+    binding_marriage_of,
+    create_person,
+    end_union,
+    open_wedlock_union_among,
+    record_union,
+    wedlock_union_kind,
+)
+from world.secrets.models import Secret
 
 
 class KinInline(admin.TabularInline):
@@ -132,6 +148,152 @@ class FamilyMembershipInline(admin.TabularInline):
     extra = 0
 
 
+#: The through row between a person and a union; the Spouses section's model (#4232).
+SpouseRow = Union.members.through
+
+
+def _spouse_row_label(row: SpouseRow) -> str:
+    """The row heading the admin prints for an existing row: the union, not
+    "Union_members object (1)". The through model is Django's own, so its label
+    is set here rather than on a model class of ours."""
+    return str(row.union)
+
+
+SpouseRow.__str__ = _spouse_row_label
+
+
+class SpouseForm(ModelForm):
+    """One row of the Spouses section: the union's own fields, carried on its through row.
+
+    A new row names a partner (an existing node, picked through the Kinsperson
+    autocomplete) and the union to record between them; an existing row edits the
+    union it already stands for, and its other members are shown read-only, since a
+    union may hold more than two. ``KinspersonAdmin.save_formset`` writes every row
+    through the kinship services, never ``save()``.
+    """
+
+    partner = forms.ModelChoiceField(
+        queryset=Kinsperson.objects.all(),
+        required=False,
+        widget=AutocompleteSelect(Union.members.field, admin.site),
+        help_text="Who the person marries. Set on a new row only.",
+    )
+    kind = forms.ModelChoiceField(queryset=UnionKind.objects.all())
+    started_at = forms.DateTimeField(required=False)
+    ended_at = forms.DateTimeField(required=False, help_text="Set to end the marriage.")
+    is_public_record = forms.BooleanField(required=False, initial=True)
+    is_true = forms.BooleanField(required=False, initial=True)
+    secret = forms.ModelChoiceField(
+        queryset=Secret.objects.all(),
+        required=False,
+        widget=ForeignKeyRawIdWidget(Union.secret.field.remote_field, admin.site),
+    )
+
+    class Meta:
+        model = SpouseRow
+        fields: list[str] = []
+
+    def __init__(self, *args, **kwargs) -> None:
+        super().__init__(*args, **kwargs)
+        union = self.instance.union if self.instance.pk else None
+        if union is not None:
+            self.initial.update(
+                kind=union.kind_id,
+                started_at=union.started_at,
+                ended_at=union.ended_at,
+                is_public_record=union.is_public_record,
+                is_true=union.is_true,
+                secret=union.secret_id,
+            )
+            return
+        with contextlib.suppress(KinshipServiceError):
+            self.initial.setdefault("kind", wedlock_union_kind().pk)
+
+    def clean(self) -> dict:
+        cleaned = super().clean()
+        if self.instance.pk:
+            return cleaned
+        partner = cleaned.get("partner")
+        if partner is None:
+            self.add_error("partner", "Name who the person marries.")
+            return cleaned
+        # On the add page the parent is unsaved: the formset sets only the id, and it
+        # is None, so the relation itself cannot be read. The two checks against the
+        # person need a saved person; a new one has no marriages to clash with.
+        person_pk = self.instance.kinsperson_id
+        if person_pk is None:
+            return cleaned
+        if partner.pk == person_pk:
+            self.add_error("partner", "A person cannot marry themselves.")
+            return cleaned
+        person = Kinsperson.objects.get(pk=person_pk)
+        if open_wedlock_union_among([person, partner]) is not None:
+            self.add_error("partner", "They already share an open marriage.")
+            return cleaned
+        kind = cleaned.get("kind")
+        if kind is not None and kind.confers_wedlock:
+            # A marriage must end, by death or dissolution, before either party
+            # marries again (ruling on #4232); a consort or paramour kind is no marriage.
+            for party in (person, partner):
+                if binding_marriage_of(party) is not None:
+                    self.add_error("partner", already_married_message(party))
+                    return cleaned
+        return cleaned
+
+
+class SpouseFormSet(BaseInlineFormSet):
+    """Refuses to delete a union a marriage pact or a recorded birth still points at."""
+
+    def clean(self) -> None:
+        super().clean()
+        from world.societies.houses.models import MarriagePact  # noqa: PLC0415
+
+        for form in self.deleted_forms:
+            union = form.instance.union
+            dependents = []
+            if MarriagePact.objects.filter(union=union).exists():
+                dependents.append("a marriage pact")
+            if union.births.exists():
+                dependents.append("a recorded birth")
+            if dependents:
+                what = " and ".join(dependents)
+                msg = (
+                    f"{union} cannot be removed: {what} depends on it. "
+                    "Set an end date to end the marriage instead."
+                )
+                raise ValidationError(msg)
+
+
+class SpouseInline(admin.TabularInline):
+    """The person's unions, added and ended through the kinship services (#4232)."""
+
+    model = SpouseRow
+    fk_name = "kinsperson"
+    form = SpouseForm
+    formset = SpouseFormSet
+    extra = 0
+    verbose_name = "Spouse"
+    verbose_name_plural = "Spouses"
+    readonly_fields = ["spouses"]
+    fields = [
+        "spouses",
+        "partner",
+        "kind",
+        "started_at",
+        "ended_at",
+        "is_public_record",
+        "is_true",
+        "secret",
+    ]
+
+    @admin.display(description="Married to")
+    def spouses(self, row: SpouseRow) -> str:
+        if row.pk is None:
+            return "-"
+        others = row.union.members.exclude(pk=row.kinsperson_id)
+        return ", ".join(member.display_name for member in others) or "-"
+
+
 class KinspersonTraitValueInline(admin.TabularInline):
     """Pinned appearance values (#2815) — authored or back-inferred."""
 
@@ -164,9 +326,73 @@ class KinspersonAdmin(admin.ModelAdmin):
         "is_appable",
         "family__kind",
     ]
-    search_fields = ["name", "description", "family__name"]
+    # A sheet-bound person's ``name`` column is empty (the sheet names them), so the
+    # autocomplete the Spouses section's partner picker uses has to search the
+    # character's key too, or no player character can ever be picked (#4232).
+    search_fields = ["name", "description", "family__name", "sheet__character__db_key"]
     raw_id_fields = ["sheet", "functionary", "deferred_definer"]
-    inlines = [ParentageUpInline, FamilyMembershipInline, KinspersonTraitValueInline]
+    inlines = [ParentageUpInline, FamilyMembershipInline, SpouseInline, KinspersonTraitValueInline]
+
+    def save_formset(
+        self, request: HttpRequest, form: ModelForm, formset: BaseInlineFormSet, change: bool
+    ) -> None:
+        """Spouses rows go through the kinship services (#4232); the rest save as usual.
+
+        A new row records a union between the person and the named partner, ended at
+        once when the row carries an end date. An existing row writes its union's own
+        fields, and an end date set on an open union goes through ``end_union``. A
+        deleted row deletes the union; ``SpouseFormSet.clean`` has already refused
+        one a pact or a birth depends on.
+        """
+        if formset.model is not SpouseRow:
+            super().save_formset(request, form, formset, change)
+            return
+        # The admin's change message reads these off a saved formset; this one never
+        # calls ``formset.save()``, so they are filled by hand with the unions written.
+        formset.new_objects = []
+        formset.changed_objects = []
+        formset.deleted_objects = []
+        person = form.instance
+        for row_form in formset.deleted_forms:
+            union = row_form.instance.union
+            formset.deleted_objects.append(union)
+            union.delete()
+        for row_form in formset.forms:
+            if row_form in formset.deleted_forms or not row_form.has_changed():
+                continue
+            data = row_form.cleaned_data
+            if row_form.instance.pk:
+                union = row_form.instance.union
+                _write_union(union, data)
+                formset.changed_objects.append((union, row_form.changed_data))
+                continue
+            union = record_union(
+                kind=data["kind"],
+                members=[person, data["partner"]],
+                started_at=data.get("started_at"),
+                is_public_record=data.get("is_public_record", False),
+                is_true=data.get("is_true", False),
+                secret=data.get("secret"),
+            )
+            if data.get("ended_at"):
+                end_union(union, ended_at=data["ended_at"])
+            formset.new_objects.append(union)
+
+
+def _write_union(union: Union, data: dict) -> None:
+    """An existing Spouses row's edits onto its union, ending it through ``end_union``."""
+    union.kind = data["kind"]
+    union.started_at = data.get("started_at")
+    union.is_public_record = data.get("is_public_record", False)
+    union.is_true = data.get("is_true", False)
+    union.secret = data.get("secret")
+    ended_at = data.get("ended_at")
+    if union.ended_at is None and ended_at:
+        union.save(update_fields=["kind", "started_at", "is_public_record", "is_true", "secret"])
+        end_union(union, ended_at=ended_at)
+        return
+    union.ended_at = ended_at
+    union.save()
 
 
 @admin.register(ParentageEdge)

@@ -715,15 +715,6 @@ class PlateInk(models.TextChoices):
     NIGHT = "night", "Night"
 
 
-class MaritalStatus(models.TextChoices):
-    """Marital status choices for characters."""
-
-    SINGLE = "single", "Single"
-    MARRIED = "married", "Married"
-    WIDOWED = "widowed", "Widowed"
-    DIVORCED = "divorced", "Divorced"
-
-
 class SheetVisibility(models.TextChoices):
     """Player-controlled visibility tier for a character-sheet section (#1271).
 
@@ -993,7 +984,6 @@ class StaffEditFields(TypedDict):
     ic_birth_year: int | None
     true_height_inches: int | None
     weight_pounds: int | None
-    marital_status: str
     vocation: str
     social_rank: int
     build: int | None

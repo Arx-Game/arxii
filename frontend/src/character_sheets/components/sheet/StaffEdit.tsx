@@ -317,13 +317,6 @@ function ProseHistory({
   );
 }
 
-const MARITAL_OPTIONS = [
-  { value: 'single', label: 'Single' },
-  { value: 'married', label: 'Married' },
-  { value: 'widowed', label: 'Widowed' },
-  { value: 'divorced', label: 'Divorced' },
-];
-
 /**
  * In edit mode, the fields the sheet never draws (the real concept, the obituary, the
  * exact measures, the social rank) and the ones it draws only when filled (the actor's
@@ -457,18 +450,6 @@ export function StaffEditBand({ sheet }: { sheet: CharacterSheetPayload }) {
           label="Weight (pounds)"
           min={0}
           display={stored.weight_pounds}
-        />
-      ),
-    },
-    {
-      label: 'Marital status',
-      node: (
-        <StaffEditable
-          field="marital_status"
-          kind="select"
-          label="Marital status"
-          options={MARITAL_OPTIONS}
-          display={MARITAL_OPTIONS.find((o) => o.value === stored.marital_status)?.label}
         />
       ),
     },
