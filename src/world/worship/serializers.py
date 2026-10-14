@@ -4,19 +4,13 @@
 tradition name) — safe anywhere; it never exposes pools or avatar links.
 """
 
-from __future__ import annotations
-
-from typing import TYPE_CHECKING
-
 from rest_framework import serializers
 
 from world.character_sheets.models import CharacterSheet
 from world.clues.models import Clue
 from world.stories.models import Episode
 from world.worship.models import Miracle, Prayer, Vision, WorshippedBeing, WorshipRite
-
-if TYPE_CHECKING:
-    from world.worship.types import InvocationDifficulty
+from world.worship.types import InvocationDifficulty
 
 
 class WorshippedBeingRefSerializer(serializers.ModelSerializer):

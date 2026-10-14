@@ -60,6 +60,7 @@ const LIVE_BEAT: BeatView = {
       check_type_name: null,
       base_risk: 0,
       reasons: [],
+      rolls_check: false,
     },
   ],
   is_paused: false,
@@ -73,6 +74,7 @@ const RESOLVED: ResolvedBeat = {
   is_terminal: false,
   next_beat: null,
   epilogue: '',
+  invocation: null,
 };
 
 const resolveMutate = vi.fn();

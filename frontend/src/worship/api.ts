@@ -9,7 +9,7 @@
 import { apiFetch } from '@/evennia_replacements/api';
 import { throwApiError } from '@/lib/errors';
 import { dispatchCanvasAction, type DispatchResult } from '@/map-canvas/dispatch';
-import type { Prayer, Vision, VisionCreate } from './types';
+import type { InvocationOptions, Prayer, Vision, VisionCreate } from './types';
 
 interface Paginated<T> {
   results: T[];
@@ -47,4 +47,16 @@ export async function sendVision(payload: VisionCreate): Promise<Vision> {
 /** Dispatch `pray` as `characterId`: `{ being: id, text }`. */
 export function pray(characterId: number, being: number, text: string): Promise<DispatchResult> {
   return dispatchCanvasAction(characterId, 'pray', { being, text });
+}
+
+/**
+ * GET /api/worship/beings/invocation-options/ (#4333) — the Call on favor picker for the
+ * character this tab acts as: each being they hold a standing with, whether it can be invoked
+ * now (and why not), uses left this week, the difficulty with each ease, and the bonus by result.
+ */
+export async function fetchInvocationOptions(entryId?: number | null): Promise<InvocationOptions> {
+  const query = entryId != null ? `?entry_id=${entryId}` : '';
+  const res = await apiFetch(`/api/worship/beings/invocation-options/${query}`);
+  if (!res.ok) await throwApiError(res, 'Failed to load the beings you can call on.');
+  return (await res.json()) as InvocationOptions;
 }

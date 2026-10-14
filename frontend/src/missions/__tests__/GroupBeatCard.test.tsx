@@ -32,6 +32,7 @@ const PICK_BEAT: GroupBeatResult = {
         check_type_name: null,
         base_risk: 0,
         reasons: [],
+        rolls_check: false,
       },
     ],
     ballots: [
@@ -65,6 +66,7 @@ const RESOLVED: ResolvedBeat = {
   is_terminal: false,
   next_beat: null,
   epilogue: '',
+  invocation: null,
 };
 
 const useGroupBeatMock = vi.fn();

@@ -896,6 +896,8 @@ export function GamePage() {
         action_key: action.actionKey,
         target_persona_id: action.targetPersonaId,
         technique_id: action.techniqueId,
+        // The view refuses a social action with no initiator persona (#4353).
+        initiator_persona: personaId ?? undefined,
       }),
     onSuccess: (_result, variables) => {
       attachedActionGuard.current.succeed(variables.clientRequestId);

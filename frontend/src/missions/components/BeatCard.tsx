@@ -7,16 +7,28 @@
  * Clicking resolves: the roll/result prose renders in place (it also
  * lands in the scroll as a STORY narrative block), then Continue moves
  * to the next beat or the epilogue.
+ *
+ * A rolled option carries a Call on favor control (#4333): the chosen being's invocation
+ * rolls first and its bonus joins the option's roll; the result shows the invocation's two
+ * lines and the check's breakdown with the favor line.
  */
 import { useState } from 'react';
 
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 
+import { CallOnFavor } from '@/worship/components/CallOnFavor';
+import type { InvocationChoice } from '@/worship/types';
+
 import { ApiValidationError, flattenErrorMessage } from '../api';
 import { useBeat, useResolveBeat } from '../queries';
 import type { BeatOption, ResolvedBeat } from '../types';
 import { BeatTrack } from './BeatTrack';
+import { InvocationResult } from './InvocationResult';
+
+function optionKey(option: BeatOption): string {
+  return `${option.option_id}-${option.approach_id ?? 'authored'}`;
+}
 
 interface BeatCardProps {
   instanceId: number;
@@ -28,10 +40,12 @@ export function BeatCard({ instanceId, roomKey }: BeatCardProps) {
   const { data: beat, isLoading } = useBeat(instanceId, roomKey);
   const resolve = useResolveBeat();
   const [result, setResult] = useState<ResolvedBeat | null>(null);
+  const [invocations, setInvocations] = useState<Record<string, InvocationChoice | null>>({});
 
   if (result) {
     return (
       <div className="space-y-2 rounded border bg-card p-3" data-testid="beat-result">
+        {result.invocation ? <InvocationResult invocation={result.invocation} /> : null}
         {result.outcome_name ? <Badge variant="outline">{result.outcome_name}</Badge> : null}
         <p className="whitespace-pre-wrap text-sm">{result.story_text}</p>
         {result.is_terminal ? (
@@ -69,23 +83,45 @@ export function BeatCard({ instanceId, roomKey }: BeatCardProps) {
         </p>
       ) : (
         <div className="space-y-1" data-testid="beat-options">
-          {beat.options.map((option) => (
-            <OptionButton
-              key={`${option.option_id}-${option.approach_id ?? 'authored'}`}
-              option={option}
-              pending={resolve.isPending}
-              onPick={() =>
-                resolve.mutate(
-                  {
-                    instanceId,
-                    option_id: option.option_id,
-                    approach_id: option.approach_id,
-                  },
-                  { onSuccess: setResult }
-                )
-              }
-            />
-          ))}
+          {beat.options.map((option) => {
+            const key = optionKey(option);
+            const invocation = invocations[key] ?? null;
+            return (
+              <div key={key} className="space-y-1" data-testid="beat-option">
+                <OptionButton
+                  option={option}
+                  pending={resolve.isPending}
+                  onPick={() =>
+                    resolve.mutate(
+                      {
+                        instanceId,
+                        option_id: option.option_id,
+                        approach_id: option.approach_id,
+                        ...(invocation
+                          ? { invoke_being_id: invocation.beingId, invoke_line: invocation.line }
+                          : {}),
+                      },
+                      {
+                        onSuccess: (resolved) => {
+                          setInvocations({});
+                          setResult(resolved);
+                        },
+                      }
+                    )
+                  }
+                />
+                {option.rolls_check ? (
+                  <div className="flex justify-end">
+                    <CallOnFavor
+                      value={invocation}
+                      onChange={(choice) => setInvocations((prev) => ({ ...prev, [key]: choice }))}
+                      disabled={resolve.isPending}
+                    />
+                  </div>
+                ) : null}
+              </div>
+            );
+          })}
         </div>
       )}
       {resolve.error ? (
