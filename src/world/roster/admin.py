@@ -150,6 +150,16 @@ class FamilyMembershipInline(admin.TabularInline):
 SpouseRow = Union.members.through
 
 
+def _spouse_row_label(row: SpouseRow) -> str:
+    """The row heading the admin prints for an existing row: the union, not
+    "Union_members object (1)". The through model is Django's own, so its label
+    is set here rather than on a model class of ours."""
+    return str(row.union)
+
+
+SpouseRow.__str__ = _spouse_row_label
+
+
 class SpouseForm(ModelForm):
     """One row of the Spouses section: the union's own fields, carried on its through row.
 
