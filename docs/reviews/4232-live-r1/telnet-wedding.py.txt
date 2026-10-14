@@ -1,0 +1,72 @@
+"""Live wedding over telnet (#4232 round 1, item 1): officiant opens, both spouses accept, finish."""
+
+import re
+import socket
+import sys
+import time
+
+OUT = sys.argv[1]
+log = open(OUT, "w")
+
+
+class Session:
+    def __init__(self, label, user, pw):
+        self.label = label
+        self.s = socket.create_connection(("localhost", 4000))
+        self.s.settimeout(0.5)
+        self.drain(1.5)
+        self.cmd(f"connect {user} {pw}", wait=3.0)
+
+    def drain(self, seconds):
+        end = time.time() + seconds
+        out = b""
+        while time.time() < end:
+            try:
+                d = self.s.recv(65536)
+                if not d:
+                    break
+                out += d
+            except TimeoutError:
+                pass
+        return out
+
+    def cmd(self, line, wait=2.5):
+        self.s.sendall(line.encode() + b"\r\n")
+        raw = self.drain(wait)
+        text = re.sub(rb"\xff[\xfb-\xfe].", b"", raw)
+        text = re.sub(rb"\xff\xfa.*?\xff\xf0", b"", text, flags=re.DOTALL)
+        text = re.sub(rb"\x1b\[[0-9;]*m", b"", text).decode("latin1", "replace")
+        text = "".join(ch for ch in text if ch in "\t\n\r" or 32 <= ord(ch) < 127)
+        block = f"\n=== [{self.label}] > {line}\n{text.strip()}\n"
+        log.write(block)
+        log.flush()
+        print(block)
+        return text
+
+    def quit(self):
+        self.cmd("quit", wait=1.0)
+        self.s.close()
+
+
+orrin = Session("Father Orrin", "e2e_orrin", "TestPass123!")
+rowan = Session("Rowan Ashby", "e2e_test_account", "TestPass123!")
+lisbet = Session("Lisbet Crane", "e2e_lisbet", "TestPass123!")
+
+rowan.cmd("sheet")
+orrin.cmd("look")
+orrin.cmd("ceremony/wedding Rowan Ashby,Lisbet Crane", wait=4.0)
+orrin.cmd("ceremony")
+for spouse in (rowan, lisbet):
+    offers = spouse.cmd("wedding")
+    m = re.search(r"\[(\d+)\]", offers)
+    if not m:
+        print("NO OFFER for", spouse.label)
+        sys.exit(1)
+    spouse.cmd(f"wedding accept {m.group(1)}", wait=3.0)
+orrin.cmd("ceremony/finish", wait=6.0)
+rowan.cmd("sheet")
+lisbet.cmd("sheet")
+rowan.cmd("sheet/family")
+for s in (orrin, rowan, lisbet):
+    s.quit()
+log.close()

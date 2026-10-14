@@ -1,0 +1,29 @@
+"""Record (or remove, with REMOVE=1) a birth within Rowan and Lisbet's live union (#4232 round 1)."""
+
+import os
+import sys
+
+os.environ.setdefault("DJANGO_SETTINGS_MODULE", "server.conf.settings")
+import django
+
+django.setup()
+from django.conf import settings
+
+if settings.DATABASES["default"]["NAME"] != "rt_4232":
+    sys.exit("refusing: not rt_4232")
+import evennia
+
+evennia._init()
+from world.roster.models import Kinsperson, ParentageEdge, Union
+from world.roster.services.kinship import create_person, record_parentage
+
+rowan = Kinsperson.objects.get(pk=1)
+union = Union.objects.filter(members=rowan, ended_at__isnull=True).get()
+if os.environ.get("REMOVE") == "1":
+    n, _ = ParentageEdge.objects.filter(born_within_union=union).delete()
+    Kinsperson.objects.filter(name="Wren Ashby").delete()
+    print("removed birth edges:", n)
+else:
+    child = create_person(name="Wren Ashby")
+    edge = record_parentage(child=child, parent=rowan, born_within_union=union)
+    print("birth", edge.pk, "within union", union.pk, "child", child.pk)

@@ -1,0 +1,29 @@
+Pre-fix telnet transcript, captured 2026-10-14 01:38Z against the server running b086dff6a (the branch before 1a7219e55), from the Playwright run's assertion output (frontend/e2e/marriage-live-4232.spec.ts, run 2): the account connected, was auto-puppeted onto Rowan Ashby, then ran sheet.
+
+    Received string:    "
+    ==============================================================
+     Welcome to Arx, version 5.0.1!··
+     If you have an existing account, connect to it by typing:
+          connect <username> <password>··
+     New accounts come from the website during alpha, invite-only  the
+     telnet create command is closed. Once you've registered there, run
+     account email <address> here to verify the email your account needs.··
+     If you have spaces in your username, enclose it in quotes.
+     Enter help for more info. look will re-show this screen.··
+     Play in your browser: http://localhost:3000
+    ==============================================================
+    [MudInfo] [2026-10-14(01:38)]: e2e_test_account connected
+    You become Rowan Ashby.
+    The Wanderer's Rest
+    This is a room.
+    Characters: Rowan Ashby
+    Now controlling Rowan Ashby.
+    You don't have any characters to display a sheet for.
+    Quitting. Hope to see you again, soon.
+    [MudInfo] [2026-10-14(01:38)]: e2e_test_account disconnected (quit)
+    quit
+    "
+
+      81 |     const single = await telnetSheet();
+      82 |     fs.writeFileSync(path.join(SHOTS, 'telnet-sheet-before.txt'), single);
+    > 83 |     expect(single).toContain('Marital Status: Single');
