@@ -155,6 +155,7 @@ class SoloMissionInvocationTests(MissionInvocationBase):
                 return_value=_result(self.invocation_type, self.success),
             ) as invocation_check,
             patch(_OPTION_CHECK, side_effect=_option_check),
+            self.captureOnCommitCallbacks(execute=True),
         ):
             result = resolve_beat_option(
                 self.instance,
@@ -187,7 +188,12 @@ class SoloMissionInvocationTests(MissionInvocationBase):
                 recipient_character_sheet=self.sheet
             ).values_list("message__body", flat=True)
         )
-        self.assertIn(f"{invocation.call_line}\n{invocation.outcome_line}", bodies)
+        self.assertIn(
+            f"{invocation.call_line}\n{invocation.outcome_line}\n"
+            "Perception + Investigation: 48 + 10 Ombrin's favor (invocation: Success) = 58, "
+            "rank Expert against Expert (rank difference 0).",
+            bodies,
+        )
 
     def test_refused_on_an_option_with_no_roll(self) -> None:
         with self.assertRaises(BeatActionError) as refused:
@@ -251,6 +257,7 @@ class GroupMissionInvocationTests(MissionInvocationBase):
         with (
             patch(_INVOCATION_CHECK, side_effect=_invocation_check),
             patch(_OPTION_CHECK, side_effect=_option_check),
+            self.captureOnCommitCallbacks(execute=True),
         ):
             submit_group_pick(
                 instance,
@@ -292,9 +299,14 @@ class GroupMissionInvocationTests(MissionInvocationBase):
         )
         self.assertIn(partner_public, holder_bodies)
         self.assertFalse(any("[partner line]" in body for body in holder_bodies))
-        self.assertIn(
-            f"{partner.key} calls on River Spirit: [partner line]\n"
-            f"{partner.key}'s invocation: Partial Success.",
+        self.assertTrue(
+            any(
+                body.startswith(
+                    f"{partner.key} calls on River Spirit: [partner line]\n"
+                    f"{partner.key}'s invocation: Partial Success.\n"
+                )
+                for body in partner_bodies
+            ),
             partner_bodies,
         )
 
@@ -381,3 +393,51 @@ class FavorInvocationApiTests(MissionInvocationBase):
         )
         self.assertEqual(response.status_code, 400)
         self.assertIn("You have no favor with River Spirit to call on.", str(response.json()))
+
+
+class GroupInvokerBreakdownTests(MissionInvocationBase):
+    def test_the_group_invoker_gets_their_breakdown_in_the_log(self) -> None:
+        holder = _pc()
+        partner = _pc()
+        DevotionStandingFactory(character_sheet=holder.sheet_data, being=self.being, favor=12)
+        template, option, _ = self._check_graph("group-log", conflict_mode=ConflictMode.JOINT)
+        instance = staff_assign_mission(template, holder)
+        share_mission(instance, partner)
+
+        with (
+            patch(_INVOCATION_CHECK, return_value=_result(self.invocation_type, self.success)),
+            patch(
+                _OPTION_CHECK,
+                side_effect=lambda _character, check_type, **kw: _result(
+                    check_type, self.success, total_points=kw["extra_modifiers"] + 40
+                ),
+            ),
+            self.captureOnCommitCallbacks(execute=True),
+        ):
+            submit_group_pick(
+                instance,
+                holder,
+                option_id=option.pk,
+                invoke=InvocationChoice(being_id=self.being.pk),
+            )
+            submit_group_pick(instance, partner, option_id=option.pk)
+
+        holder_bodies = list(
+            NarrativeMessageDelivery.objects.filter(
+                recipient_character_sheet=holder.sheet_data
+            ).values_list("message__body", flat=True)
+        )
+        self.assertTrue(
+            any(
+                "Perception + Investigation: 40 + 10 Ombrin's favor (invocation: Success) = 50."
+                in body
+                for body in holder_bodies
+            ),
+            holder_bodies,
+        )
+        partner_bodies = " ".join(
+            NarrativeMessageDelivery.objects.filter(
+                recipient_character_sheet=partner.sheet_data
+            ).values_list("message__body", flat=True)
+        )
+        self.assertNotIn("+ 10", partner_bodies)

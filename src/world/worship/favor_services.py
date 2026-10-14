@@ -8,7 +8,7 @@ a crafting recipe modifier, a covenant role bonus) reaches a character through
 ``favor_modifier_total``, the one reader.
 
 Targets are created explicitly, never by a signal: by the Deity Editor's
-``save_being``, by the backfill data migration ``0223_being_favor_targets``, and by
+``save_being``, by the backfill data migration ``0224_being_favor_targets``, and by
 the seeds. A missing target reads as 0.
 """
 

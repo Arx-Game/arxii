@@ -188,8 +188,8 @@ that gap is real and remains.
 **Favor categories (#4333).** `favor_invocation` (difficulty points eased on an invocation
 check) and `favor_earning` (percentage points added to the earning rate) are scoped to a
 worshipped being by `ModifierTarget.target_being` (a plain FK: one target per (category,
-being), unique when set; null is the single "any being" target per category, held unique
-by (category, name)). `world.worship.favor_services.ensure_being_modifier_targets` creates
+being), unique when set; null is the single "any being" target per category, held by
+`ModifierTarget.clean()`, which also refuses a being outside the two favor categories). `world.worship.favor_services.ensure_being_modifier_targets` creates
 them and `favor_modifier_total(sheet, being, category)` is the one reader (eager rows,
 crafted items, the equipment walk, conditions). Both categories are in
 `EQUIPMENT_RELEVANT_CATEGORIES`; for them `equipment_walk_total` adds the covenant role

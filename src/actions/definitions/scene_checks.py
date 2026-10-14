@@ -164,7 +164,10 @@ def _perform_and_broadcast_self_check(
     favor_lines: list[str] = []
     favor_bonus = 0
     if invocation is not None:
-        from world.scenes.favor_invocation import broadcast_invocation  # noqa: PLC0415
+        from world.scenes.favor_invocation import (  # noqa: PLC0415
+            broadcast_invocation,
+            invocation_private_lines,
+        )
         from world.worship.exceptions import FavorInvocationRefused  # noqa: PLC0415
         from world.worship.invocation_services import invoke_favor  # noqa: PLC0415
 
@@ -181,10 +184,7 @@ def _perform_and_broadcast_self_check(
             return ActionResult(success=False, message=exc.user_message)
         broadcast_invocation(outcome, persona=persona, scene=scene, location=actor.location)
         favor_bonus = outcome.bonus
-        if outcome.private_call_line != outcome.call_line:
-            favor_lines.append(outcome.private_call_line)
-        if outcome.contribution is not None:
-            favor_lines.append(f"{outcome.contribution.source_label}: +{favor_bonus}")
+        favor_lines = invocation_private_lines(outcome)
     result = perform_check(
         actor,
         check_type,
@@ -205,7 +205,8 @@ def _perform_and_broadcast_self_check(
         mode=InteractionMode.OUTCOME,
         persona=persona,
     )
-    _echo_to_telnet_bystanders(actor, narration)
+    # On commit, after the invocation's own lines (also delivered on commit).
+    transaction.on_commit(lambda: _echo_to_telnet_bystanders(actor, narration))
     return ActionResult(success=True, message="\n".join([*favor_lines, narration]))
 
 

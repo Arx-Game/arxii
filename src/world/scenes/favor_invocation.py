@@ -82,6 +82,7 @@ def declared_invocation_contribution(
         return invocation_contribution(recorded)
     persona = action_request.initiator_persona
     sheet = persona.character_sheet
+    character = sheet.character
     try:
         outcome = invoke_favor(
             sheet,
@@ -91,17 +92,30 @@ def declared_invocation_contribution(
             scene=action_request.scene,
             scene_action_request=action_request,
         )
-    except FavorInvocationRefused:
+    except FavorInvocationRefused as exc:
+        # Declared earlier, refused now (the week's uses spent since): the
+        # initiator is told why nothing was added.
+        reason = exc.user_message
+        transaction.on_commit(lambda: character.msg(reason))
         return None
-    character = sheet.character
     broadcast_invocation(
         outcome,
         persona=persona,
         scene=action_request.scene,
         location=character.location,
     )
-    if outcome.private_call_line != outcome.call_line:
-        # A secret faith: the room heard "calls on something."; the player still
-        # sees their own line.
-        transaction.on_commit(lambda: character.msg(outcome.private_call_line))
+    private = invocation_private_lines(outcome)
+    if private:
+        transaction.on_commit(lambda: character.msg("\n".join(private)))
     return outcome.contribution
+
+
+def invocation_private_lines(outcome: InvocationOutcome) -> list[str]:
+    """What only the invoker sees: their own line when the room heard "calls on
+    something." (a secret faith), and the bonus the invocation added."""
+    lines: list[str] = []
+    if outcome.private_call_line != outcome.call_line:
+        lines.append(outcome.private_call_line)
+    if outcome.contribution is not None:
+        lines.append(f"{outcome.contribution.source_label}: +{outcome.contribution.value}")
+    return lines

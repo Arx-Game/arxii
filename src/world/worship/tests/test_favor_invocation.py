@@ -485,3 +485,23 @@ class InvokeFavorTests(InvocationTestBase):
         self.assertEqual(options[0].difficulty.points, 30)
         self.assertFalse(options[1].can_invoke)
         self.assertIsNone(options[1].difficulty)
+
+
+class FavorTargetCleanTests(TestCase):
+    def test_a_being_only_on_favor_targets_and_one_any_being_target(self) -> None:
+        from django.core.exceptions import ValidationError
+
+        from world.mechanics.factories import ModifierCategoryFactory
+
+        being = WorshippedBeingFactory(name="Ombrin")
+        ensure_being_modifier_targets(being)
+        stat = ModifierCategoryFactory(name="stat")
+        with self.assertRaises(ValidationError):
+            ModifierTarget(category=stat, name="Odd", target_being=being).full_clean()
+        favor = ModifierTarget.objects.get(
+            category__name=FAVOR_INVOCATION_CATEGORY_NAME, target_being=being
+        ).category
+        with self.assertRaises(ValidationError):
+            ModifierTarget(category=favor, name="A second any being").full_clean()
+        # The existing any-being target still validates against itself.
+        _any_target(FAVOR_INVOCATION_CATEGORY_NAME).full_clean()

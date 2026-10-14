@@ -286,3 +286,72 @@ class SceneActionInvocationTests(SceneInvocationBase):
         )
         for leak in ("[player line]", "Fenwright", "favor", "Easy", "30", "+"):
             self.assertNotIn(leak, everything, leak)
+
+
+class InvokerPrivateLineTests(SceneInvocationBase):
+    """What only the invoker sees on a scene action: the bonus, or why it was refused."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.standing = DevotionStandingFactory(
+            character_sheet=self.sheet, being=self.being, favor=12
+        )
+        ActionTemplateFactory(name="Persuade", check_type=CheckTypeFactory(name="Persuasion"))
+        self.target_persona = active_persona_for_sheet(self.onlooker.sheet_data)
+
+    def _declare_and_accept(self, outcomes, *, before_accept=None):
+        request = create_action_request(
+            scene=self.scene,
+            initiator_persona=self.persona,
+            target_persona=self.target_persona,
+            action_key="persuade",
+            invoke=InvocationChoice(being_id=self.being.pk),
+        )
+        if before_accept is not None:
+            before_accept()
+        recorder = _RollRecorder(outcomes)
+        with (
+            patch(_PERFORM_CHECK, side_effect=recorder),
+            patch.object(type(self.actor), "msg") as actor_msg,
+            self.captureOnCommitCallbacks(execute=True),
+        ):
+            respond_to_action_request(action_request=request, decision=ConsentDecision.ACCEPT)
+        return [str(call.args[0]) for call in actor_msg.call_args_list if call.args]
+
+    def test_the_invoker_sees_the_bonus(self) -> None:
+        said = self._declare_and_accept([self.success, self.success])
+        self.assertIn("Fenwright Dead's favor (invocation: Success): +10", said)
+
+    def test_a_refusal_at_accept_time_is_told(self) -> None:
+        def _lose_favor() -> None:
+            self.standing.favor = 0
+            self.standing.save()
+
+        said = self._declare_and_accept([self.success], before_accept=_lose_favor)
+        self.assertIn("You have no favor with Fenwright Dead to call on.", said)
+        self.assertFalse(FavorInvocation.objects.exists())
+
+
+class SelfCheckTelnetEchoTests(SceneInvocationBase):
+    def test_plain_self_check_reaches_telnet_bystanders_but_not_the_roller(self) -> None:
+        perception = CheckTypeFactory(name="Perception")
+        recorder = _RollRecorder([self.success])
+        with (
+            patch(_PERFORM_CHECK, side_effect=recorder),
+            patch(
+                "world.scenes.interaction_services.non_web_sessions",
+                side_effect=lambda _obj: ["telnet"],
+            ),
+            patch.object(type(self.onlooker), "msg") as heard,
+            self.captureOnCommitCallbacks(execute=True),
+        ):
+            SceneSelfCheckAction().run(
+                actor=self.actor,
+                check_type_ref=perception.name,
+                difficulty=DifficultyChoice.NORMAL,
+            )
+        receivers = [call for call in heard.call_args_list if call.kwargs.get("session")]
+        # The class-level patch sees every character's msg; only the onlooker's
+        # telnet copy is expected (the roller gets the line as their result).
+        self.assertEqual(len(receivers), 1)
+        self.assertIn("Perception", str(receivers[0].args[0]))

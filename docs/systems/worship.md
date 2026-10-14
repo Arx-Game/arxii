@@ -410,10 +410,10 @@ character's standing with one being; it is never spent.
 `favor_invocation` (difficulty points eased) and `favor_earning` (percentage points added
 to the earning rate). `ModifierTarget.target_being` scopes a target to one being; null in
 those categories means any being. Uniqueness: (category, target_being) when the being is
-set; the single "any being" target per category is held by (category, name).
+set; `ModifierTarget.clean()` holds the single "any being" target per category and refuses a being outside the two favor categories.
 `ensure_being_modifier_targets(being)` get-or-creates the being's two targets and the two
 "any being" targets; called by the Deity Editor's `save_being`, the seeds, and the backfill
-migration `0223_being_favor_targets`. `favor_modifier_total(sheet, being, category)` is the
+migration `0224_being_favor_targets`. `favor_modifier_total(sheet, being, category)` is the
 one reader: over the category's targets for the being and for any being, it sums
 `get_modifier_total` (distinctions and other `CharacterModifier` rows, crafted items, the
 equipment walk) and `get_condition_modifier_total` (conditions). Both favor categories are

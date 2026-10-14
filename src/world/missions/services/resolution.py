@@ -110,7 +110,7 @@ if TYPE_CHECKING:
     from world.missions.types import OptionRollReport
     from world.stories.constants import BeatOutcome
     from world.tasking.models import OrgTask
-    from world.worship.types import InvocationRequest
+    from world.worship.types import InvocationOutcome, InvocationRequest
 
 _ERR_CHECK_NO_TYPE = (
     "OptionKind.CHECK option {option_pk} has no authored_check_type — "
@@ -733,10 +733,13 @@ def resolve_option(  # noqa: PLR0913
         return _resolve_branch(instance, node, option, character, advance=advance)
 
     # OptionKind.CHECK
-    if invocation is not None:
-        extra_modifiers += _roll_option_invocation(
-            instance, actor, option, chosen_approach, invocation, roll_report
-        )
+    invoked = (
+        _roll_option_invocation(instance, actor, option, chosen_approach, invocation)
+        if invocation is not None
+        else None
+    )
+    if invoked is not None:
+        extra_modifiers += invoked.bonus
     if option.source_kind == OptionSource.CHALLENGE:
         # The chosen ChallengeApproach supplies the check; the challenge's
         # severity is the difficulty. Routing below is unchanged — it keys
@@ -756,7 +759,14 @@ def resolve_option(  # noqa: PLR0913
             extra_modifiers=extra_modifiers,
             situation_ctx=mission_situation_ctx(character, instance),
         )
+    if invoked is not None:
+        from world.missions.services.invocation import (  # noqa: PLC0415
+            deliver_invocation_to_mission_log,
+        )
+
+        deliver_invocation_to_mission_log(instance, actor.character, invoked, result)
     if roll_report is not None:
+        roll_report.invocation = invoked
         roll_report.check_result = result
 
     return _route_graded_outcome(
@@ -770,15 +780,14 @@ def resolve_option(  # noqa: PLR0913
     )
 
 
-def _roll_option_invocation(  # noqa: PLR0913 - mirrors resolve_option's own context
+def _roll_option_invocation(
     instance: MissionInstance,
     actor: MissionParticipant,
     option: MissionOption,
     chosen_approach: ChallengeApproach | None,
     invocation: InvocationRequest,
-    roll_report: OptionRollReport | None,
-) -> int:
-    """Roll the actor's invocation before an option check; return its bonus (#4333).
+) -> InvocationOutcome | None:
+    """Roll the actor's invocation before an option check (#4333), or None.
 
     An auto-succeeding approach rolls nothing, so nothing is invoked on it.
     """
@@ -789,13 +798,8 @@ def _roll_option_invocation(  # noqa: PLR0913 - mirrors resolve_option's own con
         and chosen_approach is not None
         and chosen_approach.auto_succeeds
     ):
-        return 0
-    invoked = roll_mission_invocation(instance, actor, invocation)
-    if invoked is None:
-        return 0
-    if roll_report is not None:
-        roll_report.invocation = invoked
-    return invoked.bonus
+        return None
+    return roll_mission_invocation(instance, actor, invocation)
 
 
 def _route_graded_outcome(  # noqa: PLR0913

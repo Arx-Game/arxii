@@ -211,7 +211,7 @@ class ChosenFavorConfigAdmin(admin.ModelAdmin):
             },
         ),
         (
-            "Favor: earning and invocation (#4333)",
+            "Favor: earning and invocation",
             {"fields": ("earn_bonus_percent", "invocation_ease_points", "chosen_per_being")},
         ),
     )

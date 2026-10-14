@@ -15,13 +15,7 @@
 import { useMemo, useState } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Textarea } from '@/components/ui/textarea';
@@ -183,10 +177,12 @@ function CallOnFavorPicker({
               data-testid="invocation-line"
             />
           </div>
-          <p className="text-xs text-muted-foreground">
-            <span className="font-semibold">Rules:</span> favor is not spent. A failed invocation
-            still uses one of this week&apos;s {perWeek ?? ''}. One being per check.
-          </p>
+          {perWeek ? (
+            <p className="text-xs text-muted-foreground">
+              <span className="font-semibold">Rules:</span> favor is not spent. A failed invocation
+              still uses one of this week&apos;s {perWeek}. One being per check.
+            </p>
+          ) : null}
         </>
       ) : null}
       <div className="flex justify-end gap-2">
@@ -258,12 +254,13 @@ export function CallOnFavor({
         picker && <div className="w-full rounded border p-3">{picker}</div>
       ) : (
         <Dialog open={open} onOpenChange={setOpen}>
-          <DialogContent className="max-w-lg" data-testid="call-on-favor-dialog">
+          <DialogContent
+            className="max-w-lg"
+            aria-describedby={undefined}
+            data-testid="call-on-favor-dialog"
+          >
             <DialogHeader>
               <DialogTitle>Call on favor</DialogTitle>
-              <DialogDescription className="sr-only">
-                Call on a being before this check.
-              </DialogDescription>
             </DialogHeader>
             {picker}
           </DialogContent>

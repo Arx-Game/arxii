@@ -63,21 +63,6 @@ _INVOKE_HINT = (
 )
 
 
-def _invocation_breakdown(invocation: Any) -> str:
-    """The acting player's one-line check breakdown with the favor bonus (#4333)."""
-    ranks = ""
-    if invocation.roller_rank and invocation.target_rank:
-        ranks = (
-            f", rank {invocation.roller_rank} against {invocation.target_rank}"
-            f" (rank difference {invocation.rank_difference})"
-        )
-    bonus = f" + {invocation.bonus} {invocation.bonus_label}" if invocation.bonus else " (no bonus)"
-    return (
-        f"{invocation.check_type_name}: {invocation.points_before_bonus}{bonus}"
-        f" = {invocation.total_points}{ranks}."
-    )
-
-
 _ERR_CHOOSE_NUMBER = "Choose an option by its number, e.g. 'mission resolve <id> 1'."
 
 
@@ -553,7 +538,11 @@ class CmdMission(ArxCommand):
         lines = []
         invocation = resolved.invocation
         if invocation is not None:
-            lines.append(_invocation_breakdown(invocation))
+            from world.missions.services.invocation import (  # noqa: PLC0415
+                format_invocation_breakdown,
+            )
+
+            lines.append(format_invocation_breakdown(invocation))
         lines.append(resolved.story_text)
         if resolved.outcome_name:
             lines.append(f"Outcome: {resolved.outcome_name}.")

@@ -25,6 +25,7 @@ if TYPE_CHECKING:
     from world.traits.models import Trait
 from world.contributors.models import CreditedContent
 from world.mechanics.constants import (
+    FAVOR_CATEGORY_NAMES,
     SOURCE_TYPE_ACHIEVEMENT_REWARD,
     SOURCE_TYPE_DISTINCTION,
     SOURCE_TYPE_FORM,
@@ -209,7 +210,8 @@ class ModifierTarget(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
         help_text=(
             "The being this favor target belongs to (favor_invocation and favor_earning "
             "categories only, #4333). Null in those categories means any being. A plain "
-            "FK, not one-to-one: a being has one target in each favor category."
+            "FK, not one-to-one: a being has one target in each favor category. CASCADE, "
+            "not SET_NULL: clearing it would widen a being's target to every being."
         ),
     )
     # Future target FKs — added when their systems are built:
@@ -232,9 +234,9 @@ class ModifierTarget(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
         ordering = ["category__display_order", "display_order", "name"]
         constraints = [
             # One target per (favor category, being) (#4333). The single "any being"
-            # target per favor category is held unique by (category, name) above:
-            # a partial index on a null target_being cannot be scoped to the two
-            # favor categories, and every other category's targets are null here.
+            # target per favor category is held by clean(): a partial index on a null
+            # target_being cannot be scoped to the two favor categories, and every
+            # other category's targets are null here.
             models.UniqueConstraint(
                 fields=["category", "target_being"],
                 condition=models.Q(target_being__isnull=False),
@@ -248,6 +250,26 @@ class ModifierTarget(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
 
     def __str__(self):
         return f"{self.name} ({self.category.name})"
+
+    def clean(self) -> None:
+        """A favor target's being (#4333): only in the two favor categories, and one
+        "any being" target (no being) per favor category."""
+        super().clean()
+        if not self.category_id:
+            return
+        is_favor = self.category.name in FAVOR_CATEGORY_NAMES
+        if self.target_being_id and not is_favor:
+            msg = "Only a favor invocation or favor earning target names a being."
+            raise ValidationError({"target_being": msg})
+        if is_favor and not self.target_being_id:
+            others = (
+                type(self)
+                .objects.filter(category_id=self.category_id, target_being__isnull=True)
+                .exclude(pk=self.pk)
+            )
+            if others.exists():
+                msg = "This favor category already has its any-being target; name a being."
+                raise ValidationError({"target_being": msg})
 
     @classmethod
     def get_for_trait(cls, trait: "Trait") -> "ModifierTarget | None":
