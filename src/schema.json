@@ -34390,7 +34390,7 @@ paths:
       - in: query
         name: location
         schema:
-          type: integer
+          type: number
       - name: page
         required: false
         in: query
