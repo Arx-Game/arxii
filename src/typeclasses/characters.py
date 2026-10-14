@@ -674,11 +674,22 @@ class Character(ObjectParent, DefaultCharacter):
         the character go, ``prelogout_location`` remembers where it was (Evennia's
         ``at_pre_puppet`` puts it back there on the next login), and its location
         empties so nobody is left standing in a room with no player behind them.
+
+        The line goes first, as Evennia's did, because naming the character for
+        each listener reads its room. It runs through ``run_safely``: a failure
+        there is reported, never allowed to leave the character on the grid or
+        skip the rest of ``at_post_unpuppet``, which also runs for every account
+        on a reload (#3195).
         """
+        from world.player_submissions.services import run_safely
+
         location = self.location
         if location is None:
             return
-        self._announce_departure(location, reason=reason)
+        run_safely(
+            "logout_line",
+            lambda: self._announce_departure(location, reason=reason),
+        )
         self.db.prelogout_location = location
         self.location = None
 

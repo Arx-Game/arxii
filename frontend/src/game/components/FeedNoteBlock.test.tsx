@@ -80,6 +80,7 @@ describe('FeedNoteBlock (#3856)', () => {
     'move',
     'ambience',
     'vision',
+    'ooc',
   ] as const)(
     'a %s note sets no size, face or width of its own, so Display settings reach it (#4330)',
     (kind) => {

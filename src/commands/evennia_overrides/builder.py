@@ -79,6 +79,7 @@ def write_name(obj: ObjectDB, name: str) -> None:
     also ``ObjectDisplayData.longname``, which ``where`` and the area path read
     first (``set_room_display_data``). An item's is also its instance's
     ``custom_name``, which the inventory and the web read (``set_item_name``).
+    A companion's is also its ``Companion.name`` (``rename_companion``).
     Anything else is shown by its key, and a longname it already carries is kept
     in step so the two never disagree.
     """
@@ -89,6 +90,12 @@ def write_name(obj: ObjectDB, name: str) -> None:
     instance = obj.item_instance_or_none
     if instance is not None:
         set_item_name(instance, name)
+        return
+    companion = obj.companion_rows.first()
+    if companion is not None:
+        from world.companions.services import rename_companion  # noqa: PLC0415
+
+        rename_companion(companion, name)
         return
     if isinstance(obj, DefaultRoom):
         set_room_display_data(room=obj, name=name, bypass_ownership=True)
@@ -270,14 +277,14 @@ class CmdSetHome(EvenniaCmdSetHome):
         try:
             persona = active_persona_for_sheet(sheet)
         except Persona.DoesNotExist:
-            caller.msg(f"{obj.key} has no face to give a home to.")
+            self.msg(f"{obj.key} has no face to give a home to.")
             return
         try:
             set_primary_home(persona=persona, room=room)
         except RoomEditError as exc:
-            caller.msg(f"{obj.key}'s home was not changed: {exc.user_message}")
+            self.msg(f"{obj.key}'s home was not changed: {exc.user_message}")
             return
-        caller.msg(f"{obj.key}'s home is now {room.key}, as {persona.name}.")
+        self.msg(f"{obj.key}'s home is now {room.key}, as {persona.name}.")
 
 
 class CmdSetAttribute(EvenniaCmdSetAttribute):
@@ -318,26 +325,37 @@ class CmdSetAttribute(EvenniaCmdSetAttribute):
         """``<obj>/desc`` on a game object is its description, not an Attribute (#4338)."""
         return attr == _DESC_ATTRIBUTE and category is None and isinstance(obj, ObjectDB)
 
+    def _sets_description(self) -> bool:
+        """Whether this line writes ``desc`` with a value: not a view, a clear or the editor."""
+        if not self.args or not self.rhs or _EDIT_SWITCH in self.switches:
+            return False
+        attrs = self.lhs_objattr[0]["attrs"]
+        return _DESC_ATTRIBUTE in attrs and not self.lhs_objs[0].get("option")
+
     def func(self) -> None:
         """``set <obj>/desc = <text>`` stores the text as typed (#4338).
 
         Evennia's flow reads every value as a Python literal first, so prose came
-        back with a "was converted to a string" warning and quoted text lost its
-        quotes. A description is always text, so that one form is handled here;
-        everything else, including several attributes at once, is Evennia's.
+        back with a "was converted to a string" warning, quoted text lost its
+        quotes and ``$dbref(...)`` turned into an object's name. A description is
+        always text, so a line that writes one is handled here, and only on its
+        own: ``desc`` among several attributes is refused rather than parsed.
+        Viewing, clearing and the editor go through Evennia's flow and the hooks
+        below; so does every other attribute, and any account, script or channel.
         """
-        if not self.args or not self.rhs or _EDIT_SWITCH in self.switches:
+        if not self._sets_description():
             super().func()
             return
         target = self.lhs_objattr[0]
-        if target["attrs"] != [_DESC_ATTRIBUTE] or self.lhs_objs[0].get("option"):
-            super().func()
-            return
         obj = self.search_for_obj(target["name"])
         if not obj:
             return
         if not isinstance(obj, ObjectDB):
+            # An account's, a script's or a channel's desc is an ordinary Attribute.
             super().func()
+            return
+        if len(target["attrs"]) > 1:
+            self.caller.msg("Set desc on its own: set <obj>/desc = <text>")
             return
         if not self.check_obj(obj):
             return
@@ -357,12 +375,6 @@ class CmdSetAttribute(EvenniaCmdSetAttribute):
             write_description(obj, "", edited_by=self.account)
             return f"\nCleared the description of {obj.name}."
         return super().rm_attr(obj, attr, category)
-
-    def set_attr(self, obj: Any, attr: str, value: Any, category: str | None) -> str:
-        if self._is_description(obj, attr, category):
-            write_description(obj, str(value), edited_by=self.account)
-            return f"\nSet the description of {obj.name}."
-        return super().set_attr(obj, attr, value, category)
 
     def edit_handler(self, obj: Any, attr: str, caller: ObjectDB) -> None:
         # The edit switch takes no category; Evennia's own editor ignores it too.

@@ -612,9 +612,11 @@ class AccountCmdSet(default_cmds.AccountCmdSet):
         super().at_cmdset_creation()
         # charcreate/chardelete (#3996): Evennia's stock character mint bypasses
         # sheets, rosters and the slot ledger. Characters are made on the web.
-        # ooc (#4337): Evennia's unpuppets into its stock account screen, and there
-        # is no out-of-character state (login always puppets, ADR-0294). `ooc` is
-        # now OOC speech to the room, CharacterCmdSet's CmdOOC.
+        # ooc (#4337): Evennia's unpuppets into its stock account screen, and nobody
+        # steps out of character on purpose any more (login always puppets,
+        # ADR-0294). `ooc` is now OOC speech to the room, CharacterCmdSet's CmdOOC.
+        # A session can still be left with no character (a retirement, a refused
+        # puppet), and there Evennia's account `look` still draws its stock screen.
         for cmdname in (
             "ic",
             "characters",

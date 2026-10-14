@@ -67,12 +67,16 @@ actions, backends, and service functions.
 - **`CmdOOC`** (`ooc <message>`, `evennia_overrides/communication.py`, #4337): out-of-character
   speech to the room through `OOCSayAction` (key `ooc`): `<OOC> Name says: text`, typed `ooc`
   for the web feed, sent to the `say` audience (the broadcast-exclusion seam) minus anyone who
-  has OOC-muted the speaker's face or player (`mute_services.ooc_muter_account_ids`), named per
-  listener so a mask shows the mask, never written to the scene log. It replaced Evennia's
-  `ooc` (alias `unpuppet`), which `AccountCmdSet` now removes: that one unpuppeted into the
-  stock account screen, and there is no out-of-character state (ADR-0294). `ooc` is in
-  `DEAD_ALLOWED_ACTION_KEYS`, since the player talking is never the character acting. `@ic`
-  stays as the telnet way to switch characters.
+  has OOC-muted the face the speaker is wearing (`mute_services.ooc_muter_account_ids`; an
+  account-level mute does not follow the player to another face here, because the room
+  would see the gap and link the faces, ADR-0204), named per listener so a mask shows the
+  mask, never written to the scene log. It replaced Evennia's `ooc` (alias `unpuppet`), which
+  `AccountCmdSet` now removes: that one unpuppeted into the stock account screen, and nobody
+  steps out of character on purpose any more (login always puppets, ADR-0294). A session can
+  still be left with no character (a retirement, a refused puppet, several characters and none
+  chosen), and there Evennia's account `look` (`CmdOOCLook`) still draws the stock screen.
+  `ooc` is in `DEAD_ALLOWED_ACTION_KEYS`, since the player talking is never the character
+  acting. `@ic` stays as the telnet way to switch characters.
 - **`evennia_overrides/communication.py`**: `CmdSay`, `CmdWhisper`, `CmdPose`, `CmdPage`,
   `CmdPemit` (`pemit <name>[,<name>...]=<text>`, `cmd:all()`, #906/#2117 — private GM narration to
   specific characters via `PemitAction`, gated on `MinimumGMLevelPrerequisite(GMLevel.STARTING)`,
@@ -1046,18 +1050,22 @@ actions, backends, and service functions.
     `set_room_display_data(bypass_ownership=True)` (key and `longname`, which `where` and the
     area path read), an item through `items.services.materialize.set_item_name`
     (`custom_name`, which the inventory reads, and the game object's key, which `look`
-    reads), anything else by key with an existing `longname` kept in step. Aliases after `;`
-    stay Evennia aliases; `*account` renames stay Evennia's.
+    reads), a companion through `companions.services.rename_companion` (`Companion.name`
+    and the key), anything else by key with an existing `longname` kept in step. Aliases
+    after `;` stay Evennia aliases; `*account` renames stay Evennia's.
   - `CmdSetHome` (`@sethome`) on a character calls `set_primary_home` for the character's
     active persona, so Evennia's `home`, `CharacterSheet.current_residence` and the tenancy's
     `is_primary_home` agree; it refuses a room the persona has no tenancy standing in, so
     staff grant the tenancy first. Any other object keeps Evennia's `home`.
   - `CmdSetAttribute` (`@set`) sends `<obj>/desc` on a game object (view, set, clear and
     `/edit`) to `read_description`/`write_description`; `set <obj>/desc = <text>` skips
-    Evennia's Python-literal parsing, so prose is stored as typed. Every other attribute,
-    and any account, script or channel, is stock.
+    Evennia's Python-literal parsing, so prose is stored as typed, and `desc` among several
+    attributes (`set rock/desc/weight = ...`) is refused rather than parsed. Every other
+    attribute, and any account, script or channel, is stock.
   - `@spawn` and `@copy` are removed: they made objects without the `ObjectDisplayData` and
-    `RoomProfile` Arx reads, and nobody uses them.
+    `RoomProfile` Arx reads, and nobody uses them. `@wipe`, `@cpattr` and `@mvattr` remain
+    stock and still act on Evennia's retired `desc` Attribute, not on the description `look`
+    shows; nobody ruled on them.
 
 ### Account Commands (`account/`)
 - **`account_info.py`**: `CmdAccount` (`@account`/`account`) — bare shows account information

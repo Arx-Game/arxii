@@ -18,6 +18,7 @@ from evennia_extensions.factories import AccountFactory, CharacterFactory, Objec
 from evennia_extensions.models import PlayerData
 from typeclasses.characters import Character
 from world.character_sheets.factories import CharacterSheetFactory
+from world.conditions.factories import ConditionInstanceFactory, UnconsciousConditionFactory
 from world.scenes.factories import PersonaFactory
 from world.scenes.models import Mute
 from world.scenes.mute_services import set_mute
@@ -97,29 +98,46 @@ class OOCSayTests(TestCase):
 
         assert heard == [(f"<OOC> Apostate says: {LINE}", OOC)]
 
-    def test_an_account_level_ooc_mute_covers_every_face(self) -> None:
+    def test_an_account_level_mute_hides_the_face_it_names(self) -> None:
+        set_mute(
+            owner=self._listener_player(),
+            muted_persona=self.speaker.character_sheet.primary_persona,
+            ic=False,
+            ooc=True,
+            account_level=True,
+        )
+
+        _result, heard, _echoed = self._say()
+
+        assert heard == []
+
+    def test_an_account_level_mute_does_not_follow_the_player_to_another_face(self) -> None:
+        """The room would see the muter left out, and the silence would link the faces.
+
+        An account-level mute names one face and snapshots the player behind it. The
+        speaker now wears a different face; hiding that line from the muter alone would
+        tell them who is under it (ADR-0204), so the line reaches them.
+        """
         speaker_player, _ = PlayerData.objects.get_or_create(account=self.speaker.account)
-        other_face = PersonaFactory(character_sheet=self.speaker.character_sheet)
+        muted_face = PersonaFactory(character_sheet=self.speaker.character_sheet)
         Mute.objects.create(
             owner=self._listener_player(),
-            muted_persona=other_face,
+            muted_persona=muted_face,
             muted_player=speaker_player,
             account_level=True,
             mute_ic=False,
             mute_ooc=True,
         )
 
-        with patch("world.scenes.mute_services._persona_player", return_value=speaker_player):
-            _result, heard, _echoed = self._say()
+        _result, heard, _echoed = self._say()
 
-        assert heard == []
+        assert heard == [(f"<OOC> Apostate says: {LINE}", OOC)]
 
-    def test_a_dreamside_occupant_does_not_hear_the_waking_room(self) -> None:
-        with patch(
-            "flows.service_functions.perception_registry.resolve_broadcast_exclusions",
-            return_value={self.listener},
-        ):
-            _result, heard, _echoed = self._say()
+    def test_an_unconscious_occupant_does_not_hear_the_waking_room(self) -> None:
+        """Dreamside perception (#2287) through the real exclusion registry, not a stub."""
+        ConditionInstanceFactory(target=self.listener, condition=UnconsciousConditionFactory())
+
+        _result, heard, _echoed = self._say()
 
         assert heard == []
 

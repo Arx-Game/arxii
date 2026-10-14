@@ -102,8 +102,10 @@ lastSeenByThread, sceneBaselineId})` returns `{here, pages}`: **Here** is the
 - **`feedChips.ts`**: The filter chips' pure model (#3856 PR 2). `FeedChip {id, label,
 kinds, on, wake, custom}`; a kind belongs to at most one chip; `DEFAULT_FEED_CHIPS`
   are the demo's five plus Visions (#3779) and OOC (#4337) (Roleplay, Whispers, Visions
-  and OOC wake; Movement, Ambience, System do not). A layout stored before OOC existed
-  has no chip owning `ooc`, so it shows (an unowned kind always does) without waking. **System owns the `system` kind** (#3933): it is
+  and OOC carry the wake flag; Movement, Ambience, System do not). **Wake only reaches
+  interactions today:** `attention.ts` classifies interactions alone, so the flag on a
+  note kind (`vision`, `ooc`) lights nothing yet. A layout stored before OOC existed
+  has no chip owning `ooc`, so it shows (an unowned kind always does). **System owns the `system` kind** (#3933): it is
   the hide-system button, so pressing it has to hide login and connection chatter, not
   just look/item/error. `normalizeFeedChips` migrates a stored layout once, and only
   under both guards: the `sy` chip still has exactly the pre-#3933 default kinds

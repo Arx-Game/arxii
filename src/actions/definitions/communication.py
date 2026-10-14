@@ -610,7 +610,7 @@ OOC_USAGE = "Usage: ooc <message>"
 
 
 def _ooc_muters_in(location: ObjectDB, speaker: ObjectDB) -> list[ObjectDB]:
-    """Who in ``location`` has OOC-muted the face ``speaker`` is wearing, or its player (#2087)."""
+    """Who in ``location`` has OOC-muted the face ``speaker`` is wearing (#2087)."""
     from world.scenes.models import Persona  # noqa: PLC0415
     from world.scenes.mute_services import ooc_muter_account_ids  # noqa: PLC0415
     from world.scenes.services import active_persona_for_sheet  # noqa: PLC0415
@@ -635,14 +635,16 @@ class OOCSayAction(Action):
     Arx 1's ``ooc``: ``<OOC> Name says: text``, the unmistakable way to tell a room
     something that is not the character talking (a hello, a question about the
     scene, a call for a GM). It replaced Evennia's ``ooc``, which unpuppeted the
-    character into the stock account screen; there is no out-of-character state
-    to go to (ADR-0294).
+    character into the stock account screen; nobody steps out of character on
+    purpose any more, since login always puppets (ADR-0294).
 
     The audience is ``say``'s: the room, through the broadcast-exclusion seam, so
     a dreamside occupant does not hear the waking room. Anyone who has OOC-muted
-    the speaker's face or player is left out, as a page leaves them out. Each
-    listener sees their own name for the speaker, so a mask shows the mask. The
-    line is typed ``ooc`` for the web feed and is not written to the scene log.
+    the face the speaker is wearing is left out; an account-level mute does not
+    follow the player to another face here, because the room would notice the
+    gap (``ooc_muter_account_ids``). Each listener sees their own name for the
+    speaker, so a mask shows the mask. The line is typed ``ooc`` for the web
+    feed and is not written to the scene log.
     """
 
     key: str = "ooc"

@@ -21,12 +21,12 @@ class UnpuppetFinishesEmptySceneTests(TestCase):
     def test_another_open_window_does_not_close_scene(self):
         """A character still played in another window stays on the grid (#3812),
         so the scene-close check must not run at all."""
-        self.character.sessions.all = mock.MagicMock(return_value=[mock.MagicMock()])
+        self.character.sessions.all = mock.Mock(return_value=[mock.Mock()])
 
         with mock.patch(
             "world.scenes.round_services.maybe_finish_empty_scene"
         ) as mock_maybe_finish:
-            self.character.at_post_unpuppet(session=mock.MagicMock())
+            self.character.at_post_unpuppet(session=mock.Mock())
 
         mock_maybe_finish.assert_not_called()
         assert self.character.location == self.room

@@ -53,21 +53,21 @@ def ooc_muted_persona_ids_for_viewer(*, viewer_account: Any) -> set[int]:
 
 
 def ooc_muter_account_ids(*, persona: Persona) -> set[int]:
-    """Account ids that have OOC-muted ``persona``, by this face or account-wide (#4337).
+    """Account ids that have OOC-muted this very face, ``persona`` (#4337).
 
     The speaker-side twin of ``ooc_muted_persona_ids_for_viewer``: a room-wide OOC line asks
-    once who to leave out rather than once per listener. An account-level mute counts when it
-    names the player behind ``persona`` now (the ``muted_player`` snapshot) and covers OOC.
-    One query, plus the persona's current player.
-    """
-    from django.db.models import Q  # noqa: PLC0415
+    once who to leave out rather than once per listener. One query.
 
-    muted = Q(muted_persona=persona)
-    player = _persona_player(persona)
-    if player is not None:
-        muted |= Q(account_level=True, muted_player=player)
+    Only a mute naming the face being worn counts, even when the mute is account-level. A room
+    line has an audience, so leaving a listener out is observable: the others answer a line the
+    muter never saw. Following an account-level mute to the player's other faces would make
+    that silence a tell linking a mask or an alt to the face that was muted, the reason
+    ADR-0204 keeps IC room channels flag-only. Muting a face hides only what that face says.
+    """
     return set(
-        Mute.objects.filter(muted, mute_ooc=True).values_list("owner__account_id", flat=True)
+        Mute.objects.filter(muted_persona=persona, mute_ooc=True).values_list(
+            "owner__account_id", flat=True
+        )
     )
 
 

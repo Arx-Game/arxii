@@ -497,8 +497,9 @@ directly.
 object's key from `ItemInstance.display_name` once, and `look` and the room listing read the
 key while the inventory and the web read `display_name`. Every later rename goes through
 `materialize.set_item_name` (writes `custom_name`, then syncs the key) or, for a writer
-that saves `custom_name` itself, `materialize.sync_item_object_key`. Callers: staff `@name`
-and the market's `finish_ware`.
+that saves `custom_name` itself, `materialize.sync_item_object_key`. Callers: staff `@name`,
+the market's `finish_ware` and `ItemInstanceAdmin.save_model` (a staff edit of the name or
+the template).
 
 **GM stage-prop improv (#2503).** `world.items.services.staging.stage_prop(item_template,
 room)` is the GM's "are there torches in here?" verb — it creates a fresh, holder-less

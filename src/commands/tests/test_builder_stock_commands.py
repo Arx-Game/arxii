@@ -27,6 +27,7 @@ from world.areas.constants import AreaLevel
 from world.areas.factories import AreaFactory
 from world.areas.services import _room_display_name
 from world.character_sheets.factories import CharacterSheetFactory
+from world.companions.factories import CompanionFactory
 from world.items.factories import ItemInstanceFactory, ItemTemplateFactory
 from world.items.services.materialize import materialize_item_game_object_in_room
 from world.locations.constants import HolderType, LocationParentType
@@ -123,6 +124,23 @@ class NameCommandTests(_StaffFixture):
         assert instance.custom_name == "Heron cup"
         assert instance.display_name == "Heron cup"
         assert _look_name(cup, self.staffer) == "Heron cup"
+
+    def test_a_companion_rename_moves_its_own_name_too(self):
+        """``Companion.name`` is what the companion panels show; ``look`` reads the key."""
+        companion = CompanionFactory(owner=self.sheet, name="Old Hound")
+        hound = ObjectDBFactory(
+            db_key="Old Hound",
+            db_typeclass_path="typeclasses.companions.CompanionObject",
+            location=self.room,
+        )
+        companion.objectdb = hound
+        companion.save(update_fields=["objectdb"])
+
+        _run(CmdName, self.staffer, "@name", "Old Hound = Ember")
+
+        companion.refresh_from_db()
+        assert companion.name == "Ember"
+        assert _live(hound).key == "Ember"
 
     def test_any_other_object_keeps_its_longname_in_step(self):
         ObjectDisplayData.objects.update_or_create(
@@ -226,6 +244,14 @@ class SetDescriptionTests(_StaffFixture):
         _run(CmdSetAttribute, self.staffer, "@set", "StockRock/weight = 12")
 
         assert self.rock.attributes.get("weight") == 12
+
+    def test_desc_among_several_attributes_is_refused_not_parsed(self):
+        """Evennia's multi-attribute flow reads the value as Python; a description is text."""
+        messages = _run(CmdSetAttribute, self.staffer, "@set", 'StockRock/desc/weight = "Hi"')
+
+        assert messages == ["Set desc on its own: set <obj>/desc = <text>"]
+        assert self._description(self.rock) != "Hi"
+        assert self.rock.attributes.get("weight") is None
 
     def test_set_edit_desc_opens_the_description_editor(self):
         # A fresh staffer: the editor adds a persistent cmdset to its caller,

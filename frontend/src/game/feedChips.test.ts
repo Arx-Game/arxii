@@ -27,7 +27,7 @@ const defaults = (): FeedChipState => ({
 });
 
 describe('default chips (#3856)', () => {
-  it('match the demo: Roleplay, Whispers, Movement, Ambience, Visions, OOC, System; Roleplay, Whispers, Visions and OOC wake', () => {
+  it('match the demo: Roleplay, Whispers, Movement, Ambience, Visions, OOC, System; Roleplay, Whispers, Visions and OOC carry wake', () => {
     expect(DEFAULT_FEED_CHIPS.map((c) => [c.label, c.kinds.join(','), c.wake])).toEqual([
       ['Roleplay', 'pose,say,emit', true],
       ['Whispers', 'whisper', true],
@@ -35,7 +35,8 @@ describe('default chips (#3856)', () => {
       ['Ambience', 'ambience', false],
       // A vision is rare and prized (#3779): it shows and it wakes.
       ['Visions', 'vision', true],
-      // Players talking out of character to the room (#4337): it shows and it wakes.
+      // Players talking out of character to the room (#4337): it shows; its wake
+      // flag is set like Visions', though only interactions drive attention today.
       ['OOC', 'ooc', true],
       // Pages (#4129) are OOC lines, so the hide-system button hides them too.
       ['System', 'look,item,error,page,system', false],

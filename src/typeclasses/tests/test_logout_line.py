@@ -8,13 +8,19 @@ does the same step with the line the login line already matched (#3933).
 
 from __future__ import annotations
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import Mock, patch
 
 from django.test import TestCase
 
 from evennia_extensions.factories import CharacterFactory, ObjectDBFactory
 from typeclasses.characters import Character
 from typeclasses.mixins import ObjectParent
+from world.character_sheets.factories import CharacterSheetFactory
+from world.conditions.factories import ConditionInstanceFactory, UnconsciousConditionFactory
+
+
+def _texts(mock_msg) -> list:
+    return [call.kwargs["text"] for call in mock_msg.call_args_list if "text" in call.kwargs]
 
 
 class LogoutLineTests(TestCase):
@@ -32,15 +38,15 @@ class LogoutLineTests(TestCase):
             patch("world.scenes.friend_services.notify_friends_of_status"),
         ):
             self.leaver.at_post_unpuppet(**unpuppet_kwargs)
-        return [call.kwargs["text"] for call in heard.call_args_list if "text" in call.kwargs]
+        return _texts(heard)
 
     def test_the_room_hears_a_typed_departure(self) -> None:
-        heard = self._lines_heard(session=MagicMock())
+        heard = self._lines_heard(session=Mock())
 
         assert heard == [("Leaver has left the game.", {"type": "move"})]
 
     def test_the_character_still_leaves_the_grid(self) -> None:
-        self._lines_heard(session=MagicMock())
+        self._lines_heard(session=Mock())
 
         assert self.leaver.location is None
         assert self.leaver.db.prelogout_location == self.room
@@ -53,19 +59,22 @@ class LogoutLineTests(TestCase):
 
     def test_a_sneaking_character_logs_out_silently(self) -> None:
         with patch("world.stealth.services.is_sneaking", return_value=True):
-            heard = self._lines_heard(session=MagicMock())
+            heard = self._lines_heard(session=Mock())
 
         assert heard == []
         assert self.leaver.location is None
 
-    def test_a_dreamside_occupant_does_not_hear_it(self) -> None:
-        with patch(
-            "typeclasses.characters.resolve_broadcast_exclusions",
-            return_value={self.listener},
-        ):
-            heard = self._lines_heard(session=MagicMock())
+    def test_an_unconscious_occupant_does_not_hear_it(self) -> None:
+        """Dreamside perception (#2287) through the real exclusion registry, not a stub."""
+        sleeper = CharacterFactory(db_key="Sleeper", location=self.room)
+        CharacterSheetFactory(character=sleeper)
+        ConditionInstanceFactory(target=sleeper, condition=UnconsciousConditionFactory())
 
-        assert heard == []
+        with patch.object(sleeper, "msg") as sleeper_heard:
+            heard = self._lines_heard(session=Mock())
+
+        assert heard == [("Leaver has left the game.", {"type": "move"})]
+        assert _texts(sleeper_heard) == []
 
     def test_the_name_is_the_listeners_display_name(self) -> None:
         """A mask shows the mask: the line asks the leaver for its name per listener."""
@@ -74,16 +83,28 @@ class LogoutLineTests(TestCase):
             "get_display_name",
             side_effect=lambda looker=None, **_kwargs: f"the masked figure (to {looker.key})",
         ):
-            heard = self._lines_heard(session=MagicMock())
+            heard = self._lines_heard(session=Mock())
 
         assert heard == [
             ("the masked figure (to Listener) has left the game.", {"type": "move"}),
         ]
 
-    def test_closing_one_of_two_windows_sends_nothing_and_stays(self) -> None:
-        self.leaver.sessions.all = MagicMock(return_value=[MagicMock()])
+    def test_a_failing_line_still_takes_the_character_off_the_grid(self) -> None:
+        """The rest of the hook runs on every reload too (#3195); a broken line can't stop it."""
+        with (
+            patch.object(Character, "_announce_departure", side_effect=RuntimeError("broken")),
+            patch("world.player_submissions.services.report_error") as reported,
+        ):
+            self._lines_heard(session=Mock())
 
-        heard = self._lines_heard(session=MagicMock())
+        assert self.leaver.location is None
+        assert self.leaver.db.prelogout_location == self.room
+        reported.assert_called_once()
+
+    def test_closing_one_of_two_windows_sends_nothing_and_stays(self) -> None:
+        self.leaver.sessions.all = Mock(return_value=[Mock()])
+
+        heard = self._lines_heard(session=Mock())
 
         assert heard == []
         assert self.leaver.location == self.room

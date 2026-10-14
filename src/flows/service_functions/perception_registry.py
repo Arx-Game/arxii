@@ -17,9 +17,11 @@ the registry silently fails to close the gap it exists for. Current callers:
 ``flows.service_functions.communication.message_location`` (the general
 broadcast path), ``actions.definitions.communication`` 's language-aware
 ``say`` per-recipient delivery loop (hand-rolls room delivery instead of
-calling ``message_location``), and
-``world.vitals.carry_services._broadcast_waking`` (carry/set-down room
-emits). A new hand-rolled ``location.msg_contents(...)`` call site MUST call
+calling ``message_location``) and its ``ooc`` room line (``OOCSayAction``,
+#4337), ``world.vitals.carry_services._broadcast_waking`` (carry/set-down room
+emits), and ``typeclasses.characters.Character``'s login and logout lines
+(``_announce_arrival``, ``_announce_departure``, #3933/#4336). A new
+hand-rolled ``location.msg_contents(...)`` call site MUST call
 this seam too, not add a fourth direct ``_dreamside_occupants``-style import.
 
 Dependency-free by design (ADR-0010, specific-general FK direction generalized
