@@ -1044,6 +1044,34 @@ gate, plain Django forms, `base_site.html`, a page-owned `extrastyle` link.
 - Deliberate no-ADR: recorded in the approved #3675 spec, the same precedent
   #3660/#3675 set above.
 
+## Standoff Profile Builder (#4354)
+
+**Purpose:** author one creature template's standoff profile - its `cause` and
+`cause_margin_percent`, every `CreatureDrive` and every template-owned `FactionRule` - on one
+page in one transaction, replacing the two stock inlines the creature template change page
+used to carry. Same pattern as the Builders above: `superuser_required`, the contributor gate
+(an unlinked operator sees the shared setup guidance and nothing saves), `base_site.html`
+with `forms.css`/`widgets.css` linked by the page itself, `builder_formsets.js` for "+ Add".
+
+- **Files** - `web/admin/standoff_profile/`: `forms.py` (`StandoffProfileForm`,
+  `CreatureDriveFormSet`, `FactionRuleFormSet`; `FactionRule.rule` is a JSON textarea until
+  the predicate widget lands in slice 2), `live.py` (`drive_context`: each drive's property
+  description and the approaches and terms that reach it; `grade_preview`: each approach and
+  terms graded for an example character of `?level=` against one member of that level,
+  through the shared `social_target_difficulty` with no actor; `cause_check`: a plain-text
+  reading against an example party of `?party=`; `placements`), `views.py`
+  (`standoff_profile`). Templates in `web/templates/admin/standoff_profile/`: `page.html`,
+  `_rail.html`, `_css.html`.
+- **Ways in** - the "Open the Standoff Profile Builder" object tool on the creature
+  template's change page (`links.builder_url`'s `CreatureTemplate` branch).
+- **URL** - `_standoff_profile/<template_pk>/` -> `admin_standoff_profile`.
+- **Credit** - a valid save credits the template (`stamp_written`); drives and faction rules
+  are not credited content. A refused save drops the template and the posted drive and rule
+  rows from the identity map, since validating a ModelForm writes the posted values onto the
+  shared instance.
+- **Guard** - `web/admin/tests/test_standoff_profile_builder.py`'s styling test, the same
+  "the rule must reach the page" check as the other Builders.
+
 ## Soulfray Stage Builder (#4089)
 
 **Purpose:** author one Soulfray `ConditionStage`'s whole consequence ladder - its own

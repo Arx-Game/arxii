@@ -599,7 +599,12 @@ actions, backends, and service functions.
   `gm prompt done <id>` close a prompt directly (`done` is the GM-facing name for
   closing one that has already been narrated, same backend close, `DismissGMPromptAction`).
   `gm prompts` labels each row with the verbs that resolve it: a dramatic-moment row names
-  `moment confirm|dismiss <id>`, since `gm prompt` closes narration kinds only.
+  `moment confirm|dismiss <id>`, since `gm prompt` closes narration kinds only. A standoff
+  proposal row (#4354) names `gm prompt confirm|hold <id>` and `gm prompt override <id>
+  <reason>` (`gm_standoff_confirm`/`_hold`/`_override`), and `gm standoff shake|steady
+  <group id or name> <reason>` is the GM morale control (`gm_standoff_morale`). Bare
+  `standoff` outside the encounter shows a scene GM the GM view and anyone else the public
+  summary.
   `gm suggest <kind>=<text>` (#2127 — `kind` one of
   `new_situation`/`check_fit`/`difficulty_guide`/`pool_guide`/`other`) dispatches
   `SubmitCatalogSuggestionAction` (`actions/definitions/gm_catalog.py`), gated

@@ -860,6 +860,14 @@ to the actor's current room for a location-less Battle scene or a scene-less pro
 `present_characters_in_room`, one batched query, shared by the REST serializer and telnet's
 `gm prompt send`.
 
+**Decision prompts (#4354, ADR-4354-A).** `STANDOFF_CAUSE` is a decision kind
+(`DECISION_PROMPT_KINDS`): addressed to one GM like a narration kind (visibility reads
+`ADDRESSED_PROMPT_KINDS`), but resolved by `gm_standoff_confirm`/`_hold`/`_override` instead of
+narrated or dismissed. `POST .../confirm/` branches on kind; `.../hold/` and `.../override/`
+(`{reason}`, required) are standoff-only. The row carries `standoff_group_name`,
+`standoff_cause_label`, `standoff_reason` and, once decided, `resolution_note`. Scene end
+closes any still pending. See `docs/systems/standoffs.md`.
+
 **Who the queue says it concerns (ruling RF-2).** A queue row's `subject_name` and
 `subject_persona_id` come from the frozen `subject_persona` (falling back to the subject's
 primary persona, and to no name at all if even that is missing), resolved for the page by

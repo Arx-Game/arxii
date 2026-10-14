@@ -7628,22 +7628,34 @@ weights, speed_rank, Thread pulls). `CovenantRank` = administrative authority
 - **Source:** `src/world/covenants/`
 - **Details:** [covenants.md](covenants.md)
 
-### Standoffs (#4145)
+### Standoffs (#4145, #4354)
 The moment before a fight: round zero of a `CombatEncounter`, where a party reads groups of
 creatures, presses them with social approaches and names terms that settle them. Derived
-from OPEN `StandoffGroup` rows, never a stored flag (ADR-4145-A).
+from live (OPEN or PROPOSED) `StandoffGroup` rows, never a stored flag (ADR-4145-A). In a
+scene a GM is running, a firing cause becomes a GM proposal (ADR-4354-A).
 
-- **Models:** `CreatureDrive`, `RegardRule`, `StandoffApproach`, `StandoffTerms`,
-  `StandoffConfig` (singleton), `StandoffGroup`, `StandoffReveal`, `StandoffSparkShare`;
-  `CreatureTemplate.cause` / `cause_margin_percent`; `OpponentTierTemplate.force_weight_percent`; `MissionOption.opens_as_standoff`.
+- **Models:** `CreatureDrive`, `FactionRule` (was `RegardRule`), `StandoffApproach`,
+  `StandoffTerms`, `StandoffConfig` (singleton), `StandoffCauseGloss`, `StandoffGroup`,
+  `StandoffReveal`, `StandoffAngleShare` (was `StandoffSparkShare`), `StandoffMoraleRuling`;
+  `CreatureTemplate.cause` (NONE, PREDATION, ORDERS) / `cause_margin_percent`;
+  `OpponentTierTemplate.force_weight_percent`; `MissionOption.opens_as_standoff`;
+  `BeatOpponentLine.opens_as_standoff`; `GMPrompt.standoff_group` / `resolution_note`
+  (`GMPromptKind.STANDOFF_CAUSE`, a decision kind).
 - **Key functions:** `open_standoff`, `end_standoff_into_fight`,
-  `begin_round_or_break_standoff` (`services/state.py`); `evaluate_causes`, `cause_fires`
-  (`services/force.py`); `standoff_read`, `standoff_press`, `standoff_terms`,
-  `standoff_fight`, `standoff_share_spark` (`services/verbs.py`); `build_standoff_view`
+  `begin_round_or_break_standoff` (`services/state.py`); `evaluate_causes`,
+  `cause_fire_reason`, `cause_fires` (`services/force.py`); `standoff_is_gm_run`, `propose`,
+  `resolve_proposal` (`services/proposals.py`); `shift_group_morale`
+  (`services/gm_morale.py`); `build_gm_standoff_view`, `build_standoff_summary`
+  (`services/gm_view.py`); `settled_tier` (`services/routing.py`); `faction_rule_matches`
+  (`services/faction_rules.py`); `standoff_read`, `standoff_press`, `standoff_terms`,
+  `standoff_fight`, `standoff_share_angle` (`services/verbs.py`); `build_standoff_view`
   (`services/view.py`); `social_target_difficulty` (`world/checks/social_target.py`, one
   grade for every social check on a character, ADR-4145-B).
-- **Surfaces:** actions `standoff_*`, telnet `standoff`, `StandoffCard` on the encounter
-  detail's per-viewer `standoff` block.
+- **Surfaces:** actions `standoff_*` and `gm_standoff_*` / `gm_open_standoff`, telnet
+  `standoff`, `gm prompt confirm|hold|override`, `gm standoff shake|steady`; `StandoffCard`,
+  `GMStandoffPanel` and `StandoffSummaryCard` from the encounter detail's `standoff`,
+  `gm_standoff` and `standoff_summary` blocks; the Standoff Profile Builder admin page
+  (`web/admin/standoff_profile/`).
 - **Details:** [standoffs.md](standoffs.md)
 
 ### Spectacle (#4147)
