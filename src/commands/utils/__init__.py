@@ -156,7 +156,8 @@ def command_names(obj: Any) -> list[str]:
     The web composer reads this list to tell ``@desc`` (a command this
     character can run) from ``@Nyx`` (someone to address) and from a word that
     is neither. Covers every command *obj* and its account can run, not only
-    the ones with a web form, which is all ``serialize_cmdset`` sends.
+    the ones with a web form, which is all ``serialize_cmdset`` sends. The
+    session cmdset (Evennia's ``sessions``) is not read.
 
     Returns:
         list[str]: Sorted, prefix-free, lowercased names.

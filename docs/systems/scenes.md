@@ -1528,9 +1528,10 @@ own default is derived the same way (#3857): with no mode chosen it is Pose, so 
 typed line is a pose and never a raw command; a line starting with `/` is the
 command after the slash. `+`, and `@` with a command the character has, mark a
 command too (#4346); `@` with someone in the room addresses them (in a scene the
-composer sends the names as the pose endpoint's `target_names`), a person present
-winning over a command of the same name; `@` with neither is held in the composer
-with a note, never posted (`frontend/src/game/composerLine.ts`). Staff have a Commands mode whose lines go as typed and
+composer sends the names as the pose endpoint's `target_names` and keeps them in
+the text), a person present winning over a command of the same name; in pose or
+emit, `@` with neither is held in the composer with a note, never posted
+(`frontend/src/game/composerLine.ts`). Staff have a Commands mode whose lines go as typed and
 whose answers land in the staff console (`StaffConsole.tsx`), tagged `console` by
 `server/conf/serversession.py` while `server/conf/inputfuncs.py:text` runs the
 line, never in the player-facing column. Nothing about the selection is

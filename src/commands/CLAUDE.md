@@ -1168,10 +1168,16 @@ actions, backends, and service functions.
   commands with a web form). `command_names()` (#4346) — every key and alias the
   object and its account can run (the `cmd` lock checked), lowercased with
   `CMD_IGNORE_PREFIXES` stripped the way Evennia's parser matches them, Evennia's
-  `__` system commands left out. `commands_frame()` builds the `commands` frame from
-  both: `session.msg(commands=commands_frame(obj))`, descriptors as args, `names` in
-  kwargs. Every sender uses it (puppet, login, `CmdSetHandler` on a cmdset change);
-  the web composer reads the names to tell `@desc` from `@Nyx`.
+  `__` system commands left out (the session cmdset is not read, so `@sessions`
+  is held on the web; `/sessions` reaches it). `commands_frame()` builds the
+  `commands` frame from both: `session.msg(commands=commands_frame(obj))`,
+  descriptors as args, `names` in kwargs. It is sent on puppet, to the
+  character's sessions, and on login, to the logging-in window only (#4346: the
+  account's frame has no character commands, and sent to every window it emptied
+  a sibling tab's list). `CmdSetHandler` (`evennia_overrides/cmdset_handler.py`)
+  re-sends it on a cmdset change but is not installed on any typeclass, so the
+  names are as of the last puppet. The web composer reads them to tell `@desc`
+  from `@Nyx`.
 - **`serializers.py`**: `CommandSerializer` — DRF serializer for command payloads
 
 ### Other

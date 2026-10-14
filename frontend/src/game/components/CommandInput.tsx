@@ -7,7 +7,7 @@ import { useActionResult } from '@/hooks/actionResultBus';
 import type { ActionResultPayload } from '@/hooks/types';
 import { useDraftStore, readStoredDraft } from '@/game/useDraftStore';
 import type { DraftKey, DraftMode, DraftScopeSettling } from '@/game/useDraftStore';
-import { readComposerLine } from '@/game/composerLine';
+import { readComposerLine, uniqueNames } from '@/game/composerLine';
 import type { ComposerLine } from '@/game/composerLine';
 import { dbrefToId } from '@/lib/dbref';
 import { RichTextInput } from '@/components/RichTextInput';
@@ -76,6 +76,14 @@ const EXECUTE_ACTION_SPEECH_MODES = new Set(['say', 'whisper', 'tt']);
 
 /** No command names yet (before the first `commands` frame): one stable empty list. */
 const NO_COMMAND_NAMES: readonly string[] = [];
+/** Modes where a leading `@Nyx` addresses someone here (#4346); elsewhere it is just text. */
+const ADDRESSING_MODES: ReadonlySet<string> = new Set(['pose', 'emit']);
+/**
+ * Verbs whose telnet command runs the server's target parser, which reads a
+ * leading `@@` as the escape (`parse_targets_from_text`). Tabletalk, whisper
+ * and page do not, so they are sent the spoken text instead.
+ */
+const PARSING_VERBS: ReadonlySet<string> = new Set(['pose', 'emit', 'say']);
 
 /**
  * Builds the socket line for a read composer line given the active composer
@@ -88,14 +96,11 @@ function buildFullCommand(
   composerMode?: ComposerMode
 ): string {
   if (line.kind === 'command') return line.line;
-  // Say, pose and emit run the server's target parser, which reads a doubled
-  // `@` as the escape; whisper and page do not, so they get the spoken text.
-  const text = line.socketText;
-  if (!composerMode) return text;
+  if (!composerMode) return line.socketText;
 
-  const firstWord = text.split(' ')[0].toLowerCase();
+  const firstWord = line.socketText.split(' ')[0].toLowerCase();
   const hasExplicitCommand = KNOWN_COMMANDS.has(firstWord);
-  if (hasExplicitCommand) return text;
+  if (hasExplicitCommand) return line.socketText;
 
   if (composerMode.command === 'whisper' && composerMode.targets.length > 0) {
     return `whisper ${composerMode.targets[0]}=${line.spoken}`;
@@ -104,7 +109,13 @@ function buildFullCommand(
   if (composerMode.command === 'page' && composerMode.targets.length > 0) {
     return `page ${composerMode.targets[0]}=${line.spoken}`;
   }
-  const targetStr = composerMode.targets.length > 0 ? ` @${composerMode.targets.join(',@')} ` : ' ';
+  // The server unescapes only a LEADING `@@`, so the doubled form is right only
+  // when the typed text opens the command's arguments: a parsing verb with no
+  // picked targets in front of it (#4346).
+  const targets = composerMode.targets;
+  const text =
+    PARSING_VERBS.has(composerMode.command) && targets.length === 0 ? line.socketText : line.spoken;
+  const targetStr = targets.length > 0 ? ` @${targets.join(',@')} ` : ' ';
   return `${composerMode.command}${targetStr}${text}`;
 }
 
@@ -247,6 +258,11 @@ export function CommandInput({
     if (!activeCharacter) return NO_COMMAND_NAMES;
     return state.game.sessions[activeCharacter]?.commandNames ?? NO_COMMAND_NAMES;
   });
+  // Before a `room_state` (or on a page with no live session) nobody is known to
+  // be here, so nobody can be called absent either.
+  const roomKnown = useAppSelector((state) =>
+    activeCharacter ? Boolean(state.game.sessions[activeCharacter]?.room) : false
+  );
   // #3867 — the entrance is the first pose, not a toggle: a state the composer
   // shows until the room's own `room_state` says this character has entered
   // the live scene. The server marks the pose whatever is sent; `pose_kind`
@@ -543,10 +559,21 @@ export function CommandInput({
       isCommandsMode
         ? null
         : readComposerLine(draft.content.trim(), {
-            people: [...roomCharacters.map((occupant) => occupant.name), character],
+            people: roomKnown
+              ? [...roomCharacters.map((occupant) => occupant.name), character]
+              : null,
             commandNames,
+            addressing: !composerMode || ADDRESSING_MODES.has(composerMode.command),
           }),
-    [isCommandsMode, draft.content, roomCharacters, character, commandNames]
+    [
+      isCommandsMode,
+      draft.content,
+      roomKnown,
+      roomCharacters,
+      character,
+      commandNames,
+      composerMode,
+    ]
   );
   // A lone `@wor` at the end of the line may still be mid-word, so its note waits
   // for a send; this is the text that send was refused for.
@@ -798,19 +825,19 @@ export function CommandInput({
       // reuse) must not silently eat the player's text; the composer keeps
       // it and the server's error surfaces via toast so a retry doesn't mean
       // retyping the whole pose.
-      // #4346 — a typed leading `@Nyx,@Bob` addresses them here too, as the
-      // server's own parser does on the socket path: the names join the picked
-      // targets and leave the text. The endpoint reads only `target_names`.
+      // #4346 — a typed leading `@Nyx,@Bob` addresses them here too: the names
+      // join the picked targets (the endpoint reads only `target_names`, by key)
+      // and stay in the text, since a name the key match misses (a worn face, a
+      // multi-word name) would otherwise vanish from the pose. Once each, without
+      // case: two spellings of one person would write the same target row twice.
       const typedTargets = composerLine.kind === 'prose' ? composerLine.targets : [];
-      const composerTargets = [...new Set([...(composerMode?.targets ?? []), ...typedTargets])];
-      const poseContent =
-        composerLine.kind === 'prose' && typedTargets.length > 0 ? composerLine.body : spoken;
+      const composerTargets = uniqueNames([...(composerMode?.targets ?? []), ...typedTargets]);
       const clientRequestId = beginSend(liveSpeechMode);
       pendingSpeechRef.current = { clientRequestId, text: trimmed };
       submitPose({
         persona_id: personaId,
         scene_id: Number(sceneId),
-        content: poseContent,
+        content: spoken,
         client_request_id: clientRequestId,
         pose_kind: isEntrance ? 'entry' : undefined,
         ...(composerTargets.length > 0 ? { target_names: composerTargets } : {}),

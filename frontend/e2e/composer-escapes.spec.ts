@@ -60,10 +60,11 @@ test.describe('@ and + mark a command, and a person present wins (#4346)', () =>
     await expect.poll(() => sentText(connection)).toContain('@sheet');
     expect(posed).toHaveLength(0);
 
-    // `@` and someone here addresses them through the pose endpoint's target names.
+    // `@` and someone here addresses them through the pose endpoint's target
+    // names; the name stays in the text, so a key the server cannot match loses nothing.
     await typeLine(page, '@Nyx waves her over.');
     await expect.poll(() => posed.length).toBe(1);
-    expect(posed[0]).toMatchObject({ content: 'waves her over.', target_names: ['Nyx'] });
+    expect(posed[0]).toMatchObject({ content: '@Nyx waves her over.', target_names: ['Nyx'] });
 
     // `@@` poses one literal at sign and addresses nobody.
     await typeLine(page, '@@everyone gets a round.');

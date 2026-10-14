@@ -11,13 +11,16 @@
  * | `//`                                | prose with one literal `/`            |
  * | `/`                                 | the command after the slash           |
  * | `@@` or `++`                        | prose with one literal `@` or `+`     |
- * | `+` and a digit                     | prose (`+1`)                          |
- * | `+` and anything else               | a command, sent as typed              |
+ * | `+` and a letter                    | a command, sent as typed              |
+ * | `+` and anything else (`+1`, `+_+`) | prose                                 |
  * | `@` and the name of someone here    | prose addressed to them               |
  * | `@` and a command the character has | a command, sent as typed              |
  * | `@` and anything else               | held                                  |
  *
  * In a target list (`@Nyx,@Bob waves`) every name has to be someone here.
+ * Nothing is held where `@` addresses nobody (a page, a whisper, a structured
+ * say) or while the room is not known yet: there the line is prose, unless its
+ * `@` word is a command.
  */
 
 /** A name character, as Python's Unicode `\w` plus the hyphen the server's token allows. */
@@ -33,13 +36,19 @@ const TARGET_LIST = new RegExp(
 /** A leading `@word` with no list after it (`@who`, `@desc/edit here`, `@Nyx`). */
 const LEADING_AT_WORD = new RegExp(`^@(${NAME_CHARS})`, 'u');
 const NAME_WORD = new RegExp(NAME_CHARS, 'gu');
+const PLUS_COMMAND = /^\+\p{L}/u;
 const DRAFT_KEPT = 'Your draft is kept.';
 
 export interface ComposerLineContext {
-  /** The people here, by the names the room list shows (worn faces, never keys). */
-  people: readonly string[];
+  /**
+   * The people here, by the names the room list shows (worn faces, never keys),
+   * or `null` while the room is not known: then nobody can be called absent.
+   */
+  people: readonly string[] | null;
   /** Every name this character can type a command by (`Session.commandNames`). */
   commandNames: readonly string[];
+  /** Whether `@` addresses people in this mode (pose, emit), so an unknown name is held. */
+  addressing: boolean;
 }
 
 export type ComposerLine =
@@ -48,16 +57,18 @@ export type ComposerLine =
   | {
       kind: 'prose';
       /**
-       * What follows the mode's verb on the socket (`pose <socketText>`). A `@@`
+       * What follows a parsing verb on the socket (`pose <socketText>`). A `@@`
        * stays doubled: the server's target parser reads it as the escape.
        */
       socketText: string;
       /** What the room reads: every escape removed. For the paths that parse nothing. */
       spoken: string;
-      /** The leading `@` names, when the line opens with a target list. */
+      /**
+       * The leading `@` names when the line opens with a list of people here,
+       * once each. The text keeps them: the server resolves names by key, which
+       * the room list does not show, so taking one out could lose it.
+       */
       targets: string[];
-      /** `spoken` without that list, for the pose endpoint's `target_names` form. */
-      body: string;
     }
   | {
       kind: 'held';
@@ -70,8 +81,8 @@ export type ComposerLine =
       settled: boolean;
     };
 
-function prose(socketText: string, spoken = socketText): ComposerLine {
-  return { kind: 'prose', socketText, spoken, targets: [], body: spoken };
+function prose(socketText: string, spoken = socketText, targets: string[] = []): ComposerLine {
+  return { kind: 'prose', socketText, spoken, targets };
 }
 
 /** Every way the room list lets a player write a person: each word, or the whole name hyphenated. */
@@ -84,6 +95,17 @@ function personWords(people: readonly string[]): Set<string> {
     for (const word of name.match(NAME_WORD) ?? []) words.add(word);
   }
   return words;
+}
+
+/** Each name once, compared without case, keeping the first spelling. */
+export function uniqueNames(names: readonly string[]): string[] {
+  const seen = new Set<string>();
+  return names.filter((name) => {
+    const key = name.toLowerCase();
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
 }
 
 function joinWithOr(names: string[]): string {
@@ -101,35 +123,35 @@ function heldForWord(word: string, settled: boolean): ComposerLine {
 }
 
 function readAtLine(trimmed: string, context: ComposerLineContext): ComposerLine {
-  const people = personWords(context.people);
   const commands = new Set(context.commandNames);
-  const isPerson = (name: string) => people.has(name.toLowerCase());
   const isCommand = (name: string) => commands.has(name.toLowerCase());
+  // Where `@` addresses nobody, or the room is not known, nobody can be absent.
+  const people = context.addressing && context.people ? personWords(context.people) : null;
+  const isPerson = (name: string) => people?.has(name.toLowerCase()) ?? false;
 
   const list = TARGET_LIST.exec(trimmed);
-  if (list) {
-    const names = list[1].split(',').map((name) => name.trim().slice(1));
-    const body = list[2];
-    if (names.length === 1 && !isPerson(names[0])) {
-      return isCommand(names[0]) ? { kind: 'command', line: trimmed } : heldForWord(names[0], true);
-    }
-    const missing = names.filter((name) => !isPerson(name));
-    if (missing.length > 0) {
-      return {
-        kind: 'held',
-        reason: `Nobody called ${joinWithOr(missing)} is here.`,
-        hint: DRAFT_KEPT,
-        settled: true,
-      };
-    }
-    return { kind: 'prose', socketText: trimmed, spoken: trimmed, targets: names, body };
+  const names = list ? list[1].split(',').map((name) => name.trim().slice(1)) : null;
+  const word = names?.[0] ?? LEADING_AT_WORD.exec(trimmed)?.[1];
+  if (!word) return prose(trimmed);
+
+  if (!people) {
+    if (isCommand(word) && (names?.length ?? 1) === 1) return { kind: 'command', line: trimmed };
+    return prose(trimmed, trimmed, context.addressing && names ? uniqueNames(names) : []);
   }
 
-  const word = LEADING_AT_WORD.exec(trimmed)?.[1];
-  if (!word) return prose(trimmed);
-  if (isPerson(word)) return prose(trimmed);
+  if (names && names.length > 1) {
+    const missing = names.filter((name) => !isPerson(name));
+    if (missing.length === 0) return prose(trimmed, trimmed, uniqueNames(names));
+    return {
+      kind: 'held',
+      reason: `Nobody called ${joinWithOr(missing)} is here.`,
+      hint: DRAFT_KEPT,
+      settled: true,
+    };
+  }
+  if (isPerson(word)) return prose(trimmed, trimmed, names ? [word] : []);
   if (isCommand(word)) return { kind: 'command', line: trimmed };
-  return heldForWord(word, trimmed.length > word.length + 1);
+  return heldForWord(word, names !== null || trimmed.length > word.length + 1);
 }
 
 /** Reads a trimmed composer line. Commands mode (staff) sends as typed and never comes here. */
@@ -139,9 +161,7 @@ export function readComposerLine(trimmed: string, context: ComposerLineContext):
   if (trimmed.startsWith('@@')) return prose(trimmed, trimmed.slice(1));
   if (trimmed.startsWith('++')) return prose(trimmed.slice(1));
   if (trimmed.startsWith('+')) {
-    const next = trimmed.charAt(1);
-    if (next === '' || /\s|\d/u.test(next)) return prose(trimmed);
-    return { kind: 'command', line: trimmed };
+    return PLUS_COMMAND.test(trimmed) ? { kind: 'command', line: trimmed } : prose(trimmed);
   }
   if (trimmed.startsWith('@')) return readAtLine(trimmed, context);
   return prose(trimmed);
