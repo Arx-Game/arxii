@@ -1,32 +1,18 @@
-"""Django admin for standoffs: creature drives and faction rules, approaches, terms, config."""
+"""Django admin for standoffs: approaches, terms, config and cause glosses.
+
+A creature's drives, cause and faction rules are authored on the Standoff Profile
+Builder (``web/admin/standoff_profile``, #4354), not here.
+"""
 
 from django.contrib import admin
 
 from world.standoffs.models import (
-    CreatureDrive,
-    FactionRule,
     StandoffApproach,
     StandoffCauseGloss,
     StandoffConfig,
     StandoffReactionLine,
     StandoffTerms,
 )
-
-
-class CreatureDriveInline(admin.TabularInline):
-    """Drives edited on the creature template page."""
-
-    model = CreatureDrive
-    extra = 0
-    autocomplete_fields = ("property",)
-
-
-class FactionRuleInline(admin.StackedInline):
-    """Faction rules edited on the creature template page (stacked: they carry prose)."""
-
-    model = FactionRule
-    extra = 0
-    autocomplete_fields = ("drive", "deed_archetype")
 
 
 class StandoffReactionLineInline(admin.StackedInline):
