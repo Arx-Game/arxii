@@ -58,6 +58,12 @@ export interface Session {
   messages: Array<GameMessage & { id: string }>;
   unread: number;
   commands: CommandSpec[];
+  /**
+   * Every name this character can type a command by, prefix-free and lowercased
+   * (#4346): the `commands` frame's `names`. The composer reads it to tell `@desc`
+   * (a command) from `@Nyx` (someone to address).
+   */
+  commandNames: string[];
   room: RoomData | null;
   scene: SceneSummary | null;
   sceneInteractions: InteractionWsPayload[];
@@ -218,6 +224,7 @@ export const gameSlice = createSlice({
           dismissedFeed: [],
           unread: 0,
           commands: [],
+          commandNames: [],
           room: null,
           scene: null,
           sceneInteractions: [],
@@ -340,12 +347,17 @@ export const gameSlice = createSlice({
     },
     setSessionCommands: (
       state,
-      action: PayloadAction<{ character: MyRosterEntry['name']; commands: CommandSpec[] }>
+      action: PayloadAction<{
+        character: MyRosterEntry['name'];
+        commands: CommandSpec[];
+        commandNames: string[];
+      }>
     ) => {
-      const { character, commands } = action.payload;
+      const { character, commands, commandNames } = action.payload;
       const session = state.sessions[character];
       if (session) {
         session.commands = commands;
+        session.commandNames = commandNames;
       }
     },
     setSessionRoom: (

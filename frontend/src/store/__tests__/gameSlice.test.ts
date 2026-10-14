@@ -71,6 +71,7 @@ interface Session {
   dismissedFeed: string[];
   unread: number;
   commands: CommandSpec[];
+  commandNames: string[];
   room: RoomData | null;
   scene: SceneSummary | null;
   sceneInteractions: InteractionWsPayload[];
@@ -95,6 +96,7 @@ const createDefaultSession = (overrides: Partial<Session> = {}): Session => ({
   dismissedFeed: [],
   unread: 0,
   commands: [],
+  commandNames: [],
   room: null,
   scene: null,
   sceneInteractions: [],
@@ -267,6 +269,7 @@ describe('gameSlice', () => {
           dismissedFeed: [],
           unread: 0,
           commands: [],
+          commandNames: [],
           room: null,
           scene: null,
           sceneInteractions: [],
@@ -1087,7 +1090,7 @@ describe('gameSlice', () => {
 
         const result = reducer(
           initialState,
-          setSessionCommands({ character: 'TestCharacter', commands })
+          setSessionCommands({ character: 'TestCharacter', commands, commandNames: [] })
         );
 
         expect(result.sessions['TestCharacter'].commands).toEqual(commands);
@@ -1102,7 +1105,11 @@ describe('gameSlice', () => {
 
         const result = reducer(
           initialState,
-          setSessionCommands({ character: 'TestCharacter', commands: newCommands })
+          setSessionCommands({
+            character: 'TestCharacter',
+            commands: newCommands,
+            commandNames: [],
+          })
         );
 
         expect(result.sessions['TestCharacter'].commands).toEqual(newCommands);
@@ -1114,10 +1121,23 @@ describe('gameSlice', () => {
 
         const result = reducer(
           initialState,
-          setSessionCommands({ character: 'TestCharacter', commands: [] })
+          setSessionCommands({ character: 'TestCharacter', commands: [], commandNames: [] })
         );
 
         expect(result.sessions['TestCharacter'].commands).toEqual([]);
+      });
+
+      it('replaces the names the character can type along with the commands (#4346)', () => {
+        const initialState = createStateWithSession('TestCharacter', {
+          commandNames: ['desc', 'who'],
+        });
+
+        const result = reducer(
+          initialState,
+          setSessionCommands({ character: 'TestCharacter', commands: [], commandNames: ['who'] })
+        );
+
+        expect(result.sessions['TestCharacter'].commandNames).toEqual(['who']);
       });
     });
 
@@ -1128,7 +1148,7 @@ describe('gameSlice', () => {
 
         const result = reducer(
           initialState,
-          setSessionCommands({ character: 'NonExistent', commands })
+          setSessionCommands({ character: 'NonExistent', commands, commandNames: [] })
         );
 
         expect(result.sessions['NonExistent']).toBeUndefined();
@@ -1154,7 +1174,7 @@ describe('gameSlice', () => {
 
         const result = reducer(
           initialState,
-          setSessionCommands({ character: 'TestCharacter', commands: [command] })
+          setSessionCommands({ character: 'TestCharacter', commands: [command], commandNames: [] })
         );
 
         expect(result.sessions['TestCharacter'].commands[0]).toEqual(command);
@@ -1488,6 +1508,7 @@ describe('gameSlice', () => {
             dismissedFeed: [],
             unread: 10,
             commands: [createCommandSpec('attack', 'Attack')],
+            commandNames: ['attack'],
             room: createRoomData(
               1,
               'Castle',
@@ -1534,7 +1555,7 @@ describe('gameSlice', () => {
 
       // Receive commands
       const commands = [createCommandSpec('look', 'Look around')];
-      state = reducer(state, setSessionCommands({ character: 'Hero', commands }));
+      state = reducer(state, setSessionCommands({ character: 'Hero', commands, commandNames: [] }));
       expect(state.sessions['Hero'].commands).toEqual(commands);
 
       // Enter room
