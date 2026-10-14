@@ -113,6 +113,7 @@ class GMGroupViewSerializer(serializers.Serializer):
     cause_margin_percent = serializers.IntegerField()
     proposal_reason = serializers.CharField(allow_blank=True)
     pending_prompt_id = serializers.IntegerField(allow_null=True)
+    last_decision = serializers.CharField(allow_blank=True)
     override_standing = serializers.BooleanField()
     emboldened_bands = serializers.IntegerField()
     terms_ease = serializers.IntegerField()

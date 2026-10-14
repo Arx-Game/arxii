@@ -56763,6 +56763,8 @@ components:
         pending_prompt_id:
           type: integer
           nullable: true
+        last_decision:
+          type: string
         override_standing:
           type: boolean
         emboldened_bands:
@@ -56807,6 +56809,7 @@ components:
       - group_force
       - group_id
       - has_morale
+      - last_decision
       - member_count
       - members
       - morale_state
@@ -57041,6 +57044,11 @@ components:
           type: string
           readOnly: true
           default: ''
+        standoff_force:
+          type: string
+          description: 'The force on both sides, read when the queue is: blank on
+            other kinds.'
+          readOnly: true
         resolution_note:
           type: string
           readOnly: true
@@ -57080,6 +57088,7 @@ components:
       - scene
       - stake_summary
       - standoff_cause_label
+      - standoff_force
       - standoff_group
       - standoff_group_name
       - standoff_reason

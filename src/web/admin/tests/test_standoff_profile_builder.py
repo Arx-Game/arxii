@@ -134,10 +134,22 @@ class ProfileBuilderPageTests(ProfileBuilderTestCase):
 
 
 class ProfileBuilderSaveTests(ProfileBuilderTestCase):
+    def test_save_and_continue_stays_on_the_builder(self) -> None:
+        self.client.force_login(self.author)
+        data = self.post_data()
+        data.pop("save")
+        data["save_continue"] = "Save and continue editing"
+        response = self.client.post(self.url(), data)
+        self.assertRedirects(response, self.url(), fetch_redirect_response=False)
+
     def test_one_save_writes_the_creature_its_drives_and_its_rules(self) -> None:
         self.client.force_login(self.author)
         response = self.client.post(self.url(), self.post_data())
-        self.assertEqual(response.status_code, 302)
+        self.assertRedirects(
+            response,
+            reverse("admin:arxii_creaturetemplate_change", args=[self.template.pk]),
+            fetch_redirect_response=False,
+        )
         self.template.refresh_from_db()
         self.assertEqual(
             (self.template.cause, self.template.cause_margin_percent), (CauseKind.ORDERS, 10)

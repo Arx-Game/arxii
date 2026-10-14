@@ -136,6 +136,16 @@ describe('StandoffCard', () => {
     expect(screen.getByText(/4/)).toBeInTheDocument();
   });
 
+  it('says something about the party matters until a read reveals the rule', () => {
+    const { unmount } = renderCard();
+    expect(screen.getByTestId('standoff-matters-hint')).toHaveTextContent(
+      'Something about one of you matters to them.'
+    );
+    unmount();
+    renderCard({ ...STANDOFF, angles: [] });
+    expect(screen.queryByTestId('standoff-matters-hint')).toBeNull();
+  });
+
   it('renders the own angle and shares it', async () => {
     const user = userEvent.setup();
     renderCard();

@@ -27,6 +27,7 @@ function group(patch: Partial<GMGroupView> = {}): GMGroupView {
     cause_margin_percent: 25,
     proposal_reason: '',
     pending_prompt_id: null,
+    last_decision: '',
     override_standing: false,
     emboldened_bands: 0,
     terms_ease: 0,
@@ -117,6 +118,13 @@ describe('GMStandoffPanel', () => {
     expect(screen.queryByText(/Party outweighs them/)).toBeNull();
   });
 
+  it("shows the GM's last decision once no proposal is pending", () => {
+    renderPanel(group({ last_decision: 'Held for one action.' }));
+    expect(screen.getByTestId('standoff-last-decision')).toHaveTextContent(
+      'Last decision: Held for one action.'
+    );
+  });
+
   it('hides the morale control when the group has no morale', () => {
     renderPanel(group({ has_morale: false }));
     expect(screen.queryByRole('button', { name: 'Shake' })).toBeNull();
@@ -126,7 +134,11 @@ describe('GMStandoffPanel', () => {
     const user = userEvent.setup();
     renderPanel();
     await user.click(screen.getByRole('button', { name: 'Shake' }));
-    const submit = screen.getByRole('button', { name: 'Shake them' });
+    const confirm = screen.getByTestId('standoff-morale-confirm');
+    expect(
+      within(confirm).getByText('moves them one state: steady to faltering')
+    ).toBeInTheDocument();
+    const submit = within(confirm).getByRole('button', { name: 'Shake' });
     expect(submit).toBeDisabled();
     await user.click(submit);
     expect(mutate).not.toHaveBeenCalled();

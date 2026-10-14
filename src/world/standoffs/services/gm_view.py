@@ -33,7 +33,7 @@ from world.standoffs.services.force import (
     group_force,
     party_force,
 )
-from world.standoffs.services.proposals import pending_prompts
+from world.standoffs.services.proposals import last_decision, pending_prompts
 from world.standoffs.services.state import active_members, is_in_standoff
 
 if TYPE_CHECKING:
@@ -82,6 +82,7 @@ class GMGroupView:
     cause_margin_percent: int
     proposal_reason: str
     pending_prompt_id: int | None
+    last_decision: str
     override_standing: bool
     emboldened_bands: int
     terms_ease: int
@@ -192,6 +193,7 @@ def _gm_group(group: StandoffGroup, participants: list, config: StandoffConfig) 
         cause_margin_percent=template.cause_margin_percent,
         proposal_reason=group.proposal_reason if prompts else "",
         pending_prompt_id=prompts[0].pk if prompts else None,
+        last_decision=last_decision(group),
         override_standing=group.override_party_force is not None,
         emboldened_bands=group.emboldened_bands,
         terms_ease=group.terms_ease,

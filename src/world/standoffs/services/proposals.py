@@ -113,11 +113,43 @@ def close_group_prompts(group: StandoffGroup, note: str) -> None:
     )
 
 
+def force_line(group: StandoffGroup) -> str:
+    """The force on both sides as the GM reads it: party, group, and emboldening."""
+    from world.standoffs.models import StandoffConfig  # noqa: PLC0415
+    from world.standoffs.services.force import group_force, party_force  # noqa: PLC0415
+
+    config = StandoffConfig.load()
+    party = round(party_force(group.encounter, config), 1)
+    theirs = round(group_force(group, config), 1)
+    bands = group.emboldened_bands
+    line = f"Force: party {party:g}, them {theirs:g}"
+    if bands:
+        line += f", emboldened {bands} band{'s' if bands != 1 else ''}"
+    return f"{line}."
+
+
+def last_decision(group: StandoffGroup) -> str:
+    """The GM's most recent decision on this group's proposals, or ""."""
+    from world.gm.models import GMPrompt  # noqa: PLC0415
+
+    prompt = (
+        GMPrompt.objects.filter(standoff_group=group, kind=GMPromptKind.STANDOFF_CAUSE)
+        .exclude(status=GMPromptStatus.PENDING)
+        .exclude(resolution_note="")
+        .order_by("-created_at", "-pk")
+        .first()
+    )
+    return prompt.resolution_note if prompt is not None else ""
+
+
 def proposal_summary(group: StandoffGroup) -> str:
-    """One line for the GM: the group, its cause and why it fired."""
+    """One line for the GM: the group, its cause, why it fired, and the force."""
     cause = CauseKind(group.creature_template.cause).label
     reason = group.proposal_reason or "Its cause holds."
-    return f"{group.creature_template.name}: cause fires. Cause: {cause}. Reason: {reason}"
+    return (
+        f"{group.creature_template.name}: cause fires. Cause: {cause}. Reason: {reason} "
+        f"{force_line(group)}"
+    )
 
 
 def _encounter_of_prompt(prompt: GMPrompt, *_: object, **__: object) -> CombatEncounter:

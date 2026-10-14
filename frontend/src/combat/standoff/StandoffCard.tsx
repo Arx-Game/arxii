@@ -322,6 +322,11 @@ function GroupSection({
             {line}
           </p>
         ))}
+        {group.revealed_faction_rules.length === 0 && angles.length > 0 && (
+          <p className="text-xs text-muted-foreground" data-testid="standoff-matters-hint">
+            Something about one of you matters to them.
+          </p>
+        )}
       </div>
 
       <div className="flex min-w-0 flex-col gap-1.5">

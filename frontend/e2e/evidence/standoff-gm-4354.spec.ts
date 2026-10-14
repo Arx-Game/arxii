@@ -109,7 +109,7 @@ test('staff author a creature on the Standoff Profile Builder', async ({ browser
   await page.screenshot({ path: shot('09-admin-profile-builder.png'), fullPage: true });
   // Change the margin and save; the page reloads with the stored value.
   await page.fill('#id_cause_margin_percent', '25');
-  await page.click('input[name="save"]');
+  await page.click('input[name="save_continue"]');
   await expect(page.getByText('Saved and credited to you.')).toBeVisible();
   await expect(page.locator('#id_cause_margin_percent')).toHaveValue('25');
   await expect(page.getByText(/With margin 25,/)).toBeVisible();

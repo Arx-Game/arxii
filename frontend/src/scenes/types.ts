@@ -425,6 +425,7 @@ export interface GMPrompt {
   standoff_group_name?: string;
   standoff_cause_label?: string;
   standoff_reason?: string;
+  standoff_force?: string;
   resolution_note?: string;
   room_text: string;
   private_text: string;

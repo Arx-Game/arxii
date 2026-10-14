@@ -1008,6 +1008,7 @@ class GMPromptSerializer(serializers.ModelSerializer):
         source="standoff_group.creature_template.name", read_only=True, default=""
     )
     standoff_cause_label = serializers.SerializerMethodField()
+    standoff_force = serializers.SerializerMethodField()
     standoff_reason = serializers.CharField(
         source="standoff_group.proposal_reason", read_only=True, default=""
     )
@@ -1031,6 +1032,7 @@ class GMPromptSerializer(serializers.ModelSerializer):
             "standoff_group_name",
             "standoff_cause_label",
             "standoff_reason",
+            "standoff_force",
             "resolution_note",
             "room_text",
             "private_text",
@@ -1072,6 +1074,13 @@ class GMPromptSerializer(serializers.ModelSerializer):
         if group is None:
             return ""
         return CauseKind(group.creature_template.cause).label
+
+    def get_standoff_force(self, obj: GMPrompt) -> str:
+        """The force on both sides, read when the queue is: blank on other kinds."""
+        from world.standoffs.services.proposals import force_line  # noqa: PLC0415
+
+        group = obj.standoff_group
+        return force_line(group) if group is not None else ""
 
     def get_subject_persona_id(self, obj: GMPrompt) -> int | None:
         persona = prompt_subject_persona(obj)

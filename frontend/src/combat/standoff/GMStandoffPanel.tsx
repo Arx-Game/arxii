@@ -32,6 +32,23 @@ function fmt(n: number): string {
   return String(Math.round(n));
 }
 
+const MORALE_ORDER = ['steady', 'falter', 'break'] as const;
+const MORALE_WORD: Record<string, string> = {
+  steady: 'steady',
+  falter: 'faltering',
+  break: 'broken',
+};
+
+/** "moves them one state: steady to faltering", or why it cannot move. */
+export function moraleStepGloss(direction: 'shake' | 'steady', state: string): string {
+  const at = MORALE_ORDER.indexOf(state as (typeof MORALE_ORDER)[number]);
+  const to = direction === 'shake' ? at + 1 : at - 1;
+  if (at < 0 || to < 0 || to >= MORALE_ORDER.length) {
+    return direction === 'shake' ? 'already broken' : 'already steady';
+  }
+  return `moves them one state: ${MORALE_WORD[state]} to ${MORALE_WORD[MORALE_ORDER[to]]}`;
+}
+
 function MoraleControl({ encounterId, group }: { encounterId: number; group: GMGroupView }) {
   const [direction, setDirection] = useState<'shake' | 'steady' | null>(null);
   const [reason, setReason] = useState('');
@@ -67,8 +84,8 @@ function MoraleControl({ encounterId, group }: { encounterId: number; group: GMG
           className="flex flex-col gap-2 rounded-md border border-primary/50 bg-primary/5 p-2 text-sm"
           data-testid="standoff-morale-confirm"
         >
-          <span>
-            {direction === 'shake' ? 'Shake' : 'Steady'} {group.name} by one step.
+          <span className="font-semibold">
+            {direction === 'shake' ? 'Shake' : 'Steady'} {group.name}
           </span>
           <Input
             aria-label="Reason (required)"
@@ -88,11 +105,14 @@ function MoraleControl({ encounterId, group }: { encounterId: number; group: GMG
               disabled={reason.trim() === '' || morale.isPending}
               onClick={submit}
             >
-              {direction === 'shake' ? 'Shake' : 'Steady'} them
+              {direction === 'shake' ? 'Shake' : 'Steady'}
             </Button>
             <Button type="button" size="sm" variant="ghost" onClick={close}>
               Cancel
             </Button>
+            <span className="self-center text-xs text-muted-foreground">
+              {moraleStepGloss(direction, group.morale_state)}
+            </span>
           </div>
         </div>
       )}
@@ -206,6 +226,12 @@ function GroupBox({ encounterId, group }: { encounterId: number; group: GMGroupV
             ))}
           </tbody>
         </table>
+      )}
+
+      {group.pending_prompt_id === null && group.last_decision && (
+        <p className="text-xs text-muted-foreground" data-testid="standoff-last-decision">
+          Last decision: {group.last_decision}
+        </p>
       )}
 
       {group.pending_prompt_id !== null && (

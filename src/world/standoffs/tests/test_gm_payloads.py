@@ -141,6 +141,10 @@ class StandoffPayloadTests(TestCase):
         queue = client.get("/api/gm/prompts/", {"scene": self.scene.pk}).data["results"]
         self.assertEqual(queue[0]["standoff_group_name"], self.template.name)
         self.assertEqual(queue[0]["standoff_cause_label"], "Orders")
+        # The patched level-100 player against the group, one band emboldened by the botch.
+        self.assertRegex(
+            queue[0]["standoff_force"], r"^Force: party 100, them [\d.]+, emboldened 1 band\.$"
+        )
         refused = client.post(f"/api/gm/prompts/{prompt.pk}/override/", {}, format="json")
         self.assertEqual(refused.status_code, 400)
         response = client.post(
@@ -153,6 +157,8 @@ class StandoffPayloadTests(TestCase):
         self.assertEqual(prompt.status, GMPromptStatus.DISMISSED)
         self.group.refresh_from_db()
         self.assertEqual(self.group.state, StandoffGroupState.OPEN)
+        gm_group = self.detail(self.gm)["gm_standoff"]["groups"][0]
+        self.assertEqual(gm_group["last_decision"], "Overridden: PLACEHOLDER reason")
 
     def test_a_player_cannot_reach_another_gms_prompt(self) -> None:
         with patch(CHECK, return_value=forced(-2)):

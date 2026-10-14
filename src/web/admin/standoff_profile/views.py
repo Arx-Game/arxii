@@ -31,8 +31,9 @@ from web.admin.tuning.views import superuser_required
 from world.combat.models import CreatureTemplate
 from world.standoffs.models import CreatureDrive, FactionRule
 
-#: The submit button's name that returns to the creature's change page after saving.
-BACK_BUTTON = "back"
+#: The submit button's name that stays on this page after saving; "Save" returns to the
+#: creature's change page, as a stock change form does.
+CONTINUE_BUTTON = "save_continue"
 
 
 @dataclass
@@ -132,6 +133,6 @@ def standoff_profile(request: HttpRequest, template_pk: int) -> HttpResponse:
         forms.rules.save()
         stamp_written(saved, contributor)
     messages.success(request, "Saved and credited to you.")
-    if BACK_BUTTON in request.POST:
-        return redirect(reverse("admin:arxii_creaturetemplate_change", args=[saved.pk]))
-    return redirect(reverse("admin_standoff_profile", args=[saved.pk]))
+    if CONTINUE_BUTTON in request.POST:
+        return redirect(reverse("admin_standoff_profile", args=[saved.pk]))
+    return redirect(reverse("admin:arxii_creaturetemplate_change", args=[saved.pk]))

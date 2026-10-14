@@ -33037,6 +33037,7 @@ export interface components {
       cause_margin_percent: number;
       proposal_reason: string;
       pending_prompt_id: number | null;
+      last_decision: string;
       override_standing: boolean;
       emboldened_bands: number;
       terms_ease: number;
@@ -33149,6 +33150,8 @@ export interface components {
       readonly standoff_cause_label: string;
       /** @default  */
       readonly standoff_reason: string;
+      /** @description The force on both sides, read when the queue is: blank on other kinds. */
+      readonly standoff_force: string;
       /** @description What the GM decided on a decision prompt, with their reason when they gave one (a standoff Override's reason is recorded here). */
       readonly resolution_note: string;
       /** @description Resolved authored room line offered in the composer (may be blank). */
