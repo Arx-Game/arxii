@@ -40,6 +40,7 @@ test('the GM, a player and an onlooker each see their own seat of the standoff',
   await expect(player.getByTestId('combat-rail')).toBeVisible({ timeout: 20_000 });
   await expect(player.getByText(/deciding/i).first()).toBeVisible({ timeout: 20_000 });
   await expect(player.getByText(/Critical failure on a press/)).toHaveCount(0);
+  await expect(player.getByTestId('standoff-matters-hint')).toBeVisible();
   await player.screenshot({ path: shot('01-player-deciding.png'), fullPage: true });
 
   // Onlooker seat: the public summary, no cause, no drive.
@@ -56,6 +57,7 @@ test('the GM, a player and an onlooker each see their own seat of the standoff',
   const prompt = gm.getByTestId('gm-prompt-row').first();
   await expect(prompt).toContainText('Gate Sellswords', { timeout: 20_000 });
   await expect(prompt).toContainText('Critical failure on a press');
+  await expect(prompt).toContainText(/Force: party [\d.]+, them [\d.]+, emboldened 1 band\./);
   await gm.getByTestId('rail-tab-gm').click();
   const panel = gm.getByTestId('gm-standoff-panel');
   await expect(panel).toBeVisible({ timeout: 20_000 });
@@ -68,6 +70,8 @@ test('the GM, a player and an onlooker each see their own seat of the standoff',
   await expect(override).toBeDisabled();
   await prompt.getByRole('button', { name: /Hold for one action/ }).click();
   await expect(gm.getByTestId('gm-prompt-row')).toHaveCount(0, { timeout: 20_000 });
+  await gm.getByTestId('rail-tab-gm').click();
+  await expect(gm.getByTestId('standoff-last-decision')).toContainText('Held for one action.');
   await gm.screenshot({ path: shot('04-gm-after-hold.png'), fullPage: true });
 
   // The morale control: Shake asks for a reason, then moves the group to faltering.
@@ -78,6 +82,7 @@ test('the GM, a player and an onlooker each see their own seat of the standoff',
     .click();
   const confirm = gm.getByTestId('standoff-morale-confirm');
   await expect(confirm).toBeVisible();
+  await expect(confirm).toContainText('moves them one state: steady to faltering');
   await confirm.getByRole('textbox').fill('Test reason: they saw their captain leave.');
   await gm.screenshot({ path: shot('05-gm-shake-confirm.png'), fullPage: true });
   await confirm.getByRole('button', { name: /^Shake/ }).click();
