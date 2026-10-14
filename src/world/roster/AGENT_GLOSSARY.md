@@ -51,10 +51,13 @@ kinship graph). Root terms live in `AGENT_GLOSSARY_MAP.md`.
   `confers_wedlock`. Births stamp `born_within_union` for legitimacy law
   (#1884). The only record of a marriage (#4232): a wedding writes it, with
   or without a betrothal; staff write it in the Kinsperson admin's
-  **Spouses** section. One at a time: a marriage ends by death or
-  dissolution before either party marries again (`binding_marriage_of`);
-  ended unions stay as the record of prior marriages. _Avoid:_ marriage as
-  a boolean on a person; a stored marital status; deleting an ended union.
+  **Spouses** section. One to one and one at a time (ruled 2026-10-14:
+  polycules are relationships or non-wedlock unions, never a coded
+  polygamy): a wedlock union holds exactly two, and a marriage ends by
+  death or dissolution before either party marries again
+  (`binding_marriage_of`, `MARRIAGE_MEMBERS`); ended unions stay as the
+  record of prior marriages. _Avoid:_ marriage as a boolean on a person; a
+  stored marital status; deleting an ended union; a three-member marriage.
 - **Marital status** — DERIVED from a person's visible wedlock-conferring
   unions (`marital_status_of`, `MaritalStatus` in `roster/constants.py`):
   Married over Widowed over Divorced over Single. Never a column (#4232

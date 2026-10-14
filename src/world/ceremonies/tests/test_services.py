@@ -631,6 +631,22 @@ class WeddingWithoutBetrothalTests(TestCase):
         )
         self.assertEqual(Union.objects.count(), 1)
 
+    def test_three_honorees_are_refused_a_marriage_is_two_people(self) -> None:
+        from world.roster.factories import KinspersonFactory, UnionKindFactory
+        from world.roster.models import Union
+
+        UnionKindFactory(name="Marriage")
+        trio = [self._sheet_with_account() for _ in range(3)]
+        for sheet, _ in trio:
+            KinspersonFactory(sheet=sheet)
+        ceremony = self._consented_wedding(trio)
+
+        with self.assertRaises(CeremonyError) as caught:
+            finish_ceremony(ceremony=ceremony)
+
+        self.assertEqual(caught.exception.user_message, "A marriage is between two people.")
+        self.assertFalse(Union.objects.exists())
+
     def test_no_law_of_marriage_refuses_the_rite(self) -> None:
         from world.roster.models import Union
 

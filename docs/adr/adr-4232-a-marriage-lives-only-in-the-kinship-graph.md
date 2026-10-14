@@ -37,11 +37,17 @@ separate `Union` admin page instead of the inline. Staff record a marriage where
 already editing the person, and a page per union would have put the partner picker a
 navigation away.
 
-One marriage at a time (ApostateCD, 2026-10-14): a marriage ends by death or by
-dissolution before either party marries again, and the ended union stays on the record as
-the history of prior marriages. The gate reads death the way the world does (a spouse the
-world believes dead no longer binds), so a refusal never betrays a hidden survival, and a
-real death ends nothing on the record: the status reads Widowed off the open union.
+Marriages are one to one and one at a time (ApostateCD, 2026-10-14). Polycules exist in
+play as relationships and as non-wedlock unions, but a coded polygamy is neither thematic
+nor safe out of character: it invites uneven power structures, harems of people taken
+advantage of, so a wedlock union holds exactly two people and a marriage ends by death or
+by dissolution before either party marries again. The ended union stays on the record as
+the history of prior marriages. Death here is the truth, not the belief: a spouse the
+world believes dead still binds while they live, and a plot that wants the widow free to
+remarry has staff end the marriage on the record. A real death ends nothing on the record:
+the status reads Widowed off the open union. *Rejected:* letting a believed death free the
+survivor so that a refusal could never betray a hidden survival; it would have let the
+record hold two open marriages the moment the first spouse returned.
 
 **Consequences.** Any consenting pair can marry, one marriage at a time. `CharacterSheet.marital_status` is gone
 (play state; every row on the production copy held the default). Staff edit mode loses its

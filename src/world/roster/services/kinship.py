@@ -223,11 +223,19 @@ def record_union(  # noqa: PLR0913 — keyword-only
     is_true: bool = True,
     secret: Secret | None = None,
 ) -> Union:
-    """Record a union between two or more people."""
+    """Record a union between two or more people; a marriage between exactly two.
+
+    Marriages are one to one (ApostateCD, 2026-10-14): polycules exist in play
+    as relationships and as non-wedlock unions, but a wedlock-conferring union
+    never holds a third member. ``MARRIAGE_MEMBERS`` is the whole of that rule.
+    """
     min_members = 2
     if len(members) < min_members:
         msg = f"a union needs at least {min_members} members, got {len(members)}"
         raise KinshipServiceError(msg, user_message="A union needs at least two members.")
+    if kind.confers_wedlock and len(members) != MARRIAGE_MEMBERS:
+        msg = f"a marriage is between two people, got {len(members)}"
+        raise KinshipServiceError(msg, user_message=MARRIAGE_IS_TWO_MESSAGE)
     union = Union.objects.create(
         kind=kind,
         started_at=started_at,
@@ -281,13 +289,13 @@ def open_wedlock_union_among(members: list[Kinsperson]) -> Union | None:
 def binding_marriage_of(person: Kinsperson) -> Union | None:
     """The open marriage that still binds ``person``, if any (#4232 ruling).
 
-    A marriage ends by death or by dissolution, and only then may either party
-    marry again; the ended union stays on the record. The world's reading
-    decides what "death" means here: a spouse the world believes dead no longer
-    binds, so a refusal never betrays a hidden survival, and a real death needs
-    no writer to end the union (the record keeps it, and the status reads
-    Widowed). A wedlock union whose every other member is dead or believed dead
-    does not bind.
+    Marriages are one to one. A marriage ends by death or by dissolution, and
+    only then may either party marry again; the ended union stays on the
+    record. Death is the truth, not the belief: a spouse the world believes
+    dead still binds while they live, so a plot that wants the widow free to
+    remarry has staff end the marriage on the record (the admin's end date).
+    A real death needs no writer to end the union: the record keeps it, and
+    the status reads Widowed off it.
     """
     unions = (
         person.unions.filter(ended_at__isnull=True, kind__confers_wedlock=True)
@@ -295,10 +303,14 @@ def binding_marriage_of(person: Kinsperson) -> Union | None:
         .prefetch_related("members")  # noqa: PREFETCH_STRING — no to_attr on SharedMemoryModel (leak)
     )
     for union in unions:
-        others = [m for m in union.members.all() if m.pk != person.pk]
-        if any(not (m.is_deceased or m.believed_deceased) for m in others):
+        if any(not m.is_deceased for m in union.members.all() if m.pk != person.pk):
             return union
     return None
+
+
+#: Marriages are one to one (ApostateCD, 2026-10-14): a wedlock union holds exactly two.
+MARRIAGE_MEMBERS = 2
+MARRIAGE_IS_TWO_MESSAGE = "A marriage is between two people."
 
 
 def already_married_message(person: Kinsperson) -> str:
@@ -317,6 +329,9 @@ def record_marriage(members: list[Kinsperson], *, started_at: object | None = No
     another marriage still binds (``binding_marriage_of``) is refused, since a
     marriage must end before either party marries again (ruling on #4232).
     """
+    if len(members) != MARRIAGE_MEMBERS:
+        msg = f"a marriage is between two people, got {len(members)}"
+        raise KinshipServiceError(msg, user_message=MARRIAGE_IS_TWO_MESSAGE)
     existing = open_wedlock_union_among(members)
     if existing is not None:
         return existing

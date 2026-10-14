@@ -598,12 +598,29 @@ class MarriageBindsTests(TestCase):
         first.refresh_from_db()
         assert first.ended_at is None
 
-    def test_a_spouse_the_world_believes_dead_does_not_bind(self) -> None:
-        kinship.record_marriage([self.a, self.b])
+    def test_a_spouse_the_world_believes_dead_still_binds_while_alive(self) -> None:
+        """Death is the truth, not the belief: a plot that wants the widow free has
+        staff end the marriage on the record."""
+        first = kinship.record_marriage([self.a, self.b])
         self.b.believed_deceased = True
         self.b.save(update_fields=["believed_deceased"])
-        assert kinship.binding_marriage_of(self.a) is None
+        assert kinship.binding_marriage_of(self.a) == first
+        with self.assertRaises(kinship.KinshipServiceError):
+            kinship.record_marriage([self.a, self.c])
+        kinship.end_union(first)
         kinship.record_marriage([self.a, self.c])
+
+    def test_a_marriage_is_between_exactly_two_people(self) -> None:
+        with self.assertRaises(kinship.KinshipServiceError) as caught:
+            kinship.record_marriage([self.a, self.b, self.c])
+        assert caught.exception.user_message == "A marriage is between two people."
+        marriage = kinship.wedlock_union_kind()
+        with self.assertRaises(kinship.KinshipServiceError):
+            kinship.record_union(kind=marriage, members=[self.a, self.b, self.c])
+        # A non-wedlock union may still hold a polycule.
+        bond = UnionKindFactory(name="Bond", confers_wedlock=False)
+        union = kinship.record_union(kind=bond, members=[self.a, self.b, self.c])
+        assert union.members.count() == len([self.a, self.b, self.c])
 
     def test_a_consort_kind_does_not_bind(self) -> None:
         consort = UnionKindFactory(name="Consort", confers_wedlock=False)
