@@ -56,7 +56,7 @@ Also added elsewhere: `CreatureTemplate.cause` (`CauseKind`: NONE, PREDATION, OR
 `initiated_by_pc_side` help text now says a cause stamps False;
 `MissionOption.opens_as_standoff` (`missions/models.py:700`, ENCOUNTER options only).
 Migration `0199_creaturetemplate_cause_and_more`. #4354 adds `BeatOpponentLine.opens_as_standoff`,
-`GMPrompt.standoff_group` and `GMPrompt.resolution_note` (migrations `0222`-`0225`; the rename is
+`GMPrompt.standoff_group` and `GMPrompt.resolution_note` (migrations `0223`-`0226`; the rename is
 `RenameModel`/`RenameField`, the reveal kind moves in its own data-only migration). Admin: a
 creature's cause, drives and faction rules are authored on the Standoff Profile Builder
 (`web/admin/standoff_profile/`, below); approaches, terms, config and cause glosses are stock

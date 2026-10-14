@@ -2172,10 +2172,10 @@
 
 ### Service Functions
 - `acquire_clue(roster_entry: 'RosterEntry', clue: 'Clue') -> 'CharacterClue' - Record that a character has found a clue (idempotent).`
-- `find_clue(roster_entry: 'RosterEntry', clue: 'Clue') -> 'CharacterClue' - A character finds a clue: hold it, and resolve it on the spot if AUTOMATIC (#4331).`
 - `clear_rescue_clues(captivity: 'Captivity') -> 'None' - Delete a captivity's rescue clues (and their placements) when it resolves (#931).`
 - `clue_target_kind_allowed(account: 'object', target_kind: 'str') -> 'bool' - The clue authoring policy (#3432) as one callable (#3566).`
 - `create_accusation_counter_clue(secret: 'Secret', *, area: 'Area', difficulty: 'int') -> 'Clue' - Plant the investigable trail an accusation leaves behind (#1825). Idempotent.`
+- `find_clue(roster_entry: 'RosterEntry', clue: 'Clue') -> 'CharacterClue' - A character finds a clue: hold it, and resolve it on the spot if AUTOMATIC (#4331).`
 - `grant_clue_mission(template: 'MissionTemplate', roster_entry: 'RosterEntry', *, message: 'str | None' = None, ooc_note: 'str' = '') -> 'None' - Hand ``template`` to one character as a clue's payoff (#3429, #4327).`
 - `grant_clue_target(clue: 'Clue', roster_entry: 'RosterEntry') -> 'None' - AUTOMATIC resolution — grant a clue's target to the character on the spot.`
 - `maybe_grant_clue_triggers(character: 'ObjectDB', room: 'ObjectDB') -> 'list[Clue]' - Grant clues triggered passively by entering ``room`` (#1160).`
@@ -2558,7 +2558,7 @@
   - phase_templates <- combat.CreaturePhaseTemplate
   - mission_option_opponent_lines <- missions.MissionOptionOpponentLine
   - drives <- standoffs.CreatureDrive
-  - regard_rules <- standoffs.RegardRule
+  - faction_rules <- standoffs.FactionRule
   - standoff_groups <- standoffs.StandoffGroup
   - beat_opponent_lines <- stories.BeatOpponentLine
 
@@ -2863,6 +2863,7 @@
 - `order_companion(*, companion: 'Companion', order_kind: 'str', round_number: 'int', encounter: 'CombatEncounter | None' = None, battle: 'Battle | None' = None, target_opponent=None, target_unit=None, ability=None, defending_participant=None, target_ally=None) - Validate and upsert a CompanionOrder directive (#1921).`
 - `promote_summon_to_companion(*, caster_sheet: 'CharacterSheet', combat_opponent: 'CombatOpponent', archetype: 'CompanionArchetype', granting_gift: 'Gift', name: 'str') -> 'Companion' - Promote an ephemeral summon or charmed enemy into a persistent Companion (#2502).`
 - `release_companion(companion: 'Companion') -> 'None' - Release a bonded companion: destroy its live object, keep the row.`
+- `rename_companion(companion: 'Companion', name: 'str') -> 'None' - Rename a companion: its row and its in-world object's key together (#4338).`
 - `resolve_bonded_companion(opponent: 'CombatOpponent') -> 'Companion | None' - The live, unreleased Companion behind an ALLY CombatOpponent, if any.`
 - `resolve_companion_defeat(companion: 'Companion', risk_level: 'str') -> 'bool' - Resolve a bridged companion's defeat consequence (#1873).`
 - `stables_capacity_bonus_for_sheet(character_sheet: 'CharacterSheet') -> 'int' - Flat Companion Capacity bonus from every Stables the sheet keeps a household at.`
@@ -4286,6 +4287,7 @@
   - technique -> magic.Technique [FK] (nullable)
   - resolved_by -> evennia.AccountDB [FK] (nullable)
   - confirmed_tag -> magic.DramaticMomentTag [OneToOne] (nullable)
+  - standoff_group -> standoffs.StandoffGroup [FK] (nullable)
 **Pointed to by:**
   - narrations <- gm.GMPromptNarration
 
@@ -9984,11 +9986,17 @@
   - creature_template -> combat.CreatureTemplate [FK]
   - property -> mechanics.Property [FK]
 
-### RegardRule
+### FactionRule
 **Foreign Keys:**
   - creature_template -> combat.CreatureTemplate [FK]
   - deed_archetype -> societies.PhilosophicalArchetype [FK] (nullable)
   - drive -> mechanics.Property [FK] (nullable)
+
+### StandoffAngleShare
+**Foreign Keys:**
+  - group -> standoffs.StandoffGroup [FK]
+  - character_sheet -> character_sheets.CharacterSheet [FK]
+  - faction_rule -> standoffs.FactionRule [FK]
 
 ### StandoffApproach
 **Foreign Keys:**
@@ -9998,6 +10006,8 @@
   - archetypes -> societies.PhilosophicalArchetype [M2M]
 **Pointed to by:**
   - reaction_lines <- standoffs.StandoffReactionLine
+
+### StandoffCauseGloss
 
 ### StandoffConfig
 **Foreign Keys:**
@@ -10012,8 +10022,15 @@
   - creature_template -> combat.CreatureTemplate [FK]
   - settled_outcome -> traits.CheckOutcome [FK] (nullable)
 **Pointed to by:**
+  - gm_prompts <- gm.GMPrompt
   - reveals <- standoffs.StandoffReveal
-  - spark_shares <- standoffs.StandoffSparkShare
+  - angle_shares <- standoffs.StandoffAngleShare
+  - morale_rulings <- standoffs.StandoffMoraleRuling
+
+### StandoffMoraleRuling
+**Foreign Keys:**
+  - group -> standoffs.StandoffGroup [FK]
+  - ruled_by -> evennia.AccountDB [FK] (nullable)
 
 ### StandoffReactionLine
 **Foreign Keys:**
@@ -10025,13 +10042,7 @@
 **Foreign Keys:**
   - group -> standoffs.StandoffGroup [FK]
   - drive -> standoffs.CreatureDrive [FK] (nullable)
-  - regard_rule -> standoffs.RegardRule [FK] (nullable)
-
-### StandoffSparkShare
-**Foreign Keys:**
-  - group -> standoffs.StandoffGroup [FK]
-  - character_sheet -> character_sheets.CharacterSheet [FK]
-  - regard_rule -> standoffs.RegardRule [FK]
+  - faction_rule -> standoffs.FactionRule [FK] (nullable)
 
 ### StandoffTerms
 **Foreign Keys:**
