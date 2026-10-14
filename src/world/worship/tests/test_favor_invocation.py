@@ -119,6 +119,19 @@ class FavorTargetTests(TestCase):
                 category=target.category, name="A second one", target_being=being
             )
 
+    def test_a_target_that_lost_its_being_is_linked_again(self) -> None:
+        """A rolled-back release drops target_being and leaves the named targets."""
+        being = WorshippedBeingFactory(name="Ombrin")
+        first = ensure_being_modifier_targets(being)
+        for target in first:
+            target.target_being = None
+            target.save(update_fields=["target_being"])
+
+        again = ensure_being_modifier_targets(being)
+
+        self.assertEqual([t.pk for t in again], [t.pk for t in first])
+        self.assertEqual(ModifierTarget.objects.filter(target_being=being).count(), 2)
+
     def test_renamed_being_keeps_its_targets(self) -> None:
         being = WorshippedBeingFactory(name="Before")
         ensure_being_modifier_targets(being)

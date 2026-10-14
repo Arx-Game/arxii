@@ -42,27 +42,23 @@ def backfill_being_favor_targets(apps, schema_editor):
             defaults={"target_being": None},
         )
         for being in WorshippedBeing.objects.all():
-            ModifierTarget.objects.get_or_create(
+            if ModifierTarget.objects.filter(category=category, target_being=being).exists():
+                continue
+            # A target left behind by a rollback (its being link dropped with the
+            # column) is found by name and linked again rather than duplicated.
+            target, _ = ModifierTarget.objects.get_or_create(
                 category=category,
-                target_being=being,
-                defaults={"name": _target_name(being.name, label)},
+                name=_target_name(being.name, label),
+                defaults={"target_being": being},
             )
+            if target.target_being_id != being.pk:
+                target.target_being = being
+                target.save(update_fields=["target_being"])
 
 
 def _target_name(being_name, label):
     suffix = f" {label}"
     return f"{being_name[: TARGET_NAME_MAX_LENGTH - len(suffix)]}{suffix}"
-
-
-def remove_being_favor_targets(apps, schema_editor):
-    """Reverse: drop the favor categories and their targets, so that migrating
-    forward again (after 0222's reverse drops target_being) starts clean."""
-    ModifierCategory = apps.get_model("arxii", "ModifierCategory")
-    ModifierTarget = apps.get_model("arxii", "ModifierTarget")
-
-    names = [name for name, _, _ in _CATEGORIES]
-    ModifierTarget.objects.filter(category__name__in=names).delete()
-    ModifierCategory.objects.filter(name__in=names).delete()
 
 
 class Migration(migrations.Migration):
@@ -71,5 +67,8 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
-        migrations.RunPython(backfill_being_favor_targets, remove_being_favor_targets),
+        # Reverse is a no-op: deleting the targets would cascade through every
+        # modifier authored against them. 0223's reverse drops target_being, and
+        # running this forward again re-links the left-behind targets by name.
+        migrations.RunPython(backfill_being_favor_targets, migrations.RunPython.noop),
     ]

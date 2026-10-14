@@ -78,11 +78,18 @@ def ensure_being_modifier_targets(being: WorshippedBeing) -> list[ModifierTarget
             name=f"{ANY_BEING_TARGET_PREFIX} {label}",
             defaults={"target_being": None},
         )
-        target, _ = ModifierTarget.objects.get_or_create(
-            category=category,
-            target_being=being,
-            defaults={"name": _being_target_name(being, label)},
-        )
+        target = ModifierTarget.objects.filter(category=category, target_being=being).first()
+        if target is None:
+            # A target that already carries the being's name but lost its link
+            # (a rolled-back release) is linked again rather than duplicated.
+            target, _ = ModifierTarget.objects.get_or_create(
+                category=category,
+                name=_being_target_name(being, label),
+                defaults={"target_being": being},
+            )
+            if target.target_being_id != being.pk:
+                target.target_being = being
+                target.save(update_fields=["target_being"])
         targets.append(target)
     return targets
 
