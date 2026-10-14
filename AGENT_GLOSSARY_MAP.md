@@ -27,11 +27,13 @@ term is chosen and the rest are listed under `_Avoid_`.
   (ADR-4091): Settle, Settle pool, Hold strength; and (ADR-4120) Settled round / Settle round
   effects
 - [vitals](src/world/vitals/AGENT_GLOSSARY.md) - also holds Certain death (deferred) (#4098)
-- [worship](src/world/worship/AGENT_GLOSSARY.md)
+- [worship](src/world/worship/AGENT_GLOSSARY.md) - also holds the #4333 favor terms
+  (ADR-4333-A): Favor, Invocation, Earning rate, Favor modifier
 - [ceremonies](src/world/ceremonies/AGENT_GLOSSARY.md)
 - [estates](src/world/estates/AGENT_GLOSSARY.md)
-- [checks](src/world/checks/AGENT_GLOSSARY.md)
-- [mechanics](src/world/mechanics/AGENT_GLOSSARY.md)
+- [checks](src/world/checks/AGENT_GLOSSARY.md) - also holds Favor as a modifier source (#4333)
+- [mechanics](src/world/mechanics/AGENT_GLOSSARY.md) - also holds the favor categories and
+  `ModifierTarget.target_being` (#4333)
 - [progression](src/world/progression/AGENT_GLOSSARY.md)
 - [classes](src/world/classes/AGENT_GLOSSARY.md)
 - [societies](src/world/societies/AGENT_GLOSSARY.md) - also holds the Almanach de Catenys

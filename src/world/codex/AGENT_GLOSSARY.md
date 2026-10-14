@@ -47,7 +47,8 @@ _Avoid_: "org secret", "faction lore".
 **Reach** (#3775, ADR-0303):
 How a `CodexEntry` can be known at all: public (`is_public`), granted to a group through
 one of the five grant tables (Beginnings, Path, Distinction, Tradition, Organization) or a
-species lineage, or found through a Mystery (a `Clue` with `target_kind=CODEX`). An entry
+species lineage, or found through a Mystery (a `Clue` with `target_kind=CODEX`; this older
+usage means a codex-target clue, not the planned per-character Mystery model of #3619). An entry
 with none of these is **unreachable** - no character can ever come to know it, and no
 future character can either until someone adds a route. `ReachListFilter` is the entry
 admin's list filter of this name (public / granted to a group / reached by a clue /

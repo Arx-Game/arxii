@@ -18,8 +18,6 @@ class MiracleTrigger(models.TextChoices):
     ``INCAPACITATED`` fires from the combat trigger (#2360); ``NEAR_DEATH`` is
     the dire-straits prayer's trigger (#3779): a character in Soulfray or below
     the knockout health band prays, and a miracle of that trigger may answer.
-    ``NEAR_DEATH`` is
-    defined for future use (see Scope/follow-ups in the spec).
     """
 
     INCAPACITATED = "incapacitated", "Character Incapacitated"

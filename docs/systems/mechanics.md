@@ -38,7 +38,7 @@ from world.mechanics.types import (
 | Model | Purpose | Key Fields |
 |-------|---------|------------|
 | `ModifierCategory` | Broad groupings for modifier targets (stat, magic, affinity, resonance, goal, etc.) | `name` (unique), `description`, `display_order` |
-| `ModifierTarget` | Unified registry of all things that can be modified; replaces separate Affinity, Resonance, GoalDomain models | `name`, `category` (FK ModifierCategory), `description`, `display_order`, `is_active`, `target_trait` (FK Trait, nullable), `affiliated_affinity` (self FK), `opposite` (self OneToOne), `resonance_affinity` (ResonanceAffinity) |
+| `ModifierTarget` | Unified registry of all things that can be modified; replaces separate Affinity, Resonance, GoalDomain models | `name`, `category` (FK ModifierCategory), `description`, `display_order`, `is_active`, `target_trait` (FK Trait, nullable), `target_being` (FK WorshippedBeing, nullable, #4333 favor categories), `affiliated_affinity` (self FK), `opposite` (self OneToOne), `resonance_affinity` (ResonanceAffinity) |
 
 ### Per-Character Data
 
@@ -185,6 +185,17 @@ full parity with a cast: `_derive_power`'s FLAT stage also sums condition-source
 contributions (`get_condition_modifier_breakdown`), which the pull fold does not include —
 that gap is real and remains.
 
+**Favor categories (#4333).** `favor_invocation` (difficulty points eased on an invocation
+check) and `favor_earning` (percentage points added to the earning rate) are scoped to a
+worshipped being by `ModifierTarget.target_being` (a plain FK: one target per (category,
+being), unique when set; null is the single "any being" target per category, held unique
+by (category, name)). `world.worship.favor_services.ensure_being_modifier_targets` creates
+them and `favor_modifier_total(sheet, being, category)` is the one reader (eager rows,
+crafted items, the equipment walk, conditions). Both categories are in
+`EQUIPMENT_RELEVANT_CATEGORIES`; for them `equipment_walk_total` adds the covenant role
+bonus once (`covenant_role_base_total`) instead of once per equipped item. See
+`docs/systems/worship.md`.
+
 ---
 
 ## Modifier Target Naming Conventions
@@ -197,6 +208,7 @@ that gap is real and remains.
 | `height_band` | Descriptive name | `max_height_band_bonus` |
 | `resonance` | Resonance name | Uses `affiliated_affinity`, `opposite`, `resonance_affinity` fields |
 | `goal` / `goal_percent` / `goal_points` | Goal domain names | Standing, Wealth, Knowledge, etc. |
+| `favor_invocation` / `favor_earning` | `<being> favor invocation` / `<being> favor earning`; one `Any being ...` target each | `target_being` names the being; null = any being (#4333) |
 
 ---
 

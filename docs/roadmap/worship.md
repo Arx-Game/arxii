@@ -116,6 +116,19 @@ Vitals (#2287 ghost containers), Events/Scenes (optional chassis)
   untouched (a no-op), not built into a retarget/shed service or a new secret-side
   Action — flag as a possible follow-on if play surfaces demand for changing a
   *secret* faith post-CG.
+- **Favor with beings, slice 1: invoking favor (#4333, #4353):** a character with favor above
+  zero calls on a being before a check (a mission option or group pick, a scene self-check or
+  answered check call, a scene social action). An invocation check rolls first: Daunting
+  eased by the Chosen ease, the favor eases and favor invocation modifiers from any source
+  (distinctions, conditions, crafted items, covenant roles), never below Trivial; its outcome
+  sets the bonus on the check (`FavorOutcomeAward`, labelled "<being>'s favor"). Favor is
+  never spent; three uses per being per game week, failures included. Room and mission log
+  lines name the being (a secret faith's do not). Every favor source now earns at the earning
+  rate (100% + 100% for the being's Chosen + favor earning modifiers). Web picker beside each
+  check, telnet `invoke` and `/invoke <being>[=<line>]`, Devotion config admin, the
+  Distinction Builder's favor targets. ADR-4333-A. Next slices of #4333: pledges and
+  sacrifices, answers at the close, stewards, answering live, rituals, Mysteries, favored
+  facets on worn items.
 
 ## Not built (filed)
 

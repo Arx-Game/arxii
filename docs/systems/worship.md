@@ -16,7 +16,7 @@ issue bodies; the model decision is ADR-0132.
   `domains` (#3776: plain free-text spheres, e.g. "Carnage, wanton bloodshed,
   feral battle, ferocity" — deliberately no lookup table; overlap across gods
   is expected and fine, and no mechanical matching need was confirmed), tradition
-  FK, `resonance_pool` (BigInteger, spendable by future miracles #2360),
+  FK, `resonance_pool` (BigInteger, spent by miracles and visions, #2360/#3779),
   `lifetime_worship` (monotonic audit), nullable OneToOne `avatar_sheet` →
   CharacterSheet (rare played gods), `is_active`, `tarot_cards` (#3776 Task 9:
   M2M → `tarot.TarotCard`, `related_name="represented_beings"`, blank, no cap —
@@ -180,10 +180,16 @@ issue bodies; the model decision is ADR-0132.
 
 - `grant_worship(being, amount, *, granted_by, reason)` → pool + lifetime +
   ledger row.
-- `bump_devotion(sheet, being, amount)` → standing upsert + the God's Favorite
-  check: reaching or tying the being's top favor grants the gender-matched
-  achievement (God's Favorite Princess / Prince / Chosen; leapfroggers earn it
-  too, prior holders keep theirs; text never names the being).
+- `bump_devotion(sheet, being, amount)` → `DevotionBump(standing, credited)`:
+  standing upsert + the God's Favorite check: reaching or tying the being's top
+  favor grants the gender-matched achievement (God's Favorite Princess / Prince /
+  Chosen; leapfroggers earn it too, prior holders keep theirs; text never names
+  the being). Since #4333 a positive amount is scaled by the **earning rate**
+  (`favor_services.earning_rate`: 100% + `ChosenFavorConfig.earn_bonus_percent`
+  for an active patronage of the being + the character's favor earning modifiers),
+  rounded down; `credited` is what landed, and the rite and prayer callers record
+  it (`WorshipRitePerformance.favor_granted`, `Prayer.devotion_granted`). A Chosen
+  bonus of 0 and no favor earning modifiers restore the old rates.
 - `gods_favorite_achievement_for(sheet)` — gender-variant row resolution.
 - `get_chosen_favor_config()` — lazy-create the singleton (pk=1).
 - `active_patronage_for(sheet)` → active patronages (valence set, released_at
@@ -372,6 +378,90 @@ the rite consecrates the site in turn.
   (called from `world/apps.py`); its progression handler refuses the generic
   ROOM_FEATURE_PROGRESSION project path, since a shrine is founded by its holder,
   never built as a project.
+
+### Favor with beings: invoking favor (#4333, slice 1) [BUILT & WIRED]
+
+Spec and demo: issue #4333 (slice 1 is #4353). Decision: ADR-4333-A (favor is
+invoked through a check and never spent). Favor (`DevotionStanding.favor`) is a
+character's standing with one being; it is never spent.
+
+**Models**
+
+- `DevotionConfig` — singleton (`invocation_services.get_devotion_config()`):
+  `invocation_check_type` (default; nullable, invoking is refused until set or the
+  being has its own), `base_difficulty` (`DifficultyChoice`, default Daunting),
+  `favor_ease_low_threshold`/`_points` (30/15) and `favor_ease_high_threshold`/`_points`
+  (60/30), `invocations_per_week` (3). Example tuning throughout.
+- `FavorOutcomeAward` — `config` FK, `kind` (`FavorAwardKind`: INVOCATION = check points
+  added to the check; CLOSING = base favor a pledge's closing rite pays, read from slice 2),
+  `outcome_tier` FK `CheckOutcome`, `amount`; unique per (config, kind, tier). Not an
+  `OutcomeTierAward` (its one-to-one allows one row per tier). A missing INVOCATION row is
+  no bonus.
+- `FavorInvocation` — one rolled invocation: the weekly counter and the log
+  (`character_sheet`, `being`, `game_week`, `outcome_tier`, `bonus`, `player_line`, nullable
+  `scene` / `mission_instance`, OneToOne `scene_action_request`). The only stored player
+  text is `player_line`.
+- `WorshippedBeing.invocation_check_type` — optional per-being override (ruling 13).
+- `ChosenFavorConfig.earn_bonus_percent` (100) and `.invocation_ease_points` (30).
+- `MissionGroupBallot.invoke_being`/`invoke_line` and `SceneActionRequest.invoke_being`/
+  `invoke_line` — a declared invocation held until its check rolls.
+
+**Favor modifiers** (`worship/favor_services.py`). Two `ModifierCategory` rows,
+`favor_invocation` (difficulty points eased) and `favor_earning` (percentage points added
+to the earning rate). `ModifierTarget.target_being` scopes a target to one being; null in
+those categories means any being. Uniqueness: (category, target_being) when the being is
+set; the single "any being" target per category is held by (category, name).
+`ensure_being_modifier_targets(being)` get-or-creates the being's two targets and the two
+"any being" targets; called by the Deity Editor's `save_being`, the seeds, and the backfill
+migration `0223_being_favor_targets`. `favor_modifier_total(sheet, being, category)` is the
+one reader: over the category's targets for the being and for any being, it sums
+`get_modifier_total` (distinctions and other `CharacterModifier` rows, crafted items, the
+equipment walk) and `get_condition_modifier_total` (conditions). Both favor categories are
+in `EQUIPMENT_RELEVANT_CATEGORIES`, and for them the walk counts a covenant role once
+(`covenant_role_base_total`). Facet, mantle and motif bonuses reach targets only through a
+resonance, so they add nothing here (slice 8 covers favored facets).
+`earning_rate(sheet, being)` / `scale_by_earning_rate` feed `bump_devotion`.
+
+**Invocation** (`worship/invocation_services.py`)
+
+- `invocation_difficulty(sheet, being)` → `InvocationDifficulty`: base points minus the
+  Chosen ease (active patronage of the being), the favor ease (by threshold), and the
+  favor invocation total; never below Trivial (15). Each ease is labelled for the picker.
+- `invocation_refusal(sheet, being)` / `check_can_invoke` — favor above zero, a use left
+  this week (every invocation counts, failures too), a check type configured.
+- `invoke_favor(sheet, being, *, actor_name, player_line, scene, mission_instance,
+  scene_action_request)` → `InvocationOutcome`: rolls `perform_check_with_modifiers` with
+  the being's (or the default) check type and the tradition's Rites specialization at that
+  difficulty, writes the `FavorInvocation`, and returns the FAVOR `ModifierContribution`
+  ("<being>'s favor (invocation: <outcome>)") and the lines. Favor is unchanged.
+- Lines (design 1): "<name> calls on <being>: <line>" (or "<name> calls on <being>."),
+  then "<name>'s invocation: <outcome>.". For a secret faith (the declaration's
+  `secret_being`) the public call line is "<name> calls on something." with no line; the
+  actor still gets their own. The bonus is never in a room line.
+- `invocation_options(sheet)` / `invocation_bonus_table()` — the picker's data; also
+  served at `GET /api/worship/beings/invocation-options/` (`entry_id` names the character).
+
+**Where the bonus lands**
+
+- Missions: `resolve_beat_option(..., invoke=InvocationChoice)` and `submit_group_pick`
+  (stored on the ballot; it rolls at node resolution, only for a pick whose check rolls).
+  `resolve_option(..., invocation=)` rolls first and adds the bonus to `extra_modifiers`;
+  lines go to every participant's mission log (`missions/services/invocation.py`). The solo
+  result carries `BeatInvocation` (lines, points before and after, ranks; never the roll).
+- Scene self-checks and answered check calls (`invoke_being_id`/`invoke_line` kwargs on
+  `scene_self_check` / `answer_check_call`): roll at once; lines are OUTCOME interactions.
+- Scene actions: `create_action_request(..., invoke=)` stores the choice; at accept time
+  `scenes/favor_invocation.declared_invocation_contribution` rolls it once per request and
+  the contribution joins the check (`extra_contributions` on the plain path).
+- Telnet: `invoke` lists beings, difficulty and uses; a trailing
+  `/invoke <being>[=<line>]` works on `check`, `check answer`, `mission resolve`,
+  `mission pick` and the social actions (`commands/utils/invocation.py`).
+
+**Admin**: Devotion config (singleton change form, the awards inline, a read-only
+difficulty table and last week's invocations), Chosen favor config (the two new terms,
+Chosen per being), the being's check type override, the Distinction Builder's favor-target
+help line. Required-content sentinels: `favor-invocation-check-type`,
+`favor-invocation-awards`.
 
 ### Miracles & Divine Intervention (#2360)
 
