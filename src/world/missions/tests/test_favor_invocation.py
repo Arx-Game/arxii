@@ -297,3 +297,87 @@ class GroupMissionInvocationTests(MissionInvocationBase):
             f"{partner.key}'s invocation: Partial Success.",
             partner_bodies,
         )
+
+
+class FavorInvocationApiTests(MissionInvocationBase):
+    """The web path: the picker endpoint and the resolve endpoint, as a player."""
+
+    def setUp(self) -> None:
+        from rest_framework.test import APIClient
+
+        from world.roster.factories import RosterEntryFactory, RosterTenureFactory
+
+        super().setUp()
+        self.character = _pc()
+        self.sheet = self.character.sheet_data
+        entry = RosterEntryFactory(character_sheet=self.sheet)
+        tenure = RosterTenureFactory(roster_entry=entry, end_date=None)
+        self.entry_id = entry.pk
+        self.client = APIClient()
+        self.client.force_authenticate(tenure.player_data.account)
+        DevotionStandingFactory(
+            character_sheet=self.sheet,
+            being=self.being,
+            favor=44,
+            valence=PatronageValence.DEVOTIONAL,
+            established_at=timezone.now(),
+        )
+        template, self.option, _ = self._check_graph("api-invoke")
+        self.instance = staff_assign_mission(template, self.character)
+
+    def test_invocation_options_endpoint(self) -> None:
+        response = self.client.get(
+            f"/api/worship/beings/invocation-options/?entry_id={self.entry_id}"
+        )
+        self.assertEqual(response.status_code, 200, response.content)
+        (ombrin,) = response.json()["beings"]
+        self.assertEqual(
+            (ombrin["being_name"], ombrin["favor"], ombrin["can_invoke"], ombrin["uses_left"]),
+            ("Ombrin", 44, True, 3),
+        )
+        difficulty = ombrin["difficulty"]
+        self.assertEqual((difficulty["points"], difficulty["band_label"]), (30, "Easy"))
+        self.assertEqual(
+            [(e["label"], e["points"]) for e in difficulty["eases"]],
+            [
+                ("You are Ombrin's Chosen", 30),
+                ("Favor 44 (30 or more)", 15),
+                ("Favor invocation modifiers for Ombrin", 0),
+            ],
+        )
+        bonuses = {row["outcome_name"]: row["bonus"] for row in response.json()["bonuses"]}
+        self.assertEqual(bonuses, {"Success": 10, "Partial Success": 5})
+
+    def test_resolve_endpoint_with_invocation(self) -> None:
+        with (
+            patch(_INVOCATION_CHECK, return_value=_result(self.invocation_type, self.success)),
+            patch(
+                _OPTION_CHECK,
+                return_value=_result(self.investigation, self.success, total_points=58),
+            ),
+        ):
+            response = self.client.post(
+                f"/api/missions/journal/{self.instance.pk}/resolve/?entry_id={self.entry_id}",
+                {
+                    "option_id": self.option.pk,
+                    "invoke_being_id": self.being.pk,
+                    "invoke_line": "[player line]",
+                },
+                format="json",
+            )
+        self.assertEqual(response.status_code, 200, response.content)
+        invocation = response.json()["invocation"]
+        self.assertEqual(invocation["bonus"], 10)
+        self.assertEqual(invocation["bonus_label"], "Ombrin's favor (invocation: Success)")
+        self.assertTrue(invocation["call_line"].endswith("calls on Ombrin: [player line]"))
+        self.assertEqual(FavorInvocation.objects.get().mission_instance, self.instance)
+
+    def test_resolve_endpoint_refusal_is_a_400_with_the_reason(self) -> None:
+        stranger = WorshippedBeingFactory(name="River Spirit")
+        response = self.client.post(
+            f"/api/missions/journal/{self.instance.pk}/resolve/?entry_id={self.entry_id}",
+            {"option_id": self.option.pk, "invoke_being_id": stranger.pk},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("You have no favor with River Spirit to call on.", str(response.json()))

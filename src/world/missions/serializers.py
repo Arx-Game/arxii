@@ -5,7 +5,10 @@ CRUD serializers for nodes / options / routes / candidates / rewards
 land in D2; giver-library serializers in D3; predicate-tree in D5.
 """
 
+from __future__ import annotations
+
 from collections.abc import Callable
+from typing import TYPE_CHECKING
 
 from django.core.exceptions import ObjectDoesNotExist, ValidationError as DjangoValidationError
 from drf_spectacular.utils import extend_schema_field
@@ -30,6 +33,10 @@ from world.missions.models import (
     MissionOptionRouteReward,
     MissionTemplate,
 )
+from world.worship.constants import FAVOR_INVOCATION_LINE_MAX_LENGTH
+
+if TYPE_CHECKING:
+    from world.worship.types import InvocationChoice
 
 _ERR_TARGET_AREA_ONLY_AREA = "target_area is only valid when location_mode is AREA."
 _ERR_AREA_REQUIRES_TARGET_AREA = "AREA location mode requires a target area."
@@ -925,6 +932,8 @@ class BeatOptionSerializer(serializers.Serializer):
     check_type_name = serializers.CharField(allow_null=True)
     base_risk = serializers.IntegerField()
     reasons = serializers.ListField(child=serializers.CharField(), read_only=True)
+    # #4333: the option rolls a check, so a being's favor may be invoked on it.
+    rolls_check = serializers.BooleanField()
 
 
 class TrackViewSerializer(serializers.Serializer):
@@ -953,6 +962,25 @@ class BeatViewSerializer(serializers.Serializer):
     track = TrackViewSerializer(allow_null=True)
 
 
+class BeatInvocationSerializer(serializers.Serializer):
+    """Read-only mirror of :class:`world.missions.types.BeatInvocation` (#4333).
+
+    The acting player's own view: their call line, the outcome line, the bonus
+    and the check's points and ranks before and after it. Never the d100 roll.
+    """
+
+    call_line = serializers.CharField()
+    outcome_line = serializers.CharField()
+    bonus = serializers.IntegerField()
+    bonus_label = serializers.CharField(allow_blank=True)
+    check_type_name = serializers.CharField()
+    points_before_bonus = serializers.IntegerField()
+    total_points = serializers.IntegerField()
+    roller_rank = serializers.CharField(allow_null=True)
+    target_rank = serializers.CharField(allow_null=True)
+    rank_difference = serializers.IntegerField()
+
+
 class ResolvedBeatSerializer(serializers.Serializer):
     """Read-only mirror of :class:`world.missions.types.ResolvedBeat`."""
 
@@ -964,14 +992,44 @@ class ResolvedBeatSerializer(serializers.Serializer):
     # DRF nested to_representation does not accept None.
     next_beat = serializers.SerializerMethodField()
     epilogue = serializers.CharField(allow_blank=True)
+    invocation = serializers.SerializerMethodField()
 
     @extend_schema_field(BeatViewSerializer(allow_null=True))
     def get_next_beat(self, obj: object) -> dict | None:
         beat = obj.next_beat  # type: ignore[attr-defined]
         return BeatViewSerializer(beat).data if beat is not None else None
 
+    @extend_schema_field(BeatInvocationSerializer(allow_null=True))
+    def get_invocation(self, obj: object) -> dict | None:
+        invocation = obj.invocation  # type: ignore[attr-defined]
+        return BeatInvocationSerializer(invocation).data if invocation is not None else None
 
-class BeatResolveRequestSerializer(serializers.Serializer):
+
+class InvokeRequestFields(serializers.Serializer):
+    """The optional Call on favor choice a check request carries (#4333).
+
+    Eligibility (favor above zero, a use left this week) is checked by the play
+    service, which answers with the reason.
+    """
+
+    invoke_being_id = serializers.IntegerField(
+        required=False, allow_null=True, min_value=1, default=None
+    )
+    invoke_line = serializers.CharField(
+        max_length=FAVOR_INVOCATION_LINE_MAX_LENGTH, required=False, allow_blank=True, default=""
+    )
+
+    def invoke_choice(self) -> InvocationChoice | None:
+        """The validated choice, or None when no being was named."""
+        from world.worship.types import InvocationChoice  # noqa: PLC0415
+
+        being_id = self.validated_data.get("invoke_being_id")
+        if being_id is None:
+            return None
+        return InvocationChoice(being_id=being_id, player_line=self.validated_data["invoke_line"])
+
+
+class BeatResolveRequestSerializer(InvokeRequestFields):
     """POST body for the #885 resolve endpoint."""
 
     option_id = serializers.IntegerField(min_value=1)
@@ -1046,7 +1104,7 @@ class GroupBeatResultSerializer(serializers.Serializer):
         return ResolvedBeatSerializer(resolved).data if resolved is not None else None
 
 
-class GroupPickRequestSerializer(serializers.Serializer):
+class GroupPickRequestSerializer(InvokeRequestFields):
     """POST body for the #1036 group-pick endpoint."""
 
     option_id = serializers.IntegerField(min_value=1)

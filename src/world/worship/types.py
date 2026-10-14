@@ -94,6 +94,14 @@ class InvocationOption:
 
 
 @dataclass(frozen=True)
+class InvocationPicker:
+    """The Call on favor picker's data for one character (#4333)."""
+
+    beings: list[InvocationOption]
+    bonuses: tuple[InvocationBonusRow, ...]
+
+
+@dataclass(frozen=True)
 class InvocationOutcome:
     """One rolled invocation: the row, the roll and the contribution it adds.
 

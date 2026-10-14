@@ -4,12 +4,19 @@
 tradition name) — safe anywhere; it never exposes pools or avatar links.
 """
 
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
 from rest_framework import serializers
 
 from world.character_sheets.models import CharacterSheet
 from world.clues.models import Clue
 from world.stories.models import Episode
 from world.worship.models import Miracle, Prayer, Vision, WorshippedBeing, WorshipRite
+
+if TYPE_CHECKING:
+    from world.worship.types import InvocationDifficulty
 
 
 class WorshippedBeingRefSerializer(serializers.ModelSerializer):
@@ -150,3 +157,61 @@ class VisionCreateSerializer(serializers.Serializer):
     episode = serializers.PrimaryKeyRelatedField(
         queryset=Episode.objects.all(), required=False, allow_null=True
     )
+
+
+class InvocationEaseSerializer(serializers.Serializer):
+    """One labelled ease on the invocation check (#4333)."""
+
+    label = serializers.CharField()
+    points = serializers.IntegerField()
+
+
+class InvocationDifficultySerializer(serializers.Serializer):
+    """How hard an invocation check is for the acting character, and why (#4333)."""
+
+    base_points = serializers.IntegerField()
+    base_band = serializers.CharField()
+    base_band_label = serializers.SerializerMethodField()
+    eases = InvocationEaseSerializer(many=True)
+    points = serializers.IntegerField()
+    band = serializers.CharField()
+    band_label = serializers.SerializerMethodField()
+
+    def get_base_band_label(self, obj: InvocationDifficulty) -> str:
+        from world.scenes.action_constants import DifficultyChoice  # noqa: PLC0415
+
+        return DifficultyChoice(obj.base_band).label
+
+    def get_band_label(self, obj: InvocationDifficulty) -> str:
+        from world.scenes.action_constants import DifficultyChoice  # noqa: PLC0415
+
+        return DifficultyChoice(obj.band).label
+
+
+class InvocationOptionSerializer(serializers.Serializer):
+    """One being the acting character could call on (#4333). ``refusal`` is the
+    player-facing reason it cannot be invoked now, or ""."""
+
+    being_id = serializers.IntegerField(source="being.pk")
+    being_name = serializers.CharField(source="being.name")
+    favor = serializers.IntegerField()
+    can_invoke = serializers.BooleanField()
+    refusal = serializers.CharField()
+    uses_left = serializers.IntegerField()
+    uses_per_week = serializers.IntegerField()
+    difficulty = InvocationDifficultySerializer(allow_null=True)
+
+
+class InvocationBonusRowSerializer(serializers.Serializer):
+    """The bonus one outcome tier gives the next check (#4333)."""
+
+    outcome_name = serializers.CharField()
+    success_level = serializers.IntegerField()
+    bonus = serializers.IntegerField()
+
+
+class InvocationOptionsSerializer(serializers.Serializer):
+    """The Call on favor picker's data: the beings and the bonus by result."""
+
+    beings = InvocationOptionSerializer(many=True)
+    bonuses = InvocationBonusRowSerializer(many=True)
