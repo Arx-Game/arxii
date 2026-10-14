@@ -49,7 +49,9 @@ export interface ComposerMode {
 // (no `tell`), so it's the only addition here. Without it, `page
 // <name>=<message>` typed while a composer mode is set (pose/say/etc.) gets
 // wrapped by buildFullCommand into IC prose instead of reaching CmdPage
-// verbatim as OOC.
+// verbatim as OOC. `ooc` (#4337) is here for the same reason: `ooc <message>`
+// is OOC speech to the room, and wrapped into a pose it would be the very IC
+// line it exists not to be.
 const KNOWN_COMMANDS: ReadonlySet<string> = new Set([
   'pose',
   'say',
@@ -59,6 +61,7 @@ const KNOWN_COMMANDS: ReadonlySet<string> = new Set([
   'tt',
   'tabletalk',
   'page',
+  'ooc',
 ]);
 
 // #2993 — the language selector only makes sense for speech modes (comprehension

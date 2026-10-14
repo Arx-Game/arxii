@@ -24,6 +24,7 @@ class CmdExpel(ArxCommand):
     """
 
     key = "expel"
+    takes_switches = True
     locks = "cmd:all()"
     help_category = "Building"
     action = None  # routes to multiple actions

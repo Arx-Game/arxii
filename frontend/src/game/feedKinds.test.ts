@@ -16,6 +16,8 @@ describe('classifyText (#3856)', () => {
     ['narrative', 'ambience'],
     ['gemit', 'ambience'],
     ['page', 'page'],
+    // `ooc <message>`, a player talking out of character to the room (#4337).
+    ['ooc', 'ooc'],
     ['system', 'system'],
     ['weather', 'system'],
     [undefined, 'system'],
@@ -65,6 +67,7 @@ describe('FEED_KINDS', () => {
       'item',
       'error',
       'page',
+      'ooc',
       'system',
     ]);
   });

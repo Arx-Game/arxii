@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 import re
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, ClassVar
 
 from evennia.commands.command import Command
 
@@ -47,6 +48,28 @@ def parse_greedy_kwargs(args: str, *, greedy_key: str | None = None) -> dict[str
     return out
 
 
+# ``/one/two`` straight after the command name. Evennia's default ``arg_regex`` only
+# matches a command followed by a space, a ``/`` or nothing, so a ``/`` here always
+# opens switches and never begins the text of a ``say``.
+_SWITCHES = re.compile(r"^/(?P<switches>\S+)(?P<rest>.*)$", re.DOTALL)
+
+
+def split_switches(args: str) -> tuple[list[str], str]:
+    """Split ``/finish/all Heron Plate`` into ``(["finish", "all"], " Heron Plate")``.
+
+    Switches come back lower-cased. The rest keeps its leading space, the shape
+    ``args`` has when no switch was typed, so a command reads both the same way.
+    Input with no switch comes back unchanged.
+    """
+    match = _SWITCHES.match(args)
+    if match is None:
+        return [], args
+    switches = [switch.lower() for switch in match["switches"].split("/") if switch]
+    if not switches:
+        return [], args
+    return switches, match["rest"]
+
+
 class ArxCommand(Command):
     """Base command class for Arx II.
 
@@ -82,6 +105,22 @@ class ArxCommand(Command):
     account: Any = None
     raw_string: str | None = None
     obj: Any | None = None
+    # A command that reads ``self.switches`` sets this. Every other command gets its
+    # typed line untouched: dropping an unread switch would turn ``retire/x`` into a
+    # bare ``retire``, and ``CMD_NOMATCH`` receives the whole unmatched line as ``args``.
+    takes_switches: ClassVar[bool] = False
+    # Set by ``parse()``; the empty default covers a command built and run by hand.
+    switches: Sequence[str] = ()
+
+    def parse(self) -> None:
+        """Split typed switches off the arguments: ``market/finish 12``.
+
+        Evennia's base ``Command.parse`` does nothing; only its ``MuxCommand`` reads
+        switches. Without this, ``self.switches`` was never set on a typed command and
+        ``/finish`` stayed at the front of ``self.args``.
+        """
+        if self.takes_switches:
+            self.switches, self.args = split_switches(self.args or "")
 
     def msg(self, *args: object, **kwargs: Any) -> None:
         """Send a message to the caller.

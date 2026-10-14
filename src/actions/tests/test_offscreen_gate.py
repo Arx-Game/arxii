@@ -21,7 +21,7 @@ from actions.constants import (
     OFFSCREEN_REASON_UNKNOWN,
     OffscreenActState,
 )
-from actions.definitions.communication import EmitAction, PoseAction
+from actions.definitions.communication import EmitAction, OOCSayAction, PoseAction
 from actions.definitions.perception import InventoryAction, LookAction, LookAtItemAction
 from actions.definitions.personas import SetActivePersonaAction
 from actions.definitions.vitals import GiveDeathKudosAction, RetireCharacterAction, WakeAction
@@ -205,6 +205,7 @@ class DeadGateRegressionTests(TestCase):
                     "wake",
                     "retire",
                     "death_kudos",
+                    "ooc",
                 }
             ),
         )
@@ -219,6 +220,7 @@ class DeadGateRegressionTests(TestCase):
             "wake": WakeAction(),
             "retire": RetireCharacterAction(),
             "death_kudos": GiveDeathKudosAction(),
+            "ooc": OOCSayAction(),
         }
         self.assertEqual(set(actions_by_key), DEAD_ALLOWED_ACTION_KEYS)
         for key, action_obj in actions_by_key.items():

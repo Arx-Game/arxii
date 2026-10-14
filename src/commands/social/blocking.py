@@ -38,18 +38,8 @@ def _target_persona(command: ArxCommand, name: str) -> tuple[object, Persona]:
 
 
 def _account_scope_from_switches(command: ArxCommand) -> bool:
-    """True (account-first) unless the caller passed /persona (#2996 Decision 1).
-
-    Reads ``switches`` defensively (not a bare ``command.switches``) because unit tests
-    routinely call ``func()`` directly without going through Evennia's ``parse()`` step that
-    would otherwise set it — a command instance built that way has no ``switches`` attribute
-    at all yet.
-    """
-    try:
-        switches = command.switches
-    except AttributeError:
-        switches = None
-    return _PERSONA_SWITCH not in {s.lower() for s in (switches or [])}
+    """True (account-first) unless the caller passed /persona (#2996 Decision 1)."""
+    return _PERSONA_SWITCH not in command.switches
 
 
 class CmdBlock(ArxCommand):
@@ -65,6 +55,7 @@ class CmdBlock(ArxCommand):
     """
 
     key = "+block"
+    takes_switches = True
     locks = _LOCK_ALL
     action = None
 
@@ -177,6 +168,7 @@ class CmdMute(ArxCommand):
     """
 
     key = "+mute"
+    takes_switches = True
     locks = _LOCK_ALL
     action = None
 

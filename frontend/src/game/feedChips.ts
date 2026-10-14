@@ -42,6 +42,11 @@ export const DEFAULT_FEED_CHIPS: readonly FeedChip[] = [
   { id: 'am', label: 'Ambience', kinds: ['ambience'], on: true, wake: false, custom: false },
   // A vision is rare and prized (#3779): it shows and it wakes.
   { id: 'vi', label: 'Visions', kinds: ['vision'], on: true, wake: true, custom: false },
+  // Players talking out of character to the room (#4337): a question for the
+  // table or a call for a GM. It shows; its wake flag is on like Visions', but
+  // only interactions light the attention badges today (attention.ts), so a
+  // note's wake has no effect yet.
+  { id: 'oc', label: 'OOC', kinds: ['ooc'], on: true, wake: true, custom: false },
   {
     id: 'sy',
     label: 'System',
@@ -77,6 +82,7 @@ export const KIND_LABELS: Record<FeedKind, string> = {
   item: 'Item handling',
   error: 'Command errors',
   page: 'Pages',
+  ooc: 'Out of character',
   system: 'Everything else',
 };
 

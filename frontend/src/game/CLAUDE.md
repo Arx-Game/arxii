@@ -107,13 +107,18 @@ lastSeenByThread, sceneBaselineId})` returns `{here, pages}`: **Here** is the
   the list the filter chips will offer. `classifyText(kwargs.type, kwargs.category)`
   maps a `text` frame's wire type (`look`, `item`, `error`, `move`, `arrive`;
   `narrative` and `gemit` to `ambience`, except a `narrative` frame in the `visions`
-  category, which is the `vision` kind (#3779); anything else `system`) and `classifyInteraction(mode)`
+  category, which is the `vision` kind (#3779); `page` and `ooc` as themselves, `ooc` being
+  `ooc <message>`, a player talking out of character to the room (#4337); anything else
+  `system`) and `classifyInteraction(mode)`
   maps an interaction's mode. A new kind is a deliberate addition here, never an ad
   hoc string.
 - **`feedChips.ts`**: The filter chips' pure model (#3856 PR 2). `FeedChip {id, label,
 kinds, on, wake, custom}`; a kind belongs to at most one chip; `DEFAULT_FEED_CHIPS`
-  are the demo's five plus Visions (#3779) (Roleplay, Whispers and Visions wake;
-  Movement, Ambience, System do not). **System owns the `system` kind** (#3933): it is
+  are the demo's five plus Visions (#3779) and OOC (#4337) (Roleplay, Whispers, Visions
+  and OOC carry the wake flag; Movement, Ambience, System do not). **Wake only reaches
+  interactions today:** `attention.ts` classifies interactions alone, so the flag on a
+  note kind (`vision`, `ooc`) lights nothing yet. A layout stored before OOC existed
+  has no chip owning `ooc`, so it shows (an unowned kind always does). **System owns the `system` kind** (#3933): it is
   the hide-system button, so pressing it has to hide login and connection chatter, not
   just look/item/error. `normalizeFeedChips` migrates a stored layout once, and only
   under both guards: the `sy` chip still has exactly the pre-#3933 default kinds
@@ -374,7 +379,8 @@ chips, dismissed?)` counts unread per waking chip for the strip's "new" pills,
   by `FeedKind` after the approved demo: a boxed note for `look` (subject title +
   prose body), `item` and `system`; the destructive tokens and `role="alert"` for
   `error`; a bare italic line for `arrive`/`move`; the italic line with a hairline
-  for `ambience`. Every body renders through `EvenniaMessage` in prose
+  for `ambience`; full ink with a sky rule for `ooc` (#4337), a person talking, so
+  never muted like a system note. Every body renders through `EvenniaMessage` in prose
   presentation, since the server sends Evennia's HTML (colour spans, `<br>`).
   There is no separate system strip any more: `SystemLane` was removed with
   #3856, since every text frame is a note in the column now. **No note sets its

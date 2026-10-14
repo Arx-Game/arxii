@@ -41,6 +41,7 @@ const NOTE_KINDS = [
   'move',
   'ambience',
   'vision',
+  'ooc',
 ] as const;
 
 async function mockRestRoutes(page: Page): Promise<void> {
@@ -135,6 +136,7 @@ function sendEveryNote(socket: WebSocketRoute): void {
     })
   );
   socket.send(text('A cold wind moves through the courtyard.', { type: 'narrative' }));
+  socket.send(text('&lt;OOC&gt; Nyx says: brb, tea.', { type: 'ooc' }));
 }
 
 /** The reader's settings, read off the root the way every reader reads them. */

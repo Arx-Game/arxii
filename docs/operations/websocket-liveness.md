@@ -89,7 +89,7 @@ guessing a smaller value.
 
 ## When one tab has many sessions
 
-A different symptom with a different cause: `ooc` lists several websocket
+A different symptom with a different cause: `sessions` lists several websocket
 sessions for one browser tab, and the room shows "connected" / "Sharing <name>
 with another of your sessions" each time the player comes back to the window,
 at irregular times. That is the client, not the edge. Before #4026 the SPA's
@@ -103,7 +103,7 @@ edge is not the cause. Then open DevTools, Network, **Socket**, and count the
 `game/` rows whose Time still says Pending. More than one means the client has
 lost track of a socket.
 
-The session IPs in `ooc` are Cloudflare edge addresses, not player addresses,
+The session IPs in `sessions` are Cloudflare edge addresses, not player addresses,
 because the Portal records the TCP peer. Do not read two IPs as two people.
 
 ## Related

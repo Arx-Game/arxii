@@ -531,6 +531,21 @@ describe('CommandInput', () => {
     expect(sendMock).toHaveBeenCalledWith('Alice', 'page Bob=meet me ooc for a sec');
   });
 
+  it.each(['pose', 'say'] as const)(
+    'sends a typed ooc line verbatim in %s mode, never as IC speech (#4337)',
+    (command) => {
+      const mode: ComposerMode = { command, targets: [], label: `${command} → Room` };
+      render(<CommandInput character="Alice" composerMode={mode} />);
+      const textarea = screen.getByRole('textbox');
+
+      fireEvent.change(textarea, { target: { value: 'ooc anyone up for a scene?' } });
+      fireEvent.keyDown(textarea, { key: 'Enter' });
+
+      expect(sendMock).toHaveBeenCalledWith('Alice', 'ooc anyone up for a scene?');
+      expect(executeActionMock).not.toHaveBeenCalled();
+    }
+  );
+
   it('whisper mode dispatches via executeAction with a resolved target_id and client_request_id (#3760)', () => {
     const mode: ComposerMode = {
       command: 'whisper',

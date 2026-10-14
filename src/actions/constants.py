@@ -21,6 +21,8 @@ DEAD_ALLOWED_ACTION_KEYS: frozenset[str] = frozenset(
         "wake",
         "retire",
         "death_kudos",
+        # #4337: OOC speech is the player talking, never the character.
+        "ooc",
     }
 )
 

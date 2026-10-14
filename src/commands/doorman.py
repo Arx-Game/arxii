@@ -29,6 +29,7 @@ class CmdDoorman(ArxCommand):
     """
 
     key = "doorman"
+    takes_switches = True
     aliases = ("doormen",)
     locks = "cmd:all()"
     help_category = "Building"

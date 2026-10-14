@@ -58,7 +58,12 @@ the unified Persona identity system, and non-combat scene rounds.
   out of their own view (IC and/or OOC), reversible; IC target exclusion is enforced for
   player-authored target writes (#3827), and the muted party is never told why.
   `mute_services.py` (`muted_persona_ids_for_viewer`, `set_mute`, `unmute`); the IC side is wired into
-  the scene feed (muted personas skipped). The OOC channel, the "actions still show without text"
+  the scene feed (muted personas skipped). The OOC side reaches pages and the room `ooc` line
+  (#4337): `ooc_muter_account_ids(persona=...)` answers, in one query, which accounts OOC-muted
+  the face being worn, so a room broadcast leaves them out. An account-level mute does not
+  follow the player to another face there: the room would see the muter left out and the
+  silence would link the faces (ADR-0204). The OOC
+  channel, the "actions still show without text"
   refinement, the opt-in reveal, and the "N hidden" feed divider are follow-ups (#2087).
   **Account-level (#2996):** `muted_player` — a nullable `PlayerData` FK, snapshotted at creation
   exactly like `Block.blocked_player` (never re-derived from `muted_persona` at query time; null for

@@ -101,6 +101,7 @@ from actions.definitions.combat_maneuvers import (
 from actions.definitions.communication import (
     EmitAction,
     MutterAction,
+    OOCSayAction,
     PemitAction,
     PoseAction,
     SayAction,
@@ -671,6 +672,7 @@ _ALL_ACTIONS: list[Action] = [
     SearchAction(),
     IdentifyAction(),
     SayAction(),
+    OOCSayAction(),
     PoseAction(),
     EmitAction(),
     WhisperAction(),

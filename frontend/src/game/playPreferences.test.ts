@@ -31,6 +31,7 @@ describe('playPreferences', () => {
       'Movement',
       'Ambience',
       'Visions',
+      'OOC',
       'System',
     ]);
     expect(prefs.feedAll).toBe(true);
@@ -58,6 +59,7 @@ describe('playPreferences', () => {
       'mv',
       'am',
       'vi',
+      'oc',
       'sy',
     ]);
   });

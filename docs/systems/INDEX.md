@@ -1361,8 +1361,11 @@ symmetric.
   one. Walking into a room runs `LookAction` at the room (`Character._send_arrival_look`),
   never Evennia's stock look, and staff `desc` (`commands.evennia_overrides.builder.CmdDesc`)
   writes each kind's store. Evennia's `desc` Attribute is retired (`evennia-desc-attribute`
-  hook); `setdesc` is removed, and the Builder-only `@set .../desc`, `@spawn` and `@copy`
-  still touch the Attribute (ADR-4329).
+  hook); `setdesc` is removed, `@set <obj>/desc` goes through the same `write_description`,
+  and `@spawn` and `@copy` are removed (#4338, ADR-4329). Staff `@name` renames through the
+  owning service (`write_name`: `rename_character`, `set_room_display_data`,
+  `items.services.materialize.set_item_name`) and `@sethome` on a character through
+  `set_primary_home`.
 - **Room Description Variants (#3291):** `evennia_extensions.RoomDescVariant`
   (`room_profile` FK, nullable `season`/`phase` TextChoices reusing
   `world.game_clock.constants.Season`/`TimePhase`, `description` text, unique on
@@ -4973,7 +4976,7 @@ surfaces via the #1225 `Concealed` condition (sneak-sourced instances only —
 magical concealment is untouched), while every room they occupy discloses an
 identity-free unseen presence. Disclosure is one-way: arrivals always announce
 (anonymous echo + `room_state` flag), departures are silent (normal "X leaves"
-broadcast suppressed while sneaking). One concealment roll per room per visit
+broadcast suppressed while sneaking, and the logout line too, #4336). One concealment roll per room per visit
 (`.ndb` anti-spam token); arriving re-rolls automatically — failure strips the
 stance quietly and the arrival is a normal visible one.
 
@@ -10048,8 +10051,9 @@ WebSocket-based game interface for MUD interaction.
 - **Hooks:** `useWebSocket()`, `useGameState()`
 - **Wire vocabulary (#3933, ADR-0306):** `src/core/wire_options.py` is the home of the
   `text`-frame option keys and type values every layer shares: `TextFrameOption`
-  (`console`, `interaction_echo`, `on_entry`), `TextFrameType` (`lifecycle`, `arrive`),
-  `TextFrameType` (`lifecycle`, `arrive`) and `LifecycleEvent` (`become`, `switch`, `puppet`). It lives in
+  (`console`, `interaction_echo`, `on_entry`), `TextFrameType` (`lifecycle`, `arrive`,
+  `look`, `error`, `move` for the logout line #4336, `ooc` for `ooc <message>` #4337) and
+  `LifecycleEvent` (`become`, `switch`, `puppet`). It lives in
   `core` because none of it is protocol-specific and `flows` sits below `web`;
   `src/web/webclient/message_types.py` re-exports the names through `__all__` and keeps
   the websocket frame names themselves. `WebsocketMessageType` gained `PUPPET` (the web
