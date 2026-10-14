@@ -125,7 +125,7 @@ reason; a page extending `base_site.html` directly does not get it for free.
               {% for f in effects.forms %}
               <tr>
                 {% for hidden in f.hidden_fields %}{{ hidden }}{% endfor %}
-                <td>{{ f.target }}</td>
+                <td>{{ f.target }}{% with target_help=f.instance|effect_target_help %}{% if target_help %}<div class="help">{{ target_help }}</div>{% endif %}{% endwith %}</td>
                 <td>{{ f.value_per_rank }}</td>
                 <td>{{ f.instance|effect_reads }}</td>
                 <td>{% if f.instance.pk %}{{ f.DELETE }}{% endif %}</td>
@@ -149,6 +149,8 @@ reason; a page extending `base_site.html` directly does not get it for free.
                     data-template="empty-effect-template">
               + Add an effect
             </button>
+            <span class="help">The target picker lists every being's two favor targets (favor
+              invocation, favor earning) and the two "any being" targets.</span>
           </div>
         </div>
 

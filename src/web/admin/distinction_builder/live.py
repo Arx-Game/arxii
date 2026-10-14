@@ -12,6 +12,7 @@ from web.admin.authoring.offers import PreviewLine, offer_sort_key, preview_from
 from world.character_creation.constants import OfferChapter
 from world.character_creation.models import Beginnings, DistinctionOffer
 from world.distinctions.models import CharacterDistinction, Distinction, DistinctionEffect
+from world.mechanics.models import ModifierTarget
 
 #: The placeholder marker `_placeholder_check` watches for - never typed by a
 #: player, just staff shorthand for "description not written yet".
@@ -27,6 +28,29 @@ def effect_reads(effect: DistinctionEffect) -> str:
     if effect.amplifies_sources_by is not None:
         return f"Other {effect.target.name} sources {effect.amplifies_sources_by:+d}"
     return f"See {effect.target.name}"
+
+
+def favor_target_help(target: ModifierTarget | None) -> str:
+    """What a value means on one of a being's favor targets (#4333), else "".
+
+    The Effects table's target picker lists every being's favor invocation and
+    favor earning targets and the two "any being" targets; this line under a
+    chosen one names its being and its unit.
+    """
+    from world.mechanics.constants import (  # noqa: PLC0415
+        FAVOR_EARNING_CATEGORY_NAME,
+        FAVOR_INVOCATION_CATEGORY_NAME,
+    )
+
+    if target is None:
+        return ""
+    category = target.category.name
+    if category not in (FAVOR_INVOCATION_CATEGORY_NAME, FAVOR_EARNING_CATEGORY_NAME):
+        return ""
+    being = target.target_being.name if target.target_being_id else "any being"
+    if category == FAVOR_INVOCATION_CATEGORY_NAME:
+        return f"Being: {being}. Value is difficulty points eased; 15 is one band."
+    return f"Being: {being}. Value is percent added to the earning rate."
 
 
 def sorted_offer_forms(offers_formset: BaseInlineFormSet) -> list:
