@@ -247,6 +247,27 @@ class SpouseAdminTests(TestCase):
         self.assertEqual(set(union.members.all()), {newly, self.partner})
         self.assertEqual(kinship.marital_status_of(newly, OMNISCIENT), MaritalStatus.MARRIED)
 
+    def test_the_partner_picker_finds_a_sheet_bound_person_by_character_name(self) -> None:
+        """A player character's node has an empty name column; the autocomplete the
+        picker uses must search the character's key (found on the live server)."""
+        from world.character_sheets.factories import CharacterSheetFactory
+
+        sheet = CharacterSheetFactory(character__db_key="Marisol Vey")
+        node = kinship.ensure_node_for_sheet(sheet)
+        self.client.force_login(self.superuser)
+        response = self.client.get(
+            reverse("admin:autocomplete"),
+            {
+                "app_label": "arxii",
+                "model_name": "union",
+                "field_name": "members",
+                "term": "Marisol",
+            },
+        )
+        self.assertEqual(response.status_code, 200)
+        ids = [int(row["id"]) for row in response.json()["results"]]
+        self.assertEqual(ids, [node.pk])
+
     def test_an_ended_marriage_does_not_block_a_new_one(self) -> None:
         old = self._marry()
         kinship.end_union(old, ended_at=timezone.now() - timedelta(days=1))

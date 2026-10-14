@@ -315,7 +315,10 @@ class KinspersonAdmin(admin.ModelAdmin):
         "is_appable",
         "family__kind",
     ]
-    search_fields = ["name", "description", "family__name"]
+    # A sheet-bound person's ``name`` column is empty (the sheet names them), so the
+    # autocomplete the Spouses section's partner picker uses has to search the
+    # character's key too, or no player character can ever be picked (#4232).
+    search_fields = ["name", "description", "family__name", "sheet__character__db_key"]
     raw_id_fields = ["sheet", "functionary", "deferred_definer"]
     inlines = [ParentageUpInline, FamilyMembershipInline, SpouseInline, KinspersonTraitValueInline]
 
