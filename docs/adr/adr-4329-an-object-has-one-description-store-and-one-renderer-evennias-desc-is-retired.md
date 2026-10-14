@@ -36,9 +36,9 @@ fixes. *Rejected:* removing `desc`. Staff reach for it from telnet and the conso
 and the ruling (ApostateCD, 2026-10-13) was that it should describe any object.
 
 **Consequences.** Evennia code that reads or writes `db.desc` shows defaults here, never our
-descriptions: contribs, the tutorial world, `DefaultObject.return_appearance`, and three
-Builder-only stock commands still in the cmdset, `@set <obj>/desc = ...` (writes the
-Attribute), `@spawn` (a prototype's `desc` becomes the Attribute) and `@copy` (copies
-Attributes, not `ObjectDisplayData` or `RoomProfile`, so a copied room shows "This is a
-room."). Anything adopted from Evennia that renders or sets a description has to be routed
-through `LookAction` and the stores above first.
+descriptions: contribs, the tutorial world and `DefaultObject.return_appearance`. Anything
+adopted from Evennia that renders or sets a description has to be routed through `LookAction`
+and the stores above first. The three Builder-only stock commands that still wrote the retired
+store are dealt with (#4338): `@set <obj>/desc` reads and writes through `write_description`
+like `desc`, and `@spawn` and `@copy`, which made objects without `ObjectDisplayData` or a
+`RoomProfile`, left the cmdset.

@@ -73,6 +73,27 @@ def _create_item_object_db(instance: ItemInstance, location: ObjectDB) -> Object
     return game_object
 
 
+def sync_item_object_key(instance: ItemInstance) -> None:
+    """Keep the item's game object key equal to the instance's display name (#4338).
+
+    The key is what ``look`` and the room listing show; the inventory and the web
+    read ``display_name``. ``_create_item_object_db`` sets one from the other once,
+    when the object is made, so every later rename of the instance has to carry the
+    new name across, or the two places show different names. A row-only instance
+    has no object and nothing to sync.
+    """
+    game_object = instance.game_object
+    if game_object is not None and game_object.db_key != instance.display_name:
+        game_object.key = instance.display_name
+
+
+def set_item_name(instance: ItemInstance, name: str) -> None:
+    """Name an item: its instance's ``custom_name`` and its game object's key together."""
+    instance.custom_name = name
+    instance.save(update_fields=["custom_name"])
+    sync_item_object_key(instance)
+
+
 def materialize_item_game_object(
     instance: ItemInstance,
     holder_sheet: CharacterSheet,

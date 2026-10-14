@@ -75,7 +75,16 @@ from commands.duels import CmdDuel
 from commands.durance import CmdDurance
 from commands.encounter import CmdEncounter
 from commands.endorse import CmdEndorse, CmdPoses
-from commands.evennia_overrides.builder import CmdDesc, CmdDig, CmdLink, CmdOpen, CmdUnlink
+from commands.evennia_overrides.builder import (
+    CmdDesc,
+    CmdDig,
+    CmdLink,
+    CmdName,
+    CmdOpen,
+    CmdSetAttribute,
+    CmdSetHome,
+    CmdUnlink,
+)
 from commands.evennia_overrides.communication import (
     CmdEmit,
     CmdMutter,
@@ -233,6 +242,16 @@ class CharacterCmdSet(default_cmds.CharacterCmdSet):
             # their own character) goes: a character's description is its sheet's.
             "@desc",
             "setdesc",
+            # #4338: @name, @sethome and @set wrote only Evennia's stores (the key,
+            # `home`, Attributes) while look, where and the sheet read ours; the
+            # overrides below go through the owning services. @spawn and @copy
+            # made objects without the display data and room profile Arx reads,
+            # and nobody uses them, so they go.
+            "@name",
+            "@sethome",
+            "@set",
+            "@spawn",
+            "@copy",
         ):
             self.remove(cmdname)
 
@@ -338,6 +357,9 @@ class CharacterCmdSet(default_cmds.CharacterCmdSet):
             CmdLink,
             CmdUnlink,
             CmdDesc,
+            CmdName,
+            CmdSetHome,
+            CmdSetAttribute,
             # #1278 — block/mute social controls (the telnet face of the persona menu).
             CmdBlock,
             CmdUnblock,

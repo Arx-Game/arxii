@@ -1361,8 +1361,11 @@ symmetric.
   one. Walking into a room runs `LookAction` at the room (`Character._send_arrival_look`),
   never Evennia's stock look, and staff `desc` (`commands.evennia_overrides.builder.CmdDesc`)
   writes each kind's store. Evennia's `desc` Attribute is retired (`evennia-desc-attribute`
-  hook); `setdesc` is removed, and the Builder-only `@set .../desc`, `@spawn` and `@copy`
-  still touch the Attribute (ADR-4329).
+  hook); `setdesc` is removed, `@set <obj>/desc` goes through the same `write_description`,
+  and `@spawn` and `@copy` are removed (#4338, ADR-4329). Staff `@name` renames through the
+  owning service (`write_name`: `rename_character`, `set_room_display_data`,
+  `items.services.materialize.set_item_name`) and `@sethome` on a character through
+  `set_primary_home`.
 - **Room Description Variants (#3291):** `evennia_extensions.RoomDescVariant`
   (`room_profile` FK, nullable `season`/`phase` TextChoices reusing
   `world.game_clock.constants.Season`/`TimePhase`, `description` text, unique on

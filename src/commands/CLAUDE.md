@@ -1031,6 +1031,24 @@ actions, backends, and service functions.
   `set_permanent_description`. Evennia's `setdesc` (any player, own character) is removed
   from `CharacterCmdSet` for the same reason. `CmdSet.remove` matches the key exactly, so
   the removal tuple must spell Evennia's key (`"@desc"`, not `"desc"`).
+  The rest of the stock builder commands that wrote only Evennia's stores (#4338):
+  - `CmdName` (`@name`/`@rename`) renames through `write_name`: a character through
+    `rename_character` (key, primary persona name, particled-name aliases), a room through
+    `set_room_display_data(bypass_ownership=True)` (key and `longname`, which `where` and the
+    area path read), an item through `items.services.materialize.set_item_name`
+    (`custom_name`, which the inventory reads, and the game object's key, which `look`
+    reads), anything else by key with an existing `longname` kept in step. Aliases after `;`
+    stay Evennia aliases; `*account` renames stay Evennia's.
+  - `CmdSetHome` (`@sethome`) on a character calls `set_primary_home` for the character's
+    active persona, so Evennia's `home`, `CharacterSheet.current_residence` and the tenancy's
+    `is_primary_home` agree; it refuses a room the persona has no tenancy standing in, so
+    staff grant the tenancy first. Any other object keeps Evennia's `home`.
+  - `CmdSetAttribute` (`@set`) sends `<obj>/desc` on a game object (view, set, clear and
+    `/edit`) to `read_description`/`write_description`; `set <obj>/desc = <text>` skips
+    Evennia's Python-literal parsing, so prose is stored as typed. Every other attribute,
+    and any account, script or channel, is stock.
+  - `@spawn` and `@copy` are removed: they made objects without the `ObjectDisplayData` and
+    `RoomProfile` Arx reads, and nobody uses them.
 
 ### Account Commands (`account/`)
 - **`account_info.py`**: `CmdAccount` (`@account`/`account`) — bare shows account information

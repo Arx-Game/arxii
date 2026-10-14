@@ -42,7 +42,8 @@ RP hubs over one crowded square; the description belongs to the player
 `purchase_stock` (sink + mint), `list_ware` (seller must hold + have
 crafted it, and it must be unfinished), `purchase_ware` (transfer + pass
 mint + host cut), `finish_ware` (consumes pass; player prose supersedes;
-designer credit), `set_service_offer`, `run_service_craft` (wraps the real
+designer credit; a new name also reaches the game object's key, which `look`
+reads, #4338), `set_service_offer`, `run_service_craft` (wraps the real
 attachment pipeline `run_crafting_recipe` with the **offering crafter as
 skill source**, buyer present at the shop, fee charged up front — Arx 1's
 craft-with-a-crafter's-skill loop made consensual and priced).
