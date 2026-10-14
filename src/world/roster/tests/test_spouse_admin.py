@@ -9,16 +9,17 @@ from __future__ import annotations
 
 from datetime import timedelta
 
-from django.forms.widgets import MultiWidget
+from django.contrib.admin.widgets import RelatedFieldWidgetWrapper
+from django.forms.widgets import MultiWidget, SelectMultiple
 from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
 
 from evennia_extensions.factories import AccountFactory
 from world.roster.admin import SpouseRow
-from world.roster.constants import MaritalStatus, MembershipBasis
+from world.roster.constants import DefinitionTier, MaritalStatus, MembershipBasis
 from world.roster.factories import FamilyFactory, ParentageEdgeFactory, UnionKindFactory
-from world.roster.models import Union
+from world.roster.models import Kinsperson, Union
 from world.roster.services import kinship
 from world.roster.services.kinship import OMNISCIENT
 from world.societies.factories import OrganizationFactory
@@ -29,7 +30,11 @@ def _posted_value(bound) -> object | None:
     """What the browser would post for one bound field; None for an unchecked checkbox."""
     value = bound.value()
     if value is None:
-        return ""
+        # An empty multiple select posts nothing at all; an empty single input posts "".
+        widget = bound.field.widget
+        if isinstance(widget, RelatedFieldWidgetWrapper):  # the admin wraps related widgets
+            widget = widget.widget
+        return None if isinstance(widget, SelectMultiple) else ""
     if isinstance(value, bool):
         return "on" if value else None
     if isinstance(value, list):
@@ -212,6 +217,35 @@ class SpouseAdminTests(TestCase):
         self.assertContains(response, "A person cannot marry themselves.")
         self.assertContains(response, "They already share an open marriage.")
         self.assertEqual(Union.objects.count(), 1)
+
+    def test_a_spouse_can_be_added_on_the_add_page(self) -> None:
+        """The parent is unsaved while the row validates (the formset sets only its id,
+        None); the row must not read the relation. Found by the mock-fidelity review."""
+        self.client.force_login(self.superuser)
+        response = self.client.get(reverse("admin:arxii_kinsperson_add"))
+        self.assertEqual(response.status_code, 200)
+        data, prefix = _page_as_post(response)
+        data.update(
+            {
+                "name": "Newly Wed",
+                "definition_tier": DefinitionTier.NAME_ONLY,
+                f"{prefix}-TOTAL_FORMS": "1",
+                f"{prefix}-0-id": "",
+                f"{prefix}-0-kinsperson": "",
+                f"{prefix}-0-partner": str(self.partner.pk),
+                f"{prefix}-0-kind": str(self.kind.pk),
+                f"{prefix}-0-is_public_record": "on",
+                f"{prefix}-0-is_true": "on",
+            }
+        )
+
+        response = self.client.post(reverse("admin:arxii_kinsperson_add"), data)
+
+        self.assertEqual(response.status_code, 302, _errors(response))
+        newly = Kinsperson.objects.get(name="Newly Wed")
+        union = Union.objects.get()
+        self.assertEqual(set(union.members.all()), {newly, self.partner})
+        self.assertEqual(kinship.marital_status_of(newly, OMNISCIENT), MaritalStatus.MARRIED)
 
     def test_an_ended_marriage_does_not_block_a_new_one(self) -> None:
         old = self._marry()

@@ -211,15 +211,21 @@ class SpouseForm(ModelForm):
         cleaned = super().clean()
         if self.instance.pk:
             return cleaned
-        person = self.instance.kinsperson
         partner = cleaned.get("partner")
         if partner is None:
             self.add_error("partner", "Name who the person marries.")
             return cleaned
-        if person.pk is not None and partner.pk == person.pk:
+        # On the add page the parent is unsaved: the formset sets only the id, and it
+        # is None, so the relation itself cannot be read. The two checks against the
+        # person need a saved person; a new one has no marriages to clash with.
+        person_pk = self.instance.kinsperson_id
+        if person_pk is None:
+            return cleaned
+        if partner.pk == person_pk:
             self.add_error("partner", "A person cannot marry themselves.")
             return cleaned
-        if person.pk is not None and open_wedlock_union_among([person, partner]) is not None:
+        person = Kinsperson.objects.get(pk=person_pk)
+        if open_wedlock_union_among([person, partner]) is not None:
             self.add_error("partner", "They already share an open marriage.")
         return cleaned
 
