@@ -90,6 +90,19 @@ lastSeenByThread, sceneBaselineId})` returns `{here, pages}`: **Here** is the
   matches in `<mark data-find-match>`; `FeedFindContext`/`useFeedFind` carry the
   needle from `GameWindow` to `FormattedContent`, `ActorLine` and `EvenniaMessage`
   without a prop through every reader. History's search is a different thing.
+- **`composerLine.ts`**: How the composer reads a line's opening (#4346, ruled
+  2026-10-13). `readComposerLine(trimmed, {people, commandNames, addressing})`
+  returns a `command` (sent as `line`), `prose` (`socketText` for after a parsing
+  verb, `spoken` with every escape removed, and the leading `@` `targets`, each
+  once) or `held` (`reason`, `hint`, `settled`). `people` is `null` until the room
+  is known and `addressing` is false outside pose and emit; either way nobody is
+  held for being absent. People are matched on the names the room list shows
+  (every word of each, so the first word of an autocompleted multi-word name
+  counts, or the whole name hyphenated), never on keys, which the client does not
+  have: on the web, `@RealName` for someone in a mask is held. `uniqueNames`
+  dedupes target names without case. The target-list pattern mirrors the
+  server's `_TARGET_PREFIX_RE` (`src/commands/parsing.py`) with Unicode name
+  characters, as Python's `\w` is. The ruling's table is in the module docstring.
 - **`feedKinds.ts`**: The closed `FeedKind` union (#3856) every feed entry carries,
   the list the filter chips will offer. `classifyText(kwargs.type, kwargs.category)`
   maps a `text` frame's wire type (`look`, `item`, `error`, `move`, `arrive`;
@@ -378,10 +391,24 @@ chips, dismissed?)` counts unread per waking chip for the strip's "new" pills,
   `effectiveComposerMode` derives Pose for the room anchor whenever no mode is
   chosen (a fresh connection, the reset on every character or scene change), so a
   typed line is `pose <line>` and never a raw command by accident; picking a mode
-  works before any was set. A line starting with `/` is the command after the
-  slash, sent as typed whatever the mode (`slashEscape`); `//` poses a literal
-  slash; a typed speech verb or `page` (`KNOWN_COMMANDS`) still passes through,
-  and any other word is prose (`look` on its own is the pose "look"). Staff
+  works before any was set. **How a line opens decides what it is**
+  (`composerLine.ts`'s `readComposerLine`, #3857/#4346): `/` is the command after
+  the slash; `+` and a letter, and `@` with a command the character has
+  (`Session.commandNames`), are commands sent as typed, whatever the mode; `@` with
+  someone in the room addresses them, outside a scene through `pose @Nyx ...` and
+  in a scene by sending the names as the pose endpoint's `target_names` while
+  **keeping them in the text** (the server matches names by key, which the room
+  list does not show, so a worn face or a multi-word name would otherwise vanish
+  from the pose); in pose or emit mode, once the room is known, `@` with anything
+  else is **held**: nothing is sent, the line stays, and a `line-held` note in
+  `tagRefusal`'s style says why (a lone `@word` at the end of the line waits for a
+  send attempt, since it may be mid-word). A page, a whisper or a say never holds
+  for a name. A person present wins over a command of the same name; `/` still
+  reaches the command. `//`, `@@` and `++` post one literal character (`@@` stays
+  doubled only where the server's target parser opens the arguments: pose, emit
+  or say with no picked target). A typed speech verb or `page` (`KNOWN_COMMANDS`)
+  still passes through, and any other word is prose (`look` on its own is the
+  pose "look"). Staff
   (`isStaff`, from `account.is_staff` via `GameWindow`) get a Commands entry in
   `ModeSelector`; in that mode the formatting controls, the companion selector and
   the scene controls step aside, the box takes the monospace face, and every line

@@ -29,7 +29,7 @@ from django.utils.functional import cached_property
 from evennia.accounts.accounts import DefaultAccount, DefaultGuest
 from evennia.utils.utils import make_iter
 
-from commands.utils import serialize_cmdset
+from commands.utils import commands_frame
 from core.descriptors import ReverseOneToOneOrNone
 from core.wire_options import LifecycleEvent, TextFrameType
 from evennia_extensions.account_setup import heal_account_setup
@@ -622,11 +622,14 @@ class Account(DefaultAccount):
             session.msg(logged_in={})
         self._send_to_connect_channel(f"|G{self.key} connected|n")
 
-        payload = serialize_cmdset(self)
-        for sess in self.sessions.all():
-            sess.msg(commands=(payload, {}))
         if session is None:
             return
+        # Only the window that just logged in (#4346): the account's own frame
+        # lacks every character command, and a sibling tab playing a character
+        # would lose its command names (and the composer would hold its
+        # `@desc` lines) until its next puppet. The puppet below sends this
+        # window the character's full frame.
+        session.msg(commands=commands_frame(self))
 
         available = self.get_available_characters()
         if not available:

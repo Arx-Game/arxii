@@ -17,7 +17,7 @@ from django.utils import timezone
 from django.utils.functional import cached_property
 from evennia.objects.objects import DefaultCharacter
 
-from commands.utils import serialize_cmdset
+from commands.utils import commands_frame
 from core.wire_options import LifecycleEvent, TextFrameOption, TextFrameType
 from flows.constants import EventName
 from flows.emit import emit_event
@@ -584,9 +584,9 @@ class Character(ObjectParent, DefaultCharacter):
         self._run_entry_step("roster", update_roster, joining)
 
         def send_commands():
-            payload = serialize_cmdset(self)
+            frame = commands_frame(self)
             for session in sessions:
-                session.msg(commands=(payload, {}))
+                session.msg(commands=frame)
 
         self._run_entry_step("commands", send_commands, joining)
 

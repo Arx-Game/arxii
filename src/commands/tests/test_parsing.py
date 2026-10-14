@@ -59,3 +59,14 @@ class TestParseTargetsFromText(TestCase):
         # No space after target means no match on the regex — returns original
         assert remaining == "@Bob"
         assert targets == []
+
+    def test_doubled_at_sign_is_a_literal_at(self) -> None:
+        """`@@` escapes the target list (#4346): one `@` is kept, and nobody is targeted."""
+        remaining, targets = parse_targets_from_text("@@everyone gets a drink", self.room)
+        assert remaining == "@everyone gets a drink"
+        assert targets == []
+
+    def test_doubled_at_sign_before_a_present_name_still_targets_nobody(self) -> None:
+        remaining, targets = parse_targets_from_text("@@Bob is my handle", self.room)
+        assert remaining == "@Bob is my handle"
+        assert targets == []

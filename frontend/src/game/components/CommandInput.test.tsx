@@ -84,8 +84,15 @@ let mockRoomCharacters: Array<{
 }> = [{ name: 'Bob', thumbnail_url: null, dbref: '#501' }];
 // The room's live scene as the store holds it (#3867); tests set `viewer_entered`.
 let mockScene: { id: number; viewer_entered: boolean } | null = null;
+// The `commands` frame's names (#4346): a player's, with no staff `desc`.
+const PLAYER_COMMAND_NAMES = ['look', 'who', 'sheet', 'friend', 'friends', 'pose', 'say'];
+let mockCommandNames: string[] = PLAYER_COMMAND_NAMES;
+// False is a session with no `room_state` yet (or a page with no live session).
+let mockRoomKnown = true;
 beforeEach(() => {
   mockScene = null;
+  mockCommandNames = PLAYER_COMMAND_NAMES;
+  mockRoomKnown = true;
 });
 
 vi.mock('@/store/hooks', () => ({
@@ -95,8 +102,9 @@ vi.mock('@/store/hooks', () => ({
         active: 'Alice',
         sessions: {
           Alice: {
-            room: { characters: mockRoomCharacters },
+            room: mockRoomKnown ? { characters: mockRoomCharacters } : null,
             scene: mockScene,
+            commandNames: mockCommandNames,
           },
         },
       },
@@ -268,6 +276,148 @@ describe('CommandInput', () => {
       fireEvent.change(textarea, { target: { value: '//shrugs' } });
       fireEvent.keyDown(textarea, { key: 'Enter' });
       expect(sendMock).toHaveBeenCalledWith('Alice', 'pose /shrugs');
+    });
+
+    describe('@ and + mark a command too, and a person present wins (#4346)', () => {
+      function sendLine(value: string) {
+        const textarea = screen.getByRole('textbox');
+        fireEvent.change(textarea, { target: { value } });
+        fireEvent.keyDown(textarea, { key: 'Enter' });
+        return textarea;
+      }
+
+      it('sends a + line as the command it is, never as a pose', () => {
+        render(<CommandInput character="Alice" composerMode={pose} sceneId="5" personaId={9} />);
+        sendLine('+friends');
+        expect(sendMock).toHaveBeenCalledWith('Alice', '+friends');
+        expect(submitPoseMock).not.toHaveBeenCalled();
+      });
+
+      it('sends @ and a command the character has as typed, in a scene or say mode', () => {
+        mockCommandNames = [...PLAYER_COMMAND_NAMES, 'desc'];
+        render(<CommandInput character="Alice" composerMode={pose} sceneId="5" personaId={9} />);
+        sendLine('@desc here = A cold room');
+        expect(sendMock).toHaveBeenCalledWith('Alice', '@desc here = A cold room');
+        expect(submitPoseMock).not.toHaveBeenCalled();
+      });
+
+      it('sends @command in say mode as the command, not as speech', () => {
+        const say: ComposerMode = { command: 'say', targets: [], label: 'Say' };
+        render(<CommandInput character="Alice" composerMode={say} />);
+        sendLine('@sheet');
+        expect(sendMock).toHaveBeenCalledWith('Alice', '@sheet');
+        expect(executeActionMock).not.toHaveBeenCalled();
+      });
+
+      it('holds @ and a command the character lacks: nothing sent, the line kept, Send off', () => {
+        render(<CommandInput character="Alice" composerMode={pose} sceneId="5" personaId={9} />);
+        const textarea = sendLine('@desc here = A cold room');
+        expect(sendMock).not.toHaveBeenCalled();
+        expect(submitPoseMock).not.toHaveBeenCalled();
+        expect(textarea).toHaveValue('@desc here = A cold room');
+        expect(screen.getByTestId('line-held')).toHaveTextContent(
+          'Nobody called desc is here, and you have no desc command.'
+        );
+        expect(screen.getByRole('button', { name: /send/i })).toBeDisabled();
+      });
+
+      it('holds a target who is not here', () => {
+        render(<CommandInput character="Alice" composerMode={pose} />);
+        sendLine('@Gone waves');
+        expect(sendMock).not.toHaveBeenCalled();
+        expect(screen.getByTestId('line-held')).toHaveTextContent('Nobody called Gone is here');
+      });
+
+      it('shows the note for a lone unknown word only once Send is pressed', () => {
+        // A word nobody's name starts with, so the @ autocomplete stays shut
+        // (with it open, Enter completes the name instead of sending).
+        render(<CommandInput character="Alice" composerMode={pose} />);
+        const textarea = screen.getByRole('textbox');
+        fireEvent.change(textarea, { target: { value: '@Zed' } });
+        expect(screen.queryByTestId('line-held')).not.toBeInTheDocument();
+        fireEvent.keyDown(textarea, { key: 'Enter' });
+        expect(sendMock).not.toHaveBeenCalled();
+        expect(screen.getByTestId('line-held')).toHaveTextContent('Nobody called Zed is here');
+        fireEvent.change(textarea, { target: { value: '@Zedd' } });
+        expect(screen.queryByTestId('line-held')).not.toBeInTheDocument();
+      });
+
+      it('addresses someone here outside a scene through the pose command, as before', () => {
+        render(<CommandInput character="Alice" composerMode={pose} />);
+        sendLine('@Bob waves');
+        expect(sendMock).toHaveBeenCalledWith('Alice', 'pose @Bob waves');
+      });
+
+      it('addresses someone here in a scene through target names, keeping the name in the text', () => {
+        render(<CommandInput character="Alice" composerMode={pose} sceneId="5" personaId={9} />);
+        sendLine('@bob waves');
+        expect(submitPoseMock).toHaveBeenCalledWith(
+          expect.objectContaining({ scene_id: 5, content: '@bob waves', target_names: ['bob'] })
+        );
+        expect(sendMock).not.toHaveBeenCalled();
+      });
+
+      it('sends a picked and a typed spelling of one person as one target', () => {
+        const toBob: ComposerMode = { command: 'pose', targets: ['Bob'], label: 'Pose' };
+        render(<CommandInput character="Alice" composerMode={toBob} sceneId="5" personaId={9} />);
+        sendLine('@bob waves');
+        expect(submitPoseMock).toHaveBeenCalledWith(
+          expect.objectContaining({ target_names: ['Bob'] })
+        );
+      });
+
+      it('never holds a page for naming someone elsewhere', () => {
+        const toNyx: ComposerMode = { command: 'page', targets: ['Nyx'], label: 'Page Nyx' };
+        render(<CommandInput character="Alice" composerMode={toNyx} />);
+        sendLine('@Gone said you were late');
+        expect(screen.queryByTestId('line-held')).not.toBeInTheDocument();
+        expect(sendMock).toHaveBeenCalledWith('Alice', 'page Nyx=@Gone said you were late');
+      });
+
+      it('holds nobody as absent before the room is known', () => {
+        mockRoomKnown = false;
+        render(<CommandInput character="Alice" composerMode={pose} sceneId="5" personaId={9} />);
+        sendLine('@Nyx waves');
+        expect(screen.queryByTestId('line-held')).not.toBeInTheDocument();
+        expect(submitPoseMock).toHaveBeenCalledWith(
+          expect.objectContaining({ content: '@Nyx waves', target_names: ['Nyx'] })
+        );
+      });
+
+      it('lets someone here win over a command of the same name', () => {
+        mockRoomCharacters = [{ name: 'Sheet', thumbnail_url: null, dbref: '#502' }];
+        render(<CommandInput character="Alice" composerMode={pose} />);
+        sendLine('@Sheet nods');
+        expect(sendMock).toHaveBeenCalledWith('Alice', 'pose @Sheet nods');
+      });
+
+      it('poses @@ and ++ with one literal character', () => {
+        render(<CommandInput character="Alice" composerMode={pose} sceneId="5" personaId={9} />);
+        sendLine('@@everyone gets a drink');
+        expect(submitPoseMock).toHaveBeenLastCalledWith(
+          expect.objectContaining({ content: '@everyone gets a drink' })
+        );
+        expect(submitPoseMock).toHaveBeenLastCalledWith(
+          expect.not.objectContaining({ target_names: expect.anything() })
+        );
+      });
+
+      it('sends @@ single behind a picked target, where the server would not unescape it', () => {
+        const toBob: ComposerMode = { command: 'pose', targets: ['Bob'], label: 'Pose' };
+        render(<CommandInput character="Alice" composerMode={toBob} />);
+        sendLine('@@everyone gets a drink');
+        expect(sendMock).toHaveBeenLastCalledWith('Alice', 'pose @Bob @everyone gets a drink');
+      });
+
+      it('leaves @@ doubled on the socket, where the server parser reads the escape', () => {
+        render(<CommandInput character="Alice" composerMode={pose} />);
+        sendLine('@@everyone gets a drink');
+        expect(sendMock).toHaveBeenLastCalledWith('Alice', 'pose @@everyone gets a drink');
+        sendLine('++friend is a word');
+        expect(sendMock).toHaveBeenLastCalledWith('Alice', 'pose +friend is a word');
+        sendLine('+1 to that');
+        expect(sendMock).toHaveBeenLastCalledWith('Alice', 'pose +1 to that');
+      });
     });
 
     it('offers Commands in the selector for staff only', async () => {

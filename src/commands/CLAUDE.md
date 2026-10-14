@@ -1164,12 +1164,31 @@ actions, backends, and service functions.
 
 ### Frontend Integration
 - **`frontend.py`**: `FrontendMetadataMixin` — for non-action commands (builder, page)
-- **`utils.py`**: `serialize_cmdset()` — serializes cmdset for frontend
+- **`utils/__init__.py`**: `serialize_cmdset()` — serializes cmdset for frontend (only
+  commands with a web form). `command_names()` (#4346) — every key and alias the
+  object and its account can run (the `cmd` lock checked), lowercased with
+  `CMD_IGNORE_PREFIXES` stripped the way Evennia's parser matches them, Evennia's
+  `__` system commands left out (the session cmdset is not read, so `@sessions`
+  is held on the web; `/sessions` reaches it). `commands_frame()` builds the
+  `commands` frame from both: `session.msg(commands=commands_frame(obj))`,
+  descriptors as args, `names` in kwargs. It is sent on puppet, to the
+  character's sessions, and on login, to the logging-in window only (#4346: the
+  account's frame has no character commands, and sent to every window it emptied
+  a sibling tab's list). `CmdSetHandler` (`evennia_overrides/cmdset_handler.py`)
+  re-sends it on a cmdset change but is not installed on any typeclass, so the
+  names are as of the last puppet. The web composer reads them to tell `@desc`
+  from `@Nyx`.
 - **`serializers.py`**: `CommandSerializer` — DRF serializer for command payloads
 
 ### Other
 - **`default_cmdsets.py`**: Command set registration
 - **`exceptions.py`**: `CommandError` — raised for invalid input
+- **`parsing.py`**: `parse_targets_from_text` — the leading `@Nyx,@Bob` target list
+  `say`, `pose` and `emit` read, resolved by key against the room's contents. The list
+  is stripped even when no name resolves (telnet keeps that, per the #4346 ruling; the
+  web composer holds such a line before it is sent). A leading `@@` is the escape
+  (#4346): one `@` is kept and nobody is targeted. `parse_kv_and_flags` — the shared
+  `key=value` / bare-flag tokenizer.
 - **`descriptors.py`**: Serializable command/dispatcher descriptors
 
 ## Adding a New Command

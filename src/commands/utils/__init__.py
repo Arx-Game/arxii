@@ -5,10 +5,14 @@ from __future__ import annotations
 import logging
 from typing import Any
 
+from django.conf import settings
+
 from commands.frontend_types import FrontendDescriptor
 from commands.serializers import CommandSerializer
 
 UNKNOWN_COMMAND_KEY = "unknown"
+# Evennia's own no-input / no-match / multi-match handlers. Nobody types them.
+SYSTEM_COMMAND_PREFIX = "__"
 
 
 def _get_cmdset(cmdset_obj: Any) -> Any:
@@ -113,3 +117,67 @@ def serialize_cmdset(obj: Any) -> list[FrontendDescriptor]:
         _serialize_cmdset_commands(account, "account", results)
 
     return results
+
+
+def _typed_names(command: Any) -> set[str]:
+    """The words a typed line can reach *command* by, compared the way Evennia does.
+
+    Evennia's parser also matches a key or alias with its leading
+    ``CMD_IGNORE_PREFIXES`` stripped, so ``@desc`` and ``desc`` reach the same
+    command and ``+friend`` answers to ``friend``. Lowercased, as Evennia
+    lowercases the typed word before matching.
+    """
+    try:
+        raw_names = [command.key, *command.aliases]
+    except AttributeError:
+        return set()
+    names = set()
+    for raw_name in raw_names:
+        name = str(raw_name).lower().lstrip(settings.CMD_IGNORE_PREFIXES)
+        if name and not name.startswith(SYSTEM_COMMAND_PREFIX):
+            names.add(name)
+    return names
+
+
+def _collect_command_names(cmdset_obj: Any, source_name: str, names: set[str]) -> None:
+    cmdset = _get_cmdset(cmdset_obj)
+    if not cmdset:
+        return
+
+    for command in cmdset.commands:
+        if not _has_command_access(command, cmdset_obj, source_name):
+            continue
+        names.update(_typed_names(command))
+
+
+def command_names(obj: Any) -> list[str]:
+    """Every name a line typed as *obj* can reach a command by (#4346).
+
+    The web composer reads this list to tell ``@desc`` (a command this
+    character can run) from ``@Nyx`` (someone to address) and from a word that
+    is neither. Covers every command *obj* and its account can run, not only
+    the ones with a web form, which is all ``serialize_cmdset`` sends. The
+    session cmdset (Evennia's ``sessions``) is not read.
+
+    Returns:
+        list[str]: Sorted, prefix-free, lowercased names.
+    """
+    names: set[str] = set()
+    _collect_command_names(obj, "object", names)
+    try:
+        account = obj.account
+    except AttributeError:
+        account = None
+    if account:
+        _collect_command_names(account, "account", names)
+    return sorted(names)
+
+
+def commands_frame(obj: Any) -> tuple[list[FrontendDescriptor], dict[str, list[str]]]:
+    """The ``commands`` frame for *obj*: its web-form descriptors, and every name it can type.
+
+    Send it as ``session.msg(commands=commands_frame(obj))``. The descriptors are
+    the frame's args; the names ride its kwargs as ``names``, which the web
+    composer reads (#4346).
+    """
+    return serialize_cmdset(obj), {"names": command_names(obj)}
