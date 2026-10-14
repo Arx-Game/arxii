@@ -98,8 +98,6 @@ class CmdRelationship(ArxCommand):
     aliases = ["relation", "rel"]
     locks = "cmd:all()"
     action = None  # routed per-subverb in func()
-    # Base Command has no switches attr; a class default keeps direct func() calls safe.
-    switches: list[str] = []
 
     def _handlers(self) -> dict[str, Callable[[str], None]]:
         """The subverb -> handler table (a dict keeps ``func()`` under the branch limit)."""
@@ -118,20 +116,10 @@ class CmdRelationship(ArxCommand):
     def func(self) -> None:
         """Route the leading subverb; bare ``relationship`` lists ties."""
         try:
-            raw = (self.args or "").strip()
-            # Switch form: ``rel/plus <name>`` / ``rel/neg <name>`` (#1699).
-            switches = {s.lower() for s in (self.switches or [])}
-            bump_switch = switches & _BUMP_SUBVERBS
-            if bump_switch:
-                self._dispatch_bump(bump_switch.pop(), raw)
-                return
-            if not raw:
+            subverb, rest = self._subverb_and_rest()
+            if subverb is None:
                 self._show_list()
                 return
-            parts = raw.split(maxsplit=1)
-            # Accept the slash-form embedded in args too (``/plus <name>``).
-            subverb = parts[0].lower().lstrip("/")
-            rest = parts[1].strip() if len(parts) > 1 else ""
             if subverb in _BUMP_SUBVERBS:
                 self._dispatch_bump(subverb, rest)
                 return
@@ -143,6 +131,20 @@ class CmdRelationship(ArxCommand):
         except CommandError as err:
             self.msg(str(err))
             self.msg(command_error={"error": str(err), "command": self.raw_string or ""})
+
+    def _subverb_and_rest(self) -> tuple[str | None, str]:
+        """The subverb and what follows it; ``None`` for a bare ``relationship``.
+
+        The subverb may be typed as a switch (``rel/plus <name>``, #1699) or as the first
+        word (``relationship plus <name>``); both reach the same handler.
+        """
+        raw = (self.args or "").strip()
+        if self.switches:
+            return self.switches[0], raw
+        if not raw:
+            return None, ""
+        parts = raw.split(maxsplit=1)
+        return parts[0].lower(), parts[1].strip() if len(parts) > 1 else ""
 
     # -- ambient bumps (#1699) --------------------------------------------------
 

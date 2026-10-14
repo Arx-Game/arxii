@@ -1,6 +1,6 @@
 ---
 name: mock-fidelity-reviewer
-description: Checks whether a test's doubles are faithful enough to fail, and whether the code under test calls its collaborators with the signature those collaborators actually have. Use when a diff calls a framework hook or another object's method, when it adds or changes tests that stand a Mock/MagicMock in for a real collaborator, and when frontend tests hand-write a double of a browser API (WebSocket, observers, storage) or stub the layout jsdom does not have (scroll and size numbers). Catches the call that is green in every test and raises on every real request.
+description: Checks whether a test's doubles are faithful enough to fail, and whether the code under test calls its collaborators with the signature those collaborators actually have. Use when a diff calls a framework hook or another object's method, when it adds or changes tests that stand a Mock/MagicMock in for a real collaborator or set by hand an attribute the framework would set (a command's `switches`, a request's `user`), and when frontend tests hand-write a double of a browser API (WebSocket, observers, storage) or stub the layout jsdom does not have (scroll and size numbers). Catches the call that is green in every test and raises on every real request.
 tools: Bash, Read, Grep, Glob
 model: sonnet
 ---
@@ -78,6 +78,18 @@ rule in a file is not a gate; you are the gate.
 - **An assertion that only proves the call happened** (`assert_called`,
   `assert_called_once`) where the interesting question is what was passed. Say
   what the assertion would need to check to have caught the defect.
+- **A test that writes the attribute the framework would have set**, then runs the
+  code that reads it: `cmd.switches = ["finish"]`, `cmd.lhs = ...`, `request.user = ...`.
+  The test skips whatever sets the attribute for real, so it proves the branch works
+  and nothing about whether a real call ever reaches it. Every command test in
+  `src/commands/tests/` set `switches` by hand. `ArxCommand` subclassed Evennia's base
+  `Command`, whose `parse()` sets nothing, so `market/finish`, `gemit/society`,
+  `room/dig` and a dozen more raised `AttributeError` for every telnet player, and
+  `home/set` recalled the character home instead of setting it, all behind green
+  tests (`ArxCommand.parse` and `tests/test_command_switches.py` fixed it). Read the
+  framework code that sets the attribute, confirm the class under test actually
+  inherits it, and ask for one test through the real entry point:
+  `character.execute_cmd("...")` for a command, the test client for a view.
 - **A hand-written frontend double of a browser API** (`WebSocket`,
   `IntersectionObserver`, `localStorage`, `fetch`, ...) that accepts arguments the
   browser rejects. The TypeScript types do not save you: `close(code?: number)`

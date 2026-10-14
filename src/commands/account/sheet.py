@@ -5,11 +5,13 @@ Provides the @sheet OOC command to display character demographic and descriptive
 This is an account-level command for viewing character information out-of-character.
 """
 
+from collections.abc import Sequence
 from typing import Any, ClassVar
 
 from evennia import Command
 
 from commands.account.sheet_sections import SECTION_NAMES, SHEET_SECTIONS
+from commands.command import split_switches
 from commands.exceptions import CommandError
 
 
@@ -35,14 +37,16 @@ class CmdSheet(Command):  # ty: ignore[invalid-base]
     aliases: ClassVar[list[str]] = ["sheet"]
     locks = "cmd:all()"
     help_category = "Account"
+    # Set by ``parse()``; the empty default covers a command built and run by hand.
+    switches: Sequence[str] = ()
+
+    def parse(self) -> None:
+        """Split ``/secret`` off the arguments; Evennia's base ``Command`` never does."""
+        self.switches, self.args = split_switches(self.args or "")
 
     def func(self) -> None:
         """Dispatch to a section (``sheet/<section>``) or show the overview."""
-        try:
-            switches = self.switches
-        except AttributeError:
-            switches = []
-        section = next((switch for switch in switches if switch in SHEET_SECTIONS), None)
+        section = next((switch for switch in self.switches if switch in SHEET_SECTIONS), None)
         if section is not None:
             try:
                 output = SHEET_SECTIONS[section](self)

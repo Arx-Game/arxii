@@ -28,6 +28,19 @@ SCENE_ADAPTIVE backend.
   - `action`: The Action instance this command delegates to
   - `resolve_action_args()`: Override to parse telnet text into action kwargs
   - `func()`: Calls `resolve_action_args()` → `action.run()` → sends result to caller
+  - `parse()` splits typed switches off the arguments through `split_switches`:
+    `market/finish 12` gives `switches == ["finish"]` (lower-cased) and `args == " 12"`,
+    the leading space being the shape `args` has with no switch. Evennia's base
+    `Command.parse` does nothing; only its `MuxCommand` reads switches, so before this
+    every `ArxCommand` that read `self.switches` raised `AttributeError` when typed, and
+    the ones that read it defensively ran their switch-less branch (`home/set` recalled the
+    character home). `switches` defaults to `()` for a command built and run by hand, so
+    read `self.switches` directly, never through `getattr`. A command on Evennia's bare
+    `Command` that takes switches needs the same `parse()` (`CmdSheet` has it).
+    `tests/test_command_switches.py` types lines through Evennia's command handler, and
+    its guard fails for any command in the game's cmdsets whose code reads `switches`
+    while its `parse()` leaves `/switch` in the arguments. A test that sets
+    `cmd.switches` by hand never runs the parser, which is how this went unnoticed.
   - `feed_kind` / `send_result()` (#3856): a command that declares `feed_kind = "look"`
     or `"item"` sends its result through Evennia's tuple form,
     `msg((text, {"type": kind}))`, whose dict becomes the `text` frame's kwargs on the
@@ -998,7 +1011,8 @@ actions, backends, and service functions.
   namespace. One `ArxCommand` routes a leading subverb (`declare <name>=<type>[,awareness]` /
   `shift <name>=<from>,<to>[,note]` / `end <name>=<type>` / `reveal <name>=<type>,<awareness>` /
   `ap <name>=<n>` / `advance <name>=<journal entry id>` / `summary <name>=<text>` / `plus`/`neg
-  <name>`) and runs the matching tie Action via `action.run()` directly — the same seam the web
+  <name>`; any subverb may also be typed as a switch, `rel/plus <name>`) and runs the matching
+  tie Action via `action.run()` directly — the same seam the web
   tie panel uses (plain REGISTRY actions, not the dispatcher). Bare `relationship` / `relationship
   list` renders one line per side (labels, depth, tier); `relationship show <name|#>` adds
   gauges/AP/summary. Relationship types resolve by name (iexact); `advance` looks the named

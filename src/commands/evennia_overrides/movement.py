@@ -111,11 +111,7 @@ class CmdHome(ArxCommand):
     SET_SWITCH: ClassVar[str] = "set"
 
     def _execute(self) -> None:
-        # ``switches`` is populated by the cmdhandler at parse time; a directly-constructed
-        # command (unit tests) may not have it, so default to empty.
-        # Suppression justified: Evennia cmdhandler attr; absent on direct construction.
-        switches = getattr(self, "switches", None) or ()  # noqa: GETATTR_LITERAL
-        if self.SET_SWITCH in switches:
+        if self.SET_SWITCH in self.switches:
             self._set_home()
             return
         super()._execute()
