@@ -10,6 +10,7 @@ from typing import Any, ClassVar
 from evennia import Command
 
 from commands.account.sheet_sections import SECTION_NAMES, SHEET_SECTIONS
+from commands.command import split_switches
 from commands.exceptions import CommandError
 
 
@@ -55,6 +56,16 @@ class CmdSheet(Command):  # ty: ignore[invalid-base]
     aliases: ClassVar[list[str]] = ["sheet"]
     locks = "cmd:all()"
     help_category = "Account"
+
+    def parse(self) -> None:
+        """``sheet/family`` reaches its section on telnet (#4232 fix-on-sight).
+
+        Evennia's base command parses no switches, so the slash form searched
+        for a character named ``/family``; the split is the one ``ArxCommand``
+        uses.
+        """
+        super().parse()
+        self.switches, self.args = split_switches(self.args)
 
     def func(self) -> None:
         """Dispatch to a section (``sheet/<section>``) or show the overview."""

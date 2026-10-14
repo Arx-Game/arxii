@@ -47,6 +47,21 @@ def parse_greedy_kwargs(args: str, *, greedy_key: str | None = None) -> dict[str
     return out
 
 
+def split_switches(args: str | None) -> tuple[list[str], str]:
+    """``"/wedding a,b"`` becomes ``(["wedding"], "a,b")``; a plain line keeps its text.
+
+    Evennia's cmdhandler hands ``cmd/switch rest`` to the command keyed ``cmd``
+    with ``args`` of ``/switch rest`` and parses nothing further; only its
+    ``MuxCommand`` splits the switches. ``ArxCommand.parse`` and the sheet
+    command share this split (#4232 fix-on-sight).
+    """
+    text = args or ""
+    if not text.startswith("/"):
+        return [], text
+    head, _, rest = text[1:].partition(" ")
+    return [switch for switch in head.split("/") if switch], rest
+
+
 class ArxCommand(Command):
     """Base command class for Arx II.
 
@@ -98,14 +113,7 @@ class ArxCommand(Command):
         the shape ``MuxCommand`` gives and every subclass expects.
         """
         super().parse()
-        args = self.args or ""
-        switches: list[str] = []
-        if args.startswith("/"):
-            head, _, rest = args[1:].partition(" ")
-            switches = [switch for switch in head.split("/") if switch]
-            args = rest
-        self.switches = switches
-        self.args = args
+        self.switches, self.args = split_switches(self.args)
 
     def msg(self, *args: object, **kwargs: Any) -> None:
         """Send a message to the caller.

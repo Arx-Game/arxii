@@ -7,6 +7,7 @@ subclass reading ``self.switches`` raised on a real telnet line.
 
 from django.test import SimpleTestCase
 
+from commands.account.sheet import CmdSheet
 from commands.ceremonies import CmdCeremony
 from commands.command import ArxCommand
 
@@ -50,3 +51,10 @@ class ArxCommandSwitchParseTests(SimpleTestCase):
         cmd.parse()
         self.assertEqual(cmd.switches, ["wedding"])
         self.assertEqual(cmd.args, "Rowan Ashby,Lisbet Crane")
+
+    def test_the_sheet_command_parses_its_section_switch(self) -> None:
+        cmd = CmdSheet()
+        cmd.args = "/family"
+        cmd.parse()
+        self.assertEqual(cmd.switches, ["family"])
+        self.assertEqual(cmd.args, "")
