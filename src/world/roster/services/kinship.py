@@ -278,6 +278,34 @@ def open_wedlock_union_among(members: list[Kinsperson]) -> Union | None:
     return unions.first()
 
 
+def binding_marriage_of(person: Kinsperson) -> Union | None:
+    """The open marriage that still binds ``person``, if any (#4232 ruling).
+
+    A marriage ends by death or by dissolution, and only then may either party
+    marry again; the ended union stays on the record. The world's reading
+    decides what "death" means here: a spouse the world believes dead no longer
+    binds, so a refusal never betrays a hidden survival, and a real death needs
+    no writer to end the union (the record keeps it, and the status reads
+    Widowed). A wedlock union whose every other member is dead or believed dead
+    does not bind.
+    """
+    unions = (
+        person.unions.filter(ended_at__isnull=True, kind__confers_wedlock=True)
+        .select_related("kind")
+        .prefetch_related("members")  # noqa: PREFETCH_STRING — no to_attr on SharedMemoryModel (leak)
+    )
+    for union in unions:
+        others = [m for m in union.members.all() if m.pk != person.pk]
+        if any(not (m.is_deceased or m.believed_deceased) for m in others):
+            return union
+    return None
+
+
+def already_married_message(person: Kinsperson) -> str:
+    """The refusal a wedding or the admin gives for a person a marriage still binds."""
+    return f"{person.display_name} is already married; that marriage must end first."
+
+
 @transaction.atomic
 def record_marriage(members: list[Kinsperson], *, started_at: object | None = None) -> Union:
     """Marry ``members`` under the realm's wedlock kind (#4232).
@@ -285,11 +313,17 @@ def record_marriage(members: list[Kinsperson], *, started_at: object | None = No
     What a wedding records when no betrothal stands between the honorees: the
     union and nothing else. No pact, no prestige, no change of family or name.
     A pair who already share an open wedlock union get that union back, so a
-    second wedding between the same people records nothing new.
+    second wedding between the same people records nothing new; a member whom
+    another marriage still binds (``binding_marriage_of``) is refused, since a
+    marriage must end before either party marries again (ruling on #4232).
     """
     existing = open_wedlock_union_among(members)
     if existing is not None:
         return existing
+    for member in members:
+        if binding_marriage_of(member) is not None:
+            msg = already_married_message(member)
+            raise KinshipServiceError(msg, user_message=msg)
     return record_union(kind=wedlock_union_kind(), members=members, started_at=started_at)
 
 

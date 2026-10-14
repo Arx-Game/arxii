@@ -111,7 +111,12 @@ GM-authored Secrets for hidden edges), `record_union`, `record_marriage`
 (#4232: marries under `wedlock_union_kind()`, the universal wedlock kind
 else any, refusing with "No law of marriage exists to wed under." when
 there is none; returns the pair's existing open wedlock union,
-`open_wedlock_union_among`, instead of a second), `end_union`,
+`open_wedlock_union_among`, instead of a second; refuses a member whom
+another marriage still binds, `binding_marriage_of`: a marriage ends by
+death or dissolution before either party marries again, ruled on #4232,
+with the world's reading of death, so a spouse believed dead no longer
+binds and a real death ends nothing on the record; ended unions stay, the
+prior marriages are the record), `end_union`,
 `record_incarnation`, `add_membership`/`end_membership` (denorm
 maintenance), `mint_from_pool`, `claim_appable_node` (CG bind,
 constraint-checked), `ensure_node_for_sheet`, `define_deferred`

@@ -610,6 +610,27 @@ class WeddingWithoutBetrothalTests(TestCase):
 
         self.assertEqual(Union.objects.filter(members=bride).filter(members=groom).count(), 1)
 
+    def test_an_honoree_a_marriage_still_binds_is_refused(self) -> None:
+        from world.roster.factories import KinspersonFactory, UnionKindFactory
+        from world.roster.models import Union
+        from world.roster.services.kinship import record_marriage
+
+        UnionKindFactory(name="Marriage")
+        sheet_a, account_a = self._sheet_with_account()
+        sheet_b, account_b = self._sheet_with_account()
+        bride = KinspersonFactory(sheet=sheet_a)
+        KinspersonFactory(sheet=sheet_b)
+        record_marriage([bride, KinspersonFactory(name="First Spouse")])
+        ceremony = self._consented_wedding([(sheet_a, account_a), (sheet_b, account_b)])
+
+        with self.assertRaises(CeremonyError) as caught:
+            finish_ceremony(ceremony=ceremony)
+
+        self.assertIn(
+            "is already married; that marriage must end first.", caught.exception.user_message
+        )
+        self.assertEqual(Union.objects.count(), 1)
+
     def test_no_law_of_marriage_refuses_the_rite(self) -> None:
         from world.roster.models import Union
 

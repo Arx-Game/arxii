@@ -268,6 +268,30 @@ class SpouseAdminTests(TestCase):
         ids = [int(row["id"]) for row in response.json()["results"]]
         self.assertEqual(ids, [node.pk])
 
+    def test_a_person_a_marriage_still_binds_cannot_be_married_again(self) -> None:
+        """Ruling on #4232: a marriage ends by death or dissolution before a new one."""
+        self._marry()
+        other = kinship.create_person(name="Tamsin Vole")
+        response = self._get_page()
+        data, prefix = _page_as_post(response)
+        data.update(
+            {
+                f"{prefix}-TOTAL_FORMS": "2",
+                f"{prefix}-1-id": "",
+                f"{prefix}-1-kinsperson": str(self.person.pk),
+                f"{prefix}-1-partner": str(other.pk),
+                f"{prefix}-1-kind": str(self.kind.pk),
+            }
+        )
+
+        response = self.client.post(self._change_url(), data)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(
+            response, "Rowan Ashby is already married; that marriage must end first."
+        )
+        self.assertEqual(Union.objects.count(), 1)
+
     def test_an_ended_marriage_does_not_block_a_new_one(self) -> None:
         old = self._marry()
         kinship.end_union(old, ended_at=timezone.now() - timedelta(days=1))

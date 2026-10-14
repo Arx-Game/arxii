@@ -560,3 +560,53 @@ class RecordMarriageTests(TestCase):
         with self.assertRaises(kinship.KinshipServiceError) as caught:
             kinship.wedlock_union_kind()
         assert caught.exception.user_message == "No law of marriage exists to wed under."
+
+
+class MarriageBindsTests(TestCase):
+    """A marriage must end, by death or dissolution, before either party marries again
+    (ruling on #4232); ended marriages stay on the record."""
+
+    def setUp(self) -> None:
+        UnionKindFactory(name="Marriage")
+        self.a, self.b, self.c = _person("A"), _person("B"), _person("C")
+
+    def test_a_person_a_marriage_still_binds_is_refused(self) -> None:
+        first = kinship.record_marriage([self.a, self.b])
+        with self.assertRaises(kinship.KinshipServiceError) as caught:
+            kinship.record_marriage([self.a, self.c])
+        expected = "A is already married; that marriage must end first."
+        assert caught.exception.user_message == expected
+        with self.assertRaises(kinship.KinshipServiceError):
+            kinship.record_marriage([self.c, self.b])
+        assert kinship.binding_marriage_of(self.a) == first
+        assert self.a.unions.count() == 1
+
+    def test_a_dissolved_marriage_frees_both_and_stays_on_the_record(self) -> None:
+        first = kinship.record_marriage([self.a, self.b])
+        kinship.end_union(first)
+        second = kinship.record_marriage([self.a, self.c])
+        assert second != first
+        assert kinship.binding_marriage_of(self.a) == second
+        assert set(self.a.unions.all()) == {first, second}
+
+    def test_a_dead_spouse_frees_the_survivor_without_ending_the_union(self) -> None:
+        first = kinship.record_marriage([self.a, self.b])
+        self.b.is_deceased = True
+        self.b.save(update_fields=["is_deceased"])
+        assert kinship.binding_marriage_of(self.a) is None
+        kinship.record_marriage([self.a, self.c])
+        first.refresh_from_db()
+        assert first.ended_at is None
+
+    def test_a_spouse_the_world_believes_dead_does_not_bind(self) -> None:
+        kinship.record_marriage([self.a, self.b])
+        self.b.believed_deceased = True
+        self.b.save(update_fields=["believed_deceased"])
+        assert kinship.binding_marriage_of(self.a) is None
+        kinship.record_marriage([self.a, self.c])
+
+    def test_a_consort_kind_does_not_bind(self) -> None:
+        consort = UnionKindFactory(name="Consort", confers_wedlock=False)
+        kinship.record_union(kind=consort, members=[self.a, self.b])
+        assert kinship.binding_marriage_of(self.a) is None
+        kinship.record_marriage([self.a, self.c])

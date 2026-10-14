@@ -38,6 +38,8 @@ from world.roster.models import (
 )
 from world.roster.services.kinship import (
     KinshipServiceError,
+    already_married_message,
+    binding_marriage_of,
     create_person,
     end_union,
     open_wedlock_union_among,
@@ -227,6 +229,15 @@ class SpouseForm(ModelForm):
         person = Kinsperson.objects.get(pk=person_pk)
         if open_wedlock_union_among([person, partner]) is not None:
             self.add_error("partner", "They already share an open marriage.")
+            return cleaned
+        kind = cleaned.get("kind")
+        if kind is not None and kind.confers_wedlock:
+            # A marriage must end, by death or dissolution, before either party
+            # marries again (ruling on #4232); a consort or paramour kind is no marriage.
+            for party in (person, partner):
+                if binding_marriage_of(party) is not None:
+                    self.add_error("partner", already_married_message(party))
+                    return cleaned
         return cleaned
 
 

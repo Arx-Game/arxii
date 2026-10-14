@@ -125,7 +125,9 @@ Vitals (#2287 ghost containers), Events/Scenes (optional chassis)
   (`kinship.record_marriage`), a betrothal adds its pact, terms, tier prestige and
   `wed_at`. Staff add and end a marriage from the Kinsperson admin page's Spouses
   section; `CharacterSheet.marital_status` is dropped and telnet `sheet` derives the
-  status from the unions (`kinship.marital_status_of`). ADR-4232.
+  status from the unions (`kinship.marital_status_of`). One marriage at a time: a
+  marriage ends by death or dissolution before either party marries again, and ended
+  unions stay as the record (`binding_marriage_of`). ADR-4232.
 - **Wedding consent + Coronation + divorce prestige (#2358, 2026-08-15):** WEDDING
   solemnizes a pre-existing `Betrothal` at FINISH, gated on a `WeddingConsentOffer`
   per spouse honoree minted at ceremony START (both must ACCEPT; a DECLINE aborts the

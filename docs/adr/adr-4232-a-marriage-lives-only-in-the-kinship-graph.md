@@ -37,7 +37,13 @@ separate `Union` admin page instead of the inline. Staff record a marriage where
 already editing the person, and a page per union would have put the partner picker a
 navigation away.
 
-**Consequences.** Any consenting pair can marry. `CharacterSheet.marital_status` is gone
+One marriage at a time (ApostateCD, 2026-10-14): a marriage ends by death or by
+dissolution before either party marries again, and the ended union stays on the record as
+the history of prior marriages. The gate reads death the way the world does (a spouse the
+world believes dead no longer binds), so a refusal never betrays a hidden survival, and a
+real death ends nothing on the record: the status reads Widowed off the open union.
+
+**Consequences.** Any consenting pair can marry, one marriage at a time. `CharacterSheet.marital_status` is gone
 (play state; every row on the production copy held the default). Staff edit mode loses its
 Marital status row and the admin Kinsperson page gains Spouses. `MaritalStatus` moves to
 `world.roster.constants`, since it now describes the kinship record. The wedding handler
