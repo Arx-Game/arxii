@@ -98,6 +98,26 @@ class PerformRiteTests(RiteTestBase):
         self.assertEqual(grant.source, GainSource.WORSHIP_RITE)
         self.assertEqual(grant.source_worship_rite_performance, performance)
 
+    def test_a_chosen_records_the_credited_favor(self) -> None:
+        """#4333: the Chosen earn at 200%; the performance records what landed."""
+        from django.utils import timezone
+
+        from world.worship.factories import DevotionStandingFactory
+        from world.worship.models import PatronageValence
+
+        DevotionStandingFactory(
+            character_sheet=self.sheet,
+            being=self.being,
+            valence=PatronageValence.DEVOTIONAL,
+            established_at=timezone.now(),
+        )
+
+        outcome = self._perform()
+
+        self.assertEqual(outcome.favor_granted, 4)
+        self.assertEqual(WorshipRitePerformance.objects.get().favor_granted, 4)
+        self.assertEqual(self._favor(), 4)
+
     def test_costs_one_ap_per_tier_and_some_social_fatigue(self) -> None:
         from world.fatigue.services import get_or_create_fatigue_pool
 

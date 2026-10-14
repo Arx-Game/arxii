@@ -152,3 +152,15 @@ class CodexPageNameTaken(EditorError):
         "A Codex page with this name already exists under The Pantheon; rename the being "
         "or link that page from the admin."
     )
+
+
+class FavorInvocationRefused(Exception):
+    """A character cannot call on a being's favor now (#4333). ``user_message`` is
+    player-safe and names the reason."""
+
+    user_message = "You cannot call on that being's favor now."
+
+    def __init__(self, user_message: str | None = None) -> None:
+        if user_message is not None:
+            self.user_message = user_message
+        super().__init__(self.user_message)

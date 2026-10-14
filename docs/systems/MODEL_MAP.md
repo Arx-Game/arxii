@@ -1822,6 +1822,7 @@
   - devotion_standings <- worship.DevotionStanding
   - worship_declaration <- worship.WorshipDeclaration
   - miracle_performances <- worship.MiraclePerformance
+  - favor_invocations <- worship.FavorInvocation
   - rite_performances <- worship.WorshipRitePerformance
   - founded_shrines <- worship.ShrineDetails
   - founded_temples <- worship.TempleDedication
@@ -1952,6 +1953,7 @@
   - project_contribution_methods <- projects.ContributionMethod
   - scene_check_modifiers <- scenes.SceneCheckModifier
   - task_templates <- tasking.TaskTemplate
+  - invocation_for_beings <- worship.WorshippedBeing
   - worship_rites <- worship.WorshipRite
 
 ### CheckTypeAspect
@@ -2172,10 +2174,10 @@
 
 ### Service Functions
 - `acquire_clue(roster_entry: 'RosterEntry', clue: 'Clue') -> 'CharacterClue' - Record that a character has found a clue (idempotent).`
-- `find_clue(roster_entry: 'RosterEntry', clue: 'Clue') -> 'CharacterClue' - A character finds a clue: hold it, and resolve it on the spot if AUTOMATIC (#4331).`
 - `clear_rescue_clues(captivity: 'Captivity') -> 'None' - Delete a captivity's rescue clues (and their placements) when it resolves (#931).`
 - `clue_target_kind_allowed(account: 'object', target_kind: 'str') -> 'bool' - The clue authoring policy (#3432) as one callable (#3566).`
 - `create_accusation_counter_clue(secret: 'Secret', *, area: 'Area', difficulty: 'int') -> 'Clue' - Plant the investigable trail an accusation leaves behind (#1825). Idempotent.`
+- `find_clue(roster_entry: 'RosterEntry', clue: 'Clue') -> 'CharacterClue' - A character finds a clue: hold it, and resolve it on the spot if AUTOMATIC (#4331).`
 - `grant_clue_mission(template: 'MissionTemplate', roster_entry: 'RosterEntry', *, message: 'str | None' = None, ooc_note: 'str' = '') -> 'None' - Hand ``template`` to one character as a clue's payoff (#3429, #4327).`
 - `grant_clue_target(clue: 'Clue', roster_entry: 'RosterEntry') -> 'None' - AUTOMATIC resolution — grant a clue's target to the character on the spot.`
 - `maybe_grant_clue_triggers(character: 'ObjectDB', room: 'ObjectDB') -> 'list[Clue]' - Grant clues triggered passively by entering ``room`` (#1160).`
@@ -2863,6 +2865,7 @@
 - `order_companion(*, companion: 'Companion', order_kind: 'str', round_number: 'int', encounter: 'CombatEncounter | None' = None, battle: 'Battle | None' = None, target_opponent=None, target_unit=None, ability=None, defending_participant=None, target_ally=None) - Validate and upsert a CompanionOrder directive (#1921).`
 - `promote_summon_to_companion(*, caster_sheet: 'CharacterSheet', combat_opponent: 'CombatOpponent', archetype: 'CompanionArchetype', granting_gift: 'Gift', name: 'str') -> 'Companion' - Promote an ephemeral summon or charmed enemy into a persistent Companion (#2502).`
 - `release_companion(companion: 'Companion') -> 'None' - Release a bonded companion: destroy its live object, keep the row.`
+- `rename_companion(companion: 'Companion', name: 'str') -> 'None' - Rename a companion: its row and its in-world object's key together (#4338).`
 - `resolve_bonded_companion(opponent: 'CombatOpponent') -> 'Companion | None' - The live, unreleased Companion behind an ALLY CombatOpponent, if any.`
 - `resolve_companion_defeat(companion: 'Companion', risk_level: 'str') -> 'bool' - Resolve a bridged companion's defeat consequence (#1873).`
 - `stables_capacity_bonus_for_sheet(character_sheet: 'CharacterSheet') -> 'int' - Flat Companion Capacity bonus from every Stables the sheet keeps a household at.`
@@ -4168,6 +4171,7 @@
   - goal_journals <- goals.GoalJournal
   - journal_xp_trackers <- journals.WeeklyJournalXP
   - gambling_loss_ledgers <- tavern_games.GamblingLossLedger
+  - favor_invocations <- worship.FavorInvocation
   - rite_performances <- worship.WorshipRitePerformance
   - prayers <- worship.Prayer
 
@@ -6635,6 +6639,7 @@
   - target_capability -> conditions.CapabilityType [OneToOne] (nullable)
   - target_check_type -> checks.CheckType [OneToOne] (nullable)
   - target_damage_type -> conditions.DamageType [OneToOne] (nullable)
+  - target_being -> worship.WorshippedBeing [FK] (nullable)
 **Pointed to by:**
   - reward_definitions <- achievements.RewardDefinition
   - conditionmodifiereffect_set <- conditions.ConditionModifierEffect
@@ -6910,6 +6915,7 @@
   - picked_option -> missions.MissionOption [FK]
   - picked_approach -> mechanics.ChallengeApproach [FK] (nullable)
   - voted_option -> missions.MissionOption [FK] (nullable)
+  - invoke_being -> worship.WorshippedBeing [FK] (nullable)
 
 ### MissionInstance
 **Foreign Keys:**
@@ -6933,6 +6939,7 @@
   - support_declarations <- missions.MissionSupportDeclaration
   - tales <- missions.MissionRunTale
   - task_fulfillments <- tasking.TaskFulfillment
+  - favor_invocations <- worship.FavorInvocation
 
 ### MissionInvite
 **Foreign Keys:**
@@ -7097,9 +7104,9 @@
 - `invite_to_mission(instance: 'MissionInstance', holder_persona: 'Persona', invitee_persona: 'Persona') -> 'MissionInvite' - Create a PENDING invite for ``invitee_persona`` to join ``instance``.`
 - `journal_for(character: 'ObjectDB') -> 'list[JournalEntry]' - Return one :class:`JournalEntry` per mission this character is in.`
 - `on_mission_complete_for_beat(instance: 'MissionInstance', *, route: 'MissionOptionRoute | None' = None, option: 'MissionOption | None' = None, beat_outcome: 'BeatOutcome | None' = None) -> 'MissionBeatTriggerRecord | None' - Record a Mission → Beat terminal trigger and complete the linked Beat.`
-- `resolve_beat_option(instance: 'MissionInstance', character: 'ObjectDB', *, option_id: 'int', approach_id: 'int | None' = None) -> 'ResolvedBeat' - Resolve the chosen option for ``character``; deliver both narratives.`
+- `resolve_beat_option(instance: 'MissionInstance', character: 'ObjectDB', *, option_id: 'int', approach_id: 'int | None' = None, invoke: 'InvocationChoice | None' = None) -> 'ResolvedBeat' - Resolve the chosen option for ``character``; deliver both narratives.`
 - `resolve_group_node(instance: 'MissionInstance', node: 'MissionNode') -> 'list[MissionDeedRecord]' - Resolve a group ``node`` from its collected ``MissionGroupBallot`` rows (#1036).`
-- `resolve_option(instance: 'MissionInstance', node: 'MissionNode', option: 'MissionOption', actor: 'MissionParticipant', *, chosen_approach: 'ChallengeApproach | None' = None, advance: 'bool' = True, extra_modifiers: 'int' = 0) -> 'MissionDeedRecord' - Resolve ``actor`` taking ``option`` at ``node``; return its deed.`
+- `resolve_option(instance: 'MissionInstance', node: 'MissionNode', option: 'MissionOption', actor: 'MissionParticipant', *, chosen_approach: 'ChallengeApproach | None' = None, advance: 'bool' = True, extra_modifiers: 'int' = 0, invocation: 'InvocationRequest | None' = None, roll_report: 'OptionRollReport | None' = None) -> 'MissionDeedRecord' - Resolve ``actor`` taking ``option`` at ``node``; return its deed.`
 - `respond_to_mission_invite(invite: 'MissionInvite', decision: 'MissionInvite.Response') -> 'MissionParticipant | None' - Resolve a PENDING invite. On ACCEPT, calls ``share_mission``.`
 - `share_mission(instance: 'MissionInstance', other_character: 'ObjectDB') -> 'MissionParticipant' - Add ``other_character`` as a non-holder participant to ``instance``.`
 - `staff_assign_mission(template: 'MissionTemplate', character: 'ObjectDB', *, project: 'Project | None' = None, persona: 'Persona | None' = None) -> 'MissionInstance' - Staff-power: drop a mission on a character without a giver context.`
@@ -8798,6 +8805,7 @@
   - story_episodes <- stories.EpisodeScene
   - deaths <- vitals.CharacterVitals
   - miracle_performances <- worship.MiraclePerformance
+  - favor_invocations <- worship.FavorInvocation
   - rite_performances <- worship.WorshipRitePerformance
 
 ### SceneActionDeclaration
@@ -8838,12 +8846,14 @@
   - snapshot_check_type -> checks.CheckType [FK] (nullable)
   - result_interaction -> scenes.Interaction [OneToOne] (nullable)
   - action_interaction -> scenes.Interaction [OneToOne] (nullable)
+  - invoke_being -> worship.WorshippedBeing [FK] (nullable)
   - delivery_receivers -> scenes.Persona [M2M]
   - target_personas -> scenes.Persona [M2M]
 **Pointed to by:**
   - additional_targets <- scenes.SceneActionTarget
   - pull_declaration <- scenes.SceneActionPullDeclaration
   - boon <- scenes.Boon
+  - favor_invocation <- worship.FavorInvocation
 
 ### SceneActionTarget
 **Foreign Keys:**
@@ -10602,6 +10612,8 @@
   - project_outcomes <- projects.Project
   - project_contributions <- projects.Contribution
   - beat_completions <- stories.BeatCompletion
+  - favor_outcome_awards <- worship.FavorOutcomeAward
+  - favor_invocations <- worship.FavorInvocation
   - worship_rite_awards <- worship.WorshipRiteTierAward
   - rite_performances <- worship.WorshipRitePerformance
 
@@ -10877,12 +10889,33 @@
 
 ### ConsecrationTier
 
+### DevotionConfig
+**Foreign Keys:**
+  - invocation_check_type -> checks.CheckType [FK] (nullable)
+**Pointed to by:**
+  - outcome_awards <- worship.FavorOutcomeAward
+
 ### DevotionStanding
 **Foreign Keys:**
   - character_sheet -> character_sheets.CharacterSheet [FK]
   - being -> worship.WorshippedBeing [FK]
 
 ### DivineInterventionConfig
+
+### FavorInvocation
+**Foreign Keys:**
+  - character_sheet -> character_sheets.CharacterSheet [FK]
+  - being -> worship.WorshippedBeing [FK]
+  - game_week -> game_clock.GameWeek [FK]
+  - outcome_tier -> traits.CheckOutcome [FK]
+  - scene -> scenes.Scene [FK] (nullable)
+  - mission_instance -> missions.MissionInstance [FK] (nullable)
+  - scene_action_request -> scenes.SceneActionRequest [OneToOne] (nullable)
+
+### FavorOutcomeAward
+**Foreign Keys:**
+  - config -> worship.DevotionConfig [FK]
+  - outcome_tier -> traits.CheckOutcome [FK]
 
 ### Miracle
 **Foreign Keys:**
@@ -11004,9 +11037,11 @@
   - tradition -> worship.WorshipTradition [FK]
   - avatar_sheet -> character_sheets.CharacterSheet [OneToOne] (nullable)
   - codex_entry -> codex.CodexEntry [FK] (nullable)
+  - invocation_check_type -> checks.CheckType [FK] (nullable)
   - tarot_cards -> tarot.TarotCard [M2M]
   - ultimate_techniques -> magic.Technique [M2M]
 **Pointed to by:**
+  - modifier_targets <- mechanics.ModifierTarget
   - ceremonies <- ceremonies.Ceremony
   - house_aspect_options <- societies.HouseAspectOption
   - audere_majora_faith_variants <- magic.AudereMajoraFaithVariant
@@ -11024,6 +11059,7 @@
   - secret_worshippers <- worship.WorshipDeclaration
   - miracles <- worship.Miracle
   - miracle_performances <- worship.MiraclePerformance
+  - favor_invocations <- worship.FavorInvocation
   - rites <- worship.WorshipRite
   - relics <- worship.Relic
   - shrines <- worship.ShrineDetails
@@ -11034,7 +11070,7 @@
 ### Service Functions
 - `active_patronage_for(sheet: 'CharacterSheet') -> list[world.worship.models.DevotionStanding] - Return all active patronages for a character, ordered by favor descending.`
 - `best_patronage_favor(sheet: 'CharacterSheet') -> int - Return the favor of the highest-favor active patronage, or 0.`
-- `bump_devotion(character_sheet: 'CharacterSheet', being: world.worship.models.WorshippedBeing, amount: int) -> world.worship.models.DevotionStanding - Upsert the (sheet, being) standing and run the God's Favorite check.`
+- `bump_devotion(character_sheet: 'CharacterSheet', being: world.worship.models.WorshippedBeing, amount: int) -> world.worship.types.DevotionBump - Upsert the (sheet, being) standing and run the God's Favorite check.`
 - `convert_public_worship(character_sheet: 'CharacterSheet', new_being: world.worship.models.WorshippedBeing, *, is_sincere: bool = True) -> world.worship.models.WorshipDeclaration - Repoint a character's PUBLIC worship declaration (#2361).`
 - `establish_patronage(sheet: 'CharacterSheet', being: world.worship.models.WorshippedBeing, *, valence: world.worship.models.PatronageValence) -> world.worship.models.DevotionStanding - Get-or-create a DevotionStanding and mark it as a patronage.`
 - `fire_divine_intervention(character_sheet: 'CharacterSheet', *, trigger: str, trigger_event: str, scene=None, being: world.worship.models.WorshippedBeing | None = None) -> 'MiraclePerformance | None' - The divine-intervention check: the highest-priority qualifying miracle fires.`

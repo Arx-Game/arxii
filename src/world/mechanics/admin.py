@@ -54,12 +54,14 @@ class ModifierCategoryAdmin(admin.ModelAdmin):
 
 @admin.register(ModifierTarget)
 class ModifierTargetAdmin(admin.ModelAdmin):
-    list_display = ["name", "category", "display_order", "is_active"]
+    list_display = ["name", "category", "target_being", "display_order", "is_active"]
     list_filter = ["category", "is_active"]
-    search_fields = ["name", "description"]
+    # target_being__name (#4333): a being's favor targets are found by the being's
+    # name in every picker that autocompletes against this admin.
+    search_fields = ["name", "description", "target_being__name"]
     ordering = ["category__display_order", "display_order", "name"]
     list_editable = ["display_order", "is_active"]
-    list_select_related = ["category"]
+    list_select_related = ["category", "target_being"]
 
 
 @admin.register(ModifierSource)

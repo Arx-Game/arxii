@@ -169,8 +169,8 @@ def pray(character_sheet: CharacterSheet, being: WorshippedBeing, text: str) -> 
             at_site and _week_prayers(character_sheet, being, week).select_for_update().exists()
         )
         if at_site and not already_paid:
-            devotion = PRAYER_SITE_DEVOTION_AMOUNT
-            bump_devotion(character_sheet, being, devotion)
+            # #4333: the earning rate scales the prayer's devotion; record what landed.
+            devotion = bump_devotion(character_sheet, being, PRAYER_SITE_DEVOTION_AMOUNT).credited
             prayer.devotion_granted = devotion
             prayer.save(update_fields=["devotion_granted"])
 

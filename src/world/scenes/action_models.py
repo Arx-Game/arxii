@@ -270,6 +270,25 @@ class SceneActionRequest(CommittingDeclaration, DefenderConsentFields, SharedMem
             "the target accepts. One-way — it can only waive concealment, never add it."
         ),
     )
+    invoke_being = models.ForeignKey(
+        "arxii.WorshippedBeing",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="+",
+        help_text=(
+            "The being whose favor the initiator calls on before this action's check "
+            "(#4333). Persisted rather than passed for the same reason as cast_openly: "
+            "the check rolls at ACCEPT time. The invocation itself is the "
+            "FavorInvocation row linked back to this request."
+        ),
+    )
+    invoke_line = models.CharField(
+        max_length=200,
+        blank=True,
+        default="",
+        help_text="The initiator's optional one-line description of the invocation.",
+    )
     created_at = models.DateTimeField(default=timezone.now)
     resolved_at = models.DateTimeField(
         null=True,

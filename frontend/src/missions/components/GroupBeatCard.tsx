@@ -7,11 +7,17 @@
  * "Expired" is a client-derived state — the server resolves lazily on next
  * fetch, so when the countdown hits zero we show a "waiting" message and
  * let the next refetch (or the cron backstop) resolve it.
+ *
+ * In the pick phase a rolled option takes a Call on favor choice (#4333), stored with the
+ * pick; the invocation rolls when the node resolves, and only if this pick's check rolls.
  */
 import { useEffect, useState } from 'react';
 
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+
+import { CallOnFavor } from '@/worship/components/CallOnFavor';
+import type { InvocationChoice } from '@/worship/types';
 
 import { ApiValidationError, flattenErrorMessage } from '../api';
 import { useCastGroupVote, useGroupBeat, useSubmitGroupPick } from '../queries';
@@ -111,6 +117,7 @@ function GroupBeatView({
   const submitPick = useSubmitGroupPick();
   const castVote = useCastGroupVote();
   const { expired, secondsLeft } = useCountdown(beat.expires_at);
+  const [invocations, setInvocations] = useState<Record<string, InvocationChoice | null>>({});
 
   const phaseLabel = beatPhaseLabel(expired, beat.phase);
 
@@ -139,27 +146,48 @@ function GroupBeatView({
         </p>
       ) : (
         <div className="space-y-1" data-testid="group-beat-options">
-          {beat.options.map((option) => (
-            <GroupOptionButton
-              key={`${option.option_id}-${option.approach_id ?? 'authored'}`}
-              option={option}
-              phase={beat.phase}
-              pickPending={submitPick.isPending}
-              votePending={castVote.isPending}
-              onPick={() =>
-                submitPick.mutate(
-                  { instanceId, option_id: option.option_id, approach_id: option.approach_id },
-                  { onSuccess: (data) => data.resolved && onResolved(data.resolved) }
-                )
-              }
-              onVote={() =>
-                castVote.mutate(
-                  { instanceId, option_id: option.option_id },
-                  { onSuccess: (data) => data.resolved && onResolved(data.resolved) }
-                )
-              }
-            />
-          ))}
+          {beat.options.map((option) => {
+            const key = `${option.option_id}-${option.approach_id ?? 'authored'}`;
+            const invocation = invocations[key] ?? null;
+            return (
+              <div key={key} className="space-y-1">
+                <GroupOptionButton
+                  option={option}
+                  phase={beat.phase}
+                  pickPending={submitPick.isPending}
+                  votePending={castVote.isPending}
+                  onPick={() =>
+                    submitPick.mutate(
+                      {
+                        instanceId,
+                        option_id: option.option_id,
+                        approach_id: option.approach_id,
+                        ...(invocation
+                          ? { invoke_being_id: invocation.beingId, invoke_line: invocation.line }
+                          : {}),
+                      },
+                      { onSuccess: (data) => data.resolved && onResolved(data.resolved) }
+                    )
+                  }
+                  onVote={() =>
+                    castVote.mutate(
+                      { instanceId, option_id: option.option_id },
+                      { onSuccess: (data) => data.resolved && onResolved(data.resolved) }
+                    )
+                  }
+                />
+                {beat.phase !== 'vote' && option.rolls_check ? (
+                  <div className="flex justify-end">
+                    <CallOnFavor
+                      value={invocation}
+                      onChange={(choice) => setInvocations((prev) => ({ ...prev, [key]: choice }))}
+                      disabled={submitPick.isPending}
+                    />
+                  </div>
+                ) : null}
+              </div>
+            );
+          })}
         </div>
       )}
 

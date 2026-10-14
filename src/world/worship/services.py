@@ -24,6 +24,7 @@ from world.worship.models import (
     WorshipGrant,
     WorshippedBeing,
 )
+from world.worship.types import DevotionBump
 
 if TYPE_CHECKING:
     from datetime import date
@@ -107,13 +108,23 @@ def gods_favorite_achievement_for(character_sheet: "CharacterSheet") -> "Achieve
 
 def bump_devotion(
     character_sheet: "CharacterSheet", being: WorshippedBeing, amount: int
-) -> DevotionStanding:
+) -> DevotionBump:
     """Upsert the (sheet, being) standing and run the God's Favorite check.
 
     Becoming — or tying — the top ``favor`` holder for the being grants the
     gender-matched achievement (leapfroggers earn it too; earlier holders keep
     theirs; ``grant_achievement`` is idempotent per sheet).
+
+    A positive ``amount`` is scaled by the character's earning rate with the
+    being (#4333, design 1a): 100%, plus the Chosen bonus for an active patronage,
+    plus favor earning modifiers. Every favor source writes through here, so all
+    of them are scaled. A negative amount is applied as given. Returns the
+    standing and the amount actually credited.
     """
+    from world.worship.favor_services import scale_by_earning_rate  # noqa: PLC0415
+
+    if amount > 0:
+        amount = scale_by_earning_rate(character_sheet, being, amount)
     standing, _ = DevotionStanding.objects.get_or_create(
         character_sheet=character_sheet, being=being
     )
@@ -143,7 +154,7 @@ def bump_devotion(
     else:
         remove_divine_intervention_trigger(character_sheet, being)
 
-    return standing
+    return DevotionBump(standing=standing, credited=amount)
 
 
 def get_divine_intervention_config() -> "DivineInterventionConfig":

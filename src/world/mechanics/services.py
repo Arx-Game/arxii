@@ -31,6 +31,7 @@ from world.magic.models import (
 )
 from world.mechanics.constants import (
     EQUIPMENT_RELEVANT_CATEGORIES,
+    FAVOR_CATEGORY_NAMES,
     POWER_CATEGORY_NAME,
     POWER_MULTIPLIER_TARGET_NAME,
     RESONANCE_CATEGORY_NAME,
@@ -414,10 +415,17 @@ def equipment_walk_total(
     """
     if target.category.name not in EQUIPMENT_RELEVANT_CATEGORIES:
         return 0
+    # #4333: a favor target has no gear stat to blend against, so the per-item
+    # covenant_role_bonus would count the role once per equipped item. Count the
+    # role's bonus once instead.
+    if target.category.name in FAVOR_CATEGORY_NAMES:
+        role_total = covenant_role_base_total(character, target)
+    else:
+        role_total = covenant_role_bonus(character, target, level_override=level_override)
     return (
         passive_facet_bonuses(character, target)
         + passive_facet_crossing_bonuses(character, target)
-        + covenant_role_bonus(character, target, level_override=level_override)
+        + role_total
         + covenant_level_bonus(character, target)
         + vow_stat_scaling_bonus(character, target)
         + passive_mantle_bonuses(character, target)

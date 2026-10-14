@@ -21,6 +21,7 @@ function beatWith(reasons: string[]): BeatView {
         check_type_name: null,
         base_risk: 0,
         reasons,
+        rolls_check: false,
       },
     ],
     is_paused: false,

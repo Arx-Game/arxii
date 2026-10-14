@@ -1,0 +1,32 @@
+{% extends "admin/change_form.html" %}
+{% comment %}
+Devotion config (#4333): a stock singleton change form plus one read-only
+fieldset after the favor outcome awards, so the author sees what the terms add
+up to while typing them (the GlimpseTagAdmin precedent, magic/admin.py).
+{% endcomment %}
+{% block after_related_objects %}
+{{ block.super }}
+<div class="help">Rule: an invocation bonus changes a result only when it moves the total across
+a rank threshold.</div>
+{% if difficulty_rows %}
+<fieldset class="module aligned" id="devotion-config-context">
+  <h2>Resulting invocation difficulty (read-only; the +15 modifier is an example)</h2>
+  <table>
+    <thead>
+      <tr>{% for header in difficulty_headers %}<th scope="col">{{ header }}</th>{% endfor %}</tr>
+    </thead>
+    <tbody>
+      {% for row in difficulty_rows %}
+      <tr>{% for cell in row %}{% if forloop.first %}<th scope="row">{{ cell }}</th>{% else %}<td>{{ cell }}</td>{% endif %}{% endfor %}</tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  <div class="form-row">
+    <div class="flex-container">
+      <label for="invocations-last-week">Invocations last week:</label>
+      <div class="readonly"><output id="invocations-last-week">{{ invocations_last_week }}</output></div>
+    </div>
+  </div>
+</fieldset>
+{% endif %}
+{% endblock %}

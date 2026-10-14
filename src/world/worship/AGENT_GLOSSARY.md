@@ -14,6 +14,26 @@
   CharacterResonance for beings.
 - **Devotion standing** — the one-way PC→god favor record (`DevotionStanding`).
   _Avoid_: CharacterRelationship for sheetless gods.
+- **Favor** — a character's standing with one being, `DevotionStanding.favor` (running total
+  `lifetime_favor`). Read as standing (divine intervention, miracle thresholds, God's
+  Favorite, Chosen anima recovery) and as the gate and ease of an invocation; never spent
+  (ADR-4333-A). _Avoid_: confusing it with an organization's favor token
+  (`FavorTokenDetails`, currency) or an organization membership's `favor`.
+- **Invocation** — calling on a being's favor before a check (#4333): the system rolls an
+  invocation check (`invoke_favor`) and its outcome tier sets the bonus
+  (`FavorOutcomeAward` kind INVOCATION) on the check it was declared on. Needs favor above
+  zero and a use left this game week (`DevotionConfig.invocations_per_week`; a failure
+  counts). Recorded as a `FavorInvocation`, whose `player_line` is the player's one line of
+  how it shows. _Avoid_: "boon" (the scenes social ask), "blessing" (reads as a condition),
+  "prayer" (a message, not a mechanic).
+- **Earning rate** — the percentage applied to all favor a character earns with one being
+  (#4333): 100 + `ChosenFavorConfig.earn_bonus_percent` for an active patronage of it + the
+  character's favor earning modifiers. `bump_devotion` applies it to every positive amount.
+- **Favor modifier** — a modifier against a target in the `favor_invocation` (difficulty
+  points eased) or `favor_earning` (earning-rate points) category, scoped to one being by
+  `ModifierTarget.target_being` or to every being (null). Any modifier source can grant one
+  except facet, mantle and motif bonuses (#4333 slice 8). Read only by
+  `favor_modifier_total`. _Avoid_: a being-to-distinction link table.
 - **Domains** — `WorshippedBeing.domains`, plain prose naming the spheres a being holds
   ("Carnage, wanton bloodshed, feral battle"). Deliberately NOT a lookup table (#3776):
   overlap between gods is expected and nothing matches on it mechanically, so a

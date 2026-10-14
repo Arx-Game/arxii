@@ -180,7 +180,7 @@ class GodsFavoriteTests(TestCase):
     def test_missing_achievement_rows_noop(self) -> None:
         Achievement.objects.all().delete()
         sheet = CharacterSheetFactory()
-        standing = bump_devotion(sheet, self.being, 10)
+        standing = bump_devotion(sheet, self.being, 10).standing
         self.assertEqual(standing.favor, 10)
         self.assertEqual(self._earned(sheet), set())
 
@@ -250,7 +250,8 @@ class ActivePatronageTests(TestCase):
     def test_best_patronage_favor_returns_highest(self) -> None:
         establish_patronage(self.sheet, self.being_a, valence=PatronageValence.DEVOTIONAL)
         bump_devotion(self.sheet, self.being_a, 20)
-        self.assertEqual(best_patronage_favor(self.sheet), 20)
+        # #4333: the Chosen earn at 200% (100% + the default Chosen bonus of 100%).
+        self.assertEqual(best_patronage_favor(self.sheet), 40)
 
     def test_best_patronage_favor_zero_when_no_patronage(self) -> None:
         self.assertEqual(best_patronage_favor(self.sheet), 0)

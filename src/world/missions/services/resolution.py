@@ -107,8 +107,10 @@ if TYPE_CHECKING:
         MissionOption,
         MissionParticipant,
     )
+    from world.missions.types import OptionRollReport
     from world.stories.constants import BeatOutcome
     from world.tasking.models import OrgTask
+    from world.worship.types import InvocationOutcome, InvocationRequest
 
 _ERR_CHECK_NO_TYPE = (
     "OptionKind.CHECK option {option_pk} has no authored_check_type — "
@@ -665,8 +667,17 @@ def resolve_option(  # noqa: PLR0913
     chosen_approach: ChallengeApproach | None = None,
     advance: bool = True,
     extra_modifiers: int = 0,
+    invocation: InvocationRequest | None = None,
+    roll_report: OptionRollReport | None = None,
 ) -> MissionDeedRecord:
     """Resolve ``actor`` taking ``option`` at ``node``; return its deed.
+
+    ``invocation`` (#4333): the actor calls on a being's favor before the check.
+    For an option that rolls, the invocation check rolls first and its bonus
+    joins ``extra_modifiers``; its lines go to the mission log. A refused
+    invocation (the week's uses spent since a group pick) rolls nothing.
+    ``roll_report``, when given, is filled with the invocation and the check
+    result, for a caller that shows the roll.
 
     BRANCH options route the graph with no dice. CHECK options either:
 
@@ -722,6 +733,13 @@ def resolve_option(  # noqa: PLR0913
         return _resolve_branch(instance, node, option, character, advance=advance)
 
     # OptionKind.CHECK
+    invoked = (
+        _roll_option_invocation(instance, actor, option, chosen_approach, invocation)
+        if invocation is not None
+        else None
+    )
+    if invoked is not None:
+        extra_modifiers += invoked.bonus
     if option.source_kind == OptionSource.CHALLENGE:
         # The chosen ChallengeApproach supplies the check; the challenge's
         # severity is the difficulty. Routing below is unchanged — it keys
@@ -741,6 +759,15 @@ def resolve_option(  # noqa: PLR0913
             extra_modifiers=extra_modifiers,
             situation_ctx=mission_situation_ctx(character, instance),
         )
+    if invoked is not None:
+        from world.missions.services.invocation import (  # noqa: PLC0415
+            deliver_invocation_to_mission_log,
+        )
+
+        deliver_invocation_to_mission_log(instance, actor.character, invoked, result)
+    if roll_report is not None:
+        roll_report.invocation = invoked
+        roll_report.check_result = result
 
     return _route_graded_outcome(
         instance,
@@ -751,6 +778,28 @@ def resolve_option(  # noqa: PLR0913
         chosen_approach=chosen_approach,
         advance=advance,
     )
+
+
+def _roll_option_invocation(
+    instance: MissionInstance,
+    actor: MissionParticipant,
+    option: MissionOption,
+    chosen_approach: ChallengeApproach | None,
+    invocation: InvocationRequest,
+) -> InvocationOutcome | None:
+    """Roll the actor's invocation before an option check (#4333), or None.
+
+    An auto-succeeding approach rolls nothing, so nothing is invoked on it.
+    """
+    from world.missions.services.invocation import roll_mission_invocation  # noqa: PLC0415
+
+    if (
+        option.source_kind == OptionSource.CHALLENGE
+        and chosen_approach is not None
+        and chosen_approach.auto_succeeds
+    ):
+        return None
+    return roll_mission_invocation(instance, actor, invocation)
 
 
 def _route_graded_outcome(  # noqa: PLR0913

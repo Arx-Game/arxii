@@ -145,6 +145,10 @@ export async function createActionRequest(
      * asks carry a sum_tier (never raw coppers); deed asks carry deed_text.
      */
     boon?: BoonAskPayload;
+    /** Call on favor (#4333): the being whose favor is invoked before this action's check. */
+    invoke_being_id?: number;
+    /** The player's optional one line of how the invocation shows. */
+    invoke_line?: string;
   }
 ): Promise<ActionRequestResponse> {
   // Backend SceneActionRequestCreateSerializer expects:
@@ -169,6 +173,8 @@ export async function createActionRequest(
   copyDefinedField(requestBody, 'bond_thread_id', body.bond_thread_id);
   copyDefinedField(requestBody, 'entry_interaction_id', body.entry_interaction_id);
   copyDefinedField(requestBody, 'boon', body.boon);
+  copyDefinedField(requestBody, 'invoke_being_id', body.invoke_being_id);
+  copyDefinedField(requestBody, 'invoke_line', body.invoke_line);
   const res = await apiFetch('/api/action-requests/', {
     method: 'POST',
     body: JSON.stringify(requestBody),

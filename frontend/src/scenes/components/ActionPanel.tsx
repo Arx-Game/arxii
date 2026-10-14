@@ -28,6 +28,8 @@ import { useCastPullSelection } from '../hooks/useCastPullSelection';
 import { extractErrorMessage } from '@/lib/errors';
 import { toast } from 'sonner';
 import { useNavigate } from 'react-router-dom';
+import { CallOnFavor } from '@/worship/components/CallOnFavor';
+import type { InvocationChoice } from '@/worship/types';
 import { magicKeys } from '@/magic/queries';
 import {
   BOON_ACTION_KEYS,
@@ -164,6 +166,8 @@ export function ActionPanel({ sceneId, viewerKey }: Props) {
   const [strainByAction, setStrainByAction] = useState<Record<string, number>>({});
   // Initiator effort level for social actions (#1275).
   const [effortLevel, setEffortLevel] = useState<string>(DEFAULT_EFFORT);
+  // #4333: a Call on favor choice for the next action's check; rolls when it resolves.
+  const [invocation, setInvocation] = useState<InvocationChoice | null>(null);
 
   // Cast section state
   const [castOpen, setCastOpen] = useState(false);
@@ -287,7 +291,14 @@ export function ActionPanel({ sceneId, viewerKey }: Props) {
       effort_level?: string;
       /** Structured-ask payload (#2540) — boon dispatches only. */
       boon?: BoonAskPayload;
-    }) => createActionRequest(sceneId, params),
+      /** Call on favor (#4333): the being and the optional line. */
+      invoke_being_id?: number;
+      invoke_line?: string;
+    }) =>
+      createActionRequest(sceneId, {
+        ...params,
+        initiator_persona: initiatorPersonaId ?? undefined,
+      }),
     onSuccess: (data) => {
       if (data.boon_refused) {
         // #2540 slice 3 honest unavailability: the ask was well-formed (a real
@@ -310,6 +321,7 @@ export function ActionPanel({ sceneId, viewerKey }: Props) {
       setOpen(false);
       setTargetingAction(null);
       setStrainByAction({});
+      setInvocation(null);
     },
   });
 
@@ -359,6 +371,7 @@ export function ActionPanel({ sceneId, viewerKey }: Props) {
       ...(extras.boon !== undefined ? { boon: extras.boon } : {}),
       strain_commitment: strain && strain > 0 ? strain : undefined,
       effort_level: effortLevel !== DEFAULT_EFFORT ? effortLevel : undefined,
+      ...(invocation ? { invoke_being_id: invocation.beingId, invoke_line: invocation.line } : {}),
     });
   }
 
@@ -554,6 +567,17 @@ export function ActionPanel({ sceneId, viewerKey }: Props) {
                   ))}
                 </SelectContent>
               </Select>
+            </div>
+
+            {/* Call on favor (#4333): applies to the next action's own check. */}
+            <div className="flex flex-wrap items-center gap-2" data-testid="action-panel-favor">
+              <CallOnFavor
+                value={invocation}
+                onChange={setInvocation}
+                entryId={activeEntry?.id ?? null}
+                disabled={performAction.isPending}
+                inline
+              />
             </div>
 
             {isLoading && <p className="text-sm text-muted-foreground">Loading...</p>}

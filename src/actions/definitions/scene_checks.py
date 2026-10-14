@@ -45,6 +45,7 @@ if TYPE_CHECKING:
 
     from world.character_sheets.models import CharacterSheet
     from world.checks.models import CheckType
+    from world.worship.types import InvocationRequest
 
 _SELF_CHECK_HINT = "No such check -- try `check find <term>`."
 _CALL_CHECK_HINT = "No such check -- try `check find <term>`."
@@ -82,11 +83,61 @@ def _resolve_target_sheets(raw_targets: Any) -> list[CharacterSheet]:
     return sheets
 
 
+def _invocation_from_kwargs(
+    actor_sheet: CharacterSheet, kwargs: dict[str, Any]
+) -> InvocationRequest | ActionResult | None:
+    """A Call on favor choice from the action's kwargs (#4333), checked.
+
+    ``invoke_being_id`` (a ``WorshippedBeing`` pk) and an optional
+    ``invoke_line``. Returns None when no being was chosen, or a failed
+    ``ActionResult`` carrying the player-facing reason it was refused.
+    """
+    from world.worship.exceptions import FavorInvocationRefused  # noqa: PLC0415
+    from world.worship.invocation_services import (  # noqa: PLC0415
+        MSG_NO_SUCH_BEING,
+        resolve_invocation_choice,
+    )
+    from world.worship.types import InvocationChoice  # noqa: PLC0415
+
+    raw = kwargs.get("invoke_being_id")
+    if raw in (None, ""):
+        return None
+    try:
+        being_id = int(raw)
+    except (TypeError, ValueError):
+        return ActionResult(success=False, message=MSG_NO_SUCH_BEING)
+    choice = InvocationChoice(being_id=being_id, player_line=str(kwargs.get("invoke_line") or ""))
+    try:
+        return resolve_invocation_choice(actor_sheet, choice)
+    except FavorInvocationRefused as exc:
+        return ActionResult(success=False, message=exc.user_message)
+
+
+def _echo_to_telnet_bystanders(actor: ObjectDB, text: str) -> None:
+    """Send a room line to the non-web sessions of everyone else in the room.
+
+    ``record_interaction`` pushes to the web only; the roller already gets the
+    line as their result message, so they are skipped here.
+    """
+    from world.scenes.interaction_services import non_web_sessions  # noqa: PLC0415
+
+    location = actor.location
+    if location is None:
+        return
+    for obj in location.contents:
+        if obj.pk == actor.pk:
+            continue
+        sessions = non_web_sessions(obj)
+        if sessions:
+            obj.msg(text, session=sessions)
+
+
 def _perform_and_broadcast_self_check(
     actor: ObjectDB,
     actor_sheet: CharacterSheet,
     check_type: CheckType,
     band: str,
+    invocation: InvocationRequest | None = None,
 ) -> ActionResult:
     """Fire ``perform_check`` and broadcast a number-free narration to the room.
 
@@ -96,16 +147,50 @@ def _perform_and_broadcast_self_check(
     ``actor.key``/the raw character name -- OUTCOME-mode interactions render with no
     payload-persona name at all, so the label MUST be embedded in the content, and it
     must be the presenting face to honor the #981 alt-leak rule).
+
+    ``invocation`` (#4333): a Call on favor rolls first; its lines reach the room
+    and its bonus is added to this check. The roller's result message carries
+    their own line (for a secret faith the room line omits it) and the bonus.
     """
     from world.checks.services import perform_check  # noqa: PLC0415
     from world.scenes.interaction_services import (  # noqa: PLC0415
+        get_active_scene,
         record_interaction,
         render_challenge_outcome_narration,
     )
     from world.scenes.services import active_persona_for_sheet  # noqa: PLC0415
 
     persona = active_persona_for_sheet(actor_sheet)
-    result = perform_check(actor, check_type, target_difficulty=DIFFICULTY_VALUES[band])
+    favor_lines: list[str] = []
+    favor_bonus = 0
+    if invocation is not None:
+        from world.scenes.favor_invocation import (  # noqa: PLC0415
+            broadcast_invocation,
+            invocation_private_lines,
+        )
+        from world.worship.exceptions import FavorInvocationRefused  # noqa: PLC0415
+        from world.worship.invocation_services import invoke_favor  # noqa: PLC0415
+
+        scene = get_active_scene(actor.location)
+        try:
+            outcome = invoke_favor(
+                actor_sheet,
+                invocation.being,
+                actor_name=persona.name,
+                player_line=invocation.player_line,
+                scene=scene,
+            )
+        except FavorInvocationRefused as exc:
+            return ActionResult(success=False, message=exc.user_message)
+        broadcast_invocation(outcome, persona=persona, scene=scene, location=actor.location)
+        favor_bonus = outcome.bonus
+        favor_lines = invocation_private_lines(outcome)
+    result = perform_check(
+        actor,
+        check_type,
+        target_difficulty=DIFFICULTY_VALUES[band],
+        extra_modifiers=favor_bonus,
+    )
     band_label = DifficultyChoice(band).label
     narration = render_challenge_outcome_narration(
         actor_label=persona.name,
@@ -120,7 +205,9 @@ def _perform_and_broadcast_self_check(
         mode=InteractionMode.OUTCOME,
         persona=persona,
     )
-    return ActionResult(success=True, message=narration)
+    # On commit, after the invocation's own lines (also delivered on commit).
+    transaction.on_commit(lambda: _echo_to_telnet_bystanders(actor, narration))
+    return ActionResult(success=True, message="\n".join([*favor_lines, narration]))
 
 
 @dataclass
@@ -174,7 +261,10 @@ class SceneSelfCheckAction(Action):
             return band_result
         band = band_result
 
-        return _perform_and_broadcast_self_check(actor, actor_sheet, check_type, band)
+        invocation = _invocation_from_kwargs(actor_sheet, kwargs)
+        if isinstance(invocation, ActionResult):
+            return invocation
+        return _perform_and_broadcast_self_check(actor, actor_sheet, check_type, band, invocation)
 
 
 @dataclass
@@ -315,8 +405,15 @@ class AnswerCheckCallAction(Action):
         if target_row is None:
             return ActionResult(success=False, message=MSG_NO_PENDING_CALL)
 
+        invocation = _invocation_from_kwargs(actor_sheet, kwargs)
+        if isinstance(invocation, ActionResult):
+            return invocation
         call = target_row.call
-        result = _perform_and_broadcast_self_check(actor, actor_sheet, call.check_type, call.band)
+        result = _perform_and_broadcast_self_check(
+            actor, actor_sheet, call.check_type, call.band, invocation
+        )
+        if not result.success:
+            return result
         target_row.status = CheckCallTargetStatus.ANSWERED
         target_row.resolved_at = timezone.now()
         target_row.save(update_fields=["status", "resolved_at"])

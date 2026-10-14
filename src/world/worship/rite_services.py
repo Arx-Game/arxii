@@ -203,7 +203,10 @@ def apply_rite_award(  # noqa: PLR0913 - the settlement's inputs are keyword-onl
                 worship_rite_performance=performance,
             )
         if favor_amount > 0:
-            bump_devotion(character_sheet, rite.being, favor_amount)
+            # #4333: the earning rate scales the award; record what was credited.
+            favor_amount = bump_devotion(character_sheet, rite.being, favor_amount).credited
+            performance.favor_granted = favor_amount
+            performance.save(update_fields=["favor_granted"])
         grow_consecration(sites, rite)
     return RiteOutcome(
         performance=performance,

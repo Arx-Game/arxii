@@ -42137,6 +42137,32 @@ paths:
               schema:
                 $ref: '#/components/schemas/WorshippedBeingRef'
           description: ''
+  /api/worship/beings/invocation-options/:
+    get:
+      operationId: worship_beings_invocation_options_retrieve
+      description: |-
+        The Call on favor picker for the acting character (#4333).
+
+        Every being the character holds a standing with: favor, whether it can
+        be invoked now (and why not), uses left this week and how hard the
+        invocation check is with each ease; plus the bonus each outcome gives.
+      parameters:
+      - in: query
+        name: entry_id
+        schema:
+          type: integer
+        description: The roster entry this tab acts as (#3479).
+      tags:
+      - worship
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InvocationOptions'
+          description: ''
   /api/worship/miracles/:
     get:
       operationId: worship_miracles_list
@@ -44906,6 +44932,51 @@ components:
       - story_id
       - story_title
       - updated_at
+    BeatInvocation:
+      type: object
+      description: |-
+        Read-only mirror of :class:`world.missions.types.BeatInvocation` (#4333).
+
+        The acting player's own view: their call line, the outcome line, the bonus
+        and the check's points and ranks before and after it. Never the d100 roll.
+      properties:
+        call_line:
+          type: string
+        outcome_line:
+          type: string
+        bonus:
+          type: integer
+        bonus_label:
+          type: string
+        check_type_name:
+          type: string
+        points_before_bonus:
+          type: integer
+        total_points:
+          type: integer
+        roller_rank:
+          type: string
+          nullable: true
+        target_rank:
+          type: string
+          nullable: true
+        rank_difference:
+          type: integer
+        rank_difference_without_bonus:
+          type: integer
+          nullable: true
+      required:
+      - bonus
+      - bonus_label
+      - call_line
+      - check_type_name
+      - outcome_line
+      - points_before_bonus
+      - rank_difference
+      - rank_difference_without_bonus
+      - roller_rank
+      - target_rank
+      - total_points
     BeatKindEnum:
       enum:
       - situation
@@ -45005,6 +45076,8 @@ components:
           items:
             type: string
           readOnly: true
+        rolls_check:
+          type: boolean
       required:
       - approach_id
       - base_risk
@@ -45013,6 +45086,7 @@ components:
       - label
       - option_id
       - reasons
+      - rolls_check
     BeatOutcomeEnum:
       enum:
       - success
@@ -45294,6 +45368,14 @@ components:
       type: object
       description: 'POST body for the #885 resolve endpoint.'
       properties:
+        invoke_being_id:
+          type: integer
+          minimum: 1
+          nullable: true
+        invoke_line:
+          type: string
+          default: ''
+          maxLength: 200
         option_id:
           type: integer
           minimum: 1
@@ -50584,6 +50666,7 @@ components:
       - relationship
       - capability
       - soulfray
+      - favor
       type: string
       description: |-
         * `condition` - Condition
@@ -50600,6 +50683,7 @@ components:
         * `relationship` - Relationship
         * `capability` - Capability
         * `soulfray` - Soulfray
+        * `favor` - Favor
     ConsequencePoolCatalog:
       type: object
       description: Read-only serializer for the curated technique-cast consequence-pool
@@ -58324,6 +58408,14 @@ components:
       type: object
       description: 'POST body for the #1036 group-pick endpoint.'
       properties:
+        invoke_being_id:
+          type: integer
+          minimum: 1
+          nullable: true
+        invoke_line:
+          type: string
+          default: ''
+          maxLength: 200
         option_id:
           type: integer
           minimum: 1
@@ -60730,6 +60822,111 @@ components:
           readOnly: true
       required:
       - first_journal
+    InvocationBonusRow:
+      type: object
+      description: The bonus one outcome tier gives the next check (#4333).
+      properties:
+        outcome_name:
+          type: string
+        success_level:
+          type: integer
+        bonus:
+          type: integer
+      required:
+      - bonus
+      - outcome_name
+      - success_level
+    InvocationDifficulty:
+      type: object
+      description: How hard an invocation check is for the acting character, and why
+        (#4333).
+      properties:
+        base_points:
+          type: integer
+        base_band:
+          type: string
+        base_band_label:
+          type: string
+          readOnly: true
+        eases:
+          type: array
+          items:
+            $ref: '#/components/schemas/InvocationEase'
+        points:
+          type: integer
+        band:
+          type: string
+        band_label:
+          type: string
+          readOnly: true
+      required:
+      - band
+      - band_label
+      - base_band
+      - base_band_label
+      - base_points
+      - eases
+      - points
+    InvocationEase:
+      type: object
+      description: One labelled ease on the invocation check (#4333).
+      properties:
+        label:
+          type: string
+        points:
+          type: integer
+      required:
+      - label
+      - points
+    InvocationOption:
+      type: object
+      description: |-
+        One being the acting character could call on (#4333). ``refusal`` is the
+        player-facing reason it cannot be invoked now, or "".
+      properties:
+        being_id:
+          type: integer
+        being_name:
+          type: string
+        favor:
+          type: integer
+        can_invoke:
+          type: boolean
+        refusal:
+          type: string
+        uses_left:
+          type: integer
+        uses_per_week:
+          type: integer
+        difficulty:
+          allOf:
+          - $ref: '#/components/schemas/InvocationDifficulty'
+          nullable: true
+      required:
+      - being_id
+      - being_name
+      - can_invoke
+      - difficulty
+      - favor
+      - refusal
+      - uses_left
+      - uses_per_week
+    InvocationOptions:
+      type: object
+      description: 'The Call on favor picker''s data: the beings and the bonus by
+        result.'
+      properties:
+        beings:
+          type: array
+          items:
+            $ref: '#/components/schemas/InvocationOption'
+        bonuses:
+          type: array
+          items:
+            $ref: '#/components/schemas/InvocationBonusRow'
+      required:
+      - beings
+      - bonuses
     IssueInvite:
       type: object
       description: Input for issuing a new invite — write-only, not model-backed.
@@ -80831,9 +81028,15 @@ components:
           readOnly: true
         epilogue:
           type: string
+        invocation:
+          allOf:
+          - $ref: '#/components/schemas/BeatInvocation'
+          nullable: true
+          readOnly: true
       required:
       - epilogue
       - instance_id
+      - invocation
       - is_terminal
       - next_beat
       - outcome_name
@@ -82414,6 +82617,13 @@ components:
           allOf:
           - $ref: '#/components/schemas/BoonAskRequest'
           nullable: true
+        invoke_being_id:
+          type: integer
+          nullable: true
+        invoke_line:
+          type: string
+          default: ''
+          maxLength: 200
       required:
       - action_key
       - scene

@@ -268,6 +268,52 @@ def ensure_rite_kinds_and_awards() -> None:
             )
 
 
+#: Example invocation bonuses by outcome (#4333 design 1): check points added to the check
+#: an invocation was declared on. PLACEHOLDER tuning.
+_INVOCATION_BONUSES = {
+    "Critical Success": 15,
+    "Success": 10,
+    "Partial Success": 5,
+    "Failure": 0,
+    "Critical Failure": 0,
+}
+
+
+def ensure_favor_terms(check_type) -> None:
+    """Seed the favor terms every character shares (#4333) and every being's targets.
+
+    The ``DevotionConfig`` singleton (its default invocation check is the Ceremony
+    Rites check, when that exists and none is set yet), the example INVOCATION
+    ``FavorOutcomeAward`` rows, and each being's favor invocation and favor earning
+    ``ModifierTarget`` (``ensure_being_modifier_targets``). Idempotent; never
+    overwrites a value staff set.
+    """
+    from world.seeds.checks import seed_check_resolution_tables  # noqa: PLC0415
+    from world.traits.models import CheckOutcome  # noqa: PLC0415
+    from world.worship.constants import FavorAwardKind  # noqa: PLC0415
+    from world.worship.favor_services import ensure_being_modifier_targets  # noqa: PLC0415
+    from world.worship.invocation_services import get_devotion_config  # noqa: PLC0415
+    from world.worship.models import FavorOutcomeAward, WorshippedBeing  # noqa: PLC0415
+
+    config = get_devotion_config()
+    if config.invocation_check_type_id is None and check_type is not None:
+        config.invocation_check_type = check_type
+        config.save(update_fields=["invocation_check_type"])
+    seed_check_resolution_tables()
+    for outcome_name, amount in _INVOCATION_BONUSES.items():
+        outcome = CheckOutcome.objects.filter(name=outcome_name).first()
+        if outcome is None:
+            continue
+        FavorOutcomeAward.objects.get_or_create(
+            config=config,
+            kind=FavorAwardKind.INVOCATION,
+            outcome_tier=outcome,
+            defaults={"amount": amount},
+        )
+    for being in WorshippedBeing.objects.all():
+        ensure_being_modifier_targets(being)
+
+
 def ensure_shrine_kind():
     """Get-or-create the Shrine ``RoomFeatureKind`` (#3778): persona-owned,
     level 1 only, installed in place by ``found_shrine`` (RITUAL mechanism, no
@@ -328,10 +374,11 @@ def seed_worship_content() -> None:
     (``seeds/consent.py``) with the rest of the antagonism tree.
     """
     seeded = ensure_rites_skill_and_specializations()
-    ensure_ceremony_check_type(seeded["skill"])
+    ceremony_check = ensure_ceremony_check_type(seeded["skill"])
     ensure_favorite_achievements()
     ensure_traditions_and_beings(seeded["specs"])
     ensure_rite_kinds_and_awards()
+    ensure_favor_terms(ceremony_check)
     ensure_shrine_kind()
     ensure_consecration_tiers()
 

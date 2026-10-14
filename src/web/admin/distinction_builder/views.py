@@ -56,7 +56,9 @@ def _build_forms(request: HttpRequest, distinction: Distinction) -> _BuilderForm
         data,
         instance=distinction,
         prefix="effects",
-        queryset=DistinctionEffect.objects.select_related("target"),
+        queryset=DistinctionEffect.objects.select_related(
+            "target__category", "target__target_being"
+        ),
     )
     offers = DistinctionOfferFormSet(
         data,

@@ -289,3 +289,50 @@ class VisionFactory(factory.django.DjangoModelFactory):
     recipient = factory.SubFactory("world.character_sheets.factories.CharacterSheetFactory")
     being = factory.SubFactory(WorshippedBeingFactory)
     body = "[PLACEHOLDER] A door opens in the dark."
+
+
+class DevotionConfigFactory(factory.django.DjangoModelFactory):
+    """The ``DevotionConfig`` singleton (#4333). Updates the existing row's fields
+    rather than dropping them (the ``django_get_or_create`` gotcha)."""
+
+    class Meta:
+        model = "arxii.DevotionConfig"
+
+    pk = 1
+
+    @classmethod
+    def _create(cls, model_class, *args, **kwargs):
+        pk = kwargs.pop("pk")
+        instance, created = model_class.objects.get_or_create(pk=pk, defaults=kwargs)
+        if not created and kwargs:
+            for field, value in kwargs.items():
+                setattr(instance, field, value)
+            instance.save()
+        return instance
+
+
+class FavorOutcomeAwardFactory(factory.django.DjangoModelFactory):
+    class Meta:
+        model = "arxii.FavorOutcomeAward"
+
+    config = factory.SubFactory(DevotionConfigFactory)
+    kind = "invocation"
+    outcome_tier = factory.SubFactory("world.traits.factories.CheckOutcomeFactory")
+    amount = 10
+
+
+def _current_game_week():
+    from world.game_clock.week_services import get_current_game_week
+
+    return get_current_game_week()
+
+
+class FavorInvocationFactory(factory.django.DjangoModelFactory):
+    class Meta:
+        model = "arxii.FavorInvocation"
+
+    character_sheet = factory.SubFactory("world.character_sheets.factories.CharacterSheetFactory")
+    being = factory.SubFactory(WorshippedBeingFactory)
+    game_week = factory.LazyFunction(_current_game_week)
+    outcome_tier = factory.SubFactory("world.traits.factories.CheckOutcomeFactory")
+    bonus = 0

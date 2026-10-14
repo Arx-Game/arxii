@@ -26101,6 +26101,29 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/worship/beings/invocation-options/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description The Call on favor picker for the acting character (#4333).
+     *
+     *     Every being the character holds a standing with: favor, whether it can
+     *     be invoked now (and why not), uses left this week and how hard the
+     *     invocation check is with each ease; plus the bonus each outcome gives.
+     */
+    get: operations['worship_beings_invocation_options_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/worship/miracles/': {
     parameters: {
       query?: never;
@@ -27435,6 +27458,25 @@ export interface components {
       staged_battle?: components['schemas']['BeatStagedBattle'] | null;
     };
     /**
+     * @description Read-only mirror of :class:`world.missions.types.BeatInvocation` (#4333).
+     *
+     *     The acting player's own view: their call line, the outcome line, the bonus
+     *     and the check's points and ranks before and after it. Never the d100 roll.
+     */
+    BeatInvocation: {
+      call_line: string;
+      outcome_line: string;
+      bonus: number;
+      bonus_label: string;
+      check_type_name: string;
+      points_before_bonus: number;
+      total_points: number;
+      roller_rank: string | null;
+      target_rank: string | null;
+      rank_difference: number;
+      rank_difference_without_bonus: number | null;
+    };
+    /**
      * @description * `situation` - Situation
      *     * `encounter` - Encounter
      *     * `task` - Task
@@ -27489,6 +27531,7 @@ export interface components {
       check_type_name: string | null;
       base_risk: number;
       readonly reasons: string[];
+      rolls_check: boolean;
     };
     /**
      * @description * `success` - Success
@@ -27624,6 +27667,9 @@ export interface components {
     };
     /** @description POST body for the #885 resolve endpoint. */
     BeatResolveRequestRequest: {
+      invoke_being_id?: number | null;
+      /** @default  */
+      invoke_line: string;
       option_id: number;
       approach_id?: number | null;
     };
@@ -30055,6 +30101,7 @@ export interface components {
      *     * `relationship` - Relationship
      *     * `capability` - Capability
      *     * `soulfray` - Soulfray
+     *     * `favor` - Favor
      * @enum {string}
      */
     ConsequenceOutcomeModifierSourceKindEnum:
@@ -30071,7 +30118,8 @@ export interface components {
       | 'pull'
       | 'relationship'
       | 'capability'
-      | 'soulfray';
+      | 'soulfray'
+      | 'favor';
     /** @description Read-only serializer for the curated technique-cast consequence-pool catalog. */
     ConsequencePoolCatalog: {
       readonly id: number;
@@ -33740,6 +33788,9 @@ export interface components {
     GroupDbaEnum: 'perception' | 'items' | 'movement' | 'authored';
     /** @description POST body for the #1036 group-pick endpoint. */
     GroupPickRequestRequest: {
+      invoke_being_id?: number | null;
+      /** @default  */
+      invoke_line: string;
       option_id: number;
       approach_id?: number | null;
     };
@@ -34938,6 +34989,46 @@ export interface components {
     /** @description Which Introductions a draft is offered (#3621). Read-only, schema only. */
     IntroductionsOffered: {
       readonly first_journal: boolean;
+    };
+    /** @description The bonus one outcome tier gives the next check (#4333). */
+    InvocationBonusRow: {
+      outcome_name: string;
+      success_level: number;
+      bonus: number;
+    };
+    /** @description How hard an invocation check is for the acting character, and why (#4333). */
+    InvocationDifficulty: {
+      base_points: number;
+      base_band: string;
+      readonly base_band_label: string;
+      eases: components['schemas']['InvocationEase'][];
+      points: number;
+      band: string;
+      readonly band_label: string;
+    };
+    /** @description One labelled ease on the invocation check (#4333). */
+    InvocationEase: {
+      label: string;
+      points: number;
+    };
+    /**
+     * @description One being the acting character could call on (#4333). ``refusal`` is the
+     *     player-facing reason it cannot be invoked now, or "".
+     */
+    InvocationOption: {
+      being_id: number;
+      being_name: string;
+      favor: number;
+      can_invoke: boolean;
+      refusal: string;
+      uses_left: number;
+      uses_per_week: number;
+      difficulty: components['schemas']['InvocationDifficulty'] | null;
+    };
+    /** @description The Call on favor picker's data: the beings and the bonus by result. */
+    InvocationOptions: {
+      beings: components['schemas']['InvocationOption'][];
+      bonuses: components['schemas']['InvocationBonusRow'][];
     };
     /** @description Input for issuing a new invite — write-only, not model-backed. */
     IssueInvite: {
@@ -45980,6 +46071,7 @@ export interface components {
       is_terminal: boolean;
       readonly next_beat: components['schemas']['BeatView'] | null;
       epilogue: string;
+      readonly invocation: components['schemas']['BeatInvocation'] | null;
     };
     /** @description Wire shape for a single ResolvedPullEffect row. */
     ResolvedPullEffect: {
@@ -46760,6 +46852,9 @@ export interface components {
       bond_thread_id?: number | null;
       pull?: components['schemas']['CastPullRequestRequest'] | null;
       boon?: components['schemas']['BoonAskRequest'] | null;
+      invoke_being_id?: number | null;
+      /** @default  */
+      invoke_line: string;
     };
     /** @description Flat read payload for a pending additional-target consent row (#1177). */
     SceneActionTarget: {
@@ -87691,6 +87786,28 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['WorshippedBeingRef'];
+        };
+      };
+    };
+  };
+  worship_beings_invocation_options_retrieve: {
+    parameters: {
+      query?: {
+        /** @description The roster entry this tab acts as (#3479). */
+        entry_id?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['InvocationOptions'];
         };
       };
     };

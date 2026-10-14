@@ -584,6 +584,9 @@ describe('ActionPanel', () => {
       expect(createActionRequest).toHaveBeenCalledWith('42', {
         action_key: 'grand_entry',
         technique_id: techniqueId,
+        // The acting character's persona selects the initiator (#4353 fix: the view
+        // refuses a social action without it).
+        initiator_persona: 77,
       });
     });
   });
