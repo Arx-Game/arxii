@@ -1,0 +1,64 @@
+{
+  "beings": [
+    {
+      "being_id": 2,
+      "being_name": "The Fenwright Dead",
+      "favor": 12,
+      "can_invoke": true,
+      "refusal": "",
+      "uses_left": 3,
+      "uses_per_week": 3,
+      "difficulty": {
+        "base_points": 75,
+        "base_band": "daunting",
+        "base_band_label": "Daunting",
+        "eases": [
+          {
+            "label": "Favor invocation modifiers for The Fenwright Dead",
+            "points": 0
+          }
+        ],
+        "points": 75,
+        "band": "daunting",
+        "band_label": "Daunting"
+      }
+    },
+    {
+      "being_id": 3,
+      "being_name": "River Spirit",
+      "favor": 0,
+      "can_invoke": false,
+      "refusal": "You have no favor with River Spirit to call on.",
+      "uses_left": 3,
+      "uses_per_week": 3,
+      "difficulty": null
+    }
+  ],
+  "bonuses": [
+    {
+      "outcome_name": "Critical Success",
+      "success_level": 2,
+      "bonus": 15
+    },
+    {
+      "outcome_name": "Success",
+      "success_level": 1,
+      "bonus": 10
+    },
+    {
+      "outcome_name": "Partial Success",
+      "success_level": 0,
+      "bonus": 5
+    },
+    {
+      "outcome_name": "Failure",
+      "success_level": -1,
+      "bonus": 0
+    },
+    {
+      "outcome_name": "Critical Failure",
+      "success_level": -2,
+      "bonus": 0
+    }
+  ]
+}
