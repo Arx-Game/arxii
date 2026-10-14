@@ -1,10 +1,11 @@
 /**
  * GMDashboardPage — the GM's story-shaped dashboard (#2004).
  *
- * Shows the GM's tables, upcoming sessions, stories needing attention,
- * pending AGM claims, pending story offers, evidence summary, and (#3426)
- * the GM's own Story NPCs + a mint dialog, from GET /api/gm/dashboard/ plus
- * GET /api/roster/entries/mine/.
+ * Opens on the "Waiting on you" strip (#4188, `WaitingOnYouStrip` over
+ * GET /api/gm/attention/: offers, invites, requests, claims, sessions, each
+ * row a door), then the GM's profile summary, tables, Story NPCs + a mint
+ * dialog (#3426), the remaining stat tiles and the open group requests, from
+ * GET /api/gm/dashboard/ plus GET /api/roster/entries/mine/.
  *
  * Permission gating: the endpoint returns 403 for non-GMs. We use a local
  * query with throwOnError: false so we can render a friendly "not a GM" page
@@ -37,9 +38,11 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Textarea } from '@/components/ui/textarea';
 import { apiFetch } from '@/evennia_replacements/api';
 import { parseDispatchBody } from '@/lib/errors';
+import { gmKeys, useGMAttention } from '@/gm/queries';
 import { useMyRosterEntriesQuery } from '@/roster/queries';
 import { useAccount } from '@/store/hooks';
 import { GMPromptFilterCard } from '../components/GMPromptFilterCard';
+import { WaitingOnYouStrip } from '../components/WaitingOnYouStrip';
 
 // ---------------------------------------------------------------------------
 // Types (manually authored — spectacular can't introspect this APIView)
@@ -197,6 +200,9 @@ function GMDashboardContent() {
     queryFn: getGMDashboard,
     throwOnError: false,
   });
+  // #4188: asked once the dashboard answered, which is the proof the viewer
+  // is a GM (the attention endpoint 403s everyone else the same way).
+  const { data: attention } = useGMAttention(data !== undefined);
 
   // The GM's active character's ObjectDB pk — doubles as the character_sheet
   // pk (see claimGroupStoryRequest doc comment). Needed to dispatch the claim
@@ -214,6 +220,7 @@ function GMDashboardContent() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['gm-dashboard'] }).catch(() => {});
+      queryClient.invalidateQueries({ queryKey: gmKeys.attention }).catch(() => {});
     },
   });
 
@@ -281,6 +288,9 @@ function GMDashboardContent() {
           <Link to="/gm/story-builder">Story Builder</Link>
         </Button>
       </div>
+
+      {/* Waiting on you (#4188): the strip the page opens on. */}
+      {attention ? <WaitingOnYouStrip attention={attention} /> : null}
 
       {/* Evidence summary */}
       <section className="rounded-lg border p-4">
@@ -422,19 +432,12 @@ function GMDashboardContent() {
         )}
       </section>
 
-      {/* Attention counts */}
+      {/* Stat tiles. Pending AGM claims and assigned sessions moved to the
+          strip above (#4188), where they have doors. */}
       <section className="grid grid-cols-2 gap-4">
         <div className="rounded-lg border p-4">
           <p className="text-sm text-muted-foreground">Episodes ready to run</p>
           <p className="text-2xl font-bold">{data.episodes_ready_to_run.length}</p>
-        </div>
-        <div className="rounded-lg border p-4">
-          <p className="text-sm text-muted-foreground">Pending AGM claims</p>
-          <p className="text-2xl font-bold">{data.pending_agm_claims.length}</p>
-        </div>
-        <div className="rounded-lg border p-4">
-          <p className="text-sm text-muted-foreground">Assigned sessions</p>
-          <p className="text-2xl font-bold">{data.assigned_session_requests.length}</p>
         </div>
         <div className="rounded-lg border p-4">
           <p className="text-sm text-muted-foreground">Stories waiting on you</p>
@@ -459,25 +462,6 @@ function GMDashboardContent() {
           <p className="text-sm text-muted-foreground">Open invites</p>
           <p className="text-2xl font-bold">{data.open_invites}</p>
         </Link>
-      </section>
-
-      {/* Pending story offers */}
-      <section className="rounded-lg border p-4">
-        <h2 className="mb-2 text-lg font-semibold">
-          Pending Story Offers ({data.pending_story_offers.length})
-        </h2>
-        {data.pending_story_offers.length === 0 ? (
-          <p className="text-sm text-muted-foreground">No pending offers.</p>
-        ) : (
-          <ul className="space-y-1 text-sm">
-            {data.pending_story_offers.map((offer) => (
-              <li key={offer.id}>
-                <span className="font-medium">{offer.story__title}</span> -{' '}
-                {new Date(offer.created_at).toLocaleDateString()}
-              </li>
-            ))}
-          </ul>
-        )}
       </section>
 
       {/* Open group requests (#2119) — the broadcast covenant-GM recruitment queue */}

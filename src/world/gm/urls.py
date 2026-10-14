@@ -11,6 +11,7 @@ from world.gm.views import (
     GMApplicationActionView,
     GMApplicationQueueView,
     GMApplicationViewSet,
+    GMAttentionView,
     GMDashboardView,
     GMInviteClaimView,
     GMProfileViewSet,
@@ -57,6 +58,7 @@ urlpatterns = [
     ),
     path("demand-ransom/", DemandRansomView.as_view(), name="gm-demand-ransom"),
     path("dashboard/", GMDashboardView.as_view(), name="gm-dashboard"),
+    path("attention/", GMAttentionView.as_view(), name="gm-attention"),
     path(
         "looking-for-table/",
         LookingForTableBrowseView.as_view(),

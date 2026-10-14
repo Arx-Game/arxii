@@ -316,6 +316,12 @@ The full React UI for the stories + narrative backend is implemented in
   read-only with frontier highlighting)
 - Role-gated navigation: player / GM / staff / author sections visible to the
   right audience; unread-narrative badge wires into the nav
+- **GMing nav group (#4188):** a header dropdown for story design and tracking
+  (Dashboard, Story Builder, Tables, Lead GM Queue; a Staff section with Story
+  Workload), gated on `account.is_gm || is_staff`, with one count on the trigger
+  from `GET /api/gm/attention/`; the GM Dashboard opens on a "Waiting on you"
+  strip of the same counts, each a door (`WaitingOnYouStrip`); World holds only
+  lore; the loose top-bar Story Workload link is gone (ADR-4188)
 - Lazy routing: all page-level imports use `React.lazy()` for route-level code
   splitting
 - Error boundaries at the page level for graceful fallbacks
@@ -328,9 +334,9 @@ The full React UI for the stories + narrative backend is implemented in
 - `spectacular` cannot introspect `APIView`-based dashboard endpoints (the
   `my-active`, `gm-queue`, `staff-workload` views). Types for these were
   authored manually in `stories/types.ts` rather than generated.
-- `GMProfile` is not included in the `/api/user/` account payload; the GM
-  navigation section is conditionally shown based on the `gm-queue` endpoint
-  returning a non-403 response.
+- `account.is_gm` in the `/api/user/` payload says whether the account holds a
+  `GMProfile` (#2004) and gates the GMing nav group (#4188); the GM pages still
+  render their own "not a GM" fallback on a 403.
 - `StaffRoute` wraps staff-only pages; `ProtectedRoute` wraps player/GM pages.
   Unauthenticated access redirects to `/login` — e2e smoke tests account for
   this by verifying crash-free rendering rather than requiring live auth.

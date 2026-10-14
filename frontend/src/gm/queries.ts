@@ -17,13 +17,45 @@
  */
 
 import { useQuery } from '@tanstack/react-query';
+import { apiFetch } from '@/evennia_replacements/api';
+import type { components } from '@/generated/api';
+import { throwApiError } from '@/lib/errors';
 import { fetchGMProfileMine } from '@/home/hall/api';
 
 export const gmKeys = {
   profileMine: ['gm', 'profile-mine'] as const,
+  /** Everything waiting on the GM (#4188): the header badge and the Dashboard strip. */
+  attention: ['gm-attention'] as const,
 };
 
 const FIVE_MINUTES = 5 * 60 * 1000;
+
+/** How often the GMing badge re-reads the server, the Staff badge's cadence. */
+const ATTENTION_REFETCH_MS = 60_000;
+
+export type GMAttention = components['schemas']['GMAttention'];
+
+/** GET /api/gm/attention/: the counts of what waits on this GM, plus `total`. */
+export async function fetchGMAttention(): Promise<GMAttention> {
+  const res = await apiFetch('/api/gm/attention/');
+  if (!res.ok) await throwApiError(res, 'Failed to load what is waiting on you.');
+  return (await res.json()) as GMAttention;
+}
+
+/**
+ * What is waiting on the GM (#4188). One query feeds the GMing trigger's
+ * badge (`total`) and the Dashboard's "Waiting on you" strip (the rows), so
+ * the two can never disagree (ADR-4188). `enabled` is the account's `is_gm`:
+ * the endpoint 403s an account with no GMProfile, so nothing asks for it.
+ */
+export function useGMAttention(enabled: boolean) {
+  return useQuery({
+    queryKey: gmKeys.attention,
+    queryFn: fetchGMAttention,
+    refetchInterval: ATTENTION_REFETCH_MS,
+    enabled,
+  });
+}
 
 /** The requesting account's own GM profile, or `null` when it has none (404). */
 export function useGMProfileMine() {

@@ -89,6 +89,7 @@ introspect `APIView`-based dashboard endpoints.
 | `StoryFormDialog.tsx`               | Story CRUD dialog                                          |
 | `StoryLog.tsx`                      | Visibility-filtered story log timeline                     |
 | `TransitionFormDialog.tsx`          | Transition CRUD dialog                                     |
+| `WaitingOnYouStrip.tsx`             | The GM Dashboard's opening strip (#4188): one row per kind of thing waiting on the GM, from `useGMAttention`; a non-zero row links to its page |
 | `WorkloadStatCard.tsx`              | Stat card on the staff workload dashboard                  |
 
 **Phase 5 additions:**
@@ -195,12 +196,11 @@ Types for their responses (`MyActiveStoriesResponse`, `GMQueueResponse`,
 `StaffWorkloadResponse`, and nested entry types) are authored manually in
 `types.ts` and must be kept in sync with the backend serializers by hand.
 
-**`GMProfile` is not in the `/api/user/` account payload.** The account
-endpoint returns `is_staff`, `is_superuser`, and character sheet data but
-not whether the user has a `GMProfile`. The navigation shows GM links for
-any authenticated user; non-GMs hit a 403 when the `gm-queue` API call
-resolves and `GMQueuePage` renders the `NotGMPage` fallback instead of
-blowing the error boundary.
+**`account.is_gm` says whether the account holds a `GMProfile`** (#2004;
+`src/web/api/serializers.py`), and the header's GMing group is gated on it
+(#4188). The GM pages still guard themselves: a non-GM who types a URL hits a
+403 when the `gm-queue` or dashboard call resolves and the page renders its
+"not a GM" fallback instead of blowing the error boundary.
 
 **`ProtectedRoute` redirects unauthenticated users to `/login`.** In the
 Playwright e2e smoke tests (which run without a live backend), all

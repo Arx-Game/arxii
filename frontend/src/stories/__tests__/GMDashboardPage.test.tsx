@@ -47,6 +47,24 @@ vi.mock('@/components/ui/select', () => ({
   ),
 }));
 
+// The "Waiting on you" strip (#4188) reads the attention counts through its
+// own hook; mocked directly so it never shifts the ordered apiFetch mocks
+// below. `mockAttention` is overridden per test; the default is all zeros.
+const ZERO_ATTENTION = {
+  story_offers: 0,
+  crossover_invites: 0,
+  sheet_update_requests: 0,
+  claims_to_approve: 0,
+  my_claims: 0,
+  session_requests: 0,
+  total: 0,
+};
+const mockAttention = vi.fn((_enabled: boolean) => ({ data: ZERO_ATTENTION }));
+vi.mock('@/gm/queries', () => ({
+  gmKeys: { attention: ['gm-attention'] },
+  useGMAttention: (enabled: boolean) => mockAttention(enabled),
+}));
+
 // The My NPCs block (#3426) fetches the account's roster entries; mock the
 // query directly so it never competes with the order-dependent apiFetch mocks.
 vi.mock('@/roster/queries', () => ({
@@ -96,6 +114,11 @@ const mockDashboard = {
 };
 
 describe('GMDashboardPage', () => {
+  beforeEach(() => {
+    mockAttention.mockReset();
+    mockAttention.mockReturnValue({ data: ZERO_ATTENTION });
+  });
+
   it('renders dashboard sections on success', async () => {
     vi.mocked(apiFetch).mockResolvedValueOnce({
       ok: true,
@@ -130,6 +153,62 @@ describe('GMDashboardPage', () => {
     const invitesTile = screen.getByTestId('open-invites-tile');
     expect(invitesTile).toHaveTextContent('2');
     expect(invitesTile).toHaveAttribute('href', '/tables');
+  });
+
+  it('opens on a "Waiting on you" strip whose non-zero rows link to their pages (#4188)', async () => {
+    mockAttention.mockReturnValue({
+      data: {
+        story_offers: 2,
+        crossover_invites: 1,
+        sheet_update_requests: 3,
+        claims_to_approve: 1,
+        my_claims: 0,
+        session_requests: 4,
+        total: 11,
+      },
+    });
+    vi.mocked(apiFetch).mockResolvedValueOnce({
+      ok: true,
+      json: () => Promise.resolve(mockDashboard),
+    } as Response);
+
+    render(withProviders(<GMDashboardPage />));
+
+    const strip = await screen.findByTestId('waiting-on-you');
+    expect(strip).toHaveTextContent('Waiting on you');
+    // Only asked once the dashboard answered, the proof the viewer is a GM.
+    expect(mockAttention).toHaveBeenLastCalledWith(true);
+
+    const row = (key: string) => screen.getByTestId(`waiting-${key}`);
+    expect(row('story_offers')).toHaveAttribute('href', '/stories/my-offers');
+    expect(row('story_offers')).toHaveTextContent('2');
+    expect(row('crossover_invites')).toHaveAttribute('href', '/crossover/inbox');
+    expect(row('sheet_update_requests')).toHaveAttribute('href', '/gm/update-requests');
+    expect(row('claims_to_approve')).toHaveAttribute('href', '/stories/gm-queue');
+    expect(row('session_requests')).toHaveAttribute('href', '/stories/gm-queue');
+    expect(row('session_requests')).toHaveTextContent('4');
+    // A zero row is muted and unlinked.
+    expect(row('my_claims')).not.toHaveAttribute('href');
+    expect(row('my_claims')).toHaveTextContent('0');
+
+    // The strip replaced the offers section and the claims/sessions tiles.
+    expect(screen.queryByText(/Pending Story Offers/)).not.toBeInTheDocument();
+    expect(screen.queryByText('Pending AGM claims')).not.toBeInTheDocument();
+    expect(screen.queryByText('Assigned sessions')).not.toBeInTheDocument();
+    expect(screen.getByText('Episodes ready to run')).toBeInTheDocument();
+  });
+
+  it('renders a strip of zeros with no links when nothing is waiting (#4188)', async () => {
+    vi.mocked(apiFetch).mockResolvedValueOnce({
+      ok: true,
+      json: () => Promise.resolve(mockDashboard),
+    } as Response);
+
+    render(withProviders(<GMDashboardPage />));
+
+    const strip = await screen.findByTestId('waiting-on-you');
+    expect(strip.querySelectorAll('a')).toHaveLength(0);
+    expect(screen.getByTestId('waiting-my_claims')).toHaveTextContent('My claims');
   });
 
   it('renders not-a-GM message on 403', async () => {

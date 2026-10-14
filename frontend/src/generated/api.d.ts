@@ -10225,6 +10225,23 @@ export interface paths {
     patch: operations['gm_applications_partial_update'];
     trace?: never;
   };
+  '/api/gm/attention/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description Return the counts and their total. */
+    get: operations['gm_attention_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/gm/catalog-suggestions/': {
     parameters: {
       query?: never;
@@ -32963,6 +32980,19 @@ export interface components {
       readonly applied_date: string;
       /** @description Why player wants this character */
       readonly application_text: string;
+    };
+    /**
+     * @description Read-only view of ``world.gm.types.GMAttention`` (#4188): everything
+     *     waiting on the requesting GM, as counts, plus their ``total``.
+     */
+    GMAttention: {
+      story_offers: number;
+      crossover_invites: number;
+      sheet_update_requests: number;
+      claims_to_approve: number;
+      my_claims: number;
+      session_requests: number;
+      total: number;
     };
     /** @description Read-only view of ``world.gm.types.GMEvidenceSummary`` for staff review (#2000). */
     GMEvidenceSummary: {
@@ -65593,6 +65623,25 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['GMApplicationDetail'];
+        };
+      };
+    };
+  };
+  gm_attention_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['GMAttention'];
         };
       };
     };

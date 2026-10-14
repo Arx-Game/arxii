@@ -10,7 +10,8 @@ import type { ReactNode } from 'react';
 import { Provider } from 'react-redux';
 import { configureStore } from '@reduxjs/toolkit';
 import { Header } from '../Header';
-import { authSlice } from '@/store/authSlice';
+import { authSlice, setAccount } from '@/store/authSlice';
+import type { AccountData } from '@/evennia_replacements/types';
 import { gameSlice, hydrateActiveCharacter } from '@/store/gameSlice';
 import { rouletteSlice } from '@/store/rouletteSlice';
 import type { MyRosterEntry } from '@/roster/types';
@@ -24,6 +25,22 @@ vi.mock('@/staff/queries', () => ({
   useOpenSubmissionCount: () => ({
     data: undefined,
   }),
+}));
+
+// The account menu (`ProfileDropdown`'s `useLogout`) wants a QueryClient and the
+// game socket once a viewer is signed in; the #4188 cases below sign one in, so
+// stub it out the way the other query-backed pieces are. Its own behaviour is
+// covered by ProfileDropdown.test.tsx.
+vi.mock('../UserNav', () => ({
+  UserNav: () => <span data-testid="user-nav-stub" />,
+}));
+
+// #4188 — the GMing badge's count. `mockAttention` is overridden per test.
+const mockAttention = vi.fn((_enabled: boolean) => ({
+  data: undefined as { total: number } | undefined,
+}));
+vi.mock('@/gm/queries', () => ({
+  useGMAttention: (enabled: boolean) => mockAttention(enabled),
 }));
 
 vi.mock('@/narrative/components/UnreadNarrativeBadge', () => ({
@@ -80,6 +97,33 @@ function makeStore() {
   });
 }
 
+/** A signed-in viewer; `is_gm` and `is_staff` decide what the header shows (#4188). */
+function makeAccount(overrides: Partial<AccountData> = {}): AccountData {
+  return {
+    id: 1,
+    username: 'viewer',
+    display_name: 'Viewer',
+    last_login: null,
+    email: '',
+    email_verified: true,
+    can_create_characters: true,
+    character_slots: { total: null, used: 0, activity_total: 0, activity_used: 0, holders: [] },
+    is_staff: false,
+    is_gm: false,
+    available_characters: [],
+    pending_applications: [],
+    selected_entry_id: null,
+    selected_entry: null,
+    ...overrides,
+  };
+}
+
+function storeFor(account: AccountData | null) {
+  const store = makeStore();
+  if (account) store.dispatch(setAccount(account));
+  return store;
+}
+
 function Wrapper({
   children,
   store = makeStore(),
@@ -98,6 +142,8 @@ describe('Header', () => {
   beforeEach(() => {
     mockRosterEntries.mockReturnValue({ data: [] });
     mockSelectMutate.mockClear();
+    mockAttention.mockReset();
+    mockAttention.mockReturnValue({ data: undefined });
   });
 
   it('renders direct nav links and dropdown triggers', () => {
@@ -177,12 +223,157 @@ describe('Header', () => {
 
     await user.click(screen.getByRole('button', { name: /world/i }));
 
-    expect(screen.getByRole('link', { name: /crossover/i })).toBeInTheDocument();
+    // World is the lore shelf (#4188): Crossover left for the GM Dashboard strip.
+    expect(screen.queryByRole('link', { name: /crossover/i })).not.toBeInTheDocument();
     expect(screen.getByRole('link', { name: /codex/i })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: /tidings/i })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: /journals/i })).toHaveAttribute('href', '/journals');
     // The Realms hub (#3725): one plain link, no per-realm jumps under it.
     expect(screen.getByRole('link', { name: /realms/i })).toHaveAttribute('href', '/realms');
+  });
+
+  // ---------------------------------------------------------------------------
+  // GMing group (#4188): story design and tracking, one badge, World is lore.
+  // ---------------------------------------------------------------------------
+
+  describe('GMing group (#4188)', () => {
+    it('shows no GMing group to a signed-out visitor, and never asks for the count', () => {
+      render(
+        <Wrapper store={storeFor(null)}>
+          <Header />
+        </Wrapper>
+      );
+
+      expect(screen.queryByRole('button', { name: /gming/i })).not.toBeInTheDocument();
+      expect(mockAttention).toHaveBeenCalledWith(false);
+    });
+
+    it('shows no GMing group to a signed-in player who is neither GM nor staff', () => {
+      render(
+        <Wrapper store={storeFor(makeAccount())}>
+          <Header />
+        </Wrapper>
+      );
+
+      expect(screen.queryByRole('button', { name: /gming/i })).not.toBeInTheDocument();
+      expect(screen.getByRole('link', { name: /inbox/i })).toBeInTheDocument();
+      expect(mockAttention).toHaveBeenCalledWith(false);
+    });
+
+    it('gives a GM the four GM rows and no Staff section', async () => {
+      const { user } = setupUser();
+      render(
+        <Wrapper store={storeFor(makeAccount({ is_gm: true }))}>
+          <Header />
+        </Wrapper>
+      );
+
+      await user.click(screen.getByRole('button', { name: /gming/i }));
+
+      expect(screen.getByRole('link', { name: 'Dashboard' })).toHaveAttribute(
+        'href',
+        '/gm/dashboard'
+      );
+      expect(screen.getByRole('link', { name: 'Story Builder' })).toHaveAttribute(
+        'href',
+        '/gm/story-builder'
+      );
+      expect(screen.getByRole('link', { name: 'Tables' })).toHaveAttribute('href', '/tables');
+      expect(screen.getByRole('link', { name: 'Lead GM Queue' })).toHaveAttribute(
+        'href',
+        '/stories/gm-queue'
+      );
+      expect(screen.queryByRole('link', { name: 'Story Workload' })).not.toBeInTheDocument();
+      expect(screen.queryByText('Staff')).not.toBeInTheDocument();
+      expect(mockAttention).toHaveBeenCalledWith(true);
+    });
+
+    it('carries one count on the trigger when something is waiting, none at zero', () => {
+      mockAttention.mockReturnValue({ data: { total: 7 } });
+      const { unmount } = render(
+        <Wrapper store={storeFor(makeAccount({ is_gm: true }))}>
+          <Header />
+        </Wrapper>
+      );
+
+      expect(screen.getByTestId('gm-attention-badge')).toHaveTextContent('7');
+      unmount();
+
+      mockAttention.mockReturnValue({ data: { total: 0 } });
+      render(
+        <Wrapper store={storeFor(makeAccount({ is_gm: true }))}>
+          <Header />
+        </Wrapper>
+      );
+
+      expect(screen.queryByTestId('gm-attention-badge')).not.toBeInTheDocument();
+    });
+
+    it('gives staff who are not GMs only the Staff section, with Story Workload', async () => {
+      const { user } = setupUser();
+      render(
+        <Wrapper store={storeFor(makeAccount({ is_staff: true }))}>
+          <Header />
+        </Wrapper>
+      );
+
+      await user.click(screen.getByRole('button', { name: /gming/i }));
+
+      expect(screen.getByText('Staff', { selector: 'p' })).toBeInTheDocument();
+      expect(screen.getByRole('link', { name: 'Story Workload' })).toHaveAttribute(
+        'href',
+        '/stories/staff-workload'
+      );
+      expect(screen.queryByRole('link', { name: 'Dashboard' })).not.toBeInTheDocument();
+      expect(screen.queryByRole('link', { name: 'Lead GM Queue' })).not.toBeInTheDocument();
+      // The GMing badge needs a GMProfile; staff without one never ask for it.
+      expect(mockAttention).toHaveBeenCalledWith(false);
+    });
+
+    it('gives staff who are also GMs one menu holding both', async () => {
+      const { user } = setupUser();
+      render(
+        <Wrapper store={storeFor(makeAccount({ is_staff: true, is_gm: true }))}>
+          <Header />
+        </Wrapper>
+      );
+
+      await user.click(screen.getByRole('button', { name: /gming/i }));
+
+      expect(screen.getByRole('link', { name: 'Dashboard' })).toBeInTheDocument();
+      expect(screen.getByRole('link', { name: 'Story Workload' })).toBeInTheDocument();
+      expect(screen.getAllByRole('button', { name: /gming/i })).toHaveLength(1);
+    });
+
+    it('has no loose Story Workload link in the top bar for staff', () => {
+      render(
+        <Wrapper store={storeFor(makeAccount({ is_staff: true }))}>
+          <Header />
+        </Wrapper>
+      );
+
+      // Closed menu: the only staff door in the bar is the Staff link itself.
+      expect(screen.queryByRole('link', { name: 'Story Workload' })).not.toBeInTheDocument();
+      expect(screen.getByRole('link', { name: /^staff/i })).toHaveAttribute('href', '/staff');
+    });
+
+    it('mirrors the group and its count in the phone sheet', async () => {
+      const { user } = setupUser();
+      mockAttention.mockReturnValue({ data: { total: 3 } });
+      render(
+        <Wrapper store={storeFor(makeAccount({ is_gm: true, is_staff: true }))}>
+          <Header />
+        </Wrapper>
+      );
+
+      await user.click(screen.getByRole('button', { name: /open menu/i }));
+
+      const sheet = screen.getByRole('dialog');
+      expect(sheet).toHaveTextContent('GMing (3)');
+      expect(sheet).toHaveTextContent('Dashboard');
+      expect(sheet).toHaveTextContent('Story Workload');
+      expect(sheet).not.toHaveTextContent('Crossover');
+    });
   });
 
   // ---------------------------------------------------------------------------

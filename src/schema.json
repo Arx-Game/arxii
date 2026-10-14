@@ -16049,6 +16049,21 @@ paths:
               schema:
                 $ref: '#/components/schemas/GMApplicationDetail'
           description: ''
+  /api/gm/attention/:
+    get:
+      operationId: gm_attention_retrieve
+      description: Return the counts and their total.
+      tags:
+      - gm
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GMAttention'
+          description: ''
   /api/gm/catalog-suggestions/:
     get:
       operationId: gm_catalog_suggestions_list
@@ -56607,6 +56622,34 @@ components:
       - character_key
       - id
       - status
+    GMAttention:
+      type: object
+      description: |-
+        Read-only view of ``world.gm.types.GMAttention`` (#4188): everything
+        waiting on the requesting GM, as counts, plus their ``total``.
+      properties:
+        story_offers:
+          type: integer
+        crossover_invites:
+          type: integer
+        sheet_update_requests:
+          type: integer
+        claims_to_approve:
+          type: integer
+        my_claims:
+          type: integer
+        session_requests:
+          type: integer
+        total:
+          type: integer
+      required:
+      - claims_to_approve
+      - crossover_invites
+      - my_claims
+      - session_requests
+      - sheet_update_requests
+      - story_offers
+      - total
     GMEvidenceSummary:
       type: object
       description: Read-only view of ``world.gm.types.GMEvidenceSummary`` for staff
