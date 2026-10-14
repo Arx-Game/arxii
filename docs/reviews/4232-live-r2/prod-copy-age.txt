@@ -1,5 +1,0 @@
-Age of the production copy (arxiidev on the db host), read 2026-10-14 ~02:48Z:
-select (pg_stat_file('base/' || oid || '/PG_VERSION')).modification from pg_database where datname='arxiidev'
-  -> 2026-10-13 13:32:19+00 (the database was created by the pull at that time)
-select max(applied) from django_migrations  -> 2026-10-12 18:06:48+00 (production's last migration row as dumped)
-The pull (infra/scripts/pull_prod_db.sh via just pull-prod) restores the newest object matching arxii-<timestamp>.sql.gz under db/ in the backups bucket; the pull's own log naming that object was not kept, so the object is identified here by the copy's creation time.
