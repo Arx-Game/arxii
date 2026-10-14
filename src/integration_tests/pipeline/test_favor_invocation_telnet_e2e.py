@@ -102,7 +102,7 @@ class FavorInvocationTelnetTests(TestCase):
         ensure_being_modifier_targets(self.ombrin)
 
         self.room = ObjectDBFactory(db_key="Shrine", db_typeclass_path="typeclasses.rooms.Room")
-        self.scene = SceneFactory(location=self.room, is_active=True)
+        self.scene = SceneFactory(room=self.room, is_active=True)
         self.ysmay = self._pc("Ysmay")
         self.hobb = self._pc("Hobb")
         DevotionStandingFactory(
