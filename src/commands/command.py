@@ -82,6 +82,30 @@ class ArxCommand(Command):
     account: Any = None
     raw_string: str | None = None
     obj: Any | None = None
+    # The ``/switch`` words between the command name and its arguments, set by
+    # ``parse`` (#4232 fix-on-sight). Evennia's base ``Command`` never parses
+    # them (only its ``MuxCommand`` does), so every subclass here that read
+    # ``self.switches`` raised on a real telnet line like ``ceremony/wedding a,b``
+    # while its tests, which set the attribute by hand, stayed green.
+    switches: list[str] = []  # replaced per instance by parse()
+
+    def parse(self) -> None:
+        """Split a leading ``/switch[/switch...]`` off the arguments.
+
+        Evennia hands ``ceremony/wedding Rowan,Lisbet`` to the command keyed
+        ``ceremony`` with ``args`` of ``/wedding Rowan,Lisbet``. The switches
+        land in ``self.switches`` and ``self.args`` keeps only the arguments,
+        the shape ``MuxCommand`` gives and every subclass expects.
+        """
+        super().parse()
+        args = self.args or ""
+        switches: list[str] = []
+        if args.startswith("/"):
+            head, _, rest = args[1:].partition(" ")
+            switches = [switch for switch in head.split("/") if switch]
+            args = rest
+        self.switches = switches
+        self.args = args
 
     def msg(self, *args: object, **kwargs: Any) -> None:
         """Send a message to the caller.
