@@ -979,6 +979,7 @@ class BeatInvocationSerializer(serializers.Serializer):
     roller_rank = serializers.CharField(allow_null=True)
     target_rank = serializers.CharField(allow_null=True)
     rank_difference = serializers.IntegerField()
+    rank_difference_without_bonus = serializers.IntegerField(allow_null=True)
 
 
 class ResolvedBeatSerializer(serializers.Serializer):

@@ -116,9 +116,15 @@ def format_invocation_breakdown(invocation: BeatInvocation) -> str:
     """
     ranks = ""
     if invocation.roller_rank and invocation.target_rank:
+        without = ""
+        if (
+            invocation.rank_difference_without_bonus is not None
+            and invocation.rank_difference_without_bonus != invocation.rank_difference
+        ):
+            without = f", {invocation.rank_difference_without_bonus} without the bonus"
         ranks = (
             f", rank {invocation.roller_rank} against {invocation.target_rank}"
-            f" (rank difference {invocation.rank_difference})"
+            f" (rank difference {invocation.rank_difference}{without})"
         )
     bonus = f" + {invocation.bonus} {invocation.bonus_label}" if invocation.bonus else " (no bonus)"
     return (
@@ -141,4 +147,18 @@ def beat_invocation(outcome: InvocationOutcome, check_result: CheckResult) -> Be
         roller_rank=check_result.roller_rank.name if check_result.roller_rank else None,
         target_rank=check_result.target_rank.name if check_result.target_rank else None,
         rank_difference=check_result.rank_difference,
+        rank_difference_without_bonus=_rank_difference_without(outcome, check_result),
     )
+
+
+def _rank_difference_without(outcome: InvocationOutcome, check_result: CheckResult) -> int | None:
+    """The check's rank difference had the bonus not been added, or None when the
+    ranks are unknown (a forced or synthesized result)."""
+    from world.traits.models import CheckRank  # noqa: PLC0415
+
+    if check_result.roller_rank is None or check_result.target_rank is None:
+        return None
+    rank = CheckRank.get_rank_for_points(check_result.total_points - outcome.bonus)
+    if rank is None:
+        return None
+    return rank.rank - check_result.target_rank.rank

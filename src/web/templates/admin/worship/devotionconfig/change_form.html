@@ -6,9 +6,11 @@ up to while typing them (the GlimpseTagAdmin precedent, magic/admin.py).
 {% endcomment %}
 {% block after_related_objects %}
 {{ block.super }}
+<div class="help">Rule: an invocation bonus changes a result only when it moves the total across
+a rank threshold.</div>
 {% if difficulty_rows %}
 <fieldset class="module aligned" id="devotion-config-context">
-  <h2>Resulting invocation difficulty <span class="help">(read-only; the +15 modifier is an example)</span></h2>
+  <h2>Resulting invocation difficulty (read-only; the +15 modifier is an example)</h2>
   <table>
     <thead>
       <tr>{% for header in difficulty_headers %}<th scope="col">{{ header }}</th>{% endfor %}</tr>

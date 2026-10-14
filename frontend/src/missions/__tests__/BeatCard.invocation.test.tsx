@@ -103,6 +103,7 @@ const RESOLVED: ResolvedBeat = {
     roller_rank: 'Expert',
     target_rank: 'Expert',
     rank_difference: 0,
+    rank_difference_without_bonus: -1,
   },
 };
 
@@ -197,5 +198,8 @@ describe('BeatCard Call on favor', () => {
     expect(breakdown).toHaveTextContent('+10');
     expect(breakdown).toHaveTextContent('58, rank Expert');
     expect(breakdown).toHaveTextContent('rank Expert');
+    expect(screen.getByTestId('invocation-rank-difference')).toHaveTextContent(
+      '0 (would be -1 without the bonus)'
+    );
   });
 });

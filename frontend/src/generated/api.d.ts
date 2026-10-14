@@ -27474,6 +27474,7 @@ export interface components {
       roller_rank: string | null;
       target_rank: string | null;
       rank_difference: number;
+      rank_difference_without_bonus: number | null;
     };
     /**
      * @description * `situation` - Situation

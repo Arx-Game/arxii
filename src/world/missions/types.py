@@ -244,6 +244,9 @@ class BeatInvocation:
     roller_rank: str | None
     target_rank: str | None
     rank_difference: int
+    #: The rank difference the check would have had without the bonus, so the
+    #: player sees whether the bonus moved the total across a rank threshold.
+    rank_difference_without_bonus: int | None = None
 
 
 @dataclass

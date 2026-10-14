@@ -694,15 +694,15 @@ class ChosenFavorConfig(SharedMemoryModel):
     earn_bonus_percent = models.PositiveIntegerField(
         default=100,
         help_text=(
-            "Added to the 100% base earning rate for a character whose active patronage "
-            "is this being (#4333). Adds with favor earning modifiers."
+            "Added to the 100% base rate for a character whose active patronage is this "
+            "being. Adds with favor earning modifiers."
         ),
     )
     invocation_ease_points = models.PositiveIntegerField(
         default=30,
         help_text=(
-            "Difficulty points eased when a character invokes their own patron (#4333); "
-            "15 points is one band. Adds with favor eases and favor invocation modifiers."
+            "Points eased when invoking the character's own patron (30 is two bands). "
+            "Adds with favor eases and favor invocation modifiers."
         ),
     )
 

@@ -44962,6 +44962,9 @@ components:
           nullable: true
         rank_difference:
           type: integer
+        rank_difference_without_bonus:
+          type: integer
+          nullable: true
       required:
       - bonus
       - bonus_label
@@ -44970,6 +44973,7 @@ components:
       - outcome_line
       - points_before_bonus
       - rank_difference
+      - rank_difference_without_bonus
       - roller_rank
       - target_rank
       - total_points

@@ -53,7 +53,13 @@ export function InvocationResult({ invocation }: { invocation: BeatInvocation })
             <dt>Difficulty</dt>
             <dd className="text-right">rank {invocation.target_rank}</dd>
             <dt>Rank difference</dt>
-            <dd className="text-right">{invocation.rank_difference}</dd>
+            <dd className="text-right" data-testid="invocation-rank-difference">
+              {invocation.rank_difference}
+              {invocation.rank_difference_without_bonus != null &&
+              invocation.rank_difference_without_bonus !== invocation.rank_difference
+                ? ` (would be ${invocation.rank_difference_without_bonus} without the bonus)`
+                : ''}
+            </dd>
           </>
         ) : null}
       </dl>

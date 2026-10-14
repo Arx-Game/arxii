@@ -140,7 +140,8 @@ class SoloMissionInvocationTests(MissionInvocationBase):
         rolls = {o.option_id: o.rolls_check for o in beat.options}
         self.assertEqual(rolls, {self.option.pk: True, self.branch.pk: False})
 
-        expert = CheckRankFactory(name="Expert", min_points=50)
+        CheckRankFactory(name="Competent", rank=2, min_points=25)
+        expert = CheckRankFactory(name="Expert", rank=3, min_points=50)
         option_results = []
 
         def _option_check(character, check_type, **kwargs):
@@ -177,6 +178,8 @@ class SoloMissionInvocationTests(MissionInvocationBase):
         self.assertEqual(invocation.bonus_label, "Ombrin's favor (invocation: Success)")
         self.assertEqual((invocation.points_before_bonus, invocation.total_points), (48, 58))
         self.assertEqual((invocation.roller_rank, invocation.target_rank), ("Expert", "Expert"))
+        # 48 alone is Competent: the bonus moved the total across the Expert threshold.
+        self.assertEqual(invocation.rank_difference_without_bonus, -1)
 
         row = FavorInvocation.objects.get(character_sheet=self.sheet)
         self.assertEqual((row.mission_instance, row.bonus), (self.instance, 10))
@@ -191,7 +194,7 @@ class SoloMissionInvocationTests(MissionInvocationBase):
         self.assertIn(
             f"{invocation.call_line}\n{invocation.outcome_line}\n"
             "Perception + Investigation: 48 + 10 Ombrin's favor (invocation: Success) = 58, "
-            "rank Expert against Expert (rank difference 0).",
+            "rank Expert against Expert (rank difference 0, -1 without the bonus).",
             bodies,
         )
 
