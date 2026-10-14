@@ -412,7 +412,7 @@ def _unmask(task: OrgTask, fulfillment: TaskFulfillment) -> list[str]:
     """Pierce the mark's mask: mint a PERSONA_LINK clue to the handler."""
     from world.clues.constants import ClueResolution, ClueTargetKind  # noqa: PLC0415
     from world.clues.models import Clue  # noqa: PLC0415
-    from world.clues.services import acquire_clue, grant_clue_target  # noqa: PLC0415
+    from world.clues.services import find_clue  # noqa: PLC0415
     from world.roster.models import RosterEntry  # noqa: PLC0415
     from world.scenes.constants import PersonaType  # noqa: PLC0415
 
@@ -440,8 +440,7 @@ def _unmask(task: OrgTask, fulfillment: TaskFulfillment) -> list[str]:
     )
     entry = RosterEntry.objects.filter(character_sheet=fulfillment.handler.character_sheet).first()
     if entry is not None:
-        acquire_clue(entry, clue)
-        grant_clue_target(clue, entry)
+        find_clue(entry, clue)
     return [f"The mask slips: you now know who {target.name} really is."]
 
 

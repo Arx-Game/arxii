@@ -7,6 +7,7 @@ from world.assets.factories import NPCAssetFactory
 from world.assets.models import NPCAsset
 from world.checks.factories import CheckTypeFactory
 from world.checks.test_helpers import force_check_outcome
+from world.clues.constants import ClueResolution
 from world.locations.factories import LocationOwnershipFactory
 from world.roster.factories import RosterEntryFactory, RosterTenureFactory
 from world.scenes.factories import PersonaFactory
@@ -119,6 +120,32 @@ class FlipTests(CounterplayTestBase):
         self._move(self.handler)
         collected = collect_harvest(self.post, self.handler)
         self.assertEqual(collected, clue)
+        self.assertTrue(
+            SecretKnowledge.objects.filter(
+                roster_entry=handler_entry, secret=clue.target_secret
+            ).exists()
+        )
+
+    def test_research_mode_planted_clue_still_collects_like_a_real_catch(self):
+        """The handler must not tell a red herring from a catch by its mode (#4331)."""
+        with force_check_outcome(self.win):
+            flip_listener(self.actor, self.post)
+        clue = plant_red_herring(
+            self.actor,
+            self.post,
+            subject_sheet=RosterEntryFactory().character_sheet,
+            content="PLACEHOLDER they meet a foreign paymaster at dusk.",
+        )
+        clue.resolution_mode = ClueResolution.RESEARCH
+        clue.save(update_fields=["resolution_mode"])
+        self.post.threshold = 1
+        self.post.save(update_fields=["threshold"])
+        listener_sweep()
+        handler_entry = RosterEntryFactory(character_sheet=self.handler.character_sheet)
+        self._move(self.handler)
+
+        collect_harvest(self.post, self.handler)
+
         self.assertTrue(
             SecretKnowledge.objects.filter(
                 roster_entry=handler_entry, secret=clue.target_secret

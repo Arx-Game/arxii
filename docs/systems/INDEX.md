@@ -2133,7 +2133,9 @@ resolve them automatically or through a collaborative **research project**.
   section. Frontend: the shared `AuthorClueDialog`
   (`frontend/src/clues/components/`), reached from `PlaceClueDialog`'s "New clue…" and
   `StaffSecretsPanel`'s "Author a clue to this secret".
-- **Key functions (`world/clues/services.py`, `research.py`):** `acquire_clue`,
+- **Key functions (`world/clues/services.py`, `research.py`):** `find_clue(roster_entry, clue)`
+  (#4331, the one "found a clue" entry point: `acquire_clue` + `grant_clue_target` when AUTOMATIC), `acquire_clue`
+  (hold-only primitive),
   `target_already_known`, `clue_target_kind_allowed(account, target_kind)`
   (#3566 - the clue-authoring policy as one callable: staff → anything,
   SENIOR+ GM required otherwise, SECRET staff-only; shared by `author_clue`

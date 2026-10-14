@@ -4,15 +4,16 @@ When a ceremony secretly serves the officiant's hidden god, perceptive
 witnesses may sense the rite's forms are subtly wrong. Eligibility routes
 through the existing consent register (the ``secret-investigation`` category,
 antagonism tree) — mirroring ``accusation_permitted`` — then a hidden
-Perception/Investigation ("Search") roll decides; success mints a clue against
-the officiant's worship Secret. Failures are silent.
+Perception/Investigation ("Search") roll decides; success mints a RESEARCH clue
+against the officiant's worship Secret: a hunch to investigate (#4331), not a
+reveal. Failures are silent.
 """
 
 import logging
 from typing import TYPE_CHECKING
 
 from world.ceremonies.models import Ceremony, get_ceremony_config
-from world.clues.constants import ClueTargetKind
+from world.clues.constants import ClueResolution, ClueTargetKind
 from world.clues.models import Clue
 
 if TYPE_CHECKING:
@@ -104,7 +105,7 @@ def _observer_senses_twist(  # noqa: PLR0913
 ) -> bool:
     """One witness: consent gate → hidden Search roll → clue mint on success."""
     from world.checks.services import perform_check_with_modifiers  # noqa: PLC0415
-    from world.clues.services import acquire_clue  # noqa: PLC0415
+    from world.clues.services import find_clue  # noqa: PLC0415
     from world.roster.models import RosterEntry  # noqa: PLC0415
 
     if not _may_investigate(observer_sheet, officiant_sheet):
@@ -115,16 +116,25 @@ def _observer_senses_twist(  # noqa: PLR0913
     entry = RosterEntry.objects.filter(character_sheet=observer_sheet).first()
     if entry is None:
         return False
-    clue, _ = Clue.objects.get_or_create(
+    # A hunch that something is off, not proof (#4331): a RESEARCH lead the witness
+    # can investigate, never an on-the-spot reveal of the secret. The mode is part of
+    # the lookup, so a leak clue stored AUTOMATIC before this fix is left alone and a
+    # RESEARCH one is used (or created) beside it.
+    clue = Clue.objects.filter(
         target_kind=ClueTargetKind.SECRET,
         target_secret=worship_secret,
-        defaults={
-            "name": "Something off about the rite",
-            "description": (
+        resolution_mode=ClueResolution.RESEARCH,
+    ).first()
+    if clue is None:
+        clue = Clue.objects.create(
+            target_kind=ClueTargetKind.SECRET,
+            target_secret=worship_secret,
+            resolution_mode=ClueResolution.RESEARCH,
+            name="Something off about the rite",
+            description=(
                 "PLACEHOLDER — the liturgy's forms bent subtly away from the "
                 "god they were spoken for."
             ),
-        },
-    )
-    acquire_clue(entry, clue)
+        )
+    find_clue(entry, clue)
     return True

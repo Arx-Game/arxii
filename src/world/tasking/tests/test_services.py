@@ -14,7 +14,12 @@ from world.assets.constants import AssetStatus
 from world.assets.factories import CluePoolEntryFactory, CluePoolFactory, NPCAssetFactory
 from world.checks.factories import ConsequenceEffectFactory, ConsequenceFactory
 from world.checks.test_helpers import force_check_outcome
+from world.clues.constants import ClueResolution
+from world.clues.factories import ClueFactory
 from world.clues.models import CharacterClue
+from world.codex.constants import CodexKnowledgeStatus
+from world.codex.factories import CodexEntryFactory
+from world.codex.models import CharacterCodexKnowledge
 from world.currency.services import get_or_create_purse
 from world.roster.factories import RosterEntryFactory
 from world.societies.factories import OrganizationFactory, OrganizationMembershipFactory
@@ -101,6 +106,39 @@ class ResolveTaskTests(TaskingServiceTestBase):
         self.assertEqual(get_or_create_purse(self.handler.character_sheet).balance, 100)
         self.assertTrue(
             CharacterClue.objects.filter(roster_entry=roster_entry, clue=entry.clue).exists()
+        )
+
+    def _resolve_with_pool_clue(self, resolution_mode, entry):
+        roster_entry = RosterEntryFactory(character_sheet=self.handler.character_sheet)
+        clue_pool = CluePoolFactory()
+        CluePoolEntryFactory(
+            pool=clue_pool,
+            clue=ClueFactory(target_codex_entry=entry, resolution_mode=resolution_mode),
+        )
+        TaskOutcomeRouteFactory(
+            template=self.template,
+            outcome_tier=self.success,
+            clue_pool=clue_pool,
+            report_template="{agent} pulled off {task} against {target}.",
+        )
+        self._assign()
+        with force_check_outcome(self.success):
+            resolve_task(self.task)
+        return roster_entry
+
+    def test_automatic_pool_clue_leaves_the_handler_knowing_the_entry(self):
+        """An AUTOMATIC clue from a route's pool is resolved, not just held (#4331)."""
+        entry = CodexEntryFactory(learn_threshold=5)
+        roster_entry = self._resolve_with_pool_clue(ClueResolution.AUTOMATIC, entry)
+        knowledge = CharacterCodexKnowledge.objects.get(roster_entry=roster_entry, entry=entry)
+        self.assertEqual(knowledge.status, CodexKnowledgeStatus.KNOWN)
+
+    def test_research_pool_clue_is_only_held(self):
+        entry = CodexEntryFactory(learn_threshold=5)
+        roster_entry = self._resolve_with_pool_clue(ClueResolution.RESEARCH, entry)
+        self.assertTrue(CharacterClue.objects.filter(roster_entry=roster_entry).exists())
+        self.assertFalse(
+            CharacterCodexKnowledge.objects.filter(roster_entry=roster_entry, entry=entry)
         )
 
     def test_failure_with_no_route_pays_nothing_and_fails(self):

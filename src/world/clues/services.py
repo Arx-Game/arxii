@@ -40,6 +40,26 @@ def acquire_clue(roster_entry: RosterEntry, clue: Clue) -> CharacterClue:
     return held
 
 
+def find_clue(roster_entry: RosterEntry, clue: Clue) -> CharacterClue:
+    """A character finds a clue: hold it, and resolve it on the spot if AUTOMATIC (#4331).
+
+    The one entry point every acquisition surface calls when a clue reaches a
+    character (room search, triggers, visions, spy payouts, listener rewards, asset
+    intel, org-task clue pools, the twisted-rite leak). An AUTOMATIC clue teaches its
+    target the moment it is found (``grant_clue_target``); a RESEARCH clue is only
+    held, as a lead to investigate. Holding alone is ``acquire_clue``'s job, which
+    stays the primitive for the paths that deliberately hand over a lead only
+    (research evidence, the accusation counter-clue).
+
+    A surface that reveals regardless of the clue's mode (an NPC's explicit
+    ``CLUE_REVEAL`` offer, a stake reward line) calls ``grant_clue_target`` itself.
+    """
+    held = acquire_clue(roster_entry, clue)
+    if clue.resolution_mode == ClueResolution.AUTOMATIC:
+        grant_clue_target(clue, roster_entry)
+    return held
+
+
 # PLACEHOLDER magnitude (#1825): at most this many hub placements per counter-clue.
 ACCUSATION_CLUE_HUB_CAP = 3
 
@@ -392,9 +412,7 @@ def search_room(
         )
         if result.outcome is None or result.outcome.success_level < 0:
             continue
-        acquire_clue(roster_entry, clue)
-        if clue.resolution_mode == ClueResolution.AUTOMATIC:
-            grant_clue_target(clue, roster_entry)
+        find_clue(roster_entry, clue)
         found.append(clue)
     return found
 
@@ -504,9 +522,7 @@ def _grant_triggered_clues(
                 context = _predicate_context(character)
             if not evaluate(trigger.eligibility_rule, context):
                 continue
-        acquire_clue(roster_entry, clue)
-        if clue.resolution_mode == ClueResolution.AUTOMATIC:
-            grant_clue_target(clue, roster_entry)
+        find_clue(roster_entry, clue)
         _notify_clue_found(roster_entry, clue)
         granted.append(clue)
     return granted
