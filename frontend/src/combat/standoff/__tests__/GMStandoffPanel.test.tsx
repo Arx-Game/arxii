@@ -104,7 +104,7 @@ describe('GMStandoffPanel', () => {
         cause_fires: true,
         cause_reason: 'provoked',
         pending_prompt_id: 5,
-        proposal_reason: 'critical failure on a press',
+        proposal_reason: 'Critical failure on a press.',
         effective_party_force: 20,
       })
     );
@@ -112,7 +112,7 @@ describe('GMStandoffPanel', () => {
     expect(screen.getByText('emboldened')).toBeInTheDocument();
     expect(screen.getByText('fires: provoked')).toBeInTheDocument();
     expect(
-      screen.getByText(/critical failure on a press\. Decide it in the GM prompts/)
+      screen.getByText(/Critical failure on a press\. Decide it in the GM prompts/)
     ).toBeInTheDocument();
     expect(screen.queryByText(/Party outweighs them/)).toBeNull();
   });

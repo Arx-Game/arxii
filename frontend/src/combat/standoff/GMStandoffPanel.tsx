@@ -210,7 +210,7 @@ function GroupBox({ encounterId, group }: { encounterId: number; group: GMGroupV
 
       {group.pending_prompt_id !== null && (
         <p className="rounded-md border border-violet-500/40 bg-violet-500/10 px-2 py-1 text-xs">
-          The cause fires: {group.proposal_reason}. Decide it in the GM prompts.
+          The cause fires: {group.proposal_reason} Decide it in the GM prompts.
         </p>
       )}
 

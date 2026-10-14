@@ -306,7 +306,7 @@ describe('GMPromptRow', () => {
         standoff_group: 3,
         standoff_group_name: 'Saltreed sellswords',
         standoff_cause_label: 'Orders',
-        standoff_reason: 'critical failure on a press',
+        standoff_reason: 'Critical failure on a press.',
       });
     }
 
@@ -316,7 +316,7 @@ describe('GMPromptRow', () => {
       });
       expect(screen.getByText('Saltreed sellswords: cause fires')).toBeInTheDocument();
       expect(
-        screen.getByText(/Cause: Orders\. Reason: critical failure on a press\./)
+        screen.getByText(/Cause: Orders\. Reason: Critical failure on a press\.$/)
       ).toBeInTheDocument();
       expect(screen.getByRole('button', { name: 'Confirm: they attack' })).toBeEnabled();
       expect(screen.getByRole('button', { name: 'Hold for one action' })).toBeEnabled();

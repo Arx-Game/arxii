@@ -72,7 +72,7 @@ function StandoffCausePromptRow({ prompt, sceneId }: { prompt: GMPrompt; sceneId
       </div>
       <div className="font-semibold">{prompt.standoff_group_name}: cause fires</div>
       <div className="text-xs text-muted-foreground">
-        Cause: {prompt.standoff_cause_label}. Reason: {prompt.standoff_reason}.
+        Cause: {prompt.standoff_cause_label}. Reason: {prompt.standoff_reason}
       </div>
       <div className="flex flex-wrap gap-2">
         <Button
