@@ -55,6 +55,19 @@ class Placement:
     label: str
     count: int
     opens_as_standoff: bool | None
+    url: str = ""
+    edited: bool = False
+
+
+def _line_edited(line: object) -> bool:
+    """True when a placement changes anything over its template (#4361)."""
+    return bool(
+        line.cause_override
+        or line.cause_margin_override is not None
+        or line.organization_id is not None
+        or line.drive_edits.exists()
+        or line.faction_rule_suppressions.exists()
+    )
 
 
 def drive_context(template: CreatureTemplate) -> dict[int, DriveContext]:
@@ -142,38 +155,65 @@ def grade_preview(template: CreatureTemplate, level: int) -> list[PreviewLine]:
     return lines
 
 
-def cause_check(template: CreatureTemplate, level: int, party: int) -> str:
-    """A plain-text reading of the cause against an example party."""
-    if template.cause == CauseKind.NONE:
+def cause_check(
+    template: CreatureTemplate,
+    level: int,
+    party: int,
+    *,
+    cause: str | None = None,
+    margin: int | None = None,
+) -> str:
+    """A plain-text reading of the cause against an example party.
+
+    ``cause`` and ``margin`` default to the template's own; the Placement page passes a
+    placement's overrides (#4361).
+    """
+    cause = template.cause if cause is None else cause
+    margin_percent = template.cause_margin_percent if margin is None else margin
+    if cause == CauseKind.NONE:
         return "No cause: they never start a fight on their own."
     weight_row = OpponentTierTemplate.objects.filter(tier=template.tier).first()
     weight = weight_row.force_weight_percent if weight_row is not None else _PERCENT
-    margin = _PERCENT + template.cause_margin_percent
+    margin_factor = _PERCENT + margin_percent
     member_force = level * weight / _PERCENT
     party_force = party * level
     held_off = 0
     if member_force > 0:
         # The party holds them back while party * 100 > group * margin.
-        held_off = max(0, int((party_force * _PERCENT - 1) // (member_force * margin)))
+        held_off = max(0, int((party_force * _PERCENT - 1) // (member_force * margin_factor)))
     text = (
-        f"With margin {template.cause_margin_percent}, {party} level {level} characters hold "
+        f"With margin {margin_percent}, {party} level {level} characters hold "
         f"back up to {held_off} of them at level {level}; any more and the cause fires."
     )
-    if template.cause == CauseKind.ORDERS:
+    if cause == CauseKind.ORDERS:
         text += " Any botched press or terms against them also counts as a provocation."
     return text
 
 
 def placements(template: CreatureTemplate) -> list[Placement]:
-    """The beat and mission option lines that spawn this creature."""
+    """The beat and mission option lines that spawn this creature, linked to their pages."""
+    from django.urls import reverse  # noqa: PLC0415
+
     rows = [
-        Placement(f"Beat: {line.beat}", line.count, line.opens_as_standoff)
+        Placement(
+            f"Beat: {line.beat}",
+            line.count,
+            line.opens_as_standoff,
+            url=reverse("admin_placement_beat", args=[line.pk]),
+            edited=_line_edited(line),
+        )
         for line in BeatOpponentLine.objects.filter(creature_template=template).select_related(
             "beat"
         )
     ]
     rows.extend(
-        Placement(f"Mission option: {line.option}", line.count, None)
+        Placement(
+            f"Mission option: {line.option}",
+            line.count,
+            None,
+            url=reverse("admin_placement_mission", args=[line.pk]),
+            edited=_line_edited(line),
+        )
         for line in MissionOptionOpponentLine.objects.filter(
             creature_template=template
         ).select_related("option")

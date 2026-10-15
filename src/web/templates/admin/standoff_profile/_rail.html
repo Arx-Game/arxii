@@ -1,8 +1,27 @@
+{% load standoff_admin_tags %}
 {% comment %}
 The context rail (#4354): read-only, computed from the saved rows. The grade preview
 and cause check take an example level and party size from the query string, so the
 author can try the creature against a different party without saving anything.
 {% endcomment %}
+<div class="module">
+  <h2>Also applies (inherited)</h2>
+  {% if inherited %}
+  <table class="tuning-table sp-rail-table">
+    <tbody>
+      {% for entry in inherited %}
+      <tr><td>{{ entry.rule|faction_rule_label }}</td>
+        <td class="sp-src">{{ entry.source }}</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  <p class="sp-rail-note">Edit them on their own pages. A placement can switch any of them off.</p>
+  {% else %}
+  <p class="sp-rail-note">No affiliation rules: set an affiliation to inherit its organization's,
+    its parents' and its society's faction rules.</p>
+  {% endif %}
+</div>
+
 <div class="module">
   <h2>Grade preview</h2>
   <form method="get" class="sp-preview-form">
@@ -38,7 +57,7 @@ author can try the creature against a different party without saving anything.
   {% if placements %}
   <ul class="sp-placements">
     {% for p in placements %}
-    <li>{{ p.label }} &middot; x{{ p.count }}{% if p.opens_as_standoff %} &middot; opens as a standoff{% endif %}</li>
+    <li><a href="{{ p.url }}">{{ p.label }}</a> &middot; x{{ p.count }}{% if p.opens_as_standoff %} &middot; opens as a standoff{% endif %}{% if p.edited %} &middot; edits here{% endif %}</li>
     {% endfor %}
   </ul>
   {% else %}

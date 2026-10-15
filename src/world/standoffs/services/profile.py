@@ -85,6 +85,56 @@ def _societies(chain: list[Organization]) -> list[Society]:
     return societies
 
 
+def affiliation_rules(
+    organization: Organization | None, first_level: int = TEMPLATE_LEVEL + 1
+) -> list[InheritedRule]:
+    """The rules an affiliation brings: the organization's, each parent's, each society's.
+
+    Most specific first; the organization's own rules sit at ``first_level`` and each
+    step outward adds one.
+    """
+    from world.standoffs.models import FactionRule  # noqa: PLC0415
+
+    chain = org_chain(organization)
+    if not chain:
+        return []
+    rules: list[InheritedRule] = []
+    by_org: dict[int, list[FactionRule]] = {}
+    for rule in FactionRule.objects.filter(
+        organization__in=[org.pk for org in chain]
+    ).select_related("deed_archetype", "drive"):
+        by_org.setdefault(rule.organization_id, []).append(rule)
+    for depth, org in enumerate(chain):
+        rules.extend(
+            InheritedRule(rule, first_level + depth, org.name) for rule in by_org.get(org.pk, [])
+        )
+    societies = _societies(chain)
+    by_society: dict[int, list[FactionRule]] = {}
+    for rule in FactionRule.objects.filter(
+        society__in=[society.pk for society in societies]
+    ).select_related("deed_archetype", "drive"):
+        by_society.setdefault(rule.society_id, []).append(rule)
+    base = first_level + len(chain)
+    for offset, society in enumerate(societies):
+        rules.extend(
+            InheritedRule(rule, base + offset, society.name)
+            for rule in by_society.get(society.pk, [])
+        )
+    return rules
+
+
+def society_rules(society: Society) -> list[InheritedRule]:
+    """A society's own rules, as the Faction Rules page lists them (level 0)."""
+    from world.standoffs.models import FactionRule  # noqa: PLC0415
+
+    return [
+        InheritedRule(rule, TEMPLATE_LEVEL, society.name)
+        for rule in FactionRule.objects.filter(society=society).select_related(
+            "deed_archetype", "drive"
+        )
+    ]
+
+
 def inherited_rules(
     template: CreatureTemplate,
     organization: Organization | None,
@@ -104,27 +154,7 @@ def inherited_rules(
             "deed_archetype", "drive"
         )
     ]
-    chain = org_chain(organization)
-    if chain:
-        by_org: dict[int, list[FactionRule]] = {}
-        for rule in FactionRule.objects.filter(
-            organization__in=[org.pk for org in chain]
-        ).select_related("deed_archetype", "drive"):
-            by_org.setdefault(rule.organization_id, []).append(rule)
-        for depth, org in enumerate(chain, start=1):
-            rules.extend(InheritedRule(rule, depth, org.name) for rule in by_org.get(org.pk, []))
-        societies = _societies(chain)
-        by_society: dict[int, list[FactionRule]] = {}
-        for rule in FactionRule.objects.filter(
-            society__in=[society.pk for society in societies]
-        ).select_related("deed_archetype", "drive"):
-            by_society.setdefault(rule.society_id, []).append(rule)
-        base = len(chain) + 1
-        for offset, society in enumerate(societies):
-            rules.extend(
-                InheritedRule(rule, base + offset, society.name)
-                for rule in by_society.get(society.pk, [])
-            )
+    rules.extend(affiliation_rules(organization))
     return [entry for entry in rules if entry.rule.pk not in suppressed]
 
 

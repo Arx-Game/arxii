@@ -1,0 +1,119 @@
+{% extends "admin/base_site.html" %}
+{% load i18n static standoff_admin_tags %}
+
+{% block title %}{{ title }} | {% translate 'Site administration' %}{% endblock %}
+
+{% block extrastyle %}
+{{ block.super }}
+{% comment %}
+A custom page extending base_site.html gets base.css, dark_mode.css and responsive.css
+only; it links forms.css and widgets.css itself (#3667).
+{% endcomment %}
+<link rel="stylesheet" href="{% static 'admin/css/forms.css' %}">
+<link rel="stylesheet" href="{% static 'admin/css/widgets.css' %}">
+{% endblock %}
+
+{% block extrahead %}
+{{ block.super }}
+<script src="{% url 'admin:jsi18n' %}"></script>
+{{ media }}
+<script src="{% static 'admin/js/builder_formsets.js' %}"></script>
+{% endblock %}
+
+{% block breadcrumbs %}
+<div class="breadcrumbs">
+  <a href="{% url 'admin:index' %}">{% translate 'Home' %}</a>
+  &rsaquo; <a href="{{ owner.changelist_url }}">{{ owner.changelist_label }}</a>
+  &rsaquo; <a href="{{ owner.change_url }}">{{ owner.instance }}</a>
+  &rsaquo; Faction rules
+</div>
+{% endblock %}
+
+{% block content %}
+{% include "admin/tuning/_panel_css.html" %}
+{% include "admin/standoff_profile/_css.html" %}
+<div id="faction-rules-root" class="sp-root">
+  <h1>Faction rules: {{ owner.instance }}</h1>
+  <p class="sp-intro">How this {{ owner.noun }}'s people stand toward particular characters.
+    Every creature affiliated with it (or with an organization below it) carries these rules
+    in a standoff, unless a placement switches one off.</p>
+
+  <div class="sp-columns">
+    <div class="sp-main">
+      <form method="post">
+        {% csrf_token %}
+        <div class="module" id="rules-module">
+          <h2>Rules this {{ owner.noun }} holds</h2>
+          {{ rules.management_form }}
+          {% if rules.non_form_errors %}<p class="errornote">{{ rules.non_form_errors }}</p>{% endif %}
+          <div id="rules-body">
+            {% for f in rules.forms %}
+            <div class="sp-rule">
+              {% for hidden in f.hidden_fields %}{{ hidden }}{% endfor %}
+              <h3>{% if f.instance.pk %}{{ f.instance|faction_rule_label }}{% else %}Faction rule (new){% endif %}
+                {% if f.instance.pk %}<span class="sp-delete">{{ f.DELETE }} Delete</span>{% endif %}</h3>
+              {% if f.non_field_errors %}<p class="errornote">{{ f.non_field_errors }}</p>{% endif %}
+              <table class="tuning-table sp-table">
+                <tbody>
+                  {% for field in f.visible_fields %}{% if field.name != "DELETE" %}
+                  <tr><th>{{ field.label_tag }}</th>
+                    <td>{{ field.errors }}{{ field }}
+                      {% if field.help_text %}<div class="help">{{ field.help_text }}</div>{% endif %}</td></tr>
+                  {% endif %}{% endfor %}
+                </tbody>
+              </table>
+            </div>
+            {% empty %}
+            <p class="sp-rail-note">No rules yet.</p>
+            {% endfor %}
+          </div>
+          <template id="empty-rule-template">
+            <div class="sp-rule">
+              {% for hidden in rules.empty_form.hidden_fields %}{{ hidden }}{% endfor %}
+              <h3>Faction rule (new)</h3>
+              <table class="tuning-table sp-table">
+                <tbody>
+                  {% for field in rules.empty_form.visible_fields %}{% if field.name != "DELETE" %}
+                  <tr><th>{{ field.label_tag }}</th>
+                    <td>{{ field }}
+                      {% if field.help_text %}<div class="help">{{ field.help_text }}</div>{% endif %}</td></tr>
+                  {% endif %}{% endfor %}
+                </tbody>
+              </table>
+            </div>
+          </template>
+          <div class="sp-addrow">
+            <button type="button" class="button" id="add-rule-btn"
+                    data-prefix="{{ rules.prefix }}" data-target="rules-body"
+                    data-template="empty-rule-template">+ Add another faction rule</button>
+          </div>
+        </div>
+
+        <div class="submit-row">
+          <input type="submit" name="save" value="Save" class="default">
+          <input type="submit" name="save_continue" value="Save and continue editing">
+          <a class="button" href="{{ owner.change_url }}">Back to the {{ owner.noun }}</a>
+        </div>
+      </form>
+    </div>
+
+    <aside class="sp-rail">
+      {% include "admin/faction_rules/_rail.html" %}
+    </aside>
+  </div>
+</div>
+
+<script>
+(function () {
+  var formsets = window.arxBuilderFormsets;
+  var btn = document.getElementById("add-rule-btn");
+  if (!btn) { return; }
+  btn.addEventListener("click", function () {
+    var index = formsets.nextFormIndex(btn.dataset.prefix);
+    var node = formsets.cloneFromTemplate(btn.dataset.template, index, "div");
+    document.getElementById(btn.dataset.target).appendChild(node);
+    formsets.announceFormsetAdded(btn.dataset.prefix, node);
+  });
+})();
+</script>
+{% endblock %}

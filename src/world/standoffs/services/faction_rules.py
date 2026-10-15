@@ -190,3 +190,50 @@ def drive_strength_toward(group: StandoffGroup, drive: GroupDrive, sheet: Charac
 def band_shift_toward(group: StandoffGroup, sheet: CharacterSheet) -> int:
     """Difficulty bands the group's faction rules add for this character."""
     return band_shift_from(faction_rule_matches(group, sheet))
+
+
+@dataclass(frozen=True)
+class RuleTest:
+    """One faction rule run against one character, for staff (the Faction Rules page)."""
+
+    rule: FactionRule
+    source: str
+    inherited: bool
+    matched: bool
+    reasons: list[str]
+
+
+def run_rules_against(
+    sheet: CharacterSheet, entries: Sequence[InheritedRule], own_level: int
+) -> list[RuleTest]:
+    """Run each rule against ``sheet`` as presented now and say why it matched.
+
+    Staff-only: the reasons name the hidden reputation tier and the association behind a
+    match (``explain_leaf_for_staff``), which a player never sees. ``own_level`` is the
+    precedence level of the page's own rules; any other level is inherited.
+    """
+    from world.predicates.describe import explain_leaf_for_staff  # noqa: PLC0415
+
+    persona = active_persona_for_sheet(sheet)
+    ctx = CharacterPredicateContext(sheet.character, presented_persona=persona)
+    results: list[RuleTest] = []
+    for entry in entries:
+        rule = entry.rule
+        leaves = matched_leaves(rule.rule, ctx)
+        matched = leaves is not None and (
+            rule.deed_archetype_id is None
+            or _has_common_knowledge_deed(sheet, rule.deed_archetype_id)
+        )
+        reasons = [explain_leaf_for_staff(leaf, persona) for leaf in (leaves or [])]
+        if matched and rule.deed_archetype_id is not None:
+            reasons.append(f"known for {rule.deed_archetype.name} deeds")
+        results.append(
+            RuleTest(
+                rule=rule,
+                source=entry.source,
+                inherited=entry.level != own_level,
+                matched=matched,
+                reasons=reasons if matched else [],
+            )
+        )
+    return results

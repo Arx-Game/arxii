@@ -1,0 +1,59 @@
+{% load standoff_admin_tags %}
+{% comment %}
+The Faction Rules page's rail (#4361): read-only. What the owner inherits from above,
+what its rules reach below, and a staff-only test of every rule against one character.
+{% endcomment %}
+<div class="module">
+  <h2>Inherits from above</h2>
+  {% if inherited %}
+  <table class="tuning-table sp-rail-table">
+    <tbody>
+      {% for entry in inherited %}
+      <tr><td>{{ entry.rule|faction_rule_label }}</td><td class="sp-src">{{ entry.source }}</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="sp-rail-note">Nothing above this {{ owner.noun }} holds a faction rule.</p>
+  {% endif %}
+  <p class="sp-rail-note">Where two rules shift the same thing, the more specific one wins: a
+    creature's own rule beats its organization's, an organization's beats its parent's, and a
+    parent's beats the society's.</p>
+</div>
+
+<div class="module">
+  <h2>Reaches</h2>
+  <p class="sp-rail-note">
+    {{ owner.reach.templates|length }} creature template{{ owner.reach.templates|length|pluralize }} affiliated{% if owner.reach.templates %} ({{ owner.reach.templates|join:", " }}){% endif %}
+    &middot; {{ owner.reach.placements }} placement{{ owner.reach.placements|pluralize }}
+    &middot; {{ owner.reach.child_organizations|length }} {% if owner.noun == "society" %}organization{{ owner.reach.child_organizations|length|pluralize }}{% else %}child organization{{ owner.reach.child_organizations|length|pluralize }}{% endif %}{% if owner.reach.child_organizations %} ({{ owner.reach.child_organizations|join:", " }}){% endif %}
+  </p>
+</div>
+
+<div class="module" id="test-module">
+  <h2>Test a character</h2>
+  <form method="get" class="sp-test-form">
+    {{ test_form.character }}
+    <input type="submit" class="button" value="Test">
+  </form>
+  {% if tested_name and results is None %}
+    <p class="sp-rail-note">No character is called "{{ tested_name }}".</p>
+  {% elif results is not None %}
+    {% if results %}
+    <table class="tuning-table sp-rail-table">
+      <tbody>
+        {% for row in results %}
+        <tr><td>{{ row.rule|faction_rule_label }}{% if row.inherited %} <span class="sp-src">({{ row.source }})</span>{% endif %}</td>
+          <td>{% if row.matched %}<span class="sp-grade sp-ok">matches</span>
+            <span class="sp-src">{{ row.reasons|join:"; " }}</span>{% else %}<span class="sp-src">no match</span>{% endif %}</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <p class="sp-rail-note">There are no rules to test yet.</p>
+    {% endif %}
+  {% endif %}
+  <p class="sp-rail-note">Runs against the face the character presents now, and says why.
+    Staff only: a player sees only their angle, and the revealed text after a successful read,
+    never the tier or the tie.</p>
+</div>

@@ -3,8 +3,11 @@
 from __future__ import annotations
 
 from django import forms
+from django.contrib import admin
+from django.contrib.admin.widgets import AutocompleteSelect
 from django.forms import inlineformset_factory
 
+from web.admin.predicate_widget import PredicateRuleField
 from world.combat.models import CreatureTemplate
 from world.standoffs.models import CreatureDrive, FactionRule
 
@@ -14,7 +17,14 @@ class StandoffProfileForm(forms.ModelForm):
 
     class Meta:
         model = CreatureTemplate
-        fields = ["cause", "cause_margin_percent"]
+        fields = ["cause", "cause_margin_percent", "organization"]
+        labels = {"organization": "Affiliation"}
+        widgets = {
+            "organization": AutocompleteSelect(
+                CreatureTemplate._meta.get_field("organization"),  # noqa: SLF001
+                admin.site,
+            ),
+        }
         help_texts = {
             "cause": (
                 "Why they would start a fight on their own. Predation: they hunt the weak. "
@@ -24,6 +34,10 @@ class StandoffProfileForm(forms.ModelForm):
             "cause_margin_percent": (
                 "How much stronger the party must look before they hold back. 10 means the "
                 "party must outweigh them by a tenth."
+            ),
+            "organization": (
+                "Default organization. Its faction rules, its parents' and its society's apply "
+                "to every placement unless a placement changes it."
             ),
         }
 
@@ -35,18 +49,9 @@ class CreatureDriveForm(forms.ModelForm):
 
 
 class FactionRuleForm(forms.ModelForm):
-    """One faction rule. ``rule`` is the predicate tree, typed as JSON until the predicate
-    widget lands with organization and society rules (a later slice of #4121)."""
+    """One faction rule; ``rule`` is edited with the predicate rule widget (#4361)."""
 
-    rule = forms.JSONField(
-        required=False,
-        widget=forms.Textarea(attrs={"rows": 3, "cols": 60}),
-        help_text=(
-            "The test, as a predicate tree over the acting character "
-            '(for example {"leaf": "has_capability", "params": {"name": "Warding"}}). '
-            "Empty matches everyone."
-        ),
-    )
+    rule = PredicateRuleField(label="Test")
 
     class Meta:
         model = FactionRule
@@ -64,9 +69,6 @@ class FactionRuleForm(forms.ModelForm):
             "angle_text": forms.Textarea(attrs={"rows": 2, "cols": 60}),
             "revealed_text": forms.Textarea(attrs={"rows": 2, "cols": 60}),
         }
-
-    def clean_rule(self) -> dict:
-        return self.cleaned_data.get("rule") or {}
 
 
 CreatureDriveFormSet = inlineformset_factory(

@@ -18,6 +18,8 @@ from world.combat.models import CreatureTemplate
 from world.conditions.models import ConditionStage
 from world.distinctions.models import Distinction
 from world.magic.services.soulfray import is_soulfray_stage
+from world.missions.models import MissionOptionOpponentLine
+from world.societies.models import Organization, Society
 
 
 def builder_url(obj: object) -> str:
@@ -30,7 +32,9 @@ def builder_url(obj: object) -> str:
     slate page keyed by its own pk; ``Distinction`` opens on the Distinction
     Builder (#3675 Task 8); a Soulfray ``ConditionStage`` opens on the Soulfray
     Stage Builder (#4089). Any other condition's stage has no builder. A
-    ``CreatureTemplate`` opens on the Standoff Profile Builder (#4354).
+    ``CreatureTemplate`` opens on the Standoff Profile Builder (#4354). An ``Organization``
+    or ``Society`` opens on its Faction Rules page, and a mission option opponent line on
+    its Placement page (#4361).
     """
     if isinstance(obj, OriginTemplate) and obj.pk:
         return reverse("admin_upbringing_builder", args=[obj.pk])
@@ -42,6 +46,12 @@ def builder_url(obj: object) -> str:
         return reverse("admin_soulfray_builder", args=[obj.pk])
     if isinstance(obj, CreatureTemplate) and obj.pk:
         return reverse("admin_standoff_profile", args=[obj.pk])
+    if isinstance(obj, Organization) and obj.pk:
+        return reverse("admin_faction_rules_organization", args=[obj.pk])
+    if isinstance(obj, Society) and obj.pk:
+        return reverse("admin_faction_rules_society", args=[obj.pk])
+    if isinstance(obj, MissionOptionOpponentLine) and obj.pk:
+        return reverse("admin_placement_mission", args=[obj.pk])
     return ""
 
 
@@ -57,6 +67,10 @@ def builder_label(obj: object) -> str:
         return "Open in Soulfray Stage Builder"
     if isinstance(obj, CreatureTemplate):
         return "Open the Standoff Profile Builder"
+    if isinstance(obj, (Organization, Society)):
+        return "Edit its faction rules"
+    if isinstance(obj, MissionOptionOpponentLine):
+        return "Open the Placement page"
     return ""
 
 

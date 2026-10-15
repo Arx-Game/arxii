@@ -41,6 +41,7 @@ from web.admin.distinction_builder.views import (
     distinction_builder_pick,
     distinction_builder_review,
 )
+from web.admin.faction_rules.views import organization_faction_rules, society_faction_rules
 from web.admin.game_setup_views import game_setup
 from web.admin.seed_views import seed_confirm, seed_run
 from web.admin.soulfray_builder.views import (
@@ -50,6 +51,7 @@ from web.admin.soulfray_builder.views import (
     soulfray_builder_review,
 )
 from web.admin.sphinx_views import sphinx_audit
+from web.admin.standoff_placement.views import beat_line_placement, mission_line_placement
 from web.admin.standoff_profile.views import standoff_profile
 from web.admin.tradition_slate.views import (
     tradition_slate,
@@ -252,6 +254,22 @@ urlpatterns = [
         "_standoff_profile/<int:template_pk>/",
         standoff_profile,
         name="admin_standoff_profile",
+    ),
+    path(
+        "_faction_rules/organization/<int:org_pk>/",
+        organization_faction_rules,
+        name="admin_faction_rules_organization",
+    ),
+    path(
+        "_faction_rules/society/<int:society_pk>/",
+        society_faction_rules,
+        name="admin_faction_rules_society",
+    ),
+    path("_placement/beat/<int:line_pk>/", beat_line_placement, name="admin_placement_beat"),
+    path(
+        "_placement/mission/<int:line_pk>/",
+        mission_line_placement,
+        name="admin_placement_mission",
     ),
     path("_soulfray_builder/", soulfray_builder_index, name="admin_soulfray_builder_index"),
     path(
