@@ -5554,6 +5554,11 @@ captivity's RANSOM ownership).
   recovered on the next tick. `register_kind_handler(..., success_only=True)` marks a
   handler that ignores the tier (buildings, ships, room features, ransom, item
   refinement, org capability), so it never runs for a failure.
+- **Expiry-only kinds (#4333):** `register_expiry_only_kind` marks a SINGLE_THRESHOLD kind
+  (PLEDGE) that is completion-ready only when its time limit passes, never when its
+  threshold is met: its own closing act (a pledge's closing rite) resolves it, by setting
+  RESOLVING and calling `resolve_project` itself. `is_expiry_only_kind`; the registry is in
+  `snapshot_registries` / `restore_registries`.
 - **Propaganda campaigns (#1621):** `PropagandaCampaignTier` + `PropagandaDetails`
   (both inherit `RenownAwardConfig`; live in `world/societies/models.py`),
   `launch_propaganda_campaign` / `resolve_propaganda_project`
@@ -9079,6 +9084,22 @@ lightly-structured freeform RP. Full doc: `docs/systems/worship.md`; model decis
   (returns the FAVOR `ModifierContribution`), `invocation_options`. Wired into mission option
   checks, scene self-checks and scene action requests; `GET /api/worship/beings/
   invocation-options/`; telnet `invoke` and `/invoke <being>[=<line>]`.
+- **Pledges and sacrifices** (#4333 slice 2, ADR-4362): `Pledge` (a being's pledge type:
+  favor target, span in game weeks, a tier 1 or 2 closing rite; credited content),
+  `PledgeDetails` (the PLEDGE `Project`'s sidecar: sheet, pledge, prayer, closing
+  performance, close attempts), `PledgeCredit` (one favor credit with base, earning rate,
+  credited and its deed / sacrifice / rite), `DevotionConfig` deed percents, weekly deed cap
+  and sacrifice value per favor, `CeremonyOffering.being`/`pledge_details`/`facet` (a
+  sacrifice outside a ceremony). Services (`worship/pledge_services.py`): `take_pledge`,
+  `record_pledge_credit` (from `bump_devotion`: progress is favor), `credit_pledge_deed`
+  (from `grant_resonance`), `close_pledge` (one retry after a failed first close; atomic
+  RESOLVING + `resolve_project`), `resolve_pledge_project` (CLOSING award, or on a lapse the
+  Partial Success award at half the target), `service_terms`, `pledge_card`,
+  `holy_sites_here`; `ceremonies.services.sacrifice_items` / `give_up_item`;
+  `perform_worship_rite(..., pay_award=False)`. Actions `pledge_take`, `pledge_close`,
+  `sacrifice`; API `pledges/`, `pledge-cards/`, `beings/{id}/service-terms/`,
+  `beings/holy-site/`; telnet `pledge`, `pledge/close`, `sacrifice`; admin Being Service
+  builder (`/admin/_being_service/<being>/`).
 - **Worship services**: `grant_worship`, `bump_devotion` (+ God's Favorite
   Princess/Prince/Chosen achievement on top-favor reach/tie), `gods_favorite_achievement_for`;
   `mint_worship_secret` (`worship/secrets.py`); `convert_public_worship(sheet, new_being, *,

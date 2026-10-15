@@ -1282,9 +1282,14 @@
 
 ### CeremonyOffering
 **Foreign Keys:**
-  - ceremony -> ceremonies.Ceremony [FK]
+  - ceremony -> ceremonies.Ceremony [FK] (nullable)
+  - being -> worship.WorshippedBeing [FK] (nullable)
+  - pledge_details -> worship.PledgeDetails [FK] (nullable)
+  - facet -> magic.Facet [FK] (nullable)
   - worship_grant -> worship.WorshipGrant [FK] (nullable)
   - offered_by -> scenes.Persona [FK]
+**Pointed to by:**
+  - pledge_credit <- worship.PledgeCredit
 
 ### CeremonySpeech
 **Foreign Keys:**
@@ -1317,8 +1322,10 @@
 ### Service Functions
 - `abandon_ceremony(*, ceremony: world.ceremonies.models.Ceremony) -> world.ceremonies.models.Ceremony - Decision 12: close the rite awarding nothing; frees the location + ghost window.`
 - `execute_will(character_sheet: 'CharacterSheet') -> None - Execute the deceased's estate — the funeral door of #1985.`
+- `favored_facets_by_item(being: 'WorshippedBeing', item_instances: 'list[ItemInstance]') -> 'dict[int, Facet]' - Each of ``item_instances`` carrying a Facet ``being`` favors (BeingFacet),`
 - `finish_ceremony(*, ceremony: world.ceremonies.models.Ceremony, sincere: bool | None = None) -> world.ceremonies.models.Ceremony - Close the rite: quality roll, renown tallies, worship, funeral effects.`
 - `get_ceremony_config() -> world.ceremonies.models.CeremonyConfig - Get-or-create the first CeremonyConfig row (singleton-by-convention).`
+- `give_up_item(instance: 'ItemInstance', being: 'WorshippedBeing', *, facet: 'Facet | None', granted_by: 'CharacterSheet', reason: str) -> world.ceremonies.services.OfferedItem - Destroy an offered item and feed ``being``'s pool from its value.`
 - `open_ceremony(*, officiant_persona: 'Persona', type_key: str, honoree_sheets: 'list[CharacterSheet]', location_profile, being: 'WorshippedBeing | None' = None, scene=None, event=None, title=None, is_staff_fiat: bool = False, worship_rite: 'WorshipRite | None' = None) -> world.ceremonies.models.Ceremony - Open a ceremony at a location, recognizing zero or more honorees.`
 - `open_funeral_for(character_sheet: 'CharacterSheet') -> world.ceremonies.models.Ceremony | None - The OPEN funeral honoring this character, if any (the ghost container).`
 - `pending_conversion_offers_for_account(account: object) -> 'QuerySet[WorshipConversionOffer]' - PENDING conversion offers addressed to any character this account has ever held.`
@@ -1330,6 +1337,7 @@
 - `respond_to_seance_offer(offer: 'SeanceManifestationOffer', *, account: object, accept: bool) -> 'SeanceManifestationOffer' - Accept or decline a pending seance manifestation offer (#2393).`
 - `respond_to_wedding_consent_offer(offer: 'WeddingConsentOffer', *, account: object, accept: bool) -> 'WeddingConsentOffer' - Accept or decline a pending wedding consent offer (#2358).`
 - `revoke_seance_manifestations(ceremony: world.ceremonies.models.Ceremony) -> None - Force-unpuppet any manifested RETIRED honoree when a Seance closes (#2393).`
+- `sacrifice_items(sheet: 'CharacterSheet', item_instances: 'list[ItemInstance]', *, being: 'WorshippedBeing | None' = None) -> 'SacrificeOutcome' - Give items up to a being at its shrine or temple, outside a ceremony.`
 
 
 ## world.character_creation
@@ -1829,6 +1837,7 @@
   - founded_temples <- worship.TempleDedication
   - prayers <- worship.Prayer
   - visions <- worship.Vision
+  - pledges <- worship.PledgeDetails
 
 ### Gender
 **Pointed to by:**
@@ -4175,6 +4184,7 @@
   - favor_invocations <- worship.FavorInvocation
   - rite_performances <- worship.WorshipRitePerformance
   - prayers <- worship.Prayer
+  - pledge_credits <- worship.PledgeCredit
 
 ### ScheduledTaskRecord
 
@@ -4399,6 +4409,7 @@
 - `find_situations(*, query: 'str', risk: 'str | None', actor_level_index: 'int') -> 'DiscoveryResult' - The one catalog search behind telnet ``setsituation find`` and`
 - `get_notification_target_for_gm(gm_profile: 'GMProfile') -> 'CharacterSheet | None' - Resolve the CharacterSheet to use as the notification recipient for a GM.`
 - `gm_application_queue(gm: 'GMProfile') -> 'QuerySet[RosterApplication]' - Pending applications for characters at tables this GM owns.`
+- `gm_attention(account: 'AccountDB') -> 'GMAttention' - Count everything waiting on ``account`` as a GM (#4188).`
 - `gm_evidence_summary(profile: 'GMProfile') -> 'GMEvidenceSummary' - Aggregate a GM's track record for staff reviewing a level change.`
 - `gm_level_index(level: str) -> int - Return ``level``'s position in ``GM_LEVEL_ORDER`` (STARTING=0 .. SENIOR=4).`
 - `gm_max_risk(user) -> 'str' - RenownRisk ceiling for a non-staff author: their GMLevelCap.max_beat_risk.`
@@ -4422,6 +4433,8 @@
 - `submit_distinction_change_request(membership: 'GMTableMembership', *, action: 'str', reasoning: 'str', distinction: 'Distinction | None' = None, character_distinction: 'CharacterDistinction | None' = None) -> 'TableUpdateRequest' - Submit a distinction add/rank-up/remove for table-GM sign-off (#2631).`
 - `submit_profile_text_request(membership: 'GMTableMembership', *, field: 'str', proposed_text: 'str', reasoning: 'str') -> 'TableUpdateRequest' - Submit a profile prose rewrite for the table GM's sign-off (#2631).`
 - `surrender_character_story(gm: 'GMProfile', story: 'Story') -> 'None' - GM surrenders oversight of a story.`
+- `table_update_requests_for(account: 'AccountDB') -> 'QuerySet[TableUpdateRequest]' - The sheet-update requests ``account`` may judge as a table GM.`
+- `table_update_review_pool_q(account: 'AccountDB') -> 'Q' - The review pool (#2631 ruling), as a filter on ``TableUpdateRequest``.`
 - `touch_gm_activity(gm_profile: 'GMProfile') -> 'None' - Stamp ``GMProfile.last_active_at`` to now (#2004).`
 - `transfer_ownership(table: 'GMTable', new_gm: 'GMProfile') -> 'None' - Reassign a table to a different GM. Staff-only action.`
 - `user_breadth_index(user: 'AbstractBaseUser | AnonymousUser') -> 'int' - How far up the GM ladder a web caller may browse (#3564).`
@@ -5926,6 +5939,8 @@
   - source_mission_deed_reward_line -> missions.MissionDeedRewardLine [FK] (nullable)
   - source_character_distinction -> distinctions.CharacterDistinction [FK] (nullable)
   - source_worship_rite_performance -> worship.WorshipRitePerformance [FK] (nullable)
+**Pointed to by:**
+  - pledge_credit <- worship.PledgeCredit
 
 ### ResonanceTier
 
@@ -7861,6 +7876,7 @@
   - ship_upgrade_details <- ships.ShipUpgradeDetails
   - ship_construction_details <- ships.ShipConstructionDetails
   - ship_repair_details <- ships.ShipRepairDetails
+  - pledge_details <- worship.PledgeDetails
   - org_capability_details <- societies.OrganizationCapabilityProjectDetails
 
 ### ProjectKindResonanceAward
@@ -7875,7 +7891,9 @@
 - `get_kind_handler(kind: 'str') -> 'KindHandler' - Return the registered handler for `kind`, or raise LookupError.`
 - `get_tiered_resolver(kind: 'str') -> 'TieredResolver' - Return the registered tiered resolver for ``kind``, or raise LookupError.`
 - `has_kind_handler(kind: 'str') -> 'bool' - True when a handler is registered for ``kind``.`
+- `is_expiry_only_kind(kind: 'str') -> 'bool' - True when ``kind`` was registered with :func:`register_expiry_only_kind`.`
 - `maybe_complete_immediately(project: 'Project') -> 'bool' - Resolve an instant-completion project the moment its threshold is funded (#1500).`
+- `register_expiry_only_kind(kind: 'str') -> 'None' - Mark a SINGLE_THRESHOLD kind as completion-ready only at its time limit.`
 - `register_instant_completion_kind(kind: 'str') -> 'None' - Mark a ProjectKind as completing immediately on threshold (re-register safe).`
 - `register_kind_handler(kind: 'str', handler: 'KindHandler', *, success_only: 'bool' = False) -> 'None' - Register a per-kind resolution handler. Re-registration overwrites.`
 - `register_tiered_resolver(kind: 'str', resolver: 'TieredResolver') -> 'None' - Register a TIERED_PERIOD kind's tier-grading resolver. Re-registration overwrites.`
@@ -10955,6 +10973,34 @@
 **Pointed to by:**
   - answered_prayer <- worship.Prayer
 
+### Pledge
+**Foreign Keys:**
+  - written_by -> contributors.ContentContributor [FK] (nullable)
+  - reviewed_by -> contributors.ContentContributor [FK] (nullable)
+  - being -> worship.WorshippedBeing [FK]
+  - closing_rite -> worship.WorshipRite [FK]
+**Pointed to by:**
+  - taken <- worship.PledgeDetails
+
+### PledgeCredit
+**Foreign Keys:**
+  - pledge_details -> worship.PledgeDetails [FK]
+  - game_week -> game_clock.GameWeek [FK]
+  - resonance_grant -> magic.ResonanceGrant [OneToOne] (nullable)
+  - offering -> ceremonies.CeremonyOffering [OneToOne] (nullable)
+  - rite_performance -> worship.WorshipRitePerformance [FK] (nullable)
+
+### PledgeDetails
+**Foreign Keys:**
+  - project -> projects.Project [OneToOne]
+  - character_sheet -> character_sheets.CharacterSheet [FK]
+  - pledge -> worship.Pledge [FK]
+  - prayer -> worship.Prayer [FK] (nullable)
+  - closing_performance -> worship.WorshipRitePerformance [OneToOne] (nullable)
+**Pointed to by:**
+  - sacrifices <- ceremonies.CeremonyOffering
+  - credits <- worship.PledgeCredit
+
 ### Prayer
 **Foreign Keys:**
   - character_sheet -> character_sheets.CharacterSheet [FK]
@@ -11021,6 +11067,7 @@
 **Pointed to by:**
   - ceremonies <- ceremonies.Ceremony
   - performances <- worship.WorshipRitePerformance
+  - closing_for_pledges <- worship.Pledge
 
 ### WorshipRitePerformance
 **Foreign Keys:**
@@ -11032,6 +11079,8 @@
   - outcome_tier -> traits.CheckOutcome [FK]
 **Pointed to by:**
   - resonance_grants <- magic.ResonanceGrant
+  - closed_pledge <- worship.PledgeDetails
+  - pledge_credits <- worship.PledgeCredit
 
 ### WorshipRiteTierAward
 **Foreign Keys:**
@@ -11054,6 +11103,7 @@
 **Pointed to by:**
   - modifier_targets <- mechanics.ModifierTarget
   - ceremonies <- ceremonies.Ceremony
+  - sacrifices <- ceremonies.CeremonyOffering
   - house_aspect_options <- societies.HouseAspectOption
   - audere_majora_faith_variants <- magic.AudereMajoraFaithVariant
   - manifest_options <- magic.TechniqueManifestOption
@@ -11077,11 +11127,12 @@
   - temples <- worship.TempleDedication
   - prayers <- worship.Prayer
   - visions <- worship.Vision
+  - pledges <- worship.Pledge
 
 ### Service Functions
 - `active_patronage_for(sheet: 'CharacterSheet') -> list[world.worship.models.DevotionStanding] - Return all active patronages for a character, ordered by favor descending.`
 - `best_patronage_favor(sheet: 'CharacterSheet') -> int - Return the favor of the highest-favor active patronage, or 0.`
-- `bump_devotion(character_sheet: 'CharacterSheet', being: world.worship.models.WorshippedBeing, amount: int) -> world.worship.types.DevotionBump - Upsert the (sheet, being) standing and run the God's Favorite check.`
+- `bump_devotion(character_sheet: 'CharacterSheet', being: world.worship.models.WorshippedBeing, amount: int, *, source: 'FavorSource | None' = None) -> world.worship.types.DevotionBump - Upsert the (sheet, being) standing and run the God's Favorite check.`
 - `convert_public_worship(character_sheet: 'CharacterSheet', new_being: world.worship.models.WorshippedBeing, *, is_sincere: bool = True) -> world.worship.models.WorshipDeclaration - Repoint a character's PUBLIC worship declaration (#2361).`
 - `establish_patronage(sheet: 'CharacterSheet', being: world.worship.models.WorshippedBeing, *, valence: world.worship.models.PatronageValence) -> world.worship.models.DevotionStanding - Get-or-create a DevotionStanding and mark it as a patronage.`
 - `fire_divine_intervention(character_sheet: 'CharacterSheet', *, trigger: str, trigger_event: str, scene=None, being: world.worship.models.WorshippedBeing | None = None) -> 'MiraclePerformance | None' - The divine-intervention check: the highest-priority qualifying miracle fires.`

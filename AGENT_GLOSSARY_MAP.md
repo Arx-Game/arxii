@@ -28,7 +28,8 @@ term is chosen and the rest are listed under `_Avoid_`.
   effects
 - [vitals](src/world/vitals/AGENT_GLOSSARY.md) - also holds Certain death (deferred) (#4098)
 - [worship](src/world/worship/AGENT_GLOSSARY.md) - also holds the #4333 favor terms
-  (ADR-4333-A): Favor, Invocation, Earning rate, Favor modifier
+  (ADR-4333-A): Favor, Invocation, Earning rate, Favor modifier; and the pledge terms (slice 2,
+  ADR-4362): Pledge, Favor target, Deed, Sacrifice, Pledge credit, Closing rite, Lapse
 - [ceremonies](src/world/ceremonies/AGENT_GLOSSARY.md)
 - [estates](src/world/estates/AGENT_GLOSSARY.md)
 - [checks](src/world/checks/AGENT_GLOSSARY.md) - also holds Favor as a modifier source (#4333)

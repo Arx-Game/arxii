@@ -34,6 +34,33 @@
   `ModifierTarget.target_being` or to every being (null). Any modifier source can grant one
   except facet, mantle and motif bonuses (#4333 slice 8). Read only by
   `favor_modifier_total`. _Avoid_: a being-to-distinction link table.
+- **Pledge** — two things (#4333 slice 2). A *pledge type* is an authored `Pledge` row: a
+  being's offer of service with a favor target, a span in game weeks and a closing rite (one of
+  the being's own tier 1 or 2 rites). An *open pledge* is one character's: a `Project` of kind
+  PLEDGE with a `PledgeDetails` sidecar; at most one per character. Authored for staff-owned
+  beings on the Being Service builder. _Avoid_: vigil, vow (a covenant vow), quest.
+- **Favor target** — the favor a character must earn with the being after opening a pledge,
+  before it can be closed (`Pledge.favor_target`, the project's `threshold_target`). Progress
+  is the favor itself, on `Project.current_progress`: every favor write for the being while
+  the pledge is open adds to it. _Avoid_: marks, points (no second currency).
+- **Deed** — an act in ordinary play that grants the character a resonance the pledged being
+  holds as FAVORED or ASSOCIATED (`credit_pledge_deed`, called by `grant_resonance`); it earns
+  favor only while a pledge to that being is open, under `DevotionConfig.weekly_deed_favor_cap`
+  (base favor). A worship rite's own grant is not a deed.
+- **Sacrifice** — an item given up to a being at its shrine or temple outside a ceremony
+  (`sacrifice_items`): destroyed, feeding the pool, earning 1 base favor per
+  `sacrifice_value_per_favor` of value (more for a favored facet). Recorded as a
+  `CeremonyOffering` with `being` set and no ceremony. _Avoid_: "offering" for this (an
+  offering is made during a ceremony).
+- **Pledge credit** — one favor write credited to a pledge, with its calculation
+  (`PledgeCredit`: base, earning rate, credited, and the deed, sacrifice or rite it was for).
+  The audit trail behind the pledge card, not a counter (ADR-4362).
+- **Closing rite / closing award** — performing the pledge's closing rite once its target is
+  met closes it, paying the CLOSING `FavorOutcomeAward` for the rite's outcome in place of the
+  rite's own award. A first Failure or Critical Failure leaves one retry (Ruling 17).
+- **Lapse** — a pledge whose span ends unclosed. At half its target or more it pays the
+  Partial Success closing award, otherwise nothing; never an answer, and earned favor is kept
+  (Ruling 18).
 - **Domains** — `WorshippedBeing.domains`, plain prose naming the spheres a being holds
   ("Carnage, wanton bloodshed, feral battle"). Deliberately NOT a lookup table (#3776):
   overlap between gods is expected and nothing matches on it mechanically, so a

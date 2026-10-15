@@ -126,9 +126,19 @@ Vitals (#2287 ghost containers), Events/Scenes (optional chassis)
   lines name the being (a secret faith's do not). Every favor source now earns at the earning
   rate (100% + 100% for the being's Chosen + favor earning modifiers). Web picker beside each
   check, telnet `invoke` and `/invoke <being>[=<line>]`, Devotion config admin, the
-  Distinction Builder's favor targets. ADR-4333-A. Next slices of #4333: pledges and
-  sacrifices, answers at the close, stewards, answering live, rituals, Mysteries, favored
-  facets on worn items.
+  Distinction Builder's favor targets. ADR-4333-A.
+- **Favor with beings, slice 2: pledges and sacrifices (#4333, #4362):** a character pledges
+  to a being (one of its authored pledge types: a favor target within a span of game weeks,
+  with an optional prayer); every favor they then earn with it counts, and the pledge card
+  lists each credit with its calculation. Deeds (resonance grants the being favors, 100%, or
+  is associated with, 50%) earn favor only while a pledge is open, capped at 8 base a week;
+  sacrifices at the being's shrine or temple earn 1 base per 10 value, doubled for a favored
+  facet. Reaching the target does not close the pledge; its closing rite does, paying the
+  closing award for its outcome in place of the rite's own; a first failed close leaves one
+  retry. A lapse at half the target or more pays the Partial Success award. Web (sheet card
+  and dialogs, the room's holy-site line), telnet `pledge` and `sacrifice`, the Being Service
+  builder. ADR-4362. Next slices of #4333: answers at the close, stewards, answering live,
+  rituals, Mysteries, favored facets on worn items.
 
 ## Not built (filed)
 
