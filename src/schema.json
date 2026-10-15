@@ -42255,9 +42255,15 @@ paths:
     get:
       operationId: worship_beings_service_terms_retrieve
       description: |-
-        What earns favor with this being for the acting character, and their
-        earning rate (#4333 slice 2): the pledge dialog's system-generated list.
+        What earns favor with this being for a character, and their earning rate
+        (#4333 slice 2): the pledge dialog's system-generated list. For the sheet the
+        page names (one the requester plays, or any for staff), else the acting one.
       parameters:
+      - in: query
+        name: character_sheet
+        schema:
+          type: integer
+        description: A sheet the requester plays (the sheet page); wins over entry_id.
       - in: query
         name: entry_id
         schema:

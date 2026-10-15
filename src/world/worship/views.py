@@ -132,19 +132,46 @@ class WorshippedBeingViewSet(ReadOnlyModelViewSet):
                 int,
                 required=False,
                 description="The roster entry this tab acts as (#3479).",
-            )
+            ),
+            OpenApiParameter(
+                "character_sheet",
+                int,
+                required=False,
+                description="A sheet the requester plays (the sheet page); wins over entry_id.",
+            ),
         ],
         responses=ServiceTermsSerializer,
     )
     @action(detail=True, methods=["get"], url_path="service-terms")
     def service_terms(self, request: Request, pk: str | None = None) -> Response:
-        """What earns favor with this being for the acting character, and their
-        earning rate (#4333 slice 2): the pledge dialog's system-generated list."""
+        """What earns favor with this being for a character, and their earning rate
+        (#4333 slice 2): the pledge dialog's system-generated list. For the sheet the
+        page names (one the requester plays, or any for staff), else the acting one."""
         from world.worship.pledge_services import service_terms  # noqa: PLC0415
 
         being = self.get_object()
-        sheet = _acting_sheet(request)
+        sheet = _named_or_acting_sheet(request)
         return Response(ServiceTermsSerializer(service_terms(sheet, being)).data)
+
+
+def _named_or_acting_sheet(request: Request):
+    """The ``character_sheet`` the request names, when the requester plays it (or is
+    staff); otherwise the sheet this tab acts as."""
+    from world.character_sheets.models import CharacterSheet  # noqa: PLC0415
+
+    raw = request.query_params.get("character_sheet")
+    if raw in (None, ""):
+        return _acting_sheet(request)
+    try:
+        sheet_id = int(raw)
+    except (TypeError, ValueError) as exc:
+        raise ValidationError({"character_sheet": "A valid integer is required."}) from exc
+    if not request.user.is_staff and sheet_id not in _own_sheet_ids(request):
+        raise PermissionDenied(_NOT_YOUR_CHARACTER)
+    sheet = CharacterSheet.objects.filter(pk=sheet_id).first()
+    if sheet is None:
+        raise ValidationError({"character_sheet": "No such character."})
+    return sheet
 
 
 def _acting_sheet(request: Request):
@@ -235,6 +262,7 @@ class WorshipRiteViewSet(ReadOnlyModelViewSet):
 
 
 _STAFF_ONLY_VISIONS = "Only staff send visions."
+_NOT_YOUR_CHARACTER = "That is not a character you play."
 
 
 def _own_sheet_ids(request) -> list[int]:

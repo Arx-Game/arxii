@@ -556,3 +556,35 @@ class PledgeApiTests(PledgeTestBase):
         self.assertEqual(card["credits"][0]["calculation"], "3 base, at 200% = +6")
         self.assertEqual(card["pledge"]["name"], self.pledge.name)
         self.assertEqual(hidden, [])
+
+    def test_service_terms_for_a_named_sheet_only_when_you_play_it(self) -> None:
+        from evennia.accounts.models import AccountDB
+
+        url = f"/api/worship/beings/{self.being.pk}/service-terms/?character_sheet={self.sheet.pk}"
+        own = self._client().get(url)
+        stranger = AccountDB.objects.create(username="stranger-terms-4362", is_staff=False)
+        other = self._client(stranger).get(url)
+
+        self.assertEqual(own.json()["rate"]["total"], 200)
+        self.assertEqual(other.status_code, 403)
+
+
+class WebDispatchTests(PledgeTestBase):
+    """The web dispatches pks, not names: the pledge, the being and the items."""
+
+    def test_pray_take_and_sacrifice_by_pk(self) -> None:
+        from actions.definitions.worship import PrayAction, SacrificeAction, TakePledgeAction
+
+        character = self.sheet.character
+        prayed = PrayAction().run(actor=character, being=self.being.pk, text="[prayer]")
+        taken = TakePledgeAction().run(actor=character, pledge=self.pledge.pk, prayer="")
+        item = self._carried_item(20, facet=self.silk)
+        given = SacrificeAction().run(actor=character, item_ids=[item.pk], being=self.being.pk)
+
+        self.assertTrue(prayed.success, prayed.message)
+        self.assertTrue(taken.success, taken.message)
+        self.assertIn("Your earning rate with Ombrin: 200% (100% + 100% Chosen).", taken.message)
+        self.assertTrue(given.success, given.message)
+        self.assertIn(
+            "Value 20: 2 base, x2 Silk = 4, at 200% = +8 favor with Ombrin.", given.message
+        )

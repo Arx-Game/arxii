@@ -26194,8 +26194,9 @@ export interface paths {
       cookie?: never;
     };
     /**
-     * @description What earns favor with this being for the acting character, and their
-     *     earning rate (#4333 slice 2): the pledge dialog's system-generated list.
+     * @description What earns favor with this being for a character, and their earning rate
+     *     (#4333 slice 2): the pledge dialog's system-generated list. For the sheet the
+     *     page names (one the requester plays, or any for staff), else the acting one.
      */
     get: operations['worship_beings_service_terms_retrieve'];
     put?: never;
@@ -88339,6 +88340,8 @@ export interface operations {
   worship_beings_service_terms_retrieve: {
     parameters: {
       query?: {
+        /** @description A sheet the requester plays (the sheet page); wins over entry_id. */
+        character_sheet?: number;
         /** @description The roster entry this tab acts as (#3479). */
         entry_id?: number;
       };
