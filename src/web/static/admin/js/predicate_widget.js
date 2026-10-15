@@ -96,6 +96,19 @@
       self.tree = replacement || {};
       self.changed();
     }));
+    if (!this.tree.op) {
+      // A single test at the top: adding beside it wraps both in an AND group.
+      var adds = el("div", "pred-adds");
+      adds.appendChild(button("+ Leaf", "", function () {
+        self.tree = { op: "AND", of: [self.tree, { leaf: "", params: {} }] };
+        self.changed();
+      }));
+      adds.appendChild(button("+ Group", "", function () {
+        self.tree = { op: "AND", of: [self.tree, { op: "OR", of: [] }] };
+        self.changed();
+      }));
+      this.root.appendChild(adds);
+    }
   };
 
   // Draws one node; `replace(newNode)` swaps it in its parent (null removes it).

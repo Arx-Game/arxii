@@ -83,6 +83,7 @@ test('part 1: staff and GM author the placement and the faction rules', async ({
   await panel.getByLabel('Off: is_member_of_org: Riverland Guilds (test)').check();
   await expect(gm.getByTestId('placement-summary-0')).toContainText('3 faction rules');
   await gm.screenshot({ path: shot('05-gm-beat-dialog-placement.png'), fullPage: true });
+  await panel.screenshot({ path: shot('05b-gm-beat-dialog-placement-panel.png') });
   await gm.getByRole('button', { name: 'Save Beat' }).click();
   await expect(gm.getByRole('heading', { name: 'Edit Beat' })).toHaveCount(0, { timeout: 20_000 });
 });
@@ -119,6 +120,11 @@ test('part 2: the spawned standoff carries the placement', async ({ browser }) =
   // A template edit after the spawn leaves the running standoff alone.
   const staff = await signIn(browser, 'staff4361');
   await staff.goto(`/admin/_standoff_profile/${IDS.template}/`);
+  await expect(staff.getByText('Also applies (inherited)')).toBeVisible();
+  await staff.screenshot({
+    path: shot('09-profile-builder-affiliation-and-inherited.png'),
+    fullPage: true,
+  });
   await staff.locator('#id_cause').selectOption('none');
   await staff.click('input[name="save_continue"]');
   await expect(staff.getByText('Saved and credited to you.')).toBeVisible();

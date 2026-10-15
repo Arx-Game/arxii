@@ -37,6 +37,10 @@ class _LineForm(forms.ModelForm):
         self.fields["cause_override"].label = "Cause"
         self.fields["cause_margin_override"].label = "Cause margin percent"
         self.fields["organization"].label = "Affiliation"
+        template_org = self.instance.creature_template.organization
+        self.fields["organization"].widget.attrs["data-placeholder"] = (
+            f"(template: {template_org.name})" if template_org else "(template: no affiliation)"
+        )
         self.fields["organization"].help_text = (
             "Blank keeps the template's affiliation. Another one brings that organization's "
             "rules, its parents' and its society's instead."

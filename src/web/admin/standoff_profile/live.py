@@ -196,7 +196,7 @@ def placements(template: CreatureTemplate) -> list[Placement]:
 
     rows = [
         Placement(
-            f"Beat: {line.beat}",
+            f"Beat: {line.beat.internal_description.strip()[:60] or line.beat}",
             line.count,
             line.opens_as_standoff,
             url=reverse("admin_placement_beat", args=[line.pk]),
