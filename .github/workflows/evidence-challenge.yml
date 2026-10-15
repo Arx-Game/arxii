@@ -136,9 +136,13 @@ jobs:
           # Not `gh api`: it can write with this token's permissions. Write is
           # for the comment file (posted with --body-file); the runner is
           # throwaway and nothing runs the checkout after this step.
+          # 60 turns, not 30: a round that reads a long evidence answer (run
+          # logs, pasted test output, a shard table) took 34 on PR #4363 and
+          # the action then reported failure AFTER the verdict was posted, so
+          # main showed a red run for a satisfied challenge.
           claude_args: >-
             --model claude-haiku-5-5
-            --max-turns 30
+            --max-turns 60
             --allowed-tools "Read,Grep,Glob,Write,Bash(gh run view:*),Bash(gh pr view:*),Bash(gh pr diff:*),Bash(gh issue view:*),Bash(gh pr comment:*),Bash(git fetch:*),Bash(git log:*),Bash(git show:*),Bash(git diff:*),Bash(git cat-file:*)"
 
       # The action hides the model's output, so a refused tool call is
