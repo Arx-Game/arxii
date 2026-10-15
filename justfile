@@ -247,6 +247,20 @@ regression *args: _fs-warn
     just _ensure-testdb "$REBUILD"
     echo "yes" | uv run arx test --keepdb --parallel "${ARGS[@]}"
 
+# What no journey reaches (#3657, ADR-3657): run the journey layer alone under
+# coverage and list the source files it never executed, by package. Design
+# input (a missing journey or a stub), never a gate and never a target. The
+# same report runs weekly on main (.github/workflows/journey-coverage.yml).
+#   just coverage-journeys
+#   just coverage-journeys --min-percent 10
+coverage-journeys *args: _fs-warn
+    #!/usr/bin/env bash
+    set -euo pipefail
+    just _ensure-testdb ""
+    echo "yes" | uv run arx test --coverage --keepdb integration_tests
+    uv run coverage json --data-file=src/.coverage -o .coverage-journeys.json -q
+    uv run python tools/coverage_gaps.py .coverage-journeys.json {{args}}
+
 # --- Lint / format -----------------------------------------------------------
 
 # Run ruff check.

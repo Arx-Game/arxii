@@ -58,6 +58,7 @@ pip-log.txt
 
 # Unit test / coverage reports
 .coverage
+.coverage-journeys.json
 .tox
 nosetests.xml
 .ruff_cache/

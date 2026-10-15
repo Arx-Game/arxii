@@ -1,0 +1,82 @@
+name: Journey coverage
+
+# What no journey reaches (#3657, ADR-3657). Once a week, run the journey layer
+# (src/integration_tests) alone under coverage on the Postgres tier and write
+# the gap report (tools/coverage_gaps.py) to the run summary. Design input for
+# the test-suite audit: a file no journey executes is a missing story or a stub.
+# Never a gate: this workflow is not a required check and sets no target.
+#
+# The Postgres setup mirrors ci.yml's backend shard (the manual `docker run`
+# because the `services:` block cannot pass max_locks_per_transaction).
+
+on:
+  schedule:
+    - cron: "0 7 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  journey-coverage:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      DEBUG: False
+      SECRET_KEY: test-secret-key-for-ci-only
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/arxii_test
+      CLOUDINARY_CLOUD_NAME: test-cloud
+      CLOUDINARY_API_KEY: test-key
+      CLOUDINARY_API_SECRET: test-secret
+      SENDGRID_API_KEY: test-sendgrid-key
+      DEFAULT_FROM_EMAIL: test@example.com
+      FACEBOOK_APP_ID: test-facebook-id
+      FACEBOOK_APP_SECRET: test-facebook-secret
+    steps:
+      - uses: actions/checkout@v6
+      - name: Mint a throwaway MFA_SECRETS_KEY for this job
+        run: echo "MFA_SECRETS_KEY=$(python3 -c 'import base64, os; print(base64.urlsafe_b64encode(os.urandom(32)).decode())')" >> "$GITHUB_ENV"
+      - name: Start Postgres with max_locks_per_transaction bumped
+        run: |
+          docker run -d \
+            --name postgres-ci \
+            -e POSTGRES_PASSWORD=postgres \
+            -e POSTGRES_DB=arxii_test \
+            -e POSTGRES_INITDB_ARGS=--no-sync \
+            --tmpfs /var/lib/postgresql/data:rw,noexec,nosuid,size=2g \
+            -p 5432:5432 \
+            postgres:15 \
+            -c max_locks_per_transaction=512
+      - name: Wait for Postgres ready
+        run: |
+          for i in $(seq 1 30); do
+            if docker exec postgres-ci pg_isready -U postgres -d arxii_test; then
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "Postgres did not become ready" >&2
+          docker logs postgres-ci
+          exit 1
+      - uses: astral-sh/setup-uv@v7
+        with:
+          python-version: '3.13'
+      - run: uv sync
+      - name: Build schema from model state
+        run: uv run python tools/build_schema.py
+      - name: Clone built DB into the test database
+        run: |
+          docker exec postgres-ci psql -U postgres -d postgres \
+            -c "CREATE DATABASE test_arxii_test TEMPLATE arxii_test"
+      - name: Run the journey layer under coverage
+        run: uv run arx test --coverage --keepdb integration_tests
+      - name: Write the gap report
+        run: |
+          set -euo pipefail
+          uv run coverage json --data-file=src/.coverage -o .coverage-journeys.json -q
+          uv run python tools/coverage_gaps.py .coverage-journeys.json | tee -a "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: journey-coverage
+          path: .coverage-journeys.json
+          retention-days: 30

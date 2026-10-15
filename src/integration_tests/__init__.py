@@ -1,9 +1,9 @@
-"""
-Integration tests for Arx II.
+"""Journeys, fuzz and cross-system integration tests for Arx II (#3657).
 
-These tests are NOT run as part of the normal test suite.
-They test integration with external services and require manual setup.
-
-DO NOT import or run these tests in CI or regular development.
-Only run them deliberately when testing integrations.
+This package is the home of the first two of the suite's three layers:
+``harness.JourneyCase`` drives a player's story through the real seams (the
+command handler, ``dispatch_player_action``, the REST client); ``fuzz/`` throws
+malformed input at those seams. ``pipeline/`` holds the journeys written
+before the harness existed. CI runs this package on every PR (shard-2 of
+``.github/workflows/ci.yml``); it is PostgreSQL-only, like every journey.
 """

@@ -44,16 +44,23 @@ def _author_stand_in_resonances() -> list:
     No seeder mints a Resonance any more, so a suite that exercises seed steps
     keyed to one has to supply them itself — exactly as a real deploy does, by
     loading lore-repo content before the cluster loop runs.
+
+    The names are given, not left to the factory: the seeds take "the first
+    authored Resonance" by name (``authored_resonances`` orders by ``name``),
+    and the factory's ``Resonance{n}`` names sort ``Resonance10`` before
+    ``Resonance8`` once ten have been made in the process, which depends on
+    what else the CI worker ran first (PR #4360). These sort as authored.
     """
     from world.magic.factories import AffinityFactory, ResonanceFactory
 
     affinities = {name: AffinityFactory(name=name) for name in ("Celestial", "Primal", "Abyssal")}
-    return [
-        ResonanceFactory(affinity=affinities["Celestial"]),
-        ResonanceFactory(affinity=affinities["Celestial"]),
-        ResonanceFactory(affinity=affinities["Primal"]),
-        ResonanceFactory(affinity=affinities["Abyssal"]),
-    ]
+    authored = (
+        ("Aurora Stand-In", "Celestial"),
+        ("Beacon Stand-In", "Celestial"),
+        ("Ember Stand-In", "Primal"),
+        ("Gloam Stand-In", "Abyssal"),
+    )
+    return [ResonanceFactory(name=name, affinity=affinities[aff]) for name, aff in authored]
 
 
 @override_settings(SEED_SAMPLE_CONTENT=True)
