@@ -38,6 +38,7 @@ dependencies = [
     "sentry-sdk>=2.64.0",
     "pyopenssl>=19.1",
     "service-identity>=18.1.0",
+    "hypothesis>=6.100",
 ]
 
 [tool.ruff]
