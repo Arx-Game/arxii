@@ -1,0 +1,2624 @@
+<html><head></head><body><h2>Required-Content Sentinel</h2>
+<p>
+  Authored database rows the code hard-depends on, probed against THIS database. Seeds prove nothing here - a clone's seed data is bootstrap/E2E scaffolding only, never a stand-in for the corpus.
+</p>
+
+<div class="stat-tiles">
+  <div class="stat-tile">
+    <span class="stat-value">85</span>
+    <span class="stat-label">Missing required rows</span>
+  </div>
+  <div class="stat-tile">
+    <span class="stat-value">93</span>
+    <span class="stat-label">Missing tuning rows</span>
+  </div>
+</div>
+
+<h3>Missing - Required</h3>
+
+<p>
+  Each row below is load-bearing for a code path a player or staff member can hit today.
+</p>
+<table class="tuning-table required-content-table required-content-table--missing">
+  <thead>
+    <tr>
+      <th>Dependency</th>
+      <th>Consumer</th>
+      <th>Consequence</th>
+      <th>Missing</th>
+    </tr>
+  </thead>
+  <tbody>
+
+    <tr class="required-content-row--missing">
+      <td><a href="/admin/arxii/conditiontemplate/">Audere and Audere Majora condition templates</a></td>
+      <td>world/magic/audere.py:261 offer_audere(); world/magic/audere_majora.py:679 (majora crossing)</td>
+      <td>Accepting an Audere or Audere Majora corruption offer raises ConditionTemplate.DoesNotExist and crashes the offer instead of applying the condition.</td>
+      <td>
+
+        Audere, Audere Majora, Soulfray
+
+
+        <br>
+        Missing ConditionTemplate row(s): Audere, Audere Majora, Soulfray.
+
+      </td>
+    </tr>
+
+    <tr class="required-content-row--missing">
+      <td><a href="/admin/arxii/conditiontemplate/">Audere and Audere Majora condition duration + death deferral</a></td>
+      <td>world/magic/audere.py (end_audere, encounter cleanup backstop); world/conditions/services.py:2849 has_death_deferred()</td>
+      <td>A round-limited duration lets the condition expire off its own countdown before encounter cleanup runs, bypassing end_audere's engagement-revert/ultimate-clear logic; missing the death_deferred property means Soulfray's certain-death consequence kills immediately instead of deferring to encounter cleanup.</td>
+      <td>
+
+        Audere: missing, Audere Majora: missing
+
+
+        <br>
+        Audere/Audere Majora condition problem(s): Audere: missing; Audere Majora: missing.
+
+      </td>
+    </tr>
+
+    <tr class="required-content-row--missing">
+      <td><a href="/admin/arxii/conditiontemplate/">Mounted and Unhorsed condition templates</a></td>
+      <td>world/combat/services.py:3774 (mounted charge); world/combat/services.py:7901 (joust unhorsing)</td>
+      <td>Charging while mounted, or losing a joust badly enough to be unhorsed, raises ConditionTemplate.DoesNotExist and crashes the combat action for both participants.</td>
+      <td>
+
+        Mounted, Unhorsed
+
+
+        <br>
+        Missing ConditionTemplate row(s): Mounted, Unhorsed.
+
+      </td>
+    </tr>
+
+    <tr class="required-content-row--missing">
+      <td><a href="/admin/arxii/conditiontemplate/">Sent Flying condition template</a></td>
+      <td>world/combat/services.py:5443 _apply_sent_flying_marker()</td>
+      <td>A knockback attack that should send its target flying silently applies no marker - the target never gets a mid-air catch window and the fall never resolves at end of round.</td>
+      <td>
+
+        Sent Flying
+
+
+        <br>
+        Missing ConditionTemplate row(s): Sent Flying.
+
+      </td>
+    </tr>
+
+    <tr class="required-content-row--missing">
+      <td><a href="/admin/arxii/conditiontemplate/">Shielded condition template</a></td>
+      <td>world/covenants/perks/evaluators.py:1180</td>
+      <td>A covenant perk gated on an ally being Shielded silently never triggers, even when the ally is actually defending.</td>
+      <td>
+
+        Shielded
+
+
+        <br>
+        Missing ConditionTemplate row(s): Shielded.
+
+      </td>
+    </tr>
+
+    <tr class="required-content-row--missing">
+      <td>Surrounded isolation tagging (template, pool, entry stage)</td>
+      <td>world/battles/resolution.py:1160-1190 _apply_surrounded_isolation() - needs the Surrounded ConditionTemplate, the surrounded_entry ConsequencePool, and its stage_order=1 ConditionStage, not the template alone</td>
+      <td>A battle participant cut off from their allies never gets tagged Surrounded - the acute-peril stacking from being isolated silently never applies.</td>
+      <td>
+
+        ConditionTemplate 'Surrounded', ConsequencePool 'surrounded_entry', ConditionStage stage_order=1 for 'Surrounded'
+
+
+        <br>
+        Missing row(s) for Surrounded isolation tagging: ConditionTemplate 'Surrounded', ConsequencePool 'surrounded_entry', ConditionStage stage_order=1 for 'Surrounded'.
+
+      </td>
+    </tr>
+
+    <tr class="required-content-row--missing">
+      <td><a href="/admin/arxii/conditiontemplate/">Unconscious condition template</a></td>
+      <td>world/vitals/services.py:1407 unconscious_instance()</td>
+      <td>Every unconsciousness check (dream access, intoxication blackout) silently reports the character as awake even when they should be out cold.</td>
+      <td>
+
+        Unconscious
+
+
+        <br>
+        Missing ConditionTemplate row(s): Unconscious.
+
+      </td>
+    </tr>
+
+    <tr class="required-content-row--missing">
+      <td><a href="/admin/arxii/conditiontemplate/">A condition that charms (sets_allegiance = Fights for the charmer)</a></td>
+      <td>world/companions/services.py promote_summon_to_companion(); world/assets/services.py charm_into_asset()</td>
+      <td>No condition charms anyone: binding a charmed enemy and taking a charmed NPC into service can never succeed.</td>
+      <td>
+
+
+        <br>
+        No ConditionTemplate has sets_allegiance = ally.
+
+      </td>
+    </tr>
+
+    <tr class="required-content-row--missing">
+      <td><a href="/admin/arxii/conditiontemplate/">A condition that calms (sets_allegiance = Will not attack)</a></td>
+      <td>world/combat/services.py _resolve_parley()</td>
+      <td>No condition calms anyone: a decisive parley never talks a foe out of the fight.</td>
+      <td>
+
+
+        <br>
+        No ConditionTemplate has sets_allegiance = neutral.
+
+      </td>
+    </tr>
+
+    <tr class="required-content-row--missing">
+      <td><a href="/admin/arxii/actiontemplate/">The Settle action template (settles_allegiance)</a></td>
+      <td>actions/definitions/social.py SettleAction</td>
+      <td>No one can settle a charm: the Settle action never appears.</td>
+      <td>
+
+
+        <br>
+        No ActionTemplate has settles_allegiance set.
+
+      </td>
+    </tr>
+
+    <tr class="required-content-row--missing">
+      <td><a href="/admin/arxii/devotionconfig/">Devotion config: default invocation check type</a></td>
+      <td>world/worship/invocation_services.py invocation_refusal()</td>
+      <td>No one can call on a being's favor unless that being has its own invocation check type: every Call on favor is refused as not set up.</td>
+      <td>
+
+
+        <br>
+        Devotion config has no default invocation check type.
+
+      </td>
+    </tr>
+
+    <tr class="required-content-row--missing">
+      <td><a href="/admin/arxii/conditiontemplate/">Savaged condition template</a></td>
+      <td>world/companions/services.py:398 _apply_savaged()</td>
+      <td>A companion drawn the stay_incapacitated outcome walks away unmarked, so that draw is indistinguishable from recovering and the pool's three tiers collapse to two.</td>
+      <td>
+
+        Savaged
+
+
+        <br>
+        Missing ConditionTemplate row(s): Savaged.
+
+      </td>
+    </tr>
+
+    <tr class="required-content-row--missing">
+      <td><a href="/admin/arxii/conditiontemplate/">Plummeting condition template</a></td>
+      <td>world/areas/positioning/plummet.py:129 begin_plummet()</td>
+      <td>A character who starts falling raises ConditionTemplate.DoesNotExist instead of beginning to plummet, crashing movement resolution.</td>
+      <td>
+
+        Plummeting
+
+
+        <br>
+        Missing ConditionTemplate row(s): Plummeting.
+
+      </td>
+    </tr>
+
+    <tr class="required-content-row--missing">
+      <td><a href="/admin/arxii/conditiontemplate/">Berserk condition template</a></td>
+      <td>world/species/moon_sensitivity.py:180 _apply_berserk()</td>
+      <td>A character losing control to moon-sensitivity fury logs a warning and never gets the Berserk condition applied - the forced rampage compulsion silently never fires.</td>
+      <td>
+
+        Berserk
+
+
+        <br>
+        Missing ConditionTemplate row(s): Berserk.
+
+      </td>
+    </tr>
+
+    <tr class="required-content-row--missing">
+      <td><a href="/admin/arxii/conditiontemplate/">Soul Tether Active and Tether Strain condition templates</a></td>
+      <td>world/magic/services/soul_tether.py:273 accept_soul_tether(); world/magic/services/soul_tether.py:1623 _get_or_create_tether_strain_instance() - literals, no constant</td>
+      <td>Forming a Soul Tether raises ConditionTemplate.DoesNotExist mid-transaction, so the bond never completes and the Sineater never accrues Tether Strain.</td>
+      <td>
+
+        Soul Tether Active, Tether Strain
+
+
+        <br>
+        Missing ConditionTemplate row(s): Soul Tether Active, Tether Strain.
+
+      </td>
+    </tr>
+
+    <tr class="required-content-row--missing">
+      <td><a href="/admin/arxii/checktype/">Penetration check type</a></td>
+      <td>world/combat/services.py:343 get_penetration_check_type()</td>
+      <td>Resolving a ward's penetration contest crashes with CheckType.DoesNotExist instead of rolling the check.</td>
+      <td>
+
+        penetration
+
+
+        <br>
+        Missing CheckType row(s): penetration.
+
+      </td>
+    </tr>
+
+    <tr class="required-content-row--missing">
+      <td><a href="/admin/arxii/checktype/">Concentration check type</a></td>
+      <td>world/combat/services.py:357 get_concentration_check_type()</td>
+      <td>Declaring a sustained action crashes with CheckType.DoesNotExist instead of rolling the Concentration check.</td>
+      <td>
+
+        Concentration
+
+
+        <br>
+        Missing CheckType row(s): Concentration.
+
+      </td>
+    </tr>
+
+    <tr class="required-content-row--missing">
+      <td><a href="/admin/arxii/checktype/">Fashion Presentation check type</a></td>
+      <td>world/items/services/fashion_presentation.py:119</td>
+      <td>Presenting an outfit for a fashion check crashes with CheckType.DoesNotExist instead of rolling the presentation check.</td>
+      <td>
+
+        Fashion Presentation
+
+
+        <br>
+        Missing CheckType row(s): Fashion Presentation.
+
+      </td>
+    </tr>
+
+    <tr class="required-content-row--missing">
+      <td><a href="/admin/arxii/checktype/">Gather Evidence check type</a></td>
+      <td>world/justice/evidence.py:68 _gather_check_type()</td>
+      <td>Generating crime evidence from a legend entry crashes with CheckType.DoesNotExist instead of producing evidence for the deed.</td>
+      <td>
+
+        Gather Evidence
+
+
+        <br>
+        Missing CheckType row(s): Gather Evidence.
+
+      </td>
+    </tr>
+
+    <tr class="required-content-row--missing">
+      <td><a href="/admin/arxii/checktype/">Scrutinize Evidence check type</a></td>
+      <td>world/justice/case_file.py:111 examine_evidence()</td>
+      <td>Examining a piece of evidence crashes with CheckType.DoesNotExist instead of rolling the Scrutinize Evidence check.</td>
+      <td>
+
+        Scrutinize Evidence
+
+
+        <br>
+        Missing CheckType row(s): Scrutinize Evidence.
+
+      </td>
+    </tr>
+
+    <tr class="required-content-row--missing">
+      <td><a href="/admin/arxii/checktype/">Bind Attempt check type</a></td>
+      <td>world/companions/services.py:496 promote_summon_to_companion()</td>
+      <td>Attempting to bind a summon or charmed enemy into a permanent companion crashes with CheckType.DoesNotExist instead of rolling the bind check.</td>
+      <td>
+
+        Bind Attempt
+
+
+        <br>
+        Missing CheckType row(s): Bind Attempt.
+
+      </td>
+    </tr>
+
+    <tr class="required-content-row--missing">
+      <td><a href="/admin/arxii/checktype/">Identification check type</a></td>
+      <td>world/forms/services/identification.py:414 attempt_identification()</td>
+      <td>Attempting to recognize a masked or disguised character crashes with CheckType.DoesNotExist instead of rolling the check.</td>
+      <td>
+
+        Identification
+
+
+        <br>
+        Missing CheckType row(s): Identification.
+
+      </td>
+    </tr>
+
+    <tr class="required-content-row--missing">
+      <td><a href="/admin/arxii/checktype/">Magical Endurance check type</a></td>
+      <td>world/magic/services/soul_tether.py:1403</td>
+      <td>The Soul Tether system crashes with CheckType.DoesNotExist instead of rolling the Magical Endurance check it depends on.</td>
+      <td>
+
+        Magical Endurance
+
+
+        <br>
+        Missing CheckType row(s): Magical Endurance.
+
+      </td>
+    </tr>
+
+    <tr class="required-content-row--missing">
+      <td><a href="/admin/arxii/checktype/">Technique Training check type</a></td>
+      <td>world/magic/services/technique_training.py:69 resolve_training_check()</td>
+      <td>Training a technique crashes with CheckType.DoesNotExist instead of rolling the Technique Training check.</td>
+      <td>
+
+        Technique Training
+
+
+        <br>
+        Missing CheckType row(s): Technique Training.
+
+      </td>
+    </tr>
+
+    <tr class="required-content-row--missing">
+      <td><a href="/admin/arxii/checktype/">Endure Hallowed Ground check type</a></td>
+      <td>world/magic/services/resonance_environment.py:583 _get_endure_hallowed_ground_check_type()</td>
+      <td>A character resisting hallowed ground's resonance pressure crashes with CheckType.DoesNotExist instead of rolling to endure it.</td>
+      <td>
+
+        endure_hallowed_ground
+
+
+        <br>
+        Missing CheckType row(s): endure_hallowed_ground.
+
+      </td>
+    </tr>
+
+    <tr class="required-content-row--missing">
+      <td><a href="/admin/arxii/checktype/">Search check type</a></td>
+      <td>actions/definitions/investigation.py:69 SearchAction</td>
+      <td>Every player who searches a room gets the placeholder failure "You can't search right now." - the core search action never produces a result.</td>
+      <td>
+
+        Search
+
+
+        <br>
+        Missing CheckType row(s): Search.
+
+      </td>
+    </tr>
+
+    <tr class="required-content-row--missing">
+      <td><a href="/admin/arxii/checktype/">Tax Collection check type</a></td>
+      <td>world/assets/content.py:95 ensure_asset_promotion_content() - literal, no constant</td>
+      <td>Seeding the Collect Income NPC service offer crashes with CheckType.DoesNotExist, so the asset-collection tax check is never wired up for players.</td>
+      <td>
+
+        Tax Collection
+
+
+        <br>
+        Missing CheckType row(s): Tax Collection.
+
+      </td>
+    </tr>
+
+    <tr class="required-content-row--missing">
+      <td><a href="/admin/arxii/challengetemplate/">Interpose challenge template</a></td>
+      <td>world/scenes/sudden_harm.py:58 _bind_interpose_challenge()</td>
+      <td>Sudden harm that should offer allies a chance to interpose instead resolves immediately, with no window for anyone to step in.</td>
+      <td>
+
+        Interpose
+
+
+        <br>
+        Missing ChallengeTemplate row(s): Interpose.
+
+      </td>
+    </tr>
+
+    <tr class="required-content-row--missing">
+      <td><a href="/admin/arxii/challengetemplate/">Succor challenge template</a></td>
+      <td>world/combat/services.py:10512 _ensure_succor_challenges()</td>
+      <td>A declared Succor action (helping a struggling ally) never gets a challenge bound to it, so the assist silently produces no roll.</td>
+      <td>
+
+        Succor
+
+
+        <br>
+        Missing ChallengeTemplate row(s): Succor.
+
+      </td>
+    </tr>
+
+    <tr class="required-content-row--missing">
+      <td><a href="/admin/arxii/challengetemplate/">Catch the Faller challenge template</a></td>
+      <td>world/areas/positioning/plummet.py:70 _create_catch_challenge_for()</td>
+      <td>A falling character with a would-be catcher present crashes with ChallengeTemplate.DoesNotExist instead of opening the catch window.</td>
+      <td>
+
+        Catch the Faller
+
+
+        <br>
+        Missing ChallengeTemplate row(s): Catch the Faller.
+
+      </td>
+    </tr>
+
+    <tr class="required-content-row--missing">
+      <td><a href="/admin/arxii/roomfeaturekind/">Sanctum room feature kind</a></td>
+      <td>world/magic/services/sanctum_install.py:301 perform_sanctification()</td>
+      <td>Performing a sanctification ceremony crashes with RoomFeatureKind.DoesNotExist instead of installing the Sanctum room feature.</td>
+      <td>
+
+        Sanctum
+
+
+        <br>
+        Missing RoomFeatureKind row(s): Sanctum.
+
+      </td>
+    </tr>
+
+    <tr class="required-content-row--missing">
+      <td><a href="/admin/arxii/property/">Aerial property</a></td>
+      <td>world/areas/positioning/services.py:919 _aerial_property()</td>
+      <td>Marking or clearing a flying character's aerial state crashes with Property.DoesNotExist instead of updating their position.</td>
+      <td>
+
+        aerial
+
+
+        <br>
+        Missing Property row(s): aerial.
+
+      </td>
+    </tr>
+
+    <tr class="required-content-row--missing">
+      <td><a href="/admin/arxii/ritual/">Accept Soul Tether ritual</a></td>
+      <td>world/magic/services/soul_tether.py:218 accept_soul_tether() - literal, no constant</td>
+      <td>Forming a Soul Tether raises Ritual.DoesNotExist mid-transaction and the bond formation crashes.</td>
+      <td>
+
+        accept_soul_tether
+
+
+        <br>
+        Missing Ritual row(s): accept_soul_tether.
+
+      </td>
+    </tr>
+
+    <tr class="required-content-row--missing">
+      <td><a href="/admin/arxii/capabilitytype/">Movement capability type</a></td>
+      <td>world/areas/positioning/services.py:783 _can_move()</td>
+      <td>Checking whether a character can move raises CapabilityType.DoesNotExist and crashes movement resolution - documented in the call site itself as a fatal configuration error by design.</td>
+      <td>
+
+        movement
+
+
+        <br>
+        Missing CapabilityType row(s): movement.
+
+      </td>
+    </tr>
+
+    <tr class="required-content-row--missing">
+      <td><a href="/admin/arxii/modifiertarget/">Fashion Presentation modifier target</a></td>
+      <td>world/items/constants.py:301 get_fashion_modifier_target()</td>
+      <td>Computing a fashion presentation modifier crashes with ModifierTarget.DoesNotExist - documented in the call site itself as a loud configuration error, not a silent fallback.</td>
+      <td>
+
+        Fashion Presentation
+
+
+        <br>
+        Missing ModifierTarget row(s): Fashion Presentation.
+
+      </td>
+    </tr>
+
+    <tr class="required-content-row--missing">
+      <td><a href="/admin/arxii/modifiertarget/">Armor Soak modifier target</a></td>
+      <td>world/combat/services.py:11565 _resonant_armor_soak()</td>
+      <td>Armor soak from resonant/magical modifiers silently falls back to 0 soak for every character - no traceback, the bonus just never applies.</td>
+      <td>
+
+        armor_soak
+
+
+        <br>
+        Missing ModifierTarget row(s): armor_soak.
+
+      </td>
+    </tr>
+
+    <tr class="required-content-row--missing">
+      <td><a href="/admin/arxii/modifiertarget/">Consider bias-direction modifier target</a></td>
+      <td>world/combat/consider.py:128 bias_direction()</td>
+      <td>The consider check's optimism/pessimism skew silently falls back to a random direction instead of the authored bias - no traceback, just a worse read every time.</td>
+      <td>
+
+        consider_bias_direction
+
+
+        <br>
+        Missing ModifierTarget row(s): consider_bias_direction.
+
+      </td>
+    </tr>
+
+    <tr class="required-content-row--missing">
+      <td><a href="/admin/arxii/modifiertarget/">Travel Speed modifier target</a></td>
+      <td>world/travel/services.py:138 compute_travel_time()</td>
+      <td>Per-character travel speed modifiers (weather, magic) silently fall back to 0 - no traceback, travel just never gets that adjustment.</td>
+      <td>
+
+
+        <br>
+        No ModifierTarget 'travel_speed' row under category 'travel'.
+
+      </td>
+    </tr>
+
+    <tr class="required-content-row--missing">
+      <td><a href="/admin/arxii/checktype/">Gossip check type</a></td>
+      <td>world/secrets/gossip.py:88 _gossip_check_type()</td>
+      <td>Planting, seeking, or suppressing gossip crashes with CheckType.DoesNotExist instead of rolling the Gossip check.</td>
+      <td>
+
+
+        <br>
+        No CheckType 'Gossip' row under category 'Social'.
+
+      </td>
+    </tr>
+
+    <tr class="required-content-row--missing">
+      <td><a href="/admin/arxii/specialization/">Gossip specialization</a></td>
+      <td>world/secrets/gossip.py:94 _gossip_specialization()</td>
+      <td>Every Gossip skill-gate check (can this character even attempt gossip actions) crashes with Specialization.DoesNotExist.</td>
+      <td>
+
+
+        <br>
+        No Specialization 'Gossip' row under skill trait 'Persuasion'.
+
+      </td>
+    </tr>
+
+    <tr class="required-content-row--missing">
+      <td><a href="/admin/arxii/trait/">Willpower stat trait</a></td>
+      <td>world/magic/services/anima.py:393 provision_player_anima_ritual()</td>
+      <td>Provisioning a player's anima ritual logs a warning and skips ritual creation entirely for that character when no explicit stat was chosen at CG.</td>
+      <td>
+
+
+        <br>
+        No Trait 'willpower' row with trait_type=STAT.
+
+      </td>
+    </tr>
+
+    <tr class="required-content-row--missing">
+      <td><a href="/admin/arxii/socialconsentcategory/">Hostile social consent category</a></td>
+      <td>world/secrets/services.py:218 accusation_permitted() - literal, no constant. Looked up by `key`, not `name` (NaturalKeyConfig.fields = ['key']), so a name-only probe would check the wrong column</td>
+      <td>The hostile-consent gate silently allows every accusation, even against a tenure that has blocked hostile targeting - the safety gate never applies.</td>
+      <td>
+
+
+        <br>
+        No SocialConsentCategory row with key='hostile'.
+
+      </td>
+    </tr>
+
+    <tr class="required-content-row--missing">
+      <td><a href="/admin/arxii/socialconsentcategory/">Makeovers &amp; Styling consent category</a></td>
+      <td>world/items/services/usage.py makeover_outcome() - literal key, no constant. Looked up by `key`, not `name`.</td>
+      <td>Every makeover of another player's character is refused and nobody can be asked or opt a stylist in: the row is the setting (#4187). Create it with key='makeover', default mode Ask me, and 'asks before acting' on; the seed makes the same row on an empty database.</td>
+      <td>
+
+
+        <br>
+        No SocialConsentCategory row with key='makeover'.
+
+      </td>
+    </tr>
+
+    <tr class="required-content-row--missing">
+      <td><a href="/admin/arxii/auderemajorathreshold/">Audere Majora tier-crossing thresholds</a></td>
+      <td>world/magic/audere_majora.py:679 (tier-crossing offer)</td>
+      <td>A character who reaches a boundary level (5, 10, 15, or 20) with no authored threshold row for it never receives the Audere Majora crossing offer - the corruption path silently stops advancing.</td>
+      <td>
+
+        5, 10, 15, 20
+
+
+        <br>
+        Missing AudereMajoraThreshold row(s) for boundary level(s): 5, 10, 15, 20.
+
+      </td>
+    </tr>
+
+    <tr class="required-content-row--missing">
+      <td><a href="/admin/arxii/spectaclereactionline/">Spectacle reaction lines</a></td>
+      <td>world/combat/spectacle.py _flavour_line() (GM-less display narration)</td>
+      <td>An earned display in a scene with no GM shakes the witnesses and posts the credit line, but a reaction (shaken, faltering, broken, heartened) with no generic authored line gets no flavour.</td>
+      <td>
+
+        Shaken, Faltering, Broken, Heartened
+
+
+        <br>
+        No generic spectacle reaction line for: Shaken, Faltering, Broken, Heartened. Displays in GM-less scenes post no flavour for them.
+
+      </td>
+    </tr>
+
+    <tr class="required-content-row--missing">
+      <td>Soulfray stage consequence pools</td>
+      <td>world/magic/services/soulfray.py _fire_stage_consequence_pool()</td>
+      <td>A caster who reaches the stage gains severity and nothing happens: there is nothing for the resilience roll to draw.</td>
+      <td>
+
+
+        <br>
+        No ConditionStage rows exist for the Soulfray template.
+
+      </td>
+    </tr>
+
+    <tr class="required-content-row--missing">
+      <td>Some Soulfray stage can kill</td>
+      <td>world/magic/services/soulfray.py nonlethal_severity_ceiling(), get_soulfray_warning()</td>
+      <td>Soulfray never kills. Non-lethal casts are never capped, the safety checkpoint never warns of death, and Audere's death deferral has nothing to defer.</td>
+      <td>
+
+
+        <br>
+        No Soulfray stage's pool holds a consequence marked Can kill.
+
+      </td>
+    </tr>
+
+    <tr class="required-content-row--missing">
+      <td><a href="/admin/arxii/stakesescalationmodifier/">Stakes escalation curves</a></td>
+      <td>world/combat/escalation.py (assign_default_escalation_curve, _stakes_intensity_step_bonus)</td>
+      <td>A high-stakes fight with no authored curve for its stakes level silently never auto-escalates - no traceback, a GM must notice and set its escalation curve by hand instead of it happening automatically.</td>
+      <td>
+
+        local, regional, national, continental, world
+
+
+        <br>
+        0 of 5 stakes levels have a default escalation curve. Missing: local, regional, national, continental, world.
+
+      </td>
+    </tr>
+
+    <tr class="required-content-row--missing">
+      <td><a href="/admin/arxii/encounteroutcomemapping/">Encounter outcome-tier mappings</a></td>
+      <td>world/combat/beat_wiring.py:69 classify_battle_outcome()</td>
+      <td>An EncounterOutcome x RiskLevel pair with no authored EncounterOutcomeMapping row means the fight's outcome never resolves what it's grading: VICTORY/DEFEAT grade a story beat (concludes with the beat never resolved), FLED/ABANDONED grade a scenario ENCOUNTER option's route instead (#3565, concludes with the run left paused) - the error log names the pair, but nothing grades until a GM authors the missing row.</td>
+      <td>
+
+        abandoned/extreme, abandoned/high, abandoned/lethal, abandoned/low, abandoned/moderate, defeat/extreme, defeat/high, defeat/lethal, defeat/low, defeat/moderate, fled/extreme, fled/high, fled/lethal, fled/low, fled/moderate, victory/extreme, victory/high, victory/lethal, victory/low, victory/moderate
+
+
+        <br>
+        Missing EncounterOutcomeMapping row(s): abandoned/extreme, abandoned/high, abandoned/lethal, abandoned/low, abandoned/moderate, defeat/extreme, defeat/high, defeat/lethal, defeat/low, defeat/moderate, fled/extreme, fled/high, fled/lethal, fled/low, fled/moderate, victory/extreme, victory/high, victory/lethal, victory/low, victory/moderate.
+
+      </td>
+    </tr>
+
+    <tr class="required-content-row--missing">
+      <td>Battle outcome-tier mappings</td>
+      <td>world/battles/beat_wiring.py:31 classify_battle_conclusion_outcome()</td>
+      <td>A resolved BattleOutcome (any value except UNRESOLVED) with no authored BattleOutcomeMapping row means a battle linked to a story beat concludes and the beat never resolves - the error log names the outcome, but nothing grades the beat until a GM authors the missing row.</td>
+      <td>
+
+        attacker_decisive, attacker_marginal, defender_decisive, defender_marginal
+
+
+        <br>
+        Missing BattleOutcomeMapping row(s): attacker_decisive, attacker_marginal, defender_decisive, defender_marginal.
+
+      </td>
+    </tr>
+
+    <tr class="required-content-row--missing">
+      <td>Companion defeat consequence pool</td>
+      <td>world/companions/services.py:335 resolve_companion_defeat()</td>
+      <td>A companion defeated at EXTREME or LETHAL risk is silently unharmed: it never dies, never comes out savaged, and the stakes its owner acknowledged mean nothing.</td>
+      <td>
+
+        ConsequencePool 'companion_defeat'
+
+
+        <br>
+        No 'companion_defeat' ConsequencePool row.
+
+      </td>
+    </tr>
+
+    <tr class="required-content-row--missing">
+      <td><a href="/admin/arxii/auderethreshold/">Audere offer threshold</a></td>
+      <td>world/magic/audere.py:257 offer_audere()</td>
+      <td>Accepting an Audere offer silently declines every time regardless of eligibility - offer_audere() returns accepted=False with no error, so players believe the offer failed for no reason.</td>
+      <td>
+
+
+        <br>
+        No AudereThreshold rows exist.
+
+      </td>
+    </tr>
+
+    <tr class="required-content-row--missing">
+      <td><a href="/admin/arxii/gameclock/">Game clock (IC time anchor)</a></td>
+      <td>world/game_clock/views.py:55 ClockViewSet.list(); world/events/services.py:46 derive_ic_time_from_real(); world/conditions/services.py:698 _compute_ingame_time_expires()</td>
+      <td>GET /api/clock/ answers 503 NOT_CONFIGURED, the Hall's Time plate reads 'Time is currently frozen', and every IC-date reader (event scheduling, in-game-time condition expiry, journals) gets None and skips. Seed it once through Django admin (add is allowed only while no row exists) or POST /api/clock/adjust/ as staff.</td>
+      <td>
+
+
+        <br>
+        No GameClock rows exist.
+
+      </td>
+    </tr>
+
+    <tr class="required-content-row--missing">
+      <td><a href="/admin/arxii/legendlevelcalibration/">Legend level calibration (Rite of Honors)</a></td>
+      <td>world/societies/honors.py:343 honor_deed(); world/achievements/services.py:352 maybe_grant_deed_title()</td>
+      <td>honor_deed() and maybe_grant_deed_title() raise LegendLevelCalibration.DoesNotExist for the honorer's or the deed's level when it has no authored row - nobody can honor a deed and no deed can grant a title until the curve is filled in.</td>
+      <td>
+
+
+        <br>
+        No LegendLevelCalibration rows exist.
+
+      </td>
+    </tr>
+
+    <tr class="required-content-row--missing">
+      <td><a href="/admin/arxii/appearancesection/">Appearance section headings</a></td>
+      <td>AppearanceStage (#3709): one block per AppearanceSection</td>
+      <td>The Appearance chapter has no block to render an offer in, so nothing authored for it can be shown or bought.</td>
+      <td>
+
+
+        <br>
+        No AppearanceSection rows exist.
+
+      </td>
+    </tr>
+
+    <tr class="required-content-row--missing">
+      <td><a href="/admin/arxii/distinction/">Per-feature Appearance distinctions</a></td>
+      <td>AppearanceStage distinctive features (#3739, #3756)</td>
+      <td>Nothing can be made distinctive and Alluring, Menacing and Regal cannot be bought on a feature; the seed only invents these rows under SEED_SAMPLE_CONTENT.</td>
+      <td>
+
+        Make It Distinctive, Alluring, Menacing, Regal
+
+
+        <br>
+        Missing or inactive feature row(s): Make It Distinctive, Alluring, Menacing, Regal.
+
+      </td>
+    </tr>
+
+    <tr class="required-content-row--missing">
+      <td><a href="/admin/arxii/enemyreason/">Enemy reasons</a></td>
+      <td>Final Touches enemy picker (#3621, #3709)</td>
+      <td>The enemy picker offers no reason, so no enemy can be priced and the Actor's Sheet's enemy line is unreachable.</td>
+      <td>
+
+
+        <br>
+        No EnemyReason rows exist.
+
+      </td>
+    </tr>
+
+    <tr class="required-content-row--missing">
+      <td><a href="/admin/arxii/traditionstateline/">Tradition state lines</a></td>
+      <td>web/admin/tradition_slate/live.py state_line_display(), preview_line(); world/character_creation/serializers.py TraditionSerializer.get_state_line()</td>
+      <td>The tradition step prints nothing for every Beginning's slate line at the missing or blank state - the row is shared, not authored per Beginning, so the gap is silent everywhere at once.</td>
+      <td>
+
+        self_taught, teachers_gone, living_masters
+
+
+        <br>
+        Missing or blank TraditionStateLine row(s) for state(s): self_taught, teachers_gone, living_masters.
+
+      </td>
+    </tr>
+
+    <tr class="required-content-row--missing">
+      <td><a href="/admin/arxii/schoolingline/">Tradition schooling lines</a></td>
+      <td>web/admin/tradition_slate/live.py schooling_line_display()</td>
+      <td>The living-masters schooling set is incomplete for every Beginning at once at the missing or blank rank.</td>
+      <td>
+
+        0, 1, 2
+
+
+        <br>
+        Missing or blank SchoolingLine row(s) for rank(s): 0, 1, 2.
+
+      </td>
+    </tr>
+
+    <tr class="required-content-row--missing">
+      <td><a href="/admin/arxii/damagesuccesslevelmultiplier/">Damage success-level multipliers</a></td>
+      <td>world/combat/services.py:785 CombatTechniqueResolver._apply_damage(); world/conditions/services.py get_damage_multiplier()</td>
+      <td>get_damage_multiplier returns 0 for every success level, so no technique deals damage in combat and every attack prices at 0 DE on the Techniques tuning panel. The curve the combat tests use: min_success_level 2 at 1.00 (Full), 1 at 0.50 (Partial).</td>
+      <td>
+
+
+        <br>
+        No DamageSuccessLevelMultiplier rows exist.
+
+      </td>
+    </tr>
+
+    <tr class="required-content-row--missing">
+      <td><a href="/admin/arxii/furytier/">Fury tiers</a></td>
+      <td>actions/player_interface.py:565 _fury_tier_options()</td>
+      <td>The combat declaration offers no Fury tier, so no player can commit Fury or risk Berserk.</td>
+      <td>
+
+
+        <br>
+        No FuryTier rows exist.
+
+      </td>
+    </tr>
+
+    <tr class="required-content-row--missing">
+      <td><a href="/admin/arxii/fleeconfig/">Flee rules</a></td>
+      <td>world/combat/services.py:422 get_flee_config()</td>
+      <td>get_flee_config raises FleeConfig.DoesNotExist, so any attempt to flee combat errors.</td>
+      <td>
+
+
+        <br>
+        No FleeConfig rows exist.
+
+      </td>
+    </tr>
+
+    <tr class="required-content-row--missing">
+      <td><a href="/admin/arxii/classstagehealthrate/">Class health growth per level</a></td>
+      <td>world/vitals/services.py derive_base_max_health()</td>
+      <td>The class term of max health sums to 0, so a character's health never grows with level.</td>
+      <td>
+
+
+        <br>
+        No ClassStageHealthRate rows exist.
+
+      </td>
+    </tr>
+
+    <tr class="required-content-row--missing">
+      <td><a href="/admin/arxii/treatmenttemplate/">Treatments</a></td>
+      <td>world/conditions/services.py:4205 perform_treatment()</td>
+      <td>No treatment exists to perform, so no condition or wound can be treated.</td>
+      <td>
+
+
+        <br>
+        No TreatmentTemplate rows exist.
+
+      </td>
+    </tr>
+
+    <tr class="required-content-row--missing">
+      <td><a href="/admin/arxii/buildingkind/">Building kinds</a></td>
+      <td>world/buildings/services.py:139 issue_permit(); world/buildings/services.py:251 validate_permit_site()</td>
+      <td>No permit can name a building kind, so nothing can be built.</td>
+      <td>
+
+
+        <br>
+        No BuildingKind rows exist.
+
+      </td>
+    </tr>
+
+    <tr class="required-content-row--missing">
+      <td><a href="/admin/arxii/rampartelementprofile/">Rampart elements</a></td>
+      <td>world/areas/positioning/services.py:208 raise_rampart()</td>
+      <td>raise_rampart needs an element profile, so no rampart can be raised.</td>
+      <td>
+
+
+        <br>
+        No RampartElementProfile rows exist.
+
+      </td>
+    </tr>
+
+    <tr class="required-content-row--missing">
+      <td><a href="/admin/arxii/mentorbondconfig/">Mentor bond rules</a></td>
+      <td>world/covenants/services.py:2226 get_mentor_bond_config()</td>
+      <td>get_mentor_bond_config raises MentorBondConfig.DoesNotExist, so Mentor's Vow bond scaling errors.</td>
+      <td>
+
+
+        <br>
+        No MentorBondConfig rows exist.
+
+      </td>
+    </tr>
+
+    <tr class="required-content-row--missing">
+      <td><a href="/admin/arxii/craftingrecipe/">Crafting recipes</a></td>
+      <td>world/items/crafting/services.py:196 _resolve_recipe_for_quote()</td>
+      <td>Every crafting quote raises CraftingNotConfigured, so no item can be crafted.</td>
+      <td>
+
+
+        <br>
+        No CraftingRecipe rows exist.
+
+      </td>
+    </tr>
+
+    <tr class="required-content-row--missing">
+      <td><a href="/admin/arxii/npcrole/">NPC roles</a></td>
+      <td>world/npc_services/views.py:214 (starting an NPC interaction)</td>
+      <td>No functionary can be placed and no NPC interaction menu can open.</td>
+      <td>
+
+
+        <br>
+        No NPCRole rows exist.
+
+      </td>
+    </tr>
+
+    <tr class="required-content-row--missing">
+      <td><a href="/admin/arxii/npcserviceoffer/">NPC service offers</a></td>
+      <td>world/npc_services/services.py:453 available_offers()</td>
+      <td>Every NPC interaction opens to an empty menu, so permits, missions, loans, training, court grants and styling are unreachable.</td>
+      <td>
+
+
+        <br>
+        No NPCServiceOffer rows exist.
+
+      </td>
+    </tr>
+
+    <tr class="required-content-row--missing">
+      <td><a href="/admin/arxii/predatorkind/">Predator kinds</a></td>
+      <td>world/predators/services.py:228 _maybe_spawn_band()</td>
+      <td>The weekly menace tick returns before spawning, so no predator band ever appears.</td>
+      <td>
+
+
+        <br>
+        No PredatorKind rows exist.
+
+      </td>
+    </tr>
+
+    <tr class="required-content-row--missing">
+      <td><a href="/admin/arxii/unionkind/">A union kind that confers wedlock</a></td>
+      <td>world/societies/houses/pact_services.py:238 solemnize_wedding()</td>
+      <td>solemnize_wedding refuses every wedding with "No law of marriage exists to wed under."</td>
+      <td>
+
+
+        <br>
+        No UnionKind with confers_wedlock set exists.
+
+      </td>
+    </tr>
+
+    <tr class="required-content-row--missing">
+      <td><a href="/admin/arxii/title/">Claimable titles for house founding</a></td>
+      <td>world/societies/houses/creator.py:51 claimable_titles()</td>
+      <td>Character creation's house-founding step has no title to claim, so no new landed house can be founded.</td>
+      <td>
+
+
+        <br>
+        No claimable Title exists.
+
+      </td>
+    </tr>
+
+    <tr class="required-content-row--missing">
+      <td><a href="/admin/arxii/missiongiver/">Mission givers</a></td>
+      <td>world/missions/services/boards.py:49 postings_for_giver()</td>
+      <td>No mission board exists, so players can never discover or take a mission.</td>
+      <td>
+
+
+        <br>
+        No MissionGiver rows exist.
+
+      </td>
+    </tr>
+
+    <tr class="required-content-row--missing">
+      <td><a href="/admin/arxii/missiontemplate/">Mission templates</a></td>
+      <td>world/missions/services/boards.py:49 postings_for_giver()</td>
+      <td>Every mission board shows zero postings. Missions are authored in the Mission Studio; the admin page is a table view and fallback editor.</td>
+      <td>
+
+
+        <br>
+        No MissionTemplate rows exist.
+
+      </td>
+    </tr>
+
+    <tr class="required-content-row--missing">
+      <td><a href="/admin/arxii/roomsizetier/">Default room size tier</a></td>
+      <td>world/buildings/room_services.py:170 dig_room(); world/buildings/services.py:530 create_entry_room()</td>
+      <td>A default-sized room resolves no size tier and costs 0 space-budget units, so the building space budget never limits construction.</td>
+      <td>
+
+        Modest
+
+
+        <br>
+        Missing RoomSizeTier row(s): Modest.
+
+      </td>
+    </tr>
+
+    <tr class="required-content-row--missing">
+      <td><a href="/admin/arxii/riskcalibration/">Stakes risk calibrations</a></td>
+      <td>world/stories/services/stakes.py:398 validate_stakes_readiness()</td>
+      <td>A risked story beat at a risk level with no calibration row can never be marked ready, so its stakes never settle.</td>
+      <td>
+
+        low, moderate, high, extreme
+
+
+        <br>
+        Missing RiskCalibration row(s) for risk level(s): low, moderate, high, extreme.
+
+      </td>
+    </tr>
+
+    <tr class="required-content-row--missing">
+      <td><a href="/admin/arxii/covenantlevelthreshold/">Covenant level thresholds</a></td>
+      <td>world/covenants/services.py:1461 recompute_covenant_level()</td>
+      <td>recompute_covenant_level finds no threshold, so every covenant stays at level 1.</td>
+      <td>
+
+
+        <br>
+        No CovenantLevelThreshold rows exist.
+
+      </td>
+    </tr>
+
+    <tr class="required-content-row--missing">
+      <td><a href="/admin/arxii/gangturfreputationaward/">Gang turf reputation awards</a></td>
+      <td>world/societies/gang_turf.py:72 _tier_to_reputation_delta()</td>
+      <td>A finished gang-turf project grants no reputation and moves no turf.</td>
+      <td>
+
+
+        <br>
+        No GangTurfReputationAward rows exist.
+
+      </td>
+    </tr>
+
+    <tr class="required-content-row--missing">
+      <td><a href="/admin/arxii/warfundingtierbonus/">War funding tier bonuses</a></td>
+      <td>world/battles/war_funding_services.py:150 complete_war_funding(); world/battles/war_funding_services.py:200 get_war_funding_bonus()</td>
+      <td>A finished war-funding drive grants no training XP and no strength, morale or quality bonus.</td>
+      <td>
+
+
+        <br>
+        No WarFundingTierBonus rows exist.
+
+      </td>
+    </tr>
+
+    <tr class="required-content-row--missing">
+      <td><a href="/admin/arxii/readinessthreshold/">War readiness thresholds</a></td>
+      <td>world/battles/war_funding_services.py:215 get_war_funding_bonus()</td>
+      <td>Readiness a covenant builds never converts into a unit quality step.</td>
+      <td>
+
+
+        <br>
+        No ReadinessThreshold rows exist.
+
+      </td>
+    </tr>
+
+    <tr class="required-content-row--missing">
+      <td><a href="/admin/arxii/citydefenseintegritybonus/">City defense integrity bonuses</a></td>
+      <td>world/battles/city_defense_services.py:134 get_city_defense_integrity_bonus()</td>
+      <td>A finished city-defense project gives the defending side no fortification bonus.</td>
+      <td>
+
+
+        <br>
+        No CityDefenseIntegrityBonus rows exist.
+
+      </td>
+    </tr>
+
+    <tr class="required-content-row--missing">
+      <td><a href="/admin/arxii/standoffconfig/">Standoff settings singleton</a></td>
+      <td>world/standoffs/models.py StandoffConfig.load()</td>
+      <td>The standoff settings row is missing or incomplete (read check, terms check, pass condition and turn condition must all be set); players can only fight.</td>
+      <td>
+
+
+        <br>
+        No StandoffConfig row has all four of its links set.
+
+      </td>
+    </tr>
+
+    <tr class="required-content-row--missing">
+      <td><a href="/admin/arxii/standoffapproach/">Standoff approaches</a></td>
+      <td>world/standoffs/models.py StandoffApproach</td>
+      <td>Standoffs offer no approaches; players can only fight.</td>
+      <td>
+
+
+        <br>
+        No StandoffApproach rows exist.
+
+      </td>
+    </tr>
+
+    <tr class="required-content-row--missing">
+      <td><a href="/admin/arxii/standoffterms/">Standoff terms</a></td>
+      <td>world/standoffs/models.py StandoffTerms</td>
+      <td>Standoffs offer no terms; players can only fight.</td>
+      <td>
+
+
+        <br>
+        No StandoffTerms rows exist.
+
+      </td>
+    </tr>
+
+  </tbody>
+</table>
+
+
+<h3>Missing - Tuning</h3>
+
+<p>
+  Each row below is config the game runs without, just with worse numbers.
+</p>
+<table class="tuning-table required-content-table required-content-table--missing">
+  <thead>
+    <tr>
+      <th>Dependency</th>
+      <th>Consumer</th>
+      <th>Consequence</th>
+      <th>Missing</th>
+    </tr>
+  </thead>
+  <tbody>
+
+    <tr class="required-content-row--missing">
+      <td><a href="/admin/arxii/devotionconfig/">Favor outcome awards: closing awards</a></td>
+      <td>world/worship/pledge_services.py resolve_pledge_project()</td>
+      <td>A pledge closed by its closing rite, or one that lapses at half its target or more, pays no closing award.</td>
+      <td>
+
+
+        <br>
+        No closing award is authored for any outcome tier.
+
+      </td>
+    </tr>
+
+    <tr class="required-content-row--missing">
+      <td>Standoff reaction lines</td>
+      <td>world/standoffs/services/reactions.py reaction_line_for()</td>
+      <td>Standoff presses and terms show only the plain outcome line; a critical roll gets no bigger authored reaction.</td>
+      <td>
+
+
+        <br>
+        No StandoffReactionLine rows exist.
+
+      </td>
+    </tr>
+
+    <tr class="required-content-row--missing">
+      <td><a href="/admin/arxii/capabilitypowerconfig/">Capability power config singleton</a></td>
+      <td>world/magic/services/capability_curve.py:31 get_capability_power_config()</td>
+      <td>Capability magnitude contributes nothing to the power curve - every capability-driven power calculation returns its unscaled base value.</td>
+      <td>
+
+
+        <br>
+        No CapabilityPowerConfig rows exist.
+
+      </td>
+    </tr>
+
+    <tr class="required-content-row--missing">
+      <td><a href="/admin/arxii/levelpowerconfig/">Level power config singleton</a></td>
+      <td>world/magic/services/power_terms.py:87 get_level_power_config()</td>
+      <td>Character and technique level contribute zero bonus to magical power output - the level-scaling term of the power formula is silently disabled.</td>
+      <td>
+
+
+        <br>
+        No LevelPowerConfig rows exist.
+
+      </td>
+    </tr>
+
+    <tr class="required-content-row--missing">
+      <td><a href="/admin/arxii/aurapowerconfig/">Aura power config singleton</a></td>
+      <td>world/magic/services/power_terms.py:94 get_aura_power_config()</td>
+      <td>A caster's aura contributes zero bonus to magical power output - the aura-scaling term of the power formula is silently disabled.</td>
+      <td>
+
+
+        <br>
+        No AuraPowerConfig rows exist.
+
+      </td>
+    </tr>
+
+    <tr class="required-content-row--missing">
+      <td><a href="/admin/arxii/languagetrainingconfig/">Language training config singleton</a></td>
+      <td>world/species/language_progression.py get_language_training_config() via actions/definitions/language.py TrainLanguageAction</td>
+      <td>Language training runs at the shipped default rates (15 dp with a teacher, 8 dp self-study) until staff save the singleton; the first training session creates it at those defaults.</td>
+      <td>
+
+
+        <br>
+        No LanguageTrainingConfig rows exist.
+
+      </td>
+    </tr>
+
+    <tr class="required-content-row--missing">
+      <td><a href="/admin/arxii/soulfrayconfig/">Soulfray config singleton</a></td>
+      <td>world/magic/services/anima.py:219 apply_anima_ritual_outcome(); world/magic/services/techniques.py _get_social_safety_bonus()</td>
+      <td>Anima ritual outcomes cannot compute Soulfray severity accumulation or resilience checks - the ritual outcome silently omits the Soulfray term. The out-of-combat social safety control bonus also falls back to its field default (10) instead of a staff-tuned value.</td>
+      <td>
+
+
+        <br>
+        No SoulfrayConfig rows exist.
+
+      </td>
+    </tr>
+
+    <tr class="required-content-row--missing">
+      <td><a href="/admin/arxii/tierthreshold/">Building polish tier thresholds</a></td>
+      <td>world/buildings/room_services.py:526 _check_template_prerequisites() (commission gate)</td>
+      <td>A polish project's tier prerequisites are an empty many-to-many, so commissioning it never checks the building's polish tier at all.</td>
+      <td>
+
+
+        <br>
+        No TierThreshold rows exist.
+
+      </td>
+    </tr>
+
+    <tr class="required-content-row--missing">
+      <td><a href="/admin/arxii/captivityconfig/">Captivity config singleton</a></td>
+      <td>world/captivity/models.py:209 CaptivityConfig.load()</td>
+      <td>Captivity runs on the model's own field defaults rather than an authored row - staff have nothing to tune.</td>
+      <td>
+
+
+        <br>
+        No CaptivityConfig rows exist.
+
+      </td>
+    </tr>
+
+    <tr class="required-content-row--missing">
+      <td><a href="/admin/arxii/cgpointbudget/">CG point budget</a></td>
+      <td>world/character_creation/models.py:1793 CharacterDraft.calculate_cg_points_remaining() (CGPointBudget.get_active_budget()); world/character_creation/services.py:1483 _convert_remaining_cg_points_to_xp() (CGPointBudget.get_active_conversion_rate())</td>
+      <td>Character creation falls back to a 100-point budget and converts unspent points to XP at a flat 2-to-1 rate, with no active row to tune either number.</td>
+      <td>
+
+
+        <br>
+        No CGPointBudget rows exist.
+
+      </td>
+    </tr>
+
+    <tr class="required-content-row--missing">
+      <td><a href="/admin/arxii/checktypespecialization/">Check type specializations</a></td>
+      <td>world/checks/services.py:989 _calculate_specialization_points()</td>
+      <td>No check ever adds a specialization bonus - the third leg of stat + skill + specialization is silently just stat + skill.</td>
+      <td>
+
+
+        <br>
+        No CheckTypeSpecialization rows exist.
+
+      </td>
+    </tr>
+
+    <tr class="required-content-row--missing">
+      <td><a href="/admin/arxii/characterclass/">Character classes</a></td>
+      <td>world/classes/services.py:26 ensure_default_character_class()</td>
+      <td>Only the placeholder Adventurer class exists - character creation offers no other class to pick.</td>
+      <td>
+
+
+        <br>
+        No CharacterClass rows exist.
+
+      </td>
+    </tr>
+
+    <tr class="required-content-row--missing">
+      <td><a href="/admin/arxii/propertygrantprofile/">Property grant profiles</a></td>
+      <td>world/buildings/property_grant_services.py:48 grant_property_house()</td>
+      <td>A Beginning configured to grant a starting house has no profile to grant it from, so the character receives nothing.</td>
+      <td>
+
+
+        <br>
+        No PropertyGrantProfile rows exist.
+
+      </td>
+    </tr>
+
+    <tr class="required-content-row--missing">
+      <td><a href="/admin/arxii/buildinglisting/">Building listings for sale</a></td>
+      <td>world/buildings/services.py:962 purchase_building()</td>
+      <td>No building is ever listed for sale, so no player can buy one for coin.</td>
+      <td>
+
+
+        <br>
+        No BuildingListing rows exist.
+
+      </td>
+    </tr>
+
+    <tr class="required-content-row--missing">
+      <td><a href="/admin/arxii/polishcategory/">Polish categories</a></td>
+      <td>world/buildings/polish_services.py:52 derive_tier_label()</td>
+      <td>The polish system has no categories to track, so a building's polish never derives a tier label in any dimension.</td>
+      <td>
+
+
+        <br>
+        No PolishCategory rows exist.
+
+      </td>
+    </tr>
+
+    <tr class="required-content-row--missing">
+      <td><a href="/admin/arxii/projecttemplate/">Interior design project templates</a></td>
+      <td>world/buildings/views.py:325 DecorationTemplateViewSet.get_queryset()</td>
+      <td>The interior-design catalog a player browses to commission a polish project is empty, so no project can be commissioned.</td>
+      <td>
+
+
+        <br>
+        No ProjectTemplate rows exist.
+
+      </td>
+    </tr>
+
+    <tr class="required-content-row--missing">
+      <td><a href="/admin/arxii/projecttemplatepolishincrement/">Project template polish increments</a></td>
+      <td>world/buildings/polish_services.py:68 apply_project_completion(); world/buildings/room_services.py:622 complete_interior_design()</td>
+      <td>A commissioned project template with no increment rows applies zero polish to the building or room it targets - the project completes and grants nothing.</td>
+      <td>
+
+
+        <br>
+        No ProjectTemplatePolishIncrement rows exist.
+
+      </td>
+    </tr>
+
+    <tr class="required-content-row--missing">
+      <td><a href="/admin/arxii/decorationkind/">Decoration kinds</a></td>
+      <td>world/buildings/services.py:850 place_decoration()</td>
+      <td>No decoration kind exists to place, so no player can decorate a room.</td>
+      <td>
+
+
+        <br>
+        No DecorationKind rows exist.
+
+      </td>
+    </tr>
+
+    <tr class="required-content-row--missing">
+      <td><a href="/admin/arxii/companionabilityfunctiontag/">Companion ability function tags</a></td>
+      <td>world/covenants/sphinx.py:148 _companion_supply()</td>
+      <td>A companion's abilities never count toward the Sphinx's kit coverage check, regardless of what the companion actually brings.</td>
+      <td>
+
+
+        <br>
+        No CompanionAbilityFunctionTag rows exist.
+
+      </td>
+    </tr>
+
+    <tr class="required-content-row--missing">
+      <td><a href="/admin/arxii/conditionstageonentry/">Condition stage on-entry associations</a></td>
+      <td>world/conditions/services.py:3138 apply_stage_entry_aftermath()</td>
+      <td>Advancing a character into a condition stage never applies that stage's on-entry condition - the loop has nothing to iterate.</td>
+      <td>
+
+
+        <br>
+        No ConditionStageOnEntry rows exist.
+
+      </td>
+    </tr>
+
+    <tr class="required-content-row--missing">
+      <td><a href="/admin/arxii/penetrationoutcomefactor/">Penetration outcome factors</a></td>
+      <td>world/conditions/services.py:4348 get_penetration_factor()</td>
+      <td>Penetration always resolves at full power for every success level - the per- level scaling factor is never applied.</td>
+      <td>
+
+
+        <br>
+        No PenetrationOutcomeFactor rows exist.
+
+      </td>
+    </tr>
+
+    <tr class="required-content-row--missing">
+      <td><a href="/admin/arxii/fleetiermodifier/">Flee tier modifiers</a></td>
+      <td>world/combat/services.py:8192 _resolve_flee()</td>
+      <td>Flee difficulty ignores the opponent's tier entirely - fleeing is exactly as hard against a boss as against a minion.</td>
+      <td>
+
+
+        <br>
+        No FleeTierModifier rows exist.
+
+      </td>
+    </tr>
+
+    <tr class="required-content-row--missing">
+      <td><a href="/admin/arxii/encounteraftermathrule/">Encounter aftermath rules</a></td>
+      <td>world/combat/services.py:9479 _apply_aftermath_rules()</td>
+      <td>A finished encounter produces no aftermath for its outcome and risk level - the lookup finds nothing to apply.</td>
+      <td>
+
+
+        <br>
+        No EncounterAftermathRule rows exist.
+
+      </td>
+    </tr>
+
+    <tr class="required-content-row--missing">
+      <td><a href="/admin/arxii/positionblueprint/">Position blueprints</a></td>
+      <td>world/areas/positioning/services.py:354 instantiate_blueprint()</td>
+      <td>GMs have no tactical map template to clone onto an encounter - every battlefield has to be laid out by hand.</td>
+      <td>
+
+
+        <br>
+        No PositionBlueprint rows exist.
+
+      </td>
+    </tr>
+
+    <tr class="required-content-row--missing">
+      <td><a href="/admin/arxii/rampartelementresistance/">Rampart element resistances</a></td>
+      <td>world/combat/services.py:12262 _rampart_resist()</td>
+      <td>A Rampart's element resists nothing against any damage type - every intercepted strike lands as if the Rampart were unaligned.</td>
+      <td>
+
+
+        <br>
+        No RampartElementResistance rows exist.
+
+      </td>
+    </tr>
+
+    <tr class="required-content-row--missing">
+      <td><a href="/admin/arxii/actionenhancement/">Action enhancements</a></td>
+      <td>actions/base.py:338 Action.run()</td>
+      <td>No enhancement adds an effect to any action - the enhancement pipeline runs on every action call with nothing authored to apply.</td>
+      <td>
+
+
+        <br>
+        No ActionEnhancement rows exist.
+
+      </td>
+    </tr>
+
+    <tr class="required-content-row--missing">
+      <td><a href="/admin/arxii/courtgrantconfig/">Court grant config singleton</a></td>
+      <td>world/covenants/services.py:2239 get_court_grant_config()</td>
+      <td>Court grant negotiation runs entirely on the model's field defaults - staff have no authored row to tune it through.</td>
+      <td>
+
+
+        <br>
+        No CourtGrantConfig rows exist.
+
+      </td>
+    </tr>
+
+    <tr class="required-content-row--missing">
+      <td><a href="/admin/arxii/dreamperilconfig/">Dream peril config singleton</a></td>
+      <td>world/dreams/peril.py:38 resolve_dream_peril_collapse()</td>
+      <td>A dream collapse always resolves at the safest outcome - the peril curve staff would tune has no authored row behind it.</td>
+      <td>
+
+
+        <br>
+        No DreamPerilConfig rows exist.
+
+      </td>
+    </tr>
+
+    <tr class="required-content-row--missing">
+      <td><a href="/admin/arxii/geararchetypecompatibility/">Gear archetype compatibility</a></td>
+      <td>world/covenants/services.py:1015 is_gear_compatible()</td>
+      <td>A covenant role's stats and its gear archetype's stats never stack - compatibility never authored means never compatible.</td>
+      <td>
+
+
+        <br>
+        No GearArchetypeCompatibility rows exist.
+
+      </td>
+    </tr>
+
+    <tr class="required-content-row--missing">
+      <td><a href="/admin/arxii/covenantriterolepackage/">Covenant rite role packages</a></td>
+      <td>world/covenants/services.py:2200 perform_covenant_rite() (CovenantRite.package_for())</td>
+      <td>A rite participant's role and the covenant's level never change which condition package they receive - every participant falls back to the rite's single granted_condition.</td>
+      <td>
+
+
+        <br>
+        No CovenantRiteRolePackage rows exist.
+
+      </td>
+    </tr>
+
+    <tr class="required-content-row--missing">
+      <td><a href="/admin/arxii/covenantrolegiftgrant/">Covenant role gift grants</a></td>
+      <td>world/covenants/services.py:854 _grant_role_gifts_and_techniques()</td>
+      <td>Engaging a covenant role grants no gifts or techniques - the role carries no authored gift package to hand out.</td>
+      <td>
+
+
+        <br>
+        No CovenantRoleGiftGrant rows exist.
+
+      </td>
+    </tr>
+
+    <tr class="required-content-row--missing">
+      <td><a href="/admin/arxii/insighttableentry/">Insight table entries</a></td>
+      <td>world/covenants/insight.py:31 maybe_produce_insight()</td>
+      <td>The Insight rider never fires - there is no authored entry for it to draw.</td>
+      <td>
+
+
+        <br>
+        No InsightTableEntry rows exist.
+
+      </td>
+    </tr>
+
+    <tr class="required-content-row--missing">
+      <td><a href="/admin/arxii/vowstatscaling/">Vow stat scaling</a></td>
+      <td>world/mechanics/services.py:1021 vow_stat_scaling_bonus()</td>
+      <td>A vow's thread level grants zero stat scaling bonus - the scaling term of the formula is silently disabled.</td>
+      <td>
+
+
+        <br>
+        No VowStatScaling rows exist.
+
+      </td>
+    </tr>
+
+    <tr class="required-content-row--missing">
+      <td><a href="/admin/arxii/profession/">Professions</a></td>
+      <td>world/currency/services.py:1533 run_weekly_employment()</td>
+      <td>No profession exists for a character to take, so the weekly employment tick has nothing to pay anyone for.</td>
+      <td>
+
+
+        <br>
+        No Profession rows exist.
+
+      </td>
+    </tr>
+
+    <tr class="required-content-row--missing">
+      <td><a href="/admin/arxii/craftingmaterialrequirement/">Crafting material requirements</a></td>
+      <td>world/items/crafting/services.py:202 build_crafting_quote()</td>
+      <td>A crafting recipe requires no materials at all - a quote for it lists an empty ingredient list regardless of what the recipe is supposed to consume.</td>
+      <td>
+
+
+        <br>
+        No CraftingMaterialRequirement rows exist.
+
+      </td>
+    </tr>
+
+    <tr class="required-content-row--missing">
+      <td><a href="/admin/arxii/craftingskillcap/">Crafting skill caps</a></td>
+      <td>world/items/crafting/services.py:202 build_crafting_quote() (CraftingSkillCap.for_skill())</td>
+      <td>Crafted quality is never capped by the crafter's skill - the skill ceiling on a recipe's output silently does not apply.</td>
+      <td>
+
+
+        <br>
+        No CraftingSkillCap rows exist.
+
+      </td>
+    </tr>
+
+    <tr class="required-content-row--missing">
+      <td><a href="/admin/arxii/craftingrecipeconsequence/">Crafting recipe consequences</a></td>
+      <td>world/items/crafting/services.py:849 run_crafting_recipe()</td>
+      <td>A crafting attempt has no authored risk outcomes to draw from - the weighted- consequence pool for the roll's tier is empty.</td>
+      <td>
+
+
+        <br>
+        No CraftingRecipeConsequence rows exist.
+
+      </td>
+    </tr>
+
+    <tr class="required-content-row--missing">
+      <td><a href="/admin/arxii/craftingrecipemodifier/">Crafting recipe modifiers</a></td>
+      <td>world/items/handlers.py:70 CharacterEquipmentHandler._equipped()</td>
+      <td>A crafted item grants no stat modifiers from its recipe, regardless of what the recipe is meant to confer.</td>
+      <td>
+
+
+        <br>
+        No CraftingRecipeModifier rows exist.
+
+      </td>
+    </tr>
+
+    <tr class="required-content-row--missing">
+      <td><a href="/admin/arxii/mantleleveldefinition/">Mantle level definitions</a></td>
+      <td>world/items/services/mantle.py:57 record_mantle_clearances()</td>
+      <td>A mantle's attunement ladder never advances - there is no authored level for a character's clearance to walk up to.</td>
+      <td>
+
+
+        <br>
+        No MantleLevelDefinition rows exist.
+
+      </td>
+    </tr>
+
+    <tr class="required-content-row--missing">
+      <td><a href="/admin/arxii/sentenceladderrung/">Sentence ladder rungs</a></td>
+      <td>world/justice/pipeline.py:537 _ladder_kind()</td>
+      <td>Sentencing falls back to the default band with no per-society escalation - a society's own sentencing culture never applies.</td>
+      <td>
+
+
+        <br>
+        No SentenceLadderRung rows exist.
+
+      </td>
+    </tr>
+
+    <tr class="required-content-row--missing">
+      <td><a href="/admin/arxii/furyconfig/">Fury config singleton</a></td>
+      <td>world/magic/services/fury.py:34 _config() (get_fury_config())</td>
+      <td>Fury runs entirely on the model's field defaults - staff have no authored row to tune its check trait or thresholds through.</td>
+      <td>
+
+
+        <br>
+        No FuryConfig rows exist.
+
+      </td>
+    </tr>
+
+    <tr class="required-content-row--missing">
+      <td><a href="/admin/arxii/auraaffinitythreshold/">Aura affinity thresholds</a></td>
+      <td>world/magic/services/aura.py:106 fire_aura_threshold_crossings()</td>
+      <td>No aura-crossing achievement ever fires, no matter how far a character's affinity drifts - there is no authored threshold to cross.</td>
+      <td>
+
+
+        <br>
+        No AuraAffinityThreshold rows exist.
+
+      </td>
+    </tr>
+
+    <tr class="required-content-row--missing">
+      <td><a href="/admin/arxii/techniquebudgetconfig/">Technique budget config singleton</a></td>
+      <td>world/magic/services/technique_builder.py:42 get_technique_budget_config()</td>
+      <td>The technique builder prices every technique against the model's field defaults rather than an authored budget.</td>
+      <td>
+
+
+        <br>
+        No TechniqueBudgetConfig rows exist.
+
+      </td>
+    </tr>
+
+    <tr class="required-content-row--missing">
+      <td><a href="/admin/arxii/techniquetierbudget/">Technique tier budget</a></td>
+      <td>world/magic/services/technique_builder.py:51 get_technique_tier_budget()</td>
+      <td>A technique tier's own budget is lazily created at its field defaults on first use - staff have not tuned any tier's budget.</td>
+      <td>
+
+
+        <br>
+        No TechniqueTierBudget rows exist.
+
+      </td>
+    </tr>
+
+    <tr class="required-content-row--missing">
+      <td><a href="/admin/arxii/corruptionconfig/">Corruption config singleton</a></td>
+      <td>world/magic/services/corruption.py:60 get_corruption_config()</td>
+      <td>Corruption accrual runs on the model's field defaults rather than an authored row - staff have nothing to tune.</td>
+      <td>
+
+
+        <br>
+        No CorruptionConfig rows exist.
+
+      </td>
+    </tr>
+
+    <tr class="required-content-row--missing">
+      <td><a href="/admin/arxii/resonancetier/">Resonance tiers</a></td>
+      <td>world/magic/services/touchstone.py:19 touchstone_cast_bonus()</td>
+      <td>An equipped touchstone's tier contributes zero cast bonus - the tier-scaled term of the formula multiplies by nothing.</td>
+      <td>
+
+
+        <br>
+        No ResonanceTier rows exist.
+
+      </td>
+    </tr>
+
+    <tr class="required-content-row--missing">
+      <td><a href="/admin/arxii/resonancealignmentboontier/">Resonance alignment boon tiers</a></td>
+      <td>world/magic/services/resonance_environment.py:556 clear_resonance_alignment()</td>
+      <td>An aligned resonance environment grants no boon at any tier - there is no authored row for a character's alignment to qualify against.</td>
+      <td>
+
+
+        <br>
+        No ResonanceAlignmentBoonTier rows exist.
+
+      </td>
+    </tr>
+
+    <tr class="required-content-row--missing">
+      <td><a href="/admin/arxii/beginningsritualgrant/">Beginnings ritual grants</a></td>
+      <td>world/magic/services/ritual_knowledge.py:33 reconcile_ritual_knowledge()</td>
+      <td>A character's Beginning grants no ritual knowledge - that source of the reconciliation contributes nothing.</td>
+      <td>
+
+
+        <br>
+        No BeginningsRitualGrant rows exist.
+
+      </td>
+    </tr>
+
+    <tr class="required-content-row--missing">
+      <td><a href="/admin/arxii/pathritualgrant/">Path ritual grants</a></td>
+      <td>world/magic/services/ritual_knowledge.py:33 reconcile_ritual_knowledge()</td>
+      <td>A character's Path grants no ritual knowledge - that source of the reconciliation contributes nothing.</td>
+      <td>
+
+
+        <br>
+        No PathRitualGrant rows exist.
+
+      </td>
+    </tr>
+
+    <tr class="required-content-row--missing">
+      <td><a href="/admin/arxii/distinctionritualgrant/">Distinction ritual grants</a></td>
+      <td>world/magic/services/ritual_knowledge.py:33 reconcile_ritual_knowledge()</td>
+      <td>A character's Distinctions grant no ritual knowledge - that source of the reconciliation contributes nothing.</td>
+      <td>
+
+
+        <br>
+        No DistinctionRitualGrant rows exist.
+
+      </td>
+    </tr>
+
+    <tr class="required-content-row--missing">
+      <td><a href="/admin/arxii/traditionritualgrant/">Tradition ritual grants</a></td>
+      <td>world/magic/services/ritual_knowledge.py:33 reconcile_ritual_knowledge()</td>
+      <td>A character's Tradition grants no ritual knowledge - that source of the reconciliation contributes nothing.</td>
+      <td>
+
+
+        <br>
+        No TraditionRitualGrant rows exist.
+
+      </td>
+    </tr>
+
+    <tr class="required-content-row--missing">
+      <td><a href="/admin/arxii/codexentryritualgrant/">Codex entry ritual grants</a></td>
+      <td>world/magic/services/ritual_knowledge.py:33 reconcile_ritual_knowledge()</td>
+      <td>A character's researched Codex entries grant no ritual knowledge - that source of the reconciliation contributes nothing.</td>
+      <td>
+
+
+        <br>
+        No CodexEntryRitualGrant rows exist.
+
+      </td>
+    </tr>
+
+    <tr class="required-content-row--missing">
+      <td><a href="/admin/arxii/distinctionresonancegrant/">Distinction resonance grants</a></td>
+      <td>world/magic/services/distinction_resonance.py:66 reconcile_distinction_resonance_grants()</td>
+      <td>A Distinction seeds no resonance for its holder - the character never gets claimed into the resonance the distinction is meant to open.</td>
+      <td>
+
+
+        <br>
+        No DistinctionResonanceGrant rows exist.
+
+      </td>
+    </tr>
+
+    <tr class="required-content-row--missing">
+      <td><a href="/admin/arxii/techniquevariant/">Technique variants</a></td>
+      <td>world/magic/specialization/services.py:341 resolve_specialized_variant()</td>
+      <td>No resonance-specialized variant exists for any technique - specialization never changes which version of a technique a character casts.</td>
+      <td>
+
+
+        <br>
+        No TechniqueVariant rows exist.
+
+      </td>
+    </tr>
+
+    <tr class="required-content-row--missing">
+      <td><a href="/admin/arxii/aestheticaxisconfig/">Aesthetic axis config singleton</a></td>
+      <td>world/mechanics/services.py:103 get_aesthetic_config()</td>
+      <td>Aesthetic axes run entirely on the model's field defaults - staff have no authored row to tune them through.</td>
+      <td>
+
+
+        <br>
+        No AestheticAxisConfig rows exist.
+
+      </td>
+    </tr>
+
+    <tr class="required-content-row--missing">
+      <td><a href="/admin/arxii/missioncategory/">Mission categories</a></td>
+      <td>world/missions/views.py:500 MissionCategoryViewSet</td>
+      <td>The mission category picker a player browses is empty.</td>
+      <td>
+
+
+        <br>
+        No MissionCategory rows exist.
+
+      </td>
+    </tr>
+
+    <tr class="required-content-row--missing">
+      <td><a href="/admin/arxii/missionassistpattern/">Mission assist patterns</a></td>
+      <td>world/missions/services/support.py:130 _pattern_support_moves()</td>
+      <td>A group mission offers no generic assist moves - the pattern catalog a support character draws from is empty.</td>
+      <td>
+
+
+        <br>
+        No MissionAssistPattern rows exist.
+
+      </td>
+    </tr>
+
+    <tr class="required-content-row--missing">
+      <td><a href="/admin/arxii/missionnodesupportoption/">Mission node support options</a></td>
+      <td>world/missions/services/support.py:102 _gem_support_moves()</td>
+      <td>No mission node offers an authored support move - a would-be helper has nothing gem-specific to contribute.</td>
+      <td>
+
+
+        <br>
+        No MissionNodeSupportOption rows exist.
+
+      </td>
+    </tr>
+
+    <tr class="required-content-row--missing">
+      <td><a href="/admin/arxii/missionofferdetails/">Mission offer details</a></td>
+      <td>world/npc_services/services.py:369 _mission_gates_pass()</td>
+      <td>No NPC ever offers a mission - a MISSION-kind offer with no details row fails closed before it can be shown.</td>
+      <td>
+
+
+        <br>
+        No MissionOfferDetails rows exist.
+
+      </td>
+    </tr>
+
+    <tr class="required-content-row--missing">
+      <td><a href="/admin/arxii/permitofferdetails/">Permit offer details</a></td>
+      <td>world/buildings/services.py:120 issue_permit()</td>
+      <td>No NPC issues a building permit - the offer has no permit details row to act on.</td>
+      <td>
+
+
+        <br>
+        No PermitOfferDetails rows exist.
+
+      </td>
+    </tr>
+
+    <tr class="required-content-row--missing">
+      <td><a href="/admin/arxii/loanofferdetails/">Loan offer details</a></td>
+      <td>world/npc_services/effects.py:263 grant_loan()</td>
+      <td>No NPC offers a loan - the offer has no loan details row to act on.</td>
+      <td>
+
+
+        <br>
+        No LoanOfferDetails rows exist.
+
+      </td>
+    </tr>
+
+    <tr class="required-content-row--missing">
+      <td><a href="/admin/arxii/trainofferdetails/">Train offer details</a></td>
+      <td>world/npc_services/effects.py:527 run_train_offer()</td>
+      <td>No NPC trains a technique - the offer has no training details row to act on.</td>
+      <td>
+
+
+        <br>
+        No TrainOfferDetails rows exist.
+
+      </td>
+    </tr>
+
+    <tr class="required-content-row--missing">
+      <td><a href="/admin/arxii/courtgrantofferdetails/">Court grant offer details</a></td>
+      <td>world/npc_services/effects.py:309 raise_court_grant()</td>
+      <td>A court grant petition never resolves - the offer has no court grant details row to act on.</td>
+      <td>
+
+
+        <br>
+        No CourtGrantOfferDetails rows exist.
+
+      </td>
+    </tr>
+
+    <tr class="required-content-row--missing">
+      <td><a href="/admin/arxii/stylingofferdetails/">Styling offer details</a></td>
+      <td>world/npc_services/effects.py:801 run_styling_offer()</td>
+      <td>No NPC restyles a character - the offer has no styling details row to act on.</td>
+      <td>
+
+
+        <br>
+        No StylingOfferDetails rows exist.
+
+      </td>
+    </tr>
+
+    <tr class="required-content-row--missing">
+      <td><a href="/admin/arxii/profilerecordingofferdetails/">Profile recording offer details</a></td>
+      <td>world/npc_services/effects.py:891 run_profile_recording_offer()</td>
+      <td>The Archive sitting never runs - the offer has no profile-recording details row to act on.</td>
+      <td>
+
+
+        <br>
+        No ProfileRecordingOfferDetails rows exist.
+
+      </td>
+    </tr>
+
+    <tr class="required-content-row--missing">
+      <td><a href="/admin/arxii/nameculture/">Name cultures</a></td>
+      <td>world/npc_services/instantiation.py:31 name_culture_for_room()</td>
+      <td>Every newly-instantiated NPC is named Sojourner, the hardcoded fallback, since no authored culture exists at any area or globally.</td>
+      <td>
+
+
+        <br>
+        No NameCulture rows exist.
+
+      </td>
+    </tr>
+
+    <tr class="required-content-row--missing">
+      <td><a href="/admin/arxii/namecultureentry/">Name culture entries</a></td>
+      <td>world/npc_services/instantiation.py:60 _weighted_value()</td>
+      <td>An authored name culture yields no name parts to draw from - a culture with no entries produces an empty surname or given name.</td>
+      <td>
+
+
+        <br>
+        No NameCultureEntry rows exist.
+
+      </td>
+    </tr>
+
+    <tr class="required-content-row--missing">
+      <td><a href="/admin/arxii/personalitytrait/">Personality traits</a></td>
+      <td>world/npc_services/personality.py:27 assign_random_personality()</td>
+      <td>A newly-instantiated NPC gets no likes or dislikes - there is no authored trait for the assignment to draw.</td>
+      <td>
+
+
+        <br>
+        No PersonalityTrait rows exist.
+
+      </td>
+    </tr>
+
+    <tr class="required-content-row--missing">
+      <td><a href="/admin/arxii/staffingprofile/">Staffing profiles</a></td>
+      <td>world/npc_services/staffing.py:30 _profile_for()</td>
+      <td>A building never auto-staffs on activation - no building kind has an authored baseline crew.</td>
+      <td>
+
+
+        <br>
+        No StaffingProfile rows exist.
+
+      </td>
+    </tr>
+
+    <tr class="required-content-row--missing">
+      <td><a href="/admin/arxii/staffingprofileline/">Staffing profile lines</a></td>
+      <td>world/npc_services/staffing.py:37 ensure_staffing_for_building()</td>
+      <td>A building kind's staffing profile staffs nothing - the profile exists but names no role to place.</td>
+      <td>
+
+
+        <br>
+        No StaffingProfileLine rows exist.
+
+      </td>
+    </tr>
+
+    <tr class="required-content-row--missing">
+      <td><a href="/admin/arxii/regardeventconfig/">Regard event config singleton</a></td>
+      <td>world/npc_services/regard.py:41 get_regard_event_config()</td>
+      <td>NPC regard events run entirely on the model's field defaults - staff have no authored row to tune the story-vital threshold through.</td>
+      <td>
+
+
+        <br>
+        No RegardEventConfig rows exist.
+
+      </td>
+    </tr>
+
+    <tr class="required-content-row--missing">
+      <td><a href="/admin/arxii/durancetrainingsite/">Durance training sites</a></td>
+      <td>world/progression/services/advancement.py:392 convene_durance_at_site()</td>
+      <td>No training site is active in the room, so a Durance rite can only be convened by an officiant directly - the site-based convene path finds nothing to officiate through.</td>
+      <td>
+
+
+        <br>
+        No DuranceTrainingSite rows exist.
+
+      </td>
+    </tr>
+
+    <tr class="required-content-row--missing">
+      <td><a href="/admin/arxii/legendrequirement/">Legend requirements</a></td>
+      <td>world/progression/services/spends.py:112 _check_requirements()</td>
+      <td>No class unlock is gated on Legend - the requirement type is wired into the check but no row uses it.</td>
+      <td>
+
+
+        <br>
+        No LegendRequirement rows exist.
+
+      </td>
+    </tr>
+
+    <tr class="required-content-row--missing">
+      <td><a href="/admin/arxii/edictkind/">Edict kinds</a></td>
+      <td>world/societies/proclamations.py:163 enact_edict()</td>
+      <td>No edict kind exists, so no edict can be enacted at all.</td>
+      <td>
+
+
+        <br>
+        No EdictKind rows exist.
+
+      </td>
+    </tr>
+
+    <tr class="required-content-row--missing">
+      <td><a href="/admin/arxii/domaincrisistype/">Domain crisis types</a></td>
+      <td>world/societies/houses/crisis_services.py:84 pick_crisis_type()</td>
+      <td>No domain crisis type exists, so a domain never spawns a crisis to resolve.</td>
+      <td>
+
+
+        <br>
+        No DomainCrisisType rows exist.
+
+      </td>
+    </tr>
+
+    <tr class="required-content-row--missing">
+      <td><a href="/admin/arxii/domaincrisistypeoption/">Domain crisis type options</a></td>
+      <td>world/societies/houses/crisis_services.py:184 pay_cost_for()</td>
+      <td>A spawned crisis offers no resolution path - the option list a player would pay a cost against is empty.</td>
+      <td>
+
+
+        <br>
+        No DomainCrisisTypeOption rows exist.
+
+      </td>
+    </tr>
+
+    <tr class="required-content-row--missing">
+      <td><a href="/admin/arxii/statureband/">Stature bands</a></td>
+      <td>world/societies/houses/stature_services.py:679 band_for_percentile()</td>
+      <td>Every house gets the same neutral predation odds and no stature headline - there is no authored band for its percentile to land in.</td>
+      <td>
+
+
+        <br>
+        No StatureBand rows exist.
+
+      </td>
+    </tr>
+
+    <tr class="required-content-row--missing">
+      <td><a href="/admin/arxii/prestigerankband/">Prestige rank bands</a></td>
+      <td>world/societies/houses/stature_services.py:775 prestige_rank_band()</td>
+      <td>A house's prestige rank never drifts its prosperity - there is no authored band for its rank to land in.</td>
+      <td>
+
+
+        <br>
+        No PrestigeRankBand rows exist.
+
+      </td>
+    </tr>
+
+    <tr class="required-content-row--missing">
+      <td><a href="/admin/arxii/pactkind/">Pact kinds</a></td>
+      <td>world/societies/houses/pact_services.py:64 propose_org_pact()</td>
+      <td>No pact kind exists, so no organization pact can be proposed.</td>
+      <td>
+
+
+        <br>
+        No PactKind rows exist.
+
+      </td>
+    </tr>
+
+    <tr class="required-content-row--missing">
+      <td><a href="/admin/arxii/philosophicalarchetype/">Philosophical archetypes</a></td>
+      <td>world/societies/scandal.py:67 scandalous_societies()</td>
+      <td>Scandal reactions ignore philosophy entirely - with no archetype authored, a deed's philosophical tags never read as scandal to any society.</td>
+      <td>
+
+
+        <br>
+        No PhilosophicalArchetype rows exist.
+
+      </td>
+    </tr>
+
+    <tr class="required-content-row--missing">
+      <td><a href="/admin/arxii/stancearchetype/">Stance archetypes</a></td>
+      <td>world/societies/proclamations.py:63 apply_stance_reception()</td>
+      <td>No stance exists to proclaim - a persona has nothing to align a proclamation to.</td>
+      <td>
+
+
+        <br>
+        No StanceArchetype rows exist.
+
+      </td>
+    </tr>
+
+    <tr class="required-content-row--missing">
+      <td><a href="/admin/arxii/propagandacampaigntier/">Propaganda campaign tiers</a></td>
+      <td>world/societies/propaganda.py:58 launch_propaganda_campaign()</td>
+      <td>No propaganda campaign can be launched at any tier.</td>
+      <td>
+
+
+        <br>
+        No PropagandaCampaignTier rows exist.
+
+      </td>
+    </tr>
+
+    <tr class="required-content-row--missing">
+      <td><a href="/admin/arxii/rankingdisplay/">Ranking displays</a></td>
+      <td>world/societies/ranking_services.py:280 render_ranking_display()</td>
+      <td>No leaderboard appears in the world - there is no authored display to render.</td>
+      <td>
+
+
+        <br>
+        No RankingDisplay rows exist.
+
+      </td>
+    </tr>
+
+    <tr class="required-content-row--missing">
+      <td><a href="/admin/arxii/legendsettlementconfig/">Legend settlement config singleton</a></td>
+      <td>world/societies/models.py:1927 LegendSettlementConfig.get_active_config()</td>
+      <td>Legend settlement runs entirely on the model's field defaults - staff have no authored row to tune it through.</td>
+      <td>
+
+
+        <br>
+        No LegendSettlementConfig rows exist.
+
+      </td>
+    </tr>
+
+    <tr class="required-content-row--missing">
+      <td><a href="/admin/arxii/renownmagnitudeaward/">Renown magnitude awards</a></td>
+      <td>world/societies/renown.py:413 _magnitude_awards()</td>
+      <td>Renown falls back to the built-in magnitude constants rather than a staff- editable row - the table exists precisely so staff can retune these without a deploy, and an empty one means they can't.</td>
+      <td>
+
+
+        <br>
+        No RenownMagnitudeAward rows exist.
+
+      </td>
+    </tr>
+
+    <tr class="required-content-row--missing">
+      <td><a href="/admin/arxii/scenerounddefaultsconfig/">Scene round defaults config singleton</a></td>
+      <td>world/scenes/models.py:1743 get_scene_round_defaults_config()</td>
+      <td>Scene rounds run entirely on the model's field defaults - staff have no authored row to tune them through.</td>
+      <td>
+
+
+        <br>
+        No SceneRoundDefaultsConfig rows exist.
+
+      </td>
+    </tr>
+
+    <tr class="required-content-row--missing">
+      <td><a href="/admin/arxii/weathertransition/">Weather transitions</a></td>
+      <td>world/weather/services.py:203 _pick_next_weather()</td>
+      <td>Weather rolls draw from the flat global pool for every region - an authored transition table never narrows the roll to what makes sense for that region's climate.</td>
+      <td>
+
+
+        <br>
+        No WeatherTransition rows exist.
+
+      </td>
+    </tr>
+
+    <tr class="required-content-row--missing">
+      <td><a href="/admin/arxii/weathertypeshelter/">Weather type shelters</a></td>
+      <td>world/weather/services.py:165 apply_weather_exposure()</td>
+      <td>Weather gives no hazard shelter of any kind - a sheltered location is exposed exactly as much as an open one.</td>
+      <td>
+
+
+        <br>
+        No WeatherTypeShelter rows exist.
+
+      </td>
+    </tr>
+
+    <tr class="required-content-row--missing">
+      <td><a href="/admin/arxii/restriction/">Prices offered in character creation</a></td>
+      <td>world/magic/services/creation_personalization.py creation_personalization_options()</td>
+      <td>The Gift stage offers no price for any technique.</td>
+      <td>
+
+
+        <br>
+        No PRICE restriction carries a creation_point_cost.
+
+      </td>
+    </tr>
+
+    <tr class="required-content-row--missing">
+      <td><a href="/admin/arxii/signaturemotifbonus/">Signature flourishes offered in character creation</a></td>
+      <td>world/magic/services/creation_personalization.py creation_personalization_options()</td>
+      <td>The Gift stage offers no signature flourish.</td>
+      <td>
+
+
+        <br>
+        No signature bonus carries a creation_point_cost.
+
+      </td>
+    </tr>
+
+    <tr class="required-content-row--missing">
+      <td><a href="/admin/arxii/techniquevariant/">Specialized forms offered in character creation</a></td>
+      <td>world/magic/services/creation_personalization.py creation_personalization_options()</td>
+      <td>The Gift stage offers no early specialized form.</td>
+      <td>
+
+
+        <br>
+        No technique variant carries a creation_point_cost.
+
+      </td>
+    </tr>
+
+    <tr class="required-content-row--missing">
+      <td><a href="/admin/arxii/cgexplanation/">Make-it-yours panel lines</a></td>
+      <td>frontend/src/character-creation/components/gift/PersonalizationPanel.tsx</td>
+      <td>Players see PLACEHOLDER text on the Gift stage's make-it-yours panel.</td>
+      <td>
+
+        personalize_heading, personalize_name_title, personalize_name_gloss, personalize_flourish_title, personalize_flourish_gloss, personalize_form_title, personalize_form_gloss, personalize_price_title, personalize_price_gloss, personalize_name_label, personalize_description_label, personalize_free_note, personalize_mechanics_note, personalize_needs_resonance, personalize_summary_none
+
+
+        <br>
+        15 panel line(s) unwritten.
+
+      </td>
+    </tr>
+
+    <tr class="required-content-row--missing">
+      <td><a href="/admin/arxii/standoffcausegloss/">Standoff cause glosses</a></td>
+      <td>world/standoffs/services/view.py _cause_gloss()</td>
+      <td>A revealed cause shows its name with no one-line explanation under it.</td>
+      <td>
+
+        Predation, Orders
+
+
+        <br>
+        No gloss for: Predation, Orders.
+
+      </td>
+    </tr>
+
+  </tbody>
+</table>
+
+
+<details>
+  <summary>
+
+
+
+    23 dependencies present
+
+
+  </summary>
+  <table class="tuning-table required-content-table">
+    <thead>
+      <tr>
+        <th>Dependency</th>
+        <th>Tier</th>
+        <th>Consumer</th>
+      </tr>
+    </thead>
+    <tbody>
+
+      <tr>
+        <td><a href="/admin/arxii/conditiontemplate/">Break check on every allegiance condition</a></td>
+        <td>Required</td>
+        <td>world/npc_services/allegiance_outcomes.py attempt_allegiance_break()</td>
+      </tr>
+
+      <tr>
+        <td><a href="/admin/arxii/kudossourcecategory/">Social Engagement kudos category</a></td>
+        <td>Required</td>
+        <td>world/scenes/action_services.py:193 _get_social_engagement_category(); world/progression/services/engagement.py:75 grant_social_engagement_kudos() - literal, no constant</td>
+      </tr>
+
+      <tr>
+        <td>Path starter technique pools</td>
+        <td>Required</td>
+        <td>world/magic/services/cg_catalog.py:28 get_technique_options()</td>
+      </tr>
+
+      <tr>
+        <td><a href="/admin/arxii/pathgiftgrant/">Ultimates for every Path and major gift</a></td>
+        <td>Required</td>
+        <td>world/magic/services/ultimates.py _owned_pools() (Audere reveal)</td>
+      </tr>
+
+      <tr>
+        <td><a href="/admin/arxii/technique/">Ultimates with no action template</a></td>
+        <td>Required</td>
+        <td>world/magic/services/technique_builder.py (use_technique cast pipeline)</td>
+      </tr>
+
+      <tr>
+        <td>Manifestable beings have avatar sheets</td>
+        <td>Required</td>
+        <td>world/magic/services/effect_handlers.py manifest_bound_entity()</td>
+      </tr>
+
+      <tr>
+        <td>Manifestable companion archetypes have abilities</td>
+        <td>Required</td>
+        <td>world/magic/services/effect_handlers.py manifest_bound_entity()</td>
+      </tr>
+
+      <tr>
+        <td>Manifestable beings have a threat pool</td>
+        <td>Required</td>
+        <td>world/magic/services/effect_handlers.py manifest_bound_entity()</td>
+      </tr>
+
+      <tr>
+        <td>Manifestable being tiers have opponent tier templates</td>
+        <td>Required</td>
+        <td>world/magic/services/effect_handlers.py manifest_bound_entity()</td>
+      </tr>
+
+      <tr>
+        <td>Capability combat-power bridges</td>
+        <td>Required</td>
+        <td>web.admin.tuning.capability_power_analytics.build_capability_power_panel (Capabilities tuning panel)</td>
+      </tr>
+
+      <tr>
+        <td>Accounts load as the Account typeclass</td>
+        <td>Required</td>
+        <td>web/api/mixins.py:63 get_available_characters (X-Character-ID auth); world/checks/views.py:135 played_character_sheet_ids; world/combat/views.py:1207 played_character_sheet_ids</td>
+      </tr>
+
+      <tr>
+        <td>2FA secrets key decrypts stored authenticators</td>
+        <td>Required</td>
+        <td>evennia_extensions/mfa_adapter.py ArxMFAAdapter.decrypt (every 2FA sign-in)</td>
+      </tr>
+
+      <tr>
+        <td>Beginnings without an Upbringing</td>
+        <td>Required</td>
+        <td>LineageStage / get_lineage_errors (#3617)</td>
+      </tr>
+
+      <tr>
+        <td><a href="/admin/arxii/beginnings/">Beginnings that allow no species</a></td>
+        <td>Required</td>
+        <td>HeritageStage / Beginnings.get_available_species()</td>
+      </tr>
+
+      <tr>
+        <td>Beginnings with no tradition on their slate</td>
+        <td>Required</td>
+        <td>world/character_creation/validators.py compute_magic_errors()</td>
+      </tr>
+
+      <tr>
+        <td><a href="/admin/arxii/nobiliaryparticle/">Realms with nobility but no nobiliary particle rows</a></td>
+        <td>Required</td>
+        <td>world/societies/houses/services.py full_display_name() (#3261)</td>
+      </tr>
+
+      <tr>
+        <td><a href="/admin/arxii/pointconversionrange/">Stat point-conversion ranges</a></td>
+        <td>Required</td>
+        <td>world/checks/services.py:916 _weighted_trait_points(); web/admin/tuning/technique_analytics.py starting_stats_roller_points()</td>
+      </tr>
+
+      <tr>
+        <td><a href="/admin/arxii/settleconfig/">Settle rules</a></td>
+        <td>Required</td>
+        <td>world/conditions/services.py get_settle_config()</td>
+      </tr>
+
+
+      <tr>
+        <td><a href="/admin/arxii/devotionconfig/">Favor outcome awards: invocation bonuses</a></td>
+        <td>Tuning</td>
+        <td>world/worship/invocation_services.py invocation_bonus_for()</td>
+      </tr>
+
+      <tr>
+        <td><a href="/admin/arxii/auderethreshold/">Audere reveal labels and lines</a></td>
+        <td>Tuning</td>
+        <td>world/magic/services/ultimates.py, world/vitals/services.py</td>
+      </tr>
+
+      <tr>
+        <td><a href="/admin/arxii/auderethreshold/">Audere and crossing offer dialog copy</a></td>
+        <td>Tuning</td>
+        <td>frontend/src/magic/components/AudereOfferDialog.tsx, AudereOfferGate.tsx, AudereMajoraOfferDialog.tsx</td>
+      </tr>
+
+      <tr>
+        <td><a href="/admin/arxii/animaconfig/">Anima config singleton</a></td>
+        <td>Tuning</td>
+        <td>world/magic/services/anima.py:59 recompute_max_anima()</td>
+      </tr>
+
+      <tr>
+        <td><a href="/admin/arxii/restriction/">Price components from active item templates</a></td>
+        <td>Tuning</td>
+        <td>world/magic/services/technique_personalization.py price_paid_for_cast()</td>
+      </tr>
+
+    </tbody>
+  </table>
+</details>
+</body></html>

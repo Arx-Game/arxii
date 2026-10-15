@@ -1,0 +1,49 @@
+server: 200
+===== telnet as e2e_test_account (Ysmay Dunhollow)
+> connect e2e_test_account ****
+> @ic Ysmay Dunhollow
+Switching from Tobiah Fenwright to Ysmay Dunhollow.
+You become Ysmay Dunhollow.
+Ombrin's Shrine
+This is a room.
+Characters: Ysmay Dunhollow and Orla Cobbe
+> pledge Ombrin/[staff-authored second pledge name]
+You pledge yourself to Ombrin: [staff-authored second pledge name]. Favor target 10 within 1 game week. Your earning rate with Ombrin: 200% (100% + 100% Chosen).
+> pledge Ombrin/[staff-authored pledge name]
+You already hold an open pledge. Close it or let it lapse first.
+> sacrifice amber comb
+Ysmay Dunhollow sacrifices amber comb at Ombrin's shrine.
+You sacrifice amber comb at Ombrin's shrine. Value 50: 5 base, at 200% = +10 favor with Ombrin.
+> pledge
+Pledge to Ombrin: [staff-authored second pledge name]. 10 of 10 favor since pledging. Ready to close. 6 days, 23 hours left.
+  Sacrificed amber comb: value 50: 5 base, at 200% = +10
+> pledge/close
+Ysmay Dunhollow performs Ombrin's rite.
+You close your pledge with Ombrin's rite: Partial Success. Closing award for Partial Success: 3 base, at 200% = +6 favor with Ombrin.
+> pledge
+Pledge to Ombrin: [staff-authored second pledge name]. 10 of 10 favor since pledging. Closed.
+  Sacrificed amber comb: value 50: 5 base, at 200% = +10
+  Closing award for Partial Success: 3 base, at 200% = +6
+> pledge/close
+You hold no open pledge.
+> pledge
+Pledge to Ombrin: [staff-authored second pledge name]. 10 of 10 favor since pledging. Closed.
+  Sacrificed amber comb: value 50: 5 base, at 200% = +10
+  Closing award for Partial Success: 3 base, at 200% = +6
+===== telnet as e2e_test_account (Hobb Pennock)
+> connect e2e_test_account ****
+> @ic Hobb Pennock
+Switching from Ysmay Dunhollow to Hobb Pennock.
+You become Hobb Pennock.
+Ombrin's Shrine
+This is a room.
+Characters: Orla Cobbe and Hobb Pennock
+> pledge Ombrin/[staff-authored second pledge name]
+You pledge yourself to Ombrin: [staff-authored second pledge name]. Favor target 10 within 1 game week. Your earning rate with Ombrin: 100% (100%).
+> sacrifice bronze bell
+Hobb Pennock sacrifices bronze bell at Ombrin's shrine.
+You sacrifice bronze bell at Ombrin's shrine. Value 100: 10 base, at 100% = +10 favor with Ombrin.
+> pledge
+Pledge to Ombrin: [staff-authored second pledge name]. 10 of 10 favor since pledging. Ready to close. 6 days, 23 hours left.
+  Sacrificed bronze bell: value 100: 10 base, at 100% = +10
+playwright rc=0

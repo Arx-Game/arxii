@@ -1,0 +1,8 @@
+from datetime import timedelta
+from django.utils import timezone
+from evennia.objects.models import ObjectDB
+from world.worship.models import PledgeDetails
+d = PledgeDetails.objects.filter(character_sheet=ObjectDB.objects.get(db_key="Hobb Pennock").sheet_data).order_by("-pk").first()
+d.project.time_limit = timezone.now() - timedelta(minutes=1)
+d.project.save(update_fields=["time_limit"])
+print("EXPIRED project", d.project.pk, d.project.status, d.project.current_progress, d.project.time_limit)
