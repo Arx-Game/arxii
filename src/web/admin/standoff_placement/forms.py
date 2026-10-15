@@ -93,6 +93,7 @@ class DrivesForm(forms.Form):
                 required=False,
                 initial=initial,
                 label=drive.property.name,
+                widget=forms.Select(attrs={"aria-label": f"{drive.property.name} here"}),
             )
 
     @staticmethod
