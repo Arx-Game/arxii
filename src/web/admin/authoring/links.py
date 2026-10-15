@@ -18,6 +18,7 @@ from world.combat.models import CreatureTemplate
 from world.conditions.models import ConditionStage
 from world.distinctions.models import Distinction
 from world.magic.services.soulfray import is_soulfray_stage
+from world.worship.models import WorshippedBeing
 
 
 def builder_url(obj: object) -> str:
@@ -30,7 +31,8 @@ def builder_url(obj: object) -> str:
     slate page keyed by its own pk; ``Distinction`` opens on the Distinction
     Builder (#3675 Task 8); a Soulfray ``ConditionStage`` opens on the Soulfray
     Stage Builder (#4089). Any other condition's stage has no builder. A
-    ``CreatureTemplate`` opens on the Standoff Profile Builder (#4354).
+    ``CreatureTemplate`` opens on the Standoff Profile Builder (#4354). A
+    ``WorshippedBeing`` opens on the Being Service builder (#4333).
     """
     if isinstance(obj, OriginTemplate) and obj.pk:
         return reverse("admin_upbringing_builder", args=[obj.pk])
@@ -42,6 +44,8 @@ def builder_url(obj: object) -> str:
         return reverse("admin_soulfray_builder", args=[obj.pk])
     if isinstance(obj, CreatureTemplate) and obj.pk:
         return reverse("admin_standoff_profile", args=[obj.pk])
+    if isinstance(obj, WorshippedBeing) and obj.pk:
+        return reverse("admin_being_service", args=[obj.pk])
     return ""
 
 
@@ -57,6 +61,8 @@ def builder_label(obj: object) -> str:
         return "Open in Soulfray Stage Builder"
     if isinstance(obj, CreatureTemplate):
         return "Open the Standoff Profile Builder"
+    if isinstance(obj, WorshippedBeing):
+        return "Open the Being Service builder"
     return ""
 
 

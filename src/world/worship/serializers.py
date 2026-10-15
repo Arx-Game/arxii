@@ -9,7 +9,7 @@ from rest_framework import serializers
 from world.character_sheets.models import CharacterSheet
 from world.clues.models import Clue
 from world.stories.models import Episode
-from world.worship.models import Miracle, Prayer, Vision, WorshippedBeing, WorshipRite
+from world.worship.models import Miracle, Pledge, Prayer, Vision, WorshippedBeing, WorshipRite
 from world.worship.types import InvocationDifficulty
 
 
@@ -209,3 +209,81 @@ class InvocationOptionsSerializer(serializers.Serializer):
 
     beings = InvocationOptionSerializer(many=True)
     bonuses = InvocationBonusRowSerializer(many=True)
+
+
+class PledgeSerializer(serializers.ModelSerializer):
+    """A pledge type a being offers (#4333 slice 2): the staff-authored text and terms."""
+
+    being_name = serializers.CharField(source="being.name", read_only=True)
+    closing_rite_name = serializers.CharField(source="closing_rite.name", read_only=True)
+
+    class Meta:
+        model = Pledge
+        fields = [
+            "id",
+            "being",
+            "being_name",
+            "name",
+            "description",
+            "favor_target",
+            "span_weeks",
+            "closing_rite_name",
+        ]
+        read_only_fields = fields
+
+
+class EarningRateSerializer(serializers.Serializer):
+    base = serializers.IntegerField()
+    chosen_bonus = serializers.IntegerField()
+    modifiers = serializers.IntegerField()
+    total = serializers.IntegerField()
+
+
+class ServiceTermLineSerializer(serializers.Serializer):
+    label = serializers.CharField()
+    amount = serializers.CharField()
+
+
+class ServiceTermsSerializer(serializers.Serializer):
+    """What earns favor with one being for the acting character (system-generated)."""
+
+    being_id = serializers.IntegerField(source="being.pk")
+    being_name = serializers.CharField(source="being.name")
+    rate = EarningRateSerializer()
+    lines = ServiceTermLineSerializer(many=True)
+    weekly_deed_cap = serializers.IntegerField()
+
+
+class PledgeCreditLineSerializer(serializers.Serializer):
+    source = serializers.CharField()
+    label = serializers.CharField()
+    calculation = serializers.CharField()
+    credited = serializers.IntegerField()
+    counts_toward_progress = serializers.BooleanField()
+    created_at = serializers.DateTimeField()
+
+
+class PledgeCardSerializer(serializers.Serializer):
+    """One character's pledge as its card shows it (#4333 slice 2). Read by the
+    character's own player and by staff only."""
+
+    id = serializers.IntegerField(source="details.pk")
+    character_sheet = serializers.IntegerField(source="details.character_sheet_id")
+    pledge = PledgeSerializer(source="details.pledge")
+    state = serializers.CharField()
+    progress = serializers.IntegerField()
+    target = serializers.IntegerField()
+    time_limit = serializers.DateTimeField()
+    close_attempts = serializers.IntegerField()
+    retry_available = serializers.BooleanField()
+    favor = serializers.IntegerField()
+    credits = PledgeCreditLineSerializer(many=True)
+    terms = ServiceTermsSerializer()
+
+
+class HolySiteSerializer(serializers.Serializer):
+    """A being holy in the room the acting character stands in (#4333 slice 2)."""
+
+    being_id = serializers.IntegerField()
+    being_name = serializers.CharField()
+    site = serializers.CharField()

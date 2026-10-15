@@ -17,6 +17,7 @@ from web.admin.authoring.views import (
     authoring_setup,
     authoring_stats_fragment,
 )
+from web.admin.being_service.views import being_service, being_service_review
 from web.admin.content_conflict_views import (
     content_conflict_detail,
     content_conflict_resolve,
@@ -252,6 +253,12 @@ urlpatterns = [
         "_standoff_profile/<int:template_pk>/",
         standoff_profile,
         name="admin_standoff_profile",
+    ),
+    path("_being_service/<int:being_pk>/", being_service, name="admin_being_service"),
+    path(
+        "_being_service/<int:being_pk>/review/",
+        being_service_review,
+        name="admin_being_service_review",
     ),
     path("_soulfray_builder/", soulfray_builder_index, name="admin_soulfray_builder_index"),
     path(

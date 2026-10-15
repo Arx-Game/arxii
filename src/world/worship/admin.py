@@ -23,6 +23,9 @@ from world.worship.models import (
     MiracleAppliedCondition,
     MiracleDamageProfile,
     MiraclePerformance,
+    Pledge,
+    PledgeCredit,
+    PledgeDetails,
     Prayer,
     Relic,
     RiteKind,
@@ -335,7 +338,17 @@ class DevotionConfigAdmin(admin.ModelAdmin):
                 )
             },
         ),
-        ("Earning", {"fields": ("earning_rate_rule",)}),
+        (
+            "Earning",
+            {
+                "fields": (
+                    "earning_rate_rule",
+                    ("favored_deed_percent", "associated_deed_percent"),
+                    "weekly_deed_favor_cap",
+                    "sacrifice_value_per_favor",
+                )
+            },
+        ),
     )
 
     @admin.display(description="Eases")
@@ -502,3 +515,72 @@ class VisionAdmin(admin.ModelAdmin):
     autocomplete_fields = ("being",)
     raw_id_fields = ("recipient", "sent_by", "prayer", "clue", "episode", "message")
     readonly_fields = ("sent_at", "resonance_spent")
+
+
+@admin.register(Pledge)
+class PledgeAdmin(admin.ModelAdmin):
+    """Pledge types (#4333 slice 2), listed here and written on the Being Service
+    builder: the one place a staff-owned being's pledge types are authored (Ruling 8).
+    The change form's object tool opens the being's builder."""
+
+    list_display = ("name", "being", "favor_target", "span_weeks", "closing_rite", "is_active")
+    list_filter = ("being", "is_active")
+    search_fields = ("name", "being__name")
+    readonly_fields = (
+        "being",
+        "name",
+        "description",
+        "favor_target",
+        "span_weeks",
+        "closing_rite",
+        "is_active",
+        "service_builder",
+    )
+    fields = readonly_fields
+
+    @admin.display(description="Edit")
+    def service_builder(self, obj: Pledge) -> str:
+        from django.utils.html import format_html  # noqa: PLC0415
+
+        url = reverse("admin_being_service", args=[obj.being_id])
+        return format_html('<a href="{}">Open the Being Service builder</a>', url)
+
+    def has_add_permission(self, request: HttpRequest) -> bool:
+        del request
+        return False
+
+
+class PledgeCreditInline(admin.TabularInline):
+    model = PledgeCredit
+    extra = 0
+    can_delete = False
+    fields = ("source", "base", "earning_rate_percent", "credited", "game_week", "created_at")
+    readonly_fields = fields
+
+    def has_add_permission(self, request: HttpRequest, obj=None) -> bool:
+        del request, obj
+        return False
+
+
+@admin.register(PledgeDetails)
+class PledgeDetailsAdmin(admin.ModelAdmin):
+    """Characters' pledges (#4333 slice 2), read-only: each one's credits, attempts
+    and closing rite. Pledges are opened, credited and closed only through play."""
+
+    list_display = ("character_sheet", "pledge", "project", "close_attempts", "created_at")
+    list_filter = ("pledge__being",)
+    raw_id_fields = ("character_sheet", "project", "prayer", "closing_performance")
+    readonly_fields = (
+        "project",
+        "character_sheet",
+        "pledge",
+        "prayer",
+        "closing_performance",
+        "close_attempts",
+        "created_at",
+    )
+    inlines = (PledgeCreditInline,)
+
+    def has_add_permission(self, request: HttpRequest) -> bool:
+        del request
+        return False

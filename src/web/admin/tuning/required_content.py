@@ -1484,6 +1484,22 @@ def _declarations() -> tuple[ContentDependency, ...]:
             admin_model="DevotionConfig",
         ),
         ContentDependency(
+            key="favor-closing-awards",
+            label="Favor outcome awards: closing awards",
+            tier=DependencyTier.TUNING,
+            consumer="world/worship/pledge_services.py resolve_pledge_project()",
+            consequence=(
+                "A pledge closed by its closing rite, or one that lapses at half its target "
+                "or more, pays no closing award."
+            ),
+            probe=FilteredRowProbe(
+                label="FavorOutcomeAward",
+                filters=(("kind", "closing"),),
+                absent_detail="No closing award is authored for any outcome tier.",
+            ),
+            admin_model="DevotionConfig",
+        ),
+        ContentDependency(
             key="savaged-condition",
             label="Savaged condition template",
             tier=DependencyTier.REQUIRED,

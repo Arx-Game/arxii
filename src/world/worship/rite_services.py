@@ -24,6 +24,7 @@ from world.worship.constants import (
     RITE_AP_COST_PER_TIER,
     RITE_SOCIAL_FATIGUE_COST,
     BeingResonanceTier,
+    PledgeCreditSource,
     RiteTier,
 )
 from world.worship.exceptions import (
@@ -169,6 +170,7 @@ def apply_rite_award(  # noqa: PLR0913 - the settlement's inputs are keyword-onl
         sites_of,
     )
     from world.worship.services import bump_devotion  # noqa: PLC0415
+    from world.worship.types import FavorSource  # noqa: PLC0415
 
     if award is None:
         award = award_for(rite, outcome)
@@ -204,7 +206,12 @@ def apply_rite_award(  # noqa: PLR0913 - the settlement's inputs are keyword-onl
             )
         if favor_amount > 0:
             # #4333: the earning rate scales the award; record what was credited.
-            favor_amount = bump_devotion(character_sheet, rite.being, favor_amount).credited
+            favor_amount = bump_devotion(
+                character_sheet,
+                rite.being,
+                favor_amount,
+                source=FavorSource(kind=PledgeCreditSource.RITE, rite_performance=performance),
+            ).credited
             performance.favor_granted = favor_amount
             performance.save(update_fields=["favor_granted"])
         grow_consecration(sites, rite)
@@ -228,7 +235,7 @@ def _room_profile_for(*, scene: Scene | None, ceremony: Ceremony | None) -> Room
     return None
 
 
-def _scene_participant(scene: Scene, character_sheet: CharacterSheet) -> bool:
+def scene_participant(scene: Scene, character_sheet: CharacterSheet) -> bool:
     """The roster-tenure participation check ``magic.services.anima`` and
     ``conditions.services`` each keep privately; this one reuses the public
     ``account_for_sheet`` walk rather than copying theirs."""
@@ -261,7 +268,7 @@ def _charge_costs(character_sheet: CharacterSheet, rite: WorshipRite) -> None:
 
 
 def perform_worship_rite(
-    character_sheet: CharacterSheet, rite: WorshipRite, *, scene: Scene
+    character_sheet: CharacterSheet, rite: WorshipRite, *, scene: Scene, pay_award: bool = True
 ) -> RiteOutcome:
     """Perform a tier 1 or 2 rite in a live scene: pay, roll, be paid.
 
@@ -269,6 +276,10 @@ def perform_worship_rite(
     specialization (the same modifier the ceremony Rites roll applies), so a
     Shepherd's vigil and a Hollow Flame's vigil roll the same skill through
     different liturgies. Tier 3 rites are ceremonies and are refused here.
+
+    ``pay_award=False`` (#4333 slice 2) is a pledge's closing rite: the costs,
+    the roll and the ``WorshipRitePerformance`` row are kept, and the rite's own
+    award is not paid; the pledge pays its closing award instead.
     """
     from world.checks.services import perform_check_with_modifiers  # noqa: PLC0415
 
@@ -276,7 +287,7 @@ def perform_worship_rite(
         raise RiteNotAvailable
     if rite.kind.tier == RiteTier.PERILOUS:
         raise RiteIsCeremony
-    if not scene.is_active or not _scene_participant(scene, character_sheet):
+    if not scene.is_active or not scene_participant(scene, character_sheet):
         raise RiteScenePrerequisiteFailed
     require_complete_award_table(rite)
 
@@ -288,4 +299,34 @@ def perform_worship_rite(
             specialization=rite.being.tradition.rites_specialization,
             scene=scene,
         )
+        if not pay_award:
+            return record_unpaid_performance(character_sheet, rite, result.outcome, scene=scene)
         return apply_rite_award(character_sheet, rite, result.outcome, scene=scene)
+
+
+def record_unpaid_performance(
+    character_sheet: CharacterSheet, rite: WorshipRite, outcome: CheckOutcome, *, scene: Scene
+) -> RiteOutcome:
+    """Record a performance that pays no award (a pledge's closing rite, #4333).
+
+    The row keeps the rite's place in the log and the outcome the pledge reads;
+    its resonance and favor stay 0, so it never counts toward the rite's weekly
+    favor cap.
+    """
+    from world.game_clock.week_services import get_current_game_week  # noqa: PLC0415
+
+    performance = WorshipRitePerformance.objects.create(
+        character_sheet=character_sheet,
+        rite=rite,
+        game_week=get_current_game_week(),
+        scene=scene,
+        outcome_tier=outcome,
+    )
+    return RiteOutcome(
+        performance=performance,
+        outcome_name=outcome.name,
+        resonance_granted=0,
+        favor_granted=0,
+        favor_capped=False,
+        multiplier_percent=100,
+    )

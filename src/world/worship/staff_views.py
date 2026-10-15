@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from django.db.models import OuterRef, QuerySet, Subquery
+from django.db.models import OuterRef, Q, QuerySet, Subquery
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
@@ -281,7 +281,9 @@ def _worship_tab(being: WorshippedBeing) -> dict[str, Any]:
             "ceremony_id": offering.ceremony_id,
             "when": offering.worship_grant.created_at if offering.worship_grant_id else None,
         }
-        for offering in CeremonyOffering.objects.filter(ceremony__being=being)
+        # A ceremony offering reaches the being through its ceremony; a shrine
+        # sacrifice (#4333) names the being itself.
+        for offering in CeremonyOffering.objects.filter(Q(ceremony__being=being) | Q(being=being))
         .select_related("offered_by", "worship_grant")
         .order_by("-pk")[:TAB_ROWS]
     ]

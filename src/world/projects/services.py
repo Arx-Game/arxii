@@ -373,23 +373,30 @@ def clear_kind_handlers() -> None:
     _SUCCESS_ONLY_KINDS.clear()
 
 
-RegistrySnapshot = tuple[dict[str, KindHandler], dict[str, "TieredResolver"], set[str]]
+RegistrySnapshot = tuple[dict[str, KindHandler], dict[str, "TieredResolver"], set[str], set[str]]
 
 
 def snapshot_registries() -> RegistrySnapshot:
     """Test-only: copy the registries for restore_registries()."""
-    return dict(_KIND_HANDLERS), dict(_TIERED_RESOLVERS), set(_SUCCESS_ONLY_KINDS)
+    return (
+        dict(_KIND_HANDLERS),
+        dict(_TIERED_RESOLVERS),
+        set(_SUCCESS_ONLY_KINDS),
+        set(_EXPIRY_ONLY_KINDS),
+    )
 
 
 def restore_registries(snapshot: RegistrySnapshot) -> None:
     """Test-only: reset the registries to a snapshot_registries() copy."""
-    kind_handlers, tiered_resolvers, success_only_kinds = snapshot
+    kind_handlers, tiered_resolvers, success_only_kinds, expiry_only_kinds = snapshot
     _KIND_HANDLERS.clear()
     _KIND_HANDLERS.update(kind_handlers)
     _SUCCESS_ONLY_KINDS.clear()
     _SUCCESS_ONLY_KINDS.update(success_only_kinds)
     _TIERED_RESOLVERS.clear()
     _TIERED_RESOLVERS.update(tiered_resolvers)
+    _EXPIRY_ONLY_KINDS.clear()
+    _EXPIRY_ONLY_KINDS.update(expiry_only_kinds)
 
 
 # ---------------------------------------------------------------------------
@@ -417,6 +424,27 @@ def register_instant_completion_kind(kind: str) -> None:
 def clear_instant_completion_kinds() -> None:
     """Test-only: clear the instant-completion registry."""
     _INSTANT_COMPLETION_KINDS.clear()
+
+
+# ---------------------------------------------------------------------------
+# Expiry-only kinds (#4333)
+# ---------------------------------------------------------------------------
+# A SINGLE_THRESHOLD project normally becomes completion-ready the moment its
+# threshold is met. An expiry-only kind does not: meeting the target only makes
+# it eligible for its own closing act (a pledge's closing rite), which resolves
+# it directly. The tick resolves it only when its time limit passes.
+
+_EXPIRY_ONLY_KINDS: set[str] = set()
+
+
+def register_expiry_only_kind(kind: str) -> None:
+    """Mark a SINGLE_THRESHOLD kind as completion-ready only at its time limit."""
+    _EXPIRY_ONLY_KINDS.add(kind)
+
+
+def is_expiry_only_kind(kind: str) -> bool:
+    """True when ``kind`` was registered with :func:`register_expiry_only_kind`."""
+    return kind in _EXPIRY_ONLY_KINDS
 
 
 # ---------------------------------------------------------------------------
@@ -518,9 +546,12 @@ def _project_is_completion_ready(project: Project, now: datetime) -> bool:
 
     SINGLE_THRESHOLD: completion = (current_progress >= threshold_target)
                                    OR (now >= time_limit).
+                      An expiry-only kind (#4333): completion = (now >= time_limit).
     TIERED_PERIOD:    completion = (now >= time_limit).
     """
     if project.completion_mode == CompletionMode.SINGLE_THRESHOLD:
+        if project.kind in _EXPIRY_ONLY_KINDS:
+            return now >= project.time_limit
         if project.threshold_target is None:
             return False
         return project.current_progress >= project.threshold_target or now >= project.time_limit
