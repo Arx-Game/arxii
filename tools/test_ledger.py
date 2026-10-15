@@ -54,7 +54,16 @@ _BUILTIN_NAMES = re.compile(
     r"^test_.*(unique_constraint|null|blank|max_length|choices_are|is_registered|admin_registered|"
     r"serializer_fields|read_only_fields|pagination|filterset|filter_backends|permission_classes)"
 )
-_OUTCOME_ASSERTS = ("assertIn(", "assertEqual(", "assertTrue(", "assertFalse(", "assertRaises")
+# A bare ``assert`` statement counts too: the conditions pilot graded a predicate
+# module mock-pinned because its twenty bare asserts were invisible (#3657).
+_OUTCOME_ASSERTS = (
+    "assertIn(",
+    "assertEqual(",
+    "assertTrue(",
+    "assertFalse(",
+    "assertRaises",
+    " assert ",
+)
 
 
 @dataclass(frozen=True)
