@@ -18,6 +18,7 @@ Social structures (Societies, Organizations) with reputation and legend tracking
 - **`OrganizationReputation`**: Reputation standing with an organization per-persona
 - **`LegendSourceType`**: Categories of legend-generating events (combat, story, discovery, etc.) - uses SharedMemoryModel
 - **`SpreadingConfig`**: Singleton server-wide config for spreading mechanics - uses SharedMemoryModel
+- **`AssociationConfig`** (#4361): Singleton: `former_member_years`, `work_missions`, `work_days`, the example thresholds the association leaves read
 - **`LegendEvent`**: Group events that generate deeds for multiple participants
 - **`LegendEntry`**: Individual deeds with base_value, spread cap, active flag, optional event/scene/story FKs
 - **`LegendSpread`**: Spreading actions that add value to entries, clamped to spread cap
@@ -59,6 +60,18 @@ Social structures (Societies, Organizations) with reputation and legend tracking
 - **`appoint_office(*, organization, slug, holder, title="", feeds_check=None)`**: install/replace an office holder (idempotent per org+slug)
 - **`vacate_office(*, organization, slug)`**: clear the holder (no-op when absent)
 - **`office_holder(organization, slug)`** / **`holds_office(persona, organization, slug)`**: read seams. Domain management (`houses.services.can_administer_domain`) gates on `holds_office` for the `domain-steward` slug.
+
+### `association.py` (#4361)
+**Association** is whether the world sees a persona as tied to an organization: perception,
+not formal membership, and not the organization's own opinion (that is reputation).
+`association_with_org(persona, org)` / `association_with_society(persona, society)` return an
+`AssociationReason` (kind and a staff-facing detail) or None: a member now, a member who left
+within `AssociationConfig.former_member_years` in-game years, an exile always, kin of a family
+house (`Organization.family` matches the character's family, primary persona only), or
+`work_missions` missions completed in the last `work_days` in-game days from offers whose NPC
+role fronts for the organization. Counted through the organization and every organization
+below it (`org_and_descendant_ids`); covert organizations never count; only the persona passed
+in is read. Read by the `associated_with_org` / `associated_with_society` predicate leaves.
 
 ### `honors.py` (#3466)
 The Rite of Honors. **`honor_deed(*, character_sheet, ritual, honoree_persona, deed=None,
