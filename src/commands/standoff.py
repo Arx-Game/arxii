@@ -371,18 +371,23 @@ def _render_gm_view(view: GMStandoffView) -> list[str]:
             + _state_words(group.state, group.morale_state, emboldened=group.emboldened_bands > 0)
         )
         status = f"fires: {group.cause_reason}" if group.cause_fires else "holds"
-        lines.append(f"    Cause: {group.cause} ({status})")
+        edited = " - edited here" if group.cause_edited else ""
+        lines.append(f"    Cause: {group.cause} ({status}){edited}")
+        if group.affiliation:
+            set_here = " - set on this line" if group.affiliation_edited else ""
+            lines.append(f"    Affiliation: {group.affiliation}{set_here}")
         if group.pending_prompt_id is not None:
             lines.append(
                 f"    Proposal [{group.pending_prompt_id}]: {group.proposal_reason} "
                 f"(gm prompt confirm, hold or override {group.pending_prompt_id})"
             )
         lines.extend(
-            f"    Drive: {drive.label} ({drive.strength}){' - read' if drive.revealed else ''}"
+            f"    Drive: {drive.label} ({drive.strength})"
+            f"{' - edited here' if drive.edited else ''}{' - read' if drive.revealed else ''}"
             for drive in group.drives
         )
         lines.extend(
-            f"    Faction rule: {rule.label} - matches "
+            f"    Faction rule: {rule.label} (from {rule.source}) - matches "
             f"{', '.join(rule.matched_by) or 'nobody'}{' - read' if rule.revealed else ''}"
             for rule in group.faction_rules
         )

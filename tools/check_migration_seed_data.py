@@ -71,6 +71,11 @@ ALLOWED_MIGRATIONS: set[str] = {
     # ensure_being_modifier_targets creates for every being saved after this
     # release. Derived one-per-being from rows already in the database; no authored
     # content is invented.
+    "world/migrations/0231_standoff_profile_snapshot_backfill.py",
+    # #4361: play-state backfill. Opponents in a live standoff used to read their
+    # creature template's drives live; the snapshot now lives on each opponent's
+    # object as ObjectProperty rows. It stamps the template's own CreatureDrive
+    # rows onto those opponents; nothing authored is invented or overwritten.
 }
 
 # Patterns that suggest seed data in migrations

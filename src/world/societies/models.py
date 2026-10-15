@@ -1521,6 +1521,49 @@ class SpreadingConfig(SharedMemoryModel):
         )
 
 
+class AssociationConfig(SharedMemoryModel):
+    """Singleton (pk=1): when the world sees a persona as tied to an organization (#4361).
+
+    Read by the ``associated_with_org`` and ``associated_with_society`` predicate leaves.
+    Association is perception, not formal membership: a current member, a former member
+    for a while after leaving, an exile always, kin of a family house, and someone who
+    has lately run several missions for the organization's people. Covert organizations
+    never count. The numbers here are example tuning.
+    """
+
+    former_member_years = models.PositiveSmallIntegerField(
+        default=2,
+        help_text="In-game years a member who left is still seen as tied to the organization.",
+    )
+    work_missions = models.PositiveSmallIntegerField(
+        default=3,
+        validators=[MinValueValidator(1)],
+        help_text="Completed missions for an organization's people that make a steady tie.",
+    )
+    work_days = models.PositiveSmallIntegerField(
+        default=90,
+        validators=[MinValueValidator(1)],
+        help_text="In-game days back that those missions are counted over.",
+    )
+
+    objects = ArxSharedMemoryManager()
+
+    class Meta:
+        verbose_name = "Association settings"
+        verbose_name_plural = "Association settings"
+
+    @classmethod
+    def load(cls) -> "AssociationConfig":
+        """Fetch (or lazily create) the singleton row."""
+        config = cls.objects.cached_singleton()
+        if config is None:
+            config, _created = cls.objects.get_or_create(pk=1)
+        return config
+
+    def __str__(self) -> str:
+        return "Association settings"
+
+
 class SpreadAssistTarget(SharedMemoryModel):
     """Links a SPREAD_ASSIST reaction window to the deed it can boost (#915).
 

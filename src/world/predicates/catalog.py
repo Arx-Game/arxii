@@ -13,6 +13,7 @@ from __future__ import annotations
 import inspect
 import typing
 
+from world.predicates.predicates import _TIER_ORDER, LEAF_RESOLVERS
 from world.predicates.types import LeafResolver
 
 _TYPE_TAGS: dict[type, str] = {int: "int", bool: "bool", str: "str", float: "float"}
@@ -53,3 +54,32 @@ def leaf_params(resolver: LeafResolver) -> list[dict[str, str]]:
         for name, param in list(sig.parameters.items())[1:]
         if param.kind in (param.KEYWORD_ONLY, param.POSITIONAL_OR_KEYWORD)
     ]
+
+
+# Params constrained beyond their primitive type, keyed (leaf, param). ``_tier_rank``
+# raises KeyError for any value outside ``_TIER_ORDER`` (deliberately loud, but the loud
+# failure fires inside every later evaluation), so the validator rejects out-of-set
+# values at author time and the builders offer them as a pick list.
+PARAM_ALLOWED_VALUES: dict[tuple[str, str], tuple[str, ...]] = {
+    ("min_org_reputation", "tier"): _TIER_ORDER,
+    ("min_society_standing", "tier"): _TIER_ORDER,
+    ("max_org_reputation", "tier"): _TIER_ORDER,
+    ("max_society_standing", "tier"): _TIER_ORDER,
+}
+
+
+def leaf_catalog() -> list[dict]:
+    """Every registered leaf with its typed params, sorted by name.
+
+    Each param is ``{"name", "type"}``, plus ``"choices"`` when the param only takes a
+    fixed set of values. Served by the mission studio's leaf catalog endpoint and the
+    admin predicate widget, so both builders offer the same palette.
+    """
+    catalog = []
+    for name, resolver in sorted(LEAF_RESOLVERS.items()):
+        params = []
+        for spec in leaf_params(resolver):
+            allowed = PARAM_ALLOWED_VALUES.get((name, spec["name"]))
+            params.append({**spec, "choices": list(allowed)} if allowed else spec)
+        catalog.append({"name": name, "params": params})
+    return catalog

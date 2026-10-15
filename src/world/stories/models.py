@@ -10,6 +10,7 @@ from core.models import ArxSharedMemoryModel as SharedMemoryModel
 from world.battles.constants import BattleSideRole
 from world.character_sheets.types import LifecycleState
 from world.societies.constants import RenownRisk
+from world.standoffs.placement_fields import PlacementEdits
 from world.stories.constants import (
     AssistantClaimStatus,
     BeatKind,
@@ -1044,7 +1045,7 @@ class StoryScenario(SharedMemoryModel):
         return f"Scenario {self.template_id} of Story {self.story_id}"
 
 
-class BeatOpponentLine(SharedMemoryModel):
+class BeatOpponentLine(PlacementEdits, SharedMemoryModel):
     """An authored opponent (creature x count x position hint) to spawn when a beat runs.
 
     Session prep (#3425): a GM authors the roster for an ENCOUNTER beat ahead of the

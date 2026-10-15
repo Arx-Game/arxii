@@ -1082,11 +1082,12 @@ class GMPromptSerializer(serializers.ModelSerializer):
     def get_standoff_cause_label(self, obj: GMPrompt) -> str:
         """The proposed group's cause, by label (Orders, Predation); blank on other kinds."""
         from world.combat.constants import CauseKind  # noqa: PLC0415
+        from world.standoffs.services.profile import group_cause  # noqa: PLC0415
 
         group = obj.standoff_group
         if group is None:
             return ""
-        return CauseKind(group.creature_template.cause).label
+        return CauseKind(group_cause(group)[0]).label
 
     def get_standoff_force(self, obj: GMPrompt) -> str:
         """The force on both sides, read when the queue is: blank on other kinds."""

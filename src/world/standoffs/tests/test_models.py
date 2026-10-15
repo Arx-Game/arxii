@@ -42,8 +42,10 @@ class StandoffModelTests(TestCase):
 
     def test_drive_reveal_with_drive_is_valid(self) -> None:
         drive = CreatureDriveFactory(creature_template=self.template)
-        reveal = StandoffRevealFactory(group=self.group, kind=RevealKind.DRIVE, drive=drive)
-        self.assertEqual(reveal.drive, drive)
+        reveal = StandoffRevealFactory(
+            group=self.group, kind=RevealKind.DRIVE, drive=drive.property
+        )
+        self.assertEqual(reveal.drive, drive.property)
 
     @tag("postgres")  # nulls_distinct=False is unenforced on SQLite
     def test_duplicate_cause_reveal_rejected(self) -> None:

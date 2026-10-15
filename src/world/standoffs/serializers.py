@@ -82,6 +82,7 @@ class GMDriveViewSerializer(serializers.Serializer):
     label = serializers.CharField()
     strength = serializers.CharField()
     revealed = serializers.BooleanField()
+    edited = serializers.BooleanField()
 
 
 class GMFactionRuleViewSerializer(serializers.Serializer):
@@ -92,6 +93,7 @@ class GMFactionRuleViewSerializer(serializers.Serializer):
     suppresses_cause = serializers.BooleanField()
     matched_by = serializers.ListField(child=serializers.CharField())
     revealed = serializers.BooleanField()
+    source = serializers.CharField(allow_blank=True)
 
 
 class GMMemberViewSerializer(serializers.Serializer):
@@ -122,6 +124,9 @@ class GMGroupViewSerializer(serializers.Serializer):
     party_force = serializers.FloatField()
     effective_party_force = serializers.FloatField()
     group_force = serializers.FloatField()
+    affiliation = serializers.CharField(allow_blank=True)
+    cause_edited = serializers.BooleanField()
+    affiliation_edited = serializers.BooleanField()
     drives = GMDriveViewSerializer(many=True)
     faction_rules = GMFactionRuleViewSerializer(many=True)
     members = GMMemberViewSerializer(many=True)

@@ -94,3 +94,26 @@ class StandoffReactionLineFactory(factory_django.DjangoModelFactory):
     approach = factory.SubFactory(StandoffApproachFactory)
     min_success_level = 1
     text = "PLACEHOLDER <actor> and <group>"
+
+
+def restamp_from_templates(encounter: object) -> None:
+    """Re-stamp every templated opponent in ``encounter`` from its template as it is now.
+
+    A spawn stamps the template's standoff profile on the opponent (#4361); a test that
+    edits the template (cause, drives, affiliation) after its opponents exist calls this,
+    the way a real encounter would have been spawned from the edited template.
+    """
+    from world.mechanics.models import ObjectProperty
+    from world.standoffs.services.placement import (
+        placement_profile,
+        stamp_opponent,
+    )
+
+    for opponent in encounter.opponents.exclude(creature_template=None):
+        if opponent.objectdb_id is not None:
+            ObjectProperty.objects.filter(
+                object_id=opponent.objectdb_id,
+                source_condition__isnull=True,
+                source_challenge__isnull=True,
+            ).delete()
+        stamp_opponent(opponent, placement_profile(opponent.creature_template))
