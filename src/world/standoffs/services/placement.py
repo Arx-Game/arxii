@@ -29,6 +29,7 @@ if TYPE_CHECKING:
     from world.mechanics.models import Property
     from world.missions.models import MissionOptionOpponentLine
     from world.societies.models import Organization
+    from world.standoffs.models import FactionRule
     from world.stories.models import BeatOpponentLine
 
     OpponentLine = BeatOpponentLine | MissionOptionOpponentLine
@@ -307,3 +308,66 @@ def _line_field(line: OpponentLine) -> str:
     from world.stories.models import BeatOpponentLine  # noqa: PLC0415
 
     return "beat_line" if isinstance(line, BeatOpponentLine) else "mission_line"
+
+
+@dataclass(frozen=True)
+class ContextDrive:
+    property: Property
+    property_id: int
+    strength: int
+    strength_label: str
+
+
+@dataclass(frozen=True)
+class ContextRule:
+    rule: FactionRule
+    label: str
+    source: str
+    level: int
+
+
+@dataclass(frozen=True)
+class TemplateContext:
+    """A template's own standoff values, beside which a placement editor shows its edits."""
+
+    creature_template: int
+    name: str
+    cause: str
+    cause_label: str
+    cause_margin_percent: int
+    organization: int | None
+    organization_name: str
+    drives: list[ContextDrive]
+    inherited_rules: list[ContextRule]
+
+
+def template_context(
+    template: CreatureTemplate, organization: Organization | None = None
+) -> TemplateContext:
+    """The template's cause, margin, affiliation and drives, and the rules a placement
+    affiliated with ``organization`` (or the template's own affiliation) inherits."""
+    from world.standoffs.services.gm_view import faction_rule_label  # noqa: PLC0415
+
+    effective_org = organization or template.organization
+    return TemplateContext(
+        creature_template=template.pk,
+        name=template.name,
+        cause=template.cause,
+        cause_label=CauseKind(template.cause).label,
+        cause_margin_percent=template.cause_margin_percent,
+        organization=template.organization_id,
+        organization_name=template.organization.name if template.organization else "",
+        drives=[
+            ContextDrive(
+                drive.property,
+                drive.property_id,
+                drive.strength,
+                DriveStrength(drive.strength).label,
+            )
+            for drive in template.drives.select_related("property")
+        ],
+        inherited_rules=[
+            ContextRule(entry.rule, faction_rule_label(entry.rule), entry.source, entry.level)
+            for entry in inherited_rules(template, effective_org)
+        ],
+    )
