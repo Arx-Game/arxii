@@ -143,6 +143,21 @@ def _same_room(actor: ObjectDB, target_persona: Persona) -> bool:
     return actor_room.pk == target_room.pk
 
 
+def _tell_invitee(
+    actor_persona: Persona, target_persona: Persona, organization: Organization
+) -> None:
+    """The invitation is an offer the invitee answers with ``accept org`` or
+    ``deny org``; until #3657 tranche 2 nothing told them it was waiting."""
+    try:
+        character = target_persona.character_sheet.character
+    except (AttributeError, ObjectDoesNotExist):
+        return
+    character.msg(
+        f"{actor_persona.name} invites you to join {organization.name}. "
+        "accept org to join, deny org to refuse."
+    )
+
+
 @dataclass
 class OrgInviteAction(Action):
     key: str = "org_invite"
@@ -181,6 +196,7 @@ class OrgInviteAction(Action):
 
         try:
             invite_to_organization(organization, actor_persona, target_persona)
+            _tell_invitee(actor_persona, target_persona, organization)
         except (
             NotAuthorizedToInviteError,
             AlreadyOrganizationMemberError,

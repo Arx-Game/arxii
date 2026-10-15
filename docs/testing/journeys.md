@@ -29,6 +29,8 @@ inventory reports for commands, API routes and frontend routes.
 | Shaking off a charm: `breakfree` weakens the hold, a second try is refused, `rally` grants the bonus her next attempt carries; nothing to fight says so (#3657 pilot). | handler | `src/integration_tests/test_conditions_journeys.py` |
 | Treating a fever in a scene: `treat` lists candidates, the offer waits, `accept` applies the poultice and the feed shows it; the sheet and the treat panel read the same rows (#3657 pilot). | handler + API | `src/integration_tests/test_conditions_journeys.py` |
 | A GM applies, lists and removes a condition from the panel; a player who is not the GM is refused (#3657 pilot). | dispatch | `src/integration_tests/test_conditions_journeys.py` |
+| Joining and rising in an organization: `org invite`, the invitee is told and types `accept org`, then `org promote`, `org demote`, `org expel`; `org leave`; a rank-and-file member cannot promote the leader; an unknown organization is named back; the web invite is the same action (#3657 tranche 2). | handler + dispatch | `src/integration_tests/test_membership_and_consent_journeys.py` |
+| Keeping hands off her body: an awake character cannot be carried; unconscious, her body-handling allowlist decides who may (`consent whitelist add/remove`), `carry_body` and `set_down_body` answer accordingly; the blacklist lines read back; an unknown category is named back (#3657 tranche 2). | handler + dispatch | `src/integration_tests/test_membership_and_consent_journeys.py` |
 | End-to-end pipeline tests for the magical alteration system. | services / dispatch | `src/integration_tests/pipeline/test_alteration_pipeline.py` |
 | End-to-end pipeline tests for the daily anima regen tick. | services / dispatch | `src/integration_tests/pipeline/test_anima_regen_pipeline.py` |
 | End-to-end pipeline test for the Audere offer surface (#873). | services / dispatch | `src/integration_tests/pipeline/test_audere_offer_pipeline.py` |
@@ -83,6 +85,15 @@ inventory reports for commands, API routes and frontend routes.
 | Survivability journey tests for issue #3450. | services / dispatch | `src/integration_tests/test_survivability_journey.py` |
 
 ## Gaps to write first
+
+### Gaps the journeys found (what a player meets; ruled or fixed on #3657)
+
+| Gap | Found by | State |
+|---|---|---|
+| `org invite <person> in <org>` (and promote, demote, expel, favor, disfavor) searched for a character named "invite <person>": the two-argument parser read the raw args, subverb included. Its unit tests set the parsed fields by hand and never saw it. | the organization journey | fixed in tranche 2 (`parse_two_args(text=...)`) |
+| An invitee was never told an invitation was waiting; only typing `accept` revealed it. | the organization journey | fixed in tranche 2 (the invite action tells them) |
+| Under an allowlist category (body handling, theft) `consent blacklist add` replies "X may no longer target you", but the gate consults only the whitelist in that mode, so a whitelisted X is still admitted (`test_blacklist_only_counts_under_all_but_blacklist` pins the rule). | the body-handling journey | open: a ruling on list precedence or on the reply's wording |
+| On a deploy without the foundational capability rows authored, Unconscious does not stop anyone acting and a body can be neither protected nor carried (`can_act` degrades to True by design). | the body-handling journey | open: content, not code |
 
 From the inventory's `none` rows (2026-10-15): 61 commands, 79 API routes and 66
 frontend routes are named by no test. The ledger (`tools/test_ledger.py`) sorts
