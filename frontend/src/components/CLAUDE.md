@@ -29,7 +29,16 @@ Character-specific UI components:
 ### Application Shell
 
 - **`Layout.tsx`**: Main application layout wrapper
-- **`Header.tsx`**: Application header with navigation
+- **`Header.tsx`**: Application header with navigation. Dropdown rows carry
+  `requires: 'auth' | 'gm' | 'staff'` (#4188): `gm` is `account.is_gm`, which an
+  assistant GM also has, so it is the whole GM gate. The **GMing** group (Dashboard,
+  Story Builder, Tables, Lead GM Queue, plus a Staff section holding Story Workload)
+  shows for `is_gm || is_staff`; its trigger carries one count, `total` from
+  `useGMAttention` (`gm/queries.ts`, `GET /api/gm/attention/`), the same payload the
+  Dashboard's "Waiting on you" strip reads, so badge and strip never disagree
+  (ADR-4188). World is the lore shelf (Codex, Tidings, Journals, Realms); Crossover is
+  reached from the Dashboard strip. The phone sheet mirrors the groups and shows the
+  count in the group label.
 - **`SelectedCharacterChip.tsx`**: The docked-portrait chip the header renders when the
   account has a selected character (#3412). Selection is not presence, and the chip
   shows both (#3859, #4321): presence comes from `roster/useCharacterPresence.ts`, which

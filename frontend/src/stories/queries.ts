@@ -7,6 +7,7 @@
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import * as api from './api';
+import { gmKeys } from '@/gm/queries';
 import type {
   CreateBeatScenarioBody,
   ListBeatsParams,
@@ -680,6 +681,7 @@ export function useRequestClaim() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: storiesKeys.agmClaims() }).catch(() => {});
       qc.invalidateQueries({ queryKey: storiesKeys.gmQueue() }).catch(() => {});
+      qc.invalidateQueries({ queryKey: gmKeys.attention }).catch(() => {});
     },
   });
 }
@@ -693,6 +695,7 @@ export function useApproveClaim() {
       qc.invalidateQueries({ queryKey: storiesKeys.agmClaim(claimId) }).catch(() => {});
       qc.invalidateQueries({ queryKey: storiesKeys.agmClaims() }).catch(() => {});
       qc.invalidateQueries({ queryKey: storiesKeys.gmQueue() }).catch(() => {});
+      qc.invalidateQueries({ queryKey: gmKeys.attention }).catch(() => {});
     },
   });
 }
@@ -706,6 +709,7 @@ export function useRejectClaim() {
       qc.invalidateQueries({ queryKey: storiesKeys.agmClaim(claimId) }).catch(() => {});
       qc.invalidateQueries({ queryKey: storiesKeys.agmClaims() }).catch(() => {});
       qc.invalidateQueries({ queryKey: storiesKeys.gmQueue() }).catch(() => {});
+      qc.invalidateQueries({ queryKey: gmKeys.attention }).catch(() => {});
     },
   });
 }
@@ -717,6 +721,7 @@ export function useCancelClaim() {
     onSuccess: (_, claimId) => {
       qc.invalidateQueries({ queryKey: storiesKeys.agmClaim(claimId) }).catch(() => {});
       qc.invalidateQueries({ queryKey: storiesKeys.agmClaims() }).catch(() => {});
+      qc.invalidateQueries({ queryKey: gmKeys.attention }).catch(() => {});
     },
   });
 }
@@ -729,6 +734,7 @@ export function useCompleteClaim() {
       qc.invalidateQueries({ queryKey: storiesKeys.agmClaim(claimId) }).catch(() => {});
       qc.invalidateQueries({ queryKey: storiesKeys.agmClaims() }).catch(() => {});
       qc.invalidateQueries({ queryKey: storiesKeys.gmQueue() }).catch(() => {});
+      qc.invalidateQueries({ queryKey: gmKeys.attention }).catch(() => {});
     },
   });
 }
@@ -743,6 +749,7 @@ export function useCreateEventFromSessionRequest() {
       qc.invalidateQueries({ queryKey: storiesKeys.sessionRequests() }).catch(() => {});
       qc.invalidateQueries({ queryKey: storiesKeys.gmQueue() }).catch(() => {});
       qc.invalidateQueries({ queryKey: storiesKeys.myActive() }).catch(() => {});
+      qc.invalidateQueries({ queryKey: gmKeys.attention }).catch(() => {});
     },
   });
 }
@@ -755,6 +762,7 @@ export function useCancelSessionRequest() {
       qc.invalidateQueries({ queryKey: storiesKeys.sessionRequest(requestId) }).catch(() => {});
       qc.invalidateQueries({ queryKey: storiesKeys.sessionRequests() }).catch(() => {});
       qc.invalidateQueries({ queryKey: storiesKeys.gmQueue() }).catch(() => {});
+      qc.invalidateQueries({ queryKey: gmKeys.attention }).catch(() => {});
     },
   });
 }
@@ -768,6 +776,7 @@ export function useResolveSessionRequest() {
       qc.invalidateQueries({ queryKey: storiesKeys.sessionRequests() }).catch(() => {});
       qc.invalidateQueries({ queryKey: storiesKeys.gmQueue() }).catch(() => {});
       qc.invalidateQueries({ queryKey: storiesKeys.myActive() }).catch(() => {});
+      qc.invalidateQueries({ queryKey: gmKeys.attention }).catch(() => {});
     },
   });
 }
@@ -1016,6 +1025,7 @@ export function useAcceptOffer() {
       qc.invalidateQueries({ queryKey: storiesKeys.storyGMOffers() }).catch(() => {});
       qc.invalidateQueries({ queryKey: storiesKeys.story(updated.story) }).catch(() => {});
       qc.invalidateQueries({ queryKey: storiesKeys.gmQueue() }).catch(() => {});
+      qc.invalidateQueries({ queryKey: gmKeys.attention }).catch(() => {});
     },
   });
 }
@@ -1027,6 +1037,7 @@ export function useDeclineOffer() {
       api.declineOffer(offerId, body),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: storiesKeys.storyGMOffers() }).catch(() => {});
+      qc.invalidateQueries({ queryKey: gmKeys.attention }).catch(() => {});
     },
   });
 }
@@ -1037,6 +1048,7 @@ export function useWithdrawOffer() {
     mutationFn: (offerId: number) => api.withdrawOffer(offerId),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: storiesKeys.storyGMOffers() }).catch(() => {});
+      qc.invalidateQueries({ queryKey: gmKeys.attention }).catch(() => {});
     },
   });
 }

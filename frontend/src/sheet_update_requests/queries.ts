@@ -4,6 +4,7 @@
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
+import { gmKeys } from '@/gm/queries';
 
 import {
   createUpdateRequest,
@@ -43,6 +44,7 @@ export function useCreateUpdateRequestMutation() {
     onSuccess: () => {
       toast.success('Update request submitted to your table GM.');
       void queryClient.invalidateQueries({ queryKey: sheetUpdateRequestKeys.all });
+      void queryClient.invalidateQueries({ queryKey: gmKeys.attention });
     },
     onError: (error: Error) => toast.error(error.message),
   });
@@ -55,6 +57,7 @@ export function useSignoffMutation() {
     onSuccess: (request) => {
       toast.success(request.status === 'rejected' ? 'Request declined.' : 'Request approved.');
       void queryClient.invalidateQueries({ queryKey: sheetUpdateRequestKeys.all });
+      void queryClient.invalidateQueries({ queryKey: gmKeys.attention });
     },
     onError: (error: Error) => toast.error(error.message),
   });
@@ -67,6 +70,7 @@ export function useWithdrawMutation() {
     onSuccess: () => {
       toast.success('Request withdrawn.');
       void queryClient.invalidateQueries({ queryKey: sheetUpdateRequestKeys.all });
+      void queryClient.invalidateQueries({ queryKey: gmKeys.attention });
     },
     onError: (error: Error) => toast.error(error.message),
   });

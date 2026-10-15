@@ -2,6 +2,7 @@
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import * as api from './api';
+import { gmKeys } from '@/gm/queries';
 import type {
   CrossoverInviteAcceptBody,
   CrossoverInviteCreateBody,
@@ -55,6 +56,7 @@ export function useCreateCrossoverInvite() {
     mutationFn: (body: CrossoverInviteCreateBody) => api.createCrossoverInvite(body),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: crossoverKeys.all }).catch(() => {});
+      qc.invalidateQueries({ queryKey: gmKeys.attention }).catch(() => {});
     },
   });
 }
@@ -66,6 +68,7 @@ export function useAcceptCrossoverInvite() {
       api.acceptCrossoverInvite(id, body),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: crossoverKeys.all }).catch(() => {});
+      qc.invalidateQueries({ queryKey: gmKeys.attention }).catch(() => {});
     },
   });
 }
@@ -77,6 +80,7 @@ export function useDeclineCrossoverInvite() {
       api.declineCrossoverInvite(id, responseNote),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: crossoverKeys.all }).catch(() => {});
+      qc.invalidateQueries({ queryKey: gmKeys.attention }).catch(() => {});
     },
   });
 }
@@ -87,6 +91,7 @@ export function useWithdrawCrossoverInvite() {
     mutationFn: (id: number) => api.withdrawCrossoverInvite(id),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: crossoverKeys.all }).catch(() => {});
+      qc.invalidateQueries({ queryKey: gmKeys.attention }).catch(() => {});
     },
   });
 }

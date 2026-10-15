@@ -3234,7 +3234,14 @@ GM at a given level may author (#2000, ADR-0097).
   `GMDashboardView` (`GET /api/gm/dashboard/`) payload gained `pending_applications`
   (count from `gm_application_queue(gm)`) and `open_invites` (this GM's unclaimed,
   unexpired `GMRosterInvite` rows) as the tile source for those same recruitment
-  surfaces (#3268).
+  surfaces (#3268). **`GMAttentionView` (`GET /api/gm/attention/`, `IsGM`, #4188)**
+  returns `gm_attention(account)` (`world/gm/services.py`, a `GMAttention` dataclass
+  in `world/gm/types.py`): counts of pending story offers, received pending crossover
+  invites, the pending sheet-update review pool (`table_update_requests_for`, the same
+  `table_update_review_pool_q` filter `TableUpdateRequestViewSet` ORs with the player's
+  own rows), the Lead GM queue's claims to approve and assigned session requests, the
+  GM's own open assistant claims, and their `total`. One payload feeds the header's
+  GMing badge and the Dashboard's "Waiting on you" strip (ADR-4188).
 - **GM onboarding lives on the Hall (#3478):** the Hall's GM slot
   (`frontend/src/home/hall/GMSlot.tsx`) is the sole surface for both
   `mine`/`character` endpoints above — `CreateGMCharacterDialog` mints via
