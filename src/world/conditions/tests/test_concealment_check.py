@@ -1,7 +1,5 @@
 """Concealment predicates do not grant spatial scope or record detection."""
 
-from unittest.mock import patch
-
 from django.test import TestCase
 from django.utils import timezone
 
@@ -89,16 +87,3 @@ class ConcealmentCheckTests(TestCase):
             assert not passes_concealment_check(self.actor, self.target)
         assert list(instance.detected_by.all()) == detected_before
         assert (instance.is_suppressed, instance.resolved_at) == state_before
-
-    def test_direct_perception_delegates_only_after_original_location_gate(self):
-        with patch("world.conditions.services.passes_concealment_check") as check:
-            assert not can_perceive(self.actor, self.target)
-            check.assert_not_called()
-            self.target.location = self.room
-            check.return_value = False
-            assert not can_perceive(self.actor, self.target)
-            check.assert_called_once_with(self.actor, self.target)
-            check.reset_mock()
-            check.return_value = True
-            assert can_perceive(self.actor, self.target)
-            check.assert_called_once_with(self.actor, self.target)

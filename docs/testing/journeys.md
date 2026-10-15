@@ -26,6 +26,9 @@ inventory reports for commands, API routes and frontend routes.
 | Journey | Seam | Covering test |
 |---|---|---|
 | A greeting is heard by the speaker and the room; an unknown line is refused; a typed /switch reaches its command (the harness's own journeys). | handler | `src/integration_tests/test_harness_journeys.py` |
+| Shaking off a charm: `breakfree` weakens the hold, a second try is refused, `rally` grants the bonus her next attempt carries; nothing to fight says so (#3657 pilot). | handler | `src/integration_tests/test_conditions_journeys.py` |
+| Treating a fever in a scene: `treat` lists candidates, the offer waits, `accept` applies the poultice and the feed shows it; the sheet and the treat panel read the same rows (#3657 pilot). | handler + API | `src/integration_tests/test_conditions_journeys.py` |
+| A GM applies, lists and removes a condition from the panel; a player who is not the GM is refused (#3657 pilot). | dispatch | `src/integration_tests/test_conditions_journeys.py` |
 | End-to-end pipeline tests for the magical alteration system. | services / dispatch | `src/integration_tests/pipeline/test_alteration_pipeline.py` |
 | End-to-end pipeline tests for the daily anima regen tick. | services / dispatch | `src/integration_tests/pipeline/test_anima_regen_pipeline.py` |
 | End-to-end pipeline test for the Audere offer surface (#873). | services / dispatch | `src/integration_tests/pipeline/test_audere_offer_pipeline.py` |

@@ -164,3 +164,19 @@ def _flush_natural_key_indexes() -> None:
 
 
 register_test_cache_flusher(_flush_natural_key_indexes)
+
+
+def _flush_result_chart_cache() -> None:
+    """Drop ``ResultChart``'s class-level chart cache (#3657 tranche 1).
+
+    ``ResultChart.get_chart_for_difference`` fills ``_chart_cache`` from the
+    table on first use and never refills it, so the charts one test built
+    answered every later check in the process after their rows were rolled
+    back: a dead chart has no outcome rows, and the roll resolved to nothing.
+    """
+    from world.traits.models import ResultChart  # noqa: PLC0415
+
+    ResultChart._chart_cache.clear()
+
+
+register_test_cache_flusher(_flush_result_chart_cache)
