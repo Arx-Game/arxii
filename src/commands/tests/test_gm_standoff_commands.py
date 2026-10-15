@@ -10,7 +10,7 @@ from django.test import TestCase
 
 from commands.gm_ops import CmdGMDashboard
 from commands.standoff import CmdStandoff
-from evennia_extensions.factories import AccountFactory, ObjectDBFactory
+from evennia_extensions.factories import AccountFactory, ObjectDBFactory, RoomProfileFactory
 from world.character_sheets.factories import CharacterSheetFactory
 from world.checks.factories import CheckTypeFactory
 from world.combat.constants import CauseKind, OpponentTier
@@ -40,7 +40,7 @@ class GMStandoffTelnetTests(TestCase):
         seed_scaling_defaults()
         self.room = ObjectDBFactory(db_typeclass_path="typeclasses.rooms.Room")
         self.gm = AccountFactory()
-        self.scene = SceneFactory(location=self.room)
+        self.scene = SceneFactory(location=RoomProfileFactory(objectdb=self.room))
         SceneParticipationFactory(scene=self.scene, account=self.gm, is_gm=True)
         self.gm_char = CharacterSheetFactory().character
         self.gm_char.location = self.room
