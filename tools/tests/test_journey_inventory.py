@@ -1,4 +1,7 @@
-"""The inventory's source-text parsers read routes, routers and test mentions (#3657)."""
+"""The inventory's source-text parsers read routes, routers and test mentions (#3657).
+
+U-keep: parsers with branches over source text; no journey reaches tooling over text.
+"""
 
 from __future__ import annotations
 

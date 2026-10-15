@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import unittest
 
-from hypothesis import given, strategies as st
+from hypothesis import assume, given, strategies as st
 from hypothesis.extra.django import TestCase as HypothesisTestCase
 
 from commands.command import parse_greedy_kwargs, split_switches
@@ -39,8 +39,7 @@ class SplitSwitchesHoldsItsContract(unittest.TestCase):
 
     @given(printable_lines)
     def test_input_without_a_leading_slash_comes_back_unchanged(self, args: str) -> None:
-        if args.startswith("/"):
-            return
+        assume(not args.startswith("/"))
         self.assertEqual(split_switches(args), ([], args))
 
     @given(
@@ -86,8 +85,8 @@ class UnknownLinesAreAnsweredNeverRaised(HypothesisTestCase, JourneyCase):
 
     @given(st.text(alphabet=typed, min_size=1, max_size=40))
     def test_a_line_that_matches_no_command_is_refused_with_a_reply(self, line: str) -> None:
-        # Lines a real command could match are the other tests' business.
-        if not line.strip() or line.split()[0].lower() in {"look", "say", "l", "help"}:
-            return
+        # No command key or alias starts with "zzqx", so the typed line can
+        # match nothing: this is the handler's no-match path and only that.
+        assume(line.strip())
         told = self.telnet(self.ysmay, "zzqx" + line)
-        self.assertTrue(told, f"{line!r} got no reply")
+        self.assertIn("is not available", told, f"{line!r} was not refused: {told!r}")

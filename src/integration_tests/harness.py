@@ -24,8 +24,8 @@ tier does not build. ``@tag("postgres")`` on the base class is inherited.
             hobb = self.make_player("Hobb", room=room)
             self.watch(hobb)
             told = self.telnet(ysmay, 'say Good evening.')
-            self.assertIn('You say, "Good evening."', told)
-            self.assertTold(hobb, 'Ysmay says, "Good evening."')
+            self.assertIn('You say "Good evening."', told)
+            self.assertTold(hobb, 'Ysmay says "Good evening."')
 """
 
 from __future__ import annotations
@@ -35,6 +35,7 @@ from typing import TYPE_CHECKING, Any
 from unittest.mock import patch
 
 from django.test import TestCase, tag
+from evennia.utils.idmapper.models import flush_cache
 from rest_framework.test import APIClient
 from twisted.python.failure import Failure
 
@@ -83,6 +84,16 @@ class JourneyCase(TestCase):
     def setUp(self) -> None:
         super().setUp()
         self._mailboxes: dict[int, Mailbox] = {}
+
+    def tearDown(self) -> None:
+        # The rooms and characters a journey builds are rolled back with the
+        # test, but Evennia's identity map keeps the instances (ADR-0008).
+        # Left there, a later test in the same process that asks for
+        # ``settings.DEFAULT_HOME`` ("#2") gets the dead room back and writes
+        # a home the database no longer holds: seven magic tests died that way
+        # on PR #4360's first CI run. Every Evennia test base flushes here.
+        flush_cache()
+        super().tearDown()
 
     # -- building the world ---------------------------------------------------
 

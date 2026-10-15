@@ -1,4 +1,7 @@
-"""The gap report lists what the journeys never executed, by package (#3657)."""
+"""The gap report lists what the journeys never executed, by package (#3657).
+
+U-keep: pure functions over a coverage JSON; no journey reaches tooling over text.
+"""
 
 from __future__ import annotations
 

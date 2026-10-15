@@ -1,4 +1,7 @@
-"""The ledger's first pass grades a module from its own text (#3657)."""
+"""The ledger's first pass grades a module from its own text (#3657).
+
+U-keep: grading heuristics over test source; no journey reaches tooling over text.
+"""
 
 from __future__ import annotations
 
