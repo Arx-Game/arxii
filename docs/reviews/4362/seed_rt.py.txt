@@ -1,0 +1,142 @@
+"""Scratch seed for the #4362 real-testing pass, run in `evennia shell` against rt_4362 only."""
+
+from django.utils import timezone
+from evennia import create_object
+from evennia.accounts.models import AccountDB
+
+from evennia_extensions.models import RoomProfile
+from world.action_points.factories import ActionPointPoolFactory
+from world.character_sheets.factories import CharacterSheetFactory
+from world.contributors.factories import ContentContributorFactory
+from world.items.factories import ItemFacetFactory, ItemInstanceFactory
+from world.roster.factories import RosterEntryFactory, RosterTenureFactory
+from world.scenes.factories import SceneFactory, SceneParticipationFactory
+from world.seeds.checks import seed_check_resolution_tables
+from world.seeds.test_account import seed_test_account
+from world.seeds.worship_content import ensure_favor_terms
+from world.traits.models import CheckOutcome
+from world.worship.constants import BeingResonanceTier, RiteTier
+from world.worship.factories import (
+    BeingFacetFactory,
+    BeingResonanceFactory,
+    DevotionStandingFactory,
+    PledgeFactory,
+    RiteKindFactory,
+    ShrineDetailsFactory,
+    WorshippedBeingFactory,
+    WorshipRiteFactory,
+    WorshipRiteTierAwardFactory,
+)
+from world.worship.favor_services import ensure_being_modifier_targets
+from world.worship.models import PatronageValence
+
+seed_check_resolution_tables()
+ensure_favor_terms(None)
+for outcome in CheckOutcome.objects.all():
+    WorshipRiteTierAwardFactory(
+        tier=RiteTier.DEVOTIONAL, outcome_tier=outcome, resonance_amount=4, favor_amount=2
+    )
+
+result = seed_test_account()
+account = AccountDB.objects.get(username=result.username)
+staff = AccountDB.objects.filter(
+    username="staff_4362"
+).first() or AccountDB.objects.create_superuser(
+    "staff_4362", "staff_4362@example.com", "StaffPass123!"
+)
+from evennia_extensions.models import PlayerData
+
+pd, _ = PlayerData.objects.get_or_create(account=staff)
+pd.contributor = ContentContributorFactory(name="RT Staff 4362")
+pd.save()
+
+shrine_room = create_object("typeclasses.rooms.Room", key="Ombrin's Shrine")
+road = create_object("typeclasses.rooms.Room", key="The Old Road")
+shrine_profile = RoomProfile.objects.get(pk=shrine_room.pk)
+
+being = WorshippedBeingFactory(
+    name="Ombrin", resonance_pool=100, domains="[staff-authored domains]"
+)
+favored = BeingResonanceFactory(
+    being=being, tier=BeingResonanceTier.FAVORED, resonance__name="Clarity"
+)
+associated = BeingResonanceFactory(
+    being=being, tier=BeingResonanceTier.ASSOCIATED, resonance__name="Patience"
+)
+silk = BeingFacetFactory(being=being, facet__name="Silk").facet
+rite = WorshipRiteFactory(
+    being=being,
+    kind=RiteKindFactory(name="Vigil", tier=RiteTier.DEVOTIONAL),
+    name="Ombrin's rite",
+    resonance=associated,
+)
+ShrineDetailsFactory(feature_instance__room_profile=shrine_profile, being=being)
+ensure_being_modifier_targets(being)
+pledge = PledgeFactory(
+    being=being,
+    name="[staff-authored pledge name]",
+    description="[staff-authored pledge description]",
+    favor_target=20,
+    span_weeks=2,
+    closing_rite=rite,
+)
+scene = SceneFactory(location=shrine_profile, is_active=True, name="Shrine scene 4362")
+
+
+def pc(name, *, chosen=False, rollmod=0):
+    character = create_object(
+        "typeclasses.characters.Character", key=name, location=shrine_room, home=shrine_room
+    )
+    sheet = CharacterSheetFactory(character=character)
+    if rollmod:
+        sheet.rollmod = rollmod
+        sheet.save(update_fields=["rollmod"])
+    entry = RosterEntryFactory(character_sheet=sheet)
+    RosterTenureFactory(roster_entry=entry, player_data=account.player_data, end_date=None)
+    ActionPointPoolFactory(character=sheet, current=50, maximum=50)
+    SceneParticipationFactory(scene=scene, account=account)
+    if chosen:
+        DevotionStandingFactory(
+            character_sheet=sheet,
+            being=being,
+            valence=PatronageValence.DEVOTIONAL,
+            established_at=timezone.now(),
+        )
+    return character, sheet
+
+
+def carried(character, sheet, name, value, facet=None):
+    obj = create_object("typeclasses.objects.Object", key=name, location=character)
+    item = ItemInstanceFactory(
+        template__name=name, template__value=value, game_object=obj, holder_character_sheet=sheet
+    )
+    if facet is not None:
+        ItemFacetFactory(item_instance=item, facet=facet)
+    return item
+
+
+ysmay, ysmay_sheet = pc("Ysmay Dunhollow", chosen=True)
+carried(ysmay, ysmay_sheet, "silk scarf", 20, facet=silk)
+orla, orla_sheet = pc("Orla Cobbe", rollmod=-100)
+carried(orla, orla_sheet, "copper bowl", 120)
+tobiah, tobiah_sheet = pc("Tobiah Fenwright")
+carried(tobiah, tobiah_sheet, "brass lamp", 100)
+hobb, hobb_sheet = pc("Hobb Pennock")
+carried(hobb, hobb_sheet, "clay cup", 90)
+print(
+    "SEEDED",
+    {
+        "being": being.pk,
+        "pledge": pledge.pk,
+        "room": shrine_room.pk,
+        "road": road.pk,
+        "scene": scene.pk,
+        "ysmay": ysmay.pk,
+        "orla": orla.pk,
+        "tobiah": tobiah.pk,
+        "hobb": hobb.pk,
+        "account": account.pk,
+        "staff": staff.pk,
+        "entries": {c.key: c.sheet_data.roster_entry.pk for c in (ysmay, orla, tobiah, hobb)},
+    },
+)

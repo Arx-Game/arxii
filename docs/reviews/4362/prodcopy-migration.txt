@@ -1,0 +1,65 @@
+NOTICE:  database "prodcopy_4362" does not exist, skipping
+dump: arxii-20261015T033006Z.sql.gz
+prod newest recorded migration: 0222_drop_sheet_marital_status applied 2026-10-14 16:35:01.68955+00
+== bring to main tip 0229
+Operations to perform:
+  Target specific migration: 0229_standoff_proposals_and_gm_controls, from arxii
+Running migrations:
+  Applying arxii.0223_favor_invocation... OK
+  Applying arxii.0224_being_favor_targets... OK
+  Applying arxii.0225_scene_location_is_a_roomprofile... OK
+  Applying arxii.0226_rename_faction_rules_and_angles... OK
+  Applying arxii.0227_reveal_kind_faction_rule... OK
+  Applying arxii.0228_faction_rule_constraints... OK
+  Applying arxii.0229_standoff_proposals_and_gm_controls... OK
+before (at 0229):
+ERROR:  relation "arxii_pledge" does not exist
+LINE 1: ...ll then 'absent' else (select count(*)::text from arxii_pled...
+                                                             ^
+ERROR:  relation "arxii_pledgedetails" does not exist
+LINE 1: ...ll then 'absent' else (select count(*)::text from arxii_pled...
+                                                             ^
+ERROR:  relation "arxii_pledgecredit" does not exist
+LINE 1: ...ll then 'absent' else (select count(*)::text from arxii_pled...
+                                                             ^
+  ceremonyoffering=0 project=1 beings=6 pledge= pledgedetails= pledgecredit=
+== forward to branch tip
+Operations to perform:
+  Apply all migrations: arxii
+Running migrations:
+  Applying arxii.0230_pledges_and_sacrifices... OK
+  Applying arxii.0231_ceremony_offering_ceremony_xor_being... OK
+after forward:
+  ceremonyoffering=0 project=1 beings=6 pledge=0 pledgedetails=0 pledgecredit=0
+  offerings with being set: 0, with ceremony: 0
+  pending: 0
+== reverse to 0229
+Operations to perform:
+  Target specific migration: 0229_standoff_proposals_and_gm_controls, from arxii
+Running migrations:
+  Rendering model states... DONE
+  Unapplying arxii.0231_ceremony_offering_ceremony_xor_being... OK
+  Unapplying arxii.0230_pledges_and_sacrifices... OK
+after reverse:
+ERROR:  relation "arxii_pledge" does not exist
+LINE 1: ...ll then 'absent' else (select count(*)::text from arxii_pled...
+                                                             ^
+ERROR:  relation "arxii_pledgedetails" does not exist
+LINE 1: ...ll then 'absent' else (select count(*)::text from arxii_pled...
+                                                             ^
+ERROR:  relation "arxii_pledgecredit" does not exist
+LINE 1: ...ll then 'absent' else (select count(*)::text from arxii_pled...
+                                                             ^
+  ceremonyoffering=0 project=1 beings=6 pledge= pledgedetails= pledgecredit=
+== forward again
+Operations to perform:
+  Apply all migrations: arxii
+Running migrations:
+  Applying arxii.0230_pledges_and_sacrifices... OK
+  Applying arxii.0231_ceremony_offering_ceremony_xor_being... OK
+after second forward:
+  ceremonyoffering=0 project=1 beings=6 pledge=0 pledgedetails=0 pledgecredit=0
+ [X] 0228_faction_rule_constraints
+ [X] 0229_standoff_proposals_and_gm_controls
+ [X] 0230_pledges_and_sacrifices
+ [X] 0231_ceremony_offering_ceremony_xor_being

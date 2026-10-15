@@ -1,0 +1,18 @@
+DEED Ysmay Dunhollow Clarity 3 -> progress 8
+DEED Ysmay Dunhollow Patience 2 -> progress 10
+DEED Orla Cobbe Clarity 8 -> progress 20
+DEED Orla Cobbe Clarity 3 -> progress 20
+TICK resolved 2
+STATE Orla Cobbe ACTIVE 20 favor 20
+STATE Ysmay Dunhollow ACTIVE 10 favor 10
+STATE Tobiah Fenwright FAILED 11 favor 14
+STATE Hobb Pennock FAILED 9 favor 9
+CREDIT Orla Cobbe sacrifice 12 12
+CREDIT Ysmay Dunhollow prayer 1 2
+CREDIT Tobiah Fenwright prayer 1 1
+CREDIT Tobiah Fenwright sacrifice 10 10
+CREDIT Hobb Pennock sacrifice 9 9
+CREDIT Ysmay Dunhollow deed 3 6
+CREDIT Ysmay Dunhollow deed 1 2
+CREDIT Orla Cobbe deed 8 8
+CREDIT Tobiah Fenwright lapse 3 3
