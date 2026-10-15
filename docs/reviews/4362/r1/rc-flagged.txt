@@ -1,2 +1,0 @@
-Favor outcome awards: closing awards	world/worship/pledge_services.py resolve_pledge_project()	A pledge closed by its closing rite, or one that lapses at half its target or more, pays no closing award.
-No closing award is authored for any outcome tier.
