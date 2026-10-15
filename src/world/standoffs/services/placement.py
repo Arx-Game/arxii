@@ -29,7 +29,7 @@ if TYPE_CHECKING:
     from world.mechanics.models import Property
     from world.missions.models import MissionOptionOpponentLine
     from world.societies.models import Organization
-    from world.standoffs.models import FactionRule
+    from world.standoffs.models import CreatureDrive, FactionRule
     from world.stories.models import BeatOpponentLine
 
     OpponentLine = BeatOpponentLine | MissionOptionOpponentLine
@@ -150,6 +150,24 @@ def draft_from_line(line: OpponentLine | None) -> PlacementDraft:
     )
 
 
+def _drive_state(strength: int | None, template_strength: int) -> str:
+    if not strength:
+        return DriveEditState.REMOVED
+    if strength == template_strength:
+        return DriveEditState.SAME
+    return DriveEditState.EDITED
+
+
+def _template_drive(drive: CreatureDrive, edits: dict[int, int | None]) -> PlacementDrive:
+    """One template drive as a placement shows it: its strength here and how it changed."""
+    if drive.property_id in edits:
+        strength = edits[drive.property_id]
+        state = _drive_state(strength, drive.strength)
+    else:
+        strength, state = drive.strength, DriveEditState.SAME
+    return PlacementDrive(drive.property, drive.property_id, drive.strength, strength, state)
+
+
 def placement_profile(
     template: CreatureTemplate, draft: PlacementDraft | None = None
 ) -> PlacementProfile:
@@ -160,20 +178,7 @@ def placement_profile(
     template_drives = {
         drive.property_id: drive for drive in template.drives.select_related("property")
     }
-    drives: list[PlacementDrive] = []
-    for property_id, drive in template_drives.items():
-        if property_id in edits:
-            strength = edits[property_id]
-            state = (
-                DriveEditState.REMOVED
-                if not strength
-                else DriveEditState.SAME
-                if strength == drive.strength
-                else DriveEditState.EDITED
-            )
-        else:
-            strength, state = drive.strength, DriveEditState.SAME
-        drives.append(PlacementDrive(drive.property, property_id, drive.strength, strength, state))
+    drives = [_template_drive(drive, edits) for drive in template_drives.values()]
     added_ids = [pid for pid, strength in edits.items() if pid not in template_drives and strength]
     if added_ids:
         from world.mechanics.models import Property  # noqa: PLC0415

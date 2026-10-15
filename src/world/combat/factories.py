@@ -186,20 +186,20 @@ class CombatOpponentFactory(factory_django.DjangoModelFactory):
         return npc.pk
 
     @factory.post_generation
-    def stamp_standoff_profile(obj, create: bool, extracted: object, **kwargs: object) -> None:  # noqa: N805
+    def stamp_standoff_profile(self, create: bool, extracted: object, **kwargs: object) -> None:
         """Stamp the template's standoff profile, as a real spawn does (#4361).
 
         A test that edits the template afterwards re-stamps with
         ``world.standoffs.factories.restamp_from_templates``.
         """
-        if not create or obj.creature_template_id is None:
+        if not create or self.creature_template_id is None:
             return
         from world.standoffs.services.placement import (
             placement_profile,
             stamp_opponent,
         )
 
-        stamp_opponent(obj, placement_profile(obj.creature_template))
+        stamp_opponent(self, placement_profile(self.creature_template))
 
 
 class BossOpponentFactory(CombatOpponentFactory):

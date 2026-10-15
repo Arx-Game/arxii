@@ -8,6 +8,7 @@ author can try the creature against a different party without saving anything.
   <h2>Also applies (inherited)</h2>
   {% if inherited %}
   <table class="tuning-table sp-rail-table">
+    <thead><tr><th scope="col">Rule</th><th scope="col">From</th></tr></thead>
     <tbody>
       {% for entry in inherited %}
       <tr><td>{{ entry.rule|faction_rule_label }}</td>

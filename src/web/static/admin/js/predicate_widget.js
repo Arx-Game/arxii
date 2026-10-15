@@ -213,10 +213,12 @@
       var current = node.params[param.name];
       input.value = current === undefined || current === null ? "" : String(current);
     }
-    input.addEventListener("change", function () {
+    function store() {
       node.params[param.name] = coerce(input.value, param.type);
       self.write();
-    });
+    }
+    input.addEventListener("input", store);
+    input.addEventListener("change", store);
     label.appendChild(input);
     return label;
   };

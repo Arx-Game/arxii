@@ -7,6 +7,7 @@ what its rules reach below, and a staff-only test of every rule against one char
   <h2>Inherits from above</h2>
   {% if inherited %}
   <table class="tuning-table sp-rail-table">
+    <thead><tr><th scope="col">Rule</th><th scope="col">From</th></tr></thead>
     <tbody>
       {% for entry in inherited %}
       <tr><td>{{ entry.rule|faction_rule_label }}</td><td class="sp-src">{{ entry.source }}</td></tr>
@@ -41,6 +42,7 @@ what its rules reach below, and a staff-only test of every rule against one char
   {% elif results is not None %}
     {% if results %}
     <table class="tuning-table sp-rail-table">
+      <thead><tr><th scope="col">Rule</th><th scope="col">Result</th></tr></thead>
       <tbody>
         {% for row in results %}
         <tr><td>{{ row.rule|faction_rule_label }}{% if row.inherited %} <span class="sp-src">({{ row.source }})</span>{% endif %}</td>

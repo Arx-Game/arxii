@@ -21,7 +21,7 @@ if TYPE_CHECKING:
     from actions.types import ActionRef, DispatchResult
     from world.combat.models import CombatEncounter, CombatParticipant
     from world.standoffs.models import StandoffGroup
-    from world.standoffs.services.gm_view import GMStandoffView
+    from world.standoffs.services.gm_view import GMGroupView, GMStandoffView
     from world.standoffs.services.view import GroupView, LeverView, StandoffView
 
 _SUBVERBS: dict[str, str] = {
@@ -362,43 +362,54 @@ def _render_outside_view(caller: Any, encounter: CombatEncounter) -> list[str]:
     return lines
 
 
+def _gm_profile_lines(group: GMGroupView) -> list[str]:
+    """A group's cause, affiliation and drives for the GM, with what the placement edited."""
+    status = f"fires: {group.cause_reason}" if group.cause_fires else "holds"
+    edited = " - edited here" if group.cause_edited else ""
+    lines = [f"    Cause: {group.cause} ({status}){edited}"]
+    if group.affiliation:
+        set_here = " - set on this line" if group.affiliation_edited else ""
+        lines.append(f"    Affiliation: {group.affiliation}{set_here}")
+    if group.pending_prompt_id is not None:
+        lines.append(
+            f"    Proposal [{group.pending_prompt_id}]: {group.proposal_reason} "
+            f"(gm prompt confirm, hold or override {group.pending_prompt_id})"
+        )
+    lines.extend(
+        f"    Drive: {drive.label} ({drive.strength})"
+        f"{' - edited here' if drive.edited else ''}{' - read' if drive.revealed else ''}"
+        for drive in group.drives
+    )
+    return lines
+
+
+def _render_gm_group(group: GMGroupView) -> list[str]:
+    """One group of the GM's view, as plain text."""
+    lines = [
+        f"  [{group.group_id}] {group.name} ({group.member_count}) - "
+        + _state_words(group.state, group.morale_state, emboldened=group.emboldened_bands > 0),
+        *_gm_profile_lines(group),
+    ]
+    lines.extend(
+        f"    Faction rule: {rule.label} (from {rule.source}) - matches "
+        f"{', '.join(rule.matched_by) or 'nobody'}{' - read' if rule.revealed else ''}"
+        for rule in group.faction_rules
+    )
+    lines.append(
+        f"    Force: party {group.effective_party_force}, them {group.group_force} "
+        f"(margin {group.cause_margin_percent}%)"
+    )
+    lines.append(
+        "    Morale: " + ", ".join(f"{m.name} {m.morale} ({m.morale_state})" for m in group.members)
+    )
+    return lines
+
+
 def _render_gm_view(view: GMStandoffView) -> list[str]:
     """The GM's whole view of a standoff, as plain text."""
     lines = [f"Standoff at {view.place} (GM):" if view.place else "Standoff (GM):"]
     for group in view.groups:
-        lines.append(
-            f"  [{group.group_id}] {group.name} ({group.member_count}) - "
-            + _state_words(group.state, group.morale_state, emboldened=group.emboldened_bands > 0)
-        )
-        status = f"fires: {group.cause_reason}" if group.cause_fires else "holds"
-        edited = " - edited here" if group.cause_edited else ""
-        lines.append(f"    Cause: {group.cause} ({status}){edited}")
-        if group.affiliation:
-            set_here = " - set on this line" if group.affiliation_edited else ""
-            lines.append(f"    Affiliation: {group.affiliation}{set_here}")
-        if group.pending_prompt_id is not None:
-            lines.append(
-                f"    Proposal [{group.pending_prompt_id}]: {group.proposal_reason} "
-                f"(gm prompt confirm, hold or override {group.pending_prompt_id})"
-            )
-        lines.extend(
-            f"    Drive: {drive.label} ({drive.strength})"
-            f"{' - edited here' if drive.edited else ''}{' - read' if drive.revealed else ''}"
-            for drive in group.drives
-        )
-        lines.extend(
-            f"    Faction rule: {rule.label} (from {rule.source}) - matches "
-            f"{', '.join(rule.matched_by) or 'nobody'}{' - read' if rule.revealed else ''}"
-            for rule in group.faction_rules
-        )
-        lines.append(
-            f"    Force: party {group.effective_party_force}, them {group.group_force} "
-            f"(margin {group.cause_margin_percent}%)"
-        )
-        lines.append(
-            "    Morale: "
-            + ", ".join(f"{m.name} {m.morale} ({m.morale_state})" for m in group.members)
-        )
+        lines.extend(_render_gm_group(group))
     # No pipe characters: on telnet "|" starts a colour code.
     lines.append("GM: gm standoff shake <group id> <reason> (or steady)")
     return lines
