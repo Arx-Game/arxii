@@ -50,7 +50,10 @@ class PledgeForm(forms.ModelForm):
     class Meta:
         model = Pledge
         fields = ["name", "description", "favor_target", "span_weeks", "closing_rite", "is_active"]
-        widgets = {"description": forms.Textarea(attrs={"rows": 3, "cols": 60})}
+        widgets = {
+            "name": forms.TextInput(attrs={"class": "vTextField", "size": 60}),
+            "description": forms.Textarea(attrs={"rows": 3, "cols": 60}),
+        }
         help_texts = {
             "favor_target": "Favor to earn with the being after pledging.",
             "span_weeks": "Game weeks the character has to earn it and close the pledge.",

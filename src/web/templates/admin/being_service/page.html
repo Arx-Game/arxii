@@ -31,6 +31,9 @@ for the facet picker.
 </div>
 {% endblock %}
 
+{# The page draws its own heading beside the object tools; admin's default title would repeat it. #}
+{% block content_title %}{% endblock %}
+
 {% block content %}
 {% include "admin/tuning/_panel_css.html" %}
 {% include "admin/being_service/_css.html" %}

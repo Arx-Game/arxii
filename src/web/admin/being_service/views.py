@@ -62,7 +62,8 @@ def _build_forms(request: HttpRequest, being: WorshippedBeing) -> _ServiceForms:
             data,
             instance=being,
             prefix="resonances",
-            queryset=BeingResonance.objects.select_related("resonance").order_by("tier", "pk"),
+            # Favored first: "favored" sorts after "associated", so the tier goes descending.
+            queryset=BeingResonance.objects.select_related("resonance").order_by("-tier", "pk"),
         ),
         facets=FavoredFacetsForm(
             data,
