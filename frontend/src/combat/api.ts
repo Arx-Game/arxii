@@ -208,6 +208,44 @@ export async function fetchCreatureTemplates(
   return data.results ?? [];
 }
 
+/** A creature template's standoff profile for a placement editor (#4361). */
+export type PlacementContext = components['schemas']['PlacementContext'];
+
+/** One row of the placement editors' affiliation or drive picker (#4361). */
+export interface PlacementPick {
+  id: number;
+  name: string;
+}
+
+/**
+ * GET /api/combat/creature-templates/{id}/placement-context/?organization={id}
+ * The template's cause, drives and affiliation, and the faction rules a placement
+ * inherits (through `organization` when given, else the template's affiliation).
+ */
+export async function fetchPlacementContext(
+  templateId: number,
+  organizationId?: number | null
+): Promise<PlacementContext> {
+  const query = organizationId ? `?organization=${organizationId}` : '';
+  const res = await apiFetch(
+    `/api/combat/creature-templates/${templateId}/placement-context/${query}`
+  );
+  if (!res.ok) throw new Error('Failed to load the placement context');
+  return (await res.json()) as PlacementContext;
+}
+
+/** GET /api/combat/placement-{kind}/?search= — the affiliation or drive picker (#4361). */
+export async function fetchPlacementPicks(
+  kind: 'organizations' | 'properties',
+  search: string
+): Promise<PlacementPick[]> {
+  const query = search ? `?search=${encodeURIComponent(search)}` : '';
+  const res = await apiFetch(`/api/combat/placement-${kind}/${query}`);
+  if (!res.ok) throw new Error(`Failed to load ${kind}`);
+  const data = (await res.json()) as { results?: PlacementPick[] };
+  return data.results ?? [];
+}
+
 /** One row of the GM-gated escalation curve catalog (#3552). */
 export interface EscalationCurveSummary {
   id: number;

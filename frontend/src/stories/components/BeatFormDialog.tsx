@@ -41,6 +41,7 @@ import { useActiveCharacterId } from '@/gm-adjudication/useActiveCharacterId';
 import { SituationFinder } from '@/gm-adjudication/SituationFinder';
 import { getMissionTemplate, listMissionTemplates } from '@/missions/api';
 import { OpponentLineDraft, OpponentLinesEditor } from './OpponentLinesEditor';
+import { placementFieldsFromLine, placementPayload } from './placementDraft';
 import {
   BattlePrepDraft,
   BattlePrepEditor,
@@ -688,6 +689,7 @@ function opponentLineDraftsFromBeat(beat: Beat | undefined): OpponentLineDraft[]
     count: String(line.count ?? 1),
     position_name: line.position_name ?? '',
     opens_as_standoff: line.opens_as_standoff ?? false,
+    ...placementFieldsFromLine(line),
   }));
 }
 
@@ -701,6 +703,7 @@ function opponentLineDraftsToPayload(drafts: OpponentLineDraft[]): BeatOpponentL
       position_name: d.position_name.trim(),
       opens_as_standoff: d.opens_as_standoff ?? false,
       order: 0,
+      ...placementPayload(d),
     }));
 }
 
@@ -1454,6 +1457,7 @@ export function BeatFormDialog({
                     onChange={setOpponentLines}
                     rowErrors={fieldErrors.opponent_lines}
                     showStandoffSwitch
+                    showPlacement
                   />
                 ) : (
                   <BattlePrepEditor

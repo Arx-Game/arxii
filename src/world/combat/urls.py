@@ -8,6 +8,8 @@ from world.combat.views import (
     CreatureTemplateViewSet,
     DuelChallengeViewSet,
     EscalationCurveViewSet,
+    PlacementOrganizationViewSet,
+    PlacementPropertyViewSet,
     ThreatPoolViewSet,
 )
 from world.combat.views_outcome_details import ActionOutcomeDetailsView
@@ -20,6 +22,10 @@ router.register("duel-challenges", DuelChallengeViewSet, basename="duel-challeng
 router.register("threat-pools", ThreatPoolViewSet, basename="threat-pool")
 router.register("creature-templates", CreatureTemplateViewSet, basename="creature-template")
 router.register("escalation-curves", EscalationCurveViewSet, basename="escalation-curve")
+router.register(
+    "placement-organizations", PlacementOrganizationViewSet, basename="placement-organization"
+)
+router.register("placement-properties", PlacementPropertyViewSet, basename="placement-property")
 router.register("", CombatEncounterViewSet, basename="combat-encounter")
 
 app_name = "combat"

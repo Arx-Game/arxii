@@ -188,6 +188,7 @@ class OpponentLineDriveSerializer(serializers.Serializer):
     """One drive edit on a placement: a strength, or null to remove the template's drive."""
 
     property = serializers.PrimaryKeyRelatedField(queryset=Property.objects.all())
+    property_name = serializers.CharField(read_only=True)
     strength = serializers.ChoiceField(choices=DriveStrength.choices, allow_null=True)
 
 
@@ -208,12 +209,22 @@ class PlacementFieldsMixin(serializers.Serializer):
     suppressed_faction_rules = serializers.ListField(
         child=serializers.IntegerField(), required=False
     )
+    organization_name = serializers.SerializerMethodField()
+
+    def get_organization_name(self, instance: object) -> str:
+        """The overriding affiliation's name, so an editor can show the pick (read only)."""
+        organization = instance.organization
+        return organization.name if organization is not None else ""
 
     def to_representation(self, instance: object) -> dict:
         data = super().to_representation(instance)
         data["drive_edits"] = [
-            {"property": row.property_id, "strength": row.strength}
-            for row in instance.drive_edits.all()
+            {
+                "property": row.property_id,
+                "property_name": row.property.name,
+                "strength": row.strength,
+            }
+            for row in instance.drive_edits.select_related("property")
         ]
         data["suppressed_faction_rules"] = sorted(
             instance.faction_rule_suppressions.values_list("faction_rule_id", flat=True)
@@ -296,6 +307,13 @@ class PlacementRuleContextSerializer(serializers.Serializer):
     label = serializers.CharField()
     source = serializers.CharField()
     level = serializers.IntegerField()
+
+
+class PlacementPickSerializer(serializers.Serializer):
+    """One row of a placement editor's affiliation or drive picker."""
+
+    id = serializers.IntegerField()
+    name = serializers.CharField()
 
 
 class PlacementContextQuerySerializer(serializers.Serializer):

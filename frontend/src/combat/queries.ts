@@ -51,6 +51,12 @@ export const combatKeys = {
     [...combatKeys.all, 'creature-templates', search ?? '', tier ?? ''] as const,
 
   escalationCurves: () => [...combatKeys.all, 'escalation-curves'] as const,
+
+  placementContext: (templateId: number, organizationId?: number | null) =>
+    [...combatKeys.all, 'placement-context', templateId, organizationId ?? null] as const,
+
+  placementPicks: (kind: 'organizations' | 'properties', search: string) =>
+    [...combatKeys.all, 'placement-picks', kind, search] as const,
 };
 
 /**
@@ -589,6 +595,30 @@ export function useCreatureTemplates(search?: string, tier?: api.OpponentTier) {
   return useQuery({
     queryKey: combatKeys.creatureTemplates(search, tier),
     queryFn: () => api.fetchCreatureTemplates(search, tier),
+    staleTime: 60_000,
+  });
+}
+
+/** A template's standoff profile and inherited rules, for a placement editor (#4361). */
+export function usePlacementContext(templateId: number | null, organizationId?: number | null) {
+  return useQuery({
+    queryKey: combatKeys.placementContext(templateId ?? 0, organizationId),
+    queryFn: () => api.fetchPlacementContext(templateId as number, organizationId),
+    enabled: templateId !== null,
+    staleTime: 60_000,
+  });
+}
+
+/** The affiliation or drive picker's options, by name (#4361). GM-gated server-side. */
+export function usePlacementPicks(
+  kind: 'organizations' | 'properties',
+  search: string,
+  enabled = true
+) {
+  return useQuery({
+    queryKey: combatKeys.placementPicks(kind, search),
+    queryFn: () => api.fetchPlacementPicks(kind, search),
+    enabled,
     staleTime: 60_000,
   });
 }

@@ -3,7 +3,9 @@
  * Per group it shows the profile the players have to read out of it (cause,
  * drives, morale), the force comparison, which faction rules match whom, and
  * the Shake / Steady morale control. A pending cause proposal is decided from
- * the GM prompt queue; this panel only points at it.
+ * the GM prompt queue; this panel only points at it. Edits the placement made over
+ * the creature template (#4361) are marked, and each faction rule names where it
+ * came from (the template, its organization, a parent, a society).
  */
 
 import { useState } from 'react';
@@ -26,6 +28,11 @@ function partyOutweighs(group: GMGroupView): boolean {
 function readLabel(rule: GMGroupView['faction_rules'][number]): string {
   if (rule.matched_by.length === 0) return '';
   return rule.revealed ? 'yes' : 'no';
+}
+
+/** The "edited here" mark beside a value a placement changed over its template. */
+function EditedMark({ text = 'edited here' }: { text?: string }) {
+  return <span className="font-mono text-[10px] text-violet-700 dark:text-violet-300">{text}</span>;
 }
 
 function fmt(n: number): string {
@@ -162,6 +169,12 @@ function GroupBox({ encounterId, group }: { encounterId: number; group: GMGroupV
           {group.cause_revealed && (
             <span className="text-xs text-muted-foreground"> · read by the party</span>
           )}
+          {group.cause_edited && (
+            <>
+              {' '}
+              <EditedMark />
+            </>
+          )}
         </dd>
         <dt className="text-muted-foreground">Drives</dt>
         <dd>
@@ -171,12 +184,26 @@ function GroupBox({ encounterId, group }: { encounterId: number; group: GMGroupV
                 <span key={`${d.label}-${i}`}>
                   {i > 0 && ' · '}
                   {d.label}, {d.strength}{' '}
+                  {d.edited && (
+                    <>
+                      <EditedMark />{' '}
+                    </>
+                  )}
                   <span className="text-xs text-muted-foreground">
                     {d.revealed ? 'read' : 'unread'}
                   </span>
                 </span>
               ))}
         </dd>
+        {group.affiliation && (
+          <>
+            <dt className="text-muted-foreground">Affiliation</dt>
+            <dd>
+              {group.affiliation}{' '}
+              {group.affiliation_edited && <EditedMark text="set on this line" />}
+            </dd>
+          </>
+        )}
         <dt className="text-muted-foreground">Morale</dt>
         <dd>
           {group.members.length === 0
@@ -210,6 +237,7 @@ function GroupBox({ encounterId, group }: { encounterId: number; group: GMGroupV
           <thead>
             <tr className="text-left text-[10px] uppercase tracking-wide text-muted-foreground">
               <th className="py-1 pr-2 font-medium">Faction rule</th>
+              <th className="py-1 pr-2 font-medium">From</th>
               <th className="py-1 pr-2 font-medium">Matches</th>
               <th className="py-1 font-medium">Read</th>
             </tr>
@@ -218,6 +246,7 @@ function GroupBox({ encounterId, group }: { encounterId: number; group: GMGroupV
             {group.faction_rules.map((r) => (
               <tr key={r.faction_rule_id} className="border-t border-border align-top">
                 <td className="py-1 pr-2">{r.label}</td>
+                <td className="py-1 pr-2 text-muted-foreground">{r.source}</td>
                 <td className="py-1 pr-2">
                   {r.matched_by.length > 0 ? r.matched_by.join(', ') : 'nobody'}
                 </td>

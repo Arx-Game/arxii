@@ -102,18 +102,18 @@ class PlacementProfile:
         return self.organization != self.template_organization
 
     def summary(self, count: int) -> str:
-        """One plain line saying what the placement spawns."""
+        """Plain sentences saying what the placement spawns (the Placement page's rail)."""
         drives = ", ".join(f"{d.property.name} ({d.label})" for d in self.live_drives)
         rules = len(self.live_rules)
-        parts = [
-            f"Spawns {count} {self.template.name}",
-            f"cause {CauseKind(self.cause).label}, margin {self.cause_margin_percent}",
-            f"drives {drives}" if drives else "no drives",
+        sentences = [
+            f"{count} {self.template.name}",
+            f"Cause {CauseKind(self.cause).label}, margin {self.cause_margin_percent}",
+            f"Drives {drives}" if drives else "No drives",
             f"{rules} faction rule{'s' if rules != 1 else ''}",
         ]
         if self.organization is not None:
-            parts.append(f"affiliated with {self.organization.name}")
-        return ". ".join([parts[0] + ": " + parts[1], *parts[2:]]) + "."
+            sentences.append(f"Affiliated with {self.organization.name}")
+        return ". ".join(sentences) + "."
 
 
 @dataclass(frozen=True)

@@ -211,7 +211,7 @@ class PlacementPageTests(_Seed):
         self.assertIn("(same: Major)", body)  # the template's strength beside the pick
         self.assertIn("(template: Orders)", body)
         self.assertIn("PLACEHOLDER Guilds", body)  # an inherited rule and its source
-        self.assertIn("Spawns 6 PLACEHOLDER Sellsword", body)
+        self.assertIn("6 PLACEHOLDER Sellsword. Cause Orders, margin 0.", body)
 
     def test_the_beat_inline_links_here(self) -> None:
         self.client.force_login(self.author)

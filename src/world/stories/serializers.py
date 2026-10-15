@@ -1008,6 +1008,7 @@ class BeatOpponentLineSerializer(PlacementFieldsMixin, serializers.ModelSerializ
             "cause_override",
             "cause_margin_override",
             "organization",
+            "organization_name",
             "drive_edits",
             "suppressed_faction_rules",
         ]

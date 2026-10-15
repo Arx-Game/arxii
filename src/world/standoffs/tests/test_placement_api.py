@@ -75,7 +75,13 @@ class BeatPlacementApiTests(APITestCase):
         self.assertEqual(echoed["suppressed_faction_rules"], [self.company_rule.pk])
         self.assertEqual(
             echoed["drive_edits"],
-            [{"property": self.greedy.pk, "strength": DriveStrength.DEFINING}],
+            [
+                {
+                    "property": self.greedy.pk,
+                    "property_name": self.greedy.name,
+                    "strength": DriveStrength.DEFINING,
+                }
+            ],
         )
 
     def test_switching_off_a_rule_the_line_does_not_inherit_is_a_400(self) -> None:
@@ -106,3 +112,34 @@ class BeatPlacementApiTests(APITestCase):
         self.client.force_authenticate(user=AccountFactory())
         url = reverse("combat:creature-template-placement-context", args=[self.creature.pk])
         self.assertEqual(self.client.get(url).status_code, status.HTTP_403_FORBIDDEN)
+
+
+class PlacementPickerTests(APITestCase):
+    @classmethod
+    def setUpTestData(cls) -> None:
+        from world.societies.factories import OrganizationTypeFactory
+
+        cls.staff = AccountFactory(is_staff=True)
+        cls.open_org = OrganizationFactory(name="PLACEHOLDER Open Company")
+        cls.covert_org = OrganizationFactory(
+            name="PLACEHOLDER Hidden Company", org_type=OrganizationTypeFactory(is_covert=True)
+        )
+        cls.prop = PropertyFactory(name="PLACEHOLDER Greedy")
+
+    def test_the_affiliation_picker_searches_by_name(self) -> None:
+        self.client.force_authenticate(user=self.staff)
+        url = reverse("combat:placement-organization-list")
+        names = [row["name"] for row in self.client.get(url, {"search": "company"}).data["results"]]
+        self.assertIn(self.open_org.name, names)
+        self.assertIn(self.covert_org.name, names)  # staff see covert organizations
+
+    def test_the_drive_picker_lists_properties(self) -> None:
+        self.client.force_authenticate(user=self.staff)
+        url = reverse("combat:placement-property-list")
+        rows = self.client.get(url, {"search": "greedy"}).data["results"]
+        self.assertEqual(rows, [{"id": self.prop.pk, "name": self.prop.name}])
+
+    def test_players_cannot_browse_either_picker(self) -> None:
+        self.client.force_authenticate(user=AccountFactory())
+        for name in ("combat:placement-organization-list", "combat:placement-property-list"):
+            self.assertEqual(self.client.get(reverse(name)).status_code, status.HTTP_403_FORBIDDEN)

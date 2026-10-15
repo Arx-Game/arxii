@@ -73,3 +73,9 @@ class CreatureTemplateFilter(django_filters.FilterSet):
     class Meta:
         model = CreatureTemplate
         fields = ["search", "tier"]
+
+
+class PlacementPickFilter(django_filters.FilterSet):
+    """``?search=`` by name for the placement editor's affiliation and drive pickers (#4361)."""
+
+    search = django_filters.CharFilter(field_name="name", lookup_expr="icontains")
