@@ -492,6 +492,15 @@ output. A machine that cannot carry the pass gets `BLOCKED: resources`, never a
 pass. `evidence-challenge-reviewer` challenges every PR's claims; it is advisory and
 a maintainer approval overrides it, but its challenges get real answers.
 
+**Three layers, not coverage** (#3657, ADR-3657): a journey per thing a player
+does, on the real seam (`integration_tests.harness.JourneyCase`: `telnet()`
+through the command handler, `web()` through dispatch, `api()`), fuzz at those
+seams (Hypothesis, `integration_tests/fuzz/`), cross-system integration. A unit
+test is kept only where a journey cannot reach. Never build a `Cmd` and call
+`.func()` by hand. The curated journeys live in `docs/testing/journeys.md` and a
+PR names the row its change is covered by; `docs/testing/README.md` has the
+rubric and recipes.
+
 **Always use `arx test` or its `just` wrappers** — never `uv run python -m`,
 `python manage.py test`, or sourcing venvs. Two tiers: SQLite for fast local
 iteration (`just test-fast <app>`), Postgres for parity (`just test-parity` /

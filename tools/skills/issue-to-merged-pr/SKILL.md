@@ -333,6 +333,10 @@ report of what you did, what you expected, what you saw, and where the evidence
 is. If the machine cannot carry a pass, record `BLOCKED: resources` and do the
 smaller form that fits; never call `BLOCKED` a pass. That report becomes
 `PR_VERIFICATION` (Step 5), and the evidence challenger (Step 6a) reads it.
+It also names the journey that covers the change (the row in
+`docs/testing/journeys.md`, added or updated in the same PR; `none, because
+...` when a change has no player-facing path), per the three-layer rule in
+CLAUDE.md's Testing section (#3657).
 
 ### 4. Sync with main
 
