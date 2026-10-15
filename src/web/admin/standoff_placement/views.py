@@ -91,6 +91,7 @@ class _Where:
 
 def _beat_where(line: BeatOpponentLine) -> _Where:
     beat = line.beat
+    beat_label = beat.internal_description.strip()[:60] or str(beat)
     level = beat.target_level or _DEFAULT_LEVEL
     note = (
         f"Target level {beat.target_level}."
@@ -98,8 +99,8 @@ def _beat_where(line: BeatOpponentLine) -> _Where:
         else f"The beat has no target level; level {level} is an example."
     )
     return _Where(
-        label=f'{line.creature_template.name} x{line.count} at "{beat}"',
-        parent_label=str(beat),
+        label=f'{line.creature_template.name} x{line.count} at "{beat_label}"',
+        parent_label=beat_label,
         parent_url=reverse("admin:arxii_beat_change", args=[beat.pk]),
         parent_changelist_label="Beats",
         parent_changelist_url=reverse("admin:arxii_beat_changelist"),

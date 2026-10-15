@@ -101,7 +101,7 @@ def _render(request: HttpRequest, owner: _Owner, formset: BaseInlineFormSet) -> 
         {
             **admin.site.each_context(request),
             "is_nav_sidebar_enabled": False,
-            "title": f"Faction rules: {owner.instance}",
+            "title": f"Faction rules: {owner.instance.name}",
             "owner": owner,
             "rules": formset,
             "media": formset.media + test_form.media,

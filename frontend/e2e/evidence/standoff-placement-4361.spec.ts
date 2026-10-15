@@ -74,7 +74,6 @@ test('part 1: staff and GM author the placement and the faction rules', async ({
   const gm = await signIn(browser, 'gm4361');
   await gm.goto(`/stories/author/${IDS.story}`);
   await gm.getByText('The Corle gate (test)').first().click();
-  await gm.getByRole('button', { name: /Chapter \(test\)/ }).click();
   await gm.getByRole('button', { name: /Episode \(test\)/ }).click();
   await gm.getByRole('button', { name: 'Edit beat' }).first().click();
   const panel = gm.getByTestId('placement-panel-0');
@@ -82,12 +81,9 @@ test('part 1: staff and GM author the placement and the faction rules', async ({
   await expect(panel.getByLabel('Greedy (test) here')).toHaveValue('3');
   await expect(panel.getByLabel('Off: has_capability: Spellcraft')).toBeChecked();
   await panel.getByLabel('Off: is_member_of_org: Riverland Guilds (test)').check();
-  await expect(gm.getByTestId('placement-summary-0')).toContainText('2 faction rules');
+  await expect(gm.getByTestId('placement-summary-0')).toContainText('3 faction rules');
   await gm.screenshot({ path: shot('05-gm-beat-dialog-placement.png'), fullPage: true });
-  await gm
-    .getByRole('button', { name: /save|update/i })
-    .last()
-    .click();
+  await gm.getByRole('button', { name: 'Save Beat' }).click();
   await expect(gm.getByRole('heading', { name: 'Edit Beat' })).toHaveCount(0, { timeout: 20_000 });
 });
 

@@ -20,11 +20,13 @@ only; it links forms.css and widgets.css itself (#3667).
 <script src="{% static 'admin/js/builder_formsets.js' %}"></script>
 {% endblock %}
 
+{% block content_title %}{% endblock %}
+
 {% block breadcrumbs %}
 <div class="breadcrumbs">
   <a href="{% url 'admin:index' %}">{% translate 'Home' %}</a>
   &rsaquo; <a href="{{ owner.changelist_url }}">{{ owner.changelist_label }}</a>
-  &rsaquo; <a href="{{ owner.change_url }}">{{ owner.instance }}</a>
+  &rsaquo; <a href="{{ owner.change_url }}">{{ owner.instance.name }}</a>
   &rsaquo; Faction rules
 </div>
 {% endblock %}
@@ -33,7 +35,7 @@ only; it links forms.css and widgets.css itself (#3667).
 {% include "admin/tuning/_panel_css.html" %}
 {% include "admin/standoff_profile/_css.html" %}
 <div id="faction-rules-root" class="sp-root">
-  <h1>Faction rules: {{ owner.instance }}</h1>
+  <h1>Faction rules: {{ owner.instance.name }}</h1>
   <p class="sp-intro">How this {{ owner.noun }}'s people stand toward particular characters.
     Every creature affiliated with it (or with an organization below it) carries these rules
     in a standoff, unless a placement switches one off.</p>

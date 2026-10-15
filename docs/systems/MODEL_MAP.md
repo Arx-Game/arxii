@@ -2412,12 +2412,14 @@
   - persona -> scenes.Persona [FK] (nullable)
   - portrait -> evennia_extensions.Media [FK] (nullable)
   - objectdb -> evennia.ObjectDB [FK] (nullable)
+  - organization -> societies.Organization [FK] (nullable)
   - mirrors_participant -> combat.CombatParticipant [FK] (nullable)
   - summoned_by -> character_sheets.CharacterSheet [FK] (nullable)
   - barrier_break_pool -> actions.ConsequencePool [FK] (nullable)
   - aftermath_pool -> actions.ConsequencePool [FK] (nullable)
   - wall_breaker_combo -> combat.ComboDefinition [FK] (nullable)
   - reinforces -> combat.CombatOpponent [FK] (nullable)
+  - suppressed_faction_rules -> standoffs.FactionRule [M2M]
 **Pointed to by:**
   - reinforced_by <- combat.CombatOpponent
   - phases <- combat.BossPhase
@@ -2553,6 +2555,7 @@
   - written_by -> contributors.ContentContributor [FK] (nullable)
   - reviewed_by -> contributors.ContentContributor [FK] (nullable)
   - threat_pool -> combat.ThreatPool [FK] (nullable)
+  - organization -> societies.Organization [FK] (nullable)
 **Pointed to by:**
   - weakness_pool_entries <- covenants.WeaknessPoolEntry
   - spawned_opponents <- combat.CombatOpponent
@@ -2782,7 +2785,7 @@
 - `roll_sustained_absorption_budget(participant: 'CombatParticipant') -> 'tuple[int, CheckOutcome | None]' - Roll Concentration once to set a sustained action's absorption budget (#2705).`
 - `scan_round_combos(encounter: 'CombatEncounter', round_number: 'int') -> 'list[RoundCombo]' - List every combo taking shape in this round's declared actions (#3553).`
 - `select_npc_actions(encounter: 'CombatEncounter') -> 'list[CombatOpponentAction]' - Select and create NPC actions for the current round.`
-- `spawn_from_creature_template(encounter: 'CombatEncounter', template: 'CreatureTemplate', *, position: 'Position | None' = None, acting_account: 'AccountDB | None' = None) -> 'CombatOpponent' - Spawn a CombatOpponent from a CreatureTemplate bestiary entry (#2016).`
+- `spawn_from_creature_template(encounter: 'CombatEncounter', template: 'CreatureTemplate', *, position: 'Position | None' = None, acting_account: 'AccountDB | None' = None, line: 'OpponentLine | None' = None) -> 'CombatOpponent' - Spawn a CombatOpponent from a CreatureTemplate bestiary entry (#2016).`
 - `swarm_attack_count(swarm_count: 'int', bodies_per_attack: 'int', active_pc_count: 'int') -> 'int' - Attacks a swarm makes this round — scales with remaining bodies (#875).`
 - `swarm_kills(raw_damage: 'int', body_toughness: 'int') -> 'int' - Bodies a single landing attack clears from a swarm (#875).`
 - `toggle_action_ready(action: 'CombatRoundAction') -> 'CombatRoundAction' - Flip the ready flag on a round action and persist it.`
@@ -4399,6 +4402,7 @@
 - `find_situations(*, query: 'str', risk: 'str | None', actor_level_index: 'int') -> 'DiscoveryResult' - The one catalog search behind telnet ``setsituation find`` and`
 - `get_notification_target_for_gm(gm_profile: 'GMProfile') -> 'CharacterSheet | None' - Resolve the CharacterSheet to use as the notification recipient for a GM.`
 - `gm_application_queue(gm: 'GMProfile') -> 'QuerySet[RosterApplication]' - Pending applications for characters at tables this GM owns.`
+- `gm_attention(account: 'AccountDB') -> 'GMAttention' - Count everything waiting on ``account`` as a GM (#4188).`
 - `gm_evidence_summary(profile: 'GMProfile') -> 'GMEvidenceSummary' - Aggregate a GM's track record for staff reviewing a level change.`
 - `gm_level_index(level: str) -> int - Return ``level``'s position in ``GM_LEVEL_ORDER`` (STARTING=0 .. SENIOR=4).`
 - `gm_max_risk(user) -> 'str' - RenownRisk ceiling for a non-staff author: their GMLevelCap.max_beat_risk.`
@@ -4422,6 +4426,8 @@
 - `submit_distinction_change_request(membership: 'GMTableMembership', *, action: 'str', reasoning: 'str', distinction: 'Distinction | None' = None, character_distinction: 'CharacterDistinction | None' = None) -> 'TableUpdateRequest' - Submit a distinction add/rank-up/remove for table-GM sign-off (#2631).`
 - `submit_profile_text_request(membership: 'GMTableMembership', *, field: 'str', proposed_text: 'str', reasoning: 'str') -> 'TableUpdateRequest' - Submit a profile prose rewrite for the table GM's sign-off (#2631).`
 - `surrender_character_story(gm: 'GMProfile', story: 'Story') -> 'None' - GM surrenders oversight of a story.`
+- `table_update_requests_for(account: 'AccountDB') -> 'QuerySet[TableUpdateRequest]' - The sheet-update requests ``account`` may judge as a table GM.`
+- `table_update_review_pool_q(account: 'AccountDB') -> 'Q' - The review pool (#2631 ruling), as a filter on ``TableUpdateRequest``.`
 - `touch_gm_activity(gm_profile: 'GMProfile') -> 'None' - Stamp ``GMProfile.last_active_at`` to now (#2004).`
 - `transfer_ownership(table: 'GMTable', new_gm: 'GMProfile') -> 'None' - Reassign a table to a different GM. Staff-only action.`
 - `user_breadth_index(user: 'AbstractBaseUser | AnonymousUser') -> 'int' - How far up the GM ladder a web caller may browse (#3564).`
@@ -6996,8 +7002,12 @@
 
 ### MissionOptionOpponentLine
 **Foreign Keys:**
+  - organization -> societies.Organization [FK] (nullable)
   - option -> missions.MissionOption [FK]
   - creature_template -> combat.CreatureTemplate [FK]
+**Pointed to by:**
+  - drive_edits <- standoffs.OpponentLineDrive
+  - faction_rule_suppressions <- standoffs.OpponentLineFactionRuleSuppression
 
 ### MissionOptionRoute
 **Foreign Keys:**
@@ -9157,6 +9167,8 @@
 
 ## world.societies
 
+### AssociationConfig
+
 ### Betrothal
 **Foreign Keys:**
   - kinsperson_a -> roster.Kinsperson [FK]
@@ -9633,6 +9645,7 @@
   - covenant <- covenants.Covenant
   - ritualsessionreference_set <- magic.RitualSessionReference
   - anchored_threads <- magic.Thread
+  - affiliated_creature_templates <- combat.CreatureTemplate
   - treasury <- currency.OrganizationTreasury
   - issued_favor_tokens <- currency.FavorTokenDetails
   - economics <- currency.OrgEconomicsProfile
@@ -9662,6 +9675,7 @@
   - gemits <- narrative.Gemit
   - stalking_predators <- predators.PredatorBand
   - secret_victimhoods <- secrets.SecretVictim
+  - faction_rules <- standoffs.FactionRule
   - org_tasks <- tasking.OrgTask
   - org_tasks_targeting <- tasking.OrgTask
   - capability_projects <- societies.OrganizationCapabilityProjectDetails
@@ -9829,6 +9843,7 @@
   - sentence_ladder <- justice.SentenceLadderRung
   - gemits <- narrative.Gemit
   - exposed_secrets <- secrets.Secret
+  - faction_rules <- standoffs.FactionRule
 
 ### SocietyReputation
 **Foreign Keys:**
@@ -9998,9 +10013,25 @@
 
 ### FactionRule
 **Foreign Keys:**
-  - creature_template -> combat.CreatureTemplate [FK]
+  - creature_template -> combat.CreatureTemplate [FK] (nullable)
+  - organization -> societies.Organization [FK] (nullable)
+  - society -> societies.Society [FK] (nullable)
   - deed_archetype -> societies.PhilosophicalArchetype [FK] (nullable)
   - drive -> mechanics.Property [FK] (nullable)
+**Pointed to by:**
+  - suppressions <- standoffs.OpponentLineFactionRuleSuppression
+
+### OpponentLineDrive
+**Foreign Keys:**
+  - beat_line -> stories.BeatOpponentLine [FK] (nullable)
+  - mission_line -> missions.MissionOptionOpponentLine [FK] (nullable)
+  - property -> mechanics.Property [FK]
+
+### OpponentLineFactionRuleSuppression
+**Foreign Keys:**
+  - beat_line -> stories.BeatOpponentLine [FK] (nullable)
+  - mission_line -> missions.MissionOptionOpponentLine [FK] (nullable)
+  - faction_rule -> standoffs.FactionRule [FK]
 
 ### StandoffAngleShare
 **Foreign Keys:**
@@ -10051,8 +10082,8 @@
 ### StandoffReveal
 **Foreign Keys:**
   - group -> standoffs.StandoffGroup [FK]
-  - drive -> standoffs.CreatureDrive [FK] (nullable)
   - faction_rule -> standoffs.FactionRule [FK] (nullable)
+  - drive -> mechanics.Property [FK] (nullable)
 
 ### StandoffTerms
 **Foreign Keys:**
@@ -10141,8 +10172,12 @@
 
 ### BeatOpponentLine
 **Foreign Keys:**
+  - organization -> societies.Organization [FK] (nullable)
   - beat -> stories.Beat [FK]
   - creature_template -> combat.CreatureTemplate [FK]
+**Pointed to by:**
+  - drive_edits <- standoffs.OpponentLineDrive
+  - faction_rule_suppressions <- standoffs.OpponentLineFactionRuleSuppression
 
 ### BeatStagedBattle
 **Foreign Keys:**
