@@ -1,1 +1,0 @@
-tag=PROGRESS value=11 max=20 label=11 of 20 favor

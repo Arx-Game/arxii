@@ -1,9 +1,0 @@
-build ok
-static ok
-server: 200
-
-Running 1 test using 1 worker
-
-[1A[2K[1/1] [chromium] › e2e/rt-4362.spec.ts:200:1 › J card after the progress element change
-[1A[2K  1 passed (5.9s)
-playwright rc=0
