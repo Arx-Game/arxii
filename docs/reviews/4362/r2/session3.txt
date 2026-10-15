@@ -1,0 +1,7 @@
+server: 200
+
+Running 1 test using 1 worker
+
+[1A[2K[1/1] [chromium] › e2e/rt-4362.spec.ts:137:1 › G being service builder
+[1A[2K  1 passed (6.0s)
+playwright rc=0
