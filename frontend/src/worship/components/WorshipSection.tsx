@@ -9,8 +9,11 @@
  */
 
 import { formatRelativeTime } from '@/lib/relativeTime';
-import { usePrayers, useVisions } from '../queries';
+import { usePledgeCards, usePrayers, useVisions } from '../queries';
+import { PledgeCard } from './PledgeCard';
+import { PledgeDialog } from './PledgeDialog';
 import { PrayDialog } from './PrayDialog';
+import { SacrificeDialog } from './SacrificeDialog';
 import { SendVisionDialog } from './SendVisionDialog';
 import { VisionCard } from './VisionCard';
 import {
@@ -46,18 +49,31 @@ export function WorshipSection({
   const privileged = isMyCharacter || isStaff;
   const { data: visions } = useVisions(sheetId, privileged);
   const { data: prayers } = usePrayers(sheetId, isStaff);
+  const { data: pledgeCards } = usePledgeCards(sheetId, privileged);
   const recentPrayers = (prayers ?? []).slice(0, RECENT_PRAYERS);
+  // The open pledge, else the one that resolved most recently (#4333).
+  const pledgeCard = (pledgeCards ?? [])[0] ?? null;
 
   return (
     <div className="refsheet-stack" data-testid="worship-section">
       <Heading>Worship</Heading>
       <p className="refsheet-ledger" data-testid="public-worship">
         {publicWorship ? `Keeps faith with ${publicWorship.name}.` : 'No declared faith.'}
+        {pledgeCard && ` Favor with ${pledgeCard.terms.being_name}: ${pledgeCard.favor}.`}
       </p>
       {(isMyCharacter || isStaff) && (
         <div className="refsheet-doors">
           {isMyCharacter && (
-            <PrayDialog characterId={sheetId} defaultBeingId={publicWorship?.id ?? null} />
+            <>
+              <PrayDialog characterId={sheetId} defaultBeingId={publicWorship?.id ?? null} />
+              <SacrificeDialog characterId={sheetId} />
+              <PledgeDialog
+                characterId={sheetId}
+                sheetId={sheetId}
+                defaultBeingId={publicWorship?.id ?? null}
+                variant="outline"
+              />
+            </>
           )}
           {isStaff && (
             <SendVisionDialog
@@ -67,6 +83,9 @@ export function WorshipSection({
             />
           )}
         </div>
+      )}
+      {privileged && pledgeCard && (
+        <PledgeCard card={pledgeCard} characterId={isMyCharacter ? sheetId : null} />
       )}
       {privileged && (
         <div className="refsheet-stack" data-testid="visions-list">

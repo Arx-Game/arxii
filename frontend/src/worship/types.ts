@@ -23,3 +23,19 @@ export interface InvocationChoice {
   /** The player's optional one line of how it shows; the room sees it. */
   line: string;
 }
+
+/** Pledges (#4333 slice 2): a being's pledge types, what earns favor, and a character's card. */
+export type Pledge = components['schemas']['Pledge'];
+export type ServiceTerms = components['schemas']['ServiceTerms'];
+export type PledgeCard = components['schemas']['PledgeCard'];
+export type PledgeCreditLine = components['schemas']['PledgeCreditLine'];
+/** A being holy where the acting character stands: its shrine here or the temple over it. */
+export type HolySite = components['schemas']['HolySite'];
+
+/** `PledgeCard.state`, as the server derives it (`world.worship.constants.PledgeState`). */
+export const PLEDGE_STATE = {
+  open: 'open',
+  ready: 'ready',
+  closed: 'closed',
+  lapsed: 'lapsed',
+} as const;

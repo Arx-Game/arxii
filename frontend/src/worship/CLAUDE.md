@@ -17,3 +17,15 @@ Prayers and visions (#3779) on the character sheet.
 invocation-options/`): per being the difficulty with each ease, uses left, the bonus by
   result, or the reason it is refused. The choice rides the check's request; nothing rolls in
   the picker. `invocationText.ts` builds the bonus line.
+- Pledges (#4333 slice 2). `components/PledgeDialog.tsx` (Pledge yourself: the pledge type's
+  staff-authored text, its favor target, the system-generated `ServiceTermsList` of what earns
+  favor with the earning rate, an optional prayer; dispatches `pledge_take`),
+  `components/SacrificeDialog.tsx` (items the character carries; dispatches `sacrifice`, which
+  the server refuses away from a shrine or temple), `components/PledgeCard.tsx` (the sheet's
+  pledge in three labelled parts, each credit with its calculation, and Close once the target
+  is met; dispatches `pledge_close`). `WorshipSection` shows the newest pledge card and the
+  owner's Pray / Sacrifice / Pledge yourself doors; the room panel's
+  `game/components/room-panel/HolySiteBlock.tsx` shows them for the being whose shrine or
+  temple the character stands in. Reads `/api/worship/pledges/`, `/api/worship/pledge-cards/`,
+  `/api/worship/beings/{id}/service-terms/` and `/api/worship/beings/holy-site/`.
+  `pledgeText.ts` builds the earning-rate parts and the time left.

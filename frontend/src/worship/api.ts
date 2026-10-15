@@ -9,7 +9,16 @@
 import { apiFetch } from '@/evennia_replacements/api';
 import { throwApiError } from '@/lib/errors';
 import { dispatchCanvasAction, type DispatchResult } from '@/map-canvas/dispatch';
-import type { InvocationOptions, Prayer, Vision, VisionCreate } from './types';
+import type {
+  HolySite,
+  InvocationOptions,
+  Pledge,
+  PledgeCard,
+  Prayer,
+  ServiceTerms,
+  Vision,
+  VisionCreate,
+} from './types';
 
 interface Paginated<T> {
   results: T[];
@@ -59,4 +68,70 @@ export async function fetchInvocationOptions(entryId?: number | null): Promise<I
   const res = await apiFetch(`/api/worship/beings/invocation-options/${query}`);
   if (!res.ok) await throwApiError(res, 'Failed to load the beings you can call on.');
   return (await res.json()) as InvocationOptions;
+}
+
+function entryQuery(entryId?: number | null): string {
+  return entryId != null ? `?entry_id=${entryId}` : '';
+}
+
+/** GET /api/worship/pledges/?being={id} (#4333): the pledge types a being offers. */
+export async function fetchPledges(beingId: number): Promise<Pledge[]> {
+  const res = await apiFetch(`/api/worship/pledges/?being=${beingId}`);
+  if (!res.ok) await throwApiError(res, 'Failed to load the pledges.');
+  return unwrap((await res.json()) as Paginated<Pledge> | Pledge[]);
+}
+
+/**
+ * GET /api/worship/beings/{id}/service-terms/ (#4333): what earns favor with the being for a
+ * character, and their earning rate. System-generated. `sheetId` names a sheet the requester
+ * plays (the sheet page); otherwise the character this tab acts as (`entryId`) answers.
+ */
+export async function fetchServiceTerms(
+  beingId: number,
+  { sheetId, entryId }: { sheetId?: number | null; entryId?: number | null } = {}
+): Promise<ServiceTerms> {
+  const query = sheetId != null ? `?character_sheet=${sheetId}` : entryQuery(entryId);
+  const res = await apiFetch(`/api/worship/beings/${beingId}/service-terms/${query}`);
+  if (!res.ok) await throwApiError(res, 'Failed to load what earns favor.');
+  return (await res.json()) as ServiceTerms;
+}
+
+/** GET /api/worship/beings/holy-site/ (#4333): the beings holy where the character stands. */
+export async function fetchHolySites(entryId?: number | null): Promise<HolySite[]> {
+  const res = await apiFetch(`/api/worship/beings/holy-site/${entryQuery(entryId)}`);
+  if (!res.ok) await throwApiError(res, 'Failed to load the holy site here.');
+  return (await res.json()) as HolySite[];
+}
+
+/** GET /api/worship/pledge-cards/?character_sheet={sheetId} (#4333): newest first. */
+export async function fetchPledgeCards(sheetId: number): Promise<PledgeCard[]> {
+  const res = await apiFetch(`/api/worship/pledge-cards/?character_sheet=${sheetId}`);
+  if (!res.ok) await throwApiError(res, 'Failed to load the pledge.');
+  return unwrap((await res.json()) as Paginated<PledgeCard> | PledgeCard[]);
+}
+
+/** Dispatch `pledge_take` as `characterId`: `{ pledge: id, prayer }`. */
+export function takePledge(
+  characterId: number,
+  pledge: number,
+  prayer: string
+): Promise<DispatchResult> {
+  return dispatchCanvasAction(characterId, 'pledge_take', { pledge, prayer });
+}
+
+/** Dispatch `pledge_close` as `characterId`: perform the open pledge's closing rite. */
+export function closePledge(characterId: number): Promise<DispatchResult> {
+  return dispatchCanvasAction(characterId, 'pledge_close', {});
+}
+
+/** Dispatch `sacrifice` as `characterId`: `{ item_ids, being? }`. */
+export function sacrifice(
+  characterId: number,
+  itemIds: number[],
+  being?: number | null
+): Promise<DispatchResult> {
+  return dispatchCanvasAction(characterId, 'sacrifice', {
+    item_ids: itemIds,
+    ...(being != null ? { being } : {}),
+  });
 }

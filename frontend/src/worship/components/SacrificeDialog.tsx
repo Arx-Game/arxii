@@ -1,0 +1,119 @@
+/**
+ * SacrificeDialog (#4333) — give up items you carry at a being's shrine or temple. Each item is
+ * destroyed and earns favor in proportion to its value (more for a facet the being favors); the
+ * server answers with each item's calculation. Dispatches `sacrifice` as the character; the
+ * server refuses it away from a holy site.
+ */
+
+import { useState } from 'react';
+import { toast } from 'sonner';
+import { Button } from '@/components/ui/button';
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from '@/components/ui/dialog';
+import { useInventory } from '@/inventory/hooks/useInventory';
+import { useSacrifice } from '../queries';
+
+interface SacrificeDialogProps {
+  /** The acting character's sheet (= ObjectDB) pk. */
+  characterId: number;
+  /** The being the place is holy to, when the caller knows it (a shrine's card). */
+  beingId?: number | null;
+  beingName?: string | null;
+  size?: 'sm' | 'default';
+  variant?: 'default' | 'outline';
+}
+
+export function SacrificeDialog({
+  characterId,
+  beingId,
+  beingName,
+  size = 'sm',
+  variant = 'outline',
+}: SacrificeDialogProps) {
+  const [open, setOpen] = useState(false);
+  const [chosen, setChosen] = useState<number[]>([]);
+  const { data: items } = useInventory(open ? characterId : undefined);
+  const mutation = useSacrifice(characterId);
+
+  function toggle(id: number) {
+    setChosen((current) =>
+      current.includes(id) ? current.filter((row) => row !== id) : [...current, id]
+    );
+  }
+
+  function handleSubmit(event: React.FormEvent) {
+    event.preventDefault();
+    if (chosen.length === 0) {
+      toast.error('Choose what to sacrifice.');
+      return;
+    }
+    mutation.mutate(
+      { itemIds: chosen, being: beingId ?? null },
+      {
+        onSuccess: (result) => {
+          if (result.success === false) {
+            toast.error(result.message);
+            return;
+          }
+          toast.success(result.message);
+          setChosen([]);
+          setOpen(false);
+        },
+        onError: (error: Error) => toast.error(error.message),
+      }
+    );
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger asChild>
+        <Button variant={variant} size={size} data-testid="sacrifice-button">
+          Sacrifice
+        </Button>
+      </DialogTrigger>
+      <DialogContent>
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <DialogHeader>
+            <DialogTitle>Sacrifice{beingName ? ` to ${beingName}` : ''}</DialogTitle>
+          </DialogHeader>
+          {(items ?? []).length === 0 ? (
+            <p className="text-sm text-muted-foreground">You carry nothing to give up.</p>
+          ) : (
+            <ul className="max-h-72 space-y-1 overflow-y-auto" data-testid="sacrifice-items">
+              {(items ?? []).map((item) => (
+                <li key={item.id}>
+                  <label className="flex items-center gap-2 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={chosen.includes(item.id)}
+                      onChange={() => toggle(item.id)}
+                    />
+                    <span>{item.display_name}</span>
+                  </label>
+                </li>
+              ))}
+            </ul>
+          )}
+          <p className="text-xs text-muted-foreground">
+            <b>Rule:</b> each item is destroyed. Favor is its value per the being's terms, more for
+            a facet the being favors, at your earning rate.
+          </p>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setOpen(false)}>
+              Close
+            </Button>
+            <Button type="submit" disabled={chosen.length === 0 || mutation.isPending}>
+              {mutation.isPending ? 'Sacrificing…' : 'Sacrifice'}
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+}

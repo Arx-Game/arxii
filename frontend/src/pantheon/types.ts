@@ -56,7 +56,8 @@ export interface OfferingRow {
   offered_by: string;
   item_value: number;
   amount: number | null;
-  ceremony_id: number;
+  /** Null for a sacrifice at a shrine or temple outside a ceremony (#4333). */
+  ceremony_id: number | null;
   when: string | null;
 }
 
