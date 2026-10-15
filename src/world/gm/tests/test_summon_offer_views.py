@@ -33,7 +33,7 @@ class GMSummonOfferInboxTests(TestCase):
             db_key="SummonInboxGMRoom", db_typeclass_path="typeclasses.rooms.Room"
         )
         cls.room_profile = get_room_profile(gm_room)
-        cls.scene = SceneFactory(location=gm_room, name="Summon Inbox Scene")
+        cls.scene = SceneFactory(room=gm_room, name="Summon Inbox Scene")
 
         cls.target_account = AccountFactory(username="summon_inbox_target")
         cls.target_character = CharacterFactory(db_key="SummonInboxTarget")

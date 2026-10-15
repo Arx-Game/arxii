@@ -174,7 +174,7 @@ class DuelChallengeViewSet(ReadOnlyModelViewSet):
         challenged_sheet = get_object_or_404(CharacterSheet, pk=data["challenged_sheet_id"])
         pool = get_object_or_404(ThreatPool, pk=data["threat_pool_id"])
 
-        room = scene.location or challenged_sheet.character.db_location
+        room = scene.room or challenged_sheet.character.db_location
         if room is None:
             return Response(
                 {"detail": "No room resolvable for this duel."},

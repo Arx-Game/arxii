@@ -60,7 +60,7 @@ class SetRoundModeActionGateTests(TestCase):
 
     def setUp(self):
         self.room = _make_room()
-        self.scene = SceneFactory(location=self.room, is_active=True)
+        self.scene = SceneFactory(room=self.room, is_active=True)
 
     def test_non_owner_pc_denied(self):
         """A PC who is not a scene owner gets success=False."""
@@ -142,7 +142,7 @@ class SetRoundModeActionRefusalTests(TestCase):
         """Room has a scene but no active round → action refuses."""
         room = _make_room()
         char, _sheet, account = _create_pc_with_account("Grace", location=room)
-        scene = SceneFactory(location=room, is_active=True)
+        scene = SceneFactory(room=room, is_active=True)
         SceneOwnerParticipationFactory(scene=scene, account=account)
         # No round created
         action = SetRoundModeAction()
@@ -155,7 +155,7 @@ class SetRoundModeActionRefusalTests(TestCase):
         (no DANGER-specific block) when there are no pending declarations."""
         room = _make_room()
         char, _sheet, account = _create_pc_with_account("Hank", location=room)
-        scene = SceneFactory(location=room, is_active=True)
+        scene = SceneFactory(room=room, is_active=True)
         SceneOwnerParticipationFactory(scene=scene, account=account)
         rnd = SceneRound.objects.create(
             room=RoomProfileFactory(objectdb=room),
@@ -174,7 +174,7 @@ class SetRoundModeActionRefusalTests(TestCase):
         """Success result mentions the new mode when mode was set."""
         room = _make_room()
         char, _sheet, account = _create_pc_with_account("Iris", location=room)
-        scene = SceneFactory(location=room, is_active=True)
+        scene = SceneFactory(room=room, is_active=True)
         SceneOwnerParticipationFactory(scene=scene, account=account)
         _make_active_round(room)
         action = SetRoundModeAction()
@@ -186,7 +186,7 @@ class SetRoundModeActionRefusalTests(TestCase):
         """Updating only a knob (no mode change) → success with generic message."""
         room = _make_room()
         char, _sheet, account = _create_pc_with_account("Jake", location=room)
-        scene = SceneFactory(location=room, is_active=True)
+        scene = SceneFactory(room=room, is_active=True)
         SceneOwnerParticipationFactory(scene=scene, account=account)
         rnd = _make_active_round(room)
         action = SetRoundModeAction()
@@ -224,7 +224,7 @@ class StartRoundActionModeOverrideTests(TestCase):
         """Override for a PC who is not a scene owner → denied."""
         char, _sheet, _account = _create_pc_with_account("Mia", location=self.room)
         # Scene exists but Mia is not an owner
-        SceneFactory(location=self.room, is_active=True)
+        SceneFactory(room=self.room, is_active=True)
         action = StartRoundAction()
         result = action.run(char, mode=SceneRoundMode.OPEN)
         self.assertFalse(result.success)
@@ -232,7 +232,7 @@ class StartRoundActionModeOverrideTests(TestCase):
     def test_override_applied_for_owner(self):
         """Override by a scene owner → round created with the requested mode, scene linked."""
         char, _sheet, account = _create_pc_with_account("Nora", location=self.room)
-        scene = SceneFactory(location=self.room, is_active=True)
+        scene = SceneFactory(room=self.room, is_active=True)
         SceneOwnerParticipationFactory(scene=scene, account=account)
         action = StartRoundAction()
         result = action.run(char, mode=SceneRoundMode.STRICT, advance_quorum_pct=80)
@@ -247,7 +247,7 @@ class StartRoundActionModeOverrideTests(TestCase):
         char, _sheet, account = _create_pc_with_account("Petra", location=self.room)
         account.is_staff = True
         account.save()
-        scene = SceneFactory(location=self.room, is_active=True)
+        scene = SceneFactory(room=self.room, is_active=True)
         action = StartRoundAction()
         result = action.run(char, mode=SceneRoundMode.OPEN)
         self.assertTrue(result.success)

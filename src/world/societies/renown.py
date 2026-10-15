@@ -1015,15 +1015,9 @@ def _resolve_spread_realm(scene) -> object | None:
     Returns None when the chain breaks at any step (no scene, no
     location, non-room location, no realm in the area's parent chain).
     """
-    from evennia_extensions.models import RoomProfile  # noqa: PLC0415
-
     if scene is None or scene.location is None:
         return None
-    try:
-        room_profile = scene.location.room_profile
-    except RoomProfile.DoesNotExist:
-        return None
-    return _resolve_home_realm(room_profile.area)
+    return _resolve_home_realm(scene.location.area)
 
 
 def apply_spread_fame_bump(

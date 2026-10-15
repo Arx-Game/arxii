@@ -112,7 +112,7 @@ class CombatEncounterFactory(factory_django.DjangoModelFactory):
     def scene(self) -> object:
         from world.scenes.factories import SceneFactory
 
-        return SceneFactory(location=self.room)
+        return SceneFactory(room=self.room)
 
 
 class ThreatPoolFactory(factory_django.DjangoModelFactory):

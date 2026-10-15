@@ -98,7 +98,7 @@ class BattleFrontEntranceTestBase(CastScenarioMixin):
         # Set db_location so the actor is in the scene's room.
         for persona in (self.caster, self.target):
             character = persona.character_sheet.character
-            character.db_location = self.scene.location
+            character.db_location = self.scene.room
             character.save()
 
         # Create a battle whose scene is the cast scenario's scene.
@@ -135,7 +135,7 @@ class ResolveBattleContextTests(CastScenarioMixin):
         super().setUp()
         for persona in (self.caster, self.target):
             character = persona.character_sheet.character
-            character.db_location = self.scene.location
+            character.db_location = self.scene.room
             character.save()
 
     def _actor(self):
@@ -165,7 +165,7 @@ class ResolveBattleContextTests(CastScenarioMixin):
     def test_returns_none_when_scene_colocation_fails(self) -> None:
         """A participant whose battle's scene differs from the actor's scene returns None."""
         other_room = _make_room("OtherSceneRoom")
-        other_scene = SceneFactory(location=other_room)
+        other_scene = SceneFactory(room=other_room)
         battle = BattleFactory(name="Other Scene Battle")
         battle.scene = other_scene
         battle.save(update_fields=["scene"])
@@ -212,7 +212,7 @@ class MaybeBindBattleEncounterTests(CastScenarioMixin):
         super().setUp()
         for persona in (self.caster, self.target):
             character = persona.character_sheet.character
-            character.db_location = self.scene.location
+            character.db_location = self.scene.room
             character.save()
 
         self.battle = BattleFactory(name="Bind Test Battle")
@@ -232,7 +232,7 @@ class MaybeBindBattleEncounterTests(CastScenarioMixin):
         """No binding when battle_context is None."""
         encounter = CombatEncounterFactory(
             scene=self.scene,
-            room=self.scene.location,
+            room=self.scene.room,
             status=RoundStatus.DECLARING,
         )
         EntranceAction._maybe_bind_battle_encounter(encounter, None)
@@ -244,7 +244,7 @@ class MaybeBindBattleEncounterTests(CastScenarioMixin):
         existing = open_place_encounter(battle_place=self.place)
         new_encounter = CombatEncounterFactory(
             scene=self.scene,
-            room=self.scene.location,
+            room=self.scene.room,
             status=RoundStatus.DECLARING,
         )
         EntranceAction._maybe_bind_battle_encounter(new_encounter, (self.participant, self.place))
@@ -255,7 +255,7 @@ class MaybeBindBattleEncounterTests(CastScenarioMixin):
         """Binds the new encounter when the place has no encounter."""
         new_encounter = CombatEncounterFactory(
             scene=self.scene,
-            room=self.scene.location,
+            room=self.scene.room,
             status=RoundStatus.DECLARING,
         )
         EntranceAction._maybe_bind_battle_encounter(new_encounter, (self.participant, self.place))
@@ -270,7 +270,7 @@ class MaybeBindBattleEncounterTests(CastScenarioMixin):
 
         new_encounter = CombatEncounterFactory(
             scene=self.scene,
-            room=self.scene.location,
+            room=self.scene.room,
             status=RoundStatus.DECLARING,
         )
         EntranceAction._maybe_bind_battle_encounter(new_encounter, (self.participant, self.place))
@@ -321,7 +321,7 @@ class HostileEntranceJourneyTests(BattleFrontEntranceTestBase):
         # is feedable without acknowledgement, matching the cast-seeded default).
         existing = CombatEncounterFactory(
             scene=self.scene,
-            room=self.scene.location,
+            room=self.scene.room,
             status=RoundStatus.DECLARING,
             risk_level=RiskLevel.MODERATE,
             encounter_type=EncounterType.PARTY_COMBAT,
@@ -441,7 +441,7 @@ class HostileEntranceJourneyTests(BattleFrontEntranceTestBase):
         """When the battle's scene differs from the actor's scene, no binding."""
         # Create a separate scene/room for the battle.
         other_room = _make_room("OtherColocationRoom")
-        other_scene = SceneFactory(location=other_room)
+        other_scene = SceneFactory(room=other_room)
         self.battle.scene = other_scene
         self.battle.save(update_fields=["scene"])
 

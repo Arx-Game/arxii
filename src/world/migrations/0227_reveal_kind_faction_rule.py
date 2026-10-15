@@ -20,7 +20,7 @@ def backwards(apps, schema_editor):
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("arxii", "0223_rename_faction_rules_and_angles"),
+        ("arxii", "0226_rename_faction_rules_and_angles"),
     ]
 
     operations = [

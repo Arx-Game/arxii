@@ -38,7 +38,7 @@ class ScandalForkTestCase(TestCase):
 
     def _scene(self, *, public: bool):
         profile = RoomProfileFactory(area=self.kingdom, is_public=public)
-        return SceneFactory(location=profile.objectdb)
+        return SceneFactory(location=profile)
 
     def _mint(self, scene, archetypes, **kwargs):
         from world.societies.factories import LegendSourceTypeFactory

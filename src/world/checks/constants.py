@@ -88,6 +88,9 @@ class ModifierSourceKind(models.TextChoices):
     RELATIONSHIP = "relationship", "Relationship"
     CAPABILITY = "capability", "Capability"
     SOULFRAY = "soulfray", "Soulfray"
+    # #4333: the bonus an invocation of a being's favor adds to the check it was
+    # declared on, labelled with the being.
+    FAVOR = "favor", "Favor"
 
 
 class CheckCallTargetStatus(models.TextChoices):

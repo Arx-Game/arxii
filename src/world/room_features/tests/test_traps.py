@@ -386,7 +386,7 @@ class GMPlacedTrapProvenanceTest(TestCase):
             room_profile=self.room_profile, name="GM Snare", created_by_sheet=sheet
         )
         authored_trap = TrapFactory(room_profile=self.room_profile, name="Ancient Pit")
-        scene = SceneFactory(location=self.room)
+        scene = SceneFactory(room=self.room)
 
         finish_scene_full(scene)
 
@@ -421,7 +421,7 @@ class GMTrapManagementLifecycleTest(TestCase):
         account = tenure.player_data.account
         self.gm_character.db_account = account
         GMProfileFactory(account=account, level=GMLevel.JUNIOR)
-        self.scene = SceneFactory(location=self.room)
+        self.scene = SceneFactory(room=self.room)
         SceneParticipationFactory(scene=self.scene, account=account, is_gm=True)
         invalidate_active_scene_cache(self.room)
 

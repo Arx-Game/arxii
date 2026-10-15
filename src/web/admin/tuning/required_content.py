@@ -1456,6 +1456,34 @@ def _declarations() -> tuple[ContentDependency, ...]:
             ),
         ),
         ContentDependency(
+            key="favor-invocation-check-type",
+            label="Devotion config: default invocation check type",
+            tier=DependencyTier.REQUIRED,
+            consumer="world/worship/invocation_services.py invocation_refusal()",
+            consequence=(
+                "No one can call on a being's favor unless that being has its own "
+                "invocation check type: every Call on favor is refused as not set up."
+            ),
+            probe=FilteredRowProbe(
+                label="DevotionConfig",
+                filters=(("invocation_check_type__isnull", False),),
+                absent_detail="Devotion config has no default invocation check type.",
+            ),
+        ),
+        ContentDependency(
+            key="favor-invocation-awards",
+            label="Favor outcome awards: invocation bonuses",
+            tier=DependencyTier.TUNING,
+            consumer="world/worship/invocation_services.py invocation_bonus_for()",
+            consequence="An invocation that succeeds adds no bonus to the check it was made for.",
+            probe=FilteredRowProbe(
+                label="FavorOutcomeAward",
+                filters=(("kind", "invocation"),),
+                absent_detail="No invocation bonus is authored for any outcome tier.",
+            ),
+            admin_model="DevotionConfig",
+        ),
+        ContentDependency(
             key="savaged-condition",
             label="Savaged condition template",
             tier=DependencyTier.REQUIRED,

@@ -11,6 +11,16 @@ register = template.Library()
 
 
 @register.filter
+def effect_target_help(effect: DistinctionEffect | None) -> str:
+    """The unit line under a saved effect's favor target (#4333), else ""."""
+    from web.admin.distinction_builder import live  # noqa: PLC0415
+
+    if effect is None or not effect.target_id:
+        return ""
+    return live.favor_target_help(effect.target)
+
+
+@register.filter
 def effect_reads(effect: DistinctionEffect | None) -> str:
     """The player-facing gloss for one saved ``DistinctionEffect`` row.
 

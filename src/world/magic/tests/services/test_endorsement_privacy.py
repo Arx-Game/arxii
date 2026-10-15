@@ -41,7 +41,7 @@ class WhisperEndorsementTests(TestCase):
         idmapper_models.flush_cache()
 
         self.room = ObjectDBFactory(db_key="TestRoom", db_typeclass_path="typeclasses.rooms.Room")
-        self.scene = SceneFactory(location=self.room, is_active=True)
+        self.scene = SceneFactory(room=self.room, is_active=True)
 
         self.endorser_char, self.endorser_sheet, self.endorser_account = _char_with_account()
         self.endorsee_char, self.endorsee_sheet, self.endorsee_account = _char_with_account()
@@ -85,7 +85,7 @@ class VeryPrivateEndorsementTests(TestCase):
         idmapper_models.flush_cache()
 
         self.room = ObjectDBFactory(db_key="TestRoom2", db_typeclass_path="typeclasses.rooms.Room")
-        self.scene = SceneFactory(location=self.room, is_active=True)
+        self.scene = SceneFactory(room=self.room, is_active=True)
 
         self.endorser_char, self.endorser_sheet, self.endorser_account = _char_with_account()
         self.endorsee_char, self.endorsee_sheet, self.endorsee_account = _char_with_account()
@@ -125,7 +125,7 @@ class GetEndorseablePosesTests(TestCase):
         idmapper_models.flush_cache()
 
         self.room = ObjectDBFactory(db_key="TestRoom3", db_typeclass_path="typeclasses.rooms.Room")
-        self.scene = SceneFactory(location=self.room, is_active=True)
+        self.scene = SceneFactory(room=self.room, is_active=True)
 
         self.endorser_char, self.endorser_sheet, self.endorser_account = _char_with_account()
         self.endorsee_char, self.endorsee_sheet, self.endorsee_account = _char_with_account()

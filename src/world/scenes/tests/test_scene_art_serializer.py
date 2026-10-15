@@ -32,7 +32,7 @@ class SceneDetailSerializerArtUrlTestCase(TestCase):
         ward = AreaFactory(level=AreaLevel.WARD)
         self.room.room_profile.area = ward
         self.room.room_profile.save()
-        scene = SceneFactory(location=self.room)
+        scene = SceneFactory(room=self.room)
         data = SceneDetailSerializer(scene).data
         assert data["art_url"] is None
 
@@ -41,7 +41,7 @@ class SceneDetailSerializerArtUrlTestCase(TestCase):
         ward = AreaFactory(level=AreaLevel.WARD, art=ward_media)
         self.room.room_profile.area = ward
         self.room.room_profile.save()
-        scene = SceneFactory(location=self.room)
+        scene = SceneFactory(room=self.room)
         data = SceneDetailSerializer(scene).data
         assert data["art_url"] == ward_media.cloudinary_url
 
@@ -52,6 +52,6 @@ class SceneDetailSerializerArtUrlTestCase(TestCase):
         self.room.room_profile.area = ward
         self.room.room_profile.save()
         ObjectDisplayData.objects.create(object=self.room, thumbnail=room_media)
-        scene = SceneFactory(location=self.room)
+        scene = SceneFactory(room=self.room)
         data = SceneDetailSerializer(scene).data
         assert data["art_url"] == room_media.cloudinary_url

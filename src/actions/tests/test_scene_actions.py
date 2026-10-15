@@ -51,7 +51,7 @@ class StartSceneActionTests(TestCase):
         result = StartSceneAction().execute(actor)
 
         assert result.success is True
-        assert Scene.objects.filter(location=room, is_active=True).exists()
+        assert Scene.objects.filter(location_id=room.pk, is_active=True).exists()
 
     def test_actor_is_co_owner_after_start(self):
         """The actor's account becomes a co-owner of the new scene."""
@@ -60,7 +60,7 @@ class StartSceneActionTests(TestCase):
 
         StartSceneAction().execute(actor)
 
-        scene = Scene.objects.get(location=room, is_active=True)
+        scene = Scene.objects.get(location_id=room.pk, is_active=True)
         assert SceneParticipation.objects.filter(
             scene=scene, account=account, is_owner=True
         ).exists()
@@ -73,7 +73,7 @@ class StartSceneActionTests(TestCase):
 
         StartSceneAction().execute(actor)
 
-        scene = Scene.objects.get(location=room, is_active=True)
+        scene = Scene.objects.get(location_id=room.pk, is_active=True)
         assert SceneParticipation.objects.filter(
             scene=scene, account=account_b, is_owner=True
         ).exists()
@@ -96,7 +96,7 @@ class StartSceneActionTests(TestCase):
 
         assert result.success is True
         assert "already active" not in result.message
-        new_scene = Scene.objects.get(location=room, is_active=True, battle__isnull=True)
+        new_scene = Scene.objects.get(location_id=room.pk, is_active=True, battle__isnull=True)
         assert new_scene.pk != battle.scene_id
 
     def test_start_when_scene_exists_does_not_flip_ownership(self):
@@ -105,7 +105,7 @@ class StartSceneActionTests(TestCase):
         actor, actor_account = _create_pc_with_account("Eve", location=room)
 
         # Create a scene where Eve is NOT an owner.
-        scene = SceneFactory(location=room, is_active=True)
+        scene = SceneFactory(room=room, is_active=True)
         SceneParticipation.objects.create(scene=scene, account=actor_account, is_owner=False)
 
         result = StartSceneAction().execute(actor)
@@ -122,7 +122,7 @@ class StartSceneActionTests(TestCase):
         """With an existing scene, the actor is added as a non-owner participant."""
         room = _make_room("Room5")
         actor, actor_account = _create_pc_with_account("Frank", location=room)
-        scene = SceneFactory(location=room, is_active=True)
+        scene = SceneFactory(room=room, is_active=True)
 
         StartSceneAction().execute(actor)
 
@@ -146,7 +146,7 @@ class FinishSceneActionTests(TestCase):
         """A PC who is not a scene owner gets success=False."""
         room = _make_room("Room6")
         actor, _account = _create_pc_with_account("Grace", location=room)
-        scene = SceneFactory(location=room, is_active=True)
+        scene = SceneFactory(room=room, is_active=True)
         # Actor has no SceneParticipation row → not an owner.
 
         result = FinishSceneAction().execute(actor)
@@ -158,7 +158,7 @@ class FinishSceneActionTests(TestCase):
         """The scene is not deactivated when the actor lacks permission."""
         room = _make_room("Room7")
         actor, _account = _create_pc_with_account("Henry", location=room)
-        scene = SceneFactory(location=room, is_active=True)
+        scene = SceneFactory(room=room, is_active=True)
 
         FinishSceneAction().execute(actor)
 
@@ -169,7 +169,7 @@ class FinishSceneActionTests(TestCase):
         """A scene owner successfully finishes the active scene."""
         room = _make_room("Room8")
         actor, account = _create_pc_with_account("Iris", location=room)
-        scene = SceneFactory(location=room, is_active=True)
+        scene = SceneFactory(room=room, is_active=True)
         SceneOwnerParticipationFactory(scene=scene, account=account)
 
         with (
@@ -187,7 +187,7 @@ class FinishSceneActionTests(TestCase):
         """A GM character (is_story_runner=True) can finish any scene."""
         room = _make_room("Room9")
         gm = GMCharacterFactory(db_key="GMFinish", location=room)
-        scene = SceneFactory(location=room, is_active=True)
+        scene = SceneFactory(room=room, is_active=True)
 
         with (
             patch(f"{_FINISH_PATCH_BASE}.on_scene_finished"),
@@ -231,7 +231,7 @@ class GrantSceneGMActionTests(TestCase):
         owner, owner_account = _create_pc_with_account("GrantOwner", location=room)
         target, target_account = _create_pc_with_account("GrantTarget", location=room)
         GMProfileFactory(account=target_account)
-        scene = SceneFactory(location=room, is_active=True)
+        scene = SceneFactory(room=room, is_active=True)
         SceneOwnerParticipationFactory(scene=scene, account=owner_account)
 
         result = GrantSceneGMAction().execute(owner, target_name=target.db_key)
@@ -247,7 +247,7 @@ class GrantSceneGMActionTests(TestCase):
         non_admin, _non_admin_account = _create_pc_with_account("NonAdmin", location=room)
         target, target_account = _create_pc_with_account("GrantTarget2", location=room)
         GMProfileFactory(account=target_account)
-        scene = SceneFactory(location=room, is_active=True)
+        scene = SceneFactory(room=room, is_active=True)
         # non_admin has no SceneParticipation row -> not an owner, not GM, not staff.
 
         result = GrantSceneGMAction().execute(non_admin, target_name=target.db_key)
@@ -263,7 +263,7 @@ class GrantSceneGMActionTests(TestCase):
         owner, owner_account = _create_pc_with_account("GrantOwner3", location=room)
         target, target_account = _create_pc_with_account("GrantTarget3", location=room)
         # No GMProfile created for target_account.
-        scene = SceneFactory(location=room, is_active=True)
+        scene = SceneFactory(room=room, is_active=True)
         SceneOwnerParticipationFactory(scene=scene, account=owner_account)
 
         result = GrantSceneGMAction().execute(owner, target_name=target.db_key)
@@ -280,7 +280,7 @@ class GrantSceneGMActionTests(TestCase):
         gm_runner = GMCharacterFactory(db_key="GrantGMRunner", location=room)
         target, target_account = _create_pc_with_account("GrantTarget4", location=room)
         GMProfileFactory(account=target_account)
-        scene = SceneFactory(location=room, is_active=True)
+        scene = SceneFactory(room=room, is_active=True)
 
         result = GrantSceneGMAction().execute(gm_runner, target_name=target.db_key)
 
@@ -293,7 +293,7 @@ class GrantSceneGMActionTests(TestCase):
         """A target name that matches no present character fails with a clear message."""
         room = _make_room("GrantRoom5")
         owner, owner_account = _create_pc_with_account("GrantOwner5", location=room)
-        scene = SceneFactory(location=room, is_active=True)
+        scene = SceneFactory(room=room, is_active=True)
         SceneOwnerParticipationFactory(scene=scene, account=owner_account)
 
         result = GrantSceneGMAction().execute(owner, target_name="NoSuchCharacter")

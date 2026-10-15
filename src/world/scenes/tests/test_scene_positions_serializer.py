@@ -31,7 +31,7 @@ class SceneDetailSerializerPositionsTestCase(TestCase):
         connect_positions(self.pos_a, self.pos_b, is_passable=True)
 
         # Scene located in the room
-        self.scene = SceneFactory(location=self.room)
+        self.scene = SceneFactory(room=self.room)
 
         # Persona whose character is placed in pos_a
         self.persona = PersonaFactory()
@@ -93,7 +93,7 @@ class SceneDetailSerializerPositionsTestCase(TestCase):
 
     def test_persona_whose_character_is_unplaced_yields_null_position(self) -> None:
         """A persona whose character has no ObjectPosition gets position=null."""
-        scene = SceneFactory(location=self.room)
+        scene = SceneFactory(room=self.room)
         persona_unplaced = PersonaFactory()
         character = persona_unplaced.character_sheet.character
         character.location = self.room
@@ -113,7 +113,7 @@ class ScenePositionGraphFieldsTests(TestCase):
 
     def test_position_nodes_and_edges_reflect_the_room_graph(self) -> None:
         edge = PositionEdgeFactory()
-        scene = SceneFactory(location=edge.position_a.room)
+        scene = SceneFactory(room=edge.position_a.room)
 
         data = SceneDetailSerializer(scene).data
 

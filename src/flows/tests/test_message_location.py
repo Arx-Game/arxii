@@ -233,7 +233,7 @@ class TestMessageLocation(TestCase):
             db_typeclass_path="typeclasses.rooms.Room",
         )
         caller = CharacterFactory(location=room)
-        scene = SceneFactory(location=room)
+        scene = SceneFactory(room=room)
         room.active_scene = scene
 
         sdm = SceneDataManager()
@@ -252,7 +252,7 @@ class TestMessageLocation(TestCase):
             db_typeclass_path="typeclasses.rooms.Room",
         )
         caller = CharacterFactory(db_key="Alice", location=room)
-        scene = SceneFactory(location=room)
+        scene = SceneFactory(room=room)
         room.active_scene = scene
 
         sdm = SceneDataManager()

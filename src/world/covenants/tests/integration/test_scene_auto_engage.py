@@ -59,7 +59,7 @@ class MoveObjectAutoEngageTests(TestCase):
 
         # char_b is already in the room; active scene is live.
         _place_character_in_room(char_b, room)
-        SceneFactory(location=room, is_active=True)
+        SceneFactory(room=room, is_active=True)
 
         # char_a starts in a different room.
         start_room = _make_room("StartRoom")
@@ -93,7 +93,7 @@ class MoveObjectAutoEngageTests(TestCase):
         # Both members in the room with an active scene → both engaged.
         _place_character_in_room(char_a, room)
         _place_character_in_room(char_b, room)
-        SceneFactory(location=room, is_active=True)
+        SceneFactory(room=room, is_active=True)
 
         from world.covenants.services import evaluate_scene_engagement
 
@@ -160,7 +160,7 @@ class StartSceneAutoEngageTests(TestCase):
         room = _make_room("ExistingSceneRoom")
         char_a = mem_a.character_sheet.character
         _place_character_in_room(char_a, room)
-        SceneFactory(location=room, is_active=True)  # scene pre-exists
+        SceneFactory(room=room, is_active=True)  # scene pre-exists
 
         # Manually keep engaged=False.
         mem_a.engaged = False
@@ -193,7 +193,7 @@ class SceneParticipationAutoEngageTests(TestCase):
         # Both characters in the same room, active scene exists.
         _place_character_in_room(char_a, room)
         _place_character_in_room(char_b, room)
-        scene = SceneFactory(location=room, is_active=True)
+        scene = SceneFactory(room=room, is_active=True)
 
         self.assertFalse(mem_a.engaged)
 

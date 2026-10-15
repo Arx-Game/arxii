@@ -186,6 +186,7 @@ if TYPE_CHECKING:
     from world.roster.models import RosterTenure
     from world.scenes.boon_services import BoonAsk
     from world.scenes.place_models import Place
+    from world.worship.types import InvocationChoice, InvocationRequest
 
 
 def resolve_delivery(*, requested: str, template: ActionTemplate | None) -> str:
@@ -255,6 +256,35 @@ def _validate_technique_enhancement(
     ).exists():
         msg = f"Character does not know technique '{technique}'."
         raise ValidationError(msg)
+
+
+def _validate_invocation_choice(
+    *,
+    initiator_persona: Persona,
+    action_key: str,
+    action_template: ActionTemplate | None,
+    invoke: InvocationChoice | None,
+) -> InvocationRequest | None:
+    """Check a Call on favor choice on a scene action (#4333); None when absent.
+
+    Raises ``ValidationError`` with the player-facing reason: the action has no
+    check of its own to add the bonus to, or the character cannot invoke the
+    being now.
+    """
+    if invoke is None:
+        return None
+    from django.core.exceptions import ValidationError  # noqa: PLC0415
+
+    from world.scenes.favor_invocation import MSG_NOT_ON_THIS_ACTION  # noqa: PLC0415
+    from world.worship.exceptions import FavorInvocationRefused  # noqa: PLC0415
+    from world.worship.invocation_services import resolve_invocation_choice  # noqa: PLC0415
+
+    if action_template is None or action_key in CUSTOM_ACTION_RESOLVERS:
+        raise ValidationError(MSG_NOT_ON_THIS_ACTION)
+    try:
+        return resolve_invocation_choice(initiator_persona.character_sheet, invoke)
+    except FavorInvocationRefused as exc:
+        raise ValidationError(exc.user_message) from exc
 
 
 def _action_template_for_key(action_key: str) -> ActionTemplate | None:
@@ -417,6 +447,7 @@ def create_action_request(  # noqa: PLR0913 - the one dispatch orchestrator
     target_pending_alteration: PendingAlteration | None = None,
     thread_used: Thread | None = None,
     boon: BoonAsk | None = None,
+    invoke: InvocationChoice | None = None,
 ) -> SceneActionRequest:
     """Create a pending action request for consent.
 
@@ -470,6 +501,11 @@ def create_action_request(  # noqa: PLR0913 - the one dispatch orchestrator
             up front (ask-time eligibility, dial 1) and persisted as the request's
             ``Boon`` row BEFORE NPC auto-resolve fires, so the payload exists for
             the pending-consent UI and the NPC-side cost band alike.
+        invoke: Optional Call on favor choice (#4333). Checked now (favor above
+            zero, a use left this week) and persisted on the request; the
+            invocation rolls when the action's check does, and its bonus joins
+            that check's contributions. Refused for an action with no check of
+            its own (a standalone cast, a custom-resolved action).
 
     Returns:
         The created SceneActionRequest. Status is PENDING when the primary
@@ -509,6 +545,12 @@ def create_action_request(  # noqa: PLR0913 - the one dispatch orchestrator
     snapshot_kwargs: dict[str, object] = {}
     if ritual_id is not None:
         snapshot_kwargs = _snapshot_kwargs_from_ritual(ritual_id)
+    invocation = _validate_invocation_choice(
+        initiator_persona=initiator_persona,
+        action_key=action_key,
+        action_template=action_template,
+        invoke=invoke,
+    )
 
     request = SceneActionRequest.objects.create(
         scene=scene,
@@ -527,6 +569,8 @@ def create_action_request(  # noqa: PLR0913 - the one dispatch orchestrator
         target_condition_instance=target_condition_instance,
         target_pending_alteration=target_pending_alteration,
         thread_used=thread_used,
+        invoke_being=invocation.being if invocation is not None else None,
+        invoke_line=invocation.player_line if invocation is not None else "",
         **snapshot_kwargs,
     )
     if delivery_receivers:
@@ -891,7 +935,7 @@ def _scene_is_high_stakes(action_request: SceneActionRequest) -> bool:
     scene = action_request.scene
     if scene is None:
         return False
-    room = scene.location
+    room = scene.room
     has_active_combat = CombatEncounter.objects.filter(
         scene=scene,
         status__in=[
@@ -1033,6 +1077,7 @@ def _resolve_action_against_persona(
         apply_social_disposition_delta,
     )
     from world.relationships.services import relationship_gated_contributions  # noqa: PLC0415
+    from world.scenes.favor_invocation import declared_invocation_contribution  # noqa: PLC0415
 
     if difficulty_override is not None:
         difficulty = difficulty_override
@@ -1079,6 +1124,9 @@ def _resolve_action_against_persona(
         action_request.initiator_persona.character_sheet,
         ActionCategory.SOCIAL,
     )
+    # #4333: a declared Call on favor rolls first (once per request) and its
+    # labelled bonus joins this check.
+    favor = declared_invocation_contribution(action_request)
     if action_request.technique is not None:
         # Fold condition / rollmod / scene / equipment / fashion modifiers into
         # the technique branch's check roll through the shared seam — the plain
@@ -1099,7 +1147,9 @@ def _resolve_action_against_persona(
             action_key=action_request.action_key,
             difficulty=difficulty,
             context=context,
-            effort_modifier=fatigue_penalty + technique_check_modifiers,
+            effort_modifier=(
+                fatigue_penalty + technique_check_modifiers + (favor.value if favor else 0)
+            ),
             effort_level=effort_level,
             strain_commitment=action_request.strain_commitment,
             fury_commitment=action_request.fury_commitment,
@@ -1137,6 +1187,8 @@ def _resolve_action_against_persona(
             )
 
             gated = [*gated, *settle_contributions(target_character)]
+        if favor is not None:
+            gated = [*gated, favor]
         breakdown = collect_check_modifiers(
             action_request.initiator_persona.character_sheet,
             action_template.check_type,

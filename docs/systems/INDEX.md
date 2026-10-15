@@ -3234,7 +3234,14 @@ GM at a given level may author (#2000, ADR-0097).
   `GMDashboardView` (`GET /api/gm/dashboard/`) payload gained `pending_applications`
   (count from `gm_application_queue(gm)`) and `open_invites` (this GM's unclaimed,
   unexpired `GMRosterInvite` rows) as the tile source for those same recruitment
-  surfaces (#3268).
+  surfaces (#3268). **`GMAttentionView` (`GET /api/gm/attention/`, `IsGM`, #4188)**
+  returns `gm_attention(account)` (`world/gm/services.py`, a `GMAttention` dataclass
+  in `world/gm/types.py`): counts of pending story offers, received pending crossover
+  invites, the pending sheet-update review pool (`table_update_requests_for`, the same
+  `table_update_review_pool_q` filter `TableUpdateRequestViewSet` ORs with the player's
+  own rows), the Lead GM queue's claims to approve and assigned session requests, the
+  GM's own open assistant claims, and their `total`. One payload feeds the header's
+  GMing badge and the Dashboard's "Waiting on you" strip (ADR-4188).
 - **GM onboarding lives on the Hall (#3478):** the Hall's GM slot
   (`frontend/src/home/hall/GMSlot.tsx`) is the sole surface for both
   `mine`/`character` endpoints above — `CreateGMCharacterDialog` mints via
@@ -9059,6 +9066,19 @@ lightly-structured freeform RP. Full doc: `docs/systems/worship.md`; model decis
   (OneToOne sheet; `public_being` + `secret_being` + minted `secret` FK; `public_is_sincere`
   BooleanField default True, #2361 — the heart-vs-lip-service inward truth, private,
   owner/staff-only in the sheet identity serializer).
+- **Favor with beings** (#4333 slice 1, ADR-4333-A): `DevotionConfig` (singleton: default
+  `invocation_check_type`, `base_difficulty`, favor ease thresholds/points,
+  `invocations_per_week`), `FavorOutcomeAward` (kind INVOCATION/CLOSING × `CheckOutcome` →
+  amount), `FavorInvocation` (the weekly counter and log; `player_line`; scene / mission /
+  scene-action links), `WorshippedBeing.invocation_check_type`, `ChosenFavorConfig.
+  earn_bonus_percent`/`invocation_ease_points`, `ModifierTarget.target_being` with the
+  `favor_invocation`/`favor_earning` categories. Services: `favor_services.
+  ensure_being_modifier_targets`, `favor_modifier_total`, `earning_rate` (scales every
+  `bump_devotion`, which now returns `DevotionBump(standing, credited)`);
+  `invocation_services.invocation_difficulty`, `invocation_refusal`, `invoke_favor`
+  (returns the FAVOR `ModifierContribution`), `invocation_options`. Wired into mission option
+  checks, scene self-checks and scene action requests; `GET /api/worship/beings/
+  invocation-options/`; telnet `invoke` and `/invoke <being>[=<line>]`.
 - **Worship services**: `grant_worship`, `bump_devotion` (+ God's Favorite
   Princess/Prince/Chosen achievement on top-favor reach/tie), `gods_favorite_achievement_for`;
   `mint_worship_secret` (`worship/secrets.py`); `convert_public_worship(sheet, new_being, *,

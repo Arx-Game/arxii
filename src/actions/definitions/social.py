@@ -471,7 +471,7 @@ class EntranceAction(_SocialTemplateAction):
         from world.scenes.models import Persona, Scene  # noqa: PLC0415
         from world.scenes.services import persona_for_character  # noqa: PLC0415
 
-        scene = Scene.objects.filter(location=actor.location, is_active=True).first()
+        scene = Scene.objects.filter(location_id=actor.db_location_id, is_active=True).first()
         if scene is None:
             return _ActionResult(success=False, message="There is no active scene here.")
 

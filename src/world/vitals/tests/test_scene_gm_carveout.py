@@ -34,7 +34,7 @@ class SceneGMVitalsCarveoutTests(APITestCase):
         self.gm_account = AccountFactory()
         GMProfileFactory(account=self.gm_account, level=GMLevel.JUNIOR)
 
-        self.scene = SceneFactory(location=self.room, is_active=True)
+        self.scene = SceneFactory(room=self.room, is_active=True)
         SceneParticipationFactory(scene=self.scene, account=self.gm_account, is_gm=True)
 
         self.url = f"/api/vitals/{self.target_sheet.pk}/"
@@ -99,7 +99,7 @@ class SceneGMVitalsCarveoutTests(APITestCase):
 
         self.scene.delete()
         battle = BattleFactory()
-        battle.scene.location = self.room
+        battle.scene.room = self.room
         battle.scene.save(update_fields=["location"])
         SceneParticipationFactory(scene=battle.scene, account=self.gm_account, is_gm=True)
         response = self.client.get(self.url)

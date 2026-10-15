@@ -91,7 +91,7 @@ class CastTechniqueAction(Action):
         # standing in a staged/active battle should log against the battle's own
         # scene, not silently miss it and fall through to some other room scene (#2010
         # review).
-        scene = Scene.objects.filter(location=actor.location, is_active=True).first()
+        scene = Scene.objects.filter(location_id=actor.db_location_id, is_active=True).first()
         if scene is None:
             return ActionResult(success=False, message="There is no active scene here.")
 

@@ -26,7 +26,7 @@ class PositionCoverDamageReductionTest(TestCase):
         self.pos = create_position(self.room, "cover_pos")
         self.damage_type = ensure_radiant_damage_type()
 
-        self.scene = SceneFactory(location=self.room)
+        self.scene = SceneFactory(room=self.room)
         self.sheet = CharacterSheetFactory()
         self.character = self.sheet.character
         self.character.location = self.room

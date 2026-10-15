@@ -1,10 +1,13 @@
 """API views for the worship foundation (#2355)."""
 
 from django_filters.rest_framework import DjangoFilterBackend
+from drf_spectacular.utils import OpenApiParameter, extend_schema
 from rest_framework import mixins, status, viewsets
+from rest_framework.decorators import action
 from rest_framework.exceptions import PermissionDenied, ValidationError
 from rest_framework.filters import SearchFilter
 from rest_framework.permissions import IsAdminUser, IsAuthenticated
+from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.viewsets import ReadOnlyModelViewSet
 
@@ -14,6 +17,7 @@ from world.worship.exceptions import VisionError
 from world.worship.models import Miracle, Prayer, Vision, WorshippedBeing, WorshipRite
 from world.worship.prayer_services import send_vision
 from world.worship.serializers import (
+    InvocationOptionsSerializer,
     MiracleSerializer,
     PrayerSerializer,
     VisionCreateSerializer,
@@ -21,6 +25,21 @@ from world.worship.serializers import (
     WorshippedBeingRefSerializer,
     WorshipRiteSerializer,
 )
+
+
+def _entry_id_param(request: Request) -> int | None:
+    """The tab's ``entry_id`` query parameter (#3479), or None when absent.
+
+    The same identity parameter the mission journal reads; not a filter, so it
+    is read here rather than through a FilterSet.
+    """
+    raw = request.query_params.get("entry_id")
+    if raw in (None, ""):
+        return None
+    try:
+        return int(raw)
+    except (TypeError, ValueError) as exc:
+        raise ValidationError({"entry_id": "A valid integer is required."}) from exc
 
 
 class WorshippedBeingViewSet(ReadOnlyModelViewSet):
@@ -37,6 +56,41 @@ class WorshippedBeingViewSet(ReadOnlyModelViewSet):
     filterset_fields = ["tradition"]
     search_fields = ["name"]
     queryset = WorshippedBeing.objects.filter(is_active=True).select_related("tradition")
+
+    @extend_schema(
+        parameters=[
+            OpenApiParameter(
+                "entry_id",
+                int,
+                required=False,
+                description="The roster entry this tab acts as (#3479).",
+            )
+        ],
+        responses=InvocationOptionsSerializer,
+    )
+    @action(detail=False, methods=["get"], url_path="invocation-options")
+    def invocation_options(self, request: Request) -> Response:
+        """The Call on favor picker for the acting character (#4333).
+
+        Every being the character holds a standing with: favor, whether it can
+        be invoked now (and why not), uses left this week and how hard the
+        invocation check is with each ease; plus the bonus each outcome gives.
+        """
+        from world.roster.services.selection import character_for_request  # noqa: PLC0415
+        from world.worship.invocation_services import (  # noqa: PLC0415
+            invocation_bonus_table,
+            invocation_options,
+        )
+        from world.worship.types import InvocationPicker  # noqa: PLC0415
+
+        character = character_for_request(request, entry_id=_entry_id_param(request))
+        sheet = character.character_sheet if character is not None else None
+        if sheet is None:
+            raise ValidationError({"detail": "Select a character first."})
+        picker = InvocationPicker(
+            beings=invocation_options(sheet), bonuses=invocation_bonus_table()
+        )
+        return Response(InvocationOptionsSerializer(picker).data)
 
 
 class MiracleViewSet(ReadOnlyModelViewSet):

@@ -129,7 +129,7 @@ def _fire_enrollment_antiphon(inductee: CharacterSheet, scene: Scene | None) -> 
 
     key = _DURANCE_ANTIPHON_SPONSORED if sponsored else _DURANCE_ANTIPHON_UNSponsored
     text = f"[{key}]"
-    scene.location.msg_contents(text)
+    scene.room.msg_contents(text)
 
 
 def register_durance_via_session(*, session: RitualSession) -> dict:

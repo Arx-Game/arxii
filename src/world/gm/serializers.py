@@ -259,6 +259,19 @@ class CategoryFeedbackSerializer(serializers.Serializer):
     rating_count = serializers.IntegerField()
 
 
+class GMAttentionSerializer(serializers.Serializer):
+    """Read-only view of ``world.gm.types.GMAttention`` (#4188): everything
+    waiting on the requesting GM, as counts, plus their ``total``."""
+
+    story_offers = serializers.IntegerField()
+    crossover_invites = serializers.IntegerField()
+    sheet_update_requests = serializers.IntegerField()
+    claims_to_approve = serializers.IntegerField()
+    my_claims = serializers.IntegerField()
+    session_requests = serializers.IntegerField()
+    total = serializers.IntegerField()
+
+
 class GMEvidenceSummarySerializer(serializers.Serializer):
     """Read-only view of ``world.gm.types.GMEvidenceSummary`` for staff review (#2000)."""
 

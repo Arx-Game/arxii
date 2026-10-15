@@ -212,7 +212,7 @@ class RiteGrowsTheSiteTests(ConsecrationTestBase):
         cls.tenure = grant_test_tenure(cls.sheet)
         cls.sheet.character.db_location = cls.room
         cls.sheet.character.save(update_fields=["db_location"])
-        cls.scene = SceneFactory(location=cls.room, is_active=True)
+        cls.scene = SceneFactory(room=cls.room, is_active=True)
         SceneParticipationFactory(scene=cls.scene, account=cls.tenure.player_data.account)
         ActionPointPoolFactory(character=cls.sheet, current=20, maximum=20)
         cls.rite = WorshipRiteFactory(

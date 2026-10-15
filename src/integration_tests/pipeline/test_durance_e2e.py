@@ -98,7 +98,7 @@ class DuranceE2ESingleInducteeTests(TestCase):
 
         # Active scene at the shared location so the testament POSE is posted.
         self.scene = SceneFactory(
-            location=self.inductee_sheet.character.location,
+            room=self.inductee_sheet.character.location,
             is_active=True,
         )
 
@@ -227,7 +227,7 @@ class DuranceE2EMultiInducteeTests(TestCase):
         self.inductee_b.character.location = shared_room
         self.inductee_b.character.save()
 
-        self.scene = SceneFactory(location=shared_room, is_active=True)
+        self.scene = SceneFactory(room=shared_room, is_active=True)
 
         self.ritual = RitualOfTheDuranceFactory()
 

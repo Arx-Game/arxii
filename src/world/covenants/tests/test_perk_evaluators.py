@@ -82,7 +82,7 @@ class AtRangeInMeleeEvaluatorTests(TestCase):
         self.pos_b = create_position(self.room, "pos_b")
         connect_positions(self.pos_a, self.pos_b, is_passable=True)
 
-        self.scene = SceneFactory(location=self.room)
+        self.scene = SceneFactory(room=self.room)
         self.holder_sheet = CharacterSheetFactory()
         self.holder_sheet.character.location = self.room
         self.holder_sheet.character.save()
@@ -440,14 +440,14 @@ class DuringNegotiationEvaluatorTests(TestCase):
         )
 
     def test_true_when_active_scene_and_not_in_combat(self) -> None:
-        SceneFactory(location=self.room)
+        SceneFactory(room=self.room)
         self.assertTrue(evaluators.during_negotiation(self._ctx(None), NO_PARAMS))
 
     def test_false_when_no_active_scene(self) -> None:
         self.assertFalse(evaluators.during_negotiation(self._ctx(None), NO_PARAMS))
 
     def test_false_when_resolving_in_combat(self) -> None:
-        SceneFactory(location=self.room)
+        SceneFactory(room=self.room)
         participant = CombatParticipantFactory(character_sheet=self.subject_sheet)
         resolution = CombatRoundContext(participant)
         self.assertFalse(evaluators.during_negotiation(self._ctx(resolution), NO_PARAMS))
@@ -505,7 +505,7 @@ class ChampionDuelEvaluatorTests(TestCase):
 
     def setUp(self) -> None:
         self.room = create_object("typeclasses.rooms.Room", key="ChampionDuelRoom", nohome=True)
-        self.scene = SceneFactory(location=self.room)
+        self.scene = SceneFactory(room=self.room)
         self.sheet = CharacterSheetFactory()
 
     def _ctx(self, resolution) -> SituationContext:
@@ -535,7 +535,7 @@ class OnChosenGroundEvaluatorTests(TestCase):
 
     def setUp(self) -> None:
         self.room = create_object("typeclasses.rooms.Room", key="ChosenGroundRoom", nohome=True)
-        self.scene = SceneFactory(location=self.room)
+        self.scene = SceneFactory(room=self.room)
         self.sheet = CharacterSheetFactory()
 
     def _ctx(self, resolution) -> SituationContext:
@@ -565,7 +565,7 @@ class CombatOpenedFromParleyEvaluatorTests(TestCase):
 
     def setUp(self) -> None:
         self.room = create_object("typeclasses.rooms.Room", key="ParleyOriginRoom", nohome=True)
-        self.scene = SceneFactory(location=self.room)
+        self.scene = SceneFactory(room=self.room)
         self.sheet = CharacterSheetFactory()
 
     def _ctx(self, resolution) -> SituationContext:
@@ -598,7 +598,7 @@ class AmbushUnderwayEvaluatorTests(TestCase):
 
     def setUp(self) -> None:
         self.room = create_object("typeclasses.rooms.Room", key="AmbushRoom", nohome=True)
-        self.scene = SceneFactory(location=self.room)
+        self.scene = SceneFactory(room=self.room)
         self.sheet = CharacterSheetFactory()
 
     def _ctx(self, resolution) -> SituationContext:

@@ -167,7 +167,7 @@ class PointerKnownItemsForTargetTests(TestCase):
         room = RoomProfileFactory().objectdb
         self.asker_sheet.character.move_to(room, quiet=True)
         self.target.character_sheet.character.move_to(room, quiet=True)
-        SceneFactory(location=room)
+        SceneFactory(room=room)
 
     def test_empty_without_a_shared_scene(self) -> None:
         """The co-presence gate, not the pointer, is what's missing here — a valid

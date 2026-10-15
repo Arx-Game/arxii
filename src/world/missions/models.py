@@ -1981,6 +1981,24 @@ class MissionGroupBallot(SharedMemoryModel):
         related_name="+",
         help_text="Stage-2 vote for a surfaced option; null until the participant votes.",
     )
+    invoke_being = models.ForeignKey(
+        "arxii.WorshippedBeing",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="+",
+        help_text=(
+            "The being whose favor the participant calls on before their pick's check "
+            "(#4333). The invocation rolls when the node resolves, and only if this "
+            "participant's attempt rolls."
+        ),
+    )
+    invoke_line = models.CharField(
+        max_length=200,
+        blank=True,
+        default="",
+        help_text="The participant's optional one-line description of the invocation.",
+    )
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:

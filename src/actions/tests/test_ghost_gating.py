@@ -86,7 +86,7 @@ class GhostWindowPrerequisiteTests(TestCase):
     def test_dead_in_active_death_scene_passes(self) -> None:
         room = _make_room("Death Scene Room")
         self.character.location = room
-        scene = SceneFactory(location=room)
+        scene = SceneFactory(room=room)
         self._kill(days_ago=3, scene=scene)
         met, _ = GhostWindowPrerequisite().is_met(self.character)
         self.assertTrue(met)
@@ -94,7 +94,7 @@ class GhostWindowPrerequisiteTests(TestCase):
     def test_dead_after_scene_closed_and_day_passed_is_blocked(self) -> None:
         room = _make_room("Closed Scene Room")
         self.character.location = room
-        scene = SceneFactory(location=room, is_active=False, date_finished=timezone.now())
+        scene = SceneFactory(room=room, is_active=False, date_finished=timezone.now())
         self._kill(days_ago=3, scene=scene)
         met, reason = GhostWindowPrerequisite().is_met(self.character)
         self.assertFalse(met)

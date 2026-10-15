@@ -1412,7 +1412,7 @@ class VowSituationalPowerTermTests(TestCase):
         self.character.save()
         place_in_position(self.character, pos_a)
 
-        scene = SceneFactory(location=room)
+        scene = SceneFactory(room=room)
         encounter = CombatEncounter.objects.create(scene=scene, room=room)
         participant = CombatParticipantFactory(encounter=encounter, character_sheet=self.sheet)
 
@@ -1458,7 +1458,7 @@ class VowSituationalPowerTermTests(TestCase):
         self.character.save()
         place_in_position(self.character, pos_a)
 
-        scene = SceneFactory(location=room)
+        scene = SceneFactory(room=room)
         encounter = CombatEncounter.objects.create(scene=scene, room=room)
         participant = CombatParticipantFactory(encounter=encounter, character_sheet=self.sheet)
 
@@ -1496,7 +1496,7 @@ class VowSituationalPowerTermTests(TestCase):
         room = create_object("typeclasses.rooms.Room", key="VowPerkNegotiationRoom", nohome=True)
         self.character.location = room
         self.character.save()
-        SceneFactory(location=room)
+        SceneFactory(room=room)
 
         role = self._engage_role()
         perk = VowSituationalPerkFactory(
@@ -1648,7 +1648,7 @@ class VowSituationalPowerTermTests(TestCase):
         self.character.save()
         place_in_position(self.character, pos_a)
 
-        scene = SceneFactory(location=room)
+        scene = SceneFactory(room=room)
         encounter = CombatEncounter.objects.create(scene=scene, room=room)
         participant = CombatParticipantFactory(encounter=encounter, character_sheet=self.sheet)
 

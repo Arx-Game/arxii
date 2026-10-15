@@ -66,7 +66,7 @@ class AccountAttentionTests(TestCase):
         # actually sits in that room - pose attribution alone already covers
         # both, so the presence path adds a query but no sheets here.
         cls.room = create_object("typeclasses.rooms.Room", key="Attention Test Room", nohome=True)
-        cls.scene = SceneFactory(location=cls.room)
+        cls.scene = SceneFactory(room=cls.room)
         SceneParticipationFactory(scene=cls.scene, account=cls.account)
         InteractionFactory(scene=cls.scene, persona=cls.persona_one, mode=InteractionMode.POSE)
         InteractionFactory(scene=cls.scene, persona=cls.persona_two, mode=InteractionMode.POSE)

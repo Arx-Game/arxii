@@ -44,7 +44,7 @@ class PrecaptureConsentOfferHandler:
 
     def describe(self, offer: PrecaptureConsentRequest) -> str:
         count = precapture_candidates_for(offer).count()
-        room = offer.scene.location.db_key if offer.scene.location is not None else "somewhere"
+        room = offer.scene.room.db_key if offer.scene.location_id is not None else "somewhere"
         plural = "s" if count != 1 else ""
         return (
             f"a scene at {room} would like to fold in {count} of your recent unattached "

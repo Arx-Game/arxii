@@ -435,7 +435,7 @@ def _present_participant_sheets(scene: Scene) -> list[CharacterSheet]:
     the scene's location — an account's off-scene alts must not skew the
     activation's ``party_average_level``. Deduped, order-preserving.
     """
-    location = scene.location
+    location = scene.room
     if location is None:
         return []
     present_ids = {obj.pk for obj in location.contents}

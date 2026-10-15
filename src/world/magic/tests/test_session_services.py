@@ -54,7 +54,7 @@ class DraftSessionTests(TestCase):
             db_typeclass_path="typeclasses.rooms.Room",
         )
         in_scene_initiator.character.location = room
-        active_scene = SceneFactory(location=room, is_active=True)
+        active_scene = SceneFactory(room=room, is_active=True)
 
         in_scene_session = draft_session(
             ritual=ritual,

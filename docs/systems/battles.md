@@ -1285,7 +1285,7 @@ GM's live scene in one press instead of the GM working through
 `create_battle`/`stage_battle_map`/`spawn_battle_units`/
 `enlist_battle_participant` by hand. It reuses this layer's own services
 directly rather than re-deriving them: `stage_battle` (blueprint clone +
-`location=scene.location`), `spawn_units_from_template` (per authored unit
+`location=scene.room`), `spawn_units_from_template` (per authored unit
 line, resolving `place_name` against the staged blueprint's places - an
 unknown name logs and spawns unplaced), and `world.battles.services
 .enlist_participant` (the running scene's present, non-GM participants, onto

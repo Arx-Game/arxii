@@ -49,7 +49,7 @@ class CmdIntimidateTests(TestCase):
         self.initiator_persona = self.initiator_sheet.primary_persona
         self.target_persona = self.target_sheet.primary_persona
         # The active scene is resolved off the caller's location.
-        self.scene = SceneFactory(is_active=True, location=self.room)
+        self.scene = SceneFactory(is_active=True, room=self.room)
         # Bust the per-location active-scene cache (SharedMemory identity map).
         if hasattr(self.room, "_active_scene_cache"):
             del self.room._active_scene_cache
@@ -137,7 +137,7 @@ class CmdSeduceTests(TestCase):
         self.target_sheet = CharacterSheetFactory(character=self.target_char)
         self.initiator_persona = self.initiator_sheet.primary_persona
         self.target_persona = self.target_sheet.primary_persona
-        self.scene = SceneFactory(is_active=True, location=self.room)
+        self.scene = SceneFactory(is_active=True, room=self.room)
         if hasattr(self.room, "_active_scene_cache"):
             del self.room._active_scene_cache
 
@@ -196,7 +196,7 @@ class RespondCommandTests(TestCase):
         self.target_sheet = CharacterSheetFactory(character=self.target_char)
         self.initiator_persona = self.initiator_sheet.primary_persona
         self.target_persona = self.target_sheet.primary_persona
-        self.scene = SceneFactory(is_active=True, location=self.room)
+        self.scene = SceneFactory(is_active=True, room=self.room)
 
     def _make_pending(self) -> SceneActionRequest:
         return SceneActionRequestFactory(

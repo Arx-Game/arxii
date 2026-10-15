@@ -769,6 +769,7 @@ class MissionJournalViewSet(viewsets.ViewSet):
                 character,
                 option_id=body.validated_data["option_id"],
                 approach_id=body.validated_data.get("approach_id"),
+                invoke=body.invoke_choice(),
             )
         except BeatActionError as exc:
             # Typed exception with a user-safe message — never str() of
@@ -924,6 +925,7 @@ class MissionJournalViewSet(viewsets.ViewSet):
                 character,
                 option_id=body.validated_data["option_id"],
                 approach_id=body.validated_data.get("approach_id"),
+                invoke=body.invoke_choice(),
             )
         except BeatActionError as exc:
             raise ValidationError(exc.user_message) from exc

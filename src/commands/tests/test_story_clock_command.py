@@ -46,7 +46,7 @@ class StoryClockCommandTests(TestCase):
             end_date=None,
         )
         self.beat = BeatFactory(clock_size=2)
-        self.scene = SceneFactory(location=self.room, is_active=True, running_beat=self.beat)
+        self.scene = SceneFactory(room=self.room, is_active=True, running_beat=self.beat)
         SceneParticipationFactory(scene=self.scene, account=self.gm_account, is_gm=True)
         start_scene_clock(self.scene, self.beat)
 

@@ -28,6 +28,7 @@ from commands.command import ArxCommand
 from commands.exceptions import CommandError
 from commands.offer_registry import find_handler, format_pending_listing, get_all_pending
 from commands.pull_parsing import PullParsingMixin
+from commands.utils.invocation import invocation_choice_for, split_invocation
 from world.scenes.action_constants import ActionRequestStatus, ConsentDecision
 from world.scenes.action_models import SceneActionRequest
 from world.scenes.action_services import create_action_request, respond_to_action_request
@@ -54,8 +55,12 @@ class ConsentRequestCommand(PullParsingMixin, ArxCommand):
     ``beseech=`` token is extracted but discarded — it is a combat-only mechanic
     (#1718) and has no effect on social actions.
 
+    A trailing ``/invoke <being>[=<line>]`` calls on that being's favor before
+    the action's check (#4333); the invocation rolls when the target accepts.
+
     Usage:
         <key> <character> [pull=<thread> resonance=<name> [tier=<1-3>]]
+            [/invoke <being>[=<line>]]
     """
 
     action_key: ClassVar[str] = ""
@@ -70,6 +75,9 @@ class ConsentRequestCommand(PullParsingMixin, ArxCommand):
         # pull= / resonance= / tier= / beseech= tokens don't contaminate the
         # target-name search. beseech= is discarded (combat-only mechanic).
         raw = (self.args or "").strip()
+        # #4333: a trailing '/invoke <being>[=<line>]' calls on a being's favor.
+        raw, being_name, invoke_line = split_invocation(raw)
+        invoke = invocation_choice_for(self.caller, being_name, invoke_line)
         raw, pull_thread_str, resonance_str, pull_tier, _beseech = self._extract_pull_keywords(raw)
         # Re-set self.args so _resolve_target_persona searches the cleaned remainder.
         self.args = raw
@@ -84,6 +92,7 @@ class ConsentRequestCommand(PullParsingMixin, ArxCommand):
                 target_persona=target_persona,
                 action_key=self.action_key,
                 pull=cast_pull,
+                invoke=invoke,
             )
         except DjangoValidationError as err:
             msg = "; ".join(err.messages)

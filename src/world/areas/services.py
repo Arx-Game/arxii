@@ -264,10 +264,7 @@ def area_for_scene(scene: Scene | None) -> Area | None:
     package-init time), so this module — not ``world.magic`` — is the safe home
     for the shared helper.
     """
-    location = scene.location if scene is not None else None
-    if location is None:
-        return None
-    profile = location.room_profile_or_none
+    profile = scene.location if scene is not None else None
     return profile.area if profile is not None else None
 
 

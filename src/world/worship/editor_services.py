@@ -136,6 +136,7 @@ class BeingPage:
 def save_being(page: BeingPage, *, being: WorshippedBeing | None = None) -> WorshippedBeing:
     """Write one edit page. Live at once; there is no draft gate pre-launch."""
     from world.codex.services import grant_organization_entry_to_members  # noqa: PLC0415
+    from world.worship.favor_services import ensure_being_modifier_targets  # noqa: PLC0415
 
     name = page.name.strip()
     taken = WorshippedBeing.objects.filter(name__iexact=name)
@@ -174,6 +175,9 @@ def save_being(page: BeingPage, *, being: WorshippedBeing | None = None) -> Wors
         _replace_feast_days(being, page.feast_days)
         _replace_tarot_cards(being, page.tarot_cards)
         _replace_relationships(being, page.relationships)
+        # #4333: every being has a favor invocation and a favor earning target, so
+        # modifier sources can be authored against it from the start.
+        ensure_being_modifier_targets(being)
     return being
 
 

@@ -274,7 +274,7 @@ def _resolve_spread_tale(action_request, result) -> None:
     if success_level <= 0:
         return
 
-    room = action_request.scene.location if action_request.scene else None
+    room = action_request.scene.room if action_request.scene else None
     band = room_activity_band(room)
     value = compute_spread_value(
         base_value=deed.base_value, success_level=success_level, multiplier=band.multiplier
@@ -304,7 +304,7 @@ def _resolve_spread_tale(action_request, result) -> None:
             deed=deed,
             personas=scene_witness_personas(action_request.scene),
             source=DeedKnowledgeSource.HEARD_TOLD,
-            room=action_request.scene.location,
+            room=action_request.scene.room,
         )
     _open_spread_assist_window(action_request, deed, value)
     tier_changed = apply_spread_fame_bump(

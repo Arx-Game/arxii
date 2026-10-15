@@ -89,3 +89,31 @@ class NarratableEvent:
     technique: Technique | None = None
     stake_outcome: StakeOutcome | None = None
     standoff_group: StandoffGroup | None = None
+
+
+@dataclass(frozen=True)
+class GMAttention:
+    """Everything waiting on one GM, as counts (#4188).
+
+    One answer for the header's GMing badge and the Dashboard's "Waiting on
+    you" strip, so the two can never disagree (ADR-4188). Each count is scoped
+    to the account that asked; ``total`` is their sum.
+    """
+
+    story_offers: int
+    crossover_invites: int
+    sheet_update_requests: int
+    claims_to_approve: int
+    my_claims: int
+    session_requests: int
+
+    @property
+    def total(self) -> int:
+        return (
+            self.story_offers
+            + self.crossover_invites
+            + self.sheet_update_requests
+            + self.claims_to_approve
+            + self.my_claims
+            + self.session_requests
+        )

@@ -77,7 +77,7 @@ def _maybe_open_witness_window(
     from evennia_extensions.models import room_is_publicly_listed  # noqa: PLC0415
     from world.justice.models import DeedCrimeTag  # noqa: PLC0415
 
-    if not room_is_publicly_listed(scene.location):
+    if not room_is_publicly_listed(scene.room):
         return
     if not DeedCrimeTag.objects.filter(deed=entry).exists():
         return
@@ -178,7 +178,7 @@ def create_solo_deed(  # noqa: PLR0913
             deed=entry,
             personas=witnesses,
             source=DeedKnowledgeSource.WITNESSED,
-            room=scene.location,
+            room=scene.room,
         )
         # #1464 — the reach fork: contained Secret vs society awareness.
         from world.societies.scandal import route_deed_reach  # noqa: PLC0415
@@ -316,7 +316,7 @@ def create_legend_event(  # noqa: PLR0913, C901
                 deed=e,
                 personas=witnesses,
                 source=DeedKnowledgeSource.WITNESSED,
-                room=scene.location,
+                room=scene.room,
             )
             # #1464 — each participant routes (and hushes) their own part.
             route_deed_reach(

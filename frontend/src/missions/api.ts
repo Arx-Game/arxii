@@ -472,7 +472,12 @@ export async function getBeat(
 
 export async function resolveBeat(
   instanceId: number,
-  body: { option_id: number; approach_id?: number | null },
+  body: {
+    option_id: number;
+    approach_id?: number | null;
+    invoke_being_id?: number | null;
+    invoke_line?: string;
+  },
   entryId?: number | null
 ): Promise<ResolvedBeat> {
   const res = await apiFetch(`${BASE_URL}/journal/${instanceId}/resolve/${entryIdQuery(entryId)}`, {
@@ -555,7 +560,12 @@ export async function getGroupBeat(
 
 export async function submitGroupPick(
   instanceId: number,
-  body: { option_id: number; approach_id?: number | null },
+  body: {
+    option_id: number;
+    approach_id?: number | null;
+    invoke_being_id?: number | null;
+    invoke_line?: string;
+  },
   entryId?: number | null
 ): Promise<GroupBeatResult> {
   const res = await apiFetch(

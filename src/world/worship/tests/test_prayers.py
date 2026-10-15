@@ -95,6 +95,28 @@ class HolySitePrayerTests(PrayerTestBase):
         self.assertEqual(standing.favor, PRAYER_SITE_DEVOTION_AMOUNT)
         self.assertEqual(Prayer.objects.filter(devotion_granted__gt=0).count(), 1)
 
+    def test_a_chosen_records_the_credited_devotion(self) -> None:
+        """#4333: the Chosen earn at 200%; the prayer records what landed."""
+        from django.utils import timezone
+
+        from world.worship.factories import DevotionStandingFactory
+        from world.worship.models import PatronageValence
+
+        ShrineDetailsFactory(feature_instance__room_profile=self.profile, being=self.being)
+        DevotionStandingFactory(
+            character_sheet=self.sheet,
+            being=self.being,
+            valence=PatronageValence.DEVOTIONAL,
+            established_at=timezone.now(),
+        )
+
+        outcome = pray(self.sheet, self.being, "Keep this house.")
+
+        self.assertEqual(outcome.devotion_granted, 2 * PRAYER_SITE_DEVOTION_AMOUNT)
+        self.assertEqual(Prayer.objects.get().devotion_granted, 2 * PRAYER_SITE_DEVOTION_AMOUNT)
+        standing = DevotionStanding.objects.get(character_sheet=self.sheet, being=self.being)
+        self.assertEqual(standing.favor, 2 * PRAYER_SITE_DEVOTION_AMOUNT)
+
     def test_another_beings_shrine_pays_nothing(self) -> None:
         ShrineDetailsFactory(feature_instance__room_profile=self.profile, being=self.other_being)
 

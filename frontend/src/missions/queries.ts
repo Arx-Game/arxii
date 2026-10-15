@@ -414,14 +414,20 @@ export function useResolveBeat() {
       instanceId,
       option_id,
       approach_id,
+      invoke_being_id,
+      invoke_line,
     }: {
       instanceId: number;
       option_id: number;
       approach_id?: number | null;
-    }) => resolveBeat(instanceId, { option_id, approach_id }, entryId),
+      invoke_being_id?: number | null;
+      invoke_line?: string;
+    }) =>
+      resolveBeat(instanceId, { option_id, approach_id, invoke_being_id, invoke_line }, entryId),
     onSuccess: () => {
-      // Position, deeds, status, and liveness all changed.
+      // Position, deeds, status, and liveness all changed; an invocation spent a use.
       qc.invalidateQueries({ queryKey: missionKeys.journal() }).catch(() => {});
+      qc.invalidateQueries({ queryKey: ['worship', 'invocation-options'] }).catch(() => {});
       qc.invalidateQueries({ queryKey: [...missionKeys.all, 'beat'] }).catch(() => {});
     },
   });
@@ -503,11 +509,20 @@ export function useSubmitGroupPick() {
       instanceId,
       option_id,
       approach_id,
+      invoke_being_id,
+      invoke_line,
     }: {
       instanceId: number;
       option_id: number;
       approach_id?: number | null;
-    }) => submitGroupPick(instanceId, { option_id, approach_id }, entryId),
+      invoke_being_id?: number | null;
+      invoke_line?: string;
+    }) =>
+      submitGroupPick(
+        instanceId,
+        { option_id, approach_id, invoke_being_id, invoke_line },
+        entryId
+      ),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: [...missionKeys.all, 'group-beat'] }).catch(() => {});
       qc.invalidateQueries({ queryKey: missionKeys.journal() }).catch(() => {});

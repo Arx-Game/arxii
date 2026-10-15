@@ -8,6 +8,10 @@ _Avoid_: modifier group, modifier kind
 A single entry in the unified registry of everything that can be modified — one row per stat, capability, check type, damage resistance, resonance, or goal domain. Replaces the former separate Affinity/Resonance/GoalDomain models; optional FKs link it to the concrete trait, capability, check type, or damage type it represents.
 _Avoid_: modifiable, affinity/resonance (as separate models), attribute
 
+**Favor categories** (`favor_invocation`, `favor_earning`, #4333):
+The two modifier categories that carry favor with a worshipped being. A `ModifierTarget` in them names its being through `target_being` (a plain FK; one target per being per category); null there means the target applies to any being. `favor_invocation` values are difficulty points eased on an invocation check, `favor_earning` values are percentage points added to the earning rate. Read only by `world.worship.favor_services.favor_modifier_total`; created by `ensure_being_modifier_targets`.
+_Avoid_: a being-specific modifier model, "blessing" as a category name
+
 **ModifierSource**:
 The provenance record for a character's modifier — where it came from (e.g. a distinction effect template plus the character-distinction instance). It answers WHICH target a modifier grants and its base value, and drives cascade cleanup when the source is removed.
 _Avoid_: origin, provider, grantor

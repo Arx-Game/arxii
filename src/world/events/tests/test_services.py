@@ -288,7 +288,7 @@ class CompleteEventExpiresGMPromptsTest(TestCase):
         prompt.refresh_from_db()
         self.assertEqual(prompt.status, GMPromptStatus.DISMISSED)
         push.assert_called_once()
-        self.assertEqual(push.call_args.kwargs.get("location"), scene.location)
+        self.assertEqual(push.call_args.kwargs.get("location"), scene.room)
         self.assertTrue(Interaction.objects.filter(content="a wonder occurs", scene=scene).exists())
 
 

@@ -11,7 +11,7 @@ from django.db import migrations
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("arxii", "0222_drop_sheet_marital_status"),
+        ("arxii", "0225_scene_location_is_a_roomprofile"),
     ]
 
     operations = [

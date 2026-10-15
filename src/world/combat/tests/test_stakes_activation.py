@@ -132,7 +132,7 @@ class CastSeedStakesActivationTests(TestCase):
                 base_max_health=50,
             )
         room = create_object("typeclasses.rooms.Room", key="Cast Room", nohome=True)
-        scene = SceneFactory(location=room)
+        scene = SceneFactory(room=room)
         beat = _staked_beat_for_scene(scene)
 
         seed_or_feed_encounter_from_cast(

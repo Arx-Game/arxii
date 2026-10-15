@@ -17,6 +17,7 @@ import { Badge } from './ui/badge';
 import { navigationMenuTriggerStyle } from '@/components/ui/navigation-menu-trigger-style';
 import { useAppSelector } from '@/store/hooks';
 import { useOpenSubmissionCount } from '@/staff/queries';
+import { useGMAttention } from '@/gm/queries';
 import { useMyRosterEntriesQuery } from '@/roster/queries';
 
 /** How often a tab without a socket re-reads the server's presence (#4321). */
@@ -25,16 +26,60 @@ import { UnreadNarrativeBadge } from '@/narrative/components/UnreadNarrativeBadg
 import { UnreadMailBadge } from '@/mail/components/UnreadMailBadge';
 import { useRitualSessionInbox } from '@/rituals/queries';
 
+/**
+ * Who sees a row (#4188): nothing for everyone, `auth` for any account, `gm`
+ * for an account holding a GMProfile (assistant GMs hold one too, so this is
+ * the whole GM gate), `staff` for `is_staff`.
+ */
+type NavRequirement = 'auth' | 'gm' | 'staff';
+
 interface NavLink {
   to: string;
   label: string;
-  authOnly?: boolean;
+  requires?: NavRequirement;
+  /** Rows sharing a section render under its label, after the unsectioned rows. */
+  section?: string;
 }
 
 interface NavDropdown {
   type: 'dropdown';
   label: string;
   children: NavLink[];
+  /** Which count the trigger's badge shows, when the group carries one. */
+  badge?: 'gm-attention';
+}
+
+interface Viewer {
+  account: boolean;
+  isGM: boolean;
+  isStaff: boolean;
+}
+
+function canSee(link: NavLink, viewer: Viewer): boolean {
+  switch (link.requires) {
+    case undefined:
+      return true;
+    case 'auth':
+      return viewer.account;
+    case 'gm':
+      return viewer.isGM;
+    case 'staff':
+      return viewer.isStaff;
+  }
+}
+
+/** The visible rows, unsectioned first, then each section's rows in first-seen order. */
+function sectioned(links: NavLink[]): { section: string | undefined; rows: NavLink[] }[] {
+  const groups = new Map<string | undefined, NavLink[]>();
+  groups.set(undefined, []);
+  for (const link of links) {
+    const rows = groups.get(link.section);
+    if (rows) rows.push(link);
+    else groups.set(link.section, [link]);
+  }
+  return [...groups.entries()]
+    .filter(([, rows]) => rows.length > 0)
+    .map(([section, rows]) => ({ section, rows }));
 }
 
 /** Dropdown groups for secondary navigation links. */
@@ -54,15 +99,34 @@ const dropdownGroups: NavDropdown[] = [
     children: [
       { to: '/scenes', label: 'Scenes' },
       { to: '/events', label: 'Events' },
-      { to: '/stories/my-active', label: 'My Stories', authOnly: true },
-      { to: '/books', label: 'Books', authOnly: true },
+      { to: '/stories/my-active', label: 'My Stories', requires: 'auth' },
+      { to: '/books', label: 'Books', requires: 'auth' },
+    ],
+  },
+  // #4188: story design and tracking. What waits on a GM lives on the
+  // Dashboard's "Waiting on you" strip, not here (ADR-4188); the trigger
+  // carries one count of all of it.
+  {
+    type: 'dropdown',
+    label: 'GMing',
+    badge: 'gm-attention',
+    children: [
+      { to: '/gm/dashboard', label: 'Dashboard', requires: 'gm' },
+      { to: '/gm/story-builder', label: 'Story Builder', requires: 'gm' },
+      { to: '/tables', label: 'Tables', requires: 'gm' },
+      { to: '/stories/gm-queue', label: 'Lead GM Queue', requires: 'gm' },
+      {
+        to: '/stories/staff-workload',
+        label: 'Story Workload',
+        requires: 'staff',
+        section: 'Staff',
+      },
     ],
   },
   {
     type: 'dropdown',
     label: 'World',
     children: [
-      { to: '/crossover/inbox', label: 'Crossover' },
       { to: '/codex', label: 'Codex' },
       { to: '/tidings', label: 'Tidings' },
       { to: '/journals', label: 'Journals' },
@@ -74,7 +138,13 @@ const dropdownGroups: NavDropdown[] = [
 export function Header() {
   const account = useAppSelector((state) => state.auth.account);
   const isStaff = account?.is_staff ?? false;
+  const isGM = account?.is_gm ?? false;
+  const viewer: Viewer = { account: account !== null, isGM, isStaff };
   const { data: pendingCount } = useOpenSubmissionCount(isStaff);
+  const { data: attention } = useGMAttention(isGM);
+  const badgeCounts: Record<NonNullable<NavDropdown['badge']>, number> = {
+    'gm-attention': attention?.total ?? 0,
+  };
   const { data: inboxSessions } = useRitualSessionInbox();
   const pendingInvitationCount = account ? (inboxSessions?.length ?? 0) : 0;
 
@@ -108,18 +178,48 @@ export function Header() {
               </Link>
             </NavigationMenuItem>
             {dropdownGroups.map((group) => {
-              const visibleChildren = group.children.filter((child) => !child.authOnly || account);
+              const visibleChildren = group.children.filter((child) => canSee(child, viewer));
               if (visibleChildren.length === 0) return null;
+              const count = group.badge ? badgeCounts[group.badge] : 0;
               return (
                 <NavigationMenuItem key={group.label}>
-                  <NavigationMenuTrigger>{group.label}</NavigationMenuTrigger>
+                  <NavigationMenuTrigger>
+                    {group.label}
+                    {count > 0 ? (
+                      <Badge
+                        variant="destructive"
+                        className="ml-1.5 h-5 min-w-5 px-1 text-xs"
+                        data-testid={`${group.badge}-badge`}
+                      >
+                        {count}
+                      </Badge>
+                    ) : null}
+                  </NavigationMenuTrigger>
                   <NavigationMenuContent>
                     <ul className="flex flex-col gap-1 p-2">
-                      {visibleChildren.map((child) => (
-                        <li key={child.to}>
-                          <Link to={child.to} className={navigationMenuTriggerStyle()}>
-                            {child.label}
-                          </Link>
+                      {sectioned(visibleChildren).map(({ section, rows }) => (
+                        <li
+                          key={section ?? ''}
+                          className={
+                            section
+                              ? 'mt-1 flex flex-col gap-1 border-t pt-2'
+                              : 'flex flex-col gap-1'
+                          }
+                        >
+                          {section ? (
+                            <p className="px-3 text-xs font-semibold text-muted-foreground">
+                              {section}
+                            </p>
+                          ) : null}
+                          <ul className="flex flex-col gap-1">
+                            {rows.map((child) => (
+                              <li key={child.to}>
+                                <Link to={child.to} className={navigationMenuTriggerStyle()}>
+                                  {child.label}
+                                </Link>
+                              </li>
+                            ))}
+                          </ul>
                         </li>
                       ))}
                     </ul>
@@ -155,13 +255,6 @@ export function Header() {
                 </Link>
               </NavigationMenuItem>
             )}
-            {isStaff && (
-              <NavigationMenuItem>
-                <Link to="/stories/staff-workload" className={navigationMenuTriggerStyle()}>
-                  Story Workload
-                </Link>
-              </NavigationMenuItem>
-            )}
             <NavigationMenuItem>
               <ModeToggle />
             </NavigationMenuItem>
@@ -190,20 +283,33 @@ export function Header() {
                   Play
                 </Link>
                 {dropdownGroups.map((group) => {
-                  const visibleChildren = group.children.filter(
-                    (child) => !child.authOnly || account
-                  );
+                  const visibleChildren = group.children.filter((child) => canSee(child, viewer));
                   if (visibleChildren.length === 0) return null;
+                  const count = group.badge ? badgeCounts[group.badge] : 0;
                   return (
                     <div key={group.label} className="space-y-2">
-                      <p className="text-sm font-semibold text-muted-foreground">{group.label}</p>
-                      <div className="flex flex-col gap-2 pl-2">
-                        {visibleChildren.map((child) => (
-                          <Link key={child.to} to={child.to} className="text-lg">
-                            {child.label}
-                          </Link>
-                        ))}
-                      </div>
+                      <p className="text-sm font-semibold text-muted-foreground">
+                        {group.label} {count > 0 ? `(${count})` : ''}
+                      </p>
+                      {sectioned(visibleChildren).map(({ section, rows }) => (
+                        <div
+                          key={section ?? ''}
+                          className={
+                            section
+                              ? 'mt-1 flex flex-col gap-2 border-t pl-2 pt-2'
+                              : 'flex flex-col gap-2 pl-2'
+                          }
+                        >
+                          {section ? (
+                            <p className="text-xs font-semibold text-muted-foreground">{section}</p>
+                          ) : null}
+                          {rows.map((child) => (
+                            <Link key={child.to} to={child.to} className="text-lg">
+                              {child.label}
+                            </Link>
+                          ))}
+                        </div>
+                      ))}
                     </div>
                   );
                 })}
@@ -215,11 +321,6 @@ export function Header() {
                 {isStaff && (
                   <Link to="/staff" className="text-lg">
                     Staff {pendingCount && pendingCount > 0 ? `(${pendingCount})` : ''}
-                  </Link>
-                )}
-                {isStaff && (
-                  <Link to="/stories/staff-workload" className="text-lg">
-                    Story Workload
                   </Link>
                 )}
                 <ModeToggle />

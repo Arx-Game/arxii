@@ -360,7 +360,7 @@ class DefensiveFashionWiringTests(TestCase):
             db_typeclass_path="typeclasses.rooms.Room",
         )
         RoomProfile.objects.update_or_create(objectdb=area_room, defaults={"area": area})
-        self.scene = SceneFactory(location=area_room)
+        self.scene = SceneFactory(room=area_room)
 
         # --- encounter wired to the scene ---
         self.encounter = CombatEncounterFactory(

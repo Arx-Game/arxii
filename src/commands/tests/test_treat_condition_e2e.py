@@ -64,7 +64,7 @@ class TreatConditionConsentE2ETests(TestCase):
         self.target_char = CharacterFactory(location=self.room)
         self.helper_sheet = CharacterSheetFactory(character=self.helper_char)
         self.target_sheet = CharacterSheetFactory(character=self.target_char)
-        self.scene = SceneFactory(is_active=True, location=self.room)
+        self.scene = SceneFactory(is_active=True, room=self.room)
         # Bust the per-location active-scene cache.
         if hasattr(self.room, "_active_scene_cache"):
             del self.room._active_scene_cache

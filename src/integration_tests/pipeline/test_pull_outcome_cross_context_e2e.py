@@ -119,7 +119,7 @@ class NoncombatCastPullChangesCheckModifierE2ETests(TestCase):
             db_key="PullOutcomeTestRoom",
             db_typeclass_path="typeclasses.rooms.Room",
         )
-        self.scene = SceneFactory(location=self.room)
+        self.scene = SceneFactory(room=self.room)
 
         self.persona = PersonaFactory()
         self.sheet = self.persona.character_sheet
@@ -589,7 +589,7 @@ class RefuseWithoutChargeE2ETests(TestCase):
             db_key="RefuseTestRoom",
             db_typeclass_path="typeclasses.rooms.Room",
         )
-        self.scene = SceneFactory(location=self.room)
+        self.scene = SceneFactory(room=self.room)
 
         self.persona = PersonaFactory()
         self.sheet = self.persona.character_sheet

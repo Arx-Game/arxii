@@ -636,7 +636,7 @@ def narration_location_for(
     ``gm prompt send`` subject-presence check -- the one place this resolution
     is written, not re-derived per call site.
     """
-    scene_location = prompt.scene.location if prompt.scene_id else None
+    scene_location = prompt.scene.room if prompt.scene_id else None
     return scene_location or actor.location
 
 

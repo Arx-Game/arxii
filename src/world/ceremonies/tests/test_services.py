@@ -1325,7 +1325,7 @@ class ConversionScandalForkTests(TestCase):
     def _scene(self):
         from world.scenes.factories import SceneFactory
 
-        return SceneFactory(location=self.profile.objectdb)
+        return SceneFactory(location=self.profile)
 
     def test_conversion_away_from_declared_faith_tags_treacherous_scandal(self) -> None:
         from world.societies.models import LegendEntry

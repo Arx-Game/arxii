@@ -191,7 +191,7 @@ class CourtRegardEngagementTests(TestCase):
         covenant, membership, leader_sheet = self._court_membership_with_leader()
         room = _make_room()
         _place_character_in_room(membership.character_sheet.character, room)
-        SceneFactory(location=room, is_active=True)
+        SceneFactory(room=room, is_active=True)
 
         target_sheet = CharacterSheetFactory()
         _place_character_in_room(target_sheet.character, room)
@@ -213,7 +213,7 @@ class CourtRegardEngagementTests(TestCase):
         covenant, membership, leader_sheet = self._court_membership_with_leader()
         room = _make_room()
         _place_character_in_room(membership.character_sheet.character, room)
-        SceneFactory(location=room, is_active=True)
+        SceneFactory(room=room, is_active=True)
 
         target_sheet = CharacterSheetFactory()
         _place_character_in_room(target_sheet.character, room)
@@ -233,7 +233,7 @@ class CourtRegardEngagementTests(TestCase):
         covenant, membership, _leader_sheet = self._court_membership_with_leader()
         room = _make_room()
         _place_character_in_room(membership.character_sheet.character, room)
-        SceneFactory(location=room, is_active=True)
+        SceneFactory(room=room, is_active=True)
 
         stranger_sheet = CharacterSheetFactory()
         _place_character_in_room(stranger_sheet.character, room)
@@ -250,7 +250,7 @@ class CourtRegardEngagementTests(TestCase):
         covenant, membership, leader_sheet = self._court_membership_with_leader()
         room = _make_room()
         _place_character_in_room(membership.character_sheet.character, room)
-        SceneFactory(location=room, is_active=True)
+        SceneFactory(room=room, is_active=True)
 
         # Regarded target exists but is NOT placed in the room.
         target_sheet = CharacterSheetFactory()
@@ -276,7 +276,7 @@ class CourtRegardEngagementTests(TestCase):
         covenant, membership, leader_sheet = self._court_membership_with_leader()
         room = _make_room()
         _place_character_in_room(membership.character_sheet.character, room)
-        SceneFactory(location=room, is_active=True)
+        SceneFactory(room=room, is_active=True)
 
         target_sheet = CharacterSheetFactory()
         _place_character_in_room(target_sheet.character, room)

@@ -21,6 +21,15 @@ TEAM_DAMAGE_PERCENT_TARGET_NAME = "team_damage_percent"
 TECHNIQUE_STAT_CATEGORY_NAME = "technique_stat"
 TECHNIQUE_STAT_INTENSITY = "intensity"
 TECHNIQUE_STAT_CONTROL = "control"
+# #4333 — favor with a being. Each being has one target in each category
+# (ModifierTarget.target_being), plus one "any being" target per category.
+# favor_invocation values are difficulty points eased on the invocation check;
+# favor_earning values are percentage points added to the earning rate.
+FAVOR_INVOCATION_CATEGORY_NAME = "favor_invocation"
+FAVOR_EARNING_CATEGORY_NAME = "favor_earning"
+FAVOR_CATEGORY_NAMES: frozenset[str] = frozenset(
+    {FAVOR_INVOCATION_CATEGORY_NAME, FAVOR_EARNING_CATEGORY_NAME}
+)
 
 # ModifierSource.source_type return values
 SOURCE_TYPE_DISTINCTION = "distinction"
@@ -95,6 +104,11 @@ EQUIPMENT_RELEVANT_CATEGORIES: frozenset[str] = frozenset(
         "magic",
         "affinity",
         "resonance",
+        # #4333: favor targets take covenant role, covenant level and vow bonuses.
+        # For these two the walk counts a covenant role once (see
+        # world.mechanics.services.equipment_walk_total).
+        "favor_invocation",
+        "favor_earning",
         # Add more as PR3 lands combat stats and ItemCapabilityGrants.
     }
 )

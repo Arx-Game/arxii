@@ -96,7 +96,7 @@ class GMOpsAdjudicationTestBase(TestCase):
             )
 
         self.room = _room()
-        self.scene = SceneFactory(location=self.room)
+        self.scene = SceneFactory(room=self.room)
 
         self.gm_actor, self.gm_account = _pc_in_room(self.room, db_key="GMOpsGM")
         GMProfileFactory(account=self.gm_account, level=GMLevel.SENIOR)

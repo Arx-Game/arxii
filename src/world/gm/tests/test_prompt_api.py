@@ -311,7 +311,7 @@ class GMPromptApiTest(TestCase):
         all -- no narration link, no Interaction (the room/private pose never
         gets dispatched)."""
         room = ObjectDBFactory(db_typeclass_path="typeclasses.rooms.Room")
-        scene = SceneFactory(location=room)
+        scene = SceneFactory(room=room)
         SceneGMParticipationFactory(scene=scene, account=self.gm)
         prompt = GMPromptFactory(
             kind=GMPromptKind.DEATH,
@@ -380,7 +380,7 @@ class GMPromptApiTest(TestCase):
     def test_narrate_chosen_accepts_persona_present_in_the_room(self):
         """#4101 fix round 2, finding 1: the mirror-image success case."""
         room = ObjectDBFactory(db_typeclass_path="typeclasses.rooms.Room")
-        scene = SceneFactory(location=room)
+        scene = SceneFactory(room=room)
         SceneGMParticipationFactory(scene=scene, account=self.gm)
         prompt = GMPromptFactory(
             kind=GMPromptKind.DEATH,

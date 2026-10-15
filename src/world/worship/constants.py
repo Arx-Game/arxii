@@ -18,8 +18,6 @@ class MiracleTrigger(models.TextChoices):
     ``INCAPACITATED`` fires from the combat trigger (#2360); ``NEAR_DEATH`` is
     the dire-straits prayer's trigger (#3779): a character in Soulfray or below
     the knockout health band prays, and a miracle of that trigger may answer.
-    ``NEAR_DEATH`` is
-    defined for future use (see Scope/follow-ups in the spec).
     """
 
     INCAPACITATED = "incapacitated", "Character Incapacitated"
@@ -107,3 +105,22 @@ class BeingVisibility(models.TextChoices):
 # Where the editor files a being's Codex page when it has to create one (#3780).
 PANTHEON_CODEX_CATEGORY_NAME = "The World"
 PANTHEON_CODEX_SUBJECT_NAME = "The Pantheon"
+
+
+class FavorAwardKind(models.TextChoices):
+    """What a ``FavorOutcomeAward`` row pays (#4333).
+
+    INVOCATION is the bonus, in check points, an invocation check's outcome tier
+    adds to the check it was declared on. CLOSING is the base favor a pledge's
+    closing rite pays for its outcome tier; pledges read it (#4333 slice 2).
+    """
+
+    INVOCATION = "invocation", "Invocation bonus (check points)"
+    CLOSING = "closing", "Closing award (base favor)"
+
+
+#: The longest one-line description a player may attach to an invocation (#4333).
+FAVOR_INVOCATION_LINE_MAX_LENGTH = 200
+#: The base earning rate, in percent, before the Chosen bonus and favor earning
+#: modifiers are added (#4333, design 1a).
+FAVOR_EARNING_BASE_PERCENT = 100

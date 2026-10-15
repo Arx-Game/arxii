@@ -95,7 +95,7 @@ class PatronageEstablishmentTests(TestCase):
         """Ordinary worship (bump_devotion) does not set valence."""
         from world.worship.services import bump_devotion
 
-        standing = bump_devotion(self.sheet, self.being, 10)
+        standing = bump_devotion(self.sheet, self.being, 10).standing
         self.assertIsNone(standing.valence)
         self.assertIsNone(standing.established_at)
         self.assertEqual(standing.favor, 10)

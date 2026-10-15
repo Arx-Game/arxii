@@ -83,7 +83,7 @@ def _make_battle_with_round(room: object) -> tuple[object, object, object, objec
     gm_char = _make_gm(room, gm_account)
 
     battle = create_battle(name="Subverb E2E Battle")
-    battle.scene.location = room
+    battle.scene.room = room
     battle.scene.save(update_fields=["location"])
 
     attacker_side = add_side(battle=battle, role=BattleSideRole.ATTACKER)

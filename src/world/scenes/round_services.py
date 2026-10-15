@@ -603,7 +603,7 @@ def maybe_finish_empty_scene(
     from world.scenes.models import Scene  # noqa: PLC0415
     from world.scenes.scene_admin_services import finish_scene_full  # noqa: PLC0415
 
-    scene = Scene.objects.filter(location=room, is_active=True).first()
+    scene = Scene.objects.filter(location_id=room.pk, is_active=True).first()
     if scene is None:
         return
 

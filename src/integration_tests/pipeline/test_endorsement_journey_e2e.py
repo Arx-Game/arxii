@@ -67,7 +67,7 @@ class EndorsementJourneyE2ETests(TestCase):
             db_key="EndorseTestRoom",
             db_typeclass_path="typeclasses.rooms.Room",
         )
-        self.scene = SceneFactory(location=self.room, is_active=True)
+        self.scene = SceneFactory(room=self.room, is_active=True)
 
         # --- Endorser ---
         self.endorser_char = _make_char_in_room(self.room)

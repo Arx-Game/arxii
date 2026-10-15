@@ -38,8 +38,15 @@ from world.gm.models import (
     GMWeeklyRewardTracker,
     SituationDifficultyGuide,
     SituationKind,
+    TableUpdateRequest,
 )
-from world.gm.types import CategoryFeedback, DiscoveryResult, GMEvidenceSummary, KindResult
+from world.gm.types import (
+    CategoryFeedback,
+    DiscoveryResult,
+    GMAttention,
+    GMEvidenceSummary,
+    KindResult,
+)
 from world.mechanics.models import ChallengeTemplate, SituationTemplate
 from world.scenes.constants import PersonaType
 from world.scenes.models import Persona
@@ -53,7 +60,6 @@ if TYPE_CHECKING:
     from world.areas.models import Area
     from world.character_sheets.models import CharacterSheet
     from world.distinctions.models import CharacterDistinction, Distinction
-    from world.gm.models import TableUpdateRequest
     from world.progression.models import XPTransaction
     from world.roster.models import RosterEntry
     from world.roster.models.applications import RosterApplication
@@ -933,10 +939,7 @@ def submit_distinction_change_request(
     Returns:
         The PENDING request.
     """
-    from world.gm.models import (  # noqa: PLC0415
-        DistinctionChangeRequestDetails,
-        TableUpdateRequest,
-    )
+    from world.gm.models import DistinctionChangeRequestDetails  # noqa: PLC0415
 
     _require_active_membership(membership)
     if not reasoning.strip():
@@ -962,6 +965,71 @@ def submit_distinction_change_request(
         details.full_clean()
         details.save()
     return request
+
+
+def table_update_review_pool_q(account: AccountDB) -> Q:
+    """The review pool (#2631 ruling), as a filter on ``TableUpdateRequest``.
+
+    A GM sees requests from any persona holding an ACTIVE membership at one of
+    their tables, not only those submitted through the GM's own table:
+    shopping among known GMs is fine; strangers never see the sheet. The
+    viewset ORs this with the player's own requests; the attention count
+    (#4188) uses it alone, so the two can never drift.
+    """
+    return Q(
+        membership__persona__gm_table_memberships__left_at__isnull=True,
+        membership__persona__gm_table_memberships__table__gm__account=account,
+    )
+
+
+def table_update_requests_for(account: AccountDB) -> QuerySet[TableUpdateRequest]:
+    """The sheet-update requests ``account`` may judge as a table GM."""
+    return TableUpdateRequest.objects.filter(table_update_review_pool_q(account)).distinct()
+
+
+def gm_attention(account: AccountDB) -> GMAttention:
+    """Count everything waiting on ``account`` as a GM (#4188).
+
+    The caller has already established that ``account`` holds a GMProfile
+    (``IsGM``). Each count reuses the query its own page lists from: the
+    offers the Dashboard showed, the inbox's received invites, the review
+    pool above, the Lead GM queue's claim and session buckets, and the My
+    Claims page's open claims. ``GMAttention.total`` is their sum.
+    """
+    from world.stories.constants import (  # noqa: PLC0415
+        AssistantClaimStatus,
+        CrossoverInviteStatus,
+        StoryGMOfferStatus,
+    )
+    from world.stories.models import (  # noqa: PLC0415
+        AssistantGMClaim,
+        CrossoverInvite,
+        StoryGMOffer,
+    )
+    from world.stories.views import _collect_gm_queue  # noqa: PLC0415
+
+    gm_profile = account.gm_profile
+    buckets = _collect_gm_queue(gm_profile)
+    return GMAttention(
+        story_offers=StoryGMOffer.objects.filter(
+            offered_to=gm_profile, status=StoryGMOfferStatus.PENDING
+        ).count(),
+        crossover_invites=CrossoverInvite.objects.filter(
+            to_story__owners=account, status=CrossoverInviteStatus.PENDING
+        )
+        .exclude(from_gm__account=account)
+        .distinct()
+        .count(),
+        sheet_update_requests=table_update_requests_for(account)
+        .filter(status=TableRequestStatus.PENDING)
+        .count(),
+        claims_to_approve=len(buckets.pending_claims),
+        my_claims=AssistantGMClaim.objects.filter(
+            assistant_gm=gm_profile,
+            status__in=[AssistantClaimStatus.REQUESTED, AssistantClaimStatus.APPROVED],
+        ).count(),
+        session_requests=len(buckets.assigned_requests),
+    )
 
 
 def withdraw_table_update_request(request: TableUpdateRequest) -> None:

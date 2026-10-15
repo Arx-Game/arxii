@@ -455,7 +455,7 @@ class NarrateCompanionLossTests(TestCase):
             db_key="NarrateCompanionLossRoom",
             db_typeclass_path="typeclasses.rooms.Room",
         )
-        scene = SceneFactory(location=room)
+        scene = SceneFactory(room=room)
 
         with mock.patch("world.scenes.interaction_services._broadcast_to_location") as broadcast:
             narrate_companion_loss("Ash", scene)

@@ -119,7 +119,7 @@ class _RiteSceneTestCase(TestCase):
             condition_template=self.condition_template,
         )
 
-        self.scene = SceneFactory(location=self.room, is_active=True)
+        self.scene = SceneFactory(room=self.room, is_active=True)
         self.encounter = _make_active_encounter(room=self.room, scene=self.scene)
 
         self.session = RitualSessionFactory(

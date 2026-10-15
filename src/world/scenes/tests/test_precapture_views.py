@@ -47,7 +47,7 @@ class TruncatePrecaptureViewTestCase(APITestCase):
     def setUp(self):
         self.account = AccountFactory()
         self.char, self.sheet, self.room = _setup_owner_with_character(self.account)
-        self.scene = SceneFactory(location=self.room, is_active=True)
+        self.scene = SceneFactory(room=self.room, is_active=True)
         SceneOwnerParticipationFactory(scene=self.scene, account=self.account)
 
         self.interactions = []
@@ -101,7 +101,7 @@ class PrecaptureConsentRequestViewSetTestCase(APITestCase):
         _owner_char, _owner_sheet, self.room = _setup_owner_with_character(
             self.owner_account, "Salon"
         )
-        self.scene = SceneFactory(location=self.room, is_active=True)
+        self.scene = SceneFactory(room=self.room, is_active=True)
         SceneOwnerParticipationFactory(scene=self.scene, account=self.owner_account)
 
         self.absent_account = AccountFactory()

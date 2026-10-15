@@ -43,7 +43,7 @@ class CrossingNarrationTest(TestCase):
         ) = build_majora_world(
             10, "narr4101", vision_text="tier vision", manifestation_text="tier room"
         )
-        cls.scene = SceneFactory(location=cls.character.location)
+        cls.scene = SceneFactory(room=cls.character.location)
         cls.gm = AccountFactory()
 
     def _offer(self):

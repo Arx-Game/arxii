@@ -110,7 +110,7 @@ class IsSceneGMPrerequisiteTests(TestCase):
 
     def setUp(self) -> None:
         self.room = _room()
-        self.scene = SceneFactory(location=self.room)
+        self.scene = SceneFactory(room=self.room)
 
     def test_staff_bypasses_regardless_of_scene_gm_status(self) -> None:
         actor = _plain_actor(db_key="StaffCheckBypass", is_staff=True)

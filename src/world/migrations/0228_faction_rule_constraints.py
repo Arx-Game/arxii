@@ -6,7 +6,7 @@ import django.db.models.deletion
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("arxii", "0224_reveal_kind_faction_rule"),
+        ("arxii", "0227_reveal_kind_faction_rule"),
     ]
 
     operations = [

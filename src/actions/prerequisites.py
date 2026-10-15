@@ -1143,7 +1143,7 @@ class GhostWindowPrerequisite(Prerequisite):
         if not is_dead(sheet):
             return True, ""
         scene = vitals.died_in_scene
-        if scene is not None and scene.is_active and actor.location == scene.location:
+        if scene is not None and scene.is_active and actor.location == scene.room:
             return True, ""
         funeral = open_funeral_for(sheet)
         if funeral is not None and actor.location == funeral.location.objectdb:

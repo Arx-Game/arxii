@@ -119,7 +119,7 @@ class EntranceTechniqueActionTests(CastScenarioMixin):
         # the Room/Character objects in the graph.
         for persona in (self.caster, self.target):
             character = persona.character_sheet.character
-            character.db_location = self.scene.location
+            character.db_location = self.scene.room
             character.save()
 
     def _actor(self):
@@ -187,7 +187,7 @@ class EntranceTechniqueActionTests(CastScenarioMixin):
     def test_protective_entrance_seats_caster(self) -> None:
         encounter = CombatEncounterFactory(
             scene=self.scene,
-            room=self.scene.location,
+            room=self.scene.room,
             status=RoundStatus.DECLARING,
             risk_level=RiskLevel.MODERATE,
             round_number=1,
@@ -278,7 +278,7 @@ class EntranceTechniqueActionTests(CastScenarioMixin):
     def test_already_in_fight_guard(self) -> None:
         encounter = CombatEncounterFactory(
             scene=self.scene,
-            room=self.scene.location,
+            room=self.scene.room,
             status=RoundStatus.DECLARING,
             risk_level=RiskLevel.MODERATE,
             round_number=1,
@@ -307,7 +307,7 @@ class EntranceTechniqueActionTests(CastScenarioMixin):
         """
         encounter = CombatEncounterFactory(
             scene=self.scene,
-            room=self.scene.location,
+            room=self.scene.room,
             status=RoundStatus.DECLARING,
             risk_level=RiskLevel.MODERATE,
             round_number=1,

@@ -406,7 +406,7 @@ class CmdDeclareTechniqueTargetResolverTests(TestCase):
 
         self.scene = SceneFactory(
             is_active=True,
-            location=self.room,
+            room=self.room,
             participants=[self.caller_account, self.target_account],
         )
         if hasattr(self.room, "_active_scene_cache"):

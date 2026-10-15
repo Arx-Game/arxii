@@ -73,6 +73,7 @@ from world.gm.serializers import (
     GMApplicationCreateSerializer,
     GMApplicationDetailSerializer,
     GMApplicationQueueSerializer,
+    GMAttentionSerializer,
     GMEvidenceSummarySerializer,
     GMInviteClaimSerializer,
     GMInviteRevokeSerializer,
@@ -98,6 +99,7 @@ from world.gm.services import (
     archive_table,
     find_situations,
     gm_application_queue,
+    gm_attention,
     gm_evidence_summary,
     join_table,
     leave_table,
@@ -106,6 +108,7 @@ from world.gm.services import (
     signoff_table_update_request,
     submit_distinction_change_request,
     submit_profile_text_request,
+    table_update_review_pool_q,
     transfer_ownership as transfer_ownership_service,
     user_breadth_index,
     withdraw_table_update_request,
@@ -596,6 +599,23 @@ class DemandRansomView(APIView):
         )
 
 
+class GMAttentionView(APIView):
+    """GET /api/gm/attention/ (#4188): everything waiting on this GM, as counts.
+
+    One payload feeds the header's GMing badge (``total``) and the Dashboard's
+    "Waiting on you" strip (the rows), so the two can never disagree
+    (ADR-4188). Read-only, one row, scoped to ``request.user``; ``IsGM``
+    refuses an account with no GMProfile.
+    """
+
+    permission_classes = [IsGM]
+
+    @extend_schema(responses=GMAttentionSerializer)
+    def get(self, request: Request) -> Response:
+        """Return the counts and their total."""
+        return Response(GMAttentionSerializer(gm_attention(request.user)).data)
+
+
 class GMDashboardView(APIView):
     """GET /api/gm/dashboard/ — the GM's story-shaped dashboard (#2004).
 
@@ -831,16 +851,11 @@ class TableUpdateRequestViewSet(
         user = self.request.user
         if user.is_staff:
             return qs
-        # Review pool (#2631 ruling): a GM sees requests from any persona with
-        # an ACTIVE membership at one of their tables — not just requests
-        # submitted via their own table. Shopping among known GMs is fine;
-        # strangers never see the sheet.
+        # The player's own requests, plus the review pool (#2631 ruling) the
+        # attention count (#4188) also reads: `table_update_review_pool_q`.
         return qs.filter(
             Q(membership__persona__character_sheet__character__db_account=user)
-            | Q(
-                membership__persona__gm_table_memberships__left_at__isnull=True,
-                membership__persona__gm_table_memberships__table__gm__account=user,
-            )
+            | table_update_review_pool_q(user)
         ).distinct()
 
     @extend_schema(

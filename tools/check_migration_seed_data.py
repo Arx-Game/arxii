@@ -65,6 +65,12 @@ ALLOWED_MIGRATIONS: set[str] = {
     # look is gone) into ObjectDisplayData.permanent_description. The display
     # row it get_or_creates holds text that already existed on the object, in a
     # different store; nothing is invented and nothing is overwritten.
+    "world/migrations/0224_being_favor_targets.py",
+    # #4333: backfills each existing WorshippedBeing's two favor ModifierTargets (and
+    # the two favor categories with their "any being" targets), the rows
+    # ensure_being_modifier_targets creates for every being saved after this
+    # release. Derived one-per-being from rows already in the database; no authored
+    # content is invented.
 }
 
 # Patterns that suggest seed data in migrations

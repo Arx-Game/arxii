@@ -53,6 +53,7 @@ from world.missions.services.resolution import (
 from world.missions.services.rewards import emit_candidate_rewards, emit_terminal_rewards
 from world.narrative.constants import NarrativeCategory
 from world.narrative.services import emit_ambient_room_stir, send_narrative_message
+from world.worship.types import InvocationRequest
 
 if TYPE_CHECKING:
     from world.mechanics.models import ChallengeApproach
@@ -171,11 +172,12 @@ def resolve_group_node(
 
     ballots = list(
         MissionGroupBallot.objects.filter(instance=instance, node=node).select_related(
-            "participant", "picked_option", "voted_option"
+            "participant", "picked_option", "voted_option", "invoke_being"
         )
     )
     if not ballots:
         return []
+    invocations = _ballot_invocations(ballots)
     # Resolution + ballot cleanup are one atomic unit: ``resolve_option`` always
     # creates a fresh (non-idempotent) deed, so a mid-resolution raise must roll
     # back any partial deeds rather than leave the node wedged with stale ballots
@@ -186,11 +188,24 @@ def resolve_group_node(
         if node.conflict_mode == ConflictMode.JOINT:
             picks = {ballot.participant: ballot.picked_option for ballot in ballots}
             attempts = tuple(sorted(picks.items(), key=lambda item: item[0].pk))
-            deeds = _resolve_joint(instance, node, presented, attempts, extra_modifiers=easing)
+            deeds = _resolve_joint(
+                instance,
+                node,
+                presented,
+                attempts,
+                extra_modifiers=easing,
+                invocations=invocations,
+            )
         else:
             option, actor = _tally_group_winner(ballots)
             deeds = _resolve_single_winner(
-                instance, node, presented, option, actor, extra_modifiers=easing
+                instance,
+                node,
+                presented,
+                option,
+                actor,
+                extra_modifiers=easing,
+                invocation=invocations.get(actor.pk),
             )
         MissionGroupBallot.objects.filter(instance=instance, node=node).delete()
     # Per-actor STORY + ambient stir (#887). Emitted OUTSIDE the atomic block
@@ -199,6 +214,17 @@ def resolve_group_node(
     # reach here, so timed-out resolutions emit the same prose.
     _emit_group_resolution_narrative(instance, presented, deeds)
     return deeds
+
+
+def _ballot_invocations(ballots: list[MissionGroupBallot]) -> dict[int, InvocationRequest]:
+    """Each ballot's stored Call on favor choice (#4333), keyed by participant pk."""
+    return {
+        ballot.participant_id: InvocationRequest(
+            being=ballot.invoke_being, player_line=ballot.invoke_line
+        )
+        for ballot in ballots
+        if ballot.invoke_being is not None
+    }
 
 
 def _emit_group_resolution_narrative(
@@ -385,8 +411,12 @@ def _resolve_single_winner(  # noqa: PLR0913
     actor: MissionParticipant,
     *,
     extra_modifiers: int = 0,
+    invocation: InvocationRequest | None = None,
 ) -> list[MissionDeedRecord]:
     """Resolve ONE winning option once, as ``actor`` (the GROUP_VOTE path).
+
+    ``invocation`` is the actor's own ballot's Call on favor choice (#4333); a
+    losing picker's invocation never rolls.
 
     Phase-3 ``resolve_option`` performs the check, applies the route
     consequence, and advances/terminates the run — we reimplement none of it.
@@ -394,18 +424,25 @@ def _resolve_single_winner(  # noqa: PLR0913
     """
     approach = _approach_for_pick(presented, actor, option)
     deed = resolve_option(
-        instance, node, option, actor, chosen_approach=approach, extra_modifiers=extra_modifiers
+        instance,
+        node,
+        option,
+        actor,
+        chosen_approach=approach,
+        extra_modifiers=extra_modifiers,
+        invocation=invocation,
     )
     return [deed]
 
 
-def _resolve_joint(
+def _resolve_joint(  # noqa: PLR0913 - the per-participant invocations ride with the attempts
     instance: MissionInstance,
     node: MissionNode,
     presented: list[PresentedOption],
     attempts: tuple[tuple[MissionParticipant, MissionOption], ...],
     *,
     extra_modifiers: int = 0,
+    invocations: dict[int, InvocationRequest] | None = None,
 ) -> list[MissionDeedRecord]:
     """JOINT: every participant runs their OWN pick; combined result routes once.
 
@@ -444,6 +481,8 @@ def _resolve_joint(
                 chosen_approach=approach,
                 advance=False,
                 extra_modifiers=extra_modifiers,
+                # #4333: each participant's own Call on favor lands on their own check.
+                invocation=(invocations or {}).get(participant.pk),
             )
         )
 

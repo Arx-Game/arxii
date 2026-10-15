@@ -207,7 +207,7 @@ class SceneActionRequestViewSetTestCase(APITestCase):
         room = RoomProfileFactory().objectdb
         self.character.move_to(room, quiet=True)
         self.target_character.move_to(room, quiet=True)
-        self.scene.location = room
+        self.scene.room = room
         self.scene.save(update_fields=["location"])
 
     def test_boon_options_pointer_items_lists_held_item_the_asker_knows_of(self) -> None:
@@ -762,7 +762,7 @@ class CastEndpointTestCase(APITestCase):
 
         CheckSystemSetupFactory.create()
         room = create_object("typeclasses.rooms.Room", key="Cast Room API", nohome=True)
-        cls.scene = SceneFactory(location=room)
+        cls.scene = SceneFactory(room=room)
 
         cls.account = AccountFactory()
         cls.character = CharacterSheetFactory().character

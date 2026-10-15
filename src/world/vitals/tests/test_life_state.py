@@ -80,7 +80,7 @@ class DeathMomentTests(TestCase):
             typeclass="typeclasses.rooms.Room", key="Death Room", nohome=True
         )
         sheet.character.location = room
-        scene = SceneFactory(location=room)
+        scene = SceneFactory(room=room)
         invalidate_active_scene_cache(room)
 
         _mark_dead(sheet)

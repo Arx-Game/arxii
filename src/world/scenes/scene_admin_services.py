@@ -225,7 +225,7 @@ def finish_scene_full(scene: Scene, by_account: AccountDB | None = None) -> None
     # ramparts and conjured or GM-placed zone hazards in the scene's room. All
     # three are cast-for-the-scene constructs with no other teardown trigger
     # (each previously had no production call site; this closes that gap).
-    if scene.location is not None:
+    if scene.room is not None:
         from world.areas.positioning.services import (  # noqa: PLC0415
             teardown_conjured_obstacles,
             teardown_ramparts,
@@ -234,9 +234,9 @@ def finish_scene_full(scene: Scene, by_account: AccountDB | None = None) -> None
             teardown_conjured_hazards,
         )
 
-        teardown_conjured_obstacles(scene.location)
-        teardown_ramparts(scene.location)
-        teardown_conjured_hazards(scene.location)
+        teardown_conjured_obstacles(scene.room)
+        teardown_ramparts(scene.room)
+        teardown_conjured_hazards(scene.room)
 
     # #2051: when a scene ends, Durance vows tied to co-presence in that
     # scene's room may dim — can_engage_membership checks for an active scene,
@@ -244,7 +244,7 @@ def finish_scene_full(scene: Scene, by_account: AccountDB | None = None) -> None
     # COURT vows re-validate by their own arm (master's business), so only
     # Durance vows are affected. Hot-path short-circuit: skip occupants with no
     # engaged covenant role (cached handler — no DB query for the common case).
-    if scene.location is not None:
+    if scene.room is not None:
         from world.covenants.services import revalidate_engagements  # noqa: PLC0415
         from world.scenes.interaction_services import (  # noqa: PLC0415
             invalidate_active_scene_cache,
@@ -253,19 +253,19 @@ def finish_scene_full(scene: Scene, by_account: AccountDB | None = None) -> None
         # finish_scene() set is_active=False but the room's in-memory
         # _active_scene_cache still holds this scene — bust it so
         # can_engage_membership sees no active scene.
-        invalidate_active_scene_cache(scene.location)
+        invalidate_active_scene_cache(scene.room)
 
-        for obj in scene.location.contents:
+        for obj in scene.room.contents:
             sheet = obj.character_sheet
             if sheet is None:
                 continue
             roles = sheet.character.covenant_roles
             if not any(m.engaged for m in roles.active_memberships):
                 continue
-            revalidate_engagements(character_sheet=sheet, room=scene.location)
+            revalidate_engagements(character_sheet=sheet, room=scene.room)
 
     # #2356: close any active speaker queue for this scene's room.
-    if scene.location is not None:
+    if scene.room is not None:
         from world.scenes.speaker_queue_services import clear_queue_on_scene_finish  # noqa: PLC0415
 
         clear_queue_on_scene_finish(scene)
@@ -287,9 +287,9 @@ def finish_scene_full(scene: Scene, by_account: AccountDB | None = None) -> None
     # charmer is in the room. The scene ending closes it regardless, so sweep this
     # room's still-open WON_OVER ephemeral bodies rather than leaving them for the
     # periodic release_closed_bind_windows() sweep to eventually catch.
-    if scene.location is not None:
+    if scene.room is not None:
         from world.combat.won_over import release_won_over_npcs_in_room  # noqa: PLC0415
 
-        release_won_over_npcs_in_room(scene.location)
+        release_won_over_npcs_in_room(scene.room)
 
     broadcast_scene_message(scene, SceneAction.END)

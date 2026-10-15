@@ -40,7 +40,7 @@ class ChampionDuelOutcomeWiringTests(TestCase):
         wire_champion_duel_trigger()
         self.room = create_object("typeclasses.rooms.Room", key="Duel Wiring Room", nohome=True)
         self.battle = BattleFactory()
-        self.battle.scene.location = self.room
+        self.battle.scene.room = self.room
         self.battle.scene.save(update_fields=["location"])
         self.covenant = CovenantFactory(covenant_type=CovenantType.BATTLE)
         self.challenger_side = BattleSideFactory(

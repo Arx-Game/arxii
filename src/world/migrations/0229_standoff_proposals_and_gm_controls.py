@@ -9,7 +9,7 @@ import core.natural_keys
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("arxii", "0225_faction_rule_constraints"),
+        ("arxii", "0228_faction_rule_constraints"),
         migrations.swappable_dependency(settings.AUTH_USER_MODEL),
     ]
 

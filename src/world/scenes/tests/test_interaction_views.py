@@ -575,7 +575,7 @@ class PoseSubmitViewTests(APITestCase):
             db_key="Other Room",
             db_typeclass_path="typeclasses.rooms.Room",
         )
-        scene = SceneFactory(location=other_room)
+        scene = SceneFactory(room=other_room)
         response = self.client.post(
             self.url,
             {
@@ -591,7 +591,7 @@ class PoseSubmitViewTests(APITestCase):
 
     def test_submit_pose_accepts_when_actor_in_scenes_room(self) -> None:
         """A located scene accepts a pose when the actor's character is co-located (#2156)."""
-        scene = SceneFactory(location=self.room)
+        scene = SceneFactory(room=self.room)
         response = self.client.post(
             self.url,
             {
@@ -1182,8 +1182,8 @@ class PoseSubmitViewTests(APITestCase):
         `record_interaction`'s `get_active_scene` fallback) so the two really
         do target two distinct Scene rows.
         """
-        scene_a = SceneFactory(location=self.room)
-        scene_b = SceneFactory(location=self.room)
+        scene_a = SceneFactory(room=self.room)
+        scene_b = SceneFactory(room=self.room)
         base = {
             "persona_id": self.persona.pk,
             "content": "waves.",
@@ -1211,7 +1211,7 @@ class PoseSubmitViewTests(APITestCase):
         ``cached_reactions``, ``cached_action_links`` (Task 2), and
         ``cached_endorsements`` (this task, #3816 Task 4).
         """
-        scene = SceneFactory(location=self.room, participants=[self.account, self.other_account])
+        scene = SceneFactory(room=self.room, participants=[self.account, self.other_account])
         payload = {
             "persona_id": self.persona.pk,
             "scene_id": scene.pk,

@@ -10,6 +10,9 @@
  * (Narrator-voiced OUTCOME line) — this panel only reports success/failure to
  * the roller via toast, exactly like the GM panel's tabs.
  *
+ * A Call on favor control (#4333) rides beside the roll: the chosen being's invocation rolls
+ * first, its lines reach the room, and its bonus is added to this check.
+ *
  * The empty-result state offers "Propose a check" (Decision 4 in the spec):
  * when the catalog has nothing fitting, a player proposes a new CheckType
  * instead of inventing one — this dispatches `propose_check_type`, landing in
@@ -31,6 +34,8 @@ import { Button } from '@/components/ui/button';
 import { usePlayerCheckTypeCatalog } from '@/checks/queries';
 import { DIFFICULTY_BANDS } from '@/checks/types';
 import type { DifficultyBand } from '@/checks/types';
+import { CallOnFavor } from '@/worship/components/CallOnFavor';
+import type { InvocationChoice } from '@/worship/types';
 
 const SELECT_CLASS =
   'flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50';
@@ -133,10 +138,12 @@ interface SelfCheckPanelProps {
 export function SelfCheckPanel({ className }: SelfCheckPanelProps) {
   const activeCharacterName = useAppSelector((state) => state.game.active);
   const { data: myRosterEntries = [] } = useMyRosterEntriesQuery();
-  const characterId = useMemo(
-    () => myRosterEntries.find((e) => e.name === activeCharacterName)?.character_id ?? null,
+  const activeEntry = useMemo(
+    () => myRosterEntries.find((e) => e.name === activeCharacterName) ?? null,
     [myRosterEntries, activeCharacterName]
   );
+  const characterId = activeEntry?.character_id ?? null;
+  const [invocation, setInvocation] = useState<InvocationChoice | null>(null);
 
   const [search, setSearch] = useState('');
   const [checkTypeId, setCheckTypeId] = useState<number | null>(null);
@@ -159,9 +166,18 @@ export function SelfCheckPanel({ className }: SelfCheckPanelProps) {
     dispatch
       .mutateAsync({
         ref: { backend: 'registry', registry_key: 'scene_self_check' },
-        kwargs: { check_type_ref: checkTypeId, difficulty },
+        kwargs: {
+          check_type_ref: checkTypeId,
+          difficulty,
+          ...(invocation
+            ? { invoke_being_id: invocation.beingId, invoke_line: invocation.line }
+            : {}),
+        },
       })
-      .then((result) => reportResult(result, 'Check rolled.'))
+      .then((result) => {
+        reportResult(result, 'Check rolled.');
+        if (!isDispatchFailure(result)) setInvocation(null);
+      })
       .catch(() => toast.error('Could not roll that check.'));
   }
 
@@ -209,9 +225,17 @@ export function SelfCheckPanel({ className }: SelfCheckPanelProps) {
             ))}
           </select>
         </div>
-        <Button disabled={!canSubmit} onClick={handleSubmit} data-testid="self-check-submit">
-          {dispatch.isPending ? 'Rolling…' : 'Roll Check'}
-        </Button>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <Button disabled={!canSubmit} onClick={handleSubmit} data-testid="self-check-submit">
+            {dispatch.isPending ? 'Rolling…' : 'Roll Check'}
+          </Button>
+          <CallOnFavor
+            value={invocation}
+            onChange={setInvocation}
+            entryId={activeEntry?.id ?? null}
+            disabled={dispatch.isPending}
+          />
+        </div>
         {search.trim() !== '' && checkTypes.length === 0 && (
           <ProposeCheckForm characterId={characterId} initialName={search} />
         )}

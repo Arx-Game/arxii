@@ -138,3 +138,11 @@ shows and is spun past, delivers to the caster only, and on the scene action pat
 and replayed after that action's own wheel(s) (ADR-4089-B).
 _Avoid_: prism, roulette prism (the pre-Part-C frontend shape, since replaced),
 roulette wheel alone (ambiguous with the older equal-weighted consequence-pool spin)
+
+**Favor (modifier source)**:
+`ModifierSourceKind.FAVOR` (#4333): the labelled line an invocation of a being's favor adds
+to the check it was declared on, "<being>'s favor (invocation: <outcome>)", worth the
+INVOCATION `FavorOutcomeAward` for the invocation check's outcome tier. It changes a result
+only when it moves the total across a rank threshold. Shown only in the acting player's
+breakdown, never in a room line.
+_Avoid_: "pull" (a thread pull's flat bonus), "boon"

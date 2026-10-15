@@ -532,7 +532,7 @@ open clock on the scene's `running_beat`, not the beat's authored `clock_size`.
 pressing Run twice never spawns a second battle); otherwise it calls
 `stage_battle(name, risk_level, blueprint=staged.blueprint,
 campaign_story=beat.episode.chapter.story, region=staged.region,
-location=scene.location)` (`world.battles.staging`), sets
+location=scene.room)` (`world.battles.staging`), sets
 `battle.story_beat = beat` (so `activate_stakes_for_battle` and
 `resolve_battle_beats` scope to this one beat - see battles.md's "Stakes /
 Beat Wiring"), links the battle's scene to the beat's episode via

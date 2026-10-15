@@ -46,7 +46,7 @@ class GMSummonActionsTestBase(TestCase):
     def setUp(self) -> None:
         self.gm_room = _room(db_key="GMSceneRoom")
         self.other_room = _room(db_key="ElsewhereRoom")
-        self.scene = SceneFactory(location=self.gm_room)
+        self.scene = SceneFactory(room=self.gm_room)
 
         self.gm_actor, self.gm_account = _pc_in_room(self.gm_room, db_key="SummonGM")
         GMProfileFactory(account=self.gm_account, level=GMLevel.JUNIOR)

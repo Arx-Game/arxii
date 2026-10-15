@@ -67,7 +67,7 @@ class SceneScenarioViewTestBase(APITestCase):
             "scenario_view_actor_b", self.room, self.account_b
         )
 
-        self.scene = SceneFactory(location=self.room, is_active=True)
+        self.scene = SceneFactory(room=self.room, is_active=True)
         SceneParticipationFactory(scene=self.scene, account=self.account_a, is_gm=False)
         SceneParticipationFactory(scene=self.scene, account=self.account_b, is_gm=False)
 
@@ -139,7 +139,7 @@ class SceneScenarioViewTests(SceneScenarioViewTestBase):
         self.assertEqual(gm["beat_outcome_key"], self.beat.outcome_key)
 
     def test_no_running_scenario_returns_null_instance(self) -> None:
-        idle_scene = SceneFactory(location=self.room, is_active=True)
+        idle_scene = SceneFactory(room=self.room, is_active=True)
         SceneParticipationFactory(scene=idle_scene, account=self.account_a, is_gm=False)
         url = reverse("scene-scenario", kwargs={"pk": idle_scene.pk})
         self.client.force_authenticate(user=self.account_a)
