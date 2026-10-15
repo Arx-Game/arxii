@@ -40,7 +40,7 @@ def _active_battle_in_room(actor: ObjectDB) -> Battle | None:
         return None
     return (
         Battle.objects.filter(
-            scene__location=room,
+            scene__location_id=room.pk,
             scene__is_active=True,
             outcome=BattleOutcome.UNRESOLVED,
         )

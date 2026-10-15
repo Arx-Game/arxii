@@ -308,7 +308,7 @@ class CmdRelationshipBumpTests(TestCase):
 
         flush_cache()
         self.room = ObjectDBFactory(db_key="BumpRoom", db_typeclass_path="typeclasses.rooms.Room")
-        self.scene = SceneFactory(location=self.room, is_active=True)
+        self.scene = SceneFactory(room=self.room, is_active=True)
         self.caller = CharacterFactory()
         self.caller.location = self.room
         self.caller.save()

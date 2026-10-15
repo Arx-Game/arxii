@@ -244,7 +244,7 @@ class CastUsesPerCharacterCheckTests(TestCase):
 
         # A persona on this finalized sheet, in an active scene, to cast through.
         room = create_object("typeclasses.rooms.Room", key="CastPC Room", nohome=True)
-        scene = SceneFactory(location=room)
+        scene = SceneFactory(room=room)
         caster_persona = PersonaFactory(character_sheet=sheet)
 
         # Spy the real start_action_resolution (``wraps`` keeps the cast resolving)

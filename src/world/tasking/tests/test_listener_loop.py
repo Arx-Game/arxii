@@ -38,7 +38,7 @@ class ListenerLoopTestBase(TestCase):
         return create_listener_post(self.asset, self.room, self.handler, **kwargs)
 
     def _mint_room_secret(self):
-        scene = SceneFactory(location=self.room.objectdb)
+        scene = SceneFactory(location=self.room)
         subject = RosterEntryFactory()
         return author_secret(
             subject_sheet=subject.character_sheet,

@@ -55,7 +55,7 @@ class DuranceWitnessTests(TestCase):
         self.friend = CharacterSheetFactory()
         self.friend.character.location = self.inductee.character.location
         self.friend.character.save()
-        self.scene = SceneFactory(location=self.inductee.character.location, is_active=True)
+        self.scene = SceneFactory(room=self.inductee.character.location, is_active=True)
 
     def _interact(self, sheet: CharacterSheet) -> None:
         # Minimal Interaction so scene_witness_personas counts the friend's persona.

@@ -51,7 +51,7 @@ def _make_scene_in_realm(realm):
     area = AreaFactory(realm=realm)
     room_obj = ObjectDBFactory(db_typeclass_path="typeclasses.rooms.Room")
     profile = RoomProfileFactory(objectdb=room_obj, area=area)
-    return SceneFactory(location=profile.objectdb)
+    return SceneFactory(location=profile)
 
 
 class ExtendDeedAwarenessTests(TestCase):

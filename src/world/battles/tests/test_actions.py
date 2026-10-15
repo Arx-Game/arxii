@@ -91,7 +91,7 @@ class BattleActionTestBase(TestCase):
         # Battle whose scene is active and located in this room.
         # BattleFactory auto-creates a Scene with location=None; update location below.
         self.battle = BattleFactory(name="Test Battle")
-        self.battle.scene.location = self.room
+        self.battle.scene.room = self.room
         self.battle.scene.save(update_fields=["location"])
 
         # Two sides on the battle.
@@ -584,7 +584,7 @@ class ChallengeChampionDuelActionTests(BattleActionTestBase):
 
     def setUp(self) -> None:
         super().setUp()
-        self.battle.scene.location = self.room
+        self.battle.scene.room = self.room
         self.battle.scene.save(update_fields=["location"])
         self.covenant = CovenantFactory(covenant_type=CovenantType.BATTLE)
         self.defender_side.covenant = self.covenant

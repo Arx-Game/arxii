@@ -49,7 +49,7 @@ class MomentTelnetE2ETest(TestCase):
         idmapper.models.flush_cache()
 
         self.room = create_object("typeclasses.rooms.Room", key="MomentRoom", nohome=True)
-        self.scene = SceneFactory(location=self.room, is_active=True)
+        self.scene = SceneFactory(room=self.room, is_active=True)
 
         self.sheet = CharacterSheetFactory()
         self.resonance_holder = CharacterResonanceFactory(character_sheet=self.sheet)

@@ -266,7 +266,7 @@ class SocialConsentExclusionsIntegrationTest(django.test.TestCase):
         self.target_tenure = RosterTenureFactory(roster_entry=target_entry, end_date=None)
 
         # Scene in the same room (is_active=True is the default; no end_time field)
-        self.scene = SceneFactory(location=self.room, is_active=True)
+        self.scene = SceneFactory(room=self.room, is_active=True)
 
         # Participate both actors in the scene via their accounts
         SceneParticipationFactory(scene=self.scene, account=self.actor_tenure.player_data.account)
@@ -337,7 +337,7 @@ class SocialConsentExclusionsQueryBudgetTest(django.test.TestCase):
         actor_entry = RosterEntryFactory(character_sheet=actor_sheet)
         actor_tenure = RosterTenureFactory(roster_entry=actor_entry, end_date=None)
 
-        scene = SceneFactory(location=room, is_active=True)
+        scene = SceneFactory(room=room, is_active=True)
         SceneParticipationFactory(scene=scene, account=actor_tenure.player_data.account)
 
         for _ in range(num_targets):

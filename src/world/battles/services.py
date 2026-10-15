@@ -1046,7 +1046,7 @@ def conclude_battle(*, battle: Battle, outcome: str) -> Battle:
             invalidate_active_scene_cache,
         )
 
-        invalidate_active_scene_cache(scene.location)
+        invalidate_active_scene_cache(scene.room)
 
     resolve_battle_beats(battle)
     run_battle_conclusion_hooks(battle)
@@ -1182,7 +1182,7 @@ def open_champion_duel(
     if not is_champion:
         raise NotAChampionError
 
-    room = battle_place.battle.scene.location
+    room = battle_place.battle.scene.room
     enc = create_lethal_duel(
         challenger_participant.character_sheet,
         opponent_kwargs,
@@ -1243,7 +1243,7 @@ def open_siege_engine_encounter(
     if battle_place.combat_encounter_id is not None:
         raise PlaceAlreadyDuelingError
 
-    room = battle_place.battle.scene.location
+    room = battle_place.battle.scene.room
     enc = create_lethal_duel(
         participant.character_sheet,
         opponent_kwargs,
@@ -1291,7 +1291,7 @@ def open_place_encounter(*, battle_place: BattlePlace) -> CombatEncounter:
     if battle_place.combat_encounter_id is not None:
         raise PlaceAlreadyDuelingError
 
-    room = battle_place.battle.scene.location
+    room = battle_place.battle.scene.room
     enc = CombatEncounter.objects.create(
         room=room,
         scene=battle_place.battle.scene,

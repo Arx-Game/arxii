@@ -300,7 +300,8 @@ def _settlement_sheets(
     if scene is not None:
         from world.roster.models import RosterEntry  # noqa: PLC0415
 
-        location_ids = {obj.pk for obj in scene.location.contents} if scene.location else set()
+        room = scene.room
+        location_ids = {obj.pk for obj in room.contents} if room is not None else set()
         for participation in scene.participations.filter(
             is_gm=False, left_at__isnull=True
         ).select_related("account"):

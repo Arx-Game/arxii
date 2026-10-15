@@ -73,7 +73,7 @@ class TestDuranceRegistrationServices(TestCase):
             participation_rule=ParticipationRule.INDUCTION,
             min_participants=2,
         )
-        scene = SceneFactory(location=inductee.character.location, is_active=True)
+        scene = SceneFactory(room=inductee.character.location, is_active=True)
         session = RitualSessionFactory(
             ritual=ritual,
             initiator=officiant,

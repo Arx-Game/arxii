@@ -74,7 +74,7 @@ class TelnetConsentJourneyTests(TestCase):
         self.target_char.save(update_fields=["db_account"])
         self.initiator_sheet = CharacterSheetFactory(character=self.initiator_char)
         self.target_sheet = CharacterSheetFactory(character=self.target_char)
-        self.scene = SceneFactory(is_active=True, location=self.room)
+        self.scene = SceneFactory(is_active=True, room=self.room)
         # Bust the per-location active-scene cache (SharedMemory identity map).
         if hasattr(self.room, "_active_scene_cache"):
             del self.room._active_scene_cache

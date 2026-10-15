@@ -49,7 +49,7 @@ class CmdReactTests(TestCase):
     def setUp(self) -> None:
         idmapper_models.flush_cache()
         self.room = ObjectDBFactory(db_key="ReactRoom", db_typeclass_path="typeclasses.rooms.Room")
-        self.scene = SceneFactory(location=self.room, is_active=True)
+        self.scene = SceneFactory(room=self.room, is_active=True)
         # Actor
         self.actor = _make_char_in_room(self.room)
         self.actor_sheet = CharacterSheetFactory(character=self.actor)

@@ -229,7 +229,7 @@ def build_gm_story_rail_payload(scene: Scene, user: AccountDB) -> dict[str, Any]
     if scene.location_id is not None:
         participants.extend(
             {"character_sheet_id": sheet.pk, "name": sheet.character.db_key}
-            for sheet in _present_character_sheets(scene.location)
+            for sheet in _present_character_sheets(scene.room)
         )
 
     return {

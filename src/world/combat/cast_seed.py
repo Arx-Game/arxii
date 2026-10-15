@@ -255,7 +255,7 @@ def seed_or_feed_encounter_from_cast(  # noqa: PLR0913 - cast context + entrance
     target_sheet: CharacterSheet,
     technique: Technique,
     scene: Scene,
-    room: ObjectDB,  # noqa: OBJECTDB_PARAM
+    room: ObjectDB | None,  # noqa: OBJECTDB_PARAM
     from_entrance: bool = False,
 ) -> CombatEncounter:
     """Seed a new combat encounter from a hostile cast, or feed an active one.
@@ -268,7 +268,8 @@ def seed_or_feed_encounter_from_cast(  # noqa: PLR0913 - cast context + entrance
         target_sheet: The targeted PC's sheet (becomes a PvP opponent).
         technique: The hostile (damage) technique driving the cast.
         scene: The Scene the cast happens in; the encounter binds to it.
-        room: The room ObjectDB the encounter takes place in.
+        room: The room ObjectDB the encounter takes place in (None for a scene
+            held nowhere; the encounter then has no room, like a roomless duel).
         from_entrance: True when this hostile cast originated as a dramatic
             technique entrance (#2183) — stamped onto the caster's declared
             round action so a later task can fire recognition on resolution.

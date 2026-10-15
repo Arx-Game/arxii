@@ -141,4 +141,4 @@ def complete_instanced_room(room: ObjectDB) -> None:
 
 def _has_meaningful_data(room: ObjectDB) -> bool:
     """Check if this room has data worth preserving."""
-    return Scene.objects.filter(location=room).exists()
+    return Scene.objects.filter(location_id=room.pk).exists()

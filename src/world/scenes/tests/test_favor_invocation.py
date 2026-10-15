@@ -90,7 +90,7 @@ class SceneInvocationBase(TestCase):
         ensure_being_modifier_targets(self.being)
 
         self.room = ObjectDBFactory(db_key="Hall", db_typeclass_path="typeclasses.rooms.Room")
-        self.scene = SceneFactory(location=self.room, is_active=True)
+        self.scene = SceneFactory(room=self.room, is_active=True)
         self.actor, account = _pc_in_room(self.room, db_key="Tobiah")
         SceneParticipationFactory(scene=self.scene, account=account)
         self.onlooker, onlooker_account = _pc_in_room(self.room, db_key="Hobb")

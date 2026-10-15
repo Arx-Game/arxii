@@ -1232,7 +1232,7 @@ class PoseSubmitSerializer(serializers.Serializer):
         if scene.location is None:
             return
         actor_room = persona.character_sheet.character.location
-        if actor_room is None or actor_room.pk != scene.location.pk:
+        if actor_room is None or actor_room.pk != scene.location_id:
             raise serializers.ValidationError(
                 {"scene_id": "Your character is not present in this scene's room."}
             )

@@ -375,7 +375,7 @@ def create_cast_outcome_pose(  # noqa: PLR0913 - all params describe one pose; c
     # nobody live. Location comes from the scene, not the writer -- the Narrator
     # persona is never physically placed (a receiver-scoped row below still
     # reaches its receivers regardless; only a room-heard row needs this).
-    location = scene.location
+    location = scene.room
 
     if not audience.concealed:
         unconcealed_pose = create_interaction(
@@ -700,7 +700,7 @@ def _resolve_hostile_accepted_cast(
             target_sheet=target.character_sheet,
             technique=technique,
             scene=action_request.scene,
-            room=action_request.scene.location,
+            room=action_request.scene.room,
             from_entrance=action_request.originated_as_entrance,
         )
         acknowledge_encounter_risk(encounter, target.character_sheet)
@@ -1372,7 +1372,7 @@ def _route_hostile_cast(  # noqa: PLR0913 - cohesive hostile-cast routing params
             target_sheet=target_persona.character_sheet,
             technique=technique,
             scene=scene,
-            room=scene.location,
+            room=scene.room,
             from_entrance=originated_as_entrance,
         )
     return CastResult(request=request, encounter=encounter)

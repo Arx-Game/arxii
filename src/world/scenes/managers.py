@@ -20,6 +20,9 @@ class SceneQuerySet(ArxSharedMemoryQuerySet):
     def active_for_room(self, location: ObjectDB | None) -> SceneQuerySet:
         """Active, room-scoped RP scenes at *location* — excludes battle-backed scenes.
 
+        *location* is the Evennia room object; ``Scene.location`` is its
+        ``RoomProfile``, which shares the room's pk, so the filter is on the id.
+
         A staged ``Battle``'s backing Scene (``Battle`` is a 1:1 Scene extension, #2010)
         is active + located + PUBLIC and typically the newest scene at the room too, so
         an unfiltered ``Scene.objects.filter(location=room, is_active=True)`` lookup
@@ -28,7 +31,8 @@ class SceneQuerySet(ArxSharedMemoryQuerySet):
         ``ensure_scene_for_location``, the create-scene collision check, ``scene status``)
         must go through this method rather than hand-rolling the filter (#2010 review).
         """
-        return self.filter(location=location, is_active=True, battle__isnull=True)
+        location_id = location.pk if location is not None else None
+        return self.filter(location_id=location_id, is_active=True, battle__isnull=True)
 
     def viewable_by(self, account: AccountDB | None) -> SceneQuerySet:
         """Scenes ``account`` may view.

@@ -209,7 +209,7 @@ class CombatEndHandOffTest(TestCase):
 
         # Build a room + encounter in it.
         self.room = create_object("typeclasses.rooms.Room", key="Hand-off Room", nohome=True)
-        scene = SceneFactory(location=self.room)
+        scene = SceneFactory(room=self.room)
         self.encounter = CombatEncounterFactory(
             scene=scene, room=self.room, status=RoundStatus.BETWEEN_ROUNDS
         )

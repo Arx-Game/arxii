@@ -181,7 +181,7 @@ class CmdPositionPlaceTests(TestCase):
         throne = PositionFactory(room=room, name="throne", kind=PositionKind.PRIMARY)
         gm_account = AccountFactory(username="cmdplace_gm")
         gm = self._make_actor_with_account("CmdPlaceGM", room, gm_account)
-        scene = SceneFactory(location=room)
+        scene = SceneFactory(room=room)
         SceneParticipationFactory(scene=scene, account=gm_account, is_gm=True)
         npc = CharacterFactory(db_key="CmdPlaceGMNPC", location=room)
 

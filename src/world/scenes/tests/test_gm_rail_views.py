@@ -38,7 +38,7 @@ class GMStoryRailViewTests(APITestCase):
             db_key="RailRoom",
             db_typeclass_path="typeclasses.rooms.Room",
         )
-        self.scene = SceneFactory(location=self.room, is_active=True)
+        self.scene = SceneFactory(room=self.room, is_active=True)
 
         self.gm_account = AccountFactory()
         GMProfileFactory(account=self.gm_account, level=GMLevel.JUNIOR)

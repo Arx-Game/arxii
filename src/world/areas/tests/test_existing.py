@@ -583,7 +583,7 @@ class SocietiesForSceneTests(TestCase):
             dominant_society=self.society_a,
         )
         room = _make_room_in_area(area)
-        scene = SceneFactory(location=room)
+        scene = SceneFactory(room=room)
 
         result = societies_for_scene(scene)
 
@@ -597,7 +597,7 @@ class SocietiesForSceneTests(TestCase):
             dominant_society=None,
         )
         room = _make_room_in_area(area)
-        scene = SceneFactory(location=room)
+        scene = SceneFactory(room=room)
 
         result = societies_for_scene(scene)
 
@@ -612,7 +612,7 @@ class SocietiesForSceneTests(TestCase):
         city = AreaFactory(name="Walk City", level=AreaLevel.BARONY, parent=kingdom, realm=None)
         hall = AreaFactory(name="Walk Hall", level=AreaLevel.BUILDING, parent=city, realm=None)
         room = _make_room_in_area(hall)
-        scene = SceneFactory(location=room)
+        scene = SceneFactory(room=room)
 
         result = societies_for_scene(scene)
 
@@ -629,7 +629,7 @@ class SocietiesForSceneTests(TestCase):
             dominant_society=self.society_b,
         )
         room = _make_room_in_area(hall)
-        scene = SceneFactory(location=room)
+        scene = SceneFactory(room=room)
 
         result = societies_for_scene(scene)
 
@@ -641,7 +641,7 @@ class SocietiesForSceneTests(TestCase):
             db_typeclass_path="typeclasses.rooms.Room",
         )
         RoomProfile.objects.update_or_create(objectdb=room_obj, defaults={"area": None})
-        scene = SceneFactory(location=room_obj)
+        scene = SceneFactory(room=room_obj)
 
         result = societies_for_scene(scene)
 
@@ -655,7 +655,7 @@ class SocietiesForSceneTests(TestCase):
             dominant_society=None,
         )
         room = _make_room_in_area(area)
-        scene = SceneFactory(location=room)
+        scene = SceneFactory(room=room)
 
         result = societies_for_scene(scene)
 

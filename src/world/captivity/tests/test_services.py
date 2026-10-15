@@ -126,7 +126,7 @@ class ResolveCaptivityTests(TestCase):
         # A scene in the cell keeps the room from being torn down so we can
         # assert the instance was completed rather than deleted.
         cell = captivity.cell
-        SceneFactory(location=cell.room.objectdb)
+        SceneFactory(location=cell.room)
 
         resolve_captivity(captivity, status=CaptivityStatus.ESCAPED)
 

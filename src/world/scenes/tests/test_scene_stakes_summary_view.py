@@ -57,7 +57,7 @@ class SceneStakesSummaryViewTests(APITestCase):
             "stakes_summary_view_actor_a", self.room, self.account_a
         )
 
-        self.scene = SceneFactory(location=self.room, is_active=True)
+        self.scene = SceneFactory(room=self.room, is_active=True)
         SceneParticipationFactory(scene=self.scene, account=self.account_a, is_gm=False)
 
         self.story = StoryFactory()
@@ -117,7 +117,7 @@ class SceneStakesSummaryViewTests(APITestCase):
             self.assertNotIn(leaked_key, stake_payload)
 
     def test_no_running_beat_returns_the_empty_shape(self) -> None:
-        idle_scene = SceneFactory(location=self.room, is_active=True)
+        idle_scene = SceneFactory(room=self.room, is_active=True)
         SceneParticipationFactory(scene=idle_scene, account=self.account_a, is_gm=False)
         url = reverse("scene-stakes-summary", kwargs={"pk": idle_scene.pk})
         self.client.force_authenticate(user=self.account_a)
@@ -155,7 +155,7 @@ class SceneStakesSummaryPrivacyGateTests(APITestCase):
         )
 
         self.scene = SceneFactory(
-            location=self.room, is_active=True, privacy_mode=ScenePrivacyMode.PRIVATE
+            room=self.room, is_active=True, privacy_mode=ScenePrivacyMode.PRIVATE
         )
         SceneParticipationFactory(scene=self.scene, account=self.account_a, is_gm=False)
 

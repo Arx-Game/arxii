@@ -90,7 +90,7 @@ class SceneChecksTestBase(TestCase):
             )
 
         self.room = _room()
-        self.scene = SceneFactory(location=self.room)
+        self.scene = SceneFactory(room=self.room)
 
         self.player_actor, self.player_account = _pc_in_room(self.room, db_key="SelfChecker")
         SceneParticipationFactory(scene=self.scene, account=self.player_account, is_gm=False)

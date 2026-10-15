@@ -1833,7 +1833,7 @@ def _has_active_non_public_scene(room: DefaultObject) -> bool:
     from world.scenes.models import Scene  # noqa: PLC0415
 
     return (
-        Scene.objects.filter(location=room, is_active=True)
+        Scene.objects.filter(location_id=room.pk, is_active=True)
         .exclude(privacy_mode=ScenePrivacyMode.PUBLIC)
         .exists()
     )

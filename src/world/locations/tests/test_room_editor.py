@@ -97,7 +97,7 @@ class SetRoomDisplayDataTests(TestCase):
     def test_cannot_make_public_while_a_non_public_scene_is_active(self) -> None:
         self.profile.is_public = False
         self.profile.save(update_fields=["is_public"])
-        SceneFactory(location=self.room, privacy_mode=ScenePrivacyMode.PRIVATE, is_active=True)
+        SceneFactory(room=self.room, privacy_mode=ScenePrivacyMode.PRIVATE, is_active=True)
         with self.assertRaises(RoomEditError):
             set_room_display_data(room=self.room, persona=self.owner, is_public=True)
         assert RoomProfile.objects.get(objectdb=self.room).is_public is False
@@ -125,7 +125,7 @@ class SetRoomDisplayDataTests(TestCase):
         stranger = PersonaFactory()
         self.profile.is_public = False
         self.profile.save(update_fields=["is_public"])
-        SceneFactory(location=self.room, privacy_mode=ScenePrivacyMode.PRIVATE, is_active=True)
+        SceneFactory(room=self.room, privacy_mode=ScenePrivacyMode.PRIVATE, is_active=True)
         with self.assertRaises(RoomEditError):
             set_room_display_data(
                 room=self.room,

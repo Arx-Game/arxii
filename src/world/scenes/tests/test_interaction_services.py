@@ -134,7 +134,7 @@ class TestCreateInteraction(TestCase):
         cannot occur in production, and ``persona_can_receive`` correctly refuses it.
         """
         room = ObjectDBFactory(db_key="Hall", db_typeclass_path="typeclasses.rooms.Room")
-        scene = SceneFactory(location=room)
+        scene = SceneFactory(room=room)
         writer = _persona_in_room(room)
         target = _persona_in_room(room)
         # The target has entered the scene (#3867): a line of their own is in the log.
@@ -153,7 +153,7 @@ class TestCreateInteraction(TestCase):
     def test_a_target_at_the_threshold_is_refused_with_its_own_words(self) -> None:
         """Present in the room, not yet in the scene (#3867): not addressable room-heard."""
         room = ObjectDBFactory(db_key="Hall", db_typeclass_path="typeclasses.rooms.Room")
-        scene = SceneFactory(location=room)
+        scene = SceneFactory(room=room)
         writer = _persona_in_room(room)
         reader = _persona_in_room(room)
 
@@ -175,7 +175,7 @@ class TestEntrance(TestCase):
 
     def setUp(self) -> None:
         self.room = ObjectDBFactory(db_key="Hall", db_typeclass_path="typeclasses.rooms.Room")
-        self.scene = SceneFactory(location=self.room)
+        self.scene = SceneFactory(room=self.room)
         self.character = CharacterFactory(db_key="Alice", location=self.room)
         self.sheet = CharacterSheetFactory(character=self.character)
 
@@ -896,7 +896,7 @@ class TestEphemeralInteraction(TestCase):
         """In ephemeral scenes, interactions are pushed via WebSocket but not saved."""
         room, char_a, char_b, identity_a, _identity_b = self._make_room_with_characters()
         scene = SceneFactory(
-            location=room,
+            room=room,
             privacy_mode=ScenePrivacyMode.EPHEMERAL,
         )
 
@@ -937,7 +937,7 @@ class TestEphemeralInteraction(TestCase):
         char_c = CharacterFactory(db_key="Carol", location=room)
         CharacterSheetFactory(character=char_c)
         scene = SceneFactory(
-            location=room,
+            room=room,
             privacy_mode=ScenePrivacyMode.EPHEMERAL,
         )
         room.active_scene = scene
@@ -967,7 +967,7 @@ class TestEphemeralInteraction(TestCase):
         """Regular scenes still persist interactions normally."""
         room, char_a, char_b, _identity_a, _identity_b = self._make_room_with_characters()
         scene = SceneFactory(
-            location=room,
+            room=room,
             privacy_mode=ScenePrivacyMode.PUBLIC,
         )
 
@@ -1069,7 +1069,7 @@ class TestGetActiveScene(TestCase):
             db_key="Hall",
             db_typeclass_path="typeclasses.rooms.Room",
         )
-        scene = SceneFactory(location=room, is_active=True)
+        scene = SceneFactory(room=room, is_active=True)
         result = get_active_scene(room)
         assert result is not None
         assert result.pk == scene.pk
@@ -1079,7 +1079,7 @@ class TestGetActiveScene(TestCase):
             db_key="Hall",
             db_typeclass_path="typeclasses.rooms.Room",
         )
-        SceneFactory(location=room, is_active=False)
+        SceneFactory(room=room, is_active=False)
         result = get_active_scene(room)
         assert result is None
 
@@ -1101,7 +1101,7 @@ class TestGetActiveScene(TestCase):
             db_key="Warfront",
             db_typeclass_path="typeclasses.rooms.Room",
         )
-        rp_scene = SceneFactory(location=room, is_active=True)
+        rp_scene = SceneFactory(room=room, is_active=True)
         stage_battle(name="Siege of Warfront", location=room)
 
         result = get_active_scene(room)
@@ -1125,7 +1125,7 @@ class TestRecordInteractionActiveSceneFromDB(TestCase):
         )
         char_a = CharacterFactory(db_key="Alice", location=room)
         CharacterSheetFactory(character=char_a)
-        scene = SceneFactory(location=room, is_active=True)
+        scene = SceneFactory(room=room, is_active=True)
 
         result = record_interaction(
             character=char_a,
@@ -1308,7 +1308,7 @@ class TestRecordInteractionAutoJoinsScene(TestCase):
         )
         char_a = CharacterFactory(db_key="Alice", location=room)
         CharacterSheetFactory(character=char_a)
-        scene = SceneFactory(location=room)
+        scene = SceneFactory(room=room)
 
         # Set up roster entry with active tenure for the character
         entry = RosterEntryFactory(character_sheet__character=char_a)
@@ -1336,7 +1336,7 @@ class TestRecordInteractionAutoJoinsScene(TestCase):
         )
         char_a = CharacterFactory(db_key="Alice", location=room)
         CharacterSheetFactory(character=char_a)
-        scene = SceneFactory(location=room)
+        scene = SceneFactory(room=room)
 
         entry = RosterEntryFactory(character_sheet__character=char_a)
         tenure = RosterTenureFactory(roster_entry=entry, end_date=None)
@@ -1377,7 +1377,7 @@ class TestEnsureSceneParticipation(TestCase):
         entry = RosterEntryFactory(character_sheet__character=char_a)
         RosterTenureFactory(roster_entry=entry, end_date=None)
 
-        scene = SceneFactory(location=room)
+        scene = SceneFactory(room=room)
         ensure_scene_participation(scene, char_a)
         account_id = _get_account_for_character(char_a.pk)
         self.assertTrue(

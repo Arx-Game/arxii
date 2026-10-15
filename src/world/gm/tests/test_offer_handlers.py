@@ -26,7 +26,7 @@ class GMSummonPendingHandlerTests(TestCase):
     def setUp(self) -> None:
         self.gm_room = _room(db_key="HandlerGMRoom")
         self.other_room = _room(db_key="HandlerElsewhere")
-        self.scene = SceneFactory(location=self.gm_room, name="A Quiet Word")
+        self.scene = SceneFactory(room=self.gm_room, name="A Quiet Word")
 
         self.target = CharacterFactory(db_key="HandlerTarget", location=self.other_room)
         self.target_sheet = CharacterSheetFactory(character=self.target)

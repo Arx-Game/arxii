@@ -386,7 +386,7 @@ def route_deed_reach(  # noqa: PLR0913
         return DeedReachResult()
 
     scandal_dots = scandalous_societies(archetypes, societies)
-    is_public = room_is_publicly_listed(scene.location)
+    is_public = room_is_publicly_listed(scene.room)
 
     if scandal_dots:
         declared = _approach_for_key(containment_approach)

@@ -419,7 +419,7 @@ class SceneViewSet(viewsets.ModelViewSet):
         from world.locations.activity_services import room_activity_band  # noqa: PLC0415
 
         scene = self.get_object()
-        band = room_activity_band(scene.location)
+        band = room_activity_band(scene.room)
         return Response(SceneActivitySerializer({"band": band.label}).data)
 
     @extend_schema(responses=GMStoryRailSerializer, tags=["scenes"])

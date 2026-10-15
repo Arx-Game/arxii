@@ -33,7 +33,7 @@ class RelationshipBumpActionTests(TestCase):
     def setUp(self) -> None:
         idmapper_models.flush_cache()
         self.room = ObjectDBFactory(db_key="TestRoom", db_typeclass_path="typeclasses.rooms.Room")
-        self.scene = SceneFactory(location=self.room, is_active=True)
+        self.scene = SceneFactory(room=self.room, is_active=True)
         self.actor, self.actor_sheet, self.actor_account = _char_with_account(self.room)
         self.target, self.target_sheet, self.target_account = _char_with_account(self.room)
         SceneParticipationFactory(scene=self.scene, account=self.actor_account)

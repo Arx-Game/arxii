@@ -42,7 +42,7 @@ class PlaceEncounterOutcomeWiringTests(TestCase):
             "typeclasses.rooms.Room", key="Place Encounter Wiring Room", nohome=True
         )
         self.battle = BattleFactory()
-        self.battle.scene.location = self.room
+        self.battle.scene.room = self.room
         self.battle.scene.save(update_fields=["location"])
         self.pc_side = BattleSideFactory(battle=self.battle, role=BattleSideRole.ATTACKER)
         self.enemy_side = BattleSideFactory(battle=self.battle, role=BattleSideRole.DEFENDER)

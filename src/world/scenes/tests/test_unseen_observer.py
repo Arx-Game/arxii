@@ -68,7 +68,7 @@ class UnseenObserverTests(TestCase):
         frontend consumer, and fresh on every login/move, not just at the moment of
         transition."""
         room = create_object("typeclasses.rooms.Room", key="UnseenObserverBroadcastRoom")
-        self.scene.location = room
+        self.scene.room = room
         self.scene.save()
 
         with patch.object(room, "_broadcast_room_state") as broadcast:
@@ -83,7 +83,7 @@ class UnseenObserverTests(TestCase):
         # rides real sessions, not account.msg directly — #1225 review fix), so a
         # fake session stands in for a live connection.
         room = create_object("typeclasses.rooms.Room", key="UnseenObserverTestRoom", nohome=True)
-        self.scene.location = room
+        self.scene.room = room
         self.scene.save()
         room.active_scene = self.scene
 

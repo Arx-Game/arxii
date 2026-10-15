@@ -190,7 +190,7 @@ class SceneViewSetTestCase(APITestCase):
         response = self.client.post(url, {"location_id": room.id}, format="json")
 
         assert response.status_code == status.HTTP_400_BAD_REQUEST
-        assert not Scene.objects.filter(location=room).exists()
+        assert not Scene.objects.filter(location_id=room.pk).exists()
 
     def test_scene_list_filtering(self):
         """Test scene filtering by is_active and privacy_mode"""
@@ -375,7 +375,7 @@ class SetRoundModeViewTestCase(APITestCase):
         self.account = AccountFactory()
         self.client.force_authenticate(user=self.account)
         self.char, self.room = _setup_owner_with_character(self.account)
-        self.scene = SceneFactory(location=self.room, is_active=True)
+        self.scene = SceneFactory(room=self.room, is_active=True)
         SceneOwnerParticipationFactory(scene=self.scene, account=self.account)
         self.round = SceneRoundFactory(
             room=RoomProfileFactory(objectdb=self.room),
@@ -455,7 +455,7 @@ class SetRoundModeViewTestCase(APITestCase):
     def test_scene_detail_active_round_payload(self):
         self.round.delete()
         rnd = SceneRound.objects.create(
-            room=RoomProfileFactory(objectdb=self.scene.location),
+            room=RoomProfileFactory(objectdb=self.scene.room),
             scene=self.scene,
             mode=SceneRoundMode.STRICT,
             advance_quorum_pct=50,
@@ -476,7 +476,7 @@ class SetRoundModeViewTestCase(APITestCase):
     def test_scene_detail_active_round_is_danger(self):
         self.round.delete()
         SceneRound.objects.create(
-            room=RoomProfileFactory(objectdb=self.scene.location),
+            room=RoomProfileFactory(objectdb=self.scene.room),
             scene=self.scene,
             start_reason=SceneRoundStartReason.DANGER,
         )

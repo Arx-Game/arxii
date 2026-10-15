@@ -173,7 +173,7 @@ class SoulTetherJourneyTests(TestCase):
             target=self.sinner_sheet,
         )
 
-        self.scene = SceneFactory(is_active=True, location=self.room)
+        self.scene = SceneFactory(is_active=True, room=self.room)
         if hasattr(self.room, "_active_scene_cache"):
             del self.room._active_scene_cache
 

@@ -893,7 +893,7 @@ class SceneParticipationOnCombatEntryTest(TestCase):
         from world.scenes.interaction_services import _get_account_for_character
         from world.scenes.models import SceneParticipation
 
-        scene = SceneFactory(location=self.room)
+        scene = SceneFactory(room=self.room)
         enc = CombatEncounterFactory(scene=scene, room=self.room)
         add_participant(enc, self.character_sheet)
 

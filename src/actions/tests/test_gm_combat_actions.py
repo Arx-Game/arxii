@@ -106,7 +106,7 @@ class GMCombatActionTestBase(TestCase):
         )
 
         # Scene with the player as a non-GM participant and the GM as GM.
-        self.scene = SceneFactory(location=self.room)
+        self.scene = SceneFactory(room=self.room)
         SceneParticipationFactory(scene=self.scene, account=self.player_account, is_gm=False)
         SceneParticipationFactory(scene=self.scene, account=self.gm_account, is_gm=True)
 
@@ -801,7 +801,7 @@ class CreateEncounterActionTests(TestCase):
             self.player_account,
         )
 
-        self.scene = SceneFactory(location=self.room, is_active=True)
+        self.scene = SceneFactory(room=self.room, is_active=True)
         SceneParticipationFactory(scene=self.scene, account=self.gm_account, is_gm=True)
         SceneParticipationFactory(scene=self.scene, account=self.player_account, is_gm=False)
 

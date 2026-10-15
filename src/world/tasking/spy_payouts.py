@@ -393,11 +393,11 @@ def _movements_report(task: OrgTask) -> list[str]:
         Interaction.objects.filter(
             persona=target,
             timestamp__gte=since,
-            scene__location__room_profile__is_public=True,
+            scene__location__is_public=True,
         )
         .select_related("scene__location")
         .order_by("-timestamp")
-        .values_list("scene__location__db_key", "timestamp")
+        .values_list("scene__location__objectdb__db_key", "timestamp")
     )
     seen: dict[str, str] = {}
     for room_name, when in rows:

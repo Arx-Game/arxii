@@ -88,13 +88,13 @@ class StageBattleTests(TestCase):
         battle = stage_battle(name="Located Siege", location=room)
 
         battle.scene.refresh_from_db()
-        self.assertEqual(battle.scene.location, room)
+        self.assertEqual(battle.scene.room, room)
 
     def test_leaves_scene_location_none_by_default(self) -> None:
         battle = stage_battle(name="Locationless Siege")
 
         battle.scene.refresh_from_db()
-        self.assertIsNone(battle.scene.location)
+        self.assertIsNone(battle.scene.room)
 
 
 class InstantiateBattleBlueprintTests(TestCase):

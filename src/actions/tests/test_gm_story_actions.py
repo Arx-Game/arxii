@@ -523,7 +523,7 @@ class DeclareStakesActionTests(GMStoryActionTestBase):
         invalidate_active_scene_cache(self.room)
         # An active scene at the actors' room with the player as participant.
         self.scene = SceneFactory(
-            location=self.room,
+            room=self.room,
             participants=[self.player_account, self.lead_gm_account],
         )
         self.beat = BeatFactory(
@@ -679,7 +679,7 @@ class DeclareStakesActionTests(GMStoryActionTestBase):
 
         self.assertNotIn(alt_sheet, sheets)
         # The participating characters standing in the room ARE included.
-        present_ids = {obj.pk for obj in self.scene.location.contents}
+        present_ids = {obj.pk for obj in self.scene.room.contents}
         self.assertTrue(sheets)
         for sheet in sheets:
             self.assertIn(sheet.character_id, present_ids)

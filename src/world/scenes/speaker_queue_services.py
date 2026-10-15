@@ -160,9 +160,10 @@ def clear_queue_on_scene_finish(scene: Scene) -> None:
 
     Called from ``finish_scene_full``. No-op if no active queue exists.
     """
-    if scene.location is None:
+    room = scene.room
+    if room is None:
         return
-    queue = get_active_queue(scene.location)
+    queue = get_active_queue(room)
     if queue is not None:
         close_queue(queue)
 

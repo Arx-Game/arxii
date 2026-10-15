@@ -127,7 +127,7 @@ class _ScenePipelineTestCase(TestCase):
         cls.initiator = _placed_persona(cls.room, "Initiator")
         cls.target = _placed_persona(cls.room, "Target")
         cls.bystander = _placed_persona(cls.room, "Bystander")
-        cls.scene = SceneFactory(location=cls.room)
+        cls.scene = SceneFactory(room=cls.room)
 
     def setUp(self) -> None:
         # accrue hits the DB for KudosSourceCategory/GameWeek, which may not be seeded

@@ -114,7 +114,7 @@ class SettleAllegianceTests(TestCase):
             db_key="Settle Hall",
             db_typeclass_path="typeclasses.rooms.Room",
         )
-        cls.scene = SceneFactory(is_active=True, location=cls.room)
+        cls.scene = SceneFactory(is_active=True, room=cls.room)
         cls.wren_char, cls.wren = CharacterContent.create_base_social_character(name="Wren")
         cls.tamsin_char, cls.tamsin = CharacterContent.create_base_social_character(name="Tamsin")
         cls.npc_char, cls.npc = CharacterContent.create_base_social_character(

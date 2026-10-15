@@ -41,7 +41,7 @@ class MintCrossingDeedWithWitnessesTests(TestCase):
             cls.offer,
         ) = build_crossing_world(boundary_level=30, suffix="_deed_mint")
         # Active scene at the crosser's location.
-        cls.scene = SceneFactory(location=cls.character.location, is_active=True)
+        cls.scene = SceneFactory(room=cls.character.location, is_active=True)
 
     def setUp(self):
         cross_threshold(
@@ -90,7 +90,7 @@ class MintCrossingDeedWitnessesRecordedTests(TestCase):
             cls.offer,
         ) = build_crossing_world(boundary_level=31, suffix="_deed_wit")
         # Scene at the crosser's location.
-        cls.scene = SceneFactory(location=cls.character.location, is_active=True)
+        cls.scene = SceneFactory(room=cls.character.location, is_active=True)
 
         # A witness: separate sheet with a primary persona.
         cls.witness_sheet = CharacterSheetFactory()

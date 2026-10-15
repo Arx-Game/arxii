@@ -110,7 +110,7 @@ class TestAcceptedEntranceCastHooks(CastScenarioMixin):
     def _make_embattled_encounter(self):
         encounter = CombatEncounterFactory(
             scene=self.scene,
-            room=self.scene.location,
+            room=self.scene.room,
             status=RoundStatus.DECLARING,
             risk_level=RiskLevel.MODERATE,
             round_number=1,
@@ -201,7 +201,7 @@ class TestAcceptedEntranceCastHooks(CastScenarioMixin):
         """A #777-gated hostile entrance accept stamps from_entrance on the declaration."""
         encounter = CombatEncounterFactory(
             scene=self.scene,
-            room=self.scene.location,
+            room=self.scene.room,
             status=RoundStatus.BETWEEN_ROUNDS,
             risk_level=RiskLevel.LETHAL,
             round_number=1,

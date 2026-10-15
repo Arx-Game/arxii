@@ -339,7 +339,7 @@ class TestImmediateCastSurfacesEnvironmentLedger(ResonanceCacheIsolationMixin, T
         )
         CharacterTechniqueFactory(character=initiator.character_sheet, technique=technique)
 
-        scene = SceneFactory(location=room)
+        scene = SceneFactory(room=room)
 
         with patch("world.scenes.action_services.accrue"):
             cast = request_technique_cast(
@@ -586,7 +586,7 @@ class TestImmediateCastThreadRaisesPower(ResonanceCacheIsolationMixin, TestCase)
         Caller is responsible for the one-time ``CheckSystemSetupFactory.create()``.
         """
         room = create_object("typeclasses.rooms.Room", key=room_key, nohome=True)
-        scene = SceneFactory(location=room)
+        scene = SceneFactory(room=room)
 
         initiator = PersonaFactory()
         caster_char = initiator.character_sheet.character
@@ -852,7 +852,7 @@ class HostileCastRiskGateTests(CastScenarioMixin):
     def _make_encounter(self, risk_level: str) -> CombatEncounter:
         """A feedable (BETWEEN_ROUNDS) encounter in the test scene at *risk_level*."""
         return CombatEncounter.objects.create(
-            room=self.scene.location,
+            room=self.scene.room,
             scene=self.scene,
             status=RoundStatus.BETWEEN_ROUNDS,
             risk_level=risk_level,

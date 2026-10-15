@@ -247,7 +247,7 @@ class PvpFullRoundTripTests(TestCase):
         from world.scenes.factories import SceneFactory
 
         enc = create_pvp_duel(self.sheet_a, self.sheet_b, self.room)
-        scene = SceneFactory(location=self.room)
+        scene = SceneFactory(room=self.room)
         enc.scene = scene
         enc.save(update_fields=["scene"])
 

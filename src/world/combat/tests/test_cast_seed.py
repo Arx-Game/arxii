@@ -83,7 +83,7 @@ class SeedOrFeedEncounterFromCastTests(EvenniaTestCase):
         from world.scenes.factories import SceneFactory
 
         room = create_object("typeclasses.rooms.Room", key="Cast Room", nohome=True)
-        scene = SceneFactory(location=room)
+        scene = SceneFactory(room=room)
         return scene, room
 
     def _seed(self, caster, target, technique, scene, room):
@@ -336,7 +336,7 @@ class SeedOrFeedEncounterOpenedFromParleyTests(EvenniaTestCase):
         from world.scenes.factories import SceneFactory
 
         room = create_object("typeclasses.rooms.Room", key="Parley Cast Room", nohome=True)
-        scene = SceneFactory(location=room, is_active=is_active)
+        scene = SceneFactory(room=room, is_active=is_active)
         return scene, room
 
     def test_create_from_active_scene_stamps_opened_from_parley(self):
@@ -465,7 +465,7 @@ class SeedOrFeedEncounterInitiatedByPcSideTests(EvenniaTestCase):
         from world.scenes.factories import SceneFactory
 
         room = create_object("typeclasses.rooms.Room", key="Initiator Cast Room", nohome=True)
-        scene = SceneFactory(location=room)
+        scene = SceneFactory(room=room)
         return scene, room
 
     def test_seeded_encounter_stamps_pc_side_initiator(self):

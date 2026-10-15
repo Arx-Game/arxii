@@ -53,7 +53,7 @@ class SceneActionRequestSerializerRiskLevelTests(CastScenarioMixin):
     def _make_encounter(self, risk_level: str) -> CombatEncounter:
         """A feedable (BETWEEN_ROUNDS) encounter in the test scene at *risk_level*."""
         return CombatEncounter.objects.create(
-            room=self.scene.location,
+            room=self.scene.room,
             scene=self.scene,
             status=RoundStatus.BETWEEN_ROUNDS,
             risk_level=risk_level,
@@ -131,7 +131,7 @@ class SceneActionRequestSerializerCombatStakesTests(CastScenarioMixin):
 
     def _make_encounter(self, risk_level: str) -> CombatEncounter:
         return CombatEncounter.objects.create(
-            room=self.scene.location,
+            room=self.scene.room,
             scene=self.scene,
             status=RoundStatus.BETWEEN_ROUNDS,
             risk_level=risk_level,
@@ -208,7 +208,7 @@ class SceneActionTargetSerializerRiskLevelTests(CastScenarioMixin):
 
     def _make_encounter(self, risk_level: str) -> CombatEncounter:
         return CombatEncounter.objects.create(
-            room=self.scene.location,
+            room=self.scene.room,
             scene=self.scene,
             status=RoundStatus.BETWEEN_ROUNDS,
             risk_level=risk_level,

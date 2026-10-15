@@ -335,7 +335,7 @@ def broadcast_scene_message(scene: Scene, action: ActionType) -> None:
         scene: Scene to announce.
         action: Event type for the scene.
     """
-    location = scene.location
+    location = scene.room
     if location is None:
         return
     if action in (SceneAction.START, SceneAction.END):
@@ -453,7 +453,7 @@ def _broadcast_unseen_observer_state(scene: Scene) -> None:
     payload key with no frontend consumer and no resend-on-reconnect), so a
     player who reconnects or walks in while a grant is already active also
     sees the current state without a separate re-sync mechanism."""
-    location = scene.location
+    location = scene.room
     if location is None:
         return
     location._broadcast_room_state()  # noqa: SLF001

@@ -185,7 +185,7 @@ def start_event(event: Event) -> Event:
             raise EventError(EventError.PRIVATE_IN_PUBLIC_ROOM)
         scene = Scene.objects.create(
             name=event.name,
-            location=event.location.objectdb,
+            location=event.location,
             privacy_mode=privacy,
             event=event,
         )

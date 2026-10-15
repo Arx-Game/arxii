@@ -50,7 +50,7 @@ class FrameJobFixture(TestCase):
 
         # The crime: a scened deed, tagged, evidence generated at the scene.
         cls.crime_room = RoomProfileFactory(area=cls.kingdom)
-        cls.deed = LegendEntryFactory(scene=SceneFactory(location=cls.crime_room.objectdb))
+        cls.deed = LegendEntryFactory(scene=SceneFactory(location=cls.crime_room))
         tag_deed_crimes(cls.deed, [cls.theft])
         cls.evidence = CrimeEvidence.objects.get(deed=cls.deed)
 

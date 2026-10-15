@@ -227,7 +227,7 @@ class RestDispatchTargetResolutionTests(IdentifyActionTestCase):
 
 class AttemptInteractionLoggingTests(IdentifyActionTestCase):
     def test_attempt_logs_an_outcome_blind_interaction_in_an_active_scene(self) -> None:
-        SceneFactory(location=self.room, is_active=True)
+        SceneFactory(room=self.room, is_active=True)
         failure = CheckOutcomeFactory(name="IdentifyAction Attempt Log", success_level=-1)
 
         before = Interaction.objects.count()

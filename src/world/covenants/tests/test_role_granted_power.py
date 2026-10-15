@@ -165,7 +165,7 @@ class ComboSlotArchetypeTests(TestCase):
         room = ObjectDBFactory(db_key="ArchComboRoom", db_typeclass_path="typeclasses.rooms.Room")
         sword_sheet.character.db_location = room
         sword_sheet.character.save(update_fields=["db_location"])
-        SceneFactory(location=room, is_active=True)
+        SceneFactory(room=room, is_active=True)
 
         sword_membership = CharacterCovenantRoleFactory(
             character_sheet=sword_sheet,

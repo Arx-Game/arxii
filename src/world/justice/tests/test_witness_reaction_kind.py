@@ -72,7 +72,7 @@ class WitnessReactionKindTests(TestCase):
 
     def setUp(self) -> None:
         self.room = RoomProfileFactory(area=self.city)
-        self.scene = SceneFactory(privacy_mode=ScenePrivacyMode.PUBLIC, location=self.room.objectdb)
+        self.scene = SceneFactory(privacy_mode=ScenePrivacyMode.PUBLIC, location=self.room)
         self.witness = make_participant(self.scene)
         # The deed's actor: an established persona (reputation-eligible), not
         # itself a scene participant: the deed can be reported wherever

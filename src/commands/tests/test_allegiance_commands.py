@@ -80,7 +80,7 @@ class CmdSettleTests(TestCase):
         self.target_sheet = CharacterSheetFactory(character=self.target_char)
         self.initiator_persona = self.initiator_sheet.primary_persona
         self.target_persona = self.target_sheet.primary_persona
-        self.scene = SceneFactory(is_active=True, location=self.room)
+        self.scene = SceneFactory(is_active=True, room=self.room)
         if hasattr(self.room, "_active_scene_cache"):
             del self.room._active_scene_cache
 

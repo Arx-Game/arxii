@@ -121,7 +121,7 @@ class PersonaMenuServiceTests(django.test.TestCase):
         category = ConditionCategoryFactory(conceals_from_perception=True)
         template = ConditionTemplateFactory(category=category)
         ConditionInstanceFactory(target=self.target, condition=template)
-        SceneFactory(location=self.room, is_active=True)
+        SceneFactory(room=self.room, is_active=True)
 
         menu = build_persona_menu(self.viewer, self.persona)
         assert [i.key for i in menu.items] == ["look", "mute", "block"]
@@ -129,7 +129,7 @@ class PersonaMenuServiceTests(django.test.TestCase):
         assert menu.scene_actions == []
 
     def test_shared_scene_adds_scene_items_and_clears_the_empty_state(self) -> None:
-        SceneFactory(location=self.room, is_active=True)
+        SceneFactory(room=self.room, is_active=True)
         keys = [i.key for i in build_persona_menu(self.viewer, self.persona).items]
         assert keys[:3] == ["look", "challenge", "identify"]
         assert {"scene_succor", "scene_interpose", "treat"} <= set(keys)
@@ -141,14 +141,14 @@ class PersonaMenuServiceTests(django.test.TestCase):
         assert all(self.target.key not in i.reason for i in menu.items)
 
     def test_gm_of_the_scene_gets_give_mission(self) -> None:
-        scene = SceneFactory(location=self.room, is_active=True)
+        scene = SceneFactory(room=self.room, is_active=True)
         SceneParticipationFactory(scene=scene, account=self.viewer_account, is_gm=True)
         keys = [i.key for i in build_persona_menu(self.viewer, self.persona).items]
         assert "give_mission" in keys
 
     def test_charm_holder_sees_send_away_and_charm_asset_available(self) -> None:
         """#4091 task 12: the viewer's own charm makes both items available."""
-        SceneFactory(location=self.room, is_active=True)
+        SceneFactory(room=self.room, is_active=True)
         charm = ConditionTemplateFactory(
             sets_allegiance=Allegiance.ALLY_OF_CASTER,
             allegiance_break_check_type=CheckTypeFactory(name="Persona Menu Allegiance Break"),
@@ -167,7 +167,7 @@ class PersonaMenuServiceTests(django.test.TestCase):
         self,
     ) -> None:
         """#4091 task 12: no charm from this viewer -> unavailable, with a reason."""
-        SceneFactory(location=self.room, is_active=True)
+        SceneFactory(room=self.room, is_active=True)
 
         send_away_item = self._item("send_away")
         charm_asset_item = self._item("charm_asset")
@@ -181,7 +181,7 @@ class PersonaMenuServiceTests(django.test.TestCase):
         """#4091 task 12 fix round 1 ruling 3 (NPC-only guard) + fix round 2 (the
         canonical test is an active RosterTenure, not db_account -- a RosterEntry
         alone doesn't count, since major NPCs are rostered too)."""
-        SceneFactory(location=self.room, is_active=True)
+        SceneFactory(room=self.room, is_active=True)
         charm = ConditionTemplateFactory(
             sets_allegiance=Allegiance.ALLY_OF_CASTER,
             allegiance_break_check_type=CheckTypeFactory(

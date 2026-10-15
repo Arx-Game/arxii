@@ -158,7 +158,7 @@ class IsInEncounterRoomTest(TestCase):
     def setUpTestData(cls) -> None:
         cls.permission = IsInEncounterRoom()
         cls.room = ObjectDBFactory(db_key="Combat Room")
-        cls.scene = SceneFactory(location=cls.room)
+        cls.scene = SceneFactory(room=cls.room)
         cls.encounter = CombatEncounterFactory(scene=cls.scene)
 
     def test_character_in_room_allowed(self) -> None:

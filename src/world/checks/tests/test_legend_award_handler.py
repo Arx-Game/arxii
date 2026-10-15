@@ -377,7 +377,7 @@ class LegendAwardHandlerWitnessWindowTests(TestCase):
 
         area = AreaFactory(level=AreaLevel.KINGDOM)
         profile = RoomProfileFactory(area=area, is_public=True)
-        return SceneFactory(location=profile.objectdb)
+        return SceneFactory(location=profile)
 
     def test_interaction_is_forwarded_to_create_legend_event(self) -> None:
         """context.interaction reaches create_legend_event verbatim (spy, no DB effect)."""

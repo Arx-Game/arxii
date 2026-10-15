@@ -268,7 +268,8 @@ class RunBeatAction(Action):
         """Return present, non-GM character sheets committing to a run."""
         from world.roster.models import RosterEntry  # noqa: PLC0415
 
-        location_ids = {obj.pk for obj in scene.location.contents} if scene.location else set()
+        room = scene.room
+        location_ids = {obj.pk for obj in room.contents} if room is not None else set()
         sheets: dict[int, Any] = {}
         participations = scene.participations.filter(
             is_gm=False, left_at__isnull=True
@@ -319,7 +320,7 @@ class RunBeatAction(Action):
         # actual covenant party rather than an empty, newly-created encounter.
         # Match scenario party selection: exclude the administering GM and
         # ignore off-scene alternate characters on the same account.
-        location = scene.location
+        location = scene.room
         present_ids = {obj.pk for obj in location.contents} if location is not None else set()
         party_sheets = {
             persona.character_sheet_id: persona.character_sheet
@@ -391,7 +392,7 @@ class RunBeatAction(Action):
                 blueprint=staged.blueprint,
                 campaign_story=beat.episode.chapter.story,
                 region=staged.region,
-                location=scene.location,
+                location=scene.room,
             )
             battle.story_beat = beat
             battle.save(update_fields=["story_beat"])
@@ -481,7 +482,7 @@ class RunBeatAction(Action):
         from world.battles.services import enlist_participant  # noqa: PLC0415
         from world.roster.models import RosterEntry  # noqa: PLC0415
 
-        location = scene.location
+        location = scene.room
         present_ids = {obj.pk for obj in location.contents} if location is not None else set()
         already_enlisted = set(battle.participants.values_list("character_sheet_id", flat=True))
 
@@ -509,7 +510,7 @@ class RunBeatAction(Action):
             instantiate_situation,
         )
 
-        location = scene.location
+        location = scene.room
         if location is None:
             return {"staged": [], "message": "Scene has no room; nothing was staged."}
 

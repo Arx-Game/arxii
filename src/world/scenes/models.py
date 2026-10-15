@@ -39,6 +39,7 @@ from world.societies.houses.constants import NameDegree, TitleSuffixMode
 
 if TYPE_CHECKING:
     from evennia.accounts.models import AccountDB
+    from evennia.objects.models import ObjectDB
 
     from world.combat.models import CombatRoundAction
     from world.gm.models import GMPromptNarration
@@ -66,13 +67,19 @@ class Scene(CachedPropertiesMixin, SharedMemoryModel):
 
     name = models.CharField(max_length=255, db_index=True)
     description = models.TextField(blank=True)
+    # The room's profile, not the bare ObjectDB (#4217, off #2608's audit): a
+    # scene is held in a room, never in a vase. ``RoomProfile`` shares the
+    # room's pk, so ``location_id`` is still the room's id and a caller holding
+    # the Evennia object filters with ``location_id=room.pk``; the ``room``
+    # property below hands back that object for presence, broadcast and
+    # teardown work.
     location = models.ForeignKey(
-        "objects.ObjectDB",
+        "arxii.RoomProfile",
         blank=True,
         null=True,
         related_name="scenes_held",
         on_delete=models.SET_NULL,
-        help_text="The room/location where this scene takes place",
+        help_text="The room where this scene takes place",
     )
     date_started = models.DateTimeField(auto_now_add=True)
     date_finished = models.DateTimeField(blank=True, null=True)
@@ -177,10 +184,36 @@ class Scene(CachedPropertiesMixin, SharedMemoryModel):
         Uses the room's contents cache (Evennia identity map) instead of
         querying. No DB hit if the room is already loaded.
         """
-        if not self.location:
+        room = self.room
+        if room is None:
             return False
-        present_ids = {ob.pk for ob in self.location.contents}
+        present_ids = {ob.pk for ob in room.contents}
         return bool(present_ids & set(character_ids))
+
+    # ObjectDB on purpose, both ways: this accessor exists to hand callers the
+    # Evennia room object (``contents``, ``msg_contents``, teardowns) behind the
+    # RoomProfile the FK holds, and to take one back.
+    @property
+    def room(self) -> ObjectDB | None:  # noqa: OBJECTDB_PARAM
+        """The Evennia room this scene is held in, or None.
+
+        ``location`` is the room's ``RoomProfile``; this is the object whose
+        ``contents`` are the people present and whose ``msg_contents`` reaches
+        them. Setting it takes the room object (``scene.room = room``) and
+        records its profile, which every room typeclass creates at birth.
+        """
+        if self.location_id is None:
+            return None
+        return self.location.objectdb
+
+    @room.setter
+    def room(self, room: ObjectDB | None) -> None:  # noqa: OBJECTDB_PARAM
+        if room is None:
+            self.location = None
+            return
+        from world.areas.services import get_room_profile  # noqa: PLC0415
+
+        self.location = get_room_profile(room)
 
     def is_gm(self, account: AccountDB | None) -> bool:
         """Check if the given account is a GM of this scene.
@@ -216,9 +249,10 @@ class Scene(CachedPropertiesMixin, SharedMemoryModel):
         """
         from evennia_extensions.models import room_is_publicly_listed  # noqa: PLC0415
 
-        if self.location_id is None or self.privacy_mode == ScenePrivacyMode.PUBLIC:
+        room = self.room
+        if room is None or self.privacy_mode == ScenePrivacyMode.PUBLIC:
             return
-        if room_is_publicly_listed(self.location):
+        if room_is_publicly_listed(room):
             raise ValidationError(
                 {
                     "privacy_mode": (

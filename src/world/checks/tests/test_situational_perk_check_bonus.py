@@ -321,7 +321,7 @@ class SituationalPerkCheckBonusTests(TestCase):
         room = create_object("typeclasses.rooms.Room", key="CheckPerkAllyRoom", nohome=True)
         self.character.location = room
         self.character.save()
-        SceneFactory(location=room)
+        SceneFactory(room=room)
 
         mate_character = CharacterFactory()
         mate_sheet = CharacterSheetFactory(character=mate_character)

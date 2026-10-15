@@ -41,7 +41,7 @@ class EvidenceActionTests(TestCase):
         cls.room = RoomProfileFactory()
         cls.sheet = CharacterSheetFactory()
         cls.character = _set_character_location(cls.sheet.character, cls.room.objectdb)
-        deed = LegendEntryFactory(scene=SceneFactory(location=cls.room.objectdb))
+        deed = LegendEntryFactory(scene=SceneFactory(location=cls.room))
         tag_deed_crimes(deed, [CrimeKindFactory(slug="theft", name="Theft")])
         cls.evidence = CrimeEvidence.objects.get(deed=deed)
 

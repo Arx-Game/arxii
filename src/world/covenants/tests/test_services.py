@@ -1097,7 +1097,7 @@ class EvaluateSceneEngagementTests(TestCase):
         room = self._make_room()
         if hasattr(room, "_active_scene_cache"):
             del room._active_scene_cache
-        SceneFactory(location=room, is_active=True)
+        SceneFactory(room=room, is_active=True)
         self._place_chars_in_room(room, sheets)
         return room
 
@@ -1233,7 +1233,7 @@ class MinorGuestAutoEngageTests(TestCase):
         room = self._make_room()
         if hasattr(room, "_active_scene_cache"):
             del room._active_scene_cache
-        SceneFactory(location=room, is_active=True)
+        SceneFactory(room=room, is_active=True)
         self._place_chars_in_room(room, sheets)
         return room
 

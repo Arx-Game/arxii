@@ -61,7 +61,7 @@ class VowRevalidationTests(TestCase):
         # Both members in the room with an active scene → auto-engage.
         _place_character_in_room(self.char_a, self.room)
         _place_character_in_room(self.char_b, self.room)
-        SceneFactory(location=self.room, is_active=True)
+        SceneFactory(room=self.room, is_active=True)
 
         from world.covenants.services import evaluate_scene_engagement
 
@@ -83,7 +83,7 @@ class VowRevalidationTests(TestCase):
         """An engaged Durance member stays engaged while a covenant-mate is co-present."""
         _place_character_in_room(self.char_a, self.room)
         _place_character_in_room(self.char_b, self.room)
-        SceneFactory(location=self.room, is_active=True)
+        SceneFactory(room=self.room, is_active=True)
 
         from world.covenants.services import evaluate_scene_engagement
 
@@ -100,7 +100,7 @@ class VowRevalidationTests(TestCase):
     def test_revalidate_no_ops_when_not_engaged(self) -> None:
         """revalidate_engagements is a no-op for a character with no engaged roles."""
         _place_character_in_room(self.char_a, self.room)
-        SceneFactory(location=self.room, is_active=True)
+        SceneFactory(room=self.room, is_active=True)
 
         # mem_a is not engaged — revalidate should be a clean no-op.
         revalidate_engagements(character_sheet=self.mem_a.character_sheet, room=self.room)
@@ -127,7 +127,7 @@ class SceneFinishVowDimTests(TestCase):
         # Both members in the room with an active scene → both engaged.
         _place_character_in_room(char_a, room)
         _place_character_in_room(char_b, room)
-        scene = SceneFactory(location=room, is_active=True)
+        scene = SceneFactory(room=room, is_active=True)
 
         from world.covenants.services import evaluate_scene_engagement
 

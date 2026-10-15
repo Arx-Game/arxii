@@ -240,12 +240,12 @@ class RouteNarratableEventTest(TestCase):
 
         original_room = RoomProfileFactory().objectdb
         elsewhere_room = RoomProfileFactory().objectdb
-        scene = SceneFactory(location=original_room)
+        scene = SceneFactory(room=original_room)
         SceneGMParticipationFactory(scene=scene, account=self.gm)
         # A different scene is active wherever the character ends up -- if
         # release re-derived the scene from the character's CURRENT location,
         # the EMIT would land here instead.
-        elsewhere_scene = SceneFactory(location=elsewhere_room)
+        elsewhere_scene = SceneFactory(room=elsewhere_room)
 
         self.sheet.character.location = original_room
         prompt = route_narratable_event(
@@ -298,7 +298,7 @@ class RouteNarratableEventTest(TestCase):
 
         scene_room = RoomProfileFactory().objectdb
         elsewhere_room = RoomProfileFactory().objectdb
-        scene = SceneFactory(location=scene_room)
+        scene = SceneFactory(room=scene_room)
         SceneGMParticipationFactory(scene=scene, account=self.gm)
 
         prompt = route_narratable_event(

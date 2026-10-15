@@ -74,7 +74,7 @@ class ReactionJourneyE2ETests(TestCase):
         self.room = ObjectDBFactory(
             db_key="ReactionE2ERoom", db_typeclass_path="typeclasses.rooms.Room"
         )
-        self.scene = SceneFactory(location=self.room, is_active=True)
+        self.scene = SceneFactory(room=self.room, is_active=True)
 
         # Reactor
         self.reactor_char = _make_char_in_room(self.room)
@@ -178,7 +178,7 @@ class WitnessReportJourneyE2ETests(TestCase):
         idmapper_models.flush_cache()
         profile = RoomProfileFactory(area=self.city, is_public=True)
         self.scene = SceneFactory(
-            privacy_mode=ScenePrivacyMode.PUBLIC, location=profile.objectdb, is_active=True
+            privacy_mode=ScenePrivacyMode.PUBLIC, location=profile, is_active=True
         )
         self.actor = PersonaFactory()
         self.interaction = InteractionFactory(persona=self.actor, scene=self.scene)

@@ -935,7 +935,7 @@ def _scene_is_high_stakes(action_request: SceneActionRequest) -> bool:
     scene = action_request.scene
     if scene is None:
         return False
-    room = scene.location
+    room = scene.room
     has_active_combat = CombatEncounter.objects.filter(
         scene=scene,
         status__in=[

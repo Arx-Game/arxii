@@ -152,7 +152,7 @@ class CrossingWithSceneTests(TestCase):
             self.puissant_path,
             self.offer,
         ) = _build_crossing_character(boundary_level=6, suffix="_scene")
-        self.scene = SceneFactory(location=self.character.location, is_active=True)
+        self.scene = SceneFactory(room=self.character.location, is_active=True)
 
     def test_declaration_interaction_created(self) -> None:
         declaration_text = "I am the one who stands here."
@@ -472,7 +472,7 @@ class TestPostDeclarationEmptyGuard(TestCase):
             self.puissant_path,
             self.offer,
         ) = _build_crossing_character(boundary_level=4, suffix="_empty_guard")
-        self.scene = SceneFactory(location=self.character.location, is_active=True)
+        self.scene = SceneFactory(room=self.character.location, is_active=True)
 
     def test_empty_text_returns_no_interaction(self) -> None:
         result_scene, interaction = _post_declaration(self.character, "")

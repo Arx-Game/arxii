@@ -86,7 +86,7 @@ class SceneRoundJourneyTest(TestCase):
 
         from world.scenes.models import Scene
 
-        scene = Scene.objects.filter(location=self.room, is_active=True).first()
+        scene = Scene.objects.filter(location_id=self.room.pk, is_active=True).first()
         self.assertIsNotNone(scene, "An active scene should exist after 'scene start'")
 
         # Owner was in the room at start → becomes a co-owner.
@@ -119,7 +119,7 @@ class SceneRoundJourneyTest(TestCase):
 
         from world.scenes.models import Scene
 
-        scene = Scene.objects.filter(location=self.room, is_active=True).first()
+        scene = Scene.objects.filter(location_id=self.room.pk, is_active=True).first()
         self.assertIsNotNone(scene)
         # Owner was in the room at start → co-owner.
         self.assertTrue(

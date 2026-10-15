@@ -285,7 +285,7 @@ class ConcealedCastJourneyTests(CastScenarioMixin):
         # docstring for why a module-level version was tried and reverted (#2710
         # task 5 review: order-dependent stale-account collisions across classes).
         cls._persona_accounts = {}
-        room = cls.scene.location
+        room = cls.scene.room
         cls.detector = PersonaFactory()
         cls.marginal = PersonaFactory()
         cls.bystander = PersonaFactory()
@@ -434,7 +434,7 @@ class ConcealedCastRequestLeakTests(APITestCase, ConcealedCastJourneyTests):
     def setUpTestData(cls) -> None:
         super().setUpTestData()
         character = cls.target.character_sheet.character
-        character.location = cls.scene.location
+        character.location = cls.scene.room
         character.save()
         _account_playing(cls.target, cls._persona_accounts)
         TechniqueAppliedConditionFactory(
@@ -541,7 +541,7 @@ class CastOpenlyTests(CastScenarioMixin):
     @classmethod
     def setUpTestData(cls) -> None:
         super().setUpTestData()
-        room = cls.scene.location
+        room = cls.scene.room
         cls.bystander = PersonaFactory()
         for persona in (cls.caster, cls.target, cls.bystander):
             character = persona.character_sheet.character
