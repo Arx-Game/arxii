@@ -131,6 +131,9 @@ async function mockApp(page: Page, viewer: Viewer) {
 const gmingTrigger = (page: Page) => page.getByRole('button', { name: /gming/i });
 const worldTrigger = (page: Page) => page.getByRole('button', { name: /^world/i });
 
+/** Let a dropdown finish fading in before its shot. */
+const settled = (page: Page) => page.waitForTimeout(500);
+
 async function openHeaderOn(page: Page, viewer: Viewer, route = '/codex') {
   await page.setViewportSize({ width: 1280, height: 720 });
   await mockApp(page, viewer);
@@ -151,6 +154,7 @@ test.describe('The GMing nav group (#4188) on the production bundle', () => {
     await expect(header.getByRole('link', { name: 'Realms' })).toBeVisible();
     await expect(page.getByRole('link', { name: /crossover/i })).toHaveCount(0);
     await expect(page.getByRole('link', { name: 'Story Workload' })).toHaveCount(0);
+    await settled(page);
     await page.screenshot({ path: shot('01-c1-signed-out-world-1280.png') });
     expect(errors).toEqual([]);
   });
@@ -175,6 +179,7 @@ test.describe('The GMing nav group (#4188) on the production bundle', () => {
     await expect(page.getByRole('link', { name: 'Tables' })).toBeVisible();
     await expect(page.getByRole('link', { name: 'Lead GM Queue' })).toBeVisible();
     await expect(page.getByRole('link', { name: 'Story Workload' })).toHaveCount(0);
+    await settled(page);
     await page.screenshot({ path: shot('03-b1-gm-menu-1280.png') });
     expect(errors).toEqual([]);
   });
@@ -189,6 +194,7 @@ test.describe('The GMing nav group (#4188) on the production bundle', () => {
       '/stories/staff-workload'
     );
     await expect(gmingTrigger(page)).toHaveCount(1);
+    await settled(page);
     await page.screenshot({ path: shot('04-b2-staff-gm-menu-1280.png') });
   });
 
@@ -201,6 +207,7 @@ test.describe('The GMing nav group (#4188) on the production bundle', () => {
     await expect(page.getByRole('link', { name: 'Story Workload' })).toBeVisible();
     await expect(page.getByRole('link', { name: 'Dashboard' })).toHaveCount(0);
     await expect(page.getByRole('link', { name: 'Lead GM Queue' })).toHaveCount(0);
+    await settled(page);
     await page.screenshot({ path: shot('05-staff-only-menu-1280.png') });
   });
 

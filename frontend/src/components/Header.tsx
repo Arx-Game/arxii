@@ -198,9 +198,16 @@ export function Header() {
                   <NavigationMenuContent>
                     <ul className="flex flex-col gap-1 p-2">
                       {sectioned(visibleChildren).map(({ section, rows }) => (
-                        <li key={section ?? ''} className="flex flex-col gap-1">
+                        <li
+                          key={section ?? ''}
+                          className={
+                            section
+                              ? 'mt-1 flex flex-col gap-1 border-t pt-2'
+                              : 'flex flex-col gap-1'
+                          }
+                        >
                           {section ? (
-                            <p className="px-3 pt-1 text-xs font-semibold text-muted-foreground">
+                            <p className="px-3 text-xs font-semibold text-muted-foreground">
                               {section}
                             </p>
                           ) : null}
@@ -285,7 +292,14 @@ export function Header() {
                         {group.label} {count > 0 ? `(${count})` : ''}
                       </p>
                       {sectioned(visibleChildren).map(({ section, rows }) => (
-                        <div key={section ?? ''} className="flex flex-col gap-2 pl-2">
+                        <div
+                          key={section ?? ''}
+                          className={
+                            section
+                              ? 'mt-1 flex flex-col gap-2 border-t pl-2 pt-2'
+                              : 'flex flex-col gap-2 pl-2'
+                          }
+                        >
                           {section ? (
                             <p className="text-xs font-semibold text-muted-foreground">{section}</p>
                           ) : null}
