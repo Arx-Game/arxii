@@ -21,8 +21,8 @@ object, validation passes (object name unchanged), and downstream FK
 inserts blow up because the stale PK isn't in the database.
 
 The fix below installs a teardown hook in :class:`TimedEvenniaTestRunner`
-that flushes the SharedMemoryModel identity map (and any registered
-project-level caches) at the end of every test. Each test then begins
+that empties the SharedMemoryModel identity map, every instance, safe or
+not (and any registered project-level caches) at the end of every test. Each test then begins
 with the same fresh-process state as a real production restart, and
 production-correct caches stay production-correct in tests.
 
@@ -63,13 +63,23 @@ def register_test_cache_flusher(fn: Callable[[], None]) -> None:
 
 
 def _flush_sharedmemorymodel_caches() -> None:
-    """Flush every SharedMemoryModel subclass's identity map.
+    """Drop every cached SharedMemoryModel instance, safe or not.
 
     Walks the subclass tree rather than relying on Evennia's signal-shaped
     helper so we can call this from a plain teardown hook without spoofing
-    signal kwargs. Uses ``force=False`` to match Evennia's post_migrate signal
-    behavior: clear safe (non-dirty) objects, preserve objects with in-flight
-    state. This is the same semantics production uses; tests should mirror it.
+    signal kwargs.
+
+    The flush is forced (#3657 tranche 1, ruled 2026-10-15). Evennia's own
+    flush keeps every object whose ``at_idmapper_flush`` says it carries
+    in-flight state, which for a typeclassed object means any NAttribute, and
+    the command handler sets ``ndb.last_cmd`` on whoever typed a line. So a
+    character that ran one command in test_A survived the per-test flush and
+    was still cached, with no row behind it, when test_B asked for
+    ``settings.DEFAULT_HOME`` by pk: ``SharedMemoryManager.get`` answers a pk
+    lookup from the cache without a query, and test_B wrote a home the
+    database did not hold. Ten magic tests died that way on PR #4360's first
+    two CI runs, each time in a different worker. In-flight state is a
+    property of a live server; between two tests there is none worth keeping.
     """
     # Imported lazily so this module is importable in environments where
     # Evennia isn't available (e.g. tool scripts that import core.testing).
@@ -90,7 +100,7 @@ def _flush_sharedmemorymodel_caches() -> None:
         flusher = getattr(cls, "flush_instance_cache", None)  # noqa: GETATTR_LITERAL
         if flusher is not None:
             with contextlib.suppress(AttributeError, TypeError):
-                flusher()  # force=False — match Evennia's signal behavior
+                flusher(force=True)
         queue.extend(cls.__subclasses__())
 
 

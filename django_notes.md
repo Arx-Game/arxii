@@ -548,6 +548,19 @@ catch the general case — too noisy — only mutate-save-then-raise. Suppress a
 deliberate keeper with `# noqa: IDMAPPER_MUTATE_ORDER` and a stated reason (added to
 the custom linter token list above).
 
+**Between tests the identity map is emptied, forced.** The test runner's per-test
+hook (`core.testing.flush_test_caches`, installed by `TimedEvenniaTestRunner`)
+calls `flush_instance_cache(force=True)` on every `SharedMemoryModel` after every
+test (#3657 tranche 1). Evennia's own flush keeps any object carrying an
+NAttribute, and the command handler sets `ndb.last_cmd` on whoever typed a line,
+so a character that ran one command in test_A used to survive into test_B with no
+row behind it; `SharedMemoryManager.get` answers a pk lookup from the cache without
+a query, so test_B's `create_object` with no home resolved `DEFAULT_HOME` (`#2`) to
+it and wrote a home the database did not hold (PR #4360, ten magic tests, two CI
+runs, a different worker each time). A test that goes red under the forced flush
+was relying on two lookups being one cached instance across tests; fix the test,
+never the flush.
+
 ## FactoryBoy `django_get_or_create` Gotcha
 
 This expands the FactoryBoy guidance in "Use FactoryBoy for All Test Data" above with a sharp edge worth calling out explicitly.
