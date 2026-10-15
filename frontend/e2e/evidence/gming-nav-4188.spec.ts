@@ -18,13 +18,14 @@ const REPO_ROOT = path.resolve(__dirname, '..', '..', '..');
 const EVIDENCE_DIR = path.join(REPO_ROOT, 'docs', 'reviews', '4188');
 const shot = (name: string) => path.join(EVIDENCE_DIR, name);
 
-type Viewer = 'out' | 'player' | 'gm' | 'gm-quiet' | 'staff' | 'staff-gm';
+type Viewer = 'out' | 'player' | 'gm' | 'gm-quiet' | 'agm' | 'staff' | 'staff-gm';
 
 const IS_GM: Record<Viewer, boolean> = {
   out: false,
   player: false,
   gm: true,
   'gm-quiet': true,
+  agm: true,
   staff: false,
   'staff-gm': true,
 };
@@ -33,6 +34,7 @@ const IS_STAFF: Record<Viewer, boolean> = {
   player: false,
   gm: false,
   'gm-quiet': false,
+  agm: false,
   staff: true,
   'staff-gm': true,
 };
@@ -47,6 +49,16 @@ const WAITING = {
   session_requests: 0,
   total: 7,
 };
+/** An assistant GM with one open claim of their own and nothing else. */
+const AGM_WAITING = {
+  story_offers: 0,
+  crossover_invites: 0,
+  sheet_update_requests: 0,
+  claims_to_approve: 0,
+  my_claims: 1,
+  session_requests: 0,
+  total: 1,
+};
 const QUIET = {
   story_offers: 0,
   crossover_invites: 0,
@@ -56,6 +68,8 @@ const QUIET = {
   session_requests: 0,
   total: 0,
 };
+
+const COUNTS_FOR: Partial<Record<Viewer, typeof WAITING>> = { 'gm-quiet': QUIET, agm: AGM_WAITING };
 
 function accountPayload(viewer: Viewer) {
   return {
@@ -97,10 +111,38 @@ const DASHBOARD = {
   open_invites: 0,
 };
 
-async function mockApp(page: Page, viewer: Viewer) {
+const OFFER = {
+  id: 11,
+  story: 31,
+  offered_to: 1,
+  offered_by_account: 2,
+  status: 'pending',
+  message: 'Would you run this one for us.',
+  response_note: '',
+  created_at: '2026-10-12T00:00:00Z',
+  responded_at: null,
+  updated_at: '2026-10-12T00:00:00Z',
+};
+
+/** The same GM after answering one offer: the counts the server would then return. */
+function afterOffer(counts: typeof WAITING) {
+  return { ...counts, story_offers: counts.story_offers - 1, total: counts.total - 1 };
+}
+
+async function mockApp(page: Page, viewer: Viewer, state = { accepted: false }) {
   await page.route('**/api/**', async (route: Route) => {
     const url = new URL(route.request().url());
     const p = url.pathname;
+    if (p === '/api/story-gm-offers/' && route.request().method() === 'GET') {
+      const offers = state.accepted ? [] : [OFFER];
+      return route.fulfill({
+        json: { count: offers.length, next: null, previous: null, results: offers },
+      });
+    }
+    if (p === `/api/story-gm-offers/${OFFER.id}/accept/`) {
+      state.accepted = true;
+      return route.fulfill({ json: { ...OFFER, status: 'accepted' } });
+    }
     if (p === '/api/user/') {
       // Signed out, the real endpoint answers 200 with an empty body (`fetchAccount`).
       return viewer === 'out'
@@ -111,7 +153,8 @@ async function mockApp(page: Page, viewer: Viewer) {
       if (!IS_GM[viewer]) {
         return route.fulfill({ status: 403, json: { detail: 'You must be a GM.' } });
       }
-      return route.fulfill({ json: viewer === 'gm-quiet' ? QUIET : WAITING });
+      const counts = COUNTS_FOR[viewer] ?? WAITING;
+      return route.fulfill({ json: state.accepted ? afterOffer(counts) : counts });
     }
     if (p === '/api/gm/dashboard/') {
       if (!IS_GM[viewer]) {
@@ -257,6 +300,36 @@ test.describe('The GMing nav group (#4188) on the production bundle', () => {
     await expect(strip.locator('a')).toHaveCount(0);
     await expect(page.getByTestId('waiting-my_claims')).toContainText('0');
     await page.screenshot({ path: shot('07-quiet-dashboard-1280.png'), fullPage: true });
+  });
+
+  test('Story 4: an assistant GM reaches My Claims from the strip', async ({ page }) => {
+    await openHeaderOn(page, 'agm', '/gm/dashboard');
+    await expect(page.getByTestId('gm-attention-badge')).toHaveText('1');
+    const row = page.getByTestId('waiting-my_claims');
+    await expect(row).toHaveAttribute('href', '/stories/my-claims');
+    await expect(row).toContainText('1');
+    await row.click();
+    await expect(page).toHaveURL(/\/stories\/my-claims$/);
+    await expect(page.getByRole('heading', { name: /my .*claims/i })).toBeVisible();
+  });
+
+  test('Decision 6: answering an offer drops the badge and the strip row without a reload', async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 1280, height: 720 });
+    const state = { accepted: false };
+    await mockApp(page, 'gm', state);
+    await page.goto('/stories/my-offers');
+    await expect(page.getByTestId('gm-attention-badge')).toHaveText('7');
+    await page.getByTestId('accept-offer-trigger').click();
+    await page.getByTestId('accept-confirm-button').click();
+    // The accept mutation invalidates the attention key: the badge re-reads 6.
+    await expect(page.getByTestId('gm-attention-badge')).toHaveText('6');
+    expect(state.accepted).toBe(true);
+    // The Dashboard strip, reached through the menu, shows the same drop.
+    await gmingTrigger(page).click();
+    await page.getByRole('link', { name: 'Dashboard' }).click();
+    await expect(page.getByTestId('waiting-story_offers')).toContainText('1');
   });
 
   test('D phone: the sheet mirrors the group and its count', async ({ page }) => {
