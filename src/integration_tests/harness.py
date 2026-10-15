@@ -35,7 +35,6 @@ from typing import TYPE_CHECKING, Any
 from unittest.mock import patch
 
 from django.test import TestCase, tag
-from evennia.utils.idmapper.models import SharedMemoryModel
 from rest_framework.test import APIClient
 from twisted.python.failure import Failure
 
@@ -77,21 +76,6 @@ class Mailbox:
         return "\n".join(self.lines)
 
 
-def _flush_identity_map() -> None:
-    """Drop every cached SharedMemoryModel instance, safe or not."""
-
-    def leaves(classes: list[type]) -> Any:
-        for cls in classes:
-            subclasses = cls.__subclasses__()
-            if subclasses:
-                yield from leaves(subclasses)
-            else:
-                yield cls
-
-    for cls in leaves([SharedMemoryModel]):
-        cls.flush_instance_cache(force=True)
-
-
 @tag("postgres")
 class JourneyCase(TestCase):
     """Base class for journey tests. See the module docstring for the shape."""
@@ -100,19 +84,11 @@ class JourneyCase(TestCase):
         super().setUp()
         self._mailboxes: dict[int, Mailbox] = {}
 
-    def tearDown(self) -> None:
-        # The rooms and characters a journey builds are rolled back with the
-        # test, but Evennia's identity map keeps the instances (ADR-0008), and
-        # ``ObjectDB.objects.get(id=...)`` answers from that map without a
-        # query. A later test in the same process that creates an object with
-        # no home resolves ``settings.DEFAULT_HOME`` ("#2") to the dead
-        # instance and writes a home the database no longer holds: ten magic
-        # tests died that way on PR #4360's first two CI runs. Evennia's
-        # ``flush_cache()`` is not enough here: it keeps every object carrying
-        # an NAttribute, and the command handler sets ``ndb.last_cmd`` on the
-        # character that typed the line. So the flush is forced.
-        _flush_identity_map()
-        super().tearDown()
+    # No tearDown of its own: the rooms and characters a journey builds are
+    # rolled back with the test, and the test runner empties Evennia's
+    # identity map after every test, forced (``core.testing``), so the
+    # character that typed a line (the handler sets ``ndb.last_cmd`` on it)
+    # cannot be handed to the next test as a dead ``DEFAULT_HOME`` (#4360).
 
     # -- building the world ---------------------------------------------------
 
