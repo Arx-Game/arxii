@@ -1,6 +1,6 @@
 """Tests for societies legend service functions."""
 
-from django.test import TestCase
+from django.test import TestCase, tag
 
 from world.scenes.constants import PersonaType
 from world.scenes.factories import PersonaFactory
@@ -53,6 +53,7 @@ class CreateSoloDeedTests(TestCase):
         self.assertIsNone(deed.scene)
         self.assertIsNone(deed.story)
 
+    @tag("postgres")
     def test_refreshes_materialized_view(self) -> None:
         """CharacterLegendSummary shows correct total after creation."""
         create_solo_deed(
@@ -100,6 +101,7 @@ class CreateLegendEventTests(TestCase):
         persona_ids = {deed.persona_id for deed in deeds}
         self.assertEqual(persona_ids, {self.persona_a.pk, self.persona_b.pk})
 
+    @tag("postgres")
     def test_refreshes_materialized_view(self) -> None:
         """Totals correct after creation."""
         create_legend_event(
@@ -200,6 +202,7 @@ class SpreadDeedTests(TestCase):
                 value_added=5,
             )
 
+    @tag("postgres")
     def test_refreshes_materialized_view(self) -> None:
         """Total includes spread after refresh."""
         persona = PersonaFactory()
@@ -291,6 +294,7 @@ class GetCharacterLegendTotalTests(TestCase):
         total = get_character_legend_total(persona.character_sheet.character)
         self.assertEqual(total, 0)
 
+    @tag("postgres")
     def test_returns_correct_total(self) -> None:
         """Returns the correct legend total for a character."""
         persona = PersonaFactory()
@@ -309,6 +313,7 @@ class GetCharacterLegendTotalTests(TestCase):
         total = get_character_legend_total(persona.character_sheet.character)
         self.assertEqual(total, 30)
 
+    @tag("postgres")
     def test_sums_across_personas(self) -> None:
         """Sums legend from multiple personas of the same character."""
         persona_a = PersonaFactory()
@@ -351,6 +356,7 @@ class GetPersonaLegendTotalTests(TestCase):
         total = get_persona_legend_total(persona)
         self.assertEqual(total, 0)
 
+    @tag("postgres")
     def test_returns_correct_total(self) -> None:
         """Returns correct legend total for a persona."""
         persona = PersonaFactory()
