@@ -79479,6 +79479,8 @@ components:
     PledgeCreditLine:
       type: object
       properties:
+        id:
+          type: integer
         source:
           type: string
         label:
@@ -79497,6 +79499,7 @@ components:
       - counts_toward_progress
       - created_at
       - credited
+      - id
       - label
       - source
     PolishIncrement:

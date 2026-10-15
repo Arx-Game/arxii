@@ -195,6 +195,7 @@ class ServiceTerms:
 class PledgeCreditLine:
     """One credit on the pledge card, with its calculation in words."""
 
+    id: int  # the PledgeCredit row, a stable key for the card's list
     source: str
     label: str
     calculation: str

@@ -30,7 +30,6 @@ export function PledgeCard({ card, characterId }: PledgeCardProps) {
   const close = useClosePledge(characterId ?? 0);
   const being = card.terms.being_name;
   const live = card.state === PLEDGE_STATE.open || card.state === PLEDGE_STATE.ready;
-  const percent = card.target > 0 ? Math.min(100, (card.progress / card.target) * 100) : 0;
 
   function handleClose() {
     close.mutate(undefined, {
@@ -71,15 +70,12 @@ export function PledgeCard({ card, characterId }: PledgeCardProps) {
             </b>{' '}
             favor earned with {being} since pledging
           </div>
-          <div
-            className="h-2 overflow-hidden rounded-full bg-muted"
-            role="progressbar"
-            aria-valuemin={0}
-            aria-valuemax={card.target}
-            aria-valuenow={card.progress}
-          >
-            <span className="block h-full bg-amber-600" style={{ width: `${percent}%` }} />
-          </div>
+          <progress
+            className="block h-2 w-full overflow-hidden rounded-full bg-muted [&::-moz-progress-bar]:bg-amber-600 [&::-webkit-progress-bar]:bg-muted [&::-webkit-progress-value]:bg-amber-600"
+            max={Math.max(card.target, 1)}
+            value={Math.min(card.progress, card.target)}
+            aria-label={`${card.progress} of ${card.target} favor`}
+          />
           <div className="flex flex-wrap items-center justify-between gap-2">
             <Tag>What earns favor with {being} for you · system-generated</Tag>
             <span className="rounded-full border px-2 text-xs font-semibold">
@@ -92,8 +88,8 @@ export function PledgeCard({ card, characterId }: PledgeCardProps) {
             </p>
           ) : (
             <ul className="divide-y divide-dotted" data-testid="pledge-credits">
-              {card.credits.map((credit, index) => (
-                <li key={index} className="flex justify-between gap-3 py-1">
+              {card.credits.map((credit) => (
+                <li key={credit.id} className="flex justify-between gap-3 py-1">
                   <span>{credit.label}</span>
                   <span className="shrink-0 text-right font-semibold tabular-nums text-amber-700 dark:text-amber-400">
                     {credit.calculation}

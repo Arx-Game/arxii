@@ -45395,6 +45395,7 @@ export interface components {
       terms: components['schemas']['ServiceTerms'];
     };
     PledgeCreditLine: {
+      id: number;
       source: string;
       label: string;
       calculation: string;

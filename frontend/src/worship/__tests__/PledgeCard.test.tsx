@@ -52,6 +52,7 @@ function card(overrides: Partial<PledgeCardData> = {}): PledgeCardData {
     favor: 34,
     credits: [
       {
+        id: 1,
         source: 'sacrifice',
         label: 'Sacrificed [item] (Silk facet, favored)',
         calculation: 'value 20: 2 base, x2 Silk = 4, at 200% = +8',

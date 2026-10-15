@@ -205,11 +205,11 @@ def pledge_pacing(pledge: Pledge) -> str:
     parts = []
     for label, rate in columns:
         weeks = weeks_from_deeds(pledge.favor_target, rate, cap)
-        parts.append(
-            f"{label} never"
-            if weeks is None
-            else f"{label} {weeks} week{'s' if weeks != 1 else ''}"
-        )
+        if weeks is None:
+            parts.append(f"{label} never")
+            continue
+        unit = "week" if weeks == 1 else "weeks"
+        parts.append(f"{label} {weeks} {unit}")
     return "At the weekly deed cap, from deeds alone: " + " · ".join(parts)
 
 

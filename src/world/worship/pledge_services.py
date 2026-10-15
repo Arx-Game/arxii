@@ -547,6 +547,7 @@ def credit_lines(details: PledgeDetails) -> list[PledgeCreditLine]:
         label, before_rate = _credit_label(credit)
         lines.append(
             PledgeCreditLine(
+                id=credit.pk,
                 source=credit.source,
                 label=label,
                 calculation=(

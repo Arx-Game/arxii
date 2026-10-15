@@ -255,6 +255,7 @@ class ServiceTermsSerializer(serializers.Serializer):
 
 
 class PledgeCreditLineSerializer(serializers.Serializer):
+    id = serializers.IntegerField()
     source = serializers.CharField()
     label = serializers.CharField()
     calculation = serializers.CharField()
