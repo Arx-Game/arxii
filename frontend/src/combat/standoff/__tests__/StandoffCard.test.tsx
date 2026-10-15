@@ -1,5 +1,5 @@
 /**
- * StandoffCard: reading, pressing, naming terms, fighting and sharing sparks (#4145).
+ * StandoffCard: reading, pressing, naming terms, fighting and sharing angles (#4145).
  */
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { render, screen, waitFor, within } from '@testing-library/react';
@@ -42,12 +42,13 @@ const STANDOFF: StandoffView = {
       cause_gloss: 'Test gloss.',
       hidden_count: 3,
       drives: [{ label: 'Test drive', strength: 'minor' }],
-      revealed_regard: [],
+      revealed_faction_rules: [],
       read_check: 'Test read check',
       read_grade: 'moderate',
       read_grade_label: 'Moderate',
       morale_state: 'steady',
       terms_morale_ease: 0,
+      emboldened: false,
     },
   ],
   approaches: [
@@ -59,8 +60,8 @@ const STANDOFF: StandoffView = {
       grade_label: 'Easy',
       check_caption: 'Test check + Test sway',
       levers: [
-        { text: 'hits Test drive (Minor)', is_spark: false },
-        { text: 'your spark: Test detail', is_spark: true },
+        { text: 'hits Test drive (Minor)', is_angle: false },
+        { text: 'your angle: Test detail', is_angle: true },
       ],
       hits_revealed_drive: true,
       casts_technique: false,
@@ -88,8 +89,8 @@ const STANDOFF: StandoffView = {
       critical_label: 'Turn',
     },
   ],
-  sparks: [{ group_id: 11, regard_rule_id: 41, text: 'Test spark', shared: false }],
-  shared_sparks: [],
+  angles: [{ group_id: 11, faction_rule_id: 41, text: 'Test angle', shared: false }],
+  shared_angles: [],
   display_techniques: [],
 };
 
@@ -135,14 +136,24 @@ describe('StandoffCard', () => {
     expect(screen.getByText(/4/)).toBeInTheDocument();
   });
 
-  it('renders the own spark and shares it', async () => {
+  it('says something about the party matters until a read reveals the rule', () => {
+    const { unmount } = renderCard();
+    expect(screen.getByTestId('standoff-matters-hint')).toHaveTextContent(
+      'Something about one of you matters to them.'
+    );
+    unmount();
+    renderCard({ ...STANDOFF, angles: [] });
+    expect(screen.queryByTestId('standoff-matters-hint')).toBeNull();
+  });
+
+  it('renders the own angle and shares it', async () => {
     const user = userEvent.setup();
     renderCard();
-    expect(screen.getByText('Test spark')).toBeInTheDocument();
+    expect(screen.getByText('Test angle')).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Share with the party' }));
     expect(mutateAsync).toHaveBeenCalledWith({
-      ref: { backend: 'registry', registry_key: 'standoff_share_spark' },
-      kwargs: { group_id: 11, regard_rule_id: 41 },
+      ref: { backend: 'registry', registry_key: 'standoff_share_angle' },
+      kwargs: { group_id: 11, faction_rule_id: 41 },
     });
   });
 
@@ -212,20 +223,20 @@ describe('StandoffCard', () => {
     const hit = screen.getByTestId('standoff-approach-hit');
     expect(hit).toHaveTextContent('Test approach');
     expect(hit.className).toMatch(/border-accent/);
-    expect(within(hit).getByText('your spark: Test detail').className).toMatch(/text-primary/);
+    expect(within(hit).getByText('your angle: Test detail').className).toMatch(/text-primary/);
     expect(within(hit).getByText('hits Test drive (Minor)').className).toMatch(/text-foreground/);
     const plain = screen.getByRole('button', { name: /Plain approach/ });
     expect(plain.className).not.toMatch(/border-accent/);
     expect(within(plain).getByText('no known lever')).toBeInTheDocument();
   });
 
-  it('hints at the spark until a read reveals it', () => {
+  it('hints at the angle until a read reveals it', () => {
     const { unmount } = renderCard();
     expect(screen.getByText(/How, you don.t know yet/)).toBeInTheDocument();
     unmount();
     renderCard({
       ...STANDOFF,
-      groups: [{ ...STANDOFF.groups[0], revealed_regard: ['Test detail.'] }],
+      groups: [{ ...STANDOFF.groups[0], revealed_faction_rules: ['Test detail.'] }],
     });
     expect(screen.queryByText(/How, you don.t know yet/)).toBeNull();
   });
@@ -236,7 +247,7 @@ describe('StandoffCard', () => {
     unmount();
     renderCard({
       ...STANDOFF,
-      groups: [{ ...STANDOFF.groups[0], cause: null, drives: [], revealed_regard: [] }],
+      groups: [{ ...STANDOFF.groups[0], cause: null, drives: [], revealed_faction_rules: [] }],
     });
     expect(screen.queryByRole('button', { name: /^Read them again/ })).toBeNull();
   });
@@ -298,15 +309,15 @@ describe('StandoffCard', () => {
     });
   });
 
-  it('offers an own spark as a read focus', async () => {
+  it('offers an own angle as a read focus', async () => {
     const user = userEvent.setup();
     renderCard();
     await user.click(screen.getByLabelText('Look for'));
-    await user.click(screen.getByRole('option', { name: 'Test spark' }));
+    await user.click(screen.getByRole('option', { name: 'Test angle' }));
     await user.click(screen.getByRole('button', { name: /^Read them/ }));
     expect(mutateAsync).toHaveBeenLastCalledWith({
       ref: { backend: 'registry', registry_key: 'standoff_read' },
-      kwargs: { group_id: 11, focus_kind: 'regard', focus_regard_rule_id: 41 },
+      kwargs: { group_id: 11, focus_kind: 'faction_rule', focus_faction_rule_id: 41 },
     });
   });
 
@@ -437,5 +448,15 @@ describe('StandoffCard', () => {
       kwargs: { group_id: 11, approach_id: 22, technique_id: 77, confirm_soulfray_risk: true },
     });
     await waitFor(() => expect(screen.queryByTestId('standoff-soulfray-gate')).toBeNull());
+  });
+
+  it('shows a deciding chip for a proposed group without naming the proposal', () => {
+    renderCard(withGroup({ state: 'proposed', emboldened: true }));
+    expect(screen.getByTestId('standoff-group-chip')).toHaveTextContent('emboldened, deciding');
+  });
+
+  it('shows emboldened alone when the group is not proposed', () => {
+    renderCard(withGroup({ emboldened: true }));
+    expect(screen.getByTestId('standoff-group-chip')).toHaveTextContent(/^emboldened$/);
   });
 });

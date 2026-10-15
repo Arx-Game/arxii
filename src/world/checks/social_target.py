@@ -48,7 +48,7 @@ class SocialDifficulty:
 
 def social_target_difficulty(  # noqa: PLR0913
     *,
-    actor_sheet: CharacterSheet,
+    actor_sheet: CharacterSheet | None,
     target_character: ObjectDB | None,
     check_type: CheckType | None,  # noqa: ARG001 - part of the shared signature; reserved for check-aware terms
     base_difficulty: int = 0,
@@ -65,6 +65,8 @@ def social_target_difficulty(  # noqa: PLR0913
 
     ``resist_increment`` lets a caller grading many checks against one target compute
     the defender's resist once (``compute_resist_increment``) and pass it in.
+    ``actor_sheet`` may be None only for a preview with no actor (the Standoff Profile
+    Builder's example character, #4354): the actor-side contributions are then skipped.
     """
     eased_bands = sum(hit.strength for hit in drive_hits)
     resist = 0
@@ -81,7 +83,7 @@ def social_target_difficulty(  # noqa: PLR0913
         + DIFFICULTY_BAND_STEP * (extra_bands - eased_bands)
     )
     contributions: list[ModifierContribution] = []
-    if sway_target is not None:
+    if sway_target is not None and actor_sheet is not None:
         per_count = get_modifier_total(actor_sheet, sway_target)
         if per_count:
             contributions.append(
@@ -91,7 +93,7 @@ def social_target_difficulty(  # noqa: PLR0913
                     value=per_count * (1 + eased_bands),
                 )
             )
-    if perceiver_sheet is not None:
+    if perceiver_sheet is not None and actor_sheet is not None:
         from world.relationships.services import (  # noqa: PLC0415
             relationship_gated_contributions,
         )

@@ -8901,6 +8901,29 @@ paths:
               schema:
                 $ref: '#/components/schemas/EncounterDetail'
           description: ''
+  /api/combat/{id}/open-standoff/:
+    post:
+      operationId: combat_open_standoff_create
+      description: 'GM: open a standoff on an encounter that has not begun round one
+        (#4354).'
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this combat encounter.
+        required: true
+      tags:
+      - combat
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EncounterDetail'
+          description: ''
   /api/combat/{id}/opponent-defaults/:
     get:
       operationId: combat_opponent_defaults_retrieve
@@ -9231,6 +9254,35 @@ paths:
           application/json:
             schema:
               $ref: '#/components/schemas/PatchedEncounterDetailRequest'
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EncounterDetail'
+          description: ''
+  /api/combat/{id}/standoff-morale/:
+    post:
+      operationId: combat_standoff_morale_create
+      description: 'GM: shake or steady one standoff group by one morale state, with
+        a reason (#4354).'
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this combat encounter.
+        required: true
+      tags:
+      - combat
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StandoffMoraleRequestRequest'
+        required: true
       security:
       - cookieAuth: []
       responses:
@@ -16723,6 +16775,7 @@ paths:
           - dramatic_moment
           - miracle
           - stake_outcome
+          - standoff_cause
         description: |-
           What this prompt is about; dramatic_moment is the confirm kind.
 
@@ -16733,6 +16786,7 @@ paths:
           * `miracle` - Miracle
           * `death` - Death
           * `stake_outcome` - Stake outcome
+          * `standoff_cause` - Standoff
       - name: page
         required: false
         in: query
@@ -16826,6 +16880,28 @@ paths:
               schema:
                 $ref: '#/components/schemas/GMPrompt'
           description: ''
+  /api/gm/prompts/{id}/hold/:
+    post:
+      operationId: gm_prompts_hold_create
+      description: Hold a standoff proposal for one action (#4354).
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this GM Prompt.
+        required: true
+      tags:
+      - gm
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GMPrompt'
+          description: ''
   /api/gm/prompts/{id}/narrate/:
     post:
       operationId: gm_prompts_narrate_create
@@ -16843,6 +16919,29 @@ paths:
         3, finding M1). ``confirm``/``dismiss``/``narrate`` dispatch the REGISTRY
         actions that own the real authorization/validation -- this view is
         dispatch plumbing only.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this GM Prompt.
+        required: true
+      tags:
+      - gm
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GMPrompt'
+          description: ''
+  /api/gm/prompts/{id}/override/:
+    post:
+      operationId: gm_prompts_override_create
+      description: Override a standoff proposal; the body's ``reason`` is required
+        (#4354).
       parameters:
       - in: path
         name: id
@@ -43669,6 +43768,22 @@ components:
         * `same_as` - The same group as an earlier question
         * `served_house` - The house the character's family served
         * `own_family` - The character's own family
+    AngleView:
+      type: object
+      properties:
+        group_id:
+          type: integer
+        faction_rule_id:
+          type: integer
+        text:
+          type: string
+        shared:
+          type: boolean
+      required:
+      - faction_rule_id
+      - group_id
+      - shared
+      - text
     ApplicablePullsRequestRequest:
       type: object
       description: |-
@@ -45034,6 +45149,10 @@ components:
           type: integer
           maximum: 2147483647
           minimum: 0
+        opens_as_standoff:
+          type: boolean
+          description: When any line on the beat has this set, running the beat opens
+            a standoff before round one instead of starting the fight.
       required:
       - creature_template
     BeatOpponentLineRequest:
@@ -45066,6 +45185,10 @@ components:
           type: integer
           maximum: 2147483647
           minimum: 0
+        opens_as_standoff:
+          type: boolean
+          description: When any line on the beat has this set, running the beat opens
+            a standoff before round one instead of starting the fight.
       required:
       - creature_template
     BeatOption:
@@ -54002,6 +54125,16 @@ components:
           - $ref: '#/components/schemas/StandoffView'
           nullable: true
           readOnly: true
+        gm_standoff:
+          allOf:
+          - $ref: '#/components/schemas/GMStandoffView'
+          nullable: true
+          readOnly: true
+        standoff_summary:
+          allOf:
+          - $ref: '#/components/schemas/StandoffSummary'
+          nullable: true
+          readOnly: true
         is_lethal:
           type: boolean
           readOnly: true
@@ -54022,6 +54155,7 @@ components:
       - escalation_start_round
       - escalation_tick_narration
       - forced_escape
+      - gm_standoff
       - id
       - is_gm
       - is_lethal
@@ -54039,6 +54173,7 @@ components:
       - resolution_order
       - scene
       - standoff
+      - standoff_summary
       - surge_beats
       - sustained_actions
       - volatile_objects
@@ -56650,6 +56785,19 @@ components:
       - sheet_update_requests
       - story_offers
       - total
+    GMDriveView:
+      type: object
+      properties:
+        label:
+          type: string
+        strength:
+          type: string
+        revealed:
+          type: boolean
+      required:
+      - label
+      - revealed
+      - strength
     GMEvidenceSummary:
       type: object
       description: Read-only view of ``world.gm.types.GMEvidenceSummary`` for staff
@@ -56689,6 +56837,116 @@ components:
       - level_changes
       - profile_id
       - stories_running
+    GMFactionRuleView:
+      type: object
+      properties:
+        faction_rule_id:
+          type: integer
+        label:
+          type: string
+        angle_text:
+          type: string
+        difficulty_shift_bands:
+          type: integer
+        suppresses_cause:
+          type: boolean
+        matched_by:
+          type: array
+          items:
+            type: string
+        revealed:
+          type: boolean
+      required:
+      - angle_text
+      - difficulty_shift_bands
+      - faction_rule_id
+      - label
+      - matched_by
+      - revealed
+      - suppresses_cause
+    GMGroupView:
+      type: object
+      properties:
+        group_id:
+          type: integer
+        name:
+          type: string
+        state:
+          type: string
+        member_count:
+          type: integer
+        cause:
+          type: string
+        cause_revealed:
+          type: boolean
+        cause_fires:
+          type: boolean
+        cause_reason:
+          type: string
+        cause_margin_percent:
+          type: integer
+        proposal_reason:
+          type: string
+        pending_prompt_id:
+          type: integer
+          nullable: true
+        last_decision:
+          type: string
+        override_standing:
+          type: boolean
+        emboldened_bands:
+          type: integer
+        terms_ease:
+          type: integer
+        has_morale:
+          type: boolean
+        morale_state:
+          type: string
+        party_force:
+          type: number
+          format: double
+        effective_party_force:
+          type: number
+          format: double
+        group_force:
+          type: number
+          format: double
+        drives:
+          type: array
+          items:
+            $ref: '#/components/schemas/GMDriveView'
+        faction_rules:
+          type: array
+          items:
+            $ref: '#/components/schemas/GMFactionRuleView'
+        members:
+          type: array
+          items:
+            $ref: '#/components/schemas/GMMemberView'
+      required:
+      - cause
+      - cause_fires
+      - cause_margin_percent
+      - cause_reason
+      - cause_revealed
+      - drives
+      - effective_party_force
+      - emboldened_bands
+      - faction_rules
+      - group_force
+      - group_id
+      - has_morale
+      - last_decision
+      - member_count
+      - members
+      - morale_state
+      - name
+      - override_standing
+      - party_force
+      - pending_prompt_id
+      - proposal_reason
+      - state
+      - terms_ease
     GMLevelChange:
       type: object
       description: Read-only audit row for a staff-driven GM trust-level change (#2000).
@@ -56739,6 +56997,22 @@ components:
       - old_level_display
       - profile
       - reason
+    GMMemberView:
+      type: object
+      properties:
+        opponent_id:
+          type: integer
+        name:
+          type: string
+        morale:
+          type: integer
+        morale_state:
+          type: string
+      required:
+      - morale
+      - morale_state
+      - name
+      - opponent_id
     GMProfile:
       type: object
       description: Read-only serializer for GM profiles.
@@ -56836,6 +57110,7 @@ components:
             * `miracle` - Miracle
             * `death` - Death
             * `stake_outcome` - Stake outcome
+            * `standoff_cause` - Standoff
         kind_label:
           type: string
           readOnly: true
@@ -56877,6 +57152,35 @@ components:
           type: string
           readOnly: true
           default: ''
+        standoff_group:
+          type: integer
+          readOnly: true
+          nullable: true
+          description: The standoff group a standoff_cause prompt proposes to start
+            the fight.
+        standoff_group_name:
+          type: string
+          readOnly: true
+          default: ''
+        standoff_cause_label:
+          type: string
+          description: The proposed group's cause, by label (Orders, Predation); blank
+            on other kinds.
+          readOnly: true
+        standoff_reason:
+          type: string
+          readOnly: true
+          default: ''
+        standoff_force:
+          type: string
+          description: 'The force on both sides, read when the queue is: blank on
+            other kinds.'
+          readOnly: true
+        resolution_note:
+          type: string
+          readOnly: true
+          description: What the GM decided on a decision prompt, with their reason
+            when they gave one (a standoff Override's reason is recorded here).
         room_text:
           type: string
           readOnly: true
@@ -56906,9 +57210,15 @@ components:
       - moment_type_label
       - prepared_for_character
       - private_text
+      - resolution_note
       - room_text
       - scene
       - stake_summary
+      - standoff_cause_label
+      - standoff_force
+      - standoff_group
+      - standoff_group_name
+      - standoff_reason
       - status
       - subject_name
       - subject_persona_id
@@ -56936,6 +57246,7 @@ components:
       - miracle
       - death
       - stake_outcome
+      - standoff
       type: string
       description: |-
         * `dramatic_moment` - Dramatic Moment
@@ -56943,6 +57254,7 @@ components:
         * `miracle` - Miracles
         * `death` - Deaths
         * `stake_outcome` - Stake outcomes
+        * `standoff` - Standoffs
     GMPromptFilterRequest:
       type: object
       description: One per-group row of a GM's prompt-filter switches (#4101; demo
@@ -56964,6 +57276,7 @@ components:
       - miracle
       - death
       - stake_outcome
+      - standoff_cause
       type: string
       description: |-
         * `dramatic_moment` - Dramatic Moment
@@ -56973,6 +57286,7 @@ components:
         * `miracle` - Miracle
         * `death` - Death
         * `stake_outcome` - Stake outcome
+        * `standoff_cause` - Standoff
     GMPromptStatusEnum:
       enum:
       - pending
@@ -57056,6 +57370,25 @@ components:
           format: email
       required:
       - roster_entry
+    GMStandoffView:
+      type: object
+      description: Everything a GM sees of a standoff (``services/gm_view.py``). GM
+        and staff only.
+      properties:
+        place:
+          type: string
+        participants:
+          type: array
+          items:
+            type: string
+        groups:
+          type: array
+          items:
+            $ref: '#/components/schemas/GMGroupView'
+      required:
+      - groups
+      - participants
+      - place
     GMStoryRail:
       type: object
       description: Full GM story rail response.
@@ -58611,7 +58944,7 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/DriveView'
-        revealed_regard:
+        revealed_faction_rules:
           type: array
           items:
             type: string
@@ -58625,10 +58958,13 @@ components:
           type: string
         terms_morale_ease:
           type: integer
+        emboldened:
+          type: boolean
       required:
       - cause
       - cause_gloss
       - drives
+      - emboldened
       - group_id
       - hidden_count
       - member_count
@@ -58637,7 +58973,7 @@ components:
       - read_check
       - read_grade
       - read_grade_label
-      - revealed_regard
+      - revealed_faction_rules
       - state
       - terms_ease
       - terms_morale_ease
@@ -62108,10 +62444,10 @@ components:
       properties:
         text:
           type: string
-        is_spark:
+        is_angle:
           type: boolean
       required:
-      - is_spark
+      - is_angle
       - text
     LibraryEntry:
       type: object
@@ -84583,22 +84919,6 @@ components:
       - has_death_risk
       - stage_description
       - stage_name
-    SparkView:
-      type: object
-      properties:
-        group_id:
-          type: integer
-        regard_rule_id:
-          type: integer
-        text:
-          type: string
-        shared:
-          type: boolean
-      required:
-      - group_id
-      - regard_rule_id
-      - shared
-      - text
     SpeakerQueue:
       type: object
       properties:
@@ -86596,6 +86916,49 @@ components:
       description: |-
         * `core` - Core Member
         * `minor` - Minor Member
+    StandoffMoraleRequestDirectionEnum:
+      enum:
+      - shake
+      - steady
+      type: string
+      description: |-
+        * `shake` - Shake
+        * `steady` - Steady
+    StandoffMoraleRequestRequest:
+      type: object
+      description: 'Body for the GM morale control (#4354): which group, which way,
+        and why.'
+      properties:
+        group_id:
+          type: integer
+        direction:
+          $ref: '#/components/schemas/StandoffMoraleRequestDirectionEnum'
+        reason:
+          type: string
+          minLength: 1
+          maxLength: 500
+      required:
+      - direction
+      - group_id
+      - reason
+    StandoffSummary:
+      type: object
+      description: The public standoff summary an onlooker sees (``services/gm_view.py``).
+      properties:
+        place:
+          type: string
+        participants:
+          type: array
+          items:
+            type: string
+        groups:
+          type: array
+          items:
+            $ref: '#/components/schemas/SummaryGroupView'
+      required:
+      - groups
+      - participants
+      - place
     StandoffView:
       type: object
       properties:
@@ -86613,25 +86976,25 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/TermsView'
-        sparks:
+        angles:
           type: array
           items:
-            $ref: '#/components/schemas/SparkView'
-        shared_sparks:
+            $ref: '#/components/schemas/AngleView'
+        shared_angles:
           type: array
           items:
-            $ref: '#/components/schemas/SparkView'
+            $ref: '#/components/schemas/AngleView'
         display_techniques:
           type: array
           items:
             $ref: '#/components/schemas/DisplayTechnique'
       required:
+      - angles
       - approaches
       - display_techniques
       - groups
       - place
-      - shared_sparks
-      - sparks
+      - shared_angles
       - terms
     StartingArea:
       type: object
@@ -87963,6 +88326,28 @@ components:
         * `minor` - A minor sum
         * `fair` - A fair sum
         * `great` - A great sum
+    SummaryGroupView:
+      type: object
+      properties:
+        group_id:
+          type: integer
+        name:
+          type: string
+        member_count:
+          type: integer
+        state:
+          type: string
+        morale_state:
+          type: string
+        emboldened:
+          type: boolean
+      required:
+      - emboldened
+      - group_id
+      - member_count
+      - morale_state
+      - name
+      - state
     SummaryWriteRequest:
       type: object
       properties:

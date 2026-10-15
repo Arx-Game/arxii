@@ -1,7 +1,7 @@
 """Standoff telnet command: the ``standoff <subverb>`` namespace (#4145).
 
 Reaches the standoff registry actions through the shared ``dispatch_player_action`` seam,
-the same path the web uses. Names typed by the player (group, approach, terms, drive, spark)
+the same path the web uses. Names typed by the player (group, approach, terms, drive, angle)
 are looked up by ``iexact`` against rows scoped to the caller's standoff; nothing is
 designated by name in code.
 """
@@ -19,8 +19,9 @@ if TYPE_CHECKING:
     from collections.abc import Callable
 
     from actions.types import ActionRef, DispatchResult
-    from world.combat.models import CombatParticipant
+    from world.combat.models import CombatEncounter, CombatParticipant
     from world.standoffs.models import StandoffGroup
+    from world.standoffs.services.gm_view import GMStandoffView
     from world.standoffs.services.view import GroupView, LeverView, StandoffView
 
 _SUBVERBS: dict[str, str] = {
@@ -29,7 +30,7 @@ _SUBVERBS: dict[str, str] = {
     "display": "standoff_press",
     "terms": "standoff_terms",
     "fight": "standoff_fight",
-    "share": "standoff_share_spark",
+    "share": "standoff_share_angle",
 }
 _NOT_IN_STANDOFF = "You are not in a standoff."
 _CAUSE_WORD = "cause"
@@ -55,13 +56,13 @@ class CmdStandoff(DispatchCommand):
     """Act in a standoff before a fight begins.
 
     Usage:
-        standoff                         - the groups here, your sparks and what you can do
-        standoff read <group> [cause|<drive>|<spark>] - read a group for what moves it
+        standoff                         - the groups here, your angles and what you can do
+        standoff read <group> [cause|<drive>|<angle>] - read a group for what moves it
         standoff press <approach> <group> - press a group with an approach
         standoff display <technique> <group> [soulfray] - cast a technique as a display
                                            of power; 'soulfray' accepts the Soulfray risk
         standoff terms <terms> <group>   - name terms to a group
-        standoff share <group> <spark>   - share what you feel about a group
+        standoff share <group> <angle>   - share what you feel about a group
         standoff fight                   - break the standoff and begin the fight
     """
 
@@ -153,9 +154,9 @@ class CmdStandoff(DispatchCommand):
         return matches[0]
 
     def _own_matches(self, group: StandoffGroup) -> list[Any]:
-        from world.standoffs.services.regard import regard_matches  # noqa: PLC0415
+        from world.standoffs.services.faction_rules import faction_rule_matches  # noqa: PLC0415
 
-        return regard_matches(group, self.caller.sheet_data)
+        return faction_rule_matches(group, self.caller.sheet_data)
 
     def _split(self, text: str, first: Callable[[str], Any], second: Callable[[str], Any]) -> Any:
         """Resolve ``<first> <second>`` where either may be several words."""
@@ -195,8 +196,11 @@ class CmdStandoff(DispatchCommand):
         if focus.lower() == _CAUSE_WORD:
             return {"focus_kind": RevealKind.CAUSE}
         for match in self._own_matches(group):
-            if match.rule.spark_text.lower() == focus.lower():
-                return {"focus_kind": RevealKind.REGARD, "focus_regard_rule_id": match.rule.pk}
+            if match.rule.angle_text.lower() == focus.lower():
+                return {
+                    "focus_kind": RevealKind.FACTION_RULE,
+                    "focus_faction_rule_id": match.rule.pk,
+                }
         prop = Property.objects.filter(name__iexact=focus).first()
         if prop is not None:
             return {"focus_kind": RevealKind.DRIVE, "focus_property_id": prop.pk}
@@ -268,12 +272,12 @@ class CmdStandoff(DispatchCommand):
         return {"group_id": group.pk, "terms_id": terms.pk}
 
     def _share_args(self, text: str) -> dict[str, Any]:
-        def spark_for(group: StandoffGroup) -> Callable[[str], Any]:
+        def angle_for(group: StandoffGroup) -> Callable[[str], Any]:
             def find(name: str) -> Any:
                 for match in self._own_matches(group):
-                    if match.rule.spark_text.lower() == name.lower():
+                    if match.rule.angle_text.lower() == name.lower():
                         return match.rule
-                msg = f"You have no spark '{name}'."
+                msg = f"You have no angle '{name}'."
                 raise CommandError(msg)
 
             return find
@@ -281,31 +285,136 @@ class CmdStandoff(DispatchCommand):
         for lead, tail in _name_splits(text):
             try:
                 group = self._group(lead)
-                return {"group_id": group.pk, "regard_rule_id": spark_for(group)(tail).pk}
+                return {"group_id": group.pk, "faction_rule_id": angle_for(group)(tail).pk}
             except AmbiguousNameError:
                 raise
             except CommandError:
                 continue
-        msg = "Usage: standoff share <group> <spark>."
+        msg = "Usage: standoff share <group> <angle>."
         raise CommandError(msg)
 
     # -- summary ---------------------------------------------------------------
 
     def _show_summary(self) -> None:
-        """Print the standoff as the caller may see it, from the shared view builder."""
+        """Print the standoff as the caller may see it: as a participant, a GM or an onlooker.
+
+        A participant gets their own view. Anyone else in a room whose encounter is in its
+        standoff gets the GM view when they GM that scene (or are staff), else the public
+        summary (#4354).
+        """
         from actions.definitions.standoff import _standoff_participant  # noqa: PLC0415
         from world.standoffs.services.view import build_standoff_view  # noqa: PLC0415
 
         participant = _standoff_participant(self.caller)
-        view = (
-            None
-            if participant is None
-            else build_standoff_view(participant.encounter, participant.character_sheet)
-        )
-        if view is None:
+        if participant is not None:
+            view = build_standoff_view(participant.encounter, participant.character_sheet)
+            if view is not None:
+                self.msg("\n".join(_render_view(view)))
+                return
+        encounter = _room_standoff_encounter(self.caller)
+        if encounter is None:
             self.msg(_NOT_IN_STANDOFF)
             return
-        self.msg("\n".join(_render_view(view)))
+        self.msg("\n".join(_render_outside_view(self.caller, encounter)))
+
+
+def _room_standoff_encounter(caller: Any) -> CombatEncounter | None:
+    """The newest encounter in the caller's room that is in its standoff, if any."""
+    from world.combat.models import CombatEncounter  # noqa: PLC0415
+    from world.standoffs.services.state import is_in_standoff  # noqa: PLC0415
+
+    room = caller.location
+    if room is None:
+        return None
+    candidates = CombatEncounter.objects.filter(room=room, round_number=0).order_by("-created_at")
+    return next((e for e in candidates if is_in_standoff(e)), None)
+
+
+def _render_outside_view(caller: Any, encounter: CombatEncounter) -> list[str]:
+    """The GM view for a scene GM or staff; the public summary for anyone else."""
+    from commands.utils.gm_resolution import resolve_account_or_none  # noqa: PLC0415
+    from world.standoffs.services.gm_view import (  # noqa: PLC0415
+        build_gm_standoff_view,
+        build_standoff_summary,
+    )
+
+    # A puppeting session sets ``account``; a character played off a tenure resolves
+    # through ``active_account``.
+    account = caller.account or resolve_account_or_none(caller)
+    is_gm = account is not None and (
+        account.is_staff or (encounter.scene is not None and encounter.scene.is_gm(account))
+    )
+    if is_gm:
+        gm_view = build_gm_standoff_view(encounter)
+        if gm_view is not None:
+            return _render_gm_view(gm_view)
+    summary = build_standoff_summary(encounter)
+    if summary is None:
+        return [_NOT_IN_STANDOFF]
+    lines = [f"Standoff at {summary.place}:" if summary.place else "Standoff:"]
+    lines.extend(
+        f"  {group.name} ({group.member_count}) - "
+        + _state_words(group.state, group.morale_state, emboldened=group.emboldened)
+        for group in summary.groups
+    )
+    if summary.participants:
+        lines.append(f"In the standoff: {', '.join(summary.participants)}.")
+    return lines
+
+
+def _render_gm_view(view: GMStandoffView) -> list[str]:
+    """The GM's whole view of a standoff, as plain text."""
+    lines = [f"Standoff at {view.place} (GM):" if view.place else "Standoff (GM):"]
+    for group in view.groups:
+        lines.append(
+            f"  [{group.group_id}] {group.name} ({group.member_count}) - "
+            + _state_words(group.state, group.morale_state, emboldened=group.emboldened_bands > 0)
+        )
+        status = f"fires: {group.cause_reason}" if group.cause_fires else "holds"
+        lines.append(f"    Cause: {group.cause} ({status})")
+        if group.pending_prompt_id is not None:
+            lines.append(
+                f"    Proposal [{group.pending_prompt_id}]: {group.proposal_reason} "
+                f"(gm prompt confirm, hold or override {group.pending_prompt_id})"
+            )
+        lines.extend(
+            f"    Drive: {drive.label} ({drive.strength}){' - read' if drive.revealed else ''}"
+            for drive in group.drives
+        )
+        lines.extend(
+            f"    Faction rule: {rule.label} - matches "
+            f"{', '.join(rule.matched_by) or 'nobody'}{' - read' if rule.revealed else ''}"
+            for rule in group.faction_rules
+        )
+        lines.append(
+            f"    Force: party {group.effective_party_force}, them {group.group_force} "
+            f"(margin {group.cause_margin_percent}%)"
+        )
+        lines.append(
+            "    Morale: "
+            + ", ".join(f"{m.name} {m.morale} ({m.morale_state})" for m in group.members)
+        )
+    # No pipe characters: on telnet "|" starts a colour code.
+    lines.append("GM: gm standoff shake <group id> <reason> (or steady)")
+    return lines
+
+
+def _state_words(state: str, morale_state: str, *, emboldened: bool) -> str:
+    """A group's state for a reader: PROPOSED reads as open plus deciding."""
+    from world.combat.morale import OpponentMoraleState  # noqa: PLC0415
+    from world.standoffs.constants import StandoffGroupState  # noqa: PLC0415
+
+    deciding = state == StandoffGroupState.PROPOSED
+    words = [StandoffGroupState.OPEN.label if deciding else StandoffGroupState(state).label]
+    if emboldened:
+        words.append("emboldened")
+    if morale_state == OpponentMoraleState.FALTER:
+        words.append("faltering")
+    elif morale_state == OpponentMoraleState.BREAK:
+        words.append("broken")
+    if deciding:
+        words.append("deciding")
+    return ", ".join(words)
 
 
 def _render_view(view: StandoffView) -> list[str]:
@@ -319,9 +428,10 @@ def _render_view(view: StandoffView) -> list[str]:
 
 def _render_group(view: StandoffView, group: GroupView) -> list[str]:
     """Render one group's visible lines in the summary."""
-    from world.standoffs.constants import StandoffGroupState  # noqa: PLC0415
-
-    lines = [f"  {group.name} ({group.member_count}) - {StandoffGroupState(group.state).label}"]
+    lines = [
+        f"  {group.name} ({group.member_count}) - "
+        + _state_words(group.state, group.morale_state, emboldened=group.emboldened)
+    ]
     if group.read_grade_label:
         lines.append(f"    read ({group.read_check}): {group.read_grade_label}")
     if group.hidden_count:
@@ -330,16 +440,16 @@ def _render_group(view: StandoffView, group: GroupView) -> list[str]:
         gloss = f" {group.cause_gloss}" if group.cause_gloss else ""
         lines.append(f"    Cause: {group.cause}.{gloss}")
     lines.extend(f"    Drive: {drive.label} ({drive.strength})." for drive in group.drives)
-    lines.extend(f"    {line}" for line in group.revealed_regard)
+    lines.extend(f"    {line}" for line in group.revealed_faction_rules)
     lines.extend(
-        f"    You feel: {spark.text}{' (shared)' if spark.shared else ''}"
-        for spark in view.sparks
-        if spark.group_id == group.group_id and spark.text
+        f"    You feel: {angle.text}{' (shared)' if angle.shared else ''}"
+        for angle in view.angles
+        if angle.group_id == group.group_id and angle.text
     )
     lines.extend(
-        f"    Shared: {spark.text}"
-        for spark in view.shared_sparks
-        if spark.group_id == group.group_id and spark.text
+        f"    Shared: {angle.text}"
+        for angle in view.shared_angles
+        if angle.group_id == group.group_id and angle.text
     )
     lines.extend(
         f"    press {approach.name}: {approach.grade_label}" + _lever_suffix(approach.levers)

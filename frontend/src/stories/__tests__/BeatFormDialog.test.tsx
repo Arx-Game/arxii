@@ -1025,6 +1025,7 @@ describe('BeatFormDialog', () => {
     await user.clear(screen.getByTestId('beat-opponent-line-count-0'));
     await user.type(screen.getByTestId('beat-opponent-line-count-0'), '2');
     await user.type(screen.getByTestId('beat-opponent-line-position-0'), 'front');
+    await user.click(screen.getByLabelText('Opens as a standoff'));
 
     await user.click(screen.getByRole('button', { name: /create beat/i }));
 
@@ -1032,7 +1033,15 @@ describe('BeatFormDialog', () => {
       expect(createMock).toHaveBeenCalledWith(
         expect.objectContaining({
           kind: 'encounter',
-          opponent_lines: [{ creature_template: 1, count: 2, position_name: 'front', order: 0 }],
+          opponent_lines: [
+            {
+              creature_template: 1,
+              count: 2,
+              position_name: 'front',
+              opens_as_standoff: true,
+              order: 0,
+            },
+          ],
         }),
         expect.any(Object)
       );

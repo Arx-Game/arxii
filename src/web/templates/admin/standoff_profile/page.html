@@ -1,0 +1,184 @@
+{% extends "admin/base_site.html" %}
+{% load i18n static %}
+
+{% block title %}{{ title }} | {% translate 'Site administration' %}{% endblock %}
+
+{% block extrastyle %}
+{{ block.super }}
+{% comment %}
+A custom page extending `base_site.html` gets base.css, dark_mode.css and
+responsive.css only. `forms.css` (form rows, help, submit-row) is linked by
+`change_form.html`, so this page links it itself (#3667), and `widgets.css` with it.
+{% endcomment %}
+<link rel="stylesheet" href="{% static 'admin/css/forms.css' %}">
+<link rel="stylesheet" href="{% static 'admin/css/widgets.css' %}">
+{% endblock %}
+
+{% block extrahead %}
+{{ block.super }}
+<script src="{% url 'admin:jsi18n' %}"></script>
+{{ media }}
+<script src="{% static 'admin/js/builder_formsets.js' %}"></script>
+{% endblock %}
+
+{% block breadcrumbs %}
+<div class="breadcrumbs">
+  <a href="{% url 'admin:index' %}">{% translate 'Home' %}</a>
+  &rsaquo; <a href="{% url 'admin:arxii_creaturetemplate_changelist' %}">Creature templates</a>
+  &rsaquo; <a href="{{ change_url }}">{{ creature.name }}</a>
+  &rsaquo; Standoff profile
+</div>
+{% endblock %}
+
+{% block content %}
+{% include "admin/tuning/_panel_css.html" %}
+{% include "admin/standoff_profile/_css.html" %}
+<div id="standoff-profile-root">
+  <h1>Standoff Profile Builder</h1>
+
+  {% if needs_setup %}
+    {% include "admin/upbringing_builder/_setup.html" %}
+  {% else %}
+
+  <div class="sp-columns">
+    <div class="sp-main">
+      <form method="post">
+        {% csrf_token %}
+
+        <div class="module" id="creature-module">
+          <h2>The creature
+            <span class="sp-chips">
+              <span class="sp-chip">{{ creature.get_tier_display }}</span>
+              <span class="sp-chip">used in {{ placements|length }} placement{{ placements|length|pluralize }}</span>
+            </span>
+          </h2>
+          {% if form.non_field_errors %}<p class="errornote">{{ form.non_field_errors }}</p>{% endif %}
+          <table class="tuning-table sp-table">
+            <tbody>
+              <tr><th>{{ form.cause.label_tag }}</th>
+                <td>{{ form.cause.errors }}{{ form.cause }}
+                  <div class="help">{{ form.cause.help_text }}</div></td></tr>
+              <tr><th>{{ form.cause_margin_percent.label_tag }}</th>
+                <td>{{ form.cause_margin_percent.errors }}{{ form.cause_margin_percent }}
+                  <div class="help">{{ form.cause_margin_percent.help_text }}</div></td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="module" id="drives-module">
+          <h2>Drives</h2>
+          {{ drives.management_form }}
+          {% if drives.non_form_errors %}<p class="errornote">{{ drives.non_form_errors }}</p>{% endif %}
+          <table class="tuning-table sp-table">
+            <thead><tr><th>Property</th><th>Strength</th><th>What it means</th>
+              <th>Hit by</th><th>Delete</th></tr></thead>
+            <tbody id="drives-body">
+              {% for f, ctx in drive_rows %}
+              <tr>
+                {% for hidden in f.hidden_fields %}{{ hidden }}{% endfor %}
+                <td>{{ f.property.errors }}{{ f.property }}</td>
+                <td>{{ f.strength.errors }}{{ f.strength }}</td>
+                <td class="sp-context">{{ ctx.description }}</td>
+                <td class="sp-context{% if ctx and not ctx.hit_by %} sp-warn{% endif %}">
+                  {% if ctx %}{% if ctx.hit_by %}{{ ctx.hit_by|join:"; " }}{% else %}nothing yet: no approach's capability aims at it{% endif %}{% endif %}
+                </td>
+                <td>{% if f.instance.pk %}{{ f.DELETE }}{% endif %}</td>
+              </tr>
+              {% if f.non_field_errors %}<tr><td colspan="5">{{ f.non_field_errors }}</td></tr>{% endif %}
+              {% endfor %}
+            </tbody>
+          </table>
+          <template id="empty-drive-template">
+            <tr>
+              {% for hidden in drives.empty_form.hidden_fields %}{{ hidden }}{% endfor %}
+              <td>{{ drives.empty_form.property }}</td>
+              <td>{{ drives.empty_form.strength }}</td>
+              <td></td><td></td><td></td>
+            </tr>
+          </template>
+          <div class="sp-addrow">
+            <button type="button" class="button" id="add-drive-btn"
+                    data-prefix="{{ drives.prefix }}" data-target="drives-body"
+                    data-template="empty-drive-template">+ Add another drive</button>
+          </div>
+        </div>
+
+        <div class="module" id="rules-module">
+          <h2>Faction rules on this creature</h2>
+          {{ rules.management_form }}
+          {% if rules.non_form_errors %}<p class="errornote">{{ rules.non_form_errors }}</p>{% endif %}
+          <div id="rules-body">
+            {% for f in rules.forms %}
+            <div class="sp-rule">
+              {% for hidden in f.hidden_fields %}{{ hidden }}{% endfor %}
+              <h3>Faction rule {% if f.instance.pk %}#{{ f.instance.pk }}{% else %}(new){% endif %}
+                {% if f.instance.pk %}<span class="sp-delete">{{ f.DELETE }} Delete</span>{% endif %}</h3>
+              {% if f.non_field_errors %}<p class="errornote">{{ f.non_field_errors }}</p>{% endif %}
+              <table class="tuning-table sp-table">
+                <tbody>
+                  {% for field in f.visible_fields %}{% if field.name != "DELETE" %}
+                  <tr><th>{{ field.label_tag }}</th>
+                    <td>{{ field.errors }}{{ field }}
+                      {% if field.help_text %}<div class="help">{{ field.help_text }}</div>{% endif %}</td></tr>
+                  {% endif %}{% endfor %}
+                </tbody>
+              </table>
+            </div>
+            {% endfor %}
+          </div>
+          <template id="empty-rule-template">
+            <div class="sp-rule">
+              {% for hidden in rules.empty_form.hidden_fields %}{{ hidden }}{% endfor %}
+              <h3>Faction rule (new)</h3>
+              <table class="tuning-table sp-table">
+                <tbody>
+                  {% for field in rules.empty_form.visible_fields %}{% if field.name != "DELETE" %}
+                  <tr><th>{{ field.label_tag }}</th>
+                    <td>{{ field }}
+                      {% if field.help_text %}<div class="help">{{ field.help_text }}</div>{% endif %}</td></tr>
+                  {% endif %}{% endfor %}
+                </tbody>
+              </table>
+            </div>
+          </template>
+          <div class="sp-addrow">
+            <button type="button" class="button" id="add-rule-btn"
+                    data-prefix="{{ rules.prefix }}" data-target="rules-body"
+                    data-template="empty-rule-template">+ Add another faction rule</button>
+          </div>
+        </div>
+
+        <div class="submit-row">
+          <input type="submit" name="save" value="Save" class="default">
+          <input type="submit" name="save_continue" value="Save and continue editing">
+          <a class="button" href="{{ change_url }}">Back to the creature</a>
+        </div>
+      </form>
+    </div>
+
+    <aside class="sp-rail">
+      {% include "admin/standoff_profile/_rail.html" %}
+    </aside>
+  </div>
+
+  {% endif %}
+</div>
+
+<script>
+(function () {
+  var formsets = window.arxBuilderFormsets;
+  function wire(buttonId, wrapperTag) {
+    var btn = document.getElementById(buttonId);
+    if (!btn) { return; }
+    btn.addEventListener("click", function () {
+      var index = formsets.nextFormIndex(btn.dataset.prefix);
+      var node = formsets.cloneFromTemplate(btn.dataset.template, index, wrapperTag);
+      document.getElementById(btn.dataset.target).appendChild(node);
+      formsets.announceFormsetAdded(btn.dataset.prefix, node);
+    });
+  }
+  wire("add-drive-btn", "tbody");
+  wire("add-rule-btn", "div");
+})();
+</script>
+{% endblock %}

@@ -1,0 +1,47 @@
+{% comment %}
+The context rail (#4354): read-only, computed from the saved rows. The grade preview
+and cause check take an example level and party size from the query string, so the
+author can try the creature against a different party without saving anything.
+{% endcomment %}
+<div class="module">
+  <h2>Grade preview</h2>
+  <form method="get" class="sp-preview-form">
+    <label>Level <input type="number" name="level" min="1" max="50" value="{{ preview_level }}"></label>
+    <label>Party <input type="number" name="party" min="1" max="50" value="{{ preview_party }}"></label>
+    <input type="submit" class="button" value="Try">
+  </form>
+  <p class="sp-rail-note">A level {{ preview_level }} character with no trait points beyond its
+    level, against one level {{ preview_level }} member, average effort, no faction rule matched.</p>
+  {% if preview %}
+  <table class="tuning-table sp-rail-table">
+    <thead><tr><th scope="col">Approach or terms</th><th scope="col">Grade</th></tr></thead>
+    <tbody>
+      {% for line in preview %}
+      <tr><td>{{ line.name }}</td>
+        <td><span class="sp-grade sp-grade-{{ line.grade_class|default:'none' }}">{{ line.grade }}</span>
+          {% if line.note %}<span class="sp-rail-note">{{ line.note }}</span>{% endif %}</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="sp-rail-note">No approaches or terms are authored yet.</p>
+  {% endif %}
+</div>
+
+<div class="module">
+  <h2>Cause check</h2>
+  <p class="sp-rail-note">{{ cause_check }}</p>
+</div>
+
+<div class="module">
+  <h2>Placements</h2>
+  {% if placements %}
+  <ul class="sp-placements">
+    {% for p in placements %}
+    <li>{{ p.label }} &middot; x{{ p.count }}{% if p.opens_as_standoff %} &middot; opens as a standoff{% endif %}</li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <p class="sp-rail-note">No beat or mission option spawns this creature yet.</p>
+  {% endif %}
+</div>

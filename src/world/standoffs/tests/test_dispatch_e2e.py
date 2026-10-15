@@ -159,7 +159,7 @@ class MissionJourneyTests(StandoffJourneyBase):
         with patch(announce) as broadcast, patch(CHECK, return_value=_roll(self.success_tier)):
             self._do("standoff_press", group_id=self.group.pk, approach_id=self.approach.pk)
             self._do("standoff_read", group_id=self.group.pk)
-            self._do("standoff_share_spark", group_id=self.group.pk, regard_rule_id=0)
+            self._do("standoff_share_angle", group_id=self.group.pk, faction_rule_id=0)
             self._do("standoff_fight")
         lines = [call.kwargs["narration"] for call in broadcast.call_args_list]
         self.assertGreaterEqual(len(lines), 3)

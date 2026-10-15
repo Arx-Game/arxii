@@ -2747,7 +2747,10 @@ class CreatureTemplate(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
         max_length=20,
         choices=CauseKind.choices,
         default=CauseKind.NONE,
-        help_text="Why this creature picks a fight on its own (Predation: it hunts the weak).",
+        help_text=(
+            "Why this creature picks a fight on its own (Predation: it hunts the weak; "
+            "Orders: it holds what it was told to hold, and fires when provoked or outmatched)."
+        ),
     )
     cause_margin_percent = models.SmallIntegerField(
         default=0,

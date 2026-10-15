@@ -1,4 +1,4 @@
-"""Standoff models: creature motives, regard rules, approaches, terms and live groups.
+"""Standoff models: creature motives, faction rules, approaches, terms and live groups.
 
 A standoff is the stretch before a fight (``CombatEncounter.round_number == 0``) in
 which each group of creatures can be read and talked down. "In a standoff" is derived
@@ -14,9 +14,11 @@ from django.db import models
 from core.managers import ArxSharedMemoryManager
 from core.models import ArxSharedMemoryModel as SharedMemoryModel
 from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
+from world.combat.constants import CauseKind
 from world.predicates.validation import validate_predicate_tree
 from world.standoffs.constants import (
     DriveStrength,
+    MoraleDirection,
     RevealKind,
     StandoffGroupState,
     TermsEffect,
@@ -57,8 +59,8 @@ class CreatureDrive(SharedMemoryModel):
         return f"{self.creature_template} drive: {self.property} ({self.get_strength_display()})"
 
 
-class RegardRule(SharedMemoryModel):
-    """How a creature kind regards particular characters, and what that does to a standoff.
+class FactionRule(SharedMemoryModel):
+    """How a creature kind stands toward particular characters, and what that does to a standoff.
 
     ``rule`` is a predicate tree over the acting character's own state (ratified
     exception to the no-JSON rule, ADR-0007). Deed knowledge is the typed
@@ -68,7 +70,7 @@ class RegardRule(SharedMemoryModel):
     creature_template = models.ForeignKey(
         "arxii.CreatureTemplate",
         on_delete=models.CASCADE,
-        related_name="regard_rules",
+        related_name="faction_rules",
         help_text="The creature kind this rule belongs to.",
     )
     # SANCTIONED DYNAMIC JSON: a predicate rule tree (AND/OR/NOT over the acting
@@ -108,7 +110,7 @@ class RegardRule(SharedMemoryModel):
         default=False,
         help_text="When true, a match stops the creature's cause from firing.",
     )
-    spark_text = models.TextField(
+    angle_text = models.TextField(
         blank=True,
         help_text="Player-visible hint at the character's own reaction (author in admin).",
     )
@@ -121,7 +123,7 @@ class RegardRule(SharedMemoryModel):
         ordering = ["creature_template", "pk"]
 
     def __str__(self) -> str:
-        return f"{self.creature_template} regard rule #{self.pk}"
+        return f"{self.creature_template} faction rule #{self.pk}"
 
     def clean(self) -> None:
         super().clean()
@@ -333,6 +335,36 @@ class StandoffConfig(SharedMemoryModel):
         return "Standoff settings"
 
 
+class StandoffCauseGloss(NaturalKeyMixin, SharedMemoryModel):
+    """The one-line player-facing gloss shown under a revealed cause (author in admin).
+
+    One row per ``CauseKind``. A cause with no row shows no gloss; the Required content
+    dashboard lists the kinds still missing one.
+    """
+
+    cause = models.CharField(
+        max_length=20,
+        choices=CauseKind.choices,
+        unique=True,
+        help_text="The cause this gloss explains.",
+    )
+    text = models.CharField(
+        max_length=200,
+        help_text="Shown to the party under the cause once a read reveals it (author in admin).",
+    )
+
+    objects = NaturalKeyManager()
+
+    class Meta:
+        ordering = ["cause"]
+
+    class NaturalKeyConfig:
+        fields = ["cause"]
+
+    def __str__(self) -> str:
+        return f"{self.get_cause_display()} gloss"
+
+
 class StandoffGroup(SharedMemoryModel):
     """One creature kind's opponents in an encounter, treated as a single side of a standoff."""
 
@@ -368,6 +400,24 @@ class StandoffGroup(SharedMemoryModel):
         related_name="+",
         help_text="The outcome that settled the group, once it is settled.",
     )
+    proposal_reason = models.CharField(
+        max_length=255,
+        blank=True,
+        help_text="Why the cause last fired, shown on the GM's proposal (system text).",
+    )
+    override_party_force = models.FloatField(
+        null=True,
+        blank=True,
+        help_text=(
+            "Party force when a GM overrode the cause; the cause is not tested again until "
+            "force moves off this value or a botch lands. Null when no override stands."
+        ),
+    )
+    override_group_force = models.FloatField(
+        null=True,
+        blank=True,
+        help_text="Group force when a GM overrode the cause (see override_party_force).",
+    )
 
     class Meta:
         ordering = ["encounter", "creature_template"]
@@ -383,7 +433,7 @@ class StandoffGroup(SharedMemoryModel):
 
 
 class StandoffReveal(SharedMemoryModel):
-    """One thing a read has uncovered about a group: its cause, a drive, or a regard rule."""
+    """One thing a read has uncovered about a group: its cause, a drive, or a faction rule."""
 
     group = models.ForeignKey(
         StandoffGroup,
@@ -402,13 +452,13 @@ class StandoffReveal(SharedMemoryModel):
         related_name="+",
         help_text="The drive revealed (DRIVE reveals only).",
     )
-    regard_rule = models.ForeignKey(
-        RegardRule,
+    faction_rule = models.ForeignKey(
+        FactionRule,
         on_delete=models.CASCADE,
         null=True,
         blank=True,
         related_name="+",
-        help_text="The regard rule revealed (REGARD reveals only).",
+        help_text="The faction rule revealed ((FACTION_RULE reveals only)).",
     )
 
     class Meta:
@@ -416,16 +466,18 @@ class StandoffReveal(SharedMemoryModel):
         constraints = [
             models.CheckConstraint(
                 condition=(
-                    models.Q(kind=RevealKind.CAUSE, drive__isnull=True, regard_rule__isnull=True)
-                    | models.Q(kind=RevealKind.DRIVE, drive__isnull=False, regard_rule__isnull=True)
+                    models.Q(kind=RevealKind.CAUSE, drive__isnull=True, faction_rule__isnull=True)
                     | models.Q(
-                        kind=RevealKind.REGARD, drive__isnull=True, regard_rule__isnull=False
+                        kind=RevealKind.DRIVE, drive__isnull=False, faction_rule__isnull=True
+                    )
+                    | models.Q(
+                        kind=RevealKind.FACTION_RULE, drive__isnull=True, faction_rule__isnull=False
                     )
                 ),
                 name="standoff_reveal_fk_matches_kind",
             ),
             models.UniqueConstraint(
-                fields=["group", "kind", "drive", "regard_rule"],
+                fields=["group", "kind", "drive", "faction_rule"],
                 name="unique_standoff_reveal",
                 nulls_distinct=False,
             ),
@@ -435,39 +487,39 @@ class StandoffReveal(SharedMemoryModel):
         return f"{self.get_kind_display()} reveal for {self.group}"
 
 
-class StandoffSparkShare(SharedMemoryModel):
-    """A character's spark text for a regard rule, shared with the rest of the party."""
+class StandoffAngleShare(SharedMemoryModel):
+    """A character's angle text for a faction rule, shared with the rest of the party."""
 
     group = models.ForeignKey(
         StandoffGroup,
         on_delete=models.CASCADE,
-        related_name="spark_shares",
-        help_text="The group the spark is about.",
+        related_name="angle_shares",
+        help_text="The group the angle is about.",
     )
     character_sheet = models.ForeignKey(
         "arxii.CharacterSheet",
         on_delete=models.CASCADE,
         related_name="+",
-        help_text="The character whose spark was shared.",
+        help_text="The character whose angle was shared.",
     )
-    regard_rule = models.ForeignKey(
-        RegardRule,
+    faction_rule = models.ForeignKey(
+        FactionRule,
         on_delete=models.CASCADE,
         related_name="+",
-        help_text="The regard rule the spark came from.",
+        help_text="The faction rule the angle came from.",
     )
 
     class Meta:
         ordering = ["group", "pk"]
         constraints = [
             models.UniqueConstraint(
-                fields=["group", "character_sheet", "regard_rule"],
-                name="unique_standoff_spark_share",
+                fields=["group", "character_sheet", "faction_rule"],
+                name="unique_standoff_angle_share",
             ),
         ]
 
     def __str__(self) -> str:
-        return f"Spark share for {self.group}"
+        return f"Angle share for {self.group}"
 
 
 class StandoffReactionLine(SharedMemoryModel):
@@ -529,3 +581,33 @@ class StandoffReactionLine(SharedMemoryModel):
 
     def __str__(self) -> str:
         return f"Reaction line #{self.pk} (>= {self.min_success_level})"
+
+
+class StandoffMoraleRuling(SharedMemoryModel):
+    """A GM moved a group's morale one state, and why (#4354). The GM's own record."""
+
+    group = models.ForeignKey(
+        StandoffGroup,
+        on_delete=models.CASCADE,
+        related_name="morale_rulings",
+        help_text="The group whose morale the GM moved.",
+    )
+    ruled_by = models.ForeignKey(
+        "accounts.AccountDB",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="+",
+        help_text="The GM account that made the ruling.",
+    )
+    direction = models.CharField(
+        max_length=10, choices=MoraleDirection.choices, help_text="Shake or steady."
+    )
+    reason = models.TextField(help_text="The GM's stated reason (required).")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["group", "-created_at"]
+
+    def __str__(self) -> str:
+        return f"{self.get_direction_display()} on {self.group}"

@@ -44,7 +44,6 @@ from world.combat.models import (
     ThreatPoolEntry,
     ThreatRecord,
 )
-from world.standoffs.admin import CreatureDriveInline, RegardRuleInline
 
 
 class CombatOpponentInline(admin.TabularInline):
@@ -438,7 +437,9 @@ class CreatureTemplateAdmin(admin.ModelAdmin):
     list_display = ("name", "tier", "threat_pool")
     list_filter = ("tier",)
     search_fields = ("name",)
-    inlines = [CreaturePhaseTemplateInline, CreatureDriveInline, RegardRuleInline]
+    # Drives, cause and faction rules are authored on the Standoff Profile Builder
+    # (#4354), opened from this page's "Open the Standoff Profile Builder" tool.
+    inlines = [CreaturePhaseTemplateInline]
 
 
 @admin.register(CreaturePhaseTemplate)

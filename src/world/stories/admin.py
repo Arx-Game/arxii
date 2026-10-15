@@ -289,7 +289,7 @@ class TransitionAdmin(admin.ModelAdmin):
 class BeatOpponentLineInline(admin.TabularInline):
     model = BeatOpponentLine
     extra = 0
-    fields = ["creature_template", "count", "position_name", "order"]
+    fields = ["creature_template", "count", "position_name", "order", "opens_as_standoff"]
 
 
 class BeatStagedTemplateInline(admin.TabularInline):

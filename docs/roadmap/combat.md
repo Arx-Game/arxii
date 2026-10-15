@@ -503,6 +503,16 @@ outcome** (a closed issue or a "SHIPPED" line is not proof). See the ledger's go
   warms its target; scene NPCs with no resist effort resist passively). Web `StandoffCard`,
   telnet `standoff`. What is not built yet is listed under "Later slices" in
   `docs/systems/standoffs.md`.
+- **Standoffs in GM-run scenes, slice 1 of #4121** - SHIPPED (#4354, ADR-4354-A, 2026-10-14):
+  a story beat's opponent lines can open a standoff; in a scene a GM is running, a cause that
+  fires becomes a GM prompt (Confirm, Hold for one action, Override with a reason) instead of
+  starting the fight, while players keep acting; the GM sees every group's profile, faction
+  rule matches, force and morale in a GM standoff panel and can shake or steady a group one
+  morale state with a reason; onlookers get a public summary. New cause Orders (fires on a
+  botched press or terms, or when outmatched). Regard rules are now faction rules and sparks
+  are angles. Cause glosses are authored rows; creatures are authored on the Standoff Profile
+  Builder. A terms-settled standoff grades its story beat on the weakest terms. Slices 2 to 5
+  are listed in `docs/systems/standoffs.md`.
 - **Spectacle breaks morale** - SHIPPED (#4147, ADR-4147, 2026-10-05): an earned display
   shakes the enemies who witness it. Audere entry, an ultimate, a Crossing, a critical
   technique (intensity and success level thresholds) and a devastating action (one action

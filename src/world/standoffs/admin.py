@@ -1,31 +1,18 @@
-"""Django admin for standoffs: creature drives and regard rules, approaches, terms, config."""
+"""Django admin for standoffs: approaches, terms, config and cause glosses.
+
+A creature's drives, cause and faction rules are authored on the Standoff Profile
+Builder (``web/admin/standoff_profile``, #4354), not here.
+"""
 
 from django.contrib import admin
 
 from world.standoffs.models import (
-    CreatureDrive,
-    RegardRule,
     StandoffApproach,
+    StandoffCauseGloss,
     StandoffConfig,
     StandoffReactionLine,
     StandoffTerms,
 )
-
-
-class CreatureDriveInline(admin.TabularInline):
-    """Drives edited on the creature template page."""
-
-    model = CreatureDrive
-    extra = 0
-    autocomplete_fields = ("property",)
-
-
-class RegardRuleInline(admin.StackedInline):
-    """Regard rules edited on the creature template page (stacked: they carry prose)."""
-
-    model = RegardRule
-    extra = 0
-    autocomplete_fields = ("drive", "deed_archetype")
 
 
 class StandoffReactionLineInline(admin.StackedInline):
@@ -93,3 +80,10 @@ class StandoffConfigAdmin(admin.ModelAdmin):
     ) -> bool:
         """The singleton cannot be deleted."""
         return False
+
+
+@admin.register(StandoffCauseGloss)
+class StandoffCauseGlossAdmin(admin.ModelAdmin):
+    """One player-facing line per cause, shown under it once a read reveals it."""
+
+    list_display = ("cause", "text")

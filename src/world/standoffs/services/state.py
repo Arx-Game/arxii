@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING, Any
 from django.db import transaction
 
 from world.combat.constants import OpponentStatus
-from world.standoffs.constants import StandoffGroupState
+from world.standoffs.constants import LIVE_GROUP_STATES, StandoffGroupState
 from world.standoffs.models import StandoffGroup
 
 if TYPE_CHECKING:
@@ -63,10 +63,10 @@ def flush_cache_on_error(
 
 
 def is_in_standoff(encounter: CombatEncounter) -> bool:
-    """A standoff is the stretch before round one with a group still OPEN."""
+    """A standoff is the stretch before round one with a group still live (OPEN or PROPOSED)."""
     if encounter.round_number != 0:
         return False
-    return StandoffGroup.objects.filter(encounter=encounter, state=StandoffGroupState.OPEN).exists()
+    return StandoffGroup.objects.filter(encounter=encounter, state__in=LIVE_GROUP_STATES).exists()
 
 
 def open_standoff(encounter: CombatEncounter) -> list[StandoffGroup]:
@@ -97,12 +97,15 @@ def active_members(group: StandoffGroup) -> list[CombatOpponent]:
 
 
 def settle_empty_groups(encounter: CombatEncounter) -> bool:
-    """An OPEN group with nobody left standing is SETTLED. True when any group was settled."""
+    """A live group with nobody left standing is SETTLED. True when any group was settled."""
+    from world.standoffs.services.proposals import close_group_prompts  # noqa: PLC0415
+
     settled_any = False
-    for group in encounter.standoff_groups.filter(state=StandoffGroupState.OPEN):
+    for group in encounter.standoff_groups.filter(state__in=LIVE_GROUP_STATES):
         if not active_members(group):
             group.state = StandoffGroupState.SETTLED
             group.save(update_fields=["state"])
+            close_group_prompts(group, "Nobody is left in that group.")
             settled_any = True
     return settled_any
 
@@ -115,7 +118,7 @@ def end_standoff_into_fight(
     initiated_by_pc_side: bool | None,
     attack_sink: list[str] | None = None,
 ) -> bool:
-    """Every OPEN group goes to FIGHTING and round one begins.
+    """Every live group goes to FIGHTING and round one begins.
 
     When the creatures start it, the "attack!" line goes out after commit, unless the caller
     passes ``attack_sink``: then the line is appended there instead and the caller sends it,
@@ -126,14 +129,16 @@ def end_standoff_into_fight(
     """
     from world.combat.models import CombatEncounter  # noqa: PLC0415
     from world.combat.services import begin_declaration_phase  # noqa: PLC0415
+    from world.standoffs.services.proposals import close_group_prompts  # noqa: PLC0415
 
     locked = CombatEncounter.objects.select_for_update().get(pk=encounter.pk)
     if not is_in_standoff(locked):
         return False
     attackers = []
-    for group in encounter.standoff_groups.filter(state=StandoffGroupState.OPEN):
+    for group in encounter.standoff_groups.filter(state__in=LIVE_GROUP_STATES):
         group.state = StandoffGroupState.FIGHTING
         group.save(update_fields=["state"])
+        close_group_prompts(group, "The fight began.")
         attackers.append(group.creature_template.name)
     encounter.initiated_by_pc_side = initiated_by_pc_side
     encounter.save(update_fields=["initiated_by_pc_side"])

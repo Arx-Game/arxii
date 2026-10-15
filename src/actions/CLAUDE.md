@@ -457,6 +457,18 @@ They do not use the command system, dispatchers, or handlers.
   and the web `GMPromptViewSet` (`world/gm/views.py`). See `docs/systems/scenes.md`'s
   "GM narration of mechanical events" section and ADR-4101 for the full model.
 
+  **GM standoff actions (#4354).** `gm_standoff.py` holds five account-authorized REGISTRY
+  actions (actor may be None; pass `account`): `GMStandoffConfirmAction`/`HoldAction`/
+  `OverrideAction` (keys `gm_standoff_confirm`/`_hold`/`_override`, kwargs `prompt_id`, and
+  `reason` for override) resolve a `STANDOFF_CAUSE` prompt through
+  `world.standoffs.services.proposals.resolve_proposal`, gated to the addressed GM or staff;
+  `GMStandoffMoraleAction` (`gm_standoff_morale`, kwargs `group_id`, `direction`, `reason`)
+  wraps `shift_group_morale` and announces the room line; `GMOpenStandoffAction`
+  (`gm_open_standoff`, kwarg `encounter_id`) opens a standoff before round one. The last two
+  are gated to the encounter scene's GM or staff. Web: `GMPromptViewSet` confirm/hold/override
+  and `CombatEncounterViewSet` `standoff-morale`/`open-standoff`; telnet `gm prompt
+  confirm|hold|override` and `gm standoff shake|steady`.
+
   **Battle-front composition (#2225):** `_execute_technique_entrance` calls
   `_resolve_battle_context(actor_sheet, scene)` before dispatching. When the
   actor is an active `BattleParticipant` stationed at a `BattlePlace` whose

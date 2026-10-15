@@ -702,3 +702,31 @@ export async function postDispatchAction(
   if (!res.ok) await throwApiError(res, 'Failed to dispatch action');
   return res.json() as Promise<DispatchResult>;
 }
+
+// ---------------------------------------------------------------------------
+// Standoff GM controls (#4354)
+// ---------------------------------------------------------------------------
+
+/** Shake or steady one standoff group by a morale step; the reason is required. */
+export async function postStandoffMorale(
+  encounterId: number,
+  body: components['schemas']['StandoffMoraleRequestRequest']
+): Promise<EncounterDetail> {
+  const res = await apiFetch(`/api/combat/${encounterId}/standoff-morale/`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) await throwApiError(res, 'Failed to change morale');
+  return res.json() as Promise<EncounterDetail>;
+}
+
+/** Open the round-zero encounter as a standoff. */
+export async function postOpenStandoff(encounterId: number): Promise<EncounterDetail> {
+  const res = await apiFetch(`/api/combat/${encounterId}/open-standoff/`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+  });
+  if (!res.ok) await throwApiError(res, 'Failed to open a standoff');
+  return res.json() as Promise<EncounterDetail>;
+}

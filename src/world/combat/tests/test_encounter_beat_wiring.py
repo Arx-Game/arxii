@@ -386,6 +386,41 @@ class EncounterCompletedBeatWiringTests(EvenniaTestCase):
         beat.refresh_from_db()
         self.assertEqual(beat.outcome, BeatOutcome.UNSATISFIED)
 
+    def test_a_standoff_settled_by_terms_grades_on_the_weakest_terms(self) -> None:
+        """#4354: a story standoff the party ended with terms routes like a mission's."""
+        from world.standoffs.constants import StandoffGroupState
+        from world.standoffs.factories import StandoffGroupFactory
+
+        mapped = CheckOutcome.objects.create(name="Standoff Mapped Victory", success_level=5)
+        EncounterOutcomeMapping.objects.create(
+            outcome=EncounterOutcome.VICTORY,
+            risk_level=RiskLevel.MODERATE,
+            check_outcome=mapped,
+        )
+        partial = CheckOutcome.objects.create(name="Standoff Partial Terms", success_level=0)
+        full = CheckOutcome.objects.create(name="Standoff Full Terms", success_level=1)
+        sheet = CharacterSheetFactory()
+        story = StoryFactory(scope=StoryScope.CHARACTER, character_sheet=sheet)
+        episode = EpisodeFactory(chapter=ChapterFactory(story=story))
+        beat = BeatFactory(
+            episode=episode,
+            predicate_type=BeatPredicateType.OUTCOME_TIER,
+            outcome=BeatOutcome.UNSATISFIED,
+        )
+        StoryProgressFactory(story=story, character_sheet=sheet)
+        encounter = CombatEncounterFactory(risk_level=RiskLevel.MODERATE, story_beat=beat)
+        for outcome in (full, partial):
+            StandoffGroupFactory(
+                encounter=encounter, state=StandoffGroupState.SETTLED, settled_outcome=outcome
+            )
+        EpisodeSceneFactory(episode=episode, scene=encounter.scene)
+        install_encounter_beat_trigger(encounter)
+
+        complete_encounter(encounter, outcome=EncounterOutcome.VICTORY)
+
+        completion = BeatCompletion.objects.get(beat=beat)
+        self.assertEqual(completion.outcome_tier, partial)
+
     def test_story_beat_routes_to_only_that_beat(self) -> None:
         """Two beats share one scene; only the encounter's own story_beat resolves."""
         sheet = CharacterSheetFactory()

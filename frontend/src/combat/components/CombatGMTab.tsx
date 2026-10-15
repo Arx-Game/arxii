@@ -15,7 +15,9 @@
  * The tab itself is shown only when `scene.viewer_can_gm` (CombatRail).
  */
 
-import { useCombatEncounter } from '@/combat/queries';
+import { useCombatEncounter, useOpenStandoff } from '@/combat/queries';
+import { GMStandoffPanel } from '@/combat/standoff/GMStandoffPanel';
+import { Button } from '@/components/ui/button';
 import { GMEncounterControls } from '@/combat/sections/GMEncounterControls';
 import { COMBAT_GM_TOOL_TABS, GMAdjudicationPanel } from '@/scenes/components/GMAdjudicationPanel';
 import type { SceneDetail } from '@/scenes/types';
@@ -27,10 +29,38 @@ export interface CombatGMTabProps {
   viewerCanGm: boolean;
 }
 
+function OpenStandoffButton({ encounterId }: { encounterId: number }) {
+  const open = useOpenStandoff(encounterId);
+  return (
+    <div className="flex flex-col gap-1">
+      <Button
+        type="button"
+        size="sm"
+        variant="outline"
+        disabled={open.isPending}
+        onClick={() => open.mutate()}
+      >
+        Open a standoff
+      </Button>
+      {open.error && (
+        <p role="alert" className="text-xs text-destructive">
+          {open.error.message}
+        </p>
+      )}
+    </div>
+  );
+}
+
 export function CombatGMTab({ sceneId, encounterId, scene, viewerCanGm }: CombatGMTabProps) {
   const { data: encounter } = useCombatEncounter(encounterId);
   return (
     <div className="space-y-3" data-testid="combat-gm-tab">
+      {encounter?.gm_standoff && (
+        <GMStandoffPanel encounterId={encounterId} standoff={encounter.gm_standoff} />
+      )}
+      {encounter && !encounter.gm_standoff && (encounter.round_number ?? 0) === 0 && (
+        <OpenStandoffButton encounterId={encounterId} />
+      )}
       {encounter && (
         <GMEncounterControls sceneId={sceneId} encounter={encounter} viewerCanGm={viewerCanGm} />
       )}

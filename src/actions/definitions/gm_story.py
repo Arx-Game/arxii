@@ -334,6 +334,11 @@ class RunBeatAction(Action):
 
         lines = beat.opponent_lines.select_related("creature_template").order_by("order")
         outcomes = spawn_opponent_lines(encounter, lines, acting_account=account)
+        if any(line.opens_as_standoff for line in lines):
+            # The beat opens before round one (#4354): the GM runs it as a standoff.
+            from world.standoffs.services.state import open_standoff  # noqa: PLC0415
+
+            open_standoff(encounter)
         return {
             "encounter_id": encounter.pk,
             "risk_level": encounter.risk_level,

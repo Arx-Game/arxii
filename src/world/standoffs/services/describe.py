@@ -6,8 +6,8 @@ from typing import TYPE_CHECKING
 
 from world.combat.constants import CauseKind
 from world.standoffs.constants import DriveStrength, RevealKind
-from world.standoffs.models import StandoffSparkShare
-from world.standoffs.services.regard import regard_matches
+from world.standoffs.models import StandoffAngleShare
+from world.standoffs.services.faction_rules import faction_rule_matches
 
 if TYPE_CHECKING:
     from collections.abc import Iterable
@@ -15,7 +15,7 @@ if TYPE_CHECKING:
     from world.character_sheets.models import CharacterSheet
     from world.standoffs.models import StandoffGroup, StandoffReveal
 
-HIDDEN_REGARD_LINE = "Something about one of you matters to them."
+HIDDEN_FACTION_RULE_LINE = "Something about one of you matters to them."
 
 
 def describe_reveals(
@@ -28,21 +28,21 @@ def describe_reveals(
 ) -> list[str]:
     """One line per revealed thing, as ``reader`` may know it.
 
-    A regard rule's revealed text goes only to a reader it applies to, or once someone
-    has shared that spark; otherwise the reader learns only that someone's history matters.
+    A faction rule's revealed text goes only to a reader it applies to, or once someone
+    has shared that angle; otherwise the reader learns only that someone's history matters.
     A caller that already holds the reader's matched rule ids and the group's shared rule
     ids passes them in to skip the lookups.
     """
     matching = (
         matching_rule_ids
         if matching_rule_ids is not None
-        else {match.rule.pk for match in regard_matches(group, reader)}
+        else {match.rule.pk for match in faction_rule_matches(group, reader)}
     )
     shared = (
         shared_rule_ids
         if shared_rule_ids is not None
         else set(
-            StandoffSparkShare.objects.filter(group=group).values_list("regard_rule_id", flat=True)
+            StandoffAngleShare.objects.filter(group=group).values_list("faction_rule_id", flat=True)
         )
     )
     lines: list[str] = []
@@ -66,9 +66,9 @@ def _describe_reveal(
     if reveal.kind == RevealKind.DRIVE and reveal.drive is not None:
         label = DriveStrength(reveal.drive.strength).label
         return f"Drive: {reveal.drive.property.name} ({label})."
-    if reveal.kind == RevealKind.REGARD and reveal.regard_rule is not None:
-        rule = reveal.regard_rule
+    if reveal.kind == RevealKind.FACTION_RULE and reveal.faction_rule is not None:
+        rule = reveal.faction_rule
         if rule.pk in matching or rule.pk in shared:
-            return rule.revealed_text or HIDDEN_REGARD_LINE
-        return HIDDEN_REGARD_LINE
+            return rule.revealed_text or HIDDEN_FACTION_RULE_LINE
+        return HIDDEN_FACTION_RULE_LINE
     return None

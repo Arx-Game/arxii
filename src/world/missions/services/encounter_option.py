@@ -221,12 +221,9 @@ def complete_standoff_for_option(encounter: CombatEncounter) -> MissionDeedRecor
         return None
     if deed.instance.status != MissionStatus.ACTIVE:
         return None
-    outcomes = [
-        group.settled_outcome
-        for group in encounter.standoff_groups.select_related("settled_outcome")
-        if group.settled_outcome is not None
-    ]
-    if not outcomes:
+    from world.standoffs.services.routing import settled_tier  # noqa: PLC0415
+
+    tier = settled_tier(encounter)
+    if tier is None:
         return None
-    tier = min(outcomes, key=lambda outcome: outcome.success_level)
     return _grade_pending_deed(deed, tier)

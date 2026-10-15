@@ -1,1 +1,1 @@
-"""Standoff services: state, force and regard."""
+"""Standoff services: state, force and faction rules."""

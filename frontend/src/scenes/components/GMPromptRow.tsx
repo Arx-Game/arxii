@@ -27,10 +27,17 @@
  * another GM already closed drops out instead of failing silently.
  */
 import { Check, X } from 'lucide-react';
+import { useState } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { cn } from '@/lib/utils';
-import { useConfirmGMPrompt, useDismissGMPrompt } from '../gmPromptQueries';
+import {
+  useConfirmGMPrompt,
+  useDismissGMPrompt,
+  useHoldGMPrompt,
+  useOverrideGMPrompt,
+} from '../gmPromptQueries';
 import type { GMPrompt } from '../types';
 
 /** The row's body text, split so the demo's bold "Narrate it?" / "Confirm?" / "Narrated." can be emphasized (F4) without duplicating the sentence for test matching. */
@@ -44,7 +51,83 @@ function promptBody(prompt: GMPrompt): { lead: string; emphasis: string } {
   return { lead: `${prompt.kind_label}: ${prompt.subject_name}. `, emphasis: 'Narrate it?' };
 }
 
-export function GMPromptRow({
+/** A standoff cause proposal (#4354): the GM confirms the attack, holds one action, or overrides with a reason. */
+function StandoffCausePromptRow({ prompt, sceneId }: { prompt: GMPrompt; sceneId: string }) {
+  const confirm = useConfirmGMPrompt(sceneId);
+  const hold = useHoldGMPrompt(sceneId);
+  const override = useOverrideGMPrompt(sceneId);
+  const [reason, setReason] = useState('');
+  const busy = confirm.isPending || hold.isPending || override.isPending;
+  const failure = confirm.error ?? hold.error ?? override.error;
+  return (
+    <div
+      data-testid="gm-prompt-row"
+      className="flex flex-col gap-2 rounded-md border border-violet-500/50 bg-violet-500/10 p-3 text-sm"
+    >
+      <div className="flex items-center gap-2 text-xs text-muted-foreground">
+        <Badge variant="secondary" className="text-xs">
+          {prompt.kind_label}
+        </Badge>
+        <span>GM prompt</span>
+      </div>
+      <div className="font-semibold">{prompt.standoff_group_name}: cause fires</div>
+      <div className="text-xs text-muted-foreground">
+        Cause: {prompt.standoff_cause_label}. Reason: {prompt.standoff_reason}
+        {prompt.standoff_force ? ` ${prompt.standoff_force}` : ''}
+      </div>
+      <div className="flex flex-wrap gap-2">
+        <Button
+          type="button"
+          size="sm"
+          variant="destructive"
+          disabled={busy}
+          onClick={() => confirm.mutate(prompt.id)}
+        >
+          Confirm: they attack
+        </Button>
+        <Button type="button" size="sm" disabled={busy} onClick={() => hold.mutate(prompt.id)}>
+          Hold for one action
+        </Button>
+        <Button
+          type="button"
+          size="sm"
+          variant="secondary"
+          disabled={busy || reason.trim() === ''}
+          onClick={() => override.mutate({ promptId: prompt.id, reason: reason.trim() })}
+        >
+          Override
+        </Button>
+      </div>
+      <Input
+        aria-label="Reason (required to override)"
+        placeholder="Reason (required to override)"
+        value={reason}
+        onChange={(e) => setReason(e.target.value)}
+      />
+      <span className="text-xs text-muted-foreground">
+        Players can keep acting while you decide. The cause is tested again after each action.
+      </span>
+      {failure && (
+        <p role="alert" className="text-xs text-destructive">
+          {failure.message}
+        </p>
+      )}
+    </div>
+  );
+}
+
+export function GMPromptRow(props: {
+  prompt: GMPrompt;
+  sceneId: string;
+  onOpen: (prompt: GMPrompt) => void;
+}) {
+  if (props.prompt.kind === 'standoff_cause') {
+    return <StandoffCausePromptRow prompt={props.prompt} sceneId={props.sceneId} />;
+  }
+  return <NarrationOrMomentRow {...props} />;
+}
+
+function NarrationOrMomentRow({
   prompt,
   sceneId,
   onOpen,

@@ -1017,6 +1017,14 @@ class GMPromptSerializer(serializers.ModelSerializer):
     stake_summary = serializers.CharField(
         source="stake_outcome.stake.player_summary", read_only=True, default=""
     )
+    standoff_group_name = serializers.CharField(
+        source="standoff_group.creature_template.name", read_only=True, default=""
+    )
+    standoff_cause_label = serializers.SerializerMethodField()
+    standoff_force = serializers.SerializerMethodField()
+    standoff_reason = serializers.CharField(
+        source="standoff_group.proposal_reason", read_only=True, default=""
+    )
 
     class Meta:
         model = GMPrompt
@@ -1033,6 +1041,12 @@ class GMPromptSerializer(serializers.ModelSerializer):
             "moment_type_label",
             "technique_name",
             "stake_summary",
+            "standoff_group",
+            "standoff_group_name",
+            "standoff_cause_label",
+            "standoff_reason",
+            "standoff_force",
+            "resolution_note",
             "room_text",
             "private_text",
             "prepared_for_character",
@@ -1065,9 +1079,31 @@ class GMPromptSerializer(serializers.ModelSerializer):
     def get_subject_name(self, obj: GMPrompt) -> str:
         return self._subject_names().get(obj.pk, "")
 
+    def get_standoff_cause_label(self, obj: GMPrompt) -> str:
+        """The proposed group's cause, by label (Orders, Predation); blank on other kinds."""
+        from world.combat.constants import CauseKind  # noqa: PLC0415
+
+        group = obj.standoff_group
+        if group is None:
+            return ""
+        return CauseKind(group.creature_template.cause).label
+
+    def get_standoff_force(self, obj: GMPrompt) -> str:
+        """The force on both sides, read when the queue is: blank on other kinds."""
+        from world.standoffs.services.proposals import force_line  # noqa: PLC0415
+
+        group = obj.standoff_group
+        return force_line(group) if group is not None else ""
+
     def get_subject_persona_id(self, obj: GMPrompt) -> int | None:
         persona = prompt_subject_persona(obj)
         return persona.pk if persona is not None else None
+
+
+class OverrideStandoffProposalSerializer(serializers.Serializer):
+    """Body for ``POST .../prompts/{id}/override/`` (#4354): the GM's required reason."""
+
+    reason = serializers.CharField(max_length=500, trim_whitespace=True)
 
 
 class NarrateGMPromptSerializer(serializers.Serializer):

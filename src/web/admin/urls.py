@@ -50,6 +50,7 @@ from web.admin.soulfray_builder.views import (
     soulfray_builder_review,
 )
 from web.admin.sphinx_views import sphinx_audit
+from web.admin.standoff_profile.views import standoff_profile
 from web.admin.tradition_slate.views import (
     tradition_slate,
     tradition_slate_pick,
@@ -246,6 +247,11 @@ urlpatterns = [
         "_distinction_builder/<int:pk>/review/",
         distinction_builder_review,
         name="admin_distinction_builder_review",
+    ),
+    path(
+        "_standoff_profile/<int:template_pk>/",
+        standoff_profile,
+        name="admin_standoff_profile",
     ),
     path("_soulfray_builder/", soulfray_builder_index, name="admin_soulfray_builder_index"),
     path(

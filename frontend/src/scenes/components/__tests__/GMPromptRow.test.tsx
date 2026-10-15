@@ -296,4 +296,67 @@ describe('GMPromptRow', () => {
       expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['gm-prompts', '5'] });
     }
   );
+
+  describe('standoff cause prompt (#4354)', () => {
+    function makeStandoff(): GMPrompt {
+      return makePrompt({
+        id: 21,
+        kind: 'standoff_cause',
+        kind_label: 'Standoff',
+        standoff_group: 3,
+        standoff_group_name: 'Saltreed sellswords',
+        standoff_cause_label: 'Orders',
+        standoff_reason: 'Critical failure on a press.',
+        standoff_force: 'Force: party 41, them 30, emboldened 1 band.',
+      });
+    }
+
+    it('shows the proposal, three decisions and the hint', () => {
+      render(<GMPromptRow prompt={makeStandoff()} sceneId="5" onOpen={vi.fn()} />, {
+        wrapper: createWrapper(),
+      });
+      expect(screen.getByText('Saltreed sellswords: cause fires')).toBeInTheDocument();
+      expect(
+        screen.getByText(
+          /Cause: Orders\. Reason: Critical failure on a press\. Force: party 41, them 30, emboldened 1 band\.$/
+        )
+      ).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Confirm: they attack' })).toBeEnabled();
+      expect(screen.getByRole('button', { name: 'Hold for one action' })).toBeEnabled();
+      expect(screen.getByText(/Players can keep acting while you decide/)).toBeInTheDocument();
+    });
+
+    it('needs a reason before Override and posts it', async () => {
+      const user = userEvent.setup();
+      render(<GMPromptRow prompt={makeStandoff()} sceneId="5" onOpen={vi.fn()} />, {
+        wrapper: createWrapper(),
+      });
+      const override = screen.getByRole('button', { name: 'Override' });
+      expect(override).toBeDisabled();
+      await user.type(screen.getByLabelText('Reason (required to override)'), 'They stand down');
+      expect(override).toBeEnabled();
+      await user.click(override);
+      await waitFor(() =>
+        expect(mockApiFetch).toHaveBeenCalledWith('/api/gm/prompts/21/override/', {
+          method: 'POST',
+          body: JSON.stringify({ reason: 'They stand down' }),
+        })
+      );
+    });
+
+    it('posts hold and confirm to their endpoints', async () => {
+      const user = userEvent.setup();
+      render(<GMPromptRow prompt={makeStandoff()} sceneId="5" onOpen={vi.fn()} />, {
+        wrapper: createWrapper(),
+      });
+      await user.click(screen.getByRole('button', { name: 'Hold for one action' }));
+      await waitFor(() =>
+        expect(mockApiFetch).toHaveBeenCalledWith('/api/gm/prompts/21/hold/', { method: 'POST' })
+      );
+      await user.click(screen.getByRole('button', { name: 'Confirm: they attack' }));
+      await waitFor(() =>
+        expect(mockApiFetch).toHaveBeenCalledWith('/api/gm/prompts/21/confirm/', { method: 'POST' })
+      );
+    });
+  });
 });

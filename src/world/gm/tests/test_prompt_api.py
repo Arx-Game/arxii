@@ -409,10 +409,10 @@ class GMPromptApiTest(TestCase):
         self.assertEqual(resp.status_code, 200, resp.data)
         self.assertTrue(GMPromptNarration.objects.filter(prompt=prompt).exists())
 
-    def test_filters_list_five_groups_and_set(self):
+    def test_filters_list_every_group_and_set(self):
         client = self._client(self.gm)
         rows = client.get("/api/gm/prompt-filters/").data
-        self.assertEqual(len(rows), 5)
+        self.assertEqual(len(rows), len(GMPromptGroup.values))
         self.assertTrue(all(r["enabled"] for r in rows))
         resp = client.post(
             "/api/gm/prompt-filters/set/", {"group": "miracle", "enabled": False}, format="json"

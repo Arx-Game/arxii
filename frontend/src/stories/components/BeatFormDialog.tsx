@@ -687,6 +687,7 @@ function opponentLineDraftsFromBeat(beat: Beat | undefined): OpponentLineDraft[]
     creature_template: String(line.creature_template),
     count: String(line.count ?? 1),
     position_name: line.position_name ?? '',
+    opens_as_standoff: line.opens_as_standoff ?? false,
   }));
 }
 
@@ -698,6 +699,7 @@ function opponentLineDraftsToPayload(drafts: OpponentLineDraft[]): BeatOpponentL
       creature_template: Number(d.creature_template),
       count: d.count !== '' ? Number(d.count) : 1,
       position_name: d.position_name.trim(),
+      opens_as_standoff: d.opens_as_standoff ?? false,
       order: 0,
     }));
 }
@@ -1451,6 +1453,7 @@ export function BeatFormDialog({
                     lines={opponentLines}
                     onChange={setOpponentLines}
                     rowErrors={fieldErrors.opponent_lines}
+                    showStandoffSwitch
                   />
                 ) : (
                   <BattlePrepEditor

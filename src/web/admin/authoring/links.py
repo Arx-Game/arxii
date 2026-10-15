@@ -14,6 +14,7 @@ from django.urls import NoReverseMatch, reverse
 
 from core.app_domains import resolve_model_by_name
 from world.character_creation.models import Beginnings, OriginTemplate
+from world.combat.models import CreatureTemplate
 from world.conditions.models import ConditionStage
 from world.distinctions.models import Distinction
 from world.magic.services.soulfray import is_soulfray_stage
@@ -28,7 +29,8 @@ def builder_url(obj: object) -> str:
     opens on the Upbringing Builder; ``Beginnings`` opens on the tradition
     slate page keyed by its own pk; ``Distinction`` opens on the Distinction
     Builder (#3675 Task 8); a Soulfray ``ConditionStage`` opens on the Soulfray
-    Stage Builder (#4089). Any other condition's stage has no builder.
+    Stage Builder (#4089). Any other condition's stage has no builder. A
+    ``CreatureTemplate`` opens on the Standoff Profile Builder (#4354).
     """
     if isinstance(obj, OriginTemplate) and obj.pk:
         return reverse("admin_upbringing_builder", args=[obj.pk])
@@ -38,6 +40,8 @@ def builder_url(obj: object) -> str:
         return reverse("admin_distinction_builder", args=[obj.pk])
     if isinstance(obj, ConditionStage) and obj.pk and is_soulfray_stage(obj):
         return reverse("admin_soulfray_builder", args=[obj.pk])
+    if isinstance(obj, CreatureTemplate) and obj.pk:
+        return reverse("admin_standoff_profile", args=[obj.pk])
     return ""
 
 
@@ -51,6 +55,8 @@ def builder_label(obj: object) -> str:
         return "Open in Distinction Builder"
     if isinstance(obj, ConditionStage) and is_soulfray_stage(obj):
         return "Open in Soulfray Stage Builder"
+    if isinstance(obj, CreatureTemplate):
+        return "Open the Standoff Profile Builder"
     return ""
 
 

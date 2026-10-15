@@ -4,14 +4,16 @@ import factory
 from factory import django as factory_django
 
 from world.checks.factories import CheckTypeFactory
+from world.combat.constants import CauseKind
 from world.combat.factories import CombatEncounterFactory, CreatureTemplateFactory
 from world.conditions.factories import CapabilityTypeFactory
 from world.mechanics.factories import PropertyFactory
 from world.standoffs.constants import DriveStrength, RevealKind, TermsEffect
 from world.standoffs.models import (
     CreatureDrive,
-    RegardRule,
+    FactionRule,
     StandoffApproach,
+    StandoffCauseGloss,
     StandoffGroup,
     StandoffReactionLine,
     StandoffReveal,
@@ -28,12 +30,12 @@ class CreatureDriveFactory(factory_django.DjangoModelFactory):
     strength = DriveStrength.MINOR
 
 
-class RegardRuleFactory(factory_django.DjangoModelFactory):
+class FactionRuleFactory(factory_django.DjangoModelFactory):
     class Meta:
-        model = RegardRule
+        model = FactionRule
 
     creature_template = factory.SubFactory(CreatureTemplateFactory)
-    spark_text = "PLACEHOLDER spark"
+    angle_text = "PLACEHOLDER angle"
     revealed_text = "PLACEHOLDER revealed"
 
 
@@ -54,6 +56,15 @@ class StandoffTermsFactory(factory_django.DjangoModelFactory):
 
     name = factory.Sequence(lambda n: f"Terms {n}")
     effect = TermsEffect.PASS
+
+
+class StandoffCauseGlossFactory(factory_django.DjangoModelFactory):
+    class Meta:
+        model = StandoffCauseGloss
+        django_get_or_create = ("cause",)
+
+    cause = CauseKind.PREDATION
+    text = "PLACEHOLDER cause gloss"
 
 
 class StandoffGroupFactory(factory_django.DjangoModelFactory):

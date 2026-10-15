@@ -2561,7 +2561,7 @@
   - phase_templates <- combat.CreaturePhaseTemplate
   - mission_option_opponent_lines <- missions.MissionOptionOpponentLine
   - drives <- standoffs.CreatureDrive
-  - regard_rules <- standoffs.RegardRule
+  - faction_rules <- standoffs.FactionRule
   - standoff_groups <- standoffs.StandoffGroup
   - beat_opponent_lines <- stories.BeatOpponentLine
 
@@ -4291,6 +4291,7 @@
   - technique -> magic.Technique [FK] (nullable)
   - resolved_by -> evennia.AccountDB [FK] (nullable)
   - confirmed_tag -> magic.DramaticMomentTag [OneToOne] (nullable)
+  - standoff_group -> standoffs.StandoffGroup [FK] (nullable)
 **Pointed to by:**
   - narrations <- gm.GMPromptNarration
 
@@ -9995,11 +9996,17 @@
   - creature_template -> combat.CreatureTemplate [FK]
   - property -> mechanics.Property [FK]
 
-### RegardRule
+### FactionRule
 **Foreign Keys:**
   - creature_template -> combat.CreatureTemplate [FK]
   - deed_archetype -> societies.PhilosophicalArchetype [FK] (nullable)
   - drive -> mechanics.Property [FK] (nullable)
+
+### StandoffAngleShare
+**Foreign Keys:**
+  - group -> standoffs.StandoffGroup [FK]
+  - character_sheet -> character_sheets.CharacterSheet [FK]
+  - faction_rule -> standoffs.FactionRule [FK]
 
 ### StandoffApproach
 **Foreign Keys:**
@@ -10009,6 +10016,8 @@
   - archetypes -> societies.PhilosophicalArchetype [M2M]
 **Pointed to by:**
   - reaction_lines <- standoffs.StandoffReactionLine
+
+### StandoffCauseGloss
 
 ### StandoffConfig
 **Foreign Keys:**
@@ -10023,8 +10032,15 @@
   - creature_template -> combat.CreatureTemplate [FK]
   - settled_outcome -> traits.CheckOutcome [FK] (nullable)
 **Pointed to by:**
+  - gm_prompts <- gm.GMPrompt
   - reveals <- standoffs.StandoffReveal
-  - spark_shares <- standoffs.StandoffSparkShare
+  - angle_shares <- standoffs.StandoffAngleShare
+  - morale_rulings <- standoffs.StandoffMoraleRuling
+
+### StandoffMoraleRuling
+**Foreign Keys:**
+  - group -> standoffs.StandoffGroup [FK]
+  - ruled_by -> evennia.AccountDB [FK] (nullable)
 
 ### StandoffReactionLine
 **Foreign Keys:**
@@ -10036,13 +10052,7 @@
 **Foreign Keys:**
   - group -> standoffs.StandoffGroup [FK]
   - drive -> standoffs.CreatureDrive [FK] (nullable)
-  - regard_rule -> standoffs.RegardRule [FK] (nullable)
-
-### StandoffSparkShare
-**Foreign Keys:**
-  - group -> standoffs.StandoffGroup [FK]
-  - character_sheet -> character_sheets.CharacterSheet [FK]
-  - regard_rule -> standoffs.RegardRule [FK]
+  - faction_rule -> standoffs.FactionRule [FK] (nullable)
 
 ### StandoffTerms
 **Foreign Keys:**

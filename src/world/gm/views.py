@@ -23,6 +23,11 @@ from actions.definitions.dramatic_moments import (
     DismissDramaticMomentSuggestionAction,
     DismissGMPromptAction,
 )
+from actions.definitions.gm_standoff import (
+    GMStandoffConfirmAction,
+    GMStandoffHoldAction,
+    GMStandoffOverrideAction,
+)
 from actions.types import ActionResult
 from world.distinctions.models import CharacterDistinction, Distinction
 from world.gm.constants import (
@@ -83,6 +88,7 @@ from world.gm.serializers import (
     MintGMCharacterRequestSerializer,
     MintGMCharacterResultSerializer,
     NarrateGMPromptSerializer,
+    OverrideStandoffProposalSerializer,
     PromoteGMInputSerializer,
     TableUpdateRequestCreateSerializer,
     TableUpdateRequestSerializer,
@@ -1050,11 +1056,38 @@ class GMPromptViewSet(mixins.ListModelMixin, viewsets.GenericViewSet):
     @action(detail=True, methods=["post"])
     def confirm(self, request: Request, pk: str | None = None) -> Response:
         prompt = self._own_prompt(pk)
+        if prompt.kind == GMPromptKind.STANDOFF_CAUSE:
+            # A standoff proposal (#4354): confirming starts the fight.
+            result = GMStandoffConfirmAction().run(
+                actor=None, account=request.user, prompt_id=prompt.pk
+            )
+            return self._result(result, prompt)
         # The kind gate lives in the action itself (ConfirmDramaticMomentSuggestionAction
         # only ever resolves a DRAMATIC_MOMENT-kind suggestion id) -- #4101 fix round 2,
         # finding 6: no duplicate check here.
         result = ConfirmDramaticMomentSuggestionAction().run(
             actor=None, account=request.user, suggestion_id=prompt.pk
+        )
+        return self._result(result, prompt)
+
+    @action(detail=True, methods=["post"])
+    def hold(self, request: Request, pk: str | None = None) -> Response:
+        """Hold a standoff proposal for one action (#4354)."""
+        prompt = self._own_prompt(pk)
+        result = GMStandoffHoldAction().run(actor=None, account=request.user, prompt_id=prompt.pk)
+        return self._result(result, prompt)
+
+    @action(detail=True, methods=["post"])
+    def override(self, request: Request, pk: str | None = None) -> Response:
+        """Override a standoff proposal; the body's ``reason`` is required (#4354)."""
+        prompt = self._own_prompt(pk)
+        body = OverrideStandoffProposalSerializer(data=request.data)
+        body.is_valid(raise_exception=True)
+        result = GMStandoffOverrideAction().run(
+            actor=None,
+            account=request.user,
+            prompt_id=prompt.pk,
+            reason=body.validated_data["reason"],
         )
         return self._result(result, prompt)
 

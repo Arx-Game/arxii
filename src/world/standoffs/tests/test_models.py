@@ -9,7 +9,7 @@ from world.mechanics.factories import PropertyFactory
 from world.standoffs.constants import RevealKind
 from world.standoffs.factories import (
     CreatureDriveFactory,
-    RegardRuleFactory,
+    FactionRuleFactory,
     StandoffApproachFactory,
     StandoffGroupFactory,
     StandoffRevealFactory,
@@ -27,7 +27,7 @@ class StandoffModelTests(TestCase):
     def test_factories_create_every_model(self) -> None:
         for obj in (
             CreatureDriveFactory(),
-            RegardRuleFactory(),
+            FactionRuleFactory(),
             StandoffApproachFactory(),
             StandoffTermsFactory(),
             self.group,
@@ -61,21 +61,21 @@ class StandoffModelTests(TestCase):
         with self.assertRaises(IntegrityError), transaction.atomic():
             CreatureDriveFactory(creature_template=self.template, property=prop)
 
-    def test_regard_rule_clean_rejects_bad_tree(self) -> None:
-        rule = RegardRuleFactory(creature_template=self.template, rule={"op": "nonsense"})
+    def test_faction_rule_clean_rejects_bad_tree(self) -> None:
+        rule = FactionRuleFactory(creature_template=self.template, rule={"op": "nonsense"})
         with self.assertRaises(ValidationError):
             rule.full_clean()
 
-    def test_regard_rule_drive_must_be_one_of_the_templates_drives(self) -> None:
+    def test_faction_rule_drive_must_be_one_of_the_templates_drives(self) -> None:
         stranger = PropertyFactory()
-        rule = RegardRuleFactory(creature_template=self.template, drive=stranger)
+        rule = FactionRuleFactory(creature_template=self.template, drive=stranger)
         with self.assertRaises(ValidationError) as caught:
             rule.clean()
         self.assertIn("drive", caught.exception.message_dict)
 
-    def test_regard_rule_drive_on_a_template_drive_is_valid(self) -> None:
+    def test_faction_rule_drive_on_a_template_drive_is_valid(self) -> None:
         drive = CreatureDriveFactory(creature_template=self.template)
-        rule = RegardRuleFactory(creature_template=self.template, drive=drive.property)
+        rule = FactionRuleFactory(creature_template=self.template, drive=drive.property)
         rule.clean()
 
     def test_cause_margin_must_stay_above_minus_one_hundred(self) -> None:

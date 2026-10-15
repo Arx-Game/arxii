@@ -87,6 +87,8 @@ function makeEncounter(participants: Participant[] = []): EncounterDetail {
     is_gm: false,
     objective: null,
     standoff: null,
+    gm_standoff: null,
+    standoff_summary: null,
     participants,
     opponents: [],
     current_round_actions: [],

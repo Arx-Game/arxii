@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 from typing import TYPE_CHECKING
 
 from django.core.exceptions import ObjectDoesNotExist
@@ -10,8 +11,12 @@ from world.combat.constants import CauseKind, ParticipantStatus
 from world.combat.models import OpponentTierTemplate
 from world.combat.morale import OpponentMoraleState, morale_state_for
 from world.covenants.mentorship import effective_combat_level
-from world.standoffs.constants import StandoffGroupState
-from world.standoffs.services.regard import suppressed_for_all_participants
+from world.standoffs.constants import (
+    LIVE_GROUP_STATES,
+    REASON_OUTWEIGHED,
+    StandoffGroupState,
+)
+from world.standoffs.services.faction_rules import suppressed_for_all_participants
 from world.standoffs.services.state import (
     active_members,
     end_standoff_into_fight,
@@ -125,25 +130,101 @@ def effective_party_force(
     return max(0.0, party_force(encounter, config) * (100 - penalty) / 100)
 
 
-def cause_fires(group: StandoffGroup, config: StandoffConfig) -> bool:
-    """Predation fires when the party does not outweigh the group by its margin."""
-    if group.creature_template.cause != CauseKind.PREDATION:
+FORCE_CAUSES = frozenset({CauseKind.PREDATION, CauseKind.ORDERS})
+PROVOKED_CAUSES = frozenset({CauseKind.ORDERS})
+
+
+def _override_stands(
+    group: StandoffGroup, party: float, theirs: float, *, lapse: bool = True
+) -> bool:
+    """True while a GM override holds: force has not moved since the GM overrode the cause.
+
+    The first time force differs, the override lapses (its snapshot is cleared) and the
+    cause is tested again. A botch clears it separately (``clear_override``).
+    """
+    if group.override_party_force is None or group.override_group_force is None:
         return False
-    margin = 100 + group.creature_template.cause_margin_percent
-    weak = effective_party_force(group.encounter, group, config) * 100 <= (
-        group_force(group, config) * margin
-    )
-    return weak and not suppressed_for_all_participants(group)
+    if math.isclose(party, group.override_party_force) and math.isclose(
+        theirs, group.override_group_force
+    ):
+        return True
+    if lapse:
+        clear_override(group)
+    return False
 
 
-def evaluate_causes(encounter: CombatEncounter, attack_sink: list[str] | None = None) -> bool:
-    """Settle empty groups; if an OPEN group's cause fires, the fight begins.
+def clear_override(group: StandoffGroup) -> None:
+    """Forget a GM override so the group's cause is tested again."""
+    if group.override_party_force is None and group.override_group_force is None:
+        return
+    group.override_party_force = None
+    group.override_group_force = None
+    group.save(update_fields=["override_party_force", "override_group_force"])
 
-    Settling the last OPEN group (its members fled or were removed) leaves nothing to
+
+def cause_fire_reason(
+    group: StandoffGroup,
+    config: StandoffConfig,
+    provocation: str = "",
+    *,
+    lapse_override: bool = True,
+) -> str | None:
+    """Why the group's cause fires now, or None when it holds back.
+
+    Predation fires when the party does not outweigh the group by its margin. Orders fires
+    the same way, and also on ``provocation`` (the reason text of a botched press or terms
+    against this group, passed only on the action that botched). A faction rule that
+    suppresses the cause for every active participant stops either, and a standing GM
+    override stops both until force moves. A read-only caller (the GM view) passes
+    ``lapse_override=False`` so asking never clears an override that force has outgrown.
+    """
+    cause = group.creature_template.cause
+    if cause not in FORCE_CAUSES:
+        return None
+    party = effective_party_force(group.encounter, group, config)
+    theirs = group_force(group, config)
+    if _override_stands(group, party, theirs, lapse=lapse_override):
+        return None
+    reason = None
+    if provocation and cause in PROVOKED_CAUSES:
+        reason = provocation
+    elif party * 100 <= theirs * (100 + group.creature_template.cause_margin_percent):
+        reason = REASON_OUTWEIGHED
+    if reason is None or suppressed_for_all_participants(group):
+        return None
+    return reason
+
+
+def cause_fires(group: StandoffGroup, config: StandoffConfig, provocation: str = "") -> bool:
+    """True when the group's cause fires now (see ``cause_fire_reason``)."""
+    return cause_fire_reason(group, config, provocation) is not None
+
+
+def evaluate_causes(
+    encounter: CombatEncounter,
+    attack_sink: list[str] | None = None,
+    *,
+    provoked: StandoffGroup | None = None,
+    provocation: str = "",
+) -> bool:
+    """Settle empty groups, then test every live group's cause.
+
+    Settling the last live group (its members fled or were removed) leaves nothing to
     negotiate, so the standoff completes as a victory, as when the last terms are accepted.
-    ``attack_sink`` is handed to ``end_standoff_into_fight`` (see there).
+
+    A firing cause starts the fight on its own when nobody runs the scene (missions, as in
+    slice 1). In a GM-run standoff it becomes a proposal instead: the group goes PROPOSED
+    and the GM gets a prompt; a group already PROPOSED just has its reason restated.
+    ``provoked`` and ``provocation`` name the group a botch landed on this action and why.
+    ``attack_sink`` is handed to ``end_standoff_into_fight`` (see there). True when the
+    fight began.
     """
     from world.standoffs.models import StandoffConfig  # noqa: PLC0415
+    from world.standoffs.services.proposals import (  # noqa: PLC0415
+        propose,
+        restate_proposal,
+        standoff_is_gm_run,
+    )
 
     if (
         settle_empty_groups(encounter)
@@ -154,11 +235,22 @@ def evaluate_causes(encounter: CombatEncounter, attack_sink: list[str] | None = 
         complete_standoff(encounter)
         return False
     config = StandoffConfig.load()
-    for group in encounter.standoff_groups.filter(state=StandoffGroupState.OPEN).select_related(
+    gm_run: bool | None = None
+    for group in encounter.standoff_groups.filter(state__in=LIVE_GROUP_STATES).select_related(
         "creature_template"
     ):
-        if cause_fires(group, config):
-            return end_standoff_into_fight(
-                encounter, initiated_by_pc_side=False, attack_sink=attack_sink
-            )
+        own_provocation = provocation if provoked is not None and group.pk == provoked.pk else ""
+        reason = cause_fire_reason(group, config, own_provocation)
+        if reason is None:
+            continue
+        if group.state == StandoffGroupState.PROPOSED:
+            restate_proposal(group, reason)
+            continue
+        if gm_run is None:
+            gm_run = standoff_is_gm_run(encounter)
+        if gm_run and propose(group, reason):
+            continue
+        return end_standoff_into_fight(
+            encounter, initiated_by_pc_side=False, attack_sink=attack_sink
+        )
     return False

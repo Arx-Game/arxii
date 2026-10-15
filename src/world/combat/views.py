@@ -99,6 +99,7 @@ from world.gm.permissions import IsGMOrStaff
 from world.items.models import ItemInstance
 from world.scenes.constants import PersonaType, RoundStatus
 from world.scenes.models import Persona, Scene
+from world.standoffs.serializers import StandoffMoraleRequestSerializer
 from world.standoffs.services.state import begin_round_or_break_standoff
 from world.stories.pagination import StandardResultsSetPagination
 
@@ -743,6 +744,43 @@ class CombatEncounterViewSet(ModelViewSet):
         serializer = EncounterSettingsSerializer(data=request.data, partial=True)
         serializer.is_valid(raise_exception=True)
         update_encounter_settings(encounter, **serializer.validated_data)
+        return self._serialize_encounter(request, encounter)
+
+    @extend_schema(request=StandoffMoraleRequestSerializer, responses=EncounterDetailSerializer)
+    @action(detail=True, methods=[HTTPMethod.POST], url_path="standoff-morale")
+    def standoff_morale(self, request: Request, pk: int | None = None) -> Response:
+        """GM: shake or steady one standoff group by one morale state, with a reason (#4354)."""
+        from actions.definitions.gm_standoff import GMStandoffMoraleAction  # noqa: PLC0415
+
+        encounter = self.get_object()
+        body = StandoffMoraleRequestSerializer(data=request.data)
+        body.is_valid(raise_exception=True)
+        group = get_object_or_404(
+            encounter.standoff_groups.all(), pk=body.validated_data["group_id"]
+        )
+        result = GMStandoffMoraleAction().run(
+            actor=None,
+            account=request.user,
+            group_id=group.pk,
+            direction=body.validated_data["direction"],
+            reason=body.validated_data["reason"],
+        )
+        if not result.success:
+            return Response({"detail": result.message}, status=status.HTTP_400_BAD_REQUEST)
+        return self._serialize_encounter(request, encounter)
+
+    @extend_schema(request=None, responses=EncounterDetailSerializer)
+    @action(detail=True, methods=[HTTPMethod.POST], url_path="open-standoff")
+    def open_standoff(self, request: Request, pk: int | None = None) -> Response:
+        """GM: open a standoff on an encounter that has not begun round one (#4354)."""
+        from actions.definitions.gm_standoff import GMOpenStandoffAction  # noqa: PLC0415
+
+        encounter = self.get_object()
+        result = GMOpenStandoffAction().run(
+            actor=None, account=request.user, encounter_id=encounter.pk
+        )
+        if not result.success:
+            return Response({"detail": result.message}, status=status.HTTP_400_BAD_REQUEST)
         return self._serialize_encounter(request, encounter)
 
     @action(detail=True, methods=[HTTPMethod.POST])
