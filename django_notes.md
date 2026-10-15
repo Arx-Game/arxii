@@ -201,10 +201,17 @@ class CharacterDraftViewSet(viewsets.ModelViewSet):
 
 ### Test Coverage Philosophy
 
-**Focus on application logic, not Django functionality:**
+**Three layers, not coverage** (#3657, ADR-3657, `docs/testing/README.md`): a
+journey per thing a player does, driven on the real seam through
+`integration_tests.harness.JourneyCase` and asserting what the player was told;
+fuzz at those seams with Hypothesis; cross-system integration where one app's
+change breaks another. A unit test is kept only when a journey cannot reach the
+logic (a parser with branches, an error-path mapping, a pure function's edge).
 
-- ✅ **Test**: Custom methods, API behavior, serializers, business logic
-- ❌ **Don't Test**: Django's built-in functionality (save(), delete(), etc.)
+- ✅ **Test**: the story a player lives through, on the seam they reach it by
+- ❌ **Don't Test**: Django's built-in functionality (save(), delete(), field
+  options, admin registration), the shape of a dict or queryset, that a mock
+  was called, `__str__`, that a factory builds
 
 ### Use FactoryBoy for All Test Data
 
@@ -257,21 +264,30 @@ class StoryViewSetTestCase(TestCase):
 
 ### Test Structure
 
-**Organize tests by functionality:**
+**Organize tests by the story they protect, not by layer.** One class per
+journey, named for what the player is doing; the per-layer shape (a model
+class, a serializer class, a viewset class, a permission class per model) is
+the accreted shape the #3657 audit is removing, and new tests must not add to
+it.
 
 ```python
-class StoryModelTestCase(TestCase):
-    """Test Story model methods and properties"""
+from integration_tests.harness import JourneyCase
 
-class StorySerializerTestCase(TestCase):
-    """Test Story serialization and deserialization"""
 
-class StoryViewSetTestCase(TestCase):
-    """Test Story API endpoints and permissions"""
+class APlayerOffersTheirStoryToAGM(JourneyCase):
+    """The offer reaches the GM's inbox and the GM can accept it."""
 
-class StoryPermissionTestCase(TestCase):
-    """Test Story permission classes"""
+    def test_the_gm_is_told_and_the_story_moves(self) -> None: ...
+    def test_an_offer_to_a_non_gm_is_refused_with_a_reason(self) -> None: ...
+
+
+class OfferParsing(TestCase):
+    """U-keep: the one parser branch the journey cannot reach."""
 ```
+
+A journey lives in `src/integration_tests/` (PostgreSQL-only); a `U-keep` unit
+stays in the app's `tests/`. The PR's Verification names the journey row in
+`docs/testing/journeys.md` that covers the change.
 
 ### Test Naming Convention
 
@@ -531,6 +547,19 @@ calls `.save(...)` on that same name, inside `transaction.atomic()`. It does not
 catch the general case — too noisy — only mutate-save-then-raise. Suppress a
 deliberate keeper with `# noqa: IDMAPPER_MUTATE_ORDER` and a stated reason (added to
 the custom linter token list above).
+
+**Between tests the identity map is emptied, forced.** The test runner's per-test
+hook (`core.testing.flush_test_caches`, installed by `TimedEvenniaTestRunner`)
+calls `flush_instance_cache(force=True)` on every `SharedMemoryModel` after every
+test (#3657 tranche 1). Evennia's own flush keeps any object carrying an
+NAttribute, and the command handler sets `ndb.last_cmd` on whoever typed a line,
+so a character that ran one command in test_A used to survive into test_B with no
+row behind it; `SharedMemoryManager.get` answers a pk lookup from the cache without
+a query, so test_B's `create_object` with no home resolved `DEFAULT_HOME` (`#2`) to
+it and wrote a home the database did not hold (PR #4360, ten magic tests, two CI
+runs, a different worker each time). A test that goes red under the forced flush
+was relying on two lookups being one cached instance across tests; fix the test,
+never the flush.
 
 ## FactoryBoy `django_get_or_create` Gotcha
 

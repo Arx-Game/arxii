@@ -16,6 +16,8 @@ Prefer big **E2E user-journey integration tests** over many fine-grained unit te
 
 Write focused unit tests only when logic is genuinely fiddly and wouldn't be observable from the E2E happy path: e.g. a parsing helper with multiple lookup branches, error-path exception mapping, or a pure-function edge case. When in doubt, skip the unit test and let the integration test carry the weight.
 
+**The harness is `integration_tests.harness.JourneyCase`** (#3657): `telnet()` types a line through the real command handler (never build a `Cmd` and call `.func()` by hand; that skips cmdset membership and `parse`, which is how #4352's unparsed switches stayed green), `web()` dispatches a registry action, `api()` is a signed-in REST client, `assertTold()` reads what a character was told. Journeys are PostgreSQL-only; the fuzz layer (`integration_tests/fuzz/`, Hypothesis) and the ledger rubric are in `docs/testing/README.md`.
+
 **Don't assume player omniscience.** E2E journey tests should assert that the game tells the player what to do next, not just that the underlying state changed. If the game should emit a prompt ("use `flourish <resonance>` to declare your entrance"), assert that the caller received it. A journey test that only checks DB state leaves a gap: the player could be left with no idea what action is available to them, and the test wouldn't catch it.
 
 ## Two-tier model: SQLite for the inner loop, Postgres for parity
