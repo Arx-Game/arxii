@@ -3,6 +3,23 @@
 **Status:** in-progress
 **Depends on:** Areas, Items, Combat, Stories (for GM tools)
 
+## Built (2026-10-15, #3657 tranche 0 — the three-layer test suite's tools)
+
+The suite audit's first tranche builds the tools and changes the rules, and removes
+nothing. `integration_tests.harness.JourneyCase` is the one journey harness (a typed
+line through the real command handler, a web action through `dispatch_player_action`,
+a signed-in REST client, `assertTold` for what each character was told);
+`integration_tests/fuzz/` is the Hypothesis layer with `ci` and `dev` profiles;
+`tools/journey_inventory.py` generates `docs/testing/journey-inventory.md` from the
+action, command, router and frontend-route registries with the tests naming each
+surface (555 actions, 269 commands, 537 API routes, 131 routes on 2026-10-15), and
+`docs/testing/journeys.md` is the curated list; `tools/test_ledger.py` grades an
+app's test modules J/F/X/U-keep/R as the first pass of its ledger;
+`just coverage-journeys` and the weekly `journey-coverage` workflow report what no
+journey reaches, as design input, never a gate. `django_notes.md`'s per-layer test
+shape is replaced by the three layers; `test-layer-reviewer` reads every PR's tests.
+ADR-3657. Tranche 1 is the `world.conditions` pilot.
+
 ## Built (2026-09-30, #4064 — the reviewed delete, and admin pages for domains and fealty)
 
 Deleting an organization other rows protect stopped at Django's "cannot delete" page,
