@@ -90,7 +90,7 @@ inventory reports for commands, API routes and frontend routes.
 
 | Gap | Found by | State |
 |---|---|---|
-| `org invite <person> in <org>` (and promote, demote, expel, favor, disfavor) searched for a character named "invite <person>": the two-argument parser read the raw args, subverb included. Its unit tests set the parsed fields by hand and never saw it. | the organization journey | fixed in tranche 2 (`parse_two_args(text=...)`) |
+| `org invite <person> in <org>` (and promote, demote, expel; favor and disfavor parse the remainder themselves and were fine) searched for a character named "invite <person>": the two-argument parser read the raw args, subverb included. Its unit tests set the parsed fields by hand and never saw it. | the organization journey | fixed in tranche 2 (`parse_two_args(text=...)`) |
 | An invitee was never told an invitation was waiting; only typing `accept` revealed it. | the organization journey | fixed in tranche 2 (the invite action tells them) |
 | Under an allowlist category (body handling, theft) `consent blacklist add` replies "X may no longer target you", but the gate consults only the whitelist in that mode, so a whitelisted X is still admitted (`test_blacklist_only_counts_under_all_but_blacklist` pins the rule). | the body-handling journey | open: a ruling on list precedence or on the reply's wording |
 | On a deploy without the foundational capability rows authored, Unconscious does not stop anyone acting and a body can be neither protected nor carried (`can_act` degrades to True by design). | the body-handling journey | open: content, not code |
