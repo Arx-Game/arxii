@@ -42,7 +42,7 @@ set -euo pipefail
 set +x
 
 readonly SCRATCH_PREFIX="scratch_pmc_"
-readonly MAX_SECONDS=1200
+MAX_SECONDS="${ARX_PMC_MAX_SECONDS:-1200}"   # override only to test the ceiling
 LOCK_FILE="${ARX_HEAVY_LOCK:-/tmp/claude-1000/arx-heavy.lock}"
 
 # Take the heavy-command lock and a hard 20 minute ceiling by re-running
@@ -262,9 +262,11 @@ count_tables() {
       printf '  %s=%s\n' "${full}" "$(q "select count(*) from \"${full}\"")"
     else
       printf '  %s=(table absent)\n' "${t}"
+      ABSENT_TABLES+=("${t}")
     fi
   done
 }
+ABSENT_TABLES=()
 
 # Run evennia against the scratch database. The environment is the file's
 # values (only where unset, as settings.py does) with DATABASE_URL forced.
@@ -306,6 +308,8 @@ PROD_TIP="$(applied_tip)"
 echo "production tip: ${PROD_TIP:-none} | branch head: ${BRANCH_HEAD} | main tip: ${MAIN_TIP} | step back to: ${BACK_TO}"
 echo "== rows before (dump as restored)"
 count_tables
+ABSENT_BEFORE=" ${ABSENT_TABLES[*]:-} "
+ABSENT_TABLES=()
 echo "== forward to branch head"
 migrate_step forward "${BRANCH_HEAD}"
 if [[ "${BACK_TO}" < "${BRANCH_HEAD}" ]]; then
@@ -318,6 +322,10 @@ else
 fi
 echo "== rows after"
 count_tables
+# A name missing both before and after never existed: a typo, not a result.
+for t in "${ABSENT_TABLES[@]:-}"; do
+  [[ -z "${t}" || "${ABSENT_BEFORE}" != *" ${t} "* ]] || fail "table '${t}' is absent before and after; check the name"
+done
 echo "== pending migrations"
 PENDING="$(evennia_scratch showmigrations 2>/dev/null | grep -E '^ *\[ \]' || true)"
 if [[ -z "${PENDING}" ]]; then echo "  none"; else echo "${PENDING}"; fi
