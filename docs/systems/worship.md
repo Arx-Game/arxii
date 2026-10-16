@@ -180,7 +180,8 @@ issue bodies; the model decision is ADR-0132.
 
 - `grant_worship(being, amount, *, granted_by, reason)` → pool + lifetime +
   ledger row.
-- `bump_devotion(sheet, being, amount)` → `DevotionBump(standing, credited)`:
+- `bump_devotion(sheet, being, amount, *, source=None)` → `DevotionBump(standing, credited,
+  pledge_credit, earning_rate_percent)`:
   standing upsert + the God's Favorite check: reaching or tying the being's top
   favor grants the gender-matched achievement (God's Favorite Princess / Prince /
   Chosen; leapfroggers earn it too, prior holders keep theirs; text never names
@@ -189,7 +190,10 @@ issue bodies; the model decision is ADR-0132.
   for an active patronage of the being + the character's favor earning modifiers),
   rounded down; `credited` is what landed, and the rite and prayer callers record
   it (`WorshipRitePerformance.favor_granted`, `Prayer.devotion_granted`). A Chosen
-  bonus of 0 and no favor earning modifiers restore the old rates.
+  bonus of 0 and no favor earning modifiers restore the old rates. Since #4333 slice 2
+  a positive credit also goes to the character's open pledge to the being, when there
+  is one (`pledge_services.record_pledge_credit`); `source` (`FavorSource`) names what
+  the favor was for, so the pledge card can show it.
 - `gods_favorite_achievement_for(sheet)` — gender-variant row resolution.
 - `get_chosen_favor_config()` — lazy-create the singleton (pk=1).
 - `active_patronage_for(sheet)` → active patronages (valence set, released_at
@@ -420,7 +424,8 @@ equipment walk) and `get_condition_modifier_total` (conditions). Both favor cate
 in `EQUIPMENT_RELEVANT_CATEGORIES`, and for them the walk counts a covenant role once
 (`covenant_role_base_total`). Facet, mantle and motif bonuses reach targets only through a
 resonance, so they add nothing here (slice 8 covers favored facets).
-`earning_rate(sheet, being)` / `scale_by_earning_rate` feed `bump_devotion`.
+`earning_rate(sheet, being)` feeds `bump_devotion`, which applies it and returns the rate on
+`DevotionBump.earning_rate_percent`.
 
 **Invocation** (`worship/invocation_services.py`)
 
@@ -462,6 +467,92 @@ difficulty table and last week's invocations), Chosen favor config (the two new 
 Chosen per being), the being's check type override, the Distinction Builder's favor-target
 help line. Required-content sentinels: `favor-invocation-check-type`,
 `favor-invocation-awards`.
+
+### Favor with beings: pledges and sacrifices (#4333, slice 2) [BUILT & WIRED]
+
+Spec and demo: issue #4333 (slice 2 is #4362; walkthrough A steps 1 and 2). Decision:
+ADR-4362 (pledge credits explain a pledge's favor and never count it). Favor is the only
+pledge progress (Ruling 9).
+
+**Models**
+
+- `Pledge` (`CreditedContent`) — a pledge type: `being`, `name`, `description`,
+  `favor_target`, `span_weeks`, `closing_rite` (FK `WorshipRite`; `clean()` requires one of
+  the being's own tier 1 or 2 rites, since a tier 3 rite is a ceremony), `is_active`; unique
+  (being, name).
+- `PledgeDetails` — the PLEDGE project's sidecar: O2O `project`, `character_sheet`,
+  `pledge`, nullable `prayer` (the `Prayer` pledged with; the text lives there),
+  O2O `closing_performance` (the `WorshipRitePerformance` that resolved it; empty for an
+  open or lapsed pledge), `close_attempts`.
+- `PledgeCredit` — one favor credit with its calculation: `pledge_details`, `source`
+  (`PledgeCreditSource`: DEED, SACRIFICE, RITE, PRAYER, CEREMONY_OFFERING, CEREMONY, CLOSING,
+  LAPSE, OTHER), `base`, `earning_rate_percent`, `credited`, `game_week`, and the typed
+  source (`resonance_grant` O2O, `offering` O2O, `rite_performance`).
+- `DevotionConfig` gains `favored_deed_percent` (100), `associated_deed_percent` (50),
+  `weekly_deed_favor_cap` (8, base favor) and `sacrifice_value_per_favor` (10).
+  `FavorOutcomeAward` CLOSING rows are the closing awards (seeded 8 / 5 / 3 / 2 / 0).
+- `CeremonyOffering` (ceremonies) gains nullable `being`, `pledge_details` and `facet`;
+  `ceremony` is nullable; a CHECK requires exactly one of ceremony or being (migration 0231,
+  its own migration after the columns in 0230).
+- `ProjectKind.PLEDGE`, registered expiry-only (`projects.services.register_expiry_only_kind`).
+
+**Services** (`worship/pledge_services.py`)
+
+- `take_pledge(sheet, pledge, *, prayer_text="")` — one open pledge per character (the sheet
+  row is locked while checking); opens a SINGLE_THRESHOLD PLEDGE project (threshold = favor
+  target, time limit = span x 7 days) and the sidecar; a prayer goes through `pray`, after
+  the pledge opens, so a holy-site prayer's devotion already counts.
+- `record_pledge_credit(...)` — called by `bump_devotion` for every positive write: the open
+  pledge to that being gains the credited favor on `current_progress` and a `PledgeCredit`.
+  CLOSING and LAPSE credits name their pledge and add no progress.
+- `credit_pledge_deed(grant)` — called by `grant_resonance` after it writes the ledger row.
+  With an open pledge whose being holds the grant's resonance as FAVORED or ASSOCIATED: base
+  = amount x the percent, rounded down, at least 1, held to what is left of the week's cap.
+  WORSHIP_RITE grants are skipped (the rite pays favor itself).
+- `close_pledge(sheet, *, scene)` — needs the target met and the span not over; runs
+  `perform_worship_rite(..., pay_award=False)` (the roll and the performance row are kept,
+  the rite's own award is not paid, `record_unpaid_performance`). A first Failure or
+  Critical Failure only counts the attempt (Ruling 17). Otherwise, in one atomic block, the
+  project goes to RESOLVING, the performance is recorded and `resolve_project` runs; a
+  failure restores the identity-mapped project and sidecar.
+- `resolve_pledge_project(project, outcome_tier)` — the PLEDGE handler. With a closing
+  performance it pays the CLOSING award for the rite's tier; without one it is a lapse (the
+  tick resolved it at the time limit): half the target or more pays the Partial Success
+  CLOSING award, less pays nothing (Ruling 18). Awards go through `bump_devotion` at the
+  earning rate; earned favor is never taken back. Slice 3 delivers the closing answer here.
+- `service_terms(sheet, being)`, `pledge_card(details)`, `holy_sites_here(sheet)`,
+  `open_pledge_for` / `latest_pledge_for`, `broadcast_room_line`.
+- Sacrifices: `ceremonies.services.sacrifice_items(sheet, items, *, being=None)` at a shrine
+  in the room or a temple over it (the being chooses when both are present for different
+  beings); each carried item goes through `give_up_item` (the step extracted from
+  `record_offering`: destroy, feed the pool, favored-facet multiplier), base favor = value //
+  `sacrifice_value_per_favor` (at least 1) x the multiplier for a favored facet, and one room
+  line "<name> sacrifices <item> at <being>'s shrine." `record_offering` keeps its flat
+  `devotion_per_offering` and now records the facet too.
+
+**Surfaces**
+
+- Actions: `pledge_take` (`TakePledgeAction`; pledge pk, or names), `pledge_close`
+  (`ClosePledgeAction`; starts or joins the room's scene through `StartSceneAction`; the room
+  sees "<name> performs <rite>." and nothing of the result), `sacrifice` (`SacrificeAction`;
+  item pks from the web, names from telnet). `PerformWorshipRiteAction` writes the same rite
+  line. Being kwargs accept a pk (the web) or a name.
+- API: `GET /api/worship/pledges/?being=`, `GET /api/worship/pledge-cards/?character_sheet=`
+  (own characters, staff all), `GET /api/worship/beings/{id}/service-terms/` (`character_sheet`
+  the requester plays, or `entry_id`), `GET /api/worship/beings/holy-site/`.
+- Web: the sheet's Worship section (Pray, Sacrifice, Pledge yourself; the pledge card in three
+  labelled parts with each credit's calculation and Close once ready); the room panel's
+  holy-site line (`HolySiteBlock`).
+- Telnet: `pledge`, `pledge <being>`, `pledge <being>/<pledge>[=<prayer>]`, `pledge/close`,
+  `sacrifice <item>[,<item>...][=<being>]`.
+- Admin: the **Being Service builder** (`/admin/_being_service/<being>/`,
+  `web/admin/being_service/`): favored resonances (with deed favor and the last 30 days'
+  grants to the being's worshippers by source), favored facets, every pledge type (with how
+  long its target takes from deeds alone at the cap), the favor modifiers authored against
+  the being's targets, a rail of worship numbers, checks and credit with Mark reviewed. It
+  creates the being's favor targets when it opens. `PledgeAdmin` and `PledgeDetailsAdmin`
+  are read-only. Devotion config shows the four earning fields. Required-content sentinel:
+  `favor-closing-awards`.
 
 ### Miracles & Divine Intervention (#2360)
 

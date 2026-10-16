@@ -32,6 +32,7 @@ if TYPE_CHECKING:
     from world.achievements.models import Achievement
     from world.character_sheets.models import CharacterSheet
     from world.worship.models import DivineInterventionConfig, Miracle, MiraclePerformance
+    from world.worship.types import FavorSource
 
 logger = logging.getLogger(__name__)
 
@@ -107,7 +108,11 @@ def gods_favorite_achievement_for(character_sheet: "CharacterSheet") -> "Achieve
 
 
 def bump_devotion(
-    character_sheet: "CharacterSheet", being: WorshippedBeing, amount: int
+    character_sheet: "CharacterSheet",
+    being: WorshippedBeing,
+    amount: int,
+    *,
+    source: "FavorSource | None" = None,
 ) -> DevotionBump:
     """Upsert the (sheet, being) standing and run the God's Favorite check.
 
@@ -120,11 +125,19 @@ def bump_devotion(
     plus favor earning modifiers. Every favor source writes through here, so all
     of them are scaled. A negative amount is applied as given. Returns the
     standing and the amount actually credited.
-    """
-    from world.worship.favor_services import scale_by_earning_rate  # noqa: PLC0415
 
+    While the character holds an open pledge to ``being`` (#4333 slice 2), the
+    credited amount also advances the pledge's ``Project.current_progress`` and
+    is recorded as a ``PledgeCredit`` of ``source``'s kind with its calculation.
+    """
+    from world.worship.favor_services import earning_rate  # noqa: PLC0415
+    from world.worship.pledge_services import record_pledge_credit  # noqa: PLC0415
+
+    base = amount
+    rate = 100
     if amount > 0:
-        amount = scale_by_earning_rate(character_sheet, being, amount)
+        rate = earning_rate(character_sheet, being)
+        amount = amount * rate // 100
     standing, _ = DevotionStanding.objects.get_or_create(
         character_sheet=character_sheet, being=being
     )
@@ -154,7 +167,17 @@ def bump_devotion(
     else:
         remove_divine_intervention_trigger(character_sheet, being)
 
-    return DevotionBump(standing=standing, credited=amount)
+    pledge_credit = None
+    if amount > 0:
+        pledge_credit = record_pledge_credit(
+            character_sheet, being, base=base, rate=rate, credited=amount, source=source
+        )
+    return DevotionBump(
+        standing=standing,
+        credited=amount,
+        pledge_credit=pledge_credit,
+        earning_rate_percent=rate,
+    )
 
 
 def get_divine_intervention_config() -> "DivineInterventionConfig":

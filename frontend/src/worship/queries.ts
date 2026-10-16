@@ -1,6 +1,19 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useBrowsingIdentity } from '@/roster/useBrowsingIdentity';
-import { fetchInvocationOptions, fetchPrayers, fetchVisions, pray, sendVision } from './api';
+import {
+  closePledge,
+  fetchHolySites,
+  fetchInvocationOptions,
+  fetchPledgeCards,
+  fetchPledges,
+  fetchPrayers,
+  fetchServiceTerms,
+  fetchVisions,
+  pray,
+  sacrifice,
+  sendVision,
+  takePledge,
+} from './api';
 import type { VisionCreate } from './types';
 
 export const worshipKeys = {
@@ -9,6 +22,12 @@ export const worshipKeys = {
   prayers: (sheetId: number) => ['worship', 'prayers', sheetId] as const,
   invocationOptions: (entryId: number | null | undefined) =>
     ['worship', 'invocation-options', entryId ?? null] as const,
+  pledges: (beingId: number) => ['worship', 'pledges', beingId] as const,
+  serviceTerms: (beingId: number, entryId: number | null | undefined) =>
+    ['worship', 'service-terms', beingId, entryId ?? null] as const,
+  holySites: (entryId: number | null | undefined, roomId: number | null | undefined) =>
+    ['worship', 'holy-sites', entryId ?? null, roomId ?? null] as const,
+  pledgeCards: (sheetId: number) => ['worship', 'pledge-cards', sheetId] as const,
 };
 
 /**
@@ -68,4 +87,91 @@ export function useSendVision() {
       queryClient.invalidateQueries({ queryKey: worshipKeys.all }).catch(() => {});
     },
   });
+}
+
+/** The pledge types a being offers (#4333). */
+export function usePledges(beingId: number | null, enabled = true) {
+  return useQuery({
+    queryKey: worshipKeys.pledges(beingId ?? 0),
+    queryFn: () => fetchPledges(beingId as number),
+    enabled: enabled && beingId != null && beingId > 0,
+  });
+}
+
+/**
+ * What earns favor with a being for a character, and their earning rate (#4333). `sheetId`
+ * names a sheet the viewer plays (the sheet page); otherwise this tab's acting character.
+ */
+export function useServiceTerms(
+  beingId: number | null,
+  { sheetId, enabled = true }: { sheetId?: number | null; enabled?: boolean } = {}
+) {
+  const browsing = useBrowsingIdentity();
+  const entryId = sheetId != null ? null : browsing.entryId;
+  return useQuery({
+    queryKey: [...worshipKeys.serviceTerms(beingId ?? 0, entryId), sheetId ?? null],
+    queryFn: () => fetchServiceTerms(beingId as number, { sheetId, entryId }),
+    enabled: enabled && beingId != null && beingId > 0,
+  });
+}
+
+/**
+ * The beings holy where the acting character stands (#4333): shrine here, temple over it.
+ * `roomId` keys the cache to the room, so moving refetches.
+ */
+export function useHolySites({
+  entryId,
+  roomId,
+  enabled = true,
+}: { entryId?: number | null; roomId?: number | null; enabled?: boolean } = {}) {
+  const browsing = useBrowsingIdentity();
+  const actingEntryId = entryId === undefined ? browsing.entryId : entryId;
+  return useQuery({
+    queryKey: worshipKeys.holySites(actingEntryId, roomId),
+    queryFn: () => fetchHolySites(actingEntryId),
+    enabled,
+  });
+}
+
+/** One character's pledges, newest first; the server returns none for a sheet you do not play. */
+export function usePledgeCards(sheetId: number, enabled = true) {
+  return useQuery({
+    queryKey: worshipKeys.pledgeCards(sheetId),
+    queryFn: () => fetchPledgeCards(sheetId),
+    enabled: enabled && sheetId > 0,
+  });
+}
+
+function useWorshipMutation<TVars>(
+  mutationFn: (vars: TVars) => ReturnType<typeof pray>,
+  extraKeys: readonly (readonly unknown[])[] = []
+) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: worshipKeys.all }).catch(() => {});
+      for (const key of extraKeys) {
+        queryClient.invalidateQueries({ queryKey: key }).catch(() => {});
+      }
+    },
+  });
+}
+
+export function useTakePledge(characterId: number) {
+  return useWorshipMutation(({ pledge, prayer }: { pledge: number; prayer: string }) =>
+    takePledge(characterId, pledge, prayer)
+  );
+}
+
+export function useClosePledge(characterId: number) {
+  return useWorshipMutation((_: void) => closePledge(characterId));
+}
+
+export function useSacrifice(characterId: number) {
+  return useWorshipMutation(
+    ({ itemIds, being }: { itemIds: number[]; being?: number | null }) =>
+      sacrifice(characterId, itemIds, being),
+    [['inventory', characterId]]
+  );
 }

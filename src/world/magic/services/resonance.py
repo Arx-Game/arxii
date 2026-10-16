@@ -192,7 +192,7 @@ def grant_resonance(  # noqa: PLR0913
     if created and cached_resonances is not None:
         character_sheet.cached_resonances = [*cached_resonances, cr]
 
-    ResonanceGrant.objects.create(
+    grant = ResonanceGrant.objects.create(
         character_sheet=character_sheet,
         resonance=resonance,
         amount=amount,
@@ -211,6 +211,11 @@ def grant_resonance(  # noqa: PLR0913
         source_character_distinction=source_character_distinction,
         source_worship_rite_performance=worship_rite_performance,
     )
+    # #4333 slice 2: a grant of a resonance the character's pledged being values
+    # is a deed, and earns favor toward the open pledge.
+    from world.worship.pledge_services import credit_pledge_deed  # noqa: PLC0415
+
+    credit_pledge_deed(grant)
 
     from world.magic.services.aura import (  # noqa: PLC0415
         fire_aura_threshold_crossings,

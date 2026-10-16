@@ -124,3 +124,38 @@ FAVOR_INVOCATION_LINE_MAX_LENGTH = 200
 #: The base earning rate, in percent, before the Chosen bonus and favor earning
 #: modifiers are added (#4333, design 1a).
 FAVOR_EARNING_BASE_PERCENT = 100
+
+
+class PledgeCreditSource(models.TextChoices):
+    """Where one favor credit to a pledge came from (#4333 slice 2).
+
+    Every favor write for a being while the character holds an open pledge to it
+    is recorded as a ``PledgeCredit`` with one of these, so the pledge card can
+    show each credit with its calculation. CLOSING and LAPSE are the awards paid
+    when the pledge resolves; they are recorded but never add to its progress.
+    """
+
+    DEED = "deed", "Deed"
+    SACRIFICE = "sacrifice", "Sacrifice"
+    RITE = "rite", "Rite"
+    PRAYER = "prayer", "Holy-site prayer"
+    CEREMONY_OFFERING = "ceremony_offering", "Ceremony offering"
+    CEREMONY = "ceremony", "Ceremony"
+    CLOSING = "closing", "Closing award"
+    LAPSE = "lapse", "Lapse award"
+    OTHER = "other", "Other"
+
+
+class PledgeState(models.TextChoices):
+    """How a character's pledge stands, derived for the pledge card (#4333 slice 2)."""
+
+    OPEN = "open", "Open"
+    READY = "ready", "Ready to close"
+    CLOSED = "closed", "Closed"
+    LAPSED = "lapsed", "Lapsed"
+
+
+#: Real days in one game week: a pledge's span is its game weeks times this (#4333).
+DAYS_PER_GAME_WEEK = 7
+#: Closing attempts a pledge allows: a first failure leaves one retry (Ruling 17).
+PLEDGE_MAX_CLOSE_ATTEMPTS = 2

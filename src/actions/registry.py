@@ -661,13 +661,16 @@ from actions.definitions.world_builder import (
     StaffUnlinkRoomsAction,
 )
 from actions.definitions.worship import (
+    ClosePledgeAction,
     DedicateTempleAction,
     DissolveShrineAction,
     FoundShrineAction,
     PerformWorshipRiteAction,
     PrayAction,
     RevokeTempleAction,
+    SacrificeAction,
     SendVisionAction,
+    TakePledgeAction,
 )
 from actions.types import TargetType
 
@@ -1160,6 +1163,10 @@ _ALL_ACTIONS: list[Action] = [
     DissolveShrineAction(),
     DedicateTempleAction(),
     RevokeTempleAction(),
+    # #4333 slice 2: pledges to a being and sacrifices at its shrine or temple.
+    TakePledgeAction(),
+    ClosePledgeAction(),
+    SacrificeAction(),
     # #2289 — ceremonies (worship rites over the events/scenes chassis).
     OpenCeremonyAction(),
     CeremonyOfferingAction(),

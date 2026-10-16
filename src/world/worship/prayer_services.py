@@ -138,7 +138,9 @@ def pray(character_sheet: CharacterSheet, being: WorshippedBeing, text: str) -> 
     """
     from world.game_clock.week_services import get_current_game_week  # noqa: PLC0415
     from world.worship.consecration_services import sites_of  # noqa: PLC0415
+    from world.worship.constants import PledgeCreditSource  # noqa: PLC0415
     from world.worship.services import bump_devotion, fire_divine_intervention  # noqa: PLC0415
+    from world.worship.types import FavorSource  # noqa: PLC0415
 
     words = text.strip()
     if not words:
@@ -170,7 +172,12 @@ def pray(character_sheet: CharacterSheet, being: WorshippedBeing, text: str) -> 
         )
         if at_site and not already_paid:
             # #4333: the earning rate scales the prayer's devotion; record what landed.
-            devotion = bump_devotion(character_sheet, being, PRAYER_SITE_DEVOTION_AMOUNT).credited
+            devotion = bump_devotion(
+                character_sheet,
+                being,
+                PRAYER_SITE_DEVOTION_AMOUNT,
+                source=FavorSource(kind=PledgeCreditSource.PRAYER),
+            ).credited
             prayer.devotion_granted = devotion
             prayer.save(update_fields=["devotion_granted"])
 

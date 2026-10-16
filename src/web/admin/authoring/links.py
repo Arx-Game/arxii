@@ -21,6 +21,7 @@ from world.distinctions.models import Distinction
 from world.magic.services.soulfray import is_soulfray_stage
 from world.missions.models import MissionOptionOpponentLine
 from world.societies.models import Organization, Society
+from world.worship.models import WorshippedBeing
 
 #: Model -> the custom page that edits one of its rows (a Soulfray ConditionStage is the
 #: one conditional case and is handled in ``builder_url``).
@@ -32,6 +33,7 @@ _BUILDER_ROUTES: tuple[tuple[type[Model], str], ...] = (
     (Organization, "admin_faction_rules_organization"),
     (Society, "admin_faction_rules_society"),
     (MissionOptionOpponentLine, "admin_placement_mission"),
+    (WorshippedBeing, "admin_being_service"),
 )
 
 
@@ -47,7 +49,8 @@ def builder_url(obj: object) -> str:
     Stage Builder (#4089). Any other condition's stage has no builder. A
     ``CreatureTemplate`` opens on the Standoff Profile Builder (#4354). An ``Organization``
     or ``Society`` opens on its Faction Rules page, and a mission option opponent line on
-    its Placement page (#4361).
+    its Placement page (#4361). A ``WorshippedBeing`` opens on the Being Service
+    builder (#4333).
     """
     if isinstance(obj, ConditionStage):
         if obj.pk and is_soulfray_stage(obj):
@@ -71,6 +74,8 @@ def builder_label(obj: object) -> str:
         return "Open in Soulfray Stage Builder"
     if isinstance(obj, CreatureTemplate):
         return "Open the Standoff Profile Builder"
+    if isinstance(obj, WorshippedBeing):
+        return "Open the Being Service builder"
     if isinstance(obj, (Organization, Society)):
         return "Edit its faction rules"
     if isinstance(obj, MissionOptionOpponentLine):

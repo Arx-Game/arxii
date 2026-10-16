@@ -13,6 +13,7 @@ from django.db import models
 
 from core.managers import ArxSharedMemoryManager
 from core.models import ArxSharedMemoryModel as SharedMemoryModel
+from world.contributors.models import CreditedContent
 from world.magic.models.techniques import (
     AbstractAppliedCondition,
     AbstractDamageProfile,
@@ -26,6 +27,7 @@ from world.worship.constants import (
     DireStraitsKind,
     FavorAwardKind,
     MiracleTrigger,
+    PledgeCreditSource,
     RiteTier,
 )
 
@@ -761,6 +763,31 @@ class DevotionConfig(SharedMemoryModel):
             "Favor is not spent."
         ),
     )
+    favored_deed_percent = models.PositiveIntegerField(
+        default=100,
+        help_text=(
+            "Base deed favor, as a percent of the resonance granted, for a resonance the "
+            "being holds as Favored."
+        ),
+    )
+    associated_deed_percent = models.PositiveIntegerField(
+        default=50,
+        help_text=(
+            "Base deed favor, as a percent of the resonance granted, for a resonance the "
+            "being holds as Associated."
+        ),
+    )
+    weekly_deed_favor_cap = models.PositiveIntegerField(
+        default=8,
+        help_text="Base favor from deeds per game week, counted before the earning rate.",
+    )
+    sacrifice_value_per_favor = models.PositiveIntegerField(
+        default=10,
+        help_text=(
+            "Base favor per sacrificed item is its value divided by this, at least 1, "
+            "multiplied for a favored facet. Ceremony offerings keep their own flat amount."
+        ),
+    )
 
     class Meta:
         verbose_name = "Devotion config"
@@ -1279,3 +1306,167 @@ class Vision(SharedMemoryModel):
 
     def __str__(self) -> str:
         return f"Vision to {self.recipient} from {self.being} ({self.sent_at:%Y-%m-%d})"
+
+
+class Pledge(CreditedContent, SharedMemoryModel):
+    """A pledge type: a being's authored offer of service (#4333 slice 2).
+
+    A character who takes one has ``span_weeks`` game weeks to earn
+    ``favor_target`` favor with the being, from any source, and then closes it
+    by performing ``closing_rite``. Progress is the favor itself
+    (``Project.current_progress`` on the character's PLEDGE project), never a
+    separate counter.
+    """
+
+    being = models.ForeignKey(WorshippedBeing, on_delete=models.CASCADE, related_name="pledges")
+    name = models.CharField(max_length=100)
+    description = models.TextField(
+        blank=True,
+        default="",
+        help_text=(
+            "Shown to the player when they take the pledge. Progress is counted "
+            "automatically from favor."
+        ),
+    )
+    favor_target = models.PositiveIntegerField(
+        default=20, help_text="Favor to earn with the being after pledging, before closing."
+    )
+    span_weeks = models.PositiveSmallIntegerField(
+        default=2, help_text="Game weeks the character has to earn the target and close."
+    )
+    closing_rite = models.ForeignKey(
+        WorshipRite,
+        on_delete=models.PROTECT,
+        related_name="closing_for_pledges",
+        help_text="One of the being's own tier 1 or 2 rites; performing it closes the pledge.",
+    )
+    is_active = models.BooleanField(default=True)
+
+    class Meta:
+        ordering = ["being", "name"]
+        constraints = [
+            models.UniqueConstraint(fields=["being", "name"], name="unique_being_pledge_name"),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.name} ({self.being})"
+
+    def clean(self) -> None:
+        super().clean()
+        errors: dict[str, str] = {}
+        if self.favor_target == 0:
+            errors["favor_target"] = "A pledge needs a favor target above zero."
+        if self.span_weeks == 0:
+            errors["span_weeks"] = "A pledge lasts at least one game week."
+        if self.closing_rite_id is not None and self.being_id is not None:
+            rite = self.closing_rite
+            if rite.being_id != self.being_id:
+                errors["closing_rite"] = "The closing rite must be one of this being's own rites."
+            elif rite.kind.tier == RiteTier.PERILOUS:
+                errors["closing_rite"] = (
+                    "The closing rite must be tier 1 or 2; a tier 3 rite is a ceremony."
+                )
+        if errors:
+            raise ValidationError(errors)
+
+
+class PledgeDetails(SharedMemoryModel):
+    """Per-kind details of a PLEDGE ``Project`` (#4333 slice 2): one character's
+    open or finished pledge.
+
+    The project carries the favor target (``threshold_target``), the span
+    (``time_limit``) and the progress (``current_progress``). This sidecar names
+    who pledged what, the prayer they pledged with, and how the closing went:
+    ``close_attempts`` counts closing rites (a first failure leaves one retry,
+    Ruling 17) and ``closing_performance`` is the rite that resolved it. A
+    resolved pledge with no closing performance lapsed.
+    """
+
+    project = models.OneToOneField(
+        "arxii.Project", on_delete=models.CASCADE, related_name="pledge_details"
+    )
+    character_sheet = models.ForeignKey(
+        CHARACTER_SHEET_MODEL, on_delete=models.CASCADE, related_name="pledges"
+    )
+    pledge = models.ForeignKey(Pledge, on_delete=models.PROTECT, related_name="taken")
+    prayer = models.ForeignKey(
+        Prayer,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="+",
+        help_text="The player's prayer when taking the pledge; the text lives on the Prayer.",
+    )
+    closing_performance = models.OneToOneField(
+        WorshipRitePerformance,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="closed_pledge",
+        help_text="The closing rite that resolved the pledge. Empty for an open or lapsed one.",
+    )
+    close_attempts = models.PositiveSmallIntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        verbose_name = "Pledge details"
+        verbose_name_plural = "Pledge details"
+
+    def __str__(self) -> str:
+        return f"{self.character_sheet} pledged {self.pledge} (project #{self.project_id})"
+
+
+class PledgeCredit(SharedMemoryModel):
+    """One favor credit to a pledge, with its calculation (#4333 slice 2).
+
+    The audit row behind the pledge card's list: every favor write for the
+    pledge's being while it is open, plus the closing or lapse award. The
+    counter is ``Project.current_progress``; these rows explain it. ``base`` is
+    the favor before the earning rate, ``earning_rate_percent`` the rate applied
+    and ``credited`` what landed. The typed source rows say what the credit was
+    for: the resonance grant of a deed, the offering of a sacrifice, the rite
+    performance of a rite.
+    """
+
+    pledge_details = models.ForeignKey(
+        PledgeDetails, on_delete=models.CASCADE, related_name="credits"
+    )
+    source = models.CharField(max_length=20, choices=PledgeCreditSource.choices)
+    base = models.PositiveIntegerField(help_text="Favor before the earning rate.")
+    earning_rate_percent = models.PositiveIntegerField()
+    credited = models.PositiveIntegerField(help_text="Favor credited, at the earning rate.")
+    game_week = models.ForeignKey(
+        "arxii.GameWeek", on_delete=models.PROTECT, related_name="pledge_credits"
+    )
+    resonance_grant = models.OneToOneField(
+        "arxii.ResonanceGrant",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="pledge_credit",
+    )
+    offering = models.OneToOneField(
+        "arxii.CeremonyOffering",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="pledge_credit",
+    )
+    rite_performance = models.ForeignKey(
+        WorshipRitePerformance,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="pledge_credits",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["created_at", "pk"]
+        indexes = [
+            models.Index(fields=["source", "game_week"], name="pledge_credit_source_week"),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.get_source_display()} +{self.credited} ({self.pledge_details})"

@@ -609,6 +609,10 @@ class ActionRegistryTests(TestCase):
             "temple_revoke",
             "pray",
             "vision_send",
+            # #4333 slice 2 — pledges and sacrifices.
+            "pledge_take",
+            "pledge_close",
+            "sacrifice",
             "ceremony_open",
             "ceremony_offering",
             "ceremony_speech",

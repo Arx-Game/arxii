@@ -1,0 +1,223 @@
+{% extends "admin/base_site.html" %}
+{% load i18n static %}
+
+{% block title %}{{ title }} | {% translate 'Site administration' %}{% endblock %}
+
+{% block extrastyle %}
+{{ block.super }}
+{% comment %}
+A custom page extending `base_site.html` gets base.css, dark_mode.css and
+responsive.css only. `forms.css` (form rows, help, submit-row) is linked by
+`change_form.html`, so this page links it itself (#3667), and `widgets.css` with it
+for the facet picker.
+{% endcomment %}
+<link rel="stylesheet" href="{% static 'admin/css/forms.css' %}">
+<link rel="stylesheet" href="{% static 'admin/css/widgets.css' %}">
+{% endblock %}
+
+{% block extrahead %}
+{{ block.super }}
+<script src="{% url 'admin:jsi18n' %}"></script>
+{{ media }}
+<script src="{% static 'admin/js/builder_formsets.js' %}"></script>
+{% endblock %}
+
+{% block breadcrumbs %}
+<div class="breadcrumbs">
+  <a href="{% url 'admin:index' %}">{% translate 'Home' %}</a>
+  &rsaquo; <a href="{% url 'admin:arxii_worshippedbeing_changelist' %}">Worshipped beings</a>
+  &rsaquo; <a href="{{ change_url }}">{{ being.name }}</a>
+  &rsaquo; Service
+</div>
+{% endblock %}
+
+{# The page draws its own heading beside the object tools; admin's default title would repeat it. #}
+{% block content_title %}{% endblock %}
+
+{% block content %}
+{% include "admin/tuning/_panel_css.html" %}
+{% include "admin/being_service/_css.html" %}
+<div id="being-service-root">
+  <div class="bs-head">
+    <h1>Being Service builder: {{ being.name }}</h1>
+    <ul class="object-tools">
+      <li><a href="{{ change_url }}">Change being</a></li>
+      <li><a href="{{ deity_editor_url }}">Deity Editor</a></li>
+    </ul>
+  </div>
+
+  {% if needs_setup %}
+    {% include "admin/upbringing_builder/_setup.html" %}
+  {% else %}
+
+  <div class="bs-columns">
+    <div class="bs-main">
+      <form method="post">
+        {% csrf_token %}
+
+        <div class="module" id="resonances-module">
+          <h2>Resonances {{ being.name }} favors
+            <span class="bs-chip">deeds that grant these earn favor during a pledge</span></h2>
+          {{ resonances.management_form }}
+          {% if resonances.non_form_errors %}<p class="errornote">{{ resonances.non_form_errors }}</p>{% endif %}
+          <div class="bs-scroll">
+          <table class="tuning-table bs-table">
+            <thead><tr><th>Resonance</th><th>Tier</th><th>Deed favor</th>
+              <th>Granted to {{ being.name }}'s worshippers, last 30 days</th><th>Delete?</th></tr></thead>
+            <tbody id="resonances-body">
+              {% for f, ctx in resonance_rows %}
+              <tr>
+                {% for hidden in f.hidden_fields %}{{ hidden }}{% endfor %}
+                <td>{{ f.resonance.errors }}{{ f.resonance }}</td>
+                <td>{{ f.tier.errors }}{{ f.tier }}</td>
+                <td class="bs-context">{{ ctx.deed_favor }}</td>
+                <td class="bs-context">{{ ctx.grants }}</td>
+                <td>{% if f.instance.pk %}{{ f.DELETE }}{% endif %}</td>
+              </tr>
+              {% if f.non_field_errors %}<tr><td colspan="5">{{ f.non_field_errors }}</td></tr>{% endif %}
+              {% endfor %}
+            </tbody>
+          </table>
+          </div>
+          <template id="empty-resonance-template">
+            <tr>
+              {% for hidden in resonances.empty_form.hidden_fields %}{{ hidden }}{% endfor %}
+              <td>{{ resonances.empty_form.resonance }}</td>
+              <td>{{ resonances.empty_form.tier }}</td>
+              <td></td><td></td><td></td>
+            </tr>
+          </template>
+          <div class="bs-addrow">
+            <button type="button" class="button" id="add-resonance-btn"
+                    data-prefix="{{ resonances.prefix }}" data-target="resonances-body"
+                    data-template="empty-resonance-template">+ Add another resonance</button>
+          </div>
+          <div class="help bs-note"><b>Rule:</b> deed favor is a share of the resonance granted,
+            set in Devotion config. Favored also doubles rite awards, as today. The last column
+            shows which sources in play grant each resonance.</div>
+        </div>
+
+        <div class="module" id="facets-module">
+          <h2>Facets {{ being.name }} favors <span class="bs-chip">for sacrifices and offerings</span></h2>
+          <div class="form-row">
+            <div class="flex-container">
+              <label for="{{ facets.favored_facets.id_for_label }}">Favored facets:</label>
+              <div>
+                {{ facets.favored_facets.errors }}{{ facets.favored_facets }}
+                <div class="help">{{ facets.favored_facets.help_text }}</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="module" id="modifiers-module">
+          <h2>Favor modifiers for {{ being.name }}
+            <span class="bs-chip">read-only; each authored in its own admin</span></h2>
+          <div class="bs-scroll">
+          <table class="tuning-table bs-table">
+            <thead><tr><th>Target</th><th>Source</th><th>Value</th><th>Reach</th></tr></thead>
+            <tbody>
+              {% for row in modifier_rows %}
+              <tr>
+                <td>{{ row.target }}</td>
+                <td>{{ row.source }}{% if row.url %} <a href="{{ row.url }}">open</a>{% endif %}</td>
+                <td class="bs-context">{{ row.value }}</td>
+                <td class="bs-context">{{ row.reach }}</td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+          </div>
+          <div class="help bs-note">{{ being.name }}'s two favor targets are created when this page
+            opens. <b>Rule:</b> a favor invocation value is difficulty points eased (15 is one band);
+            a favor earning value is percent added to the earning rate. Distinction effects,
+            achievements, alternate forms, residence comfort, crafted items, covenant roles and
+            conditions can grant these.</div>
+        </div>
+
+        <div class="module" id="pledges-module">
+          <h2>Pledge types <span class="bs-chip">{{ active_pledges }} active</span></h2>
+          {{ pledges.management_form }}
+          {% if pledges.non_form_errors %}<p class="errornote">{{ pledges.non_form_errors }}</p>{% endif %}
+          <div id="pledges-body">
+            {% for f, pacing in pledge_rows %}
+            <div class="bs-pledge">
+              {% for hidden in f.hidden_fields %}{{ hidden }}{% endfor %}
+              <h3>Pledge type {{ forloop.counter }}{% if f.instance.pk %}: {{ f.instance.name }}{% else %} (new){% endif %}
+                {% if f.instance.pk %}<span class="bs-delete">{{ f.DELETE }} Delete</span>{% endif %}</h3>
+              {% if f.non_field_errors %}<p class="errornote">{{ f.non_field_errors }}</p>{% endif %}
+              <table class="tuning-table bs-table">
+                <tbody>
+                  <tr><th class="bs-label">{{ f.name.label_tag }}</th><td>{{ f.name.errors }}{{ f.name }}</td></tr>
+                  <tr><th class="bs-label">{{ f.description.label_tag }}</th>
+                    <td>{{ f.description.errors }}{{ f.description }}<div class="help">{{ f.description.help_text }}</div></td></tr>
+                  <tr><th class="bs-label">Favor target:</th>
+                    <td>{{ f.favor_target.errors }}{{ f.span_weeks.errors }}{{ f.favor_target }} favor within {{ f.span_weeks }} game weeks
+                      {% if pacing %}<div class="bs-linked">{{ pacing }}<br>Sacrifices, rites and prayer shorten this.</div>{% endif %}</td></tr>
+                  <tr><th class="bs-label">{{ f.closing_rite.label_tag }}</th>
+                    <td>{{ f.closing_rite.errors }}{{ f.closing_rite }}<div class="help">{{ f.closing_rite.help_text }}</div></td></tr>
+                  <tr><th class="bs-label">{{ f.is_active.label_tag }}</th><td>{{ f.is_active.errors }}{{ f.is_active }}</td></tr>
+                </tbody>
+              </table>
+            </div>
+            {% endfor %}
+          </div>
+          <template id="empty-pledge-template">
+            <div class="bs-pledge">
+              {% for hidden in pledges.empty_form.hidden_fields %}{{ hidden }}{% endfor %}
+              <h3>Pledge type (new)</h3>
+              <table class="tuning-table bs-table">
+                <tbody>
+                  <tr><th class="bs-label">{{ pledges.empty_form.name.label_tag }}</th><td>{{ pledges.empty_form.name }}</td></tr>
+                  <tr><th class="bs-label">{{ pledges.empty_form.description.label_tag }}</th>
+                    <td>{{ pledges.empty_form.description }}<div class="help">{{ pledges.empty_form.description.help_text }}</div></td></tr>
+                  <tr><th class="bs-label">Favor target:</th>
+                    <td>{{ pledges.empty_form.favor_target }} favor within {{ pledges.empty_form.span_weeks }} game weeks</td></tr>
+                  <tr><th class="bs-label">{{ pledges.empty_form.closing_rite.label_tag }}</th>
+                    <td>{{ pledges.empty_form.closing_rite }}<div class="help">{{ pledges.empty_form.closing_rite.help_text }}</div></td></tr>
+                  <tr><th class="bs-label">{{ pledges.empty_form.is_active.label_tag }}</th><td>{{ pledges.empty_form.is_active }}</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </template>
+          <div class="bs-addrow">
+            <button type="button" class="button" id="add-pledge-btn"
+                    data-prefix="{{ pledges.prefix }}" data-target="pledges-body"
+                    data-template="empty-pledge-template">+ Add another pledge type</button>
+          </div>
+        </div>
+
+        <div class="submit-row">
+          <input type="submit" name="save" value="Save" class="default">
+          <input type="submit" name="save_continue" value="Save and continue editing">
+          <a class="button" href="{{ change_url }}">Back to the being</a>
+        </div>
+      </form>
+    </div>
+
+    <aside class="bs-rail">
+      {% include "admin/being_service/_rail.html" %}
+    </aside>
+  </div>
+
+  {% endif %}
+</div>
+
+<script>
+(function () {
+  var formsets = window.arxBuilderFormsets;
+  function wire(buttonId, wrapperTag) {
+    var btn = document.getElementById(buttonId);
+    if (!btn) { return; }
+    btn.addEventListener("click", function () {
+      var index = formsets.nextFormIndex(btn.dataset.prefix);
+      var node = formsets.cloneFromTemplate(btn.dataset.template, index, wrapperTag);
+      document.getElementById(btn.dataset.target).appendChild(node);
+      formsets.announceFormsetAdded(btn.dataset.prefix, node);
+    });
+  }
+  wire("add-resonance-btn", "tbody");
+  wire("add-pledge-btn", "div");
+})();
+</script>
+{% endblock %}

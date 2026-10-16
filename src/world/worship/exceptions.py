@@ -164,3 +164,39 @@ class FavorInvocationRefused(Exception):
         if user_message is not None:
             self.user_message = user_message
         super().__init__(self.user_message)
+
+
+class PledgeError(Exception):
+    """A pledge or a sacrifice could not go ahead (#4333 slice 2). ``user_message``
+    is player-safe and names the reason."""
+
+    user_message = "That cannot be done with a pledge now."
+
+    def __init__(self, user_message: str | None = None) -> None:
+        if user_message is not None:
+            self.user_message = user_message
+        super().__init__(self.user_message)
+
+
+class PledgeUnavailable(PledgeError):
+    user_message = "That pledge is not offered."
+
+
+class PledgeAlreadyOpen(PledgeError):
+    user_message = "You already hold an open pledge. Close it or let it lapse first."
+
+
+class NoOpenPledge(PledgeError):
+    user_message = "You hold no open pledge."
+
+
+class PledgeNotReady(PledgeError):
+    user_message = "Your pledge has not reached its favor target yet."
+
+
+class PledgeSpanEnded(PledgeError):
+    user_message = "Your pledge's span has ended."
+
+
+class SacrificeRefused(PledgeError):
+    user_message = "You cannot sacrifice that here."

@@ -204,7 +204,7 @@ from commands.wedding import CmdWedding
 from commands.where import CmdWhere
 from commands.who import CmdWho
 from commands.windows import CmdCloseWindow, CmdOpenWindow
-from commands.worship import CmdInvoke, CmdPray, CmdVision
+from commands.worship import CmdInvoke, CmdPledge, CmdPray, CmdSacrifice, CmdVision
 
 
 class CharacterCmdSet(default_cmds.CharacterCmdSet):
@@ -529,6 +529,9 @@ class CharacterCmdSet(default_cmds.CharacterCmdSet):
             CmdVision,
             # #4333 — which beings a character can call on before a check, and how hard.
             CmdInvoke,
+            # #4333 slice 2 — pledges to a being, and sacrifices at its shrine or temple.
+            CmdPledge,
+            CmdSacrifice,
             # #1511 — organization membership lifecycle.
             CmdOrg,
             # #3293 — appeals to organizations.

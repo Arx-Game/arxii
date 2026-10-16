@@ -147,9 +147,46 @@ class CeremonyHonoree(SharedMemoryModel):
 
 
 class CeremonyOffering(SharedMemoryModel):
-    """An item sacrificed during the ceremony (the item itself is destroyed)."""
+    """An item sacrificed to a being (the item itself is destroyed).
 
-    ceremony = models.ForeignKey(Ceremony, on_delete=models.CASCADE, related_name="offerings")
+    Either during a ceremony (``ceremony`` set) or, since #4333 slice 2, as a
+    sacrifice at the being's shrine or temple outside one (``being`` set, with
+    the sacrificer's open pledge to it, if any). Exactly one of the two is set.
+    ``facet`` is the first of the being's favored facets the item carried, by
+    facet name, or empty when it carried none.
+    """
+
+    ceremony = models.ForeignKey(
+        Ceremony,
+        null=True,
+        blank=True,
+        on_delete=models.CASCADE,
+        related_name="offerings",
+    )
+    being = models.ForeignKey(
+        "arxii.WorshippedBeing",
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="sacrifices",
+        help_text="Set for a sacrifice outside a ceremony: the being it was given to.",
+    )
+    pledge_details = models.ForeignKey(
+        "arxii.PledgeDetails",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="sacrifices",
+        help_text="The sacrificer's open pledge to the being when it was given, if any.",
+    )
+    facet = models.ForeignKey(
+        "arxii.Facet",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="+",
+        help_text="The first of the being's favored facets the item carried, by name.",
+    )
     item_name = models.CharField(max_length=200)
     item_value = models.PositiveIntegerField(default=0)
     item_legend_value = models.PositiveIntegerField(
@@ -169,8 +206,19 @@ class CeremonyOffering(SharedMemoryModel):
 
     class Meta:
         ordering = ["id"]
+        constraints = [
+            models.CheckConstraint(
+                condition=(
+                    models.Q(ceremony__isnull=False, being__isnull=True)
+                    | models.Q(ceremony__isnull=True, being__isnull=False)
+                ),
+                name="ceremony_offering_ceremony_xor_being",
+            ),
+        ]
 
     def __str__(self) -> str:
+        if self.ceremony_id is None:
+            return f"{self.item_name} sacrificed to {self.being}"
         return f"{self.item_name} offered at {self.ceremony}"
 
 

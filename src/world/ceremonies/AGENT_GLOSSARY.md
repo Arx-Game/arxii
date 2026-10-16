@@ -9,7 +9,9 @@
 - **Honoree** — a character the rite recognizes (`CeremonyHonoree`); at a funeral,
   the deceased.
 - **Offering** — an item sacrificed (destroyed) to the rite; its value feeds the
-  being's worship pool and the honoree tally.
+  being's worship pool and the honoree tally. A `CeremonyOffering` row also records a
+  **sacrifice** outside any ceremony (#4333 slice 2, worship glossary): `being` set, no
+  `ceremony`; exactly one of the two is set. Both share `give_up_item`.
 - **Presented being** — what attendees see the rite performed for; the TRUE `being`
   differs only in a twisted rite and never leaves player-facing surfaces.
 - **Twisted rite** — a ceremony secretly serving the officiant's hidden god behind

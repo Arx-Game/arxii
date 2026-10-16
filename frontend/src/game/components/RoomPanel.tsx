@@ -19,6 +19,7 @@ import { CharactersList } from './room-panel/CharactersList';
 import { ExitsList } from './room-panel/ExitsList';
 import { PortalsBlock } from './room-panel/PortalsBlock';
 import { TrapsBlock } from './room-panel/TrapsBlock';
+import { HolySiteBlock } from './room-panel/HolySiteBlock';
 import { ObjectsList } from './room-panel/ObjectsList';
 import { NpcGiversBlock } from './room-panel/NpcGiversBlock';
 import { RoomEditorPanel } from './room-panel/RoomEditorPanel';
@@ -386,6 +387,7 @@ export function RoomPanel({
         viewerPersonaId={viewerPersonaId}
         viewerInScene={scene?.viewer_entered ?? null}
       />
+      <HolySiteBlock characterId={characterId} viewerEntryId={viewerEntryId} roomId={room.id} />
       <NpcGiversBlock npcGivers={room.npc_givers ?? []} />
       <ObjectsList objects={room.objects} characterId={characterId} accountId={accountId} />
       {room.hub && <HubTidingsPanel hub={room.hub} viewerEntryId={viewerEntryId} />}

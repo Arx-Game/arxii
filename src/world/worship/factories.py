@@ -336,3 +336,18 @@ class FavorInvocationFactory(factory.django.DjangoModelFactory):
     game_week = factory.LazyFunction(_current_game_week)
     outcome_tier = factory.SubFactory("world.traits.factories.CheckOutcomeFactory")
     bonus = 0
+
+
+class PledgeFactory(factory.django.DjangoModelFactory):
+    """A pledge type (#4333 slice 2): a being's offer of service, closed by one of its
+    own tier 1 rites."""
+
+    class Meta:
+        model = "arxii.Pledge"
+
+    being = factory.SubFactory(WorshippedBeingFactory)
+    name = factory.Sequence(lambda n: f"Pledge {n}")
+    description = "[PLACEHOLDER] staff-authored pledge description"
+    favor_target = 20
+    span_weeks = 2
+    closing_rite = factory.LazyAttribute(lambda o: WorshipRiteFactory(being=o.being))

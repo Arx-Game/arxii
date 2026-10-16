@@ -26296,6 +26296,48 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/worship/beings/{id}/service-terms/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description What earns favor with this being for a character, and their earning rate
+     *     (#4333 slice 2): the pledge dialog's system-generated list. For the sheet the
+     *     page names (one the requester plays, or any for staff), else the acting one.
+     */
+    get: operations['worship_beings_service_terms_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/worship/beings/holy-site/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description The beings holy where the acting character stands (#4333 slice 2): the
+     *     room's shrine and the temple over it, for the room's Pray, Sacrifice and
+     *     Pledge yourself controls.
+     */
+    get: operations['worship_beings_holy_site_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/worship/beings/invocation-options/': {
     parameters: {
       query?: never;
@@ -26345,6 +26387,80 @@ export interface paths {
     };
     /** @description Staff-facing miracle catalog browser (#2360). */
     get: operations['worship_miracles_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/worship/pledge-cards/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description Characters' pledges as their cards show them (#4333 slice 2), newest first:
+     *     the owner reads their own characters', staff read anyone's.
+     */
+    get: operations['worship_pledge_cards_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/worship/pledge-cards/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description Characters' pledges as their cards show them (#4333 slice 2), newest first:
+     *     the owner reads their own characters', staff read anyone's.
+     */
+    get: operations['worship_pledge_cards_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/worship/pledges/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description The pledge types beings offer (#4333 slice 2): what a worshipper can take. */
+    get: operations['worship_pledges_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/worship/pledges/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description The pledge types beings offer (#4333 slice 2): what a worshipper can take. */
+    get: operations['worship_pledges_retrieve'];
     put?: never;
     post?: never;
     delete?: never;
@@ -31774,6 +31890,12 @@ export interface components {
       class_level_unlock_id: number | null;
       ready: boolean;
     };
+    EarningRate: {
+      base: number;
+      chosen_bonus: number;
+      modifiers: number;
+      total: number;
+    };
     EffectRow: {
       kind: string;
       label: string;
@@ -34335,6 +34457,12 @@ export interface components {
     HoldingKindOption: {
       readonly id: number;
       name: string;
+    };
+    /** @description A being holy in the room the acting character stands in (#4333 slice 2). */
+    HolySite: {
+      being_id: number;
+      being_name: string;
+      site: string;
     };
     /**
      * @description * `short_term` - Short term
@@ -40269,6 +40397,21 @@ export interface components {
       previous?: string | null;
       results: components['schemas']['HeldClue'][];
     };
+    PaginatedHolySiteList: {
+      /** @example 123 */
+      count: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results: components['schemas']['HolySite'][];
+    };
     PaginatedInteractionFavoriteList: {
       /** @example 123 */
       count: number;
@@ -41169,6 +41312,36 @@ export interface components {
        */
       previous?: string | null;
       results: components['schemas']['PlayerReportDetail'][];
+    };
+    PaginatedPledgeCardList: {
+      /** @example 123 */
+      count: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results: components['schemas']['PledgeCard'][];
+    };
+    PaginatedPledgeList: {
+      /** @example 123 */
+      count: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results: components['schemas']['Pledge'][];
     };
     PaginatedPortalDestinationList: {
       /** @example 123 */
@@ -45441,6 +45614,49 @@ export interface components {
       location?: number | null;
       status?: components['schemas']['StatusD66Enum'];
     };
+    /** @description A pledge type a being offers (#4333 slice 2): the staff-authored text and terms. */
+    Pledge: {
+      readonly id: number;
+      readonly being: number;
+      readonly being_name: string;
+      readonly name: string;
+      /** @description Shown to the player when they take the pledge. Progress is counted automatically from favor. */
+      readonly description: string;
+      /** @description Favor to earn with the being after pledging, before closing. */
+      readonly favor_target: number;
+      /** @description Game weeks the character has to earn the target and close. */
+      readonly span_weeks: number;
+      readonly closing_rite_name: string;
+    };
+    /**
+     * @description One character's pledge as its card shows it (#4333 slice 2). Read by the
+     *     character's own player and by staff only.
+     */
+    PledgeCard: {
+      id: number;
+      character_sheet: number;
+      pledge: components['schemas']['Pledge'];
+      state: string;
+      progress: number;
+      target: number;
+      /** Format: date-time */
+      time_limit: string;
+      close_attempts: number;
+      retry_available: boolean;
+      favor: number;
+      credits: components['schemas']['PledgeCreditLine'][];
+      terms: components['schemas']['ServiceTerms'];
+    };
+    PledgeCreditLine: {
+      id: number;
+      source: string;
+      label: string;
+      calculation: string;
+      credited: number;
+      counts_toward_progress: boolean;
+      /** Format: date-time */
+      created_at: string;
+    };
     /** @description Per-category polish a decoration template grants on completion. */
     PolishIncrement: {
       category: string;
@@ -47653,6 +47869,18 @@ export interface components {
       /** @description Coppers per attempt. PLACEHOLDER. */
       readonly fee: number;
       readonly shop_room_id: number;
+    };
+    ServiceTermLine: {
+      label: string;
+      amount: string;
+    };
+    /** @description What earns favor with one being for the acting character (system-generated). */
+    ServiceTerms: {
+      being_id: number;
+      being_name: string;
+      rate: components['schemas']['EarningRate'];
+      lines: components['schemas']['ServiceTermLine'][];
+      weekly_deed_cap: number;
     };
     /** @description Read-only serializer for SessionRequest records. */
     SessionRequest: {
@@ -88489,6 +88717,62 @@ export interface operations {
       };
     };
   };
+  worship_beings_service_terms_retrieve: {
+    parameters: {
+      query?: {
+        /** @description A sheet the requester plays (the sheet page); wins over entry_id. */
+        character_sheet?: number;
+        /** @description The roster entry this tab acts as (#3479). */
+        entry_id?: number;
+      };
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this worshipped being. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['ServiceTerms'];
+        };
+      };
+    };
+  };
+  worship_beings_holy_site_list: {
+    parameters: {
+      query?: {
+        /** @description The roster entry this tab acts as (#3479). */
+        entry_id?: number;
+        /** @description A page number within the paginated result set. */
+        page?: number;
+        /** @description Number of results to return per page. */
+        page_size?: number;
+        /** @description A search term. */
+        search?: string;
+        tradition?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedHolySiteList'];
+        };
+      };
+    };
+  };
   worship_beings_invocation_options_retrieve: {
     parameters: {
       query?: {
@@ -88553,6 +88837,98 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['Miracle'];
+        };
+      };
+    };
+  };
+  worship_pledge_cards_list: {
+    parameters: {
+      query?: {
+        /** @description A page number within the paginated result set. */
+        page?: number;
+        /** @description Number of results to return per page. */
+        page_size?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedPledgeCardList'];
+        };
+      };
+    };
+  };
+  worship_pledge_cards_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PledgeCard'];
+        };
+      };
+    };
+  };
+  worship_pledges_list: {
+    parameters: {
+      query?: {
+        being?: number;
+        /** @description A page number within the paginated result set. */
+        page?: number;
+        /** @description Number of results to return per page. */
+        page_size?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedPledgeList'];
+        };
+      };
+    };
+  };
+  worship_pledges_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this pledge. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['Pledge'];
         };
       };
     };

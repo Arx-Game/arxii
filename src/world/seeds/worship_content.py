@@ -278,13 +278,24 @@ _INVOCATION_BONUSES = {
     "Critical Failure": 0,
 }
 
+#: Example closing awards by outcome (#4333 slice 2, design 3): base favor a pledge's
+#: closing rite pays, before the earning rate. A lapse at half the target or more pays
+#: the Partial Success row. PLACEHOLDER tuning.
+_CLOSING_AWARDS = {
+    "Critical Success": 8,
+    "Success": 5,
+    "Partial Success": 3,
+    "Failure": 2,
+    "Critical Failure": 0,
+}
+
 
 def ensure_favor_terms(check_type) -> None:
     """Seed the favor terms every character shares (#4333) and every being's targets.
 
     The ``DevotionConfig`` singleton (its default invocation check is the Ceremony
-    Rites check, when that exists and none is set yet), the example INVOCATION
-    ``FavorOutcomeAward`` rows, and each being's favor invocation and favor earning
+    Rites check, when that exists and none is set yet), the example INVOCATION and
+    CLOSING ``FavorOutcomeAward`` rows, and each being's favor invocation and favor earning
     ``ModifierTarget`` (``ensure_being_modifier_targets``). Idempotent; never
     overwrites a value staff set.
     """
@@ -300,16 +311,20 @@ def ensure_favor_terms(check_type) -> None:
         config.invocation_check_type = check_type
         config.save(update_fields=["invocation_check_type"])
     seed_check_resolution_tables()
-    for outcome_name, amount in _INVOCATION_BONUSES.items():
-        outcome = CheckOutcome.objects.filter(name=outcome_name).first()
-        if outcome is None:
-            continue
-        FavorOutcomeAward.objects.get_or_create(
-            config=config,
-            kind=FavorAwardKind.INVOCATION,
-            outcome_tier=outcome,
-            defaults={"amount": amount},
-        )
+    for kind, amounts in (
+        (FavorAwardKind.INVOCATION, _INVOCATION_BONUSES),
+        (FavorAwardKind.CLOSING, _CLOSING_AWARDS),
+    ):
+        for outcome_name, amount in amounts.items():
+            outcome = CheckOutcome.objects.filter(name=outcome_name).first()
+            if outcome is None:
+                continue
+            FavorOutcomeAward.objects.get_or_create(
+                config=config,
+                kind=kind,
+                outcome_tier=outcome,
+                defaults={"amount": amount},
+            )
     for being in WorshippedBeing.objects.all():
         ensure_being_modifier_targets(being)
 

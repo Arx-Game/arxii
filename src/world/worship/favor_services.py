@@ -140,8 +140,3 @@ def earning_rate(sheet: CharacterSheet, being: WorshippedBeing) -> int:
         rate += get_chosen_favor_config().earn_bonus_percent
     rate += favor_modifier_total(sheet, being, FAVOR_EARNING_CATEGORY_NAME)
     return max(rate, 0)
-
-
-def scale_by_earning_rate(sheet: CharacterSheet, being: WorshippedBeing, amount: int) -> int:
-    """``amount`` of favor at the character's earning rate, rounded down."""
-    return amount * earning_rate(sheet, being) // 100

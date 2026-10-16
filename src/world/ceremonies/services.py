@@ -6,6 +6,7 @@ here: being/presented mapping (10), belief-aligned devotion (11), bounded
 abandonment (12), retired honorees (13).
 """
 
+from dataclasses import dataclass
 import logging
 from typing import TYPE_CHECKING
 
@@ -37,9 +38,11 @@ if TYPE_CHECKING:
     )
     from world.character_sheets.models import CharacterSheet
     from world.items.models import ItemInstance
+    from world.magic.models import Facet
     from world.scenes.models import Persona
     from world.societies.models import PhilosophicalArchetype
-    from world.worship.models import WorshippedBeing, WorshipRite
+    from world.worship.models import WorshipGrant, WorshippedBeing, WorshipRite
+    from world.worship.types import SacrificeOutcome
 
 logger = logging.getLogger(__name__)
 
@@ -292,6 +295,59 @@ def _create_open_side_offers(ceremony: Ceremony, officiant_sheet: "CharacterShee
         )
 
 
+@dataclass(frozen=True)
+class OfferedItem:
+    """One item given up to a being, read before it was destroyed (#4333 slice 2).
+
+    ``percent`` is the favored-facet multiplier that applied (100 for none) and
+    ``facet`` the favored facet it carried, if any.
+    """
+
+    name: str
+    value: int
+    legend_value: int
+    percent: int
+    facet: "Facet | None"
+    worship_grant: "WorshipGrant | None"
+
+
+def give_up_item(
+    instance: "ItemInstance",
+    being: "WorshippedBeing",
+    *,
+    facet: "Facet | None",
+    granted_by: "CharacterSheet",
+    reason: str,
+) -> OfferedItem:
+    """Destroy an offered item and feed ``being``'s pool from its value.
+
+    The shared step of a ceremony offering and a shrine sacrifice (#3777, #4333):
+    an item carrying one of the being's favored facets multiplies the pool grant
+    by the configured ``offering_favored_facet_multiplier_percent``.
+    """
+    from world.items.services.usage import hard_delete_item_instance  # noqa: PLC0415
+    from world.worship.services import grant_worship  # noqa: PLC0415
+
+    config = get_ceremony_config()
+    percent = config.offering_favored_facet_multiplier_percent if facet is not None else 100
+    value = instance.template.value
+    legend_value = instance.legend_value
+    name = str(instance)
+    hard_delete_item_instance(instance)
+    grant = None
+    credited = value * config.offering_resonance_per_value * percent // 100
+    if credited > 0:
+        grant = grant_worship(being, credited, granted_by=granted_by, reason=reason)
+    return OfferedItem(
+        name=name,
+        value=value,
+        legend_value=legend_value,
+        percent=percent,
+        facet=facet,
+        worship_grant=grant,
+    )
+
+
 def record_offering(
     *, ceremony: Ceremony, item_instances: "list[ItemInstance]"
 ) -> list[CeremonyOffering]:
@@ -303,52 +359,48 @@ def record_offering(
     truth, so their devotion tracks the true being).
     """
     _require_open(ceremony)
-    from world.items.services.usage import hard_delete_item_instance  # noqa: PLC0415
-    from world.worship.services import bump_devotion, grant_worship  # noqa: PLC0415
+    from world.worship.constants import PledgeCreditSource  # noqa: PLC0415
+    from world.worship.services import bump_devotion  # noqa: PLC0415
+    from world.worship.types import FavorSource  # noqa: PLC0415
 
     config = get_ceremony_config()
     officiant_sheet = ceremony.officiant.character_sheet
-    favored_item_ids = _favored_offering_ids(ceremony.being, item_instances)
+    facets = favored_facets_by_item(ceremony.being, item_instances)
     offerings: list[CeremonyOffering] = []
     for instance in item_instances:
         # #3777: an item carrying a facet the TRUE being favors pleases it more;
         # the multiplier scales the pool grant and the offerer's devotion alike.
-        percent = (
-            config.offering_favored_facet_multiplier_percent
-            if instance.pk in favored_item_ids
-            else 100
+        offered = give_up_item(
+            instance,
+            ceremony.being,
+            facet=facets.get(instance.pk),
+            granted_by=officiant_sheet,
+            reason=f"ceremony:{ceremony.pk}",
         )
-        value = instance.template.value
-        legend_value = instance.legend_value
-        name = str(instance)
-        hard_delete_item_instance(instance)
-        grant = None
-        credited = value * config.offering_resonance_per_value * percent // 100
-        if credited > 0:
-            grant = grant_worship(
-                ceremony.being,
-                credited,
-                granted_by=officiant_sheet,
-                reason=f"ceremony:{ceremony.pk}",
-            )
-        offerings.append(
-            CeremonyOffering.objects.create(
-                ceremony=ceremony,
-                item_name=name,
-                item_value=value,
-                item_legend_value=legend_value,
-                worship_grant=grant,
-                offered_by=ceremony.officiant,
-            )
+        offering = CeremonyOffering.objects.create(
+            ceremony=ceremony,
+            item_name=offered.name,
+            item_value=offered.value,
+            item_legend_value=offered.legend_value,
+            worship_grant=offered.worship_grant,
+            offered_by=ceremony.officiant,
+            facet=offered.facet,
         )
+        offerings.append(offering)
         bump_devotion(
-            officiant_sheet, ceremony.being, config.devotion_per_offering * percent // 100
+            officiant_sheet,
+            ceremony.being,
+            config.devotion_per_offering * offered.percent // 100,
+            source=FavorSource(kind=PledgeCreditSource.CEREMONY_OFFERING, offering=offering),
         )
     return offerings
 
 
-def _favored_offering_ids(being, item_instances: "list[ItemInstance]") -> set[int]:
-    """The pks of ``item_instances`` carrying a Facet ``being`` favors (BeingFacet).
+def favored_facets_by_item(
+    being: "WorshippedBeing", item_instances: "list[ItemInstance]"
+) -> "dict[int, Facet]":
+    """Each of ``item_instances`` carrying a Facet ``being`` favors (BeingFacet),
+    mapped to the first such facet by facet name.
 
     One query over the being's favored facets and one over the offered items'
     ItemFacet rows, before anything is deleted; empty when the being favors
@@ -358,12 +410,15 @@ def _favored_offering_ids(being, item_instances: "list[ItemInstance]") -> set[in
 
     favored_facet_ids = set(being.being_facets.values_list("facet_id", flat=True))
     if not favored_facet_ids or not item_instances:
-        return set()
-    return set(
-        ItemFacet.objects.filter(
-            item_instance__in=item_instances, facet_id__in=favored_facet_ids
-        ).values_list("item_instance_id", flat=True)
-    )
+        return {}
+    found: dict[int, Facet] = {}
+    for row in (
+        ItemFacet.objects.filter(item_instance__in=item_instances, facet_id__in=favored_facet_ids)
+        .select_related("facet")
+        .order_by("facet__name", "pk")
+    ):
+        found.setdefault(row.item_instance_id, row.facet)
+    return found
 
 
 def record_speech(
@@ -438,7 +493,9 @@ def finish_ceremony(*, ceremony: Ceremony, sincere: bool | None = None) -> Cerem
         _require_wedding_consent(ceremony)
     from world.checks.models import CheckType  # noqa: PLC0415
     from world.checks.services import perform_check_with_modifiers  # noqa: PLC0415
+    from world.worship.constants import PledgeCreditSource  # noqa: PLC0415
     from world.worship.services import bump_devotion  # noqa: PLC0415
+    from world.worship.types import FavorSource  # noqa: PLC0415
 
     config = get_ceremony_config()
     officiant_sheet = ceremony.officiant.character_sheet
@@ -499,7 +556,12 @@ def finish_ceremony(*, ceremony: Ceremony, sincere: bool | None = None) -> Cerem
                 officiant_sheet,
                 f"Officiated a {ceremony.ceremony_type.name.lower()} PLACEHOLDER",
             )
-    bump_devotion(officiant_sheet, ceremony.being, config.devotion_officiant)
+    bump_devotion(
+        officiant_sheet,
+        ceremony.being,
+        config.devotion_officiant,
+        source=FavorSource(kind=PledgeCreditSource.CEREMONY),
+    )
     _pay_rite_award(ceremony, officiant_sheet, rites_outcome, rite_award)
 
     _run_type_specific_finish(ceremony, honorees)
@@ -1032,3 +1094,126 @@ def _mint_ceremony_deed(
         archetypes=archetypes,
         scene=scene,
     )
+
+
+# ---------------------------------------------------------------------------
+# Sacrifices outside a ceremony (#4333 slice 2, design 2)
+# ---------------------------------------------------------------------------
+
+
+def _sacrifice_site(
+    sheet: "CharacterSheet", being: "WorshippedBeing | None"
+) -> "tuple[WorshippedBeing, str]":
+    """The being a sacrifice here goes to, and "shrine" or "temple".
+
+    A shrine in the room or a temple over it qualifies, each for its own being.
+    With both present for different beings, ``being`` chooses.
+    """
+    from world.worship.exceptions import SacrificeRefused  # noqa: PLC0415
+    from world.worship.pledge_services import holy_sites_here  # noqa: PLC0415
+
+    sites = holy_sites_here(sheet)
+    if being is not None:
+        sites = [site for site in sites if site.being.pk == being.pk]
+    if not sites:
+        msg = (
+            f"There is no shrine or temple of {being.name} here."
+            if being is not None
+            else "There is no shrine or temple here to sacrifice at."
+        )
+        raise SacrificeRefused(msg)
+    if len({site.being.pk for site in sites}) > 1:
+        msg = "This place is holy to more than one being; name the one you sacrifice to."
+        raise SacrificeRefused(msg)
+    return sites[0].being, sites[0].site
+
+
+def sacrifice_items(
+    sheet: "CharacterSheet",
+    item_instances: "list[ItemInstance]",
+    *,
+    being: "WorshippedBeing | None" = None,
+) -> "SacrificeOutcome":
+    """Give items up to a being at its shrine or temple, outside a ceremony.
+
+    Each item is destroyed through ``give_up_item`` (the step ceremony offerings
+    share), feeding the being's pool. Base favor per item is its value divided
+    by ``DevotionConfig.sacrifice_value_per_favor``, at least 1, multiplied by
+    the favored-facet multiplier when it carries one of the being's favored
+    facets; ``bump_devotion`` then applies the earning rate and credits an open
+    pledge to the being. Each item writes a ``CeremonyOffering`` with ``being``
+    set, the open pledge (if it is to this being) and the recorded facet, and
+    one room line: "<name> sacrifices <item> at <being>'s shrine."
+    """
+    from world.scenes.services import active_persona_for_sheet  # noqa: PLC0415
+    from world.worship.constants import PledgeCreditSource  # noqa: PLC0415
+    from world.worship.exceptions import SacrificeRefused  # noqa: PLC0415
+    from world.worship.invocation_services import get_devotion_config  # noqa: PLC0415
+    from world.worship.pledge_services import (  # noqa: PLC0415
+        broadcast_room_line,
+        multiplier_label,
+        open_pledge_for,
+    )
+    from world.worship.services import bump_devotion  # noqa: PLC0415
+    from world.worship.types import FavorSource, SacrificedItem, SacrificeOutcome  # noqa: PLC0415
+
+    if not item_instances:
+        msg = "Sacrifice what?"
+        raise SacrificeRefused(msg)
+    if being is not None and not being.is_active:
+        raise SacrificeRefused
+    target, site = _sacrifice_site(sheet, being)
+    character = sheet.character
+    for instance in item_instances:
+        if instance.game_object is None or instance.game_object.location != character:
+            msg = f"You are not carrying {instance}."
+            raise SacrificeRefused(msg)
+    persona = active_persona_for_sheet(sheet)
+    per_favor = max(get_devotion_config().sacrifice_value_per_favor, 1)
+    details = open_pledge_for(sheet)
+    if details is not None and details.pledge.being_id != target.pk:
+        details = None
+    facets = favored_facets_by_item(target, item_instances)
+    sacrificed: list[SacrificedItem] = []
+    with transaction.atomic():
+        for instance in item_instances:
+            offered = give_up_item(
+                instance,
+                target,
+                facet=facets.get(instance.pk),
+                granted_by=sheet,
+                reason=f"sacrifice:{site}",
+            )
+            offering = CeremonyOffering.objects.create(
+                being=target,
+                pledge_details=details,
+                facet=offered.facet,
+                item_name=offered.name,
+                item_value=offered.value,
+                item_legend_value=offered.legend_value,
+                worship_grant=offered.worship_grant,
+                offered_by=persona,
+            )
+            raw = max(offered.value // per_favor, 1)
+            base = raw * offered.percent // 100
+            bump = bump_devotion(
+                sheet,
+                target,
+                base,
+                source=FavorSource(kind=PledgeCreditSource.SACRIFICE, offering=offering),
+            )
+            calculation = f"Value {offered.value}: {raw} base"
+            if offered.facet is not None:
+                calculation += (
+                    f", {multiplier_label(offered.percent)} {offered.facet.name} = {base}"
+                )
+            calculation += f", at {bump.earning_rate_percent}% = +{bump.credited}"
+            sacrificed.append(
+                SacrificedItem(name=offered.name, credited=bump.credited, calculation=calculation)
+            )
+            broadcast_room_line(
+                persona,
+                f"{persona.name} sacrifices {offered.name} at {target.name}'s {site}.",
+                location=character.location,
+            )
+    return SacrificeOutcome(being=target, site=site, items=sacrificed)

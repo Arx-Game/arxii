@@ -44,6 +44,10 @@ class ProjectKind(models.TextChoices):
     FRAME_JOB = "FRAME_JOB", "Frame Job"
     WAR_FUNDING = "WAR_FUNDING", "War Funding"
     CLEANUP = "CLEANUP", "Area Cleanup"
+    # #4333: a character's pledge to a being. Expiry-only (see
+    # ``register_expiry_only_kind``): reaching its favor target never resolves it;
+    # its closing rite or its time limit does. Details model + handler in world.worship.
+    PLEDGE = "PLEDGE", "Pledge"
 
 
 class ProjectStatus(models.TextChoices):

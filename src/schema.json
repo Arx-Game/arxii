@@ -42406,6 +42406,87 @@ paths:
               schema:
                 $ref: '#/components/schemas/WorshippedBeingRef'
           description: ''
+  /api/worship/beings/{id}/service-terms/:
+    get:
+      operationId: worship_beings_service_terms_retrieve
+      description: |-
+        What earns favor with this being for a character, and their earning rate
+        (#4333 slice 2): the pledge dialog's system-generated list. For the sheet the
+        page names (one the requester plays, or any for staff), else the acting one.
+      parameters:
+      - in: query
+        name: character_sheet
+        schema:
+          type: integer
+        description: A sheet the requester plays (the sheet page); wins over entry_id.
+      - in: query
+        name: entry_id
+        schema:
+          type: integer
+        description: The roster entry this tab acts as (#3479).
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this worshipped being.
+        required: true
+      tags:
+      - worship
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ServiceTerms'
+          description: ''
+  /api/worship/beings/holy-site/:
+    get:
+      operationId: worship_beings_holy_site_list
+      description: |-
+        The beings holy where the acting character stands (#4333 slice 2): the
+        room's shrine and the temple over it, for the room's Pray, Sacrifice and
+        Pledge yourself controls.
+      parameters:
+      - in: query
+        name: entry_id
+        schema:
+          type: integer
+        description: The roster entry this tab acts as (#3479).
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      - name: search
+        required: false
+        in: query
+        description: A search term.
+        schema:
+          type: string
+      - in: query
+        name: tradition
+        schema:
+          type: integer
+      tags:
+      - worship
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedHolySiteList'
+          description: ''
   /api/worship/beings/invocation-options/:
     get:
       operationId: worship_beings_invocation_options_retrieve
@@ -42481,6 +42562,115 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Miracle'
+          description: ''
+  /api/worship/pledge-cards/:
+    get:
+      operationId: worship_pledge_cards_list
+      description: |-
+        Characters' pledges as their cards show them (#4333 slice 2), newest first:
+        the owner reads their own characters', staff read anyone's.
+      parameters:
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      tags:
+      - worship
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedPledgeCardList'
+          description: ''
+  /api/worship/pledge-cards/{id}/:
+    get:
+      operationId: worship_pledge_cards_retrieve
+      description: |-
+        Characters' pledges as their cards show them (#4333 slice 2), newest first:
+        the owner reads their own characters', staff read anyone's.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+        required: true
+      tags:
+      - worship
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PledgeCard'
+          description: ''
+  /api/worship/pledges/:
+    get:
+      operationId: worship_pledges_list
+      description: 'The pledge types beings offer (#4333 slice 2): what a worshipper
+        can take.'
+      parameters:
+      - in: query
+        name: being
+        schema:
+          type: integer
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      tags:
+      - worship
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedPledgeList'
+          description: ''
+  /api/worship/pledges/{id}/:
+    get:
+      operationId: worship_pledges_retrieve
+      description: 'The pledge types beings offer (#4333 slice 2): what a worshipper
+        can take.'
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this pledge.
+        required: true
+      tags:
+      - worship
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Pledge'
           description: ''
   /api/worship/prayers/:
     get:
@@ -54060,6 +54250,22 @@ components:
       - ready
       - requirements_met
       - xp_cost
+    EarningRate:
+      type: object
+      properties:
+        base:
+          type: integer
+        chosen_bonus:
+          type: integer
+        modifiers:
+          type: integer
+        total:
+          type: integer
+      required:
+      - base
+      - chosen_bonus
+      - modifiers
+      - total
     EffectRow:
       type: object
       properties:
@@ -59483,6 +59689,21 @@ components:
       required:
       - id
       - name
+    HolySite:
+      type: object
+      description: A being holy in the room the acting character stands in (#4333
+        slice 2).
+      properties:
+        being_id:
+          type: integer
+        being_name:
+          type: string
+        site:
+          type: string
+      required:
+      - being_id
+      - being_name
+      - site
     HorizonEnum:
       enum:
       - short_term
@@ -70724,6 +70945,29 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/HeldClue'
+    PaginatedHolySiteList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/HolySite'
     PaginatedInteractionFavoriteList:
       type: object
       required:
@@ -72163,6 +72407,52 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/PlayerReportDetail'
+    PaginatedPledgeCardList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/PledgeCard'
+    PaginatedPledgeList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/Pledge'
     PaginatedPortalDestinationList:
       type: object
       required:
@@ -79552,6 +79842,120 @@ components:
       - behavior_description
       - reported_persona
       - reporter_persona
+    Pledge:
+      type: object
+      description: 'A pledge type a being offers (#4333 slice 2): the staff-authored
+        text and terms.'
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        being:
+          type: integer
+          readOnly: true
+        being_name:
+          type: string
+          readOnly: true
+        name:
+          type: string
+          readOnly: true
+        description:
+          type: string
+          readOnly: true
+          description: Shown to the player when they take the pledge. Progress is
+            counted automatically from favor.
+        favor_target:
+          type: integer
+          readOnly: true
+          description: Favor to earn with the being after pledging, before closing.
+        span_weeks:
+          type: integer
+          readOnly: true
+          description: Game weeks the character has to earn the target and close.
+        closing_rite_name:
+          type: string
+          readOnly: true
+      required:
+      - being
+      - being_name
+      - closing_rite_name
+      - description
+      - favor_target
+      - id
+      - name
+      - span_weeks
+    PledgeCard:
+      type: object
+      description: |-
+        One character's pledge as its card shows it (#4333 slice 2). Read by the
+        character's own player and by staff only.
+      properties:
+        id:
+          type: integer
+        character_sheet:
+          type: integer
+        pledge:
+          $ref: '#/components/schemas/Pledge'
+        state:
+          type: string
+        progress:
+          type: integer
+        target:
+          type: integer
+        time_limit:
+          type: string
+          format: date-time
+        close_attempts:
+          type: integer
+        retry_available:
+          type: boolean
+        favor:
+          type: integer
+        credits:
+          type: array
+          items:
+            $ref: '#/components/schemas/PledgeCreditLine'
+        terms:
+          $ref: '#/components/schemas/ServiceTerms'
+      required:
+      - character_sheet
+      - close_attempts
+      - credits
+      - favor
+      - id
+      - pledge
+      - progress
+      - retry_available
+      - state
+      - target
+      - terms
+      - time_limit
+    PledgeCreditLine:
+      type: object
+      properties:
+        id:
+          type: integer
+        source:
+          type: string
+        label:
+          type: string
+        calculation:
+          type: string
+        credited:
+          type: integer
+        counts_toward_progress:
+          type: boolean
+        created_at:
+          type: string
+          format: date-time
+      required:
+      - calculation
+      - counts_toward_progress
+      - created_at
+      - credited
+      - id
+      - label
+      - source
     PolishIncrement:
       type: object
       description: Per-category polish a decoration template grants on completion.
@@ -84243,6 +84647,38 @@ components:
       - id
       - recipe_kind
       - shop_room_id
+    ServiceTermLine:
+      type: object
+      properties:
+        label:
+          type: string
+        amount:
+          type: string
+      required:
+      - amount
+      - label
+    ServiceTerms:
+      type: object
+      description: What earns favor with one being for the acting character (system-generated).
+      properties:
+        being_id:
+          type: integer
+        being_name:
+          type: string
+        rate:
+          $ref: '#/components/schemas/EarningRate'
+        lines:
+          type: array
+          items:
+            $ref: '#/components/schemas/ServiceTermLine'
+        weekly_deed_cap:
+          type: integer
+      required:
+      - being_id
+      - being_name
+      - lines
+      - rate
+      - weekly_deed_cap
     SessionRequest:
       type: object
       description: Read-only serializer for SessionRequest records.

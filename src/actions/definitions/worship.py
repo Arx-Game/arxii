@@ -78,6 +78,7 @@ class PerformWorshipRiteAction(Action):
             outcome = perform_worship_rite(sheet, rite, scene=scene)
         except WorshipRiteError as exc:
             return ActionResult(success=False, message=exc.user_message)
+        _broadcast_rite_line(sheet, rite, actor)
         parts = [
             f"You perform {rite.name} in the name of {rite.being.name}: {outcome.outcome_name}."
         ]
@@ -103,8 +104,15 @@ def _resolve_being(kwargs: dict[str, Any]):
     from world.worship.models import WorshippedBeing  # noqa: PLC0415
 
     being = kwargs.get("being")
-    if being is not None:
+    if isinstance(being, WorshippedBeing):
         return being, None
+    if being not in (None, ""):
+        # The web dispatches the being's pk (``PrayDialog``, the pledge and
+        # sacrifice dialogs); telnet names it.
+        row = WorshippedBeing.objects.filter(pk=being, is_active=True).first()
+        if row is None:
+            return None, ActionResult(success=False, message="No such being is known.")
+        return row, None
     name = (kwargs.get("being_name") or "").strip()
     if not name:
         return None, ActionResult(success=False, message="Name the being.")
@@ -421,3 +429,260 @@ class SendVisionAction(Action):
             message=f"A vision from {being.name} reaches {recipient.character.key}.",
             data={"vision_id": vision.pk},
         )
+
+
+def _broadcast_rite_line(sheet, rite, actor: ObjectDB) -> None:
+    """The room line every performed rite gets (#4333): "<name> performs <rite>."
+    It says nothing of the roll, the reward or a pledge the rite closes."""
+    from world.scenes.services import active_persona_for_sheet  # noqa: PLC0415
+    from world.worship.pledge_services import broadcast_room_line  # noqa: PLC0415
+
+    persona = active_persona_for_sheet(sheet)
+    broadcast_room_line(persona, f"{persona.name} performs {rite.name}.", location=actor.location)
+
+
+def _resolve_pledge(kwargs: dict[str, Any]):
+    """(pledge, error): a ``pledge`` object or pk wins; else ``pledge_name`` + ``being_name``."""
+    from world.worship.models import Pledge  # noqa: PLC0415
+
+    pledge = kwargs.get("pledge")
+    if isinstance(pledge, Pledge):
+        return pledge, None
+    if pledge not in (None, ""):
+        row = Pledge.objects.filter(pk=pledge).select_related("being").first()
+        if row is None:
+            return None, ActionResult(success=False, message="No such pledge.")
+        return row, None
+    name = (kwargs.get("pledge_name") or "").strip()
+    being_name = (kwargs.get("being_name") or "").strip()
+    if not name or not being_name:
+        return None, ActionResult(success=False, message="Name the being and the pledge.")
+    row = (
+        Pledge.objects.filter(name__iexact=name, being__name__iexact=being_name, is_active=True)
+        .select_related("being")
+        .first()
+    )
+    if row is None:
+        return None, ActionResult(
+            success=False, message=f"{being_name} offers no pledge called '{name}'."
+        )
+    return row, None
+
+
+@dataclass
+class TakePledgeAction(Action):
+    """Pledge yourself to a being (#4333 slice 2).
+
+    kwargs:
+        pledge: a ``Pledge`` or its pk; or ``pledge_name`` with ``being_name``.
+        prayer: optional words to the being, logged as a Prayer.
+    """
+
+    key: str = "pledge_take"
+    name: str = "Pledge Yourself"
+    icon: str = "hand-heart"
+    category: str = "worship"
+    target_type: TargetType = TargetType.SELF
+
+    def execute(
+        self, actor: ObjectDB, context: ActionContext | None = None, **kwargs: Any
+    ) -> ActionResult:
+        from world.worship.exceptions import PledgeError  # noqa: PLC0415
+        from world.worship.pledge_services import (  # noqa: PLC0415
+            earning_rate_breakdown,
+            take_pledge,
+        )
+
+        pledge, error = _resolve_pledge(kwargs)
+        if error is not None:
+            return error
+        sheet = _sheet_of(actor)
+        if sheet is None:
+            return ActionResult(success=False, message="You have no character sheet.")
+        try:
+            details = take_pledge(sheet, pledge, prayer_text=str(kwargs.get("prayer") or ""))
+        except PledgeError as exc:
+            return ActionResult(success=False, message=exc.user_message)
+        rate = earning_rate_breakdown(sheet, pledge.being)
+        weeks = "game week" if pledge.span_weeks == 1 else "game weeks"
+        rate_parts = f"{rate.base}%"
+        if rate.chosen_bonus:
+            rate_parts += f" + {rate.chosen_bonus}% Chosen"
+        if rate.modifiers:
+            rate_parts += f" + {rate.modifiers}% favor earning modifiers"
+        message = (
+            f"You pledge yourself to {pledge.being.name}: {pledge.name}. "
+            f"Favor target {pledge.favor_target} within {pledge.span_weeks} {weeks}. "
+            f"Your earning rate with {pledge.being.name}: {rate.total}% ({rate_parts})."
+        )
+        return ActionResult(
+            success=True,
+            message=message,
+            data={"pledge_details_id": details.pk, "project_id": details.project_id},
+        )
+
+
+@dataclass
+class ClosePledgeAction(Action):
+    """Close your open pledge with its closing rite (#4333 slice 2, design 3).
+
+    Needs the favor target reached. Performed in the live scene where you stand;
+    one is started if none runs. No shrine is required.
+    """
+
+    key: str = "pledge_close"
+    name: str = "Close Pledge"
+    icon: str = "flame"
+    category: str = "worship"
+    target_type: TargetType = TargetType.SELF
+
+    def execute(
+        self, actor: ObjectDB, context: ActionContext | None = None, **kwargs: Any
+    ) -> ActionResult:
+        from world.worship.exceptions import PledgeError, WorshipRiteError  # noqa: PLC0415
+        from world.worship.pledge_services import (  # noqa: PLC0415
+            close_pledge,
+            open_pledge_for,
+        )
+
+        sheet = _sheet_of(actor)
+        if sheet is None:
+            return ActionResult(success=False, message="You have no character sheet.")
+        details = open_pledge_for(sheet)
+        if details is None:
+            return ActionResult(success=False, message="You hold no open pledge.")
+        project = details.project
+        if project.current_progress < (project.threshold_target or 0):
+            return ActionResult(
+                success=False, message="Your pledge has not reached its favor target yet."
+            )
+        scene, error = _scene_to_close_in(actor, sheet)
+        if error is not None:
+            return error
+        try:
+            outcome = close_pledge(sheet, scene=scene)
+        except (PledgeError, WorshipRiteError) as exc:
+            return ActionResult(success=False, message=exc.user_message)
+        _broadcast_rite_line(sheet, outcome.rite, actor)
+        being = details.pledge.being.name
+        if not outcome.resolved:
+            message = (
+                f"You close your pledge with {outcome.rite.name}: {outcome.outcome_name}. "
+                f"{being} has not accepted it yet; you may try once more within the span."
+            )
+        else:
+            message = (
+                f"You close your pledge with {outcome.rite.name}: {outcome.outcome_name}. "
+                f"Closing award for {outcome.outcome_name}: {outcome.award_base} base, at "
+                f"{outcome.earning_rate_percent}% = +{outcome.award} favor with {being}."
+                if outcome.award
+                else f"You close your pledge with {outcome.rite.name}: {outcome.outcome_name}."
+            )
+        return ActionResult(
+            success=True,
+            message=message,
+            data={
+                "outcome": outcome.outcome_name,
+                "resolved": outcome.resolved,
+                "award": outcome.award,
+            },
+        )
+
+
+def _scene_to_close_in(actor: ObjectDB, sheet):
+    """(scene, error): the room's live scene with the actor in it, starting or
+    joining one through ``StartSceneAction`` when needed."""
+    from actions.definitions.scenes import StartSceneAction  # noqa: PLC0415
+    from world.scenes.interaction_services import get_active_scene  # noqa: PLC0415
+    from world.worship.rite_services import scene_participant  # noqa: PLC0415
+
+    scene = get_active_scene(actor.location)
+    if scene is None or not scene_participant(scene, sheet):
+        started = StartSceneAction().run(actor=actor)
+        if not started.success:
+            return None, started
+        scene = get_active_scene(actor.location)
+    if scene is None:
+        return None, ActionResult(success=False, message="A pledge is closed in a live scene.")
+    return scene, None
+
+
+@dataclass
+class SacrificeAction(Action):
+    """Sacrifice items you carry at a being's shrine or temple (#4333 slice 2).
+
+    kwargs:
+        item_ids: ItemInstance pks (web), or item_names to search your inventory (telnet).
+        being / being_name: optional, when the place is holy to two beings.
+    """
+
+    key: str = "sacrifice"
+    name: str = "Sacrifice"
+    icon: str = "flame"
+    category: str = "worship"
+    target_type: TargetType = TargetType.SELF
+
+    def execute(
+        self, actor: ObjectDB, context: ActionContext | None = None, **kwargs: Any
+    ) -> ActionResult:
+        from world.ceremonies.services import sacrifice_items  # noqa: PLC0415
+        from world.worship.exceptions import PledgeError  # noqa: PLC0415
+
+        sheet = _sheet_of(actor)
+        if sheet is None:
+            return ActionResult(success=False, message="You have no character sheet.")
+        being = None
+        if kwargs.get("being") or kwargs.get("being_name"):
+            being, error = _resolve_being(kwargs)
+            if error is not None:
+                return error
+        items, error = _carried_items(actor, kwargs)
+        if error is not None:
+            return error
+        try:
+            outcome = sacrifice_items(sheet, items, being=being)
+        except PledgeError as exc:
+            return ActionResult(success=False, message=exc.user_message)
+        lines = [
+            f"You sacrifice {item.name} at {outcome.being.name}'s {outcome.site}. "
+            f"{item.calculation} favor with {outcome.being.name}."
+            for item in outcome.items
+        ]
+        return ActionResult(
+            success=True,
+            message="\n".join(lines),
+            data={"credited": sum(item.credited for item in outcome.items)},
+        )
+
+
+def _carried_items(actor: ObjectDB, kwargs: dict[str, Any]):
+    """(items, error): ``item_ids`` the actor carries, or ``item_names`` found in
+    their inventory."""
+    from world.items.models import ItemInstance  # noqa: PLC0415
+
+    ids = kwargs.get("item_ids") or []
+    names: list[str] = kwargs.get("item_names") or []
+    if ids:
+        try:
+            pks = [int(pk) for pk in ids]
+        except (TypeError, ValueError):
+            return None, ActionResult(success=False, message="Choose items to sacrifice.")
+        items = list(
+            ItemInstance.objects.filter(pk__in=pks, game_object__db_location=actor).select_related(
+                "template", "game_object"
+            )
+        )
+        if len(items) != len(set(pks)):
+            return None, ActionResult(success=False, message="You are not carrying all of those.")
+        return items, None
+    if not names:
+        return None, ActionResult(success=False, message="Sacrifice what?")
+    items = []
+    for name in names:
+        found = actor.search(name, location=actor, quiet=True)
+        obj = found[0] if found else None
+        instance = ItemInstance.objects.filter(game_object=obj).first() if obj else None
+        if instance is None:
+            return None, ActionResult(success=False, message=f"You carry no '{name}'.")
+        items.append(instance)
+    return items, None

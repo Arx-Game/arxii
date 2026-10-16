@@ -14,6 +14,15 @@ vi.mock('../queries', () => ({
   usePrayers: vi.fn(),
   usePrayMutation: vi.fn(() => ({ mutate: vi.fn(), isPending: false })),
   useSendVision: vi.fn(() => ({ mutate: vi.fn(), isPending: false })),
+  usePledgeCards: vi.fn(() => ({ data: [] })),
+  usePledges: vi.fn(() => ({ data: [] })),
+  useServiceTerms: vi.fn(() => ({ data: undefined })),
+  useTakePledge: vi.fn(() => ({ mutate: vi.fn(), isPending: false })),
+  useClosePledge: vi.fn(() => ({ mutate: vi.fn(), isPending: false })),
+  useSacrifice: vi.fn(() => ({ mutate: vi.fn(), isPending: false })),
+}));
+vi.mock('@/inventory/hooks/useInventory', () => ({
+  useInventory: vi.fn(() => ({ data: [] })),
 }));
 vi.mock('@/character-creation/queries', () => ({
   useWorshippedBeings: vi.fn(() => ({ data: [{ id: 1, name: 'The Shepherd' }] })),
@@ -76,6 +85,9 @@ describe('WorshipSection', () => {
     expect(screen.getByTestId('vision-card')).toHaveTextContent('A door opens in the dark.');
     expect(screen.getByTestId('vision-card')).not.toHaveTextContent('from');
     expect(screen.getByTestId('pray-button')).toBeInTheDocument();
+    expect(screen.getByTestId('sacrifice-button')).toBeInTheDocument();
+    expect(screen.getByTestId('pledge-button')).toBeInTheDocument();
+    expect(screen.queryByTestId('pledge-card')).not.toBeInTheDocument();
     expect(screen.queryByTestId('send-vision-button')).not.toBeInTheDocument();
     expect(screen.queryByTestId('prayers-list')).not.toBeInTheDocument();
   });

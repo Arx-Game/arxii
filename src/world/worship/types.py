@@ -5,9 +5,23 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
+from world.worship.constants import PledgeCreditSource
+
 if TYPE_CHECKING:
+    from datetime import datetime
+
+    from world.ceremonies.models import CeremonyOffering
     from world.checks.types import CheckResult, ModifierContribution
-    from world.worship.models import DevotionStanding, FavorInvocation, WorshippedBeing
+    from world.magic.models import ResonanceGrant
+    from world.worship.models import (
+        DevotionStanding,
+        FavorInvocation,
+        PledgeCredit,
+        PledgeDetails,
+        WorshippedBeing,
+        WorshipRite,
+        WorshipRitePerformance,
+    )
 
 
 @dataclass(frozen=True)
@@ -20,6 +34,26 @@ class DevotionBump:
 
     standing: DevotionStanding
     credited: int
+    pledge_credit: PledgeCredit | None = None
+    earning_rate_percent: int = 100
+
+
+@dataclass(frozen=True)
+class FavorSource:
+    """What a favor write is for, so an open pledge can record it (#4333 slice 2).
+
+    Passed to ``bump_devotion``; ``kind`` is a ``PledgeCreditSource`` and the
+    typed rows name the deed's resonance grant, the sacrifice's offering or the
+    rite's performance. ``pledge_details`` names the pledge outright, for the
+    closing and lapse awards paid while it resolves; otherwise the character's
+    open pledge to the being is used.
+    """
+
+    kind: str = PledgeCreditSource.OTHER
+    resonance_grant: ResonanceGrant | None = None
+    offering: CeremonyOffering | None = None
+    rite_performance: WorshipRitePerformance | None = None
+    pledge_details: PledgeDetails | None = None
 
 
 @dataclass(frozen=True)
@@ -123,3 +157,117 @@ class InvocationOutcome:
     @property
     def bonus(self) -> int:
         return self.invocation.bonus
+
+
+@dataclass(frozen=True)
+class EarningRateBreakdown:
+    """A character's earning rate with one being, in its parts (#4333, design 1a)."""
+
+    base: int
+    chosen_bonus: int
+    modifiers: int
+
+    @property
+    def total(self) -> int:
+        return max(self.base + self.chosen_bonus + self.modifiers, 0)
+
+
+@dataclass(frozen=True)
+class ServiceTermLine:
+    """One system-generated line of what earns favor with a being, and how much."""
+
+    label: str
+    amount: str
+
+
+@dataclass(frozen=True)
+class ServiceTerms:
+    """What earns favor with ``being`` for one character (#4333 slice 2): the
+    pledge dialog's and the pledge card's system-generated list."""
+
+    being: WorshippedBeing
+    rate: EarningRateBreakdown
+    lines: list[ServiceTermLine]
+    weekly_deed_cap: int
+
+
+@dataclass(frozen=True)
+class PledgeCreditLine:
+    """One credit on the pledge card, with its calculation in words."""
+
+    id: int  # the PledgeCredit row, a stable key for the card's list
+    source: str
+    label: str
+    calculation: str
+    credited: int
+    counts_toward_progress: bool
+    created_at: datetime
+
+
+@dataclass(frozen=True)
+class PledgeCard:
+    """A character's pledge as the card shows it (#4333 slice 2)."""
+
+    details: PledgeDetails
+    state: str
+    progress: int
+    target: int
+    time_limit: datetime
+    close_attempts: int
+    retry_available: bool
+    favor: int
+    credits: list[PledgeCreditLine]
+    terms: ServiceTerms
+
+
+@dataclass(frozen=True)
+class ClosingOutcome:
+    """What one closing rite did (#4333 slice 2, Ruling 17).
+
+    ``resolved`` is False after a first Failure or Critical Failure, which
+    leaves one retry; then nothing is paid. Otherwise the pledge resolved and
+    ``award`` is the closing award credited (``award_base`` before the rate).
+    """
+
+    details: PledgeDetails
+    rite: WorshipRite
+    outcome_name: str
+    resolved: bool
+    award_base: int
+    award: int
+    earning_rate_percent: int
+
+
+@dataclass(frozen=True)
+class SacrificedItem:
+    """One item given up at a shrine or temple, and the favor it earned."""
+
+    name: str
+    credited: int
+    calculation: str
+
+
+@dataclass(frozen=True)
+class SacrificeOutcome:
+    """A sacrifice (#4333 slice 2): to whom, at which kind of site, and each item."""
+
+    being: WorshippedBeing
+    site: str
+    items: list[SacrificedItem]
+
+
+@dataclass(frozen=True)
+class HolySite:
+    """A being holy where a character stands: its shrine in the room ("shrine") or
+    the temple over it ("temple")."""
+
+    being: WorshippedBeing
+    site: str
+
+    @property
+    def being_id(self) -> int:
+        return self.being.pk
+
+    @property
+    def being_name(self) -> str:
+        return self.being.name
