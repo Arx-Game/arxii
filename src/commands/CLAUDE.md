@@ -111,6 +111,9 @@ actions, backends, and service functions.
   `say (tongue) text` tag (`_LANGUAGE_TAG_RE`, iexact `Language` name lookup) sets `language_id`
   for that one say only, without touching the speaker's sticky `current_language` — an unknown
   tongue raises `CommandError` naming it; no tag leaves kwargs unchanged (the sticky/current path).
+  `CmdWhisper` and `CmdMutter` echo the speaker their own line (`You whisper to Hobb, "..."`,
+  `You mutter to Hobb, "..."`), tagged `interaction_echo` so the web client drops the frame
+  as it does a pose's (#3657: telnet had answered both with nothing).
 - **`language.py`**: `CmdSpeak` (`speak [<language>]`, #2993) — telnet face of
   `SetLanguageAction`; sets (or, with no argument, resets to the universal default) the caller's
   sticky `current_language` via iexact `Language` name lookup. `CmdTrainLanguage`
