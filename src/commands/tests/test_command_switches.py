@@ -16,7 +16,7 @@ import inspect
 import re
 from unittest.mock import Mock, patch
 
-from django.test import TestCase
+from django.test import TestCase, tag
 from evennia.commands.cmdset import CmdSet
 
 from commands.command import ArxCommand, DispatchCommand
@@ -97,6 +97,7 @@ class TypedSwitchTests(TestCase):
 
         assert replies == ["switches=[] args=' a/b and c'"]
 
+    @tag("postgres")
     def test_home_set_sets_the_home_instead_of_recalling(self) -> None:
         """The defensive read took ``home/set`` for a bare ``home`` and walked them away."""
         old_home = RoomProfileFactory(area=self.area).objectdb
