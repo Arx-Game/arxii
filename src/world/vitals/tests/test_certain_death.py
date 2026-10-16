@@ -12,9 +12,9 @@ from world.conditions.factories import (
     ConditionInstanceFactory,
     ConditionStageFactory,
     ConditionTemplateFactory,
+    SoulfrayTemplateFactory,
 )
 from world.conditions.services import remove_condition
-from world.magic.audere import SOULFRAY_CONDITION_NAME
 from world.magic.factories import (
     AudereThresholdFactory,
     SoulfrayConfigFactory,
@@ -153,7 +153,7 @@ class SoulfrayCharacterLossTests(TestCase):
         pool = ConsequencePoolFactory(name="Soulfray lethal (test)")
         self.loss = ConsequenceFactory(outcome_tier=tier, label="Lost", character_loss=True)
         ConsequencePoolEntryFactory(pool=pool, consequence=self.loss)
-        template = ConditionTemplateFactory(name=SOULFRAY_CONDITION_NAME, has_progression=True)
+        template = SoulfrayTemplateFactory(has_progression=True)
         self.stage = ConditionStageFactory(condition=template, stage_order=5, consequence_pool=pool)
         self.config = SoulfrayConfigFactory(resilience_check_type=CheckTypeFactory())
 

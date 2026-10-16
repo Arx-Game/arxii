@@ -4,6 +4,7 @@ from decimal import Decimal
 
 from django.test import TestCase, tag
 
+from world.conditions.factories import SoulfrayTemplateFactory
 from world.magic.factories import CharacterAnimaFactory, SoulfrayConfigFactory, TechniqueFactory
 from world.magic.services import (
     calculate_effective_anima_cost,
@@ -194,13 +195,10 @@ class GetSoulfrayWarningTests(TestCase):
         from evennia_extensions.factories import CharacterFactory
         from world.conditions.factories import (
             ConditionStageFactory,
-            ConditionTemplateFactory,
         )
-        from world.magic.audere import SOULFRAY_CONDITION_NAME
 
         cls.character = CharacterFactory()
-        cls.soulfray_template = ConditionTemplateFactory(
-            name=SOULFRAY_CONDITION_NAME,
+        cls.soulfray_template = SoulfrayTemplateFactory(
             has_progression=True,
             is_stackable=False,
         )

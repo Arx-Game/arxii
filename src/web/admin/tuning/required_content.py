@@ -583,7 +583,7 @@ def _probe_audere_condition_shape() -> ProbeResult:
     Sibling to the plain presence check in the `audere-conditions` declaration below
     (#4098 final review item 2) - this checks *shape*, not just existence, for the two
     templates the Audere ultimates ceremony hard-depends on (Soulfray is covered by the
-    presence check alone; it carries neither of these requirements):
+    `soulfray-condition` check alone; it carries neither of these requirements):
 
     - `default_duration_type == ROUNDS` (the model's own default,
       `world/conditions/factories.py`'s `ConditionTemplateFactory`) lets the condition
@@ -797,6 +797,26 @@ def _soulfray_builder_link(stage_pk: int | None) -> str:
     return reverse("admin_soulfray_builder", args=[stage_pk])
 
 
+def _probe_soulfray_condition_set() -> ProbeResult:
+    """`SoulfrayConfig.condition` names the Soulfray condition template (#4122).
+
+    Every Soulfray rule finds the template through that field instead of matching
+    a name, so a config row with the field unset leaves all of them without a
+    Soulfray to act on.
+    """
+    from world.magic.models import SoulfrayConfig  # noqa: PLC0415
+
+    config = SoulfrayConfig.objects.cached_singleton()
+    if config is None:
+        return ProbeResult(present=False, detail="No Soulfray configuration row exists.")
+    if config.condition_id is None:
+        return ProbeResult(
+            present=False,
+            detail="The Soulfray configuration's Condition field is empty.",
+        )
+    return ProbeResult(present=True)
+
+
 def _probe_soulfray_stage_pools() -> ProbeResult:
     """Every Soulfray stage has a pool that draws at least one consequence (#4089).
 
@@ -807,12 +827,11 @@ def _probe_soulfray_stage_pools() -> ProbeResult:
     Reads `soulfray_ladder_summary()`, the same helper the Soulfray Stage
     Builder's ladder reads, so the two never disagree.
     """
-    from world.magic.audere import SOULFRAY_CONDITION_NAME  # noqa: PLC0415
     from world.magic.services.soulfray import soulfray_ladder_summary  # noqa: PLC0415
 
     summaries = soulfray_ladder_summary()
     if not summaries:
-        detail = f"No ConditionStage rows exist for the {SOULFRAY_CONDITION_NAME} template."
+        detail = "No ConditionStage rows exist for the condition the Soulfray config names."
         return ProbeResult(present=False, detail=detail)
     target = next((s for s in summaries if not s.consequence_count), summaries[0])
     link = _soulfray_builder_link(target.stage.pk)
@@ -1262,7 +1281,6 @@ def _declarations() -> tuple[ContentDependency, ...]:
     from world.magic.audere import (  # noqa: PLC0415
         AUDERE_CONDITION_NAME,
         AUDERE_MAJORA_CONDITION_NAME,
-        SOULFRAY_CONDITION_NAME,
     )
     from world.magic.constants import ENDURE_HALLOWED_GROUND_CHECK_TYPE_NAME  # noqa: PLC0415
     from world.magic.seeds_checks import MAGICAL_ENDURANCE_CHECK_TYPE_NAME  # noqa: PLC0415
@@ -1294,7 +1312,6 @@ def _declarations() -> tuple[ContentDependency, ...]:
                 names=(
                     AUDERE_CONDITION_NAME,
                     AUDERE_MAJORA_CONDITION_NAME,
-                    SOULFRAY_CONDITION_NAME,
                 ),
                 case_insensitive=True,
             ),
@@ -2029,6 +2046,25 @@ def _declarations() -> tuple[ContentDependency, ...]:
             ),
             probe=CustomProbe(fn=_probe_ultimates_have_action_template),
             admin_model="Technique",
+        ),
+        ContentDependency(
+            key="soulfray-condition",
+            label="Soulfray condition set on the Soulfray configuration",
+            tier=DependencyTier.REQUIRED,
+            consumer=(
+                "world/magic/services/soulfray.py soulfray_condition_id(), "
+                "_handle_soulfray_accumulation(), get_soulfray_warning(); "
+                "world/magic/audere.py; world/magic/services/anima.py"
+            ),
+            consequence=(
+                "Soulfray cannot be found: no cast accrues Soulfray (the first cast "
+                "below the anima threshold raises ConditionTemplate.DoesNotExist), "
+                "the non-lethal cap and the safety checkpoint's death warning see no "
+                "stages, Audere never sees a Soulfray stage, and the Soulfray Stage "
+                "Builder lists nothing."
+            ),
+            probe=CustomProbe(fn=_probe_soulfray_condition_set),
+            admin_model="SoulfrayConfig",
         ),
         ContentDependency(
             key="soulfray-stage-pools",

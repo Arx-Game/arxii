@@ -18,7 +18,7 @@ from commands.consent import CmdAccept
 from commands.offer_response import CmdDecline
 from commands.tests.message_capture import message_text
 from world.conditions.models import ConditionInstance
-from world.magic.audere import AUDERE_CONDITION_NAME, SOULFRAY_CONDITION_NAME, PendingAudereOffer
+from world.magic.audere import AUDERE_CONDITION_NAME, PendingAudereOffer
 from world.magic.audere_majora import AudereMajoraCrossing, PendingAudereMajoraOffer
 from world.magic.factories import (
     AudereThresholdFactory,
@@ -27,6 +27,7 @@ from world.magic.factories import (
     wire_audere_power_multipliers,
 )
 from world.magic.models import CharacterAnima
+from world.magic.services.soulfray import soulfray_condition_id
 from world.magic.tests.majora_fixtures import build_crossing_world
 from world.mechanics.engagement import CharacterEngagement
 
@@ -57,7 +58,7 @@ class TestAudereTelnetE2E(TestCase):
         soulfray_instance = (
             ConditionInstance.objects.filter(
                 target=self.character,
-                condition__name=SOULFRAY_CONDITION_NAME,
+                condition_id=soulfray_condition_id(),
             )
             .select_related("current_stage")
             .first()

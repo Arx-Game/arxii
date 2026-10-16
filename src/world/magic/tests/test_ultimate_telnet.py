@@ -12,10 +12,9 @@ from world.character_sheets.factories import CharacterSheetFactory
 from world.conditions.factories import (
     ConditionInstanceFactory,
     ConditionStageFactory,
-    ConditionTemplateFactory,
+    SoulfrayTemplateFactory,
 )
 from world.covenants.constants import RoleArchetype
-from world.magic.audere import SOULFRAY_CONDITION_NAME
 from world.magic.constants import GiftKind
 from world.magic.factories import (
     AudereThresholdFactory,
@@ -28,6 +27,7 @@ from world.magic.factories import (
     PendingAudereOfferFactory,
     ResonanceFactory,
     UltimateTechniqueFactory,
+    ensure_soulfray_config,
     wire_audere_power_multipliers,
 )
 from world.magic.models import KnownUltimate
@@ -191,9 +191,8 @@ class UltimateRevealAppendedToSurgeAcceptTests(TestCase):
         wire_audere_power_multipliers()
 
         intensity_tier = IntensityTierFactory(threshold=10, control_modifier=0)
-        soulfray_template = ConditionTemplateFactory(
-            name=SOULFRAY_CONDITION_NAME, has_progression=True
-        )
+        soulfray_template = SoulfrayTemplateFactory(has_progression=True)
+        ensure_soulfray_config()
         soulfray_stage = ConditionStageFactory(condition=soulfray_template, stage_order=2)
         self.threshold = AudereThresholdFactory(
             minimum_intensity_tier=intensity_tier,

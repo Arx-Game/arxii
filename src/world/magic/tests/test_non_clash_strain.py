@@ -9,7 +9,7 @@ exercises the full plumbing path:
 
 When the caster commits more strain than they have anima, the deduction
 deficit drives Soulfray severity above zero (per ``calculate_soulfray_severity``)
-and a ConditionInstance(name=SOULFRAY_CONDITION_NAME) is created on the
+and a ConditionInstance on the Soulfray config's condition is created on the
 character. The audit value ``Interaction.strain_committed`` records exactly
 the committed amount.
 """
@@ -25,7 +25,6 @@ from actions.factories import ActionTemplateFactory
 from actions.models import ActionEnhancement
 from actions.types import PendingActionResolution, StepResult
 from world.conditions.models import ConditionInstance
-from world.magic.audere import SOULFRAY_CONDITION_NAME
 from world.magic.factories import (
     CharacterAnimaFactory,
     CharacterTechniqueFactory,
@@ -33,6 +32,7 @@ from world.magic.factories import (
     SoulfrayContentFactory,
     TechniqueFactory,
 )
+from world.magic.services.soulfray import soulfray_condition_id
 from world.scenes.action_constants import ActionRequestStatus, ConsentDecision
 from world.scenes.action_services import respond_to_action_request
 from world.scenes.factories import PersonaFactory, SceneActionRequestFactory, SceneFactory
@@ -152,7 +152,7 @@ class StrainPushedNonClashCastTests(TestCase):
         # 4. Soulfray condition instance exists for the caster with positive severity.
         soulfray_inst = ConditionInstance.objects.filter(
             target=self.character,
-            condition__name=SOULFRAY_CONDITION_NAME,
+            condition_id=soulfray_condition_id(),
         ).first()
         self.assertIsNotNone(
             soulfray_inst,

@@ -1279,6 +1279,7 @@ class AudereThresholdAdmin(admin.ModelAdmin):
 @admin.register(SoulfrayConfig)
 class SoulfrayConfigAdmin(admin.ModelAdmin):
     list_display = [
+        "condition",
         "soulfray_threshold_ratio",
         "severity_scale",
         "deficit_scale",
@@ -1286,6 +1287,8 @@ class SoulfrayConfigAdmin(admin.ModelAdmin):
         "base_check_difficulty",
         "social_safety_bonus",
     ]
+    list_select_related = ["condition", "resilience_check_type"]
+    autocomplete_fields = ["condition"]
 
 
 @admin.register(AnimaRitualBudgetAward)
