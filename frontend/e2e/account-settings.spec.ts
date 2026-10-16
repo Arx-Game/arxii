@@ -34,7 +34,7 @@
  * after a run that stopped partway through.
  *
  * Run with: just fe-e2e account-settings
- * Not run in CI, since this suite needs a live Evennia backend.
+ * CI runs this suite in .github/workflows/real-test.yml (advisory; #4247).
  */
 
 import { createHmac, randomBytes } from 'node:crypto';

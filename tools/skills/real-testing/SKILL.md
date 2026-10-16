@@ -164,6 +164,20 @@ the server would use `arxiidev`.
 If a dependency you need is missing, say which behaviors that blocks, test the
 rest, and never replace the missing part with a mock and call it verified.
 
+### Form C: the CI run (`real-test.yml`, #4247)
+
+When Form B is `BLOCKED: resources` (or you want a second pair of hands), the
+`real-test` workflow operates the real program on a CI runner: throwaway Postgres,
+built bundle, `arx start`, the live-server Playwright specs (one worker). It runs
+on PRs touching `frontend/`, `src/web/`, or a `views.py`/`serializers.py`, when the
+PR has the `real-test` label, and on `workflow_dispatch`
+(`gh workflow run real-test.yml --ref <branch>`). It is advisory. Its run is
+acceptable evidence: cite the run URL and the artifact URL (both are in the job
+summary), the PR head commit it built, the spec that covers the claim, and what the
+screenshot or trace shows. It only proves what its specs assert; for a surface no
+spec visits, add a spec to `frontend/e2e/` and to the workflow's spec list, or
+record `BLOCKED` for that part. See `docs/testing/real-test-ci.md`.
+
 ## 3. Operate the change through its real interface
 
 | Change | What to do |
