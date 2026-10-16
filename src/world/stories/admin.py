@@ -1,4 +1,5 @@
 from django.contrib import admin
+from django.urls import reverse
 from django.utils.html import format_html
 
 from world.stories.models import (
@@ -289,7 +290,23 @@ class TransitionAdmin(admin.ModelAdmin):
 class BeatOpponentLineInline(admin.TabularInline):
     model = BeatOpponentLine
     extra = 0
-    fields = ["creature_template", "count", "position_name", "order", "opens_as_standoff"]
+    fields = [
+        "creature_template",
+        "count",
+        "position_name",
+        "order",
+        "opens_as_standoff",
+        "placement_link",
+    ]
+    readonly_fields = ["placement_link"]
+
+    @admin.display(description="Placement")
+    def placement_link(self, obj: BeatOpponentLine) -> str:
+        """Link a saved line to its Placement page, where its standoff edits live (#4361)."""
+        if obj.pk is None:
+            return "Save the beat first."
+        url = reverse("admin_placement_beat", args=[obj.pk])
+        return format_html('<a href="{}">Edit placement</a>', url)
 
 
 class BeatStagedTemplateInline(admin.TabularInline):

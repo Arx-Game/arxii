@@ -102,8 +102,7 @@ from world.missions.serializers import (
     SupportDeclareRequestSerializer,
     TaleRequestSerializer,
 )
-from world.predicates.catalog import leaf_params
-from world.predicates.predicates import LEAF_RESOLVERS
+from world.predicates.catalog import leaf_catalog
 
 
 class MissionStudioPagination(PageNumberPagination):
@@ -552,11 +551,7 @@ class PredicateLeafCatalogViewSet(viewsets.ViewSet):
         responses={200: OpenApiResponse(description="List of available predicate leaves.")},
     )
     def list(self, request: Request) -> Response:
-        catalog = [
-            {"name": name, "params": leaf_params(resolver)}
-            for name, resolver in sorted(LEAF_RESOLVERS.items())
-        ]
-        return Response(catalog)
+        return Response(leaf_catalog())
 
 
 class MissionGiverViewSet(viewsets.ModelViewSet):

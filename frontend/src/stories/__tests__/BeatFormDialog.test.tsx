@@ -54,6 +54,9 @@ vi.mock('@/combat/queries', () => ({
   useCreatureTemplates: vi.fn(() => ({
     data: [{ id: 1, name: 'Gorehorn', tier: 'boss', description: '', has_phases: true }],
   })),
+  // #4361 - each line's placement panel reads its template's profile and pickers.
+  usePlacementContext: vi.fn(() => ({ data: undefined })),
+  usePlacementPicks: vi.fn(() => ({ data: [] })),
   // #3564 - SituationFinder's CatalogSuggestionDialog calls this unconditionally
   // (it's mounted, just closed) whenever a non-null characterId is passed in.
   useDispatchPlayerAction: vi.fn(() => ({
@@ -1040,6 +1043,13 @@ describe('BeatFormDialog', () => {
               position_name: 'front',
               opens_as_standoff: true,
               order: 0,
+              // #4361: an untouched placement sends the template's own values.
+              cause_override: '',
+              cause_margin_override: null,
+              organization: null,
+              organization_name: '',
+              drive_edits: [],
+              suppressed_faction_rules: [],
             },
           ],
         }),

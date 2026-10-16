@@ -46,6 +46,7 @@ from world.missions.constants import (
     RewardGroupRule,
 )
 from world.societies.constants import RenownMagnitude, RenownReach, RenownRisk
+from world.standoffs.placement_fields import PlacementEdits
 from world.stories.constants import BeatOutcome
 
 _PERSONA_MODEL_PATH = "arxii.Persona"
@@ -922,7 +923,7 @@ class MissionOption(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
         return f"{self.node}#{self.order}"
 
 
-class MissionOptionOpponentLine(SharedMemoryModel):
+class MissionOptionOpponentLine(PlacementEdits, SharedMemoryModel):
     """An authored opponent (creature x count x position hint) an ENCOUNTER option spawns.
 
     The BeatOpponentLine shape keyed on a scenario option instead of a beat

@@ -1,9 +1,10 @@
 """The Standoff Profile Builder (#4354): one creature's cause, drives and faction rules.
 
-Pattern: the Distinction Builder. One page writes ``CreatureTemplate.cause`` and
-``cause_margin_percent``, every ``CreatureDrive`` and every template-owned ``FactionRule``
-in one transaction, with a context rail (grade preview, cause check, placements) so the
-author never needs a second tab. Replaces the two stock inlines on the creature template's
+Pattern: the Distinction Builder. One page writes ``CreatureTemplate.cause``,
+``cause_margin_percent`` and ``organization`` (the default affiliation, #4361), every
+``CreatureDrive`` and every template-owned ``FactionRule`` in one transaction, with a
+context rail (inherited rules, grade preview, cause check, placements) so the author never
+needs a second tab. Replaces the two stock inlines on the creature template's
 change page. Save credits the template to the operator's linked contributor; an unlinked
 operator sees the setup guidance and nothing is saved, as on every Builder page.
 """
@@ -30,6 +31,7 @@ from web.admin.standoff_profile.forms import (
 from web.admin.tuning.views import superuser_required
 from world.combat.models import CreatureTemplate
 from world.standoffs.models import CreatureDrive, FactionRule
+from world.standoffs.services.profile import TEMPLATE_LEVEL, inherited_rules
 
 #: The submit button's name that stays on this page after saving; "Save" returns to the
 #: creature's change page, as a stock change form does.
@@ -81,6 +83,11 @@ def _render_page(
     drive_context = live.drive_context(template)
     drive_rows = [(form, drive_context.get(form.instance.pk)) for form in forms.drives.forms]
     placements = live.placements(template)
+    inherited = [
+        entry
+        for entry in inherited_rules(template, template.organization)
+        if entry.level != TEMPLATE_LEVEL
+    ]
     return render(
         request,
         "admin/standoff_profile/page.html",
@@ -100,6 +107,7 @@ def _render_page(
             "preview": live.grade_preview(template, level),
             "cause_check": live.cause_check(template, level, party),
             "placements": placements,
+            "inherited": inherited,
             "change_url": reverse("admin:arxii_creaturetemplate_change", args=[template.pk]),
         },
     )

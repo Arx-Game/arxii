@@ -144,7 +144,9 @@ def last_decision(group: StandoffGroup) -> str:
 
 def proposal_summary(group: StandoffGroup) -> str:
     """One line for the GM: the group, its cause, why it fired, and the force."""
-    cause = CauseKind(group.creature_template.cause).label
+    from world.standoffs.services.profile import group_cause  # noqa: PLC0415
+
+    cause = CauseKind(group_cause(group)[0]).label
     reason = group.proposal_reason or "Its cause holds."
     return (
         f"{group.creature_template.name}: cause fires. Cause: {cause}. Reason: {reason} "

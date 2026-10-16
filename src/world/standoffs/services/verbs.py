@@ -55,7 +55,6 @@ from world.standoffs.constants import (
     TermsEffect,
 )
 from world.standoffs.models import (
-    CreatureDrive,
     FactionRule,
     StandoffAngleShare,
     StandoffApproach,
@@ -69,8 +68,15 @@ from world.standoffs.services.faction_rules import (
     band_shift_from,
     drive_strength_from,
     faction_rule_matches,
+    shifting_rule_ids,
 )
 from world.standoffs.services.force import clear_override, evaluate_causes
+from world.standoffs.services.profile import (
+    GroupDrive,
+    group_cause,
+    group_drives,
+    group_rules,
+)
 from world.standoffs.services.proposals import close_group_prompts
 from world.standoffs.services.routing import complete_standoff
 from world.standoffs.services.state import (
@@ -151,7 +157,7 @@ def hidden_things(
     *,
     revealed: set[tuple[str, int | None, int | None]] | None = None,
     known_matches: dict[int, list[MatchedFactionRule]] | None = None,
-) -> list[tuple[str, CreatureDrive | None, FactionRule | None]]:
+) -> list[tuple[str, GroupDrive | None, FactionRule | None]]:
     """Cause, then drives by strength desc, then faction rules by pk, that are not yet read.
 
     A caller that already holds the reveal set, or some sheets' matched rules (keyed by
@@ -160,16 +166,16 @@ def hidden_things(
     if revealed is None:
         revealed = _revealed_set(group)
     known = known_matches or {}
-    template = group.creature_template
-    hidden: list[tuple[str, CreatureDrive | None, FactionRule | None]] = []
-    if template.cause != CauseKind.NONE and (RevealKind.CAUSE, None, None) not in revealed:
+    cause, _margin = group_cause(group)
+    hidden: list[tuple[str, GroupDrive | None, FactionRule | None]] = []
+    if cause != CauseKind.NONE and (RevealKind.CAUSE, None, None) not in revealed:
         hidden.append((RevealKind.CAUSE, None, None))
     hidden.extend(
         (RevealKind.DRIVE, drive, None)
-        for drive in template.drives.order_by("-strength", "pk")
-        if (RevealKind.DRIVE, drive.pk, None) not in revealed
+        for drive in group_drives(group)
+        if (RevealKind.DRIVE, drive.property_id, None) not in revealed
     )
-    rules = list(template.faction_rules.order_by("pk"))
+    rules = sorted(group_rules(group), key=lambda entry: entry.rule.pk)
     matching_ids = {
         match.rule.pk
         for participant in participants
@@ -180,17 +186,17 @@ def hidden_things(
         )
     }
     hidden.extend(
-        (RevealKind.FACTION_RULE, None, rule)
-        for rule in rules
-        if rule.pk in matching_ids and (RevealKind.FACTION_RULE, None, rule.pk) not in revealed
+        (RevealKind.FACTION_RULE, None, entry.rule)
+        for entry in rules
+        if entry.rule.pk in matching_ids
+        and (RevealKind.FACTION_RULE, None, entry.rule.pk) not in revealed
     )
     return hidden
 
 
 def _focus_matches(
-    thing: tuple[str, CreatureDrive | None, FactionRule | None],
+    thing: tuple[str, GroupDrive | None, FactionRule | None],
     focus_kind: str | None,
-    focus_drive_id: int | None,
     focus_faction_rule_id: int | None,
     focus_property_id: int | None = None,
 ) -> bool:
@@ -198,36 +204,35 @@ def _focus_matches(
     if kind != focus_kind:
         return False
     if kind == RevealKind.DRIVE:
-        if focus_drive_id is None and focus_property_id is None:
+        if focus_property_id is None:
             # "What moves them?": any hidden drive; hidden_things lists them strongest first.
             return drive is not None
-        return drive is not None and (
-            drive.pk == focus_drive_id
-            or (focus_property_id is not None and drive.property_id == focus_property_id)
-        )
+        return drive is not None and drive.property_id == focus_property_id
     if kind == RevealKind.FACTION_RULE:
         return rule is not None and rule.pk == focus_faction_rule_id
     return True
 
 
 def _reveal(
-    group: StandoffGroup, thing: tuple[str, CreatureDrive | None, FactionRule | None]
+    group: StandoffGroup, thing: tuple[str, GroupDrive | None, FactionRule | None]
 ) -> StandoffReveal:
     kind, drive, rule = thing
     reveal, _ = StandoffReveal.objects.get_or_create(
-        group=group, kind=kind, drive=drive, faction_rule=rule
+        group=group,
+        kind=kind,
+        drive=drive.property if drive is not None else None,
+        faction_rule=rule,
     )
     return reveal
 
 
 @flush_cache_on_error(lambda participant, *_, **__: participant.encounter)
 @transaction.atomic
-def standoff_read(  # noqa: PLR0913 - the focus kwargs are the read verb's whole payload
+def standoff_read(
     participant: CombatParticipant,
     group: StandoffGroup,
     *,
     focus_kind: str | None = None,
-    focus_drive_id: int | None = None,
     focus_faction_rule_id: int | None = None,
     focus_property_id: int | None = None,
 ) -> StandoffActionResult:
@@ -273,9 +278,7 @@ def standoff_read(  # noqa: PLR0913 - the focus kwargs are the read verb's whole
         focused = [
             t
             for t in hidden
-            if _focus_matches(
-                t, focus_kind, focus_drive_id, focus_faction_rule_id, focus_property_id
-            )
+            if _focus_matches(t, focus_kind, focus_faction_rule_id, focus_property_id)
         ]
         chosen = (focused or hidden)[:1]
     else:
@@ -308,7 +311,7 @@ class GradingContext:
     """
 
     members: list[CombatOpponent]
-    drives: list[CreatureDrive]
+    drives: list[GroupDrive]
     matches: list[MatchedFactionRule]
     mindless_resistance: int
     resist_increment: int
@@ -346,7 +349,7 @@ def build_grading_context(
     )
     return GradingContext(
         members=members,
-        drives=list(group.creature_template.drives.select_related("property")),
+        drives=group_drives(group),
         matches=faction_rule_matches(group, sheet) if matches is None else matches,
         mindless_resistance=0 if has_morale else MINDLESS_MORALE_RESISTANCE,
         resist_increment=resist,
@@ -359,7 +362,7 @@ def press_grade(
     approach: StandoffApproach,
     ctx: GradingContext | None = None,
     targeted_by_capability: dict[int, set[int]] | None = None,
-) -> tuple[SocialDifficulty, list[tuple[CreatureDrive, DriveHit]], set[int]]:
+) -> tuple[SocialDifficulty, list[tuple[GroupDrive, DriveHit]], set[int]]:
     """Grade a press; ``ctx`` and ``targeted_by_capability`` let a caller read them once."""
     if ctx is None:
         ctx = build_grading_context(group, sheet)
@@ -458,17 +461,17 @@ def _embolden_on_botch(group: StandoffGroup, config: StandoffConfig) -> None:
 def _share_shifting_angles(
     group: StandoffGroup, sheet: CharacterSheet, targeted_property_ids: set[int]
 ) -> None:
-    """Acting on an angle reveals it: share every matched rule that shifted this roll."""
-    for match in faction_rule_matches(group, sheet):
-        rule = match.rule
-        # A drive shift counts when the press aims at that drive, even if the shift took
-        # its strength to zero and it no longer registers as a hit.
-        shifted = rule.difficulty_shift_bands != 0 or (
-            rule.drive_shift != 0 and rule.drive_id in targeted_property_ids
-        )
-        if shifted:
+    """Acting on an angle reveals it: share every matched rule that shifted this roll.
+
+    A drive shift counts when the press aims at that drive, even if the shift took its
+    strength to zero and it no longer registers as a hit.
+    """
+    matches = faction_rule_matches(group, sheet)
+    shifted = shifting_rule_ids(matches, targeted_property_ids)
+    for match in matches:
+        if match.rule.pk in shifted:
             StandoffAngleShare.objects.get_or_create(
-                group=group, character_sheet=sheet, faction_rule=rule
+                group=group, character_sheet=sheet, faction_rule=match.rule
             )
 
 
@@ -685,7 +688,7 @@ def _morale_shift_line(
 
 
 def _drive_revealed(group: StandoffGroup, property_id: int) -> bool:
-    return group.reveals.filter(kind=RevealKind.DRIVE, drive__property_id=property_id).exists()
+    return group.reveals.filter(kind=RevealKind.DRIVE, drive_id=property_id).exists()
 
 
 def _apply_terms(
@@ -874,12 +877,12 @@ def _press_morale_damage(
     return _morale_shift_line(group, sheet, before, [morale_state_for(m) for m in members])
 
 
-def _press_terms_message(group: StandoffGroup, hits: list[tuple[CreatureDrive, DriveHit]]) -> str:
+def _press_terms_message(group: StandoffGroup, hits: list[tuple[GroupDrive, DriveHit]]) -> str:
     """Name only revealed drives and report the updated terms ease."""
     revealed_ids = {
         drive_id for kind, drive_id, _ in _revealed_set(group) if kind == RevealKind.DRIVE
     }
-    named = [hit.label for drive, hit in hits if drive.pk in revealed_ids]
+    named = [hit.label for drive, hit in hits if drive.property_id in revealed_ids]
     message = "They soften." if not named else f"They soften: {', '.join(named)}."
     steps = group.terms_ease
     message += f" Terms are now {steps} {'step' if steps == 1 else 'steps'} easier."

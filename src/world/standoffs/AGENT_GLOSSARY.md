@@ -21,16 +21,24 @@ How a group views a character, following the character's reputation with an orga
 _Avoid_: allegiance, side
 
 **Faction rule** (`FactionRule`, was Regard rule; renamed #4354):
-How a kind of creature stands toward particular characters: a predicate over the acting character's own state (plus a typed `deed_archetype` for deeds they are commonly known for) that can shift difficulty bands, shift a drive's strength, or suppress the cause. It carries an owner-only angle and a revealed text.
+How a group stands toward particular characters: a predicate over the acting character's own state (plus a typed `deed_archetype` for deeds they are commonly known for) that can shift difficulty bands, shift a drive's strength, or suppress the cause. It carries an owner-only angle and a revealed text. Owned by a creature template, an organization or a society (#4361); a group carries its template's rules and those inherited through its Affiliation, and where two shift the same thing the most specific owner wins.
 _Avoid_: regard rule (`NpcRegard` is one named NPC's own opinion, a different thing), reaction (Reaction Line and Reaction Economy are other systems), social profile, reputation modifier
 
 **Angle** (`FactionRule.angle_text`, was Spark; renamed #4354):
 What a matched character privately learns matters about them here, because a faction rule applies to them. Shown only to that character; the player chooses when the table learns it (Share), or it is shared by acting on it. Recorded as `StandoffAngleShare`.
 _Avoid_: spark, hook (a Trigger is a flows term), ask (a Boon), aura (a resonance aggregate)
 
-**Association** (#4121, a later slice):
-Being seen as tied to an organization or society: membership now or before, kinship, or steady work for it. What a faction rule may test besides reputation.
+**Association** (`associated_with_org`, `associated_with_society`, #4361):
+Being seen as tied to an organization or society: membership now or before (a former member for `AssociationConfig.former_member_years`, an exile always), kinship with a family house, or steady work for its people. Covert organizations never count; only the presented persona is read. What a faction rule may test besides reputation.
 _Avoid_: membership (the formal row), reputation (how the organization itself regards you)
+
+**Affiliation** (`CreatureTemplate.organization`, a placement's `organization`, #4361):
+The organization a group's faction rules are inherited through: its own rules, each parent organization's and each of their societies'. A template carries a default; a placement may name another.
+_Avoid_: allegiance (which side an opponent fights on), membership (a persona's formal row), faction (how a group views a character)
+
+**Placement** (`BeatOpponentLine`, `MissionOptionOpponentLine`, #4361):
+One authored opponent line, and the edits it makes over its creature template: cause, margin, affiliation, drives and switched-off inherited faction rules. Stamped on each opponent at spawn (ADR-4361-A).
+_Avoid_: spawn (the act), instance, override (one kind of edit a placement makes)
 
 **Proposal** (`StandoffGroupState.PROPOSED`, #4354):
 In a GM-run standoff, a group whose cause fired waits in PROPOSED while a `STANDOFF_CAUSE` GM prompt asks the GM to Confirm (the fight begins), Hold for one action, or Override with a reason. Players keep acting meanwhile and see the group marked "deciding". A standoff is GM-run when its scene has a GM who has not muted standoff prompts; otherwise causes fire on their own.

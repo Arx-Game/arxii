@@ -12,6 +12,11 @@
  * half-typed count doesn't fight the input) - the caller owns
  * converting to/from its own payload shape (creature_template as a
  * number, etc.) since that shape differs between Beat and MissionOption.
+ *
+ * With `showPlacement` (#4361) each line with a creature picked gets a
+ * PlacementPanel: the line's standoff edits over its template. The placement
+ * fields share one draft and payload shape on both surfaces
+ * (`placementFieldsFromLine` / `placementPayload`).
  */
 
 import { useState } from 'react';
@@ -21,8 +26,11 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useCreatureTemplates } from '@/combat/queries';
 
+import { PlacementPanel } from './PlacementPanel';
+import type { PlacementDraft } from './placementDraft';
+
 /** Draft shape for one opponent-line row while the form is open. */
-export interface OpponentLineDraft {
+export interface OpponentLineDraft extends PlacementDraft {
   id?: number;
   creature_template: string;
   count: string;
@@ -37,6 +45,8 @@ export interface OpponentLinesEditorProps {
   rowErrors: Record<string, string[]>[] | undefined;
   /** Show the per-line "Opens as a standoff" checkbox (beats only, not mission options). */
   showStandoffSwitch?: boolean;
+  /** Show each line's standoff placement panel (#4361). */
+  showPlacement?: boolean;
 }
 
 export function OpponentLinesEditor({
@@ -44,6 +54,7 @@ export function OpponentLinesEditor({
   onChange,
   rowErrors,
   showStandoffSwitch = false,
+  showPlacement = false,
 }: OpponentLinesEditorProps) {
   const [search, setSearch] = useState('');
   const { data: creatureTemplates = [] } = useCreatureTemplates(search);
@@ -91,7 +102,14 @@ export function OpponentLinesEditor({
               <select
                 className="w-full rounded-md border bg-background px-2 py-1.5 text-sm"
                 value={line.creature_template}
-                onChange={(e) => updateRow(index, { creature_template: e.target.value })}
+                onChange={(e) =>
+                  // A new creature has other drives and rules: its edits start over.
+                  updateRow(index, {
+                    creature_template: e.target.value,
+                    drive_edits: [],
+                    suppressed_faction_rules: [],
+                  })
+                }
                 data-testid={`beat-opponent-line-creature-${index}`}
               >
                 <option value="">Select a creature…</option>
@@ -128,7 +146,31 @@ export function OpponentLinesEditor({
             >
               Remove
             </Button>
-            {showStandoffSwitch && (
+            {showPlacement && line.creature_template !== '' && (
+              <PlacementPanel
+                index={index}
+                templateId={Number(line.creature_template)}
+                count={line.count}
+                draft={line}
+                onChange={(partial) => updateRow(index, partial)}
+                showStandoffSwitch={showStandoffSwitch}
+              />
+            )}
+            {Object.entries(errors ?? {})
+              .filter(([key]) =>
+                [
+                  'drive_edits',
+                  'suppressed_faction_rules',
+                  'organization',
+                  'cause_override',
+                ].includes(key)
+              )
+              .map(([key, messages]) => (
+                <p key={key} className="col-span-full text-xs text-destructive">
+                  {messages.join(' ')}
+                </p>
+              ))}
+            {showStandoffSwitch && !(showPlacement && line.creature_template !== '') && (
               <label className="col-span-full flex items-center gap-2 text-sm">
                 <input
                   type="checkbox"

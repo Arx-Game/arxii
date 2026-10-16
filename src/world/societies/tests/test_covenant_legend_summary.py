@@ -1,6 +1,6 @@
 """Tests for CovenantLegendSummary materialized view via get_covenant_legend_total."""
 
-from django.test import TestCase
+from django.test import TestCase, tag
 
 from world.covenants.constants import CovenantType
 from world.covenants.factories import (
@@ -37,6 +37,7 @@ def _make_engaged_persona(covenants: list) -> object:
     return persona
 
 
+@tag("postgres")
 class CovenantLegendSummaryTests(TestCase):
     def test_total_grows_after_create_legend_event(self) -> None:
         """create_legend_event credits covenant → legend total reflects base_value."""

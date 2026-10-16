@@ -20,7 +20,7 @@ and spawns without a position rather than refusing the whole line.
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING, Any, Protocol
+from typing import TYPE_CHECKING, Any
 
 from django.db import transaction
 
@@ -30,24 +30,10 @@ if TYPE_CHECKING:
     from evennia.accounts.models import AccountDB
 
     from world.areas.positioning.models import Position
-    from world.combat.models import CombatEncounter, CreatureTemplate
+    from world.combat.models import CombatEncounter
+    from world.standoffs.services.placement import OpponentLine
 
 logger = logging.getLogger(__name__)
-
-
-class OpponentLineLike(Protocol):
-    """Structural shape shared by ``BeatOpponentLine`` and ``MissionOptionOpponentLine``.
-
-    Both are authored creature x count x position-hint rows, just keyed on a
-    different parent (a Beat vs. a scenario MissionOption) - this protocol
-    lets :func:`spawn_opponent_lines` stay agnostic to which one it's fed.
-    """
-
-    pk: int
-    creature_template: CreatureTemplate
-    count: int
-    position_name: str
-    order: int
 
 
 def _resolve_position_by_name(room: object, name: str) -> Position | None:
@@ -79,7 +65,7 @@ def _resolve_position_by_name(room: object, name: str) -> Position | None:
 
 def spawn_opponent_lines(
     encounter: CombatEncounter,
-    lines: Iterable[OpponentLineLike],
+    lines: Iterable[OpponentLine],
     *,
     acting_account: AccountDB | None = None,
 ) -> list[dict[str, Any]]:
@@ -111,6 +97,7 @@ def spawn_opponent_lines(
                         line.creature_template,
                         position=position,
                         acting_account=acting_account,
+                        line=line,
                     )
             except (ValueError, PositionError) as exc:
                 logger.warning(

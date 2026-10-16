@@ -655,6 +655,34 @@ class CombatOpponent(SharedMemoryModel):
         help_text="The in-world ObjectDB representation. Set at creation; "
         "nulled if the ObjectDB is destroyed externally.",
     )
+    # === Standoff profile snapshot (#4361) ===
+    # Stamped at spawn from the template and the placement's edits, so a live encounter
+    # never reads the template's standoff fields again. Drives are stamped as
+    # ObjectProperty rows on ``objectdb``.
+    cause = models.CharField(
+        max_length=20,
+        choices=CauseKind.choices,
+        default=CauseKind.NONE,
+        help_text="Why this opponent would start a fight on its own (stamped at spawn).",
+    )
+    cause_margin_percent = models.SmallIntegerField(
+        default=0,
+        help_text="How far the party must outweigh it before its cause stops firing.",
+    )
+    organization = models.ForeignKey(
+        "arxii.Organization",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="+",
+        help_text="The affiliation whose faction rules this opponent carries (stamped).",
+    )
+    suppressed_faction_rules = models.ManyToManyField(
+        "arxii.FactionRule",
+        blank=True,
+        related_name="+",
+        help_text="Inherited faction rules the placement switched off for this opponent.",
+    )
     objectdb_is_ephemeral = models.BooleanField(
         default=False,
         help_text="If True, the ObjectDB was created for this encounter only "
@@ -2758,6 +2786,17 @@ class CreatureTemplate(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
         help_text=(
             "How far, as a percent of its own force, the party must outweigh the creature "
             "before its cause stops firing."
+        ),
+    )
+    organization = models.ForeignKey(
+        "arxii.Organization",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="affiliated_creature_templates",
+        help_text=(
+            "Default affiliation. Its faction rules, its parent organizations' and its "
+            "society's apply to every placement unless a placement changes it (#4361)."
         ),
     )
 

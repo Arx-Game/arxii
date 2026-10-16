@@ -29,6 +29,7 @@ from world.standoffs.factories import (
     StandoffApproachFactory,
     StandoffGroupFactory,
     StandoffTermsFactory,
+    restamp_from_templates,
 )
 from world.standoffs.models import StandoffConfig
 from world.traits.factories import CheckOutcomeFactory
@@ -97,10 +98,10 @@ class MissionJourneyTests(StandoffJourneyBase):
                 "standoff_read",
                 group_id=self.group.pk,
                 focus_kind=RevealKind.DRIVE,
-                focus_drive_id=self.drive.pk,
+                focus_property_id=self.drive.property_id,
             )
         self.assertTrue(read.success, read.message)
-        self.assertTrue(self.group.reveals.filter(drive=self.drive).exists())
+        self.assertTrue(self.group.reveals.filter(drive=self.drive.property).exists())
         with force_check_outcome(self.success_tier):
             press = self._do("standoff_press", group_id=self.group.pk, approach_id=self.approach.pk)
         self.assertTrue(press.success, press.message)
@@ -258,6 +259,7 @@ class NotInAStandoffTests(StandoffJourneyBase):
 class ReadMessageTests(PredatorBase):
     def test_a_read_tells_the_reader_what_it_found(self) -> None:
         drive = CreatureDriveFactory(creature_template=self.creature, strength=DriveStrength.MAJOR)
+        restamp_from_templates(self.encounter)
         with patch(CHECK, return_value=_roll(CheckOutcomeFactory(name="Crit", success_level=2))):
             result = self._do("standoff_read", group_id=self.group.pk)
         self.assertIn("Cause: Predation.", result.message)

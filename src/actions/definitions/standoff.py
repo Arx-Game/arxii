@@ -162,7 +162,6 @@ class StandoffReadAction(Action):
         context: ActionContext | None = None,
         group_id: int | None = None,
         focus_kind: str | None = None,
-        focus_drive_id: int | None = None,
         focus_faction_rule_id: int | None = None,
         focus_property_id: int | None = None,
         **kwargs: Any,
@@ -179,7 +178,6 @@ class StandoffReadAction(Action):
             participant,
             group,
             focus_kind=focus_kind,
-            focus_drive_id=focus_drive_id,
             focus_faction_rule_id=focus_faction_rule_id,
             focus_property_id=focus_property_id,
         )

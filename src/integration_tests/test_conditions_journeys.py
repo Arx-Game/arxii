@@ -1,0 +1,228 @@
+"""Journeys through the conditions a character carries (#3657, tranche 1 pilot).
+
+Each journey types what a player types, or sends what the web client sends,
+and asserts what the player was told. The die is pinned (``ROLL_WELL``): the
+roll is the one thing a journey cannot drive and still be a journey.
+"""
+
+from __future__ import annotations
+
+from unittest.mock import patch
+
+from integration_tests.harness import JourneyCase
+from world.checks.factories import CheckTypeFactory
+from world.conditions.constants import BreakFreeMode, TreatmentTargetKind
+from world.conditions.factories import (
+    ConditionCategoryFactory,
+    ConditionInstanceFactory,
+    ConditionTemplateFactory,
+    TreatmentTemplateFactory,
+)
+from world.conditions.models import ConditionInstance
+from world.gm.constants import GMLevel
+from world.gm.factories import GMProfileFactory
+from world.scenes.factories import SceneFactory, SceneParticipationFactory
+from world.scenes.models import Interaction, Scene
+from world.traits.factories import CheckSystemSetupFactory
+
+# A roll of 95 lands in the top band of every chart CheckSystemSetupFactory builds.
+ROLL_WELL = patch("world.checks.services.random.randint", return_value=95)
+
+
+def severity_of(instance: ConditionInstance) -> int:
+    """The severity the database holds (``refresh_from_db`` is a no-op on idmapper rows)."""
+    return ConditionInstance.objects.filter(pk=instance.pk).values_list("severity", flat=True).get()
+
+
+def feed_of(scene: Scene) -> list[str]:
+    """What the scene's feed shows, oldest first. Outcome and narration lines are
+    recorded here and pushed to connected sessions; a harness character has no
+    session, so the feed row is the player-facing copy a journey can read."""
+    rows = Interaction.objects.filter(scene=scene).order_by("pk")
+    return list(rows.values_list("content", flat=True))
+
+
+def fresh_check_system() -> None:
+    """Outcomes and charts for the roll (the chart cache is emptied between tests)."""
+    CheckSystemSetupFactory.create()
+
+
+class ShakingOffACharm(JourneyCase):
+    """Ysmay is under a charm that alters her behavior and fights it off herself."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        fresh_check_system()
+        self.room = self.make_room("The Lantern")
+        self.ysmay = self.make_player("Ysmay", room=self.room)
+        self.hobb = self.make_player("Hobb", room=self.room)
+        self.watch(self.hobb)
+        charm = ConditionTemplateFactory(
+            name="Honeyed Words",
+            category=ConditionCategoryFactory(name="Charm", alters_behavior=True),
+            break_free_mode=BreakFreeMode.SELF_INITIATED,
+            break_free_check_type=CheckTypeFactory(name="Resolve"),
+            break_free_difficulty=10,
+        )
+        self.charm = ConditionInstanceFactory(target=self.ysmay, condition=charm, severity=3)
+
+    def test_she_pushes_back_and_the_hold_weakens(self) -> None:
+        with ROLL_WELL:
+            told = self.telnet(self.ysmay, "breakfree")
+        self.assertIn("You push back against the effect, weakening its hold.", told)
+        self.assertEqual(severity_of(self.charm), 2)
+        self.assertNotTold(self.hobb, "weakening its hold")
+
+    def test_a_second_try_at_once_is_refused(self) -> None:
+        with ROLL_WELL:
+            self.telnet(self.ysmay, "breakfree")
+        told = self.telnet(self.ysmay, "breakfree")
+        self.assertIn("You are still fighting the grip of the effect.", told)
+        self.assertEqual(severity_of(self.charm), 2)
+
+    def test_with_nothing_to_fight_he_is_told_so(self) -> None:
+        self.assertIn("You have nothing you can fight off.", self.telnet(self.hobb, "breakfree"))
+
+    def test_a_friend_rallies_her_and_her_next_attempt_carries_it(self) -> None:
+        with ROLL_WELL:
+            told = self.telnet(self.hobb, "rally Ysmay")
+        self.assertIn(
+            "You rally Ysmay, granting them +5 to their next attempt to break free.", told
+        )
+        self.assertEqual(severity_of(self.charm), 3)
+        with ROLL_WELL:
+            told = self.telnet(self.ysmay, "breakfree")
+        self.assertIn("You push back against the effect, weakening its hold.", told)
+        self.assertEqual(severity_of(self.charm), 2)
+
+    def test_rallying_someone_with_nothing_to_fight(self) -> None:
+        told = self.telnet(self.ysmay, "rally Hobb")
+        self.assertIn("They don't seem to be fighting anything.", told)
+
+
+class TreatingAFeverAtTheClinic(JourneyCase):
+    """Hobb offers Ysmay a poultice in a scene; she accepts; the fever recedes."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        fresh_check_system()
+        self.room = self.make_room("The Clinic")
+        self.hobb = self.make_player("Hobb", room=self.room)
+        self.ysmay = self.make_player("Ysmay", room=self.room)
+        self.scene = SceneFactory(
+            room=self.room,
+            participants=[self.account_of(self.hobb), self.account_of(self.ysmay)],
+        )
+        fever = ConditionTemplateFactory(name="Marsh Fever")
+        self.poultice = TreatmentTemplateFactory(
+            name="Willow Poultice",
+            target_condition=fever,
+            target_kind=TreatmentTargetKind.PRIMARY,
+        )
+        self.fever = ConditionInstanceFactory(target=self.ysmay, condition=fever, severity=5)
+        self.watch(self.ysmay)
+
+    def test_an_accepted_offer_treats_the_fever(self) -> None:
+        listing = self.telnet(self.hobb, "treat Ysmay")
+        self.assertIn("Treatable conditions on Ysmay:", listing)
+        self.assertIn("1. Willow Poultice on", listing)
+        self.assertIn("Marsh Fever", listing)
+
+        offer = self.telnet(self.hobb, "treat Ysmay 1")
+        self.assertIn("You offer to treat Ysmay for", offer)
+        self.assertIn("with Willow Poultice. Awaiting their response", offer)
+
+        with ROLL_WELL:
+            accepted = self.telnet(self.ysmay, "accept")
+        self.assertIn("You accept the action against you.", accepted)
+        self.assertIn(
+            "Hobb applies Willow Poultice to Ysmay. The treatment takes hold.", feed_of(self.scene)
+        )
+        self.assertEqual(severity_of(self.fever), 2)
+
+    def test_a_number_that_is_not_on_the_list_is_refused(self) -> None:
+        self.assertIn("Invalid candidate number.", self.telnet(self.hobb, "treat Ysmay 4"))
+        self.assertEqual(severity_of(self.fever), 5)
+
+    def test_nothing_to_treat_says_so(self) -> None:
+        self.assertIn(
+            "There are no treatable conditions on that character in this scene.",
+            self.telnet(self.ysmay, "treat Hobb"),
+        )
+
+    def test_the_sheet_and_the_treat_panel_read_the_same_rows(self) -> None:
+        sheet = self.api(self.account_of(self.ysmay)).get(
+            "/api/conditions/character/", HTTP_X_CHARACTER_ID=str(self.ysmay.pk)
+        )
+        self.assertEqual(sheet.status_code, 200, sheet.content)
+        self.assertEqual([row["name"] for row in sheet.json()], ["Marsh Fever"])
+
+        persona = self.ysmay.sheet_data.primary_persona
+        panel = self.api(self.account_of(self.hobb)).get(
+            "/api/conditions/treatments/",
+            {"target_persona_id": persona.pk},
+            HTTP_X_CHARACTER_ID=str(self.hobb.pk),
+        )
+        self.assertEqual(panel.status_code, 200, panel.content)
+        self.assertIn("Willow Poultice", panel.content.decode())
+
+
+class AGMAppliesAConditionAtTheTable(JourneyCase):
+    """Ravenna runs the scene; from the GM panel she marks Ysmay feverish, then clears it."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.room = self.make_room("The Long Table")
+        self.ravenna = self.make_player("Ravenna", room=self.room)
+        self.ysmay = self.make_player("Ysmay", room=self.room)
+        GMProfileFactory(account=self.account_of(self.ravenna), level=GMLevel.JUNIOR)
+        self.scene = SceneFactory(room=self.room)
+        SceneParticipationFactory(
+            scene=self.scene, account=self.account_of(self.ravenna), is_gm=True
+        )
+        SceneParticipationFactory(scene=self.scene, account=self.account_of(self.ysmay))
+        ConditionTemplateFactory(name="Marsh Fever")
+        self.watch(self.ysmay)
+
+    def test_the_player_hears_it_and_the_panel_lists_it(self) -> None:
+        applied = self.web(
+            self.ravenna,
+            "gm_apply_condition",
+            target=self.ysmay,
+            condition_ref="Marsh Fever",
+            severity=2,
+            note="A chill from the marsh road.",
+        )
+        self.assertTrue(applied.detail.success, applied.detail.message)
+        self.assertIn("Ysmay is now Marsh Fever.", applied.detail.message)
+        self.assertIn("Ysmay is now Marsh Fever. A chill from the marsh road.", feed_of(self.scene))
+
+        listed = self.web(self.ravenna, "gm_list_conditions", target=self.ysmay)
+        self.assertTrue(listed.detail.success, listed.detail.message)
+        self.assertIn("Marsh Fever (severity 2)", listed.detail.message)
+
+        removed = self.web(
+            self.ravenna,
+            "gm_remove_condition",
+            target=self.ysmay,
+            condition="Marsh Fever",
+            reason="the fever broke overnight",
+        )
+        self.assertTrue(removed.detail.success, removed.detail.message)
+        self.assertIn(
+            "Marsh Fever removed from Ysmay (the fever broke overnight).", removed.detail.message
+        )
+        self.assertFalse(
+            ConditionInstance.objects.filter(target=self.ysmay, resolved_at__isnull=True).exists()
+        )
+
+    def test_a_player_who_is_not_the_gm_is_refused(self) -> None:
+        refused = self.web(
+            self.ysmay,
+            "gm_apply_condition",
+            target=self.ravenna,
+            condition_ref="Marsh Fever",
+            severity=1,
+        )
+        self.assertFalse(refused.detail.success)
+        self.assertFalse(ConditionInstance.objects.filter(target=self.ravenna).exists())

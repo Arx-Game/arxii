@@ -28,6 +28,7 @@ from world.standoffs.factories import (
     StandoffGroupFactory,
     StandoffRevealFactory,
     StandoffTermsFactory,
+    restamp_from_templates,
 )
 from world.standoffs.models import StandoffAngleShare, StandoffConfig
 from world.standoffs.services.state import open_standoff
@@ -190,8 +191,9 @@ class CmdStandoffTests(TestCase):
         self.template.save(update_fields=["cause"])
         shown = CreatureDriveFactory(creature_template=self.template, strength=DriveStrength.MAJOR)
         hidden = CreatureDriveFactory(creature_template=self.template, strength=DriveStrength.MINOR)
+        restamp_from_templates(self.encounter)
         StandoffRevealFactory(group=self.group, kind=RevealKind.CAUSE)
-        StandoffRevealFactory(group=self.group, kind=RevealKind.DRIVE, drive=shown)
+        StandoffRevealFactory(group=self.group, kind=RevealKind.DRIVE, drive=shown.property)
         cmd = self._cmd("")
         cmd.func()
         text = cmd.msg.call_args.args[0]

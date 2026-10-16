@@ -18,7 +18,18 @@ app's test modules J/F/X/U-keep/R as the first pass of its ledger;
 `just coverage-journeys` and the weekly `journey-coverage` workflow report what no
 journey reaches, as design input, never a gate. `django_notes.md`'s per-layer test
 shape is replaced by the three layers; `test-layer-reviewer` reads every PR's tests.
-ADR-3657. Tranche 1 is the `world.conditions` pilot.
+ADR-3657. Tranche 1 (2026-10-15): the runner empties the identity map after every test,
+forced (#4363); the `world.conditions` pilot adds eleven journeys
+(`integration_tests/test_conditions_journeys.py`: break free, rally, treat and accept,
+the sheet and treat-panel endpoints, the GM panel), the confirmed ledger
+(`docs/testing/ledger/conditions.csv`, `confirmed` and `note` columns beside the
+tool's), and the first removals: 34 tests of 576, all of them tests of Django's own
+behaviour or a mock. Next by shard weight: actions, scenes, stories; then magic and
+combat with TehomCD confirming their ledgers. Tranche 2 (actions) began 2026-10-15 with
+journeys for organizations, the consent lists and carrying a body
+(`integration_tests/test_membership_and_consent_journeys.py`); the first two found
+`org invite` broken on telnet and invitees never told, both fixed in place, and the
+journeys list now carries a "Gaps the journeys found" table.
 
 ## Built (2026-09-30, #4064 — the reviewed delete, and admin pages for domains and fealty)
 

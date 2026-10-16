@@ -30,6 +30,7 @@ from world.standoffs.factories import (
     StandoffGroupFactory,
     StandoffRevealFactory,
     StandoffTermsFactory,
+    restamp_from_templates,
 )
 from world.standoffs.models import (
     StandoffAngleShare,
@@ -101,9 +102,11 @@ class HiddenInformationTests(ViewBase):
         super().setUp()
         self.template.cause = CauseKind.PREDATION
         self.template.save(update_fields=["cause"])
+        restamp_from_templates(self.encounter)
         self.drive = CreatureDriveFactory(
             creature_template=self.template, strength=DriveStrength.MAJOR
         )
+        restamp_from_templates(self.encounter)
 
     def test_unrevealed_things_count_but_are_never_named(self) -> None:
         group = self.view_for(self.sheet_a).groups[0]
@@ -117,7 +120,7 @@ class HiddenInformationTests(ViewBase):
 
     def test_revealed_cause_and_drive_are_named(self) -> None:
         StandoffRevealFactory(group=self.group, kind=RevealKind.CAUSE)
-        StandoffRevealFactory(group=self.group, kind=RevealKind.DRIVE, drive=self.drive)
+        StandoffRevealFactory(group=self.group, kind=RevealKind.DRIVE, drive=self.drive.property)
         group = self.view_for(self.sheet_b).groups[0]
         self.assertEqual(group.cause, "Predation")
         self.assertEqual(
@@ -150,7 +153,7 @@ class HiddenInformationTests(ViewBase):
             self.assertEqual(hidden.levers, [])
             self.assertFalse(hidden.hits_revealed_drive)
             self.assertTrue(preview.called)
-        StandoffRevealFactory(group=self.group, kind=RevealKind.DRIVE, drive=self.drive)
+        StandoffRevealFactory(group=self.group, kind=RevealKind.DRIVE, drive=self.drive.property)
         with patch(PREVIEW, return_value=0):
             revealed = self.view_for(self.sheet_b).approaches[0]
         self.assertEqual(
@@ -225,6 +228,7 @@ class PresentationTests(ViewBase):
     def test_cause_gloss_only_once_the_cause_is_revealed(self) -> None:
         self.template.cause = CauseKind.PREDATION
         self.template.save(update_fields=["cause"])
+        restamp_from_templates(self.encounter)
         StandoffCauseGlossFactory(cause=CauseKind.PREDATION, text="PLACEHOLDER predation gloss")
         self.assertIsNone(self.view_for(self.sheet_b).groups[0].cause_gloss)
         StandoffRevealFactory(group=self.group, kind=RevealKind.CAUSE)
@@ -235,6 +239,7 @@ class PresentationTests(ViewBase):
     def test_a_revealed_cause_with_no_authored_gloss_shows_none(self) -> None:
         self.template.cause = CauseKind.PREDATION
         self.template.save(update_fields=["cause"])
+        restamp_from_templates(self.encounter)
         StandoffRevealFactory(group=self.group, kind=RevealKind.CAUSE)
         group = self.view_for(self.sheet_b).groups[0]
         self.assertEqual(group.cause, "Predation")
@@ -299,12 +304,13 @@ class GradeAndTermsTests(ViewBase):
 
     def test_terms_listed_only_when_their_required_drive_is_revealed(self) -> None:
         drive = CreatureDriveFactory(creature_template=self.template)
+        restamp_from_templates(self.encounter)
         open_terms = StandoffTermsFactory()
         gated = StandoffTermsFactory(required_drive=drive.property)
         with patch(PREVIEW, return_value=0):
             names = [t.name for t in self.view_for(self.sheet_b).terms]
             self.assertEqual(names, [open_terms.name])
-            StandoffRevealFactory(group=self.group, kind=RevealKind.DRIVE, drive=drive)
+            StandoffRevealFactory(group=self.group, kind=RevealKind.DRIVE, drive=drive.property)
             names = [t.name for t in self.view_for(self.sheet_b).terms]
         self.assertEqual(set(names), {open_terms.name, gated.name})
 

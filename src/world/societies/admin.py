@@ -19,6 +19,7 @@ from world.codex.models import OrganizationCodexGrant
 from world.codex.services import apply_organization_codex_grants
 from world.contributors.admin import CREDIT_FIELDSET
 from world.societies.models import (
+    AssociationConfig,
     CovenantLegendCredit,
     CrewSlot,
     CrimeVoteWeight,
@@ -902,6 +903,25 @@ class SpreadingConfigAdmin(admin.ModelAdmin):
         obj: object = None,  # noqa: ARG002
     ) -> bool:
         """Prevent deleting the config."""
+        return False
+
+
+@admin.register(AssociationConfig)
+class AssociationConfigAdmin(admin.ModelAdmin):
+    """When the world sees a persona as tied to an organization (single row, #4361)."""
+
+    list_display = ["__str__", "former_member_years", "work_missions", "work_days"]
+
+    def has_add_permission(self, request: object) -> bool:  # noqa: ARG002
+        """Prevent adding if the settings row already exists."""
+        return not AssociationConfig.objects.exists()
+
+    def has_delete_permission(
+        self,
+        request: object,  # noqa: ARG002
+        obj: object = None,  # noqa: ARG002
+    ) -> bool:
+        """Prevent deleting the settings row."""
         return False
 
 

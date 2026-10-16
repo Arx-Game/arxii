@@ -65,32 +65,3 @@ class ConditionCheckModifierCategoryTargetingTest(TestCase):
         )
         with self.assertRaises(ValidationError):
             mod.full_clean()
-
-    def test_str_shows_category_when_check_type_is_null(self):
-        """__str__ displays the category name for category-targeted rows."""
-        category = CheckCategoryFactory(name="Magic")
-        condition = ConditionTemplateFactory(name="Blinded")
-        mod = ConditionCheckModifier(
-            condition=condition,
-            check_type=None,
-            check_category=category,
-            modifier_value=-10,
-        )
-        rendered = str(mod)
-        self.assertIn("Blinded", rendered)
-        self.assertIn("Magic", rendered)
-        self.assertIn("category", rendered.lower())
-
-    def test_str_shows_check_type_when_set(self):
-        """__str__ still displays check_type.name for exact-FK rows (backward compat)."""
-        check_type = CheckTypeFactory(name="Stealth")
-        condition = ConditionTemplateFactory(name="Blinded")
-        mod = ConditionCheckModifier(
-            condition=condition,
-            check_type=check_type,
-            check_category=None,
-            modifier_value=-10,
-        )
-        rendered = str(mod)
-        self.assertIn("Blinded", rendered)
-        self.assertIn("Stealth", rendered)

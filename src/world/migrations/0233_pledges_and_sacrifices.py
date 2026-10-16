@@ -6,7 +6,7 @@ import django.db.models.deletion
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("arxii", "0229_standoff_proposals_and_gm_controls"),
+        ("arxii", "0232_standoff_reveal_drive_is_a_property"),
     ]
 
     operations = [

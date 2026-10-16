@@ -5,7 +5,11 @@ from unittest.mock import patch
 
 from world.checks.test_helpers import force_check_outcome
 from world.standoffs.constants import RevealKind, StandoffGroupState, TermsEffect
-from world.standoffs.factories import StandoffApproachFactory, StandoffTermsFactory
+from world.standoffs.factories import (
+    StandoffApproachFactory,
+    StandoffTermsFactory,
+    restamp_from_templates,
+)
 from world.standoffs.models import StandoffGroup
 from world.standoffs.services.state import begin_round_or_break_standoff
 from world.standoffs.services.verbs import (
@@ -26,6 +30,7 @@ class RealCheckPathTests(VerbBase):
     def test_read_on_the_real_check_path(self) -> None:
         self.template.cause = "predation"
         self.template.save(update_fields=["cause"])
+        restamp_from_templates(self.encounter)
         with force_check_outcome(CheckOutcomeFactory(name="Real read", success_level=1)):
             result = standoff_read(self.participant, self.group, focus_kind=RevealKind.CAUSE)
         self.assertTrue(result.success, result.message)

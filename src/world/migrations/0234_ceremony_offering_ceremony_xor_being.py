@@ -1,13 +1,13 @@
 # The CHECK on CeremonyOffering in its own migration (#4333 slice 2): it ties the
-# ``being`` column 0230 adds to ``ceremony``. Every existing row has a ceremony and
-# no being (``ceremony`` was NOT NULL until 0230), so it satisfies the first arm.
+# ``being`` column 0233 adds to ``ceremony``. Every existing row has a ceremony and
+# no being (``ceremony`` was NOT NULL until 0233), so it satisfies the first arm.
 
 from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("arxii", "0230_pledges_and_sacrifices"),
+        ("arxii", "0233_pledges_and_sacrifices"),
     ]
 
     operations = [

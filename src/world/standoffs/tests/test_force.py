@@ -17,7 +17,7 @@ from world.combat.factories import (
     CreatureTemplateFactory,
     OpponentTierTemplateFactory,
 )
-from world.standoffs.factories import FactionRuleFactory
+from world.standoffs.factories import FactionRuleFactory, restamp_from_templates
 from world.standoffs.models import StandoffConfig
 from world.standoffs.services.force import (
     cause_fires,
@@ -94,6 +94,7 @@ class ForceTests(TestCase):
     def test_cause_none_never_fires(self) -> None:
         self.template.cause = CauseKind.NONE
         self.template.save(update_fields=["cause"])
+        restamp_from_templates(self.encounter)
         with patch(LEVEL_PATH, return_value=1):
             self.assertFalse(cause_fires(self._group(), self.config))
 

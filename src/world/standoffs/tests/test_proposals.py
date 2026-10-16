@@ -36,6 +36,7 @@ from world.standoffs.factories import (
     FactionRuleFactory,
     StandoffApproachFactory,
     StandoffTermsFactory,
+    restamp_from_templates,
 )
 from world.standoffs.models import StandoffConfig
 from world.standoffs.services.proposals import resolve_proposal, standoff_is_gm_run
@@ -271,6 +272,7 @@ class PredationIgnoresProvocationTests(ProposalBase):
     def test_a_botch_against_a_predation_group_is_no_provocation(self) -> None:
         self.template.cause = CauseKind.PREDATION
         self.template.save(update_fields=["cause"])
+        restamp_from_templates(self.encounter)
         self.botch_press()
         self.refresh()
         self.assertEqual(self.group.state, StandoffGroupState.OPEN)

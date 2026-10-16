@@ -147,3 +147,25 @@ def test_ledger_walks_the_tests_package_and_summarises(tmp_path: Path) -> None:
     assert text.startswith("2 modules, 1 tests")
     assert "R" in text
     assert "U-keep" in text
+
+
+def test_bare_asserts_are_outcome_assertions(tmp_path: Path) -> None:
+    """A module of ``assert x == y`` statements with one mock assertion is not mock-pinned."""
+    module = tmp_path / "test_predicate.py"
+    module.write_text(
+        "from unittest.mock import patch\n"
+        "from django.test import TestCase\n"
+        "class T(TestCase):\n"
+        "    def test_scope(self):\n"
+        "        assert passes(a, b)\n"
+        "        assert not can_see(a, b)\n"
+        "        assert passes(a, c)\n"
+        "    def test_delegation(self):\n"
+        "        with patch('m.passes') as check:\n"
+        "            can_see(a, b)\n"
+        "            check.assert_called_once_with(a, b)\n",
+    )
+    row = grade_module(module, "world.app.tests.test_predicate", "world.app")
+    assert row.outcome_asserts == 3
+    assert row.mock_asserts == 1
+    assert row.layer == "U-keep"

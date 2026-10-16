@@ -12,6 +12,7 @@ if TYPE_CHECKING:
     from evennia.accounts.models import AccountDB
 
     from world.areas.positioning.models import Position
+    from world.standoffs.services.placement import OpponentLine
 
 
 def spawn_from_creature_template(
@@ -20,14 +21,24 @@ def spawn_from_creature_template(
     *,
     position: Position | None = None,
     acting_account: AccountDB | None = None,
+    line: OpponentLine | None = None,
 ) -> CombatOpponent:
     """Spawn a CombatOpponent from a CreatureTemplate bestiary entry (#2016).
 
     Thin wrapper over add_opponent. Clones CreaturePhaseTemplate rows into
     BossPhase rows on the spawned opponent if present. Stamps break-bar
     config and vulnerability fields from BreakBarConfig.
+
+    Stamps the standoff profile (#4361): cause, margin, affiliation, switched-off faction
+    rules and drives, from the template and ``line``'s placement edits when the opponent
+    comes from an authored opponent line.
     """
     from world.combat.models import CreaturePhaseTemplate  # noqa: PLC0415
+    from world.standoffs.services.placement import (  # noqa: PLC0415
+        draft_from_line,
+        placement_profile,
+        stamp_opponent,
+    )
 
     has_authored_phases = CreaturePhaseTemplate.objects.filter(creature_template=template).exists()
 
@@ -44,6 +55,7 @@ def spawn_from_creature_template(
     )
     opp.creature_template = template
     opp.save(update_fields=["creature_template"])
+    stamp_opponent(opp, placement_profile(template, draft_from_line(line)))
 
     if has_authored_phases:
         _clone_authored_phases(encounter, opp, template)

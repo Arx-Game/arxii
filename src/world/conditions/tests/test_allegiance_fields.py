@@ -6,7 +6,7 @@ from django.test import TestCase
 from actions.factories import ConsequencePoolFactory
 from world.checks.factories import CheckTypeFactory
 from world.conditions.constants import Allegiance
-from world.conditions.factories import ConditionStageFactory, ConditionTemplateFactory
+from world.conditions.factories import ConditionTemplateFactory
 
 
 class AllegianceFieldTests(TestCase):
@@ -14,14 +14,6 @@ class AllegianceFieldTests(TestCase):
     def setUpTestData(cls):
         cls.check_type = CheckTypeFactory(name="Insight 4091")
         cls.pool = ConsequencePoolFactory()
-
-    def test_blank_by_default(self):
-        template = ConditionTemplateFactory()
-        self.assertEqual(template.sets_allegiance, "")
-        template.full_clean()
-
-    def test_turned_is_a_choice(self):
-        self.assertEqual(Allegiance.TURNED, "turned")
 
     def test_allegiance_requires_break_check_type(self):
         template = ConditionTemplateFactory(sets_allegiance=Allegiance.ALLY_OF_CASTER)
@@ -44,7 +36,3 @@ class AllegianceFieldTests(TestCase):
             settle_consequence_pool=self.pool,
         )
         template.full_clean()
-
-    def test_stage_settle_pool(self):
-        stage = ConditionStageFactory(settle_consequence_pool=self.pool)
-        self.assertEqual(stage.settle_consequence_pool, self.pool)

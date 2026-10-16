@@ -18,6 +18,7 @@ import {
   useMarkBeat,
   useMyActiveStories,
   useResolveEpisode,
+  useEpisode,
   useStory,
 } from '../queries';
 
@@ -294,6 +295,14 @@ describe('Stories Query Hooks', () => {
 
       expect(result.current.data).toEqual(mockStory);
       expect(api.getStory).toHaveBeenCalledWith(1);
+    });
+  });
+
+  describe('useEpisode', () => {
+    it('fetches nothing for id 0, the closed edit dialog (#4361)', async () => {
+      const { result } = renderHook(() => useEpisode(0), { wrapper: createWrapper() });
+      await waitFor(() => expect(result.current.fetchStatus).toBe('idle'));
+      expect(api.getEpisode).not.toHaveBeenCalled();
     });
   });
 

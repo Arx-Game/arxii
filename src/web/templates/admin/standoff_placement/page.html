@@ -1,0 +1,161 @@
+{% extends "admin/base_site.html" %}
+{% load i18n static standoff_admin_tags %}
+
+{% block title %}{{ title }} | {% translate 'Site administration' %}{% endblock %}
+
+{% block extrastyle %}
+{{ block.super }}
+{% comment %}
+A custom page extending base_site.html links forms.css and widgets.css itself (#3667).
+{% endcomment %}
+<link rel="stylesheet" href="{% static 'admin/css/forms.css' %}">
+<link rel="stylesheet" href="{% static 'admin/css/widgets.css' %}">
+{% endblock %}
+
+{% block extrahead %}
+{{ block.super }}
+<script src="{% url 'admin:jsi18n' %}"></script>
+{{ media }}
+<script src="{% static 'admin/js/builder_formsets.js' %}"></script>
+{% endblock %}
+
+{% block content_title %}{% endblock %}
+
+{% block breadcrumbs %}
+<div class="breadcrumbs">
+  <a href="{% url 'admin:index' %}">{% translate 'Home' %}</a>
+  &rsaquo; <a href="{{ where.parent_changelist_url }}">{{ where.parent_changelist_label }}</a>
+  &rsaquo; <a href="{{ where.parent_url }}">{{ where.parent_label }}</a>
+  &rsaquo; Placement
+</div>
+{% endblock %}
+
+{% block content %}
+{% include "admin/tuning/_panel_css.html" %}
+{% include "admin/standoff_profile/_css.html" %}
+<div id="placement-root" class="sp-root">
+  <h1>Placement: {{ where.label }}</h1>
+
+  <div class="sp-columns">
+    <div class="sp-main">
+      <form method="post">
+        {% csrf_token %}
+        <div class="module" id="placement-module">
+          <h2>This placement</h2>
+          {% if form.non_field_errors %}<p class="errornote">{{ form.non_field_errors }}</p>{% endif %}
+          <table class="tuning-table sp-table">
+            <tbody>
+              {% if is_beat %}
+              <tr><th>{{ form.opens_as_standoff.label_tag }}</th>
+                <td>{{ form.opens_as_standoff.errors }}{{ form.opens_as_standoff }}
+                  <div class="help">Running the beat opens a standoff instead of round one.</div></td></tr>
+              {% endif %}
+              <tr><th>{{ form.cause_override.label_tag }}</th>
+                <td>{{ form.cause_override.errors }}{{ form.cause_override }}
+                  <div class="help">Leave as the template's, or pick another kind for this placement only.</div></td></tr>
+              <tr><th>{{ form.cause_margin_override.label_tag }}</th>
+                <td>{{ form.cause_margin_override.errors }}{{ form.cause_margin_override }}
+                  <div class="help">Blank keeps the template's margin ({{ profile.template_cause_margin_percent }}).</div></td></tr>
+              <tr><th>{{ form.organization.label_tag }}</th>
+                <td>{{ form.organization.errors }}{{ form.organization }}
+                  <div class="help">Template: {% if profile.template_organization %}{{ profile.template_organization.name }}{% else %}no affiliation{% endif %}. {{ form.organization.help_text }}</div></td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="module" id="drives-module">
+          <h2>Drives here</h2>
+          <table class="tuning-table sp-table">
+            <thead><tr><th>Drive</th><th>Template</th><th>Here</th><th>Effect</th></tr></thead>
+            <tbody>
+              {% for drive, field in drives.rows %}
+              <tr>
+                <td>{{ drive.property.name }}</td>
+                <td class="sp-context">{{ drive.template_label }}</td>
+                <td>{{ field.errors }}{{ field }}</td>
+                <td class="sp-context">{% if drive.state == "edited" %}<span class="sp-edited">edited</span>{% elif drive.state == "removed" %}<span class="sp-edited">removed here</span>{% endif %}</td>
+              </tr>
+              {% empty %}
+              <tr><td colspan="4" class="sp-context">The template has no drives.</td></tr>
+              {% endfor %}
+            </tbody>
+          </table>
+          {{ added.management_form }}
+          {% if added.non_form_errors %}<p class="errornote">{{ added.non_form_errors }}</p>{% endif %}
+          <table class="tuning-table sp-table">
+            <thead><tr><th>Added drive</th><th>Strength</th><th>Delete</th></tr></thead>
+            <tbody id="added-body">
+              {% for f in added.forms %}
+              <tr>
+                <td>{{ f.property.errors }}{{ f.property }}</td>
+                <td>{{ f.strength.errors }}{{ f.strength }}</td>
+                <td>{{ f.DELETE }}</td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+          <template id="empty-added-template">
+            <tr>
+              <td>{{ added.empty_form.property }}</td>
+              <td>{{ added.empty_form.strength }}</td>
+              <td>{{ added.empty_form.DELETE }}</td>
+            </tr>
+          </template>
+          <div class="sp-addrow">
+            <button type="button" class="button" id="add-drive-btn"
+                    data-prefix="{{ added.prefix }}" data-target="added-body"
+                    data-template="empty-added-template">+ Add a drive for this placement</button>
+          </div>
+        </div>
+
+        <div class="module" id="rules-module">
+          <h2>Inherited faction rules</h2>
+          {% if rules_form.non_field_errors %}<p class="errornote">{{ rules_form.non_field_errors }}</p>{% endif %}
+          {{ rules_form.switched_off.errors }}
+          <table class="tuning-table sp-table">
+            <thead><tr><th>Rule</th><th>From</th><th>Switch off here</th></tr></thead>
+            <tbody>
+              {% for entry, off in rule_rows %}
+              <tr>
+                <td>{{ entry.inherited.rule|faction_rule_label }}</td>
+                <td class="sp-context">{{ entry.inherited.source }}</td>
+                <td><input type="checkbox" name="{{ rules_form.switched_off.html_name }}"
+                           value="{{ entry.inherited.rule.pk }}"
+                           aria-label="Switch off {{ entry.inherited.rule|faction_rule_label }}"
+                           {% if off %}checked{% endif %}></td>
+              </tr>
+              {% empty %}
+              <tr><td colspan="3" class="sp-context">This placement inherits no faction rules.</td></tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+
+        <div class="submit-row">
+          <input type="submit" name="save" value="Save" class="default">
+          <input type="submit" name="save_continue" value="Save and continue editing">
+          <a class="button" href="{{ where.parent_url }}">Back to the {% if is_beat %}beat{% else %}line{% endif %}</a>
+        </div>
+      </form>
+    </div>
+
+    <aside class="sp-rail">
+      {% include "admin/standoff_placement/_rail.html" %}
+    </aside>
+  </div>
+</div>
+
+<script>
+(function () {
+  var formsets = window.arxBuilderFormsets;
+  var btn = document.getElementById("add-drive-btn");
+  if (!btn) { return; }
+  btn.addEventListener("click", function () {
+    var index = formsets.nextFormIndex(btn.dataset.prefix);
+    var node = formsets.cloneFromTemplate(btn.dataset.template, index, "tbody");
+    document.getElementById(btn.dataset.target).appendChild(node);
+    formsets.announceFormsetAdded(btn.dataset.prefix, node);
+  });
+})();
+</script>
+{% endblock %}

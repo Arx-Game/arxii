@@ -17,6 +17,7 @@ from world.standoffs.constants import (
     StandoffGroupState,
 )
 from world.standoffs.services.faction_rules import suppressed_for_all_participants
+from world.standoffs.services.profile import group_cause
 from world.standoffs.services.state import (
     active_members,
     end_standoff_into_fight,
@@ -178,7 +179,7 @@ def cause_fire_reason(
     override stops both until force moves. A read-only caller (the GM view) passes
     ``lapse_override=False`` so asking never clears an override that force has outgrown.
     """
-    cause = group.creature_template.cause
+    cause, margin = group_cause(group)
     if cause not in FORCE_CAUSES:
         return None
     party = effective_party_force(group.encounter, group, config)
@@ -188,7 +189,7 @@ def cause_fire_reason(
     reason = None
     if provocation and cause in PROVOKED_CAUSES:
         reason = provocation
-    elif party * 100 <= theirs * (100 + group.creature_template.cause_margin_percent):
+    elif party * 100 <= theirs * (100 + margin):
         reason = REASON_OUTWEIGHED
     if reason is None or suppressed_for_all_participants(group):
         return None

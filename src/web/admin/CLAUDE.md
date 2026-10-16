@@ -1053,9 +1053,9 @@ used to carry. Same pattern as the Builders above: `superuser_required`, the con
 (an unlinked operator sees the shared setup guidance and nothing saves), `base_site.html`
 with `forms.css`/`widgets.css` linked by the page itself, `builder_formsets.js` for "+ Add".
 
-- **Files** - `web/admin/standoff_profile/`: `forms.py` (`StandoffProfileForm`,
-  `CreatureDriveFormSet`, `FactionRuleFormSet`; `FactionRule.rule` is a JSON textarea until
-  the predicate widget lands in slice 2), `live.py` (`drive_context`: each drive's property
+- **Files** - `web/admin/standoff_profile/`: `forms.py` (`StandoffProfileForm` with the
+  affiliation (#4361), `CreatureDriveFormSet`, `FactionRuleFormSet`; `FactionRule.rule` uses the
+  predicate rule widget since #4361), `live.py` (`drive_context`: each drive's property
   description and the approaches and terms that reach it; `grade_preview`: each approach and
   terms graded for an example character of `?level=` against one member of that level,
   through the shared `social_target_difficulty` with no actor; `cause_check`: a plain-text
@@ -1071,6 +1071,40 @@ with `forms.css`/`widgets.css` linked by the page itself, `builder_formsets.js` 
   shared instance.
 - **Guard** - `web/admin/tests/test_standoff_profile_builder.py`'s styling test, the same
   "the rule must reach the page" check as the other Builders.
+
+## Placement page, Faction Rules page and the predicate widget (#4361)
+
+- **Placement page** - `web/admin/standoff_placement/` (`views.py`: `beat_line_placement`,
+  `mission_line_placement`; `forms.py`: `BeatLineForm`/`MissionLineForm`, `DrivesForm` (one
+  "Here" pick per template drive: same, a strength, Remove), `AddedDriveFormSet`,
+  `SuppressionsForm`). Templates `web/templates/admin/standoff_placement/` (`page.html`,
+  `_rail.html`). Writes the opponent line's placement fields, its `OpponentLineDrive` and
+  `OpponentLineFactionRuleSuppression` rows through `world.standoffs.services.placement
+  .save_placement` in one transaction (a `ValidationError` from it lands on the rules form and
+  the line is flushed from the identity map). URLs `_placement/beat/<line_pk>/` ->
+  `admin_placement_beat`, `_placement/mission/<line_pk>/` -> `admin_placement_mission`.
+  Reached from `BeatOpponentLineInline`'s "Edit placement" column and the mission line change
+  page's object tool (`links.builder_url`). Lines are not credited; no contributor gate.
+- **Faction Rules page** - `web/admin/faction_rules/` (`views.py`:
+  `organization_faction_rules`, `society_faction_rules`; `forms.py`: `OrganizationRuleFormSet`,
+  `SocietyRuleFormSet` reusing the builder's `FactionRuleForm`, `CharacterTestForm`; `live.py`:
+  `organization_reach`, `society_reach`, `find_character`). Templates
+  `web/templates/admin/faction_rules/`. Rail: inherited rules with the precedence rule, reach,
+  and a GET "test a character" run through `standoffs.services.faction_rules
+  .run_rules_against` with `explain_leaf_for_staff` reasons. URLs
+  `_faction_rules/organization/<org_pk>/`, `_faction_rules/society/<society_pk>/`. Reached
+  from the Organization and Society change pages' "Edit its faction rules" object tool.
+- **Predicate rule widget** - `web/admin/predicate_widget.py` (`PredicateRuleWidget`,
+  `PredicateRuleField`) and `web/static/admin/js/predicate_widget.js`: draws the mission
+  studio's builder over a hidden JSON textarea from `world.predicates.catalog.leaf_catalog()`
+  (json_script beside each widget), re-inits on `formset:added` for cloned rows, and leaves
+  the raw textarea showing when the JSON does not parse. Used by `FactionRuleForm`, so the
+  Standoff Profile Builder gets it too.
+- **Shared styling** - all three standoff pages include
+  `admin/standoff_profile/_css.html`, now scoped to a `.sp-root` class (each page's root keeps
+  its own id), which also carries the widget's `.pred-*` rules.
+- **Guard** - `web/admin/tests/test_faction_rules_page.py` (render, save, character test,
+  links, and the same styling test for both new template directories).
 
 ## Soulfray Stage Builder (#4089)
 

@@ -5,7 +5,7 @@ Tests focus on custom methods and behaviors, not standard Django functionality.
 """
 
 from django.core.exceptions import ValidationError
-from django.test import TestCase
+from django.test import TestCase, tag
 import pytest
 
 from world.character_creation.factories import RealmFactory
@@ -832,6 +832,7 @@ class LegendDeedStoryModelTests(TestCase):
         assert story2.pk is not None
 
 
+@tag("postgres")
 class CharacterLegendSummaryTests(TestCase):
     """Test CharacterLegendSummary materialized view."""
 
@@ -889,6 +890,7 @@ class CharacterLegendSummaryTests(TestCase):
         assert row.personal_legend == 50  # 30 + 20
 
 
+@tag("postgres")
 class PersonaLegendSummaryTests(TestCase):
     """Test PersonaLegendSummary materialized view."""
 

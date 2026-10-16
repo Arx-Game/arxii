@@ -29,9 +29,8 @@ by the shared introspected catalog.
 
 from __future__ import annotations
 
-from world.predicates.catalog import leaf_params
+from world.predicates.catalog import PARAM_ALLOWED_VALUES, leaf_params
 from world.predicates.predicates import (
-    _TIER_ORDER,
     KEY_LEAF,
     KEY_OF,
     KEY_OP,
@@ -52,15 +51,6 @@ _TAG_CHECKS = {
     "float": lambda v: isinstance(v, (int, float)) and not isinstance(v, bool),
     "bool": lambda v: isinstance(v, bool),
     "str": lambda v: isinstance(v, str),
-}
-
-# Params constrained beyond their primitive type, keyed (leaf, param).
-# ``_tier_rank`` raises KeyError for any value outside ``_TIER_ORDER``
-# (deliberately loud — but the loud failure fires inside every later
-# availability check, so reject out-of-set values at author time too).
-_PARAM_ALLOWED_VALUES: dict[tuple[str, str], tuple[str, ...]] = {
-    ("min_org_reputation", "tier"): _TIER_ORDER,
-    ("min_society_standing", "tier"): _TIER_ORDER,
 }
 
 
@@ -132,7 +122,7 @@ def _walk_leaf(node: dict, errors: list[str], path: str) -> None:
                 f"got {type(value).__name__}."
             )
             continue
-        allowed = _PARAM_ALLOWED_VALUES.get((leaf, name))
+        allowed = PARAM_ALLOWED_VALUES.get((leaf, name))
         if allowed is not None and value not in allowed:
             errors.append(
                 f"{path}: leaf {leaf!r} param {name!r} must be one of "

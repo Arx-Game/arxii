@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from unittest.mock import patch
 
-from django.test import TestCase
+from django.test import TestCase, tag
 from evennia.objects.models import ObjectDB
 
 from commands.default_cmdsets import CharacterCmdSet
@@ -176,6 +176,7 @@ class SetHomeCommandTests(_StaffFixture):
             holder_persona=cls.owner,
         )
 
+    @tag("postgres")
     def test_a_character_home_is_their_residence_everywhere(self):
         persona = self.sheet.primary_persona
         assign_room_tenant(persona=self.owner, room=self.room, tenant_persona=persona)

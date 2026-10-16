@@ -495,6 +495,83 @@ def _resolve_min_society_standing(ctx: ResolverContext, *, society: str, tier: s
     return _tier_rank(current_tier) >= threshold_rank
 
 
+def _org_reputation_rank(ctx: ResolverContext, org: str) -> int | None:
+    """The presented persona's reputation tier rank with ``org``; None without a row."""
+    if ctx.presented_persona is None:
+        return None
+    from world.societies.models import OrganizationReputation  # noqa: PLC0415
+    from world.societies.types import ReputationTier  # noqa: PLC0415
+
+    row = OrganizationReputation.objects.filter(
+        persona=ctx.presented_persona, organization__name=org
+    ).first()
+    return None if row is None else _tier_rank(ReputationTier.from_value(row.value).value)
+
+
+def _society_reputation_rank(ctx: ResolverContext, society: str) -> int | None:
+    """The presented persona's reputation tier rank with ``society``; None without a row."""
+    if ctx.presented_persona is None:
+        return None
+    from world.societies.models import SocietyReputation  # noqa: PLC0415
+    from world.societies.types import ReputationTier  # noqa: PLC0415
+
+    row = SocietyReputation.objects.filter(
+        persona=ctx.presented_persona, society__name=society
+    ).first()
+    return None if row is None else _tier_rank(ReputationTier.from_value(row.value).value)
+
+
+def _resolve_max_org_reputation(ctx: ResolverContext, *, org: str, tier: str) -> bool:
+    """True if the presented persona's reputation tier with the org is <= ``tier`` (#4361).
+
+    The "at most" sibling of ``min_org_reputation``, same tier order and same fail-closed
+    rules: no presented persona or no reputation row is False (so "at most Disliked"
+    never matches a stranger; a rule about strangers is NOT over an "at least Unknown"
+    test), and an unknown tier string raises (an authoring error).
+    """
+    threshold_rank = _tier_rank(tier)
+    rank = _org_reputation_rank(ctx, org)
+    return rank is not None and rank <= threshold_rank
+
+
+def _resolve_max_society_standing(ctx: ResolverContext, *, society: str, tier: str) -> bool:
+    """True if the presented persona's reputation tier with the society is <= ``tier`` (#4361).
+
+    The "at most" sibling of ``min_society_standing``; fail-closed like ``max_org_reputation``.
+    """
+    threshold_rank = _tier_rank(tier)
+    rank = _society_reputation_rank(ctx, society)
+    return rank is not None and rank <= threshold_rank
+
+
+def _resolve_associated_with_org(ctx: ResolverContext, *, org: str) -> bool:
+    """True if the world sees the presented persona as tied to the org (#4361).
+
+    Perception, not formal membership: membership now or recently, exile, kinship, or
+    steady work for the org's people, through the org or any org below it. Covert orgs
+    never count. See ``world.societies.association``. No presented persona or no such
+    org is False.
+    """
+    from world.societies.association import association_with_org  # noqa: PLC0415
+    from world.societies.models import Organization  # noqa: PLC0415
+
+    organization = Organization.objects.filter(name=org).first()
+    if organization is None:
+        return False
+    return association_with_org(ctx.presented_persona, organization) is not None
+
+
+def _resolve_associated_with_society(ctx: ResolverContext, *, society: str) -> bool:
+    """True if the presented persona is associated with any of the society's orgs (#4361)."""
+    from world.societies.association import association_with_society  # noqa: PLC0415
+    from world.societies.models import Society  # noqa: PLC0415
+
+    row = Society.objects.filter(name=society).first()
+    if row is None:
+        return False
+    return association_with_society(ctx.presented_persona, row) is not None
+
+
 def _resolve_min_org_rank(ctx: ResolverContext, *, org: str, rank: int) -> bool:
     """True if the presented persona holds at least ``rank`` in the org (#870).
 
@@ -593,6 +670,10 @@ LEAF_RESOLVERS: LeafRegistry = {
     "min_org_reputation": _resolve_min_org_reputation,
     "min_resonance_level": _resolve_min_resonance_level,
     "min_society_standing": _resolve_min_society_standing,
+    "max_org_reputation": _resolve_max_org_reputation,
+    "max_society_standing": _resolve_max_society_standing,
+    "associated_with_org": _resolve_associated_with_org,
+    "associated_with_society": _resolve_associated_with_society,
     "has_species": _resolve_has_species,
     "has_upbringing": _resolve_has_upbringing,
 }

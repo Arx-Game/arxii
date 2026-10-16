@@ -9486,6 +9486,37 @@ paths:
               schema:
                 $ref: '#/components/schemas/CreatureTemplate'
           description: ''
+  /api/combat/creature-templates/{id}/placement-context/:
+    get:
+      operationId: combat_creature_templates_placement_context_retrieve
+      description: |-
+        The template's standoff profile and inherited faction rules (#4361).
+
+        Read by the beat dialog's and mission studio's placement fields, which show each
+        edit beside the template's own value and offer each inherited rule a switch-off.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this creature template.
+        required: true
+      - in: query
+        name: organization
+        schema:
+          type: integer
+        description: Preview the rules inherited through this affiliation instead.
+      tags:
+      - combat
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PlacementContext'
+          description: ''
   /api/combat/duel-challenges/:
     get:
       operationId: combat_duel_challenges_list
@@ -9656,6 +9687,130 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/EscalationCurve'
+          description: ''
+  /api/combat/placement-organizations/:
+    get:
+      operationId: combat_placement_organizations_list
+      description: |-
+        Organizations a placement can name as its affiliation (#4361), by name.
+
+        The beat dialog's and mission studio's affiliation picker. Same gate as the bestiary
+        (``IsGMOrStaff``). A covert organization's existence is itself a secret, so only
+        staff see one here.
+      parameters:
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      - in: query
+        name: search
+        schema:
+          type: string
+      tags:
+      - combat
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedPlacementPickList'
+          description: ''
+  /api/combat/placement-organizations/{id}/:
+    get:
+      operationId: combat_placement_organizations_retrieve
+      description: |-
+        Organizations a placement can name as its affiliation (#4361), by name.
+
+        The beat dialog's and mission studio's affiliation picker. Same gate as the bestiary
+        (``IsGMOrStaff``). A covert organization's existence is itself a secret, so only
+        staff see one here.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this organization.
+        required: true
+      tags:
+      - combat
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PlacementPick'
+          description: ''
+  /api/combat/placement-properties/:
+    get:
+      operationId: combat_placement_properties_list
+      description: |-
+        Properties a placement can add or edit as a drive (#4361), by name.
+
+        The catalog GMs pick drives from (ADR-0110: GMs adapt authored rows, never invent).
+      parameters:
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      - in: query
+        name: search
+        schema:
+          type: string
+      tags:
+      - combat
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedPlacementPickList'
+          description: ''
+  /api/combat/placement-properties/{id}/:
+    get:
+      operationId: combat_placement_properties_retrieve
+      description: |-
+        Properties a placement can add or edit as a drive (#4361), by name.
+
+        The catalog GMs pick drives from (ADR-0110: GMs adapt authored rows, never invent).
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this property.
+        required: true
+      tags:
+      - combat
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PlacementPick'
           description: ''
   /api/combat/threat-pools/:
     get:
@@ -45314,41 +45469,9 @@ components:
       description: |-
         One authored opponent line on an ENCOUNTER beat (#3425).
 
-        ``id`` is writable-but-optional (not ``read_only``) so ``BeatSerializer
-        .update()`` can diff incoming rows against the beat's existing lines by
-        id: an id present in the payload and on the beat is an edit, an id absent
-        is a new row, and an existing row whose id is missing from the payload is
-        deleted. See ``BeatSerializer._sync_children``.
-      properties:
-        id:
-          type: integer
-        creature_template:
-          type: integer
-          description: The bestiary entry to spawn.
-        count:
-          type: integer
-          maximum: 32767
-          minimum: 1
-          description: How many of this creature to spawn.
-        position_name:
-          type: string
-          description: Authored position hint, resolved by name against the run-time
-            room's Position set. Blank = no position.
-          maxLength: 100
-        order:
-          type: integer
-          maximum: 2147483647
-          minimum: 0
-        opens_as_standoff:
-          type: boolean
-          description: When any line on the beat has this set, running the beat opens
-            a standoff before round one instead of starting the fight.
-      required:
-      - creature_template
-    BeatOpponentLineRequest:
-      type: object
-      description: |-
-        One authored opponent line on an ENCOUNTER beat (#3425).
+        Carries the placement's standoff edits (#4361): cause, margin and affiliation
+        overrides on the line, plus ``drive_edits`` and ``suppressed_faction_rules`` child
+        rows (``PlacementFieldsMixin``).
 
         ``id`` is writable-but-optional (not ``read_only``) so ``BeatSerializer
         .update()`` can diff incoming rows against the beat's existing lines by
@@ -45379,6 +45502,110 @@ components:
           type: boolean
           description: When any line on the beat has this set, running the beat opens
             a standoff before round one instead of starting the fight.
+        cause_override:
+          description: |-
+            Blank keeps the template's cause; pick another for this placement only.
+
+            * `none` - None
+            * `predation` - Predation
+            * `orders` - Orders
+          oneOf:
+          - $ref: '#/components/schemas/CauseOverrideEnum'
+          - $ref: '#/components/schemas/BlankEnum'
+        cause_margin_override:
+          type: integer
+          maximum: 32767
+          minimum: -99
+          nullable: true
+          description: Blank keeps the template's cause margin (percent).
+        organization:
+          type: integer
+          nullable: true
+          description: Blank keeps the template's affiliation; pick another for this
+            placement.
+        organization_name:
+          type: string
+          description: The overriding affiliation's name, so an editor can show the
+            pick (read only).
+          readOnly: true
+        drive_edits:
+          type: array
+          items:
+            $ref: '#/components/schemas/OpponentLineDrive'
+        suppressed_faction_rules:
+          type: array
+          items:
+            type: integer
+      required:
+      - creature_template
+      - organization_name
+    BeatOpponentLineRequest:
+      type: object
+      description: |-
+        One authored opponent line on an ENCOUNTER beat (#3425).
+
+        Carries the placement's standoff edits (#4361): cause, margin and affiliation
+        overrides on the line, plus ``drive_edits`` and ``suppressed_faction_rules`` child
+        rows (``PlacementFieldsMixin``).
+
+        ``id`` is writable-but-optional (not ``read_only``) so ``BeatSerializer
+        .update()`` can diff incoming rows against the beat's existing lines by
+        id: an id present in the payload and on the beat is an edit, an id absent
+        is a new row, and an existing row whose id is missing from the payload is
+        deleted. See ``BeatSerializer._sync_children``.
+      properties:
+        id:
+          type: integer
+        creature_template:
+          type: integer
+          description: The bestiary entry to spawn.
+        count:
+          type: integer
+          maximum: 32767
+          minimum: 1
+          description: How many of this creature to spawn.
+        position_name:
+          type: string
+          description: Authored position hint, resolved by name against the run-time
+            room's Position set. Blank = no position.
+          maxLength: 100
+        order:
+          type: integer
+          maximum: 2147483647
+          minimum: 0
+        opens_as_standoff:
+          type: boolean
+          description: When any line on the beat has this set, running the beat opens
+            a standoff before round one instead of starting the fight.
+        cause_override:
+          description: |-
+            Blank keeps the template's cause; pick another for this placement only.
+
+            * `none` - None
+            * `predation` - Predation
+            * `orders` - Orders
+          oneOf:
+          - $ref: '#/components/schemas/CauseOverrideEnum'
+          - $ref: '#/components/schemas/BlankEnum'
+        cause_margin_override:
+          type: integer
+          maximum: 32767
+          minimum: -99
+          nullable: true
+          description: Blank keeps the template's cause margin (percent).
+        organization:
+          type: integer
+          nullable: true
+          description: Blank keeps the template's affiliation; pick another for this
+            placement.
+        drive_edits:
+          type: array
+          items:
+            $ref: '#/components/schemas/OpponentLineDriveRequest'
+        suppressed_faction_rules:
+          type: array
+          items:
+            type: integer
       required:
       - creature_template
     BeatOption:
@@ -47594,6 +47821,16 @@ components:
       - average_rating
       - category_name
       - rating_count
+    CauseOverrideEnum:
+      enum:
+      - none
+      - predation
+      - orders
+      type: string
+      description: |-
+        * `none` - None
+        * `predation` - Predation
+        * `orders` - Orders
     Ceremony:
       type: object
       properties:
@@ -57000,7 +57237,10 @@ components:
           type: string
         revealed:
           type: boolean
+        edited:
+          type: boolean
       required:
+      - edited
       - label
       - revealed
       - strength
@@ -57062,6 +57302,8 @@ components:
             type: string
         revealed:
           type: boolean
+        source:
+          type: string
       required:
       - angle_text
       - difficulty_shift_bands
@@ -57069,6 +57311,7 @@ components:
       - label
       - matched_by
       - revealed
+      - source
       - suppresses_cause
     GMGroupView:
       type: object
@@ -57117,6 +57360,12 @@ components:
         group_force:
           type: number
           format: double
+        affiliation:
+          type: string
+        cause_edited:
+          type: boolean
+        affiliation_edited:
+          type: boolean
         drives:
           type: array
           items:
@@ -57130,7 +57379,10 @@ components:
           items:
             $ref: '#/components/schemas/GMMemberView'
       required:
+      - affiliation
+      - affiliation_edited
       - cause
+      - cause_edited
       - cause_fires
       - cause_margin_percent
       - cause_reason
@@ -64427,8 +64679,43 @@ components:
           type: integer
           maximum: 2147483647
           minimum: 0
+        cause_override:
+          description: |-
+            Blank keeps the template's cause; pick another for this placement only.
+
+            * `none` - None
+            * `predation` - Predation
+            * `orders` - Orders
+          oneOf:
+          - $ref: '#/components/schemas/CauseOverrideEnum'
+          - $ref: '#/components/schemas/BlankEnum'
+        cause_margin_override:
+          type: integer
+          maximum: 32767
+          minimum: -99
+          nullable: true
+          description: Blank keeps the template's cause margin (percent).
+        organization:
+          type: integer
+          nullable: true
+          description: Blank keeps the template's affiliation; pick another for this
+            placement.
+        organization_name:
+          type: string
+          description: The overriding affiliation's name, so an editor can show the
+            pick (read only).
+          readOnly: true
+        drive_edits:
+          type: array
+          items:
+            $ref: '#/components/schemas/OpponentLineDrive'
+        suppressed_faction_rules:
+          type: array
+          items:
+            type: integer
       required:
       - creature_template
+      - organization_name
     MissionOptionOpponentLineRequest:
       type: object
       description: |-
@@ -64453,6 +64740,35 @@ components:
           type: integer
           maximum: 2147483647
           minimum: 0
+        cause_override:
+          description: |-
+            Blank keeps the template's cause; pick another for this placement only.
+
+            * `none` - None
+            * `predation` - Predation
+            * `orders` - Orders
+          oneOf:
+          - $ref: '#/components/schemas/CauseOverrideEnum'
+          - $ref: '#/components/schemas/BlankEnum'
+        cause_margin_override:
+          type: integer
+          maximum: 32767
+          minimum: -99
+          nullable: true
+          description: Blank keeps the template's cause margin (percent).
+        organization:
+          type: integer
+          nullable: true
+          description: Blank keeps the template's affiliation; pick another for this
+            placement.
+        drive_edits:
+          type: array
+          items:
+            $ref: '#/components/schemas/OpponentLineDriveRequest'
+        suppressed_faction_rules:
+          type: array
+          items:
+            type: integer
       required:
       - creature_template
     MissionOptionRequest:
@@ -67108,6 +67424,40 @@ components:
       - stakes_message
       - stakes_ok
       - swarm_count
+    OpponentLineDrive:
+      type: object
+      description: 'One drive edit on a placement: a strength, or null to remove the
+        template''s drive.'
+      properties:
+        property:
+          type: integer
+        property_name:
+          type: string
+          readOnly: true
+        strength:
+          nullable: true
+          oneOf:
+          - $ref: '#/components/schemas/StrengthEnum'
+          - $ref: '#/components/schemas/NullEnum'
+      required:
+      - property
+      - property_name
+      - strength
+    OpponentLineDriveRequest:
+      type: object
+      description: 'One drive edit on a placement: a strength, or null to remove the
+        template''s drive.'
+      properties:
+        property:
+          type: integer
+        strength:
+          nullable: true
+          oneOf:
+          - $ref: '#/components/schemas/StrengthEnum'
+          - $ref: '#/components/schemas/NullEnum'
+      required:
+      - property
+      - strength
     OpponentRequest:
       type: object
       description: |-
@@ -71919,6 +72269,29 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/Place'
+    PaginatedPlacementPickList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/PlacementPick'
     PaginatedPlayerActionList:
       type: object
       required:
@@ -78752,6 +79125,87 @@ components:
       required:
       - id
       - kind
+    PlacementContext:
+      type: object
+      description: A creature template's standoff profile, for a placement editor's
+        "template" column.
+      properties:
+        creature_template:
+          type: integer
+        name:
+          type: string
+        cause:
+          type: string
+        cause_label:
+          type: string
+        cause_margin_percent:
+          type: integer
+        organization:
+          type: integer
+          nullable: true
+        organization_name:
+          type: string
+        drives:
+          type: array
+          items:
+            $ref: '#/components/schemas/PlacementDriveContext'
+        inherited_rules:
+          type: array
+          items:
+            $ref: '#/components/schemas/PlacementRuleContext'
+      required:
+      - cause
+      - cause_label
+      - cause_margin_percent
+      - creature_template
+      - drives
+      - inherited_rules
+      - name
+      - organization
+      - organization_name
+    PlacementDriveContext:
+      type: object
+      properties:
+        property:
+          type: integer
+        name:
+          type: string
+        strength:
+          type: integer
+        strength_label:
+          type: string
+      required:
+      - name
+      - property
+      - strength
+      - strength_label
+    PlacementPick:
+      type: object
+      description: One row of a placement editor's affiliation or drive picker.
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+      required:
+      - id
+      - name
+    PlacementRuleContext:
+      type: object
+      properties:
+        faction_rule_id:
+          type: integer
+        label:
+          type: string
+        source:
+          type: string
+        level:
+          type: integer
+      required:
+      - faction_rule_id
+      - label
+      - level
+      - source
     PlayerAction:
       type: object
       description: |-
@@ -88560,6 +89014,16 @@ components:
       - default
       - diminishing_floor
       - diminishing_step
+    StrengthEnum:
+      enum:
+      - 1
+      - 2
+      - 3
+      type: integer
+      description: |-
+        * `1` - Minor
+        * `2` - Major
+        * `3` - Defining
     Style:
       type: object
       description: Serializer for the Style catalog (#2030 — player-facing Motif style-binding).

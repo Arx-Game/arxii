@@ -5515,10 +5515,14 @@ never gated by a prerequisite rule tree.)
   `LEAF_RESOLVERS: dict[str, Callable]` (registered leaf names)
 - **Leaves shipped:** `has_distinction`, `has_achievement`, `has_condition`, `has_capability`,
   `has_thread`, `min_thread_level`, `min_trait`, `has_skill`, `min_character_level`,
-  `has_codex_entry`, `has_resonance`, `min_npc_standing`, `is_member_of_org`,
-  `min_org_reputation`, `min_society_standing`. `has_item` exists in code but isn't
-  registered yet — Plan 3 (#668) wires the PERMIT dispatch entry alongside its details
-  model in a single PR.
+  `has_completed_mission`, `has_codex_entry`, `has_resonance`, `min_npc_standing`,
+  `has_item`, `is_member_of_org`, `is_member_of_society`, `min_org_rank`,
+  `min_org_reputation`, `min_resonance_level`, `min_society_standing`, `has_species`,
+  `has_upbringing`, and (#4361) `max_org_reputation`, `max_society_standing`,
+  `associated_with_org`, `associated_with_society` (association lives in
+  `world/societies/association.py`). `catalog.leaf_catalog()` is the one palette the
+  mission studio endpoint and the admin predicate widget serve; tier params carry `choices`.
+  `describe.explain_leaf_for_staff` gives staff the hidden tier or tie behind a match.
 - **Extension:** add a leaf by writing `_resolve_*(ctx, **params) -> bool` and registering
   it in `LEAF_RESOLVERS`. Persona-aware resolvers read `ctx.presented_persona`; sheet-keyed
   resolvers walk `ctx.sheet`; legacy ObjectDB-keyed resolvers walk `ctx.character`.
@@ -7640,16 +7644,22 @@ weights, speed_rank, Thread pulls). `CovenantRank` = administrative authority
 - **Source:** `src/world/covenants/`
 - **Details:** [covenants.md](covenants.md)
 
-### Standoffs (#4145, #4354)
+### Standoffs (#4145, #4354, #4361)
 The moment before a fight: round zero of a `CombatEncounter`, where a party reads groups of
 creatures, presses them with social approaches and names terms that settle them. Derived
 from live (OPEN or PROPOSED) `StandoffGroup` rows, never a stored flag (ADR-4145-A). In a
-scene a GM is running, a firing cause becomes a GM proposal (ADR-4354-A).
+scene a GM is running, a firing cause becomes a GM proposal (ADR-4354-A). A placement's
+edits over its template are stamped on each opponent at spawn (ADR-4361-A).
 
 - **Models:** `CreatureDrive`, `FactionRule` (was `RegardRule`), `StandoffApproach`,
   `StandoffTerms`, `StandoffConfig` (singleton), `StandoffCauseGloss`, `StandoffGroup`,
-  `StandoffReveal`, `StandoffAngleShare` (was `StandoffSparkShare`), `StandoffMoraleRuling`;
-  `CreatureTemplate.cause` (NONE, PREDATION, ORDERS) / `cause_margin_percent`;
+  `StandoffReveal`, `StandoffAngleShare` (was `StandoffSparkShare`), `StandoffMoraleRuling`,
+  `OpponentLineDrive`, `OpponentLineFactionRuleSuppression`; `FactionRule.organization` /
+  `society` (one owner); `CreatureTemplate.cause` (NONE, PREDATION, ORDERS) /
+  `cause_margin_percent` / `organization` (affiliation); placement fields
+  `cause_override` / `cause_margin_override` / `organization` on both opponent lines
+  (`PlacementEdits`); snapshot `CombatOpponent.cause` / `cause_margin_percent` /
+  `organization` / `suppressed_faction_rules`; `societies.AssociationConfig`;
   `OpponentTierTemplate.force_weight_percent`; `MissionOption.opens_as_standoff`;
   `BeatOpponentLine.opens_as_standoff`; `GMPrompt.standoff_group` / `resolution_note`
   (`GMPromptKind.STANDOFF_CAUSE`, a decision kind).
@@ -7658,16 +7668,26 @@ scene a GM is running, a firing cause becomes a GM proposal (ADR-4354-A).
   `cause_fire_reason`, `cause_fires` (`services/force.py`); `standoff_is_gm_run`, `propose`,
   `resolve_proposal` (`services/proposals.py`); `shift_group_morale`
   (`services/gm_morale.py`); `build_gm_standoff_view`, `build_standoff_summary`
-  (`services/gm_view.py`); `settled_tier` (`services/routing.py`); `faction_rule_matches`
-  (`services/faction_rules.py`); `standoff_read`, `standoff_press`, `standoff_terms`,
+  (`services/gm_view.py`); `settled_tier` (`services/routing.py`); `faction_rule_matches`,
+  `shifting_rule_ids`, `run_rules_against` (`services/faction_rules.py`);
+  `placement_profile`, `draft_from_line`, `stamp_opponent`, `save_placement`,
+  `placement_errors`, `template_context` (`services/placement.py`); `group_cause`,
+  `group_drives`, `group_rules`, `inherited_rules`, `affiliation_rules` (`services/profile.py`);
+  predicate leaves `max_org_reputation`, `max_society_standing`, `associated_with_org`,
+  `associated_with_society`; `association_with_org` / `association_with_society`
+  (`world/societies/association.py`); `standoff_read`, `standoff_press`, `standoff_terms`,
   `standoff_fight`, `standoff_share_angle` (`services/verbs.py`); `build_standoff_view`
   (`services/view.py`); `social_target_difficulty` (`world/checks/social_target.py`, one
   grade for every social check on a character, ADR-4145-B).
 - **Surfaces:** actions `standoff_*` and `gm_standoff_*` / `gm_open_standoff`, telnet
   `standoff`, `gm prompt confirm|hold|override`, `gm standoff shake|steady`; `StandoffCard`,
   `GMStandoffPanel` and `StandoffSummaryCard` from the encounter detail's `standoff`,
-  `gm_standoff` and `standoff_summary` blocks; the Standoff Profile Builder admin page
-  (`web/admin/standoff_profile/`).
+  `gm_standoff` and `standoff_summary` blocks; `PlacementPanel` in the beat dialog and the
+  mission studio's option page; `/api/combat/creature-templates/<id>/placement-context/`,
+  `/api/combat/placement-organizations/`, `/api/combat/placement-properties/`; admin pages:
+  the Standoff Profile Builder (`web/admin/standoff_profile/`), Placement
+  (`web/admin/standoff_placement/`), Faction Rules (`web/admin/faction_rules/`) and the
+  predicate rule widget (`web/admin/predicate_widget.py`).
 - **Details:** [standoffs.md](standoffs.md)
 
 ### Spectacle (#4147)

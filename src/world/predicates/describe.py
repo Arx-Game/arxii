@@ -88,3 +88,93 @@ def describe_leaf(leaf: dict) -> str | None:
     if describer is None:
         return None
     return describer(leaf.get(KEY_PARAMS, {}))
+
+
+# --- Staff-facing reasons (#4361) -------------------------------------------------------
+# The Faction Rules page's "test a character" picker says WHY a rule matched, including
+# the hidden reputation tier and the association behind a match. Players never see these:
+# a player sees only their angle, and the revealed text after a successful read.
+
+_REGARD_HIGH = "high regard"
+_REGARD_LOW = "low regard"
+_REGARD_NONE = "no particular regard"
+
+
+def _regard_words(tier: str) -> str:
+    from world.predicates.predicates import _TIER_ORDER  # noqa: PLC0415
+
+    middle = _TIER_ORDER.index("unknown")
+    rank = _TIER_ORDER.index(tier)
+    if rank > middle:
+        return _REGARD_HIGH
+    if rank < middle:
+        return _REGARD_LOW
+    return _REGARD_NONE
+
+
+def _reputation_reason(persona: object, model: type, field: str, name: str) -> str | None:
+    from world.societies.types import ReputationTier  # noqa: PLC0415
+
+    if persona is None:
+        return None
+    row = model.objects.filter(persona=persona, **{f"{field}__name": name}).first()
+    if row is None:
+        return None
+    tier = ReputationTier.from_value(row.value)
+    return f"reputation: {name} holds you in {_regard_words(tier.value)} ({tier.value.title()})"
+
+
+def _org_reputation(params: dict, persona: object) -> str | None:
+    from world.societies.models import OrganizationReputation  # noqa: PLC0415
+
+    return _reputation_reason(
+        persona, OrganizationReputation, "organization", params.get("org", "")
+    )
+
+
+def _society_reputation(params: dict, persona: object) -> str | None:
+    from world.societies.models import SocietyReputation  # noqa: PLC0415
+
+    return _reputation_reason(persona, SocietyReputation, "society", params.get("society", ""))
+
+
+def _org_association(params: dict, persona: object) -> str | None:
+    from world.societies.association import association_with_org  # noqa: PLC0415
+    from world.societies.models import Organization  # noqa: PLC0415
+
+    org = Organization.objects.filter(name=params.get("org")).first()
+    found = association_with_org(persona, org) if org else None
+    return f"association: {found.detail}" if found else None
+
+
+def _society_association(params: dict, persona: object) -> str | None:
+    from world.societies.association import association_with_society  # noqa: PLC0415
+    from world.societies.models import Society  # noqa: PLC0415
+
+    society = Society.objects.filter(name=params.get("society")).first()
+    found = association_with_society(persona, society) if society else None
+    return f"association: {found.detail}" if found else None
+
+
+_STAFF_EXPLAINERS: dict[str, Callable[[dict, object], str | None]] = {
+    "min_org_reputation": _org_reputation,
+    "max_org_reputation": _org_reputation,
+    "min_society_standing": _society_reputation,
+    "max_society_standing": _society_reputation,
+    "associated_with_org": _org_association,
+    "associated_with_society": _society_association,
+}
+
+
+def explain_leaf_for_staff(leaf: dict, presented_persona: object) -> str:
+    """Why a matched leaf matched, for staff: names the hidden tier or association."""
+    name = leaf[KEY_LEAF]
+    params = leaf.get(KEY_PARAMS, {})
+    explainer = _STAFF_EXPLAINERS.get(name)
+    reason = explainer(params, presented_persona) if explainer else None
+    if reason is None:
+        reason = describe_leaf(leaf)
+    if reason is None:
+        values = ", ".join(str(value) for value in params.values())
+        reason = f"{name}: {values}" if values else name
+    return reason

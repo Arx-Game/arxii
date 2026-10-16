@@ -5,8 +5,10 @@ them with social approaches, and names terms that settle them without a round of
 Source `src/world/standoffs/`; glossary `src/world/standoffs/AGENT_GLOSSARY.md`; decisions
 ADR-4145-A (a standoff is round zero of the encounter, derived from OPEN groups) and
 ADR-4145-B (one difficulty function for social checks on a character), and ADR-4354-A (a
-standoff proposal is a GM decision prompt, and GM-run is derived). Issue #4145 (missions),
-#4354 (GM-run scenes), umbrella #4121. Later slices are listed at the end.
+standoff proposal is a GM decision prompt, and GM-run is derived), and ADR-4361-A (a
+placement's profile is stamped on each opponent at spawn). Issue #4145 (missions),
+#4354 (GM-run scenes), #4361 (placement edits and inherited faction rules), umbrella #4121.
+Later slices are listed at the end.
 
 ## Lifecycle
 
@@ -40,22 +42,30 @@ standoff proposal is a GM decision prompt, and GM-run is derived). Issue #4145 (
 | Model | Purpose |
 |---|---|
 | `CreatureDrive` (:28) | A property a creature template wants, with `DriveStrength` (1 Minor, 2 Major, 3 Defining). Unique per template and property. |
-| `FactionRule` (:62, was `RegardRule`, renamed #4354) | How a template stands toward particular characters: predicate `rule` (the one ratified JSON field, ADR-0007), `deed_archetype` FK, `difficulty_shift_bands`, `drive` + `drive_shift`, `suppresses_cause`, `angle_text` (was `spark_text`), `revealed_text`. |
+| `FactionRule` (:62, was `RegardRule`, renamed #4354) | How a group stands toward particular characters: predicate `rule` (the one ratified JSON field, ADR-0007), `deed_archetype` FK, `difficulty_shift_bands`, `drive` + `drive_shift`, `suppresses_cause`, `angle_text` (was `spark_text`), `revealed_text`. Owned by exactly one of `creature_template`, `organization` or `society` (#4361, check constraint `faction_rule_one_owner`). |
 | `StandoffApproach` (:141) | A press: `check_type`, `capability` (aims at drives through `Application`), `sway_target` modifier target, `damages_morale`, `archetypes`, `display_order`. |
 | `StandoffTerms` (:195) | `effect` (`TermsEffect`: PASS, FLEE, TURN, TOLL), `critical_effect` (applied instead on a critical), `required_drive`, `difficulty_shift_bands`, `archetypes`, `display_order`. |
 | `StandoffConfig` (:257) | Singleton: `read_check_type`, `terms_check_type`, `pass_condition`, `turn_condition`, `botch_force_bands`, `band_force_percent`, `over_level_percent_per_tier`, `falter_force_percent`, `break_force_percent`. `load()` returns it. |
 | `StandoffApproach.casts_technique` / `StandoffConfig.terms_ease_faltering`, `terms_ease_broken` | #4147: a casting approach (the display of power) and the bands terms ease by morale (see "Display of power and morale"). |
 | `StandoffCauseGloss` (:338, #4354) | The one-line player-facing gloss under a revealed cause, one row per `CauseKind`, authored in admin (was a hardcoded dict). |
 | `StandoffGroup` (:368) | One band in one encounter: `creature_template`, `state` (OPEN, PROPOSED, SETTLED, FIGHTING), `terms_ease`, `emboldened_bands`, `settled_outcome`, and (#4354) `proposal_reason`, `override_party_force`, `override_group_force`. Unique per encounter and template. Deleting its `creature_template` deletes the group (CASCADE). |
-| `StandoffReveal` (:435) | A thing a read uncovered: `kind` (CAUSE, DRIVE, FACTION_RULE) plus the drive or `faction_rule`. Group-wide, shared knowledge. |
+| `StandoffReveal` | A thing a read uncovered: `kind` (CAUSE, DRIVE, FACTION_RULE) plus `drive` (a `Property` since #4361; it was a `CreatureDrive`, but a placement can add a drive its template lacks) or `faction_rule`. Group-wide, shared knowledge. |
 | `StandoffAngleShare` (:490, was `StandoffSparkShare`) | A character choosing to share an angle for a group. Unique per group, sheet and rule. |
 | `StandoffMoraleRuling` (:586, #4354) | A GM moved a group one morale state: `direction` (SHAKE, STEADY), required `reason`, `ruled_by`. The GM's own record. |
+| `OpponentLineDrive` (#4361) | One placement's drive edit: `beat_line` or `mission_line` (exactly one), `property`, `strength` (blank removes the template's drive). An edit equal to the template's strength is not stored. |
+| `OpponentLineFactionRuleSuppression` (#4361) | One placement switches off one inherited `faction_rule`. Unique per line and rule. |
 
 Also added elsewhere: `CreatureTemplate.cause` (`CauseKind`: NONE, PREDATION, ORDERS) and
 `cause_margin_percent` (must stay above -100) (`combat/models.py`, `combat/constants.py`); `OpponentTierTemplate.force_weight_percent` (how much one opponent of a tier counts in group force; default 100 for every tier, staff tune it per tier in admin); `CombatEncounter`'s
 `initiated_by_pc_side` help text now says a cause stamps False;
 `MissionOption.opens_as_standoff` (`missions/models.py:700`, ENCOUNTER options only).
-Migration `0199_creaturetemplate_cause_and_more`. #4354 adds `BeatOpponentLine.opens_as_standoff`,
+Migration `0199_creaturetemplate_cause_and_more`. #4361 adds `CreatureTemplate.organization`
+(the default affiliation), the placement fields `cause_override`, `cause_margin_override` and
+`organization` on both opponent lines (abstract `standoffs/placement_fields.py:PlacementEdits`),
+the snapshot `CombatOpponent.cause`, `cause_margin_percent`, `organization` and
+`suppressed_faction_rules`, and `societies.AssociationConfig` (migrations `0230`-`0232`:
+schema, a play-state backfill, then the reveal column swap and the one-owner check).
+#4354 adds `BeatOpponentLine.opens_as_standoff`,
 `GMPrompt.standoff_group` and `GMPrompt.resolution_note` (migrations `0223`-`0226`; the rename is
 `RenameModel`/`RenameField`, the reveal kind moves in its own data-only migration). Admin: a
 creature's cause, drives and faction rules are authored on the Standoff Profile Builder
@@ -104,11 +114,48 @@ admins in `world/standoffs/admin.py`.
   encounter, its groups and its opponents from the identity map (`flush_cache_on_error`) so
   the cache matches the rolled-back database. `begin_round_or_break_standoff` returns whether
   a round began; the GM view answers 409 and the GM action says so when it did not.
-- **Faction rules** (`services/faction_rules.py`, was `regard.py`): `faction_rule_matches` (:57),
-  `drive_strength_from` (:105, clamped 0..3), `band_shift_from` (:111). Deed knowledge counts only the persona the
+- **The spawn snapshot** (#4361, ADR-4361-A; `services/placement.py`, `services/profile.py`):
+  `spawn_from_creature_template(..., line=)` stamps every new opponent with
+  `placement_profile(template, draft_from_line(line))`: the cause, margin and affiliation
+  (the line's override, else the template's), the switched-off rules
+  (`CombatOpponent.suppressed_faction_rules`) and each drive as an `ObjectProperty` on the
+  opponent's object (value = strength). From then on the encounter reads only the snapshot:
+  `group_cause`, `group_drives` (the representative's sourceless `ObjectProperty` rows; a
+  property a condition or challenge granted is not a drive) and `group_rules` read the
+  group's first-spawned member (`representative`), so two placements of one template in one
+  encounter form one group with the first placement's profile. A template edited after the
+  spawn leaves the running encounter alone. The GM view marks what the placement changed
+  (`cause_edited`, `affiliation_edited`, each drive's `edited`).
+- **Inheritance** (`services/profile.py`): `inherited_rules(template, organization)` is the
+  template's own rules (level 0), then `affiliation_rules`: the organization's (level 1),
+  each `parent_org` above it (2, 3...), then the society of each of those (after the chain).
+  Each `InheritedRule` carries its `source` (the owner's name), shown in the GM panel's
+  "From" column, the beat dialog and the admin pages. A placement's suppressed rules are
+  left out.
+- **Faction rules** (`services/faction_rules.py`, was `regard.py`): `faction_rule_matches`
+  evaluates the group's rules with the character's presented persona (so reputation and
+  association leaves read the face shown; #4354 passed none and those leaves failed
+  closed), `drive_strength_from` (clamped 0..3), `band_shift_from`, `shifting_rule_ids` (the
+  rules that actually shifted a roll, for auto-sharing and levers). **Precedence:** where two
+  matched rules shift the same thing (the difficulty, or one drive), only the most specific
+  level counts and rules at that level add up; a template rule beats its organization's, which
+  beats a parent's, which beats a society's. Deed knowledge counts only the persona the
   character presents (the primary when none), via common-knowledge `LegendEntry` rows, so an
   alt's deeds never leak the link (ADR-0033). Predicate leaves read only the acting
   character's own state, which is why deeds are a typed field and not a leaf.
+- **Reputation and association leaves** (#4361, `world/predicates/predicates.py`):
+  `max_org_reputation(org, tier)` and `max_society_standing(society, tier)` are the "at most"
+  siblings of the `min_` leaves (same tier order, same fail-closed rules: no presented persona
+  or no reputation row is False, so a rule about strangers is NOT over an "at least Unknown"
+  test). `associated_with_org(org)` and `associated_with_society(society)` call
+  `world/societies/association.py`: membership now, a former member for
+  `AssociationConfig.former_member_years` in-game years after `left_at`, an exile always,
+  kin of a family house (primary persona only), or `work_missions` missions completed in the
+  last `work_days` in-game days from offers whose role fronts for the organization; through
+  the organization or any below it; covert organizations never count; presented persona only.
+  None of these leaves has a player-facing reason (`describe_leaf` returns None for them).
+  `explain_leaf_for_staff` (`predicates/describe.py`) names the hidden tier or tie for staff.
+  The catalog (`predicates/catalog.py:leaf_catalog`) offers the tier params as `choices`.
 - **Verbs** (`services/verbs.py`): `standoff_read` (:224), `standoff_press` (:592),
   `standoff_terms` (:712), `standoff_fight` (:805), `standoff_share_angle` (:822). Each locks
   the encounter (and group) row and rechecks state; a verb after the standoff ended or the
@@ -238,8 +285,10 @@ standoff.
 
 ## Config and Required content
 
-Staff author in admin: drives, faction rules and cause on the Standoff Profile Builder;
-approaches; terms; cause glosses; the `StandoffConfig` singleton. The tuning dashboard
+Staff author in admin: a creature's drives, faction rules, cause and affiliation on the
+Standoff Profile Builder; an organization's or society's faction rules on its Faction Rules
+page; one placement's edits on its Placement page (GMs make the same edits in the beat
+dialog); approaches; terms; cause glosses; the `StandoffConfig` singleton. The tuning dashboard
 (`web/admin/tuning/required_content.py`) carries three REQUIRED entries, `standoff-config`
 (all four links set), `standoff-approaches` and `standoff-terms`; without them players can
 only fight. TUNING entries: `standoff-reaction-lines` (the authored flavour lines) and
@@ -249,8 +298,8 @@ names, glosses) is authored in admin.
 ## Deviations and rulings
 
 1. No `is_standoff` column; derived (ADR-4145-A).
-2. Drives and cause are read through `CombatOpponent.creature_template`, not stamped on
-   opponents. Per-placement overrides are slice 2 of #4121.
+2. Built in #4361: drives, cause and affiliation are stamped on opponents at spawn, as
+   ADR-4361-A records. Until then they were read live through the template.
 3. Five-tier checks (no "strong success"); botch is -2 (see Read grading).
 4. Predicate leaves read only the actor's own state, so deed knowledge is the typed
    `deed_archetype` on `FactionRule`; `has_species` and `has_upbringing` are leaves.
@@ -295,6 +344,52 @@ names, glosses) is authored in admin.
   matches and whether read, force on both sides, every member's morale, the pending prompt.
   `build_standoff_summary` is the onlooker's public view.
 
+## Placements in the beat dialog and mission studio (#4361)
+
+Both opponent line serializers (`BeatOpponentLineSerializer`,
+`MissionOptionOpponentLineSerializer`) mix in `PlacementFieldsMixin`
+(`standoffs/serializers.py`): `cause_override`, `cause_margin_override`, `organization` (with a
+read-only `organization_name`), `drive_edits` (`[{property, property_name, strength|null}]`) and
+`suppressed_faction_rules` (rule ids). A line validates its edits against what it inherits
+(`placement_errors`: a suppression of a rule it does not inherit, a drive edited twice); the
+parents' syncs pop the two lists (`pop_placement_rows`) and write them after the line saves
+(`save_placement_rows` -> `save_placement`). Three GM-gated (`IsGMOrStaff`) reads feed the
+editors: `GET /api/combat/creature-templates/<id>/placement-context/?organization=` (the
+template's cause, margin, affiliation, drives and the rules a placement with that affiliation
+inherits, with sources), `GET /api/combat/placement-organizations/?search=` (covert
+organizations shown to staff only) and `GET /api/combat/placement-properties/?search=`. Web:
+`PlacementPanel` (`frontend/src/stories/components/PlacementPanel.tsx`) inside
+`OpponentLinesEditor` for each line with a creature picked, on the beat dialog and the
+mission studio's option page: "opens as a standoff" (beats), cause, affiliation, drives
+(same/strength/remove, add from the property catalog), a switch-off box per inherited rule
+and a one-line spawn summary. Changing a line's creature clears its drive edits and
+switch-offs.
+
+## Placement and Faction Rules pages (#4361)
+
+- **Placement page** (`web/admin/standoff_placement/`, `_placement/beat/<pk>/` ->
+  `admin_placement_beat`, `_placement/mission/<pk>/` -> `admin_placement_mission`,
+  superuser): one line's `opens_as_standoff` (beats), cause, margin and affiliation
+  overrides, a "Here" pick per template drive, added drives, and a switch-off box per
+  inherited rule with its source, saved through `save_placement` in one transaction. Rail:
+  what spawns, the beat's target level (or the mission's band middle) with a plain force
+  check, a link to the Standoff Profile Builder. Reached from the beat inline's "Edit
+  placement" link and the mission line change page's object tool.
+- **Faction Rules page** (`web/admin/faction_rules/`, `_faction_rules/organization/<pk>/`,
+  `_faction_rules/society/<pk>/`, superuser): every rule the owner holds, each test built
+  with the predicate widget. Rail: what it inherits from above with the precedence rule,
+  what it reaches (child organizations, affiliated templates, placements), and "Test a
+  character": the rules run against a named character as presented now, with
+  `explain_leaf_for_staff` reasons (staff only). Reached from the Organization and Society
+  change pages' "Edit its faction rules" object tool.
+- **Predicate rule widget** (`web/admin/predicate_widget.py`,
+  `web/static/admin/js/predicate_widget.js`): the mission studio's AND / OR / NOT, leaf and
+  typed-parameter builder over a hidden JSON textarea, fed by `leaf_catalog()` (the same list
+  `/api/missions/predicate-leaves/` serves); the model's `clean()` validates the tree. Used on
+  all three standoff authoring pages.
+- **`AssociationConfig`** has a stock singleton admin and a TUNING Required content entry
+  (`association-config`).
+
 ## Standoff Profile Builder (#4354)
 
 `web/admin/standoff_profile/` (`admin_standoff_profile`, `_standoff_profile/<template pk>/`,
@@ -304,17 +399,16 @@ template-owned `FactionRule` in one transaction and credits the template. The ra
 (`live.py`): what each drive means and which approaches and terms reach it, a grade preview
 for an example character of a chosen level against one member of that level (the shared
 `social_target_difficulty` with no actor), a plain-text cause check for an example party,
-and the beat and mission lines that place the creature. `FactionRule.rule` is still typed as
-JSON here; the predicate widget arrives with organization and society rules (slice 2).
+and the beat and mission lines that place the creature, each linked to its Placement page
+and marked when it edits the template. #4361 adds the affiliation
+(`CreatureTemplate.organization`), an "Also applies (inherited)" rail of the rules the
+affiliation brings, and the predicate widget for each rule's test.
 
 ## Later slices
 
 Plan from #4121 (the proposed slice cut there):
 
-- **Slice 2, placement edits and inheritance:** per-line edits with a spawn snapshot (the
-  override in deviation 2), organization and society faction rules with inheritance and
-  suppression, the reputation and association predicate leaves, the Placement and Faction
-  Rules admin pages, the predicate widget, and the beat dialog's placement fields.
+- **Slice 2, placement edits and inheritance:** built in #4361 (sections above).
 - **Slice 3, named NPCs and language:** persona groups with `NpcRegard`, the verbal gate.
 - **Slice 4:** Hunger, Hatred and Territory, `cause_effect`, and the cause re-test when a
   Charmed or Calm hold breaks.

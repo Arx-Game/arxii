@@ -36,6 +36,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
 import { OpponentLineDraft, OpponentLinesEditor } from '@/stories/components/OpponentLinesEditor';
+import { placementFieldsFromLine, placementPayload } from '@/stories/components/placementDraft';
 import { useCheckTypeCatalog } from '@/gm-adjudication/queries';
 
 import {
@@ -69,6 +70,7 @@ function opponentLineDraftsFromOption(lines: MissionOption['opponent_lines']): O
     creature_template: String(line.creature_template),
     count: String(line.count ?? 1),
     position_name: line.position_name ?? '',
+    ...placementFieldsFromLine(line),
   }));
 }
 
@@ -83,6 +85,7 @@ function opponentLineDraftsToPayload(
       count: d.count !== '' ? Number(d.count) : 1,
       position_name: d.position_name.trim(),
       order: 0,
+      ...placementPayload(d),
     }));
 }
 
@@ -473,6 +476,7 @@ function OptionEditor({ option }: { option: MissionOption }) {
               lines={draft.opponent_lines}
               onChange={(lines) => setDraft({ ...draft, opponent_lines: lines })}
               rowErrors={undefined}
+              showPlacement
             />
           </div>
         ) : null}

@@ -33,6 +33,7 @@ from world.standoffs.factories import (
     CreatureDriveFactory,
     FactionRuleFactory,
     StandoffApproachFactory,
+    restamp_from_templates,
 )
 from world.standoffs.models import StandoffConfig, StandoffMoraleRuling
 from world.standoffs.services.state import open_standoff
@@ -76,6 +77,7 @@ class StandoffPayloadTests(TestCase):
         CreatureDriveFactory(
             creature_template=self.template, property=PropertyFactory(name=DRIVE_NAME)
         )
+        restamp_from_templates(self.encounter)
         FactionRuleFactory(creature_template=self.template, rule={}, angle_text=ANGLE)
         config = StandoffConfig.load()
         config.read_check_type = CheckTypeFactory()

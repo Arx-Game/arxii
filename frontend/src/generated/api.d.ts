@@ -6539,6 +6539,28 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/combat/creature-templates/{id}/placement-context/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description The template's standoff profile and inherited faction rules (#4361).
+     *
+     *     Read by the beat dialog's and mission studio's placement fields, which show each
+     *     edit beside the template's own value and offer each inherited rule a switch-off.
+     */
+    get: operations['combat_creature_templates_placement_context_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/combat/duel-challenges/': {
     parameters: {
       query?: never;
@@ -6653,6 +6675,94 @@ export interface paths {
      *     browse. ``?search=`` matches the name.
      */
     get: operations['combat_escalation_curves_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/combat/placement-organizations/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description Organizations a placement can name as its affiliation (#4361), by name.
+     *
+     *     The beat dialog's and mission studio's affiliation picker. Same gate as the bestiary
+     *     (``IsGMOrStaff``). A covert organization's existence is itself a secret, so only
+     *     staff see one here.
+     */
+    get: operations['combat_placement_organizations_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/combat/placement-organizations/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description Organizations a placement can name as its affiliation (#4361), by name.
+     *
+     *     The beat dialog's and mission studio's affiliation picker. Same gate as the bestiary
+     *     (``IsGMOrStaff``). A covert organization's existence is itself a secret, so only
+     *     staff see one here.
+     */
+    get: operations['combat_placement_organizations_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/combat/placement-properties/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description Properties a placement can add or edit as a drive (#4361), by name.
+     *
+     *     The catalog GMs pick drives from (ADR-0110: GMs adapt authored rows, never invent).
+     */
+    get: operations['combat_placement_properties_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/combat/placement-properties/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description Properties a placement can add or edit as a drive (#4361), by name.
+     *
+     *     The catalog GMs pick drives from (ADR-0110: GMs adapt authored rows, never invent).
+     */
+    get: operations['combat_placement_properties_retrieve'];
     put?: never;
     post?: never;
     delete?: never;
@@ -27694,6 +27804,10 @@ export interface components {
     /**
      * @description One authored opponent line on an ENCOUNTER beat (#3425).
      *
+     *     Carries the placement's standoff edits (#4361): cause, margin and affiliation
+     *     overrides on the line, plus ``drive_edits`` and ``suppressed_faction_rules`` child
+     *     rows (``PlacementFieldsMixin``).
+     *
      *     ``id`` is writable-but-optional (not ``read_only``) so ``BeatSerializer
      *     .update()`` can diff incoming rows against the beat's existing lines by
      *     id: an id present in the payload and on the beat is an edit, an id absent
@@ -27711,9 +27825,31 @@ export interface components {
       order?: number;
       /** @description When any line on the beat has this set, running the beat opens a standoff before round one instead of starting the fight. */
       opens_as_standoff?: boolean;
+      /**
+       * @description Blank keeps the template's cause; pick another for this placement only.
+       *
+       *     * `none` - None
+       *     * `predation` - Predation
+       *     * `orders` - Orders
+       */
+      cause_override?:
+        | components['schemas']['CauseOverrideEnum']
+        | components['schemas']['BlankEnum'];
+      /** @description Blank keeps the template's cause margin (percent). */
+      cause_margin_override?: number | null;
+      /** @description Blank keeps the template's affiliation; pick another for this placement. */
+      organization?: number | null;
+      /** @description The overriding affiliation's name, so an editor can show the pick (read only). */
+      readonly organization_name: string;
+      drive_edits?: components['schemas']['OpponentLineDrive'][];
+      suppressed_faction_rules?: number[];
     };
     /**
      * @description One authored opponent line on an ENCOUNTER beat (#3425).
+     *
+     *     Carries the placement's standoff edits (#4361): cause, margin and affiliation
+     *     overrides on the line, plus ``drive_edits`` and ``suppressed_faction_rules`` child
+     *     rows (``PlacementFieldsMixin``).
      *
      *     ``id`` is writable-but-optional (not ``read_only``) so ``BeatSerializer
      *     .update()`` can diff incoming rows against the beat's existing lines by
@@ -27732,6 +27868,22 @@ export interface components {
       order?: number;
       /** @description When any line on the beat has this set, running the beat opens a standoff before round one instead of starting the fight. */
       opens_as_standoff?: boolean;
+      /**
+       * @description Blank keeps the template's cause; pick another for this placement only.
+       *
+       *     * `none` - None
+       *     * `predation` - Predation
+       *     * `orders` - Orders
+       */
+      cause_override?:
+        | components['schemas']['CauseOverrideEnum']
+        | components['schemas']['BlankEnum'];
+      /** @description Blank keeps the template's cause margin (percent). */
+      cause_margin_override?: number | null;
+      /** @description Blank keeps the template's affiliation; pick another for this placement. */
+      organization?: number | null;
+      drive_edits?: components['schemas']['OpponentLineDriveRequest'][];
+      suppressed_faction_rules?: number[];
     };
     /** @description Read-only mirror of :class:`world.missions.types.BeatOption`. */
     BeatOption: {
@@ -28816,6 +28968,13 @@ export interface components {
       average_rating: number;
       rating_count: number;
     };
+    /**
+     * @description * `none` - None
+     *     * `predation` - Predation
+     *     * `orders` - Orders
+     * @enum {string}
+     */
+    CauseOverrideEnum: 'none' | 'predation' | 'orders';
     Ceremony: {
       readonly id: number;
       readonly ceremony_type_name: string;
@@ -33200,6 +33359,7 @@ export interface components {
       label: string;
       strength: string;
       revealed: boolean;
+      edited: boolean;
     };
     /** @description Read-only view of ``world.gm.types.GMEvidenceSummary`` for staff review (#2000). */
     GMEvidenceSummary: {
@@ -33224,6 +33384,7 @@ export interface components {
       suppresses_cause: boolean;
       matched_by: string[];
       revealed: boolean;
+      source: string;
     };
     GMGroupView: {
       group_id: number;
@@ -33249,6 +33410,9 @@ export interface components {
       effective_party_force: number;
       /** Format: double */
       group_force: number;
+      affiliation: string;
+      cause_edited: boolean;
+      affiliation_edited: boolean;
       drives: components['schemas']['GMDriveView'][];
       faction_rules: components['schemas']['GMFactionRuleView'][];
       members: components['schemas']['GMMemberView'][];
@@ -36715,6 +36879,24 @@ export interface components {
       count?: number;
       position_name?: string;
       order?: number;
+      /**
+       * @description Blank keeps the template's cause; pick another for this placement only.
+       *
+       *     * `none` - None
+       *     * `predation` - Predation
+       *     * `orders` - Orders
+       */
+      cause_override?:
+        | components['schemas']['CauseOverrideEnum']
+        | components['schemas']['BlankEnum'];
+      /** @description Blank keeps the template's cause margin (percent). */
+      cause_margin_override?: number | null;
+      /** @description Blank keeps the template's affiliation; pick another for this placement. */
+      organization?: number | null;
+      /** @description The overriding affiliation's name, so an editor can show the pick (read only). */
+      readonly organization_name: string;
+      drive_edits?: components['schemas']['OpponentLineDrive'][];
+      suppressed_faction_rules?: number[];
     };
     /**
      * @description One authored opponent line on an ENCOUNTER option (#3565).
@@ -36729,6 +36911,22 @@ export interface components {
       count?: number;
       position_name?: string;
       order?: number;
+      /**
+       * @description Blank keeps the template's cause; pick another for this placement only.
+       *
+       *     * `none` - None
+       *     * `predation` - Predation
+       *     * `orders` - Orders
+       */
+      cause_override?:
+        | components['schemas']['CauseOverrideEnum']
+        | components['schemas']['BlankEnum'];
+      /** @description Blank keeps the template's cause margin (percent). */
+      cause_margin_override?: number | null;
+      /** @description Blank keeps the template's affiliation; pick another for this placement. */
+      organization?: number | null;
+      drive_edits?: components['schemas']['OpponentLineDriveRequest'][];
+      suppressed_faction_rules?: number[];
     };
     /**
      * @description Editor CRUD for MissionOption rows (authored or challenge-sourced).
@@ -38195,6 +38393,17 @@ export interface components {
       phases: components['schemas']['PhaseSpec'][];
       stakes_ok: boolean;
       stakes_message: string;
+    };
+    /** @description One drive edit on a placement: a strength, or null to remove the template's drive. */
+    OpponentLineDrive: {
+      property: number;
+      readonly property_name: string;
+      strength: (components['schemas']['StrengthEnum'] | components['schemas']['NullEnum']) | null;
+    };
+    /** @description One drive edit on a placement: a strength, or null to remove the template's drive. */
+    OpponentLineDriveRequest: {
+      property: number;
+      strength: (components['schemas']['StrengthEnum'] | components['schemas']['NullEnum']) | null;
     };
     /**
      * @description Read serializer for combat opponents.
@@ -41013,6 +41222,21 @@ export interface components {
        */
       previous?: string | null;
       results: components['schemas']['Place'][];
+    };
+    PaginatedPlacementPickList: {
+      /** @example 123 */
+      count: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results: components['schemas']['PlacementPick'][];
     };
     PaginatedPlayerActionList: {
       /** @example 123 */
@@ -45042,6 +45266,35 @@ export interface components {
     PlacedFixture: {
       id: number;
       kind: string;
+    };
+    /** @description A creature template's standoff profile, for a placement editor's "template" column. */
+    PlacementContext: {
+      creature_template: number;
+      name: string;
+      cause: string;
+      cause_label: string;
+      cause_margin_percent: number;
+      organization: number | null;
+      organization_name: string;
+      drives: components['schemas']['PlacementDriveContext'][];
+      inherited_rules: components['schemas']['PlacementRuleContext'][];
+    };
+    PlacementDriveContext: {
+      property: number;
+      name: string;
+      strength: number;
+      strength_label: string;
+    };
+    /** @description One row of a placement editor's affiliation or drive picker. */
+    PlacementPick: {
+      id: number;
+      name: string;
+    };
+    PlacementRuleContext: {
+      faction_rule_id: number;
+      label: string;
+      source: string;
+      level: number;
     };
     /**
      * @description Read-only serializer for PlayerAction — the homogeneous availability descriptor.
@@ -49628,6 +49881,13 @@ export interface components {
       readonly diminishing_step: number;
       readonly diminishing_floor: number;
     };
+    /**
+     * @description * `1` - Minor
+     *     * `2` - Major
+     *     * `3` - Defining
+     * @enum {integer}
+     */
+    StrengthEnum: 1 | 2 | 3;
     /** @description Serializer for the Style catalog (#2030 — player-facing Motif style-binding). */
     Style: {
       readonly id: number;
@@ -60517,6 +60777,31 @@ export interface operations {
       };
     };
   };
+  combat_creature_templates_placement_context_retrieve: {
+    parameters: {
+      query?: {
+        /** @description Preview the rules inherited through this affiliation instead. */
+        organization?: number;
+      };
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this creature template. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PlacementContext'];
+        };
+      };
+    };
+  };
   combat_duel_challenges_list: {
     parameters: {
       query?: {
@@ -60637,6 +60922,100 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['EscalationCurve'];
+        };
+      };
+    };
+  };
+  combat_placement_organizations_list: {
+    parameters: {
+      query?: {
+        /** @description A page number within the paginated result set. */
+        page?: number;
+        /** @description Number of results to return per page. */
+        page_size?: number;
+        search?: string;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedPlacementPickList'];
+        };
+      };
+    };
+  };
+  combat_placement_organizations_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this organization. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PlacementPick'];
+        };
+      };
+    };
+  };
+  combat_placement_properties_list: {
+    parameters: {
+      query?: {
+        /** @description A page number within the paginated result set. */
+        page?: number;
+        /** @description Number of results to return per page. */
+        page_size?: number;
+        search?: string;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedPlacementPickList'];
+        };
+      };
+    };
+  };
+  combat_placement_properties_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this property. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PlacementPick'];
         };
       };
     };

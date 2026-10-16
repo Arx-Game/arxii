@@ -20,11 +20,7 @@ from world.combat.constants import CauseKind, ParticipantStatus
 from world.combat.morale import OpponentMoraleState, morale_state_for
 from world.mechanics.constants import DifficultyIndicator
 from world.mechanics.services import difficulty_indicator_for_rank_difference
-from world.standoffs.constants import (
-    LIVE_GROUP_STATES,
-    DriveStrength,
-    RevealKind,
-)
+from world.standoffs.constants import LIVE_GROUP_STATES, RevealKind
 from world.standoffs.models import (
     StandoffAngleShare,
     StandoffApproach,
@@ -35,7 +31,12 @@ from world.standoffs.models import (
     StandoffTerms,
 )
 from world.standoffs.services.describe import describe_reveals
-from world.standoffs.services.faction_rules import MatchedFactionRule, faction_rule_matches
+from world.standoffs.services.faction_rules import (
+    MatchedFactionRule,
+    faction_rule_matches,
+    shifting_rule_ids,
+)
+from world.standoffs.services.profile import GroupDrive, group_cause, group_drives
 from world.standoffs.services.state import active_members, is_in_standoff
 from world.standoffs.services.verbs import (
     build_grading_context,
@@ -181,14 +182,11 @@ class _GroupFacts:
     reveals: list[StandoffReveal]
     matches: list[MatchedFactionRule]
     shares: list[StandoffAngleShare]
+    drives: list[GroupDrive]
 
     @property
     def revealed_drive_property_ids(self) -> set[int]:
-        return {
-            r.drive.property_id
-            for r in self.reveals
-            if r.kind == RevealKind.DRIVE and r.drive is not None
-        }
+        return {r.drive_id for r in self.reveals if r.kind == RevealKind.DRIVE and r.drive_id}
 
     @property
     def revealed_set(self) -> set[tuple[str, int | None, int | None]]:
@@ -217,24 +215,23 @@ def _group_view(  # noqa: PLR0913 - one viewer-and-group context, built once per
     terms_morale_ease: int = 0,
 ) -> GroupView:
     group = facts.group
-    template = group.creature_template
-    cause_known = template.cause != CauseKind.NONE and any(
-        r.kind == RevealKind.CAUSE for r in facts.reveals
-    )
+    cause, _margin = group_cause(group)
+    cause_known = cause != CauseKind.NONE and any(r.kind == RevealKind.CAUSE for r in facts.reveals)
+    strengths = {drive.property_id: drive.strength_label for drive in facts.drives}
     drives = [
-        DriveView(r.drive.property.name, DriveStrength(r.drive.strength).label)
+        DriveView(r.drive.name, strengths[r.drive_id])
         for r in facts.reveals
-        if r.kind == RevealKind.DRIVE and r.drive is not None
+        if r.kind == RevealKind.DRIVE and r.drive is not None and r.drive_id in strengths
     ]
     faction_reveals = [r for r in facts.reveals if r.kind == RevealKind.FACTION_RULE]
     return GroupView(
         group_id=group.pk,
-        name=template.name,
+        name=group.creature_template.name,
         member_count=member_count,
         state=group.state,
         terms_ease=group.terms_ease,
-        cause=CauseKind(template.cause).label if cause_known else None,
-        cause_gloss=_cause_gloss(template.cause) if cause_known else None,
+        cause=CauseKind(cause).label if cause_known else None,
+        cause_gloss=_cause_gloss(cause) if cause_known else None,
         hidden_count=hidden_count,
         drives=drives,
         revealed_faction_rules=describe_reveals(
@@ -271,18 +268,16 @@ def _levers(facts: _GroupFacts, hits: list, targeted: set[int]) -> tuple[list[Le
     """
     revealed_props = facts.revealed_drive_property_ids
     hit_levers = [
-        LeverView(f"hits {hit.label} ({DriveStrength(drive.strength).label})", is_angle=False)
+        LeverView(f"hits {hit.label} ({drive.strength_label})", is_angle=False)
         for drive, hit in hits
         if drive.property_id in revealed_props
     ]
     levers = list(hit_levers)
     revealed_rules = facts.revealed_rule_ids
+    shifting = shifting_rule_ids(facts.matches, targeted)
     for match in facts.matches:
         rule = match.rule
-        shifts = rule.difficulty_shift_bands != 0 or (
-            rule.drive_shift != 0 and rule.drive_id in targeted
-        )
-        if shifts and rule.pk in revealed_rules and rule.revealed_text:
+        if rule.pk in shifting and rule.pk in revealed_rules and rule.revealed_text:
             levers.append(LeverView(f"your angle: {rule.revealed_text}", is_angle=True))
     return levers, bool(hit_levers)
 
@@ -396,10 +391,10 @@ def _append_group_views(  # noqa: PLR0913 - inputs are the per-view and per-grou
     grader: _Grader,
 ) -> None:
     """Add one group's summary, approaches, and terms to the viewer's view."""
-    reveals = list(group.reveals.select_related("drive__property", "faction_rule"))
+    reveals = list(group.reveals.select_related("drive", "faction_rule"))
     shares = list(group.angle_shares.select_related("faction_rule"))
     matches = faction_rule_matches(group, viewer)
-    facts = _GroupFacts(group, reveals, matches, shares)
+    facts = _GroupFacts(group, reveals, matches, shares, group_drives(group))
     members = active_members(group)
     hidden = hidden_things(
         group, participants, revealed=facts.revealed_set, known_matches={viewer.pk: matches}

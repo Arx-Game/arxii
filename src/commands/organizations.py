@@ -96,6 +96,7 @@ class CmdOrg(DispatchCommand):
                 "in",
                 empty_msg=f"Usage: org {self._subverb} <person> in <organization>.",
                 usage_msg=f"Usage: org {self._subverb} <person> in <organization>.",
+                text=self._rest,
             )
             target = self.search_or_raise(target_name)
             return {

@@ -2421,12 +2421,14 @@
   - persona -> scenes.Persona [FK] (nullable)
   - portrait -> evennia_extensions.Media [FK] (nullable)
   - objectdb -> evennia.ObjectDB [FK] (nullable)
+  - organization -> societies.Organization [FK] (nullable)
   - mirrors_participant -> combat.CombatParticipant [FK] (nullable)
   - summoned_by -> character_sheets.CharacterSheet [FK] (nullable)
   - barrier_break_pool -> actions.ConsequencePool [FK] (nullable)
   - aftermath_pool -> actions.ConsequencePool [FK] (nullable)
   - wall_breaker_combo -> combat.ComboDefinition [FK] (nullable)
   - reinforces -> combat.CombatOpponent [FK] (nullable)
+  - suppressed_faction_rules -> standoffs.FactionRule [M2M]
 **Pointed to by:**
   - reinforced_by <- combat.CombatOpponent
   - phases <- combat.BossPhase
@@ -2562,6 +2564,7 @@
   - written_by -> contributors.ContentContributor [FK] (nullable)
   - reviewed_by -> contributors.ContentContributor [FK] (nullable)
   - threat_pool -> combat.ThreatPool [FK] (nullable)
+  - organization -> societies.Organization [FK] (nullable)
 **Pointed to by:**
   - weakness_pool_entries <- covenants.WeaknessPoolEntry
   - spawned_opponents <- combat.CombatOpponent
@@ -2791,7 +2794,7 @@
 - `roll_sustained_absorption_budget(participant: 'CombatParticipant') -> 'tuple[int, CheckOutcome | None]' - Roll Concentration once to set a sustained action's absorption budget (#2705).`
 - `scan_round_combos(encounter: 'CombatEncounter', round_number: 'int') -> 'list[RoundCombo]' - List every combo taking shape in this round's declared actions (#3553).`
 - `select_npc_actions(encounter: 'CombatEncounter') -> 'list[CombatOpponentAction]' - Select and create NPC actions for the current round.`
-- `spawn_from_creature_template(encounter: 'CombatEncounter', template: 'CreatureTemplate', *, position: 'Position | None' = None, acting_account: 'AccountDB | None' = None) -> 'CombatOpponent' - Spawn a CombatOpponent from a CreatureTemplate bestiary entry (#2016).`
+- `spawn_from_creature_template(encounter: 'CombatEncounter', template: 'CreatureTemplate', *, position: 'Position | None' = None, acting_account: 'AccountDB | None' = None, line: 'OpponentLine | None' = None) -> 'CombatOpponent' - Spawn a CombatOpponent from a CreatureTemplate bestiary entry (#2016).`
 - `swarm_attack_count(swarm_count: 'int', bodies_per_attack: 'int', active_pc_count: 'int') -> 'int' - Attacks a swarm makes this round — scales with remaining bodies (#875).`
 - `swarm_kills(raw_damage: 'int', body_toughness: 'int') -> 'int' - Bodies a single landing attack clears from a swarm (#875).`
 - `toggle_action_ready(action: 'CombatRoundAction') -> 'CombatRoundAction' - Flip the ready flag on a round action and persist it.`
@@ -7011,8 +7014,12 @@
 
 ### MissionOptionOpponentLine
 **Foreign Keys:**
+  - organization -> societies.Organization [FK] (nullable)
   - option -> missions.MissionOption [FK]
   - creature_template -> combat.CreatureTemplate [FK]
+**Pointed to by:**
+  - drive_edits <- standoffs.OpponentLineDrive
+  - faction_rule_suppressions <- standoffs.OpponentLineFactionRuleSuppression
 
 ### MissionOptionRoute
 **Foreign Keys:**
@@ -9175,6 +9182,8 @@
 
 ## world.societies
 
+### AssociationConfig
+
 ### Betrothal
 **Foreign Keys:**
   - kinsperson_a -> roster.Kinsperson [FK]
@@ -9651,6 +9660,7 @@
   - covenant <- covenants.Covenant
   - ritualsessionreference_set <- magic.RitualSessionReference
   - anchored_threads <- magic.Thread
+  - affiliated_creature_templates <- combat.CreatureTemplate
   - treasury <- currency.OrganizationTreasury
   - issued_favor_tokens <- currency.FavorTokenDetails
   - economics <- currency.OrgEconomicsProfile
@@ -9680,6 +9690,7 @@
   - gemits <- narrative.Gemit
   - stalking_predators <- predators.PredatorBand
   - secret_victimhoods <- secrets.SecretVictim
+  - faction_rules <- standoffs.FactionRule
   - org_tasks <- tasking.OrgTask
   - org_tasks_targeting <- tasking.OrgTask
   - capability_projects <- societies.OrganizationCapabilityProjectDetails
@@ -9847,6 +9858,7 @@
   - sentence_ladder <- justice.SentenceLadderRung
   - gemits <- narrative.Gemit
   - exposed_secrets <- secrets.Secret
+  - faction_rules <- standoffs.FactionRule
 
 ### SocietyReputation
 **Foreign Keys:**
@@ -10016,9 +10028,25 @@
 
 ### FactionRule
 **Foreign Keys:**
-  - creature_template -> combat.CreatureTemplate [FK]
+  - creature_template -> combat.CreatureTemplate [FK] (nullable)
+  - organization -> societies.Organization [FK] (nullable)
+  - society -> societies.Society [FK] (nullable)
   - deed_archetype -> societies.PhilosophicalArchetype [FK] (nullable)
   - drive -> mechanics.Property [FK] (nullable)
+**Pointed to by:**
+  - suppressions <- standoffs.OpponentLineFactionRuleSuppression
+
+### OpponentLineDrive
+**Foreign Keys:**
+  - beat_line -> stories.BeatOpponentLine [FK] (nullable)
+  - mission_line -> missions.MissionOptionOpponentLine [FK] (nullable)
+  - property -> mechanics.Property [FK]
+
+### OpponentLineFactionRuleSuppression
+**Foreign Keys:**
+  - beat_line -> stories.BeatOpponentLine [FK] (nullable)
+  - mission_line -> missions.MissionOptionOpponentLine [FK] (nullable)
+  - faction_rule -> standoffs.FactionRule [FK]
 
 ### StandoffAngleShare
 **Foreign Keys:**
@@ -10069,8 +10097,8 @@
 ### StandoffReveal
 **Foreign Keys:**
   - group -> standoffs.StandoffGroup [FK]
-  - drive -> standoffs.CreatureDrive [FK] (nullable)
   - faction_rule -> standoffs.FactionRule [FK] (nullable)
+  - drive -> mechanics.Property [FK] (nullable)
 
 ### StandoffTerms
 **Foreign Keys:**
@@ -10159,8 +10187,12 @@
 
 ### BeatOpponentLine
 **Foreign Keys:**
+  - organization -> societies.Organization [FK] (nullable)
   - beat -> stories.Beat [FK]
   - creature_template -> combat.CreatureTemplate [FK]
+**Pointed to by:**
+  - drive_edits <- standoffs.OpponentLineDrive
+  - faction_rule_suppressions <- standoffs.OpponentLineFactionRuleSuppression
 
 ### BeatStagedBattle
 **Foreign Keys:**

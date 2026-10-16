@@ -3,7 +3,8 @@
 A standoff is the stretch before a fight (``CombatEncounter.round_number == 0``) in
 which each group of creatures can be read and talked down. "In a standoff" is derived
 from an OPEN ``StandoffGroup`` existing; there is no flag on the encounter.
-Drives and cause are read through ``CombatOpponent.creature_template``.
+Drives, cause and affiliation are stamped on each ``CombatOpponent`` at spawn (#4361); a
+live encounter reads the snapshot, never the template (``services.profile``).
 """
 
 from __future__ import annotations
@@ -60,7 +61,12 @@ class CreatureDrive(SharedMemoryModel):
 
 
 class FactionRule(SharedMemoryModel):
-    """How a creature kind stands toward particular characters, and what that does to a standoff.
+    """How a group stands toward particular characters, and what that does to a standoff.
+
+    Owned by exactly one of a creature template, an organization or a society (#4361).
+    An opponent carries its template's rules plus those of its affiliation organization,
+    that organization's ``parent_org`` chain and each of their societies; where two rules
+    shift the same thing, the most specific owner wins (``services.profile``).
 
     ``rule`` is a predicate tree over the acting character's own state (ratified
     exception to the no-JSON rule, ADR-0007). Deed knowledge is the typed
@@ -70,8 +76,29 @@ class FactionRule(SharedMemoryModel):
     creature_template = models.ForeignKey(
         "arxii.CreatureTemplate",
         on_delete=models.CASCADE,
+        null=True,
+        blank=True,
         related_name="faction_rules",
-        help_text="The creature kind this rule belongs to.",
+        help_text="The creature kind this rule belongs to (set this, an organization or a "
+        "society).",
+    )
+    organization = models.ForeignKey(
+        "arxii.Organization",
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="faction_rules",
+        help_text="The organization whose people hold this rule; inherited by every creature "
+        "affiliated with it or with an organization below it.",
+    )
+    society = models.ForeignKey(
+        "arxii.Society",
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="faction_rules",
+        help_text="The society whose people hold this rule; inherited by every creature "
+        "affiliated with one of its organizations.",
     )
     # SANCTIONED DYNAMIC JSON: a predicate rule tree (AND/OR/NOT over the acting
     # character's own state), validated by ``validate_predicate_tree`` in clean().
@@ -120,16 +147,47 @@ class FactionRule(SharedMemoryModel):
     )
 
     class Meta:
-        ordering = ["creature_template", "pk"]
+        ordering = ["pk"]
+        constraints = [
+            models.CheckConstraint(
+                condition=(
+                    models.Q(
+                        creature_template__isnull=False,
+                        organization__isnull=True,
+                        society__isnull=True,
+                    )
+                    | models.Q(
+                        creature_template__isnull=True,
+                        organization__isnull=False,
+                        society__isnull=True,
+                    )
+                    | models.Q(
+                        creature_template__isnull=True,
+                        organization__isnull=True,
+                        society__isnull=False,
+                    )
+                ),
+                name="faction_rule_one_owner",
+            ),
+        ]
 
     def __str__(self) -> str:
-        return f"{self.creature_template} faction rule #{self.pk}"
+        return f"{self.owner} faction rule #{self.pk}"
+
+    @property
+    def owner(self) -> object:
+        """The creature template, organization or society this rule belongs to."""
+        return self.creature_template or self.organization or self.society
 
     def clean(self) -> None:
         super().clean()
         errors = validate_predicate_tree(self.rule)
         if errors:
             raise ValidationError({"rule": errors})
+        owners = [self.creature_template_id, self.organization_id, self.society_id]
+        if sum(owner is not None for owner in owners) != 1:
+            msg = "A faction rule belongs to exactly one creature, organization or society."
+            raise ValidationError(msg)
         if (
             self.drive_id is not None
             and self.creature_template_id is not None
@@ -444,14 +502,6 @@ class StandoffReveal(SharedMemoryModel):
     kind = models.CharField(
         max_length=20, choices=RevealKind.choices, help_text="What sort of thing was revealed."
     )
-    drive = models.ForeignKey(
-        CreatureDrive,
-        on_delete=models.CASCADE,
-        null=True,
-        blank=True,
-        related_name="+",
-        help_text="The drive revealed (DRIVE reveals only).",
-    )
     faction_rule = models.ForeignKey(
         FactionRule,
         on_delete=models.CASCADE,
@@ -459,6 +509,17 @@ class StandoffReveal(SharedMemoryModel):
         blank=True,
         related_name="+",
         help_text="The faction rule revealed ((FACTION_RULE reveals only)).",
+    )
+    drive = models.ForeignKey(
+        "arxii.Property",
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="+",
+        help_text=(
+            "The drive revealed, by its property (DRIVE reveals only). A group's drives are "
+            "stamped on its members at spawn, so a placement may add one its template lacks."
+        ),
     )
 
     class Meta:
@@ -611,3 +672,128 @@ class StandoffMoraleRuling(SharedMemoryModel):
 
     def __str__(self) -> str:
         return f"{self.get_direction_display()} on {self.group}"
+
+
+def _one_line_constraint(name: str) -> models.CheckConstraint:
+    """Exactly one of ``beat_line`` and ``mission_line`` is set on a placement edit (#4361)."""
+    return models.CheckConstraint(
+        condition=(
+            models.Q(beat_line__isnull=False, mission_line__isnull=True)
+            | models.Q(beat_line__isnull=True, mission_line__isnull=False)
+        ),
+        name=name,
+    )
+
+
+class OpponentLineDrive(SharedMemoryModel):
+    """One placement's change to a drive: a new strength, an added drive, or a removal.
+
+    A blank ``strength`` removes the template's drive on that property for this placement
+    only. Picked from the property catalog (ADR-0110: GMs adapt authored rows).
+    """
+
+    # Declared before the ``property`` field, which shadows the builtin in this class body.
+    @property
+    def line(self) -> object:
+        """The placement this edit belongs to (exactly one of the two lines is set)."""
+        return self.beat_line or self.mission_line
+
+    beat_line = models.ForeignKey(
+        "arxii.BeatOpponentLine",
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="drive_edits",
+        help_text="The beat opponent line this edit belongs to (set this or mission_line).",
+    )
+    mission_line = models.ForeignKey(
+        "arxii.MissionOptionOpponentLine",
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="drive_edits",
+        help_text="The mission option opponent line this edit belongs to (or beat_line).",
+    )
+    property = models.ForeignKey(
+        "arxii.Property",
+        on_delete=models.PROTECT,
+        related_name="+",
+        help_text="The drive this placement changes or adds.",
+    )
+    strength = models.PositiveSmallIntegerField(
+        choices=DriveStrength.choices,
+        null=True,
+        blank=True,
+        help_text="The strength here. Blank removes the template's drive for this placement.",
+    )
+
+    class Meta:
+        ordering = ["pk"]
+        constraints = [
+            _one_line_constraint("opponent_line_drive_one_line"),
+            models.UniqueConstraint(
+                fields=["beat_line", "property"],
+                condition=models.Q(beat_line__isnull=False),
+                name="unique_beat_line_drive_property",
+            ),
+            models.UniqueConstraint(
+                fields=["mission_line", "property"],
+                condition=models.Q(mission_line__isnull=False),
+                name="unique_mission_line_drive_property",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        strength = self.get_strength_display() if self.strength else "removed"
+        return f"{self.property} ({strength}) on {self.line}"
+
+
+class OpponentLineFactionRuleSuppression(SharedMemoryModel):
+    """One placement switches off one inherited faction rule (#4361)."""
+
+    beat_line = models.ForeignKey(
+        "arxii.BeatOpponentLine",
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="faction_rule_suppressions",
+        help_text="The beat opponent line this belongs to (set this or mission_line).",
+    )
+    mission_line = models.ForeignKey(
+        "arxii.MissionOptionOpponentLine",
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="faction_rule_suppressions",
+        help_text="The mission option opponent line this belongs to (or beat_line).",
+    )
+    faction_rule = models.ForeignKey(
+        FactionRule,
+        on_delete=models.CASCADE,
+        related_name="suppressions",
+        help_text="The inherited faction rule switched off for this placement.",
+    )
+
+    class Meta:
+        ordering = ["pk"]
+        constraints = [
+            _one_line_constraint("opponent_line_suppression_one_line"),
+            models.UniqueConstraint(
+                fields=["beat_line", "faction_rule"],
+                condition=models.Q(beat_line__isnull=False),
+                name="unique_beat_line_suppression",
+            ),
+            models.UniqueConstraint(
+                fields=["mission_line", "faction_rule"],
+                condition=models.Q(mission_line__isnull=False),
+                name="unique_mission_line_suppression",
+            ),
+        ]
+
+    @property
+    def line(self) -> object:
+        """The placement this suppression belongs to (exactly one of the two lines is set)."""
+        return self.beat_line or self.mission_line
+
+    def __str__(self) -> str:
+        return f"{self.faction_rule} off on {self.line}"
