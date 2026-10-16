@@ -107,7 +107,7 @@ async function registerFreshAccount(
     });
   });
   await page.goto(`${BASE_URL}/verify-email/dummy-key-for-e2e`);
-  await expect(page.locator('h1')).toContainText('Email Verified', { timeout: 10000 });
+  await expect(page.locator('main h1')).toContainText('Email Verified', { timeout: 10000 });
 }
 
 type LoginRace = 'navigated' | 'mfa' | 'timeout';

@@ -10,6 +10,9 @@
  * Prerequisites:
  *   - Evennia server running on :4001 (`arx start` from the repo root)
  *   - DEBUG=True in src/.env (so email goes to console, not Resend SMTP)
+ *   - Registration open (staff admin: Registration Config) - it is invite-only by
+ *     default, and the register/login journeys sign up through the UI. CI opens it
+ *     in .github/workflows/real-test.yml.
  *   - Chromium installed (`cd frontend && npx playwright install chromium`)
  *
  * The email verification step is mocked via page.route() because extracting
@@ -105,7 +108,7 @@ test.describe('Registration flow', () => {
     await page.goto(`${BASE_URL}/register`);
     await page.waitForLoadState('networkidle');
 
-    await expect(page.locator('h1')).toContainText('Register for Arx');
+    await expect(page.locator('main h1')).toContainText('Register for Arx');
 
     // All four fields should be present
     await expect(page.locator('#username')).toBeVisible();
@@ -154,7 +157,7 @@ test.describe('Registration flow', () => {
 
     // Should navigate to the email verification pending page
     await page.waitForURL('**/register/verify-email', { timeout: 10000 });
-    await expect(page.locator('h1')).toContainText('Check Your Email');
+    await expect(page.locator('main h1')).toContainText('Check Your Email');
   });
 
   test('duplicate username is rejected', async ({ page }) => {
@@ -196,7 +199,7 @@ test.describe('Login flow', () => {
     await page.goto(`${BASE_URL}/login`);
     await page.waitForLoadState('networkidle');
 
-    await expect(page.locator('h1')).toContainText('Login to Arx');
+    await expect(page.locator('main h1')).toContainText('Login to Arx');
     await expect(page.locator('input[type="password"]')).toBeVisible();
     await expect(page.getByRole('link', { name: /register/i })).toBeVisible();
   });
@@ -251,7 +254,7 @@ test.describe('Login flow', () => {
 
     // Navigate to the verify page with a dummy key — the mock makes it succeed
     await page.goto(`${BASE_URL}/verify-email/dummy-key-for-e2e`);
-    await expect(page.locator('h1')).toContainText('Email Verified', { timeout: 10000 });
+    await expect(page.locator('main h1')).toContainText('Email Verified', { timeout: 10000 });
 
     // Step 3: Login
     // The mock verification didn't actually verify the account in the DB,

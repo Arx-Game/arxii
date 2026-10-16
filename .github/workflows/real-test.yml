@@ -90,8 +90,6 @@ jobs:
       CLOUDINARY_API_SECRET: test-secret
       SENDGRID_API_KEY: test-sendgrid-key
       DEFAULT_FROM_EMAIL: test@example.com
-      FACEBOOK_APP_ID: test-facebook-id
-      FACEBOOK_APP_SECRET: test-facebook-secret
     steps:
       - uses: actions/checkout@v6
       - name: Mint throwaway secrets for this job
@@ -140,8 +138,16 @@ jobs:
           # initialise Evennia first, and on a database that has never run a
           # server the seed command fails creating the account cmdset
           # ('NoneType' has no attribute 'sessions_from_account').
+          #
+          # Registration is invite-only by default (RegistrationConfig, #3054) and
+          # both specs register fresh accounts through the UI, so this throwaway
+          # database opens it. No Facebook credentials are set on purpose: with
+          # them the login page grows a second "Log in..." button and the specs'
+          # `getByRole('button', { name: 'Log In' })` matches both.
           uv run arx manage shell -c "
+          from world.registration.models import RegistrationConfig
           from world.seeds.test_account import seed_test_account
+          RegistrationConfig.objects.update_or_create(pk=1, defaults={'registration_open': True})
           print(seed_test_account(username='e2e_test_account', email='e2e_test@example.com', password='TestPass123!'))
           "
       - uses: pnpm/action-setup@v6
