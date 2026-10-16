@@ -1,0 +1,11 @@
+SNAP pool 190 task last_run_at 2026-10-16 16:21:10.210296+00:00
+SNAP held 2 Nell Garrow Success 2026-10-16 16:54:49.046884+00:00
+SNAP vision 1 Orla Cobbe Failure clue None 2026-10-16 16:10:35.897507+00:00
+SNAP vision 2 Ysmay Dunhollow Partial Success clue None 2026-10-16 16:20:53.533732+00:00
+SNAP vision 3 Tobiah Fenwright Success clue 1 2026-10-16 16:33:28.709993+00:00
+SNAP vision 4 Hobb Pennock Success clue 1 2026-10-16 16:34:57.468816+00:00
+SNAP vision 5 Mira Holt Success clue 1 2026-10-16 16:51:30.359184+00:00
+SNAP vision 6 Bram Okes Success clue 1 2026-10-16 17:25:41.651299+00:00
+SNAP vision 7 Ada Venn Success clue 1 2026-10-16 17:26:12.782558+00:00
+SNAP vision 8 Cora Lind Success clue 1 2026-10-16 17:35:59.309907+00:00
+SNAP vision 9 Dara Quill Success clue 1 2026-10-16 17:37:34.178432+00:00

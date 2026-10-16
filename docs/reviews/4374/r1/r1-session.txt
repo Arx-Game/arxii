@@ -1,0 +1,85 @@
+server up: 18:08:40
+[Brother Caddoc] connect: You become Brother Caddoc.
+Ombrin's Shrine
+This is a room.
+Characters: Wren Ashby, Orla Cobbe, Ysmay Dunhollow, Bram Okes, Ivo Marsh, and Brother Caddoc
+Now controlling Brother Caddoc.
+[Brother Caddoc] @ic: Already controlling Brother Caddoc.
+[Ivo Marsh] connect: You become Dara Quill.
+Ombrin's Shrine
+This is a room.
+Characters: Wren Ashby, Orla Cobbe, Ysmay Dunhollow, Bram Okes, Ivo Marsh, Brother Caddoc, and Dara Quill
+Now controlling Dara Quill.
+[Ivo Marsh] @ic: Switching from Dara Quill to Ivo Marsh.
+You become Ivo Marsh.
+Ombrin's Shrine
+This is a room.
+Characters: Wren Ashby, Orla Cobbe, Ysmay Dunhollow, Bram Okes, Ivo Marsh, and Brother Caddoc
+===== actor Ivo Marsh
+> pledge
+Pledge to Ombrin: [staff-authored pledge name 2]. 5 of 5 favor since pledging. Ready to close. 1 week, 6 days left.
+  Sacrificed iron nail: value 50: 5 base, at 100% = +5
+> pledge/close
+Ivo Marsh performs Ombrin's rite.
+You close your pledge with Ombrin's rite: Failure. Ombrin has not accepted it yet; you may try once more within the span.
+> pledge/close
+[VISION] [staff-authored delay text: failure, pledge 2]
+
+[staff-authored answer text: failure, pledge 2] Also sacrificed: iron nail.
+
+You know whose vision this is: Ombrin.
+Ivo Marsh performs Ombrin's rite.
+[staff-authored onlooker line: failure, pledge 2]
+You close your pledge with Ombrin's rite: Failure. Closing award for Failure: 2 base, at 100% = +2 favor with Ombrin.
+> pledge
+Pledge to Ombrin: [staff-authored pledge name 2]. 5 of 5 favor since pledging. Closed.
+  Sacrificed iron nail: value 50: 5 base, at 100% = +5
+  Closing award for Failure: 2 base, at 100% = +2
+===== onlooker Brother Caddoc received while connected
+Dara Quill has entered the game.
+Dara Quill has left the game.
+Ivo Marsh has entered the game.
+Ivo Marsh performs Ombrin's rite.
+Ivo Marsh performs Ombrin's rite.
+[staff-authored onlooker line: failure, pledge 2]
+waiting for the scheduler tick: 18:09:20
+after wait: 18:10:00
+2026-10-16 18:09:57 [EE] [INFO] 2026-10-16 18:09:57,080 world.game_clock.scheduler 38298 138348870088512 Executed task: worship.held_answers
+2026-10-16 18:09:57 [..] world.game_clock.scheduler: Executed task: worship.held_answers
+
+Running 1 test using 1 worker
+
+[1/1] [chromium] › e2e/rt-4374.spec.ts:165:1 › E staff dashboard shows held answers
+  1 passed (5.7s)
+[Brother Caddoc] connect: You become Brother Caddoc.
+Ombrin's Shrine
+This is a room.
+Characters: Wren Ashby, Orla Cobbe, Ysmay Dunhollow, Bram Okes, and Brother Caddoc
+Now controlling Brother Caddoc.
+[Brother Caddoc] @ic: Already controlling Brother Caddoc.
+[Nell Garrow] connect: You become Ivo Marsh.
+Ombrin's Shrine
+This is a room.
+Characters: Wren Ashby, Orla Cobbe, Ysmay Dunhollow, Bram Okes, Brother Caddoc, and Ivo Marsh
+Now controlling Ivo Marsh.
+[Nell Garrow] @ic: -authored fact text: success]
+
+[staff-authored cost text: success]
+
+[staff-authored follow-up text: success]
+
+You know whose vision this is: Ombrin.
+A clue came with it: Ombrin codex clue. A mission came with it: Ombrin mission clue. Condition: Marked by Ombrin.
+Ombrin's Shrine
+This is a room.
+Characters: Wren Ashby, Orla Cobbe, Ysmay Dunhollow, Bram Okes, Brother Caddoc, and Nell Garrow
+===== actor Nell Garrow
+> pledge
+Pledge to Ombrin: [staff-authored pledge name]. 5 of 5 favor since pledging. Closed.
+  Sacrificed horn spoon: value 50: 5 base, at 100% = +5
+  Closing award for Critical Success: 8 base, at 100% = +8
+===== onlooker Brother Caddoc received while connected
+Ivo Marsh has entered the game.
+Ivo Marsh has left the game.
+Nell Garrow has entered the game.
+done
