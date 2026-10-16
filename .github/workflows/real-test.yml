@@ -135,7 +135,15 @@ jobs:
       - name: Build the throwaway database
         run: |
           uv run python tools/build_schema.py
-          uv run arx manage seed_test_account
+          # Same function as `arx manage seed_test_account`, called through
+          # `shell`: only a few launcher commands (shell, check, makemigrations)
+          # initialise Evennia first, and on a database that has never run a
+          # server the seed command fails creating the account cmdset
+          # ('NoneType' has no attribute 'sessions_from_account').
+          uv run arx manage shell -c "
+          from world.seeds.test_account import seed_test_account
+          print(seed_test_account(username='e2e_test_account', email='e2e_test@example.com', password='TestPass123!'))
+          "
       - uses: pnpm/action-setup@v6
         with:
           version: 9
