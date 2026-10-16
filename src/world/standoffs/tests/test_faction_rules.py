@@ -4,7 +4,7 @@ from django.test import TestCase
 
 from evennia_extensions.factories import CharacterFactory
 from world.character_sheets.factories import CharacterSheetFactory
-from world.combat.factories import CreatureTemplateFactory
+from world.combat.factories import CombatOpponentFactory, CreatureTemplateFactory
 from world.mechanics.factories import PropertyFactory
 from world.scenes.factories import PersonaFactory
 from world.societies.factories import (
@@ -15,7 +15,6 @@ from world.societies.factories import (
 from world.species.factories import SpeciesFactory
 from world.standoffs.constants import DriveStrength
 from world.standoffs.factories import (
-    CreatureDriveFactory,
     FactionRuleFactory,
     StandoffGroupFactory,
 )
@@ -24,6 +23,7 @@ from world.standoffs.services.faction_rules import (
     drive_strength_toward,
     faction_rule_matches,
 )
+from world.standoffs.services.profile import GroupDrive
 
 
 class FactionRuleTests(TestCase):
@@ -31,6 +31,8 @@ class FactionRuleTests(TestCase):
     def setUpTestData(cls) -> None:
         cls.template = CreatureTemplateFactory()
         cls.group = StandoffGroupFactory(creature_template=cls.template)
+        # A group's rules come from its spawned members' stamped profile.
+        CombatOpponentFactory(encounter=cls.group.encounter, creature_template=cls.template)
         cls.cinderi = SpeciesFactory()
         cls.other = SpeciesFactory()
         cls.cinderi_sheet = CharacterSheetFactory(character=CharacterFactory(), species=cls.cinderi)
@@ -70,9 +72,7 @@ class FactionRuleTests(TestCase):
 
     def test_drive_strength_shift_is_clamped(self) -> None:
         prop = PropertyFactory()
-        drive = CreatureDriveFactory(
-            creature_template=self.template, property=prop, strength=DriveStrength.MAJOR
-        )
+        drive = GroupDrive(property=prop, property_id=prop.pk, strength=DriveStrength.MAJOR)
         FactionRuleFactory(creature_template=self.template, rule={}, drive=prop, drive_shift=5)
         self.assertEqual(drive_strength_toward(self.group, drive, self.other_sheet), 3)
         FactionRuleFactory(creature_template=self.template, rule={}, drive=prop, drive_shift=-9)

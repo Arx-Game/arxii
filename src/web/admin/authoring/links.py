@@ -10,6 +10,7 @@ from __future__ import annotations
 from urllib.parse import urlencode
 
 from django.contrib import admin
+from django.db.models import Model
 from django.urls import NoReverseMatch, reverse
 
 from core.app_domains import resolve_model_by_name
@@ -18,6 +19,20 @@ from world.combat.models import CreatureTemplate
 from world.conditions.models import ConditionStage
 from world.distinctions.models import Distinction
 from world.magic.services.soulfray import is_soulfray_stage
+from world.missions.models import MissionOptionOpponentLine
+from world.societies.models import Organization, Society
+
+#: Model -> the custom page that edits one of its rows (a Soulfray ConditionStage is the
+#: one conditional case and is handled in ``builder_url``).
+_BUILDER_ROUTES: tuple[tuple[type[Model], str], ...] = (
+    (OriginTemplate, "admin_upbringing_builder"),
+    (Beginnings, "admin_tradition_slate"),
+    (Distinction, "admin_distinction_builder"),
+    (CreatureTemplate, "admin_standoff_profile"),
+    (Organization, "admin_faction_rules_organization"),
+    (Society, "admin_faction_rules_society"),
+    (MissionOptionOpponentLine, "admin_placement_mission"),
+)
 
 
 def builder_url(obj: object) -> str:
@@ -30,18 +45,17 @@ def builder_url(obj: object) -> str:
     slate page keyed by its own pk; ``Distinction`` opens on the Distinction
     Builder (#3675 Task 8); a Soulfray ``ConditionStage`` opens on the Soulfray
     Stage Builder (#4089). Any other condition's stage has no builder. A
-    ``CreatureTemplate`` opens on the Standoff Profile Builder (#4354).
+    ``CreatureTemplate`` opens on the Standoff Profile Builder (#4354). An ``Organization``
+    or ``Society`` opens on its Faction Rules page, and a mission option opponent line on
+    its Placement page (#4361).
     """
-    if isinstance(obj, OriginTemplate) and obj.pk:
-        return reverse("admin_upbringing_builder", args=[obj.pk])
-    if isinstance(obj, Beginnings) and obj.pk:
-        return reverse("admin_tradition_slate", args=[obj.pk])
-    if isinstance(obj, Distinction) and obj.pk:
-        return reverse("admin_distinction_builder", args=[obj.pk])
-    if isinstance(obj, ConditionStage) and obj.pk and is_soulfray_stage(obj):
-        return reverse("admin_soulfray_builder", args=[obj.pk])
-    if isinstance(obj, CreatureTemplate) and obj.pk:
-        return reverse("admin_standoff_profile", args=[obj.pk])
+    if isinstance(obj, ConditionStage):
+        if obj.pk and is_soulfray_stage(obj):
+            return reverse("admin_soulfray_builder", args=[obj.pk])
+        return ""
+    for model, url_name in _BUILDER_ROUTES:
+        if isinstance(obj, model):
+            return reverse(url_name, args=[obj.pk]) if obj.pk else ""
     return ""
 
 
@@ -57,6 +71,10 @@ def builder_label(obj: object) -> str:
         return "Open in Soulfray Stage Builder"
     if isinstance(obj, CreatureTemplate):
         return "Open the Standoff Profile Builder"
+    if isinstance(obj, (Organization, Society)):
+        return "Edit its faction rules"
+    if isinstance(obj, MissionOptionOpponentLine):
+        return "Open the Placement page"
     return ""
 
 

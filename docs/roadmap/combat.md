@@ -513,6 +513,17 @@ outcome** (a closed issue or a "SHIPPED" line is not proof). See the ledger's go
   are angles. Cause glosses are authored rows; creatures are authored on the Standoff Profile
   Builder. A terms-settled standoff grades its story beat on the weakest terms. Slices 2 to 5
   are listed in `docs/systems/standoffs.md`.
+- **Standoffs slice 2: placement edits and inherited faction rules** - SHIPPED (#4361,
+  ADR-4361-A): a beat's or mission option's opponent line can change its creature's cause,
+  margin and affiliation, raise, lower, remove or add drives, and switch off inherited faction
+  rules, from the GM beat dialog, the mission studio or the staff Placement page; the result
+  is stamped on each opponent at spawn, so the template is no longer read live. Faction rules
+  can belong to an organization or a society and are inherited through a creature's
+  affiliation (most specific wins). New predicate leaves test reputation "at most" a tier and
+  visible association (membership now or recently, exile, kinship, steady work; never
+  covert). The Faction Rules page lets staff test a character and see why each rule matched.
+  Slices 3 to 5 remain (named NPCs and language; Hunger, Hatred, Territory and the broken
+  hold; player-character profiles).
 - **Spectacle breaks morale** - SHIPPED (#4147, ADR-4147, 2026-10-05): an earned display
   shakes the enemies who witness it. Audere entry, an ultimate, a Crossing, a critical
   technique (intensity and success level thresholds) and a devastating action (one action

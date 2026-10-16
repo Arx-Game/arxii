@@ -1,4 +1,12 @@
-"""How a creature kind stands toward particular characters (faction rules)."""
+"""How a group stands toward particular characters (faction rules).
+
+A group carries its template's rules and those inherited through its affiliation
+(``services.profile.group_rules``). Rules test the character's presented persona, so
+reputation and association leaves read the face the character is showing. Where two
+matched rules shift the same thing (the difficulty, or one drive), the most specific
+level wins: a template rule beats its organization's, which beats a parent's, which
+beats a society's. Rules at the same level add up (#4361).
+"""
 
 from __future__ import annotations
 
@@ -14,10 +22,11 @@ from world.societies.constants import COMMON_KNOWLEDGE_MULTIPLIER
 from world.societies.models import LegendEntry
 
 if TYPE_CHECKING:
-    from collections.abc import Sequence
+    from collections.abc import Callable, Sequence
 
     from world.character_sheets.models import CharacterSheet
-    from world.standoffs.models import CreatureDrive, FactionRule, StandoffGroup
+    from world.standoffs.models import FactionRule, StandoffGroup
+    from world.standoffs.services.profile import GroupDrive, InheritedRule
 
 DRIVE_MIN = 0
 DRIVE_MAX = 3
@@ -30,6 +39,8 @@ class MatchedFactionRule:
     rule: FactionRule
     character_sheet: CharacterSheet
     reasons: list[dict]
+    level: int = 0
+    source: str = ""
 
 
 def _has_common_knowledge_deed(sheet: CharacterSheet, archetype_id: int) -> bool:
@@ -57,17 +68,22 @@ def _has_common_knowledge_deed(sheet: CharacterSheet, archetype_id: int) -> bool
 def faction_rule_matches(
     group: StandoffGroup,
     sheet: CharacterSheet,
-    rules: Sequence[FactionRule] | None = None,
+    rules: Sequence[InheritedRule] | None = None,
 ) -> list[MatchedFactionRule]:
-    """Every faction rule of the group's creature kind that applies to ``sheet``.
+    """Every faction rule the group carries that applies to ``sheet``.
 
     ``rules`` lets a caller that checks many sheets fetch the group's rules once.
     """
     if rules is None:
-        rules = list(group.creature_template.faction_rules.all())
-    ctx = CharacterPredicateContext(sheet.character)
+        from world.standoffs.services.profile import group_rules  # noqa: PLC0415
+
+        rules = group_rules(group)
+    ctx = CharacterPredicateContext(
+        sheet.character, presented_persona=active_persona_for_sheet(sheet)
+    )
     matches: list[MatchedFactionRule] = []
-    for rule in rules:
+    for entry in rules:
+        rule = entry.rule
         reasons = matched_leaves(rule.rule, ctx)
         if reasons is None:
             continue
@@ -75,7 +91,15 @@ def faction_rule_matches(
             sheet, rule.deed_archetype_id
         ):
             continue
-        matches.append(MatchedFactionRule(rule=rule, character_sheet=sheet, reasons=reasons))
+        matches.append(
+            MatchedFactionRule(
+                rule=rule,
+                character_sheet=sheet,
+                reasons=reasons,
+                level=entry.level,
+                source=entry.source,
+            )
+        )
     return matches
 
 
@@ -92,32 +116,124 @@ def _active_sheets(group: StandoffGroup) -> list[CharacterSheet]:
 
 def suppressed_for_all_participants(group: StandoffGroup) -> bool:
     """True when every active participant matches a rule that suppresses the cause."""
+    from world.standoffs.services.profile import group_rules  # noqa: PLC0415
+
     sheets = _active_sheets(group)
     if not sheets:
         return False
-    rules = [r for r in group.creature_template.faction_rules.all() if r.suppresses_cause]
+    rules = [entry for entry in group_rules(group) if entry.rule.suppresses_cause]
+    if not rules:
+        return False
     return all(
         any(match.rule.suppresses_cause for match in faction_rule_matches(group, sheet, rules))
         for sheet in sheets
     )
 
 
-def drive_strength_from(matches: Sequence[MatchedFactionRule], drive: CreatureDrive) -> int:
+def _most_specific_total(
+    matches: Sequence[MatchedFactionRule], value: Callable[[FactionRule], int]
+) -> int:
+    """Sum ``value`` over the matched rules at the most specific level that shifts it."""
+    by_level: dict[int, int] = {}
+    for match in matches:
+        amount = value(match.rule)
+        if amount:
+            by_level[match.level] = by_level.get(match.level, 0) + amount
+    return by_level[min(by_level)] if by_level else 0
+
+
+def _winning_ids(
+    matches: Sequence[MatchedFactionRule], value: Callable[[FactionRule], int]
+) -> set[int]:
+    shifting = [m for m in matches if value(m.rule)]
+    if not shifting:
+        return set()
+    level = min(m.level for m in shifting)
+    return {m.rule.pk for m in shifting if m.level == level}
+
+
+def shifting_rule_ids(
+    matches: Sequence[MatchedFactionRule], targeted_property_ids: set[int]
+) -> set[int]:
+    """The matched rules that actually shift a roll aimed at ``targeted_property_ids``.
+
+    The rules counted for the difficulty, plus, for each targeted drive, the rules counted
+    for that drive's strength. A rule outranked by a more specific one does not count,
+    even when its drive shift took the drive's strength to zero.
+    """
+    ids = _winning_ids(matches, lambda rule: rule.difficulty_shift_bands)
+    for property_id in targeted_property_ids:
+        ids |= _winning_ids(
+            matches, lambda rule, pid=property_id: rule.drive_shift if rule.drive_id == pid else 0
+        )
+    return ids
+
+
+def drive_strength_from(matches: Sequence[MatchedFactionRule], drive: GroupDrive) -> int:
     """The drive's strength after the given matched rules, clamped 0..3."""
-    shift = sum(m.rule.drive_shift for m in matches if m.rule.drive_id == drive.property_id)
+    shift = _most_specific_total(
+        matches, lambda rule: rule.drive_shift if rule.drive_id == drive.property_id else 0
+    )
     return max(DRIVE_MIN, min(DRIVE_MAX, drive.strength + shift))
 
 
 def band_shift_from(matches: Sequence[MatchedFactionRule]) -> int:
-    """Total difficulty bands the given matched rules add."""
-    return sum(m.rule.difficulty_shift_bands for m in matches)
+    """Difficulty bands the given matched rules add (the most specific level that shifts)."""
+    return _most_specific_total(matches, lambda rule: rule.difficulty_shift_bands)
 
 
-def drive_strength_toward(group: StandoffGroup, drive: CreatureDrive, sheet: CharacterSheet) -> int:
+def drive_strength_toward(group: StandoffGroup, drive: GroupDrive, sheet: CharacterSheet) -> int:
     """The drive's strength toward this character after matched rules, clamped 0..3."""
     return drive_strength_from(faction_rule_matches(group, sheet), drive)
 
 
 def band_shift_toward(group: StandoffGroup, sheet: CharacterSheet) -> int:
-    """Total difficulty bands the group's faction rules add for this character."""
+    """Difficulty bands the group's faction rules add for this character."""
     return band_shift_from(faction_rule_matches(group, sheet))
+
+
+@dataclass(frozen=True)
+class RuleTest:
+    """One faction rule run against one character, for staff (the Faction Rules page)."""
+
+    rule: FactionRule
+    source: str
+    inherited: bool
+    matched: bool
+    reasons: list[str]
+
+
+def run_rules_against(
+    sheet: CharacterSheet, entries: Sequence[InheritedRule], own_level: int
+) -> list[RuleTest]:
+    """Run each rule against ``sheet`` as presented now and say why it matched.
+
+    Staff-only: the reasons name the hidden reputation tier and the association behind a
+    match (``explain_leaf_for_staff``), which a player never sees. ``own_level`` is the
+    precedence level of the page's own rules; any other level is inherited.
+    """
+    from world.predicates.describe import explain_leaf_for_staff  # noqa: PLC0415
+
+    persona = active_persona_for_sheet(sheet)
+    ctx = CharacterPredicateContext(sheet.character, presented_persona=persona)
+    results: list[RuleTest] = []
+    for entry in entries:
+        rule = entry.rule
+        leaves = matched_leaves(rule.rule, ctx)
+        matched = leaves is not None and (
+            rule.deed_archetype_id is None
+            or _has_common_knowledge_deed(sheet, rule.deed_archetype_id)
+        )
+        reasons = [explain_leaf_for_staff(leaf, persona) for leaf in (leaves or [])]
+        if matched and rule.deed_archetype_id is not None:
+            reasons.append(f"known for {rule.deed_archetype.name} deeds")
+        results.append(
+            RuleTest(
+                rule=rule,
+                source=entry.source,
+                inherited=entry.level != own_level,
+                matched=matched,
+                reasons=reasons if matched else [],
+            )
+        )
+    return results

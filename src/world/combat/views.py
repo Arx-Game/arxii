@@ -35,7 +35,12 @@ from world.combat.constants import (
     OpponentTier,
     ParticipantStatus,
 )
-from world.combat.filters import CombatEncounterFilter, CreatureTemplateFilter, DuelChallengeFilter
+from world.combat.filters import (
+    CombatEncounterFilter,
+    CreatureTemplateFilter,
+    DuelChallengeFilter,
+    PlacementPickFilter,
+)
 from world.combat.models import (
     Clash,
     CombatEncounter,
@@ -97,9 +102,16 @@ from world.conditions.models import ConditionInstance
 from world.covenants.models import CovenantRole
 from world.gm.permissions import IsGMOrStaff
 from world.items.models import ItemInstance
+from world.mechanics.models import Property
 from world.scenes.constants import PersonaType, RoundStatus
 from world.scenes.models import Persona, Scene
-from world.standoffs.serializers import StandoffMoraleRequestSerializer
+from world.societies.models import Organization
+from world.standoffs.serializers import (
+    PlacementContextQuerySerializer,
+    PlacementContextSerializer,
+    PlacementPickSerializer,
+    StandoffMoraleRequestSerializer,
+)
 from world.standoffs.services.state import begin_round_or_break_standoff
 from world.stories.pagination import StandardResultsSetPagination
 
@@ -246,6 +258,68 @@ class CreatureTemplateViewSet(ReadOnlyModelViewSet):
     filter_backends = [DjangoFilterBackend]
     filterset_class = CreatureTemplateFilter
     pagination_class = StandardResultsSetPagination
+
+    @extend_schema(
+        parameters=[
+            OpenApiParameter(
+                "organization",
+                int,
+                required=False,
+                description="Preview the rules inherited through this affiliation instead.",
+            )
+        ],
+        responses=PlacementContextSerializer,
+    )
+    @action(detail=True, methods=[HTTPMethod.GET], url_path="placement-context")
+    def placement_context(self, request: Request, pk: int | None = None) -> Response:
+        """The template's standoff profile and inherited faction rules (#4361).
+
+        Read by the beat dialog's and mission studio's placement fields, which show each
+        edit beside the template's own value and offer each inherited rule a switch-off.
+        """
+        from world.standoffs.services.placement import template_context  # noqa: PLC0415
+
+        template = self.get_object()
+        # A preview argument of one detail action, not a list filter.
+        query = PlacementContextQuerySerializer(data=request.query_params)  # noqa: USE_FILTERSET
+        query.is_valid(raise_exception=True)
+        organization = query.validated_data.get("organization")
+        return Response(PlacementContextSerializer(template_context(template, organization)).data)
+
+
+class PlacementOrganizationViewSet(ReadOnlyModelViewSet):
+    """Organizations a placement can name as its affiliation (#4361), by name.
+
+    The beat dialog's and mission studio's affiliation picker. Same gate as the bestiary
+    (``IsGMOrStaff``). A covert organization's existence is itself a secret, so only
+    staff see one here.
+    """
+
+    serializer_class = PlacementPickSerializer
+    permission_classes = [IsGMOrStaff]
+    filter_backends = [DjangoFilterBackend]
+    filterset_class = PlacementPickFilter
+    pagination_class = StandardResultsSetPagination
+
+    def get_queryset(self) -> QuerySet[Organization]:
+        queryset = Organization.objects.select_related("org_type").order_by("name")
+        if not self.request.user.is_staff:
+            queryset = queryset.exclude(org_type__is_covert=True)
+        return queryset
+
+
+class PlacementPropertyViewSet(ReadOnlyModelViewSet):
+    """Properties a placement can add or edit as a drive (#4361), by name.
+
+    The catalog GMs pick drives from (ADR-0110: GMs adapt authored rows, never invent).
+    """
+
+    serializer_class = PlacementPickSerializer
+    permission_classes = [IsGMOrStaff]
+    filter_backends = [DjangoFilterBackend]
+    filterset_class = PlacementPickFilter
+    pagination_class = StandardResultsSetPagination
+    queryset = Property.objects.order_by("name")
 
 
 class EscalationCurveViewSet(ReadOnlyModelViewSet):

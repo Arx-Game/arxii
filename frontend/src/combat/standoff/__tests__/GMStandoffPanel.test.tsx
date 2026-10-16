@@ -37,8 +37,8 @@ function group(patch: Partial<GMGroupView> = {}): GMGroupView {
     effective_party_force: 41,
     group_force: 30,
     drives: [
-      { label: 'Greedy', strength: 'Defining', revealed: true },
-      { label: 'Loyal', strength: 'Minor', revealed: false },
+      { label: 'Greedy', strength: 'Defining', revealed: true, edited: false },
+      { label: 'Loyal', strength: 'Minor', revealed: false, edited: false },
     ],
     faction_rules: [
       {
@@ -49,6 +49,7 @@ function group(patch: Partial<GMGroupView> = {}): GMGroupView {
         suppresses_cause: false,
         matched_by: ['Aubrin'],
         revealed: false,
+        source: 'Saltreed Company',
       },
       {
         faction_rule_id: 2,
@@ -58,9 +59,13 @@ function group(patch: Partial<GMGroupView> = {}): GMGroupView {
         suppresses_cause: false,
         matched_by: [],
         revealed: false,
+        source: 'Sellsword',
       },
     ],
     members: [{ opponent_id: 1, name: 'Sellsword A', morale: 70, morale_state: 'steady' }],
+    affiliation: '',
+    cause_edited: false,
+    affiliation_edited: false,
     ...patch,
   };
 }
@@ -80,6 +85,22 @@ beforeEach(() => {
 });
 
 describe('GMStandoffPanel', () => {
+  it('marks what the placement edited and where each rule came from (#4361)', () => {
+    renderPanel(
+      group({
+        affiliation: 'Saltreed Company',
+        affiliation_edited: true,
+        cause_edited: true,
+        drives: [{ label: 'Greedy', strength: 'Defining', revealed: false, edited: true }],
+      })
+    );
+    const box = screen.getByTestId('gm-standoff-group');
+    expect(within(box).getAllByText('edited here')).toHaveLength(2);
+    expect(within(box).getByText('set on this line')).toBeInTheDocument();
+    expect(within(box).getByText('Affiliation')).toBeInTheDocument();
+    expect(within(box).getByText('Sellsword')).toBeInTheDocument();
+  });
+
   it('renders the profile, matches and force', () => {
     renderPanel();
     const box = screen.getByTestId('gm-standoff-group');

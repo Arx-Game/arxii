@@ -3742,6 +3742,18 @@ def _declarations() -> tuple[ContentDependency, ...]:
             probe=AnyRowProbe(label="StandoffApproach"),
         ),
         ContentDependency(
+            key="association-config",
+            label="Association settings singleton",
+            tier=DependencyTier.TUNING,
+            consumer="world/societies/association.py AssociationConfig.load()",
+            consequence=(
+                "Faction rules that test association use the example thresholds: a former "
+                "member for 2 in-game years, steady work at 3 missions in 90 in-game days."
+            ),
+            probe=AnyRowProbe(label="AssociationConfig"),
+            admin_model="AssociationConfig",
+        ),
+        ContentDependency(
             key="standoff-terms",
             label="Standoff terms",
             tier=DependencyTier.REQUIRED,

@@ -17,6 +17,11 @@ from world.missions.models import MissionOption, MissionTemplate
 from world.scenes.models import Persona
 from world.societies.constants import RenownRisk
 from world.societies.models import Organization, Society
+from world.standoffs.serializers import (
+    PlacementFieldsMixin,
+    pop_placement_rows,
+    save_placement_rows,
+)
 from world.stories.constants import (
     AssistantClaimStatus,
     BeatKind,
@@ -975,8 +980,12 @@ def _gm_allows_item_rewards(user) -> bool:
     return bool(cap and cap.allow_item_rewards)
 
 
-class BeatOpponentLineSerializer(serializers.ModelSerializer):
+class BeatOpponentLineSerializer(PlacementFieldsMixin, serializers.ModelSerializer):
     """One authored opponent line on an ENCOUNTER beat (#3425).
+
+    Carries the placement's standoff edits (#4361): cause, margin and affiliation
+    overrides on the line, plus ``drive_edits`` and ``suppressed_faction_rules`` child
+    rows (``PlacementFieldsMixin``).
 
     ``id`` is writable-but-optional (not ``read_only``) so ``BeatSerializer
     .update()`` can diff incoming rows against the beat's existing lines by
@@ -989,7 +998,20 @@ class BeatOpponentLineSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = BeatOpponentLine
-        fields = ["id", "creature_template", "count", "position_name", "order", "opens_as_standoff"]
+        fields = [
+            "id",
+            "creature_template",
+            "count",
+            "position_name",
+            "order",
+            "opens_as_standoff",
+            "cause_override",
+            "cause_margin_override",
+            "organization",
+            "organization_name",
+            "drive_edits",
+            "suppressed_faction_rules",
+        ]
 
 
 class BeatStagedTemplateSerializer(serializers.ModelSerializer):
@@ -1438,7 +1460,7 @@ class BeatSerializer(serializers.ModelSerializer):
         staged_templates_data = validated_data.pop("staged_templates", [])
         staged_battle_data = validated_data.pop("staged_battle", _UNSET)
         beat = super().create(validated_data)
-        self._sync_children(beat, "opponent_lines", opponent_lines_data, BeatOpponentLine)
+        self._sync_opponent_lines(beat, opponent_lines_data)
         self._sync_children(beat, "staged_templates", staged_templates_data, BeatStagedTemplate)
         self._sync_staged_battle(beat, staged_battle_data)
         return beat
@@ -1458,11 +1480,20 @@ class BeatSerializer(serializers.ModelSerializer):
         staged_battle_data = validated_data.pop("staged_battle", _UNSET)
         beat = super().update(instance, validated_data)
         if opponent_lines_data is not None:
-            self._sync_children(beat, "opponent_lines", opponent_lines_data, BeatOpponentLine)
+            self._sync_opponent_lines(beat, opponent_lines_data)
         if staged_templates_data is not None:
             self._sync_children(beat, "staged_templates", staged_templates_data, BeatStagedTemplate)
         self._sync_staged_battle(beat, staged_battle_data)
         return beat
+
+    @classmethod
+    def _sync_opponent_lines(cls, beat: Beat, rows: list[dict[str, Any]]) -> None:
+        """Diff-sync the opponent lines, then write each line's placement rows (#4361)."""
+        rows = [dict(row) for row in rows]
+        placements = [pop_placement_rows(row) for row in rows]
+        lines = cls._sync_children(beat, "opponent_lines", rows, BeatOpponentLine)
+        for line, placement in zip(lines, placements, strict=True):
+            save_placement_rows(line, placement)
 
     @staticmethod
     def _sync_staged_battle(beat: Beat, data: dict[str, Any] | None | object) -> None:
@@ -1513,7 +1544,7 @@ class BeatSerializer(serializers.ModelSerializer):
         model: type[BeatOpponentLine] | type[BeatStagedTemplate] | type[BeatStagedBattleUnit],
         *,
         parent_field: str = "beat",
-    ) -> None:
+    ) -> list[Any]:
         """Diff *rows* against *parent*'s existing children by id (#3425, #3569).
 
         A row carrying an id matching an existing child updates it in place; a
@@ -1534,6 +1565,7 @@ class BeatSerializer(serializers.ModelSerializer):
         """
         existing = {obj.pk: obj for obj in getattr(parent, related_name).all()}
         seen_ids: set[int] = set()
+        saved: list[Any] = []
         for raw_row in rows:
             row = dict(raw_row)
             row_id = row.pop("id", None)
@@ -1544,10 +1576,12 @@ class BeatSerializer(serializers.ModelSerializer):
                 child.save()
                 seen_ids.add(row_id)
             else:
-                model.objects.create(**{parent_field: parent}, **row)
+                child = model.objects.create(**{parent_field: parent}, **row)
+            saved.append(child)
         stale_ids = set(existing) - seen_ids
         if stale_ids:
             model.objects.filter(pk__in=stale_ids).delete()
+        return saved
 
 
 # ---------------------------------------------------------------------------

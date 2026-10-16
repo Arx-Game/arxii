@@ -1,0 +1,26 @@
+{% comment %}
+The Placement page's rail (#4361): read-only, from the saved placement.
+{% endcomment %}
+<div class="module">
+  <h2>What spawns</h2>
+  <p class="sp-rail-note">{{ summary }}</p>
+</div>
+
+<div class="module">
+  <h2>The {% if is_beat %}beat{% else %}mission{% endif %}</h2>
+  <p class="sp-rail-note">{{ where.level_note }}</p>
+  <p class="sp-rail-note">{{ cause_check }}</p>
+</div>
+
+<div class="module">
+  <h2>The template</h2>
+  <p class="sp-rail-note">Cause, drives and the template's own faction rules are edited on the
+    <a href="{{ builder_url }}">Standoff Profile Builder</a>; a change there reaches every
+    placement that does not override it.</p>
+</div>
+
+<div class="module">
+  <h2>The GM's own path</h2>
+  <p class="sp-rail-note">A GM authoring the beat in the story author gets the same fields in the
+    beat dialog's opponent lines. This page is the staff view of the same rows.</p>
+</div>

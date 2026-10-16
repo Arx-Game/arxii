@@ -16,6 +16,7 @@ from world.standoffs.factories import (
     StandoffApproachFactory,
     StandoffReactionLineFactory,
     StandoffTermsFactory,
+    restamp_from_templates,
 )
 from world.standoffs.models import StandoffGroup
 from world.standoffs.services.reactions import best_reaction_line, reaction_text
@@ -256,6 +257,7 @@ class RoomLineTests(StandoffJourneyBase):
         self.creature.cause = CauseKind.PREDATION
         self.creature.cause_margin_percent = 30000
         self.creature.save(update_fields=["cause", "cause_margin_percent"])
+        restamp_from_templates(self.encounter)
         self.approach.damages_morale = True
         self.approach.save(update_fields=["damages_morale"])
         for member in CombatOpponent.objects.filter(encounter=self.encounter):

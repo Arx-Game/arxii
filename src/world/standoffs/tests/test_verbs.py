@@ -25,6 +25,7 @@ from world.standoffs.factories import (
     StandoffApproachFactory,
     StandoffRevealFactory,
     StandoffTermsFactory,
+    restamp_from_templates,
 )
 from world.standoffs.models import StandoffAngleShare, StandoffConfig, StandoffReveal
 from world.standoffs.services.force import evaluate_causes
@@ -75,9 +76,11 @@ class ReadTests(VerbBase):
         super().setUp()
         self.template.cause = CauseKind.PREDATION
         self.template.save(update_fields=["cause"])
+        restamp_from_templates(self.encounter)
         self.drive = CreatureDriveFactory(
             creature_template=self.template, strength=DriveStrength.MAJOR
         )
+        restamp_from_templates(self.encounter)
 
     def test_success_reveals_the_focus(self) -> None:
         with patch(CHECK, return_value=forced(1)):
@@ -91,15 +94,16 @@ class ReadTests(VerbBase):
                 self.participant,
                 self.group,
                 focus_kind=RevealKind.DRIVE,
-                focus_drive_id=self.drive.pk,
+                focus_property_id=self.drive.property_id,
             )
-        self.assertEqual([r.drive_id for r in result.revealed], [self.drive.pk])
+        self.assertEqual([r.drive_id for r in result.revealed], [self.drive.property_id])
 
     def test_success_drive_focus_without_an_id_reveals_the_strongest_drive(self) -> None:
         CreatureDriveFactory(creature_template=self.template, strength=DriveStrength.MINOR)
+        restamp_from_templates(self.encounter)
         with patch(CHECK, return_value=forced(1)):
             result = standoff_read(self.participant, self.group, focus_kind=RevealKind.DRIVE)
-        self.assertEqual([r.drive_id for r in result.revealed], [self.drive.pk])
+        self.assertEqual([r.drive_id for r in result.revealed], [self.drive.property_id])
 
     def test_partial_reveals_exactly_one(self) -> None:
         with patch(CHECK, return_value=forced(0)):
@@ -119,7 +123,7 @@ class ReadTests(VerbBase):
 
     def test_nothing_hidden_is_refused_without_a_roll(self) -> None:
         StandoffRevealFactory(group=self.group, kind=RevealKind.CAUSE)
-        StandoffRevealFactory(group=self.group, kind=RevealKind.DRIVE, drive=self.drive)
+        StandoffRevealFactory(group=self.group, kind=RevealKind.DRIVE, drive=self.drive.property)
         with patch(CHECK) as roll:
             result = standoff_read(self.participant, self.group)
         self.assertFalse(result.success)
@@ -203,6 +207,7 @@ class PressTests(VerbBase):
 
     def test_a_drive_the_approach_targets_is_passed_as_a_hit(self) -> None:
         drive = CreatureDriveFactory(creature_template=self.template, strength=DriveStrength.MAJOR)
+        restamp_from_templates(self.encounter)
         ApplicationFactory(capability=self.approach.capability, target_property=drive.property)
         with (
             patch(CHECK, return_value=forced(0)),
@@ -214,6 +219,7 @@ class PressTests(VerbBase):
 
     def test_hidden_drive_still_eases_but_is_not_named(self) -> None:
         drive = CreatureDriveFactory(creature_template=self.template, strength=DriveStrength.MAJOR)
+        restamp_from_templates(self.encounter)
         ApplicationFactory(capability=self.approach.capability, target_property=drive.property)
         with patch(CHECK, return_value=forced(1)):
             hidden = standoff_press(self.participant, self.group, self.approach)
@@ -224,7 +230,7 @@ class PressTests(VerbBase):
             ).eased_bands,
             2,
         )
-        StandoffRevealFactory(group=self.group, kind=RevealKind.DRIVE, drive=drive)
+        StandoffRevealFactory(group=self.group, kind=RevealKind.DRIVE, drive=drive.property)
         with patch(CHECK, return_value=forced(1)):
             shown = standoff_press(self.participant, self.group, self.approach)
         self.assertIn(drive.property.name, shown.message)
@@ -232,6 +238,7 @@ class PressTests(VerbBase):
     def test_botch_can_tip_a_predator_into_a_fight(self) -> None:
         self.template.cause = CauseKind.PREDATION
         self.template.save(update_fields=["cause"])
+        restamp_from_templates(self.encounter)
         with (
             patch(CHECK, return_value=forced(-2)),
             patch("world.standoffs.services.verbs.evaluate_causes", return_value=True),
@@ -295,12 +302,13 @@ class TermsTests(VerbBase):
 
     def test_required_unrevealed_drive_is_refused_without_a_roll(self) -> None:
         drive = CreatureDriveFactory(creature_template=self.template)
+        restamp_from_templates(self.encounter)
         terms = StandoffTermsFactory(required_drive=drive.property)
         with patch(CHECK) as roll:
             result = standoff_terms(self.participant, self.group, terms)
         self.assertFalse(result.success)
         roll.assert_not_called()
-        StandoffRevealFactory(group=self.group, kind=RevealKind.DRIVE, drive=drive)
+        StandoffRevealFactory(group=self.group, kind=RevealKind.DRIVE, drive=drive.property)
         with patch(CHECK, return_value=forced(1)):
             self.assertTrue(standoff_terms(self.participant, self.group, terms).success)
 
@@ -402,6 +410,7 @@ class ActingOnAnAngleRevealsItTests(VerbBase):
 
     def test_press_hitting_a_rules_drive_shares_it(self) -> None:
         drive = CreatureDriveFactory(creature_template=self.template, strength=DriveStrength.MINOR)
+        restamp_from_templates(self.encounter)
         ApplicationFactory(capability=self.approach.capability, target_property=drive.property)
         rule = FactionRuleFactory(
             creature_template=self.template, rule={}, drive=drive.property, drive_shift=1
@@ -413,6 +422,7 @@ class ActingOnAnAngleRevealsItTests(VerbBase):
 
     def test_press_aimed_at_a_drive_the_rule_weakened_to_zero_still_shares(self) -> None:
         drive = CreatureDriveFactory(creature_template=self.template, strength=DriveStrength.MINOR)
+        restamp_from_templates(self.encounter)
         ApplicationFactory(capability=self.approach.capability, target_property=drive.property)
         rule = FactionRuleFactory(
             creature_template=self.template, rule={}, drive=drive.property, drive_shift=-1
@@ -424,6 +434,7 @@ class ActingOnAnAngleRevealsItTests(VerbBase):
 
     def test_a_rule_naming_a_drive_with_no_shift_shares_nothing(self) -> None:
         drive = CreatureDriveFactory(creature_template=self.template, strength=DriveStrength.MINOR)
+        restamp_from_templates(self.encounter)
         ApplicationFactory(capability=self.approach.capability, target_property=drive.property)
         FactionRuleFactory(
             creature_template=self.template, rule={}, drive=drive.property, drive_shift=0
@@ -434,6 +445,7 @@ class ActingOnAnAngleRevealsItTests(VerbBase):
 
     def test_press_missing_a_rules_drive_shares_nothing(self) -> None:
         drive = CreatureDriveFactory(creature_template=self.template, strength=DriveStrength.MINOR)
+        restamp_from_templates(self.encounter)
         FactionRuleFactory(
             creature_template=self.template, rule={}, drive=drive.property, drive_shift=1
         )
@@ -482,6 +494,7 @@ class ResultMessageTests(VerbBase):
         self.template.cause = CauseKind.PREDATION
         self.template.cause_margin_percent = -99
         self.template.save(update_fields=["cause", "cause_margin_percent"])
+        restamp_from_templates(self.encounter)
         with patch(CHECK, return_value=forced(-1)):
             missed = standoff_read(self.participant, self.group)
         self.assertEqual(missed.message, "You study them. Failure. You learn nothing.")

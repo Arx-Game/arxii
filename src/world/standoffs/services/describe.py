@@ -5,9 +5,10 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from world.combat.constants import CauseKind
-from world.standoffs.constants import DriveStrength, RevealKind
+from world.standoffs.constants import RevealKind
 from world.standoffs.models import StandoffAngleShare
 from world.standoffs.services.faction_rules import faction_rule_matches
+from world.standoffs.services.profile import group_cause, group_drives
 
 if TYPE_CHECKING:
     from collections.abc import Iterable
@@ -61,11 +62,14 @@ def _describe_reveal(
 ) -> str | None:
     """Return the reader-safe line for one reveal, if it has one."""
     if reveal.kind == RevealKind.CAUSE:
-        cause = group.creature_template.cause
+        cause, _margin = group_cause(group)
         return None if cause == CauseKind.NONE else f"Cause: {CauseKind(cause).label}."
     if reveal.kind == RevealKind.DRIVE and reveal.drive is not None:
-        label = DriveStrength(reveal.drive.strength).label
-        return f"Drive: {reveal.drive.property.name} ({label})."
+        strengths = {drive.property_id: drive.strength_label for drive in group_drives(group)}
+        label = strengths.get(reveal.drive_id)
+        if label is None:
+            return None
+        return f"Drive: {reveal.drive.name} ({label})."
     if reveal.kind == RevealKind.FACTION_RULE and reveal.faction_rule is not None:
         rule = reveal.faction_rule
         if rule.pk in matching or rule.pk in shared:

@@ -1,57 +1,77 @@
 {% comment %}
-The Standoff Profile Builder's own stylesheet (#4354), in the Distinction Builder's
-shape: structure comes from admin's own classes (`.module`, `div.help`, `.errornote`,
+The standoff authoring pages' shared stylesheet (#4354; the Faction Rules and Placement
+pages and the predicate rule widget reuse it, #4361), in the Distinction Builder's shape: structure comes from admin's own classes (`.module`, `div.help`, `.errornote`,
 `.submit-row`, `table.tuning-table`); this sheet adds only the two-column shell, the
 header chips, the context cells, the faction rule blocks and the rail. Every colour is
 an admin CSS variable or a token set against admin's light/dark selectors.
 {% endcomment %}
 <style>
-  #standoff-profile-root { --sp-warn: #b4541b; --sp-easy: #2f7a3f; --sp-mod: #8a6d0b; --sp-hard: #ba2121; }
+  .sp-root { --sp-warn: #b4541b; --sp-easy: #2f7a3f; --sp-mod: #8a6d0b; --sp-hard: #ba2121; }
   @media (prefers-color-scheme: dark) {
-    #standoff-profile-root { --sp-warn: #d8a06a; --sp-easy: #8fb89a; --sp-mod: #e0c56a; --sp-hard: #e88a8a; }
+    .sp-root { --sp-warn: #d8a06a; --sp-easy: #8fb89a; --sp-mod: #e0c56a; --sp-hard: #e88a8a; }
   }
-  html[data-theme="light"] #standoff-profile-root { --sp-warn: #b4541b; --sp-easy: #2f7a3f; --sp-mod: #8a6d0b; --sp-hard: #ba2121; }
-  html[data-theme="dark"] #standoff-profile-root { --sp-warn: #d8a06a; --sp-easy: #8fb89a; --sp-mod: #e0c56a; --sp-hard: #e88a8a; }
+  html[data-theme="light"] .sp-root { --sp-warn: #b4541b; --sp-easy: #2f7a3f; --sp-mod: #8a6d0b; --sp-hard: #ba2121; }
+  html[data-theme="dark"] .sp-root { --sp-warn: #d8a06a; --sp-easy: #8fb89a; --sp-mod: #e0c56a; --sp-hard: #e88a8a; }
 
-  #standoff-profile-root .sp-columns {
+  .sp-root .sp-columns {
     display: grid;
     grid-template-columns: minmax(0, 1fr) 18rem;
     gap: 1.25rem;
     align-items: start;
   }
   @media (max-width: 1100px) {
-    #standoff-profile-root .sp-columns { grid-template-columns: minmax(0, 1fr); }
+    .sp-root .sp-columns { grid-template-columns: minmax(0, 1fr); }
   }
-  #standoff-profile-root .sp-main { min-width: 0; display: flex; flex-direction: column; gap: 1rem; }
-  #standoff-profile-root .module > h2 {
+  .sp-root .sp-main { min-width: 0; display: flex; flex-direction: column; gap: 1rem; }
+  .sp-root .module > h2 {
     display: flex; justify-content: space-between; gap: 0.8rem; flex-wrap: wrap; align-items: baseline;
   }
-  #standoff-profile-root .sp-chips { display: inline-flex; gap: 0.4rem; flex-wrap: wrap; }
-  #standoff-profile-root .sp-chip {
+  .sp-root .sp-chips { display: inline-flex; gap: 0.4rem; flex-wrap: wrap; }
+  .sp-root .sp-chip {
     display: inline-block; padding: 0.05rem 0.45rem; border-radius: 2px;
     background: rgba(255, 255, 255, 0.18); font-size: 0.6875rem; white-space: nowrap;
   }
-  #standoff-profile-root .sp-table { width: 100%; }
-  #standoff-profile-root .sp-table th { width: 11rem; vertical-align: top; }
-  #standoff-profile-root .sp-context { color: var(--body-quiet-color); font-size: 0.75rem; }
-  #standoff-profile-root .sp-warn { color: var(--sp-warn); }
-  #standoff-profile-root .sp-addrow { padding: 0.5rem 0.6rem; background: var(--darkened-bg); }
-  #standoff-profile-root .sp-rule { border-bottom: 1px solid var(--hairline-color); }
-  #standoff-profile-root .sp-rule > h3 {
+  .sp-root .sp-table { width: 100%; }
+  .sp-root .sp-table th { width: 11rem; vertical-align: top; }
+  .sp-root .sp-context { color: var(--body-quiet-color); font-size: 0.75rem; }
+  .sp-root .sp-warn { color: var(--sp-warn); }
+  .sp-root .sp-addrow { padding: 0.5rem 0.6rem; background: var(--darkened-bg); }
+  .sp-root .sp-rule { border-bottom: 1px solid var(--hairline-color); }
+  .sp-root .sp-rule > h3 {
     display: flex; justify-content: space-between; margin: 0; padding: 0.4rem 0.6rem;
     background: var(--darkened-bg); color: var(--body-quiet-color); font-size: 0.75rem;
   }
-  #standoff-profile-root .sp-delete { color: var(--delete-button-bg); font-weight: normal; }
-  #standoff-profile-root .sp-rail { display: flex; flex-direction: column; gap: 0.75rem; min-width: 0; }
-  #standoff-profile-root .sp-rail-note { color: var(--body-quiet-color); font-size: 0.75rem; margin: 0.4rem 0.6rem; display: block; }
-  #standoff-profile-root .sp-rail-table td { font-size: 0.75rem; vertical-align: top; }
-  #standoff-profile-root .sp-preview-form { display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center; padding: 0.5rem 0.6rem; }
-  #standoff-profile-root .sp-preview-form input[type="number"] { width: 3.5rem; }
-  #standoff-profile-root .sp-grade { font-family: ui-monospace, Menlo, monospace; font-size: 0.6875rem; }
-  #standoff-profile-root .sp-grade-easy, #standoff-profile-root .sp-grade-trivial { color: var(--sp-easy); }
-  #standoff-profile-root .sp-grade-moderate { color: var(--sp-mod); }
-  #standoff-profile-root .sp-grade-hard, #standoff-profile-root .sp-grade-very_hard,
-  #standoff-profile-root .sp-grade-impossible { color: var(--sp-hard); }
-  #standoff-profile-root .sp-grade-none { color: var(--body-quiet-color); }
-  #standoff-profile-root .sp-placements { margin: 0.4rem 0.6rem; padding-left: 1rem; font-size: 0.75rem; }
+  .sp-root .sp-delete { color: var(--delete-button-bg); font-weight: normal; }
+  .sp-root .sp-rail { display: flex; flex-direction: column; gap: 0.75rem; min-width: 0; }
+  .sp-root .sp-rail-note { color: var(--body-quiet-color); font-size: 0.75rem; margin: 0.4rem 0.6rem; display: block; }
+  .sp-root .sp-rail-table td { font-size: 0.75rem; vertical-align: top; }
+  .sp-root .sp-preview-form { display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center; padding: 0.5rem 0.6rem; }
+  .sp-root .sp-preview-form input[type="number"] { width: 3.5rem; }
+  .sp-root .sp-grade { font-family: ui-monospace, Menlo, monospace; font-size: 0.6875rem; }
+  .sp-root .sp-grade-easy, .sp-root .sp-grade-trivial { color: var(--sp-easy); }
+  .sp-root .sp-grade-moderate { color: var(--sp-mod); }
+  .sp-root .sp-grade-hard, .sp-root .sp-grade-very_hard,
+  .sp-root .sp-grade-impossible { color: var(--sp-hard); }
+  .sp-root .sp-grade-none { color: var(--body-quiet-color); }
+  .sp-root .sp-placements { margin: 0.4rem 0.6rem; padding-left: 1rem; font-size: 0.75rem; }
+  .sp-root .sp-placements a { color: var(--link-fg); }
+  .sp-root .sp-src { color: var(--body-quiet-color); font-size: 0.75rem; }
+  .sp-root .sp-edited { color: var(--link-fg); font-size: 0.6875rem; font-family: ui-monospace, Menlo, monospace; }
+  .sp-root .sp-ok { color: var(--sp-easy); }
+  .sp-root .sp-test-form { display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center; padding: 0.5rem 0.6rem; }
+  .sp-root .sp-intro { color: var(--body-quiet-color); margin: 0 0 0.75rem; }
+
+  /* The predicate rule widget (web/static/admin/js/predicate_widget.js). */
+  .pred-host { display: flex; flex-direction: column; gap: 0.35rem; min-width: 0; }
+  .pred-builder { display: flex; flex-direction: column; gap: 0.35rem; }
+  .pred { border: 1px solid var(--border-color); border-radius: 4px; padding: 0.35rem; display: flex; flex-direction: column; gap: 0.35rem; background: var(--body-bg); }
+  .pred-grp { border-left: 3px solid var(--primary); background: var(--darkened-bg); }
+  .pred-h, .pred-adds, .pred-empty { display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap; }
+  .pred-params { display: flex; gap: 0.4rem 0.75rem; align-items: center; flex-wrap: wrap; padding-left: 0.5rem; }
+  .pred-param { display: inline-flex; gap: 0.35rem; align-items: center; }
+  .pred-note { color: var(--body-quiet-color); font-size: 0.75rem; }
+  .pred-input { max-width: 14rem; }
+  .pred-op, .pred-leaf-name { max-width: 16rem; }
+  .pred-btn { padding: 2px 8px; font-size: 0.75rem; }
+  .pred-x { margin-left: auto; }
 </style>

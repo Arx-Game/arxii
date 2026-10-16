@@ -33,6 +33,11 @@ from world.missions.models import (
     MissionOptionRouteReward,
     MissionTemplate,
 )
+from world.standoffs.serializers import (
+    PlacementFieldsMixin,
+    pop_placement_rows,
+    save_placement_rows,
+)
 from world.worship.constants import FAVOR_INVOCATION_LINE_MAX_LENGTH
 
 if TYPE_CHECKING:
@@ -443,7 +448,7 @@ class MissionNodeSerializer(serializers.ModelSerializer):
         return mode
 
 
-class MissionOptionOpponentLineSerializer(serializers.ModelSerializer):
+class MissionOptionOpponentLineSerializer(PlacementFieldsMixin, serializers.ModelSerializer):
     """One authored opponent line on an ENCOUNTER option (#3565).
 
     ``id`` is writable-but-optional so ``MissionOptionSerializer.update()``
@@ -455,7 +460,19 @@ class MissionOptionOpponentLineSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = MissionOptionOpponentLine
-        fields = ["id", "creature_template", "count", "position_name", "order"]
+        fields = [
+            "id",
+            "creature_template",
+            "count",
+            "position_name",
+            "order",
+            "cause_override",
+            "cause_margin_override",
+            "organization",
+            "organization_name",
+            "drive_edits",
+            "suppressed_faction_rules",
+        ]
 
 
 def _option_clean_fields(instance: MissionOption) -> dict:
@@ -581,6 +598,7 @@ class MissionOptionSerializer(serializers.ModelSerializer):
         for raw_row in rows:
             row = dict(raw_row)
             row_id = row.pop("id", None)
+            placement = pop_placement_rows(row)
             child = existing.get(row_id) if row_id is not None else None
             if child is not None:
                 for field_name, value in row.items():
@@ -588,7 +606,8 @@ class MissionOptionSerializer(serializers.ModelSerializer):
                 child.save()
                 seen_ids.add(row_id)
             else:
-                MissionOptionOpponentLine.objects.create(option=option, **row)
+                child = MissionOptionOpponentLine.objects.create(option=option, **row)
+            save_placement_rows(child, placement)
         stale_ids = set(existing) - seen_ids
         if stale_ids:
             MissionOptionOpponentLine.objects.filter(pk__in=stale_ids).delete()

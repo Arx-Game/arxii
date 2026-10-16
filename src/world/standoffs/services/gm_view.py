@@ -21,7 +21,6 @@ from world.combat.morale import OpponentMoraleState, morale_state_for, tier_has_
 from world.predicates.predicates import KEY_LEAF, KEY_OF, KEY_OP, KEY_PARAMS, OP_NOT, OP_OR
 from world.standoffs.constants import (
     LIVE_GROUP_STATES,
-    DriveStrength,
     RevealKind,
     StandoffGroupState,
 )
@@ -32,6 +31,12 @@ from world.standoffs.services.force import (
     effective_party_force,
     group_force,
     party_force,
+)
+from world.standoffs.services.profile import (
+    group_cause,
+    group_drives,
+    group_organization,
+    group_rules,
 )
 from world.standoffs.services.proposals import last_decision, pending_prompts
 from world.standoffs.services.state import active_members, is_in_standoff
@@ -48,6 +53,7 @@ class GMDriveView:
     label: str
     strength: str
     revealed: bool
+    edited: bool = False
 
 
 @dataclass(frozen=True)
@@ -59,6 +65,7 @@ class GMFactionRuleView:
     suppresses_cause: bool
     matched_by: list[str]
     revealed: bool
+    source: str = ""
 
 
 @dataclass(frozen=True)
@@ -91,6 +98,9 @@ class GMGroupView:
     party_force: float
     effective_party_force: float
     group_force: float
+    affiliation: str = ""
+    cause_edited: bool = False
+    affiliation_edited: bool = False
     drives: list[GMDriveView] = field(default_factory=list)
     faction_rules: list[GMFactionRuleView] = field(default_factory=list)
     members: list[GMMemberView] = field(default_factory=list)
@@ -172,12 +182,15 @@ def _gm_group(group: StandoffGroup, participants: list, config: StandoffConfig) 
     reveals = list(group.reveals.all())
     revealed_drive_ids = {r.drive_id for r in reveals if r.kind == RevealKind.DRIVE}
     revealed_rule_ids = {r.faction_rule_id for r in reveals if r.kind == RevealKind.FACTION_RULE}
-    rules = list(template.faction_rules.select_related("deed_archetype").order_by("pk"))
-    matched: dict[int, list[str]] = {rule.pk: [] for rule in rules}
+    rules = group_rules(group)
+    matched: dict[int, list[str]] = {entry.rule.pk: [] for entry in rules}
     for participant in participants:
         sheet = participant.character_sheet
         for match in faction_rule_matches(group, sheet, rules):
             matched[match.rule.pk].append(_presented_name(sheet))
+    cause, margin = group_cause(group)
+    organization = group_organization(group)
+    template_strengths = {drive.property_id: drive.strength for drive in template.drives.all()}
     live = group.state in LIVE_GROUP_STATES and bool(members)
     reason = cause_fire_reason(group, config, lapse_override=False) if live else None
     prompts = pending_prompts(group) if group.state == StandoffGroupState.PROPOSED else []
@@ -186,11 +199,14 @@ def _gm_group(group: StandoffGroup, participants: list, config: StandoffConfig) 
         name=template.name,
         state=group.state,
         member_count=len(members),
-        cause=CauseKind(template.cause).label,
+        cause=CauseKind(cause).label,
         cause_revealed=any(r.kind == RevealKind.CAUSE for r in reveals),
         cause_fires=reason is not None,
         cause_reason=reason or "",
-        cause_margin_percent=template.cause_margin_percent,
+        cause_margin_percent=margin,
+        affiliation=organization.name if organization is not None else "",
+        cause_edited=cause != template.cause,
+        affiliation_edited=organization != template.organization,
         proposal_reason=group.proposal_reason if prompts else "",
         pending_prompt_id=prompts[0].pk if prompts else None,
         last_decision=last_decision(group),
@@ -205,22 +221,24 @@ def _gm_group(group: StandoffGroup, participants: list, config: StandoffConfig) 
         drives=[
             GMDriveView(
                 label=drive.property.name,
-                strength=DriveStrength(drive.strength).label,
-                revealed=drive.pk in revealed_drive_ids,
+                strength=drive.strength_label,
+                revealed=drive.property_id in revealed_drive_ids,
+                edited=template_strengths.get(drive.property_id) != drive.strength,
             )
-            for drive in template.drives.select_related("property")
+            for drive in group_drives(group)
         ],
         faction_rules=[
             GMFactionRuleView(
-                faction_rule_id=rule.pk,
-                label=faction_rule_label(rule),
-                angle_text=rule.angle_text,
-                difficulty_shift_bands=rule.difficulty_shift_bands,
-                suppresses_cause=rule.suppresses_cause,
-                matched_by=matched[rule.pk],
-                revealed=rule.pk in revealed_rule_ids,
+                faction_rule_id=entry.rule.pk,
+                label=faction_rule_label(entry.rule),
+                angle_text=entry.rule.angle_text,
+                difficulty_shift_bands=entry.rule.difficulty_shift_bands,
+                suppresses_cause=entry.rule.suppresses_cause,
+                matched_by=matched[entry.rule.pk],
+                revealed=entry.rule.pk in revealed_rule_ids,
+                source=entry.source,
             )
-            for rule in rules
+            for entry in rules
         ],
         members=[
             GMMemberView(

@@ -378,10 +378,12 @@ export function useEpisodeList(params?: ListEpisodesParams) {
   });
 }
 
+/** One episode. Id 0 means "none yet" (a closed edit dialog) and fetches nothing. */
 export function useEpisode(id: number) {
   return useQuery({
     queryKey: storiesKeys.episode(id),
     queryFn: () => api.getEpisode(id),
+    enabled: id > 0,
     throwOnError: true,
   });
 }
