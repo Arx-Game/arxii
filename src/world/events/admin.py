@@ -1,5 +1,6 @@
 from django.contrib import admin
 
+from world.admin_utils import OneRowPerFormSet
 from world.events.models import (
     Event,
     EventCatering,
@@ -24,6 +25,7 @@ class EventInvitationInline(admin.TabularInline):
 
 class EventCateringInline(admin.TabularInline):
     model = EventCatering
+    formset = OneRowPerFormSet
     extra = 0
     raw_id_fields = ["item_instance", "contributed_by"]
 

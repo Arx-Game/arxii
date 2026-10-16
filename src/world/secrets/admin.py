@@ -1,6 +1,7 @@
 from django.contrib import admin
 from django.core.exceptions import ObjectDoesNotExist
 
+from world.admin_utils import OneRowPerFormSet
 from world.secrets.models import Secret, SecretCategory, SecretKnowledge
 
 
@@ -15,6 +16,7 @@ class SecretKnowledgeInline(admin.TabularInline):
     """Read-only: who knows this secret (#3679) — audit-only, edited via SecretKnowledgeAdmin."""
 
     model = SecretKnowledge
+    formset = OneRowPerFormSet
     fields = ["roster_entry", "knows_category", "knows_consequences", "found_at"]
     readonly_fields = ["roster_entry", "knows_category", "knows_consequences", "found_at"]
     extra = 0

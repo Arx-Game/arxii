@@ -92,6 +92,7 @@ inventory reports for commands, API routes and frontend routes.
 | E2E integration test: craft facet → wear item → pull on a FACET thread. | services / dispatch | `src/integration_tests/test_crafting_facet_pull.py` |
 | End-to-end pipeline test for the magic-story slice. | services / dispatch | `src/integration_tests/test_magic_story_pipeline.py` |
 | Survivability journey tests for issue #3450. | services / dispatch | `src/integration_tests/test_survivability_journey.py` |
+| Staff author a tradition's gift grants in the admin: a tradition with two gifts re-saves with only its description changed and keeps both grants and their techniques; the same gift on two rows is refused with the gift named and where its techniques go, and nothing is saved (#4380). | admin (test client) | `src/world/magic/tests/test_tradition_admin.py` |
 
 ## Gaps to write first
 

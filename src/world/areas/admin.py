@@ -1,5 +1,6 @@
 from django.contrib import admin
 
+from world.admin_utils import OneRowPerFormSet
 from world.areas.models import Area, AreaElevationRequirement
 from world.areas.positioning.models import (
     BlueprintEdge,
@@ -35,6 +36,7 @@ class BlueprintPositionInline(admin.TabularInline):
     """#3831 - the position nodes belonging to a blueprint."""
 
     model = BlueprintPosition
+    formset = OneRowPerFormSet
     extra = 1
 
 
@@ -93,6 +95,7 @@ class RampartElementResistanceInline(admin.TabularInline):
     """#3831 - per-damage-type resist/vulnerability rows for a Rampart element."""
 
     model = RampartElementResistance
+    formset = OneRowPerFormSet
     fk_name = "profile"
     extra = 1
     autocomplete_fields = ["damage_type"]

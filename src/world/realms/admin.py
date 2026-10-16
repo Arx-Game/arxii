@@ -1,5 +1,6 @@
 from django.contrib import admin
 
+from world.admin_utils import OneRowPerFormSet
 from world.realms.models import Realm, RealmTestamentSection
 
 
@@ -7,6 +8,7 @@ class RealmTestamentSectionInline(admin.TabularInline):
     """The realm's testament, one row per movement (#3725)."""
 
     model = RealmTestamentSection
+    formset = OneRowPerFormSet
     extra = 0
     fields = ["sort_order", "body", "motto"]
     ordering = ["sort_order"]

@@ -8,6 +8,7 @@ from typing import ClassVar
 
 from django.contrib import admin
 
+from world.admin_utils import OneRowPerFormSet
 from world.buildings.models import (
     ArchitecturalStyle,
     BuildingKind,
@@ -33,6 +34,7 @@ class BuildingSizeTierAdmin(admin.ModelAdmin):
 
 class StyleAffinityInline(admin.TabularInline):
     model = StyleAffinity
+    formset = OneRowPerFormSet
     extra = 0
 
 
@@ -156,6 +158,7 @@ class ProjectTemplatePolishIncrementInline(admin.TabularInline):
     """#3831 - per-category polish increments a project template grants."""
 
     model = ProjectTemplatePolishIncrement
+    formset = OneRowPerFormSet
     extra = 1
     autocomplete_fields = ["category"]
 

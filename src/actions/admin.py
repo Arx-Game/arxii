@@ -13,10 +13,12 @@ from actions.models import (
     ModifyKwargsConfig,
     RemoveConditionOnCheckConfig,
 )
+from world.admin_utils import OneRowPerFormSet
 
 
 class ConsequencePoolEntryInline(admin.TabularInline):
     model = ConsequencePoolEntry
+    formset = OneRowPerFormSet
     extra = 1
     raw_id_fields = ("consequence",)
 
@@ -31,6 +33,7 @@ class ConsequencePoolAdmin(admin.ModelAdmin):
 
 class ActionTemplateGateInline(admin.TabularInline):
     model = ActionTemplateGate
+    formset = OneRowPerFormSet
     extra = 0
     raw_id_fields = ("consequence_pool",)
 

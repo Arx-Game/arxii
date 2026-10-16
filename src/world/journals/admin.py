@@ -2,11 +2,13 @@
 
 from django.contrib import admin
 
+from world.admin_utils import OneRowPerFormSet
 from world.journals.models import JournalBequestGrant, JournalEntry, JournalTag, WeeklyJournalXP
 
 
 class JournalTagInline(admin.TabularInline):
     model = JournalTag
+    formset = OneRowPerFormSet
     extra = 1
 
 

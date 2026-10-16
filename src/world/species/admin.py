@@ -4,6 +4,7 @@ Django admin configuration for species app.
 
 from django.contrib import admin
 
+from world.admin_utils import OneRowPerFormSet
 from world.contributors.admin import CREDIT_FIELDSET
 from world.species.models import (
     Language,
@@ -34,6 +35,7 @@ class SpeciesStatBonusInline(admin.TabularInline):
     """Inline for editing stat bonuses on a species."""
 
     model = SpeciesStatBonus
+    formset = OneRowPerFormSet
     extra = 1
     fields = ["stat", "value"]
 
@@ -42,6 +44,7 @@ class SpeciesGiftGrantInline(admin.TabularInline):
     """Inline for editing gift grants (Minor Gift + drawbacks) on a species (#2846)."""
 
     model = SpeciesGiftGrant
+    formset = OneRowPerFormSet
     extra = 0
     fields = [
         "gift",
