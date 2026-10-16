@@ -755,7 +755,8 @@ class WhisperActionIdempotencyTests(TestCase):
             WhisperAction().execute(actor=self.character, context=None, **kwargs)
             WhisperAction().execute(actor=self.character, context=None, **kwargs)
 
-        assert mock_send.call_count == 1
+        # The target's line and the whisperer's own echo, once each; the retry sends neither.
+        assert mock_send.call_count == 2
 
 
 class WhisperActionEphemeralPrivacyTests(TestCase):

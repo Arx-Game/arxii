@@ -331,7 +331,8 @@ class MutterActionLanguageTests(LanguageSpeechTestCase):
             )
 
         assert result.success is True
-        assert mock_send.call_count == 2
+        # The receiver's full line, the speaker's own echo, the bystander's fragment.
+        assert mock_send.call_count == 3
         for call in mock_send.call_args_list:
             assert call.kwargs["echo_of"] == InteractionMode.MUTTER
 

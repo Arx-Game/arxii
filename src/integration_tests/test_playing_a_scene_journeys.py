@@ -163,9 +163,9 @@ class SpeakingInTheRoom(JourneyCase):
 
     def test_a_whisper_reaches_only_its_target(self) -> None:
         told = self.telnet(self.ysmay, "whisper Hobb=Meet me by the well.")
+        self.assertIn('You whisper to Hobb, "Meet me by the well."', told)
         self.assertTold(self.hobb, 'Ysmay whispers, "Meet me by the well."')
         self.assertNotTold(self.bram, "Meet me by the well.")
-        self.assertNotIn("Meet me by the well.", told)
 
         self.assertIn("Could not find 'Nobody'.", self.telnet(self.ysmay, "whisper Nobody=hello"))
         self.assertIn("Usage: whisper <target>=<text>", self.telnet(self.ysmay, "whisper Hobb"))
@@ -173,7 +173,8 @@ class SpeakingInTheRoom(JourneyCase):
 
     def test_a_mutter_gives_the_room_only_a_fragment(self) -> None:
         muttered = "The vault key is under the third hearthstone on the left."
-        self.telnet(self.ysmay, f"mutter Hobb={muttered}")
+        told = self.telnet(self.ysmay, f"mutter Hobb={muttered}")
+        self.assertIn(f'You mutter to Hobb, "{muttered}"', told)
         self.assertTold(self.hobb, f'Ysmay mutters, "{muttered}"')
         self.assertTold(self.bram, "Ysmay mutters,")
         self.assertNotTold(self.bram, muttered)
