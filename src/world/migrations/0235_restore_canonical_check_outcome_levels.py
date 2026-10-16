@@ -4,7 +4,7 @@
 # every roll was read backwards. This restores the seeded levels, keyed by name (never by
 # pk), and blanks the Faker text, which no one authored and the seed leaves blank.
 #
-# ADR-0237 disposition: restructure. The five success_level values are corrected in place;
+# ADR-0237 disposition: restructure. Wrong success_level values are corrected in place;
 # no authored text is lost, because the only text touched is the sentence-shaped Faker
 # filler on the three rows, matched by shape and not removed from any other row.
 
