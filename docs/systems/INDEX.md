@@ -9112,7 +9112,7 @@ lightly-structured freeform RP. Full doc: `docs/systems/worship.md`; model decis
   and sacrifice value per favor, `CeremonyOffering.being`/`pledge_details`/`facet` (a
   sacrifice outside a ceremony). Services (`worship/pledge_services.py`): `take_pledge`,
   `record_pledge_credit` (from `bump_devotion`: progress is favor), `credit_pledge_deed`
-  (from `grant_resonance`), `close_pledge` (one retry after a failed first close; atomic
+  (from `grant_resonance`; passive sources skipped via `PASSIVE_DEED_SOURCES`), `close_pledge` (one retry after a failed first close; atomic
   RESOLVING + `resolve_project`), `resolve_pledge_project` (CLOSING award, or on a lapse the
   Partial Success award at half the target), `service_terms`, `pledge_card`,
   `holy_sites_here`; `ceremonies.services.sacrifice_items` / `give_up_item`;
