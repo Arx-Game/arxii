@@ -33,6 +33,8 @@ interface PlacementPanelProps {
   draft: PlacementDraft;
   onChange: (partial: PlacementDraft) => void;
   showStandoffSwitch: boolean;
+  /** Set when the line stands a named NPC (#4373): drives come from the persona. */
+  personaName?: string;
 }
 
 function AffiliationPicker({
@@ -302,6 +304,7 @@ export function PlacementPanel({
   draft,
   onChange,
   showStandoffSwitch,
+  personaName = '',
 }: PlacementPanelProps) {
   const { data: context } = usePlacementContext(templateId, draft.organization ?? null);
   return (
@@ -343,13 +346,20 @@ export function PlacementPanel({
             </div>
             <AffiliationPicker index={index} context={context} draft={draft} onChange={onChange} />
           </div>
-          <DriveTable index={index} context={context} draft={draft} onChange={onChange} />
+          {personaName ? (
+            <p className="text-xs text-muted-foreground" data-testid={`placement-persona-${index}`}>
+              {personaName} is a named NPC: their drives are their persona&apos;s properties, edited
+              on the persona, not here.
+            </p>
+          ) : (
+            <DriveTable index={index} context={context} draft={draft} onChange={onChange} />
+          )}
           <RulesTable index={index} context={context} draft={draft} onChange={onChange} />
           <span
             className="text-xs text-muted-foreground"
             data-testid={`placement-summary-${index}`}
           >
-            {placementSummary(context, draft, count)}
+            {placementSummary(context, draft, count, personaName)}
           </span>
         </>
       ) : (

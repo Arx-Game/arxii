@@ -110,6 +110,26 @@ class CmdEncounterSubverbTests(TestCase):
         self.assertEqual(kwargs["tier"], "mook")
         self.assertIsNone(kwargs.get("threat_pool_id"))
 
+    @patch("actions.definitions.gm_combat.AddOpponentAction.run")
+    def test_addnamed_dispatches_the_persona(self, mock_run: MagicMock) -> None:
+        """#4373: ``addnamed <tier> <pool> <named NPC>`` stands that persona."""
+        from world.character_sheets.factories import CharacterSheetFactory
+
+        persona = CharacterSheetFactory().primary_persona
+        persona.name = "Maud Test Carrow"
+        persona.save(update_fields=["name"])
+        mock_run.return_value = ActionResult(success=True, message="Opponent added.")
+        self._run("addnamed elite 5 maud test carrow")
+        kwargs = mock_run.call_args.kwargs
+        self.assertEqual(
+            (kwargs["tier"], kwargs["threat_pool_id"], kwargs["persona_id"]),
+            ("elite", "5", persona.pk),
+        )
+
+    def test_addnamed_of_nobody_is_an_error(self) -> None:
+        messages = self._run("addnamed elite 5 Nobody By This Name")
+        self.assertTrue(any("No named NPC" in m for m in messages), messages)
+
     def test_add_requires_name_and_tier(self) -> None:
         """Missing name/tier emits a usage error."""
         messages = self._run("add")

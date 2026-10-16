@@ -170,6 +170,41 @@ class RunBeatActionEncounterJourneyTests(RunBeatActionTestBase):
             all(g.state == StandoffGroupState.OPEN for g in encounter.standoff_groups.all())
         )
 
+    def test_a_named_npc_line_stands_the_persona_as_its_own_group(self) -> None:
+        """#4373: a line naming a persona stands that NPC as one opponent and one group."""
+        from world.mechanics.factories import PropertyFactory
+        from world.mechanics.models import ObjectProperty
+        from world.standoffs.services.profile import group_drives
+
+        npc_sheet = CharacterSheetFactory()
+        persona = npc_sheet.primary_persona
+        persona.properties.add(PropertyFactory(name="Run beat prudent (test)"))
+        BeatOpponentLineFactory(
+            beat=self.beat, creature_template=self.mook_template, persona=persona, order=2
+        )
+        self.mook_line.opens_as_standoff = True
+        self.mook_line.save(update_fields=["opens_as_standoff"])
+        result = RunBeatAction().run(self.lead_gm_actor, beat_id=self.beat.pk)
+        self.assertTrue(result.success, result.message)
+        encounter = CombatEncounter.objects.get(scene=self.scene)
+        npc = CombatOpponent.objects.get(encounter=encounter, persona=persona)
+        self.assertEqual(npc.name, persona.name)
+        self.assertEqual(npc.objectdb_id, npc_sheet.character.pk)
+        self.assertFalse(npc.objectdb_is_ephemeral)
+        self.assertEqual(
+            CombatOpponent.objects.filter(
+                encounter=encounter, creature_template=self.mook_template, persona__isnull=True
+            ).count(),
+            2,
+        )
+        named = encounter.standoff_groups.get(persona=persona)
+        self.assertEqual(named.name, persona.name)
+        self.assertEqual(
+            [d.property.name for d in group_drives(named)], ["Run beat prudent (test)"]
+        )
+        self.assertFalse(ObjectProperty.objects.filter(object_id=npc_sheet.character.pk).exists())
+        self.assertEqual(encounter.standoff_groups.count(), 3)
+
     def test_without_the_switch_no_standoff_opens(self) -> None:
         RunBeatAction().run(self.lead_gm_actor, beat_id=self.beat.pk)
         encounter = CombatEncounter.objects.get(scene=self.scene)

@@ -33,7 +33,15 @@ class TermsReactionLineInline(StandoffReactionLineInline):
 
 @admin.register(StandoffApproach)
 class StandoffApproachAdmin(admin.ModelAdmin):
-    list_display = ("name", "check_type", "capability", "damages_morale", "display_order")
+    list_display = (
+        "name",
+        "check_type",
+        "capability",
+        "is_verbal",
+        "damages_morale",
+        "display_order",
+    )
+    list_filter = ("is_verbal",)
     search_fields = ("name",)
     autocomplete_fields = ("check_type", "capability", "sway_target")
     filter_horizontal = ("archetypes",)

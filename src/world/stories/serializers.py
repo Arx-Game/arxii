@@ -995,12 +995,15 @@ class BeatOpponentLineSerializer(PlacementFieldsMixin, serializers.ModelSerializ
     """
 
     id = serializers.IntegerField(required=False)
+    persona_name = serializers.SerializerMethodField()
 
     class Meta:
         model = BeatOpponentLine
         fields = [
             "id",
             "creature_template",
+            "persona",
+            "persona_name",
             "count",
             "position_name",
             "order",
@@ -1012,6 +1015,19 @@ class BeatOpponentLineSerializer(PlacementFieldsMixin, serializers.ModelSerializ
             "drive_edits",
             "suppressed_faction_rules",
         ]
+
+    def get_persona_name(self, instance: BeatOpponentLine) -> str:
+        """The named NPC's name, so the editor can show the pick (read only)."""
+        return instance.persona.name if instance.persona_id is not None else ""
+
+    def validate(self, attrs: dict[str, Any]) -> dict[str, Any]:
+        """A named NPC line spawns exactly one opponent (#4373)."""
+        attrs = super().validate(attrs)
+        if attrs.get("persona") is not None and attrs.get("count", 1) != 1:
+            raise serializers.ValidationError(
+                {"count": "A named NPC line spawns exactly one opponent."}
+            )
+        return attrs
 
 
 class BeatStagedTemplateSerializer(serializers.ModelSerializer):
@@ -1312,6 +1328,7 @@ class BeatSerializer(serializers.ModelSerializer):
         user = request.user if request is not None else None
         # user.is_staff is safe on AccountDB and AnonymousUser; bool() guards None.
         is_staff = bool(user is not None and user.is_staff)
+        self._check_line_personas(attrs, merged, is_staff=is_staff)
 
         self._check_beat_ownership(user, is_staff, merged)
 
@@ -1368,6 +1385,48 @@ class BeatSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError(
                 {"staged_battle": "A beat stages either opponent lines or a battle, not both."}
             )
+
+    def _check_line_personas(
+        self, attrs: dict[str, Any], merged: dict[str, Any], *, is_staff: bool
+    ) -> None:
+        """A line's named NPC must be one the beat's story already uses (#4373).
+
+        Only a persona that is new on the line is checked, so a GM can still save a beat
+        whose line staff placed. Staff may place any persona.
+        """
+        from world.stories.services.cast import may_stand_persona  # noqa: PLC0415
+
+        rows = attrs.get("opponent_lines")
+        if not rows:
+            return
+        existing = (
+            set(self.instance.opponent_lines.values_list("persona_id", flat=True))
+            if self.instance is not None
+            else set()
+        )
+        episode = merged.get("episode")
+        story = episode.chapter.story if episode is not None else None
+        row_errors: list[dict[str, list[str]]] = []
+        for row in rows:
+            persona = row.get("persona")
+            refused = (
+                persona is not None
+                and persona.pk not in existing
+                and not may_stand_persona(story, persona, is_staff=is_staff)
+            )
+            row_errors.append(
+                {
+                    "persona": [
+                        f"{persona.name} is not a named NPC this story uses. Name them in "
+                        "one of its stakes or protected subjects first."
+                    ]
+                }
+                if refused
+                else {}
+            )
+        if any(row_errors):
+            # Per row, as DRF reports nested line errors, so the dialog shows it on the line.
+            raise serializers.ValidationError({"opponent_lines": row_errors})
 
     @staticmethod
     def _check_required_mission_cap(

@@ -10,6 +10,7 @@ live encounter reads the snapshot, never the template (``services.profile``).
 from __future__ import annotations
 
 from django.core.exceptions import ValidationError
+from django.core.validators import MinValueValidator
 from django.db import models
 
 from core.managers import ArxSharedMemoryManager
@@ -224,6 +225,12 @@ class StandoffApproach(NaturalKeyMixin, SharedMemoryModel):
         default=False,
         help_text="When true, a success also wears down the group's morale.",
     )
+    is_verbal = models.BooleanField(
+        default=False,
+        help_text=(
+            "Spoken: refused against a group that shares no language with the actor (#4373)."
+        ),
+    )
     casts_technique = models.BooleanField(
         default=False,
         help_text=(
@@ -375,6 +382,18 @@ class StandoffConfig(SharedMemoryModel):
     terms_ease_broken = models.PositiveSmallIntegerField(
         default=2, help_text="Terms steps eased when the group is broken."
     )
+    regard_per_band = models.PositiveSmallIntegerField(
+        default=100,
+        validators=[MinValueValidator(1)],
+        help_text=(
+            "NPC regard points per band: a named NPC's regard for the actor eases (positive) "
+            "or hardens (negative) a press or terms by one band for each full step (#4373)."
+        ),
+    )
+    regard_max_bands = models.PositiveSmallIntegerField(
+        default=3,
+        help_text="The most bands a named NPC's regard can ease or harden a press or terms.",
+    )
 
     objects = ArxSharedMemoryManager()
 
@@ -424,7 +443,12 @@ class StandoffCauseGloss(NaturalKeyMixin, SharedMemoryModel):
 
 
 class StandoffGroup(SharedMemoryModel):
-    """One creature kind's opponents in an encounter, treated as a single side of a standoff."""
+    """One side of a standoff: a creature kind's opponents, or one named NPC (#4373).
+
+    A template group is every active opponent of ``creature_template`` with no persona. A
+    persona group is the one opponent standing as ``persona``; its ``creature_template`` is
+    the template it was spawned from, if any.
+    """
 
     encounter = models.ForeignKey(
         "arxii.CombatEncounter",
@@ -435,8 +459,18 @@ class StandoffGroup(SharedMemoryModel):
     creature_template = models.ForeignKey(
         "arxii.CreatureTemplate",
         on_delete=models.CASCADE,
+        null=True,
+        blank=True,
         related_name="standoff_groups",
-        help_text="The creature kind that makes up the group.",
+        help_text="The creature kind that makes up the group (a named NPC's template, if any).",
+    )
+    persona = models.ForeignKey(
+        "arxii.Persona",
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="+",
+        help_text="The named NPC this group is, when it is one person (#4373).",
     )
     state = models.CharField(
         max_length=20,
@@ -478,16 +512,35 @@ class StandoffGroup(SharedMemoryModel):
     )
 
     class Meta:
-        ordering = ["encounter", "creature_template"]
+        ordering = ["encounter", "creature_template", "persona", "pk"]
         constraints = [
             models.UniqueConstraint(
-                fields=["encounter", "creature_template"],
-                name="unique_standoff_group_per_encounter_template",
+                fields=["encounter", "creature_template", "persona"],
+                name="unique_standoff_group_per_encounter_template_persona",
+                nulls_distinct=False,
+            ),
+            models.CheckConstraint(
+                condition=(
+                    models.Q(creature_template__isnull=False) | models.Q(persona__isnull=False)
+                ),
+                name="standoff_group_template_or_persona",
             ),
         ]
 
     def __str__(self) -> str:
-        return f"{self.creature_template} in encounter {self.encounter_id} ({self.state})"
+        return f"{self.name} in encounter {self.encounter_id} ({self.state})"
+
+    @property
+    def name(self) -> str:
+        """What players call the group: the named NPC, or the creature kind."""
+        if self.persona_id is not None:
+            return self.persona.name
+        return self.creature_template.name
+
+    @property
+    def referent(self) -> str:
+        """The group inside a room line: "Maud Carrow", or "the Sellswords"."""
+        return self.name if self.persona_id is not None else f"the {self.name}"
 
 
 class StandoffReveal(SharedMemoryModel):

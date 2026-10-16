@@ -65,6 +65,7 @@ const STANDOFF: StandoffView = {
       ],
       hits_revealed_drive: true,
       casts_technique: false,
+      refusal: '',
     },
     {
       approach_id: 22,
@@ -76,6 +77,7 @@ const STANDOFF: StandoffView = {
       levers: [],
       hits_revealed_drive: false,
       casts_technique: false,
+      refusal: '',
     },
   ],
   terms: [
@@ -87,6 +89,8 @@ const STANDOFF: StandoffView = {
       grade: 'hard',
       grade_label: 'Hard',
       critical_label: 'Turn',
+      levers: [],
+      refusal: '',
     },
   ],
   angles: [{ group_id: 11, faction_rule_id: 41, text: 'Test angle', shared: false }],
@@ -458,5 +462,34 @@ describe('StandoffCard', () => {
   it('shows emboldened alone when the group is not proposed', () => {
     renderCard(withGroup({ emboldened: true }));
     expect(screen.getByTestId('standoff-group-chip')).toHaveTextContent(/^emboldened$/);
+  });
+
+  it('lists a refused verbal approach with the reason and will not press it (#4373)', async () => {
+    const user = userEvent.setup();
+    const refused = 'You share no language with them.';
+    renderCard({
+      ...STANDOFF,
+      approaches: [{ ...STANDOFF.approaches[1], refusal: refused }],
+      terms: [{ ...STANDOFF.terms[0], refusal: refused }],
+    });
+    const press = screen.getByRole('button', { name: /Plain approach/ });
+    expect(press).toBeDisabled();
+    expect(screen.getByRole('button', { name: /Test terms/ })).toBeDisabled();
+    expect(screen.getAllByTestId('standoff-refusal').map((n) => n.textContent)).toEqual([
+      refused,
+      refused,
+    ]);
+    await user.click(press);
+    expect(mutateAsync).not.toHaveBeenCalled();
+  });
+
+  it('names a named NPC regard on approaches and terms (#4373)', () => {
+    const lever = { text: "Maud Test's regard for you: harder", is_angle: false };
+    renderCard({
+      ...STANDOFF,
+      approaches: [{ ...STANDOFF.approaches[1], levers: [lever] }],
+      terms: [{ ...STANDOFF.terms[0], levers: [lever] }],
+    });
+    expect(screen.getAllByText("Maud Test's regard for you: harder")).toHaveLength(2);
   });
 });

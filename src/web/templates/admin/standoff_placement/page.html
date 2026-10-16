@@ -65,6 +65,21 @@ A custom page extending base_site.html links forms.css and widgets.css itself (#
 
         <div class="module" id="drives-module">
           <h2>Drives here</h2>
+          {{ added.management_form }}
+          {% if profile.persona %}
+          <p class="sp-rail-note">{{ profile.persona.name }} is a named NPC: their drives are their
+            persona's properties, edited on the persona, not on this placement.</p>
+          <table class="tuning-table sp-table">
+            <thead><tr><th>Drive</th><th>Strength</th></tr></thead>
+            <tbody>
+              {% for drive in profile.drives %}
+              <tr><td>{{ drive.property.name }}</td><td class="sp-context">{{ drive.label }}</td></tr>
+              {% empty %}
+              <tr><td colspan="2" class="sp-context">The persona has no properties.</td></tr>
+              {% endfor %}
+            </tbody>
+          </table>
+          {% else %}
           <table class="tuning-table sp-table">
             <thead><tr><th>Drive</th><th>Template</th><th>Here</th><th>Effect</th></tr></thead>
             <tbody>
@@ -80,7 +95,6 @@ A custom page extending base_site.html links forms.css and widgets.css itself (#
               {% endfor %}
             </tbody>
           </table>
-          {{ added.management_form }}
           {% if added.non_form_errors %}<p class="errornote">{{ added.non_form_errors }}</p>{% endif %}
           <table class="tuning-table sp-table">
             <thead><tr><th>Added drive</th><th>Strength</th><th>Delete</th></tr></thead>
@@ -106,6 +120,7 @@ A custom page extending base_site.html links forms.css and widgets.css itself (#
                     data-prefix="{{ added.prefix }}" data-target="added-body"
                     data-template="empty-added-template">+ Add a drive for this placement</button>
           </div>
+          {% endif %}
         </div>
 
         <div class="module" id="rules-module">

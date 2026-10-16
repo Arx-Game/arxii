@@ -84,6 +84,7 @@ class DrivesForm(forms.Form):
 
     def __init__(self, *args: Any, profile: PlacementProfile, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
+        self.profile = profile
         self.template_drives = [d for d in profile.drives if d.template_strength is not None]
         for drive in self.template_drives:
             if drive.strength is None:

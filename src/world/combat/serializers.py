@@ -25,6 +25,7 @@ from world.combat.constants import (
     ClashActionSlot,
     ClashStatus,
     EncounterOutcome,
+    OpponentStatus,
     OpponentTier,
     PaceMode,
     ParticipantStatus,
@@ -2057,8 +2058,13 @@ class AddOpponentSerializer(serializers.Serializer):
     view) so that ``validate()`` can run the stakes gate.
     """
 
-    name = serializers.CharField(max_length=200)
+    name = serializers.CharField(max_length=200, required=False, allow_blank=True, default="")
     tier = serializers.ChoiceField(choices=OpponentTier.choices)
+    persona_id = serializers.IntegerField(
+        required=False,
+        allow_null=True,
+        help_text="A named NPC the story uses, to stand as this opponent (#4373).",
+    )
     max_health = serializers.IntegerField(min_value=1, required=False, allow_null=True)
     level = serializers.IntegerField(min_value=1, max_value=30, required=False, allow_null=True)
     threat_pool_id = serializers.IntegerField()
@@ -2095,7 +2101,41 @@ class AddOpponentSerializer(serializers.Serializer):
             raise serializers.ValidationError(
                 {"position_id": "That position is not in this encounter's room."}
             )
+        attrs["persona"] = self._named_npc(attrs.get("persona_id"), encounter, request)
+        if not attrs.get("name"):
+            if attrs["persona"] is None:
+                raise serializers.ValidationError({"name": "A name is required."})
+            attrs["name"] = attrs["persona"].name
         return attrs
+
+    @staticmethod
+    def _named_npc(persona_id: int | None, encounter: object, request: object) -> object:
+        """The named NPC to stand, checked against the encounter's story (#4373)."""
+        if persona_id is None:
+            return None
+        from world.combat.services.boss.opponent import (  # noqa: PLC0415
+            _acting_story_for_encounter,
+        )
+        from world.scenes.models import Persona  # noqa: PLC0415
+        from world.stories.services.cast import may_stand_persona  # noqa: PLC0415
+
+        persona = Persona.objects.filter(pk=persona_id).first()
+        if persona is None:
+            raise serializers.ValidationError({"persona_id": "No such named NPC."})
+        is_staff = bool(request is not None and request.user.is_staff)
+        story = _acting_story_for_encounter(encounter) if encounter is not None else None
+        if not may_stand_persona(story, persona, is_staff=is_staff):
+            raise serializers.ValidationError(
+                {"persona_id": f"{persona.name} is not a named NPC this story uses."}
+            )
+        if (
+            encounter is not None
+            and encounter.opponents.filter(persona=persona, status=OpponentStatus.ACTIVE).exists()
+        ):
+            raise serializers.ValidationError(
+                {"persona_id": f"{persona.name} is already in this fight."}
+            )
+        return persona
 
 
 class EncounterSettingsSerializer(serializers.Serializer):

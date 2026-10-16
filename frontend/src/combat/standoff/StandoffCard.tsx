@@ -427,6 +427,7 @@ function ApproachButton({
   const [soulfray, setSoulfray] = useState<SoulfrayWarningData | null>(null);
   const needsTechnique = approach.casts_technique;
   const noTechnique = needsTechnique && techniques.length === 0;
+  const refused = approach.refusal !== '';
   const pressKwargs = { group_id: groupId, approach_id: approach.approach_id };
 
   function onPress() {
@@ -441,7 +442,7 @@ function ApproachButton({
     <div className="flex flex-col gap-1.5">
       <Button
         variant="outline"
-        disabled={disabled || noTechnique}
+        disabled={disabled || noTechnique || refused}
         data-testid={approach.hits_revealed_drive ? 'standoff-approach-hit' : undefined}
         className={cn(
           'h-auto w-full justify-between gap-2 whitespace-normal py-2 text-left hover:bg-muted hover:text-foreground focus-visible:ring-2',
@@ -472,6 +473,7 @@ function ApproachButton({
         </span>
         <Grade value={approach.grade} label={approach.grade_label} />
       </Button>
+      {refused && <Refusal text={approach.refusal} />}
       {noTechnique && (
         <span className="text-xs text-muted-foreground">No technique to display</span>
       )}
@@ -558,6 +560,15 @@ function ApproachButton({
   );
 }
 
+/** Why the language gate closes an approach or terms to this character (#4373). */
+function Refusal({ text }: { text: string }) {
+  return (
+    <span className="text-xs text-destructive" data-testid="standoff-refusal">
+      {text}
+    </span>
+  );
+}
+
 interface TermsSectionProps {
   terms: TermsView[];
   ease: number;
@@ -594,27 +605,34 @@ function TermsSection({
         </p>
       )}
       {terms.map((term) => (
-        <Button
-          key={term.terms_id}
-          variant="outline"
-          disabled={disabled}
-          aria-pressed={chosen?.terms_id === term.terms_id}
-          className={cn(
-            'h-auto w-full justify-between gap-2 whitespace-normal py-2 text-left hover:bg-muted hover:text-foreground focus-visible:ring-2',
-            chosen?.terms_id === term.terms_id && 'border-primary'
-          )}
-          onClick={() => onChoose(term.terms_id)}
-        >
-          <span>
-            {term.name}
-            {term.critical_label ? (
-              <span className="block text-xs text-muted-foreground">
-                On a critical: {term.critical_label}
-              </span>
-            ) : null}
-          </span>
-          <Grade value={term.grade} label={term.grade_label} />
-        </Button>
+        <div key={term.terms_id} className="flex flex-col gap-1">
+          <Button
+            variant="outline"
+            disabled={disabled || term.refusal !== ''}
+            aria-pressed={chosen?.terms_id === term.terms_id}
+            className={cn(
+              'h-auto w-full justify-between gap-2 whitespace-normal py-2 text-left hover:bg-muted hover:text-foreground focus-visible:ring-2',
+              chosen?.terms_id === term.terms_id && 'border-primary'
+            )}
+            onClick={() => onChoose(term.terms_id)}
+          >
+            <span>
+              {term.name}
+              {term.critical_label ? (
+                <span className="block text-xs text-muted-foreground">
+                  On a critical: {term.critical_label}
+                </span>
+              ) : null}
+              {term.levers.map((lever) => (
+                <span key={lever.text} className="block text-xs font-normal italic">
+                  {lever.text}
+                </span>
+              ))}
+            </span>
+            <Grade value={term.grade} label={term.grade_label} />
+          </Button>
+          {term.refusal !== '' && <Refusal text={term.refusal} />}
+        </div>
       ))}
       {chosen !== null && (
         <div

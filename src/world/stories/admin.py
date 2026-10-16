@@ -292,6 +292,7 @@ class BeatOpponentLineInline(admin.TabularInline):
     extra = 0
     fields = [
         "creature_template",
+        "persona",
         "count",
         "position_name",
         "order",
@@ -299,6 +300,7 @@ class BeatOpponentLineInline(admin.TabularInline):
         "placement_link",
     ]
     readonly_fields = ["placement_link"]
+    autocomplete_fields = ["persona"]
 
     @admin.display(description="Placement")
     def placement_link(self, obj: BeatOpponentLine) -> str:

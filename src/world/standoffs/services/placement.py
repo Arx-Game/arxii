@@ -28,6 +28,7 @@ if TYPE_CHECKING:
     from world.combat.models import CombatOpponent, CreatureTemplate
     from world.mechanics.models import Property
     from world.missions.models import MissionOptionOpponentLine
+    from world.scenes.models import Persona
     from world.societies.models import Organization
     from world.standoffs.models import CreatureDrive, FactionRule
     from world.stories.models import BeatOpponentLine
@@ -84,6 +85,7 @@ class PlacementProfile:
     template_organization: Organization | None
     drives: list[PlacementDrive] = field(default_factory=list)
     rules: list[PlacementRule] = field(default_factory=list)
+    persona: Persona | None = None
 
     @property
     def live_drives(self) -> list[PlacementDrive]:
@@ -105,15 +107,32 @@ class PlacementProfile:
         """Plain sentences saying what the placement spawns (the Placement page's rail)."""
         drives = ", ".join(f"{d.property.name} ({d.label})" for d in self.live_drives)
         rules = len(self.live_rules)
+        who = (
+            f"{self.persona.name} ({self.template.name})"
+            if self.persona is not None
+            else f"{count} {self.template.name}"
+        )
         sentences = [
-            f"{count} {self.template.name}",
+            who,
             f"Cause {CauseKind(self.cause).label}, margin {self.cause_margin_percent}",
             f"Drives {drives}" if drives else "No drives",
             f"{rules} faction rule{'s' if rules != 1 else ''}",
         ]
         if self.organization is not None:
             sentences.append(f"Affiliated with {self.organization.name}")
+        sentences.append(f"Speaks {self.speaks}" if self.speaks else "Speaks no language")
         return ". ".join(sentences) + "."
+
+    @property
+    def speaks(self) -> str:
+        """The languages a spawned opponent understands, as the rails and the GM read them."""
+        from world.standoffs.services.language import (  # noqa: PLC0415
+            persona_languages,
+        )
+
+        if self.persona is not None:
+            return ", ".join(language.name for language in persona_languages(self.persona))
+        return self.template.language.name if self.template.language_id else ""
 
 
 @dataclass(frozen=True)
@@ -133,6 +152,15 @@ class PlacementDraft:
     organization: Organization | None = None
     drive_edits: dict[int, int | None] = field(default_factory=dict)
     suppressed_ids: frozenset[int] = frozenset()
+
+
+def line_persona(line: OpponentLine | None) -> Persona | None:
+    """The named NPC a line stands, if any (#4373). Only beat lines name one."""
+    from world.stories.models import BeatOpponentLine  # noqa: PLC0415
+
+    if isinstance(line, BeatOpponentLine) and line.persona_id is not None:
+        return line.persona
+    return None
 
 
 def draft_from_line(line: OpponentLine | None) -> PlacementDraft:
@@ -169,9 +197,15 @@ def _template_drive(drive: CreatureDrive, edits: dict[int, int | None]) -> Place
 
 
 def placement_profile(
-    template: CreatureTemplate, draft: PlacementDraft | None = None
+    template: CreatureTemplate,
+    draft: PlacementDraft | None = None,
+    persona: Persona | None = None,
 ) -> PlacementProfile:
-    """Resolve a placement's edits over its template (no draft: the template as it is)."""
+    """Resolve a placement's edits over its template (no draft: the template as it is).
+
+    A named NPC line (``persona``) keeps the cause, margin, affiliation and rule switches
+    of any placement, but its drives are the persona's properties (ADR-4373-A).
+    """
     draft = draft or PlacementDraft()
     edits = draft.drive_edits
     suppressed = draft.suppressed_ids
@@ -188,6 +222,13 @@ def placement_profile(
             for prop in Property.objects.filter(pk__in=added_ids)
         )
     drives.sort(key=lambda d: (-(d.strength or 0), d.property.name))
+    if persona is not None:
+        from world.standoffs.services.profile import persona_drives  # noqa: PLC0415
+
+        drives = [
+            PlacementDrive(d.property, d.property_id, None, d.strength, DriveEditState.SAME)
+            for d in persona_drives(persona)
+        ]
 
     effective_org = draft.organization or template.organization
     rules = [
@@ -208,6 +249,7 @@ def placement_profile(
         template_organization=template.organization,
         drives=drives,
         rules=rules,
+        persona=persona,
     )
 
 
@@ -215,7 +257,9 @@ def stamp_opponent(opponent: CombatOpponent, profile: PlacementProfile) -> None:
     """Write a placement profile onto a freshly spawned opponent.
 
     The drives become ``ObjectProperty`` rows on the opponent's object (value = strength),
-    so the encounter reads the snapshot and never the template again.
+    so the encounter reads the snapshot and never the template again. A named NPC's object
+    is its own character and outlives the encounter, so nothing is written on it; its drives
+    are read from its persona (ADR-4373-A).
     """
     from world.mechanics.models import ObjectProperty  # noqa: PLC0415
 
@@ -226,7 +270,7 @@ def stamp_opponent(opponent: CombatOpponent, profile: PlacementProfile) -> None:
     opponent.suppressed_faction_rules.set(
         [entry.inherited.rule.pk for entry in profile.rules if entry.suppressed]
     )
-    if opponent.objectdb_id is None:
+    if opponent.objectdb_id is None or opponent.persona_id is not None:
         return
     for drive in profile.live_drives:
         ObjectProperty.objects.update_or_create(
@@ -236,14 +280,24 @@ def stamp_opponent(opponent: CombatOpponent, profile: PlacementProfile) -> None:
         )
 
 
+#: A named NPC's drives are its persona's own properties; a placement cannot edit them.
+PERSONA_DRIVE_EDIT_ERROR = (
+    "A named NPC's drives are its persona's properties; edit them on the persona."
+)
+
+
 def placement_errors(
     template: CreatureTemplate,
     organization: Organization | None,
     drive_edits: list[DriveEdit],
     suppressed_rule_ids: list[int],
+    *,
+    persona: Persona | None = None,
 ) -> dict[str, list[str]]:
     """What is wrong with a placement's edits, by field (empty when they are valid)."""
     errors: dict[str, list[str]] = {}
+    if persona is not None and drive_edits:
+        errors["drive_edits"] = [PERSONA_DRIVE_EDIT_ERROR]
     for edit in drive_edits:
         if edit.strength is not None and edit.strength not in DriveStrength.values:
             errors.setdefault("drive_edits", []).append(f"{edit.property}: unknown strength.")
@@ -281,7 +335,13 @@ def save_placement(  # noqa: PLR0913 - one placement's whole edit set
     )
 
     template = line.creature_template
-    errors = placement_errors(template, organization, drive_edits, suppressed_rule_ids)
+    errors = placement_errors(
+        template,
+        organization,
+        drive_edits,
+        suppressed_rule_ids,
+        persona=line_persona(line),
+    )
     if errors:
         raise ValidationError(errors)
     line.cause_override = cause_override or ""
@@ -344,6 +404,7 @@ class TemplateContext:
     organization_name: str
     drives: list[ContextDrive]
     inherited_rules: list[ContextRule]
+    language_name: str = ""
 
 
 def template_context(
@@ -375,4 +436,5 @@ def template_context(
             ContextRule(entry.rule, faction_rule_label(entry.rule), entry.source, entry.level)
             for entry in inherited_rules(template, effective_org)
         ],
+        language_name=template.language.name if template.language_id else "",
     )

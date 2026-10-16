@@ -19,10 +19,10 @@ term is chosen and the rest are listed under `_Avoid_`.
 - [combat](src/world/combat/AGENT_GLOSSARY.md), also holds the #4091 allegiance terms
   (ADR-4091): Allegiance (stored vs effective), Turned, Won over, Bind window; (ADR-4120)
   Settled round; and (ADR-4147) Spectacle, Spectacle kind
-- [standoffs](src/world/standoffs/AGENT_GLOSSARY.md) (#4145, ADR-4145-A, ADR-4361-A): Standoff,
-  Group, Drive, Cause, Faction, Faction rule, Angle, Association, Affiliation, Placement,
-  Proposal, Terms, Approach, Read/Press (_Avoid_: motive, reaction, regard rule, spark, ask,
-  hook, aura, sway)
+- [standoffs](src/world/standoffs/AGENT_GLOSSARY.md) (#4145, ADR-4145-A, ADR-4361-A,
+  ADR-4373-A): Standoff, Group, Named NPC group, Language gate, Drive, Cause, Faction, Faction
+  rule, Angle, Association, Affiliation, Placement, Proposal, Terms, Approach, Read/Press
+  (_Avoid_: motive, reaction, regard rule, spark, ask, hook, aura, sway, persona opponent)
 - [battles](src/world/battles/AGENT_GLOSSARY.md)
 - [conditions](src/world/conditions/AGENT_GLOSSARY.md), also holds the #4091 settle terms
   (ADR-4091): Settle, Settle pool, Hold strength; and (ADR-4120) Settled round / Settle round

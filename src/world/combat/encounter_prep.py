@@ -79,6 +79,7 @@ def spawn_opponent_lines(
     """
     from world.areas.positioning.exceptions import PositionError  # noqa: PLC0415
     from world.combat.services import spawn_from_creature_template  # noqa: PLC0415
+    from world.standoffs.services.placement import line_persona  # noqa: PLC0415
 
     room = encounter.room
     outcomes: list[dict[str, Any]] = []
@@ -89,7 +90,9 @@ def spawn_opponent_lines(
             position = _resolve_position_by_name(room, line.position_name)
             if position is None:
                 note = f"position '{line.position_name}' not found; spawned without it"
-        for _index in range(line.count):
+        # A named NPC line stands one opponent: the NPC itself (#4373).
+        spawn_count = 1 if line_persona(line) is not None else line.count
+        for _index in range(spawn_count):
             try:
                 with transaction.atomic():
                     opponent = spawn_from_creature_template(

@@ -6729,6 +6729,54 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/combat/placement-personas/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description Named NPCs a GM may stand as an opponent (#4373), by name.
+     *
+     *     The beat dialog's and the GM Add Opponent form's named NPC picker. ``?story=`` or
+     *     ``?episode=`` (an owned story, or one of its episodes) or ``?encounter=`` (an encounter
+     *     on one of the story's beats, for its scene GMs) scopes it to the personas that story
+     *     already uses (``story_npc_personas``). Staff see every persona when they name no story.
+     */
+    get: operations['combat_placement_personas_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/combat/placement-personas/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description Named NPCs a GM may stand as an opponent (#4373), by name.
+     *
+     *     The beat dialog's and the GM Add Opponent form's named NPC picker. ``?story=`` or
+     *     ``?episode=`` (an owned story, or one of its episodes) or ``?encounter=`` (an encounter
+     *     on one of the story's beats, for its scene GMs) scopes it to the personas that story
+     *     already uses (``story_npc_personas``). Staff see every persona when they name no story.
+     */
+    get: operations['combat_placement_personas_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/combat/placement-properties/': {
     parameters: {
       query?: never;
@@ -26816,8 +26864,11 @@ export interface components {
      *     view) so that ``validate()`` can run the stakes gate.
      */
     AddOpponentRequest: {
+      /** @default  */
       name: string;
       tier: components['schemas']['Tier756Enum'];
+      /** @description A named NPC the story uses, to stand as this opponent (#4373). */
+      persona_id?: number | null;
       max_health?: number | null;
       level?: number | null;
       threat_pool_id: number;
@@ -27202,6 +27253,7 @@ export interface components {
       levers: components['schemas']['LeverView'][];
       hits_revealed_drive: boolean;
       casts_technique: boolean;
+      refusal: string;
     };
     /**
      * @description * `global` - Global
@@ -27818,6 +27870,10 @@ export interface components {
       id?: number;
       /** @description The bestiary entry to spawn. */
       creature_template: number;
+      /** @description A named NPC who stands as this line's one opponent (#4373), using the creature template's stats. Blank spawns the template's own unnamed creatures. */
+      persona?: number | null;
+      /** @description The named NPC's name, so the editor can show the pick (read only). */
+      readonly persona_name: string;
       /** @description How many of this creature to spawn. */
       count?: number;
       /** @description Authored position hint, resolved by name against the run-time room's Position set. Blank = no position. */
@@ -27861,6 +27917,8 @@ export interface components {
       id?: number;
       /** @description The bestiary entry to spawn. */
       creature_template: number;
+      /** @description A named NPC who stands as this line's one opponent (#4373), using the creature template's stats. Blank spawns the template's own unnamed creatures. */
+      persona?: number | null;
       /** @description How many of this creature to spawn. */
       count?: number;
       /** @description Authored position hint, resolved by name against the run-time room's Position set. Blank = no position. */
@@ -33416,6 +33474,9 @@ export interface components {
       drives: components['schemas']['GMDriveView'][];
       faction_rules: components['schemas']['GMFactionRuleView'][];
       members: components['schemas']['GMMemberView'][];
+      is_named_npc: boolean;
+      speaks: string[];
+      regards: components['schemas']['GMRegardView'][];
     };
     /** @description Read-only audit row for a staff-driven GM trust-level change (#2000). */
     GMLevelChange: {
@@ -33582,6 +33643,12 @@ export interface components {
      * @enum {string}
      */
     GMPromptStatusEnum: 'pending' | 'confirmed' | 'dismissed' | 'narrated';
+    GMRegardView: {
+      participant: string;
+      regard: number;
+      label: string;
+      bands: number;
+    };
     /** @description For GM create/list operations on invites for their own characters. */
     GMRosterInvite: {
       readonly id: number;
@@ -45278,6 +45345,7 @@ export interface components {
       organization_name: string;
       drives: components['schemas']['PlacementDriveContext'][];
       inherited_rules: components['schemas']['PlacementRuleContext'][];
+      language_name: string;
     };
     PlacementDriveContext: {
       property: number;
@@ -50686,6 +50754,8 @@ export interface components {
       grade: string;
       grade_label: string;
       critical_label: string;
+      levers: components['schemas']['LeverView'][];
+      refusal: string;
     };
     /**
      * @description * `open` - Open
@@ -60957,6 +61027,56 @@ export interface operations {
       header?: never;
       path: {
         /** @description A unique integer value identifying this organization. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PlacementPick'];
+        };
+      };
+    };
+  };
+  combat_placement_personas_list: {
+    parameters: {
+      query?: {
+        encounter?: number;
+        episode?: number;
+        /** @description A page number within the paginated result set. */
+        page?: number;
+        /** @description Number of results to return per page. */
+        page_size?: number;
+        search?: string;
+        story?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedPlacementPickList'];
+        };
+      };
+    };
+  };
+  combat_placement_personas_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this persona. */
         id: number;
       };
       cookie?: never;

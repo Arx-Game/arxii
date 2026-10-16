@@ -284,3 +284,55 @@ class CmdStandoffTests(TestCase):
         cmd = self._cmd("")
         cmd.func()
         cmd.msg.assert_called_with("You are not in a standoff.")
+
+
+class CmdStandoffNamedNPCAndLanguageTests(TestCase):
+    """#4373: a named NPC's group by name, and refused entries listed with the reason."""
+
+    def setUp(self) -> None:
+        from world.species.factories import make_language_with_target
+
+        self.character = CharacterFactory(db_key="standoff_speaker")
+        self.sheet = CharacterSheetFactory(character=self.character)
+        self.encounter = CombatEncounterFactory()
+        CombatParticipantFactory(encounter=self.encounter, character_sheet=self.sheet)
+        self.language, _ = make_language_with_target("Telnet test tongue")
+        self.template = CreatureTemplateFactory(
+            name="Gate Sellswords", cause=CauseKind.NONE, language=self.language
+        )
+        CombatOpponentFactory(encounter=self.encounter, creature_template=self.template)
+        npc = CharacterSheetFactory()
+        self.persona = npc.primary_persona
+        self.persona.name = "Quartermaster Test"
+        self.persona.save(update_fields=["name"])
+        CombatOpponentFactory(
+            encounter=self.encounter, creature_template=self.template, persona=self.persona
+        )
+        open_standoff(self.encounter)
+        config = StandoffConfig.load()
+        config.terms_check_type = CheckTypeFactory()
+        config.save()
+        StandoffApproachFactory(name="Sweet Talk", is_verbal=True)
+        StandoffApproachFactory(name="Show Steel", is_verbal=False)
+        StandoffTermsFactory(name="Stand Aside")
+
+    def _summary(self) -> str:
+        cmd = CmdStandoff()
+        cmd.caller = self.character
+        cmd.args = ""
+        cmd.raw_string = "standoff"
+        cmd.cmdname = "standoff"
+        cmd.msg = MagicMock()
+        cmd.func()
+        return cmd.msg.call_args.args[0]
+
+    def test_the_named_npc_is_listed_by_name(self) -> None:
+        self.assertIn("Quartermaster Test (1)", self._summary())
+
+    def test_refused_entries_say_why(self) -> None:
+        text = self._summary()
+        self.assertRegex(
+            text, r"press Sweet Talk: [^\n]*refused: You share no language with them\."
+        )
+        self.assertNotRegex(text, r"press Show Steel: [^\n]*refused")
+        self.assertRegex(text, r"terms Stand Aside: [^\n]*refused: You share no language")

@@ -62,6 +62,7 @@ import { usePersonaSearch } from '@/roster/usePersonaSearch';
 import type { LethalDuelTier, OpponentTier, PaceMode, RiskLevel, StakesLevel } from '../api';
 import {
   useAddOpponent,
+  usePlacementPersonas,
   useAddParticipant,
   useBeginRound,
   useCreateEncounter,
@@ -599,16 +600,20 @@ function FreehandOpponentForm({
   const [tier, setTier] = useState<OpponentTier>('mook');
   const [threatPoolId, setThreatPoolId] = useState<number | null>(null);
   const [positionId, setPositionId] = useState<number | null>(null);
+  const [personaId, setPersonaId] = useState<number | null>(null);
 
   const { data: pools = [] } = useThreatPools();
   const { data: defaults } = useOpponentDefaults(encounterId, tier);
+  const { data: namedNpcs = [] } = usePlacementPersonas({ encounter: encounterId });
   const { mutate, isPending, error, isError } = useAddOpponent(encounterId);
+  // A named NPC brings its own name; the server uses it when the name is left blank.
+  const nameOk = name.trim() !== '' || personaId !== null;
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!name.trim() || threatPoolId === null) return;
+    if (!nameOk || threatPoolId === null) return;
     mutate(
-      { name: name.trim(), tier, threatPoolId, positionId },
+      { name: name.trim(), tier, threatPoolId, positionId, personaId },
       {
         onSuccess: onDone,
         onError: () => {
@@ -620,6 +625,29 @@ function FreehandOpponentForm({
 
   return (
     <form onSubmit={handleSubmit} className="space-y-3">
+      {namedNpcs.length > 0 && (
+        <div className="space-y-1.5">
+          <Label htmlFor="opponent-named-npc">Named NPC (optional)</Label>
+          <select
+            id="opponent-named-npc"
+            className="w-full rounded-md border bg-background px-2 py-1.5 text-sm"
+            value={personaId !== null ? String(personaId) : ''}
+            onChange={(e) => setPersonaId(e.target.value ? Number(e.target.value) : null)}
+            data-testid="add-opponent-named-npc"
+          >
+            <option value="">None: a new opponent</option>
+            {namedNpcs.map((p) => (
+              <option key={p.id} value={String(p.id)}>
+                {p.name}
+              </option>
+            ))}
+          </select>
+          <p className="text-xs text-muted-foreground">
+            A named NPC your story uses stands as themselves, with the tier you pick.
+          </p>
+        </div>
+      )}
+
       <div className="space-y-1.5">
         <Label htmlFor="opponent-name">Name</Label>
         <Input
@@ -716,7 +744,7 @@ function FreehandOpponentForm({
         </Button>
         <Button
           type="submit"
-          disabled={isPending || !name.trim() || threatPoolId === null}
+          disabled={isPending || !nameOk || threatPoolId === null}
           data-testid="add-opponent-submit"
         >
           {isPending ? 'Adding…' : 'Add'}

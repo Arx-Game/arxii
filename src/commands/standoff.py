@@ -128,7 +128,7 @@ class CmdStandoff(DispatchCommand):
 
         return list(
             StandoffGroup.objects.filter(encounter=self._participant().encounter).select_related(
-                "creature_template"
+                "creature_template", "persona"
             )
         )
 
@@ -136,19 +136,18 @@ class CmdStandoff(DispatchCommand):
         """The group a typed name picks: the whole name, else a unique prefix or whole word."""
         typed = name.lower()
         groups = self._groups()
-        matches = [g for g in groups if g.creature_template.name.lower() == typed]
+        matches = [g for g in groups if g.name.lower() == typed]
         if not matches:
             matches = [
                 g
                 for g in groups
-                if g.creature_template.name.lower().startswith(typed)
-                or typed in g.creature_template.name.lower().split()
+                if g.name.lower().startswith(typed) or typed in g.name.lower().split()
             ]
         if not matches:
             msg = f"No group named '{name}' in this standoff."
             raise CommandError(msg)
         if len(matches) > 1:
-            listed = ", ".join(sorted({g.creature_template.name for g in matches}))
+            listed = ", ".join(sorted({g.name for g in matches}))
             msg = f"'{name}' could mean more than one group: {listed}. Be more specific."
             raise AmbiguousNameError(msg)
         return matches[0]
@@ -380,13 +379,19 @@ def _gm_profile_lines(group: GMGroupView) -> list[str]:
         f"{' - edited here' if drive.edited else ''}{' - read' if drive.revealed else ''}"
         for drive in group.drives
     )
+    lines.append(f"    Speaks: {', '.join(group.speaks) or 'no language'}")
+    lines.extend(
+        f"    Regard: {regard.participant} {regard.label} ({regard.regard})"
+        for regard in group.regards
+    )
     return lines
 
 
 def _render_gm_group(group: GMGroupView) -> list[str]:
     """One group of the GM's view, as plain text."""
+    named = " - named NPC" if group.is_named_npc else ""
     lines = [
-        f"  [{group.group_id}] {group.name} ({group.member_count}) - "
+        f"  [{group.group_id}] {group.name} ({group.member_count}){named} - "
         + _state_words(group.state, group.morale_state, emboldened=group.emboldened_bands > 0),
         *_gm_profile_lines(group),
     ]
@@ -468,14 +473,23 @@ def _render_group(view: StandoffView, group: GroupView) -> list[str]:
         if angle.group_id == group.group_id and angle.text
     )
     lines.extend(
-        f"    press {approach.name}: {approach.grade_label}" + _lever_suffix(approach.levers)
+        f"    press {approach.name}: {approach.grade_label}"
+        + _lever_suffix(approach.levers)
+        + _refusal_suffix(approach.refusal)
         for approach in view.approaches
         if approach.group_id == group.group_id
     )
     lines.extend(
         f"    terms {terms.name}: {terms.grade_label}"
         + (f" (on a critical: {terms.critical_label})" if terms.critical_label else "")
+        + _lever_suffix(terms.levers)
+        + _refusal_suffix(terms.refusal)
         for terms in view.terms
         if terms.group_id == group.group_id
     )
     return lines
+
+
+def _refusal_suffix(refusal: str) -> str:
+    """A language-gated entry is listed with why it is closed (#4373)."""
+    return f" - refused: {refusal}" if refusal else ""

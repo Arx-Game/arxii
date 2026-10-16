@@ -1091,14 +1091,30 @@ class BeatOpponentLine(PlacementEdits, SharedMemoryModel):
         ),
     )
 
+    persona = models.ForeignKey(
+        "arxii.Persona",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="+",
+        help_text=(
+            "A named NPC who stands as this line's one opponent (#4373), using the creature "
+            "template's stats. Blank spawns the template's own unnamed creatures."
+        ),
+    )
+
     class Meta:
         ordering = ["beat", "order"]
 
     def __str__(self) -> str:
+        if self.persona_id is not None:
+            return f"{self.persona.name} ({self.creature_template.name}) on Beat #{self.beat_id}"
         return f"{self.count}x {self.creature_template.name} on Beat #{self.beat_id}"
 
     def clean(self) -> None:
         super().clean()
+        if self.persona_id is not None and self.count != 1:
+            raise ValidationError({"count": "A named NPC line spawns exactly one opponent."})
         if BeatStagedBattle.objects.filter(beat_id=self.beat_id).exists():
             raise ValidationError(
                 {"beat": "A beat stages either opponent lines or a battle, not both."}

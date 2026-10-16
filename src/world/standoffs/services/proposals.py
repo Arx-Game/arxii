@@ -148,10 +148,7 @@ def proposal_summary(group: StandoffGroup) -> str:
 
     cause = CauseKind(group_cause(group)[0]).label
     reason = group.proposal_reason or "Its cause holds."
-    return (
-        f"{group.creature_template.name}: cause fires. Cause: {cause}. Reason: {reason} "
-        f"{force_line(group)}"
-    )
+    return f"{group.name}: cause fires. Cause: {cause}. Reason: {reason} {force_line(group)}"
 
 
 def _encounter_of_prompt(prompt: GMPrompt, *_: object, **__: object) -> CombatEncounter:

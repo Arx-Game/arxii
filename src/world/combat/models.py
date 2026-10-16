@@ -2799,6 +2799,17 @@ class CreatureTemplate(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
             "society's apply to every placement unless a placement changes it (#4361)."
         ),
     )
+    language = models.ForeignKey(
+        "arxii.Language",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="+",
+        help_text=(
+            "The language these creatures understand (#4373). Blank means no language: "
+            "verbal approaches never work on them."
+        ),
+    )
 
     objects = CreatureTemplateManager()
 

@@ -6,8 +6,10 @@ Source `src/world/standoffs/`; glossary `src/world/standoffs/AGENT_GLOSSARY.md`;
 ADR-4145-A (a standoff is round zero of the encounter, derived from OPEN groups) and
 ADR-4145-B (one difficulty function for social checks on a character), and ADR-4354-A (a
 standoff proposal is a GM decision prompt, and GM-run is derived), and ADR-4361-A (a
-placement's profile is stamped on each opponent at spawn). Issue #4145 (missions),
-#4354 (GM-run scenes), #4361 (placement edits and inherited faction rules), umbrella #4121.
+placement's profile is stamped on each opponent at spawn), and ADR-4373-A (a named NPC's
+group reads its persona live and stamps nothing on it). Issue #4145 (missions),
+#4354 (GM-run scenes), #4361 (placement edits and inherited faction rules), #4373 (named
+NPCs and the language gate), umbrella #4121.
 Later slices are listed at the end.
 
 ## Lifecycle
@@ -20,8 +22,11 @@ Later slices are listed at the end.
   lines has `BeatOpponentLine.opens_as_standoff` set (`RunBeatAction._run_encounter_beat`,
   `actions/definitions/gm_story.py`), or by a scene GM on an encounter that has not begun
   round one (`gm_open_standoff`). Each calls `open_standoff` (`state.py:72`): one OPEN group
-  per creature template among the ACTIVE opponents, then `evaluate_causes`.
-- Group membership and force use ACTIVE opponents only (`active_members`, `state.py:90`). A
+  per named NPC (an opponent with a `persona`) and one per creature template among the
+  remaining ACTIVE opponents, then `evaluate_causes`.
+- Group membership and force use ACTIVE opponents only (`active_members`, `member_filter`,
+  `state.py`): a named NPC's group is the opponents standing as that persona; a template
+  group is the template's opponents with no persona. A
   live group with nobody left is SETTLED (`settle_empty_groups`, `state.py:99`).
 - Ends three ways. The party fights (`standoff_fight`), a cause fires, or a caller starts
   round one: all go through `end_standoff_into_fight` (`state.py:115`), which locks the
@@ -43,17 +48,22 @@ Later slices are listed at the end.
 |---|---|
 | `CreatureDrive` (:28) | A property a creature template wants, with `DriveStrength` (1 Minor, 2 Major, 3 Defining). Unique per template and property. |
 | `FactionRule` (:62, was `RegardRule`, renamed #4354) | How a group stands toward particular characters: predicate `rule` (the one ratified JSON field, ADR-0007), `deed_archetype` FK, `difficulty_shift_bands`, `drive` + `drive_shift`, `suppresses_cause`, `angle_text` (was `spark_text`), `revealed_text`. Owned by exactly one of `creature_template`, `organization` or `society` (#4361, check constraint `faction_rule_one_owner`). |
-| `StandoffApproach` (:141) | A press: `check_type`, `capability` (aims at drives through `Application`), `sway_target` modifier target, `damages_morale`, `archetypes`, `display_order`. |
+| `StandoffApproach` (:141) | A press: `check_type`, `capability` (aims at drives through `Application`), `sway_target` modifier target, `damages_morale`, `is_verbal` (#4373: spoken, so the language gate applies), `archetypes`, `display_order`. |
 | `StandoffTerms` (:195) | `effect` (`TermsEffect`: PASS, FLEE, TURN, TOLL), `critical_effect` (applied instead on a critical), `required_drive`, `difficulty_shift_bands`, `archetypes`, `display_order`. |
 | `StandoffConfig` (:257) | Singleton: `read_check_type`, `terms_check_type`, `pass_condition`, `turn_condition`, `botch_force_bands`, `band_force_percent`, `over_level_percent_per_tier`, `falter_force_percent`, `break_force_percent`. `load()` returns it. |
 | `StandoffApproach.casts_technique` / `StandoffConfig.terms_ease_faltering`, `terms_ease_broken` | #4147: a casting approach (the display of power) and the bands terms ease by morale (see "Display of power and morale"). |
 | `StandoffCauseGloss` (:338, #4354) | The one-line player-facing gloss under a revealed cause, one row per `CauseKind`, authored in admin (was a hardcoded dict). |
-| `StandoffGroup` (:368) | One band in one encounter: `creature_template`, `state` (OPEN, PROPOSED, SETTLED, FIGHTING), `terms_ease`, `emboldened_bands`, `settled_outcome`, and (#4354) `proposal_reason`, `override_party_force`, `override_group_force`. Unique per encounter and template. Deleting its `creature_template` deletes the group (CASCADE). |
+| `StandoffGroup` (:368) | One band in one encounter: `creature_template`, `persona` (#4373: set for a named NPC's own group; its template is then the one it was spawned from, or null), `state` (OPEN, PROPOSED, SETTLED, FIGHTING), `terms_ease`, `emboldened_bands`, `settled_outcome`, and (#4354) `proposal_reason`, `override_party_force`, `override_group_force`. Unique per encounter, template and persona (nulls not distinct); one of template or persona is set (`standoff_group_template_or_persona`). `name` is the persona's or the template's; `referent` is how a room line names it ("Maud Carrow", "the Sellswords"). Deleting its `creature_template` or `persona` deletes the group (CASCADE). |
 | `StandoffReveal` | A thing a read uncovered: `kind` (CAUSE, DRIVE, FACTION_RULE) plus `drive` (a `Property` since #4361; it was a `CreatureDrive`, but a placement can add a drive its template lacks) or `faction_rule`. Group-wide, shared knowledge. |
 | `StandoffAngleShare` (:490, was `StandoffSparkShare`) | A character choosing to share an angle for a group. Unique per group, sheet and rule. |
 | `StandoffMoraleRuling` (:586, #4354) | A GM moved a group one morale state: `direction` (SHAKE, STEADY), required `reason`, `ruled_by`. The GM's own record. |
 | `OpponentLineDrive` (#4361) | One placement's drive edit: `beat_line` or `mission_line` (exactly one), `property`, `strength` (blank removes the template's drive). An edit equal to the template's strength is not stored. |
 | `OpponentLineFactionRuleSuppression` (#4361) | One placement switches off one inherited `faction_rule`. Unique per line and rule. |
+
+#4373 also adds `StandoffConfig.regard_per_band` and `regard_max_bands` (how a named NPC's
+regard turns into bands), `CreatureTemplate.language` (the language its creatures understand;
+blank is none) and `BeatOpponentLine.persona` (a named NPC who stands as the line's one
+opponent; the line's count must be 1).
 
 Also added elsewhere: `CreatureTemplate.cause` (`CauseKind`: NONE, PREDATION, ORDERS) and
 `cause_margin_percent` (must stay above -100) (`combat/models.py`, `combat/constants.py`); `OpponentTierTemplate.force_weight_percent` (how much one opponent of a tier counts in group force; default 100 for every tier, staff tune it per tier in admin); `CombatEncounter`'s
@@ -404,12 +414,59 @@ and marked when it edits the template. #4361 adds the affiliation
 (`CreatureTemplate.organization`), an "Also applies (inherited)" rail of the rules the
 affiliation brings, and the predicate widget for each rule's test.
 
+## Named NPCs and the language gate (#4373)
+
+- **A named NPC is its own group** (ADR-4373-A). An opponent with a `persona` forms a group of
+  one named by the persona (`StandoffGroup.name`, `referent`); it can be read, pressed and
+  settled like any group, and room lines name it without "the" ("Maud Carrow falters.",
+  "Maud Carrow attacks!"). Its drives are the persona's properties (`Persona.properties`,
+  authored on the stock Persona admin), each at `PERSONA_DRIVE_STRENGTH` (Major), read live
+  (`profile.persona_drives`); nothing is stamped on the NPC's own character
+  (`stamp_opponent` skips it). Cause, margin, affiliation and switched-off rules are stamped
+  as for any opponent, so a named NPC line keeps its template's cause and faction rules.
+- **Standing a named NPC.** A beat's opponent line may name a `persona` (count 1; drive edits
+  refused with `PERSONA_DRIVE_EDIT_ERROR`); `spawn_from_creature_template` then stands the
+  persona's own character with the template's stats. A GM may also add one to a live
+  encounter: `AddOpponentAction` (`persona_id`), the web `POST /api/combat/<id>/add_opponent/`
+  (`persona_id`, name defaults to the persona's) and telnet
+  `encounter addnamed <tier> <pool> <named NPC>`; add_opponent's custody APPEAR gate applies.
+  Only personas the story already uses may stand, unless the GM is staff:
+  `story_npc_personas(story)` (`stories/services/cast.py`) is the primary personas of sheets
+  named by the story's NPC fate stakes or protected subjects or a beat's regard requirement,
+  plus personas already on its opponent lines. The beat serializer
+  (`BeatSerializer._check_line_personas`) and the add-opponent paths enforce it; the picker is
+  `GET /api/combat/placement-personas/?story=<id>` or `?encounter=<id>` (`IsGMOrStaff`; a
+  story's owners or the encounter's scene GMs see its cast, staff see every persona without a
+  story).
+- **NPC regard.** A named NPC's `NpcRegard` toward the acting character's presented persona is
+  the shared function's caller-supplied base (`verbs.regard_for`, `GradingContext.regard_base`):
+  one band harder per full `regard_per_band` points of dislike, one easier per point of favour,
+  at most `regard_max_bands`. It applies to presses and terms, not reads. The player's approach
+  and terms rows carry the lever "<name>'s regard for you: easier|harder" (never the value);
+  the GM view lists each participant's regard value and label (`GMGroupView.regards`).
+- **Language gate** (`services/language.py`). A template group understands
+  `CreatureTemplate.language`; a named NPC's group every language its character has trained
+  fluency in (`persona_languages`). A verbal approach is refused, with no roll, when the group
+  understands no language (`REFUSAL_NO_LANGUAGE`) or none the actor comprehends
+  (`comprehension_value`, so a condition that grants understanding counts;
+  `REFUSAL_NO_SHARED_LANGUAGE`). Terms are refused only in the second case: a group with no
+  language can still be offered terms by gesture. Read is never gated. The player view lists a
+  refused approach or terms with its grade and `refusal`; the web card disables it and shows
+  the reason, telnet appends "refused: <reason>". The GM view lists what each group speaks
+  (`GMGroupView.speaks`). New approaches default to not verbal and templates to no language, so
+  the gate does nothing until staff mark approaches verbal and give templates a language.
+- **Authoring.** The Standoff Profile Builder gains the Language field and its grade preview
+  marks spoken approaches ("spoken: needs <language>" or "never works, no language"); the
+  approach admin shows and filters `is_verbal`; the Placement page shows a named NPC line's
+  drives read-only (from the persona) and its rail says what the spawn speaks; the beat inline
+  has an autocomplete `persona`.
+
 ## Later slices
 
 Plan from #4121 (the proposed slice cut there):
 
 - **Slice 2, placement edits and inheritance:** built in #4361 (sections above).
-- **Slice 3, named NPCs and language:** persona groups with `NpcRegard`, the verbal gate.
+- **Slice 3, named NPCs and language:** built in #4373 (section above).
 - **Slice 4:** Hunger, Hatred and Territory, `cause_effect`, and the cause re-test when a
   Charmed or Calm hold breaks.
 - **Slice 5:** opt-in profiles for player characters.

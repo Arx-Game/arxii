@@ -72,3 +72,7 @@ SUCCESS_LEVEL_WORDS: dict[int, str] = {
 }
 
 FIGHT_BEGINS_MESSAGE = "The fight begins."
+
+# System strings: why the language gate refuses a verbal approach or terms (#4373).
+REFUSAL_NO_LANGUAGE = "They have no language to answer in."
+REFUSAL_NO_SHARED_LANGUAGE = "You share no language with them."

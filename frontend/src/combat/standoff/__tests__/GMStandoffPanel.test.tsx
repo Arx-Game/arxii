@@ -66,6 +66,9 @@ function group(patch: Partial<GMGroupView> = {}): GMGroupView {
     affiliation: '',
     cause_edited: false,
     affiliation_edited: false,
+    is_named_npc: false,
+    speaks: [],
+    regards: [],
     ...patch,
   };
 }
@@ -177,5 +180,29 @@ describe('GMStandoffPanel', () => {
     renderPanel();
     await user.click(screen.getByRole('button', { name: 'Steady' }));
     expect(screen.getByRole('alert')).toHaveTextContent('Group has no morale to change.');
+  });
+
+  it('shows a named NPC group with what it speaks and its regard per player (#4373)', () => {
+    renderPanel(
+      group({
+        name: 'Maud Test',
+        is_named_npc: true,
+        member_count: 1,
+        speaks: ['Riverland test common'],
+        regards: [{ participant: 'Wrenna Test', regard: -150, label: 'negative', bands: 1 }],
+      })
+    );
+    const box = screen.getByTestId('gm-standoff-group');
+    expect(box).toHaveTextContent('named NPC');
+    expect(screen.getByTestId('gm-standoff-speaks')).toHaveTextContent('Riverland test common');
+    expect(screen.getByTestId('gm-standoff-regard')).toHaveTextContent(
+      'Wrenna Test: negative (-150)'
+    );
+  });
+
+  it('says a group with no language speaks none', () => {
+    renderPanel(group());
+    expect(screen.getByTestId('gm-standoff-speaks')).toHaveTextContent('no language');
+    expect(screen.queryByTestId('gm-standoff-regard')).toBeNull();
   });
 });

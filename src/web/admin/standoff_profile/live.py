@@ -135,6 +135,18 @@ def grade_preview(template: CreatureTemplate, level: int) -> list[PreviewLine]:
         hits = _hits(drives, targeted.get(approach.capability_id, set()))
         grade = _grade(approach.check_type, level, hits, 0)
         note = ", ".join(f"hits {hit.label}, {hit.strength} band(s)" for hit in hits)
+        if approach.is_verbal:
+            # The language gate (#4373): spoken, so it needs a language the actor shares.
+            note = ", ".join(
+                part
+                for part in (
+                    note,
+                    f"spoken: needs {template.language.name}"
+                    if template.language_id
+                    else "spoken: never works, no language",
+                )
+                if part
+            )
         lines.append(PreviewLine(approach.name, grade_label(grade), grade, note))
     config = StandoffConfig.load()
     drive_property_ids = {d.property_id for d in drives}

@@ -70,16 +70,28 @@ def is_in_standoff(encounter: CombatEncounter) -> bool:
 
 
 def open_standoff(encounter: CombatEncounter) -> list[StandoffGroup]:
-    """One OPEN group per creature template among the active opponents, then check causes."""
-    template_ids = {
-        opponent.creature_template_id
-        for opponent in encounter.opponents.filter(status=OpponentStatus.ACTIVE)
-        if opponent.creature_template_id is not None
-    }
+    """One OPEN group per named NPC and per creature template among the active opponents.
+
+    An opponent standing as a persona is its own group (#4373); the rest group by creature
+    template. An opponent with neither is not part of the standoff. Then check causes.
+    """
+    persona_template: dict[int, int | None] = {}
+    template_ids: set[int] = set()
+    for opponent in encounter.opponents.filter(status=OpponentStatus.ACTIVE).order_by("pk"):
+        if opponent.persona_id is not None:
+            persona_template.setdefault(opponent.persona_id, opponent.creature_template_id)
+        elif opponent.creature_template_id is not None:
+            template_ids.add(opponent.creature_template_id)
     groups = [
         StandoffGroup.objects.create(encounter=encounter, creature_template_id=template_id)
         for template_id in sorted(template_ids)
     ]
+    groups.extend(
+        StandoffGroup.objects.create(
+            encounter=encounter, creature_template_id=template_id, persona_id=persona_id
+        )
+        for persona_id, template_id in sorted(persona_template.items())
+    )
     if groups:
         from world.standoffs.services.force import evaluate_causes  # noqa: PLC0415
 
@@ -87,12 +99,21 @@ def open_standoff(encounter: CombatEncounter) -> list[StandoffGroup]:
     return groups
 
 
+def member_filter(group: StandoffGroup) -> dict[str, int | None]:
+    """The ``CombatOpponent`` lookup that picks a group's members.
+
+    A named NPC's group is the opponents standing as that persona; a template group is the
+    template's opponents that stand as nobody in particular.
+    """
+    if group.persona_id is not None:
+        return {"persona_id": group.persona_id}
+    return {"creature_template_id": group.creature_template_id, "persona__isnull": True}
+
+
 def active_members(group: StandoffGroup) -> list[CombatOpponent]:
     """The group's opponents still in the fight."""
     return list(
-        group.encounter.opponents.filter(
-            creature_template_id=group.creature_template_id, status=OpponentStatus.ACTIVE
-        )
+        group.encounter.opponents.filter(**member_filter(group), status=OpponentStatus.ACTIVE)
     )
 
 
@@ -134,12 +155,12 @@ def end_standoff_into_fight(
     locked = CombatEncounter.objects.select_for_update().get(pk=encounter.pk)
     if not is_in_standoff(locked):
         return False
-    attackers = []
+    attackers: list[StandoffGroup] = []
     for group in encounter.standoff_groups.filter(state__in=LIVE_GROUP_STATES):
         group.state = StandoffGroupState.FIGHTING
         group.save(update_fields=["state"])
         close_group_prompts(group, "The fight began.")
-        attackers.append(group.creature_template.name)
+        attackers.append(group)
     encounter.initiated_by_pc_side = initiated_by_pc_side
     encounter.save(update_fields=["initiated_by_pc_side"])
     begin_declaration_phase(encounter)
@@ -151,11 +172,17 @@ def end_standoff_into_fight(
     return True
 
 
-def attack_line(attackers: list[str]) -> str:
-    return f"The {' and the '.join(attackers)} attack!"
+def attack_line(attackers: list[StandoffGroup]) -> str:
+    """The room line when groups start the fight: "The Sellswords and Maud Carrow attack!"."""
+    referents = [group.referent for group in attackers]
+    if not referents:
+        return "They attack!"
+    text = " and ".join(referents)
+    verb = "attacks" if len(attackers) == 1 and attackers[0].persona_id is not None else "attack"
+    return f"{text[0].upper()}{text[1:]} {verb}!"
 
 
-def _announce_attack(encounter: CombatEncounter, attackers: list[str]) -> None:
+def _announce_attack(encounter: CombatEncounter, attackers: list[StandoffGroup]) -> None:
     """Tell the room, live, that the creatures began the fight."""
     from world.combat.interaction_services import broadcast_action_outcome  # noqa: PLC0415
 

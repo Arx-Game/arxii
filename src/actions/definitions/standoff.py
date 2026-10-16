@@ -112,7 +112,7 @@ def _reaction_or_plain(
     authored = reaction_text(
         parent,
         creature_template_id=group.creature_template_id,
-        group_name=group.creature_template.name,
+        group_name=group.name,
         actor_name=_actor_label(participant),
         success_level=outcome.success_level,
     )
@@ -183,8 +183,7 @@ class StandoffReadAction(Action):
         )
         _announce(
             participant,
-            f"{_actor_label(participant)} reads the {group.creature_template.name}: "
-            f"{_outcome_word(outcome)}.",
+            f"{_actor_label(participant)} reads {group.referent}: {_outcome_word(outcome)}.",
             outcome,
         )
         return _read_result(outcome, group, participant)
@@ -233,7 +232,7 @@ class StandoffPressAction(Action):
             participant, group, approach, technique, confirm_soulfray_risk=confirm_soulfray_risk
         )
         plain = (
-            f"{_actor_label(participant)} presses the {group.creature_template.name} "
+            f"{_actor_label(participant)} presses {group.referent} "
             f"with {approach.name}: {_outcome_word(outcome)}."
         )
         _announce(
@@ -276,7 +275,7 @@ class StandoffTermsAction(Action):
         outcome = standoff_terms(participant, group, terms)
         plain = (
             f"{_actor_label(participant)} names {terms.name} to "
-            f"the {group.creature_template.name}: {_outcome_word(outcome)}."
+            f"{group.referent}: {_outcome_word(outcome)}."
         )
         _announce(
             participant, _reaction_or_plain(participant, group, terms, outcome, plain), outcome
@@ -339,16 +338,15 @@ class StandoffShareAngleAction(Action):
         group = _resolve_group(participant, group_id)
         if group is None:
             return ActionResult(success=False, message=_NO_SUCH_GROUP_MSG)
-        rule = FactionRule.objects.filter(
-            pk=faction_rule_id, creature_template_id=group.creature_template_id
-        ).first()
+        # Any rule the group carries may be shared, inherited ones included (#4361); the
+        # verb checks that it applies to the actor.
+        rule = FactionRule.objects.filter(pk=faction_rule_id).first()
         if rule is None:
             return ActionResult(success=False, message="That does not apply to you.")
         outcome = standoff_share_angle(participant, group, rule)
         _announce(
             participant,
-            f"{_actor_label(participant)} shares what they feel about "
-            f"the {group.creature_template.name}.",
+            f"{_actor_label(participant)} shares what they feel about {group.referent}.",
             outcome,
         )
         return _to_result(outcome)
