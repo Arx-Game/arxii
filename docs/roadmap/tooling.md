@@ -35,7 +35,11 @@ keeping a vault, banking with the house and trading in the market square
 (`integration_tests/test_gatherings_coffers_and_wares_journeys.py`); they found an
 event invitee never told, the documented `vault access add/org` form unreachable, and
 vault replies printing a persona's type and an organization's realm, all fixed in
-place.
+place. Tranche 3 (scenes) began 2026-10-16 with journeys for running a scene,
+speaking in the room, rolling at the table and reacting to a pose
+(`integration_tests/test_playing_a_scene_journeys.py`); they found `scene start
+<name>` dropping its name, a GM's `callcheck` never prompting a telnet target, and
+`whisper` and `mutter` answering their speaker with nothing, all fixed in place.
 
 ## Built (2026-09-30, #4064 — the reviewed delete, and admin pages for domains and fealty)
 
