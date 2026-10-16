@@ -195,8 +195,14 @@ fi
 WORK="$(mktemp -d "${TMPDIR:-/tmp}/pmc.XXXXXX")"
 CREATED=0
 CLEANED="no scratch database was created"
+MAIN_PID=$$
+exec 3>&1
 cleanup() {
   local rc=$?
+  # Subshells (the evennia call runs in one) inherit this trap; only the main
+  # shell may clean up, or it would drop the database while its output still
+  # goes to a migrate log.
+  [[ "${BASHPID}" == "${MAIN_PID}" ]] || exit "${rc}"
   trap - EXIT
   if [[ "${CREATED}" -eq 1 && "${KEEP}" -eq 0 ]]; then
     assert_scratch "${SCRATCH_DB}"
@@ -212,8 +218,10 @@ cleanup() {
     CLEANED="KEPT ${SCRATCH_DB} (--keep); dump deleted. Drop it with: dropdb -h ${DB_HOST} -p ${DB_PORT} -U ${DB_USER} ${SCRATCH_DB}"
   fi
   rm -rf "${WORK}"
-  printf 'cleanup: %s\n' "${CLEANED}"
-  if [[ "${rc}" -eq 0 ]]; then echo "RESULT: PASS"; else echo "RESULT: FAIL (exit ${rc}); logs above"; fi
+  # fd 3 is the real stdout: a signal can land while a function call has fd 1
+  # redirected to a migrate log, and the report must still reach the caller.
+  printf 'cleanup: %s\n' "${CLEANED}" >&3
+  if [[ "${rc}" -eq 0 ]]; then echo "RESULT: PASS" >&3; else echo "RESULT: FAIL (exit ${rc}); logs above" >&3; fi
   exit "${rc}"
 }
 trap cleanup EXIT
