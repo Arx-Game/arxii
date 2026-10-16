@@ -34,25 +34,6 @@ test.describe.configure({ mode: 'serial' });
 test('part 1: the GM stands a named NPC; staff see the language fields', async ({ browser }) => {
   test.skip(process.env.PART !== '1', 'part 1 only');
   test.setTimeout(240_000);
-  // The regard moves the grade: the same non-verbal approach on Maud, Wrenna (disliked)
-  // against Aubrin (no regard). Both have the same (empty) skills.
-  const steel = (page: Page) =>
-    page
-      .getByTestId('standoff-group')
-      .filter({ hasText: MAUD })
-      .getByRole('button', { name: /Show steel \(test\)/ })
-      .getByTestId('standoff-grade');
-  const wrennaGrade = await steel(wrenna).innerText();
-  const aubrinGrade = await steel(aubrin).innerText();
-  console.log(`== Show steel on Maud: Wrenna ${wrennaGrade}, Aubrin ${aubrinGrade}`);
-  expect(wrennaGrade).not.toEqual(aubrinGrade);
-  await steel(wrenna)
-    .locator('xpath=ancestor::button')
-    .screenshot({ path: shot('05b-wrenna-steel-on-maud.png') });
-  await steel(aubrin)
-    .locator('xpath=ancestor::button')
-    .screenshot({ path: shot('06b-aubrin-steel-on-maud.png') });
-
   const gm = await signIn(browser, 'gm4373');
   await gm.goto(`/stories/author/${IDS.story}`);
   await gm.getByText('The Corle gate (test)').first().click();
@@ -129,6 +110,25 @@ test('part 2: each seat of the named NPC group and the language gate', async ({ 
   await expect(aubrin.getByRole('button', { name: /Show steel \(test\)/ }).first()).toBeEnabled();
   await expect(aubrin.getByText(/regard for you/)).toHaveCount(0);
   await aubrin.screenshot({ path: shot('06-aubrin-card-refused.png'), fullPage: true });
+
+  // The regard moves the grade: the same non-verbal approach on Maud, Wrenna (disliked)
+  // against Aubrin (no regard). Both have the same (empty) skills.
+  const steel = (page: Page) =>
+    page
+      .getByTestId('standoff-group')
+      .filter({ hasText: MAUD })
+      .getByRole('button', { name: /Show steel \(test\)/ })
+      .getByTestId('standoff-grade');
+  const wrennaGrade = await steel(wrenna).innerText();
+  const aubrinGrade = await steel(aubrin).innerText();
+  console.log(`== Show steel on Maud: Wrenna ${wrennaGrade}, Aubrin ${aubrinGrade}`);
+  expect(wrennaGrade).not.toEqual(aubrinGrade);
+  await steel(wrenna)
+    .locator('xpath=ancestor::button')
+    .screenshot({ path: shot('05b-wrenna-steel-on-maud.png') });
+  await steel(aubrin)
+    .locator('xpath=ancestor::button')
+    .screenshot({ path: shot('06b-aubrin-steel-on-maud.png') });
 
   const gm = await signIn(browser, 'gm4373');
   await gm.goto(scene);
