@@ -44,7 +44,7 @@ if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
 
     from world.character_sheets.models import CharacterSheet
-    from world.checks.models import CheckType
+    from world.checks.models import CheckCall, CheckType
     from world.worship.types import InvocationRequest
 
 _SELF_CHECK_HINT = "No such check -- try `check find <term>`."
@@ -113,11 +113,14 @@ def _invocation_from_kwargs(
         return ActionResult(success=False, message=exc.user_message)
 
 
-def _echo_to_telnet_bystanders(actor: ObjectDB, text: str) -> None:
+def _echo_to_telnet_bystanders(
+    actor: ObjectDB, text: str, *, skip_ids: frozenset[int] = frozenset()
+) -> None:
     """Send a room line to the non-web sessions of everyone else in the room.
 
     ``record_interaction`` pushes to the web only; the roller already gets the
-    line as their result message, so they are skipped here.
+    line as their result message, so they are skipped here, as is anyone in
+    ``skip_ids`` (a check call's targets, who are told directly).
     """
     from world.scenes.interaction_services import non_web_sessions  # noqa: PLC0415
 
@@ -125,11 +128,26 @@ def _echo_to_telnet_bystanders(actor: ObjectDB, text: str) -> None:
     if location is None:
         return
     for obj in location.contents:
-        if obj.pk == actor.pk:
+        if obj.pk == actor.pk or obj.pk in skip_ids:
             continue
         sessions = non_web_sessions(obj)
         if sessions:
             obj.msg(text, session=sessions)
+
+
+def _tell_check_targets(
+    call: CheckCall, target_sheets: list[CharacterSheet], narration: str
+) -> None:
+    """Tell each called character the call and the two replies to type.
+
+    ``record_interaction`` reaches the web only, and the narration carries no
+    call id, so until #3657's journey asked a telnet target was never prompted
+    and could not have answered (the same gap the org and event invites had).
+    """
+    for sheet in target_sheets:
+        sheet.character.msg(
+            f"{narration} check answer {call.pk} to roll, check decline {call.pk} to refuse."
+        )
 
 
 def _perform_and_broadcast_self_check(
@@ -359,6 +377,11 @@ class CallForCheckAction(Action):
             content=narration,
             mode=InteractionMode.OUTCOME,
             persona=caller_persona,
+        )
+        _tell_check_targets(call, target_sheets, narration)
+        target_ids = frozenset(sheet.character.pk for sheet in target_sheets)
+        transaction.on_commit(
+            lambda: _echo_to_telnet_bystanders(actor, narration, skip_ids=target_ids)
         )
         return ActionResult(success=True, message=narration, data={"call_id": call.pk})
 
