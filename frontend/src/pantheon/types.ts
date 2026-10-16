@@ -42,6 +42,22 @@ export interface Overview {
   most_devoted_favor: number | null;
   site_count: number;
   recent_activity: ActivityRow[];
+  /** #4333: the being's pledge types and written-ahead answers, read-only here. */
+  pledge_type_count: number;
+  answer_count: number;
+  held_answer_count: number;
+  service_builder_url: string;
+  answer_builder_url: string;
+}
+
+/** An answer held until the being's worship pool can pay for its vision (#4333). */
+export interface HeldAnswer {
+  id: number;
+  character_name: string;
+  pledge_name: string;
+  outcome_name: string;
+  answer: number;
+  created_at: string;
 }
 
 export interface ContributorRow {
@@ -108,6 +124,8 @@ export interface StaffVision {
   episode: number | null;
   resonance_spent: number;
   sent_by_name: string;
+  /** The written-ahead answer this vision delivered (#4333), or null for one sent live. */
+  answer: number | null;
   sent_at: string;
 }
 

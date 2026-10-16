@@ -97,7 +97,11 @@ def _render_page(
         (form, resonance_context.get(form.instance.pk)) for form in forms.resonances.forms
     ]
     pledge_rows = [
-        (form, live.pledge_pacing(form.instance) if form.instance.pk else "")
+        (
+            form,
+            live.pledge_pacing(form.instance) if form.instance.pk else "",
+            live.pledge_answers(form.instance) if form.instance.pk else None,
+        )
         for form in forms.pledges.forms
     ]
     active_pledges = Pledge.objects.filter(being=being, is_active=True).count()
@@ -123,6 +127,7 @@ def _render_page(
             "credit": live.credit_summary(being),
             "change_url": reverse("admin:arxii_worshippedbeing_change", args=[being.pk]),
             "deity_editor_url": _deity_editor_url(being),
+            "answer_builder_url": reverse("admin_answer_builder", args=[being.pk]),
         },
     )
 

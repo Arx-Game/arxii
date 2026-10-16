@@ -9120,6 +9120,18 @@ lightly-structured freeform RP. Full doc: `docs/systems/worship.md`; model decis
   `sacrifice`; API `pledges/`, `pledge-cards/`, `beings/{id}/service-terms/`,
   `beings/holy-site/`; telnet `pledge`, `pledge/close`, `sacrifice`; admin Being Service
   builder (`/admin/_being_service/<being>/`).
+- **Answers at the close** (#4333 slice 3, ADR-4333-B): `Answer` (text staff wrote ahead for
+  a being, optionally one pledge type, at one outcome tier: delay, answer, fact + fact clue,
+  cost + cost pool, follow-up + follow-up clue, onlooker line, conceals source, weight;
+  credited content), `AnswerSacrificeLine` (one line per facet), `PendingAnswer` (held until
+  the being's pool can pay), `Vision.answer`. Services (`worship/answer_services.py`):
+  `draw_answer`, `answer_body`, `deliver_answer`, `deliver_pledge_answer` (from
+  `close_pledge`, after the resolution commits), `deliver_held_answers` (daily task
+  `worship.held_answers`), `cost_condition_names`; `models.answer_part_errors` (no fact below
+  Success, no follow-up clue below Partial Success). API: `VisionSerializer` gains
+  `clue_name`, `follow_up_clue_name`, `condition_names`; staff
+  `admin/beings/{id}/held-answers/` and overview counts. Admin: the Answer builder
+  (`/admin/_being_answers/<being>/`).
 - **Worship services**: `grant_worship`, `bump_devotion` (+ God's Favorite
   Princess/Prince/Chosen achievement on top-favor reach/tie), `gods_favorite_achievement_for`;
   `mint_worship_secret` (`worship/secrets.py`); `convert_public_worship(sheet, new_being, *,

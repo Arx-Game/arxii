@@ -1,0 +1,22 @@
+{% comment %}
+One aligned admin form row (the markup `admin/includes/fieldset.html` emits): the label
+and the widget share a `.flex-container`, the help line sits under the widget, and an
+optional `linked` box says what the picked row is. Shared by every field on the page.
+{% endcomment %}
+<div class="form-row{% if field.errors %} errors{% endif %}" data-field="{{ field.name }}">
+  {{ field.errors }}
+  <div>
+    <div class="flex-container">
+      {{ field.label_tag }}
+      <div class="ab-field">
+        {{ field }}
+        {% if linked %}
+        <div class="ab-linked" data-testid="linked-{{ field.name }}">
+          <span><b>{{ linked.title }}</b></span><span>{{ linked.detail }}</span>
+        </div>
+        {% endif %}
+        {% if field.help_text %}<div class="help">{{ field.help_text }}</div>{% endif %}
+      </div>
+    </div>
+  </div>
+</div>

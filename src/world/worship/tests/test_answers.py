@@ -422,3 +422,44 @@ class RoomLineTests(AnswerTestBase):
         self._close_through_the_action("Success")
 
         self.assertEqual(len(self._room_lines()), 1)  # the rite line only
+
+
+class ApiTests(AnswerTestBase):
+    def _client(self, account):
+        from rest_framework.test import APIClient
+
+        client = APIClient()
+        client.force_authenticate(user=account)
+        return client
+
+    def test_the_recipient_reads_what_came_with_the_vision(self) -> None:
+        self._ready()
+        self._full_answer("Success")
+        self._close("Success")
+
+        row = self._client(self.account).get("/api/worship/visions/").json()["results"][0]
+
+        self.assertEqual(row["clue_name"], self.fact_clue.name)
+        self.assertEqual(row["follow_up_clue_name"], self.follow_up_clue.name)
+        self.assertEqual(row["condition_names"], ["Marked by Ombrin"])
+        self.assertEqual(row["being_name"], "Ombrin")
+
+    def test_staff_see_held_answers_on_the_beings_dashboard(self) -> None:
+        from evennia.accounts.models import AccountDB
+
+        self._ready()
+        self._full_answer("Success")
+        self.being.resonance_pool = 0
+        self.being.save(update_fields=["resonance_pool"])
+        self._close("Success")
+        staff = AccountDB.objects.create_superuser("answerstaff", "s@example.com", "pw-123456")
+        base = f"/api/worship/admin/beings/{self.being.pk}"
+
+        held = self._client(staff).get(f"{base}/held-answers/").json()
+        overview = self._client(staff).get(f"{base}/overview/").json()
+
+        self.assertEqual(len(held), 1)
+        self.assertEqual(held[0]["pledge_name"], self.pledge.name)
+        self.assertEqual(held[0]["outcome_name"], "Success")
+        self.assertEqual(overview["held_answer_count"], 1)
+        self.assertEqual(overview["answer_count"], 1)

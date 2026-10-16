@@ -1,0 +1,189 @@
+{% extends "admin/base_site.html" %}
+{% load i18n static %}
+
+{% block title %}{{ title }} | {% translate 'Site administration' %}{% endblock %}
+
+{% block extrastyle %}
+{{ block.super }}
+{% comment %}
+A custom page extending `base_site.html` gets base.css, dark_mode.css and responsive.css
+only. `forms.css` (form rows, help, submit-row) is linked by `change_form.html`, so this
+page links it itself (#3667), and `widgets.css` with it for the autocomplete pickers.
+{% endcomment %}
+<link rel="stylesheet" href="{% static 'admin/css/forms.css' %}">
+<link rel="stylesheet" href="{% static 'admin/css/widgets.css' %}">
+{% endblock %}
+
+{% block extrahead %}
+{{ block.super }}
+<script src="{% url 'admin:jsi18n' %}"></script>
+{{ media }}
+<script src="{% static 'admin/js/builder_formsets.js' %}"></script>
+{% endblock %}
+
+{% block breadcrumbs %}
+<div class="breadcrumbs">
+  <a href="{% url 'admin:index' %}">{% translate 'Home' %}</a>
+  &rsaquo; <a href="{% url 'admin:arxii_worshippedbeing_changelist' %}">Worshipped beings</a>
+  &rsaquo; <a href="{{ change_url }}">{{ being.name }}</a>
+  &rsaquo; Answers &rsaquo; {{ cell.label }} &rsaquo; {{ cell.tier.name }}
+</div>
+{% endblock %}
+
+{# The page draws its own heading beside the object tools; admin's default title would repeat it. #}
+{% block content_title %}{% endblock %}
+
+{% block content %}
+{% include "admin/tuning/_panel_css.html" %}
+{% include "admin/answer_builder/_css.html" %}
+<div id="answer-builder-root">
+  <div class="ab-head">
+    <h1>Answer builder: {{ being.name }}</h1>
+    <ul class="object-tools">
+      <li><a href="{{ service_url }}">Service builder</a></li>
+      <li><a href="{{ deity_editor_url }}">Deity Editor</a></li>
+    </ul>
+  </div>
+
+  {% if needs_setup %}
+    {% include "admin/upbringing_builder/_setup.html" %}
+  {% else %}
+
+  <div class="ab-columns">
+    <div class="ab-main">
+      <div class="module" id="coverage-module">
+        <h2>Coverage <span class="ab-chip">select a cell to edit it</span></h2>
+        <div class="ab-scroll">
+          <table class="ab-cov" data-testid="coverage">
+            <thead><tr><th scope="col">Pledge type</th>
+              {% for tier in columns %}<th scope="col">{{ tier.name }}</th>{% endfor %}</tr></thead>
+            <tbody>
+              {% for row in coverage %}
+              <tr>
+                <th scope="row">{{ row.label }}</th>
+                {% for c in row.cells %}
+                <td class="{% if c.count %} ab-c1{% else %} ab-c0{% endif %}{% if c.current %} ab-cur{% endif %}">
+                  <a href="{{ c.url }}"{% if c.current %} aria-current="true"{% endif %}>{{ c.count }}</a>
+                </td>
+                {% endfor %}
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        <div class="help ab-note">A count of active answers. A close at a tier with none
+          draws the pledge type's next lower tier, then the being's own answers at each tier.</div>
+      </div>
+
+      <form method="post" id="answer-form" novalidate>
+        {% csrf_token %}
+        <input type="hidden" name="pledge" value="{{ cell.key }}">
+        <input type="hidden" name="tier" value="{{ cell.tier.pk }}">
+        <input type="hidden" name="answer" value="{% if answer.pk %}{{ answer.pk }}{% else %}new{% endif %}">
+
+        <fieldset class="module aligned" id="answer-module">
+          <h2>{{ cell.label }} · {{ cell.tier.name }} · answer {{ position }} of {{ total }}
+            <span class="ab-chip">weight {{ answer.weight }} · used {{ times_used }} time{{ times_used|pluralize }}</span></h2>
+          <div class="ab-answer-nav">
+            {% for number, url, current in answer_links %}
+              {% if current %}<b>Answer {{ number }}</b>{% else %}<a href="{{ url }}">Answer {{ number }}</a>{% endif %}
+            {% endfor %}
+            <a href="{{ new_answer_url }}">+ Add another answer at {{ cell.tier.name }}</a>
+          </div>
+          {% if form.non_field_errors %}<p class="errornote">{{ form.non_field_errors }}</p>{% endif %}
+          {% include "admin/answer_builder/_row.html" with field=form.delay_text linked=None %}
+          {% include "admin/answer_builder/_row.html" with field=form.answer_text linked=None %}
+          {% include "admin/answer_builder/_row.html" with field=form.fact_text linked=None %}
+          {% include "admin/answer_builder/_row.html" with field=form.fact_clue linked=fact_clue %}
+          {% include "admin/answer_builder/_row.html" with field=form.cost_text linked=None %}
+          {% include "admin/answer_builder/_row.html" with field=form.cost_pool linked=cost_pool %}
+          {% include "admin/answer_builder/_row.html" with field=form.follow_up_text linked=None %}
+          {% include "admin/answer_builder/_row.html" with field=form.follow_up_clue linked=follow_up_clue %}
+          {% include "admin/answer_builder/_row.html" with field=form.onlooker_line linked=None %}
+          <div class="form-row" data-field="options">
+            <div>
+              <div class="flex-container">
+                <label>Options:</label>
+                <div class="ab-field ab-options">
+                  {{ form.weight.errors }}<label for="{{ form.weight.id_for_label }}">Weight</label> {{ form.weight }}
+                  {{ form.conceals_source }} <label class="vCheckboxLabel" for="{{ form.conceals_source.id_for_label }}">Conceal {{ being.name }} as the source</label>
+                  {{ form.is_active }} <label class="vCheckboxLabel" for="{{ form.is_active.id_for_label }}">Active</label>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="inline-group" id="lines-module">
+            <h2>Sacrifice lines <span class="ab-chip">one line per facet{% if favored_facets %}; {{ being.name }} favors {{ favored_facets }}{% endif %}</span></h2>
+            {{ lines.management_form }}
+            {% if lines.non_form_errors %}<p class="errornote">{{ lines.non_form_errors }}</p>{% endif %}
+            <div class="ab-scroll">
+            <table class="tuning-table ab-table">
+              <thead><tr><th>Facet</th><th>Text</th><th>Delete?</th></tr></thead>
+              <tbody id="lines-body">
+                {% for f in lines.forms %}
+                <tr>
+                  {% for hidden in f.hidden_fields %}{{ hidden }}{% endfor %}
+                  <td>{{ f.facet.errors }}{{ f.facet }}</td>
+                  <td>{{ f.text.errors }}{{ f.text }}</td>
+                  <td>{% if f.instance.pk %}{{ f.DELETE }}{% endif %}</td>
+                </tr>
+                {% if f.non_field_errors %}<tr><td colspan="3">{{ f.non_field_errors }}</td></tr>{% endif %}
+                {% endfor %}
+              </tbody>
+            </table>
+            </div>
+            <template id="empty-line-template">
+              <tr>
+                {% for hidden in lines.empty_form.hidden_fields %}{{ hidden }}{% endfor %}
+                <td>{{ lines.empty_form.facet }}</td>
+                <td>{{ lines.empty_form.text }}</td>
+                <td></td>
+              </tr>
+            </template>
+            <div class="ab-addrow">
+              <button type="button" class="button" id="add-line-btn"
+                      data-prefix="{{ lines.prefix }}" data-target="lines-body"
+                      data-template="empty-line-template">+ Add another sacrifice line</button>
+              <span class="help"><b>Rule:</b> one line per facet, used once per vision. Each
+                sacrifice records one facet: the first of {{ being.name }}'s favored facets the
+                item carries, by facet name. A second item with an already-used facet, or an
+                item whose facet has no line, is listed by name after the lines.</span>
+            </div>
+          </div>
+        </fieldset>
+
+        <div class="submit-row">
+          <input type="submit" name="save" value="Save" class="default">
+          <input type="submit" name="save_continue" value="Save and continue editing">
+          {% if next_tier %}<input type="submit" name="save_next_tier" value="Save and edit {{ next_tier.name }}">{% endif %}
+          {% if answer.pk %}
+          <button type="submit" class="button ab-delete" formaction="{% url 'admin_answer_builder_delete' being.pk answer.pk %}"
+                  formnovalidate>Delete</button>
+          {% endif %}
+        </div>
+      </form>
+    </div>
+
+    <aside class="ab-rail">
+      {% include "admin/answer_builder/_rail.html" %}
+    </aside>
+  </div>
+
+  {% endif %}
+</div>
+
+<script>
+(function () {
+  var formsets = window.arxBuilderFormsets;
+  var btn = document.getElementById("add-line-btn");
+  if (!btn) { return; }
+  btn.addEventListener("click", function () {
+    var index = formsets.nextFormIndex(btn.dataset.prefix);
+    var node = formsets.cloneFromTemplate(btn.dataset.template, index, "tbody");
+    document.getElementById(btn.dataset.target).appendChild(node);
+    formsets.announceFormsetAdded(btn.dataset.prefix, node);
+  });
+})();
+</script>
+{% endblock %}

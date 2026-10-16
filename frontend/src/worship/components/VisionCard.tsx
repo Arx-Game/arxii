@@ -1,7 +1,8 @@
 /**
  * VisionCard (#3779) — one vision on the sheet, in the treatment reserved for visions.
  * Names the being only when the sender revealed it (or the viewer is staff, which the
- * server decides). A clue or an episode attachment reads as a footnote, never a control.
+ * server decides). A clue, an answer's follow-up and cost (#4333) or an episode attachment
+ * reads as a footnote, never a control.
  */
 
 import { formatRelativeTime } from '@/lib/relativeTime';
@@ -25,9 +26,18 @@ export function VisionCard({ vision }: VisionCardProps) {
         <span className="ml-auto">{formatRelativeTime(vision.sent_at)}</span>
       </div>
       <p className={cn('whitespace-pre-wrap', VISION_TEXT_CLASS)}>{vision.body}</p>
-      {(vision.clue_slug || vision.episode_title) && (
-        <p className="mt-1 text-xs text-muted-foreground">
-          {vision.clue_slug && <span>A clue came with it: {vision.clue_slug}. </span>}
+      {(vision.clue_name ||
+        vision.follow_up_clue_name ||
+        vision.condition_names.length > 0 ||
+        vision.episode_title) && (
+        <p className="mt-1 text-xs text-muted-foreground" data-testid="vision-footnotes">
+          {vision.clue_name && <span>A clue came with it: {vision.clue_name}. </span>}
+          {vision.follow_up_clue_name && (
+            <span>A follow-up came with it: {vision.follow_up_clue_name}. </span>
+          )}
+          {vision.condition_names.length > 0 && (
+            <span>Condition: {vision.condition_names.join(', ')}. </span>
+          )}
           {vision.episode_title && <span>Of the episode {vision.episode_title}.</span>}
         </p>
       )}

@@ -90,8 +90,11 @@ A `Clue` is a pointer defined by three orthogonal things:
   same grant RESEARCH makes per contributor; it grants silently, skips a holder of an
   ACTIVE instance, and logs rather than raises on a failed grant. The surfaces that
   follow acquire-then-grant for AUTOMATIC clues are room search and clue triggers
-  (`clues/services.py`), visions (`send_vision`, #4327; a vision's clue is always CODEX,
-  `VisionClueNotCodex`), NPC effects, tasking listeners, spy payouts and stake resolution.
+  (`clues/services.py`), visions (`send_vision`, #4327; a vision's clue is CODEX or SECRET,
+  `VisionClueNotFact`), a pledge's written-ahead answer (#4333 slice 3: its fact clue rides
+  the vision, its follow-up clue goes through `find_clue` on Partial Success and above;
+  `worship/answer_services.py`), NPC effects, tasking listeners, spy payouts and stake
+  resolution.
 - **RESEARCH** (`world/clues/research.py`): a `ProjectKind.RESEARCH` project (on the shared
   `world/projects` framework) targeting a clue. Contributors spend AP to make Research rolls
   (`contribute_research`); progress scales with the outcome, **floored at 0** (a failed help

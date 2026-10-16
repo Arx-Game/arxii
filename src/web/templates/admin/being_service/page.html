@@ -41,6 +41,7 @@ for the facet picker.
   <div class="bs-head">
     <h1>Being Service builder: {{ being.name }}</h1>
     <ul class="object-tools">
+      <li><a href="{{ answer_builder_url }}">Answer builder</a></li>
       <li><a href="{{ change_url }}">Change being</a></li>
       <li><a href="{{ deity_editor_url }}">Deity Editor</a></li>
     </ul>
@@ -140,7 +141,7 @@ for the facet picker.
           {{ pledges.management_form }}
           {% if pledges.non_form_errors %}<p class="errornote">{{ pledges.non_form_errors }}</p>{% endif %}
           <div id="pledges-body">
-            {% for f, pacing in pledge_rows %}
+            {% for f, pacing, answers in pledge_rows %}
             <div class="bs-pledge">
               {% for hidden in f.hidden_fields %}{{ hidden }}{% endfor %}
               <h3>Pledge type {{ forloop.counter }}{% if f.instance.pk %}: {{ f.instance.name }}{% else %} (new){% endif %}
@@ -157,6 +158,11 @@ for the facet picker.
                   <tr><th class="bs-label">{{ f.closing_rite.label_tag }}</th>
                     <td>{{ f.closing_rite.errors }}{{ f.closing_rite }}<div class="help">{{ f.closing_rite.help_text }}</div></td></tr>
                   <tr><th class="bs-label">{{ f.is_active.label_tag }}</th><td>{{ f.is_active.errors }}{{ f.is_active }}</td></tr>
+                  {% if answers %}
+                  <tr><th class="bs-label">Answers:</th>
+                    <td class="bs-context" data-testid="pledge-answers">{{ answers.tiers_written }} of {{ answers.tiers_total }} outcome tiers written.
+                      <a href="{{ answers.url }}">Open in Answer builder</a></td></tr>
+                  {% endif %}
                 </tbody>
               </table>
             </div>

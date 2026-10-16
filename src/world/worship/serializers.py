@@ -98,7 +98,10 @@ class VisionSerializer(serializers.ModelSerializer):
 
     being_name = serializers.SerializerMethodField()
     clue_slug = serializers.SerializerMethodField()
+    clue_name = serializers.SerializerMethodField()
     episode_title = serializers.SerializerMethodField()
+    follow_up_clue_name = serializers.SerializerMethodField()
+    condition_names = serializers.SerializerMethodField()
 
     class Meta:
         model = Vision
@@ -111,8 +114,11 @@ class VisionSerializer(serializers.ModelSerializer):
             "prayer",
             "clue",
             "clue_slug",
+            "clue_name",
             "episode",
             "episode_title",
+            "follow_up_clue_name",
+            "condition_names",
             "sent_at",
         ]
         read_only_fields = fields
@@ -129,8 +135,26 @@ class VisionSerializer(serializers.ModelSerializer):
     def get_clue_slug(self, obj: Vision) -> str | None:
         return obj.clue.slug if obj.clue_id is not None else None
 
+    def get_clue_name(self, obj: Vision) -> str | None:
+        return obj.clue.name if obj.clue_id is not None else None
+
     def get_episode_title(self, obj: Vision) -> str | None:
         return obj.episode.title if obj.episode_id is not None else None
+
+    def get_follow_up_clue_name(self, obj: Vision) -> str | None:
+        """The follow-up a written-ahead answer handed over with this vision (#4333)."""
+        from world.worship.answer_services import delivered_follow_up_clue  # noqa: PLC0415
+
+        if obj.answer_id is None:
+            return None
+        clue = delivered_follow_up_clue(obj.answer)
+        return clue.name if clue is not None else None
+
+    def get_condition_names(self, obj: Vision) -> list[str]:
+        """The conditions an answer's cost applied with this vision (#4333)."""
+        from world.worship.answer_services import cost_condition_names  # noqa: PLC0415
+
+        return cost_condition_names(obj.answer) if obj.answer_id is not None else []
 
 
 class VisionCreateSerializer(serializers.Serializer):

@@ -7,6 +7,8 @@ from django.urls import reverse
 
 from world.scenes.action_constants import DIFFICULTY_VALUES, MIN_DIFFICULTY_POINTS, DifficultyChoice
 from world.worship.models import (
+    Answer,
+    AnswerSacrificeLine,
     BeingFacet,
     BeingNickname,
     BeingRelationship,
@@ -23,6 +25,7 @@ from world.worship.models import (
     MiracleAppliedCondition,
     MiracleDamageProfile,
     MiraclePerformance,
+    PendingAnswer,
     Pledge,
     PledgeCredit,
     PledgeDetails,
@@ -583,4 +586,88 @@ class PledgeDetailsAdmin(admin.ModelAdmin):
 
     def has_add_permission(self, request: HttpRequest) -> bool:
         del request
+        return False
+
+
+class AnswerSacrificeLineInline(admin.TabularInline):
+    model = AnswerSacrificeLine
+    extra = 0
+    fields = ("facet", "text")
+    readonly_fields = fields
+
+    def has_add_permission(self, request: HttpRequest, obj=None) -> bool:
+        del request, obj
+        return False
+
+
+@admin.register(Answer)
+class AnswerAdmin(admin.ModelAdmin):
+    """Answers (#4333 slice 3), listed here and written on the Answer builder: the one
+    place a staff-owned being's answers are authored (Ruling 8). The change form is
+    read-only and opens the builder at the answer's cell. Registered so the builder's
+    clue and pool pickers can use admin's autocomplete for this model's fields."""
+
+    list_display = ("being", "pledge", "outcome_tier", "weight", "conceals_source", "is_active")
+    list_filter = ("being", "outcome_tier", "is_active")
+    search_fields = ("being__name", "pledge__name", "delay_text", "answer_text")
+    raw_id_fields = ("fact_clue", "cost_pool", "follow_up_clue")
+    readonly_fields = (
+        "being",
+        "pledge",
+        "outcome_tier",
+        "delay_text",
+        "answer_text",
+        "fact_text",
+        "fact_clue",
+        "cost_text",
+        "cost_pool",
+        "follow_up_text",
+        "follow_up_clue",
+        "onlooker_line",
+        "conceals_source",
+        "weight",
+        "is_active",
+        "answer_builder",
+    )
+    fields = readonly_fields
+    inlines = (AnswerSacrificeLineInline,)
+
+    @admin.display(description="Edit")
+    def answer_builder(self, obj: Answer) -> str:
+        from urllib.parse import urlencode  # noqa: PLC0415
+
+        from django.utils.html import format_html  # noqa: PLC0415
+
+        query = urlencode(
+            {
+                "pledge": obj.pledge_id or "none",
+                "tier": obj.outcome_tier_id,
+                "answer": obj.pk,
+            }
+        )
+        url = f"{reverse('admin_answer_builder', args=[obj.being_id])}?{query}"
+        return format_html('<a href="{}">Open the Answer builder</a>', url)
+
+    def has_add_permission(self, request: HttpRequest) -> bool:
+        del request
+        return False
+
+
+@admin.register(PendingAnswer)
+class PendingAnswerAdmin(admin.ModelAdmin):
+    """Answers held until the being's worship pool can pay (#4333 slice 3), read-only.
+    The daily tick delivers them; staff see them here and on the being's dashboard."""
+
+    list_display = ("character_sheet", "answer", "pledge_details", "created_at")
+    list_filter = ("answer__being",)
+    raw_id_fields = ("character_sheet", "answer", "pledge_details")
+    readonly_fields = ("character_sheet", "answer", "pledge_details", "created_at")
+    fields = readonly_fields
+
+    def has_add_permission(self, request: HttpRequest) -> bool:
+        del request
+        return False
+
+    def has_change_permission(self, request: HttpRequest, obj=None) -> bool:
+        del request, obj
         return False

@@ -309,7 +309,15 @@ class VisionViewSet(
         return VisionSerializer
 
     def get_queryset(self):
-        qs = Vision.objects.select_related("being", "recipient", "clue", "episode")
+        qs = Vision.objects.select_related(
+            "being",
+            "recipient",
+            "clue",
+            "episode",
+            "answer__outcome_tier",
+            "answer__follow_up_clue",
+            "answer__cost_pool",
+        )
         if self.request.user.is_staff:
             return qs
         return qs.filter(recipient_id__in=_own_sheet_ids(self.request))
