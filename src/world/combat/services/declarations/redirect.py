@@ -11,6 +11,8 @@ from world.combat.services.declarations.cover import _combatants_at_position
 if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
 
+    from actions.models.consequence_pools import ConsequencePool
+    from world.areas.positioning.models import Position
     from world.mechanics.models import ObjectProperty
 
 
@@ -80,13 +82,67 @@ def _redirect_to_object(
         _redirect_away(encounter, interposer)
         return
 
-    characters = _combatants_at_position(encounter, position)
-    fire_pool_at_characters(
-        obj_property.property.detonation.consequence_pool,
-        characters,
-        source_character=interposer,
-    )
+    pool = obj_property.property.detonation.consequence_pool
+    opponents = _opponents_at_position(encounter, position)
+    opponent_objectdb_ids = {opp.objectdb_id for opp in opponents}
+    # PCs only here: a character's damage goes through the sheet-vitals path. Enemies
+    # are damaged separately below, through the opponent damage path (#4376).
+    characters = [
+        c for c in _combatants_at_position(encounter, position) if c.pk not in opponent_objectdb_ids
+    ]
+    fire_pool_at_characters(pool, characters)
+    _detonate_on_opponents(encounter, pool, opponents)
     obj_property.delete()
 
     narration = f"{interposer.db_key} hurls the blow into {obj.db_key} — it detonates!"
     broadcast_action_outcome(encounter=encounter, narration=narration)
+
+
+def _opponents_at_position(
+    encounter: CombatEncounter,
+    position: Position,
+) -> list[CombatOpponent]:
+    """Every ACTIVE opponent whose objectdb occupies *position*."""
+    occupant_ids = set(position.occupants.values_list("objectdb_id", flat=True))
+    return [
+        opp
+        for opp in CombatOpponent.objects.filter(
+            encounter=encounter, status=OpponentStatus.ACTIVE
+        ).select_related("objectdb")
+        if opp.objectdb_id is not None and opp.objectdb_id in occupant_ids
+    ]
+
+
+def _detonate_on_opponents(
+    encounter: CombatEncounter,
+    pool: ConsequencePool,
+    opponents: list[CombatOpponent],
+) -> None:
+    """Deal each DEAL_DAMAGE effect in *pool* to every opponent, reporting per enemy (#4376).
+
+    An enemy has no character vitals, so the pool's own effect handler cannot reach
+    it; each authored damage effect is applied through
+    :func:`apply_damage_to_opponent` instead, with the same loop guard as a
+    chosen-enemy redirect (``bypass_pre_apply=True``).
+    """
+    from world.checks.consequence_resolution import resolve_pool_consequences  # noqa: PLC0415
+    from world.checks.constants import EffectType  # noqa: PLC0415
+    from world.combat.interaction_services import broadcast_action_outcome  # noqa: PLC0415
+    from world.combat.services import apply_damage_to_opponent  # noqa: PLC0415
+
+    damage_effects = [
+        effect
+        for consequence in resolve_pool_consequences(pool)
+        for effect in consequence.effects.filter(effect_type=EffectType.DEAL_DAMAGE)
+        if effect.damage_amount and effect.damage_amount > 0
+    ]
+    for opponent in opponents:
+        for effect in damage_effects:
+            apply_damage_to_opponent(
+                opponent,
+                effect.damage_amount,
+                bypass_pre_apply=True,
+                damage_type=effect.damage_type,
+            )
+            narration = f"{opponent.name} is caught in the blast for {effect.damage_amount} damage."
+            broadcast_action_outcome(encounter=encounter, narration=narration)

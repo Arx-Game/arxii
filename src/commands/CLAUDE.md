@@ -1051,13 +1051,22 @@ actions, backends, and service functions.
   `CreateEventAction` (acts as the caller's active persona); `event schedule/start/complete/cancel
   <id>` → the host-lifecycle Actions (account-authorized — staff and scene GMs can manage an event
   with no character, so they pass `actor=None, account=<caller.account>`); `event invite <id>
-  persona=|org=|society=<name|id> [by=<persona>]` → `InviteToEventAction`; `event rsvp <id>
+  persona=|org=|society=<name|id> [by=<persona>]` → `InviteToEventAction` (a persona invitee is
+  told, with the two `event rsvp` lines to type, #3657); `event rsvp <id>
   accept|decline` → `RespondInvitationAction` (the invitee acts as their own active persona; only a
   persona-targeted invitation addressed to them may be RSVP'd). Bare `event` / `event list` shows the
   caller's visible events; `event show <id>` renders one in detail (telnet-only — the web gets
   list/detail implicitly from `EventViewSet`). `when=` accepts ISO 8601 or `YYYY-MM-DD HH:MM`
   (room/when/name/desc values may contain spaces — they run to the next `key=`). No consent gate
   (ADR-0024 — events are calendaring; an invitation does not compel behavior).
+- **`vault.py`**: `CmdVault` (`vault`, #2179) — the room vault's access list, a `DispatchCommand`
+  over `vault_access_add`/`vault_access_remove`/`vault_access_list` (`actions/definitions/vault.py`,
+  gated on TENANT-or-above standing in the room). `vault status` is a read; `vault access add
+  <persona>` / `add/org <organization>` / `remove ...` / `list`. The `/org` rides the subverb token
+  and `func()` splits it off (#3657: typed through the handler, `add/org` had been read as one
+  unknown subverb). Replies name the persona or organization by `.name`, never `str()`. The org
+  vault and treasury (`vault_deposit`, `vault_withdraw`, `treasury_withdraw`, `deliver_collection`,
+  `actions/definitions/org_vault.py`) have no telnet verb; the web dispatches them.
 - **`evennia_overrides/builder.py`**: `CmdDig`, `CmdOpen`, `CmdLink`, `CmdUnlink` (Evennia overrides)
   and `CmdDesc` (#4329, ADR-4329): Evennia's `desc` wrote the `desc` Attribute, which
   nothing renders, and still answered "The description was set on ...". The override

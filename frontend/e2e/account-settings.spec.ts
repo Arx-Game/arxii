@@ -22,8 +22,9 @@
  *     mock satisfies the frontend's "Email Verified" screen but never flips
  *     the row in the database, so a freshly registered account stays
  *     unverified for the rest of the test and cannot reach the TOTP journey.
- *     The password-change journey does not need a verified email, so it uses
- *     a fresh UI-registered account the same way user-journey.spec.ts does.
+ *     Email verification is mandatory, so a UI-registered account cannot sign
+ *     in either. The password-change journey therefore also uses the seeded
+ *     account and restores its password at the end.
  *
  * The TOTP journey is NOT idempotent against a seeded account an earlier run
  * left with 2FA enabled: this test has no way to answer a login-time code
@@ -34,21 +35,16 @@
  * after a run that stopped partway through.
  *
  * Run with: just fe-e2e account-settings
- * Not run in CI, since this suite needs a live Evennia backend.
+ * CI runs this suite in .github/workflows/real-test.yml (advisory; #4247).
  */
 
-import { createHmac, randomBytes } from 'node:crypto';
+import { createHmac } from 'node:crypto';
 import { test, expect, type Page } from '@playwright/test';
 
 const BASE_URL = 'http://localhost:4001';
 
 const SEEDED_USERNAME = 'e2e_test_account';
 const SEEDED_PASSWORD = 'TestPass123!';
-
-/** Unique suffix so parallel runs / repeated runs don't collide on usernames. */
-function uniqueSuffix(): string {
-  return `${Date.now()}-${randomBytes(3).toString('hex')}`;
-}
 
 /**
  * Suppress expected API-failure console noise, same filter as
@@ -78,36 +74,24 @@ function captureConsoleErrors(page: Page): () => string[] {
   return () => errors;
 }
 
-/** Register a fresh account through the UI, exactly as user-journey.spec.ts does. */
-async function registerFreshAccount(
+/** Change the signed-in account's password on /profile/account and wait for the success note. */
+async function changePasswordOnAccountPage(
   page: Page,
-  username: string,
-  email: string,
-  password: string
+  currentPassword: string,
+  newPassword: string
 ): Promise<void> {
-  await page.goto(`${BASE_URL}/register`);
+  await page.goto(`${BASE_URL}/profile/account`);
   await page.waitForLoadState('networkidle');
+  await expect(page.locator('#current-password')).toBeVisible();
 
-  await page.locator('#username').fill(username);
-  await page.locator('#email').fill(email);
-  await page.locator('#password1').fill(password);
-  await page.locator('#password2').fill(password);
-  await page.locator('#email').blur();
+  await page.locator('#current-password').fill(currentPassword);
+  await page.locator('#new-password').fill(newPassword);
+  await page.locator('#confirm-password').fill(newPassword);
+  await page.getByRole('button', { name: 'Change password' }).click();
 
-  await page.getByRole('button', { name: /register/i }).click();
-  await page.waitForURL('**/register/verify-email', { timeout: 10000 });
-
-  // Mock the email verification API call, same as user-journey.spec.ts. The
-  // account is NOT actually verified in the DB, see the header comment.
-  await page.route('**/api/auth/browser/v1/auth/email/verify', async (route) => {
-    await route.fulfill({
-      status: 200,
-      contentType: 'application/json',
-      body: JSON.stringify({ detail: 'Email successfully verified' }),
-    });
+  await expect(page.getByText('Password changed. You stay signed in.')).toBeVisible({
+    timeout: 10000,
   });
-  await page.goto(`${BASE_URL}/verify-email/dummy-key-for-e2e`);
-  await expect(page.locator('h1')).toContainText('Email Verified', { timeout: 10000 });
 }
 
 type LoginRace = 'navigated' | 'mfa' | 'timeout';
@@ -237,44 +221,35 @@ function totpCode(secret: string, atMs: number = Date.now()): string {
 }
 
 // ---------------------------------------------------------------------------
-// Password change: fresh account, no email verification needed
+// Password change: the seeded account, with its password restored at the end
 // ---------------------------------------------------------------------------
 
 test.describe('Account settings: password', () => {
   test('change password on /profile/account, then sign in with the new one', async ({ page }) => {
     const getErrors = captureConsoleErrors(page);
-    const suffix = uniqueSuffix();
-    const username = `acct-pw-${suffix}`;
-    const email = `acct-pw-${suffix}@test.com`;
-    const oldPassword = 'TestPass123!';
     const newPassword = 'NewTestPass456!';
 
-    await registerFreshAccount(page, username, email, oldPassword);
-    await loginViaUi(page, username, oldPassword);
-
-    // ProtectedRoute only requires an authenticated session, not a verified
-    // email, so /profile/account is reachable even though this account was
-    // never really verified in the DB.
-    await page.goto(`${BASE_URL}/profile/account`);
-    await page.waitForLoadState('networkidle');
-    await expect(page.locator('#current-password')).toBeVisible();
-
-    await page.locator('#current-password').fill(oldPassword);
-    await page.locator('#new-password').fill(newPassword);
-    await page.locator('#confirm-password').fill(newPassword);
-    await page.getByRole('button', { name: 'Change password' }).click();
-
-    await expect(page.getByText('Password changed. You stay signed in.')).toBeVisible({
-      timeout: 10000,
-    });
+    // Email verification is mandatory (ACCOUNT_EMAIL_VERIFICATION), and a
+    // browser test cannot verify a freshly registered account (see the header
+    // comment), so a registered account cannot sign in here. The seeded,
+    // verified account is used instead, and its password is put back at the
+    // end so a second run starts from the same state. If a run dies between
+    // the two changes, restore it in the admin or re-seed the database.
+    await loginViaUi(page, SEEDED_USERNAME, SEEDED_PASSWORD);
+    await changePasswordOnAccountPage(page, SEEDED_PASSWORD, newPassword);
 
     // Sign out by dropping the session cookie (the ProfileDropdown's Logout
     // menu item is not needed to exercise the password-change flow) and log
     // back in with the new password.
     await page.context().clearCookies();
-    await loginViaUi(page, username, newPassword);
+    await loginViaUi(page, SEEDED_USERNAME, newPassword);
     expect(page.url()).not.toContain('/login');
     await expect(page.locator('#root')).not.toBeEmpty();
+
+    await changePasswordOnAccountPage(page, newPassword, SEEDED_PASSWORD);
+    await page.context().clearCookies();
+    await loginViaUi(page, SEEDED_USERNAME, SEEDED_PASSWORD);
+    expect(page.url()).not.toContain('/login');
 
     expect(getErrors()).toEqual([]);
   });

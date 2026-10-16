@@ -50,6 +50,7 @@ class CmdVault(DispatchCommand):
 
     _subverb: str = ""
     _rest: str = ""
+    _for_org: bool = False
 
     def func(self) -> None:
         """Route the leading subverb; bare ``vault`` shows status."""
@@ -67,7 +68,11 @@ class CmdVault(DispatchCommand):
             self.msg("Usage: vault access <list|add|remove> ...")
             return
         sub_parts = parts[1].split(maxsplit=1)
-        self._subverb = sub_parts[0].lower()
+        # ``add/org <organization>`` is the documented form: the ``/org`` rides the
+        # subverb token, so it is split off here. Until #3657's journey typed it,
+        # ``add/org`` was read as one unknown subverb and fell to the usage line.
+        self._subverb, _, modifier = sub_parts[0].lower().partition("/")
+        self._for_org = modifier == _PREFIX_ORG.lstrip("/")
         self._rest = sub_parts[1].strip() if len(sub_parts) > 1 else ""
         if self._subverb == _SUBVERB_LIST:
             self._rest = ""
@@ -104,8 +109,11 @@ class CmdVault(DispatchCommand):
         if not self._rest:
             msg = "Specify a persona or organization name."
             raise CommandError(msg)
-        if self._rest.startswith(_PREFIX_ORG + " "):
-            org_name = self._rest[len(_PREFIX_ORG) + 1 :].strip()
+        if self._for_org or self._rest.startswith(_PREFIX_ORG + " "):
+            org_name = self._rest
+            if org_name.startswith(_PREFIX_ORG + " "):
+                org_name = org_name[len(_PREFIX_ORG) + 1 :]
+            org_name = org_name.strip()
             if not org_name:
                 msg = "Specify an organization name."
                 raise CommandError(msg)
@@ -143,5 +151,5 @@ class CmdVault(DispatchCommand):
         self.msg(
             f"Vault (Level {instance.level}): "
             f"{vault.max_items - remaining}/{vault.max_items} items. "
-            f"Founder: {vault.founder_persona}."
+            f"Founder: {vault.founder_persona.name}."
         )
