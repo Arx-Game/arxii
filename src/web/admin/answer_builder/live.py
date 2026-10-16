@@ -242,26 +242,30 @@ def _fallback_label(
     return f"A close at {tier.name} sends no vision; the closing award still lands."
 
 
+def _fact_checks(answer: Answer) -> list[tuple[str, str]]:
+    """The tier's fact rule, and whether a codex fact is really hidden."""
+    tier = answer.outcome_tier
+    if not carries_fact(answer):
+        return [("ok", f"No fact on {tier.name}: facts are given on Success and above only.")]
+    lines: list[tuple[str, str]] = []
+    clue = answer.fact_clue if answer.fact_clue_id is not None else None
+    if clue is not None:
+        lines.append(
+            ("ok", f"Fact clue on {tier.name} (allowed on Success and Critical Success only).")
+        )
+    entry = clue.target_codex_entry if clue and clue.target_kind == ClueTargetKind.CODEX else None
+    if entry is not None and entry.is_public:
+        lines.append(("warn", "The fact clue's codex entry is public: the fact is no secret."))
+    elif entry is not None:
+        lines.append(("ok", "The clue's target is reachable only through clues."))
+    return lines
+
+
 def checks(
     answer: Answer, pledge: Pledge | None, columns: list[CheckOutcome]
 ) -> list[tuple[str, str]]:
     """("ok" | "warn", text) lines about the saved rows. Warnings never block a save."""
-    lines: list[tuple[str, str]] = []
-    tier = answer.outcome_tier
-    if carries_fact(answer):
-        if answer.fact_clue_id is not None:
-            lines.append(
-                ("ok", f"Fact clue on {tier.name} (allowed on Success and Critical Success only).")
-            )
-    else:
-        lines.append(("ok", f"No fact on {tier.name}: facts are given on Success and above only."))
-    clue = answer.fact_clue if carries_fact(answer) else None
-    if clue is not None and clue.target_kind == ClueTargetKind.CODEX:
-        entry = clue.target_codex_entry
-        if entry is not None and entry.is_public:
-            lines.append(("warn", "The fact clue's codex entry is public: the fact is no secret."))
-        elif entry is not None:
-            lines.append(("ok", "The clue's target is reachable only through clues."))
+    lines = _fact_checks(answer)
     if answer.pk is not None and not answer.delay_text.strip():
         lines.append(("warn", "No delay text: the vision opens without acknowledging the effort."))
     being = answer.being

@@ -284,7 +284,7 @@ def deliver_held_answers() -> int:
     held = PendingAnswer.objects.select_related(
         "answer__being", "answer__outcome_tier", "pledge_details__character_sheet"
     ).order_by("created_at", "pk")
-    for pending in list(held):
+    for pending in held:
         if pending.answer.being.resonance_pool < VISION_RESONANCE_POOL_COST:
             continue
         try:
