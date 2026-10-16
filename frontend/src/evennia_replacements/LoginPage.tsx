@@ -61,7 +61,7 @@ export function LoginPage() {
   if (mfaStep) {
     return (
       <div className="mx-auto max-w-sm">
-        <h1 className="mb-6 text-2xl font-bold">Login to {SITE_NAME}</h1>
+        <h1 className="mb-6 text-2xl font-bold">Sign in to {SITE_NAME}</h1>
         <form
           onSubmit={(e) => {
             e.preventDefault();
@@ -91,7 +91,7 @@ export function LoginPage() {
 
   return (
     <div className="mx-auto max-w-sm">
-      <h1 className="mb-6 text-2xl font-bold">Login to {SITE_NAME}</h1>
+      <h1 className="mb-6 text-2xl font-bold">Sign in to {SITE_NAME}</h1>
       <form
         onSubmit={(e) => {
           e.preventDefault();
