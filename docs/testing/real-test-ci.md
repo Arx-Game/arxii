@@ -8,8 +8,12 @@ queue.
 ## What one run does
 
 1. Starts Postgres as a service and builds a throwaway database with
-   `tools/build_schema.py` (the same path the backend shards use), then
-   `arx manage seed_test_account` (user `e2e_test_account`).
+   `tools/build_schema.py` (the same path the backend shards use), then seeds the
+   account `e2e_test_account` with the same function `arx manage seed_test_account`
+   calls, run through `arx manage shell` because that is the launcher path that
+   initialises Evennia first. It also opens registration (it is invite-only by
+   default, `RegistrationConfig`) and sets no Facebook credentials, so the login page
+   has one "Log in" button.
 2. Builds the frontend bundle once (`pnpm build`) and collects static files.
 3. Starts the server with `arx start` and waits until `/api/status/` answers on :4001.
 4. Runs the Playwright specs that need a live server, with one worker, using
@@ -50,3 +54,11 @@ in a PR comment or in an `<!-- evidence-answer -->`:
 - To close a claim the existing specs do not cover, add a spec under
   `frontend/e2e/` that asserts the new behavior and add it to the workflow's spec
   list, or run `workflow_dispatch` against the branch.
+
+## Known limits
+
+- The throwaway database has no game clock row, so `/api/clock/` answers 503 in the
+  server log. No spec asserts on it.
+- The password-change spec changes the seeded account's password and restores it at
+  the end. A run that dies between the two changes leaves a throwaway database in an
+  odd state; in CI that is irrelevant, locally re-seed or restore it in the admin.
