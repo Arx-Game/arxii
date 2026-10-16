@@ -79,25 +79,12 @@ jobs:
     concurrency:
       group: real-test-${{ github.event.pull_request.number || github.run_id }}
       cancel-in-progress: true
-    services:
-      postgres:
-        image: postgres:15
-        env:
-          POSTGRES_HOST_AUTH_METHOD: trust
-          POSTGRES_DB: arxii_real_test
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd "pg_isready -U postgres"
-          --health-interval 5s
-          --health-timeout 5s
-          --health-retries 10
     env:
       # DEBUG=True sends allauth email to the server console, which the specs
       # rely on (account-settings.spec.ts header).
       DEBUG: 'True'
       SECRET_KEY: real-test-secret-key-for-ci-only
-      DATABASE_URL: postgresql://postgres@localhost:5432/arxii_real_test
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/arxii_real_test
       CLOUDINARY_CLOUD_NAME: test-cloud
       CLOUDINARY_API_KEY: test-key
       CLOUDINARY_API_SECRET: test-secret
@@ -107,8 +94,38 @@ jobs:
       FACEBOOK_APP_SECRET: test-facebook-secret
     steps:
       - uses: actions/checkout@v6
-      - name: Mint a throwaway MFA_SECRETS_KEY for this job
-        run: echo "MFA_SECRETS_KEY=$(python3 -c 'import base64, os; print(base64.urlsafe_b64encode(os.urandom(32)).decode())')" >> "$GITHUB_ENV"
+      - name: Mint throwaway secrets for this job
+        # MFA_SECRETS_KEY: settings.py requires it (ADR-0267). The EVENNIA_* pair
+        # lets Evennia create its Account #1 superuser without the interactive
+        # prompt it would otherwise open on the first launcher command.
+        run: |
+          echo "MFA_SECRETS_KEY=$(python3 -c 'import base64, os; print(base64.urlsafe_b64encode(os.urandom(32)).decode())')" >> "$GITHUB_ENV"
+          echo "EVENNIA_SUPERUSER_USERNAME=real_test_admin" >> "$GITHUB_ENV"
+          echo "EVENNIA_SUPERUSER_EMAIL=real_test_admin@example.com" >> "$GITHUB_ENV"
+          echo "EVENNIA_SUPERUSER_PASSWORD=$(python3 -c 'import secrets; print(secrets.token_urlsafe(24))')" >> "$GITHUB_ENV"
+      # A manual `docker run`, not a `services:` block, for the same reason as
+      # the backend shards: Django's schema build needs max_locks_per_transaction
+      # past the default 64 (it failed here with "out of shared memory").
+      - name: Start Postgres with max_locks_per_transaction bumped
+        run: |
+          docker run -d \
+            --name postgres-real-test \
+            -e POSTGRES_PASSWORD=postgres \
+            -e POSTGRES_DB=arxii_real_test \
+            -e POSTGRES_INITDB_ARGS=--no-sync \
+            --tmpfs /var/lib/postgresql/data:rw,noexec,nosuid,size=2g \
+            -p 5432:5432 \
+            postgres:15 \
+            -c max_locks_per_transaction=512
+          for i in $(seq 1 30); do
+            if docker exec postgres-real-test pg_isready -U postgres -d arxii_real_test; then
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "Postgres did not become ready" >&2
+          docker logs postgres-real-test
+          exit 1
       - uses: astral-sh/setup-uv@v7
         with:
           python-version: '3.13'
