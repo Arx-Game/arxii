@@ -20,7 +20,7 @@ const base: Vision = {
   clue_name: 'Ombrin codex clue',
   episode: null,
   episode_title: null,
-  follow_up_clue_name: 'Ombrin mission clue',
+  follow_up_footnote: 'A mission came with it: Ombrin mission clue.',
   condition_names: ['Marked by Ombrin'],
   sent_at: new Date().toISOString(),
 };
@@ -30,7 +30,7 @@ describe('VisionCard', () => {
     render(<VisionCard vision={base} />);
     const notes = screen.getByTestId('vision-footnotes');
     expect(notes).toHaveTextContent('A clue came with it: Ombrin codex clue.');
-    expect(notes).toHaveTextContent('A follow-up came with it: Ombrin mission clue.');
+    expect(notes).toHaveTextContent('A mission came with it: Ombrin mission clue.');
     expect(notes).toHaveTextContent('Condition: Marked by Ombrin.');
     expect(screen.getByText('from Ombrin')).toBeInTheDocument();
   });
@@ -43,7 +43,7 @@ describe('VisionCard', () => {
           clue: null,
           clue_slug: null,
           clue_name: null,
-          follow_up_clue_name: null,
+          follow_up_footnote: null,
           condition_names: [],
         }}
       />

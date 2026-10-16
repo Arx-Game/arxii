@@ -205,11 +205,15 @@ def pray(character_sheet: CharacterSheet, being: WorshippedBeing, text: str) -> 
     )
 
 
-def _vision_text(being: WorshippedBeing, body: str, *, reveal_source: bool) -> str:
-    """The delivered prose: the GM's words, and the sender's name only when revealed."""
-    if reveal_source:
-        return f"{body}\n\nYou know whose vision this is: {being.name}."
-    return body
+def _vision_text(
+    being: WorshippedBeing, body: str, *, reveal_source: bool, footnotes: tuple[str, ...] = ()
+) -> str:
+    """The delivered prose: the written words, the sender's name only when revealed, then
+    any footnotes naming what came with it (an answer's clue, follow-up and condition)."""
+    text = f"{body}\n\nYou know whose vision this is: {being.name}." if reveal_source else body
+    if footnotes:
+        text += "\n" + " ".join(footnotes)
+    return text
 
 
 def send_vision(  # noqa: PLR0913 - the attachments are keyword-only and each optional
@@ -223,6 +227,7 @@ def send_vision(  # noqa: PLR0913 - the attachments are keyword-only and each op
     clue: Clue | None = None,
     episode: Episode | None = None,
     answer: Answer | None = None,
+    footnotes: tuple[str, ...] = (),
 ) -> Vision:
     """A GM sends ``recipient`` a vision from ``being``, or a closing rite releases a
     written-ahead ``answer`` as one (#4333 slice 3, ``sent_by`` None).
@@ -285,7 +290,7 @@ def send_vision(  # noqa: PLR0913 - the attachments are keyword-only and each op
             find_clue(roster_entry, clue)
     message = send_narrative_message(
         recipients=[recipient],
-        body=_vision_text(being, prose, reveal_source=reveal_source),
+        body=_vision_text(being, prose, reveal_source=reveal_source, footnotes=footnotes),
         category=NarrativeCategory.VISIONS,
         sender_account=sent_by,
         ooc_note=f"A vision from {being.name}"

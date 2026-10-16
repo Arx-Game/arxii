@@ -31,4 +31,4 @@ invocation-options/`): per being the difficulty with each ease, uses left, the b
   `pledgeText.ts` builds the earning-rate parts and the time left.
 - Answers (#4333 slice 3). A closed pledge's answer arrives as an ordinary vision;
   `components/VisionCard.tsx` footnotes the fact clue (`clue_name`), the follow-up
-  (`follow_up_clue_name`) and the cost's conditions (`condition_names`), never as controls.
+  (`follow_up_footnote`, "A mission came with it: ..." for a mission clue) and the cost's conditions (`condition_names`), never as controls.

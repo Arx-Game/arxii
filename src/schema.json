@@ -93343,11 +93343,11 @@ components:
           type: string
           nullable: true
           readOnly: true
-        follow_up_clue_name:
+        follow_up_footnote:
           type: string
           nullable: true
-          description: The follow-up a written-ahead answer handed over with this
-            vision (#4333).
+          description: 'The follow-up''s footnote: "A mission came with it: ..." for
+            a mission clue.'
           readOnly: true
         condition_names:
           type: array
@@ -93368,7 +93368,7 @@ components:
       - condition_names
       - episode
       - episode_title
-      - follow_up_clue_name
+      - follow_up_footnote
       - id
       - prayer
       - recipient

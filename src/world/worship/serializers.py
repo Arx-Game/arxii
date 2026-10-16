@@ -100,7 +100,7 @@ class VisionSerializer(serializers.ModelSerializer):
     clue_slug = serializers.SerializerMethodField()
     clue_name = serializers.SerializerMethodField()
     episode_title = serializers.SerializerMethodField()
-    follow_up_clue_name = serializers.SerializerMethodField()
+    follow_up_footnote = serializers.SerializerMethodField()
     condition_names = serializers.SerializerMethodField()
 
     class Meta:
@@ -117,7 +117,7 @@ class VisionSerializer(serializers.ModelSerializer):
             "clue_name",
             "episode",
             "episode_title",
-            "follow_up_clue_name",
+            "follow_up_footnote",
             "condition_names",
             "sent_at",
         ]
@@ -141,14 +141,17 @@ class VisionSerializer(serializers.ModelSerializer):
     def get_episode_title(self, obj: Vision) -> str | None:
         return obj.episode.title if obj.episode_id is not None else None
 
-    def get_follow_up_clue_name(self, obj: Vision) -> str | None:
-        """The follow-up a written-ahead answer handed over with this vision (#4333)."""
-        from world.worship.answer_services import delivered_follow_up_clue  # noqa: PLC0415
+    def get_follow_up_footnote(self, obj: Vision) -> str | None:
+        """The follow-up's footnote: "A mission came with it: ..." for a mission clue."""
+        from world.worship.answer_services import (  # noqa: PLC0415
+            delivered_follow_up_clue,
+            follow_up_footnote,
+        )
 
         if obj.answer_id is None:
             return None
         clue = delivered_follow_up_clue(obj.answer)
-        return clue.name if clue is not None else None
+        return follow_up_footnote(clue) if clue is not None else None
 
     def get_condition_names(self, obj: Vision) -> list[str]:
         """The conditions an answer's cost applied with this vision (#4333)."""

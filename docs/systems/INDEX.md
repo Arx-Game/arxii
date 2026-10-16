@@ -9129,7 +9129,7 @@ lightly-structured freeform RP. Full doc: `docs/systems/worship.md`; model decis
   `close_pledge`, after the resolution commits), `deliver_held_answers` (daily task
   `worship.held_answers`), `cost_condition_names`; `models.answer_part_errors` (no fact below
   Success, no follow-up clue below Partial Success). API: `VisionSerializer` gains
-  `clue_name`, `follow_up_clue_name`, `condition_names`; staff
+  `clue_name`, `follow_up_footnote`, `condition_names` (the same footnotes end the narrative message); staff
   `admin/beings/{id}/held-answers/` and overview counts. Admin: the Answer builder
   (`/admin/_being_answers/<being>/`).
 - **Worship services**: `grant_worship`, `bump_devotion` (+ God's Favorite

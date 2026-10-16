@@ -18,9 +18,8 @@ from world.clues.constants import ClueTargetKind
 from world.traits.models import CheckOutcome
 from world.worship.answer_services import (
     answer_body,
+    answer_footnotes,
     carries_fact,
-    carries_follow_up_clue,
-    cost_condition_names,
 )
 from world.worship.constants import BeingResonanceTier
 from world.worship.models import (
@@ -192,17 +191,9 @@ def preview(answer: Answer) -> Preview | None:
     offerings = []
     if facet_row is not None:
         offerings.append(CeremonyOffering(item_name=PREVIEW_ITEM_NAME, facet=facet_row.facet))
-    footnotes = []
-    if carries_fact(answer) and answer.fact_clue is not None:
-        footnotes.append(f"A clue came with it: {answer.fact_clue.name}.")
-    if carries_follow_up_clue(answer) and answer.follow_up_clue is not None:
-        footnotes.append(f"A follow-up came with it: {answer.follow_up_clue.name}.")
-    conditions = cost_condition_names(answer)
-    if conditions:
-        footnotes.append(f"Condition: {', '.join(conditions)}.")
     return Preview(
         body=answer_body(answer, offerings),
-        footnotes=footnotes,
+        footnotes=list(answer_footnotes(answer)),
         facet_name=facet_row.facet.name if facet_row is not None else "",
     )
 

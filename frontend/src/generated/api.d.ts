@@ -52133,8 +52133,8 @@ export interface components {
       /** @description The episode this is a personal beat of; the recipient must be in its story. */
       readonly episode: number | null;
       readonly episode_title: string | null;
-      /** @description The follow-up a written-ahead answer handed over with this vision (#4333). */
-      readonly follow_up_clue_name: string | null;
+      /** @description The follow-up's footnote: "A mission came with it: ..." for a mission clue. */
+      readonly follow_up_footnote: string | null;
       /** @description The conditions an answer's cost applied with this vision (#4333). */
       readonly condition_names: string[];
       /** Format: date-time */

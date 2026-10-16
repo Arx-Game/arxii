@@ -227,6 +227,13 @@ class DeliveryTests(AnswerTestBase):
         self.assertTrue(self._has_condition())
         self.being.refresh_from_db()
         self.assertEqual(vision.resonance_spent, 10)
+        # Telnet reads the narrative message: the same footnotes the web card shows.
+        self.assertTrue(
+            vision.message.body.endswith(
+                f"A clue came with it: {self.fact_clue.name}. A mission came with it: "
+                f"{self.follow_up_clue.name}. Condition: Marked by Ombrin."
+            )
+        )
 
     def test_close_at_critical_success_draws_success_when_no_critical_is_written(self) -> None:
         self._ready()
@@ -275,7 +282,8 @@ class DeliveryTests(AnswerTestBase):
 
         vision = Vision.objects.get()
         self.assertFalse(vision.reveal_source)
-        self.assertNotIn("Ombrin", vision.message.body)
+        self.assertNotIn("You know whose vision this is", vision.message.body)
+        self.assertIn("source concealed", vision.message.ooc_note)
 
     def test_the_pledges_prayer_is_answered(self) -> None:
         details = take_pledge(self.sheet, self.pledge, prayer_text="[player-written prayer]")
@@ -440,7 +448,9 @@ class ApiTests(AnswerTestBase):
         row = self._client(self.account).get("/api/worship/visions/").json()["results"][0]
 
         self.assertEqual(row["clue_name"], self.fact_clue.name)
-        self.assertEqual(row["follow_up_clue_name"], self.follow_up_clue.name)
+        self.assertEqual(
+            row["follow_up_footnote"], f"A mission came with it: {self.follow_up_clue.name}."
+        )
         self.assertEqual(row["condition_names"], ["Marked by Ombrin"])
         self.assertEqual(row["being_name"], "Ombrin")
 

@@ -191,6 +191,29 @@ def _hand_over_follow_up(sheet: CharacterSheet, answer: Answer) -> None:
     find_clue(roster_entry, clue)
 
 
+def follow_up_footnote(clue: Clue) -> str:
+    """How a vision names its follow-up clue: a mission by its kind, anything else as a clue."""
+    from world.clues.constants import ClueTargetKind  # noqa: PLC0415
+
+    noun = "A mission" if clue.target_kind == ClueTargetKind.MISSION else "A clue"
+    return f"{noun} came with it: {clue.name}."
+
+
+def answer_footnotes(answer: Answer) -> tuple[str, ...]:
+    """The vision's footnotes for what the answer hands over (the demo's vision footer)."""
+    notes: list[str] = []
+    fact_clue = delivered_fact_clue(answer)
+    if fact_clue is not None:
+        notes.append(f"A clue came with it: {fact_clue.name}.")
+    follow_up = delivered_follow_up_clue(answer)
+    if follow_up is not None:
+        notes.append(follow_up_footnote(follow_up))
+    conditions = cost_condition_names(answer)
+    if conditions:
+        notes.append(f"Condition: {', '.join(conditions)}.")
+    return tuple(notes)
+
+
 def _hold(details: PledgeDetails, answer: Answer) -> AnswerDelivery:
     PendingAnswer.objects.get_or_create(
         pledge_details=details,
@@ -227,6 +250,7 @@ def deliver_answer(details: PledgeDetails, answer: Answer) -> AnswerDelivery:
             prayer=details.prayer,
             clue=delivered_fact_clue(answer),
             answer=answer,
+            footnotes=answer_footnotes(answer),
         )
     except VisionPoolInsufficient:
         return _hold(details, answer)

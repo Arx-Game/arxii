@@ -47,7 +47,7 @@ const vision = {
   clue_name: null,
   episode: null,
   episode_title: null,
-  follow_up_clue_name: null,
+  follow_up_footnote: null,
   condition_names: [],
   sent_at: new Date().toISOString(),
 };

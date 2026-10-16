@@ -607,11 +607,15 @@ answering live (slice 5) are not built.
   rite (`ClosePledgeAction`); a held answer sends no room line later. Nothing player-written
   reaches the room, so a secret faith's close carries no player line.
 - Web: the sheet's `VisionCard` footnotes the fact clue, the follow-up and the cost's
-  condition (`VisionSerializer.clue_name`, `follow_up_clue_name`, `condition_names`). The
+  condition (`VisionSerializer.clue_name`, `follow_up_footnote` - "A mission came with it"
+  for a mission clue - and `condition_names`); `answer_footnotes` ends the `[VISION]`
+  narrative message with the same lines for telnet. The
   Deity Editor dashboard's Overview counts pledge types, answers and held answers and links
   both builders; its Visions tab lists held answers
   (`GET /api/worship/admin/beings/{id}/held-answers/`).
-- Telnet: the vision arrives as a `|G[VISION]|n` narrative message, as every vision does.
+- Telnet: the vision arrives as a `|G[VISION]|n` narrative message, as every vision does,
+  ending with the footnotes. It is pushed while the close runs, so it prints before the
+  closing-award line.
 - Admin: the **Answer builder** (`/admin/_being_answers/<being>/?pledge=&tier=&answer=`,
   `web/admin/answer_builder/`): a coverage grid (no pledge type and each pledge type, by
   tier), one answer's form with its sacrifice lines, what each linked clue and pool is, a
