@@ -69,6 +69,7 @@
   - failure_beats <- stories.Beat
   - expired_beats <- stories.Beat
   - task_templates <- tasking.TaskTemplate
+  - being_answers <- worship.Answer
 
 ### ConsequencePoolEntry
 **Foreign Keys:**
@@ -1838,6 +1839,7 @@
   - prayers <- worship.Prayer
   - visions <- worship.Vision
   - pledges <- worship.PledgeDetails
+  - pending_answers <- worship.PendingAnswer
 
 ### Gender
 **Pointed to by:**
@@ -2161,6 +2163,8 @@
   - item_trigger_placements <- clues.ItemClueTrigger
   - npc_reveal_offers <- npc_services.ClueRevealOfferDetails
   - visions <- worship.Vision
+  - answers_as_fact <- worship.Answer
+  - answers_as_follow_up <- worship.Answer
 
 ### ClueTrigger
 **Foreign Keys:**
@@ -5598,6 +5602,7 @@
   - vogue_momentum <- items.FacetVogueMomentum
   - fashion_styles <- items.FashionStyle
   - favored_by_beings <- worship.BeingFacet
+  - answer_sacrifice_lines <- worship.AnswerSacrificeLine
 
 ### FacetAlias
 **Foreign Keys:**
@@ -10677,6 +10682,7 @@
   - favor_invocations <- worship.FavorInvocation
   - worship_rite_awards <- worship.WorshipRiteTierAward
   - rite_performances <- worship.WorshipRitePerformance
+  - being_answers <- worship.Answer
 
 ### CheckRank
 
@@ -10917,6 +10923,26 @@
 
 ## world.worship
 
+### Answer
+**Foreign Keys:**
+  - written_by -> contributors.ContentContributor [FK] (nullable)
+  - reviewed_by -> contributors.ContentContributor [FK] (nullable)
+  - being -> worship.WorshippedBeing [FK]
+  - pledge -> worship.Pledge [FK] (nullable)
+  - outcome_tier -> traits.CheckOutcome [FK]
+  - fact_clue -> clues.Clue [FK] (nullable)
+  - cost_pool -> actions.ConsequencePool [FK] (nullable)
+  - follow_up_clue -> clues.Clue [FK] (nullable)
+**Pointed to by:**
+  - visions <- worship.Vision
+  - sacrifice_lines <- worship.AnswerSacrificeLine
+  - pending <- worship.PendingAnswer
+
+### AnswerSacrificeLine
+**Foreign Keys:**
+  - answer -> worship.Answer [FK]
+  - facet -> magic.Facet [FK]
+
 ### BeingFacet
 **Foreign Keys:**
   - being -> worship.WorshippedBeing [FK]
@@ -11005,6 +11031,12 @@
 **Pointed to by:**
   - answered_prayer <- worship.Prayer
 
+### PendingAnswer
+**Foreign Keys:**
+  - character_sheet -> character_sheets.CharacterSheet [FK]
+  - answer -> worship.Answer [FK]
+  - pledge_details -> worship.PledgeDetails [OneToOne]
+
 ### Pledge
 **Foreign Keys:**
   - written_by -> contributors.ContentContributor [FK] (nullable)
@@ -11013,6 +11045,7 @@
   - closing_rite -> worship.WorshipRite [FK]
 **Pointed to by:**
   - taken <- worship.PledgeDetails
+  - answers <- worship.Answer
 
 ### PledgeCredit
 **Foreign Keys:**
@@ -11032,6 +11065,7 @@
 **Pointed to by:**
   - sacrifices <- ceremonies.CeremonyOffering
   - credits <- worship.PledgeCredit
+  - pending_answer <- worship.PendingAnswer
 
 ### Prayer
 **Foreign Keys:**
@@ -11073,6 +11107,7 @@
   - clue -> clues.Clue [FK] (nullable)
   - episode -> stories.Episode [FK] (nullable)
   - message -> narrative.NarrativeMessage [OneToOne] (nullable)
+  - answer -> worship.Answer [FK] (nullable)
 
 ### WorshipDeclaration
 **Foreign Keys:**
@@ -11160,6 +11195,7 @@
   - prayers <- worship.Prayer
   - visions <- worship.Vision
   - pledges <- worship.Pledge
+  - answers <- worship.Answer
 
 ### Service Functions
 - `active_patronage_for(sheet: 'CharacterSheet') -> list[world.worship.models.DevotionStanding] - Return all active patronages for a character, ordered by favor descending.`

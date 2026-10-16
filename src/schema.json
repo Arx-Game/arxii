@@ -42185,6 +42185,30 @@ paths:
               schema:
                 $ref: '#/components/schemas/StaffBeingPage'
           description: ''
+  /api/worship/admin/beings/{id}/held-answers/:
+    get:
+      operationId: worship_admin_beings_held_answers_retrieve
+      description: |-
+        Answers drawn at a pledge's close and held until this being's pool can pay
+        for the vision (#4333). Read-only: the daily tick delivers them.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this worshipped being.
+        required: true
+      tags:
+      - worship
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StaffBeingPage'
+          description: ''
   /api/worship/admin/beings/{id}/overview/:
     get:
       operationId: worship_admin_beings_overview_retrieve
@@ -93305,6 +93329,10 @@ components:
           type: string
           nullable: true
           readOnly: true
+        clue_name:
+          type: string
+          nullable: true
+          readOnly: true
         episode:
           type: integer
           readOnly: true
@@ -93315,6 +93343,18 @@ components:
           type: string
           nullable: true
           readOnly: true
+        follow_up_clue_name:
+          type: string
+          nullable: true
+          description: The follow-up a written-ahead answer handed over with this
+            vision (#4333).
+          readOnly: true
+        condition_names:
+          type: array
+          items:
+            type: string
+          description: The conditions an answer's cost applied with this vision (#4333).
+          readOnly: true
         sent_at:
           type: string
           format: date-time
@@ -93323,9 +93363,12 @@ components:
       - being_name
       - body
       - clue
+      - clue_name
       - clue_slug
+      - condition_names
       - episode
       - episode_title
+      - follow_up_clue_name
       - id
       - prayer
       - recipient

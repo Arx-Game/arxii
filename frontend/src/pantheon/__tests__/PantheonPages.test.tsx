@@ -200,6 +200,11 @@ describe('BeingDashboardPage', () => {
       recent_activity: [
         { when: new Date().toISOString(), text: 'Lily prayed', note: 'act of devotion' },
       ],
+      pledge_type_count: 2,
+      answer_count: 5,
+      held_answer_count: 1,
+      service_builder_url: '/admin/_being_service/1/',
+      answer_builder_url: '/admin/_being_answers/1/',
     });
     vi.mocked(api.fetchBeingPrayers).mockResolvedValue({
       count: 2,
@@ -247,5 +252,57 @@ describe('BeingDashboardPage', () => {
     );
     expect(screen.getByTestId('prayer-devotion')).toHaveTextContent('Act of devotion');
     expect(screen.getAllByTestId('prayer-card')).toHaveLength(2);
+  });
+
+  it('counts pledges and answers, links both builders and lists held answers', async () => {
+    vi.mocked(api.fetchBeingPage).mockResolvedValue(page);
+    vi.mocked(api.fetchOverview).mockResolvedValue({
+      resonance_pool: 5,
+      lifetime_worship: 10,
+      most_devoted_name: null,
+      most_devoted_favor: null,
+      site_count: 1,
+      recent_activity: [],
+      pledge_type_count: 1,
+      answer_count: 4,
+      held_answer_count: 1,
+      service_builder_url: '/admin/_being_service/1/',
+      answer_builder_url: '/admin/_being_answers/1/',
+    });
+    vi.mocked(api.fetchBeingVisions).mockResolvedValue({
+      count: 0,
+      next: null,
+      previous: null,
+      results: [],
+    });
+    vi.mocked(api.fetchHeldAnswers).mockResolvedValue([
+      {
+        id: 9,
+        character_name: 'Hobb',
+        pledge_name: '[staff-authored pledge name]',
+        outcome_name: 'Success',
+        answer: 3,
+        created_at: new Date().toISOString(),
+      },
+    ]);
+    renderWithProviders(
+      <Routes>
+        <Route path="/staff/pantheon/:id" element={<BeingDashboardPage />} />
+      </Routes>,
+      { initialEntries: ['/staff/pantheon/1'] }
+    );
+    const card = await screen.findByTestId('service-and-answers');
+    expect(card).toHaveTextContent(
+      '1 pledge type · 4 answers written · 1 held until the pool can pay'
+    );
+    expect(screen.getByRole('link', { name: 'Answer builder' })).toHaveAttribute(
+      'href',
+      '/admin/_being_answers/1/'
+    );
+
+    await userEvent.click(screen.getByRole('tab', { name: 'Visions' }));
+    expect(await screen.findByTestId('held-answer')).toHaveTextContent(
+      'Hobb · [staff-authored pledge name] · Success'
+    );
   });
 });
