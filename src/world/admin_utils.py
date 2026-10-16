@@ -85,7 +85,9 @@ class OneRowPerFormSet(BaseInlineFormSet):
         messages = self._mark_duplicate_rows()
         super().clean()
         if messages:
-            raise ValidationError(messages)
+            # Three rows on one gift produce the same line twice; say it once here
+            # (each doubled row still carries its own mark).
+            raise ValidationError(list(dict.fromkeys(messages)))
 
     def _row_rules(self) -> list[tuple[str, ...]]:
         """The field sets, parent key left out, that must differ between two rows."""
@@ -129,16 +131,17 @@ class OneRowPerFormSet(BaseInlineFormSet):
         if any(name not in data for name in rule):
             return None
         values = [data[name] for name in rule]
-        if any(value is None or value == "" for value in values):
-            return None
+        if any(value is None for value in values):
+            return None  # Django and Postgres both let NULLs repeat
         return values
 
     def _duplicate_message(self, rule: tuple[str, ...], values: list) -> str:
         opts = self.model._meta  # noqa: SLF001
-        parts = [
-            f"{opts.get_field(name).verbose_name} '{value}'"
-            for name, value in zip(rule, values, strict=True)
-        ]
+        parts = []
+        for name, value in zip(rule, values, strict=True):
+            field = opts.get_field(name)
+            shown = dict(field.flatchoices).get(value, value) if field.choices else value
+            parts.append(f"{field.verbose_name} '{shown}'")
         verb = "is" if len(parts) == 1 else "are"
         text = f"{' and '.join(parts)} {verb} already on another row."
         text = text[0].upper() + text[1:]
