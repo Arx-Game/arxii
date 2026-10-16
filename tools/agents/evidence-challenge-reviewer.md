@@ -80,7 +80,7 @@ that someone operated the real program and saw the result:
 - command output (a migration run, a request and its response, a page's
   saved state read back);
 - a screenshot or recording of the running application;
-- a CI run or artifact link that operated the program;
+- a CI run or artifact link that operated the program (the `real-test.yml` run URL and artifact URL, for a claim one of its specs covers: see `docs/testing/real-test-ci.md`);
 - for a bug fix, the old failure and then the fixed behavior.
 
 **Step 3. Judge each claim.** Mark it `PROVEN`, `OPEN` or `BLOCKED`:

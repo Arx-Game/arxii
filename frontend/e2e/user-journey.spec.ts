@@ -10,6 +10,9 @@
  * Prerequisites:
  *   - Evennia server running on :4001 (`arx start` from the repo root)
  *   - DEBUG=True in src/.env (so email goes to console, not Resend SMTP)
+ *   - Registration open (staff admin: Registration Config) - it is invite-only by
+ *     default, and the register/login journeys sign up through the UI. CI opens it
+ *     in .github/workflows/real-test.yml.
  *   - Chromium installed (`cd frontend && npx playwright install chromium`)
  *
  * The email verification step is mocked via page.route() because extracting
@@ -90,7 +93,7 @@ test.describe('Visitor homepage', () => {
     await page.goto(BASE_URL);
     await page.waitForLoadState('networkidle');
 
-    const beginLink = page.getByRole('link', { name: 'Begin' });
+    const beginLink = page.getByRole('link', { name: 'Begin', exact: true });
     await expect(beginLink).toBeVisible();
     await expect(beginLink).toHaveAttribute('href', '/register');
   });
@@ -105,7 +108,7 @@ test.describe('Registration flow', () => {
     await page.goto(`${BASE_URL}/register`);
     await page.waitForLoadState('networkidle');
 
-    await expect(page.locator('h1')).toContainText('Register for Arx');
+    await expect(page.locator('main h1')).toContainText('Register for Arx');
 
     // All four fields should be present
     await expect(page.locator('#username')).toBeVisible();
@@ -154,7 +157,7 @@ test.describe('Registration flow', () => {
 
     // Should navigate to the email verification pending page
     await page.waitForURL('**/register/verify-email', { timeout: 10000 });
-    await expect(page.locator('h1')).toContainText('Check Your Email');
+    await expect(page.locator('main h1')).toContainText('Check Your Email');
   });
 
   test('duplicate username is rejected', async ({ page }) => {
@@ -196,9 +199,11 @@ test.describe('Login flow', () => {
     await page.goto(`${BASE_URL}/login`);
     await page.waitForLoadState('networkidle');
 
-    await expect(page.locator('h1')).toContainText('Login to Arx');
+    await expect(page.locator('main h1')).toContainText('Login to Arx');
     await expect(page.locator('input[type="password"]')).toBeVisible();
-    await expect(page.getByRole('link', { name: /register/i })).toBeVisible();
+    await expect(
+      page.locator('#main-content').getByRole('link', { name: /register/i })
+    ).toBeVisible();
   });
 
   test('login with wrong password shows error', async ({ page }) => {
@@ -251,12 +256,12 @@ test.describe('Login flow', () => {
 
     // Navigate to the verify page with a dummy key — the mock makes it succeed
     await page.goto(`${BASE_URL}/verify-email/dummy-key-for-e2e`);
-    await expect(page.locator('h1')).toContainText('Email Verified', { timeout: 10000 });
+    await expect(page.locator('main h1')).toContainText('Email Verified', { timeout: 10000 });
 
-    // Step 3: Login
-    // The mock verification didn't actually verify the account in the DB,
-    // so login will redirect to the unverified page. That's the expected
-    // behavior — the test verifies the UI flow, not the DB state.
+    // Step 3: Login with the account just registered. The mock above did not
+    // verify it in the DB, and email verification is mandatory, so the server
+    // refuses the login and the form says so. That is the contract: an
+    // unverified account does not get a session.
     await page.goto(`${BASE_URL}/login`);
     await page.waitForLoadState('networkidle');
 
@@ -264,18 +269,18 @@ test.describe('Login flow', () => {
     await page.locator('input[type="password"]').fill(password);
     await page.getByRole('button', { name: /log in/i }).click();
 
-    // The user is either redirected to / (if verified) or /account/unverified
-    // (if not verified). Both are valid outcomes — the test verifies login
-    // succeeds (no crash, no error message).
-    await page.waitForURL('**/', { timeout: 10000 }).catch(() => {
-      // May redirect to /account/unverified — that's fine
+    await expect(page.getByText('Login failed. Please try again.')).toBeVisible({
+      timeout: 10000,
     });
-    await page.waitForURL('**/account/unverified', { timeout: 10000 }).catch(() => {
-      // May redirect to / — that's fine
-    });
+    expect(page.url()).toContain('/login');
 
-    // Either way, we should not be on the login page anymore
-    expect(page.url()).not.toContain('/login');
+    // Step 4: Login with the seeded, genuinely verified account
+    // (`just seed-test-account`) and land on the authenticated home.
+    await page.locator('input[type="text"]').fill('e2e_test_account');
+    await page.locator('input[type="password"]').fill('TestPass123!');
+    await page.getByRole('button', { name: /log in/i }).click();
+
+    await page.waitForURL((url) => !url.pathname.startsWith('/login'), { timeout: 15000 });
     await expect(page.locator('#root')).not.toBeEmpty();
   });
 });

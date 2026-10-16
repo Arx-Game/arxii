@@ -1,0 +1,220 @@
+name: Real test
+
+# Operates the real program (ADR-4246, #4247): a throwaway Postgres database,
+# the built frontend bundle, `arx start`, and the Playwright specs that need a
+# live server on :4001. The screenshots, traces and server logs are uploaded as
+# one run artifact, so a PR comment can cite the run as evidence that the
+# change was operated by something other than the agent that wrote it.
+#
+# ADVISORY by design: this workflow is not a required check and is not part of
+# ci.yml's aggregators, so a flaky browser run never blocks the merge queue
+# while the job beds in. It also never runs on merge_group or push:main.
+# See docs/testing/real-test-ci.md.
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, labeled]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  # Decides whether a pull request is one this job should operate. The paths
+  # live here rather than in an `on.pull_request.paths` filter because a trigger
+  # filter would also stop the `real-test` label from running the job on a PR
+  # that touches none of them.
+  gate:
+    runs-on: ubuntu-latest
+    outputs:
+      run: ${{ steps.decide.outputs.run }}
+    steps:
+      - uses: actions/checkout@v6
+      # Third-party action SHA-pinned (SonarCloud supply-chain rule on new code).
+      - uses: dorny/paths-filter@fbd0ab8f3e69293af611ebaee6363fc25e6d187d # v4.0.1
+        id: filter
+        continue-on-error: true
+        if: github.event_name == 'pull_request'
+        with:
+          filters: |
+            relevant:
+              - 'frontend/**'
+              - 'src/web/**'
+              - 'src/world/**/views.py'
+              - 'src/world/**/serializers.py'
+              - '.github/workflows/real-test.yml'
+      - name: Decide
+        id: decide
+        env:
+          EVENT: ${{ github.event_name }}
+          ACTION: ${{ github.event.action }}
+          LABEL_ADDED: ${{ github.event.label.name }}
+          PR_LABELS: ${{ join(github.event.pull_request.labels.*.name, ' ') }}
+          FILTER_OUTCOME: ${{ steps.filter.outcome }}
+          FILTER_RELEVANT: ${{ steps.filter.outputs.relevant }}
+        run: |
+          run=false
+          if [ "$EVENT" = "workflow_dispatch" ]; then
+            run=true
+          elif [ "$ACTION" = "labeled" ]; then
+            # Adding any other label must not start (or cancel) a browser run.
+            [ "$LABEL_ADDED" = "real-test" ] && run=true
+          elif echo " $PR_LABELS " | grep -q " real-test "; then
+            run=true
+          elif [ "$FILTER_OUTCOME" != "success" ] || [ "$FILTER_RELEVANT" = "true" ]; then
+            # Fail open: a broken filter step runs the job instead of skipping it.
+            run=true
+          fi
+          echo "run=$run" >> "$GITHUB_OUTPUT"
+
+  real-test:
+    needs: gate
+    if: needs.gate.outputs.run == 'true'
+    runs-on: ubuntu-latest
+    # One job, one worker, a hard ceiling. A new push to the same PR cancels the
+    # run in flight, so superseded runs never hold runners against the org's
+    # concurrent-job cap (see ci.yml's concurrency note). The group is on the job,
+    # not the workflow, so a skipped run never cancels a running one.
+    timeout-minutes: 25
+    concurrency:
+      group: real-test-${{ github.event.pull_request.number || github.run_id }}
+      cancel-in-progress: true
+    env:
+      # DEBUG=True sends allauth email to the server console, which the specs
+      # rely on (account-settings.spec.ts header).
+      DEBUG: 'True'
+      SECRET_KEY: real-test-secret-key-for-ci-only
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/arxii_real_test
+      CLOUDINARY_CLOUD_NAME: test-cloud
+      CLOUDINARY_API_KEY: test-key
+      CLOUDINARY_API_SECRET: test-secret
+      SENDGRID_API_KEY: test-sendgrid-key
+      DEFAULT_FROM_EMAIL: test@example.com
+    steps:
+      - uses: actions/checkout@v6
+      - name: Mint throwaway secrets for this job
+        # MFA_SECRETS_KEY: settings.py requires it (ADR-0267). The EVENNIA_* pair
+        # lets Evennia create its Account #1 superuser without the interactive
+        # prompt it would otherwise open on the first launcher command.
+        run: |
+          echo "MFA_SECRETS_KEY=$(python3 -c 'import base64, os; print(base64.urlsafe_b64encode(os.urandom(32)).decode())')" >> "$GITHUB_ENV"
+          echo "EVENNIA_SUPERUSER_USERNAME=real_test_admin" >> "$GITHUB_ENV"
+          echo "EVENNIA_SUPERUSER_EMAIL=real_test_admin@example.com" >> "$GITHUB_ENV"
+          echo "EVENNIA_SUPERUSER_PASSWORD=$(python3 -c 'import secrets; print(secrets.token_urlsafe(24))')" >> "$GITHUB_ENV"
+      # A manual `docker run`, not a `services:` block, for the same reason as
+      # the backend shards: Django's schema build needs max_locks_per_transaction
+      # past the default 64 (it failed here with "out of shared memory").
+      - name: Start Postgres with max_locks_per_transaction bumped
+        run: |
+          docker run -d \
+            --name postgres-real-test \
+            -e POSTGRES_PASSWORD=postgres \
+            -e POSTGRES_DB=arxii_real_test \
+            -e POSTGRES_INITDB_ARGS=--no-sync \
+            --tmpfs /var/lib/postgresql/data:rw,noexec,nosuid,size=2g \
+            -p 5432:5432 \
+            postgres:15 \
+            -c max_locks_per_transaction=512
+          for i in $(seq 1 30); do
+            if docker exec postgres-real-test pg_isready -U postgres -d arxii_real_test; then
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "Postgres did not become ready" >&2
+          docker logs postgres-real-test
+          exit 1
+      - uses: astral-sh/setup-uv@v7
+        with:
+          python-version: '3.13'
+      - run: uv sync
+      # Same path the backend shards use (ADR-0083), then the account the
+      # specs log in with (`just seed-test-account`).
+      - name: Build the throwaway database
+        run: |
+          uv run python tools/build_schema.py
+          # Same function as `arx manage seed_test_account`, called through
+          # `shell`: only a few launcher commands (shell, check, makemigrations)
+          # initialise Evennia first, and on a database that has never run a
+          # server the seed command fails creating the account cmdset
+          # ('NoneType' has no attribute 'sessions_from_account').
+          #
+          # Registration is invite-only by default (RegistrationConfig, #3054) and
+          # both specs register fresh accounts through the UI, so this throwaway
+          # database opens it. No Facebook credentials are set on purpose: with
+          # them the login page grows a second "Log in..." button and the specs'
+          # `getByRole('button', { name: 'Log In' })` matches both.
+          uv run arx manage shell -c "
+          from world.registration.models import RegistrationConfig
+          from world.seeds.test_account import seed_test_account
+          RegistrationConfig.objects.update_or_create(pk=1, defaults={'registration_open': True})
+          print(seed_test_account(username='e2e_test_account', email='e2e_test@example.com', password='TestPass123!'))
+          "
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 9
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22.12
+          cache: pnpm
+          cache-dependency-path: frontend/pnpm-lock.yaml
+      - name: Build the frontend bundle once
+        working-directory: frontend
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm build
+      - name: Install Chromium
+        working-directory: frontend
+        run: pnpm exec playwright install --with-deps chromium
+      - name: Start the server
+        run: |
+          uv run arx manage collectstatic --noinput
+          uv run arx start
+          for i in $(seq 1 60); do
+            if curl -fsS -o /dev/null http://localhost:4001/api/status/; then
+              echo "server ready after ${i} tries"
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "server did not become ready on :4001" >&2
+          ls -la src/server/logs || true
+          tail -n 80 src/server/logs/*.log || true
+          exit 1
+      - name: Run the live-server Playwright specs
+        working-directory: frontend
+        # The only specs that talk to :4001 are these two (the rest mock the
+        # API and run under playwright.config.ts). One worker, as
+        # tools/skills/real-testing/SKILL.md requires.
+        run: >-
+          npx playwright test --config e2e.backend.config.ts --workers=1
+          e2e/account-settings.spec.ts e2e/user-journey.spec.ts
+      - name: Stop the server
+        if: always()
+        run: uv run arx stop || true
+      - name: Upload screenshots, traces and server logs
+        id: upload
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: real-test-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            frontend/test-results
+            frontend/playwright-report
+            src/server/logs
+          if-no-files-found: warn
+          retention-days: 30
+      - name: Print the artifact link
+        if: always()
+        env:
+          ARTIFACT_URL: ${{ steps.upload.outputs.artifact-url }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          JOB_STATUS: ${{ job.status }}
+        run: |
+          {
+            echo "### Real test: ${JOB_STATUS}"
+            echo
+            echo "- Run: ${RUN_URL}"
+            echo "- Artifact (screenshots, traces, server logs): ${ARTIFACT_URL}"
+            echo "- Commit: ${GITHUB_SHA}"
+          } | tee -a "$GITHUB_STEP_SUMMARY"
