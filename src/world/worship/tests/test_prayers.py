@@ -31,7 +31,7 @@ from world.worship.constants import (
 )
 from world.worship.exceptions import (
     PrayerEmpty,
-    VisionClueNotCodex,
+    VisionClueNotFact,
     VisionEpisodeNotShared,
     VisionPoolInsufficient,
     VisionPrayerMismatch,
@@ -278,10 +278,10 @@ class SendVisionTests(PrayerTestBase):
             ).exists()
         )
 
-    def test_only_a_codex_clue_rides_a_vision(self) -> None:
+    def test_only_a_codex_or_secret_clue_rides_a_vision(self) -> None:
         clue = ClueFactory()
         clue.target_kind = ClueTargetKind.MISSION
-        with self.assertRaises(VisionClueNotCodex):
+        with self.assertRaises(VisionClueNotFact):
             send_vision(recipient=self.sheet, being=self.being, body="No.", clue=clue)
 
     def test_an_episode_needs_the_recipient_in_its_story(self) -> None:
