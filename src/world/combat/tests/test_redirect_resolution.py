@@ -37,6 +37,7 @@ from world.magic.factories import CharacterAnimaFactory
 from world.magic.models import CharacterTechnique, Technique
 from world.mechanics.models import ObjectProperty
 from world.scenes.constants import RoundStatus
+from world.scenes.models import PendingSuddenHarm
 from world.vitals.models import CharacterVitals
 
 
@@ -298,6 +299,50 @@ class RedirectVolatileObjectResolutionTest(_RedirectResolutionTestBase):
         self.ally_vitals.refresh_from_db()
         self.assertEqual(
             self.ally_vitals.health, 100, "the ward is still shielded even on degrade-to-away"
+        )
+
+
+@override_settings(SEED_SAMPLE_CONTENT=True)  # the "Fire" DamageType is sample-gated (#2698)
+class RedirectVolatileObjectEnemyDamageTest(_RedirectResolutionTestBase):
+    """A detonation hurts enemies at the object's position, not only PCs (#4376).
+
+    Real path, no mocked pool: the enemy's objectdb has no character vitals, so
+    the pool's DEAL_DAMAGE must reach the enemy through ``apply_damage_to_opponent``.
+    """
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.volatile_property = ensure_redirect_content()
+        self.keg = create_object("typeclasses.objects.Object", key="PowderKeg", location=self.room)
+        ObjectProperty.objects.create(object=self.keg, property=self.volatile_property)
+        self.position = PositionFactory(room=self.room)
+        place_in_position(self.keg, self.position)
+        place_in_position(self.ally, self.position)
+        self.opponent = CombatOpponentFactory(
+            encounter=self.encounter,
+            status=OpponentStatus.ACTIVE,
+            health=100,
+            max_health=100,
+        )
+        place_in_position(self.opponent.objectdb, self.position)
+
+    def test_detonation_damages_enemy_and_pc_at_the_spot(self) -> None:
+        # Expected, written before the run: the authored blast is 15 Fire damage.
+        # Enemy 100 -> 85 (no soak or resistance on a fresh mook). The PC's 15 goes
+        # through the sudden-harm path: applied now, or held as a PendingSuddenHarm
+        # for an Interpose beat when a bystander can interpose. Either counts as hit.
+        self._declare(redirect_object_target=self.keg)
+
+        with patch("world.combat.services.perform_check", side_effect=_fake_perform_check(2)):
+            apply_damage_to_participant(self.ally_participant, 40)
+
+        self.opponent.refresh_from_db()
+        self.ally_vitals.refresh_from_db()
+        self.assertEqual(self.opponent.health, 85, "the enemy at the spot takes the blast too")
+        held = PendingSuddenHarm.objects.filter(target_sheet=self.ally_sheet, amount=15).exists()
+        self.assertTrue(
+            held or self.ally_vitals.health == 85,
+            "the PC at the spot is hit by the blast (applied, or held for an Interpose beat)",
         )
 
 
