@@ -207,6 +207,7 @@ class ArxCommand(Command):
         *,
         empty_msg: str,
         usage_msg: str,
+        text: str | None = None,
     ) -> tuple[str, str]:
         """Parse ``"a <connector> b"`` from ``self.args``.
 
@@ -218,7 +219,12 @@ class ArxCommand(Command):
                 match the expected ``a <connector> b`` shape (with
                 ``usage_msg``).
         """
-        args = self.require_args(empty_msg)
+        # ``text`` is for commands that take a subverb first (``org invite <a>
+        # in <b>``): ``self.args`` still carries the subverb, so parsing it
+        # searched for a character named "invite Hobb" (#3657 tranche 2).
+        args = self.require_args(empty_msg) if text is None else text.strip()
+        if not args:
+            raise CommandError(empty_msg)
         match = re.match(
             rf"^(.+?)\s+{re.escape(connector)}\s+(.+)$",
             args,
