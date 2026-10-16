@@ -93,6 +93,21 @@ class TraitDefault(NamedTuple):
     description: str
 
 
+# The canonical check-outcome tiers and their success levels (#4378). Code across the game
+# reads ``CheckOutcome.success_level`` (> 0 succeeded, < 0 failed), never the name, so
+# these numbers carry meaning: the sign is the verdict. The checks seed
+# (``world.seeds.checks``) and every other seed that needs a tier go through
+# ``world.traits.services.ensure_canonical_check_outcome``, which creates a missing row
+# at these levels and corrects a drifted one. Never create a tier with
+# ``CheckOutcomeFactory`` outside tests: its ``success_level`` is a random integer.
+CANONICAL_OUTCOME_LEVELS: dict[str, int] = {
+    "Critical Failure": -2,
+    "Failure": -1,
+    "Partial Success": 0,
+    "Success": 1,
+    "Critical Success": 2,
+}
+
 # Code defaults for the STAT Traits multiple config-prerequisite paths roll checks on
 # (fatigue's willpower/endurance checks, dreams' Dream Peril Resolve — see
 # world.seeds.config_prerequisites) before the content load populates the `traits.trait`
