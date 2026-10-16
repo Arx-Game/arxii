@@ -19,7 +19,7 @@ def forward(apps, schema_editor):
     SoulfrayConfig = apps.get_model("arxii", "SoulfrayConfig")
     ConditionTemplate = apps.get_model("arxii", "ConditionTemplate")
 
-    template = ConditionTemplate.objects.filter(name__iexact=_SOULFRAY_NAME).first()
+    template = ConditionTemplate.objects.filter(name__iexact=_SOULFRAY_NAME).order_by("pk").first()
     if template is None:
         return
     SoulfrayConfig.objects.filter(condition__isnull=True).update(condition=template)

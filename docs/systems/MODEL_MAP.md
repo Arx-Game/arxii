@@ -6122,6 +6122,7 @@
 ### SoulfrayConfig
 **Foreign Keys:**
   - resilience_check_type -> checks.CheckType [FK]
+  - condition -> conditions.ConditionTemplate [FK] (nullable)
 
 ### StandingCapBand
 
