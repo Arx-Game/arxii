@@ -84,7 +84,10 @@ outcome** (a closed issue or a "SHIPPED" line is not proof). See the ledger's go
   consumed/moved/position-less object degrades to "away" (the universal fallback).
   Volatile-object detonation fires `PropertyDetonation.consequence_pool` at every
   combatant positioned there (new `world.room_features.trap_services.
-  fire_pool_at_characters`) then deletes the triggering `ObjectProperty` — one-shot.
+  fire_pool_at_characters`; each PC takes the blast as its own context, #4376). Enemies
+  positioned there take each authored DEAL_DAMAGE through `apply_damage_to_opponent`
+  (#4376), since an enemy has no character vitals. Then the triggering `ObjectProperty`
+  is deleted, one-shot.
   Journey-proven end-to-end (`world/combat/tests/test_redirect_resolution.py`,
   `actions/tests/test_combat_maneuvers.py::InterposeRedirectDispatchSeamTest` —
   the last one drives the real `InterposeAction.run()` seam, not just the service
