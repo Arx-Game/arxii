@@ -1,0 +1,150 @@
+import * as path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { test, expect, type Browser, type Page } from '@playwright/test';
+
+/**
+ * Review evidence for #4373 against a real server (rt_4373, seeded by
+ * seed_4373.py): a GM stands a named NPC on a beat line, staff see the language
+ * fields in the admin, then (after the beat runs) two players, the GM and an
+ * onlooker each see their own seat of the named NPC group and the language gate.
+ * Not a CI spec: it needs that seeded server on :4001. PART selects the phase.
+ */
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const REPO_ROOT = path.resolve(__dirname, '..', '..', '..');
+const EVIDENCE_DIR = path.join(REPO_ROOT, 'docs', 'reviews', '4373');
+const shot = (name: string) => path.join(EVIDENCE_DIR, name);
+const PASSWORD = 'TestPass123!';
+const IDS = JSON.parse(process.env.RT_IDS ?? '{}') as Record<string, number>;
+const MAUD = 'Maud Carrow (test)';
+const NO_LANGUAGE = 'You share no language with them.';
+
+async function signIn(browser: Browser, username: string): Promise<Page> {
+  const context = await browser.newContext({ viewport: { width: 1500, height: 1100 } });
+  const page = await context.newPage();
+  await page.goto('/login');
+  await page.getByPlaceholder('Username or Email').fill(username);
+  await page.getByPlaceholder('Password').fill(PASSWORD);
+  await page.getByRole('button', { name: 'Log In', exact: true }).click();
+  await page.waitForURL((url) => !url.pathname.startsWith('/login'));
+  return page;
+}
+
+test.describe.configure({ mode: 'serial' });
+
+test('part 1: the GM stands a named NPC; staff see the language fields', async ({ browser }) => {
+  test.skip(process.env.PART !== '1', 'part 1 only');
+  test.setTimeout(240_000);
+  const gm = await signIn(browser, 'gm4373');
+  await gm.goto(`/stories/author/${IDS.story}`);
+  await gm.getByText('The Corle gate (test)').first().click();
+  await gm.getByRole('button', { name: /Episode \(test\)/ }).click();
+  await gm.getByRole('button', { name: 'Edit beat' }).first().click();
+  await expect(gm.getByTestId('placement-panel-0')).toBeVisible({ timeout: 20_000 });
+  await gm.getByRole('button', { name: 'Add opponent' }).click();
+  await gm.getByTestId('beat-opponent-line-creature-1').selectOption({
+    label: 'Gate Sellsword (test) (mook)',
+  });
+  const picker = gm.getByTestId('beat-opponent-line-persona-1');
+  await expect(picker.getByRole('option', { name: MAUD })).toHaveCount(1);
+  await picker.selectOption({ label: MAUD });
+  await expect(gm.getByTestId('beat-opponent-line-count-1')).toBeDisabled();
+  await expect(gm.getByTestId('placement-persona-1')).toContainText(
+    `${MAUD} is a named NPC: their drives are their persona's properties`
+  );
+  await expect(gm.getByTestId('placement-summary-0')).toContainText(
+    'speaks Riverland common (test)'
+  );
+  await gm.screenshot({ path: shot('01-gm-beat-dialog-named-npc.png'), fullPage: true });
+  await gm.getByTestId('beat-opponent-line-row-1').screenshot({ path: shot('01b-line.png') });
+  await gm.getByRole('button', { name: 'Save Beat' }).click();
+  await expect(gm.getByRole('heading', { name: 'Edit Beat' })).toHaveCount(0, { timeout: 20_000 });
+  await gm.getByRole('button', { name: 'Edit beat' }).first().click();
+  await expect(gm.getByTestId('beat-opponent-line-persona-1')).toHaveValue(String(IDS.maud), {
+    timeout: 20_000,
+  });
+
+  const staff = await signIn(browser, 'staff4373');
+  await staff.goto(`/admin/_standoff_profile/${IDS.template}/`);
+  await expect(staff.getByText('Blank means no language')).toBeVisible();
+  await expect(staff.getByText('spoken: needs Riverland common (test)')).toBeVisible();
+  await staff.screenshot({ path: shot('02-profile-builder-language.png'), fullPage: true });
+  await staff.goto('/admin/arxii/standoffapproach/');
+  await expect(staff.getByRole('columnheader', { name: /Is verbal/ })).toBeVisible();
+  await staff.screenshot({ path: shot('03-approach-list-is-verbal.png'), fullPage: true });
+  await staff.goto(`/admin/arxii/beat/${IDS.beat}/change/`);
+  await staff.getByRole('link', { name: 'Edit placement' }).last().click();
+  await expect(staff.locator('#placement-root h1')).toContainText(MAUD);
+  await expect(staff.getByText(`${MAUD} is a named NPC`)).toBeVisible();
+  await expect(staff.getByText('Speaks Riverland common (test)')).toBeVisible();
+  await staff.screenshot({ path: shot('04-placement-named-npc.png'), fullPage: true });
+});
+
+test('part 2: each seat of the named NPC group and the language gate', async ({ browser }) => {
+  test.skip(process.env.PART !== '2', 'part 2 only');
+  test.setTimeout(240_000);
+  const scene = `/scenes/${IDS.scene}`;
+
+  const wrenna = await signIn(browser, 'wrenna4373');
+  await wrenna.goto(scene);
+  await expect(wrenna.getByText(MAUD).first()).toBeVisible({ timeout: 20_000 });
+  await expect(wrenna.getByText(`${MAUD}'s regard for you: harder`).first()).toBeVisible();
+  await expect(wrenna.getByText('-150')).toHaveCount(0);
+  await expect(wrenna.getByTestId('standoff-refusal')).toHaveCount(0);
+  await wrenna.screenshot({ path: shot('05-wrenna-card.png'), fullPage: true });
+
+  const aubrin = await signIn(browser, 'aubrin4373');
+  await aubrin.goto(scene);
+  await expect(aubrin.getByText(MAUD).first()).toBeVisible({ timeout: 20_000 });
+  await expect(aubrin.getByTestId('standoff-refusal').first()).toHaveText(NO_LANGUAGE);
+  await expect(aubrin.getByRole('button', { name: /Persuade \(test\)/ }).first()).toBeDisabled();
+  await expect(aubrin.getByRole('button', { name: /Show steel \(test\)/ }).first()).toBeEnabled();
+  await expect(aubrin.getByText(/regard for you/)).toHaveCount(0);
+  await aubrin.screenshot({ path: shot('06-aubrin-card-refused.png'), fullPage: true });
+
+  const gm = await signIn(browser, 'gm4373');
+  await gm.goto(scene);
+  await gm.getByTestId('rail-tab-gm').click();
+  const panel = gm.getByTestId('gm-standoff-panel');
+  await expect(panel).toBeVisible({ timeout: 20_000 });
+  const maudBox = gm.getByTestId('gm-standoff-group').filter({ hasText: MAUD });
+  await expect(maudBox).toContainText('named NPC');
+  await expect(maudBox).toContainText('Riverland common (test)');
+  await expect(maudBox).toContainText('Wrenna: negative (-150)');
+  await expect(maudBox).toContainText('Prudent (test), Major');
+  await panel.screenshot({ path: shot('07-gm-panel-named-npc.png') });
+
+  const anselm = await signIn(browser, 'anselm4373');
+  await anselm.goto(scene);
+  const summary = anselm.getByTestId('standoff-summary-card');
+  await expect(summary).toBeVisible({ timeout: 20_000 });
+  await expect(summary).toContainText(MAUD);
+  await expect(summary).not.toContainText('Riverland');
+  await expect(summary).not.toContainText('regard');
+  await anselm.screenshot({ path: shot('08-onlooker-summary.png'), fullPage: true });
+});
+
+test('part 3: Wrenna presses the named NPC on the web; the room sees it', async ({ browser }) => {
+  test.skip(process.env.PART !== '3', 'part 3 only');
+  test.setTimeout(180_000);
+  const scene = `/scenes/${IDS.scene}`;
+  const wrenna = await signIn(browser, 'wrenna4373');
+  await wrenna.goto(scene);
+  const persuade = wrenna
+    .getByTestId('standoff-group')
+    .filter({ hasText: MAUD })
+    .getByRole('button', { name: /Persuade \(test\)/ });
+  await expect(persuade).toBeEnabled({ timeout: 20_000 });
+  await persuade.click();
+  await expect(
+    wrenna.getByText(new RegExp(`presses ${MAUD.replace(/[()]/g, '\\$&')} with Persuade`)).first()
+  ).toBeVisible({
+    timeout: 20_000,
+  });
+  await wrenna.screenshot({ path: shot('09-wrenna-pressed-maud.png'), fullPage: true });
+  const anselm = await signIn(browser, 'anselm4373');
+  await anselm.goto(scene);
+  await expect(anselm.getByText(/presses Maud Carrow \(test\) with Persuade/).first()).toBeVisible({
+    timeout: 20_000,
+  });
+  await anselm.screenshot({ path: shot('10-onlooker-room-line.png'), fullPage: true });
+});
