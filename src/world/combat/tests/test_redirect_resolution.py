@@ -333,16 +333,32 @@ class RedirectVolatileObjectEnemyDamageTest(_RedirectResolutionTestBase):
         # for an Interpose beat when a bystander can interpose. Either counts as hit.
         self._declare(redirect_object_target=self.keg)
 
-        with patch("world.combat.services.perform_check", side_effect=_fake_perform_check(2)):
+        with (
+            patch("world.combat.services.perform_check", side_effect=_fake_perform_check(2)),
+            patch("world.combat.interaction_services.broadcast_action_outcome") as mock_broadcast,
+        ):
             apply_damage_to_participant(self.ally_participant, 40)
 
         self.opponent.refresh_from_db()
         self.ally_vitals.refresh_from_db()
+        self.guardian_vitals = CharacterVitals.objects.get(
+            character_sheet=self.guardian_participant.character_sheet
+        )
         self.assertEqual(self.opponent.health, 85, "the enemy at the spot takes the blast too")
         held = PendingSuddenHarm.objects.filter(target_sheet=self.ally_sheet, amount=15).exists()
         self.assertTrue(
             held or self.ally_vitals.health == 85,
             "the PC at the spot is hit by the blast (applied, or held for an Interpose beat)",
+        )
+        self.assertEqual(
+            self.guardian_vitals.health,
+            100,
+            "the guardian who redirected the blast is not its damage target",
+        )
+        narrations = [c.kwargs.get("narration", "") for c in mock_broadcast.call_args_list]
+        self.assertTrue(
+            any(self.opponent.name in n and "15 damage" in n for n in narrations),
+            f"the outcome names the enemy's damage; broadcasts were {narrations}",
         )
 
 
