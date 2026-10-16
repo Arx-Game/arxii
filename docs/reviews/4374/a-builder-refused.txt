@@ -1,3 +1,0 @@
-Fact text is allowed on Success and Critical Success only.
-Fact text:
-States one fact. Success and Critical Success only.
