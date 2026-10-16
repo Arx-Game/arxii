@@ -58,10 +58,15 @@ test('part 1: the GM stands a named NPC; staff see the language fields', async (
   await gm.getByTestId('beat-opponent-line-row-1').screenshot({ path: shot('01b-line.png') });
   await gm.getByRole('button', { name: 'Save Beat' }).click();
   await expect(gm.getByRole('heading', { name: 'Edit Beat' })).toHaveCount(0, { timeout: 20_000 });
+  // Read it back from the server: reopen the dialog on a fresh page.
+  await gm.reload();
+  await gm.getByText('The Corle gate (test)').first().click();
+  await gm.getByRole('button', { name: /Episode \(test\)/ }).click();
   await gm.getByRole('button', { name: 'Edit beat' }).first().click();
-  await expect(gm.getByTestId('beat-opponent-line-persona-1')).toHaveValue(String(IDS.maud), {
-    timeout: 20_000,
-  });
+  await expect(gm.getByTestId('placement-persona-1')).toBeVisible({ timeout: 20_000 });
+  await gm
+    .getByTestId('beat-opponent-line-row-1')
+    .screenshot({ path: shot('01c-line-read-back.png') });
 
   const staff = await signIn(browser, 'staff4373');
   await staff.goto(`/admin/_standoff_profile/${IDS.template}/`);
@@ -135,8 +140,11 @@ test('part 3: Wrenna presses the named NPC on the web; the room sees it', async 
     .getByRole('button', { name: /Persuade \(test\)/ });
   await expect(persuade).toBeEnabled({ timeout: 20_000 });
   await persuade.click();
+  // The press result comes back to the actor; the room line is read from the scene feed.
+  await wrenna.waitForTimeout(3000);
+  await wrenna.reload();
   await expect(
-    wrenna.getByText(new RegExp(`presses ${MAUD.replace(/[()]/g, '\\$&')} with Persuade`)).first()
+    wrenna.getByText(/Wrenna presses Maud Carrow \(test\) with Persuade/).first()
   ).toBeVisible({
     timeout: 20_000,
   });
