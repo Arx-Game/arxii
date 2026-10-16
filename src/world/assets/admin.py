@@ -1,5 +1,6 @@
 from django.contrib import admin
 
+from world.admin_utils import OneRowPerFormSet
 from world.assets.models import CluePool, CluePoolEntry, DistinctionAssetGrant, NPCAsset
 
 
@@ -42,6 +43,7 @@ class DistinctionAssetGrantAdmin(admin.ModelAdmin):
 
 class CluePoolEntryInline(admin.TabularInline):
     model = CluePoolEntry
+    formset = OneRowPerFormSet
     extra = 1
     autocomplete_fields = ["clue"]
 

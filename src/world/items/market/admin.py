@@ -8,6 +8,7 @@ dropped one, and staff cannot place one in a crime neighborhood.
 
 from django.contrib import admin
 
+from world.admin_utils import OneRowPerFormSet
 from world.items.market.models import (
     CraftingServiceOffer,
     MarketSale,
@@ -20,6 +21,7 @@ from world.items.market.models import (
 
 class StockListingInline(admin.TabularInline):
     model = StockListing
+    formset = OneRowPerFormSet
     extra = 0
     fields = ["template", "price", "min_regard", "is_active"]
     raw_id_fields = ["template"]
@@ -27,6 +29,7 @@ class StockListingInline(admin.TabularInline):
 
 class MarketStallInline(admin.TabularInline):
     model = MarketStall
+    formset = OneRowPerFormSet
     extra = 0
     fields = [
         "name",

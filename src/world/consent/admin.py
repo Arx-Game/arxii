@@ -2,6 +2,7 @@
 
 from django.contrib import admin
 
+from world.admin_utils import OneRowPerFormSet
 from world.consent.models import (
     ConsentGroup,
     ConsentGroupMember,
@@ -17,6 +18,7 @@ class ConsentGroupMemberInline(admin.TabularInline):
     """Inline admin for group members."""
 
     model = ConsentGroupMember
+    formset = OneRowPerFormSet
     extra = 1
     raw_id_fields = ["tenure"]
 
@@ -51,6 +53,7 @@ class SocialConsentCategoryRuleInline(admin.TabularInline):
     """Inline admin for per-category consent rules on a preference."""
 
     model = SocialConsentCategoryRule
+    formset = OneRowPerFormSet
     extra = 0
     raw_id_fields = ["category"]
 

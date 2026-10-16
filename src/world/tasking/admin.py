@@ -2,11 +2,13 @@
 
 from django.contrib import admin
 
+from world.admin_utils import OneRowPerFormSet
 from world.tasking.models import OrgTask, TaskFulfillment, TaskOutcomeRoute, TaskTemplate
 
 
 class TaskOutcomeRouteInline(admin.TabularInline):
     model = TaskOutcomeRoute
+    formset = OneRowPerFormSet
     extra = 0
     raw_id_fields = ("outcome_tier", "clue_pool")
 

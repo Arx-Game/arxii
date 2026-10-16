@@ -5,6 +5,7 @@ from typing import TYPE_CHECKING, Any
 from django.contrib import admin, messages
 from django.http import HttpRequest
 
+from world.admin_utils import OneRowPerFormSet
 from world.character_sheets.models import (
     CharacterEnemy,
     CharacterSheet,
@@ -26,6 +27,7 @@ class ProfileBeginningsInline(admin.TabularInline):
     """Every origin this character holds, and why (#3775)."""
 
     model = ProfileBeginnings
+    formset = OneRowPerFormSet
     extra = 0
     fields = ["beginnings", "source", "note", "gained_at"]
     readonly_fields = ["gained_at"]

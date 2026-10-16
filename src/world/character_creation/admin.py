@@ -6,6 +6,7 @@ from django import forms
 from django.contrib import admin
 from django.utils.html import format_html
 
+from world.admin_utils import OneRowPerFormSet
 from world.character_creation.constants import OfferArrival, OfferChapter
 from world.character_creation.models import (
     AppearanceSection,
@@ -69,12 +70,14 @@ class StartingAreaAdmin(admin.ModelAdmin):
 
 class BeginningsCodexGrantInline(admin.TabularInline):
     model = BeginningsCodexGrant
+    formset = OneRowPerFormSet
     extra = 1
     autocomplete_fields = ["entry"]
 
 
 class BeginningTraditionInline(admin.TabularInline):
     model = BeginningTradition
+    formset = OneRowPerFormSet
     extra = 1
     raw_id_fields = ["tradition"]
 
@@ -101,6 +104,7 @@ class BeatExclusionForBeginningInline(admin.TabularInline):
     """The library beats this Beginning never meets (#4124); the rest apply."""
 
     model = LifeBeatExclusion
+    formset = OneRowPerFormSet
     extra = 0
     autocomplete_fields = ["beat"]
     fields = ["beat", "reason"]
@@ -177,6 +181,7 @@ class OriginTemplateSlotInline(admin.TabularInline):
     """Inline for slot prompts within an origin template (#2478)."""
 
     model = OriginTemplateSlot
+    formset = OneRowPerFormSet
     extra = 1
     ordering = ["sort_order"]
     show_change_link = True
@@ -219,6 +224,7 @@ class OriginTemplateAdmin(admin.ModelAdmin):
 
 class OriginTemplateSlotChoiceInline(admin.TabularInline):
     model = OriginTemplateSlotChoice
+    formset = OneRowPerFormSet
     extra = 1
     ordering = ["sort_order"]
 
@@ -281,6 +287,7 @@ class BeatExclusionInline(admin.TabularInline):
     """The Beginnings that never meet this beat (#4124); every other Beginning does."""
 
     model = LifeBeatExclusion
+    formset = OneRowPerFormSet
     extra = 0
     autocomplete_fields = ["beginning"]
     fields = ["beginning", "reason"]

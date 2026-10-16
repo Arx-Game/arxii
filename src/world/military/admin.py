@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from django.contrib import admin
 
+from world.admin_utils import OneRowPerFormSet
 from world.military.models import (
     Army,
     ArmyMembership,
@@ -14,6 +15,7 @@ from world.military.models import (
 
 class MilitaryUnitCapabilityInline(admin.TabularInline):
     model = MilitaryUnitCapability
+    formset = OneRowPerFormSet
     extra = 0
 
 

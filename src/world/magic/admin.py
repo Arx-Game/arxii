@@ -8,7 +8,7 @@ from django.template.response import TemplateResponse
 from django.utils.html import format_html
 
 from web.admin.authoring.offers import DistinctionOfferFormSetMixin
-from world.admin_utils import describe_reverse_relations
+from world.admin_utils import OneRowPerFormSet, describe_reverse_relations
 from world.character_creation.constants import OfferChapter
 from world.character_creation.models import DistinctionOffer
 from world.codex.admin import GrantReachOnSaveMixin
@@ -228,6 +228,7 @@ class StyleCapabilityRequirementInline(admin.TabularInline):
     """Capabilities a caster needs to work magic in this style (#2700)."""
 
     model = StyleCapabilityRequirement
+    formset = OneRowPerFormSet
     extra = 1
     autocomplete_fields = ["capability"]
 
@@ -263,6 +264,7 @@ class PriceComponentRequirementInline(admin.TabularInline):
     """
 
     model = PriceComponentRequirement
+    formset = OneRowPerFormSet
     extra = 0
     autocomplete_fields = ["item_template"]
     raw_id_fields = ["min_quality_tier"]
@@ -309,6 +311,7 @@ class TechniqueCapabilityGrantInline(admin.TabularInline):
     """
 
     model = TechniqueCapabilityGrant
+    formset = OneRowPerFormSet
     extra = 1
     autocomplete_fields = ["capability"]
     verbose_name = "Capability Grant (standing, from knowing it)"
@@ -326,6 +329,7 @@ class TechniqueAppliedConditionInline(admin.TabularInline):
     """
 
     model = TechniqueAppliedCondition
+    formset = OneRowPerFormSet
     extra = 1
     autocomplete_fields = ["condition"]
 
@@ -391,6 +395,7 @@ class TechniqueRemovedConditionInline(admin.TabularInline):
     """Inline dispel payload rows on the Technique admin (#1585)."""
 
     model = TechniqueRemovedCondition
+    formset = OneRowPerFormSet
     extra = 1
     autocomplete_fields = ["condition"]
 
@@ -399,6 +404,7 @@ class TechniqueTreatmentInline(admin.TabularInline):
     """Inline treatment payload rows on the Technique admin (#2668)."""
 
     model = TechniqueTreatment
+    formset = OneRowPerFormSet
     extra = 1
 
 
@@ -406,6 +412,7 @@ class TechniqueFunctionTagInline(admin.TabularInline):
     """Inline fine-grained function labels on the Technique admin (#2443)."""
 
     model = TechniqueFunctionTag
+    formset = OneRowPerFormSet
     extra = 1
 
 
@@ -945,16 +952,36 @@ class CharacterGiftAdmin(admin.ModelAdmin):
 
 class TraditionCodexGrantInline(admin.TabularInline):
     model = TraditionCodexGrant
+    formset = OneRowPerFormSet
     extra = 1
     autocomplete_fields = ["entry"]
 
 
-class TraditionGiftGrantInline(admin.TabularInline):
-    """Gifts this tradition grants (sibling of TraditionCodexGrantInline above)."""
+class TraditionGiftGrantFormSet(OneRowPerFormSet):
+    """Names the doubled gift and says where its techniques go (#4380)."""
+
+    duplicate_hint = (
+        "A tradition grants each gift on one row; pick every special technique it "
+        "grants from that gift there."
+    )
+
+
+class TraditionGiftGrantInline(admin.StackedInline):
+    """Gifts this tradition grants (sibling of TraditionCodexGrantInline above).
+
+    One block per gift, with the gift's special techniques picked on that block.
+    Stacked rather than tabular because the technique picker is the two-column
+    ``filter_horizontal`` widget the standalone ``TraditionGiftGrantAdmin`` uses:
+    the tabular row's bare multi-select needs ctrl-click to pick a second
+    technique, which is how a tradition ended up with one row per technique and
+    the same gift twice (#4380).
+    """
 
     model = TraditionGiftGrant
+    formset = TraditionGiftGrantFormSet
     extra = 1
     autocomplete_fields = ["gift"]
+    filter_horizontal = ["special_techniques"]
 
 
 @admin.register(Tradition)
@@ -1123,12 +1150,14 @@ class AnimaRitualPerformanceAdmin(admin.ModelAdmin):
 
 class MotifResonanceStyleInline(admin.TabularInline):
     model = MotifResonanceStyle
+    formset = OneRowPerFormSet
     extra = 1
     autocomplete_fields = ["style"]
 
 
 class MotifResonanceInline(admin.TabularInline):
     model = MotifResonance
+    formset = OneRowPerFormSet
     extra = 0
 
 
@@ -1579,6 +1608,7 @@ class RitualComponentRequirementAdmin(admin.ModelAdmin):
 
 class ThreadLevelUnlockInline(admin.TabularInline):
     model = ThreadLevelUnlock
+    formset = OneRowPerFormSet
     extra = 0
     readonly_fields = ["acquired_at"]
 
@@ -1970,6 +2000,7 @@ class SignatureMotifBonusAppliedConditionInline(admin.TabularInline):
     """
 
     model = SignatureMotifBonusAppliedCondition
+    formset = OneRowPerFormSet
     extra = 0
     autocomplete_fields = ["condition"]
 
@@ -2133,6 +2164,7 @@ class GhostTutelageAdmin(admin.ModelAdmin):
 
 class FaithVariantAppliedConditionInline(admin.TabularInline):
     model = AudereMajoraFaithVariantAppliedCondition
+    formset = OneRowPerFormSet
     extra = 0
 
 
@@ -2591,6 +2623,7 @@ class TechniqueVariantCapabilityGrantInline(admin.TabularInline):
     """#3831 - capability granted by this variant (mirrors TechniqueCapabilityGrantInline)."""
 
     model = TechniqueVariantCapabilityGrant
+    formset = OneRowPerFormSet
     extra = 1
     autocomplete_fields = ["capability", "prerequisite"]
 
@@ -2599,6 +2632,7 @@ class TechniqueVariantAppliedConditionInline(admin.TabularInline):
     """#3831 - applied-condition payload rows on the TechniqueVariant admin."""
 
     model = TechniqueVariantAppliedCondition
+    formset = OneRowPerFormSet
     extra = 1
     autocomplete_fields = ["condition"]
 
