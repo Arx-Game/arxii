@@ -1,0 +1,9 @@
+BEFORE pool 5 held 1 mira visions 0 clues 0 codex 0 missions 0 conditions 0
+TICK short pool delivered 0
+AFTER SHORT TICK pool 5 held 1 mira visions 0 clues 0 codex 0 missions 0 conditions 0
+TICK paid pool delivered 1
+AFTER PAID TICK pool 90 held 0 mira visions 1 clues 2 codex 1 missions 1 conditions 1
+VISION '[staff-authored delay text: success]\n\n[staff-authored answer text: success] Also sacrificed: wooden comb.\n\n[staff-authored fact text: success]\n\n[staff-authored cost text: success]\n\n[staff-authored follow-up text: success]'
+WREN before ACTIVE 3 of 5 favor 3
+LIFECYCLE TICK 1
+WREN after FAILED favor 6 visions 0 held 0

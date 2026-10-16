@@ -1,0 +1,55 @@
+dump: arxii-20261016T033001Z.sql.gz
+restored
+prod newest recorded migration: 0222_drop_sheet_marital_status
+== bring to main tip 0234
+Operations to perform:
+  Target specific migration: 0234_ceremony_offering_ceremony_xor_being, from arxii
+Running migrations:
+  Applying arxii.0223_favor_invocation... OK
+  Applying arxii.0224_being_favor_targets... OK
+  Applying arxii.0225_scene_location_is_a_roomprofile... OK
+  Applying arxii.0226_rename_faction_rules_and_angles... OK
+  Applying arxii.0227_reveal_kind_faction_rule... OK
+  Applying arxii.0228_faction_rule_constraints... OK
+  Applying arxii.0229_standoff_proposals_and_gm_controls... OK
+  Applying arxii.0230_placement_edits_and_inherited_faction_rules... OK
+  Applying arxii.0231_standoff_profile_snapshot_backfill... OK
+  Applying arxii.0232_standoff_reveal_drive_is_a_property... OK
+  Applying arxii.0233_pledges_and_sacrifices... OK
+  Applying arxii.0234_ceremony_offering_ceremony_xor_being... OK
+before (at 0234):
+  arxii_vision=0  arxii_answer=absent  arxii_answersacrificeline=absent  arxii_pendinganswer=absent  arxii_pledge=0  arxii_pledgedetails=0  arxii_ceremonyoffering=0  arxii_worshippedbeing=6  arxii_clue=0  arxii_checkoutcome=9
+vision.answer_id column: 0
+== seeding old-shape rows at 0234 (prod has none of the shape that matters)
+1
+INSERT 0 1
+  arxii_vision=1  arxii_answer=absent  arxii_answersacrificeline=absent  arxii_pendinganswer=absent  arxii_pledge=0  arxii_pledgedetails=0  arxii_ceremonyoffering=0  arxii_worshippedbeing=6  arxii_clue=0  arxii_checkoutcome=9
+vision.answer_id column: 0
+== forward to branch tip
+Operations to perform:
+  Apply all migrations: arxii
+Running migrations:
+  Applying arxii.0235_answers_at_the_close... OK
+after forward:
+  arxii_vision=1  arxii_answer=0  arxii_answersacrificeline=0  arxii_pendinganswer=0  arxii_pledge=0  arxii_pledgedetails=0  arxii_ceremonyoffering=0  arxii_worshippedbeing=6  arxii_clue=0  arxii_checkoutcome=9
+vision.answer_id column: 1
+visions with answer set: 0
+  pending: 0
+== reverse to 0234
+Operations to perform:
+  Target specific migration: 0234_ceremony_offering_ceremony_xor_being, from arxii
+Running migrations:
+  Rendering model states... DONE
+  Unapplying arxii.0235_answers_at_the_close... OK
+after reverse:
+  arxii_vision=1  arxii_answer=absent  arxii_answersacrificeline=absent  arxii_pendinganswer=absent  arxii_pledge=0  arxii_pledgedetails=0  arxii_ceremonyoffering=0  arxii_worshippedbeing=6  arxii_clue=0  arxii_checkoutcome=9
+vision.answer_id column: 0
+== forward again
+Operations to perform:
+  Apply all migrations: arxii
+Running migrations:
+  Applying arxii.0235_answers_at_the_close... OK
+after second forward:
+  arxii_vision=1  arxii_answer=0  arxii_answersacrificeline=0  arxii_pendinganswer=0  arxii_pledge=0  arxii_pledgedetails=0  arxii_ceremonyoffering=0  arxii_worshippedbeing=6  arxii_clue=0  arxii_checkoutcome=9
+vision.answer_id column: 1
+  pending: 0

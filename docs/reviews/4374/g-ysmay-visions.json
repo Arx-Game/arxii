@@ -1,0 +1,20 @@
+[
+  {
+    "id": 2,
+    "recipient": 4,
+    "being_name": "Ombrin",
+    "body": "[staff-authored delay text: partial success]\n\n[staff-authored answer text: partial success] [staff-authored sacrifice line: Silk, partial success] Also sacrificed: silk ribbon, brass bell.\n\n[staff-authored cost text: partial success]\n\n[staff-authored follow-up text: partial success]",
+    "reveal_source": true,
+    "prayer": null,
+    "clue": null,
+    "clue_slug": null,
+    "clue_name": null,
+    "episode": null,
+    "episode_title": null,
+    "follow_up_clue_name": "Ombrin mission clue",
+    "condition_names": [
+      "Marked by Ombrin"
+    ],
+    "sent_at": "2026-10-16T16:20:53.533732Z"
+  }
+]

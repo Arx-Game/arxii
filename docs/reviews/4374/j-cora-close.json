@@ -1,0 +1,10 @@
+{
+  "status": 200,
+  "body": {
+    "backend": "registry",
+    "deferred": false,
+    "message": "You hold no open pledge.",
+    "data": null,
+    "success": false
+  }
+}

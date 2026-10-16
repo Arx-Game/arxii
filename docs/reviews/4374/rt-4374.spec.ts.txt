@@ -1,0 +1,240 @@
+/* Scratch real-testing spec for #4374 (not committed). Runs against rt_4374 on :4001. */
+import { expect, test, type Page } from '@playwright/test';
+import { mkdirSync, writeFileSync } from 'node:fs';
+
+const BASE = 'http://localhost:4001';
+const OUT = '../docs/reviews/4374';
+mkdirSync(OUT, { recursive: true });
+const BEING = 1;
+const PLEDGE = 1;
+const TIER = { cf: 1, f: 2, ps: 3, s: 4, cs: 5 };
+const YSMAY = 4;
+const ORLA = 10;
+const WREN = 14;
+const YSMAY_ENTRY = 1;
+const ORLA_ENTRY = 3;
+
+async function login(page: Page, user: string, password: string) {
+  await page.goto(`${BASE}/login`);
+  await page.waitForLoadState('networkidle');
+  await page.getByPlaceholder('Username or Email').fill(user);
+  await page.getByPlaceholder('Password').fill(password);
+  await page.getByRole('button', { name: 'Log In', exact: true }).click();
+  await page.waitForURL((url) => !url.pathname.startsWith('/login'), { timeout: 15000 });
+}
+
+async function adminLogin(page: Page) {
+  await login(page, 'staff_4374', 'StaffPass123!');
+}
+
+async function csrf(page: Page): Promise<string> {
+  const cookies = await page.context().cookies();
+  return cookies.find((c) => c.name === 'csrftoken')?.value ?? '';
+}
+
+async function dispatch(page: Page, character: number, key: string, kwargs: object) {
+  const res = await page.request.post(`${BASE}/api/actions/characters/${character}/dispatch/`, {
+    headers: { 'X-CSRFToken': await csrf(page), Referer: BASE },
+    data: { ref: { backend: 'registry', registry_key: key }, kwargs },
+  });
+  return { status: res.status(), body: await res.json() };
+}
+
+async function visions(page: Page, sheet: number) {
+  const res = await page.request.get(`${BASE}/api/worship/visions/?recipient=${sheet}`);
+  return (await res.json()).results;
+}
+
+async function pick(page: Page, field: string, text: string) {
+  await page.locator(`[data-field="${field}"] .select2-selection`).click();
+  await page.locator('.select2-search__field').fill(text);
+  await page.locator('.select2-results__option', { hasText: text }).first().click();
+}
+
+test.setTimeout(180_000);
+
+test('A staff writes the Success answer in the Answer builder', async ({ page }) => {
+  await adminLogin(page);
+  await page.goto(`${BASE}/admin/_being_answers/${BEING}/?pledge=${PLEDGE}&tier=${TIER.s}`);
+  await page.screenshot({ path: `${OUT}/01-answer-builder-empty-cell.png`, fullPage: true });
+  await page.fill('#id_answer-delay_text', '[staff-authored delay text: success]');
+  await page.fill('#id_answer-answer_text', '[staff-authored answer text: success]');
+  await page.fill('#id_answer-fact_text', '[staff-authored fact text: success]');
+  await pick(page, 'fact_clue', 'Ombrin codex clue');
+  await page.fill('#id_answer-cost_text', '[staff-authored cost text: success]');
+  await pick(page, 'cost_pool', 'One-day mark pool');
+  await page.fill('#id_answer-follow_up_text', '[staff-authored follow-up text: success]');
+  await pick(page, 'follow_up_clue', 'Ombrin mission clue');
+  await page.fill('#id_answer-onlooker_line', '[staff-authored onlooker line: success]');
+  await page.click('#add-line-btn');
+  const row = page.locator('#lines-body tr').last();
+  await row.locator('select[name$="-facet"]').selectOption({ label: 'Silk' });
+  await row.locator('input[name$="-text"]').fill('[staff-authored sacrifice line: Silk, success]');
+  await page.click('input[name=save_continue]');
+  await page.waitForLoadState('networkidle');
+  await page.screenshot({ path: `${OUT}/02-answer-builder-saved.png`, fullPage: true });
+  writeFileSync(`${OUT}/a-builder-rail.txt`, (await page.locator('.ab-rail').innerText()) + '\n');
+  writeFileSync(`${OUT}/a-builder-messages.txt`, (await page.locator('.messagelist').innerText()) + '\n');
+  // A fact on Partial Success is refused.
+  await page.goto(`${BASE}/admin/_being_answers/${BEING}/?pledge=${PLEDGE}&tier=${TIER.ps}`);
+  await page.fill('#id_answer-fact_text', '[staff-authored fact text: should be refused]');
+  await page.click('input[name=save_continue]');
+  await page.waitForLoadState('networkidle');
+  await page.locator('[data-field="fact_text"]').screenshot({ path: `${OUT}/03-answer-builder-refused.png` });
+  writeFileSync(`${OUT}/a-builder-refused.txt`, (await page.locator('[data-field="fact_text"]').innerText()) + '\n');
+  await page.goto(`${BASE}/admin/_being_service/${BEING}/`);
+  await page.screenshot({ path: `${OUT}/04-being-service-builder.png`, fullPage: true });
+  await page.goto(`${BASE}/admin/arxii/worshippedbeing/${BEING}/change/`);
+  await page.locator('.object-tools').screenshot({ path: `${OUT}/05-being-change-object-tools.png` });
+});
+
+test('B ysmay pledges, sacrifices and closes on the web', async ({ page }) => {
+  await login(page, 'e2e_test_account', 'TestPass123!');
+  await page.goto(`${BASE}/characters/${YSMAY_ENTRY}`);
+  await page.getByTestId('worship-section').waitFor();
+  await page.getByTestId('pledge-button').click();
+  await page.getByRole('combobox', { name: 'To' }).click();
+  await page.getByRole('option', { name: 'Ombrin' }).click();
+  await page.getByLabel(/\[staff-authored pledge name\]/).click();
+  await page.getByRole('button', { name: 'Pledge', exact: true }).click();
+  await page.locator('[data-sonner-toast]').first().waitFor();
+  await page.reload();
+  await page.getByTestId('pledge-card').waitFor();
+  await page.getByTestId('sacrifice-button').click();
+  const dialog = page.getByRole('dialog');
+  for (const name of ['silk scarf', 'silk ribbon', 'brass bell']) {
+    await dialog.getByText(name).click();
+  }
+  await dialog.screenshot({ path: `${OUT}/06-sacrifice-dialog.png` });
+  await dialog.getByRole('button', { name: 'Sacrifice', exact: true }).click();
+  const sacrificed = page.locator('[data-sonner-toast]').first();
+  await sacrificed.waitFor();
+  writeFileSync(`${OUT}/b-sacrifice-toast.txt`, (await sacrificed.innerText()) + '\n');
+  await page.reload();
+  await expect(page.getByTestId('close-pledge-button')).toBeVisible();
+  await page.getByTestId('close-pledge-button').click();
+  const closed = page.locator('[data-sonner-toast]').first();
+  await closed.waitFor();
+  writeFileSync(`${OUT}/b-close-toast.txt`, (await closed.innerText()) + '\n');
+  await page.reload();
+  await page.getByTestId('worship-section').waitFor();
+  await page.waitForTimeout(1500);
+  await page.getByTestId('worship-section').screenshot({ path: `${OUT}/07-ysmay-vision.png` });
+  writeFileSync(`${OUT}/b-ysmay-visions.json`, JSON.stringify(await visions(page, YSMAY), null, 2));
+});
+
+test('G ysmay closes again (her retry)', async ({ page }) => {
+  await login(page, 'e2e_test_account', 'TestPass123!');
+  await page.goto(`${BASE}/characters/${YSMAY_ENTRY}`);
+  await expect(page.getByTestId('close-pledge-button')).toBeVisible();
+  await page.getByTestId('close-pledge-button').click();
+  const closed = page.locator('[data-sonner-toast]').first();
+  await closed.waitFor();
+  writeFileSync(`${OUT}/g-close-toast.txt`, (await closed.innerText()) + '\n');
+  await page.reload();
+  await page.getByTestId('worship-section').waitFor();
+  await page.waitForTimeout(1500);
+  await page.getByTestId('worship-section').screenshot({ path: `${OUT}/07-ysmay-vision.png` });
+  writeFileSync(`${OUT}/g-ysmay-visions.json`, JSON.stringify(await visions(page, YSMAY), null, 2));
+});
+
+test('C orla, a secret faith, closes twice', async ({ page }) => {
+  await login(page, 'e2e_test_account', 'TestPass123!');
+  const log: object[] = [];
+  log.push({ step: 'take', ...(await dispatch(page, ORLA, 'pledge_take', { pledge: PLEDGE, prayer: "[Orla's player-written prayer]" })) });
+  log.push({ step: 'sacrifice', ...(await dispatch(page, ORLA, 'sacrifice', { item_ids: [5] })) });
+  log.push({ step: 'close 1', ...(await dispatch(page, ORLA, 'pledge_close', {})) });
+  log.push({ step: 'visions after close 1', visions: await visions(page, ORLA) });
+  log.push({ step: 'close 2', ...(await dispatch(page, ORLA, 'pledge_close', {})) });
+  log.push({ step: 'visions after close 2', visions: await visions(page, ORLA) });
+  writeFileSync(`${OUT}/c-orla.json`, JSON.stringify(log, null, 2));
+  await page.goto(`${BASE}/characters/${ORLA_ENTRY}`);
+  await page.getByTestId('worship-section').waitFor();
+  await page.waitForTimeout(1500);
+  await page.getByTestId('worship-section').screenshot({ path: `${OUT}/08-orla-vision.png` });
+});
+
+test('D wren pledges and sacrifices before the lapse', async ({ page }) => {
+  await login(page, 'e2e_test_account', 'TestPass123!');
+  const log: object[] = [];
+  log.push({ step: 'take', ...(await dispatch(page, WREN, 'pledge_take', { pledge: PLEDGE, prayer: '' })) });
+  log.push({ step: 'sacrifice', ...(await dispatch(page, WREN, 'sacrifice', { item_ids: [7] })) });
+  writeFileSync(`${OUT}/d-wren.json`, JSON.stringify(log, null, 2));
+});
+
+test('E staff dashboard shows held answers', async ({ page }) => {
+  await adminLogin(page);
+  await page.goto(`${BASE}/staff/pantheon/${BEING}`);
+  await page.getByTestId('service-and-answers').waitFor();
+  await page.getByTestId('service-and-answers').screenshot({ path: `${OUT}/09-dashboard-counts.png` });
+  await page.getByRole('tab', { name: 'Visions' }).click();
+  await page.waitForTimeout(1500);
+  await page.screenshot({ path: `${OUT}/10-dashboard-visions-held.png`, fullPage: true });
+  writeFileSync(
+    `${OUT}/e-held.json`,
+    JSON.stringify(await (await page.request.get(`${BASE}/api/worship/admin/beings/${BEING}/held-answers/`)).json(), null, 2)
+  );
+});
+
+test('F mira vision after the pool paid', async ({ page }) => {
+  await login(page, 'e2e_test_account', 'TestPass123!');
+  writeFileSync(`${OUT}/f-mira-visions.json`, JSON.stringify(await visions(page, 17), null, 2));
+  await page.goto(`${BASE}/characters/7`);
+  await page.getByTestId('worship-section').waitFor();
+  await page.waitForTimeout(1500);
+  await page.getByTestId('worship-section').screenshot({ path: `${OUT}/11-mira-vision.png` });
+});
+
+test('H the Answer builder after the fixes', async ({ page }) => {
+  await adminLogin(page);
+  await page.goto(`${BASE}/admin/_being_answers/${BEING}/?pledge=${PLEDGE}&tier=${TIER.s}`);
+  await page.screenshot({ path: `${OUT}/12-answer-builder-success-cell.png`, fullPage: true });
+  await page.setViewportSize({ width: 390, height: 900 });
+  await page.screenshot({ path: `${OUT}/13-answer-builder-phone.png`, fullPage: false });
+});
+
+test('I bram closes on the web while caddoc watches the play feed', async ({ browser }) => {
+  const watcherContext = await browser.newContext();
+  const watcher = await watcherContext.newPage();
+  await login(watcher, 'onlooker_4374', 'TestPass123!');
+  await watcher.goto(`${BASE}/game`);
+  await watcher.waitForLoadState('networkidle');
+  await watcher.waitForTimeout(3000);
+  const actorContext = await browser.newContext();
+  const actor = await actorContext.newPage();
+  await login(actor, 'e2e_test_account', 'TestPass123!');
+  await actor.goto(`${BASE}/characters/9`);
+  await expect(actor.getByTestId('close-pledge-button')).toBeVisible();
+  await actor.getByTestId('close-pledge-button').click();
+  const toast = actor.locator('[data-sonner-toast]').first();
+  await toast.waitFor();
+  writeFileSync(`${OUT}/i-bram-close-toast.txt`, (await toast.innerText()) + '\n');
+  await watcher.waitForTimeout(4000);
+  await watcher.screenshot({ path: `${OUT}/14-caddoc-play-feed.png`, fullPage: false });
+  await actor.reload();
+  await actor.getByTestId('worship-section').waitFor();
+  await actor.waitForTimeout(1500);
+  await actor.getByTestId('worship-section').screenshot({ path: `${OUT}/15-bram-vision.png` });
+  writeFileSync(`${OUT}/i-bram-visions.json`, JSON.stringify(await visions(actor, 21), null, 2));
+  await actor.goto(`${BASE}/characters/${YSMAY_ENTRY}`);
+  await actor.getByTestId('worship-section').waitFor();
+  await actor.waitForTimeout(1500);
+  await actor.getByTestId('worship-section').screenshot({ path: `${OUT}/07b-ysmay-vision-after-footnote-fix.png` });
+});
+
+test('J cora closes with her play feed open', async ({ page }) => {
+  await login(page, 'e2e_test_account', 'TestPass123!');
+  const sel = await page.request.post(`${BASE}/api/roster/entries/select/`, {
+    headers: { 'X-CSRFToken': await csrf(page), Referer: BASE },
+    data: { entry_id: 12 },
+  });
+  writeFileSync(`${OUT}/j-select.txt`, `${sel.status()}\n`);
+  await page.goto(`${BASE}/game`);
+  await page.waitForLoadState('networkidle');
+  await page.waitForTimeout(6000);
+  await page.screenshot({ path: `${OUT}/16a-dara-play-feed-before.png`, fullPage: false });
+  const close = await dispatch(page, 27, 'pledge_close', {});
+  writeFileSync(`${OUT}/j-dara-close.json`, JSON.stringify(close, null, 2));
+  await page.waitForTimeout(5000);
+  await page.screenshot({ path: `${OUT}/16-dara-play-feed.png`, fullPage: false });
+});

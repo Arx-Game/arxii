@@ -1,0 +1,26 @@
+[Brother Caddoc] connect: You become Brother Caddoc.
+Ombrin's Shrine
+This is a room.
+Characters: Wren Ashby, Orla Cobbe, Ysmay Dunhollow, and Brother Caddoc
+Now controlling Brother Caddoc.
+[Brother Caddoc] @ic: Already controlling Brother Caddoc.
+[Mira Holt] connect: -authored fact text: success]
+
+[staff-authored cost text: success]
+
+[staff-authored follow-up text: success]
+
+You know whose vision this is: Ombrin.
+Ombrin's Shrine
+This is a room.
+Characters: Wren Ashby, Orla Cobbe, Ysmay Dunhollow, Brother Caddoc, and Mira Holt
+Now controlling Mira Holt.
+[Mira Holt] @ic: Already controlling Mira Holt.
+===== actor Mira Holt
+> pledge
+Pledge to Ombrin: [staff-authored pledge name]. 5 of 5 favor since pledging. Closed.
+  Sacrificed wooden comb: value 50: 5 base, at 100% = +5
+  Closing award for Critical Success: 8 base, at 100% = +8
+===== onlooker Brother Caddoc received while connected
+Mira Holt has entered the game.
+playwright rc=0

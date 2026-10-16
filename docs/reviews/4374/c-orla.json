@@ -1,0 +1,86 @@
+[
+  {
+    "step": "take",
+    "status": 200,
+    "body": {
+      "backend": "registry",
+      "deferred": false,
+      "message": "You pledge yourself to Ombrin: [staff-authored pledge name]. Favor target 5 within 2 game weeks. Your earning rate with Ombrin: 100% (100%).",
+      "data": {
+        "pledge_details_id": 2,
+        "project_id": 2
+      },
+      "success": true
+    }
+  },
+  {
+    "step": "sacrifice",
+    "status": 200,
+    "body": {
+      "backend": "registry",
+      "deferred": false,
+      "message": "You sacrifice copper bowl at Ombrin's shrine. Value 50: 5 base, at 100% = +5 favor with Ombrin.",
+      "data": {
+        "credited": 5
+      },
+      "success": true
+    }
+  },
+  {
+    "step": "close 1",
+    "status": 200,
+    "body": {
+      "backend": "registry",
+      "deferred": false,
+      "message": "You close your pledge with Ombrin's rite: Failure. Ombrin has not accepted it yet; you may try once more within the span.",
+      "data": {
+        "outcome": "Failure",
+        "resolved": false,
+        "award": 0
+      },
+      "success": true
+    }
+  },
+  {
+    "step": "visions after close 1",
+    "visions": []
+  },
+  {
+    "step": "close 2",
+    "status": 200,
+    "body": {
+      "backend": "registry",
+      "deferred": false,
+      "message": "You close your pledge with Ombrin's rite: Failure. Closing award for Failure: 2 base, at 100% = +2 favor with Ombrin.",
+      "data": {
+        "outcome": "Failure",
+        "resolved": true,
+        "award": 2
+      },
+      "success": true
+    }
+  },
+  {
+    "step": "visions after close 2",
+    "visions": [
+      {
+        "id": 1,
+        "recipient": 10,
+        "being_name": "Ombrin",
+        "body": "[staff-authored delay text: failure]\n\n[staff-authored answer text: failure] Also sacrificed: copper bowl.\n\n[staff-authored cost text: failure]",
+        "reveal_source": true,
+        "prayer": 1,
+        "clue": null,
+        "clue_slug": null,
+        "clue_name": null,
+        "episode": null,
+        "episode_title": null,
+        "follow_up_clue_name": null,
+        "condition_names": [
+          "Marked by Ombrin"
+        ],
+        "sent_at": "2026-10-16T16:10:35.897507Z"
+      }
+    ]
+  }
+]

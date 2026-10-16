@@ -1,0 +1,43 @@
+Preview
+✧
+VISION
+from Ombrin
+
+[staff-authored delay text: success]
+
+[staff-authored answer text: success] [staff-authored sacrifice line: Silk, success]
+
+[staff-authored fact text: success]
+
+[staff-authored cost text: success]
+
+[staff-authored follow-up text: success]
+
+A clue came with it: Ombrin codex clue.
+
+A follow-up came with it: Ombrin mission clue.
+
+Condition: Marked by Ombrin.
+
+Preview shows the saved text, with one Silk sacrifice.
+Ombrin's worship
+Resonances
+1 favored, 1 associated
+Favored facets
+Silk
+Rites
+1
+Worship pool
+230
+Answers held for the pool
+0
+Checks
+OK: Fact clue on Success (allowed on Success and Critical Success only).
+OK: The clue's target is reachable only through clues.
+Warn: No Critical Failure answer. A close at Critical Failure sends no vision; the closing award still lands.
+Warn: No Critical Success answer. Critical Success uses Success.
+Credit
+Written by
+RT Staff 4374
+Reviewed by
+Not yet reviewed

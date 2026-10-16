@@ -1,0 +1,20 @@
+[
+  {
+    "id": 5,
+    "recipient": 17,
+    "being_name": "Ombrin",
+    "body": "[staff-authored delay text: success]\n\n[staff-authored answer text: success] Also sacrificed: wooden comb.\n\n[staff-authored fact text: success]\n\n[staff-authored cost text: success]\n\n[staff-authored follow-up text: success]",
+    "reveal_source": true,
+    "prayer": null,
+    "clue": 1,
+    "clue_slug": "clue-0",
+    "clue_name": "Ombrin codex clue",
+    "episode": null,
+    "episode_title": null,
+    "follow_up_clue_name": "Ombrin mission clue",
+    "condition_names": [
+      "Marked by Ombrin"
+    ],
+    "sent_at": "2026-10-16T16:51:30.359184Z"
+  }
+]

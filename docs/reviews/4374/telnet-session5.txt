@@ -1,0 +1,50 @@
+[Brother Caddoc] connect: You become Brother Caddoc.
+Ombrin's Shrine
+This is a room.
+Characters: Hobb Pennock, Wren Ashby, Orla Cobbe, Ysmay Dunhollow, and Brother Caddoc
+Now controlling Brother Caddoc.
+[Brother Caddoc] @ic: Already controlling Brother Caddoc.
+[Hobb Pennock] connect: You become Tobiah Fenwright.
+Ombrin's Shrine
+This is a room.
+Characters: Hobb Pennock, Wren Ashby, Orla Cobbe, Ysmay Dunhollow, Brother Caddoc, and Tobiah Fenwright
+Now controlling Tobiah Fenwright.
+[Hobb Pennock] @ic: Switching from Tobiah Fenwright to Hobb Pennock.
+You become Hobb Pennock.
+Ombrin's Shrine
+This is a room.
+Characters: Hobb Pennock, Wren Ashby, Orla Cobbe, Ysmay Dunhollow, and Brother Caddoc
+===== actor Hobb Pennock
+> pledge Ombrin/[staff-authored pledge name]
+You pledge yourself to Ombrin: [staff-authored pledge name]. Favor target 5 within 2 game weeks. Your earning rate with Ombrin: 100% (100%).
+> sacrifice clay cup
+Hobb Pennock sacrifices clay cup at Ombrin's shrine.
+You sacrifice clay cup at Ombrin's shrine. Value 50: 5 base, at 100% = +5 favor with Ombrin.
+> pledge/close
+[NARRATIVE] Through learning a piece of lore, you can now use: [codex entry: a hidden name].
+[VISION] [staff-authored delay text: success]
+
+[staff-authored answer text: success] Also sacrificed: clay cup.
+
+[staff-authored fact text: success]
+
+[staff-authored cost text: success]
+
+[staff-authored follow-up text: success]
+
+You know whose vision this is: Ombrin.
+Hobb Pennock performs Ombrin's rite.
+[staff-authored onlooker line: success]
+You close your pledge with Ombrin's rite: Critical Success. Closing award for Critical Success: 8 base, at 100% = +8 favor with Ombrin.
+> pledge
+Pledge to Ombrin: [staff-authored pledge name]. 5 of 5 favor since pledging. Closed.
+  Sacrificed clay cup: value 50: 5 base, at 100% = +5
+  Closing award for Critical Success: 8 base, at 100% = +8
+===== onlooker Brother Caddoc received while connected
+Tobiah Fenwright has entered the game.
+Tobiah Fenwright has left the game.
+Hobb Pennock has entered the game.
+Hobb Pennock sacrifices clay cup at Ombrin's shrine.
+Hobb Pennock performs Ombrin's rite.
+[staff-authored onlooker line: success]
+playwright rc=0

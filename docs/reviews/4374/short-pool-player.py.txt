@@ -1,0 +1,33 @@
+"""Scratch: a sixth player, Mira, for the short-pool close. She pledges and sacrifices here
+(the same services the actions call), then the pool is set below a vision's cost so the
+close itself finds it short."""
+from evennia import create_object
+from evennia.accounts.models import AccountDB
+from evennia.objects.models import ObjectDB
+
+from world.action_points.factories import ActionPointPoolFactory
+from world.ceremonies.services import sacrifice_items
+from world.character_sheets.factories import CharacterSheetFactory
+from world.items.factories import ItemInstanceFactory
+from world.roster.factories import RosterEntryFactory, RosterTenureFactory
+from world.worship.models import Pledge, WorshippedBeing
+from world.worship.pledge_services import take_pledge
+
+account = AccountDB.objects.get(username="e2e_test_account")
+room = ObjectDB.objects.get(db_key="Ombrin's Shrine")
+mira = create_object("typeclasses.characters.Character", key="Mira Holt", location=room, home=room)
+sheet = CharacterSheetFactory(character=mira)
+sheet.rollmod = 100
+sheet.save(update_fields=["rollmod"])
+entry = RosterEntryFactory(character_sheet=sheet)
+RosterTenureFactory(roster_entry=entry, player_data=account.player_data, end_date=None)
+ActionPointPoolFactory(character=sheet, current=50, maximum=50)
+mira.locks.add(f"puppet:pid({account.id}) or perm(Developer) or pperm(Developer)")
+obj = create_object("typeclasses.objects.Object", key="wooden comb", location=mira)
+item = ItemInstanceFactory(template__name="wooden comb", template__value=50, game_object=obj, holder_character_sheet=sheet)
+take_pledge(sheet, Pledge.objects.get(pk=1))
+sacrifice_items(sheet, [item])
+being = WorshippedBeing.objects.get(name="Ombrin")
+being.resonance_pool = 5
+being.save(update_fields=["resonance_pool"])
+print("MIRA", mira.pk, entry.pk, "pool", being.resonance_pool)

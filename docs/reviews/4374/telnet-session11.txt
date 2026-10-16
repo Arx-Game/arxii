@@ -1,0 +1,48 @@
+[Brother Caddoc] connect: You become Brother Caddoc.
+Ombrin's Shrine
+This is a room.
+Characters: Wren Ashby, Orla Cobbe, Ysmay Dunhollow, Bram Okes, Ada Venn, and Brother Caddoc
+Now controlling Brother Caddoc.
+[Brother Caddoc] @ic: Already controlling Brother Caddoc.
+[Ada Venn] connect: You become Nell Garrow.
+Ombrin's Shrine
+This is a room.
+Characters: Wren Ashby, Orla Cobbe, Ysmay Dunhollow, Bram Okes, Ada Venn, Brother Caddoc, and Nell Garrow
+Now controlling Nell Garrow.
+[Ada Venn] @ic: Switching from Nell Garrow to Ada Venn.
+You become Ada Venn.
+Ombrin's Shrine
+This is a room.
+Characters: Wren Ashby, Orla Cobbe, Ysmay Dunhollow, Bram Okes, Ada Venn, and Brother Caddoc
+===== actor Ada Venn
+> pledge
+Pledge to Ombrin: [staff-authored pledge name]. 10 of 5 favor since pledging. Ready to close. 1 week, 6 days left.
+  Sacrificed silk veil (Silk facet, favored): value 50: 5 base, x2 Silk = 10, at 100% = +10
+> pledge/close
+[NARRATIVE] Through learning a piece of lore, you can now use: [codex entry: a hidden name].
+[VISION] [staff-authored delay text: success]
+
+[staff-authored answer text: success] [staff-authored sacrifice line: Silk, success]
+
+[staff-authored fact text: success]
+
+[staff-authored cost text: success]
+
+[staff-authored follow-up text: success]
+
+You know whose vision this is: Ombrin.
+A clue came with it: Ombrin codex clue. A mission came with it: Ombrin mission clue. Condition: Marked by Ombrin.
+Ada Venn performs Ombrin's rite.
+[staff-authored onlooker line: success]
+You close your pledge with Ombrin's rite: Critical Success. Closing award for Critical Success: 8 base, at 100% = +8 favor with Ombrin.
+> pledge
+Pledge to Ombrin: [staff-authored pledge name]. 10 of 5 favor since pledging. Closed.
+  Sacrificed silk veil (Silk facet, favored): value 50: 5 base, x2 Silk = 10, at 100% = +10
+  Closing award for Critical Success: 8 base, at 100% = +8
+===== onlooker Brother Caddoc received while connected
+Nell Garrow has entered the game.
+Nell Garrow has left the game.
+Ada Venn has entered the game.
+Ada Venn performs Ombrin's rite.
+[staff-authored onlooker line: success]
+playwright rc=0
