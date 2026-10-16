@@ -10,7 +10,9 @@ target and a span. Taking one opens a ``Project`` of kind PLEDGE with a
   as a ``PledgeCredit`` with its calculation. There is no other counter.
 * **Deeds** (:func:`credit_pledge_deed`, called by ``grant_resonance``): a
   resonance grant the being holds as FAVORED or ASSOCIATED earns a share of the
-  amount granted, under a weekly cap on base deed favor.
+  amount granted, under a weekly cap on base deed favor. Passive grants (the residence
+  and outfit trickles, distinction grants, staff grants; ``PASSIVE_DEED_SOURCES``) are not
+  deeds: favor comes only from a character's actions.
 * **Closing** (:func:`close_pledge`): reaching the target never resolves a
   pledge (PLEDGE is expiry-only). Its closing rite does, through
   ``perform_worship_rite(..., pay_award=False)``. A first Failure or Critical
