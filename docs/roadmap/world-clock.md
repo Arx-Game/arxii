@@ -79,7 +79,9 @@ The central time engine that drives the living world. An anchor-based game clock
   Every IC date a player sees reads through `world.game_clock.services`' formatters:
   inline `Dreaming 14 (1/14/1012)`, birthdays `Dreaming 14 (1/14)`, full
   `the 14th of the Month of Dreaming, Year 1012` (clock tooltip, Hall Time band,
-  telnet `time`). Feast days / holidays (the other half of #2762) remain open.
+  telnet `time`). OOC time stays Gregorian; only IC dates read in the game's
+  calendar, and every IC date carries its numeric month/day beside the name.
+  #2762 is closed; feast days / holidays were split out to #3638.
 - ~~Aging mechanics~~ — **built (#2756)**: three age axes on CharacterSheet
   (chronological derives from `ic_birth_year` vs `get_ic_now()`; biological =
   matured + withered years), deterministic Maturation Points, IC-cadence aging
