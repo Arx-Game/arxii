@@ -279,6 +279,20 @@ class RollingAtTheTable(JourneyCase):
             self.telnet(self.ravenna, f"check answer {call.pk}"),
         )
 
+    def test_a_bystander_on_telnet_hears_the_call_once_it_commits(self) -> None:
+        # A harness character has no session, and the bystander echo goes only to
+        # non-web sessions; stand one in so the on-commit echo has somewhere to land.
+        GMProfileFactory(account=self.ravenna.db_account, level=GMLevel.JUNIOR)
+        on_telnet = patch(
+            "world.scenes.interaction_services.non_web_sessions", return_value=[object()]
+        )
+        with on_telnet, self.captureOnCommitCallbacks(execute=True):
+            self.telnet(self.ravenna, "callcheck Climbing=Ysmay at easy")
+        call = CheckCall.objects.get(scene=self.scene)
+        self.assertTold(self.hobb, "Ravenna calls for a check: Climbing (Easy) from Ysmay.")
+        self.assertNotTold(self.hobb, f"check answer {call.pk}")
+        self.assertEqual(self.said(self.ysmay).count("Ravenna calls for a check"), 1)
+
     def test_she_proposes_a_check_the_catalog_lacks(self) -> None:
         told = self.telnet(
             self.ysmay, "check propose Haggling=Talk a merchant down from their price"
