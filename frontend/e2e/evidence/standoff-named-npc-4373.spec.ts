@@ -41,21 +41,21 @@ test('part 1: the GM stands a named NPC; staff see the language fields', async (
   await gm.getByRole('button', { name: 'Edit beat' }).first().click();
   await expect(gm.getByTestId('placement-panel-0')).toBeVisible({ timeout: 20_000 });
   await gm.getByRole('button', { name: 'Add opponent' }).click();
-  await gm.getByTestId('beat-opponent-line-creature-1').selectOption({
+  await gm.getByTestId('beat-opponent-line-creature-2').selectOption({
     label: 'Gate Sellsword (test) (mook)',
   });
-  const picker = gm.getByTestId('beat-opponent-line-persona-1');
+  const picker = gm.getByTestId('beat-opponent-line-persona-2');
   await expect(picker.getByRole('option', { name: MAUD })).toHaveCount(1);
   await picker.selectOption({ label: MAUD });
-  await expect(gm.getByTestId('beat-opponent-line-count-1')).toBeDisabled();
-  await expect(gm.getByTestId('placement-persona-1')).toContainText(
+  await expect(gm.getByTestId('beat-opponent-line-count-2')).toBeDisabled();
+  await expect(gm.getByTestId('placement-persona-2')).toContainText(
     `${MAUD} is a named NPC: their drives are their persona's properties`
   );
   await expect(gm.getByTestId('placement-summary-0')).toContainText(
     'speaks Riverland common (test)'
   );
   await gm.screenshot({ path: shot('01-gm-beat-dialog-named-npc.png'), fullPage: true });
-  await gm.getByTestId('beat-opponent-line-row-1').screenshot({ path: shot('01b-line.png') });
+  await gm.getByTestId('beat-opponent-line-row-2').screenshot({ path: shot('01b-line.png') });
   await gm.getByRole('button', { name: 'Save Beat' }).click();
   await expect(gm.getByRole('heading', { name: 'Edit Beat' })).toHaveCount(0, { timeout: 20_000 });
   // Read it back from the server: reopen the dialog on a fresh page.
@@ -63,9 +63,9 @@ test('part 1: the GM stands a named NPC; staff see the language fields', async (
   await gm.getByText('The Corle gate (test)').first().click();
   await gm.getByRole('button', { name: /Episode \(test\)/ }).click();
   await gm.getByRole('button', { name: 'Edit beat' }).first().click();
-  await expect(gm.getByTestId('placement-persona-1')).toBeVisible({ timeout: 20_000 });
+  await expect(gm.getByTestId('placement-persona-2')).toBeVisible({ timeout: 20_000 });
   await gm
-    .getByTestId('beat-opponent-line-row-1')
+    .getByTestId('beat-opponent-line-row-2')
     .screenshot({ path: shot('01c-line-read-back.png') });
 
   const staff = await signIn(browser, 'staff4373');
@@ -99,7 +99,10 @@ test('part 2: each seat of the named NPC group and the language gate', async ({ 
   await expect(wrenna.getByText(MAUD).first()).toBeVisible({ timeout: 20_000 });
   await expect(wrenna.getByText(`${MAUD}'s regard for you: harder`).first()).toBeVisible();
   await expect(wrenna.getByText('-300')).toHaveCount(0);
-  await expect(wrenna.getByTestId('standoff-refusal')).toHaveCount(0);
+  // Wrenna speaks the sellswords' and Maud's language; only the language-less hound refuses her.
+  await expect(
+    wrenna.getByTestId('standoff-group').filter({ hasText: MAUD }).getByTestId('standoff-refusal')
+  ).toHaveCount(0);
   await wrenna.screenshot({ path: shot('05-wrenna-card.png'), fullPage: true });
 
   const aubrin = await signIn(browser, 'aubrin4373');
@@ -180,4 +183,97 @@ test('part 3: Wrenna presses the named NPC on the web; the room sees it', async 
     timeout: 20_000,
   });
   await anselm.screenshot({ path: shot('10-onlooker-room-line.png'), fullPage: true });
+});
+
+async function postJson(page: Page, url: string, data: object) {
+  const cookies = await page.context().cookies();
+  const csrf = cookies.find((c) => c.name === 'csrftoken')?.value ?? '';
+  return page.request.post(url, { data, headers: { 'X-CSRFToken': csrf, Referer: page.url() } });
+}
+
+const HOUND = 'Hollow hound (test)';
+const EXTRA = JSON.parse(process.env.RT_EXTRA ?? '{}') as Record<string, number>;
+
+const steelOnMaud = (page: Page) =>
+  page
+    .getByTestId('standoff-group')
+    .filter({ hasText: MAUD })
+    .getByRole('button', { name: /Show steel \(test\)/ });
+
+test('part 4: terms by gesture, adding named NPCs, and the dashboard', async ({ browser }) => {
+  test.skip(process.env.PART !== '4', 'part 4 only');
+  test.setTimeout(240_000);
+  const scene = `/scenes/${IDS.scene}`;
+
+  // R1: the hound has no language: verbal refused, terms by gesture allowed.
+  const aubrin = await signIn(browser, 'aubrin4373');
+  await aubrin.goto(scene);
+  const hound = aubrin.getByTestId('standoff-group').filter({ hasText: HOUND });
+  await expect(hound).toBeVisible({ timeout: 20_000 });
+  await expect(hound.getByTestId('standoff-refusal').first()).toHaveText(
+    'They have no language to answer in.'
+  );
+  const letUsPass = hound.getByRole('button', { name: /Let us pass \(test\)/ });
+  await expect(letUsPass).toBeEnabled();
+  console.log(
+    `== Aubrin Show steel on Maud, no regard: ${await steelOnMaud(aubrin).getByTestId('standoff-grade').innerText()}`
+  );
+  await steelOnMaud(aubrin).screenshot({ path: shot('11-aubrin-steel-on-maud-no-regard.png') });
+  await hound.screenshot({ path: shot('12-aubrin-hound-gesture-terms.png') });
+  await letUsPass.click();
+  await hound.getByRole('button', { name: /Spin for/ }).click();
+  await aubrin.waitForTimeout(3000);
+  await aubrin.reload();
+  await expect(
+    aubrin.getByText(/Aubrin names Let us pass \(test\) to the Hollow hound \(test\)/).first()
+  ).toBeVisible({ timeout: 20_000 });
+  await aubrin.screenshot({ path: shot('13-aubrin-named-terms-to-hound.png'), fullPage: true });
+
+  // R2: the GM adds a named NPC the story uses through the Add Opponent dialog.
+  const gm = await signIn(browser, 'gm4373');
+  await gm.goto(scene);
+  await gm.getByTestId('rail-tab-gm').click();
+  await gm.getByTestId('add-opponent-trigger').click();
+  const named = gm.getByTestId('add-opponent-named-npc');
+  await expect(named.getByRole('option', { name: 'Ilse Varn (test)' })).toHaveCount(1);
+  await expect(named.getByRole('option', { name: 'Stranger (test)' })).toHaveCount(0);
+  await named.selectOption({ label: 'Ilse Varn (test)' });
+  await gm.getByTestId('add-opponent-pool-select').click();
+  await gm.getByRole('option', { name: 'Gate pool (test)' }).click();
+  await gm.getByTestId('add-opponent-dialog').screenshot({ path: shot('14-gm-add-named-npc.png') });
+  await gm.getByTestId('add-opponent-submit').click();
+  await expect(gm.getByTestId('add-opponent-dialog')).toHaveCount(0, { timeout: 20_000 });
+  await expect(gm.getByText('Ilse Varn (test)').first()).toBeVisible({ timeout: 20_000 });
+  await gm.screenshot({ path: shot('15-gm-after-adding-ilse.png'), fullPage: true });
+
+  // R3 (web API): a GM is refused a persona the story does not use; staff are allowed.
+  const body = { tier: 'elite', threat_pool_id: EXTRA.pool, persona_id: EXTRA.stranger };
+  const refused = await postJson(gm, `/api/combat/${EXTRA.encounter}/add_opponent/`, body);
+  console.log(`== GM add Stranger: ${refused.status()} ${await refused.text()}`);
+  expect(refused.status()).toBe(400);
+  const staff = await signIn(browser, 'staff4373');
+  await staff.goto(scene);
+  const allowed = await postJson(staff, `/api/combat/${EXTRA.encounter}/add_opponent/`, body);
+  console.log(`== staff add Stranger: ${allowed.status()}`);
+  expect(allowed.status()).toBe(200);
+  expect(await allowed.text()).toContain('Stranger (test)');
+
+  // R5: the Required content panel lists the language-less standoff creature.
+  await staff.goto('/admin/_ops/required-content/');
+  await expect(staff.getByText('Standoff creature languages')).toBeVisible();
+  await expect(staff.getByText('No language: Hollow hound (test).')).toBeVisible();
+  await staff.screenshot({ path: shot('16-required-content-languages.png'), fullPage: true });
+});
+
+test('part 5: a favourable regard eases the grade', async ({ browser }) => {
+  test.skip(process.env.PART !== '5', 'part 5 only');
+  test.setTimeout(120_000);
+  const aubrin = await signIn(browser, 'aubrin4373');
+  await aubrin.goto(`/scenes/${IDS.scene}`);
+  await expect(steelOnMaud(aubrin)).toBeVisible({ timeout: 20_000 });
+  await expect(steelOnMaud(aubrin)).toContainText(`${MAUD}'s regard for you: easier`);
+  console.log(
+    `== Aubrin Show steel on Maud, regard +300: ${await steelOnMaud(aubrin).getByTestId('standoff-grade').innerText()}`
+  );
+  await steelOnMaud(aubrin).screenshot({ path: shot('17-aubrin-steel-on-maud-favoured.png') });
 });

@@ -226,6 +226,40 @@ class GMLifecycleTest(CombatEncounterViewSetTestBase):
             1,
         )
 
+    def test_add_opponent_with_the_dialogs_blank_description(self) -> None:
+        """The web dialog sends description "" when none was typed; that is not an error."""
+        seed_scaling_defaults()
+        pool = ThreatPoolFactory()
+        client = APIClient()
+        client.force_authenticate(user=self.gm_account)
+        response = client.post(
+            f"/api/combat/{self.encounter.pk}/add_opponent/",
+            {"name": "Goblin", "tier": "mook", "threat_pool_id": pool.pk, "description": ""},
+            format="json",
+        )
+        self.assertEqual(response.status_code, http_status.HTTP_200_OK, response.data)
+
+    def test_add_opponent_named_npc_needs_the_story_to_use_them(self) -> None:
+        """#4373: a GM is refused a persona the story does not use; staff are not."""
+        from evennia_extensions.factories import AccountFactory
+        from world.character_sheets.factories import CharacterSheetFactory
+
+        seed_scaling_defaults()
+        pool = ThreatPoolFactory()
+        stranger = CharacterSheetFactory().primary_persona
+        body = {"tier": "mook", "threat_pool_id": pool.pk, "persona_id": stranger.pk}
+        client = APIClient()
+        client.force_authenticate(user=self.gm_account)
+        url = f"/api/combat/{self.encounter.pk}/add_opponent/"
+        refused = client.post(url, body, format="json")
+        self.assertEqual(refused.status_code, http_status.HTTP_400_BAD_REQUEST)
+        self.assertIn("not a named NPC this story uses", str(refused.data))
+        client.force_authenticate(user=AccountFactory(username="named_npc_staff", is_staff=True))
+        allowed = client.post(url, body, format="json")
+        self.assertEqual(allowed.status_code, http_status.HTTP_200_OK, allowed.data)
+        opponent = CombatOpponent.objects.get(encounter=self.encounter, persona=stranger)
+        self.assertEqual(opponent.name, stranger.name)
+
     def test_add_opponent_omitted_soak_uses_scaled_default(self) -> None:
         """Omitting soak preserves auto-scaling instead of becoming an override."""
         seed_scaling_defaults()

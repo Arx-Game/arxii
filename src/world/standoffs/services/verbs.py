@@ -625,6 +625,28 @@ def _soulfray_refusal(warning: SoulfrayWarning) -> StandoffActionResult:
     )
 
 
+def _press_refusal(  # noqa: PLR0913 - the press's whole pre-roll context
+    encounter: CombatEncounter,
+    group: StandoffGroup,
+    members: list[CombatOpponent],
+    sheet: CharacterSheet,
+    approach: StandoffApproach,
+    technique: Technique | None,
+) -> str | None:
+    """Why this press cannot be rolled, checked in order; None when it can."""
+    refusal = _refusal(encounter, group)
+    if refusal:
+        return refusal
+    if not members:
+        return _MSG_EMPTY
+    technique_refusal = _technique_refusal(sheet, approach, technique)
+    if technique_refusal:
+        return technique_refusal
+    if approach.is_verbal:
+        return language_refusal(group, sheet, verbal=True) or None
+    return None
+
+
 @flush_cache_on_error(lambda participant, *_, **__: participant.encounter)
 @transaction.atomic
 def standoff_press(
@@ -642,20 +664,11 @@ def standoff_press(
     Soulfray is refused with the warning, spending nothing, until ``confirm_soulfray_risk``.
     """
     encounter, group = _lock(participant.encounter, group)
-    refusal = _refusal(encounter, group)
+    sheet = participant.character_sheet
+    members = active_members(group)
+    refusal = _press_refusal(encounter, group, members, sheet, approach, technique)
     if refusal:
         return _refuse(refusal)
-    members = active_members(group)
-    if not members:
-        return _refuse(_MSG_EMPTY)
-    sheet = participant.character_sheet
-    technique_refusal = _technique_refusal(sheet, approach, technique)
-    if technique_refusal:
-        return _refuse(technique_refusal)
-    if approach.is_verbal:
-        spoken_refusal = language_refusal(group, sheet, verbal=True)
-        if spoken_refusal:
-            return _refuse(spoken_refusal)
     config = StandoffConfig.load()
     graded, hits, targeted = press_grade(
         group, sheet, approach, build_grading_context(group, sheet, members=members)

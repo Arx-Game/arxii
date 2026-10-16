@@ -2068,7 +2068,8 @@ class AddOpponentSerializer(serializers.Serializer):
     max_health = serializers.IntegerField(min_value=1, required=False, allow_null=True)
     level = serializers.IntegerField(min_value=1, max_value=30, required=False, allow_null=True)
     threat_pool_id = serializers.IntegerField()
-    description = serializers.CharField(required=False, default="")
+    # The Add Opponent dialog always sends a description, blank when none was typed.
+    description = serializers.CharField(required=False, default="", allow_blank=True)
     soak_value = serializers.IntegerField(required=False)
     probing_threshold = serializers.IntegerField(
         required=False,
