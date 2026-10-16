@@ -36,7 +36,11 @@ class AnswerForm(forms.ModelForm):
             "conceals_source",
             "is_active",
         ]
-        labels = {"conceals_source": "Conceal the being as the source"}
+        labels = {
+            "conceals_source": "Conceal the being as the source",
+            "follow_up_text": "Follow-up text",
+            "follow_up_clue": "Follow-up clue",
+        }
         widgets = {
             "delay_text": forms.Textarea(attrs={"rows": 3, "class": "vLargeTextField"}),
             "answer_text": forms.Textarea(attrs={"rows": 4, "class": "vLargeTextField"}),

@@ -74,7 +74,9 @@ is an admin CSS variable or a token set against admin's light/dark selectors.
   #answer-builder-root .ab-table .vTextField { width: 100%; }
   #answer-builder-root .ab-addrow { padding: 0.5rem 0.6rem; background: var(--darkened-bg); display: grid; gap: 0.35rem; }
   #answer-builder-root .ab-delete { margin-right: auto; background: var(--delete-button-bg); color: var(--button-fg); }
-  #answer-builder-root .submit-row { display: flex; flex-wrap: wrap; gap: 0.5rem; justify-content: flex-end; }
+  /* Save stays the form's first submit button (Enter saves); reversed, it reads Delete on
+     the left and Save on the right, as admin's own change form does. */
+  #answer-builder-root .submit-row { display: flex; flex-direction: row-reverse; flex-wrap: wrap; gap: 0.5rem; }
   #answer-builder-root .ab-rail { display: flex; flex-direction: column; gap: 0.75rem; min-width: 0; }
   #answer-builder-root .ab-stat {
     display: flex; justify-content: space-between; gap: 0.6rem; padding: 0.35rem 0.6rem;

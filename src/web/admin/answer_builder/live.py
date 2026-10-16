@@ -239,6 +239,8 @@ def times_used(answer: Answer) -> int:
 def _fallback_label(
     tier: CheckOutcome, row_counts: dict[int, int], general: dict[int, int], columns
 ) -> str:
+    if general.get(tier.pk) and row_counts is not general:
+        return f"{tier.name} uses the being's general {tier.name} answer."
     for lower in sorted(
         (t for t in columns if t.success_level < tier.success_level),
         key=lambda t: t.success_level,

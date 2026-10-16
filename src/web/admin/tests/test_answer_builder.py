@@ -119,13 +119,19 @@ class AnswerBuilderTestCase(TestCase):
 class AnswerBuilderPageTests(AnswerBuilderTestCase):
     def test_the_page_shows_coverage_by_pledge_type_and_tier(self) -> None:
         AnswerFactory(being=self.being, pledge=self.pledge, outcome_tier=self.tiers["Success"])
-        AnswerFactory(being=self.being, outcome_tier=self.tiers["Failure"])
+        AnswerFactory(being=self.being, outcome_tier=self.tiers["Critical Failure"])
         body = self.body()
         self.assertIn("Answer builder: Ombrin", body)
         self.assertIn("No pledge type (live answers)", body)
         self.assertIn("Pledge type: PLACEHOLDER pledge", body)
         self.assertIn("answer 1 of 1", body)
         self.assertIn("No Critical Success answer. Critical Success uses Success.", body)
+        # The pledge row has no Critical Failure answer, but the being's general one covers it.
+        self.assertIn(
+            "No Critical Failure answer. Critical Failure uses the being&#x27;s general "
+            "Critical Failure answer.",
+            body,
+        )
 
     def test_the_rail_previews_the_saved_answer_with_its_linked_rows(self) -> None:
         answer = AnswerFactory(
