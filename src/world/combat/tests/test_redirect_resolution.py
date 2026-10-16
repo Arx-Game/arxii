@@ -37,6 +37,7 @@ from world.magic.factories import CharacterAnimaFactory
 from world.magic.models import CharacterTechnique, Technique
 from world.mechanics.models import ObjectProperty
 from world.scenes.constants import RoundStatus
+from world.scenes.models import PendingSuddenHarm
 from world.vitals.models import CharacterVitals
 
 
@@ -299,6 +300,100 @@ class RedirectVolatileObjectResolutionTest(_RedirectResolutionTestBase):
         self.assertEqual(
             self.ally_vitals.health, 100, "the ward is still shielded even on degrade-to-away"
         )
+
+
+@override_settings(SEED_SAMPLE_CONTENT=True)  # the "Fire" DamageType is sample-gated (#2698)
+class RedirectVolatileObjectEnemyDamageTest(_RedirectResolutionTestBase):
+    """A detonation hurts enemies at the object's position, not only PCs (#4376).
+
+    Real path, no mocked pool: the enemy's objectdb has no character vitals, so
+    the pool's DEAL_DAMAGE must reach the enemy through ``apply_damage_to_opponent``.
+    """
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.volatile_property = ensure_redirect_content()
+        self.keg = create_object("typeclasses.objects.Object", key="PowderKeg", location=self.room)
+        ObjectProperty.objects.create(object=self.keg, property=self.volatile_property)
+        self.position = PositionFactory(room=self.room)
+        place_in_position(self.keg, self.position)
+        place_in_position(self.ally, self.position)
+        self.opponent = CombatOpponentFactory(
+            encounter=self.encounter,
+            status=OpponentStatus.ACTIVE,
+            health=100,
+            max_health=100,
+        )
+        place_in_position(self.opponent.objectdb, self.position)
+
+    def _detonate_and_read(self, opponents):
+        """Declare the redirect into the keg, run the blow, and return the broadcasts."""
+        self._declare(redirect_object_target=self.keg)
+        with (
+            patch("world.combat.services.perform_check", side_effect=_fake_perform_check(2)),
+            patch("world.combat.interaction_services.broadcast_action_outcome") as mock_broadcast,
+        ):
+            apply_damage_to_participant(self.ally_participant, 40)
+        for opponent in opponents:
+            opponent.refresh_from_db()
+        return [c.kwargs.get("narration", "") for c in mock_broadcast.call_args_list]
+
+    def test_detonation_damages_enemy_and_pc_at_the_spot(self) -> None:
+        # Expected, written before the run: the authored blast is 15 Fire damage.
+        # Enemy 100 -> 85 (no soak or resistance on a fresh mook). The PC's 15 goes
+        # through the sudden-harm path: applied now, or held as a PendingSuddenHarm
+        # for an Interpose beat. Each check is a subTest so one run shows every state.
+        guardian_vitals = CharacterVitals.objects.get(
+            character_sheet=self.guardian_participant.character_sheet
+        )
+        narrations = self._detonate_and_read([self.opponent])
+        self.ally_vitals.refresh_from_db()
+        guardian_vitals.refresh_from_db()
+        pc_pending = PendingSuddenHarm.objects.filter(
+            target_sheet=self.ally_sheet, amount=15
+        ).count()
+        guardian_pending = PendingSuddenHarm.objects.filter(
+            target_sheet=self.guardian_participant.character_sheet, amount=15
+        ).count()
+        with self.subTest("enemy at the spot takes the blast"):
+            self.assertEqual(
+                self.opponent.health, 85, f"enemy health={self.opponent.health} (expected 85)"
+            )
+        with self.subTest("PC at the spot takes the blast"):
+            self.assertTrue(
+                pc_pending or self.ally_vitals.health == 85,
+                f"PC health={self.ally_vitals.health} pending_15={pc_pending} "
+                "(expected 85 or held)",
+            )
+        with self.subTest("guardian is not the damage target"):
+            self.assertEqual(
+                (guardian_vitals.health, guardian_pending),
+                (100, 0),
+                f"guardian health={guardian_vitals.health} pending_15={guardian_pending} "
+                "(expected health 100, no pending harm)",
+            )
+        with self.subTest("outcome names the enemy's damage"):
+            self.assertTrue(
+                any(self.opponent.name in n and "15 damage" in n for n in narrations),
+                f"broadcasts={narrations}",
+            )
+
+    def test_each_enemy_at_the_spot_gets_its_own_line(self) -> None:
+        second = CombatOpponentFactory(
+            encounter=self.encounter,
+            status=OpponentStatus.ACTIVE,
+            health=100,
+            max_health=100,
+            name="Second Opponent",
+        )
+        place_in_position(second.objectdb, self.position)
+        narrations = self._detonate_and_read([self.opponent, second])
+        self.assertEqual(self.opponent.health, 85)
+        self.assertEqual(second.health, 85)
+        lines = [n for n in narrations if "caught in the blast for 15 damage" in n]
+        self.assertEqual(len(lines), 2, f"one line per enemy; broadcasts={narrations}")
+        self.assertTrue(any(self.opponent.name in n for n in lines), lines)
+        self.assertTrue(any(second.name in n for n in lines), lines)
 
 
 @override_settings(SEED_SAMPLE_CONTENT=True)  # gates on #2698

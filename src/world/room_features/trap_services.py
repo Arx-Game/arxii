@@ -212,8 +212,6 @@ def search_room_traps(character: Character, room_profile: RoomProfile) -> list[T
 def fire_pool_at_characters(
     pool: ConsequencePool,
     characters: Iterable[ObjectDB],
-    *,
-    source_character: ObjectDB | None = None,
 ) -> None:
     """Fire *pool* deterministically (no roll) against every character in *characters*.
 
@@ -232,7 +230,10 @@ def fire_pool_at_characters(
     ``objectdb-param`` lint's current scope.
     """
     for character in characters:
-        context = ResolutionContext(character=source_character or character, target=character)
+        # The character is both the acting and the target context: a SELF-targeted
+        # damage effect must land on the character standing in the blast, not on a
+        # redirecting guardian (#4376).
+        context = ResolutionContext(character=character, target=character)
         apply_pool_deterministically(pool=pool, context=context)
 
 
