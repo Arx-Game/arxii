@@ -39,6 +39,7 @@ from world.projects.constants import CompletionMode, ProjectKind, ProjectStatus
 from world.worship.constants import (
     DAYS_PER_GAME_WEEK,
     FAVOR_EARNING_BASE_PERCENT,
+    PASSIVE_DEED_SOURCES,
     PLEDGE_MAX_CLOSE_ATTEMPTS,
     PRAYER_TEXT_MAX_LENGTH,
     BeingResonanceTier,
@@ -247,13 +248,15 @@ def credit_pledge_deed(grant: ResonanceGrant) -> PledgeCredit | None:
     the grant's amount times the configured percentage for that tier, rounded
     down, at least 1, then held to what is left of the weekly deed cap (base
     favor, before the earning rate). A worship rite's own grant is skipped: the
-    rite already pays favor.
+    rite already pays favor. So is a passive grant (``PASSIVE_DEED_SOURCES``): favor
+    comes only from a character's actions, never from a trickle, a distinction or a
+    staff grant.
     """
     from world.magic.constants import GainSource  # noqa: PLC0415
     from world.worship.invocation_services import get_devotion_config  # noqa: PLC0415
     from world.worship.services import bump_devotion  # noqa: PLC0415
 
-    if grant.source == GainSource.WORSHIP_RITE:
+    if grant.source == GainSource.WORSHIP_RITE or grant.source in PASSIVE_DEED_SOURCES:
         return None
     sheet = grant.character_sheet
     details = open_pledge_for(sheet)
