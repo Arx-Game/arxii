@@ -34,6 +34,25 @@ test.describe.configure({ mode: 'serial' });
 test('part 1: the GM stands a named NPC; staff see the language fields', async ({ browser }) => {
   test.skip(process.env.PART !== '1', 'part 1 only');
   test.setTimeout(240_000);
+  // The regard moves the grade: the same non-verbal approach on Maud, Wrenna (disliked)
+  // against Aubrin (no regard). Both have the same (empty) skills.
+  const steel = (page: Page) =>
+    page
+      .getByTestId('standoff-group')
+      .filter({ hasText: MAUD })
+      .getByRole('button', { name: /Show steel \(test\)/ })
+      .getByTestId('standoff-grade');
+  const wrennaGrade = await steel(wrenna).innerText();
+  const aubrinGrade = await steel(aubrin).innerText();
+  console.log(`== Show steel on Maud: Wrenna ${wrennaGrade}, Aubrin ${aubrinGrade}`);
+  expect(wrennaGrade).not.toEqual(aubrinGrade);
+  await steel(wrenna)
+    .locator('xpath=ancestor::button')
+    .screenshot({ path: shot('05b-wrenna-steel-on-maud.png') });
+  await steel(aubrin)
+    .locator('xpath=ancestor::button')
+    .screenshot({ path: shot('06b-aubrin-steel-on-maud.png') });
+
   const gm = await signIn(browser, 'gm4373');
   await gm.goto(`/stories/author/${IDS.story}`);
   await gm.getByText('The Corle gate (test)').first().click();
@@ -76,6 +95,11 @@ test('part 1: the GM stands a named NPC; staff see the language fields', async (
   await staff.goto('/admin/arxii/standoffapproach/');
   await expect(staff.getByRole('columnheader', { name: /Is verbal/ })).toBeVisible();
   await staff.screenshot({ path: shot('03-approach-list-is-verbal.png'), fullPage: true });
+  await staff.getByRole('link', { name: 'Persuade (test)' }).click();
+  await expect(
+    staff.getByText('Refused against a group that shares no language with the actor.')
+  ).toBeVisible();
+  await staff.screenshot({ path: shot('03b-approach-change-form.png'), fullPage: true });
   await staff.goto(`/admin/arxii/beat/${IDS.beat}/change/`);
   await staff.getByRole('link', { name: 'Edit placement' }).last().click();
   await expect(staff.locator('#placement-root h1')).toContainText(MAUD);
@@ -93,7 +117,7 @@ test('part 2: each seat of the named NPC group and the language gate', async ({ 
   await wrenna.goto(scene);
   await expect(wrenna.getByText(MAUD).first()).toBeVisible({ timeout: 20_000 });
   await expect(wrenna.getByText(`${MAUD}'s regard for you: harder`).first()).toBeVisible();
-  await expect(wrenna.getByText('-150')).toHaveCount(0);
+  await expect(wrenna.getByText('-300')).toHaveCount(0);
   await expect(wrenna.getByTestId('standoff-refusal')).toHaveCount(0);
   await wrenna.screenshot({ path: shot('05-wrenna-card.png'), fullPage: true });
 
@@ -114,7 +138,8 @@ test('part 2: each seat of the named NPC group and the language gate', async ({ 
   const maudBox = gm.getByTestId('gm-standoff-group').filter({ hasText: MAUD });
   await expect(maudBox).toContainText('named NPC');
   await expect(maudBox).toContainText('Riverland common (test)');
-  await expect(maudBox).toContainText('Wrenna: negative (-150)');
+  await expect(maudBox).toContainText('Wrenna: negative (-300)');
+  await expect(maudBox).not.toContainText('Aubrin: neutral');
   await expect(maudBox).toContainText('Prudent (test), Major');
   await panel.screenshot({ path: shot('07-gm-panel-named-npc.png') });
 

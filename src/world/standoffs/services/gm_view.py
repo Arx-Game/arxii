@@ -204,12 +204,18 @@ def _regard_label(regard: int) -> str:
 
 
 def _regards(group: StandoffGroup, participants: list, config: StandoffConfig) -> list:
-    """The named NPC's regard for each participant, as the GM reads it; empty otherwise."""
+    """The named NPC's regard for each participant who has one, as the GM reads it.
+
+    A participant the NPC holds no opinion of is left out, as the demo's "Their regard" row
+    lists only the characters it matters for; a template group has none.
+    """
     if group.persona_id is None:
         return []
     views = []
     for participant in participants:
         regard, bands = regard_for(group, participant.character_sheet, config)
+        if regard == 0:
+            continue
         views.append(
             GMRegardView(
                 participant=_presented_name(participant.character_sheet),

@@ -18,6 +18,7 @@ from world.combat.factories import (
 from world.conditions.factories import ConditionTemplateFactory
 from world.conditions.models import ConditionInstance
 from world.mechanics.factories import ApplicationFactory
+from world.species.factories import make_language_with_target
 from world.standoffs.constants import DriveStrength, RevealKind, StandoffGroupState, TermsEffect
 from world.standoffs.factories import (
     CreatureDriveFactory,
@@ -38,7 +39,7 @@ from world.standoffs.services.verbs import (
     standoff_share_angle,
     standoff_terms,
 )
-from world.traits.factories import CheckOutcomeFactory
+from world.traits.factories import CharacterTraitValueFactory, CheckOutcomeFactory
 
 CHECK = "world.standoffs.services.verbs.perform_check"
 SOCIAL = "world.standoffs.services.verbs.social_target_difficulty"
@@ -481,12 +482,25 @@ class ResultMessageTests(VerbBase):
         self.assertEqual(first.message, "Success. They soften. Terms are now 1 step easier.")
         self.assertEqual(second.message, "Success. They soften. Terms are now 2 steps easier.")
 
+    def test_a_failed_verbal_press_speaks_of_words(self) -> None:
+        verbal = StandoffApproachFactory(is_verbal=True)
+        self.template.language = make_language_with_target("Verb test tongue")[0]
+        self.template.save(update_fields=["language"])
+        CharacterTraitValueFactory(
+            character=self.participant.character_sheet,
+            trait=self.template.language.trait,
+            value=30,
+        )
+        with patch(CHECK, return_value=forced(-1)):
+            failed = standoff_press(self.participant, self.group, verbal)
+        self.assertEqual(failed.message, "Failure. Your words do not move them.")
+
     def test_press_failure_and_botch_name_the_outcome(self) -> None:
         with patch(CHECK, return_value=forced(-1)):
             failed = standoff_press(self.participant, self.group, self.approach)
         with patch(CHECK, return_value=forced(-2)):
             botched = standoff_press(self.participant, self.group, self.approach)
-        self.assertEqual(failed.message, "Failure. Your words do not move them.")
+        self.assertEqual(failed.message, "Failure. It does not move them.")
         self.assertEqual(botched.message, "Critical failure. It goes badly; they grow bolder.")
 
     def test_read_names_the_outcome(self) -> None:

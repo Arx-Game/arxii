@@ -13,7 +13,7 @@ class Migration(migrations.Migration):
     operations = [
         migrations.AlterModelOptions(
             name="standoffgroup",
-            options={"ordering": ["encounter", "creature_template", "persona", "pk"]},
+            options={"ordering": ["encounter", "pk"]},
         ),
         migrations.RemoveConstraint(
             model_name="standoffgroup",
@@ -48,7 +48,7 @@ class Migration(migrations.Migration):
             name="is_verbal",
             field=models.BooleanField(
                 default=False,
-                help_text="Spoken: refused against a group that shares no language with the actor (#4373).",
+                help_text="Refused against a group that shares no language with the actor.",
             ),
         ),
         migrations.AddField(

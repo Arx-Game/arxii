@@ -210,7 +210,7 @@ function GroupBox({ encounterId, group }: { encounterId: number; group: GMGroupV
         </dd>
         {group.regards.length > 0 && (
           <>
-            <dt className="text-muted-foreground">Regard</dt>
+            <dt className="text-muted-foreground">Their regard</dt>
             <dd data-testid="gm-standoff-regard">
               {group.regards.map((r, i) => (
                 <span key={r.participant}>

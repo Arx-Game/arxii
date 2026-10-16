@@ -443,7 +443,8 @@ affiliation brings, and the predicate widget for each rule's test.
   one band harder per full `regard_per_band` points of dislike, one easier per point of favour,
   at most `regard_max_bands`. It applies to presses and terms, not reads. The player's approach
   and terms rows carry the lever "<name>'s regard for you: easier|harder" (never the value);
-  the GM view lists each participant's regard value and label (`GMGroupView.regards`).
+  the GM view's "Their regard" row lists the value and label for each participant the NPC
+  holds an opinion of (`GMGroupView.regards`; no row for a neutral one).
 - **Language gate** (`services/language.py`). A template group understands
   `CreatureTemplate.language`; a named NPC's group every language its character has trained
   fluency in (`persona_languages`). A verbal approach is refused, with no roll, when the group

@@ -227,9 +227,7 @@ class StandoffApproach(NaturalKeyMixin, SharedMemoryModel):
     )
     is_verbal = models.BooleanField(
         default=False,
-        help_text=(
-            "Spoken: refused against a group that shares no language with the actor (#4373)."
-        ),
+        help_text=("Refused against a group that shares no language with the actor."),
     )
     casts_technique = models.BooleanField(
         default=False,
@@ -512,7 +510,7 @@ class StandoffGroup(SharedMemoryModel):
     )
 
     class Meta:
-        ordering = ["encounter", "creature_template", "persona", "pk"]
+        ordering = ["encounter", "pk"]
         constraints = [
             models.UniqueConstraint(
                 fields=["encounter", "creature_template", "persona"],

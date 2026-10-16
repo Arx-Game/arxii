@@ -667,7 +667,8 @@ def standoff_press(
         return _failed_press(use)
     _share_shifting_angles(group, sheet, targeted)
     tier = result.success_level
-    message = "Your words do not move them."
+    # A gesture or a display is not words (#4373).
+    message = "Your words do not move them." if approach.is_verbal else "It does not move them."
     morale_line = ""
     if tier >= 1:
         group.terms_ease += 1

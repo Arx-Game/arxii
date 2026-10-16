@@ -381,7 +381,7 @@ def _gm_profile_lines(group: GMGroupView) -> list[str]:
     )
     lines.append(f"    Speaks: {', '.join(group.speaks) or 'no language'}")
     lines.extend(
-        f"    Regard: {regard.participant} {regard.label} ({regard.regard})"
+        f"    Their regard: {regard.participant} {regard.label} ({regard.regard})"
         for regard in group.regards
     )
     return lines

@@ -79,7 +79,7 @@ class TraitHandler:
             # One bucket per TraitType, never a hand-picked subset: a character holding a
             # trait of a type with no bucket (a LANGUAGE fluency, #2993) made every trait
             # read on that character raise KeyError (#4373).
-            cast(str, trait_type): defaultdict(
+            trait_type: defaultdict(
                 lambda trait_type=trait_type: DefaultTraitValue("", trait_type),
             )
             for trait_type in TraitType.values
