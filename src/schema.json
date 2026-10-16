@@ -43428,7 +43428,6 @@ components:
           type: integer
         description:
           type: string
-          minLength: 1
           default: ''
         soak_value:
           type: integer
