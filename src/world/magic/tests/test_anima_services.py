@@ -5,7 +5,12 @@ from decimal import Decimal
 from django.test import TestCase, tag
 
 from world.conditions.factories import SoulfrayTemplateFactory
-from world.magic.factories import CharacterAnimaFactory, SoulfrayConfigFactory, TechniqueFactory
+from world.magic.factories import (
+    CharacterAnimaFactory,
+    SoulfrayConfigFactory,
+    TechniqueFactory,
+    ensure_soulfray_config,
+)
 from world.magic.services import (
     calculate_effective_anima_cost,
     calculate_soulfray_severity,
@@ -202,6 +207,7 @@ class GetSoulfrayWarningTests(TestCase):
             has_progression=True,
             is_stackable=False,
         )
+        ensure_soulfray_config()
         cls.stage1 = ConditionStageFactory(
             condition=cls.soulfray_template,
             stage_order=1,
