@@ -29,7 +29,13 @@ combat with TehomCD confirming their ledgers. Tranche 2 (actions) began 2026-10-
 journeys for organizations, the consent lists and carrying a body
 (`integration_tests/test_membership_and_consent_journeys.py`); the first two found
 `org invite` broken on telnet and invitees never told, both fixed in place, and the
-journeys list now carries a "Gaps the journeys found" table.
+journeys list now carries a "Gaps the journeys found" table. Its second step
+(2026-10-16) adds journeys for hosting a gathering, rising and falling in a covenant,
+keeping a vault, banking with the house and trading in the market square
+(`integration_tests/test_gatherings_coffers_and_wares_journeys.py`); they found an
+event invitee never told, the documented `vault access add/org` form unreachable, and
+vault replies printing a persona's type and an organization's realm, all fixed in
+place.
 
 ## Built (2026-09-30, #4064 — the reviewed delete, and admin pages for domains and fealty)
 

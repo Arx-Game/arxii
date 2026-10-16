@@ -455,11 +455,32 @@ class InviteToEventAction(Action):
         except IntegrityError:
             return ActionResult(success=False, message=EventError.INVITE_DUPLICATE)
         target_name = target.name if hasattr(target, "name") else f"#{target.pk}"
+        if target_type == InvitationTargetType.PERSONA:
+            _tell_invitee(event, invitation, target, invited_by)
         return ActionResult(
             success=True,
             message=f"You invite {target_name} to '{event.name}'.",
             data={"invitation_id": invitation.pk},
         )
+
+
+def _tell_invitee(
+    event: Event, invitation: EventInvitation, target: Persona, invited_by: Persona | None
+) -> None:
+    """Tell the invited persona's character an invitation is waiting, with the two
+    replies to type. Until #3657's journey asked, an invitee learned of an
+    invitation only by reading ``event show``; nothing told them (the same gap
+    the org invite had). Who invites is the ``by=`` persona when the host named
+    one, else the event's primary host."""
+    inviter = invited_by
+    if inviter is None:
+        host = event.hosts.filter(is_primary=True).select_related("persona").first()
+        inviter = host.persona if host is not None else None
+    opening = f"{inviter.name} invites you" if inviter is not None else "You are invited"
+    target.character_sheet.character.msg(
+        f"{opening} to '{event.name}'. event rsvp {invitation.pk} accept to attend, "
+        f"event rsvp {invitation.pk} decline to refuse."
+    )
 
 
 @dataclass

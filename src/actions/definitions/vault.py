@@ -79,7 +79,9 @@ class VaultAccessAddAction(Action):
         except ValueError as exc:
             return ActionResult(success=False, message=str(exc))
 
-        target_name = str(holder_persona) if holder_persona else str(holder_organization)
+        # The name alone: str() of a persona carries its type ("Hobb (Primary)")
+        # and of an organization its realm, neither of which the reply is about.
+        target_name = holder_persona.name if holder_persona else holder_organization.name
         return ActionResult(success=True, message=f"Access granted to {target_name}.")
 
 
@@ -127,7 +129,9 @@ class VaultAccessRemoveAction(Action):
             _msg = "That persona or organization was not on the access list."
             return ActionResult(success=False, message=_msg)
 
-        target_name = str(holder_persona) if holder_persona else str(holder_organization)
+        # The name alone: str() of a persona carries its type ("Hobb (Primary)")
+        # and of an organization its realm, neither of which the reply is about.
+        target_name = holder_persona.name if holder_persona else holder_organization.name
         return ActionResult(success=True, message=f"Access revoked from {target_name}.")
 
 
