@@ -27,6 +27,7 @@ from world.standoffs.constants import (
 from world.standoffs.models import StandoffConfig
 from world.standoffs.services.faction_rules import faction_rule_matches
 from world.standoffs.services.force import (
+    cause_clock,
     cause_fire_reason,
     effective_party_force,
     group_force,
@@ -68,7 +69,7 @@ class GMFactionRuleView:
     label: str
     angle_text: str
     difficulty_shift_bands: int
-    suppresses_cause: bool
+    cause_effect: str
     matched_by: list[str]
     revealed: bool
     source: str = ""
@@ -103,6 +104,7 @@ class GMGroupView:
     cause_fires: bool
     cause_reason: str
     cause_margin_percent: int
+    cause_clock: str
     proposal_reason: str
     pending_prompt_id: int | None
     last_decision: str
@@ -261,6 +263,7 @@ def _gm_group(group: StandoffGroup, participants: list, config: StandoffConfig) 
         cause_fires=reason is not None,
         cause_reason=reason or "",
         cause_margin_percent=margin,
+        cause_clock=cause_clock(group, config) if live else "",
         affiliation=organization.name if organization is not None else "",
         cause_edited=template is not None and cause != template.cause,
         affiliation_edited=template is not None and organization != template.organization,
@@ -291,7 +294,7 @@ def _gm_group(group: StandoffGroup, participants: list, config: StandoffConfig) 
                 label=faction_rule_label(entry.rule),
                 angle_text=entry.rule.angle_text,
                 difficulty_shift_bands=entry.rule.difficulty_shift_bands,
-                suppresses_cause=entry.rule.suppresses_cause,
+                cause_effect=entry.rule.cause_effect,
                 matched_by=matched[entry.rule.pk],
                 revealed=entry.rule.pk in revealed_rule_ids,
                 source=entry.source,

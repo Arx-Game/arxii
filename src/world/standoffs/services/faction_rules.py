@@ -114,20 +114,50 @@ def _active_sheets(group: StandoffGroup) -> list[CharacterSheet]:
     ]
 
 
-def suppressed_for_all_participants(group: StandoffGroup) -> bool:
-    """True when every active participant matches a rule that suppresses the cause."""
+def cause_effect_from(matches: Sequence[MatchedFactionRule]) -> str:
+    """What the matched rules do to the group's cause for one character (#4415).
+
+    The most specific level holding a rule with an effect decides; at that level a Provoke
+    beats a Suppress. None when no matched rule has an effect.
+    """
+    from world.standoffs.constants import CauseEffect  # noqa: PLC0415
+
+    with_effect = [m for m in matches if m.rule.cause_effect != CauseEffect.NONE]
+    if not with_effect:
+        return CauseEffect.NONE
+    level = min(m.level for m in with_effect)
+    effects = {m.rule.cause_effect for m in with_effect if m.level == level}
+    return CauseEffect.PROVOKE if CauseEffect.PROVOKE in effects else CauseEffect.SUPPRESS
+
+
+@dataclass(frozen=True)
+class CauseEffects:
+    """How the group's faction rules bear on its cause for the active participants.
+
+    ``provoked_by`` is the sheet of the first participant whose rules provoke the group
+    (None when nobody does); ``suppressed`` is True when every active participant's rules
+    suppress it.
+    """
+
+    provoked_by: CharacterSheet | None
+    suppressed: bool
+
+
+def cause_effects(group: StandoffGroup) -> CauseEffects:
+    """The cause effects of the group's faction rules over its active participants."""
+    from world.standoffs.constants import CauseEffect  # noqa: PLC0415
     from world.standoffs.services.profile import group_rules  # noqa: PLC0415
 
     sheets = _active_sheets(group)
-    if not sheets:
-        return False
-    rules = [entry for entry in group_rules(group) if entry.rule.suppresses_cause]
-    if not rules:
-        return False
-    return all(
-        any(match.rule.suppresses_cause for match in faction_rule_matches(group, sheet, rules))
-        for sheet in sheets
-    )
+    rules = [entry for entry in group_rules(group) if entry.rule.cause_effect != CauseEffect.NONE]
+    if not sheets or not rules:
+        return CauseEffects(provoked_by=None, suppressed=False)
+    effects = [
+        (sheet, cause_effect_from(faction_rule_matches(group, sheet, rules))) for sheet in sheets
+    ]
+    provoked_by = next((sheet for sheet, effect in effects if effect == CauseEffect.PROVOKE), None)
+    suppressed = all(effect == CauseEffect.SUPPRESS for _, effect in effects)
+    return CauseEffects(provoked_by=provoked_by, suppressed=suppressed)
 
 
 def _most_specific_total(

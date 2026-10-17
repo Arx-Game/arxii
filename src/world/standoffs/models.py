@@ -19,6 +19,7 @@ from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
 from world.combat.constants import CauseKind
 from world.predicates.validation import validate_predicate_tree
 from world.standoffs.constants import (
+    CauseEffect,
     DriveStrength,
     MoraleDirection,
     RevealKind,
@@ -134,9 +135,14 @@ class FactionRule(SharedMemoryModel):
         default=0,
         help_text="Steps added to the named drive's strength when this rule matches.",
     )
-    suppresses_cause = models.BooleanField(
-        default=False,
-        help_text="When true, a match stops the creature's cause from firing.",
+    cause_effect = models.CharField(
+        max_length=10,
+        choices=CauseEffect.choices,
+        default=CauseEffect.NONE,
+        help_text=(
+            "None, Suppress (they will not start it against this character) or Provoke "
+            "(they will, whatever the force)."
+        ),
     )
     angle_text = models.TextField(
         blank=True,
@@ -392,6 +398,19 @@ class StandoffConfig(SharedMemoryModel):
         default=3,
         help_text="The most bands a named NPC's regard can ease or harden a press or terms.",
     )
+    hunger_margin_step = models.PositiveSmallIntegerField(
+        default=10,
+        help_text=(
+            "Percent added to a Hunger group's margin for each action nobody feeds them (#4415)."
+        ),
+    )
+    territory_patience = models.PositiveSmallIntegerField(
+        default=3,
+        validators=[MinValueValidator(1)],
+        help_text=(
+            "Actions a Territory group allows before it fires. They warn one action earlier."
+        ),
+    )
 
     objects = ArxSharedMemoryManager()
 
@@ -507,6 +526,13 @@ class StandoffGroup(SharedMemoryModel):
         null=True,
         blank=True,
         help_text="Group force when a GM overrode the cause (see override_party_force).",
+    )
+    actions_elapsed = models.PositiveSmallIntegerField(
+        default=0,
+        help_text=(
+            "Party actions taken in the standoff while this group stood in it: widens a Hunger "
+            "margin and runs down a Territory group's patience (#4415)."
+        ),
     )
 
     class Meta:

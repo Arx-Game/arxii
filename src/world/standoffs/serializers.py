@@ -9,7 +9,7 @@ from rest_framework import serializers
 
 from world.mechanics.models import Property
 from world.societies.models import Organization
-from world.standoffs.constants import DriveStrength, MoraleDirection
+from world.standoffs.constants import CauseEffect, DriveStrength, MoraleDirection
 from world.standoffs.services.placement import (
     DriveEdit,
     draft_from_line,
@@ -109,7 +109,7 @@ class GMFactionRuleViewSerializer(serializers.Serializer):
     label = serializers.CharField()
     angle_text = serializers.CharField(allow_blank=True)
     difficulty_shift_bands = serializers.IntegerField()
-    suppresses_cause = serializers.BooleanField()
+    cause_effect = serializers.ChoiceField(choices=CauseEffect.choices)
     matched_by = serializers.ListField(child=serializers.CharField())
     revealed = serializers.BooleanField()
     source = serializers.CharField(allow_blank=True)
@@ -139,6 +139,7 @@ class GMGroupViewSerializer(serializers.Serializer):
     cause_fires = serializers.BooleanField()
     cause_reason = serializers.CharField(allow_blank=True)
     cause_margin_percent = serializers.IntegerField()
+    cause_clock = serializers.CharField(allow_blank=True)
     proposal_reason = serializers.CharField(allow_blank=True)
     pending_prompt_id = serializers.IntegerField(allow_null=True)
     last_decision = serializers.CharField(allow_blank=True)

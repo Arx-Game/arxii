@@ -265,14 +265,14 @@ def standoff_read(
     )
     tier = result.success_level
     if tier < 0:
-        attack_lines: list[str] = []
-        fight_started = evaluate_causes(encounter, attack_lines)
+        cause_lines: list[str] = []
+        fight_started = evaluate_causes(encounter, cause_lines, after_action=True)
         return StandoffActionResult(
             False,
             f"You study them. {_word(tier)}. You learn nothing.",
             success_level=tier,
             fight_started=fight_started,
-            attack_line=attack_lines[0] if attack_lines else "",
+            cause_lines=cause_lines,
         )
     if tier >= 2:  # noqa: PLR2004 - critical: everything
         chosen = hidden
@@ -288,15 +288,15 @@ def standoff_read(
     revealed = [_reveal(group, thing) for thing in chosen]
     # A read changes none of a cause's inputs, but every action is a point where the cause
     # is tested: a GM's "hold for one action" is tested again after the next one.
-    attack_lines = []
-    fight_started = evaluate_causes(encounter, attack_lines)
+    cause_lines = []
+    fight_started = evaluate_causes(encounter, cause_lines, after_action=True)
     return StandoffActionResult(
         True,
         f"You study them. {_word(tier)}.",
         success_level=tier,
         revealed=revealed,
         fight_started=fight_started,
-        attack_line=attack_lines[0] if attack_lines else "",
+        cause_lines=cause_lines,
     )
 
 
@@ -698,12 +698,13 @@ def standoff_press(
     elif tier <= BOTCH_LEVEL:
         _embolden_on_botch(group, config)
         message = "It goes badly; they grow bolder."
-    attack_lines: list[str] = []
+    cause_lines: list[str] = []
     fight_started = evaluate_causes(
         encounter,
-        attack_lines,
+        cause_lines,
         provoked=group if tier <= BOTCH_LEVEL else None,
         provocation=REASON_PROVOKED_PRESS,
+        after_action=True,
     )
     return StandoffActionResult(
         success=tier >= 1,
@@ -711,7 +712,7 @@ def standoff_press(
         success_level=tier,
         fight_started=fight_started,
         morale_line=morale_line,
-        attack_line=attack_lines[0] if attack_lines else "",
+        cause_lines=cause_lines,
     )
 
 
@@ -819,19 +820,20 @@ def _terms_refused(
     botched = tier <= BOTCH_LEVEL
     if botched:
         _embolden_on_botch(group, config)
-    attack_lines: list[str] = []
+    cause_lines: list[str] = []
     fight_started = evaluate_causes(
         encounter,
-        attack_lines,
+        cause_lines,
         provoked=group if botched else None,
         provocation=REASON_PROVOKED_TERMS,
+        after_action=True,
     )
     return StandoffActionResult(
         False,
         f"{_word(tier)}. They refuse your terms.",
         success_level=tier,
         fight_started=fight_started,
-        attack_line=attack_lines[0] if attack_lines else "",
+        cause_lines=cause_lines,
     )
 
 
@@ -848,19 +850,19 @@ def _terms_accepted(
     group.save(update_fields=["state", "settled_outcome"])
     close_group_prompts(group, "They accepted terms.")
     settle_empty_groups(encounter)
-    attack_lines: list[str] = []
+    cause_lines: list[str] = []
     fight_started = False
     if not encounter.standoff_groups.exclude(state=StandoffGroupState.SETTLED).exists():
         complete_standoff(encounter)
     else:
-        fight_started = evaluate_causes(encounter, attack_lines)
+        fight_started = evaluate_causes(encounter, cause_lines, after_action=True)
     return StandoffActionResult(
         True,
         f"{_word(tier)}. {terms.description or 'They accept.'}",
         success_level=tier,
         settled=True,
         fight_started=fight_started,
-        attack_line=attack_lines[0] if attack_lines else "",
+        cause_lines=cause_lines,
     )
 
 
@@ -909,13 +911,13 @@ def standoff_share_angle(
         group=group, character_sheet=sheet, faction_rule=faction_rule
     )
     # Sharing changes none of a cause's inputs, but it is an action: a held cause is tested.
-    attack_lines: list[str] = []
-    fight_started = evaluate_causes(encounter, attack_lines)
+    cause_lines: list[str] = []
+    fight_started = evaluate_causes(encounter, cause_lines, after_action=True)
     return StandoffActionResult(
         True,
         "You share what you feel.",
         fight_started=fight_started,
-        attack_line=attack_lines[0] if attack_lines else "",
+        cause_lines=cause_lines,
     )
 
 
