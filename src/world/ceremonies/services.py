@@ -1107,14 +1107,27 @@ def _sacrifice_site(
     """The being a sacrifice here goes to, and "shrine" or "temple".
 
     A shrine in the room or a temple over it qualifies, each for its own being.
-    With both present for different beings, ``being`` chooses.
+    With both present for different beings, ``being`` chooses. A named stewarded
+    being refuses anyone not seated at its table, and takes a member's sacrifice
+    anywhere, with no site ("" in place of "shrine" or "temple", #4333 slice 4).
     """
     from world.worship.exceptions import SacrificeRefused  # noqa: PLC0415
     from world.worship.pledge_services import holy_sites_here  # noqa: PLC0415
+    from world.worship.steward_services import (  # noqa: PLC0415
+        stewarded_by_table_of,
+        stewarded_refusal,
+    )
 
+    if being is not None:
+        refusal = stewarded_refusal(sheet, being)
+        if refusal:
+            raise SacrificeRefused(refusal)
     sites = holy_sites_here(sheet)
     if being is not None:
         sites = [site for site in sites if site.being.pk == being.pk]
+        if not sites and stewarded_by_table_of(sheet, being):
+            # A stewarded being takes a member's sacrifice anywhere (design 2).
+            return being, ""
     if not sites:
         msg = (
             f"There is no shrine or temple of {being.name} here."
@@ -1211,9 +1224,10 @@ def sacrifice_items(
             sacrificed.append(
                 SacrificedItem(name=offered.name, credited=bump.credited, calculation=calculation)
             )
+            where = f"at {target.name}'s {site}" if site else f"to {target.name}"
             broadcast_room_line(
                 persona,
-                f"{persona.name} sacrifices {offered.name} at {target.name}'s {site}.",
+                f"{persona.name} sacrifices {offered.name} {where}.",
                 location=character.location,
             )
     return SacrificeOutcome(being=target, site=site, items=sacrificed)

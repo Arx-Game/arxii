@@ -157,6 +157,12 @@ def take_pledge(sheet: CharacterSheet, pledge: Pledge, *, prayer_text: str = "")
 
     if not pledge.is_active or not pledge.being.is_active:
         raise PledgeUnavailable
+    from world.worship.exceptions import StewardedBeingClosed  # noqa: PLC0415
+    from world.worship.steward_services import stewarded_refusal  # noqa: PLC0415
+
+    refusal = stewarded_refusal(sheet, pledge.being)
+    if refusal:
+        raise StewardedBeingClosed(refusal)
     words = prayer_text.strip()
     if len(words) > PRAYER_TEXT_MAX_LENGTH:
         msg = f"A prayer is at most {PRAYER_TEXT_MAX_LENGTH} characters."
@@ -306,11 +312,14 @@ def close_pledge(sheet: CharacterSheet, *, scene: Scene) -> ClosingOutcome:
     project goes to RESOLVING, the performance is recorded on the sidecar and
     ``resolve_project`` runs the PLEDGE handler, which pays the closing award.
     Once that commits, the answer for the rite's tier is drawn and delivered as
-    a vision, or held while the being's pool is short (slice 3, design 4).
+    a vision, or held while the being's pool is short (slice 3, design 4). A
+    stewarded being's close goes to its table GM as a ``BEING_ANSWER`` prompt
+    instead (slice 4, design 5).
     """
     from world.projects.services import resolve_project  # noqa: PLC0415
     from world.worship.answer_services import deliver_pledge_answer  # noqa: PLC0415
     from world.worship.rite_services import perform_worship_rite  # noqa: PLC0415
+    from world.worship.steward_services import route_to_steward  # noqa: PLC0415
 
     details = open_pledge_for(sheet)
     if details is None:
@@ -359,7 +368,8 @@ def close_pledge(sheet: CharacterSheet, *, scene: Scene) -> ClosingOutcome:
     # The answer goes out after the resolution commits: send_vision pushes the vision
     # to an online player the moment its own record commits, so a push from inside
     # the block above could show a vision a rolled-back resolution never kept.
-    delivery = deliver_pledge_answer(details, outcome)
+    # A stewarded being's table GM answers it instead of the draw (slice 4).
+    delivery = route_to_steward(details) or deliver_pledge_answer(details, outcome)
     return ClosingOutcome(
         details=details,
         rite=rite,

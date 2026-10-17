@@ -154,6 +154,8 @@ def visible_prompts_for(account: AccountDB, *, scene: Scene | None) -> QuerySet[
             "technique",
             "stake_outcome__stake",
             "standoff_group__creature_template",
+            "pledge__pledge__being",
+            "pledge__closing_performance__outcome_tier",
             "scene",
         )
         .order_by("-created_at")
@@ -336,6 +338,7 @@ def route_narratable_event(
                 technique=event.technique,
                 stake_outcome=event.stake_outcome,
                 standoff_group=event.standoff_group,
+                pledge=event.pledge_details,
             )
             for account in recipients
         ]
@@ -503,6 +506,8 @@ def prompt_telnet_commands(prompt: GMPrompt) -> str:
             f"gm prompt confirm {prompt.pk} | gm prompt hold {prompt.pk}"
             f" | gm prompt override {prompt.pk} <reason>"
         )
+    if prompt.kind == GMPromptKind.BEING_ANSWER:
+        return f"gm prompt answer {prompt.pk} | gm prompt dismiss {prompt.pk}"
     return (
         f"emit/prompt {prompt.pk} <text> | pemit/prompt {prompt.pk} <names>=<text>"
         f" | gm prompt send {prompt.pk} | gm prompt dismiss {prompt.pk}"
@@ -511,6 +516,11 @@ def prompt_telnet_commands(prompt: GMPrompt) -> str:
 
 
 def _telnet_line(prompt: GMPrompt) -> str:
+    if prompt.kind == GMPromptKind.BEING_ANSWER:
+        from world.worship.steward_services import prompt_summary  # noqa: PLC0415
+
+        head = f"GM prompt [{prompt.pk}] {prompt.get_kind_display()}: "
+        return f"{head}{prompt_summary(prompt)} {prompt_telnet_commands(prompt)}"
     if prompt.kind == GMPromptKind.STANDOFF_CAUSE and prompt.standoff_group is not None:
         from world.standoffs.services.proposals import proposal_summary  # noqa: PLC0415
 
@@ -902,7 +912,21 @@ def dismiss_gm_prompt(prompt: GMPrompt, *, resolver: AccountDB | None) -> GMProm
     Authorization (who may dismiss this prompt) is the CALLER's job -- this
     function only enforces that the prompt is a narration kind and still open.
     Task 9's action is where the real GM/addressee gate lives.
+
+    A ``BEING_ANSWER`` prompt (#4333) has no default lines: dismissing it hands
+    the closed pledge back to the being's authored draw
+    (``world.worship.steward_services.dismiss_being_answer``), so the answer is
+    never dropped.
     """
+    if prompt.kind == GMPromptKind.BEING_ANSWER:
+        from world.worship.exceptions import StewardAnswerError  # noqa: PLC0415
+        from world.worship.steward_services import dismiss_being_answer  # noqa: PLC0415
+
+        try:
+            dismiss_being_answer(prompt, resolver=resolver)
+        except StewardAnswerError as exc:
+            raise GMPromptError(exc.user_message) from exc
+        return prompt
     if prompt.kind not in NARRATION_PROMPT_KINDS:
         raise GMPromptError(_MSG_NOT_NARRATION)
     return _resolve_narration_prompt(prompt, new_status=GMPromptStatus.DISMISSED, resolver=resolver)
