@@ -3,7 +3,7 @@
 ``StoryViewSet.perform_update`` wires ``ensure_canon_review_for_story`` into
 the generic PATCH /api/stories/{id}/ path whenever ``impact_tier`` changes —
 the web half of the seam telnet's ``story impact`` covers on the other side
-(``commands/tests/test_canon_review_command.py::StoryImpactRequestsReviewTests``).
+(``integration_tests/test_running_a_story_journeys.py::CallingTheCanon``).
 
 PATCH on this endpoint is staff-only today (``IsStoryOwnerOrStaff.
 has_permission`` gates every non-safe method to staff — a pre-existing

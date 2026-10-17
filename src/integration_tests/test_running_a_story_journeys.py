@@ -7,10 +7,22 @@ the GM were told."""
 from __future__ import annotations
 
 from integration_tests.harness import JourneyCase
-from world.gm.factories import GMLevelCapFactory, GMProfileFactory, GMTableFactory
+from world.gm.constants import GMLevel
+from world.gm.factories import (
+    GMLevelCapFactory,
+    GMProfileFactory,
+    GMTableFactory,
+    seed_default_gm_level_caps,
+)
 from world.instances.models import InstancedRoom
 from world.narrative.models import NarrativeMessageDelivery
-from world.stories.constants import BeatOutcome, StoryMaturity, StoryScope
+from world.stories.constants import (
+    BeatOutcome,
+    BeatVisibility,
+    CanonReviewStatus,
+    StoryMaturity,
+    StoryScope,
+)
 from world.stories.factories import (
     BeatFactory,
     ChapterFactory,
@@ -19,6 +31,7 @@ from world.stories.factories import (
     StoryProgressFactory,
     TransitionFactory,
 )
+from world.stories.models import CanonReview
 from world.stories.types import StoryStatus
 
 
@@ -63,8 +76,16 @@ class RunningAStory(_StoryTable):
         self.assertIn(f'[{self.story.pk}] The Lantern Debt — currently in "The First Knock"', told)
         self.assertIn("You have no active stories.", self.telnet(self.hobb, "story"))
 
+        self.assertIn(f"[{self.story.pk}] The Lantern Debt", self.telnet(self.ysmay, "story list"))
+        self.assertIn("Usage: story <subcommand>", self.telnet(self.ysmay, "story frobnicate"))
+
+        hidden = BeatFactory(
+            episode=self.first, order=9, player_hint="", visibility=BeatVisibility.SECRET
+        )
         told = self.telnet(self.ysmay, f"story beats {self.first.pk}")
         self.assertIn(f"Beats:\n  [{self.beat.pk}] Find out who knocked (unsatisfied)", told)
+        # A secret beat with no hint is listed, but not by name.
+        self.assertIn(f"  [{hidden.pk}] (Hidden Beat) (unsatisfied)", told)
         self.assertIn(
             "That's not one of your active stories.",
             self.telnet(self.ysmay, f"story beats {self.second.pk}"),
@@ -73,7 +94,12 @@ class RunningAStory(_StoryTable):
             "An episode must be specified by its numeric ID.",
             self.telnet(self.ysmay, "story beats first"),
         )
+        self.assertIn("Usage: story beats <episode-id>.", self.telnet(self.ysmay, "story beats"))
 
+        self.assertIn(
+            "A beat must be specified by its numeric ID.",
+            self.telnet(self.ravenna, "story mark abc success"),
+        )
         told = self.telnet(self.hobb, f"story mark {self.beat.pk} success")
         self.assertIn(
             "Only the story's Lead GM, staff, or an approved Assistant GM may mark a beat.", told
@@ -103,6 +129,9 @@ class RunningAStory(_StoryTable):
         )
         self.assertIn("Usage: story mark", self.telnet(self.ravenna, "story mark"))
 
+        self.assertIn(
+            "Usage: story resolve <episode-id> [notes]", self.telnet(self.ravenna, "story resolve")
+        )
         told = self.telnet(self.ravenna, f"story resolve {self.first.pk} The door swings open.")
         self.assertIn("Episode 'The First Knock' resolved.", told)
         self.progress.refresh_from_db()
@@ -113,7 +142,11 @@ class RunningAStory(_StoryTable):
             self.telnet(self.hobb, f"story resolve {self.second.pk}"),
         )
 
-        told = self.telnet(self.ravenna, f"story complete {self.story.pk}")
+        self.assertIn(
+            "Usage: story complete <story-id>", self.telnet(self.ravenna, "story complete")
+        )
+        # A story may be named by its title, any case, in place of its id.
+        told = self.telnet(self.ravenna, "story complete the lantern debt")
         self.assertIn("Story 'The Lantern Debt' completed.", told)
         self.story.refresh_from_db()
         self.assertEqual(self.story.status, StoryStatus.COMPLETED)
@@ -176,6 +209,61 @@ class CallingTheCanon(_StoryTable):
         self.assertIn("Impact tier: regional", told)
         self.assertIn("Canon review: Pending", told)
 
+        # Staff work the queue. Marrow sends it back once, then clears the raised tier.
+        marrow = self.make_player("Marrow", room=self.lantern)
+        marrow.db_account.permissions.add("Admin")
+        review = CanonReview.objects.get(story=self.story)
+        self.assertIn(
+            f"Pending canon reviews:\n  [{review.pk}] The Lantern Debt — tier regional "
+            "(status pending)",
+            self.telnet(marrow, "canonreview list"),
+        )
+        self.assertIn(
+            "Usage: canonreview changes <id> notes=<text>",
+            self.telnet(marrow, f"canonreview changes {review.pk}"),
+        )
+        self.assertIn("No canon review #999999.", self.telnet(marrow, "canonreview clear 999999"))
+        self.assertIn(
+            f"Canon review #{review.pk} returned with changes for The Lantern Debt.",
+            self.telnet(marrow, f"canonreview changes {review.pk} notes=Narrow the scope"),
+        )
+        review.refresh_from_db()
+        self.assertEqual(review.status, CanonReviewStatus.CHANGES_REQUESTED)
+        told = self.telnet(self.ravenna, f"story review-status {self.story.pk}")
+        self.assertIn("Canon review: Changes requested", told)
+        self.assertIn("Notes: Narrow the scope", told)
+
+        told = self.telnet(self.ravenna, f"story impact {self.story.pk}=world")
+        self.assertIn("Impact tier set to world for The Lantern Debt.", told)
+        self.assertIn("Canon review requested; awaiting staff clearance.", told)
+        second = CanonReview.objects.get(story=self.story, status=CanonReviewStatus.PENDING)
+        self.assertIn(
+            f"Canon review #{second.pk} cleared for The Lantern Debt.",
+            self.telnet(marrow, f"canonreview clear {second.pk} notes=Fine by me"),
+        )
+        self.assertIn("No pending canon reviews.", self.telnet(marrow, "canonreview list"))
+        self.assertIn(
+            "Canon review: CLEARED",
+            self.telnet(self.ravenna, f"story review-status {self.story.pk}"),
+        )
+        self.assertIn(
+            "This story's impact tier is frozen; it has a cleared canon review.",
+            self.telnet(self.ravenna, f"story impact {self.story.pk}=table"),
+        )
+
+        # An experienced GM's regional tier clears itself; a table tier asks for no review.
+        seed_default_gm_level_caps()
+        GMProfileFactory(account=self.hobb.db_account, level=GMLevel.EXPERIENCED)
+        ledger = StoryFactory(title="The Dock Ledger", owners=[self.hobb.db_account])
+        self.assertIn(
+            "Impact tier set to table for The Dock Ledger.",
+            self.telnet(self.hobb, f"story impact {ledger.pk}=table"),
+        )
+        self.assertFalse(CanonReview.objects.filter(story=ledger).exists())
+        told = self.telnet(self.hobb, f"story impact {ledger.pk}=regional")
+        self.assertIn("Canon review auto-cleared by your GM level.", told)
+        self.assertEqual(CanonReview.objects.get(story=ledger).status, CanonReviewStatus.CLEARED)
+
         told = self.telnet(self.ravenna, f"story surrender {self.story.pk}")
         self.assertIn("Surrendered oversight of The Lantern Debt. It is now seeking a GM.", told)
         self.story.refresh_from_db()
@@ -235,6 +323,15 @@ class OpeningASceneRoom(JourneyCase):
         self.assertIn("You leave.", self.telnet(self.ysmay, "leaveroom"))
         self.assertEqual(self.ysmay.location, self.lantern)
         self.assertIn("You're not in a story room.", self.telnet(self.ysmay, "leaveroom"))
+
+        # Two grants sharing a name: the lower room id wins, every time.
+        self.telnet(self.ravenna, "sceneroom The Old Mill = The other mill, across the stream.")
+        twin = InstancedRoom.objects.exclude(pk=instance.pk).get(gm_owner=self.gm_profile)
+        self.web(self.ravenna, "grant_story_room", room_id=twin.room.pk, character_name="Ysmay")
+        self.assertIn("You join The Old Mill.", self.telnet(self.ysmay, "joinroom The Old Mill"))
+        self.assertEqual(self.ysmay.location.pk, min(mill.pk, twin.room.pk))
+        self.assertIn("You leave.", self.telnet(self.ysmay, "leaveroom"))
+        self.assertIn("Usage: sceneroom", self.telnet(self.ravenna, "sceneroom close x"))
 
         self.assertIn("You join The Old Mill.", self.telnet(self.ysmay, f"joinroom #{mill.pk}"))
         self.assertIn("GM trust required.", self.telnet(self.hobb, f"sceneroom close {mill.pk}"))

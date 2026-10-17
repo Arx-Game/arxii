@@ -964,7 +964,10 @@ actions, backends, and service functions.
   `integration_tests/test_running_a_story_journeys.py` (list, beats, mark, resolve, promote,
   complete, impact, review-status, surrender) and
   `integration_tests/test_sharing_a_story_journeys.py` (protect, clearance, crossover, clock,
-  signoff), typed through the handler (#3657).
+  signoff), typed through the handler (#3657). The hand-built tests that called
+  `CmdStory.func()` and `CmdCanonReview.func()` directly are gone (#3657 tranche 4 step 3,
+  ledger `docs/testing/ledger/commands.csv`): a new story verb gets its lines in those
+  journeys, not a new `test_story_*.py`.
 - **`story_rooms.py`**: telnet play verbs for GM story areas / temp scene rooms (#2450, epic
   #2436 slice 3) — canvas authoring (create/dig/link/place/remove a story area's rooms) stays
   web-only (epic Decision 2); only the play-time verbs get a telnet face, mirroring the "no

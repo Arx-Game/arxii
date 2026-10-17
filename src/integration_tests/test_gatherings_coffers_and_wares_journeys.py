@@ -39,7 +39,7 @@ from world.locations.factories import LocationOwnershipFactory
 from world.room_features.constants import VAULT_MAX_ITEMS_PER_LEVEL, RoomFeatureServiceStrategy
 from world.room_features.factories import RoomFeatureInstanceFactory, RoomFeatureKindFactory
 from world.room_features.models import VaultDetails
-from world.scenes.models import Scene
+from world.scenes.models import Interaction, Scene
 from world.societies.factories import OrganizationFactory, OrganizationMembershipFactory
 
 
@@ -108,9 +108,16 @@ class HostingAGathering(JourneyCase):
 
         told = self.telnet(self.ysmay, f"event schedule {self.gala.pk}")
         self.assertIn("'The Grand Gala' is now scheduled.", told)
+        # A line spoken before the event begins once left the room remembering "no
+        # scene", so nothing said after the start was recorded in the event's scene.
+        self.telnet(self.hobb, "say Is it time yet?")
         told = self.telnet(self.ysmay, f"event start {self.gala.pk}")
         self.assertIn("'The Grand Gala' has started.", told)
-        self.assertTrue(Scene.objects.filter(event=self.gala, is_active=True).exists())
+        gala_scene = Scene.objects.get(event=self.gala, is_active=True)
+        self.telnet(self.hobb, "say Welcome, all of you.")
+        self.assertTrue(
+            Interaction.objects.filter(scene=gala_scene, content="Welcome, all of you.").exists()
+        )
 
         told = self.telnet(self.hobb, f"event rsvp {invitation.pk} decline")
         self.assertIn("Cannot RSVP to an invitation for an active or finished event.", told)
