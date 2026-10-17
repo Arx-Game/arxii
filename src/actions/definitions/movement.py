@@ -52,7 +52,7 @@ from world.areas.positioning.travel import find_route
 from world.conditions.services import can_perceive
 from world.items.exceptions import InventoryError, NotReachable
 from world.scenes.models import Persona
-from world.scenes.persona_display import build_persona_display_map, viewer_context_for_account
+from world.scenes.persona_display import build_persona_display_map
 from world.scenes.services import active_persona_for_sheet
 
 if TYPE_CHECKING:
@@ -432,13 +432,9 @@ class GiveAction(Action):
             checked_personas.append((persona, checked))
         if checked_personas:
             account = actor.db_account
-            viewer_persona_ids, viewer_sheet_ids = (
-                viewer_context_for_account(account) if account is not None else (set(), set())
-            )
             display_map = build_persona_display_map(
                 [persona for persona, _ in checked_personas],
-                viewer_persona_ids=viewer_persona_ids,
-                viewer_sheet_ids=viewer_sheet_ids,
+                viewer_sheet=actor.character_sheet,
                 is_staff=bool(account is not None and account.is_staff),
             )
         else:

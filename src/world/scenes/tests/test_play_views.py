@@ -1020,6 +1020,11 @@ class PlayPosesQueryBudgetTests(APITestCase):
     ``Scene.participations_cached``, already warm on any later request against
     the same scene), so only the cold budgets below drop by one; the 8-query
     warm floor is unaffected.
+
+    26 -> 27 (#4413): the persona reveal rule reads for the viewer's selected
+    character, ``Account.cached_selected_entry``, one query per account per
+    process (the cold request pays it with the account's other caches); the
+    8-query warm floor is unaffected.
     """
 
     def setUp(self) -> None:
@@ -1060,7 +1065,7 @@ class PlayPosesQueryBudgetTests(APITestCase):
         """Baseline: 6 total poses, 1 of them a reply."""
         scene = SceneFactory()
         self._build_page(scene, reply_count=1)
-        with self.assertNumQueries(26):  # 76->27 by #3816, 27->26 by #4101 (class docstring)
+        with self.assertNumQueries(27):  # 76->27 by #3816, 27->26 by #4101, 26->27 by #4413
             response = self.client.get(f"/api/play/poses/?conversation=scene:{scene.pk}")
         assert response.status_code == 200
         assert len(response.json()["results"]) == 6
@@ -1071,7 +1076,7 @@ class PlayPosesQueryBudgetTests(APITestCase):
         replies adds no query."""
         scene = SceneFactory()
         self._build_page(scene, reply_count=3)
-        with self.assertNumQueries(26):  # 76->27 by #3816, 27->26 by #4101 (class docstring)
+        with self.assertNumQueries(27):  # 76->27 by #3816, 27->26 by #4101, 26->27 by #4413
             response = self.client.get(f"/api/play/poses/?conversation=scene:{scene.pk}")
         assert response.status_code == 200
         assert len(response.json()["results"]) == 6
@@ -1197,7 +1202,9 @@ class PlayPosesQueryBudgetTests(APITestCase):
         force_authenticate(django_request, user=self.account)
         request = Request(django_request)
 
-        with self.assertNumQueries(17):  # 18->17 by #4101: cold-only GM/owner fallback retired
+        # 18->17 by #4101 (cold-only GM/owner fallback retired), 17->18 by #4413
+        # (cached_selected_entry, paid once on a cold account).
+        with self.assertNumQueries(18):
             _, interactions = _rows(request, params={"conversation": f"scene:{scene.pk}"})
 
         pose_ids = {pose.pk for pose in poses}

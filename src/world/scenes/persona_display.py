@@ -1,18 +1,24 @@
 """Per-viewer persona display resolution (#1109, slice 2).
 
-How a persona's name renders to a given viewer:
+The viewer is ONE character: the sheet of the character doing the looking (#4413). What the
+account's other characters discovered or see through is theirs, not this one's; a player on
+Hobb meets a stranger Maud has unmasked, a reminder that Hobb does not know. Only staff are
+universal discoverers (#1279). How a persona's name renders to that viewer:
 
-- **Your own faces** — any persona on a character_sheet your account currently plays — and
-  **named public faces** render by their real name. You are never restricted from your own
-  identities (the owning player always sees the truth).
-- **Anonymous faces** (`is_fake_name`) you have **discovered** (via any of your characters)
-  render as ``"<mask> (<real>)"`` — the presented face, with the real identity you've pierced
-  in parens. The parens are load-bearing: presenting under a mask is easy to lose track of, and
-  a GM running a scene needs to know who they're actually looking at.
-- **Anonymous faces** you have not discovered render as a composed **sdesc**, unless one of
-  your characters **sees through** that kind of disguise (#4396): a positive ``disguise_sight``
-  lever total on the kind (``world.forms.services.identification.pierced_disguise_kinds``)
-  reveals the face as ``"<mask> (<real>)"`` with no discovery row and no identification check.
+- **The viewer's own faces** (the personas on the viewer's sheet) and **named public faces**
+  render by their real name. A character is never restricted from its own identities.
+- **Anonymous faces** (`is_fake_name`) the viewer has **discovered** (a ``PersonaDiscovery``
+  row of this sheet's) render as ``"<mask> (<real>)"`` — the presented face, with the real
+  identity pierced in parens. The parens are load-bearing: presenting under a mask is easy to
+  lose track of, and a GM running a scene needs to know who they're actually looking at.
+- **Anonymous faces** the viewer has not discovered render as a composed **sdesc**, unless the
+  viewer **sees through** that kind of disguise (#4396): a positive ``disguise_sight`` lever
+  total on the kind (``world.forms.services.identification.pierced_disguise_kinds``) reveals
+  the face as ``"<mask> (<real>)"`` with no discovery row and no identification check.
+
+Callers hand the resolvers the viewing character's sheet: ``obj.character_sheet`` for a
+puppet or an actor, ``world.relationships.reads.resolve_viewer_sheet`` for a web request (the
+account's durable selection, which login and ``@ic`` keep in step with the puppet).
 
 ``build_persona_display_map`` resolves a whole page of personas in O(1) discovery queries, so
 the interaction feed stays query-bounded.
@@ -30,7 +36,7 @@ from world.scenes.models import Persona, PersonaDiscovery
 if TYPE_CHECKING:
     from collections.abc import Iterable
 
-    from evennia.accounts.models import AccountDB
+    from world.character_sheets.models import CharacterSheet
 
 # Apparent gender for the anonymous-face short description (#1109): from the character's real
 # gender; non-binary / unset render as "person". (A slice-3 disguise that conceals gender will
@@ -70,14 +76,14 @@ def compose_sdesc(persona: Persona) -> str:
 
 def _build_revealed_map(
     fake_ids: list[int],
-    viewer_sheet_ids: set[int],
+    viewer_sheet: CharacterSheet | None,
 ) -> dict[int, Persona]:
-    """Query PersonaDiscovery rows and return a mapping of fake persona pk → revealed persona."""
-    if not fake_ids or not viewer_sheet_ids:
+    """The viewer's own PersonaDiscovery rows, as a map of fake persona pk → revealed persona."""
+    if not fake_ids or viewer_sheet is None:
         return {}
     rows = PersonaDiscovery.objects.filter(
         Q(persona_id__in=fake_ids) | Q(linked_to_id__in=fake_ids),
-        discovered_by_id__in=viewer_sheet_ids,
+        discovered_by=viewer_sheet,
     ).select_related("persona", "linked_to")
     revealed: dict[int, Persona] = {}
     for discovery in rows:
@@ -118,9 +124,18 @@ def _sight_reveal(persona: Persona, pierced_kinds: set[str]) -> tuple[str, bool]
     return _staff_reveal(persona)
 
 
+def _is_own_face(persona: Persona, viewer_sheet: CharacterSheet | None) -> bool:
+    """Whether ``persona`` is one of the viewing character's own faces (#4413).
+
+    Own = on the viewer's sheet. The faces of the account's other characters are not this
+    character's; while playing Hobb, Maud's mask is a stranger's mask.
+    """
+    return viewer_sheet is not None and persona.character_sheet_id == viewer_sheet.pk
+
+
 def _resolve_single_display(
     persona: Persona,
-    viewer_persona_ids: set[int],
+    viewer_sheet: CharacterSheet | None,
     revealed: dict[int, Persona],
     *,
     is_staff: bool = False,
@@ -137,7 +152,7 @@ def _resolve_single_display(
     persona is revealed (``reveal_allowed=True``) without ever going through discovery
     (``is_discovered=False``).
     """
-    if persona.pk in viewer_persona_ids or not persona.is_fake_name:
+    if _is_own_face(persona, viewer_sheet) or not persona.is_fake_name:
         return persona.name, False, True
     if is_staff:
         name, is_discovered = _staff_reveal(persona)
@@ -154,65 +169,68 @@ def _resolve_single_display(
 def build_persona_display_map(
     personas: Iterable[Persona],
     *,
-    viewer_persona_ids: set[int],
-    viewer_sheet_ids: set[int],
+    viewer_sheet: CharacterSheet | None,
     is_staff: bool = False,
 ) -> dict[int, tuple[str, bool, bool]]:
     """Map each persona's pk -> ``(display_name, is_discovered, reveal_allowed)`` (#1109, #2378).
 
-    One discovery query covers every anonymous, non-owned persona in ``personas``. Owned and
-    named-public personas resolve to their real name with no query. When ``is_staff`` is True,
-    the discovery query is skipped entirely — staff are universal discoverers (#1279).
-    ``reveal_allowed`` (see ``_resolve_single_display``) is the shared per-viewer identity-reveal
-    predicate — reuse it instead of re-deriving reveal logic for any other identity-linked field.
+    ``viewer_sheet`` is the one character doing the looking (#4413); None is a viewer who
+    plays nobody (a stranger to every mask). One discovery query covers every anonymous,
+    non-owned persona in ``personas``. Owned and named-public personas resolve to their real
+    name with no query. When ``is_staff`` is True, the discovery query is skipped entirely —
+    staff are universal discoverers (#1279). ``reveal_allowed`` (see
+    ``_resolve_single_display``) is the shared per-viewer identity-reveal predicate — reuse it
+    instead of re-deriving reveal logic for any other identity-linked field.
     """
     unique = {p.pk: p for p in personas}
     # Owned faces are never restricted — resolved as the real name without a discovery lookup.
-    fake_ids = [p.pk for p in unique.values() if p.is_fake_name and p.pk not in viewer_persona_ids]
+    fake_ids = [
+        p.pk for p in unique.values() if p.is_fake_name and not _is_own_face(p, viewer_sheet)
+    ]
     # Staff don't need discovery rows — they see through every mask (#1279).
-    revealed = {} if is_staff else _build_revealed_map(fake_ids, viewer_sheet_ids)
+    revealed = {} if is_staff else _build_revealed_map(fake_ids, viewer_sheet)
     # Sight (#4396) is read once per page, and only when an undiscovered mask is left on it.
     pierced: set[str] = set()
     if not is_staff and any(pk not in revealed for pk in fake_ids):
-        pierced = _pierced_kinds(viewer_sheet_ids)
+        pierced = _pierced_kinds(viewer_sheet)
     return {
         persona.pk: _resolve_single_display(
-            persona, viewer_persona_ids, revealed, is_staff=is_staff, pierced_kinds=pierced
+            persona, viewer_sheet, revealed, is_staff=is_staff, pierced_kinds=pierced
         )
         for persona in unique.values()
     }
 
 
-def _pierced_kinds(viewer_sheet_ids: set[int]) -> set[str]:
+def _pierced_kinds(viewer_sheet: CharacterSheet | None) -> set[str]:
     from world.forms.services.identification import pierced_disguise_kinds  # noqa: PLC0415
 
-    return pierced_disguise_kinds(viewer_sheet_ids)
+    return pierced_disguise_kinds(viewer_sheet)
 
 
 def resolve_display_for_viewer(
     persona: Persona,
     *,
-    viewer_persona_ids: set[int],
-    viewer_sheet_ids: set[int],
+    viewer_sheet: CharacterSheet | None,
     is_staff: bool = False,
 ) -> tuple[str, bool]:
     """Resolve one persona's ``(display_name, is_discovered)`` for one viewer (#1109).
 
     The single-target form of ``build_persona_display_map`` — for the look / room-contents
-    paths, which resolve one character at a time. Own faces and named-public faces render real;
-    a discovered anonymous face reveals; otherwise the composed sdesc. One discovery query, and
-    only for an anonymous, non-owned face. When ``is_staff`` is True, the discovery query is
-    skipped — staff are universal discoverers (#1279).
+    paths, which resolve one character at a time. ``viewer_sheet`` is the looking character's
+    sheet (#4413), None for a viewer who plays nobody. Own faces and named-public faces render
+    real; a discovered anonymous face reveals; otherwise the composed sdesc. One discovery
+    query, and only for an anonymous, non-owned face. When ``is_staff`` is True, the discovery
+    query is skipped — staff are universal discoverers (#1279).
     """
-    if persona.pk in viewer_persona_ids or not persona.is_fake_name:
+    if _is_own_face(persona, viewer_sheet) or not persona.is_fake_name:
         return persona.name, False
     if is_staff:
         return _staff_reveal(persona)
-    if viewer_sheet_ids:
+    if viewer_sheet is not None:
         discovery = (
             PersonaDiscovery.objects.filter(
                 Q(persona_id=persona.pk) | Q(linked_to_id=persona.pk),
-                discovered_by_id__in=viewer_sheet_ids,
+                discovered_by=viewer_sheet,
             )
             .select_related("persona", "linked_to")
             .first()
@@ -222,7 +240,7 @@ def resolve_display_for_viewer(
                 discovery.linked_to if discovery.persona_id == persona.pk else discovery.persona
             )
             return f"{persona.name} ({linked.name})", True
-        seen = _sight_reveal(persona, _pierced_kinds(viewer_sheet_ids))
+        seen = _sight_reveal(persona, _pierced_kinds(viewer_sheet))
         if seen is not None:
             return seen
     return compose_sdesc(persona), False
@@ -231,8 +249,7 @@ def resolve_display_for_viewer(
 def identity_revealed_to_viewer(
     persona: Persona,
     *,
-    viewer_persona_ids: set[int],
-    viewer_sheet_ids: set[int],
+    viewer_sheet: CharacterSheet | None,
     is_staff: bool = False,
 ) -> bool:
     """Whether this viewer may see the real character behind ``persona`` (#1325, #4030).
@@ -240,35 +257,13 @@ def identity_revealed_to_viewer(
     The one rule for identity-linked prose (the free-text description on the sheet and in
     ``look``): the viewer's own face, staff, the PRIMARY public face, a discovered mask and a
     mask of a kind the viewer sees through (#4396) reveal; a named alt (its link to the
-    primary stays hidden) and an undiscovered mask do not. One discovery query, only for an
-    anonymous face the viewer doesn't own.
+    primary stays hidden) and an undiscovered mask do not. The viewer is the one character
+    doing the looking (#4413). One discovery query, only for an anonymous face the viewer
+    doesn't own.
     """
-    if persona.pk in viewer_persona_ids or is_staff:
+    if _is_own_face(persona, viewer_sheet) or is_staff:
         return True
     if not persona.is_fake_name:
         return persona.persona_type == PersonaType.PRIMARY
-    _name, is_discovered = resolve_display_for_viewer(
-        persona,
-        viewer_persona_ids=viewer_persona_ids,
-        viewer_sheet_ids=viewer_sheet_ids,
-    )
+    _name, is_discovered = resolve_display_for_viewer(persona, viewer_sheet=viewer_sheet)
     return is_discovered
-
-
-def viewer_context_for_account(account: AccountDB) -> tuple[set[int], set[int]]:
-    """The viewer's ``(owned_persona_ids, owned_sheet_ids)`` for a look (no request) (#1109).
-
-    Owned = personas on the character sheets the account *currently* plays. Both sets feed
-    ``resolve_display_for_viewer`` — owned for self-ownership, sheets for the discovery lookup.
-    """
-    from world.roster.models import RosterEntry  # noqa: PLC0415
-
-    sheet_ids = set(
-        RosterEntry.objects.for_account(account).values_list("character_sheet_id", flat=True)
-    )
-    if not sheet_ids:
-        return set(), set()
-    persona_ids = set(
-        Persona.objects.filter(character_sheet_id__in=sheet_ids).values_list("id", flat=True)
-    )
-    return persona_ids, sheet_ids

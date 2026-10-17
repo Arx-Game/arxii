@@ -47,18 +47,13 @@ def selected_character(account: AbstractBaseUser | AnonymousUser) -> ObjectDB | 
     ``Account.puppet`` off ``request.user``, which under ``MULTISESSION_MODE
     = 2`` is the *list* of all puppets (empty, never ``None``, with no
     session) and does not exist at all on the base ``AccountDB`` (Sentry
-    ARX2-7, 2026-09-02).
+    ARX2-7, 2026-09-02). The row is the account's ``cached_selected_entry``
+    (#4413): one query per account per process, cleared by the
+    ``PlayerData`` save that changes the selection.
     """
-    from evennia_extensions.models import PlayerData  # noqa: PLC0415
-
     if not account.is_authenticated:
         return None
-    player_data = (
-        PlayerData.objects.filter(account=account)
-        .select_related("selected_entry__character_sheet__character")
-        .first()
-    )
-    entry = player_data.selected_entry if player_data is not None else None
+    entry = account.cached_selected_entry
     if entry is None:
         return None
     return entry.character_sheet.character

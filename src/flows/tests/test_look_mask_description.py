@@ -22,9 +22,9 @@ class LookMaskDescriptionTests(django.test.TestCase):
         viewer_entry = RosterEntryFactory()
         self.viewer_sheet = viewer_entry.character_sheet
         self.viewer = self.viewer_sheet.character
-        # Give the viewer a real account + current tenure — CharacterState's
-        # viewer context (owned personas + discovery lookup) resolves off the
-        # looker's account, the same wiring `test_look_persona_display.py` uses.
+        # The reveal rule reads the looker's own sheet (#4413); the account is
+        # what the staff tests below swap, the same wiring
+        # `test_look_persona_display.py` uses.
         viewer_account = AccountFactory()
         player_data, _ = PlayerData.objects.get_or_create(account=viewer_account)
         RosterTenureFactory(player_data=player_data, roster_entry=viewer_entry)

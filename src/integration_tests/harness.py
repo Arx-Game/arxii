@@ -44,6 +44,7 @@ from commands.tests.message_capture import message_text
 from evennia_extensions.factories import CharacterFactory, ObjectDBFactory
 from world.character_sheets.factories import CharacterSheetFactory
 from world.roster.factories import RosterEntryFactory, RosterTenureFactory
+from world.roster.services.selection import set_selected_entry
 
 if TYPE_CHECKING:
     from evennia.accounts.models import AccountDB
@@ -108,6 +109,9 @@ class JourneyCase(TestCase):
         tenure = RosterTenureFactory(roster_entry=entry, end_date=None)
         character.db_account = tenure.player_data.account
         character.save()
+        # Login and ``@ic`` leave the puppet as the account's durable selection, which is
+        # how a web read learns who the account is on (#3412, #4413).
+        set_selected_entry(tenure.player_data, entry)
         return character
 
     @staticmethod

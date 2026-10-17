@@ -78,7 +78,6 @@ from world.items.exceptions import (
 from world.items.models import ItemInstance
 from world.items.services.usage import use_item
 from world.items.types import UseItemResult
-from world.scenes.persona_display import viewer_context_for_account
 
 _EQUIPMENT_TARGET_UNAVAILABLE = "That isn't available."
 _EQUIPMENT_TARGET_KEY = "target"
@@ -921,13 +920,6 @@ class UseItemAction(Action):
         kind = item.template.on_use_target_kind
         if kind is not None and kind not in SUPPORTED_KINDS:
             return (), None
-        account = actor.db_account
-        viewer_context = (
-            viewer_context_for_account(account)
-            if kind == TargetKind.CHARACTER and account is not None
-            else (set(), set())
-        )
-
         option_ids = _use_candidate_option_ids(item, kwargs)
 
         option_window = _use_option_window(option_ids, after, page_size)
@@ -954,7 +946,7 @@ class UseItemAction(Action):
                 break
             last_pair = (target_id, option_sort_order, option_id or 0)
             row = self._checked_use_candidate(
-                actor, item, kwargs, (target_id, option_id, option_name), viewer_context
+                actor, item, kwargs, (target_id, option_id, option_name)
             )
             if row is not None:
                 rows.append(row)
@@ -966,7 +958,6 @@ class UseItemAction(Action):
         item: ItemInstance,
         kwargs: dict[str, Any],
         pair: tuple[int, int | None, str],
-        viewer_context: tuple[set[int], set[int]],
     ) -> dict[str, Any] | None:
         """Resolve and check one raw pair without changing pagination accounting."""
         target_id, option_id, option_name = pair
@@ -991,11 +982,7 @@ class UseItemAction(Action):
         )
         return {
             "use_target": wire,
-            "target_name": (
-                "Yourself"
-                if target is None
-                else target_label(actor, target, viewer_context=viewer_context)
-            ),
+            "target_name": ("Yourself" if target is None else target_label(actor, target)),
             "option_id": option_id,
             "option_name": option_name,
             "available": checked.available,

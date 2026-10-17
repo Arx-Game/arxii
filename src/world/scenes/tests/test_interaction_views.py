@@ -1545,7 +1545,9 @@ class InteractionListQueryBudgetTests(APITestCase):
         """
         url = reverse("interaction-list")
         # Run once to observe the count, then assert.
-        with self.assertNumQueries(26):  # 52->27 by #3816, 27->26 by #4101 (see below)
+        # 52->27 by #3816, 27->26 by #4101 (see below), 26->27 by #4413 (the viewer's
+        # selected character, one cold query per account: cached_selected_entry).
+        with self.assertNumQueries(27):
             # #3816 dropped this from 52 to 27: Interaction.cached_receivers /
             # cached_target_personas / cached_favorites / cached_reactions /
             # cached_action_links were plain @property/@x.setter pairs backed by
@@ -1644,7 +1646,8 @@ class InteractionListQueryBudgetTests(APITestCase):
             )
 
         url = reverse("interaction-list")
-        with self.assertNumQueries(26):  # 52->27 by #3816, 27->26 by #4101 — see above
+        # 52->27 by #3816, 27->26 by #4101 — see above, 26->27 by #4413 (cached_selected_entry).
+        with self.assertNumQueries(27):
             response = self.client.get(url, {"scene": dense_scene.pk})
         assert response.status_code == 200
         assert len(response.data["results"]) == 3  # same count as small dataset
@@ -1693,7 +1696,9 @@ class InteractionListQueryBudgetTests(APITestCase):
         idmapper_models.flush_cache()
 
         url = reverse("interaction-list")
-        with self.assertNumQueries(26):  # unchanged from the sibling tests above (27->26 by #4101)
+        with self.assertNumQueries(
+            27
+        ):  # unchanged from the sibling tests above (27->26 by #4101, 26->27 by #4413)
             response = self.client.get(url, {"scene": dense_scene.pk})
         assert response.status_code == 200
         results = response.data["results"]

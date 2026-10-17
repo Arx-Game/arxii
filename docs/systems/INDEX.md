@@ -1248,9 +1248,12 @@ descriptor overlay, cosmetic editing, and shapeshift slots.
   both call, so a masked persona's real description no longer leaks through `look` for a
   viewer who hasn't seen through the mask (self, staff, and a discoverer still see it, exactly
   as the sheet already did). **Sight (#4396):** the same rule reveals a mask of a kind the
-  viewer's characters see through (`disguise_sight` lever target per `DisguiseKind`,
+  viewer sees through (`disguise_sight` lever target per `DisguiseKind`,
   `forms.services.identification.pierced_disguise_kinds` / `presented_disguise_kind`), no
-  check and no discovery row; see `mechanics.md` "Levers".
+  check and no discovery row; see `mechanics.md` "Levers". **The viewer is the one character
+  being played (#4413, ADR-4413-A):** the resolvers take `viewer_sheet`, the looker's or
+  actor's `character_sheet` on telnet and `relationships.reads.resolve_viewer_sheet(request)`
+  on the web; another character of the same account is a stranger to the mask.
   `GET /api/actions/characters/<id>/personas/<pid>/menu/`
   (`actions.persona_menu.build_persona_menu`) is the server-composed list behind the
   right-click persona menu (Look, Identify, Challenge, and the scene-only actions), reusing
@@ -2993,7 +2996,9 @@ Character lifecycle management with web-first applications and player anonymity.
   is the account's server-side "who am I browsing as" fact (state 2.5 — selected but
   not necessarily puppeting). Sole mutator `world.roster.services.selection.set_selected_entry`;
   sole reader for "who is this request acting as" `selection.selected_character(account)`
-  (missions journal, NPC interactions; ADR-0260 says why not `request.user.puppet`);
+  (missions journal, NPC interactions, the persona reveal rule's web viewer since #4413;
+  ADR-0260 says why not `request.user.puppet`), which reads the account's
+  `cached_selected_entry` (one query per account per process);
   `POST /api/roster/entries/select/` + `selected_entry`/`selected_entry_id` on
   `GET /api/user/`. Zero lifecycle/session/puppeting side effects — selection is not
   presence. Frontend mirrors it in `gameSlice` and surfaces it as `SelectedCharacterChip`

@@ -168,6 +168,26 @@ typed, and threading, muting, comprehension and search keep reading it.
   `ThreadedNarrativeReader`'s thread excerpts read the line. The per-pose collapse
   is gone (#4128): the fold (`FeedBlockFrame`) is the one way a line shrinks.
 
+### The viewer of a mask is the character you are on (#4413, ADR-4413-A)
+
+The per-viewer name (`world/scenes/persona_display.py`: `build_persona_display_map`,
+`resolve_display_for_viewer`, `identity_revealed_to_viewer`) is resolved for ONE sheet, the
+character doing the looking, never the account's set of characters. "Your own face" means a
+persona on that sheet; a discovery (`PersonaDiscovery.discovered_by`) counts only when it is
+that sheet's; sight (`pierced_disguise_kinds`, #4396) reads that sheet's levers. A player on
+Hobb meets as a stranger the mask Maud unmasked, a reminder that Hobb does not know. Staff
+stay universal discoverers (#1279). Callers hand the resolvers the viewer: `obj.character_sheet`
+for a puppet or an actor (`look`, the room listing, give and use-item menus, telnet boards and
+`gm prompts`), and `world.relationships.reads.resolve_viewer_sheet(request)` for a web read
+(the feed's serializer context `viewer_sheet`, the sheet API, board posts, the GM prompt
+queue), which is the account's durable selection, kept in step with the puppet by login and
+`@ic` (`Account.puppet_character_in_session`) and read off `Account.cached_selected_entry`
+(one query per account per process, so the feed's cold budget is one higher and its warm
+floor unchanged). The sheet API asks only when a mask or a tie needs the viewer. A request
+that plays nobody reads as a stranger, never as an account-wide aggregate. The feed context's `viewer_sheet_ids` (the
+account's sheets) stays for the OOC reads: language comprehension, a private pose's content
+to its own writer, a dramatic-moment tag on one's own sheet.
+
 ### Companion pose attribution (#3294)
 
 `Interaction.attributed_companion` — nullable FK -> `companions.Companion`

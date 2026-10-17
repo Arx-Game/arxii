@@ -108,17 +108,13 @@ class SearchFindsPersonaLinkClueTests(TestCase):
         assert PersonaDiscovery.objects.filter(discovered_by=discoverer.character_sheet).exists()
 
         display_name, is_discovered = resolve_display_for_viewer(
-            mask,
-            viewer_persona_ids=set(),
-            viewer_sheet_ids={discoverer.character_sheet.pk},
+            mask, viewer_sheet=discoverer.character_sheet
         )
         assert is_discovered
         assert display_name == f"{mask.name} ({real.name})"
 
         other_name, other_discovered = resolve_display_for_viewer(
-            mask,
-            viewer_persona_ids=set(),
-            viewer_sheet_ids={non_discoverer.character_sheet.pk},
+            mask, viewer_sheet=non_discoverer.character_sheet
         )
         assert not other_discovered
         assert other_name != display_name
