@@ -867,7 +867,12 @@ to the actor's current room for a location-less Battle scene or a scene-less pro
 narrated or dismissed. `POST .../confirm/` branches on kind; `.../hold/` and `.../override/`
 (`{reason}`, required) are standoff-only. The row carries `standoff_group_name`,
 `standoff_cause_label`, `standoff_reason` and, once decided, `resolution_note`. Scene end
-closes any still pending. See `docs/systems/standoffs.md`.
+closes any still pending. See `docs/systems/standoffs.md`. `BEING_ANSWER` (#4333 slice 4) is
+the second decision kind: a scene-less prompt to a stewarded being's table GM, answered from the
+table page (`/api/worship/steward-prompts/{id}/answer/`) or telnet `gm prompt answer`; its queue
+row carries `being_answer_summary` and `being_answer_table`, and `dismiss` (`dismiss_gm_prompt`)
+draws one of the being's authored answers instead of releasing default lines. See
+`docs/systems/worship.md`.
 
 **Who the queue says it concerns (ruling RF-2).** A queue row's `subject_name` and
 `subject_persona_id` come from the frozen `subject_persona` (falling back to the subject's

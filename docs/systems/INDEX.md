@@ -9163,6 +9163,19 @@ lightly-structured freeform RP. Full doc: `docs/systems/worship.md`; model decis
   `clue_name`, `follow_up_footnote`, `condition_names` (the same footnotes end the narrative message); staff
   `admin/beings/{id}/held-answers/` and overview counts. Admin: the Answer builder
   (`/admin/_being_answers/<being>/`).
+- **Stewards** (#4333 slice 4, ADR-4333-C): `BeingSteward` (O2O being, FK `GMTable`: the table
+  whose GM answers for the being; refused below Senior and for a being with a god sign),
+  `DevotionConfig.steward_answer_days`, `GMPrompt.pledge` and the `BEING_ANSWER` prompt kind and
+  group (a decision kind). Services (`worship/steward_services.py`): `god_signs`,
+  `steward_refusals`, `stewarded_refusal` (members only: pledge, invoke, pray, sacrifice; a
+  member's sacrifice needs no shrine), `route_to_steward` (from `close_pledge`, in place of the
+  draw), `answer_options`, `may_write_free_text`, `catalogue_clues`, `send_steward_answer`,
+  `dismiss_being_answer`, `expire_steward_prompts` (hourly task `worship.steward_answer_timeout`),
+  `stewarded_beings_for`, `may_author`. Action `gm_being_answer` (`AnswerBeingPromptAction`).
+  API: `/api/worship/stewarded-beings/`, `steward-pledges/`, `steward-answers/`,
+  `steward-sacrifice-lines/`, `steward-prompts/` (+ `answer/`, `dismiss/`); `GMPromptSerializer`
+  gains `being_answer_summary`, `being_answer_table`. Telnet `gm prompt answer`. Admin:
+  `BeingStewardInline` on the being's change form. Frontend: the table page's Beings tab.
 - **Worship services**: `grant_worship`, `bump_devotion` (+ God's Favorite
   Princess/Prince/Chosen achievement on top-favor reach/tie), `gods_favorite_achievement_for`;
   `mint_worship_secret` (`worship/secrets.py`); `convert_public_worship(sheet, new_being, *,
