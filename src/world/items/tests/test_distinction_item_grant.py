@@ -64,6 +64,26 @@ class ApplyItemGrantsTests(TestCase):
         assert not ItemInstance.objects.filter(holder_character_sheet=sheet).exists()
 
 
+class ItemGrantCacheTests(TestCase):
+    def test_adding_a_grant_clears_the_distinctions_cached_list(self):
+        """The identity-mapped distinction must not keep an empty list after staff add a grant."""
+        distinction = DistinctionFactory(name="A Mother's Keepsake")
+        assert distinction.cached_item_grants == []
+
+        grant = DistinctionItemGrantFactory(distinction=distinction)
+
+        assert [g.pk for g in distinction.cached_item_grants] == [grant.pk]
+
+    def test_deleting_a_grant_clears_it_too(self):
+        distinction = DistinctionFactory(name="A Mother's Keepsake")
+        grant = DistinctionItemGrantFactory(distinction=distinction)
+        assert [g.pk for g in distinction.cached_item_grants] == [grant.pk]
+
+        grant.delete()
+
+        assert distinction.cached_item_grants == []
+
+
 class ItemGrantSummaryTests(TestCase):
     def test_the_effects_summary_says_what_the_character_comes_with(self):
         distinction = DistinctionFactory(name="A Mother's Keepsake")

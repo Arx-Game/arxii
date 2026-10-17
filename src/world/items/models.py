@@ -22,6 +22,7 @@ from core.descriptors import ReverseOneToOneOrNone
 from core.managers import ArxSharedMemoryManager
 from core.models import ArxSharedMemoryModel as SharedMemoryModel
 from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
+from evennia_extensions.mixins import RelatedCacheClearingMixin
 from world.contributors.models import CreditedContent
 from world.forms.models import ConcealmentLevel, DisguiseKind
 from world.items.constants import (
@@ -2642,7 +2643,7 @@ class ClaimTraceStep(SharedMemoryModel):
         return f"trace step {self.position} of claim {self.claim_id}"
 
 
-class DistinctionItemGrant(NaturalKeyMixin, SharedMemoryModel):
+class DistinctionItemGrant(NaturalKeyMixin, RelatedCacheClearingMixin, SharedMemoryModel):
     """Config: a keepsake a distinction puts in its holder's hands at finalize (#4398).
 
     Ravana's pendant, Calista's ring, Ilmia's quill: nine of the sixty-nine Arx 1
@@ -2671,7 +2672,10 @@ class DistinctionItemGrant(NaturalKeyMixin, SharedMemoryModel):
     )
     objects = NaturalKeyManager()
 
-    #: A write here clears ``Distinction.cached_item_grants`` (ADR-0298 pairing).
+    #: A write here clears the distinction's cached properties, ``cached_item_grants``
+    #: among them, through ``RelatedCacheClearingMixin`` (ADR-0298 pairing). Without the
+    #: mixin the attribute is inert, and the identity-mapped distinction in a running
+    #: server keeps advertising an empty list after staff add a grant.
     related_cache_fields: ClassVar[list[str]] = ["distinction"]
 
     class NaturalKeyConfig:
