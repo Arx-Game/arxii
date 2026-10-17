@@ -819,14 +819,26 @@ def distribute_allowance(*, organization: Organization, surplus: int) -> Allowan
     per_member = pool // len(active_sheets)
     if per_member <= 0:
         return AllowanceResult(total_distributed=0, per_member=0, member_count=len(active_sheets))
+    # #4394: the income lever scales what each member collects (a Gambler collects less
+    # of the same share); ``per_member`` stays the house's even split. The pool is the
+    # ceiling, and it is the bonus that bends to it, never a plain share: every member is
+    # paid up to their split first, then whatever the split left on the table (the
+    # Gamblers' shortfall, the whole-copper remainder) tops up the members whose lever
+    # asked for more, in membership order, until the pool is spent. An overdraw would
+    # abort the whole levy with "Insufficient funds".
+    scaled = {sheet.pk: _income_for(sheet, per_member) for sheet in active_sheets.values()}
+    payouts = {pk: min(amount, per_member) for pk, amount in scaled.items()}
+    leftover = pool - sum(payouts.values())
+    for pk, amount in scaled.items():
+        if leftover <= 0:
+            break
+        bonus = min(amount - payouts[pk], leftover)
+        if bonus > 0:
+            payouts[pk] += bonus
+            leftover -= bonus
     distributed = 0
     for sheet in active_sheets.values():
-        # #4394: the income lever scales what this member collects (a Gambler collects
-        # less of the same share); ``per_member`` stays the house's even split. The pool
-        # is the ceiling: a positive lever takes from what the split left on the table,
-        # never past the treasury balance the pool was capped at (an overdraw would
-        # abort the whole levy with "Insufficient funds").
-        amount = min(_income_for(sheet, per_member), pool - distributed)
+        amount = payouts[sheet.pk]
         if amount <= 0:
             continue
         transfer(

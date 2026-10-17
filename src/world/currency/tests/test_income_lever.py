@@ -57,6 +57,23 @@ class AllowanceIncomeLeverTests(TestCase):
         assert result.total_distributed == 400
         assert _balance(self.persona.character_sheet) == 400
 
+    def test_a_gamblers_shortfall_tops_up_an_heir(self) -> None:
+        heir = PersonaFactory()
+        OrganizationMembershipFactory(persona=heir, organization=self.org, rank=2)
+        account = AccountFactory()
+        account.last_login = timezone.now() - timedelta(days=1)
+        account.save(update_fields=["last_login"])
+        character = heir.character_sheet.character
+        character.db_account = account
+        character.save(update_fields=["db_account"])
+        grant_lever(self.persona.character_sheet, INCOME_CATEGORY_NAME, INCOME_TARGET_NAME, -20)
+        grant_lever(heir.character_sheet, INCOME_CATEGORY_NAME, INCOME_TARGET_NAME, 50)
+        result = distribute_allowance(organization=self.org, surplus=1000)  # pool 500, 2 members
+        assert result.per_member == 250
+        assert _balance(self.persona.character_sheet) == 200  # 80% of 250
+        assert _balance(heir.character_sheet) == 300  # 250 plus the 50 the Gambler left
+        assert result.total_distributed == 500
+
 
 class AssetIncomeLeverTests(TestCase):
     @classmethod
@@ -105,12 +122,14 @@ class AllowancePoolCeilingTests(TestCase):
         treasury.balance = 500  # the pool is capped here: surplus 1000 -> 500
         treasury.save(update_fields=["balance"])
 
-    def test_payouts_never_exceed_the_pool(self) -> None:
+    def test_payouts_never_exceed_the_pool_and_a_plain_share_is_never_shorted(self) -> None:
         grant_lever(self.sheets[1], INCOME_CATEGORY_NAME, INCOME_TARGET_NAME, 50)
         result = distribute_allowance(organization=self.org, surplus=1000)
         assert result.per_member == 250
         assert result.total_distributed == 500
-        assert sum(_balance(sheet) for sheet in self.sheets) == 500
+        # The plain member keeps their whole split; the bonus is what bends to the pool.
+        assert _balance(self.sheets[0]) == 250
+        assert _balance(self.sheets[1]) == 250
         treasury = get_or_create_treasury(self.org)
         treasury.refresh_from_db()
         assert treasury.balance == 0
