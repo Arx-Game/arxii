@@ -482,7 +482,9 @@ def _seed_connection_reputation(draft: CharacterDraft, persona: Persona) -> None
     for choice in choices:
         org = orgs.get(anchor_by_choice_id[choice.id])
         if org is not None:
-            bump_organization_reputation(persona, org, choice.reputation_seed)
+            # A starting seed is where the character begins, not regard gained in play,
+            # so the reputation-gain lever (#4394) leaves it alone.
+            bump_organization_reputation(persona, org, choice.reputation_seed, scale_gain=False)
 
 
 def _write_actor_sheet(
@@ -550,7 +552,9 @@ def _create_enemy(
     if cached_enemy_rows is not None:
         sheet.enemy_rows = [*cached_enemy_rows, enemy]
     if org is not None:
-        bump_organization_reputation(persona, org, ENEMY_REPUTATION_SEED[resolved.degree])
+        bump_organization_reputation(
+            persona, org, ENEMY_REPUTATION_SEED[resolved.degree], scale_gain=False
+        )
 
     _seed_enemy_heat(resolved, org, persona, character)
 
@@ -1846,10 +1850,15 @@ def _create_distinction_modifiers_bulk(
         reconcile_distinction_asset_grants,
     )
     from world.currency.services import apply_starting_grant  # noqa: PLC0415
+    from world.items.services.narrative_grants import apply_item_grants  # noqa: PLC0415
+    from world.locations.comfort_effect import recompute_comfort_regen_modifier  # noqa: PLC0415
     from world.magic.services.distinction_resonance import (  # noqa: PLC0415
         reconcile_distinction_resonance_grants,
     )
-    from world.mechanics.constants import RESONANCE_CATEGORY_NAME  # noqa: PLC0415
+    from world.mechanics.constants import (  # noqa: PLC0415
+        COMFORT_CATEGORY_NAME,
+        RESONANCE_CATEGORY_NAME,
+    )
     from world.mechanics.models import CharacterModifier, ModifierSource  # noqa: PLC0415
     from world.npc_services.regard import reconcile_distinction_regard_seeds  # noqa: PLC0415
 
@@ -1892,6 +1901,14 @@ def _create_distinction_modifiers_bulk(
         # An inheritance (#4062) is paid here and nowhere else: finalize runs once
         # per draft, so the grant cannot double up the way a reconcile could.
         apply_starting_grant(char_dist)
+        # A keepsake (#4398) is minted here for the same reason.
+        apply_item_grants(char_dist)
+    # #4394: the residence was granted before the distinctions, so a comfort lever picked
+    # at creation re-materializes the home's comfort modifier here.
+    if any(
+        effect.target.category.name == COMFORT_CATEGORY_NAME for effect, _ in source_effect_ranks
+    ):
+        recompute_comfort_regen_modifier(sheet.character)
 
 
 def _materialize_draft_markings(sheet: Any, draft: CharacterDraft) -> dict[int, Any]:

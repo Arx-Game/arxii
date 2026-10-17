@@ -509,8 +509,8 @@ class MagicContent:
             ConditionResistanceModifierFactory,
             ConditionStageFactory,
             ConditionTemplateFactory,
+            SoulfrayTemplateFactory,
         )
-        from world.magic.audere import SOULFRAY_CONDITION_NAME  # noqa: PLC0415
         from world.magic.constants import AlterationTier  # noqa: PLC0415
         from world.magic.factories import (  # noqa: PLC0415
             AffinityFactory,
@@ -574,9 +574,7 @@ class MagicContent:
         #     → stage.consequence_pool fires
         #       → Consequence with MAGICAL_SCARS effect
         #         → _apply_magical_scars handler → create_pending_alteration
-        soulfray_template = ConditionTemplateFactory(
-            name=SOULFRAY_CONDITION_NAME,
-            has_progression=True,
+        soulfray_template = SoulfrayTemplateFactory(
             default_duration_type=DurationType.PERMANENT,
         )
 
@@ -1960,6 +1958,9 @@ def seed_magic_config() -> MagicConfigResult:
     # soulfray_content.stages is empty when Soulfray isn't authored and
     # SEED_SAMPLE_CONTENT is off — ripping_stage stays None in that case.
     soulfray_content = SoulfrayContentFactory()
+    # SoulfrayContentFactory also points the SoulfrayConfig made above at this template
+    # when its condition is unset (#4122); a config staff already pointed elsewhere
+    # keeps its choice.
     ripping_stage = next(
         (
             s

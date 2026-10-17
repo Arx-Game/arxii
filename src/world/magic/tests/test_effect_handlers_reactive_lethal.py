@@ -25,9 +25,9 @@ from world.conditions.factories import (
     ConditionInstanceFactory,
     ConditionStageFactory,
     ConditionTemplateFactory,
+    SoulfrayTemplateFactory,
 )
 from world.conditions.models import ConditionInstance
-from world.magic.audere import SOULFRAY_CONDITION_NAME
 from world.magic.factories import CharacterAnimaFactory, SoulfrayConfigFactory
 from world.magic.services.anima import deduct_anima
 from world.magic.services.effect_handlers import _try_spend_reactive
@@ -74,7 +74,7 @@ def _seed_death_risk_soulfray_stage() -> None:
     pool = ConsequencePoolFactory(name="Soulfray reactive death-risk (test)")
     loss = ConsequenceFactory(outcome_tier=tier, label="Lost", character_loss=True)
     ConsequencePoolEntryFactory(pool=pool, consequence=loss)
-    soulfray_template = ConditionTemplateFactory(name=SOULFRAY_CONDITION_NAME, has_progression=True)
+    soulfray_template = SoulfrayTemplateFactory(has_progression=True)
     ConditionStageFactory(condition=soulfray_template, stage_order=5, consequence_pool=pool)
 
 

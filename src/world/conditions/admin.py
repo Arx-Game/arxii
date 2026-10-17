@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from world.admin_utils import describe_reverse_relations
+from world.admin_utils import OneRowPerFormSet, describe_reverse_relations
 from world.conditions.inspection import (
     condition_template_prefetches,
     inspect_condition_template,
@@ -75,6 +75,7 @@ class DamageTypeAdmin(admin.ModelAdmin):
 
 class ConditionStageInline(admin.TabularInline):
     model = ConditionStage
+    formset = OneRowPerFormSet
     extra = 0
     ordering = ["stage_order"]
 
@@ -124,6 +125,7 @@ class ConditionDamageOverTimeInline(admin.TabularInline):
 
 class ConditionDamageInteractionInline(admin.TabularInline):
     model = ConditionDamageInteraction
+    formset = OneRowPerFormSet
     fk_name = "condition"
     extra = 0
     autocomplete_fields = ["damage_type", "applies_condition"]
@@ -131,6 +133,7 @@ class ConditionDamageInteractionInline(admin.TabularInline):
 
 class ConditionConditionInteractionInline(admin.TabularInline):
     model = ConditionConditionInteraction
+    formset = OneRowPerFormSet
     fk_name = "condition"
     extra = 0
     autocomplete_fields = ["other_condition", "result_condition"]

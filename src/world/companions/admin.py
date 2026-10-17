@@ -1,5 +1,6 @@
 from django.contrib import admin
 
+from world.admin_utils import OneRowPerFormSet
 from world.companions.models import (
     Companion,
     CompanionAbility,
@@ -18,6 +19,7 @@ class CompanionAbilityFunctionTagInline(admin.TabularInline):
 
 class CompanionAbilityInline(admin.TabularInline):
     model = CompanionAbility
+    formset = OneRowPerFormSet
     extra = 0
     list_display = ["name", "ability_kind", "base_damage"]
     inlines = [CompanionAbilityFunctionTagInline]

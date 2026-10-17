@@ -5,6 +5,7 @@ from django.db.models import Count
 from django.http import HttpRequest, HttpResponse, HttpResponseRedirect
 from django.urls import reverse
 
+from world.admin_utils import OneRowPerFormSet
 from world.scenes.action_constants import DIFFICULTY_VALUES, MIN_DIFFICULTY_POINTS, DifficultyChoice
 from world.worship.models import (
     Answer,
@@ -54,6 +55,7 @@ class WorshipTraditionAdmin(admin.ModelAdmin):
 
 class BeingTarotCardInline(admin.TabularInline):
     model = BeingTarotCard
+    formset = OneRowPerFormSet
     extra = 0
     autocomplete_fields = ("card",)
 
@@ -140,6 +142,7 @@ class WorshipDeclarationAdmin(admin.ModelAdmin):
 
 class MiracleAppliedConditionInline(admin.TabularInline):
     model = MiracleAppliedCondition
+    formset = OneRowPerFormSet
     extra = 0
 
 
@@ -241,6 +244,7 @@ class FavorOutcomeAwardInline(admin.TabularInline):
     """The outcome-keyed favor terms (#4333): invocation bonuses, closing awards."""
 
     model = FavorOutcomeAward
+    formset = OneRowPerFormSet
     extra = 0
     fields = ("kind", "outcome_tier", "amount")
     ordering = ("kind", "-outcome_tier__success_level")

@@ -333,7 +333,7 @@ def create_social_consequence_pools() -> dict[str, ConsequencePool]:
     Returns:
         Dict mapping action name (e.g. ``"Intimidate"``) to its ConsequencePool.
     """
-    from world.traits.factories import CheckOutcomeFactory
+    from world.traits.services import ensure_canonical_check_outcome
 
     pools: dict[str, ConsequencePool] = {}
 
@@ -346,7 +346,7 @@ def create_social_consequence_pools() -> dict[str, ConsequencePool]:
         pools[action_name] = pool
 
         for outcome_name, label, weight in consequence_specs:
-            outcome = CheckOutcomeFactory(name=outcome_name)
+            outcome = ensure_canonical_check_outcome(outcome_name)
             consequence, _ = Consequence.objects.get_or_create(
                 outcome_tier=outcome,
                 label=label,

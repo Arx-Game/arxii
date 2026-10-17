@@ -1,5 +1,6 @@
 from django.contrib import admin
 
+from world.admin_utils import OneRowPerFormSet
 from world.ceremonies.models import (
     Ceremony,
     CeremonyConfig,
@@ -12,6 +13,7 @@ from world.ceremonies.models import (
 
 class CeremonyHonoreeInline(admin.TabularInline):
     model = CeremonyHonoree
+    formset = OneRowPerFormSet
     extra = 0
     raw_id_fields = ("honoree_sheet",)
 

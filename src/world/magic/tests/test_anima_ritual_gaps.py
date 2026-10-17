@@ -20,8 +20,7 @@ from actions.types import PendingActionResolution, StepResult
 from evennia_extensions.factories import AccountFactory
 from world.checks.factories import CheckTypeFactory
 from world.checks.types import CheckResult
-from world.conditions.factories import ConditionTemplateFactory
-from world.magic.audere import SOULFRAY_CONDITION_NAME
+from world.conditions.factories import SoulfrayTemplateFactory
 from world.magic.constants import RitualExecutionKind
 from world.magic.factories import (
     CharacterAnimaFactory,
@@ -107,7 +106,7 @@ class AnimaRecoverySerializerFieldTests(TestCase):
 
         ritual = _make_scene_action_ritual()
         CharacterAnimaFactory(character=sheet, current=2, maximum=10)
-        ConditionTemplateFactory(name=SOULFRAY_CONDITION_NAME)
+        SoulfrayTemplateFactory()
         SoulfrayConfigFactory(
             ritual_severity_cost_per_point=1,
         )

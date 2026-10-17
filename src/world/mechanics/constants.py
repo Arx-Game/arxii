@@ -30,6 +30,34 @@ FAVOR_EARNING_CATEGORY_NAME = "favor_earning"
 FAVOR_CATEGORY_NAMES: frozenset[str] = frozenset(
     {FAVOR_INVOCATION_CATEGORY_NAME, FAVOR_EARNING_CATEGORY_NAME}
 )
+# #4394 — the five IC levers a distinction may pull (ruled allowed by ApostateCD
+# 2026-09-07; XP and Kudos never). One category each, one reader each, through
+# ``world.mechanics.levers``. Percent levers (income, reputation gain, relationship
+# gain, fatigue cost) are integer percentage points on a computed amount, the
+# ``favor_earning`` convention; comfort is a flat shift in comfort levels. Each
+# category's target is named after the category; reputation gain also has one
+# target per leg so a row can scale society regard or organization regard alone.
+INCOME_CATEGORY_NAME = "income"
+INCOME_TARGET_NAME = "income"
+REPUTATION_GAIN_CATEGORY_NAME = "reputation_gain"
+REPUTATION_GAIN_TARGET_NAME = "reputation_gain"
+REPUTATION_GAIN_SOCIETY_TARGET_NAME = "reputation_gain_society"
+REPUTATION_GAIN_ORGANIZATION_TARGET_NAME = "reputation_gain_organization"
+RELATIONSHIP_GAIN_CATEGORY_NAME = "relationship_gain"
+RELATIONSHIP_GAIN_TARGET_NAME = "relationship_gain"
+COMFORT_CATEGORY_NAME = "comfort"
+COMFORT_TARGET_NAME = "comfort"
+FATIGUE_COST_CATEGORY_NAME = "fatigue_cost"
+FATIGUE_COST_TARGET_NAME = "fatigue_cost"
+LEVER_TARGETS: tuple[tuple[str, str], ...] = (
+    (INCOME_CATEGORY_NAME, INCOME_TARGET_NAME),
+    (REPUTATION_GAIN_CATEGORY_NAME, REPUTATION_GAIN_TARGET_NAME),
+    (REPUTATION_GAIN_CATEGORY_NAME, REPUTATION_GAIN_SOCIETY_TARGET_NAME),
+    (REPUTATION_GAIN_CATEGORY_NAME, REPUTATION_GAIN_ORGANIZATION_TARGET_NAME),
+    (RELATIONSHIP_GAIN_CATEGORY_NAME, RELATIONSHIP_GAIN_TARGET_NAME),
+    (COMFORT_CATEGORY_NAME, COMFORT_TARGET_NAME),
+    (FATIGUE_COST_CATEGORY_NAME, FATIGUE_COST_TARGET_NAME),
+)
 
 # ModifierSource.source_type return values
 SOURCE_TYPE_DISTINCTION = "distinction"

@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from django.contrib import admin
 
+from world.admin_utils import OneRowPerFormSet
 from world.battles.models import (
     Battle,
     BattleActionDeclaration,
@@ -133,6 +134,7 @@ class BattleOutcomeMappingAdmin(admin.ModelAdmin):
 
 class BlueprintBattlePlaceInline(admin.TabularInline):
     model = BlueprintBattlePlace
+    formset = OneRowPerFormSet
     extra = 0
 
 
@@ -153,6 +155,7 @@ class BlueprintFortificationAdmin(admin.ModelAdmin):
 
 class BattleUnitTemplateCapabilityInline(admin.TabularInline):
     model = BattleUnitTemplateCapability
+    formset = OneRowPerFormSet
     extra = 0
     autocomplete_fields = ("capability",)
 
@@ -168,6 +171,7 @@ class BattleUnitTemplateAdmin(admin.ModelAdmin):
 
 class CityDefenseTierThresholdInline(admin.TabularInline):
     model = CityDefenseTierThreshold
+    formset = OneRowPerFormSet
     extra = 0
     raw_id_fields = ("outcome_tier",)
 
@@ -193,6 +197,7 @@ class CityDefenseIntegrityBonusAdmin(admin.ModelAdmin):
 
 class WarFundingTierThresholdInline(admin.TabularInline):
     model = WarFundingTierThreshold
+    formset = OneRowPerFormSet
     extra = 0
     raw_id_fields = ("outcome_tier",)
 

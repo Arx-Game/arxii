@@ -1,5 +1,6 @@
 from django.contrib import admin
 
+from world.admin_utils import OneRowPerFormSet
 from world.estates.models import (
     Bequest,
     EstateClaim,
@@ -12,6 +13,7 @@ from world.estates.models import (
 
 class WillExecutorInline(admin.TabularInline):
     model = WillExecutor
+    formset = OneRowPerFormSet
     extra = 0
     raw_id_fields = ("persona",)
 

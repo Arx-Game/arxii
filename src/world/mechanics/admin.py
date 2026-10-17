@@ -6,6 +6,7 @@ Admin configuration for game mechanics models.
 
 from django.contrib import admin
 
+from world.admin_utils import OneRowPerFormSet
 from world.mechanics.models import (
     AestheticAxisConfig,
     Application,
@@ -180,16 +181,19 @@ class TraitCapabilityDerivationAdmin(admin.ModelAdmin):
 
 class ChallengeTemplateConsequenceInline(admin.TabularInline):
     model = ChallengeTemplateConsequence
+    formset = OneRowPerFormSet
     extra = 1
 
 
 class ChallengeApproachInline(admin.TabularInline):
     model = ChallengeApproach
+    formset = OneRowPerFormSet
     extra = 1
 
 
 class ApproachConsequenceInline(admin.TabularInline):
     model = ApproachConsequence
+    formset = OneRowPerFormSet
     extra = 1
 
 
@@ -201,6 +205,7 @@ class ChallengeCategoryAdmin(admin.ModelAdmin):
 
 class ChallengeTemplatePropertyInline(admin.TabularInline):
     model = ChallengeTemplateProperty
+    formset = OneRowPerFormSet
     extra = 1
 
 
@@ -249,12 +254,14 @@ class ObjectPropertyAdmin(admin.ModelAdmin):
 
 class SituationChallengeLinkInline(admin.TabularInline):
     model = SituationChallengeLink
+    formset = OneRowPerFormSet
     fk_name = "situation_template"
     extra = 1
 
 
 class SituationTrapLinkInline(admin.TabularInline):
     model = SituationTrapLink
+    formset = OneRowPerFormSet
     fk_name = "situation_template"
     extra = 1
 

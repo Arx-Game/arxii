@@ -1138,6 +1138,11 @@ contributor gate, `base_site.html` with `forms.css`/`widgets.css` linked by the 
 
 ## Soulfray Stage Builder (#4089)
 
+Which template is "Soulfray" is `SoulfrayConfig.condition` (#4122), read through
+`world.magic.services.soulfray.soulfray_stages()`, so renaming the template does not
+empty the builder. With the field unset the builder lists nothing and the Required-content
+row `soulfray-condition` flags it.
+
 **Purpose:** author one Soulfray `ConditionStage`'s whole consequence ladder - its own
 fields, its on-entry conditions, the `ConditionCheckModifier` penalty tied to it, its
 consequence pool (its own rows, plus optionally one shared parent pool), every row of

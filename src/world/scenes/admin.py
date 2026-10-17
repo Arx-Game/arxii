@@ -1,5 +1,6 @@
 from django.contrib import admin
 
+from world.admin_utils import OneRowPerFormSet
 from world.scenes.models import (
     BlockContactFlag,
     Interaction,
@@ -54,6 +55,7 @@ class BlockContactFlagAdmin(admin.ModelAdmin):
 
 class SceneParticipationInline(admin.TabularInline):
     model = SceneParticipation
+    formset = OneRowPerFormSet
     extra = 0
     readonly_fields = ["joined_at", "left_at"]
 
@@ -91,6 +93,7 @@ class PersonaAdmin(admin.ModelAdmin):
 
 class InteractionReceiverInlineForInteraction(admin.TabularInline):
     model = InteractionReceiver
+    formset = OneRowPerFormSet
     extra = 0
     fk_name = "interaction"
 
@@ -169,6 +172,7 @@ class SceneRoundDefaultsConfigAdmin(admin.ModelAdmin):
 
 class PlacePresenceInline(admin.TabularInline):
     model = PlacePresence
+    formset = OneRowPerFormSet
     extra = 0
 
 

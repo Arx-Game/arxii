@@ -8,8 +8,31 @@ content-fixture load populates `traits.trait`. See `STAT_TRAIT_DEFAULTS` in
 
 from __future__ import annotations
 
-from world.traits.constants import STAT_TRAIT_DEFAULTS
-from world.traits.models import Trait
+from world.traits.constants import CANONICAL_OUTCOME_LEVELS, STAT_TRAIT_DEFAULTS
+from world.traits.models import CheckOutcome, Trait
+
+
+def ensure_check_outcome(name: str, success_level: int) -> CheckOutcome:
+    """Return the named CheckOutcome at ``success_level``, creating or correcting it (#4378).
+
+    Seed code that needs an outcome tier uses this, never ``CheckOutcomeFactory``: the
+    factory gives a new row a random ``success_level`` and Faker text, and whichever
+    seed ran first then left that row in place for every later ``get_or_create``.
+    Only ``success_level`` is corrected on an existing row; its description and
+    display template are staff's to author.
+    """
+    outcome, created = CheckOutcome.objects.get_or_create(
+        name=name, defaults={"success_level": success_level}
+    )
+    if not created and outcome.success_level != success_level:
+        outcome.success_level = success_level
+        outcome.save(update_fields=["success_level"])
+    return outcome
+
+
+def ensure_canonical_check_outcome(name: str) -> CheckOutcome:
+    """Return one of the five canonical tiers (``CANONICAL_OUTCOME_LEVELS``) at its level."""
+    return ensure_check_outcome(name, CANONICAL_OUTCOME_LEVELS[name])
 
 
 def ensure_stat_trait(name: str) -> Trait:

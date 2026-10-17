@@ -440,6 +440,40 @@ def install_cancel_damage_trigger(objectdb: object) -> None:
 # =============================================================================
 
 
+class SoulfrayTemplateFactory(ConditionTemplateFactory):
+    """The Soulfray condition template, wired onto an existing ``SoulfrayConfig``.
+
+    The game finds Soulfray through ``SoulfrayConfig.condition`` (#4122), so a test that
+    wants Soulfray needs a config row pointing at its template. This factory creates the
+    template under the seed name (pass ``name=`` to model a staff rename) and points the
+    config row at it when one exists. A config made AFTER the template picks up the
+    template made under the seed name (``SoulfrayConfigFactory``'s default); a test that
+    never makes a config must make one itself.
+    """
+
+    name = factory.LazyFunction(lambda: _soulfray_seed_name())
+    has_progression = True
+    passive_decay_per_day = 1
+    passive_decay_blocked_in_engagement = True
+
+    @classmethod
+    def _create(cls, model_class, *args, **kwargs):
+        template = super()._create(model_class, *args, **kwargs)
+        from world.magic.models import SoulfrayConfig
+
+        config = SoulfrayConfig.objects.first()
+        if config is not None and config.condition_id != template.pk:
+            config.condition = template
+            config.save(update_fields=["condition"])
+        return template
+
+
+def _soulfray_seed_name() -> str:
+    from world.magic.constants import SOULFRAY_SEED_TEMPLATE_NAME
+
+    return SOULFRAY_SEED_TEMPLATE_NAME
+
+
 def _get_soulfray_template() -> ConditionTemplate:
     """Return the Soulfray ConditionTemplate, creating it if absent.
 
@@ -448,18 +482,9 @@ def _get_soulfray_template() -> ConditionTemplate:
     need the full seeded content (stages + properties) should use
     ``SoulfrayContentFactory()`` from ``world.magic.factories`` instead.
     """
-    from world.magic.audere import SOULFRAY_CONDITION_NAME
+    from world.magic.services.soulfray import get_soulfray_template
 
-    template, _ = ConditionTemplate.objects.get_or_create(
-        name=SOULFRAY_CONDITION_NAME,
-        defaults={
-            "description": "Soulfray condition (auto-created by aftermath factory).",
-            "has_progression": True,
-            "passive_decay_per_day": 1,
-            "passive_decay_blocked_in_engagement": True,
-        },
-    )
-    return template
+    return get_soulfray_template() or SoulfrayTemplateFactory()
 
 
 def _default_treatment_check_type():

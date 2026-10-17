@@ -56,10 +56,9 @@ def minimum_break_bar_threshold() -> int:
     has not been authored yet (stage_count == 0) — a bare/test DB should not be
     forced onto a floor derived from unauthored content.
     """
-    from world.conditions.models import ConditionStage  # noqa: PLC0415
-    from world.magic.audere import SOULFRAY_CONDITION_NAME  # noqa: PLC0415
+    from world.magic.services.soulfray import soulfray_stages  # noqa: PLC0415
 
-    stage_count = ConditionStage.objects.filter(condition__name=SOULFRAY_CONDITION_NAME).count()
+    stage_count = soulfray_stages().count()
     if stage_count == 0:
         return 0
     return (stage_count + PACING_FLOOR_ROUND_PADDING) * BAR_UNITS_PER_ROUND

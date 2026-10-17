@@ -12,6 +12,7 @@ vocabulary, reaction lines, and the regard-seed/regard-event-config tables.
 
 from django.contrib import admin
 
+from world.admin_utils import OneRowPerFormSet
 from world.npc_services.models import (
     ClueRevealOfferDetails,
     CourtGrantOfferDetails,
@@ -141,6 +142,7 @@ class NameCultureEntryInline(admin.TabularInline):
     """One name in a culture's pool, weighted for random draw (#3831)."""
 
     model = NameCultureEntry
+    formset = OneRowPerFormSet
     extra = 1
 
 
@@ -182,6 +184,7 @@ class StaffingProfileLineInline(admin.TabularInline):
     """One role the venue keeps staffed (#3831)."""
 
     model = StaffingProfileLine
+    formset = OneRowPerFormSet
     extra = 1
 
 

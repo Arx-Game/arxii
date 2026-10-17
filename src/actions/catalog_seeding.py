@@ -50,14 +50,14 @@ def ensure_base_pool(
     """
     from actions.models import ConsequencePool, ConsequencePoolEntry  # noqa: PLC0415
     from world.checks.models import Consequence  # noqa: PLC0415
-    from world.traits.factories import CheckOutcomeFactory  # noqa: PLC0415
+    from world.traits.services import ensure_canonical_check_outcome  # noqa: PLC0415
 
     pool, _ = ConsequencePool.objects.get_or_create(
         name=name,
         defaults={"description": description},
     )
     for outcome_name, label, weight in consequences:
-        outcome = CheckOutcomeFactory(name=outcome_name)
+        outcome = ensure_canonical_check_outcome(outcome_name)
         consequence, _ = Consequence.objects.get_or_create(
             outcome_tier=outcome,
             label=label,
@@ -130,10 +130,10 @@ def _ensure_catalog_extra_consequences(flavor: dict, pool: ConsequencePool) -> N
     """Get-or-create the flavor's extra consequence entries on ``pool``."""
     from actions.models import ConsequencePoolEntry  # noqa: PLC0415
     from world.checks.models import Consequence  # noqa: PLC0415
-    from world.traits.factories import CheckOutcomeFactory  # noqa: PLC0415
+    from world.traits.services import ensure_canonical_check_outcome  # noqa: PLC0415
 
     for outcome_name, label, weight in flavor["extra_consequences"]:
-        outcome = CheckOutcomeFactory(name=outcome_name)
+        outcome = ensure_canonical_check_outcome(outcome_name)
         consequence, _ = Consequence.objects.get_or_create(
             outcome_tier=outcome,
             label=label,

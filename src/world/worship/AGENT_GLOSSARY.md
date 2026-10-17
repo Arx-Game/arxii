@@ -46,7 +46,9 @@
 - **Deed** — an act in ordinary play that grants the character a resonance the pledged being
   holds as FAVORED or ASSOCIATED (`credit_pledge_deed`, called by `grant_resonance`); it earns
   favor only while a pledge to that being is open, under `DevotionConfig.weekly_deed_favor_cap`
-  (base favor). A worship rite's own grant is not a deed.
+  (base favor). A worship rite's own grant is not a deed, and neither is a passive grant (a
+  residence or outfit trickle, a distinction grant, a staff grant): favor comes only from a
+  character's actions.
 - **Sacrifice** — an item given up to a being at its shrine or temple outside a ceremony
   (`sacrifice_items`): destroyed, feeding the pool, earning 1 base favor per
   `sacrifice_value_per_favor` of value (more for a favored facet). Recorded as a

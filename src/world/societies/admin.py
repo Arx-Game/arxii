@@ -14,6 +14,11 @@ from django.urls import reverse
 from django.utils.html import format_html
 
 from web.admin.reviewed_delete import ReviewedDeleteMixin
+
+# =============================================================================
+# Inline Classes
+# =============================================================================
+from world.admin_utils import OneRowPerFormSet
 from world.codex.admin import GrantReachOnSaveMixin
 from world.codex.models import OrganizationCodexGrant
 from world.codex.services import apply_organization_codex_grants
@@ -65,10 +70,6 @@ from world.societies.models import (
     Vacancy,
 )
 
-# =============================================================================
-# Inline Classes
-# =============================================================================
-
 
 class OrganizationInline(admin.TabularInline):
     """Inline for displaying organizations within a society.
@@ -112,6 +113,7 @@ class OrganizationRankInline(admin.TabularInline):
     """Inline for editing the organization's rank ladder."""
 
     model = OrganizationRank
+    formset = OneRowPerFormSet
     extra = 0
     fields = ["name", "tier", "can_invite", "can_kick", "can_manage_ranks"]
 
@@ -130,6 +132,7 @@ class OrganizationGiftGrantInline(admin.TabularInline):
     """Inline for displaying gift grants within an organization."""
 
     model = OrganizationGiftGrant
+    formset = OneRowPerFormSet
     extra = 0
     fields = ["gift", "anchor_cap", "project"]
     readonly_fields = ["project"]
@@ -145,6 +148,7 @@ class OrganizationCodexGrantInline(admin.TabularInline):
     """
 
     model = OrganizationCodexGrant
+    formset = OneRowPerFormSet
     extra = 0
     fields = ["entry"]
     autocomplete_fields = ["entry"]
@@ -172,6 +176,7 @@ class LegendDeedStoryInline(admin.TabularInline):
     """Inline for displaying player narratives within a legend entry."""
 
     model = LegendDeedStory
+    formset = OneRowPerFormSet
     extra = 0
     fields = ["author", "text", "created_at", "updated_at"]
     readonly_fields = ["created_at", "updated_at"]
@@ -182,6 +187,7 @@ class LegendHonorInline(admin.TabularInline):
     """Inline for displaying paid honors within a legend entry (#3466)."""
 
     model = LegendHonor
+    formset = OneRowPerFormSet
     extra = 0
     fields = ["honorer", "value_added", "hares_spent", "established_deed", "created_at"]
     readonly_fields = ["created_at"]
@@ -298,6 +304,7 @@ class VacancyInline(admin.TabularInline):
     """#3648: the openings a staff family offers at CG."""
 
     model = Vacancy
+    formset = OneRowPerFormSet
     extra = 0
     fields = (
         "name",
@@ -572,6 +579,7 @@ class OrgAppealSignonInline(admin.TabularInline):
     """Inline for viewing an appeal's signons."""
 
     model = OrgAppealSignon
+    formset = OneRowPerFormSet
     extra = 0
     fields = ["member_persona", "note", "created_at"]
     readonly_fields = ["created_at"]
@@ -1123,6 +1131,7 @@ class DomainCrisisTypeOptionInline(admin.TabularInline):
     """#3831 - the resolution options belonging to a crisis type."""
 
     model = DomainCrisisTypeOption
+    formset = OneRowPerFormSet
     extra = 0
     fields = ("kind", "cost_coppers", "mission_template", "self_resolve_pct", "worsen_pct")
     raw_id_fields = ("mission_template",)
@@ -1251,6 +1260,7 @@ class HouseAspectOptionInline(admin.TabularInline):
     """
 
     model = HouseAspectOption
+    formset = OneRowPerFormSet
     extra = 0
     fields = (
         "name",
@@ -1290,6 +1300,7 @@ class HouseClaimAspectInline(admin.TabularInline):
     """#2079 — the founder's picks, read-only for the review queue."""
 
     model = HouseClaimAspect
+    formset = OneRowPerFormSet
     extra = 0
     readonly_fields = ("definition", "option")
     can_delete = False
@@ -1324,6 +1335,7 @@ class HouseClaimLandInline(admin.TabularInline):
     """#3983 Plan B — the founder's per-rung land writing, read-only for the review queue."""
 
     model = HouseClaimLand
+    formset = OneRowPerFormSet
     extra = 0
     readonly_fields = ("title", "land_name", "description", "hall_name", "land_shapes")
     can_delete = False
