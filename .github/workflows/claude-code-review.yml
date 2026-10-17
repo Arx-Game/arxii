@@ -80,6 +80,13 @@ jobs:
           jq -r '.[] | select(.type == "assistant") | .message.content[]?
                  | select(.type == "tool_use") | .name' "$EXECUTION_FILE" \
             | sort | uniq -c || echo "No execution file to read."
+          # Bash commands (not their output) and the model's own text, cut short.
+          jq -r '.[] | select(.type == "assistant") | .message.content[]?
+                 | if .type == "tool_use" then "TOOL \(.name): \(.input.command // .input.description // "")"
+                   elif .type == "text" then "TEXT: \(.text[0:400])" else empty end' \
+            "$EXECUTION_FILE" || true
+          jq -c '.[] | select(.type == "system" and .subtype == "init")
+                 | {tools, slash_commands, plugins}' "$EXECUTION_FILE" || true
           jq -c '.[] | select(.type == "result")
                  | {turns: .num_turns, cost: .total_cost_usd, models: (.modelUsage | keys)}' \
             "$EXECUTION_FILE" || true
