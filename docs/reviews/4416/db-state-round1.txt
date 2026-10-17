@@ -1,0 +1,34 @@
+== prompts
+ id |     subject      |  status   |                    resolution_note                     | resolved_by
+----+------------------+-----------+--------------------------------------------------------+-------------
+  1 | Tobiah Fenwright | confirmed | Sent an authored answer.                               | gm_4416
+  2 | Hobb Pennock     | confirmed | Sent the steward's own text.                           | gm_4416
+  3 | Wren Ashby       | dismissed | Dismissed: an authored answer was drawn.               | gm_4416
+  4 | Orla Cobbe       | confirmed | Sent the steward's own text.                           | gm_4416
+  5 | Tobiah Fenwright | dismissed | No answer within 3 days: an authored answer was drawn. | (tick)
+  6 | Hobb Pennock     | confirmed | Sent the steward's own text.                           | gm_4416
+  7 | Wren Ashby       | dismissed | Dismissed: an authored answer was drawn.               | gm_4416
+  8 | Orla Cobbe       | pending   |                                                        | (tick)
+(8 rows)
+
+== visions
+ id |    recipient     | answer_id | sent_by |     fact_clue     |                             body
+----+------------------+-----------+---------+-------------------+--------------------------------------------------------------
+  1 | Tobiah Fenwright |         1 | (drawn) | Wisket codex clue | [GM-authored delay text: success]  [GM-authored answer text:
+  2 | Hobb Pennock     |           | gm_4416 |                   | [GM-written free text for Hobb]
+  3 | Orla Cobbe       |           | gm_4416 |                   | [GM-written free text for Orla]
+  4 | Wren Ashby       |         3 | (drawn) |                   | [GM-authored delay text: failure]  [GM-authored answer text:
+  5 | Tobiah Fenwright |         5 | (drawn) | Wisket codex clue | [GM-authored delay text: critical success]  [GM-authored ans
+  6 | Hobb Pennock     |           | gm_4416 | Wisket codex clue | [GM-written free text for Hobb, telnet]
+  7 | Wren Ashby       |         4 | (drawn) |                   | [GM-authored delay text: critical failure]  [GM-authored ans
+(7 rows)
+
+== clues held
+      holder      |        clue
+------------------+---------------------
+ Hobb Pennock     | Wisket codex clue
+ Hobb Pennock     | Wisket mission clue
+ Orla Cobbe       | Wisket mission clue
+ Tobiah Fenwright | Wisket codex clue
+ Tobiah Fenwright | Wisket mission clue
+(5 rows)
