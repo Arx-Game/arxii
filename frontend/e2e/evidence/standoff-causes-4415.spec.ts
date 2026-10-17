@@ -20,6 +20,7 @@ const SCENE = () => `/scenes/${IDS.scene}`;
 const CROWD = 'Quay crowd (test)';
 const HOUNDS = 'Den hounds (test)';
 const GRUDGE = 'Grudge-bearers (test)';
+const TOLLS = 'Toll-takers (test)';
 
 async function signIn(browser: Browser, username: string): Promise<Page> {
   const context = await browser.newContext({ viewport: { width: 1500, height: 1100 } });
@@ -44,7 +45,7 @@ const gmGroup = (page: Page, name: string) =>
   page.getByTestId('gm-standoff-group').filter({ hasText: name });
 
 async function logGroups(page: Page, label: string) {
-  for (const name of [CROWD, HOUNDS, GRUDGE, 'Paid guards (test)']) {
+  for (const name of [CROWD, HOUNDS, GRUDGE, 'Paid guards (test)', TOLLS]) {
     const box = gmGroup(page, name);
     if ((await box.count()) > 0) {
       console.log(`== ${label} | ${name}: ${(await box.first().innerText()).replace(/\s+/g, ' ')}`);
@@ -170,9 +171,11 @@ test('part 4: two proposals after action 3', async ({ browser }) => {
   await gm.screenshot({ path: shot('06-gm-two-proposals.png'), fullPage: true });
 });
 
-test('part 5: the paid guards leave when their Calm lapses', async ({ browser }) => {
+test('part 5: the paid guards leave; the unpaid toll-takers come back as a proposal', async ({
+  browser,
+}) => {
   test.skip(process.env.PART !== '5', 'part 5 only');
-  test.setTimeout(120_000);
+  test.setTimeout(180_000);
   const gm = await signIn(browser, 'gm4415');
   await gm.goto(SCENE());
   await expect(gm.getByText('Paid guard 1 (test) leaves.').first()).toBeVisible({
@@ -182,14 +185,39 @@ test('part 5: the paid guards leave when their Calm lapses', async ({ browser })
   console.log(`== E6 guard 2 leaves: ${await gm.getByText('Paid guard 2 (test) leaves.').count()}`);
   console.log(`== E6 run out lines: ${await gm.getByText(/Calm \(test\) on Paid guard/).count()}`);
   console.log(
-    `== E6 GM prompts: ${(await gm.getByTestId('gm-prompt-row').allInnerTexts()).join(' || ')}`
+    `== E6b toll-taker leaves lines: ${await gm.getByText(/Toll-taker \d \(test\) leaves\./).count()}`
   );
+  console.log(
+    `== E6b toll-taker run out lines: ${await gm.getByText(/Calm \(test\) on Toll-taker/).count()}`
+  );
+  console.log(
+    `== E6 GM prompts: ${(await gm.getByTestId('gm-prompt-row').allInnerTexts()).join(' || ').replace(/\s+/g, ' ')}`
+  );
+  await gm.getByTestId('rail-tab-gm').click();
+  await expect(gm.getByTestId('gm-standoff-panel')).toBeVisible({ timeout: 20_000 });
+  await logGroups(gm, 'E6 GM');
   await gm.screenshot({ path: shot('07-guards-leave.png'), fullPage: true });
+  await gmGroup(gm, TOLLS).scrollIntoViewIfNeeded();
+  await gm.screenshot({ path: shot('07c-toll-takers-proposed-gm.png'), fullPage: true });
+  await gmGroup(gm, TOLLS).screenshot({ path: shot('07c2-toll-takers-box.png') });
+
+  const pell = await signIn(browser, 'pell4415');
+  await pell.goto(SCENE());
+  const tolls = pell.getByTestId('standoff-group').filter({ hasText: TOLLS });
+  await expect(tolls).toBeVisible({ timeout: 20_000 });
+  console.log(`== E6b Pell | ${TOLLS}: ${(await tolls.first().innerText()).replace(/\s+/g, ' ')}`);
+  console.log(
+    `== E6b Pell page has "A hold on them": ${await pell.getByText(/A hold on them/).count()}`
+  );
+  await pell.screenshot({ path: shot('07d-toll-takers-player.png'), fullPage: true });
+
   const anselm = await signIn(browser, 'anselm4415');
   await anselm.goto(SCENE());
   await expect(anselm.getByText('Paid guard 2 (test) leaves.').first()).toBeVisible({
     timeout: 20_000,
   });
+  const summary = anselm.getByTestId('standoff-summary-card');
+  console.log(`== E6b Anselm summary: ${(await summary.innerText()).replace(/\s+/g, ' ')}`);
   await anselm.screenshot({ path: shot('07b-guards-leave-onlooker.png'), fullPage: true });
 });
 

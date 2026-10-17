@@ -99,6 +99,10 @@ def _retest(opponent: CombatOpponent) -> None:
 
     encounter = opponent.encounter
     group = group_of(opponent)
+    if group.pk is not None and group.state == StandoffGroupState.PROPOSED:
+        # A proposal already stands (often this very release's first member reopened the
+        # group): restating it would replace the released reason with a plain one.
+        return
     if group.pk is not None and group.state in LIVE_GROUP_STATES:
         # Still in the standoff: its cause is tested as after any other change.
         evaluate_causes(encounter)

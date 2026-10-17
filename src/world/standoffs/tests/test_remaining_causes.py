@@ -336,9 +336,17 @@ class ReleaseTests(CauseBase):
         self.encounter.save(update_fields=["scene"])
         group = self.settled_group()
         self.release(WEAK)
+        # The second member's hold lapses on the same sweep: the released reason stands.
+        with patch(LEVEL, return_value=WEAK):
+            retest_cause_on_release(self.mooks[1].objectdb)
         group.refresh_from_db()
         self.assertEqual(group.state, StandoffGroupState.PROPOSED)
-        self.assertTrue(group.proposal_reason.startswith("A hold on them ended"))
+        self.assertEqual(
+            group.proposal_reason,
+            "A hold on them ended and their cause still holds: "
+            "The party does not outweigh them by their margin.",
+        )
+        self.assertEqual(GMPrompt.objects.filter(standoff_group=group).count(), 1)
         self.assertEqual(self.encounter.round_number, 0)
 
     def test_mid_fight_a_released_mook_with_no_reason_left_leaves(self) -> None:
