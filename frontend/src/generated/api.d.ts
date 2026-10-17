@@ -27935,6 +27935,9 @@ export interface components {
        *     * `none` - None
        *     * `predation` - Predation
        *     * `orders` - Orders
+       *     * `hunger` - Hunger
+       *     * `hatred` - Hatred
+       *     * `territory` - Territory
        */
       cause_override?:
         | components['schemas']['CauseOverrideEnum']
@@ -27980,6 +27983,9 @@ export interface components {
        *     * `none` - None
        *     * `predation` - Predation
        *     * `orders` - Orders
+       *     * `hunger` - Hunger
+       *     * `hatred` - Hatred
+       *     * `territory` - Territory
        */
       cause_override?:
         | components['schemas']['CauseOverrideEnum']
@@ -29076,11 +29082,21 @@ export interface components {
     };
     /**
      * @description * `none` - None
-     *     * `predation` - Predation
-     *     * `orders` - Orders
+     *     * `suppress` - Suppress
+     *     * `provoke` - Provoke
      * @enum {string}
      */
-    CauseOverrideEnum: 'none' | 'predation' | 'orders';
+    CauseEffectEnum: 'none' | 'suppress' | 'provoke';
+    /**
+     * @description * `none` - None
+     *     * `predation` - Predation
+     *     * `orders` - Orders
+     *     * `hunger` - Hunger
+     *     * `hatred` - Hatred
+     *     * `territory` - Territory
+     * @enum {string}
+     */
+    CauseOverrideEnum: 'none' | 'predation' | 'orders' | 'hunger' | 'hatred' | 'territory';
     Ceremony: {
       readonly id: number;
       readonly ceremony_type_name: string;
@@ -33487,7 +33503,7 @@ export interface components {
       label: string;
       angle_text: string;
       difficulty_shift_bands: number;
-      suppresses_cause: boolean;
+      cause_effect: components['schemas']['CauseEffectEnum'];
       matched_by: string[];
       revealed: boolean;
       source: string;
@@ -33502,6 +33518,7 @@ export interface components {
       cause_fires: boolean;
       cause_reason: string;
       cause_margin_percent: number;
+      cause_clock: string;
       proposal_reason: string;
       pending_prompt_id: number | null;
       last_decision: string;
@@ -37008,6 +37025,9 @@ export interface components {
        *     * `none` - None
        *     * `predation` - Predation
        *     * `orders` - Orders
+       *     * `hunger` - Hunger
+       *     * `hatred` - Hatred
+       *     * `territory` - Territory
        */
       cause_override?:
         | components['schemas']['CauseOverrideEnum']
@@ -37040,6 +37060,9 @@ export interface components {
        *     * `none` - None
        *     * `predation` - Predation
        *     * `orders` - Orders
+       *     * `hunger` - Hunger
+       *     * `hatred` - Hatred
+       *     * `territory` - Territory
        */
       cause_override?:
         | components['schemas']['CauseOverrideEnum']

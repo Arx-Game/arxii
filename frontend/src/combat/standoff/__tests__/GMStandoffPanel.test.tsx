@@ -25,6 +25,7 @@ function group(patch: Partial<GMGroupView> = {}): GMGroupView {
     cause_fires: false,
     cause_reason: '',
     cause_margin_percent: 25,
+    cause_clock: '',
     proposal_reason: '',
     pending_prompt_id: null,
     last_decision: '',
@@ -46,7 +47,7 @@ function group(patch: Partial<GMGroupView> = {}): GMGroupView {
         label: 'House rank 2+',
         angle_text: '',
         difficulty_shift_bands: 1,
-        suppresses_cause: false,
+        cause_effect: 'none',
         matched_by: ['Aubrin'],
         revealed: false,
         source: 'Saltreed Company',
@@ -56,7 +57,7 @@ function group(patch: Partial<GMGroupView> = {}): GMGroupView {
         label: 'Spellcraft',
         angle_text: '',
         difficulty_shift_bands: 1,
-        suppresses_cause: false,
+        cause_effect: 'none',
         matched_by: [],
         revealed: false,
         source: 'Sellsword',
@@ -88,6 +89,37 @@ beforeEach(() => {
 });
 
 describe('GMStandoffPanel', () => {
+  it('shows a Territory clock and what a rule does to the cause (#4415)', () => {
+    renderPanel(
+      group({
+        cause: 'Territory',
+        cause_clock: 'Patience: 2 of 3 actions.',
+        faction_rules: [
+          {
+            faction_rule_id: 4,
+            label: 'has_capability: Spellcraft',
+            angle_text: '',
+            difficulty_shift_bands: 0,
+            cause_effect: 'provoke',
+            matched_by: ['Wrenna'],
+            revealed: false,
+            source: 'Den wolf',
+          },
+        ],
+      })
+    );
+    const box = screen.getByTestId('gm-standoff-group');
+    expect(within(box).getByTestId('gm-standoff-cause-clock')).toHaveTextContent(
+      'Patience: 2 of 3 actions.'
+    );
+    expect(within(box).getByText(/provokes them/)).toBeInTheDocument();
+  });
+
+  it('shows no clock for a cause without one', () => {
+    renderPanel();
+    expect(screen.queryByTestId('gm-standoff-cause-clock')).toBeNull();
+  });
+
   it('marks what the placement edited and where each rule came from (#4361)', () => {
     renderPanel(
       group({

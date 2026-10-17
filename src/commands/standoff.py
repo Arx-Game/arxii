@@ -366,6 +366,8 @@ def _gm_profile_lines(group: GMGroupView) -> list[str]:
     status = f"fires: {group.cause_reason}" if group.cause_fires else "holds"
     edited = " - edited here" if group.cause_edited else ""
     lines = [f"    Cause: {group.cause} ({status}){edited}"]
+    if group.cause_clock:
+        lines.append(f"    {group.cause_clock}")
     if group.affiliation:
         set_here = " - set on this line" if group.affiliation_edited else ""
         lines.append(f"    Affiliation: {group.affiliation}{set_here}")
@@ -396,8 +398,8 @@ def _render_gm_group(group: GMGroupView) -> list[str]:
         *_gm_profile_lines(group),
     ]
     lines.extend(
-        f"    Faction rule: {rule.label} (from {rule.source}) - matches "
-        f"{', '.join(rule.matched_by) or 'nobody'}{' - read' if rule.revealed else ''}"
+        f"    Faction rule: {rule.label} (from {rule.source}){_effect_words(rule.cause_effect)}"
+        f" - matches {', '.join(rule.matched_by) or 'nobody'}{' - read' if rule.revealed else ''}"
         for rule in group.faction_rules
     )
     lines.append(
@@ -408,6 +410,17 @@ def _render_gm_group(group: GMGroupView) -> list[str]:
         "    Morale: " + ", ".join(f"{m.name} {m.morale} ({m.morale_state})" for m in group.members)
     )
     return lines
+
+
+def _effect_words(cause_effect: str) -> str:
+    """The words beside a faction rule that provokes the group or keeps it back."""
+    from world.standoffs.constants import CauseEffect  # noqa: PLC0415
+
+    if cause_effect == CauseEffect.PROVOKE:
+        return " - provokes them"
+    if cause_effect == CauseEffect.SUPPRESS:
+        return " - keeps them back"
+    return ""
 
 
 def _render_gm_view(view: GMStandoffView) -> list[str]:

@@ -52,6 +52,7 @@ from world.standoffs.services.force import (
     evaluate_causes,
     patience_line,
 )
+from world.standoffs.services.gm_view import build_gm_standoff_view
 from world.standoffs.services.release import retest_cause_on_release
 from world.standoffs.services.state import is_in_standoff, open_standoff
 from world.traits.factories import CheckOutcomeFactory
@@ -226,6 +227,24 @@ class TerritoryTests(CauseBase):
         self.assertEqual(
             cause_clock(self.group(actions_elapsed=1), self.config), "Patience: 1 of 3 actions."
         )
+
+    def test_the_gm_view_and_its_telnet_text_carry_the_clock_and_the_rule_effect(self) -> None:
+        from commands.standoff import _render_gm_view
+
+        FactionRuleFactory(creature_template=self.template, rule={}, cause_effect="provoke")
+        for mook in self.mooks:
+            mook.morale = 0  # broken: past the provoking rule, so the standoff stays open
+            mook.save(update_fields=["morale"])
+        with patch(LEVEL, return_value=STRONG):
+            open_standoff(self.encounter)
+            evaluate_causes(self.encounter, [], after_action=True)
+            view = build_gm_standoff_view(self.encounter)
+        (group,) = view.groups
+        self.assertEqual(group.cause_clock, "Patience: 1 of 3 actions.")
+        self.assertEqual(group.faction_rules[0].cause_effect, CauseEffect.PROVOKE)
+        text = "\n".join(_render_gm_view(view))
+        self.assertIn("    Patience: 1 of 3 actions.", text)
+        self.assertIn(" - provokes them - matches", text)
 
 
 class TerritoryInAGMRunSceneTests(CauseBase):
