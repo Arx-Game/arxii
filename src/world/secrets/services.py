@@ -55,6 +55,7 @@ def author_secret(  # noqa: PLR0913 — keyword-only; each arg is a distinct sec
     legend_deed: LegendEntry | None = None,
     mission_deed: MissionDeedRecord | None = None,
     scene: Scene | None = None,
+    hook: Secret | None = None,
 ) -> Secret:
     """Author a secret about ``subject_sheet``, enforcing the anchor-scales-with-level rule.
 
@@ -79,6 +80,7 @@ def author_secret(  # noqa: PLR0913 — keyword-only; each arg is a distinct sec
         legend_deed=legend_deed,
         mission_deed=mission_deed,
         scene=scene,
+        hook=hook,
     )
     try:
         secret.full_clean()
@@ -87,6 +89,60 @@ def author_secret(  # noqa: PLR0913 — keyword-only; each arg is a distinct sec
         raise SecretError(msg, user_message=msg) from exc
     secret.save()
     return secret
+
+
+def author_truth(
+    hook: Secret,
+    *,
+    content: str,
+    level: int = SecretLevel.UNCOMMON_KNOWLEDGE,
+    category: SecretCategory | None = None,
+    consequences: str = "",
+) -> Secret:
+    """Write the truth under a hook, unknown to its subject until revealed (#4397).
+
+    A GM-authored, subject-unaware secret about the hook's own subject, pointing at the hook.
+    The player keeps reading the hook ("dreams that tell"); the truth ("the naga schemer")
+    reaches them only through a ``SecretKnowledge`` grant, like any subject-unaware secret.
+    """
+    return author_secret(
+        subject_sheet=hook.subject_sheet,
+        provenance=SecretProvenance.GM_AUTHORED,
+        level=level,
+        content=content,
+        category=category,
+        consequences=consequences,
+        subject_aware=False,
+        hook=hook,
+    )
+
+
+def hooks_for_subject(sheet: CharacterSheet) -> QuerySet[Secret]:
+    """Every hook a character carries, for the GM at their table (#4397).
+
+    A hook is any top-level secret about the subject, aware or not: a creation pick's secret
+    (a distinction minted into one), a staff-written secret, a line the player left. The
+    truths under them come from ``truths_by_hook`` (one query, never a prefetch cached on
+    the shared rows); the caller gates who may read this, since it shows what the subject
+    does not know.
+    """
+    return (
+        Secret.objects.filter(subject_sheet=sheet, hook__isnull=True)
+        .select_related("category", "author_persona")
+        .order_by("created_date", "pk")
+    )
+
+
+def truths_by_hook(sheet: CharacterSheet) -> dict[int, list[Secret]]:
+    """The truths under each of a character's hooks, keyed by the hook's pk (#4397)."""
+    grouped: dict[int, list[Secret]] = {}
+    for truth in (
+        Secret.objects.filter(subject_sheet=sheet, hook__isnull=False)
+        .select_related("category")
+        .order_by("created_date", "pk")
+    ):
+        grouped.setdefault(truth.hook_id, []).append(truth)
+    return grouped
 
 
 def set_secret_act_anchor(

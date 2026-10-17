@@ -25,6 +25,7 @@ import type {
   GMTableMembershipCreateBody,
   GMTableTransferBody,
   GMTableUpdateBody,
+  TableHookWriteBody,
 } from './types';
 
 // ---------------------------------------------------------------------------
@@ -64,6 +65,8 @@ export const tablesKeys = {
       ? ([...TABLES_ROOT, 'bulletin-replies'] as const)
       : ([...TABLES_ROOT, 'bulletin-replies', params] as const),
   invites: () => [...TABLES_ROOT, 'invites'] as const,
+  playerHooks: (tableId: number, sheetId: number) =>
+    [...TABLES_ROOT, 'player-hooks', tableId, sheetId] as const,
   gmQueue: () => [...TABLES_ROOT, 'gm-queue'] as const,
 };
 
@@ -394,6 +397,28 @@ export function useActionGMApplication() {
     }) => api.actionGMApplication(id, action, reviewNotes),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: tablesKeys.gmQueue() }).catch(() => {});
+    },
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Hooks (#4397)
+// ---------------------------------------------------------------------------
+
+export function usePlayerHooks(tableId: number, sheetId: number) {
+  return useQuery({
+    queryKey: tablesKeys.playerHooks(tableId, sheetId),
+    queryFn: () => api.getPlayerHooks(tableId, sheetId),
+    enabled: tableId > 0 && sheetId > 0,
+  });
+}
+
+export function useAddPlayerHook(tableId: number, sheetId: number) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: TableHookWriteBody) => api.addPlayerHook(tableId, sheetId, data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: tablesKeys.playerHooks(tableId, sheetId) }).catch(() => {});
     },
   });
 }

@@ -3,6 +3,14 @@
 **Status:** in-progress — core loop shipped. Epic: #1143. System doc:
 [`docs/systems/investigation_and_discovery.md`](../systems/investigation_and_discovery.md).
 
+## Built (2026-10-17, #4397: hooks at the table)
+
+A table GM reads, in one place, every hook a seated character carries (a creation pick's
+secret, a staff-written one, a line the player left) with the truths written under each, and
+writes a truth the player cannot see yet or a hook of their own (`Secret.hook`, `author_truth`,
+the table route and its Hooks tab). A past life is a hook until a GM makes it a truth.
+Creation's own hook picks come with #4395.
+
 ## Why this matters
 
 Mystery and investigation are the core loop — Arx 1's clue/research system was its most

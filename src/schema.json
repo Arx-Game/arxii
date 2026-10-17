@@ -17921,6 +17921,147 @@ paths:
               schema:
                 $ref: '#/components/schemas/GMTable'
           description: ''
+  /api/gm/tables/{id}/players/{sheet_pk}/hooks/:
+    get:
+      operationId: gm_tables_players_hooks_list
+      description: |-
+        A player's hooks at this table, and the GM's additions to them (#4397).
+
+        GET lists every hook the character carries with the truths under each; POST adds a
+        hook (``hook`` null) or a truth under one (``hook`` set), through ``author_secret`` /
+        ``author_truth``. Only staff or the GM who runs the table read this (a member does not:
+        it shows what a subject does not know), and only for a character seated at the table
+        (any face of theirs with an active membership); anyone else is refused and a stranger
+        to the table is not found.
+      parameters:
+      - in: query
+        name: gm
+        schema:
+          type: integer
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this GM Table.
+        required: true
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      - in: path
+        name: sheet_pk
+        schema:
+          type: string
+          pattern: ^[0-9]+$
+        required: true
+      - in: query
+        name: status
+        schema:
+          type: string
+          enum:
+          - active
+          - archived
+        description: |-
+          * `active` - Active
+          * `archived` - Archived
+      tags:
+      - gm
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedTableHookList'
+          description: ''
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TableHook'
+          description: ''
+    post:
+      operationId: gm_tables_players_hooks_create
+      description: |-
+        A player's hooks at this table, and the GM's additions to them (#4397).
+
+        GET lists every hook the character carries with the truths under each; POST adds a
+        hook (``hook`` null) or a truth under one (``hook`` set), through ``author_secret`` /
+        ``author_truth``. Only staff or the GM who runs the table read this (a member does not:
+        it shows what a subject does not know), and only for a character seated at the table
+        (any face of theirs with an active membership); anyone else is refused and a stranger
+        to the table is not found.
+      parameters:
+      - in: query
+        name: gm
+        schema:
+          type: integer
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this GM Table.
+        required: true
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      - in: path
+        name: sheet_pk
+        schema:
+          type: string
+          pattern: ^[0-9]+$
+        required: true
+      - in: query
+        name: status
+        schema:
+          type: string
+          enum:
+          - active
+          - archived
+        description: |-
+          * `active` - Active
+          * `archived` - Archived
+      tags:
+      - gm
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TableHookWriteRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedTableHookList'
+          description: ''
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TableHook'
+          description: ''
   /api/gm/tables/{id}/transfer_ownership/:
     post:
       operationId: gm_tables_transfer_ownership_create
@@ -44519,7 +44660,7 @@ components:
           description: The character this secret is about — and its sole owner.
         level:
           allOf:
-          - $ref: '#/components/schemas/AuthoredSecretLevelEnum'
+          - $ref: '#/components/schemas/Level508Enum'
           description: |-
             How deep/dangerous — narrative weight + default share-scope.
 
@@ -44586,18 +44727,6 @@ components:
       - provenance_display
       - subject_sheet
       - updated_date
-    AuthoredSecretLevelEnum:
-      enum:
-      - 1
-      - 2
-      - 3
-      - 4
-      type: integer
-      description: |-
-        * `1` - Uncommon Knowledge
-        * `2` - Whispers
-        * `3` - Carefully Kept
-        * `4` - Dangerous Secret
     AuthoredSecretRequest:
       type: object
       description: Staff authoring shape for Secret (#3266). Provenance is fixed server-side.
@@ -44607,7 +44736,7 @@ components:
           description: The character this secret is about — and its sole owner.
         level:
           allOf:
-          - $ref: '#/components/schemas/AuthoredSecretLevelEnum'
+          - $ref: '#/components/schemas/Level508Enum'
           description: |-
             How deep/dangerous — narrative weight + default share-scope.
 
@@ -62872,6 +63001,18 @@ components:
       - id
       - journal
       - value_added
+    Level508Enum:
+      enum:
+      - 1
+      - 2
+      - 3
+      - 4
+      type: integer
+      description: |-
+        * `1` - Uncommon Knowledge
+        * `2` - Whispers
+        * `3` - Carefully Kept
+        * `4` - Dangerous Secret
     Level554Enum:
       enum:
       - 10
@@ -73741,6 +73882,29 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/TableBulletinReply'
+    PaginatedTableHookList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/TableHook'
     PaginatedTableUpdateRequestList:
       type: object
       required:
@@ -74545,7 +74709,7 @@ components:
           description: The character this secret is about — and its sole owner.
         level:
           allOf:
-          - $ref: '#/components/schemas/AuthoredSecretLevelEnum'
+          - $ref: '#/components/schemas/Level508Enum'
           description: |-
             How deep/dangerous — narrative weight + default share-scope.
 
@@ -89504,6 +89668,96 @@ components:
       - created_at
       - id
       - post
+    TableHook:
+      type: object
+      description: |-
+        A hook a character carries, with the truths under it, for the GM at their table (#4397).
+
+        ``kind`` is the secret's category name or "Unknown" (an unplaced category is a first-class
+        state, see ``SecretCategory``); ``aware`` says whether the player can read this row on
+        their own shelf.
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        kind:
+          type: string
+          readOnly: true
+        content:
+          type: string
+          readOnly: true
+          description: The secret itself, as narrated. Player- or GM-authored prose.
+        consequences:
+          type: string
+          readOnly: true
+          description: What happens if it surfaces. Blank = Unknown.
+        level:
+          allOf:
+          - $ref: '#/components/schemas/Level508Enum'
+          readOnly: true
+          description: |-
+            How deep/dangerous — narrative weight + default share-scope.
+
+            * `1` - Uncommon Knowledge
+            * `2` - Whispers
+            * `3` - Carefully Kept
+            * `4` - Dangerous Secret
+        provenance:
+          allOf:
+          - $ref: '#/components/schemas/ProvenanceEnum'
+          readOnly: true
+          description: |-
+            Where the secret came from (drives the anchor rule + OOC attribution).
+
+            * `gm` - GM/Staff authored (canon)
+            * `action` - Action-anchored (minted by play)
+            * `flavor` - Player flavor (unverified)
+            * `accusation` - Accusation (player-authored, consent-gated, weight-bearing)
+        aware:
+          type: boolean
+          readOnly: true
+        truths:
+          type: array
+          items:
+            type: object
+            additionalProperties: {}
+          description: |-
+            From ``context["truths_by_hook"]`` (``secrets.services.truths_by_hook``), never a
+            prefetch: Secret rows are idmapper-shared, and a prefetch cache left on one answers
+            every later reader with the first request's list.
+          readOnly: true
+      required:
+      - aware
+      - consequences
+      - content
+      - id
+      - kind
+      - level
+      - provenance
+      - truths
+    TableHookWriteRequest:
+      type: object
+      description: 'What a GM adds at the table (#4397): a hook, or a truth under
+        one (``hook`` set).'
+      properties:
+        hook:
+          type: integer
+          nullable: true
+        content:
+          type: string
+          minLength: 1
+          maxLength: 4000
+        consequences:
+          type: string
+          default: ''
+        level:
+          type: integer
+          default: 1
+        category:
+          type: integer
+          nullable: true
+      required:
+      - content
     TableUpdateRequest:
       type: object
       description: Read serializer for table update requests (#2631).

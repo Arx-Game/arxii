@@ -2245,6 +2245,11 @@ secret-tab display) + the #1269 distinction migration + the **act-anchor cross-l
   `subject_aware` kwarg; `SecretVictim`/`archetypes` (reputation) stay admin-only, off the API.
   Frontend: `StaffSecretsPanel` + `AuthorSecretDialog`, staff-only-mounted on
   `CharacterSheetPage`.
+- **Hooks and truths (#4397):** `Secret.hook` (nullable self-FK, `truths`; one level, same
+  subject, `Secret.clean`); `author_truth` (subject-unaware, under a hook), `hooks_for_subject`
+  + `truths_by_hook`; read and written by the table GM at
+  `GET/POST /api/gm/tables/<table>/players/<sheet>/hooks/` (`gm.services.may_read_table_hooks`,
+  `table_seats_sheet`); the Hooks tab on the table page. See secrets.md "Hooks and truths".
 - **Codex boundary:** cut on *authorship* — Codex = canon lore (lore-authority, reviewed);
   Secret = self-serve hidden fact about a concrete entity
 - **Source:** `src/world/secrets/`
@@ -3085,8 +3090,10 @@ GM at a given level may author (#2000, ADR-0097).
   `last_active_at` stub, `contact_times`/`ooc_info` freeform `TextField`s (#3478) —
   writable only through the GM's own `mine` endpoint below), `GMApplication` (freeform
   text, staff response, one PENDING
-  per account), `GMTable` (a GM's working group; ACTIVE/ARCHIVED lifecycle),
-  `GMTableMembership` (persona-pinned, soft-leave via `left_at`), `GMRosterInvite`
+  per account), `GMTable` (a GM's working group; ACTIVE/ARCHIVED lifecycle; its
+  `players/<sheet>/hooks/` action is the GM's read of a seated character's hooks and the truths
+  under them, #4397, see Secrets), `GMTableMembership` (persona-pinned, soft-leave via
+  `left_at`), `GMRosterInvite`
   (single-use recruitment code, public or private-with-email-match, 30-day default
   expiry), `GMLevelCap` (one row per `GMLevel`, staff-tunable: `max_beat_risk`
   (`RenownRisk`), `allow_custom_stakes`, `allow_global_scope_authoring`,

@@ -90,6 +90,8 @@ from world.gm.serializers import (
     NarrateGMPromptSerializer,
     OverrideStandoffProposalSerializer,
     PromoteGMInputSerializer,
+    TableHookSerializer,
+    TableHookWriteSerializer,
     TableUpdateRequestCreateSerializer,
     TableUpdateRequestSerializer,
     TableUpdateRequestSignoffSerializer,
@@ -117,6 +119,7 @@ from world.player_submissions.constants import SubmissionStatus
 from world.roster.models.applications import RosterApplication
 from world.roster.services.selection import character_for_request
 from world.scenes.models import Scene
+from world.secrets.constants import SecretProvenance
 from world.stories.pagination import StandardResultsSetPagination
 
 
@@ -407,6 +410,85 @@ class GMTableViewSet(viewsets.ModelViewSet):
         new_gm = get_object_or_404(GMProfile, pk=new_gm_id)
         transfer_ownership_service(table, new_gm)
         return Response(GMTableSerializer(table, context=self.get_serializer_context()).data)
+
+    @extend_schema(
+        request=TableHookWriteSerializer,
+        responses={200: TableHookSerializer(many=True), 201: TableHookSerializer},
+    )
+    @action(
+        detail=True,
+        methods=["get", "post"],
+        url_path=r"players/(?P<sheet_pk>[0-9]+)/hooks",
+        url_name="player-hooks",
+    )
+    def player_hooks(self, request: Request, pk: str | None = None, sheet_pk: str = "") -> Response:
+        """A player's hooks at this table, and the GM's additions to them (#4397).
+
+        GET lists every hook the character carries with the truths under each; POST adds a
+        hook (``hook`` null) or a truth under one (``hook`` set), through ``author_secret`` /
+        ``author_truth``. Only staff or the GM who runs the table read this (a member does not:
+        it shows what a subject does not know), and only for a character seated at the table
+        (any face of theirs with an active membership); anyone else is refused and a stranger
+        to the table is not found.
+        """
+        from world.character_sheets.models import CharacterSheet  # noqa: PLC0415
+        from world.gm.services import may_read_table_hooks, table_seats_sheet  # noqa: PLC0415
+        from world.secrets.models import Secret, SecretCategory  # noqa: PLC0415
+        from world.secrets.services import (  # noqa: PLC0415
+            SecretError,
+            author_secret,
+            author_truth,
+            hooks_for_subject,
+            truths_by_hook,
+        )
+
+        table = self.get_object()
+        if not may_read_table_hooks(request.user, table):
+            return Response(
+                {"detail": "Only the GM running this table reads its players' hooks."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        sheet = get_object_or_404(CharacterSheet, pk=int(sheet_pk))
+        if not table_seats_sheet(table, sheet):
+            raise Http404
+        if request.method == "GET":
+            context = {"truths_by_hook": truths_by_hook(sheet)}
+            return Response(
+                TableHookSerializer(hooks_for_subject(sheet), many=True, context=context).data
+            )
+
+        body = TableHookWriteSerializer(data=request.data)
+        body.is_valid(raise_exception=True)
+        data = body.validated_data
+        category = None
+        if data["category"] is not None:
+            category = get_object_or_404(SecretCategory, pk=data["category"], is_active=True)
+        try:
+            if data["hook"] is None:
+                written = author_secret(
+                    subject_sheet=sheet,
+                    provenance=SecretProvenance.GM_AUTHORED,
+                    level=data["level"],
+                    content=data["content"],
+                    category=category,
+                    consequences=data["consequences"],
+                )
+            else:
+                hook = get_object_or_404(Secret, pk=data["hook"], subject_sheet=sheet)
+                written = author_truth(
+                    hook,
+                    content=data["content"],
+                    level=data["level"],
+                    category=category,
+                    consequences=data["consequences"],
+                )
+        except SecretError as exc:
+            raise serializers.ValidationError({"detail": exc.user_message}) from exc
+        top = written if written.hook_id is None else written.hook
+        context = {"truths_by_hook": truths_by_hook(sheet)}
+        return Response(
+            TableHookSerializer(top, context=context).data, status=status.HTTP_201_CREATED
+        )
 
 
 class GMTableMembershipViewSet(viewsets.ModelViewSet):

@@ -297,6 +297,24 @@ def idle_tables(threshold_days: int = IDLE_TABLE_THRESHOLD_DAYS) -> QuerySet[GMT
 
 
 @transaction.atomic
+def table_seats_sheet(table: GMTable, sheet: CharacterSheet) -> bool:
+    """Whether any face of ``sheet`` holds an active membership at ``table`` (#4397)."""
+    return GMTableMembership.objects.filter(
+        table=table, persona__character_sheet=sheet, left_at__isnull=True
+    ).exists()
+
+
+def may_read_table_hooks(user: AccountDB | None, table: GMTable) -> bool:
+    """Staff, or the GM who runs ``table`` (#4397): the one test behind a player's hooks.
+
+    A member of the table is not a reader; a player reads their own shelf, which hides what
+    they are not aware of (``secrets_owned_by``).
+    """
+    if user is None or not user.is_authenticated:
+        return False
+    return bool(user.is_staff) or table.gm.account_id == user.pk
+
+
 def join_table(table: GMTable, persona: Persona) -> GMTableMembership:
     """Add a persona to a table. Idempotent — returns existing active
     membership if one exists. Rejects TEMPORARY personas.

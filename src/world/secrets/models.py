@@ -107,6 +107,17 @@ class Secret(SharedMemoryModel):
         related_name="authored_secrets",
         help_text="The narrating persona (player-authored). Null for GM/staff-authored.",
     )
+    #: #4397: a hook is a top-level secret the GM may build on (a creation pick, a staff-written
+    #: truth, a line the player left); a GM's truth under it is a second secret pointing here,
+    #: subject-unaware until it is revealed. One level only: a truth never has truths.
+    hook = models.ForeignKey(
+        "self",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="truths",
+        help_text="The hook this secret is the truth under (#4397); null for a hook itself.",
+    )
     #: #4124: the beat of the subject's own life this secret fills in. A beat left
     #: unknown at creation (a Sleeper's past, a year nobody speaks of) is a hole a
     #: GM can author a secret against; when the subject learns it, the beat is no
@@ -251,6 +262,14 @@ class Secret(SharedMemoryModel):
         ):
             msg = "Must be an instance of subject_item_template when both are set."
             raise ValidationError({"subject_item_instance": msg})
+        if self.hook_id is not None:
+            hook = self.hook
+            if hook.subject_sheet_id != self.subject_sheet_id:
+                msg = "A truth sits under one of its own subject's hooks."
+                raise ValidationError({"hook": msg})
+            if hook.hook_id is not None:
+                msg = "A truth sits under a hook, never under another truth."
+                raise ValidationError({"hook": msg})
 
 
 class SecretVictim(SharedMemoryModel):

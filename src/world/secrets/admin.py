@@ -35,7 +35,7 @@ class SecretAdmin(admin.ModelAdmin):
     list_display = ["__str__", "level", "category", "provenance", "created_date"]
     list_filter = ["level", "provenance", "category"]
     search_fields = ["content", "consequences"]
-    raw_id_fields = ["subject_sheet", "author_persona"]
+    raw_id_fields = ["subject_sheet", "author_persona", "hook"]
     readonly_fields = ["created_date", "updated_date", "get_relocated_distinction"]
     inlines = [SecretKnowledgeInline]
 

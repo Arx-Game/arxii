@@ -38,6 +38,8 @@ import type {
   PaginatedTables,
   TableBulletinPost,
   TableBulletinReply,
+  TableHook,
+  TableHookWriteBody,
 } from './types';
 
 // ---------------------------------------------------------------------------
@@ -444,4 +446,28 @@ export async function actionGMApplication(
   });
   if (!res.ok) await throwApiError(res, `Failed to ${action} application ${id}`);
   return res.json() as Promise<{ status: string }>;
+}
+
+// ---------------------------------------------------------------------------
+// Hooks (#4397): GET/POST /api/gm/tables/{id}/players/{sheet}/hooks/
+// ---------------------------------------------------------------------------
+
+export async function getPlayerHooks(tableId: number, sheetId: number): Promise<TableHook[]> {
+  const res = await apiFetch(`${TABLES_URL}/${tableId}/players/${sheetId}/hooks/`);
+  if (!res.ok) await throwApiError(res, 'Failed to load hooks');
+  return res.json() as Promise<TableHook[]>;
+}
+
+export async function addPlayerHook(
+  tableId: number,
+  sheetId: number,
+  data: TableHookWriteBody
+): Promise<TableHook> {
+  const res = await apiFetch(`${TABLES_URL}/${tableId}/players/${sheetId}/hooks/`, {
+    method: 'POST',
+    headers: jsonHeaders(),
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) await throwApiError(res, 'Failed to add the hook');
+  return res.json() as Promise<TableHook>;
 }

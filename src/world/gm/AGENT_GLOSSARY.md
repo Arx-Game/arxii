@@ -12,6 +12,10 @@ _Avoid_: GM account, GM record.
 A GM's working group: a named set of players (via their personas) engaging with a set of stories, with an ACTIVE/ARCHIVED lifecycle. The unit that owns GROUP-scope story progress and anchors Lead-GM permission checks.
 _Avoid_: party, group, campaign.
 
+**Table hooks** (#4397):
+The GM's read of a seated character's hooks and the truths under them, `GET/POST /api/gm/tables/<table>/players/<sheet>/hooks/`, gated by `may_read_table_hooks` (staff or the table's GM) and `table_seats_sheet` (an active membership of any of the character's faces). The rows are `secrets.Secret`; see the secrets glossary.
+_Avoid_: GM secrets panel (that is the staff authoring panel on the sheet), player dossier.
+
 **GMTableMembership**:
 A player's presence at a `GMTable`, pinned to a specific `Persona` (never a temporary mask) rather than to a CharacterSheet. Supports soft-leave via `left_at` so membership history outlives a persona, with one active membership per (table, persona); it is not a privacy mechanism, since the underlying character stays walkable.
 _Avoid_: seat, table member, participant.

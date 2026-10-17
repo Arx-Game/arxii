@@ -11470,6 +11470,42 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/gm/tables/{id}/players/{sheet_pk}/hooks/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description A player's hooks at this table, and the GM's additions to them (#4397).
+     *
+     *     GET lists every hook the character carries with the truths under each; POST adds a
+     *     hook (``hook`` null) or a truth under one (``hook`` set), through ``author_secret`` /
+     *     ``author_truth``. Only staff or the GM who runs the table read this (a member does not:
+     *     it shows what a subject does not know), and only for a character seated at the table
+     *     (any face of theirs with an active membership); anyone else is refused and a stranger
+     *     to the table is not found.
+     */
+    get: operations['gm_tables_players_hooks_list'];
+    put?: never;
+    /**
+     * @description A player's hooks at this table, and the GM's additions to them (#4397).
+     *
+     *     GET lists every hook the character carries with the truths under each; POST adds a
+     *     hook (``hook`` null) or a truth under one (``hook`` set), through ``author_secret`` /
+     *     ``author_truth``. Only staff or the GM who runs the table read this (a member does not:
+     *     it shows what a subject does not know), and only for a character seated at the table
+     *     (any face of theirs with an active membership); anyone else is refused and a stranger
+     *     to the table is not found.
+     */
+    post: operations['gm_tables_players_hooks_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/gm/tables/{id}/transfer_ownership/': {
     parameters: {
       query?: never;
@@ -27352,7 +27388,7 @@ export interface components {
        *     * `3` - Carefully Kept
        *     * `4` - Dangerous Secret
        */
-      level?: components['schemas']['AuthoredSecretLevelEnum'];
+      level?: components['schemas']['Level508Enum'];
       readonly level_display: string;
       /** @description What the secret is about. Null = Unknown (not yet placed). */
       category?: number | null;
@@ -27379,14 +27415,6 @@ export interface components {
       /** Format: date-time */
       readonly updated_date: string;
     };
-    /**
-     * @description * `1` - Uncommon Knowledge
-     *     * `2` - Whispers
-     *     * `3` - Carefully Kept
-     *     * `4` - Dangerous Secret
-     * @enum {integer}
-     */
-    AuthoredSecretLevelEnum: 1 | 2 | 3 | 4;
     /** @description Staff authoring shape for Secret (#3266). Provenance is fixed server-side. */
     AuthoredSecretRequest: {
       /** @description The character this secret is about — and its sole owner. */
@@ -27399,7 +27427,7 @@ export interface components {
        *     * `3` - Carefully Kept
        *     * `4` - Dangerous Secret
        */
-      level?: components['schemas']['AuthoredSecretLevelEnum'];
+      level?: components['schemas']['Level508Enum'];
       /** @description What the secret is about. Null = Unknown (not yet placed). */
       category?: number | null;
       /** @description The secret itself, as narrated. Player- or GM-authored prose. */
@@ -35993,6 +36021,14 @@ export interface components {
       readonly journal: components['schemas']['_JournalSummary'];
     };
     /**
+     * @description * `1` - Uncommon Knowledge
+     *     * `2` - Whispers
+     *     * `3` - Carefully Kept
+     *     * `4` - Dangerous Secret
+     * @enum {integer}
+     */
+    Level508Enum: 1 | 2 | 3 | 4;
+    /**
      * @description * `10` - Building
      *     * `20` - Neighborhood
      *     * `30` - Ward
@@ -42183,6 +42219,21 @@ export interface components {
       previous?: string | null;
       results: components['schemas']['TableBulletinReply'][];
     };
+    PaginatedTableHookList: {
+      /** @example 123 */
+      count: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results: components['schemas']['TableHook'][];
+    };
     PaginatedTableUpdateRequestList: {
       /** @example 123 */
       count: number;
@@ -42700,7 +42751,7 @@ export interface components {
        *     * `3` - Carefully Kept
        *     * `4` - Dangerous Secret
        */
-      level?: components['schemas']['AuthoredSecretLevelEnum'];
+      level?: components['schemas']['Level508Enum'];
       /** @description What the secret is about. Null = Unknown (not yet placed). */
       category?: number | null;
       /** @description The secret itself, as narrated. Player- or GM-authored prose. */
@@ -50122,6 +50173,58 @@ export interface components {
       body: string;
       /** Format: date-time */
       readonly created_at: string;
+    };
+    /**
+     * @description A hook a character carries, with the truths under it, for the GM at their table (#4397).
+     *
+     *     ``kind`` is the secret's category name or "Unknown" (an unplaced category is a first-class
+     *     state, see ``SecretCategory``); ``aware`` says whether the player can read this row on
+     *     their own shelf.
+     */
+    TableHook: {
+      readonly id: number;
+      readonly kind: string;
+      /** @description The secret itself, as narrated. Player- or GM-authored prose. */
+      readonly content: string;
+      /** @description What happens if it surfaces. Blank = Unknown. */
+      readonly consequences: string;
+      /**
+       * @description How deep/dangerous — narrative weight + default share-scope.
+       *
+       *     * `1` - Uncommon Knowledge
+       *     * `2` - Whispers
+       *     * `3` - Carefully Kept
+       *     * `4` - Dangerous Secret
+       */
+      readonly level: components['schemas']['Level508Enum'];
+      /**
+       * @description Where the secret came from (drives the anchor rule + OOC attribution).
+       *
+       *     * `gm` - GM/Staff authored (canon)
+       *     * `action` - Action-anchored (minted by play)
+       *     * `flavor` - Player flavor (unverified)
+       *     * `accusation` - Accusation (player-authored, consent-gated, weight-bearing)
+       */
+      readonly provenance: components['schemas']['ProvenanceEnum'];
+      readonly aware: boolean;
+      /**
+       * @description From ``context["truths_by_hook"]`` (``secrets.services.truths_by_hook``), never a
+       *     prefetch: Secret rows are idmapper-shared, and a prefetch cache left on one answers
+       *     every later reader with the first request's list.
+       */
+      readonly truths: {
+        [key: string]: unknown;
+      }[];
+    };
+    /** @description What a GM adds at the table (#4397): a hook, or a truth under one (``hook`` set). */
+    TableHookWriteRequest: {
+      hook?: number | null;
+      content: string;
+      /** @default  */
+      consequences: string;
+      /** @default 1 */
+      level: number;
+      category?: number | null;
     };
     /** @description Read serializer for table update requests (#2631). */
     TableUpdateRequest: {
@@ -67780,6 +67883,94 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['GMTable'];
+        };
+      };
+    };
+  };
+  gm_tables_players_hooks_list: {
+    parameters: {
+      query?: {
+        gm?: number;
+        /** @description A page number within the paginated result set. */
+        page?: number;
+        /** @description Number of results to return per page. */
+        page_size?: number;
+        /**
+         * @description * `active` - Active
+         *     * `archived` - Archived
+         */
+        status?: 'active' | 'archived';
+      };
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this GM Table. */
+        id: number;
+        sheet_pk: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedTableHookList'];
+        };
+      };
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['TableHook'];
+        };
+      };
+    };
+  };
+  gm_tables_players_hooks_create: {
+    parameters: {
+      query?: {
+        gm?: number;
+        /** @description A page number within the paginated result set. */
+        page?: number;
+        /** @description Number of results to return per page. */
+        page_size?: number;
+        /**
+         * @description * `active` - Active
+         *     * `archived` - Archived
+         */
+        status?: 'active' | 'archived';
+      };
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this GM Table. */
+        id: number;
+        sheet_pk: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['TableHookWriteRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedTableHookList'];
+        };
+      };
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['TableHook'];
         };
       };
     };

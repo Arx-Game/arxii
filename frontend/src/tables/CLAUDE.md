@@ -18,6 +18,10 @@ REST API client for `/api/gm/tables/` and `/api/gm/table-memberships/`.
 - **Table actions:** `archiveTable()`, `transferOwnership()`
 - **Membership reads:** `getTableMemberships()`
 - **Membership writes:** `inviteToTable()`, `removeMembership()`, `leaveTable()`
+- **Hooks (#4397):** `getPlayerHooks()`, `addPlayerHook()` on
+  `/api/gm/tables/{id}/players/{sheet}/hooks/`; the Hooks tab (`components/TableHooks.tsx`,
+  GM and staff only) lists each member's hooks with the truths under them and writes a hook
+  or a truth
 - **GM roster recruitment (#3268):** `getTableInvites()`, `mintInvite()`, `revokeInvite()`,
   `getGMQueue()`, `actionGMApplication()` (approve/deny) — the GM-facing side, rendered in
   `RecruitmentTab` on `TableDetailPage`. `claimInvite(code)` is the player-facing side (any

@@ -144,6 +144,40 @@ philosophical-reputation M2M) stay off the API and admin-only. Authoring a secre
 safe for staff self-serve; wiring its reputation consequences is a heavier edit with a wider
 blast radius, better made deliberately in Django admin than exposed on a general authoring form.
 
+## Hooks and truths at the table (#4397)
+
+A **hook** is a top-level secret a character carries that a GM may build on: a creation pick's
+secret (a distinction minted into one by `mint_distinction_secret`), a staff-written secret, a
+line the player left. A **truth** is a second secret the GM writes under it, pointing at the
+hook through `Secret.hook` (a nullable self-FK, `related_name="truths"`, one level only: a
+truth never has truths, and a truth sits under one of its own subject's hooks, both enforced
+in `Secret.clean`). A truth is minted `subject_aware=False` (`author_truth`, thin over
+`author_secret`'s new `hook` kwarg), so the player keeps reading the hook ("dreams that
+tell") on their own shelf while the truth ("the naga schemer sends them") reaches them only
+through a `SecretKnowledge` grant, like any subject-unaware secret. A past life is a hook
+until a GM makes it a truth.
+
+**The read.** `GET /api/gm/tables/<table>/players/<sheet>/hooks/` (`GMTableViewSet.player_hooks`,
+route name `gm:gm-table-player-hooks`) returns `TableHookSerializer` rows: `id`, `kind`
+(the category name, or "Unknown"), `content`, `consequences`, `level`, `provenance`, `aware`
+and `truths` (`TableTruthSerializer`). The hooks come from `hooks_for_subject` and the truths
+from `truths_by_hook` in one query, handed to the serializer through its context, never a
+`prefetch_related` onto the shared `Secret` rows (an idmapper prefetch cache left on one answers
+every later reader with the first request's list).
+
+**Who reads it.** `gm.services.may_read_table_hooks`: staff, or the GM who runs the table. A
+member of the table is refused (403; the route shows what a subject does not know), and a
+character with no active `GMTableMembership` at the table (`table_seats_sheet`, any of their
+faces) is not found. Another GM does not see the table at all (the viewset's own scoping, 404).
+
+**The write.** `POST` the same route with `{content, consequences?, level?, category?}` to add a
+hook (`author_secret`, `GM_AUTHORED`, aware), or with `hook: <id>` to write a truth under one
+(`author_truth`). The response is the hook with its truths. The frontend is the Hooks tab on
+the table page (`frontend/src/tables/components/TableHooks.tsx`), mounted for the GM and staff.
+
+Creation's own hook picks ("what you carry") arrive with the creation rework (#4395); until
+then a character's hooks are the secrets creation and staff already write.
+
 ## Discovery (the clue loop)
 
 Secrets are discovered through the existing investigation loop, not a parallel system. `Clue`

@@ -8,6 +8,7 @@
  *  - Members: role-aware member roster
  *  - Bulletin: placeholder ("Bulletin board coming soon")
  *  - Recruitment (GM/staff only, #3268): roster invites + application queue
+ *  - Hooks (GM/staff only, #4397): each member's hooks and the truths under them
  *
  * GM/staff viewers see all content + admin actions.
  * Member/guest viewers see scoped content and no admin actions.
@@ -32,6 +33,7 @@ import { LeaveTableDialog } from '../components/LeaveTableDialog';
 import { ArchiveTableDialog } from '../components/ArchiveTableDialog';
 import { TableBulletin } from '../components/TableBulletin';
 import { RecruitmentTab } from '../components/RecruitmentTab';
+import { TableHooks } from '../components/TableHooks';
 
 // ---------------------------------------------------------------------------
 // Inner detail (inside error boundary)
@@ -162,6 +164,7 @@ function TableDetailInner({ tableId }: { tableId: number }) {
             <TabsTrigger value="members">Members</TabsTrigger>
             <TabsTrigger value="bulletin">Bulletin</TabsTrigger>
             {isGMOrStaff && <TabsTrigger value="recruitment">Recruitment</TabsTrigger>}
+            {isGMOrStaff && <TabsTrigger value="hooks">Hooks</TabsTrigger>}
           </TabsList>
         </div>
 
@@ -195,6 +198,12 @@ function TableDetailInner({ tableId }: { tableId: number }) {
         {isGMOrStaff && (
           <TabsContent value="recruitment" className="mt-4">
             <RecruitmentTab table={table} />
+          </TabsContent>
+        )}
+
+        {isGMOrStaff && (
+          <TabsContent value="hooks" className="mt-4">
+            <TableHooks table={table} />
           </TabsContent>
         )}
       </Tabs>
