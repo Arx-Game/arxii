@@ -219,8 +219,9 @@ class LeaveRoomTests(TestCase):
         assert any("You leave." in m for m in msgs)
 
     def test_leave_outside_a_story_room_fails_cleanly(self) -> None:
-        """No grant for the current (ordinary) room -- fails cleanly with the
-        service's own message rather than raising."""
+        """No grant for the current (ordinary) room -- the player is told they are
+        not in a story room (#3657: the service's "no invitation" line had leaked
+        through for an ordinary room), and nothing moves."""
         origin_room = _make_room("Non-Story Origin")
         player = _make_player_character("notinastory", origin_room)
 
@@ -228,4 +229,4 @@ class LeaveRoomTests(TestCase):
 
         player.refresh_from_db()
         assert player.location == origin_room
-        assert any("no invitation" in m for m in msgs)
+        assert any("You're not in a story room." in m for m in msgs)

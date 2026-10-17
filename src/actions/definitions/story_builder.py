@@ -780,12 +780,19 @@ class LeaveStoryRoomAction(_StoryRoomPlayerAction):
             sheet = actor.sheet_data
         except (AttributeError, ObjectDoesNotExist):
             return ActionResult(success=False, message="You have no character sheet.")
+        from world.gm.models import StoryRoomGrant  # noqa: PLC0415
+
         location = actor.location
         try:
             room_profile = location.room_profile if location is not None else None
         except ObjectDoesNotExist:
             room_profile = None
-        if room_profile is None:
+        # An ordinary room has a profile too (#3657): standing in the Lantern is
+        # not being in a story room, whatever the leave service would say.
+        if (
+            room_profile is None
+            or not StoryRoomGrant.objects.filter(room=room_profile, character=sheet).exists()
+        ):
             return ActionResult(success=False, message="You're not in a story room.")
         try:
             leave_story_room(sheet=sheet, room_profile=room_profile)
