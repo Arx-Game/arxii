@@ -12,9 +12,13 @@ from django.test import override_settings
 from django.utils import timezone
 from evennia.utils.ansi import strip_ansi
 
+from evennia_extensions.factories import CharacterFactory
+from evennia_extensions.models import PlayerAllowList
 from integration_tests.harness import JourneyCase
+from world.character_sheets.factories import CharacterSheetFactory
 from world.gm.factories import GMProfileFactory
-from world.scenes.models import Persona, Scene
+from world.roster.factories import RosterEntryFactory
+from world.scenes.models import BlockContactFlag, Persona, Scene
 from world.scenes.tasks import block_finalize_task
 
 
@@ -60,6 +64,17 @@ class WearingAnotherFace(JourneyCase):
         told = self.telnet(self.ysmay, "persona Nobody")
         self.assertIn("No persona named 'Nobody'. Available: Ysmay, The Grey Lady.", told)
         self.assertIn("Usage: persona create <name>", self.telnet(self.ysmay, "persona create"))
+
+        # A face is matched by name in any case; two faces apart only by case are refused.
+        self.telnet(self.ysmay, "persona the grey lady")
+        self.telnet(self.ysmay, "pose nods.")
+        self.assertTold(self.hobb, "The Grey Lady nods.")
+        self.telnet(self.ysmay, "persona create Echo")
+        self.telnet(self.ysmay, "persona create echo")
+        self.assertIn(
+            "Multiple personas match 'echo': Echo, echo. Be more specific.",
+            self.telnet(self.ysmay, "persona echo"),
+        )
 
     def test_a_mask_is_worn_the_moment_it_is_made(self) -> None:
         told = self.telnet(self.ysmay, "persona mask Crow Mask")
@@ -153,6 +168,12 @@ class KeepingSomeoneOut(JourneyCase):
         told = self.telnet(self.hobb, "page Ysmay=Are you there?")
         self.assertIn("You page Ysmay: Are you there?", told)
         self.assertNotTold(self.ysmay, "Hobb pages: Are you there?")
+        # His side reads as an ordinary send; the attempt is flagged for staff alone.
+        self.assertTrue(
+            BlockContactFlag.objects.filter(
+                blocked_account=self.hobb.db_account, blocker_account=self.ysmay.db_account
+            ).exists()
+        )
         self.telnet(self.bram, "page Ysmay=Evening.")
         self.assertTold(self.ysmay, "Bram pages: Evening.")
 
@@ -179,6 +200,48 @@ class KeepingSomeoneOut(JourneyCase):
         self.telnet(self.hobb, "page Ysmay=Now?")
         self.assertTold(self.ysmay, "Hobb pages: Now?")
         self.assertIn("Blocked:\n  (none)", strip_ansi(self.telnet(self.ysmay, "+blocklist")))
+
+    def test_a_page_needs_a_played_character_and_respects_quiet_mode(self) -> None:
+        self.assertIn("Usage: page <character>=<message>", self.telnet(self.hobb, "page Ysmay"))
+        unplayed = CharacterFactory(db_key="Marrow", location=self.lantern)
+        CharacterSheetFactory(character=unplayed)
+        RosterEntryFactory(character_sheet=unplayed.sheet_data)
+        self.assertIn(
+            "Character 'Marrow' has no active player.",
+            self.telnet(self.hobb, "page Marrow=Anyone home?"),
+        )
+        stranger = CharacterFactory(db_key="Wren", location=self.lantern)
+        CharacterSheetFactory(character=stranger)
+        self.assertIn(
+            "Character 'Wren' is not on the roster.", self.telnet(self.hobb, "page Wren=Anyone?")
+        )
+
+        # Hidden, she reads as offline to everyone but her allow-list, and can page
+        # only them; the allow-list itself is a staff-set row.
+        self.assertIn(
+            "You are now hidden, appearing offline.", strip_ansi(self.telnet(self.ysmay, "hide"))
+        )
+        self.assertIn(
+            "Character 'Ysmay' is not online.", self.telnet(self.hobb, "page Ysmay=Are you there?")
+        )
+        self.assertNotTold(self.ysmay, "Hobb pages: Are you there?")
+        PlayerAllowList.objects.create(
+            owner=self.ysmay.db_account.player_data, allowed_player=self.bram.db_account.player_data
+        )
+        self.telnet(self.bram, "page Ysmay=Evening.")
+        self.assertTold(self.ysmay, "Bram pages: Evening.")
+        self.assertIn(
+            "You're hidden (appearing offline), so you can only page people on your allowlist.",
+            self.telnet(self.ysmay, "page Hobb=Not now."),
+        )
+        self.assertNotTold(self.hobb, "Ysmay pages: Not now.")
+        self.telnet(self.ysmay, "page Bram=Good evening.")
+        self.assertTold(self.bram, "Ysmay pages: Good evening.")
+        self.assertIn(
+            "You are no longer hidden; you appear online again.", self.telnet(self.ysmay, "unhide")
+        )
+        self.telnet(self.hobb, "page Ysmay=There you are.")
+        self.assertTold(self.ysmay, "Hobb pages: There you are.")
 
     def test_a_block_on_one_face_can_be_widened_later(self) -> None:
         told = self.telnet(self.ysmay, "+block/persona Hobb=Just this one.")

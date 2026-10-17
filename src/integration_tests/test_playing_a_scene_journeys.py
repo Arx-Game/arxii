@@ -13,9 +13,16 @@ from world.checks.factories import CheckTypeFactory
 from world.checks.models import CheckCall, CheckCallTarget
 from world.gm.constants import GMLevel
 from world.gm.factories import GMProfileFactory
-from world.scenes.constants import InteractionMode
+from world.magic.factories import CharacterResonanceFactory, ResonanceFactory
+from world.scenes.constants import InteractionMode, ReactionWindowKind, SceneRoundMode
 from world.scenes.factories import PlaceFactory
-from world.scenes.models import Interaction, Scene, SceneParticipation
+from world.scenes.models import (
+    Interaction,
+    Scene,
+    SceneParticipation,
+    SceneRound,
+    WindowReaction,
+)
 from world.traits.factories import CheckSystemSetupFactory
 
 # A roll of 95 lands in the top band of every chart CheckSystemSetupFactory builds.
@@ -359,3 +366,107 @@ class ReactingToAPose(JourneyCase):
         self.assertIn(
             "No character named 'Nobody' here.", self.telnet(self.ysmay, "react favorite Nobody #1")
         )
+
+    def test_an_entrance_is_answered_with_one_of_the_posers_resonances(self) -> None:
+        # The pose opened its entrance window on its own; the answer names one of
+        # Hobb's resonances, so he has to hold one first.
+        CharacterResonanceFactory(
+            character_sheet=self.hobb.sheet_data, resonance=ResonanceFactory(name="Ember")
+        )
+        self.assertIn("Reaction recorded.", self.telnet(self.ysmay, "react entrance Hobb #1 Ember"))
+        self.assertEqual(
+            WindowReaction.objects.filter(window__kind=ReactionWindowKind.ENTRANCE).count(), 1
+        )
+        self.assertIn(
+            "You have already reacted to this.",
+            self.telnet(self.ysmay, "react entrance Hobb #1 Ember"),
+        )
+
+
+class PacingTheRoom(JourneyCase):
+    """Ysmay runs a round in her scene: sets its pace, guards an ally, resolves it."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.lantern = self.make_room("The Lantern")
+        self.street = self.make_room("Lantern Street")
+        self.ysmay = self.make_player("Ysmay", room=self.lantern)
+        self.hobb = self.make_player("Hobb", room=self.lantern)
+        self.bram = self.make_player("Bram", room=self.street)
+        self.watch(self.hobb, self.bram)
+
+    def current_round(self) -> SceneRound:
+        return SceneRound.objects.filter(room=self.lantern.room_profile).order_by("-pk").first()
+
+    def test_the_owner_sets_the_pace_and_a_declaration_holds_it(self) -> None:
+        self.telnet(self.ysmay, "scene start The Lantern Hour")
+        self.assertIn(
+            "There is no active round here.", self.telnet(self.ysmay, "scene round strict")
+        )
+        self.assertEqual(self.web(self.ysmay, "start_round").detail.message, "A round begins.")
+        self.assertIn(
+            "Scene: The Lantern Hour. Round 1 (pose_order).", self.telnet(self.hobb, "scene")
+        )
+        self.assertEqual(self.web(self.hobb, "join_round").detail.message, "You join the round.")
+
+        self.assertIn(
+            "Quorum and cap must be numbers.",
+            self.telnet(self.ysmay, "scene round strict quorum=abc"),
+        )
+        self.assertIn(
+            "Quorum and cap must be numbers.", self.telnet(self.ysmay, "scene round strict cap=xyz")
+        )
+        self.assertIn(
+            "Round mode set to strict.",
+            self.telnet(self.ysmay, "scene round strict quorum=70 cap=2 lock=on"),
+        )
+        rnd = self.current_round()
+        self.assertEqual(rnd.mode, SceneRoundMode.STRICT)
+        self.assertEqual(rnd.advance_quorum_pct, 70)
+        self.assertEqual(rnd.max_actions_per_round, 2)
+        self.assertTrue(rnd.per_target_repeat_lock)
+        self.telnet(self.ysmay, "scene round strict lock=off")
+        rnd.refresh_from_db()
+        self.assertFalse(rnd.per_target_repeat_lock)
+        self.assertIn("Scene: The Lantern Hour. Round 1 (strict).", self.telnet(self.hobb, "scene"))
+
+        self.bram.location = self.lantern
+        self.bram.save()
+        self.assertIn(
+            "Only the scene's GM or an owner can set the round mode.",
+            self.telnet(self.bram, "scene round open"),
+        )
+
+        # Guarding and sheltering an ally are declarations into the strict round.
+        self.assertIn("Usage: scene interpose <ally>.", self.telnet(self.ysmay, "scene interpose"))
+        self.assertIn("Usage: scene succor <ally>.", self.telnet(self.ysmay, "scene succor"))
+        self.assertIn(
+            "No active ally named 'Bram' here.", self.telnet(self.ysmay, "scene interpose Bram")
+        )
+        self.assertIn(
+            "You ready yourself to guard your ally.",
+            self.telnet(self.ysmay, "scene interpose Hobb"),
+        )
+        self.assertIn(
+            "You move to shelter your ally.", self.telnet(self.ysmay, "scene succor Hobb")
+        )
+
+        # A third participant keeps the round short of its quorum here, so a lone
+        # declaration holds rather than resolving the round on its own.
+        self.assertEqual(self.web(self.bram, "join_round").detail.message, "You join the round.")
+        # A declaration on the table holds the mode until the round resolves.
+        self.assertEqual(self.web(self.hobb, "pass_round").detail.message, "You pass.")
+        self.assertIn(
+            "Resolve the current declarations first (force-resolve), then change the mode.",
+            self.telnet(self.ysmay, "scene round pose_order"),
+        )
+        self.assertEqual(rnd.mode, SceneRoundMode.STRICT)
+        self.assertEqual(
+            self.web(self.ysmay, "force_resolve_round").detail.message,
+            "You force the round to resolve.",
+        )
+        self.assertIn(
+            "Round mode set to pose_order.", self.telnet(self.ysmay, "scene round pose_order")
+        )
+        self.assertEqual(self.current_round().mode, SceneRoundMode.POSE_ORDER)
+        self.assertIn("The scene comes to a close.", self.telnet(self.ysmay, "scene finish"))

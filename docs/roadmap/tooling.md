@@ -64,7 +64,19 @@ clearance fan-out, the staff canon queue (`canonreview`), the hidden beat, title
 resolution and the twin-named scene rooms on the way; the event journey speaks before
 `event start` to pin the cache fix on that path too. The ledger is
 `docs/testing/ledger/commands.csv` (those six rows confirmed `R`; the rest still the
-tool's proposal).
+tool's proposal). Tranche 5 (2026-10-17) does the same for the scenes and gatherings
+hand-built command tests: `test_scene_command`, `test_scene_round_journey_e2e`,
+`test_react_command`, `test_places`, `test_event_command_journey`, `test_persona_command`
+and `test_blocking_commands` (76 tests) are removed, `test_cmd_page` keeps only its web
+form descriptor, and `test_scene_gm_enrollment_e2e` is held for the combat ledger; the
+journeys gained the round pacing (mode, knobs, interpose, succor, the force-resolve
+guard), the entrance reaction, event grandeur, persona name collisions and the page
+rules (an unplayed character, the roster, `hide` and the allow-list both ways). The page
+journey found a hidden player's allow-list never letting anyone through (the check
+compared the puppeting character's pk against account ids), and the pacing journey
+found a strict round that had seen one `scene interpose` or `scene succor` unable to
+leave STRICT again (the guard counted the leftover rows the resolve sweep keeps by
+design); both fixed in place.
 
 ## Built (2026-09-30, #4064 — the reviewed delete, and admin pages for domains and fealty)
 
