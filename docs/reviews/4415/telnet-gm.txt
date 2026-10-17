@@ -1,0 +1,188 @@
+===== 2026-10-17 23:26:23 telnet as gm4415 (Warden Hale (test))
+> connect gm4415 ****
+> @ic Warden Hale (test)
+Already controlling Warden Hale (test).
+> gm prompts
+[1] Standoff: Grudge-bearers (test)
+  Grudge-bearers (test): cause fires. Cause: Hatred. Reason: Pell Hartwick (test) matches a faction rule that provokes them. Force: party 10, them 1.6.
+  gm prompt confirm 1 | gm prompt hold 1 | gm prompt override 1 <reason>
+> gm prompt hold 1
+Held for one action.
+> standoff
+Standoff at The Salt Quay (test) (GM):
+  [1] Quay crowd (test) (3) - Open
+    Cause: Hunger (holds)
+    Hunger margin 0%, widening 10 each action nobody feeds them.
+    Drive: Quay crowd (test) drive (test) (Minor)
+    Speaks: no language
+    Force: party 10.0, them 8.0 (margin 0%)
+    Morale: Quay docker 1 (test) 100 (steady), Quay docker 2 (test) 100 (steady), Quay docker 3 (test) 100 (steady)
+  [2] Den hounds (test) (2) - Open
+    Cause: Territory (holds)
+    Patience: 0 of 3 actions.
+    Drive: Den hounds (test) drive (test) (Minor)
+    Speaks: no language
+    Force: party 10.0, them 4.0 (margin 0%)
+    Morale: Den hound 1 (test) 100 (steady), Den hound 2 (test) 100 (steady)
+  [3] Grudge-bearers (test) (2) - Open, broken
+    Cause: Hatred (holds)
+    Drive: Grudge-bearers (test) drive (test) (Minor)
+    Speaks: no language
+    Faction rule: matches everyone (from Grudge-bearers (test)) - provokes them - matches Pell Hartwick (test), Ser Noble (test)
+    Force: party 10.0, them 1.6 (margin 0%)
+    Morale: Grudge-bearer 1 (test) 25 (break), Grudge-bearer 2 (test) 25 (break)
+  [4] Paid guards (test) (2) - Settled
+    Cause: Orders (holds)
+    Drive: Paid guards (test) drive (test) (Minor)
+    Speaks: no language
+    Force: party 10.0, them 4.0 (margin 0%)
+    Morale: Paid guard 1 (test) 100 (steady), Paid guard 2 (test) 100 (steady)
+  [5] Toll-takers (test) (2) - Settled
+    Cause: Predation (holds)
+    Drive: Toll-takers (test) drive (test) (Minor)
+    Speaks: no language
+    Force: party 10.0, them 20.0 (margin 0%)
+    Morale: Toll-taker 1 (test) 100 (steady), Toll-taker 2 (test) 100 (steady)
+GM: gm standoff shake <group id> <reason> (or steady)
+===== 2026-10-17 23:26:56 telnet as gm4415 (Warden Hale (test))
+> connect gm4415 ****
+> @ic Warden Hale (test)
+Already controlling Warden Hale (test).
+> standoff
+Standoff at The Salt Quay (test) (GM):
+  [1] Quay crowd (test) (3) - Open
+    Cause: Hunger (holds)
+    Hunger margin 10%, widening 10 each action nobody feeds them.
+    Drive: Quay crowd (test) drive (test) (Minor)
+    Speaks: no language
+    Force: party 10.0, them 8.0 (margin 10%)
+    Morale: Quay docker 1 (test) 100 (steady), Quay docker 2 (test) 100 (steady), Quay docker 3 (test) 100 (steady)
+  [2] Den hounds (test) (2) - Open
+    Cause: Territory (holds)
+    Patience: 1 of 3 actions.
+    Drive: Den hounds (test) drive (test) (Minor)
+    Speaks: no language
+    Force: party 10.0, them 4.0 (margin 0%)
+    Morale: Den hound 1 (test) 100 (steady), Den hound 2 (test) 100 (steady)
+  [3] Grudge-bearers (test) (2) - Open, broken
+    Cause: Hatred (holds)
+    Drive: Grudge-bearers (test) drive (test) (Minor)
+    Speaks: no language
+    Faction rule: matches everyone (from Grudge-bearers (test)) - provokes them - matches Pell Hartwick (test), Ser Noble (test)
+    Force: party 10.0, them 1.6 (margin 0%)
+    Morale: Grudge-bearer 1 (test) 25 (break), Grudge-bearer 2 (test) 25 (break)
+  [4] Paid guards (test) (2) - Settled
+    Cause: Orders (holds)
+    Drive: Paid guards (test) drive (test) (Minor)
+    Speaks: no language
+    Force: party 10.0, them 4.0 (margin 0%)
+    Morale: Paid guard 1 (test) 100 (steady), Paid guard 2 (test) 100 (steady)
+  [5] Toll-takers (test) (2) - Settled
+    Cause: Predation (holds)
+    Drive: Toll-takers (test) drive (test) (Minor)
+    Speaks: no language
+    Force: party 10.0, them 20.0 (margin 0%)
+    Morale: Toll-taker 1 (test) 100 (steady), Toll-taker 2 (test) 100 (steady)
+GM: gm standoff shake <group id> <reason> (or steady)
+===== 2026-10-17 23:27:45 telnet as gm4415 (Warden Hale (test))
+> connect gm4415 ****
+> @ic Warden Hale (test)
+Already controlling Warden Hale (test).
+> standoff
+Standoff at The Salt Quay (test) (GM):
+  [1] Quay crowd (test) (3) - Open, deciding
+    Cause: Hunger (fires: The party does not outweigh them by their margin, widened by hunger to 30%.)
+    Hunger margin 30%, widening 10 each action nobody feeds them.
+    Proposal [2]: The party does not outweigh them by their margin, widened by hunger to 30%. (gm prompt confirm, hold or override 2)
+    Drive: Quay crowd (test) drive (test) (Minor)
+    Speaks: no language
+    Force: party 10.0, them 8.0 (margin 30%)
+    Morale: Quay docker 1 (test) 100 (steady), Quay docker 2 (test) 100 (steady), Quay docker 3 (test) 100 (steady)
+  [2] Den hounds (test) (2) - Open, deciding
+    Cause: Territory (fires: They waited 3 actions for the party to settle or leave.)
+    Patience: 3 of 3 actions.
+    Proposal [3]: They waited 3 actions for the party to settle or leave. (gm prompt confirm, hold or override 3)
+    Drive: Den hounds (test) drive (test) (Minor)
+    Speaks: no language
+    Force: party 10.0, them 4.0 (margin 0%)
+    Morale: Den hound 1 (test) 100 (steady), Den hound 2 (test) 100 (steady)
+  [3] Grudge-bearers (test) (2) - Open, broken
+    Cause: Hatred (holds)
+    Drive: Grudge-bearers (test) drive (test) (Minor)
+    Speaks: no language
+    Faction rule: matches everyone (from Grudge-bearers (test)) - provokes them - matches Pell Hartwick (test), Ser Noble (test)
+    Force: party 10.0, them 1.6 (margin 0%)
+    Morale: Grudge-bearer 1 (test) 25 (break), Grudge-bearer 2 (test) 25 (break)
+  [4] Paid guards (test) (2) - Settled
+    Cause: Orders (holds)
+    Drive: Paid guards (test) drive (test) (Minor)
+    Speaks: no language
+    Force: party 10.0, them 4.0 (margin 0%)
+    Morale: Paid guard 1 (test) 100 (steady), Paid guard 2 (test) 100 (steady)
+  [5] Toll-takers (test) (2) - Settled
+    Cause: Predation (holds)
+    Drive: Toll-takers (test) drive (test) (Minor)
+    Speaks: no language
+    Force: party 10.0, them 20.0 (margin 0%)
+    Morale: Toll-taker 1 (test) 100 (steady), Toll-taker 2 (test) 100 (steady)
+GM: gm standoff shake <group id> <reason> (or steady)
+> gm prompts
+[3] Standoff: Den hounds (test)
+  Den hounds (test): cause fires. Cause: Territory. Reason: They waited 3 actions for the party to settle or leave. Force: party 10, them 4.
+  gm prompt confirm 3 | gm prompt hold 3 | gm prompt override 3 <reason>
+[2] Standoff: Quay crowd (test)
+  Quay crowd (test): cause fires. Cause: Hunger. Reason: The party does not outweigh them by their margin, widened by hunger to 30%. Force: party 10, them 8.
+  gm prompt confirm 2 | gm prompt hold 2 | gm prompt override 2 <reason>
+===== 2026-10-17 23:36:02 telnet as gm4415 (Warden Hale (test))
+> connect gm4415 ****
+> @ic Warden Hale (test)
+Already controlling Warden Hale (test).
+> gm prompts
+[4] Standoff: Toll-takers (test)
+  Toll-takers (test): cause fires. Cause: Predation. Reason: A hold on them ended and their cause still holds: The party does not outweigh them by their margin. Force: party 10, them 20.
+  gm prompt confirm 4 | gm prompt hold 4 | gm prompt override 4 <reason>
+[3] Standoff: Den hounds (test)
+  Den hounds (test): cause fires. Cause: Territory. Reason: They waited 3 actions for the party to settle or leave. Force: party 10, them 4.
+  gm prompt confirm 3 | gm prompt hold 3 | gm prompt override 3 <reason>
+[2] Standoff: Quay crowd (test)
+  Quay crowd (test): cause fires. Cause: Hunger. Reason: The party does not outweigh them by their margin, widened by hunger to 30%. Force: party 10, them 8.
+  gm prompt confirm 2 | gm prompt hold 2 | gm prompt override 2 <reason>
+> standoff
+Standoff at The Salt Quay (test) (GM):
+  [1] Quay crowd (test) (3) - Open, deciding
+    Cause: Hunger (fires: The party does not outweigh them by their margin, widened by hunger to 30%.)
+    Hunger margin 30%, widening 10 each action nobody feeds them.
+    Proposal [2]: The party does not outweigh them by their margin, widened by hunger to 30%. (gm prompt confirm, hold or override 2)
+    Drive: Quay crowd (test) drive (test) (Minor)
+    Speaks: no language
+    Force: party 10.0, them 8.0 (margin 30%)
+    Morale: Quay docker 1 (test) 100 (steady), Quay docker 2 (test) 100 (steady), Quay docker 3 (test) 100 (steady)
+  [2] Den hounds (test) (2) - Open, deciding
+    Cause: Territory (fires: They waited 3 actions for the party to settle or leave.)
+    Patience: 3 of 3 actions.
+    Proposal [3]: They waited 3 actions for the party to settle or leave. (gm prompt confirm, hold or override 3)
+    Drive: Den hounds (test) drive (test) (Minor)
+    Speaks: no language
+    Force: party 10.0, them 4.0 (margin 0%)
+    Morale: Den hound 1 (test) 100 (steady), Den hound 2 (test) 100 (steady)
+  [3] Grudge-bearers (test) (2) - Open, broken
+    Cause: Hatred (holds)
+    Drive: Grudge-bearers (test) drive (test) (Minor)
+    Speaks: no language
+    Faction rule: matches everyone (from Grudge-bearers (test)) - provokes them - matches Pell Hartwick (test), Ser Noble (test)
+    Force: party 10.0, them 1.6 (margin 0%)
+    Morale: Grudge-bearer 1 (test) 25 (break), Grudge-bearer 2 (test) 25 (break)
+  [4] Paid guards (test) (0) - Settled
+    Cause: Orders (holds)
+    Drive: Paid guards (test) drive (test) (Minor)
+    Speaks: no language
+    Force: party 10.0, them 0 (margin 0%)
+    Morale:
+  [5] Toll-takers (test) (2) - Open, deciding
+    Cause: Predation (fires: The party does not outweigh them by their margin.)
+    Proposal [4]: A hold on them ended and their cause still holds: The party does not outweigh them by their margin. (gm prompt confirm, hold or override 4)
+    Drive: Toll-takers (test) drive (test) (Minor)
+    Speaks: no language
+    Force: party 10.0, them 20.0 (margin 0%)
+    Morale: Toll-taker 1 (test) 100 (steady), Toll-taker 2 (test) 100 (steady)
+GM: gm standoff shake <group id> <reason> (or steady)

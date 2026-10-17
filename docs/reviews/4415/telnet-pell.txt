@@ -1,0 +1,88 @@
+===== 2026-10-17 23:26:41 telnet as pell4415 (Pell Hartwick (test))
+> connect pell4415 ****
+> @ic Pell Hartwick (test)
+Already controlling Pell Hartwick (test).
+> standoff
+Standoff at The Salt Quay (test):
+  Quay crowd (test) (3) - Open
+    read (Read (test)): Moderate
+    There is more to read here (2 unread).
+    press Show steel (test): Moderate
+  Den hounds (test) (2) - Open
+    read (Read (test)): Moderate
+    There is more to read here (2 unread).
+    press Show steel (test): Moderate
+  Grudge-bearers (test) (2) - Open, broken
+    read (Read (test)): Moderate
+    There is more to read here (3 unread).
+    You feel: PLACEHOLDER angle (test)
+    press Show steel (test): Moderate
+  Paid guards (test) (2) - Settled
+    There is more to read here (2 unread).
+  Toll-takers (test) (2) - Settled
+    There is more to read here (2 unread).
+You can: read, press, display, terms, fight, share.
+> standoff read quay crowd (test)
+Pell Hartwick (test) reads the Quay crowd (test): success.
+You study them. Success.
+Cause: Hunger.
+===== 2026-10-17 23:27:30 telnet as pell4415 (Pell Hartwick (test))
+> connect pell4415 ****
+> @ic Pell Hartwick (test)
+Already controlling Pell Hartwick (test).
+> standoff read grudge-bearers (test)
+Pell Hartwick (test) reads the Grudge-bearers (test): partial success.
+You study them. Partial success.
+Cause: Hatred.
+> standoff
+Standoff at The Salt Quay (test):
+  Quay crowd (test) (3) - Open, deciding
+    read (Read (test)): Moderate
+    There is more to read here (1 unread).
+    Cause: Hunger.
+    press Show steel (test): Moderate
+  Den hounds (test) (2) - Open, deciding
+    read (Read (test)): Moderate
+    There is more to read here (1 unread).
+    Cause: Territory.
+    press Show steel (test): Moderate
+  Grudge-bearers (test) (2) - Open, broken
+    read (Read (test)): Moderate
+    There is more to read here (2 unread).
+    Cause: Hatred.
+    You feel: PLACEHOLDER angle (test)
+    press Show steel (test): Moderate
+  Paid guards (test) (2) - Settled
+    There is more to read here (2 unread).
+  Toll-takers (test) (2) - Settled
+    There is more to read here (2 unread).
+You can: read, press, display, terms, fight, share.
+===== 2026-10-17 23:36:17 telnet as pell4415 (Pell Hartwick (test))
+> connect pell4415 ****
+> @ic Pell Hartwick (test)
+Already controlling Pell Hartwick (test).
+> standoff
+Standoff at The Salt Quay (test):
+  Quay crowd (test) (3) - Open, deciding
+    read (Read (test)): Moderate
+    There is more to read here (1 unread).
+    Cause: Hunger.
+    press Show steel (test): Moderate
+  Den hounds (test) (2) - Open, deciding
+    read (Read (test)): Moderate
+    There is more to read here (1 unread).
+    Cause: Territory.
+    press Show steel (test): Moderate
+  Grudge-bearers (test) (2) - Open, broken
+    read (Read (test)): Moderate
+    There is more to read here (2 unread).
+    Cause: Hatred.
+    You feel: PLACEHOLDER angle (test)
+    press Show steel (test): Moderate
+  Paid guards (test) (0) - Settled
+    There is more to read here (2 unread).
+  Toll-takers (test) (2) - Open, deciding
+    read (Read (test)): Hard
+    There is more to read here (2 unread).
+    press Show steel (test): Moderate
+You can: read, press, display, terms, fight, share.
