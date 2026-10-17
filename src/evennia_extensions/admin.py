@@ -22,6 +22,7 @@ from evennia_extensions.models import (
     RoomProfile,
     RoomSizeTier,
 )
+from world.admin_utils import OneRowPerFormSet
 
 logger = logging.getLogger(__name__)
 
@@ -315,6 +316,7 @@ class RoomDescVariantInline(admin.TabularInline):
     """Season/time-of-day description variants authored for a room (#3291)."""
 
     model = RoomDescVariant
+    formset = OneRowPerFormSet
     extra = 1
     fields: ClassVar[list[str]] = ["season", "phase", "description"]
 

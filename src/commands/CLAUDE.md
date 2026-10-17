@@ -111,6 +111,13 @@ actions, backends, and service functions.
   `say (tongue) text` tag (`_LANGUAGE_TAG_RE`, iexact `Language` name lookup) sets `language_id`
   for that one say only, without touching the speaker's sticky `current_language` — an unknown
   tongue raises `CommandError` naming it; no tag leaves kwargs unchanged (the sticky/current path).
+  `CmdWhisper` and `CmdMutter` echo the speaker their own line (`You whisper to Hobb, "..."`,
+  `You mutter to Hobb, "..."`), tagged `interaction_echo` so the web client drops the frame
+  as it does a pose's (#3657: telnet had answered both with nothing); `CmdPemit` echoes the
+  narrator the same way (`You narrate to Ysmay, Hobb: ...`). `CmdPage` takes its
+  sender from the session's puppet, or from the caller when the caller is a character and
+  no session is on the line (#3657: with no sender, the block and mute checks ran against
+  nobody and a blocked player's page was delivered).
 - **`language.py`**: `CmdSpeak` (`speak [<language>]`, #2993) — telnet face of
   `SetLanguageAction`; sets (or, with no argument, resets to the universal default) the caller's
   sticky `current_language` via iexact `Language` name lookup. `CmdTrainLanguage`
@@ -198,8 +205,9 @@ actions, backends, and service functions.
 - **`offer_response.py`**: `CmdDecline` (`decline`) — registry-offer decline; see also
   extended `CmdAccept` in `consent.py`.
 - **`scene.py`**: `CmdScene` (`scene`) — the scene-lifecycle namespace, thin over the Actions in
-  `actions/definitions/scenes.py`: `scene start [name]` (`StartSceneAction`, also enrolls any
-  present table-owning GM via `enroll_present_table_gms`, #2113), `scene finish`
+  `actions/definitions/scenes.py`: `scene start [name]` (`StartSceneAction`, which keeps the
+  typed name (#3657: it was parsed and dropped, so every scene was "Scene at <room>") and also
+  enrolls any present table-owning GM via `enroll_present_table_gms`, #2113), `scene finish`
   (`FinishSceneAction`), `scene gm <name>` (`GrantSceneGMAction`, #2113 — the fallback GM grant
   for cases auto-enrollment can't reach: gated on `actor_can_administer_scene` + the target
   holding a `GMProfile`), `scene round [...]` (`SetRoundModeAction`, `actions/definitions/
@@ -208,6 +216,16 @@ actions, backends, and service functions.
   action). Web reaches `StartSceneAction`/`FinishSceneAction`/`GrantSceneGMAction` through the
   same generic available-actions dispatcher. See "Scene Administration" in
   `docs/systems/scenes.md`. No business logic in the command.
+- **`scene_checks.py`**: `CmdCheck` (`check`, #3295) and `CmdCallCheck` (`callcheck`), thin over
+  the five Actions in `actions/definitions/scene_checks.py`. `check` / `check find <term>`
+  browse the catalog (a read, no Action); `check <name> [at <band>]` rolls `SceneSelfCheckAction`
+  and the narration reaches the room; `check answer <id>` / `check decline <id>` answer a GM's
+  call; `check propose <name>=<intent>` sends a proposal to staff. `callcheck
+  <name>=<a>,<b> [at <band>]` (Junior GM or higher, `MinimumGMLevelPrerequisite`) runs
+  `CallForCheckAction`, which tells each target the call and the two lines to type
+  (#3657: the web feed got the call and the narration carried no id, so a telnet target was
+  never prompted) and echoes the narration to telnet bystanders on commit. No business logic
+  in the command.
 - **`encounter.py`**: `CmdEncounter` (`encounter`, #1494, create #3388) — the GM
   combat-encounter lifecycle namespace, thin over the Actions in
   `actions/definitions/gm_combat.py` (`create`/alias `start`/`begin`/`resolve`/`add`/`default`/

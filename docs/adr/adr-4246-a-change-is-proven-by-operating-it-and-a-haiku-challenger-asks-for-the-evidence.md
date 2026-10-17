@@ -59,3 +59,15 @@ that evidence is consistent (the PR head commit, timestamps, matching error text
 cannot prove it is real; evidence produced by CI can, which is why #4247 matters. The
 `issue_comment` trigger runs the default-branch workflow, so a change to the answer
 loop is only exercised after it merges.
+
+## Amendment (2026-10-16, #4390): one helper for production-dump checks
+
+The standing preference is that every migration or data check is proven against the
+newest production dump. Eight PRs each hand-wrote the fetch, restore, migrate and
+cleanup, and the evidence challenger had to ask each time how the dump was fetched.
+`just prod-migration-check` (`tools/prod_migration_check.sh`) is now the one sanctioned
+path: read-only `dev_reader` key, a fresh `scratch_pmc_` database that the script
+refuses to replace with any other name, forward / back / forward, row counts, cleanup
+on every exit path, under the shared heavy-command lock. The alternative rejected was
+documenting the recipe in the skills only, which is what produced the eight variants;
+`just pull-prod` stays the tool for refreshing `arxiidev`, and is not used for checks.

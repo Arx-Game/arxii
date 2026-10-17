@@ -4,6 +4,7 @@ from django.contrib import admin, messages
 from django.db.models import Count, OuterRef, Q, Subquery
 from django.http import HttpRequest
 
+from world.admin_utils import OneRowPerFormSet
 from world.clues.models import Clue
 from world.codex.models import (
     BeginningsCodexGrant,
@@ -26,6 +27,7 @@ class CodexSubjectInline(admin.TabularInline):
     """Inline admin for subjects within a category."""
 
     model = CodexSubject
+    formset = OneRowPerFormSet
     extra = 0
     fields = ["name", "parent", "display_order"]
     fk_name = "category"
@@ -50,6 +52,7 @@ class CodexEntryInline(admin.TabularInline):
     """Inline admin for entries within a subject."""
 
     model = CodexEntry
+    formset = OneRowPerFormSet
     extra = 0
     fields = ["name", "share_cost", "learn_cost", "display_order"]
 
@@ -74,6 +77,7 @@ class CodexEntryFilingInline(admin.TabularInline):
     """Inline admin for an entry's secondary listings under other subjects."""
 
     model = CodexEntryFiling
+    formset = OneRowPerFormSet
     extra = 0
     fields = ["subject", "sort_order"]
     autocomplete_fields = ["subject"]
@@ -167,6 +171,7 @@ class BeginningsGrantInline(_GrantInline):
     """Codex entries granted by a Beginnings choice."""
 
     model = BeginningsCodexGrant
+    formset = OneRowPerFormSet
     fields = ["beginnings", "is_perspective", "holders_today"]
     autocomplete_fields = ["beginnings"]
     verbose_name_plural = "Known from birth: Beginnings codex grants"
@@ -176,6 +181,7 @@ class TraditionGrantInline(_GrantInline):
     """Codex entries granted by a Tradition."""
 
     model = TraditionCodexGrant
+    formset = OneRowPerFormSet
     fields = ["tradition", "is_perspective", "holders_today"]
     autocomplete_fields = ["tradition"]
     verbose_name_plural = "Taught by a tradition: Tradition codex grants"
@@ -185,6 +191,7 @@ class OrganizationGrantInline(_GrantInline):
     """Codex entries granted to an Organization's membership on joining."""
 
     model = OrganizationCodexGrant
+    formset = OneRowPerFormSet
     fields = ["organization", "holders_today"]
     autocomplete_fields = ["organization"]
     verbose_name_plural = "Taught on joining: Organization codex grants"
@@ -194,6 +201,7 @@ class PathGrantInline(_GrantInline):
     """Codex entries granted by a Path choice."""
 
     model = PathCodexGrant
+    formset = OneRowPerFormSet
     fields = ["path", "holders_today"]
     autocomplete_fields = ["path"]
     verbose_name_plural = "Path codex grants"
@@ -203,6 +211,7 @@ class DistinctionGrantInline(_GrantInline):
     """Codex entries granted by a Distinction."""
 
     model = DistinctionCodexGrant
+    formset = OneRowPerFormSet
     fields = ["distinction", "holders_today"]
     autocomplete_fields = ["distinction"]
     verbose_name_plural = "Distinction codex grants"

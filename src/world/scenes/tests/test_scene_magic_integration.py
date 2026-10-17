@@ -17,9 +17,8 @@ from evennia_extensions.factories import AccountFactory
 from world.character_sheets.models import CharacterSheet
 from world.checks.factories import create_social_action_templates
 from world.conditions.factories import (
-    ConditionTemplateFactory,
+    SoulfrayTemplateFactory,
 )
-from world.magic.audere import SOULFRAY_CONDITION_NAME
 from world.magic.constants import TargetKind
 from world.magic.factories import (
     CharacterAnimaFactory,
@@ -317,8 +316,7 @@ class TestEnhancedActionEdgeCases(SceneMagicTestMixin, TestCase):
         anima.save(update_fields=["current"])
 
         # Create the Soulfray condition template (required for the condition to be created)
-        ConditionTemplateFactory(
-            name=SOULFRAY_CONDITION_NAME,
+        SoulfrayTemplateFactory(
             has_progression=True,
         )
 

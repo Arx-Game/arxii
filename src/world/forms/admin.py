@@ -2,6 +2,7 @@ from django import forms
 from django.contrib import admin
 from django.db.models import Count, Prefetch
 
+from world.admin_utils import OneRowPerFormSet
 from world.forms.models import (
     ActiveAlternateSelf,
     AlternateSelf,
@@ -54,6 +55,7 @@ class BuildAdmin(admin.ModelAdmin):
 
 class FormTraitOptionInline(admin.TabularInline):
     model = FormTraitOption
+    formset = OneRowPerFormSet
     extra = 1
 
 
@@ -160,6 +162,7 @@ class SpeciesFormTraitAdmin(admin.ModelAdmin):
 
 class CharacterFormValueInline(admin.TabularInline):
     model = CharacterFormValue
+    formset = OneRowPerFormSet
     extra = 0
     autocomplete_fields = ["trait", "option"]
 

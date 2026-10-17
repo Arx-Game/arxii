@@ -21,11 +21,17 @@ from rest_framework.test import APITestCase
 
 from world.classes.factories import PathFactory
 from world.classes.models import PathStage
-from world.conditions.factories import ConditionStageFactory, ConditionTemplateFactory
-from world.magic.audere import SOULFRAY_CONDITION_NAME
+from world.conditions.factories import (
+    ConditionStageFactory,
+    SoulfrayTemplateFactory,
+)
 from world.magic.audere_majora import PendingAudereMajoraOffer
 from world.magic.exceptions import AudereMajoraOfferNotFoundError, GiftResonanceUnresolvable
-from world.magic.factories import IntensityTierFactory, wire_audere_power_multipliers
+from world.magic.factories import (
+    IntensityTierFactory,
+    ensure_soulfray_config,
+    wire_audere_power_multipliers,
+)
 from world.magic.tests.majora_fixtures import build_crossing_world
 from world.progression.models import PathIntent
 from world.roster.factories import RosterEntryFactory, RosterTenureFactory
@@ -89,9 +95,8 @@ class PendingAudereMajoraOfferListTests(APITestCase):
         self.my_account = self.my_tenure.player_data.account
 
         # Shared authored rows to avoid UNIQUE constraint collision
-        soulfray_template = ConditionTemplateFactory(
-            name=SOULFRAY_CONDITION_NAME, has_progression=True
-        )
+        soulfray_template = SoulfrayTemplateFactory(has_progression=True)
+        ensure_soulfray_config()
         ConditionStageFactory(condition=soulfray_template, stage_order=1, name="Fraying_list")
         ConditionStageFactory(condition=soulfray_template, stage_order=2, name="Tearing_list")
         soulfray_stage = ConditionStageFactory(

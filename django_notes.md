@@ -628,4 +628,23 @@ hundred rows (`RoomProfile`, `CharacterSheet`, `Persona`, `ItemInstance`); a sma
 vocabulary table (a `TextChoices` stand-in, a catalog of dozens) may keep the select.
 Evennia's own admins are never edited (see CLAUDE.md, "Never edit dependency code").
 
+## Admin Inlines With a One-Row-Per-Value Rule
+
+An inline whose model is unique over the parent key plus another field (a tradition's
+gift grants, a chart's levels, an organization's ranks) sets
+`formset = OneRowPerFormSet` from `world.admin_utils`, or a subclass of it. Django's own
+refusal for a doubled row is "Please correct the duplicate data for gift." - it names
+neither the gift nor the two rows, and a staff member authoring a tradition put the same
+gift on two rows (one per starting technique) and could not tell what was wrong (#4380).
+The shared formset reads the model's own constraints and answers "Gift 'Shadowcraft' is
+already on another row." on the doubled row and at the top of the inline; set
+`duplicate_hint` on a subclass to add what to do instead. A custom formset on such an
+inline subclasses `OneRowPerFormSet` rather than `BaseInlineFormSet` and keeps its own
+`clean()`. `web/admin/tests/test_inline_duplicate_rows.py` walks the admin registry and
+fails for any first-party inline with such a rule still on the stock formset; Evennia's
+own inlines stay as shipped. When a row is meant to hold several picks (techniques,
+members), give the inline a picker that can take more than one without ctrl-click
+(`filter_horizontal` on a `StackedInline`), or the natural reading becomes one row per
+pick.
+
 These guidelines ensure consistent, secure, and maintainable Django applications within the Arx II codebase.

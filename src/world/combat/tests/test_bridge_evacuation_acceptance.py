@@ -69,6 +69,7 @@ from world.combat.simulation import SimulationParams, run_party_vs_boss_simulati
 from world.conditions.factories import (
     ConditionStageFactory,
     ConditionTemplateFactory,
+    SoulfrayTemplateFactory,
 )
 from world.conditions.services import has_condition
 from world.covenants.factories import (
@@ -79,7 +80,6 @@ from world.covenants.factories import (
 )
 from world.covenants.weakness import maybe_create_weakness_selection, resolve_weakness_selection
 from world.fatigue.models import FatiguePool
-from world.magic.audere import SOULFRAY_CONDITION_NAME
 from world.magic.constants import TechniqueFunction
 from world.magic.factories import (
     CharacterAnimaFactory,
@@ -716,7 +716,7 @@ class BridgeEvacuationAcceptanceTests(TestCase):
     @tag("postgres")  # Soulfray's progressive condition path uses DISTINCT ON.
     def test_real_strain_anima_and_soulfray_trajectory(self) -> None:
         """Live casts record declining anima and increasing Soulfray pressure."""
-        soulfray = ConditionTemplateFactory(name=SOULFRAY_CONDITION_NAME, has_progression=True)
+        soulfray = SoulfrayTemplateFactory(has_progression=True)
         ConditionStageFactory(condition=soulfray, stage_order=1, severity_threshold=10)
         SoulfrayConfigFactory(
             soulfray_threshold_ratio=Decimal("0.30"),

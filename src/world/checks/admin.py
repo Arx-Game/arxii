@@ -2,6 +2,7 @@
 
 from django.contrib import admin
 
+from world.admin_utils import OneRowPerFormSet
 from world.checks.models import (
     CheckCall,
     CheckCallTarget,
@@ -18,6 +19,7 @@ from world.checks.models import (
 
 class CheckTypeInline(admin.TabularInline):
     model = CheckType
+    formset = OneRowPerFormSet
     extra = 0
     fields = ["name", "description", "is_active", "display_order"]
 
@@ -33,6 +35,7 @@ class CheckCategoryAdmin(admin.ModelAdmin):
 
 class CheckTypeTraitInline(admin.TabularInline):
     model = CheckTypeTrait
+    formset = OneRowPerFormSet
     extra = 1
     fields = ["trait", "weight"]
     autocomplete_fields = ["trait"]
@@ -41,6 +44,7 @@ class CheckTypeTraitInline(admin.TabularInline):
 
 class CheckTypeAspectInline(admin.TabularInline):
     model = CheckTypeAspect
+    formset = OneRowPerFormSet
     extra = 1
     fields = ["aspect", "weight"]
     autocomplete_fields = ["aspect"]
@@ -49,6 +53,7 @@ class CheckTypeAspectInline(admin.TabularInline):
 
 class CheckTypeCapabilityModifierInline(admin.TabularInline):
     model = CheckTypeCapabilityModifier
+    formset = OneRowPerFormSet
     extra = 1
     fields = ["capability", "weight"]
     autocomplete_fields = ["capability"]
@@ -95,6 +100,7 @@ class ConsequenceAdmin(admin.ModelAdmin):
 
 class CheckCallTargetInline(admin.TabularInline):
     model = CheckCallTarget
+    formset = OneRowPerFormSet
     extra = 0
     fields = ["target_sheet", "status", "resolved_at"]
     readonly_fields = ["resolved_at"]

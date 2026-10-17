@@ -7,6 +7,7 @@ effects, and character distinction grants.
 
 from django.contrib import admin
 
+from world.admin_utils import OneRowPerFormSet
 from world.codex.admin import GrantReachOnSaveMixin
 from world.codex.models import DistinctionCodexGrant
 from world.contributors.admin import CREDIT_FIELDSET
@@ -44,6 +45,7 @@ class DistinctionTagAdmin(admin.ModelAdmin):
 
 class DistinctionEffectInline(admin.TabularInline):
     model = DistinctionEffect
+    formset = OneRowPerFormSet
     extra = 1
     fields = [
         "target",
@@ -56,6 +58,7 @@ class DistinctionEffectInline(admin.TabularInline):
 
 class DistinctionCodexGrantInline(admin.TabularInline):
     model = DistinctionCodexGrant
+    formset = OneRowPerFormSet
     extra = 1
     autocomplete_fields = ["entry"]
 

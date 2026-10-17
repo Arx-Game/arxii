@@ -39,7 +39,7 @@
  */
 
 import { createHmac } from 'node:crypto';
-import { test, expect, type Page } from '@playwright/test';
+import { test, expect, type Browser, type BrowserContext, type Page } from '@playwright/test';
 
 const BASE_URL = 'http://localhost:4001';
 
@@ -92,6 +92,28 @@ async function changePasswordOnAccountPage(
   await expect(page.getByText('Password changed. You stay signed in.')).toBeVisible({
     timeout: 10000,
   });
+}
+
+/**
+ * Sign in on a page in a brand-new browser context, and return that context
+ * with its own console-error capture.
+ *
+ * Signing out by clearing cookies in the context that changed the password
+ * is a race (#4391): the settings page keeps refetching /api/user/ and the
+ * account sub-routes for a moment after "Password changed" appears, and those
+ * late responses set the old session cookie back into the jar. A fresh
+ * context has no cookies to race with, so the sign-in cannot be overwritten.
+ */
+async function signInInFreshContext(
+  browser: Browser,
+  login: string,
+  password: string
+): Promise<{ context: BrowserContext; page: Page; getErrors: () => string[] }> {
+  const context = await browser.newContext();
+  const page = await context.newPage();
+  const getErrors = captureConsoleErrors(page);
+  await loginViaUi(page, login, password);
+  return { context, page, getErrors };
 }
 
 type LoginRace = 'navigated' | 'mfa' | 'timeout';
@@ -225,7 +247,10 @@ function totpCode(secret: string, atMs: number = Date.now()): string {
 // ---------------------------------------------------------------------------
 
 test.describe('Account settings: password', () => {
-  test('change password on /profile/account, then sign in with the new one', async ({ page }) => {
+  test('change password on /profile/account, then sign in with the new one', async ({
+    page,
+    browser,
+  }) => {
     const getErrors = captureConsoleErrors(page);
     const newPassword = 'NewTestPass456!';
 
@@ -238,20 +263,23 @@ test.describe('Account settings: password', () => {
     await loginViaUi(page, SEEDED_USERNAME, SEEDED_PASSWORD);
     await changePasswordOnAccountPage(page, SEEDED_PASSWORD, newPassword);
 
-    // Sign out by dropping the session cookie (the ProfileDropdown's Logout
-    // menu item is not needed to exercise the password-change flow) and log
-    // back in with the new password.
-    await page.context().clearCookies();
-    await loginViaUi(page, SEEDED_USERNAME, newPassword);
-    expect(page.url()).not.toContain('/login');
-    await expect(page.locator('#root')).not.toBeEmpty();
+    // Sign out and sign back in with the new password, in a fresh browser
+    // context (see signInInFreshContext). The ProfileDropdown's Logout item is
+    // not needed to exercise the password-change flow.
+    const newSession = await signInInFreshContext(browser, SEEDED_USERNAME, newPassword);
+    expect(newSession.page.url()).not.toContain('/login');
+    await expect(newSession.page.locator('#root')).not.toBeEmpty();
 
-    await changePasswordOnAccountPage(page, newPassword, SEEDED_PASSWORD);
-    await page.context().clearCookies();
-    await loginViaUi(page, SEEDED_USERNAME, SEEDED_PASSWORD);
-    expect(page.url()).not.toContain('/login');
+    // Put the seeded password back, then prove the restored one signs in.
+    await changePasswordOnAccountPage(newSession.page, newPassword, SEEDED_PASSWORD);
+    const restored = await signInInFreshContext(browser, SEEDED_USERNAME, SEEDED_PASSWORD);
+    expect(restored.page.url()).not.toContain('/login');
 
     expect(getErrors()).toEqual([]);
+    expect(newSession.getErrors()).toEqual([]);
+    expect(restored.getErrors()).toEqual([]);
+    await newSession.context.close();
+    await restored.context.close();
   });
 });
 

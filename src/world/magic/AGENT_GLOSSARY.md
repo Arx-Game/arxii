@@ -111,7 +111,7 @@ An additional consequence drawn when runtime intensity exceeds control (the `con
 _Avoid_: fumble, miscast.
 
 **Soulfray**:
-The magical strain a character accrues by casting while anima is depleted below the configured threshold ratio; severity scales with depletion and is tested against a resilience check. Tuned by the `SoulfrayConfig` singleton.
+The magical strain a character accrues by casting while anima is depleted below the configured threshold ratio; severity scales with depletion and is tested against a resilience check. Tuned by the `SoulfrayConfig` singleton, whose `condition` field names the condition template that is Soulfray (the game never finds it by name).
 
 **Overburn**:
 The condition where a cast's effective anima cost exceeds the available pool and the deficit is drawn from the caster's life force. Non-lethal encounters clamp cost to available anima instead.

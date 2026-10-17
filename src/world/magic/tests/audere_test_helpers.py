@@ -9,13 +9,14 @@ from dataclasses import dataclass
 
 from world.conditions.factories import (
     ConditionStageFactory,
-    ConditionTemplateFactory,
+    SoulfrayTemplateFactory,
 )
 from world.conditions.models import ConditionStage, ConditionTemplate
-from world.magic.audere import SOULFRAY_CONDITION_NAME, AudereThreshold
+from world.magic.audere import AudereThreshold
 from world.magic.factories import (
     AudereThresholdFactory,
     IntensityTierFactory,
+    ensure_soulfray_config,
     wire_audere_power_multipliers,
 )
 from world.magic.models import IntensityTier
@@ -40,7 +41,8 @@ def build_audere_gate_fixture(*, tier_suffix: str) -> AudereGateFixture:
     """
     wire_audere_power_multipliers()
 
-    soulfray_template = ConditionTemplateFactory(name=SOULFRAY_CONDITION_NAME, has_progression=True)
+    soulfray_template = SoulfrayTemplateFactory(has_progression=True)
+    ensure_soulfray_config()
     ConditionStageFactory(condition=soulfray_template, stage_order=1, name="Fraying")
     ConditionStageFactory(condition=soulfray_template, stage_order=2, name="Tearing")
     soulfray_stage = ConditionStageFactory(

@@ -7,7 +7,7 @@ character values, and check resolution configuration.
 
 from django.contrib import admin
 
-from world.admin_utils import describe_reverse_relations
+from world.admin_utils import OneRowPerFormSet, describe_reverse_relations
 from world.traits.models import (
     CharacterTraitValue,
     CheckOutcome,
@@ -22,6 +22,7 @@ from world.traits.models import (
 
 class TraitRankDescriptionInline(admin.TabularInline):
     model = TraitRankDescription
+    formset = OneRowPerFormSet
     extra = 1
     fields = ["value", "display_value", "label", "description"]
     # display_value is a @property, not a DB field — must be declared readonly or
@@ -76,6 +77,7 @@ class CheckOutcomeAdmin(admin.ModelAdmin):
 
 class ResultChartOutcomeInline(admin.TabularInline):
     model = ResultChartOutcome
+    formset = OneRowPerFormSet
     extra = 1
     ordering = ["min_roll"]
 

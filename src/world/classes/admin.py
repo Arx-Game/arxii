@@ -1,5 +1,6 @@
 from django.contrib import admin
 
+from world.admin_utils import OneRowPerFormSet
 from world.classes.models import Aspect, CharacterClass, ClassStageHealthRate, Path, PathAspect
 from world.codex.admin import GrantReachOnSaveMixin
 from world.codex.models import PathCodexGrant
@@ -13,18 +14,21 @@ class PathAspectInline(admin.TabularInline):
     """Inline admin for aspects on a path."""
 
     model = PathAspect
+    formset = OneRowPerFormSet
     extra = 1
     autocomplete_fields = ["aspect"]
 
 
 class PathCodexGrantInline(admin.TabularInline):
     model = PathCodexGrant
+    formset = OneRowPerFormSet
     extra = 1
     autocomplete_fields = ["entry"]
 
 
 class PathSkillSuggestionInline(admin.TabularInline):
     model = PathSkillSuggestion
+    formset = OneRowPerFormSet
     extra = 1
     fk_name = "character_path"
     autocomplete_fields = ["skill"]
@@ -66,6 +70,7 @@ class PathGiftGrantInline(admin.TabularInline):
     """
 
     model = PathGiftGrant
+    formset = OneRowPerFormSet
     extra = 0
     fields = ["gift"]
     autocomplete_fields = ["gift"]
@@ -137,6 +142,7 @@ class ClassStageHealthRateInline(admin.TabularInline):
     """#3831 - the per-stage health-per-level rates authored for a class."""
 
     model = ClassStageHealthRate
+    formset = OneRowPerFormSet
     extra = 1
 
 

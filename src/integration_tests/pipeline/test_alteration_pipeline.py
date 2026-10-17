@@ -33,6 +33,7 @@ from world.magic.services import (
     resolve_pending_alteration,
     use_technique,
 )
+from world.magic.services.soulfray import soulfray_condition_id
 from world.magic.types import AlterationGateError, AlterationResolutionResult
 from world.seeds.game_content.magic import MagicContent
 
@@ -508,11 +509,10 @@ class AlterationFullPipelineTests(TestCase):
 
         # Verify Soulfray condition exists on character but no pending yet
         from world.conditions.models import ConditionInstance
-        from world.magic.audere import SOULFRAY_CONDITION_NAME
 
         assert ConditionInstance.objects.filter(
             target=self.character,
-            condition__name=SOULFRAY_CONDITION_NAME,
+            condition_id=soulfray_condition_id(),
         ).exists(), "Soulfray condition should exist after first overburn"
 
         # No PendingAlteration yet (pool fires only on subsequent accumulation)

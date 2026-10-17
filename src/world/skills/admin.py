@@ -1,5 +1,6 @@
 from django.contrib import admin
 
+from world.admin_utils import OneRowPerFormSet
 from world.skills.models import (
     CharacterSkillValue,
     CharacterSpecializationValue,
@@ -14,6 +15,7 @@ class SpecializationInline(admin.TabularInline):
     """Inline admin for specializations under a skill."""
 
     model = Specialization
+    formset = OneRowPerFormSet
     extra = 1
     fields = ["name", "tooltip", "display_order", "is_active"]
     ordering = ["display_order", "name"]

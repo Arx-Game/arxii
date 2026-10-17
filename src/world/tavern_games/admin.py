@@ -2,6 +2,7 @@
 
 from django.contrib import admin
 
+from world.admin_utils import OneRowPerFormSet
 from world.tavern_games.models import (
     GamblingLossLedger,
     GameSeat,
@@ -29,6 +30,7 @@ class TavernGamblingConfigAdmin(admin.ModelAdmin):
 
 class GameSeatInline(admin.TabularInline):
     model = GameSeat
+    formset = OneRowPerFormSet
     extra = 0
     readonly_fields = ["persona", "ante_paid", "roll_result", "seated_at"]
 

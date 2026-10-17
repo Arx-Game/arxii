@@ -3752,6 +3752,7 @@
   - species_gift_drawbacks <- species.SpeciesGiftGrant
   - table_update_request_details <- gm.DistinctionChangeRequestDetails
   - npc_regard_seeds <- npc_services.DistinctionRegardSeed
+  - item_grants <- items.DistinctionItemGrant
 
 ### DistinctionCategory
 **Foreign Keys:**
@@ -4588,6 +4589,11 @@
 **Foreign Keys:**
   - item_template -> items.ItemTemplate [FK]
 
+### DistinctionItemGrant
+**Foreign Keys:**
+  - distinction -> distinctions.Distinction [FK]
+  - item_template -> items.ItemTemplate [FK]
+
 ### EquippedItem
 **Foreign Keys:**
   - character -> character_sheets.CharacterSheet [FK]
@@ -4789,6 +4795,7 @@
   - garment_mitigations <- items.GarmentMitigation
   - gem_details <- items.GemDetails
   - stock_listings <- items.StockListing
+  - distinction_grants <- items.DistinctionItemGrant
   - secrets_about <- secrets.Secret
 
 ### ItemTemplateAppearanceEffect
@@ -6122,6 +6129,7 @@
 ### SoulfrayConfig
 **Foreign Keys:**
   - resilience_check_type -> checks.CheckType [FK]
+  - condition -> conditions.ConditionTemplate [FK] (nullable)
 
 ### StandingCapBand
 

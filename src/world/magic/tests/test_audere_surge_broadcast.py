@@ -17,16 +17,20 @@ from django.test import TestCase, tag
 from evennia.objects.models import ObjectDB
 
 from world.character_sheets.factories import CharacterSheetFactory
-from world.conditions.factories import ConditionStageFactory, ConditionTemplateFactory
+from world.conditions.factories import (
+    ConditionStageFactory,
+    ConditionTemplateFactory,
+    SoulfrayTemplateFactory,
+)
 from world.magic.audere import (
     AUDERE_CONDITION_NAME,
-    SOULFRAY_CONDITION_NAME,
     offer_audere,
 )
 from world.magic.factories import (
     AudereThresholdFactory,
     CharacterAnimaFactory,
     IntensityTierFactory,
+    ensure_soulfray_config,
 )
 from world.mechanics.constants import EngagementType
 from world.mechanics.engagement import CharacterEngagement
@@ -50,7 +54,8 @@ def _make_lifecycle_character(db_key: str) -> ObjectDB:
 
 def _make_threshold(*, surge_text: str, tier_name: str):
     ConditionTemplateFactory(name=AUDERE_CONDITION_NAME)
-    soulfray = ConditionTemplateFactory(name=SOULFRAY_CONDITION_NAME, has_progression=True)
+    soulfray = SoulfrayTemplateFactory(has_progression=True)
+    ensure_soulfray_config()
     stage = ConditionStageFactory(condition=soulfray, stage_order=3, name="Ripping")
     tier = IntensityTierFactory(name=tier_name, threshold=15)
     return AudereThresholdFactory(

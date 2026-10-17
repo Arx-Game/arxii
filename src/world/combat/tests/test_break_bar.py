@@ -39,9 +39,9 @@ from world.conditions.factories import (
     ConditionInstanceFactory,
     ConditionStageFactory,
     ConditionTemplateFactory,
+    SoulfrayTemplateFactory,
 )
-from world.magic.audere import SOULFRAY_CONDITION_NAME
-from world.magic.factories import EffectTypeFactory
+from world.magic.factories import EffectTypeFactory, ensure_soulfray_config
 from world.scenes.constants import InteractionMode
 from world.scenes.models import Interaction
 
@@ -403,7 +403,8 @@ class BreakBarPacingFloorTests(TestCase):
         self.assertEqual(minimum_break_bar_threshold(), 0)
 
     def test_authored_soulfray_stages_set_the_floor(self):
-        soulfray = ConditionTemplateFactory(name=SOULFRAY_CONDITION_NAME, has_progression=True)
+        soulfray = SoulfrayTemplateFactory(has_progression=True)
+        ensure_soulfray_config()
         ConditionStageFactory.create_batch(3, condition=soulfray)
         # (3 + 2) * BAR_UNITS_PER_ROUND(=2) = 10.
         self.assertEqual(minimum_break_bar_threshold(), 10)

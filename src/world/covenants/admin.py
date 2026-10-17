@@ -2,6 +2,7 @@
 
 from django.contrib import admin
 
+from world.admin_utils import OneRowPerFormSet
 from world.covenants.models import (
     CourtGrantConfig,
     Covenant,
@@ -31,6 +32,7 @@ class CovenantRoleTechniqueSpecialtyInline(admin.TabularInline):
     """Inline per-vow technique specialty rows on the CovenantRole admin (#2443)."""
 
     model = CovenantRoleTechniqueSpecialty
+    formset = OneRowPerFormSet
     extra = 1
 
 
@@ -136,6 +138,7 @@ class VowSituationalPerkSituationInline(admin.TabularInline):
     """Inline AND-composed situations on the perk admin (#2536)."""
 
     model = VowSituationalPerkSituation
+    formset = OneRowPerFormSet
     extra = 1
 
 
@@ -143,6 +146,7 @@ class VowSituationalPerkRungInline(admin.TabularInline):
     """Inline escalation rungs on the perk admin (#2536)."""
 
     model = VowSituationalPerkRung
+    formset = OneRowPerFormSet
     extra = 0
 
 

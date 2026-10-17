@@ -19,7 +19,6 @@ logger = logging.getLogger(__name__)
 
 AUDERE_CONDITION_NAME = "Audere"
 AUDERE_MAJORA_CONDITION_NAME = "Audere Majora"
-SOULFRAY_CONDITION_NAME = "Soulfray"
 
 
 class AudereThreshold(SharedMemoryModel):
@@ -230,6 +229,7 @@ def _evaluate_audere_gates(
     4. Already-in-Audere — 1 exists() query
     """
     from world.conditions.models import ConditionInstance
+    from world.magic.services.soulfray import soulfray_condition_id
     from world.mechanics.engagement import CharacterEngagement
 
     if not _check_intensity_gate(runtime_intensity, threshold.minimum_intensity_tier.threshold):
@@ -238,7 +238,7 @@ def _evaluate_audere_gates(
     soulfray_instance = (
         ConditionInstance.objects.filter(
             target=character,
-            condition__name=SOULFRAY_CONDITION_NAME,
+            condition_id=soulfray_condition_id(),
         )
         .select_related("current_stage")
         .first()

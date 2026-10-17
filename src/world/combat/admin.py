@@ -2,6 +2,7 @@
 
 from django.contrib import admin
 
+from world.admin_utils import OneRowPerFormSet
 from world.combat.constants import COMBO_MIN_SLOTS
 from world.combat.models import (
     BossPhase,
@@ -54,6 +55,7 @@ class CombatOpponentInline(admin.TabularInline):
 
 class CombatParticipantInline(admin.TabularInline):
     model = CombatParticipant
+    formset = OneRowPerFormSet
     extra = 0
     raw_id_fields = ["covenant_role"]
     fields = ["character_sheet", "covenant_role"]
@@ -77,6 +79,7 @@ class CombatEncounterAdmin(admin.ModelAdmin):
 
 class BossPhaseInline(admin.TabularInline):
     model = BossPhase
+    formset = OneRowPerFormSet
     extra = 0
     fields = [
         "phase_number",
@@ -123,6 +126,7 @@ class CombatParticipantAdmin(admin.ModelAdmin):
 
 class ThreatPoolEntryInline(admin.TabularInline):
     model = ThreatPoolEntry
+    formset = OneRowPerFormSet
     extra = 0
     fields = [
         "name",
@@ -187,6 +191,7 @@ class CombatOpponentActionAdmin(admin.ModelAdmin):
 
 class ComboSlotInline(admin.TabularInline):
     model = ComboSlot
+    formset = OneRowPerFormSet
     extra = 0
     min_num = COMBO_MIN_SLOTS
     validate_min = True
@@ -296,6 +301,7 @@ class CombatPullResolvedEffectAdmin(admin.ModelAdmin):
 
 class ClashContributionInline(admin.TabularInline):
     model = ClashContribution
+    formset = OneRowPerFormSet
     extra = 0
     fields = [
         "character",
@@ -312,6 +318,7 @@ class ClashContributionInline(admin.TabularInline):
 
 class ClashRoundInline(admin.TabularInline):
     model = ClashRound
+    formset = OneRowPerFormSet
     extra = 0
     fields = [
         "round_number",
@@ -427,6 +434,7 @@ class BreakBarConfigInline(admin.TabularInline):
 
 class CreaturePhaseTemplateInline(admin.TabularInline):
     model = CreaturePhaseTemplate
+    formset = OneRowPerFormSet
     extra = 0
     fk_name = "creature_template"
     inlines = [BreakBarConfigInline]

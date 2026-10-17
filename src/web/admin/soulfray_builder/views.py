@@ -323,7 +323,9 @@ def soulfray_builder_index(request: HttpRequest) -> HttpResponse:
     first = soulfray_stages().first()
     if first is None:
         messages.error(
-            request, "No Soulfray stages exist yet. Author the Soulfray condition's stages first."
+            request,
+            "No Soulfray stages exist yet. Set the Soulfray configuration's Condition, "
+            "then author that condition's stages.",
         )
         return redirect("admin_authoring")
     return redirect("admin_soulfray_builder", stage_pk=first.pk)

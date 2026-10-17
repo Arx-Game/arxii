@@ -12,6 +12,7 @@ from django.forms import BaseInlineFormSet, ModelForm
 from django.http import HttpRequest
 from django.utils.html import format_html
 
+from world.admin_utils import OneRowPerFormSet
 from world.roster.models import (
     Family,
     FamilyKind,
@@ -136,6 +137,7 @@ class FamilyKindAdmin(admin.ModelAdmin):
 
 class ParentageUpInline(admin.TabularInline):
     model = ParentageEdge
+    formset = OneRowPerFormSet
     fk_name = "child"
     extra = 0
     raw_id_fields = ["parent", "born_within_union", "secret"]
@@ -241,7 +243,7 @@ class SpouseForm(ModelForm):
         return cleaned
 
 
-class SpouseFormSet(BaseInlineFormSet):
+class SpouseFormSet(OneRowPerFormSet):
     """Refuses to delete a union a marriage pact or a recorded birth still points at."""
 
     def clean(self) -> None:
@@ -298,6 +300,7 @@ class KinspersonTraitValueInline(admin.TabularInline):
     """Pinned appearance values (#2815) — authored or back-inferred."""
 
     model = KinspersonTraitValue
+    formset = OneRowPerFormSet
     extra = 0
     raw_id_fields = ["trait", "option"]
 
@@ -705,12 +708,14 @@ class PlayerMailAdmin(admin.ModelAdmin):
 
 class NPCPresetTraitLineInline(admin.TabularInline):
     model = NPCPresetTraitLine
+    formset = OneRowPerFormSet
     extra = 1
     autocomplete_fields = ["trait"]
 
 
 class NPCPresetSkillLineInline(admin.TabularInline):
     model = NPCPresetSkillLine
+    formset = OneRowPerFormSet
     extra = 1
     autocomplete_fields = ["skill"]
 

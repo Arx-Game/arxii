@@ -45,9 +45,7 @@ def restore_levels(apps, schema_editor):
 
 
 class Migration(migrations.Migration):
-    dependencies = [
-        ("arxii", "0234_ceremony_offering_ceremony_xor_being"),
-    ]
+    dependencies = [("arxii", "0237_distinctionitemgrant")]
 
     operations = [
         migrations.RunPython(restore_levels, migrations.RunPython.noop),

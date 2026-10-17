@@ -16,7 +16,6 @@ from world.covenants.factories import CovenantFactory, CovenantRoleFactory
 from world.magic.audere import (
     AUDERE_CONDITION_NAME,
     AUDERE_MAJORA_CONDITION_NAME,
-    SOULFRAY_CONDITION_NAME,
     AudereThreshold,
     PendingAudereOffer,
 )
@@ -26,6 +25,7 @@ from world.magic.audere_majora import (
     AudereMajoraThreshold,
 )
 from world.magic.constants import (
+    SOULFRAY_SEED_TEMPLATE_NAME,
     AffinityInteractionAggressor,
     AffinityInteractionKind,
     AlterationKind,
@@ -1057,6 +1057,24 @@ class SoulfrayConfigFactory(factory.django.DjangoModelFactory):
     base_check_difficulty = 15
     ritual_severity_cost_per_point = 1
     social_safety_bonus = 10
+    # The template made under the seed name by SoulfrayTemplateFactory or
+    # SoulfrayContentFactory, whichever ran first; None when neither has.
+    condition = factory.LazyFunction(lambda: _seed_named_soulfray_template())
+
+
+def ensure_soulfray_config() -> SoulfrayConfig:
+    """The Soulfray config row, made with factory defaults when no test has made one yet.
+
+    Call it after ``SoulfrayTemplateFactory``: a new row takes the template made under the
+    seed name as its condition, and an existing row was already pointed at it.
+    """
+    return SoulfrayConfig.objects.first() or SoulfrayConfigFactory()
+
+
+def _seed_named_soulfray_template():
+    from world.conditions.models import ConditionTemplate
+
+    return ConditionTemplate.objects.filter(name=SOULFRAY_SEED_TEMPLATE_NAME).first()
 
 
 class MishapPoolTierFactory(factory.django.DjangoModelFactory):
@@ -1682,7 +1700,7 @@ class _SoulfrayContentFactory:
 
     Not a DjangoModelFactory — this is a composition helper. Callers invoke
     ``SoulfrayContentFactory()`` to get a ``SoulfrayContent`` dataclass holding:
-      - template: the seeded ConditionTemplate (name=SOULFRAY_CONDITION_NAME)
+      - template: the seeded ConditionTemplate (named SOULFRAY_SEED_TEMPLATE_NAME)
       - stages: list of 5 ConditionStage rows [Fraying, Tearing, Ripping,
                 Sundering, Unravelling] in stage_order order
       - blocks_anima_regen: the seeded Property row (name="blocks_anima_regen")
@@ -1754,10 +1772,18 @@ class _SoulfrayContentFactory:
                 "passive_decay_per_day": 1,
                 "passive_decay_blocked_in_engagement": True,
             },
-            name=SOULFRAY_CONDITION_NAME,
+            name=SOULFRAY_SEED_TEMPLATE_NAME,
         )
         if template is None:
             return SoulfrayContent(template=None, stages=(), blocks_anima_regen=blocks_prop)
+
+        # Soulfray is whichever template the config names (#4122): point an existing
+        # config row at this one when it names nothing yet. A config made afterwards
+        # picks the template up through SoulfrayConfigFactory's default.
+        config = SoulfrayConfig.objects.first()
+        if config is not None and config.condition_id is None:
+            config.condition = template
+            config.save(update_fields=["condition"])
 
         stages = []
         for spec in self._STAGES:

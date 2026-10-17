@@ -9,9 +9,10 @@ from django.test import TestCase
 
 from web.admin.tuning import required_content as rc
 from world.character_sheets.factories import CharacterSheetFactory
-from world.conditions.factories import ConditionTemplateFactory
+from world.conditions.factories import ConditionTemplateFactory, SoulfrayTemplateFactory
 from world.game_clock.factories import GameClockFactory
 from world.magic.constants import GiftKind
+from world.magic.factories import ensure_soulfray_config
 
 
 def _dep(key: str, probe: rc.ContentProbe, tier: rc.DependencyTier) -> rc.ContentDependency:
@@ -394,9 +395,9 @@ class TestSoulfrayStagePoolProbe(TestCase):
     @classmethod
     def setUpTestData(cls) -> None:
         from world.conditions.factories import ConditionStageFactory
-        from world.magic.audere import SOULFRAY_CONDITION_NAME
 
-        cls.template = ConditionTemplateFactory(name=SOULFRAY_CONDITION_NAME, has_progression=True)
+        cls.template = SoulfrayTemplateFactory(has_progression=True)
+        ensure_soulfray_config()
         cls.stage = ConditionStageFactory(
             condition=cls.template, stage_order=1, name="Fraying", severity_threshold=1
         )
@@ -448,9 +449,9 @@ class TestSoulfrayDeathRiskProbe(TestCase):
     def setUpTestData(cls) -> None:
         from actions.factories import ConsequencePoolEntryFactory, ConsequencePoolFactory
         from world.conditions.factories import ConditionStageFactory
-        from world.magic.audere import SOULFRAY_CONDITION_NAME
 
-        template = ConditionTemplateFactory(name=SOULFRAY_CONDITION_NAME, has_progression=True)
+        template = SoulfrayTemplateFactory(has_progression=True)
+        ensure_soulfray_config()
         cls.parent = ConsequencePoolFactory(name="Soulfray - common")
         cls.pool = ConsequencePoolFactory(name="Soulfray - Unravelling", parent=cls.parent)
         ConsequencePoolEntryFactory(pool=cls.pool)

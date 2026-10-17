@@ -41,11 +41,11 @@ from world.conditions.factories import (
     ConditionInstanceFactory,
     ConditionStageFactory,
     ConditionTemplateFactory,
+    SoulfrayTemplateFactory,
 )
 from world.conditions.models import ConditionInstance
 from world.magic.audere import (
     AUDERE_CONDITION_NAME,
-    SOULFRAY_CONDITION_NAME,
     check_audere_eligibility,
     end_audere,
     offer_audere,
@@ -63,6 +63,7 @@ from world.magic.factories import (
     TechniqueCapabilityGrantFactory,
     TechniqueFactory,
     TechniqueOutcomeModifierFactory,
+    ensure_soulfray_config,
 )
 from world.magic.services import get_runtime_technique_stats, use_technique
 from world.magic.types import TechniqueUseResult
@@ -1216,10 +1217,10 @@ class RuntimeModifierTests(PipelineTestMixin, TestCase):
     def test_audere_eligibility_all_gates(self) -> None:
         """Audere is eligible when engagement + soulfray stage + intensity gates all pass."""
         # Soulfray condition template with stages
-        soulfray_template = ConditionTemplateFactory(
-            name=SOULFRAY_CONDITION_NAME,
+        soulfray_template = SoulfrayTemplateFactory(
             has_progression=True,
         )
+        ensure_soulfray_config()
         ConditionStageFactory(
             condition=soulfray_template,
             stage_order=1,
@@ -1264,10 +1265,10 @@ class RuntimeModifierTests(PipelineTestMixin, TestCase):
     def test_audere_full_lifecycle(self) -> None:
         """Engagement -> accept Audere -> boosted stats -> end -> cleanup."""
         # Setup soulfray condition with stages
-        soulfray_template = ConditionTemplateFactory(
-            name=SOULFRAY_CONDITION_NAME,
+        soulfray_template = SoulfrayTemplateFactory(
             has_progression=True,
         )
+        ensure_soulfray_config()
         soulfray_stage = ConditionStageFactory(
             condition=soulfray_template,
             stage_order=1,
@@ -1346,8 +1347,7 @@ class SoulfrayProgressionTests(PipelineTestMixin, TestCase):
         super().setUpTestData()
 
         # === 1. Soulfray condition template with 3 severity-driven stages ===
-        cls.soulfray_template = ConditionTemplateFactory(
-            name=SOULFRAY_CONDITION_NAME,
+        cls.soulfray_template = SoulfrayTemplateFactory(
             has_progression=True,
         )
 
