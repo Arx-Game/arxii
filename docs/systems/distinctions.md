@@ -379,7 +379,10 @@ sixty-nine Arx 1 lives studied for the creation rework carried one (a pendant th
 ring that brought the dreams, a quill that answers).
 
 Minted once, by `apply_item_grants` (`world/items/services/narrative_grants.py`, over the
-same `grant_touchstone_item_to_character` primitive the GM item award uses) from character
+same `grant_touchstone_item_to_character` primitive the GM item award uses, then
+`materialize_item_game_object`, the coin mint's step, so the pendant is a physical object
+located on the character: the inventory API lists objects on the character, and a row-only
+grant never reaches it, which the live-server pass for #4398 found) from character
 creation's `_create_distinction_modifiers_bulk`, beside `apply_starting_grant`. It is not a
 `reconcile_*`: a keepsake is where a character started, so a distinction added in play mints
 nothing and no repeatable path may call it. The player sees it before picking:

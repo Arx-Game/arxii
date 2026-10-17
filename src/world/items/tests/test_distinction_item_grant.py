@@ -2,7 +2,9 @@
 
 from django.test import TestCase
 from evennia.accounts.models import AccountDB
+from rest_framework.test import APIClient
 
+from evennia_extensions.models import PlayerData
 from world.character_creation.services import finalize_character
 from world.character_creation.tests.finalization_fixtures import FinalizationTestMixin
 from world.character_sheets.factories import CharacterSheetFactory
@@ -12,6 +14,7 @@ from world.distinctions.serializers import DistinctionListSerializer
 from world.items.factories import DistinctionItemGrantFactory, ItemTemplateFactory
 from world.items.models import ItemInstance
 from world.items.services.narrative_grants import apply_item_grants
+from world.roster.factories import RosterTenureFactory
 
 
 class ApplyItemGrantsTests(TestCase):
@@ -28,6 +31,11 @@ class ApplyItemGrantsTests(TestCase):
         assert (
             ItemInstance.objects.filter(holder_character_sheet=sheet, template=pendant).count() == 1
         )
+        # A keepsake is carried, not row-only: its object sits on the character, where the
+        # inventory looks (the live-server pass found a row-only pendant invisible there).
+        minted[0].refresh_from_db()
+        assert minted[0].game_object is not None
+        assert minted[0].game_object.location == sheet.character
 
     def test_a_kit_is_several_rows(self):
         sheet = CharacterSheetFactory()
@@ -141,3 +149,14 @@ class ItemGrantFinalizeTests(FinalizationTestMixin, TestCase):
             holder_character_sheet=character.sheet_data, template=pendant
         )
         assert held.count() == 1
+
+        # The seam a player reads it through: the inventory API lists the pendant for
+        # the account that plays the character (the tenure an approval creates).
+        player_data, _ = PlayerData.objects.get_or_create(account=self.account)
+        RosterTenureFactory(player_data=player_data, roster_entry=character.sheet_data.roster_entry)
+        client = APIClient()
+        client.force_authenticate(user=self.account)
+        response = client.get("/api/items/inventory/", {"character": character.pk})
+        assert response.status_code == 200, response.content
+        names = [row["template"]["name"] for row in response.json()["results"]]
+        assert names == ["A Chimera Pendant"]

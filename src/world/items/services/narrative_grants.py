@@ -52,16 +52,26 @@ def apply_item_grants(char_dist: CharacterDistinction) -> list[ItemInstance]:
     not a ``reconcile_*``: a keepsake is minted exactly once, so this must never run
     from a path that can repeat (a staff grant in play, a re-sync). A retired template
     (``is_active=False``) is skipped, since retiring is how staff withdraw a template.
-    Returns the instances minted, empty when the distinction carries none.
+
+    Unlike a touchstone or a mission reward, a keepsake is a thing the character
+    carries (a pendant, a key, a sword), so each row is materialized as a physical
+    object in the character's inventory the way minted coin is: a row-only instance
+    never reaches the inventory, which lists objects located on the character (found
+    on the live server by #4398's real-testing pass). Returns the instances minted,
+    empty when the distinction carries none.
     """
     from world.items.models import DistinctionItemGrant  # noqa: PLC0415
+    from world.items.services.materialize import materialize_item_game_object  # noqa: PLC0415
 
     grants = DistinctionItemGrant.objects.filter(
         distinction=char_dist.distinction, item_template__is_active=True
     ).select_related("item_template")
-    return [
+    minted = [
         grant_touchstone_item_to_character(
             character_sheet=char_dist.character, template=grant.item_template
         )
         for grant in grants
     ]
+    for instance in minted:
+        materialize_item_game_object(instance, char_dist.character)
+    return minted
