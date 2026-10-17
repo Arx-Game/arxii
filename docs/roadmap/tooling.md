@@ -45,6 +45,11 @@ turning down the noise, taking the floor and narrating in private
 (`integration_tests/test_faces_silences_and_the_floor_journeys.py`); they found `page`
 delivering to a player who had blocked the sender when the line came from a character
 with no session, and `pemit` answering its narrator with nothing, both fixed in place.
+Tranche 4 (stories) began 2026-10-17 with journeys for running a story (the player's
+listing and beats while her Lead GM marks, resolves, promotes and completes), calling the
+canon (impact, review-status, surrender) and opening a scene room
+(`integration_tests/test_running_a_story_journeys.py`); they found `leaveroom` in an
+ordinary room answering "no invitation", fixed in place.
 
 ## Built (2026-09-30, #4064 — the reviewed delete, and admin pages for domains and fealty)
 
