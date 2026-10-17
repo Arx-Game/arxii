@@ -57,11 +57,13 @@ class WearingAnotherFace(JourneyCase):
         self.assertIn("Usage: persona create <name>", self.telnet(self.ysmay, "persona create"))
 
     def test_a_mask_is_worn_the_moment_it_is_made(self) -> None:
-        told = self.telnet(self.ysmay, "persona mask A Hooded Stranger")
-        self.assertIn("You don a mask: 'A Hooded Stranger'. You are now presenting as it.", told)
-        self.telnet(self.ysmay, "pose keeps to the shadows.")
-        self.assertTold(self.hobb, "A Hooded Stranger keeps to the shadows.")
-        self.assertNotTold(self.hobb, "Ysmay keeps")
+        told = self.telnet(self.ysmay, "persona mask Crow Mask")
+        self.assertIn("You don a mask: 'Crow Mask'. You are now presenting as it.", told)
+        told = self.telnet(self.ysmay, "pose keeps to the shadows.")
+        self.assertIn("Crow Mask keeps to the shadows.", told)
+        # The room meets a stranger in the mask, never her name.
+        self.assertTold(self.hobb, "a person wearing a Crow Mask keeps to the shadows.")
+        self.assertNotTold(self.hobb, "Ysmay")
 
     @override_settings(MAX_ESTABLISHED_PERSONAS_PER_SHEET=2)
     def test_established_identities_are_capped(self) -> None:
@@ -319,7 +321,10 @@ class NarratingInPrivate(JourneyCase):
         )
         self.assertIn("Could not find 'Nobody'.", self.telnet(self.ravenna, "pemit Nobody=Boo."))
 
-        self.telnet(self.ravenna, "pemit Ysmay,Hobb=A cold draft finds the back of your neck.")
+        told = self.telnet(
+            self.ravenna, "pemit Ysmay,Hobb=A cold draft finds the back of your neck."
+        )
+        self.assertIn("You narrate to Ysmay, Hobb: A cold draft finds the back of your neck.", told)
         self.assertTold(self.ysmay, "A cold draft finds the back of your neck.")
         self.assertTold(self.hobb, "A cold draft finds the back of your neck.")
         self.assertNotTold(self.bram, "A cold draft")
