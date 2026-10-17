@@ -98,11 +98,7 @@ export function TableBeings({ table }: { table: GMTable }) {
 
   return (
     <div className="space-y-6">
-      {sent && (
-        <p role="status" className="text-sm text-muted-foreground">
-          {sent}
-        </p>
-      )}
+      {sent && <output className="block text-sm text-muted-foreground">{sent}</output>}
       {waiting.length > 0 && (
         <section aria-label="GM prompts" className="space-y-2 rounded-md border bg-card p-3">
           <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
