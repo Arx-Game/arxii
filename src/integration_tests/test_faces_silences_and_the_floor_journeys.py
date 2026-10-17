@@ -18,7 +18,7 @@ from integration_tests.harness import JourneyCase
 from world.character_sheets.factories import CharacterSheetFactory
 from world.gm.factories import GMProfileFactory
 from world.roster.factories import RosterEntryFactory
-from world.scenes.models import BlockContactFlag, Persona, Scene
+from world.scenes.models import BlockContactFlag, Mute, Persona, Scene
 from world.scenes.tasks import block_finalize_task
 
 
@@ -276,6 +276,8 @@ class TurningDownTheNoise(JourneyCase):
     def test_a_mute_quiets_him_for_her_alone(self) -> None:
         self.assertIn("Usage: +mute <character>[=ic|ooc|both]", self.telnet(self.ysmay, "+mute"))
         self.assertIn("Muted Hobb (IC/OOC, account).", self.telnet(self.ysmay, "+mute Hobb"))
+        mute = Mute.objects.get(owner__account=self.ysmay.db_account)
+        self.assertEqual((mute.mute_ic, mute.mute_ooc, mute.account_level), (True, True, True))
         self.assertIn(
             "Muted:\n  Hobb (all my characters)", strip_ansi(self.telnet(self.ysmay, "+blocklist"))
         )
@@ -292,15 +294,22 @@ class TurningDownTheNoise(JourneyCase):
         self.assertEqual(self.feed_for(self.bram, scene), [("Bram", False), ("Hobb", False)])
 
         self.assertIn("Unmuted Hobb.", self.telnet(self.ysmay, "+unmute Hobb"))
+        self.assertFalse(Mute.objects.filter(owner__account=self.ysmay.db_account).exists())
         self.telnet(self.hobb, "ooc Still here.")
         self.assertTold(self.ysmay, "<OOC> Hobb says: Still here.")
 
     def test_a_mute_can_be_narrowed_to_one_channel_or_one_face(self) -> None:
         self.assertIn("Muted Hobb (OOC, account).", self.telnet(self.ysmay, "+mute Hobb=ooc"))
+        mute = Mute.objects.get(owner__account=self.ysmay.db_account)
+        self.assertEqual((mute.mute_ic, mute.mute_ooc, mute.account_level), (False, True, True))
+        # A face-only mute is a fresh row; an account-wide one is never narrowed back.
+        self.telnet(self.ysmay, "+unmute Hobb")
         self.assertIn(
             "Muted Hobb (IC, this character only).",
             self.telnet(self.ysmay, "+mute/persona Hobb=ic"),
         )
+        mute = Mute.objects.get(owner__account=self.ysmay.db_account)
+        self.assertEqual((mute.mute_ic, mute.mute_ooc, mute.account_level), (True, False, False))
         self.assertIn("Could not find 'Nobody'.", self.telnet(self.ysmay, "+mute Nobody"))
 
 

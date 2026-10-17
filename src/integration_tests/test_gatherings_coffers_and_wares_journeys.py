@@ -23,7 +23,7 @@ from world.covenants.factories import (
 from world.covenants.models import CharacterCovenantRole
 from world.covenants.treasury import covenant_treasury
 from world.currency.services import get_or_create_purse, get_or_create_treasury, transfer
-from world.events.constants import InvitationResponse
+from world.events.constants import EventStatus, InvitationResponse
 from world.events.models import Event, EventGrandeurContribution, EventInvitation
 from world.events.services import create_event
 from world.items.factories import (
@@ -163,6 +163,8 @@ class HostingAGathering(JourneyCase):
         self.assertIn("Only the event host or staff can invite.", told)
         told = self.telnet(self.hobb, f"event cancel {self.gala.pk}")
         self.assertIn("Only the event host or staff can do that.", told)
+        self.gala.refresh_from_db()
+        self.assertEqual(self.gala.status, EventStatus.DRAFT)
 
         told = self.telnet(self.ysmay, f"event cancel {self.gala.pk}")
         self.assertIn("'The Grand Gala' has been cancelled.", told)
@@ -174,6 +176,8 @@ class HostingAGathering(JourneyCase):
         invitation = self.invitation_for(self.hobb)
         told = self.telnet(self.ysmay, f"event rsvp {invitation.pk} accept")
         self.assertIn("That invitation is not yours to respond to.", told)
+        invitation.refresh_from_db()
+        self.assertEqual(invitation.response, InvitationResponse.PENDING)
         told = self.telnet(self.ysmay, f"event invite {self.gala.pk} persona=Hobb")
         self.assertIn("This target is already invited.", told)
 
