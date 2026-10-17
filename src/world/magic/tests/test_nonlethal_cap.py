@@ -25,8 +25,8 @@ from world.conditions.constants import DurationType
 from world.conditions.factories import (
     ConditionStageFactory,
     ConditionTemplateFactory,
+    SoulfrayTemplateFactory,
 )
-from world.magic.audere import SOULFRAY_CONDITION_NAME
 from world.magic.factories import (
     CharacterAnimaFactory,
     SoulfrayConfigFactory,
@@ -74,8 +74,7 @@ class _SoulfrayCapTestBase(TestCase):
             base_check_difficulty=15,
         )
 
-        cls.soulfray_template = ConditionTemplateFactory(
-            name=SOULFRAY_CONDITION_NAME,
+        cls.soulfray_template = SoulfrayTemplateFactory(
             has_progression=True,
             default_duration_type=DurationType.PERMANENT,
         )

@@ -33,6 +33,8 @@ from world.fatigue.constants import (
 )
 from world.fatigue.models import FatiguePool
 from world.fatigue.types import FatigueCollapseResult, RestResult
+from world.mechanics.constants import FATIGUE_COST_CATEGORY_NAME, FATIGUE_COST_TARGET_NAME
+from world.mechanics.levers import lever_total, scale_by_percent
 from world.traits.constants import STAT_DISPLAY_DIVISOR, PrimaryStat
 from world.traits.services import ensure_stat_trait
 
@@ -206,6 +208,13 @@ def apply_fatigue(
     """
     multiplier = EFFORT_COST_MULTIPLIER[effort_level]
     actual_cost = max(MIN_FATIGUE_COST, int(base_cost * multiplier))
+    # #4394: the fatigue-cost lever scales the charged cost (a Tireless row's ``-10
+    # fatigue_cost`` pays 9 of 10); the floor holds, an action is never free.
+    actual_cost = scale_by_percent(
+        actual_cost,
+        lever_total(character_sheet, FATIGUE_COST_CATEGORY_NAME, FATIGUE_COST_TARGET_NAME),
+        floor=MIN_FATIGUE_COST,
+    )
 
     pool = get_or_create_fatigue_pool(character_sheet)
     current = pool.get_current(category)

@@ -130,8 +130,8 @@ def declare_standing(
         or 0
     )
     new_value = bump_organization_reputation(target_persona, organization, nominal_delta)
-    # is_established_or_primary was already checked above and nominal_delta is never
-    # zero, so bump_organization_reputation's only no-op conditions can't apply here.
+    # None when the target's reputation-gain lever (#4394) scales a favor to nothing;
+    # is_established_or_primary was checked above and nominal_delta is never zero.
     applied = 0 if new_value is None else new_value - old_value
 
     return StandingDeclaration.objects.create(

@@ -16,7 +16,6 @@ from world.classes.models import PathStage
 from world.magic.audere import (
     AUDERE_CONDITION_NAME,
     AUDERE_MAJORA_CONDITION_NAME,
-    SOULFRAY_CONDITION_NAME,
     AbstractPendingOffer,
     _check_intensity_gate,
     shake_witnesses,
@@ -342,6 +341,7 @@ def _evaluate_majora_gates(
        no gate (fail-open) -- #1859.
     """
     from world.conditions.models import ConditionInstance  # noqa: PLC0415
+    from world.magic.services.soulfray import soulfray_condition_id  # noqa: PLC0415
     from world.mechanics.engagement import CharacterEngagement  # noqa: PLC0415
 
     threshold = AudereMajoraThreshold.objects.filter(boundary_level=sheet.current_level).first()
@@ -357,7 +357,7 @@ def _evaluate_majora_gates(
     soulfray_instance = (
         ConditionInstance.objects.filter(
             target=character,
-            condition__name=SOULFRAY_CONDITION_NAME,
+            condition_id=soulfray_condition_id(),
         )
         .select_related("current_stage")
         .first()

@@ -6,10 +6,14 @@ from django.contrib import admin
 from django.test import RequestFactory, TestCase
 from evennia.accounts.models import AccountDB
 
-from world.conditions.factories import ConditionStageFactory, ConditionTemplateFactory
+from world.conditions.factories import (
+    ConditionStageFactory,
+    ConditionTemplateFactory,
+    SoulfrayTemplateFactory,
+)
 from world.magic.admin import AudereMajoraThresholdForm
-from world.magic.audere import SOULFRAY_CONDITION_NAME
 from world.magic.audere_majora import AudereMajoraThreshold
+from world.magic.factories import ensure_soulfray_config
 
 
 class WarpStagePickerTests(TestCase):
@@ -18,7 +22,8 @@ class WarpStagePickerTests(TestCase):
         cls.admin_user = AccountDB.objects.create_superuser(
             "majoraadmin", "majoraadmin@example.com", "pw-123456"
         )
-        soulfray = ConditionTemplateFactory(name=SOULFRAY_CONDITION_NAME, has_progression=True)
+        soulfray = SoulfrayTemplateFactory(has_progression=True)
+        ensure_soulfray_config()
         cls.sundering = ConditionStageFactory(condition=soulfray, stage_order=4, name="Sundering")
         cls.numb = ConditionStageFactory(
             condition=ConditionTemplateFactory(name="Poison test", has_progression=True),

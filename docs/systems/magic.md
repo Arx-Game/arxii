@@ -2326,7 +2326,21 @@ filterset (pre-existing gap).
 
 ---
 
-### Soulfray (world/magic/services/soulfray.py, #4089)
+### Soulfray (world/magic/services/soulfray.py, #4089, #4122)
+
+**Soulfray is the condition template `SoulfrayConfig.condition` names (#4122).** The
+game never matches the template by name, so staff can rename it in admin and nothing
+changes. `soulfray_condition_id()` / `get_soulfray_template()` read the field through the
+config singleton; accrual (`_handle_soulfray_accumulation`), the non-lethal cap, the safety
+checkpoint warning (`get_soulfray_warning`), Audere and Audere Majora eligibility, the
+anima ritual's severity paydown, the boss break-bar floor, the Soulfray Stage Builder and
+the Required-content probes all go through those helpers or `soulfray_stages()`. With the
+field unset every read finds no Soulfray (a stage list is empty, no instance matches) and
+the first accrual raises `ConditionTemplate.DoesNotExist`; the Required-content row
+`soulfray-condition` flags it. The bootstrap seed (`seed_magic_config`) and the test
+factories (`SoulfrayTemplateFactory`, `SoulfrayContentFactory`) create the template under
+`world.magic.constants.SOULFRAY_SEED_TEMPLATE_NAME` and set the field; game logic never
+reads that constant.
 
 **The ladder summary is the one read every Soulfray surface shares.**
 `soulfray_ladder_summary() -> list[SoulfrayStageSummary]` walks every `ConditionStage`

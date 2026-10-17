@@ -15,8 +15,7 @@ from actions.factories import ActionTemplateFactory
 from actions.types import PendingActionResolution, StepResult
 from world.checks.factories import CheckTypeFactory
 from world.checks.types import CheckResult
-from world.conditions.factories import ConditionTemplateFactory
-from world.magic.audere import SOULFRAY_CONDITION_NAME
+from world.conditions.factories import SoulfrayTemplateFactory
 from world.magic.constants import RitualExecutionKind
 from world.magic.factories import (
     CharacterAnimaFactory,
@@ -110,7 +109,7 @@ class AnimaRitualResolverTests(TestCase):
             current=2,
             maximum=10,
         )
-        ConditionTemplateFactory(name=SOULFRAY_CONDITION_NAME)
+        SoulfrayTemplateFactory()
         SoulfrayConfigFactory(
             ritual_severity_cost_per_point=1,
         )
@@ -197,7 +196,7 @@ class AnimaRitualResolverTests(TestCase):
         persona = PersonaFactory()
         target_persona = PersonaFactory()
         # No ritual created, no snapshot_ritual on request
-        ConditionTemplateFactory(name=SOULFRAY_CONDITION_NAME)
+        SoulfrayTemplateFactory()
         SoulfrayConfigFactory()
         scene = SceneFactory(is_active=True)
         outcome = CheckOutcomeFactory(name="NoRitualOutcome", success_level=1)

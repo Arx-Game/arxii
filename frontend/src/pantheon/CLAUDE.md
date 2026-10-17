@@ -8,6 +8,9 @@ Staff-only authoring of the pantheon over `/api/worship/admin/beings/`.
   explanation as a `title` tooltip; Save is live.
 - `pages/BeingDashboardPage.tsx` — `/staff/pantheon/:id`: pool + Send Vision in the header,
   tabs Overview / Worship / Temples & Shrines / Prayers / Visions / Relics / Codex Entries.
+  Overview's "Pledges and answers" card (#4333) counts pledge types, answers and held answers
+  and links the two admin builders; the Visions tab lists answers held until the pool can pay
+  (`useHeldAnswers`, `/api/worship/admin/beings/{id}/held-answers/`).
 - Staff-page conventions only (plain cards, `container mx-auto max-w-6xl px-4 py-8`); never
   the realm-themed fonts.
 

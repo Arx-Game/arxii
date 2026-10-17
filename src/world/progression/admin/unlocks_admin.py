@@ -5,6 +5,7 @@ Admin interface for progression unlocks models.
 from django.contrib import admin
 from django.contrib.contenttypes.admin import GenericTabularInline
 
+from world.admin_utils import OneRowPerFormSet
 from world.magic.models import ThreadCrossingThreshold
 from world.progression.models import (
     AchievementRequirement,
@@ -37,6 +38,7 @@ class XPCostEntryInline(admin.TabularInline):
     """Inline admin for XP cost entries."""
 
     model = XPCostEntry
+    formset = OneRowPerFormSet
     extra = 1
 
 
@@ -214,6 +216,7 @@ class MultiClassLevelInline(admin.TabularInline):
     """Inline admin for MultiClassLevel."""
 
     model = MultiClassLevel
+    formset = OneRowPerFormSet
     extra = 1
 
 

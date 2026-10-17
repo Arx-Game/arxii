@@ -396,6 +396,16 @@ pull-prod confirm="no":
              exit 2 ;;
     esac
 
+# Prove a migration (or data check) against the NEWEST production dump in a
+# throwaway scratch database (#4390). Fetches the dump with the read-only
+# dev_reader key, restores into scratch_pmc_<timestamp>, migrates forward to
+# this branch's head, back to main's tip (or the given migration), forward
+# again, prints row counts and pending migrations, then drops the database and
+# the dump. Never touches arxiidev. Runs under the arx-heavy lock.
+#   just prod-migration-check [target_migration] [--tables a,b,c] [--keep]
+prod-migration-check *args:
+    bash tools/prod_migration_check.sh {{args}}
+
 # --- Server ------------------------------------------------------------------
 
 start:

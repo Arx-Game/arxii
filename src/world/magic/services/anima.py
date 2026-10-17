@@ -208,11 +208,11 @@ def apply_anima_ritual_outcome(
     Returns:
         RitualOutcome describing what was recovered and reduced.
     """
-    from world.conditions.models import ConditionInstance, ConditionTemplate  # noqa: PLC0415
+    from world.conditions.models import ConditionInstance  # noqa: PLC0415
     from world.conditions.services import decay_condition_severity  # noqa: PLC0415
-    from world.magic.audere import SOULFRAY_CONDITION_NAME  # noqa: PLC0415
     from world.magic.models.anima import AnimaRitualPerformance  # noqa: PLC0415
     from world.magic.models.soulfray import SoulfrayConfig  # noqa: PLC0415
+    from world.magic.services.soulfray import soulfray_condition_id  # noqa: PLC0415
 
     character = character_sheet.character
 
@@ -221,10 +221,9 @@ def apply_anima_ritual_outcome(
 
     anima = CharacterAnima.objects.select_for_update().get(character=character_sheet)
 
-    soulfray_template = ConditionTemplate.get_by_name(SOULFRAY_CONDITION_NAME)
     soulfray_inst = (
         ConditionInstance.objects.select_for_update()
-        .filter(target=character, condition=soulfray_template, resolved_at__isnull=True)
+        .filter(target=character, condition_id=soulfray_condition_id(), resolved_at__isnull=True)
         .first()
     )
 

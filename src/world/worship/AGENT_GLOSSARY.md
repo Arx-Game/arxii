@@ -46,7 +46,9 @@
 - **Deed** — an act in ordinary play that grants the character a resonance the pledged being
   holds as FAVORED or ASSOCIATED (`credit_pledge_deed`, called by `grant_resonance`); it earns
   favor only while a pledge to that being is open, under `DevotionConfig.weekly_deed_favor_cap`
-  (base favor). A worship rite's own grant is not a deed.
+  (base favor). A worship rite's own grant is not a deed, and neither is a passive grant (a
+  residence or outfit trickle, a distinction grant, a staff grant): favor comes only from a
+  character's actions.
 - **Sacrifice** — an item given up to a being at its shrine or temple outside a ceremony
   (`sacrifice_items`): destroyed, feeding the pool, earning 1 base favor per
   `sacrifice_value_per_favor` of value (more for a favored facet). Recorded as a
@@ -61,6 +63,23 @@
 - **Lapse** — a pledge whose span ends unclosed. At half its target or more it pays the
   Partial Success closing award, otherwise nothing; never an answer, and earned favor is kept
   (Ruling 18).
+- **Answer** — text staff wrote ahead for a being at one outcome tier (`Answer`, #4333 slice
+  3), optionally for one pledge type, delivered as a vision. Its parts, in the vision's order:
+  delay text, answer text with the sacrifice lines, fact text with its fact clue (a Codex
+  entry or a secret), cost text with its cost pool, follow-up text with its follow-up clue;
+  plus an onlooker line (the one room line others see) and `conceals_source`. Fact text and
+  clue only on Success and Critical Success; the follow-up clue only on Partial Success and
+  above (`answer_part_errors`, enforced on save and again at delivery). A closing rite that
+  resolves a pledge draws one (`draw_answer`: the pledge type's rows, then the being's
+  general rows, at the tier and then each lower tier). Authored for staff-owned beings on the
+  Answer builder. _Avoid_: omen, sign, response.
+- **Sacrifice line** — one authored line of an answer for one facet (`AnswerSacrificeLine`).
+  The vision adds it once per distinct facet recorded on the pledge's sacrifices; any other
+  sacrificed item is listed by name after the lines.
+- **Held answer** — an answer drawn at a close that the being's worship pool cannot yet pay
+  for (`PendingAnswer`): kept, never dropped, and sent as a vision by the daily tick
+  (`deliver_held_answers`) once the pool can pay. Staff see held answers on the being's
+  dashboard.
 - **Domains** — `WorshippedBeing.domains`, plain prose naming the spheres a being holds
   ("Carnage, wanton bloodshed, feral battle"). Deliberately NOT a lookup table (#3776):
   overlap between gods is expected and nothing matches on it mechanically, so a
@@ -171,12 +190,15 @@
   or temple of the being pays a little devotion) and **dire straits** (Soulfray active or
   near death; the NEAR_DEATH intervention check runs for the god prayed to). _Avoid_:
   "prayer" for the Rites skill or the Prayer TechniqueStyle (both older uses); "petition".
-- **Vision** — a GM-sent vision (`Vision`, #3779): prose a being sends one character,
+- **Vision** — a vision (`Vision`, #3779): prose a being sends one character,
   first-class and standalone, delivered as a VISIONS narrative message in the one
   treatment reserved for visions. `reveal_source` decides whether the recipient learns
-  the being. May answer a prayer, hand over a Codex clue, or belong to an episode; usually
-  none of these. Never automatic, never player-triggered. _Avoid_: "dream" (the dreams app
-  is the sleep realm), "omen", "vision_text" (an Audere Majora threshold's own field).
+  the being. May answer a prayer, hand over a Codex or secret clue, or belong to an episode;
+  usually none of these. Always written by a person: sent live by staff or a GM, or written
+  ahead as an Answer and released by a closing rite (`Vision.answer`, ADR-4333-B). A player
+  never causes one on demand; below Success it carries no fact text and no fact clue.
+  _Avoid_: "dream" (the dreams app is the sleep realm), "omen", "vision_text" (an Audere
+  Majora threshold's own field).
 - **Dire straits** — the danger a god might answer (`DireStraitsKind`, #3779): Soulfray
   active (read through the safety checkpoint's `get_soulfray_warning`) or health at or
   below the knockout band while alive. Near death outranks Soulfray on the record.

@@ -277,6 +277,20 @@ repos:
         # typeclass; request data is an explicit argument (serializer `context=`,
         # or `validated_data`) or middleware. Suppress with `# noqa: VIEW_MEMO`
         # plus a reason, only for constant configuration that defaults to None.
+      - id: seed-factory
+        name: Reject test factories called from production code
+        entry: uv run python tools/lint_seed_factory.py
+        language: system
+        pass_filenames: true
+        types: [python]
+        files: ^src/.*\.py$
+        exclude: (/tests/|/migrations/)
+        # #4378 (2026-10-16): seed code called `CheckOutcomeFactory(name="Success")`,
+        # which creates a missing row with a random success_level and Faker text.
+        # Production's Success read -4 and Failure read 3, so rolls were read
+        # backwards. A seed writes its rows with get_or_create and explicit values;
+        # an outcome tier comes from world.traits.services.ensure_canonical_check_outcome.
+        # The grandfather list in the script is closed. `# noqa: SEED_FACTORY` plus a reason.
       - id: undelivered-interaction
         name: Reject a persisted Interaction with no live delivery seam
         entry: uv run python tools/lint_undelivered_interaction.py

@@ -145,10 +145,12 @@ issue bodies; the model decision is ADR-0132.
   (`related_name="visions"`), `being` FK (the true sender), `sent_by` account, `body`,
   `reveal_source` (whether the recipient is told the being; the twisted-rite leak
   shape), optional `prayer` FK (the prayer it answers), optional `clue` FK → `clues.Clue`
-  (a CODEX clue the vision hands over; PROTECT), optional `episode` FK →
-  `stories.Episode` (a personal beat of a story the recipient is in), OneToOne
-  `message` → `narrative.NarrativeMessage` (the VISIONS-category delivery),
-  `resonance_spent`, `sent_at`. Rarity is not enforced: a GM composes each one.
+  (a CODEX or SECRET clue the vision hands over; PROTECT), optional `episode` FK →
+  `stories.Episode` (a personal beat of a story the recipient is in), optional `answer` FK →
+  `Answer` (the written-ahead answer a closing rite released, #4333 slice 3; SET_NULL),
+  OneToOne `message` → `narrative.NarrativeMessage` (the VISIONS-category delivery),
+  `resonance_spent`, `sent_at`. Rarity is not enforced: a person writes each one, live or
+  ahead of time (ADR-4333-B).
 - `WorshipGrant` — audit ledger (being, amount, granted_by sheet, reason).
 - `DevotionStanding` — one-way PC→god favor, unique (character_sheet, being).
   Chosen patronage fields (#2550): `valence` (nullable PatronageValence:
@@ -492,8 +494,8 @@ pledge progress (Ruling 9).
   `weekly_deed_favor_cap` (8, base favor) and `sacrifice_value_per_favor` (10).
   `FavorOutcomeAward` CLOSING rows are the closing awards (seeded 8 / 5 / 3 / 2 / 0).
 - `CeremonyOffering` (ceremonies) gains nullable `being`, `pledge_details` and `facet`;
-  `ceremony` is nullable; a CHECK requires exactly one of ceremony or being (migration 0231,
-  its own migration after the columns in 0230).
+  `ceremony` is nullable; a CHECK requires exactly one of ceremony or being (migration 0234,
+  its own migration after the columns in 0233).
 - `ProjectKind.PLEDGE`, registered expiry-only (`projects.services.register_expiry_only_kind`).
 
 **Services** (`worship/pledge_services.py`)
@@ -508,7 +510,9 @@ pledge progress (Ruling 9).
 - `credit_pledge_deed(grant)` — called by `grant_resonance` after it writes the ledger row.
   With an open pledge whose being holds the grant's resonance as FAVORED or ASSOCIATED: base
   = amount x the percent, rounded down, at least 1, held to what is left of the week's cap.
-  WORSHIP_RITE grants are skipped (the rite pays favor itself).
+  WORSHIP_RITE grants are skipped (the rite pays favor itself). So are the passive sources in
+  `PASSIVE_DEED_SOURCES` (`worship/constants.py`): the residence and outfit trickles, distinction
+  grants and staff grants. Favor comes only from a character's actions (ruling 2026-10-16).
 - `close_pledge(sheet, *, scene)` — needs the target met and the span not over; runs
   `perform_worship_rite(..., pay_award=False)` (the roll and the performance row are kept,
   the rite's own award is not paid, `record_unpaid_performance`). A first Failure or
@@ -519,7 +523,8 @@ pledge progress (Ruling 9).
   performance it pays the CLOSING award for the rite's tier; without one it is a lapse (the
   tick resolved it at the time limit): half the target or more pays the Partial Success
   CLOSING award, less pays nothing (Ruling 18). Awards go through `bump_devotion` at the
-  earning rate; earned favor is never taken back. Slice 3 delivers the closing answer here.
+  earning rate; earned favor is never taken back. The closing answer (slice 3) is delivered
+  by `close_pledge` after this resolution commits, never from inside it.
 - `service_terms(sheet, being)`, `pledge_card(details)`, `holy_sites_here(sheet)`,
   `open_pledge_for` / `latest_pledge_for`, `broadcast_room_line`.
 - Sacrifices: `ceremonies.services.sacrifice_items(sheet, items, *, being=None)` at a shrine
@@ -553,6 +558,73 @@ pledge progress (Ruling 9).
   creates the being's favor targets when it opens. `PledgeAdmin` and `PledgeDetailsAdmin`
   are read-only. Devotion config shows the four earning fields. Required-content sentinel:
   `favor-closing-awards`.
+
+### Favor with beings: answers at the close (#4333, slice 3) [BUILT & WIRED]
+
+Spec and demo: issue #4333 (slice 3 is #4374; walkthrough A steps 3 and 4). Decision:
+ADR-4333-B (a vision written ahead may be released by a closing rite). Stewards (slice 4) and
+answering live (slice 5) are not built.
+
+**Models**
+
+- `Answer` (`CreditedContent`) — text staff wrote ahead for a being at one outcome tier:
+  `being`, nullable `pledge` (empty = the being's general answers), `outcome_tier`,
+  `delay_text`, `answer_text`, `fact_text`, nullable `fact_clue` (CODEX or SECRET),
+  `cost_text`, nullable `cost_pool` (`ConsequencePool`), `follow_up_text`, nullable
+  `follow_up_clue`, `onlooker_line`, `conceals_source`, `weight`, `is_active`; index on
+  (being, pledge, outcome_tier). `clean()` applies `answer_part_errors`: fact text and fact
+  clue on Success and Critical Success only, the follow-up clue on Partial Success and above.
+- `AnswerSacrificeLine` — (answer, facet, text), unique per answer and facet.
+- `PendingAnswer` — (character_sheet, answer PROTECT, O2O pledge_details, created_at): an
+  answer whose being's pool could not yet pay for the vision.
+- `Vision.answer` (above). Migration 0235 is schema only.
+
+**Services** (`worship/answer_services.py`)
+
+- `draw_answer(details, outcome_tier)` — the pledge type's active rows at the closing tier,
+  then the being's rows with no pledge type, then the same two steps one tier lower, down to
+  the lowest; each step is a weighted choice (`select_weighted`) that leaves out answers the
+  character already drew (delivered or held). None means no vision; the award still lands.
+- `answer_body(answer, offerings)` — delay; answer text then one sacrifice line per distinct
+  facet recorded on the pledge's sacrifices (`CeremonyOffering.pledge_details`), other items
+  listed by name ("Also sacrificed: ..."); fact text (Success and above only); cost; follow-up.
+- `deliver_answer(details, answer)` — `send_vision(sent_by=None, reveal_source=not
+  conceals_source, prayer=details.prayer, clue=<fact clue at Success and above>,
+  answer=answer)`, then the follow-up clue through `find_clue` (Partial Success and above;
+  the same AUTOMATIC/RESEARCH rule a vision's clue follows, #4331), then the cost pool through
+  `apply_pool_for_tier` at the answer's own tier. A short pool holds it as a `PendingAnswer`.
+  `send_vision`'s clue guard now accepts SECRET as well as CODEX (`VisionClueNotFact`).
+- `deliver_pledge_answer(details, outcome_tier)` — called by `close_pledge` after the
+  resolution block commits (a vision is pushed to the player the moment it is written, so it
+  must never be written inside a transaction that can still roll back). `ClosingOutcome`
+  carries the `AnswerDelivery` (answer, vision, held).
+- `deliver_held_answers()` — the daily tick `worship.held_answers`
+  (`world/worship/tasks.py`): oldest first, each whose being's pool can pay; one refused
+  attachment is logged and kept.
+- `cost_condition_names(answer)` — the vision's condition footnote.
+
+**Surfaces**
+
+- Room: after the rite line, the answer's `onlooker_line` when the vision went out at the
+  rite (`ClosePledgeAction`); a held answer sends no room line later. Nothing player-written
+  reaches the room, so a secret faith's close carries no player line.
+- Web: the sheet's `VisionCard` footnotes the fact clue, the follow-up and the cost's
+  condition (`VisionSerializer.clue_name`, `follow_up_footnote` - "A mission came with it"
+  for a mission clue - and `condition_names`); `answer_footnotes` ends the `[VISION]`
+  narrative message with the same lines for telnet. The
+  Deity Editor dashboard's Overview counts pledge types, answers and held answers and links
+  both builders; its Visions tab lists held answers
+  (`GET /api/worship/admin/beings/{id}/held-answers/`).
+- Telnet: the vision arrives as a `|G[VISION]|n` narrative message, as every vision does,
+  ending with the footnotes. It is pushed while the close runs, so it prints before the
+  closing-award line.
+- Admin: the **Answer builder** (`/admin/_being_answers/<being>/?pledge=&tier=&answer=`,
+  `web/admin/answer_builder/`): a coverage grid (no pledge type and each pledge type, by
+  tier), one answer's form with its sacrifice lines, what each linked clue and pool is, a
+  vision preview, the being's worship, checks (tier rules, a public codex entry, missing
+  tiers and what they fall back to) and credit with Mark reviewed. Reached from the being's
+  change form, the Being Service builder (per pledge type "N of 5 outcome tiers written")
+  and the Deity Editor. `AnswerAdmin` and `PendingAnswerAdmin` are read-only.
 
 ### Miracles & Divine Intervention (#2360)
 

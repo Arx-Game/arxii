@@ -768,6 +768,25 @@ def collect_org_income(
     )
 
 
+def _income_for(character_sheet, amount: int) -> int:
+    """``amount`` after the character's income lever (#4394), floored at 0.
+
+    The one reader of the ``income`` category: every payout a character personally collects
+    (the house allowance, an asset collection) passes through here, so a distinction's
+    ``-20 income`` means 80 of every 100. Treasury and organization flows are untouched: the
+    lever is about what reaches a person's purse.
+    """
+    from world.mechanics.constants import (  # noqa: PLC0415
+        INCOME_CATEGORY_NAME,
+        INCOME_TARGET_NAME,
+    )
+    from world.mechanics.levers import lever_total, scale_by_percent  # noqa: PLC0415
+
+    return scale_by_percent(
+        amount, lever_total(character_sheet, INCOME_CATEGORY_NAME, INCOME_TARGET_NAME), floor=0
+    )
+
+
 @transaction.atomic
 def distribute_allowance(*, organization: Organization, surplus: int) -> AllowanceResult:
     """Auto-split a share of ``surplus`` among the org's active piloted members (#2540).
@@ -800,15 +819,35 @@ def distribute_allowance(*, organization: Organization, surplus: int) -> Allowan
     per_member = pool // len(active_sheets)
     if per_member <= 0:
         return AllowanceResult(total_distributed=0, per_member=0, member_count=len(active_sheets))
+    # #4394: the income lever scales what each member collects (a Gambler collects less
+    # of the same share); ``per_member`` stays the house's even split. The pool is the
+    # ceiling, and it is the bonus that bends to it, never a plain share: every member is
+    # paid up to their split first, then whatever the split left on the table (the
+    # Gamblers' shortfall, the whole-copper remainder) tops up the members whose lever
+    # asked for more, in membership order, until the pool is spent. An overdraw would
+    # abort the whole levy with "Insufficient funds".
+    scaled = {sheet.pk: _income_for(sheet, per_member) for sheet in active_sheets.values()}
+    payouts = {pk: min(amount, per_member) for pk, amount in scaled.items()}
+    leftover = pool - sum(payouts.values())
+    for pk, amount in scaled.items():
+        if leftover <= 0:
+            break
+        bonus = min(amount - payouts[pk], leftover)
+        if bonus > 0:
+            payouts[pk] += bonus
+            leftover -= bonus
     distributed = 0
     for sheet in active_sheets.values():
+        amount = payouts[sheet.pk]
+        if amount <= 0:
+            continue
         transfer(
-            amount=per_member,
+            amount=amount,
             reason="house allowance",
             from_treasury=treasury,
             to_purse=get_or_create_purse(sheet),
         )
-        distributed += per_member
+        distributed += amount
     return AllowanceResult(
         total_distributed=distributed, per_member=per_member, member_count=len(active_sheets)
     )
@@ -1071,7 +1110,8 @@ def collect_asset_income(*, asset, character_sheet) -> CollectionResult:
             gathered=gathered, landed=0, graft_leak=0, success_level=success_level, catastrophe=True
         )
 
-    net = gathered * pct // 100
+    # #4394: the income lever scales what the collector keeps of the landed net.
+    net = _income_for(character_sheet, gathered * pct // 100)
     if net > 0:
         transfer(
             amount=net,

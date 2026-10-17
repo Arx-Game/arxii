@@ -164,6 +164,11 @@ class DistinctionListSerializer(serializers.ModelSerializer):
             from world.currency.constants import format_coppers  # noqa: PLC0415
 
             result.append({"text": f"Starts with {format_coppers(grant.coppers)}"})
+        # A keepsake (#4398) is the other: what the character carries from the start.
+        result.extend(
+            {"text": f"Comes with {item_grant.item_template.name}"}
+            for item_grant in obj.cached_item_grants
+        )
         return result
 
     def get_codex_entry_ids(self, obj: Distinction) -> list[int]:

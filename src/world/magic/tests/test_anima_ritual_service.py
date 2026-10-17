@@ -18,8 +18,10 @@ from django.test import TestCase
 
 from evennia_extensions.factories import AccountFactory
 from world.character_sheets.factories import CharacterSheetFactory
-from world.conditions.factories import ConditionInstanceFactory, ConditionTemplateFactory
-from world.magic.audere import SOULFRAY_CONDITION_NAME
+from world.conditions.factories import (
+    ConditionInstanceFactory,
+    SoulfrayTemplateFactory,
+)
 from world.magic.constants import RitualExecutionKind
 from world.magic.exceptions import (
     CharacterEngagedForRitual,
@@ -101,10 +103,10 @@ class CritNoSoulfrayTests(TestCase):
             current=3,
             maximum=10,
         )
-        self.soulfray_template = ConditionTemplateFactory(name=SOULFRAY_CONDITION_NAME)
         self.config = SoulfrayConfigFactory(
             ritual_severity_cost_per_point=1,
         )
+        self.soulfray_template = SoulfrayTemplateFactory()
         self.scene = SceneFactory(is_active=True)
 
     @patch(_SCENE_PARTICIPANT_PATH, return_value=True)
@@ -139,7 +141,7 @@ class CritWithSoulfrayTests(TestCase):
             current=5,
             maximum=10,
         )
-        self.soulfray_template = ConditionTemplateFactory(name=SOULFRAY_CONDITION_NAME)
+        self.soulfray_template = SoulfrayTemplateFactory()
         self.soulfray_inst = ConditionInstanceFactory(
             target=self.sheet.character,
             condition=self.soulfray_template,
@@ -183,7 +185,7 @@ class SuccessWithSoulfrayTests(TestCase):
             current=2,
             maximum=10,
         )
-        self.soulfray_template = ConditionTemplateFactory(name=SOULFRAY_CONDITION_NAME)
+        self.soulfray_template = SoulfrayTemplateFactory()
         self.soulfray_inst = ConditionInstanceFactory(
             target=self.sheet.character,
             condition=self.soulfray_template,
@@ -232,7 +234,7 @@ class PartialWithHighSoulfrayTests(TestCase):
             current=1,
             maximum=10,
         )
-        self.soulfray_template = ConditionTemplateFactory(name=SOULFRAY_CONDITION_NAME)
+        self.soulfray_template = SoulfrayTemplateFactory()
         self.soulfray_inst = ConditionInstanceFactory(
             target=self.sheet.character,
             condition=self.soulfray_template,
@@ -279,10 +281,10 @@ class FailureNoSoulfrayTests(TestCase):
             current=0,
             maximum=10,
         )
-        self.soulfray_template = ConditionTemplateFactory(name=SOULFRAY_CONDITION_NAME)
         self.config = SoulfrayConfigFactory(
             ritual_severity_cost_per_point=1,
         )
+        self.soulfray_template = SoulfrayTemplateFactory()
         self.scene = SceneFactory(is_active=True)
 
     @patch(_SCENE_PARTICIPANT_PATH, return_value=True)
@@ -315,10 +317,10 @@ class GateTests(TestCase):
             current=5,
             maximum=10,
         )
-        self.soulfray_template = ConditionTemplateFactory(name=SOULFRAY_CONDITION_NAME)
         self.config = SoulfrayConfigFactory(
             ritual_severity_cost_per_point=1,
         )
+        self.soulfray_template = SoulfrayTemplateFactory()
         self.scene = SceneFactory(is_active=True)
 
     @patch(_SCENE_PARTICIPANT_PATH, return_value=True)
@@ -369,10 +371,10 @@ class PerformanceRowTests(TestCase):
             current=3,
             maximum=10,
         )
-        self.soulfray_template = ConditionTemplateFactory(name=SOULFRAY_CONDITION_NAME)
         self.config = SoulfrayConfigFactory(
             ritual_severity_cost_per_point=1,
         )
+        self.soulfray_template = SoulfrayTemplateFactory()
         self.scene = SceneFactory(is_active=True)
 
     @patch(_SCENE_PARTICIPANT_PATH, return_value=True)
@@ -410,7 +412,7 @@ class AnimaRitualBudgetGuardTests(TestCase):
     def setUp(self) -> None:
         self.sheet = CharacterSheetFactory()
         self.ritual = _make_ritual_for_sheet(self.sheet)
-        self.soulfray_template = ConditionTemplateFactory(name=SOULFRAY_CONDITION_NAME)
+        self.soulfray_template = SoulfrayTemplateFactory()
         self.scene = SceneFactory(is_active=True)
 
     @patch(_SCENE_PARTICIPANT_PATH, return_value=True)
@@ -428,9 +430,7 @@ class AnimaRitualBudgetGuardTests(TestCase):
             condition=self.soulfray_template,
             severity=10,
         )
-        SoulfrayConfigFactory(
-            ritual_severity_cost_per_point=1,
-        )
+        SoulfrayConfigFactory(ritual_severity_cost_per_point=1)
         mock_check.return_value = _make_check_result(success_level=1)  # success → budget=3
         AnimaRitualBudgetAward.objects.create(
             outcome_tier=mock_check.return_value.outcome, budget=3
@@ -463,9 +463,7 @@ class AnimaRitualBudgetGuardTests(TestCase):
             condition=self.soulfray_template,
             severity=10,
         )
-        SoulfrayConfigFactory(
-            ritual_severity_cost_per_point=2,
-        )
+        SoulfrayConfigFactory(ritual_severity_cost_per_point=2)
         mock_check.return_value = _make_check_result(success_level=1)  # success → budget=3
         AnimaRitualBudgetAward.objects.create(
             outcome_tier=mock_check.return_value.outcome, budget=3
@@ -490,9 +488,7 @@ class AnimaRitualBudgetGuardTests(TestCase):
         """
         CharacterAnimaFactory(character=self.sheet, current=0, maximum=10)
         # No ConditionInstance created for this character
-        SoulfrayConfigFactory(
-            ritual_severity_cost_per_point=2,
-        )
+        SoulfrayConfigFactory(ritual_severity_cost_per_point=2)
         mock_check.return_value = _make_check_result(success_level=1)  # success → budget=3
         AnimaRitualBudgetAward.objects.create(
             outcome_tier=mock_check.return_value.outcome, budget=3

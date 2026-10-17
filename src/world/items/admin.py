@@ -4,6 +4,7 @@ from django.contrib import admin
 from django.forms import ModelForm
 from django.http import HttpRequest
 
+from world.admin_utils import OneRowPerFormSet
 from world.contributors.admin import CREDIT_FIELDSET
 from world.items.crafting.models import (
     AccentArchetypeAllowance,
@@ -20,6 +21,7 @@ from world.items.models import (
     Adornment,
     AudacityTuning,
     DisguiseKitEffect,
+    DistinctionItemGrant,
     EquippedItem,
     FashionStyle,
     FashionStyleBonus,
@@ -189,16 +191,19 @@ class WeaponClassAdmin(admin.ModelAdmin):
 
 class TemplateSlotInline(admin.TabularInline):
     model = TemplateSlot
+    formset = OneRowPerFormSet
     extra = 1
 
 
 class TemplateInteractionInline(admin.TabularInline):
     model = TemplateInteraction
+    formset = OneRowPerFormSet
     extra = 1
 
 
 class ItemTemplateAppearanceEffectInline(admin.TabularInline):
     model = ItemTemplateAppearanceEffect
+    formset = OneRowPerFormSet
     extra = 1
     autocomplete_fields = ["trait", "target_option"]
     verbose_name = "Appearance Effect"
@@ -214,12 +219,14 @@ class DisguiseKitEffectInline(admin.TabularInline):
 
 class GarmentMitigationInline(admin.TabularInline):
     model = GarmentMitigation
+    formset = OneRowPerFormSet
     extra = 1
     raw_id_fields = ["resonance"]
 
 
 class ItemCheckModifierInline(admin.TabularInline):
     model = ItemCheckModifier
+    formset = OneRowPerFormSet
     extra = 1
     autocomplete_fields = ["check_type"]
     verbose_name = "Check Modifier"
@@ -228,6 +235,7 @@ class ItemCheckModifierInline(admin.TabularInline):
 
 class ItemTemplatePropertyInline(admin.TabularInline):
     model = ItemTemplateProperty
+    formset = OneRowPerFormSet
     extra = 1
     autocomplete_fields = ["property"]
     verbose_name = "Default Property"
@@ -334,6 +342,7 @@ class ItemTemplateAdmin(admin.ModelAdmin):
 
 class ItemStyleInline(admin.TabularInline):
     model = ItemStyle
+    formset = OneRowPerFormSet
     extra = 1
     autocomplete_fields = ["style"]
 
@@ -460,6 +469,7 @@ class OwnershipEventAdmin(admin.ModelAdmin):
 
 class FashionStyleBonusInline(admin.TabularInline):
     model = FashionStyleBonus
+    formset = OneRowPerFormSet
     extra = 1
     autocomplete_fields = ["target"]
 
@@ -519,12 +529,14 @@ class CraftingMaterialRequirementInline(admin.TabularInline):
 
 class CraftingRecipeConsequenceInline(admin.TabularInline):
     model = CraftingRecipeConsequence
+    formset = OneRowPerFormSet
     extra = 1
     autocomplete_fields = ["consequence"]
 
 
 class CraftingRecipeModifierInline(admin.TabularInline):
     model = CraftingRecipeModifier
+    formset = OneRowPerFormSet
     extra = 1
     autocomplete_fields = ["target"]
 
@@ -597,6 +609,7 @@ class CraftingRecipeModifierAdmin(admin.ModelAdmin):
 
 class MantleLevelDefinitionInline(admin.TabularInline):
     model = MantleLevelDefinition
+    formset = OneRowPerFormSet
     extra = 1
     autocomplete_fields = ["codex_entry_required"]
 
@@ -646,3 +659,12 @@ class MakeoverConsentRequestAdmin(admin.ModelAdmin):
     raw_id_fields = ["item_instance"]
     autocomplete_fields = ["stylist_persona", "target_persona", "option"]
     readonly_fields = ["requested_at", "responded_at"]
+
+
+@admin.register(DistinctionItemGrant)
+class DistinctionItemGrantAdmin(admin.ModelAdmin):
+    """A keepsake a distinction mints at finalize (#4398); the sibling of the inheritance."""
+
+    list_display = ("distinction", "item_template")
+    search_fields = ("distinction__name", "item_template__name")
+    raw_id_fields = ("distinction", "item_template")

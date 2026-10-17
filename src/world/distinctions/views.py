@@ -44,6 +44,7 @@ from world.distinctions.serializers import (
     DraftDistinctionSyncSerializer,
 )
 from world.distinctions.types import ValidatedDistinction, build_distinction_entry
+from world.items.models import DistinctionItemGrant
 
 
 class DistinctionCategoryViewSet(viewsets.ReadOnlyModelViewSet):
@@ -104,6 +105,13 @@ class DistinctionViewSet(viewsets.ReadOnlyModelViewSet):
                     "mutually_exclusive_with",
                     queryset=Distinction.objects.all(),
                     to_attr="prefetched_exclusive",
+                ),
+                Prefetch(
+                    "item_grants",
+                    queryset=DistinctionItemGrant.objects.filter(
+                        item_template__is_active=True
+                    ).select_related("item_template"),
+                    to_attr="cached_item_grants",
                 ),
                 Prefetch(
                     "codex_grants",

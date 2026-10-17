@@ -319,7 +319,9 @@ Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Sc
   - `character.combat_pulls` (`CharacterCombatPullHandler` in `world/combat`)
     — `active()`, `active_for_encounter()`, `active_pull_vital_bonuses()`
 - **Key Services:**
-  - **Soulfray ladder (#4089, `world/magic/services/soulfray.py`):** `soulfray_stages()`
+  - **Soulfray ladder (#4089, `world/magic/services/soulfray.py`):** the Soulfray template
+    is whichever `ConditionTemplate` `SoulfrayConfig.condition` names (#4122; never matched by
+    name): `soulfray_condition_id()`, `get_soulfray_template()`, `soulfray_stages()`
     (every `ConditionStage` of the Soulfray template, ladder order), `is_soulfray_stage(stage)`,
     `soulfray_ladder_summary() -> list[SoulfrayStageSummary]` (each stage's EFFECTIVE
     consequences - own pool entries merged with its shared parent's, two queries total -
@@ -6549,6 +6551,9 @@ Field+Granary/crop) are split to `needs-design` follow-up issues.
 ### Mechanics
 Unified modifier system — categories, types, sources, and per-character modifier values.
 
+- **Levers (#4394):** five `ModifierCategory` rows (`income`, `reputation_gain`,
+  `relationship_gain`, `comfort`, `fatigue_cost`) read at one seam each through
+  `world/mechanics/levers.py`; see `mechanics.md` "Levers".
 - **Models:** `ModifierCategory`, `ModifierTarget`, `ModifierSource`, `CharacterModifier`, `ConsequenceEffect`, `ObjectProperty`, `ChallengeTemplateProperty`, `PropertyDamageModifier` (#1793), `PropertyDetonation` (#2210), `SituationTemplate`, `SituationChallengeLink`, `SituationTrapLink` (#1625), `SituationInstance`
 - **Key Functions:**
   - `instantiate_situation(template, location) -> SituationInstance` (#1625) — mints
@@ -6789,6 +6794,8 @@ then choose lawful seizure vs steal-back; linked from the inventory sidebar). Th
 holder is never notified a claim exists.
 
 - **Models:**
+  - `DistinctionItemGrant` (#4398, a keepsake a distinction mints at finalize; sibling of
+    `currency.DistinctionStartingGrant`, see `distinctions.md`)
   - `QualityTier`, `InteractionType`, `ItemTemplate`, `WeaponClass` (#2879 — weighted
     strength/agility blend for `ItemTemplate.weapon_class`, replaces the small/medium/heavy
     override; see `world.combat.stat_mapping`), `TemplateSlot`, `ItemInstance`,
@@ -9121,7 +9128,7 @@ lightly-structured freeform RP. Full doc: `docs/systems/worship.md`; model decis
   and sacrifice value per favor, `CeremonyOffering.being`/`pledge_details`/`facet` (a
   sacrifice outside a ceremony). Services (`worship/pledge_services.py`): `take_pledge`,
   `record_pledge_credit` (from `bump_devotion`: progress is favor), `credit_pledge_deed`
-  (from `grant_resonance`), `close_pledge` (one retry after a failed first close; atomic
+  (from `grant_resonance`; passive sources skipped via `PASSIVE_DEED_SOURCES`), `close_pledge` (one retry after a failed first close; atomic
   RESOLVING + `resolve_project`), `resolve_pledge_project` (CLOSING award, or on a lapse the
   Partial Success award at half the target), `service_terms`, `pledge_card`,
   `holy_sites_here`; `ceremonies.services.sacrifice_items` / `give_up_item`;
@@ -9129,6 +9136,18 @@ lightly-structured freeform RP. Full doc: `docs/systems/worship.md`; model decis
   `sacrifice`; API `pledges/`, `pledge-cards/`, `beings/{id}/service-terms/`,
   `beings/holy-site/`; telnet `pledge`, `pledge/close`, `sacrifice`; admin Being Service
   builder (`/admin/_being_service/<being>/`).
+- **Answers at the close** (#4333 slice 3, ADR-4333-B): `Answer` (text staff wrote ahead for
+  a being, optionally one pledge type, at one outcome tier: delay, answer, fact + fact clue,
+  cost + cost pool, follow-up + follow-up clue, onlooker line, conceals source, weight;
+  credited content), `AnswerSacrificeLine` (one line per facet), `PendingAnswer` (held until
+  the being's pool can pay), `Vision.answer`. Services (`worship/answer_services.py`):
+  `draw_answer`, `answer_body`, `deliver_answer`, `deliver_pledge_answer` (from
+  `close_pledge`, after the resolution commits), `deliver_held_answers` (daily task
+  `worship.held_answers`), `cost_condition_names`; `models.answer_part_errors` (no fact below
+  Success, no follow-up clue below Partial Success). API: `VisionSerializer` gains
+  `clue_name`, `follow_up_footnote`, `condition_names` (the same footnotes end the narrative message); staff
+  `admin/beings/{id}/held-answers/` and overview counts. Admin: the Answer builder
+  (`/admin/_being_answers/<being>/`).
 - **Worship services**: `grant_worship`, `bump_devotion` (+ God's Favorite
   Princess/Prince/Chosen achievement on top-favor reach/tie), `gods_favorite_achievement_for`;
   `mint_worship_secret` (`worship/secrets.py`); `convert_public_worship(sheet, new_being, *,

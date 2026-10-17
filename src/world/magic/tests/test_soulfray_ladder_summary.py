@@ -12,9 +12,11 @@ from world.conditions.factories import (
     ConditionInstanceFactory,
     ConditionStageFactory,
     ConditionTemplateFactory,
+    SoulfrayTemplateFactory,
 )
 from world.conditions.models import ConditionStage
-from world.magic.audere import SOULFRAY_CONDITION_NAME
+from world.magic.factories import ensure_soulfray_config
+from world.magic.models import SoulfrayConfig
 from world.magic.services.soulfray import (
     get_soulfray_warning,
     is_soulfray_stage,
@@ -30,7 +32,8 @@ from world.traits.factories import CheckOutcomeFactory
 class SoulfrayLadderSummaryTests(TestCase):
     @classmethod
     def setUpTestData(cls) -> None:
-        cls.template = ConditionTemplateFactory(name=SOULFRAY_CONDITION_NAME, has_progression=True)
+        cls.template = SoulfrayTemplateFactory(has_progression=True)
+        ensure_soulfray_config()
         other = ConditionTemplateFactory(name="Not Soulfray", has_progression=True)
         failure = CheckOutcomeFactory(name="Failure", success_level=-1)
         botch = CheckOutcomeFactory(name="Critical Failure", success_level=-3)
@@ -86,6 +89,7 @@ class SoulfrayLadderSummaryTests(TestCase):
         self.assertTrue(soulfray_ladder_summary()[1].can_kill)
 
     def test_a_pooled_ladder_costs_two_queries(self) -> None:
+        SoulfrayConfig.objects.cached_singleton()  # the config read is cached in play
         with self.assertNumQueries(2):
             soulfray_ladder_summary()
 
@@ -95,7 +99,8 @@ class InheritedDeathRiskTests(TestCase):
 
     @classmethod
     def setUpTestData(cls) -> None:
-        cls.template = ConditionTemplateFactory(name=SOULFRAY_CONDITION_NAME, has_progression=True)
+        cls.template = SoulfrayTemplateFactory(has_progression=True)
+        ensure_soulfray_config()
         cls.common = ConsequencePoolFactory(name="Soulfray - common")
         cls.lethal = ConsequenceFactory(label="PLACEHOLDER death", character_loss=True)
         ConsequencePoolEntryFactory(pool=cls.common, consequence=cls.lethal)

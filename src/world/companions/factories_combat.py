@@ -23,9 +23,9 @@ _OUTCOME_SUCCESS = "Success"
 
 def _get_or_create_outcome(name: str, success_level: int):
     """Return a CheckOutcome with the given name, creating it if absent."""
-    from world.traits.factories import CheckOutcomeFactory  # noqa: PLC0415
+    from world.traits.services import ensure_check_outcome  # noqa: PLC0415
 
-    return CheckOutcomeFactory(name=name, success_level=success_level)
+    return ensure_check_outcome(name, success_level)
 
 
 def _seed_pool_consequences(pool, consequence_specs) -> None:

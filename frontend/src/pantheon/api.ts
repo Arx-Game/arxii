@@ -10,6 +10,7 @@ import type { VisionCreate } from '@/worship/types';
 import type {
   CodexRow,
   EditorOptions,
+  HeldAnswer,
   Overview,
   RelicRow,
   RosterCharacterRef,
@@ -87,6 +88,10 @@ export function fetchBeingPrayers(id: number): Promise<PaginatedResponse<StaffPr
 
 export function fetchBeingVisions(id: number): Promise<PaginatedResponse<StaffVision>> {
   return getJson(`${BASE}${id}/visions/?page_size=50`, 'Failed to load the visions.');
+}
+
+export function fetchHeldAnswers(id: number): Promise<HeldAnswer[]> {
+  return getJson(`${BASE}${id}/held-answers/`, 'Failed to load the held answers.');
 }
 
 export function fetchRelics(id: number): Promise<RelicRow[]> {

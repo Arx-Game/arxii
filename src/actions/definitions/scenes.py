@@ -68,7 +68,9 @@ class StartSceneAction(Action):
                 capture_prescene_interactions,
             )
 
-            scene = ensure_scene_for_location(room)
+            # The name the starter typed (``scene start <name>``) or sent; until
+            # #3657's journey asked, it was parsed and then dropped here.
+            scene = ensure_scene_for_location(room, name=kwargs.get("name") or None)
             add_present_as_co_owners(scene, room)
             enroll_present_table_gms(scene, room)
             # #3069 sub-item 4: fold prior unattached RP into the scene right as it

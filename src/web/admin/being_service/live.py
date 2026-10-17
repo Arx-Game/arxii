@@ -25,9 +25,11 @@ from world.mechanics.constants import FAVOR_EARNING_CATEGORY_NAME, FAVOR_INVOCAT
 from world.projects.constants import ProjectStatus
 from world.worship.constants import FAVOR_EARNING_BASE_PERCENT, BeingResonanceTier
 from world.worship.models import (
+    Answer,
     BeingResonance,
     DevotionStanding,
     FavorInvocation,
+    PendingAnswer,
     Pledge,
     PledgeDetails,
     WorshippedBeing,
@@ -214,6 +216,34 @@ def pledge_pacing(pledge: Pledge) -> str:
 
 
 @dataclass(frozen=True)
+class PledgeAnswers:
+    """How many outcome tiers have an answer for one pledge type, and where to write more."""
+
+    tiers_written: int
+    tiers_total: int
+    url: str
+
+
+def pledge_answers(pledge: Pledge) -> PledgeAnswers:
+    from urllib.parse import urlencode  # noqa: PLC0415
+
+    from world.traits.models import CheckOutcome  # noqa: PLC0415
+
+    written = (
+        Answer.objects.filter(pledge=pledge, is_active=True)
+        .values("outcome_tier")
+        .distinct()
+        .count()
+    )
+    query = urlencode({"pledge": pledge.pk})
+    return PledgeAnswers(
+        tiers_written=written,
+        tiers_total=CheckOutcome.objects.count(),
+        url=f"{reverse('admin_answer_builder', args=[pledge.being_id])}?{query}",
+    )
+
+
+@dataclass(frozen=True)
 class BeingStats:
     domains: str
     worshippers_with_favor: int
@@ -222,6 +252,7 @@ class BeingStats:
     closed_pledges: int
     invocations_this_week: int
     worship_pool: int
+    held_answers: int
 
 
 def being_stats(being: WorshippedBeing) -> BeingStats:
@@ -242,6 +273,7 @@ def being_stats(being: WorshippedBeing) -> BeingStats:
             being=being, game_week=get_current_game_week()
         ).count(),
         worship_pool=being.resonance_pool,
+        held_answers=PendingAnswer.objects.filter(answer__being=being).count(),
     )
 
 
@@ -266,6 +298,21 @@ def checks(being: WorshippedBeing) -> list[tuple[str, str]]:
         lines.append(("warn", "No resonance at all: no deed earns favor during a pledge."))
     if not being.being_facets.exists():
         lines.append(("warn", "No favored facet: no sacrifice counts double."))
+    general = Answer.objects.filter(being=being, pledge__isnull=True, is_active=True).exists()
+    unanswered = [
+        pledge.name
+        for pledge in active
+        if not general and not Answer.objects.filter(pledge=pledge, is_active=True).exists()
+    ]
+    if unanswered:
+        lines.append(
+            (
+                "warn",
+                f"No answers for: {', '.join(unanswered)}. Closing it pays the closing award only.",
+            )
+        )
+    elif active:
+        lines.append(("ok", "A close of every pledge type can draw an answer."))
     return lines
 
 

@@ -1106,7 +1106,42 @@ with `forms.css`/`widgets.css` linked by the page itself, `builder_formsets.js` 
 - **Guard** - `web/admin/tests/test_faction_rules_page.py` (render, save, character test,
   links, and the same styling test for both new template directories).
 
+## Being Service builder and Answer builder (#4333)
+
+**Purpose:** a staff-owned being's service (Ruling 8: the one place its pledge types and
+answers are written). Same pattern as the Builders above: `superuser_required`, the
+contributor gate, `base_site.html` with `forms.css`/`widgets.css` linked by the page,
+`builder_formsets.js` for "+ Add".
+
+- **Being Service builder** (slice 2) - `web/admin/being_service/` (`views.py`, `forms.py`,
+  `live.py`), templates `web/templates/admin/being_service/`. Writes `BeingResonance`,
+  `BeingFacet` and `Pledge` rows together; opens on `_being_service/<being_pk>/`
+  (`admin_being_service`). Each saved pledge type shows "N of 5 outcome tiers written" with a
+  link into the Answer builder; the rail counts held answers; a check warns on a pledge
+  type no answer can be drawn for.
+- **Answer builder** (slice 3) - `web/admin/answer_builder/` (`views.py`: `answer_builder`,
+  `answer_builder_review`, `answer_builder_delete`; `forms.py`: `AnswerForm` with
+  autocomplete clue and pool pickers, which is why `AnswerAdmin` is registered;
+  `SacrificeLineFormSet`; `live.py`: coverage, linked-row context, preview, checks, credit),
+  templates `web/templates/admin/answer_builder/` (`page.html`, `_row.html`, `_rail.html`,
+  `_css.html`). URL `_being_answers/<being_pk>/?pledge=<pk|none>&tier=<outcome pk>&answer=<pk|new>`
+  (`admin_answer_builder`), plus `.../review/<answer_pk>/` and `.../delete/<answer_pk>/`
+  (POST). The cell's being, pledge type and tier come from the query, never the form, so
+  `Answer.clean` checks the tier rules for the cell being edited. Save credits the answer;
+  "Save and edit <next tier>" moves along the row. A held answer refuses delete (PROTECT).
+- **Ways in** - the being's change form (`admin/arxii/worshippedbeing/change_form_object_tools.html`
+  adds "Open the Answer builder" beside `change_form.html`'s Being Service link), each
+  builder's object tools, and the Deity Editor's Overview card.
+- **Guards** - `web/admin/tests/test_being_service_builder.py` and
+  `web/admin/tests/test_answer_builder.py`, each with the "the rule must reach the page"
+  styling test.
+
 ## Soulfray Stage Builder (#4089)
+
+Which template is "Soulfray" is `SoulfrayConfig.condition` (#4122), read through
+`world.magic.services.soulfray.soulfray_stages()`, so renaming the template does not
+empty the builder. With the field unset the builder lists nothing and the Required-content
+row `soulfray-condition` flags it.
 
 **Purpose:** author one Soulfray `ConditionStage`'s whole consequence ladder - its own
 fields, its on-entry conditions, the `ConditionCheckModifier` penalty tied to it, its

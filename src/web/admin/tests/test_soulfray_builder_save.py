@@ -38,7 +38,8 @@ from world.conditions.factories import (
 )
 from world.conditions.models import ConditionCheckModifier, ConditionStage, ConditionStageOnEntry
 from world.contributors.factories import ContentContributorFactory
-from world.magic.factories import SoulfrayConfigFactory, TechniqueFactory
+from world.magic.factories import TechniqueFactory, ensure_soulfray_config
+from world.magic.models import SoulfrayConfig
 from world.mechanics.factories import PropertyFactory
 
 
@@ -49,9 +50,9 @@ class SaveTestCase(SoulfrayBuilderTestCase):
         cls.writer = ContentContributorFactory(name="Soulfray Saver")
         PlayerData.objects.create(account=cls.author, contributor=cls.writer)
         cls.unlinked = make_superuser("sfsaverunlinked")
-        cls.config = SoulfrayConfigFactory(
-            resilience_check_type=CheckTypeFactory(name="Magical Endurance")
-        )
+        cls.config = ensure_soulfray_config()  # build_ladder made it
+        cls.config.resilience_check_type = CheckTypeFactory(name="Magical Endurance")
+        cls.config.save(update_fields=["resilience_check_type"])
         cls.common = shared_pool(cls.ladder, ("Partial Success", "Success"))
         cls.fraying = cls.ladder.stage("Fraying")
         cls.tearing = cls.ladder.stage("Tearing")
@@ -492,6 +493,7 @@ class PoolPickTest(SaveTestCase):
         self.assertIn(self.common, offered)
 
     def test_the_pool_list_is_one_query_however_many_pools_and_consumers(self) -> None:
+        SoulfrayConfig.objects.cached_singleton()  # the config read is cached in play
         with self.assertNumQueries(1):
             first = list(stage_pool_choices())
         for index in range(5):
@@ -723,21 +725,3 @@ class ReviewTest(SaveTestCase):
         self.client.force_login(self.unlinked)
         self.assertEqual(self.client.post(url).status_code, 302)
         self.assertIsNone(ConditionStage.objects.get(pk=self.fraying.pk).reviewed_by)
-
-
-class NoConfigSaveTest(SoulfrayBuilderTestCase):
-    @classmethod
-    def setUpTestData(cls) -> None:
-        super().setUpTestData()
-        PlayerData.objects.create(
-            account=cls.author, contributor=ContentContributorFactory(name="No Config Saver")
-        )
-
-    def test_save_works_and_writes_no_penalty(self) -> None:
-        stage = self.ladder.stage("Tearing")
-        url = reverse("admin_soulfray_builder", args=[stage.pk])
-        self.client.force_login(self.author)
-        data = form_values(self.client.get(url).content.decode())
-        data["stage-description"] = ["PLACEHOLDER no config"]
-        self.assertEqual(self.client.post(url, data).status_code, 302)
-        self.assertFalse(ConditionCheckModifier.objects.filter(stage_id=stage.pk).exists())

@@ -1,5 +1,6 @@
 from django.contrib import admin
 
+from world.admin_utils import OneRowPerFormSet
 from world.narrative.models import (
     AmbientEmit,
     AmbientEmoteCondition,
@@ -14,6 +15,7 @@ from world.narrative.models import (
 
 class NarrativeMessageDeliveryInline(admin.TabularInline):
     model = NarrativeMessageDelivery
+    formset = OneRowPerFormSet
     extra = 0
     raw_id_fields = ("recipient_character_sheet",)
     readonly_fields = ("delivered_at", "acknowledged_at")

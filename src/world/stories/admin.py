@@ -2,6 +2,7 @@ from django.contrib import admin
 from django.urls import reverse
 from django.utils.html import format_html
 
+from world.admin_utils import OneRowPerFormSet
 from world.stories.models import (
     AggregateBeatContribution,
     AssistantGMClaim,
@@ -145,6 +146,7 @@ class StoryParticipationAdmin(admin.ModelAdmin):
 
 class EpisodeInline(admin.TabularInline):
     model = Episode
+    formset = OneRowPerFormSet
     extra = 0
     fields = ["order", "title", "is_active", "completed_at"]
     readonly_fields = ["completed_at"]
@@ -188,6 +190,7 @@ class ChapterAdmin(admin.ModelAdmin):
 
 class EpisodeSceneInline(admin.TabularInline):
     model = EpisodeScene
+    formset = OneRowPerFormSet
     extra = 0
     fields = ["order", "scene"]
 
@@ -208,6 +211,7 @@ class BeatInline(admin.TabularInline):
 
 class EpisodeProgressionRequirementInline(admin.TabularInline):
     model = EpisodeProgressionRequirement
+    formset = OneRowPerFormSet
     extra = 0
     fk_name = "episode"
     autocomplete_fields = ("beat",)
@@ -330,6 +334,7 @@ class BeatAdmin(admin.ModelAdmin):
 
 class TrustCategoryFeedbackRatingInline(admin.TabularInline):
     model = TrustCategoryFeedbackRating
+    formset = OneRowPerFormSet
     extra = 0
     fields = ["trust_category", "rating", "notes"]
 
@@ -587,6 +592,7 @@ class StakeTemplateAdmin(admin.ModelAdmin):
 
 class StakeResolutionInline(admin.TabularInline):
     model = StakeResolution
+    formset = OneRowPerFormSet
     extra = 0
     fields = (
         "column",

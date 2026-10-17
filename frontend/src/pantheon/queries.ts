@@ -6,6 +6,7 @@ import {
   fetchBeings,
   fetchCodexRows,
   fetchEditorOptions,
+  fetchHeldAnswers,
   fetchOverview,
   fetchRelics,
   fetchSites,
@@ -85,6 +86,14 @@ export function useBeingVisions(id: number, enabled: boolean) {
   return useQuery({
     queryKey: pantheonKeys.tab(id, 'visions'),
     queryFn: () => fetchBeingVisions(id),
+    enabled,
+  });
+}
+
+export function useHeldAnswers(id: number, enabled: boolean) {
+  return useQuery({
+    queryKey: pantheonKeys.tab(id, 'held-answers'),
+    queryFn: () => fetchHeldAnswers(id),
     enabled,
   });
 }

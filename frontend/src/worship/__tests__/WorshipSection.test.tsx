@@ -44,8 +44,11 @@ const vision = {
   prayer: null,
   clue: null,
   clue_slug: null,
+  clue_name: null,
   episode: null,
   episode_title: null,
+  follow_up_footnote: null,
+  condition_names: [],
   sent_at: new Date().toISOString(),
 };
 

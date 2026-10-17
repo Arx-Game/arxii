@@ -441,6 +441,22 @@ def _broadcast_rite_line(sheet, rite, actor: ObjectDB) -> None:
     broadcast_room_line(persona, f"{persona.name} performs {rite.name}.", location=actor.location)
 
 
+def _broadcast_onlooker_line(sheet, delivery, actor: ObjectDB) -> None:
+    """An answer's ``onlooker_line`` (#4333 slice 3): the one room line others see
+    of an answer, after the rite line, when the vision was delivered at the rite.
+    It is staff-authored, so a secret faith's close still carries no player text;
+    a held answer sends no room line when the pool later pays for it."""
+    if delivery is None or delivery.vision is None or delivery.answer is None:
+        return
+    line = delivery.answer.onlooker_line.strip()
+    if not line:
+        return
+    from world.scenes.services import active_persona_for_sheet  # noqa: PLC0415
+    from world.worship.pledge_services import broadcast_room_line  # noqa: PLC0415
+
+    broadcast_room_line(active_persona_for_sheet(sheet), line, location=actor.location)
+
+
 def _resolve_pledge(kwargs: dict[str, Any]):
     """(pledge, error): a ``pledge`` object or pk wins; else ``pledge_name`` + ``being_name``."""
     from world.worship.models import Pledge  # noqa: PLC0415
@@ -564,6 +580,7 @@ class ClosePledgeAction(Action):
         except (PledgeError, WorshipRiteError) as exc:
             return ActionResult(success=False, message=exc.user_message)
         _broadcast_rite_line(sheet, outcome.rite, actor)
+        _broadcast_onlooker_line(sheet, outcome.delivery, actor)
         being = details.pledge.being.name
         if not outcome.resolved:
             message = (

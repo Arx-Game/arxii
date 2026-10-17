@@ -20,6 +20,9 @@ from world.magic.models.techniques import (
 )
 from world.scenes.action_constants import DifficultyChoice
 from world.worship.constants import (
+    ANSWER_FACT_MIN_SUCCESS_LEVEL,
+    ANSWER_FOLLOW_UP_MIN_SUCCESS_LEVEL,
+    ANSWER_ONLOOKER_LINE_MAX_LENGTH,
     FAVOR_INVOCATION_LINE_MAX_LENGTH,
     BeingRelationshipValence,
     BeingResonanceTier,
@@ -1296,6 +1299,17 @@ class Vision(SharedMemoryModel):
         related_name="vision",
         help_text="The narrative message (category VISIONS) that delivered it.",
     )
+    answer = models.ForeignKey(
+        "arxii.Answer",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="visions",
+        help_text=(
+            "The written-ahead answer this vision delivered (#4333); its follow-up clue "
+            "and cost are read from it. Empty for a vision a person sent live."
+        ),
+    )
     resonance_spent = models.PositiveIntegerField(default=0)
     sent_at = models.DateTimeField(auto_now_add=True)
 
@@ -1470,3 +1484,217 @@ class PledgeCredit(SharedMemoryModel):
 
     def __str__(self) -> str:
         return f"{self.get_source_display()} +{self.credited} ({self.pledge_details})"
+
+
+#: The answer field a tier or a clue kind can refuse; named once for both checks.
+_FACT_CLUE_FIELD = "fact_clue"
+
+
+def answer_part_errors(
+    *,
+    success_level: int,
+    fact_text: str,
+    has_fact_clue: bool,
+    has_follow_up_clue: bool,
+) -> dict[str, str]:
+    """The parts an answer at ``success_level`` may not carry (#4333 design 4).
+
+    Fact text and a fact clue only on Success and Critical Success ("no fact
+    below Success"); a follow-up clue on Partial Success and above. Failure and
+    Critical Failure carry delay, answer and cost only. ``Answer.clean`` reports
+    these, and delivery leaves out any part this refuses, so a row saved past
+    the form still never hands over a fact below Success.
+    """
+    errors: dict[str, str] = {}
+    if success_level < ANSWER_FACT_MIN_SUCCESS_LEVEL:
+        if fact_text.strip():
+            errors["fact_text"] = "Fact text is allowed on Success and Critical Success only."
+        if has_fact_clue:
+            errors[_FACT_CLUE_FIELD] = (
+                "A fact clue is allowed on Success and Critical Success only."
+            )
+    if success_level < ANSWER_FOLLOW_UP_MIN_SUCCESS_LEVEL and has_follow_up_clue:
+        errors["follow_up_clue"] = (
+            "A follow-up clue is allowed on Partial Success and above; Failure and "
+            "Critical Failure carry delay, answer and cost only."
+        )
+    return errors
+
+
+class Answer(CreditedContent, SharedMemoryModel):
+    """Text staff wrote ahead for a being at one outcome tier (#4333 slice 3).
+
+    Delivered as a ``Vision`` when a closing rite resolves a pledge: the draw
+    (``answer_services.draw_answer``) prefers rows for the pledge type, then the
+    being's rows with no pledge type, at the closing tier and then each lower
+    tier. The parts, in the order the vision reads them: ``delay_text`` (the
+    effort was acknowledged), ``answer_text`` followed by the sacrifice lines,
+    ``fact_text`` with ``fact_clue`` (one fact, no reason given), ``cost_text``
+    with ``cost_pool``, ``follow_up_text`` with ``follow_up_clue`` (a next
+    action, usually a mission). Which parts a tier may carry is
+    ``answer_part_errors``. ``onlooker_line`` is the one room line others see;
+    ``conceals_source`` delivers the vision without naming the being.
+    """
+
+    being = models.ForeignKey(WorshippedBeing, on_delete=models.CASCADE, related_name="answers")
+    pledge = models.ForeignKey(
+        Pledge,
+        null=True,
+        blank=True,
+        on_delete=models.CASCADE,
+        related_name="answers",
+        help_text="The pledge type this answers; empty for the being's general answers.",
+    )
+    outcome_tier = models.ForeignKey(
+        "arxii.CheckOutcome", on_delete=models.PROTECT, related_name="being_answers"
+    )
+    delay_text = models.TextField(
+        help_text="Opens the vision and states that the character's effort was acknowledged."
+    )
+    answer_text = models.TextField(
+        blank=True, default="", help_text="The main body. Sacrifice lines are added after it."
+    )
+    fact_text = models.TextField(
+        blank=True,
+        default="",
+        help_text="States one fact. Success and Critical Success only.",
+    )
+    fact_clue = models.ForeignKey(
+        "arxii.Clue",
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="answers_as_fact",
+        help_text="A Codex or secret clue handed over with the fact.",
+    )
+    cost_text = models.TextField(
+        blank=True,
+        default="",
+        help_text="A cost, or a notice that the being has marked the character.",
+    )
+    cost_pool = models.ForeignKey(
+        "arxii.ConsequencePool",
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="being_answers",
+        help_text="Consequences applied at this answer's outcome tier when it is delivered.",
+    )
+    follow_up_text = models.TextField(
+        blank=True, default="", help_text="A next action, usually a mission."
+    )
+    follow_up_clue = models.ForeignKey(
+        "arxii.Clue",
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="answers_as_follow_up",
+        help_text="Handed over with the vision. Partial Success and above.",
+    )
+    onlooker_line = models.CharField(
+        max_length=ANSWER_ONLOOKER_LINE_MAX_LENGTH,
+        blank=True,
+        default="",
+        help_text=(
+            "Sent to the room as a public line. Others in the room see this line and "
+            "nothing else from the answer."
+        ),
+    )
+    conceals_source = models.BooleanField(
+        default=False,
+        help_text="Deliver the vision without telling the recipient which being sent it.",
+    )
+    weight = models.PositiveSmallIntegerField(
+        default=1, help_text="Relative chance among the answers that fit a draw."
+    )
+    is_active = models.BooleanField(default=True)
+
+    class Meta:
+        ordering = ["being", "pledge", "-outcome_tier__success_level", "pk"]
+        indexes = [
+            models.Index(fields=["being", "pledge", "outcome_tier"], name="answer_draw_cell"),
+        ]
+
+    def __str__(self) -> str:
+        scope = self.pledge.name if self.pledge_id is not None else "no pledge type"
+        return f"{self.being} answer, {scope}, {self.outcome_tier}"
+
+    def clean(self) -> None:
+        super().clean()
+        errors: dict[str, str] = {}
+        if self.outcome_tier_id is not None:
+            errors.update(
+                answer_part_errors(
+                    success_level=self.outcome_tier.success_level,
+                    fact_text=self.fact_text,
+                    has_fact_clue=self.fact_clue_id is not None,
+                    has_follow_up_clue=self.follow_up_clue_id is not None,
+                )
+            )
+        if (
+            self.pledge_id is not None
+            and self.being_id is not None
+            and self.pledge.being_id != self.being_id
+        ):
+            errors["pledge"] = "The pledge type must be one of this being's own."
+        fact_clue_refused = errors.get(_FACT_CLUE_FIELD)
+        if self.fact_clue_id is not None and fact_clue_refused is None:
+            from world.clues.constants import ClueTargetKind  # noqa: PLC0415
+
+            if self.fact_clue.target_kind not in (ClueTargetKind.CODEX, ClueTargetKind.SECRET):
+                errors[_FACT_CLUE_FIELD] = "A fact clue must point at a Codex entry or a secret."
+        if self.weight == 0:
+            errors["weight"] = "A weight of 0 would never be drawn; clear Active instead."
+        if errors:
+            raise ValidationError(errors)
+
+
+class AnswerSacrificeLine(SharedMemoryModel):
+    """One authored line of an answer for one facet (#4333 slice 3).
+
+    The vision adds the line once for each distinct facet recorded on the
+    pledge's sacrifices (``CeremonyOffering.facet``), after the answer text.
+    """
+
+    answer = models.ForeignKey(Answer, on_delete=models.CASCADE, related_name="sacrifice_lines")
+    facet = models.ForeignKey(
+        "arxii.Facet", on_delete=models.PROTECT, related_name="answer_sacrifice_lines"
+    )
+    text = models.TextField()
+
+    class Meta:
+        ordering = ["answer", "facet__name"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["answer", "facet"], name="unique_answer_sacrifice_line_facet"
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.answer}: {self.facet}"
+
+
+class PendingAnswer(SharedMemoryModel):
+    """An answer drawn at a pledge's close that the being's worship pool could not
+    yet pay for (#4333 slice 3).
+
+    Held, never dropped: the daily tick (``deliver_held_answers``) sends it as a
+    vision once the pool can pay, and deletes this row; the ``Vision`` it
+    becomes is the lasting record. Staff see held answers on the being's
+    dashboard.
+    """
+
+    character_sheet = models.ForeignKey(
+        CHARACTER_SHEET_MODEL, on_delete=models.CASCADE, related_name="pending_answers"
+    )
+    answer = models.ForeignKey(Answer, on_delete=models.PROTECT, related_name="pending")
+    pledge_details = models.OneToOneField(
+        PledgeDetails, on_delete=models.CASCADE, related_name="pending_answer"
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["created_at", "pk"]
+
+    def __str__(self) -> str:
+        return f"Held answer for {self.character_sheet} ({self.answer})"

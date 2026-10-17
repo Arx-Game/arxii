@@ -40,6 +40,7 @@ HANDLED_RELATIONS: frozenset[str] = frozenset(
         "vogue_momentum",  # FacetVogueMomentum.facet, unique per society
         "fashion_styles",  # FashionStyle.in_vogue_facets (M2M)
         "favored_by_beings",  # worship.BeingFacet.facet, unique per being
+        "answer_sacrifice_lines",  # worship.AnswerSacrificeLine.facet, unique per answer
         "aliases",  # FacetAlias.facet: the losers' aliases follow the winner
     }
 )
@@ -172,6 +173,8 @@ def merge_facets(winner: Facet, losers: Sequence[Facet]) -> FacetMerge:
             _move_unique_fk(loser, winner, "vogue_momentum", "society", result)
             _move_m2m(loser, winner, "fashion_styles", "in_vogue_facets", result)
             _move_unique_fk(loser, winner, "favored_by_beings", "being", result)
+            # An answer with a line for both facets keeps the winner's line (#4333).
+            _move_unique_fk(loser, winner, "answer_sacrifice_lines", "answer", result)
             for alias in loser.aliases.all():
                 alias.facet = winner
                 alias.save(update_fields=["facet"])

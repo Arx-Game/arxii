@@ -1,5 +1,6 @@
 from django.contrib import admin
 
+from world.admin_utils import OneRowPerFormSet
 from world.weather.models import (
     Climate,
     FeastDay,
@@ -21,6 +22,7 @@ class ClimateAdmin(admin.ModelAdmin):
 
 class WeatherTypeExposureInline(admin.TabularInline):
     model = WeatherTypeExposure
+    formset = OneRowPerFormSet
     extra = 1
 
 

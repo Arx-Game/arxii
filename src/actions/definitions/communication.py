@@ -513,7 +513,8 @@ def _record_pose_submission(  # noqa: PLR0913
 def _deliver_mutter(
     actor: ObjectDB, receivers: list[ObjectDB], *, text: str, fragment: str, sdm: SceneDataManager
 ) -> None:
-    """Deliver full mutter text to receivers and a fragment to bystanders."""
+    """Deliver full mutter text to receivers, a fragment to bystanders, and the
+    mutterer their own echo (#3657: telnet showed them nothing; the web drops it)."""
     receiver_ids = {receiver.pk for receiver in receivers}
     for receiver in receivers:
         receiver_state = sdm.initialize_state_for_object(receiver)
@@ -522,6 +523,12 @@ def _deliver_mutter(
             render_line(actor.key, InteractionMode.MUTTER, text),
             echo_of=InteractionMode.MUTTER,
         )
+    listeners = ", ".join(receiver.key for receiver in receivers)
+    send_message(
+        sdm.initialize_state_for_object(actor),
+        f'You mutter to {listeners}, "{text}"',
+        echo_of=InteractionMode.MUTTER,
+    )
     location = actor.location
     if location is None:
         return
@@ -930,6 +937,14 @@ class PemitAction(Action):
         for receiver in receivers:
             receiver_state = sdm.initialize_state_for_object(receiver)
             send_message(receiver_state, text, echo_of=InteractionMode.EMIT)
+        # The narrator's own echo (#3657: telnet showed the GM nothing; the web
+        # drops it as an echo of the receiver-scoped row it already has).
+        names = ", ".join(persona.name for persona in receiver_personas)
+        send_message(
+            sdm.initialize_state_for_object(actor),
+            f"You narrate to {names}: {text}",
+            echo_of=InteractionMode.EMIT,
+        )
 
         record_interaction(
             character=actor,
@@ -985,16 +1000,24 @@ class WhisperAction(Action):
             # Web clients receive this as a TEXT message but should prefer the
             # structured INTERACTION payload from push_interaction. Receiver-scoped
             # trust (#2993): the chosen audience always gets the full text, never garbled.
+            language_name = None if language is None or language.is_universal else language.name
             send_message(
                 target_state,
                 render_line(
                     caller_state.get_display_name(looker=target_state),
                     InteractionMode.WHISPER,
                     text,
-                    language_name=None
-                    if language is None or language.is_universal
-                    else language.name,
+                    language_name=language_name,
                 ),
+                echo_of=InteractionMode.WHISPER,
+            )
+            # The whisperer's own echo (#3657: telnet showed them nothing; the web
+            # drops it as an echo of the row it already has).
+            spoken_in = f" in {language_name}" if language_name else ""
+            send_message(
+                caller_state,
+                f"You whisper to {target_state.get_display_name(looker=caller_state)}"
+                f'{spoken_in}, "{text}"',
                 echo_of=InteractionMode.WHISPER,
             )
 

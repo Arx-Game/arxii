@@ -13,12 +13,14 @@ from world.achievements.models import (
     StatDefinition,
     StatTracker,
 )
+from world.admin_utils import OneRowPerFormSet
 
 
 class AchievementStatRequirementInline(admin.TabularInline):
     """Inline admin for achievement requirements."""
 
     model = AchievementStatRequirement
+    formset = OneRowPerFormSet
     extra = 1
     raw_id_fields = ["stat"]
 
@@ -27,6 +29,7 @@ class AchievementRewardInline(admin.TabularInline):
     """Inline admin for achievement rewards."""
 
     model = AchievementReward
+    formset = OneRowPerFormSet
     extra = 0
     raw_id_fields = ["reward"]
 

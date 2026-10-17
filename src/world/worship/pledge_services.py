@@ -10,7 +10,9 @@ target and a span. Taking one opens a ``Project`` of kind PLEDGE with a
   as a ``PledgeCredit`` with its calculation. There is no other counter.
 * **Deeds** (:func:`credit_pledge_deed`, called by ``grant_resonance``): a
   resonance grant the being holds as FAVORED or ASSOCIATED earns a share of the
-  amount granted, under a weekly cap on base deed favor.
+  amount granted, under a weekly cap on base deed favor. Passive grants (the residence
+  and outfit trickles, distinction grants, staff grants; ``PASSIVE_DEED_SOURCES``) are not
+  deeds: favor comes only from a character's actions.
 * **Closing** (:func:`close_pledge`): reaching the target never resolves a
   pledge (PLEDGE is expiry-only). Its closing rite does, through
   ``perform_worship_rite(..., pay_award=False)``. A first Failure or Critical
@@ -22,8 +24,9 @@ target and a span. Taking one opens a ``Project`` of kind PLEDGE with a
   Partial Success closing award; less pays nothing (Ruling 18). Favor already
   earned is kept either way, and a lapse never delivers an answer.
 
-Answers drawn at the close are slice 3; the handler is where they will be
-delivered.
+* **Answers** (slice 3): a resolving closing rite releases one written-ahead
+  answer for its tier, delivered as a vision by ``answer_services`` after the
+  resolution commits; a lapse never does.
 """
 
 from __future__ import annotations
@@ -39,6 +42,7 @@ from world.projects.constants import CompletionMode, ProjectKind, ProjectStatus
 from world.worship.constants import (
     DAYS_PER_GAME_WEEK,
     FAVOR_EARNING_BASE_PERCENT,
+    PASSIVE_DEED_SOURCES,
     PLEDGE_MAX_CLOSE_ATTEMPTS,
     PRAYER_TEXT_MAX_LENGTH,
     BeingResonanceTier,
@@ -247,13 +251,15 @@ def credit_pledge_deed(grant: ResonanceGrant) -> PledgeCredit | None:
     the grant's amount times the configured percentage for that tier, rounded
     down, at least 1, then held to what is left of the weekly deed cap (base
     favor, before the earning rate). A worship rite's own grant is skipped: the
-    rite already pays favor.
+    rite already pays favor. So is a passive grant (``PASSIVE_DEED_SOURCES``): favor
+    comes only from a character's actions, never from a trickle, a distinction or a
+    staff grant.
     """
     from world.magic.constants import GainSource  # noqa: PLC0415
     from world.worship.invocation_services import get_devotion_config  # noqa: PLC0415
     from world.worship.services import bump_devotion  # noqa: PLC0415
 
-    if grant.source == GainSource.WORSHIP_RITE:
+    if grant.source == GainSource.WORSHIP_RITE or grant.source in PASSIVE_DEED_SOURCES:
         return None
     sheet = grant.character_sheet
     details = open_pledge_for(sheet)
@@ -299,8 +305,11 @@ def close_pledge(sheet: CharacterSheet, *, scene: Scene) -> ClosingOutcome:
     Anything else, or a second attempt, resolves it in one atomic block: the
     project goes to RESOLVING, the performance is recorded on the sidecar and
     ``resolve_project`` runs the PLEDGE handler, which pays the closing award.
+    Once that commits, the answer for the rite's tier is drawn and delivered as
+    a vision, or held while the being's pool is short (slice 3, design 4).
     """
     from world.projects.services import resolve_project  # noqa: PLC0415
+    from world.worship.answer_services import deliver_pledge_answer  # noqa: PLC0415
     from world.worship.rite_services import perform_worship_rite  # noqa: PLC0415
 
     details = open_pledge_for(sheet)
@@ -347,6 +356,10 @@ def close_pledge(sheet: CharacterSheet, *, scene: Scene) -> ClosingOutcome:
             details.closing_performance = None
             details.close_attempts -= 1
     award = details.credits.filter(source=PledgeCreditSource.CLOSING).order_by("-pk").first()
+    # The answer goes out after the resolution commits: send_vision pushes the vision
+    # to an online player the moment its own record commits, so a push from inside
+    # the block above could show a vision a rolled-back resolution never kept.
+    delivery = deliver_pledge_answer(details, outcome)
     return ClosingOutcome(
         details=details,
         rite=rite,
@@ -355,6 +368,7 @@ def close_pledge(sheet: CharacterSheet, *, scene: Scene) -> ClosingOutcome:
         award_base=award.base if award is not None else 0,
         award=award.credited if award is not None else 0,
         earning_rate_percent=award.earning_rate_percent if award is not None else 0,
+        delivery=delivery,
     )
 
 
@@ -389,7 +403,9 @@ def resolve_pledge_project(project: Project, outcome_tier: CheckOutcome | None) 
     of its span, whatever tier the tick passed: pay the Partial Success closing
     award when at least half the target was earned, else nothing (Ruling 18).
     Awards go through ``bump_devotion`` at the earning rate. Favor already
-    earned is never taken back. Slice 3 delivers the closing answer here.
+    earned is never taken back. The closing answer is delivered by
+    ``close_pledge`` once this resolution commits, never from inside it (a
+    vision is pushed to the player as it is written); a lapse has none.
     """
     from world.worship.services import bump_devotion  # noqa: PLC0415
 

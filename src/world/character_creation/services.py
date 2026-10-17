@@ -64,6 +64,7 @@ if TYPE_CHECKING:
     from django.contrib.auth.base_user import AbstractBaseUser
     from django.contrib.auth.models import AnonymousUser
     from evennia.accounts.models import AccountDB
+    from evennia.objects.objects import DefaultObject
 
     from world.character_creation.enemies import ResolvedEnemy
     from world.character_creation.models import (
@@ -265,6 +266,15 @@ def finalize_character(
 
     # Create stat trait values, skills, goals, distinctions, path history, post-CG bonuses
     _apply_character_mechanics(character, draft, markings=markings)
+
+    # The residence comfort modifier (#1514) was never computed at creation: the home is
+    # assigned directly above, so the tenancy grant's residence default sees a chosen
+    # residence and skips set_residence. Computed once here, after the distinctions, so a
+    # comfort lever picked at creation (#4394) is read along with the room itself.
+    if starting_room is not None:
+        from world.locations.comfort_effect import recompute_comfort_regen_modifier  # noqa: PLC0415
+
+        recompute_comfort_regen_modifier(cast("DefaultObject", character))
 
     _initialize_full_vitals(sheet)
 
@@ -482,7 +492,9 @@ def _seed_connection_reputation(draft: CharacterDraft, persona: Persona) -> None
     for choice in choices:
         org = orgs.get(anchor_by_choice_id[choice.id])
         if org is not None:
-            bump_organization_reputation(persona, org, choice.reputation_seed)
+            # A starting seed is where the character begins, not regard gained in play,
+            # so the reputation-gain lever (#4394) leaves it alone.
+            bump_organization_reputation(persona, org, choice.reputation_seed, scale_gain=False)
 
 
 def _write_actor_sheet(
@@ -550,7 +562,9 @@ def _create_enemy(
     if cached_enemy_rows is not None:
         sheet.enemy_rows = [*cached_enemy_rows, enemy]
     if org is not None:
-        bump_organization_reputation(persona, org, ENEMY_REPUTATION_SEED[resolved.degree])
+        bump_organization_reputation(
+            persona, org, ENEMY_REPUTATION_SEED[resolved.degree], scale_gain=False
+        )
 
     _seed_enemy_heat(resolved, org, persona, character)
 
@@ -1846,6 +1860,7 @@ def _create_distinction_modifiers_bulk(
         reconcile_distinction_asset_grants,
     )
     from world.currency.services import apply_starting_grant  # noqa: PLC0415
+    from world.items.services.narrative_grants import apply_item_grants  # noqa: PLC0415
     from world.magic.services.distinction_resonance import (  # noqa: PLC0415
         reconcile_distinction_resonance_grants,
     )
@@ -1892,6 +1907,8 @@ def _create_distinction_modifiers_bulk(
         # An inheritance (#4062) is paid here and nowhere else: finalize runs once
         # per draft, so the grant cannot double up the way a reconcile could.
         apply_starting_grant(char_dist)
+        # A keepsake (#4398) is minted here for the same reason.
+        apply_item_grants(char_dist)
 
 
 def _materialize_draft_markings(sheet: Any, draft: CharacterDraft) -> dict[int, Any]:
