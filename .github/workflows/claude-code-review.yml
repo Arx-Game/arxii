@@ -1,0 +1,81 @@
+name: Claude code review
+
+# Line-level code review (#4417). Runs Anthropic's `code-review` plugin, which
+# reviews the diff with several agents (CLAUDE.md compliance and bug hunting),
+# re-checks each finding before posting, and leaves one review thread per
+# confirmed issue on the exact diff lines. It posts only high-confidence
+# findings; a clean PR gets one "No issues found" comment.
+#
+# The implementing agent answers each thread: fix it or dispute it in a reply,
+# then resolve the thread (agents may resolve their own; see the
+# issue-to-merged-pr mergeability checklist, section 4). Never a required
+# check: a check missing on `merge_group` hangs the queue (ADR-4246).
+#
+# SUPPLY CHAIN: third-party actions are pinned to a full commit SHA, as in
+# validate.yml. Re-pin via: gh api repos/<owner>/<repo>/commits/<tag> --jq .sha
+
+on:
+  pull_request:
+    types: [opened, reopened, ready_for_review]
+
+permissions:
+  contents: read
+  pull-requests: write
+  issues: read
+
+jobs:
+  review:
+    # Same-repo, non-draft PRs only. Fork PRs get no secrets; never switch to
+    # pull_request_target to work around that.
+    if: >-
+      github.event.pull_request.draft == false
+      && github.event.pull_request.head.repo.full_name == github.repository
+      && github.actor != 'dependabot[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    concurrency:
+      group: claude-code-review-${{ github.event.pull_request.number }}
+      cancel-in-progress: true
+    steps:
+      # The default branch, never the PR head: the CLAUDE.md rules the review
+      # enforces come from here, so a PR cannot weaken its own reviewer. The
+      # plugin reads the diff through `gh pr diff`. No persisted token.
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Run the code review
+        id: claude
+        uses: anthropics/claude-code-action@1d6de8cb0c237e7c15e9e1bdf973826ebae490cc # v1
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          github_token: ${{ github.token }}
+          plugin_marketplaces: https://github.com/anthropics/claude-code.git
+          plugins: code-review@claude-code-plugins
+          # The plugin stops if "Claude has already commented". The evidence
+          # challenger is a different reviewer that also posts as a bot, so
+          # its comments must not count.
+          prompt: >-
+            /code-review:code-review
+            ${{ github.repository }}/pull/${{ github.event.pull_request.number }}
+            --comment
+            NOTE: comments that start with `<!-- evidence-challenge` or
+            `<!-- evidence-answer -->` belong to a separate evidence review,
+            not to this code review; ignore them when checking whether this
+            PR was already reviewed.
+          claude_args: >-
+            --max-turns 80
+            --allowed-tools "mcp__github_inline_comment__create_inline_comment,Bash(gh issue view:*),Bash(gh search:*),Bash(gh issue list:*),Bash(gh pr comment:*),Bash(gh pr diff:*),Bash(gh pr view:*),Bash(gh pr list:*)"
+
+      # The action hides the model's output, so a refused tool call is
+      # invisible except as a count. Print only the refused calls.
+      - name: List refused tool calls
+        if: always() && steps.claude.outputs.execution_file != ''
+        env:
+          EXECUTION_FILE: ${{ steps.claude.outputs.execution_file }}
+        run: |
+          jq -c '.[] | select(.type == "result") | .permission_denials[]?
+                 | {tool: .tool_name, input: .tool_input}' "$EXECUTION_FILE" \
+            || echo "No execution file to read."
