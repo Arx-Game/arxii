@@ -1,0 +1,123 @@
+/* Scratch real-testing spec for #4416 (not committed). Runs against rt_4416 on :4001. */
+import { expect, test, type Page } from '@playwright/test';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+
+const BASE = 'http://localhost:4001';
+const OUT = '../docs/reviews/4416';
+mkdirSync(OUT, { recursive: true });
+const SEED = JSON.parse(readFileSync(process.env.RT_SEED as string, 'utf8'));
+
+async function login(page: Page, user: string) {
+  await page.goto(`${BASE}/login`);
+  await page.waitForLoadState('networkidle');
+  await page.getByPlaceholder('Username or Email').fill(user);
+  await page.getByPlaceholder('Password').fill('TestPass123!');
+  await page.getByRole('button', { name: 'Log In', exact: true }).click();
+  await page.waitForURL((url) => !url.pathname.startsWith('/login'), { timeout: 15000 });
+}
+
+async function pickSteward(page: Page, text: string) {
+  await page.locator('.field-table .select2-selection').click();
+  await page.locator('.select2-search__field').fill(text);
+  await page.locator('.select2-results__option', { hasText: text }).first().click();
+}
+
+test.setTimeout(180_000);
+
+test('admin assigns the steward', async ({ page }) => {
+  await login(page, 'staff_4416');
+  const url = `${BASE}/admin/arxii/worshippedbeing/${SEED.wisket}/change/`;
+  await page.goto(url);
+  await page.getByText('Add another Steward').click();
+  await page.screenshot({ path: `${OUT}/01-steward-inline-empty.png`, fullPage: true });
+  await pickSteward(page, 'Junior table');
+  await page.locator('input[name=_continue]').click();
+  await page.waitForLoadState('networkidle');
+  await page.screenshot({ path: `${OUT}/02-steward-refused-junior.png`, fullPage: true });
+  writeFileSync(`${OUT}/a-refused-junior.txt`, (await page.locator('.errorlist').allInnerTexts()).join('\n') + '\n');
+  await pickSteward(page, 'The Whitlow table');
+  await page.locator('input[name=_continue]').click();
+  await page.waitForLoadState('networkidle');
+  await page.goto(url);
+  await page.locator('.inline-group').filter({ hasText: 'Steward' }).first().screenshot({
+    path: `${OUT}/03-steward-saved.png`,
+  });
+  writeFileSync(
+    `${OUT}/a-steward-saved.txt`,
+    (await page.locator('.inline-group').filter({ hasText: 'Steward' }).first().innerText()) + '\n'
+  );
+  await page.screenshot({ path: `${OUT}/03b-being-change-form.png`, fullPage: true });
+
+  await page.goto(`${BASE}/admin/arxii/worshippedbeing/${SEED.ombrin}/change/`);
+  await page.getByText('Add another Steward').click();
+  await pickSteward(page, 'The Whitlow table');
+  await page.locator('input[name=_continue]').click();
+  await page.waitForLoadState('networkidle');
+  writeFileSync(`${OUT}/a-refused-god-sign.txt`, (await page.locator('.errorlist').allInnerTexts()).join('\n') + '\n');
+  await page.locator('.inline-group').filter({ hasText: 'Steward' }).first().screenshot({
+    path: `${OUT}/04-steward-refused-god-sign.png`,
+  });
+});
+
+test('table GM answers on the table page', async ({ page }) => {
+  await login(page, 'gm_4416');
+  await page.goto(`${BASE}/tables/${SEED.table}?tab=beings`);
+  await page.getByText('GM prompts').waitFor();
+  await page.screenshot({ path: `${OUT}/05-beings-tab-waiting.png`, fullPage: true });
+  writeFileSync(`${OUT}/b-pills.txt`, (await page.getByLabel('GM prompts').innerText()) + '\n');
+
+  const hobb = page.getByTestId('steward-prompt-pill').filter({ hasText: 'Orla Cobbe' });
+  await hobb.getByRole('button', { name: 'Open' }).click();
+  const panel = page.getByRole('region', { name: /Wisket answers Orla Cobbe/ });
+  await panel.getByLabel(/Write free text/).check();
+  await panel.getByLabel('Your answer').fill('[GM-written free text for Orla]');
+  await panel.getByLabel("Attach a clue from Wisket's catalogue").selectOption({ label: 'Wisket mission clue' });
+  await panel.screenshot({ path: `${OUT}/06-answer-panel-free-text.png` });
+  await panel.getByRole('button', { name: 'Send as Wisket' }).click();
+  await page.getByRole('status').first().waitFor();
+  writeFileSync(`${OUT}/b-orla-sent.txt`, (await page.getByRole('status').first().innerText()) + '\n');
+
+  const wren = page.getByTestId('steward-prompt-pill').filter({ hasText: 'Wren Ashby' });
+  await wren.getByRole('button', { name: 'Open' }).click();
+  const wrenPanel = page.getByRole('region', { name: /Wisket answers Wren Ashby/ });
+  await wrenPanel.screenshot({ path: `${OUT}/07-answer-panel-below-success.png` });
+  writeFileSync(
+    `${OUT}/b-wren-free-text-disabled.txt`,
+    String(await wrenPanel.getByLabel(/Write free text/).isDisabled()) + '\n'
+  );
+  await wren.getByRole('button', { name: /Dismiss/ }).click();
+  await expect(page.getByTestId('steward-prompt-pill').filter({ hasText: 'Wren Ashby' })).toHaveCount(0);
+  await page.screenshot({ path: `${OUT}/08-after-dismiss.png`, fullPage: true });
+});
+
+test('table GM edits the being', async ({ page }) => {
+  await login(page, 'gm_4416');
+  await page.goto(`${BASE}/tables/${SEED.table}?tab=beings`);
+  await page.getByRole('button', { name: 'Edit Wisket' }).waitFor();
+  await page.locator('.rounded-lg.border.bg-card').filter({ hasText: 'Stewarded by this table' }).screenshot({
+    path: `${OUT}/09-being-card-before.png`,
+  });
+  await page.getByRole('button', { name: 'Edit Wisket' }).click();
+  const pledgeForm = page.getByRole('form', { name: 'Pledge type' });
+  await pledgeForm.getByLabel('Favor target').fill('6');
+  await pledgeForm.getByRole('button', { name: 'Save pledge type' }).click();
+  await page.waitForLoadState('networkidle');
+  await page.getByRole('button', { name: /^Critical Success/ }).click();
+  const answer = page.getByRole('form', { name: 'Answer · Critical Success' });
+  await answer.getByLabel('Delay text').fill('[GM-authored delay text: critical success]');
+  await answer.getByLabel('Answer text').fill('[GM-authored answer text: critical success]');
+  await answer.getByLabel('Fact clue', { exact: true }).selectOption({ label: 'Wisket codex clue' });
+  await answer.getByRole('textbox', { name: /^Fact text and fact clue/ }).fill('[GM-authored fact text: critical success]');
+  await answer.getByLabel('Sacrifice line, Wolf facet').fill('[GM-authored sacrifice line: Wolf, critical success]');
+  await page.screenshot({ path: `${OUT}/10-editor-critical-success.png`, fullPage: true });
+  await answer.getByRole('button', { name: 'Save' }).click();
+  await page.waitForLoadState('networkidle');
+  await expect(page.getByText('written, editing now', { exact: true })).toBeVisible();
+  await page.screenshot({ path: `${OUT}/11-editor-after-save.png`, fullPage: true });
+  await page.getByRole('button', { name: 'Close' }).click();
+  const card = page.locator('.rounded-lg.border.bg-card').filter({ hasText: 'Stewarded by this table' });
+  await card.screenshot({ path: `${OUT}/12-being-card-after.png` });
+  writeFileSync(`${OUT}/c-card-after.txt`, (await card.innerText()) + '\n');
+  await page.setViewportSize({ width: 390, height: 900 });
+  await page.screenshot({ path: `${OUT}/13-beings-tab-phone.png`, fullPage: true });
+});

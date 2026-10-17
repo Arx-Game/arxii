@@ -1,0 +1,176 @@
+"""Scratch seed for the #4416 real-testing pass, run in `arx manage shell` against rt_4416 only.
+All authored text is labelled placeholders."""
+
+from evennia import create_object
+from evennia.accounts.models import AccountDB
+
+from evennia_extensions.models import PlayerData
+from world.action_points.factories import ActionPointPoolFactory
+from world.character_sheets.factories import CharacterSheetFactory
+from world.clues.constants import ClueResolution, ClueTargetKind
+from world.clues.factories import ClueFactory
+from world.codex.factories import CodexEntryFactory
+from world.contributors.factories import ContentContributorFactory
+from world.gm.constants import GMLevel
+from world.gm.factories import GMProfileFactory, GMTableFactory, GMTableMembershipFactory
+from world.items.factories import ItemInstanceFactory
+from world.missions.factories import MissionNodeFactory, MissionTemplateFactory
+from world.roster.factories import RosterEntryFactory, RosterTenureFactory
+from world.seeds.checks import seed_check_resolution_tables
+from world.seeds.test_account import seed_test_account
+from world.seeds.worship_content import ensure_favor_terms
+from world.traits.models import CheckOutcome
+from world.worship.constants import BeingResonanceTier, RiteTier
+from world.worship.factories import (
+    AnswerFactory,
+    AnswerSacrificeLineFactory,
+    BeingFacetFactory,
+    BeingResonanceFactory,
+    PledgeFactory,
+    RiteKindFactory,
+    WorshipDeclarationFactory,
+    WorshippedBeingFactory,
+    WorshipRiteFactory,
+    WorshipRiteTierAwardFactory,
+)
+from world.worship.favor_services import ensure_being_modifier_targets
+
+seed_check_resolution_tables()
+ensure_favor_terms(None)
+tiers = {o.name: o for o in CheckOutcome.objects.all()}
+for outcome in tiers.values():
+    WorshipRiteTierAwardFactory._meta.model.objects.filter(tier=RiteTier.DEVOTIONAL, outcome_tier=outcome).exists() or WorshipRiteTierAwardFactory(
+        tier=RiteTier.DEVOTIONAL, outcome_tier=outcome, resonance_amount=4, favor_amount=2
+    )
+
+result = seed_test_account()
+player = AccountDB.objects.get(username=result.username)
+
+
+def account(name, *, staff=False):
+    row = AccountDB.objects.filter(username=name).first()
+    if row is None:
+        if staff:
+            row = AccountDB.objects.create_superuser(name, f"{name}@example.com", "TestPass123!")
+        else:
+            row = AccountDB.objects.create_user(name, f"{name}@example.com", "TestPass123!")
+    PlayerData.objects.get_or_create(account=row)
+    return row
+
+
+staff = account("staff_4416", staff=True)
+gm = account("gm_4416")
+gm_data = PlayerData.objects.get(account=gm)
+gm_data.contributor = ContentContributorFactory(name="RT Table GM 4416")
+gm_data.save()
+gm_profile = GMProfileFactory(account=gm, level=GMLevel.SENIOR)
+table = GMTableFactory(gm=gm_profile, name="The Whitlow table")
+junior_table = GMTableFactory(gm=GMProfileFactory(level=GMLevel.JUNIOR), name="Junior table")
+
+road = create_object("typeclasses.rooms.Room", key="Whitlow Road")
+gm_room = create_object("typeclasses.rooms.Room", key="Warden's Lodge")
+
+wisket = WorshippedBeingFactory(
+    name="Wisket", resonance_pool=100, description="[GM-authored being description]"
+)
+favored = BeingResonanceFactory(being=wisket, tier=BeingResonanceTier.FAVORED, resonance__name="Cunning")
+wolf = BeingFacetFactory(being=wisket, facet__name="Wolf").facet
+rite = WorshipRiteFactory(
+    being=wisket,
+    kind=RiteKindFactory(name="Offering", tier=RiteTier.DEVOTIONAL),
+    name="Wisket's rite",
+    resonance=favored,
+)
+ensure_being_modifier_targets(wisket)
+pledge = PledgeFactory(
+    being=wisket,
+    name="[GM-authored pledge name]",
+    description="[GM-authored pledge description]",
+    favor_target=2,
+    span_weeks=1,
+    closing_rite=rite,
+)
+
+entry = CodexEntryFactory(name="[codex entry: a hidden place]", is_public=False, learn_threshold=5)
+fact_clue = ClueFactory(
+    name="Wisket codex clue", target_codex_entry=entry, resolution_mode=ClueResolution.AUTOMATIC
+)
+mission = MissionTemplateFactory(name="[mission: the wolf's errand]")
+MissionNodeFactory(template=mission, key="entry", is_entry=True)
+mission_clue = ClueFactory(
+    name="Wisket mission clue",
+    target_kind=ClueTargetKind.MISSION,
+    target_codex_entry=None,
+    target_mission=mission,
+    resolution_mode=ClueResolution.AUTOMATIC,
+)
+
+answers = {}
+for tier_name in ("Success", "Partial Success", "Failure", "Critical Failure"):
+    label = tier_name.lower()
+    parts = {
+        "being": wisket,
+        "pledge": pledge,
+        "outcome_tier": tiers[tier_name],
+        "delay_text": f"[GM-authored delay text: {label}]",
+        "answer_text": f"[GM-authored answer text: {label}]",
+        "onlooker_line": f"[GM-authored onlooker line: {label}]",
+    }
+    if tier_name == "Success":
+        parts.update(fact_text="[GM-authored fact text: success]", fact_clue=fact_clue)
+    if tier_name in ("Success", "Partial Success"):
+        parts.update(follow_up_text=f"[GM-authored follow-up text: {label}]", follow_up_clue=mission_clue)
+    row = AnswerFactory(**parts)
+    AnswerSacrificeLineFactory(answer=row, facet=wolf, text=f"[GM-authored sacrifice line: Wolf, {label}]")
+    answers[tier_name] = row.pk
+
+ombrin = WorshippedBeingFactory(name="Ombrin", resonance_pool=100)
+
+
+def pc(name, owner, room, *, seated=True, rollmod=0):
+    character = create_object("typeclasses.characters.Character", key=name, location=room, home=room)
+    character.locks.add(f"puppet:pid({owner.id}) or perm(Developer) or pperm(Developer)")
+    sheet = CharacterSheetFactory(character=character)
+    if rollmod:
+        sheet.rollmod = rollmod
+        sheet.save(update_fields=["rollmod"])
+    entry_row = RosterEntryFactory(character_sheet=sheet)
+    RosterTenureFactory(roster_entry=entry_row, player_data=owner.player_data, end_date=None)
+    ActionPointPoolFactory(character=sheet, current=50, maximum=50)
+    if seated:
+        GMTableMembershipFactory(table=table, persona=sheet.primary_persona)
+    return character, sheet
+
+
+people = {}
+for name, seated, rollmod in (
+    ("Tobiah Fenwright", True, 100),
+    ("Hobb Pennock", True, 100),
+    ("Wren Ashby", True, -100),
+    ("Orla Cobbe", True, 100),
+    ("Brother Caddoc", False, 0),
+):
+    character, sheet = pc(name, player, road, seated=seated, rollmod=rollmod)
+    obj = create_object("typeclasses.objects.Object", key="wolf tooth", location=character)
+    ItemInstanceFactory(template__name="wolf tooth", template__value=20, game_object=obj, holder_character_sheet=sheet)
+    people[name] = {"character": character.pk, "sheet": sheet.pk, "entry": sheet.roster_entry.pk}
+gm_char, gm_sheet = pc("Warden Ashe", gm, gm_room, seated=False)
+people["Warden Ashe"] = {"character": gm_char.pk, "sheet": gm_sheet.pk}
+
+WorshipDeclarationFactory(character_sheet=CharacterSheetFactory(), public_being=ombrin)
+
+print(
+    "SEEDED",
+    {
+        "wisket": wisket.pk,
+        "ombrin": ombrin.pk,
+        "pledge": pledge.pk,
+        "table": table.pk,
+        "junior_table": junior_table.pk,
+        "answers": answers,
+        "tiers": {k: v.pk for k, v in tiers.items()},
+        "fact_clue": fact_clue.pk,
+        "mission_clue": mission_clue.pk,
+        "people": people,
+    },
+)

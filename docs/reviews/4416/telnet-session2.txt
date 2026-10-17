@@ -1,0 +1,110 @@
+[gm] @ic Warden Ashe: Already controlling Warden Ashe.
+[player] @ic Tobiah Fenwright: Already controlling Tobiah Fenwright.
+===== [gm] > gm prompts
+[1] Being answer: Tobiah Fenwright
+  Wisket answers Tobiah Fenwright (Critical Success).
+  gm prompt answer 1 | gm prompt dismiss 1
+===== [gm] > gm prompt answer 1
+Wisket answers Tobiah Fenwright (Critical Success).
+  Pledge: [GM-authored pledge name].
+  Prayer: [player-written prayer: Tobiah]
+  answer=1 (Success) [GM-authored answer text: success]
+  answer=2 (Partial Success) [GM-authored answer text: partial success]
+  answer=3 (Failure) [GM-authored answer text: failure]
+  answer=4 (Critical Failure) [GM-authored answer text: critical failure]
+  text=<your words> is allowed. Clues you may attach: clue=1 Wisket codex clue, clue=2 Wisket mission clue.
+  Dismissed or unanswered by 2026-10-20 22:27, an authored answer is drawn.
+===== [gm] > gm prompt answer 1 answer=1
+Sent as a vision from Wisket.
+----- pushed to [player]
+[NARRATIVE] Through learning a piece of lore, you can now use: [codex entry: a hidden place].
+[VISION] [GM-authored delay text: success]
+
+[GM-authored answer text: success] Also sacrificed: wolf tooth.
+
+[GM-authored fact text: success]
+
+[GM-authored follow-up text: success]
+
+You know whose vision this is: Wisket.
+A clue came with it: Wisket codex clue. A mission came with it: Wisket mission clue.
+===== [player] > look
+Whitlow Road
+This is a room.
+Characters: Hobb Pennock, Orla Cobbe, Wren Ashby, and Tobiah Fenwright
+===== [player] > @ic Hobb Pennock
+Switching from Tobiah Fenwright to Hobb Pennock.
+You become Hobb Pennock.
+Whitlow Road
+This is a room.
+Characters: Hobb Pennock, Orla Cobbe, and Wren Ashby
+===== [player] > pledge Wisket/[GM-authored pledge name]=[player-written prayer: Hobb]
+You pledge yourself to Wisket: [GM-authored pledge name]. Favor target 2 within 1 game week. Your earning rate with Wisket: 100% (100%).
+===== [player] > sacrifice wolf tooth=Wisket
+Hobb Pennock sacrifices wolf tooth to Wisket.
+You sacrifice wolf tooth to Wisket. Value 20: 2 base, at 100% = +2 favor with Wisket.
+===== [player] > pledge/close
+Hobb Pennock performs Wisket's rite.
+You close your pledge with Wisket's rite: Critical Success. Closing award for Critical Success: 8 base, at 100% = +8 favor with Wisket. Wisket's answer will come later.
+----- pushed to [gm]
+GM prompt [2] Being answer: Wisket answers Hobb Pennock (Critical Success). gm prompt answer 2 | gm prompt dismiss 2
+===== [player] > @ic Wren Ashby
+Switching from Hobb Pennock to Wren Ashby.
+You become Wren Ashby.
+Whitlow Road
+This is a room.
+Characters: Orla Cobbe and Wren Ashby
+===== [player] > pledge Wisket/[GM-authored pledge name]=[player-written prayer: Wren]
+You pledge yourself to Wisket: [GM-authored pledge name]. Favor target 2 within 1 game week. Your earning rate with Wisket: 100% (100%).
+===== [player] > sacrifice wolf tooth=Wisket
+Wren Ashby sacrifices wolf tooth to Wisket.
+You sacrifice wolf tooth to Wisket. Value 20: 2 base, at 100% = +2 favor with Wisket.
+===== [player] > pledge/close
+Wren Ashby performs Wisket's rite.
+You close your pledge with Wisket's rite: Failure. Wisket has not accepted it yet; you may try once more within the span.
+===== [player] > pledge/close
+Wren Ashby performs Wisket's rite.
+You close your pledge with Wisket's rite: Failure. Closing award for Failure: 2 base, at 100% = +2 favor with Wisket. Wisket's answer will come later.
+----- pushed to [gm]
+GM prompt [3] Being answer: Wisket answers Wren Ashby (Failure). gm prompt answer 3 | gm prompt dismiss 3
+===== [gm] > gm prompt answer 3 text=[GM-written free text for Wren]
+Your own text can be sent on Success and Critical Success only.
+===== [gm] > gm prompt answer 3
+Wisket answers Wren Ashby (Failure).
+  Pledge: [GM-authored pledge name].
+  Prayer: [player-written prayer: Wren]
+  answer=3 (Failure) [GM-authored answer text: failure]
+  answer=4 (Critical Failure) [GM-authored answer text: critical failure]
+  Your own text is allowed on Success and Critical Success only.
+  Dismissed or unanswered by 2026-10-20 22:30, an authored answer is drawn.
+===== [player] > @ic Orla Cobbe
+Switching from Wren Ashby to Orla Cobbe.
+You become Orla Cobbe.
+Whitlow Road
+This is a room.
+Characters: Orla Cobbe
+===== [player] > pledge Wisket/[GM-authored pledge name]=[player-written prayer: Orla]
+You pledge yourself to Wisket: [GM-authored pledge name]. Favor target 2 within 1 game week. Your earning rate with Wisket: 100% (100%).
+===== [player] > sacrifice wolf tooth=Wisket
+Orla Cobbe sacrifices wolf tooth to Wisket.
+You sacrifice wolf tooth to Wisket. Value 20: 2 base, at 100% = +2 favor with Wisket.
+===== [player] > pledge/close
+Orla Cobbe performs Wisket's rite.
+You close your pledge with Wisket's rite: Critical Success. Closing award for Critical Success: 8 base, at 100% = +8 favor with Wisket. Wisket's answer will come later.
+----- pushed to [gm]
+GM prompt [4] Being answer: Wisket answers Orla Cobbe (Critical Success). gm prompt answer 4 | gm prompt dismiss 4
+===== [gm] > gm prompts
+[4] Being answer: Orla Cobbe
+  Wisket answers Orla Cobbe (Critical Success).
+  gm prompt answer 4 | gm prompt dismiss 4
+[3] Being answer: Wren Ashby
+  Wisket answers Wren Ashby (Failure).
+  gm prompt answer 3 | gm prompt dismiss 3
+[2] Being answer: Hobb Pennock
+  Wisket answers Hobb Pennock (Critical Success).
+  gm prompt answer 2 | gm prompt dismiss 2
+===== [player] late
+
+===== [gm] late
+
+FOUND {"prompt": "2", "answer": "3"}

@@ -1,0 +1,13 @@
+== seeded at 0242_secret_hook: 1 devotionconfig, 2 pending gmprompt (stake_outcome), 1 gmpromptfilter (standoff, muted)
+== forward
+  Applying arxii.0243_stewarded_beings... OK
+== rows after
+devotionconfig steward_answer_days=3
+gmprompt 1 kind=stake_outcome status=pending pledge_id=null
+gmprompt 2 kind=stake_outcome status=pending pledge_id=null
+gmpromptfilter group=standoff enabled=false
+beingsteward rows=0
+== back to 0242 and forward again
+  Unapplying arxii.0243_stewarded_beings... OK
+  Applying arxii.0243_stewarded_beings... OK
+rows kept: devotionconfig=1 gmprompt=2 gmpromptfilter=1
