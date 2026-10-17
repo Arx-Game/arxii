@@ -5,12 +5,17 @@ asserts what the player, the room and the feed were told."""
 
 from __future__ import annotations
 
+from datetime import timedelta
+from unittest.mock import patch
+
 from django.test import override_settings
+from django.utils import timezone
 from evennia.utils.ansi import strip_ansi
 
 from integration_tests.harness import JourneyCase
 from world.gm.factories import GMProfileFactory
 from world.scenes.models import Persona, Scene
+from world.scenes.tasks import block_finalize_task
 
 
 def active_scene(room) -> Scene | None:
@@ -164,6 +169,16 @@ class KeepingSomeoneOut(JourneyCase):
             "Hobb (all my characters) - lifting", strip_ansi(self.telnet(self.ysmay, "+blocklist"))
         )
         self.assertIn("You have not blocked Bram.", self.telnet(self.ysmay, "+unblock Bram"))
+
+        # The grace holds until the cron's own task runs an hour on; then his page lands.
+        self.telnet(self.hobb, "page Ysmay=Still there?")
+        self.assertNotTold(self.ysmay, "Hobb pages: Still there?")
+        an_hour_on = timezone.now() + timedelta(hours=1, minutes=1)
+        with patch("world.scenes.tasks.timezone.now", return_value=an_hour_on):
+            block_finalize_task()
+        self.telnet(self.hobb, "page Ysmay=Now?")
+        self.assertTold(self.ysmay, "Hobb pages: Now?")
+        self.assertIn("Blocked:\n  (none)", strip_ansi(self.telnet(self.ysmay, "+blocklist")))
 
     def test_a_block_on_one_face_can_be_widened_later(self) -> None:
         told = self.telnet(self.ysmay, "+block/persona Hobb=Just this one.")
