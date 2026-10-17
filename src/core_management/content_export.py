@@ -213,6 +213,7 @@ CONTENT_MODELS: frozenset[str] = frozenset(
         "items.craftingrecipe",
         "items.craftingrecipeconsequence",
         "items.craftingskillcap",
+        "items.distinctionitemgrant",
         "items.itemtemplateproperty",
         # magic
         "magic.affinity",

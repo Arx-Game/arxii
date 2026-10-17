@@ -21,6 +21,7 @@ from world.items.models import (
     Adornment,
     AudacityTuning,
     DisguiseKitEffect,
+    DistinctionItemGrant,
     EquippedItem,
     FashionStyle,
     FashionStyleBonus,
@@ -658,3 +659,12 @@ class MakeoverConsentRequestAdmin(admin.ModelAdmin):
     raw_id_fields = ["item_instance"]
     autocomplete_fields = ["stylist_persona", "target_persona", "option"]
     readonly_fields = ["requested_at", "responded_at"]
+
+
+@admin.register(DistinctionItemGrant)
+class DistinctionItemGrantAdmin(admin.ModelAdmin):
+    """A keepsake a distinction mints at finalize (#4398); the sibling of the inheritance."""
+
+    list_display = ("distinction", "item_template")
+    search_fields = ("distinction__name", "item_template__name")
+    raw_id_fields = ("distinction", "item_template")
