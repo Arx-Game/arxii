@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from decimal import Decimal
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, ClassVar
 
 if TYPE_CHECKING:
     from evennia_extensions.models import Media
@@ -22,6 +22,7 @@ from core.descriptors import ReverseOneToOneOrNone
 from core.managers import ArxSharedMemoryManager
 from core.models import ArxSharedMemoryModel as SharedMemoryModel
 from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
+from evennia_extensions.mixins import RelatedCacheClearingMixin
 from world.contributors.models import CreditedContent
 from world.forms.models import ConcealmentLevel, DisguiseKind
 from world.items.constants import (
@@ -2640,3 +2641,56 @@ class ClaimTraceStep(SharedMemoryModel):
 
     def __str__(self) -> str:
         return f"trace step {self.position} of claim {self.claim_id}"
+
+
+class DistinctionItemGrant(NaturalKeyMixin, RelatedCacheClearingMixin, SharedMemoryModel):
+    """Config: a keepsake a distinction puts in its holder's hands at finalize (#4398).
+
+    Ravana's pendant, Calista's ring, Ilmia's quill: nine of the sixty-nine Arx 1
+    lives studied for #4398 carried an object that was more than it seemed. The
+    distinction's own ``description`` says what the keepsake is and why it matters;
+    this sidecar holds only which template to mint; a kit is several rows. A retired
+    template (``is_active=False``) is neither minted nor advertised. Same sidecar shape as
+    ``currency.DistinctionStartingGrant`` (ADR-0010: the consumer holds the FK pointing
+    at the primitive, so ``world.distinctions`` never imports ``world.items``).
+
+    Minted once, by character creation's finalize through ``apply_item_grants``, and
+    never from a path that can repeat: a keepsake is where a character started.
+    """
+
+    distinction = models.ForeignKey(
+        "arxii.Distinction",
+        on_delete=models.CASCADE,
+        related_name="item_grants",
+        help_text="The distinction whose new holders start with this item.",
+    )
+    item_template = models.ForeignKey(
+        ItemTemplate,
+        on_delete=models.PROTECT,
+        related_name="distinction_grants",
+        help_text="The item minted into the holder's inventory at finalize.",
+    )
+    objects = NaturalKeyManager()
+
+    #: A write here clears the distinction's cached properties, ``cached_item_grants``
+    #: among them, through ``RelatedCacheClearingMixin`` (ADR-0298 pairing). Without the
+    #: mixin the attribute is inert, and the identity-mapped distinction in a running
+    #: server keeps advertising an empty list after staff add a grant.
+    related_cache_fields: ClassVar[list[str]] = ["distinction"]
+
+    class NaturalKeyConfig:
+        fields = ["distinction", "item_template"]
+        dependencies = ["arxii.Distinction", "arxii.ItemTemplate"]
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["distinction", "item_template"],
+                name="one_item_grant_per_distinction_template",
+            ),
+        ]
+        verbose_name = "Distinction Item Grant"
+        verbose_name_plural = "Distinction Item Grants"
+
+    def __str__(self) -> str:
+        return f"{self.distinction} grants {self.item_template}"
