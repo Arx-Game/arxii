@@ -113,7 +113,8 @@ actions, backends, and service functions.
   tongue raises `CommandError` naming it; no tag leaves kwargs unchanged (the sticky/current path).
   `CmdWhisper` and `CmdMutter` echo the speaker their own line (`You whisper to Hobb, "..."`,
   `You mutter to Hobb, "..."`), tagged `interaction_echo` so the web client drops the frame
-  as it does a pose's (#3657: telnet had answered both with nothing). `CmdPage` takes its
+  as it does a pose's (#3657: telnet had answered both with nothing); `CmdPemit` echoes the
+  narrator the same way (`You narrate to Ysmay, Hobb: ...`). `CmdPage` takes its
   sender from the session's puppet, or from the caller when the caller is a character and
   no session is on the line (#3657: with no sender, the block and mute checks ran against
   nobody and a blocked player's page was delivered).
