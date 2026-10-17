@@ -960,7 +960,11 @@ actions, backends, and service functions.
   `actions/definitions/gm_story.py`) - spends `n` ticks (default 1) on the acting GM's current
   scene's running beat's open `SceneClock`; gated by scene-GM standing
   (`IsSceneGMPrerequisite`), not story Lead-GM standing like the subverbs above, since it paces
-  the scene, not the story.
+  the scene, not the story. The subverbs are covered by the journeys in
+  `integration_tests/test_running_a_story_journeys.py` (list, beats, mark, resolve, promote,
+  complete, impact, review-status, surrender) and
+  `integration_tests/test_sharing_a_story_journeys.py` (protect, clearance, crossover, clock,
+  signoff), typed through the handler (#3657).
 - **`story_rooms.py`**: telnet play verbs for GM story areas / temp scene rooms (#2450, epic
   #2436 slice 3) — canvas authoring (create/dig/link/place/remove a story area's rooms) stays
   web-only (epic Decision 2); only the play-time verbs get a telnet face, mirroring the "no

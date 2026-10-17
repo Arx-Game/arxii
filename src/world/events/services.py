@@ -189,6 +189,13 @@ def start_event(event: Event) -> Event:
             privacy_mode=privacy,
             event=event,
         )
+        # The room caches its active scene, "none" included (#3657): clear it so
+        # the lines spoken from here on land in the event's scene.
+        from world.scenes.interaction_services import (  # noqa: PLC0415
+            invalidate_active_scene_cache,
+        )
+
+        invalidate_active_scene_cache(scene.room)
         # Link any accepted crossover invites to this freshly-spawned scene —
         # creates the EpisodeScene row for each invited story's accepted episode
         # and enrolls the invited Lead GM as a scene GM (#2002).

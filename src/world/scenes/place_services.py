@@ -69,6 +69,13 @@ def ensure_scene_for_location(
         room=room,
         privacy_mode=privacy_mode,
     )
+    # The room remembers its active scene (``get_active_scene``), "none" included:
+    # a line spoken here before the scene began left "none" cached, and until
+    # #3657's journey asked, the new scene went unseen by every lookup after it
+    # (lines not recorded in it, its GM refused the GM verbs) until a reload.
+    from world.scenes.interaction_services import invalidate_active_scene_cache  # noqa: PLC0415
+
+    invalidate_active_scene_cache(room)
 
     # Auto-engage Durance covenant for room occupants when a new scene starts (Slice B §4.10)
     from world.covenants.services import evaluate_scene_engagement  # noqa: PLC0415

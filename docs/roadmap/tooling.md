@@ -49,7 +49,12 @@ Tranche 4 (stories) began 2026-10-17 with journeys for running a story (the play
 listing and beats while her Lead GM marks, resolves, promotes and completes), calling the
 canon (impact, review-status, surrender) and opening a scene room
 (`integration_tests/test_running_a_story_journeys.py`); they found `leaveroom` in an
-ordinary room answering "no invitation", fixed in place.
+ordinary room answering "no invitation", fixed in place. Its second step (2026-10-17)
+adds journeys for protecting what a story needs and clearing another GM to touch it,
+crossing two stories at one event, pacing a beat by its clock and a player's treasured
+sign-off (`integration_tests/test_sharing_a_story_journeys.py`); they found a scene
+started where anyone had already spoken going unseen (the room's cached "no scene" was
+never cleared by `scene start` or an event start), fixed in place.
 
 ## Built (2026-09-30, #4064 — the reviewed delete, and admin pages for domains and fealty)
 
