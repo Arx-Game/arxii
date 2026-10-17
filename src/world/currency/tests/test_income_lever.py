@@ -83,3 +83,34 @@ class AssetIncomeLeverTests(TestCase):
         grant_lever(self.sheet, INCOME_CATEGORY_NAME, INCOME_TARGET_NAME, 25)
         assert self._collect().landed == 1250
         assert _balance(self.sheet) == 1250
+
+
+class AllowancePoolCeilingTests(TestCase):
+    """A positive lever takes from what the split left, never past the pool."""
+
+    def setUp(self) -> None:
+        self.org = OrganizationFactory()
+        self.sheets = []
+        for _ in range(2):
+            persona = PersonaFactory()
+            OrganizationMembershipFactory(persona=persona, organization=self.org, rank=2)
+            account = AccountFactory()
+            account.last_login = timezone.now() - timedelta(days=1)
+            account.save(update_fields=["last_login"])
+            character = persona.character_sheet.character
+            character.db_account = account
+            character.save(update_fields=["db_account"])
+            self.sheets.append(persona.character_sheet)
+        treasury = get_or_create_treasury(self.org)
+        treasury.balance = 500  # the pool is capped here: surplus 1000 -> 500
+        treasury.save(update_fields=["balance"])
+
+    def test_payouts_never_exceed_the_pool(self) -> None:
+        grant_lever(self.sheets[1], INCOME_CATEGORY_NAME, INCOME_TARGET_NAME, 50)
+        result = distribute_allowance(organization=self.org, surplus=1000)
+        assert result.per_member == 250
+        assert result.total_distributed == 500
+        assert sum(_balance(sheet) for sheet in self.sheets) == 500
+        treasury = get_or_create_treasury(self.org)
+        treasury.refresh_from_db()
+        assert treasury.balance == 0

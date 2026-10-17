@@ -558,15 +558,18 @@ def _apply_archetype_reputation(inputs: _AwardInputs) -> tuple[list[int], dict[i
     aware_societies = list(Society.objects.filter(realm__in=inputs.aware_realm_ids))
     aware_society_ids = [s.pk for s in aware_societies]
     reputation_deltas: dict[int, int] = {}
+    percent = reputation_gain_percent(inputs.persona, REPUTATION_GAIN_SOCIETY_TARGET_NAME)
     for society in aware_societies:
         rep_delta = (
             inputs.overrides[society]
             if society in inputs.overrides
             else _archetype_dot_product(inputs.archetype_list, society)
         )
+        # #4394: scaled here so the deed records what each society actually moved by.
+        rep_delta = scale_reputation_gain(rep_delta, percent)
         if rep_delta == 0:
             continue
-        bump_society_reputation(inputs.persona, society, rep_delta)
+        bump_society_reputation(inputs.persona, society, rep_delta, scale_gain=False)
         reputation_deltas[society.pk] = rep_delta
     return aware_society_ids, reputation_deltas
 
@@ -682,27 +685,49 @@ def _apply_renown_award(  # noqa: PLR0913
     )
 
 
-def _reputation_gain_for(persona: Persona, delta: int, leg_target_name: str) -> int:
-    """A positive reputation ``delta`` after the character's reputation-gain lever (#4394).
+def reputation_gain_percent(persona: Persona, leg_target_name: str) -> int:
+    """The character's reputation-gain lever for one leg, in percentage points (#4394).
 
-    The one reader of the ``reputation_gain`` category, at the two chokepoints every society
-    and organization regard write goes through (a renown award's archetype legs, a stakes
-    resolution, a reported crime). The general target and the leg's own target add: a
-    Renowned row may say ``+25 reputation_gain`` and a Kin by Choice row ``-10
-    reputation_gain_organization``. A loss is never scaled: a sting is not a gain. Legend
-    is not touched (ADR-0249).
+    The one reader of the ``reputation_gain`` category. The general target and the leg's
+    own target add: a Renowned row may say ``+25 reputation_gain`` and a Kin by Choice row
+    ``-10 reputation_gain_organization``. Read once per award and applied per society with
+    ``scale_reputation_gain``, so a deed seen by many societies costs one lever read.
     """
-    if delta <= 0:
-        return delta
-    from world.mechanics.levers import lever_total, scale_by_percent  # noqa: PLC0415
+    from world.mechanics.levers import lever_total  # noqa: PLC0415
 
     sheet = persona.character_sheet
     percent = lever_total(sheet, REPUTATION_GAIN_CATEGORY_NAME, REPUTATION_GAIN_TARGET_NAME)
-    percent += lever_total(sheet, REPUTATION_GAIN_CATEGORY_NAME, leg_target_name)
+    return percent + lever_total(sheet, REPUTATION_GAIN_CATEGORY_NAME, leg_target_name)
+
+
+def scale_reputation_gain(delta: int, percent: int) -> int:
+    """A reputation ``delta`` after the lever: a gain is scaled, a loss never is (#4394).
+
+    A sting is not a gain. Legend is not touched (ADR-0249).
+    """
+    if delta <= 0:
+        return delta
+    from world.mechanics.levers import scale_by_percent  # noqa: PLC0415
+
     return scale_by_percent(delta, percent, floor=0)
 
 
-def bump_society_reputation(persona: Persona, society, delta: int) -> int | None:
+def _reputation_gain_for(persona: Persona, delta: int, leg_target_name: str) -> int:
+    """``scale_reputation_gain`` with the percent read for this one write.
+
+    The two chokepoints every regard write goes through (``bump_society_reputation`` and
+    ``bump_organization_reputation``: a stakes resolution, a reported crime, a standing
+    declaration) read it here; the award loops read the percent once and pass
+    ``scale_gain=False`` so the deed records what each society actually moved by.
+    """
+    if delta <= 0:
+        return delta
+    return scale_reputation_gain(delta, reputation_gain_percent(persona, leg_target_name))
+
+
+def bump_society_reputation(
+    persona: Persona, society, delta: int, *, scale_gain: bool = True
+) -> int | None:
     """Apply a clamped reputation delta to (persona, society) (#1760, #1765).
 
     The relational/targeted channel for Society, symmetric with
@@ -719,7 +744,8 @@ def bump_society_reputation(persona: Persona, society, delta: int) -> int | None
     """
     if delta == 0 or not persona.is_established_or_primary:
         return None
-    delta = _reputation_gain_for(persona, delta, REPUTATION_GAIN_SOCIETY_TARGET_NAME)
+    if scale_gain:
+        delta = _reputation_gain_for(persona, delta, REPUTATION_GAIN_SOCIETY_TARGET_NAME)
     if delta == 0:
         return None
     from world.societies.models import SocietyReputation  # noqa: PLC0415
@@ -759,16 +785,19 @@ def apply_archetype_society_reputation(persona: Persona, societies, archetypes) 
     if not archetype_list or not persona.is_established_or_primary:
         return {}
     applied: dict[int, int] = {}
+    percent = reputation_gain_percent(persona, REPUTATION_GAIN_SOCIETY_TARGET_NAME)
     for society in societies:
-        delta = _archetype_dot_product(archetype_list, society)
+        delta = scale_reputation_gain(_archetype_dot_product(archetype_list, society), percent)
         if delta == 0:
             continue
-        bump_society_reputation(persona, society, delta)
+        bump_society_reputation(persona, society, delta, scale_gain=False)
         applied[society.pk] = delta
     return applied
 
 
-def bump_organization_reputation(persona: Persona, organization, delta: int) -> int | None:
+def bump_organization_reputation(
+    persona: Persona, organization, delta: int, *, scale_gain: bool = True
+) -> int | None:
     """Apply a clamped reputation delta to (persona, organization) (#1429).
 
     The relational / targeted channel: a direct hit to a specific organization (e.g. the victim
@@ -779,7 +808,8 @@ def bump_organization_reputation(persona: Persona, organization, delta: int) -> 
     """
     if delta == 0 or not persona.is_established_or_primary:
         return None
-    delta = _reputation_gain_for(persona, delta, REPUTATION_GAIN_ORGANIZATION_TARGET_NAME)
+    if scale_gain:
+        delta = _reputation_gain_for(persona, delta, REPUTATION_GAIN_ORGANIZATION_TARGET_NAME)
     if delta == 0:
         return None
     from world.societies.models import OrganizationReputation  # noqa: PLC0415
@@ -1032,11 +1062,12 @@ def extend_deed_awareness(
         return list(newly_aware_ids), {}
 
     applied: dict[int, int] = {}
+    percent = reputation_gain_percent(deed.persona, REPUTATION_GAIN_SOCIETY_TARGET_NAME)
     for society in new_societies:
-        delta = _archetype_dot_product(archetype_list, society)
+        delta = scale_reputation_gain(_archetype_dot_product(archetype_list, society), percent)
         if delta == 0:
             continue
-        bump_society_reputation(deed.persona, society, delta)
+        bump_society_reputation(deed.persona, society, delta, scale_gain=False)
         applied[society.pk] = delta
     return list(newly_aware_ids), applied
 

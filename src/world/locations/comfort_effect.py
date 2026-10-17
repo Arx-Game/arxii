@@ -32,6 +32,7 @@ if TYPE_CHECKING:
     from evennia.objects.objects import DefaultObject
 
     from world.character_sheets.models import CharacterSheet
+    from world.distinctions.models import CharacterDistinction
     from world.mechanics.models import ModifierSource, ModifierTarget
 
 
@@ -111,6 +112,24 @@ def recompute_comfort_regen_modifier(character: DefaultObject) -> None:
             )
         else:
             CharacterModifier.objects.filter(character=sheet, target=target, source=source).delete()
+
+
+def refresh_comfort_lever(character_distinction: CharacterDistinction) -> None:
+    """Re-materialize the holder's residence comfort modifier after a distinction with a
+    comfort-lever effect is granted, ranked up or removed (#4394).
+
+    The comfort lever is read when the residence modifier is recomputed, and that only
+    happens on a residence or room-comfort change; a Sheltered row picked at creation (the
+    residence is granted before the distinctions) or granted in play would otherwise sit
+    unread until the home next changed. Cheap: one ``exists`` on the distinction's effects,
+    and the recompute only when one of them is on the comfort category.
+    """
+    from world.mechanics.constants import COMFORT_CATEGORY_NAME  # noqa: PLC0415
+
+    distinction = character_distinction.distinction
+    if not distinction.effects.filter(target__category__name=COMFORT_CATEGORY_NAME).exists():
+        return
+    recompute_comfort_regen_modifier(character_distinction.character.character)
 
 
 def recompute_room_residents_comfort(room: DefaultObject) -> None:

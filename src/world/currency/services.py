@@ -822,8 +822,11 @@ def distribute_allowance(*, organization: Organization, surplus: int) -> Allowan
     distributed = 0
     for sheet in active_sheets.values():
         # #4394: the income lever scales what this member collects (a Gambler collects
-        # less of the same share); ``per_member`` stays the house's even split.
-        amount = _income_for(sheet, per_member)
+        # less of the same share); ``per_member`` stays the house's even split. The pool
+        # is the ceiling: a positive lever takes from what the split left on the table,
+        # never past the treasury balance the pool was capped at (an overdraw would
+        # abort the whole levy with "Insufficient funds").
+        amount = min(_income_for(sheet, per_member), pool - distributed)
         if amount <= 0:
             continue
         transfer(

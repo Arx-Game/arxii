@@ -630,7 +630,7 @@ def apply_relationship_bump(
     return bump
 
 
-def _relationship_gain_for(sheet: CharacterSheet, amount: int) -> int:
+def relationship_gain_for(sheet: CharacterSheet, amount: int) -> int:
     """A positive affection ``amount`` after ``sheet``'s relationship-gain lever (#4394).
 
     The one reader of the ``relationship_gain`` category; ``apply_affection_shift`` is the
@@ -666,7 +666,7 @@ def apply_affection_shift(  # noqa: PLR0913 - two provenance modes share one wri
     # #4394: the relationship-gain lever scales a gain of affection for the sheet whose
     # regard moves (``source``); a Guarded character's regard rises more slowly. Conflict
     # (a negative amount) is not a gain and is never scaled.
-    amount = _relationship_gain_for(source, amount)
+    amount = relationship_gain_for(source, amount)
     if amount == 0:
         return None
     try:
