@@ -272,6 +272,14 @@ class LifeStage(models.TextChoices):
 BEAT_LINE_MAX_LENGTH = 200
 
 
+#: The age rule for a beat whose picks scale with age (#4395): one pick at or under
+#: ``AGE_PICKS_FROM_AGE``, one more for every ``AGE_PICKS_YEARS_PER_PICK`` years lived past
+#: it. Nineteen is one "known for" pick; fifty is four. The rule is
+#: ``offers.age_pick_allowance``; these two numbers are the whole of it.
+AGE_PICKS_FROM_AGE = 20
+AGE_PICKS_YEARS_PER_PICK = 10
+
+
 class BeatSelection(models.TextChoices):
     """How many of a beat's answers may be taken (#4124).
 
