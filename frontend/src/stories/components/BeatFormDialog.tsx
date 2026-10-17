@@ -689,6 +689,8 @@ function opponentLineDraftsFromBeat(beat: Beat | undefined): OpponentLineDraft[]
     count: String(line.count ?? 1),
     position_name: line.position_name ?? '',
     opens_as_standoff: line.opens_as_standoff ?? false,
+    persona: line.persona ?? null,
+    persona_name: line.persona_name ?? '',
     ...placementFieldsFromLine(line),
   }));
 }
@@ -702,6 +704,8 @@ function opponentLineDraftsToPayload(drafts: OpponentLineDraft[]): BeatOpponentL
       count: d.count !== '' ? Number(d.count) : 1,
       position_name: d.position_name.trim(),
       opens_as_standoff: d.opens_as_standoff ?? false,
+      persona: d.persona ?? null,
+      persona_name: d.persona_name ?? '',
       order: 0,
       ...placementPayload(d),
     }));
@@ -1458,6 +1462,7 @@ export function BeatFormDialog({
                     rowErrors={fieldErrors.opponent_lines}
                     showStandoffSwitch
                     showPlacement
+                    personaScope={{ episode: episodeId }}
                   />
                 ) : (
                   <BattlePrepEditor

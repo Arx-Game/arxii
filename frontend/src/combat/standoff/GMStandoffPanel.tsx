@@ -150,7 +150,7 @@ function GroupBox({ encounterId, group }: { encounterId: number; group: GMGroupV
           )}
           <MoraleStateChip state={group.morale_state} />
           <span>
-            x{group.member_count} · {group.state}
+            {group.is_named_npc ? 'named NPC' : `x${group.member_count}`} · {group.state}
           </span>
         </span>
       </div>
@@ -201,6 +201,24 @@ function GroupBox({ encounterId, group }: { encounterId: number; group: GMGroupV
             <dd>
               {group.affiliation}{' '}
               {group.affiliation_edited && <EditedMark text="set on this line" />}
+            </dd>
+          </>
+        )}
+        <dt className="text-muted-foreground">Speaks</dt>
+        <dd data-testid="gm-standoff-speaks">
+          {group.speaks.length === 0 ? 'no language' : group.speaks.join(', ')}
+        </dd>
+        {group.regards.length > 0 && (
+          <>
+            <dt className="text-muted-foreground">Their regard</dt>
+            <dd data-testid="gm-standoff-regard">
+              {group.regards.map((r, i) => (
+                <span key={r.participant}>
+                  {i > 0 && ' · '}
+                  {r.participant}: {r.label} ({r.regard}){' '}
+                  <span className="text-xs text-muted-foreground">NPC regard</span>
+                </span>
+              ))}
             </dd>
           </>
         )}

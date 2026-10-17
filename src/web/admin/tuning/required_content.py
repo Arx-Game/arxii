@@ -878,6 +878,29 @@ def _probe_standoff_cause_glosses() -> ProbeResult:
     return ProbeResult(present=not missing, missing=missing, detail=detail)
 
 
+def _probe_standoff_creature_languages() -> ProbeResult:
+    """Every creature with a standoff profile understands a language, once any approach is
+    verbal (#4373). Until an approach is marked verbal the gate does nothing, so nothing is
+    missing."""
+    from django.db.models import Q  # noqa: PLC0415
+
+    from world.combat.constants import CauseKind  # noqa: PLC0415
+    from world.combat.models import CreatureTemplate  # noqa: PLC0415
+    from world.standoffs.models import StandoffApproach  # noqa: PLC0415
+
+    if not StandoffApproach.objects.filter(is_verbal=True).exists():
+        return ProbeResult(present=True)
+    missing = tuple(
+        CreatureTemplate.objects.filter(language__isnull=True)
+        .filter(~Q(cause=CauseKind.NONE) | Q(drives__isnull=False))
+        .distinct()
+        .order_by("name")
+        .values_list("name", flat=True)
+    )
+    detail = f"No language: {', '.join(missing)}." if missing else ""
+    return ProbeResult(present=not missing, missing=missing, detail=detail)
+
+
 def _probe_surrounded_condition_bundle() -> ProbeResult:
     """All three rows `_apply_surrounded_isolation` needs, not just the template.
 
@@ -3763,6 +3786,18 @@ def _declarations() -> tuple[ContentDependency, ...]:
             consequence=("A revealed cause shows its name with no one-line explanation under it."),
             probe=CustomProbe(fn=_probe_standoff_cause_glosses),
             admin_model="StandoffCauseGloss",
+        ),
+        ContentDependency(
+            key="standoff-creature-languages",
+            label="Standoff creature languages",
+            tier=DependencyTier.TUNING,
+            consumer="world/standoffs/services/language.py language_refusal()",
+            consequence=(
+                "Verbal approaches never work on these creatures, because they understand no "
+                "language; terms and gestures still do."
+            ),
+            probe=CustomProbe(fn=_probe_standoff_creature_languages),
+            admin_model="CreatureTemplate",
         ),
         ContentDependency(
             key="standoff-config",

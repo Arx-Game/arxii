@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from http import HTTPMethod
 import logging
-from typing import cast
+from typing import TYPE_CHECKING, cast
 
 from django.db.models import Prefetch, Q, QuerySet
 from django.shortcuts import get_object_or_404
@@ -39,6 +39,7 @@ from world.combat.filters import (
     CombatEncounterFilter,
     CreatureTemplateFilter,
     DuelChallengeFilter,
+    PlacementPersonaFilter,
     PlacementPickFilter,
 )
 from world.combat.models import (
@@ -114,6 +115,9 @@ from world.standoffs.serializers import (
 )
 from world.standoffs.services.state import begin_round_or_break_standoff
 from world.stories.pagination import StandardResultsSetPagination
+
+if TYPE_CHECKING:
+    from world.stories.models import Story
 
 logger = logging.getLogger(__name__)
 
@@ -320,6 +324,65 @@ class PlacementPropertyViewSet(ReadOnlyModelViewSet):
     filterset_class = PlacementPickFilter
     pagination_class = StandardResultsSetPagination
     queryset = Property.objects.order_by("name")
+
+
+class PlacementPersonaViewSet(ReadOnlyModelViewSet):
+    """Named NPCs a GM may stand as an opponent (#4373), by name.
+
+    The beat dialog's and the GM Add Opponent form's named NPC picker. ``?story=`` or
+    ``?episode=`` (an owned story, or one of its episodes) or ``?encounter=`` (an encounter
+    on one of the story's beats, for its scene GMs) scopes it to the personas that story
+    already uses (``story_npc_personas``). Staff see every persona when they name no story.
+    """
+
+    serializer_class = PlacementPickSerializer
+    permission_classes = [IsGMOrStaff]
+    filter_backends = [DjangoFilterBackend]
+    filterset_class = PlacementPersonaFilter
+    pagination_class = StandardResultsSetPagination
+
+    def get_queryset(self) -> QuerySet[Persona]:
+        from world.stories.services.cast import story_npc_personas  # noqa: PLC0415
+
+        user = self.request.user
+        story, encounter = self._story_and_encounter()
+        if story is None:
+            return Persona.objects.order_by("name") if user.is_staff else Persona.objects.none()
+        allowed = (
+            user.is_staff
+            or story.owners.filter(id=user.id).exists()
+            or (
+                encounter is not None
+                and encounter.scene is not None
+                and encounter.scene.is_gm(user)
+            )
+        )
+        return story_npc_personas(story) if allowed else Persona.objects.none()
+
+    def _story_and_encounter(self) -> tuple[Story | None, CombatEncounter | None]:
+        """The story the pick is for, and the encounter it came through (if any)."""
+        from world.stories.models import Episode, Story  # noqa: PLC0415
+
+        params = self.request.query_params
+        story_id = params.get("story")
+        if story_id and story_id.isdigit():
+            return Story.objects.filter(pk=int(story_id)).first(), None
+        episode_id = params.get("episode")
+        if episode_id and episode_id.isdigit():
+            episode = (
+                Episode.objects.filter(pk=int(episode_id)).select_related("chapter__story").first()
+            )
+            return (episode.chapter.story if episode is not None else None), None
+        encounter_id = params.get("encounter")
+        if encounter_id and encounter_id.isdigit():
+            encounter = (
+                CombatEncounter.objects.filter(pk=int(encounter_id))
+                .select_related("story_beat__episode__chapter__story", "scene")
+                .first()
+            )
+            if encounter is not None and encounter.story_beat is not None:
+                return encounter.story_beat.episode.chapter.story, encounter
+        return None, None
 
 
 class EscalationCurveViewSet(ReadOnlyModelViewSet):
@@ -681,10 +744,8 @@ class CombatEncounterViewSet(ModelViewSet):
             position = get_object_or_404(Position, pk=position_id)
         # #2001 Task 5: this is a GM-facing web path (not action-dispatch), so
         # the requesting account is threaded directly rather than resolved
-        # from a puppeted actor. This serializer doesn't accept
-        # existing_objectdb/persona kwargs yet — today's spawns here are
-        # always ephemeral and never gated — but the account is threaded for
-        # the same forward-compat reason as AddOpponentAction.
+        # from a puppeted actor; a named NPC (#4373) goes through
+        # add_opponent's custody APPEAR gate with it.
         try:
             new_opponent = add_opponent(
                 encounter,
@@ -698,6 +759,7 @@ class CombatEncounterViewSet(ModelViewSet):
                 level=data.get("level"),
                 acting_account=cast(AccountDB, request.user),
                 position=position,
+                persona=data.get("persona"),
             )
         except NPCUnderCustodyError as exc:
             return Response(

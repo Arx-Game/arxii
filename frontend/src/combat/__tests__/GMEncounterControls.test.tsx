@@ -33,6 +33,7 @@ vi.mock('../queries', () => ({
   useCreatureTemplates: vi.fn(),
   useSpawnCreature: vi.fn(),
   useEscalationCurves: vi.fn(),
+  usePlacementPersonas: vi.fn(() => ({ data: [] })),
 }));
 
 vi.mock('@/roster/usePersonaSearch', () => ({
@@ -141,7 +142,13 @@ const mockCreateMutate = vi.fn(
 );
 const mockAddOpponentMutate = vi.fn(
   (
-    _vars: { name: string; tier: string; threatPoolId: number; positionId: number | null },
+    _vars: {
+      name: string;
+      tier: string;
+      threatPoolId: number;
+      positionId: number | null;
+      personaId?: number | null;
+    },
     _opts?: MutateOpts
   ) => {}
 );
@@ -362,7 +369,7 @@ describe('GMEncounterControls — add opponent', () => {
     await user.click(screen.getByTestId('add-opponent-submit'));
 
     expect(mockAddOpponentMutate).toHaveBeenCalledWith(
-      { name: 'Goblin', tier: 'mook', threatPoolId: 7, positionId: null },
+      { name: 'Goblin', tier: 'mook', threatPoolId: 7, positionId: null, personaId: null },
       expect.objectContaining({
         onSuccess: expect.any(Function),
         onError: expect.any(Function),
@@ -394,7 +401,7 @@ describe('GMEncounterControls — add opponent', () => {
     await user.click(screen.getByTestId('add-opponent-submit'));
 
     expect(mockAddOpponentMutate).toHaveBeenCalledWith(
-      { name: 'Ogre', tier: 'boss', threatPoolId: 7, positionId: 12 },
+      { name: 'Ogre', tier: 'boss', threatPoolId: 7, positionId: 12, personaId: null },
       expect.objectContaining({ onSuccess: expect.any(Function) })
     );
   });

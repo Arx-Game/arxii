@@ -21,11 +21,12 @@ from commands.utils.gm_resolution import (
     resolve_character_sheet_in_room,
     resolve_model_by_pk_or_name,
 )
-from world.combat.constants import OpponentTier
+from world.combat.constants import OpponentStatus, OpponentTier
 from world.gm.constants import GMLevel
 from world.scenes.constants import RoundStatus
 
 if TYPE_CHECKING:
+    from evennia.accounts.models import AccountDB
     from evennia.objects.models import ObjectDB
 
     from world.areas.positioning.models import Position
@@ -37,7 +38,7 @@ if TYPE_CHECKING:
         EscalationCurve,
     )
     from world.combat.scaling import OpponentStatBlock
-    from world.scenes.models import Scene
+    from world.scenes.models import Persona, Scene
 
 
 # Encounter statuses that represent an ongoing (non-completed) combat.
@@ -259,9 +260,9 @@ class ResolveEncounterRoundAction(Action):
 
 
 def _resolve_add_opponent_inputs(
-    kwargs: dict[str, Any],
+    kwargs: dict[str, Any], default_name: str = ""
 ) -> tuple[str, str, object, str, object] | ActionResult:
-    """Resolve + validate ``AddOpponentAction`` kwargs.
+    """Resolve + validate ``AddOpponentAction`` kwargs (a named NPC's name is the default).
 
     Returns ``(name, tier, threat_pool, description, position)`` on success,
     or the failure ``ActionResult`` to return immediately. Extracted from
@@ -270,7 +271,7 @@ def _resolve_add_opponent_inputs(
     from world.areas.positioning.models import Position  # noqa: PLC0415
     from world.combat.models import ThreatPool  # noqa: PLC0415
 
-    name = kwargs.get("name")
+    name = kwargs.get("name") or default_name
     tier = kwargs.get("tier")
     threat_pool_id = kwargs.get("threat_pool_id")
     description = kwargs.get("description", "")
@@ -327,18 +328,19 @@ class AddOpponentAction(Action):
         if error:
             return error
 
-        resolved = _resolve_add_opponent_inputs(kwargs)
+        # #2001 Task 5: threads the GM's account so add_opponent's custody
+        # APPEAR gate can refuse an outsider GM standing a story-protected NPC.
+        account = resolve_account_or_none(actor)
+        persona = _resolve_opponent_persona(encounter, kwargs.get("persona_id"), account)
+        if isinstance(persona, ActionResult):
+            return persona
+
+        resolved = _resolve_add_opponent_inputs(
+            kwargs, default_name=persona.name if persona is not None else ""
+        )
         if isinstance(resolved, ActionResult):
             return resolved
         name, tier, pool, description, position = resolved
-
-        # #2001 Task 5: threads the GM's account so add_opponent's custody
-        # APPEAR gate can refuse an outsider GM spawning a story-protected
-        # NPC (via existing_objectdb/persona — this action doesn't accept
-        # either kwarg yet, so today's ephemeral-only spawns are never
-        # gated, but the account is threaded here so any future kwarg
-        # addition inherits the gate for free).
-        account = resolve_account_or_none(actor)
 
         try:
             opponent = add_opponent(
@@ -349,6 +351,7 @@ class AddOpponentAction(Action):
                 description=description,
                 acting_account=account,
                 position=position,
+                persona=persona,
             )
         except ValueError as err:
             return ActionResult(success=False, message=str(err))
@@ -360,6 +363,35 @@ class AddOpponentAction(Action):
             success=True,
             message=f"Opponent '{opponent.name}' added to the encounter.",
         )
+
+
+def _resolve_opponent_persona(
+    encounter: CombatEncounter, persona_id: object, account: AccountDB | None
+) -> Persona | ActionResult | None:
+    """The named NPC a GM asked to stand as the opponent, if any (#4373).
+
+    Only a persona the encounter's story already uses (``story_npc_personas``) may stand,
+    unless the GM is staff; one already standing in this encounter cannot stand twice.
+    """
+    if persona_id in (None, ""):
+        return None
+    from world.combat.services.boss.opponent import (  # noqa: PLC0415
+        _acting_story_for_encounter,
+    )
+    from world.scenes.models import Persona  # noqa: PLC0415
+    from world.stories.services.cast import may_stand_persona  # noqa: PLC0415
+
+    persona = Persona.objects.filter(pk=persona_id).select_related("character_sheet").first()
+    if persona is None:
+        return ActionResult(success=False, message="No such named NPC.")
+    is_staff = bool(account is not None and account.is_staff)
+    if not may_stand_persona(_acting_story_for_encounter(encounter), persona, is_staff=is_staff):
+        return ActionResult(
+            success=False, message=f"{persona.name} is not a named NPC this story uses."
+        )
+    if encounter.opponents.filter(persona=persona, status=OpponentStatus.ACTIVE).exists():
+        return ActionResult(success=False, message=f"{persona.name} is already in this fight.")
+    return persona
 
 
 def _resolve_spawn_creature_inputs(

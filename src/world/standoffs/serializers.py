@@ -60,6 +60,7 @@ class ApproachViewSerializer(serializers.Serializer):
     levers = LeverViewSerializer(many=True)
     hits_revealed_drive = serializers.BooleanField()
     casts_technique = serializers.BooleanField()
+    refusal = serializers.CharField(allow_blank=True)
 
 
 class AngleViewSerializer(serializers.Serializer):
@@ -77,6 +78,8 @@ class TermsViewSerializer(serializers.Serializer):
     grade = serializers.CharField()
     grade_label = serializers.CharField()
     critical_label = serializers.CharField(allow_blank=True)
+    levers = LeverViewSerializer(many=True)
+    refusal = serializers.CharField(allow_blank=True)
 
 
 class DisplayTechniqueSerializer(serializers.Serializer):
@@ -119,6 +122,13 @@ class GMMemberViewSerializer(serializers.Serializer):
     morale_state = serializers.CharField()
 
 
+class GMRegardViewSerializer(serializers.Serializer):
+    participant = serializers.CharField()
+    regard = serializers.IntegerField()
+    label = serializers.CharField()
+    bands = serializers.IntegerField()
+
+
 class GMGroupViewSerializer(serializers.Serializer):
     group_id = serializers.IntegerField()
     name = serializers.CharField()
@@ -146,6 +156,9 @@ class GMGroupViewSerializer(serializers.Serializer):
     drives = GMDriveViewSerializer(many=True)
     faction_rules = GMFactionRuleViewSerializer(many=True)
     members = GMMemberViewSerializer(many=True)
+    is_named_npc = serializers.BooleanField()
+    speaks = serializers.ListField(child=serializers.CharField())
+    regards = GMRegardViewSerializer(many=True)
 
 
 class GMStandoffViewSerializer(serializers.Serializer):
@@ -244,6 +257,7 @@ class PlacementFieldsMixin(serializers.Serializer):
             organization,
             [DriveEdit(row["property"], row["strength"]) for row in attrs.get("drive_edits", [])],
             attrs.get("suppressed_faction_rules", []),
+            persona=attrs.get("persona"),
         )
         if errors:
             raise serializers.ValidationError(errors)
@@ -336,3 +350,4 @@ class PlacementContextSerializer(serializers.Serializer):
     organization_name = serializers.CharField(allow_blank=True)
     drives = PlacementDriveContextSerializer(many=True)
     inherited_rules = PlacementRuleContextSerializer(many=True)
+    language_name = serializers.CharField(allow_blank=True)

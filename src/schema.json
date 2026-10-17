@@ -9752,6 +9752,84 @@ paths:
               schema:
                 $ref: '#/components/schemas/PlacementPick'
           description: ''
+  /api/combat/placement-personas/:
+    get:
+      operationId: combat_placement_personas_list
+      description: |-
+        Named NPCs a GM may stand as an opponent (#4373), by name.
+
+        The beat dialog's and the GM Add Opponent form's named NPC picker. ``?story=`` or
+        ``?episode=`` (an owned story, or one of its episodes) or ``?encounter=`` (an encounter
+        on one of the story's beats, for its scene GMs) scopes it to the personas that story
+        already uses (``story_npc_personas``). Staff see every persona when they name no story.
+      parameters:
+      - in: query
+        name: encounter
+        schema:
+          type: integer
+      - in: query
+        name: episode
+        schema:
+          type: integer
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      - in: query
+        name: search
+        schema:
+          type: string
+      - in: query
+        name: story
+        schema:
+          type: integer
+      tags:
+      - combat
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedPlacementPickList'
+          description: ''
+  /api/combat/placement-personas/{id}/:
+    get:
+      operationId: combat_placement_personas_retrieve
+      description: |-
+        Named NPCs a GM may stand as an opponent (#4373), by name.
+
+        The beat dialog's and the GM Add Opponent form's named NPC picker. ``?story=`` or
+        ``?episode=`` (an owned story, or one of its episodes) or ``?encounter=`` (an encounter
+        on one of the story's beats, for its scene GMs) scopes it to the personas that story
+        already uses (``story_npc_personas``). Staff see every persona when they name no story.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this persona.
+        required: true
+      tags:
+      - combat
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PlacementPick'
+          description: ''
   /api/combat/placement-properties/:
     get:
       operationId: combat_placement_properties_list
@@ -43353,10 +43431,14 @@ components:
       properties:
         name:
           type: string
-          minLength: 1
+          default: ''
           maxLength: 200
         tier:
           $ref: '#/components/schemas/Tier756Enum'
+        persona_id:
+          type: integer
+          nullable: true
+          description: A named NPC the story uses, to stand as this opponent (#4373).
         max_health:
           type: integer
           minimum: 1
@@ -43370,7 +43452,6 @@ components:
           type: integer
         description:
           type: string
-          minLength: 1
           default: ''
         soak_value:
           type: integer
@@ -43381,7 +43462,6 @@ components:
           type: integer
           nullable: true
       required:
-      - name
       - threat_pool_id
       - tier
     AdvanceWriteRequest:
@@ -44213,6 +44293,8 @@ components:
           type: boolean
         casts_technique:
           type: boolean
+        refusal:
+          type: string
       required:
       - approach_id
       - casts_technique
@@ -44223,6 +44305,7 @@ components:
       - hits_revealed_drive
       - levers
       - name
+      - refusal
     ArcScopeEnum:
       enum:
       - global
@@ -45508,6 +45591,17 @@ components:
         creature_template:
           type: integer
           description: The bestiary entry to spawn.
+        persona:
+          type: integer
+          nullable: true
+          description: A named NPC who stands as this line's one opponent (#4373),
+            using the creature template's stats. Blank spawns the template's own unnamed
+            creatures.
+        persona_name:
+          type: string
+          description: The named NPC's name, so the editor can show the pick (read
+            only).
+          readOnly: true
         count:
           type: integer
           maximum: 32767
@@ -45563,6 +45657,7 @@ components:
       required:
       - creature_template
       - organization_name
+      - persona_name
     BeatOpponentLineRequest:
       type: object
       description: |-
@@ -45583,6 +45678,12 @@ components:
         creature_template:
           type: integer
           description: The bestiary entry to spawn.
+        persona:
+          type: integer
+          nullable: true
+          description: A named NPC who stands as this line's one opponent (#4373),
+            using the creature template's stats. Blank spawns the template's own unnamed
+            creatures.
         count:
           type: integer
           maximum: 32767
@@ -57402,6 +57503,16 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/GMMemberView'
+        is_named_npc:
+          type: boolean
+        speaks:
+          type: array
+          items:
+            type: string
+        regards:
+          type: array
+          items:
+            $ref: '#/components/schemas/GMRegardView'
       required:
       - affiliation
       - affiliation_edited
@@ -57418,6 +57529,7 @@ components:
       - group_force
       - group_id
       - has_morale
+      - is_named_npc
       - last_decision
       - member_count
       - members
@@ -57427,6 +57539,8 @@ components:
       - party_force
       - pending_prompt_id
       - proposal_reason
+      - regards
+      - speaks
       - state
       - terms_ease
     GMLevelChange:
@@ -57781,6 +57895,22 @@ components:
         * `confirmed` - Confirmed
         * `dismissed` - Dismissed
         * `narrated` - Narrated
+    GMRegardView:
+      type: object
+      properties:
+        participant:
+          type: string
+        regard:
+          type: integer
+        label:
+          type: string
+        bands:
+          type: integer
+      required:
+      - bands
+      - label
+      - participant
+      - regard
     GMRosterInvite:
       type: object
       description: For GM create/list operations on invites for their own characters.
@@ -79182,6 +79312,8 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/PlacementRuleContext'
+        language_name:
+          type: string
       required:
       - cause
       - cause_label
@@ -79189,6 +79321,7 @@ components:
       - creature_template
       - drives
       - inherited_rules
+      - language_name
       - name
       - organization
       - organization_name
@@ -90767,13 +90900,21 @@ components:
           type: string
         critical_label:
           type: string
+        levers:
+          type: array
+          items:
+            $ref: '#/components/schemas/LeverView'
+        refusal:
+          type: string
       required:
       - critical_label
       - description
       - grade
       - grade_label
       - group_id
+      - levers
       - name
+      - refusal
       - terms_id
     TerrainTypeEnum:
       enum:

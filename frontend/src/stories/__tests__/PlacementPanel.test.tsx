@@ -25,6 +25,7 @@ const CONTEXT: PlacementContext = {
       level: 1,
     },
   ],
+  language_name: 'Riverland test common',
 };
 
 vi.mock('@/combat/queries', () => ({
@@ -68,7 +69,7 @@ describe('PlacementPanel (#4361)', () => {
     expect(screen.getByLabelText('Greedy here')).toHaveValue('same');
     expect(screen.getByText('Saltreed Company', { selector: 'td' })).toBeInTheDocument();
     expect(screen.getByTestId('placement-summary-0')).toHaveTextContent(
-      'Spawns 6 Sellsword: Orders, Greedy (Major), Fearful (Minor), 2 faction rules.'
+      'Spawns 6 Sellsword: Orders, Greedy (Major), Fearful (Minor), 2 faction rules, speaks Riverland test common.'
     );
   });
 
@@ -130,7 +131,18 @@ describe('PlacementPanel (#4361)', () => {
       suppressed_faction_rules: [21],
     });
     expect(placementSummary(CONTEXT, draft, '2')).toBe(
-      'Spawns 2 Sellsword: Predation, Greedy (Major), Prudent (Minor), 1 faction rule.'
+      'Spawns 2 Sellsword: Predation, Greedy (Major), Prudent (Minor), 1 faction rule, speaks Riverland test common.'
+    );
+  });
+
+  it('a named NPC line shows no drive table: drives come from the persona (#4373)', () => {
+    renderEditor(vi.fn(), { ...LINE, count: '1', persona: 9, persona_name: 'Maud Test' });
+    expect(screen.queryByLabelText('Greedy here')).toBeNull();
+    expect(screen.getByTestId('placement-persona-0')).toHaveTextContent(
+      "Maud Test is a named NPC: their drives are their persona's properties"
+    );
+    expect(screen.getByTestId('placement-summary-0')).toHaveTextContent(
+      'Stands Maud Test (Sellsword): Orders, drives from their persona, 2 faction rules.'
     );
   });
 });

@@ -17,11 +17,15 @@ class StandoffProfileForm(forms.ModelForm):
 
     class Meta:
         model = CreatureTemplate
-        fields = ["cause", "cause_margin_percent", "organization"]
+        fields = ["cause", "cause_margin_percent", "organization", "language"]
         labels = {"organization": "Affiliation"}
         widgets = {
             "organization": AutocompleteSelect(
                 CreatureTemplate._meta.get_field("organization"),  # noqa: SLF001
+                admin.site,
+            ),
+            "language": AutocompleteSelect(
+                CreatureTemplate._meta.get_field("language"),  # noqa: SLF001
                 admin.site,
             ),
         }
@@ -39,6 +43,7 @@ class StandoffProfileForm(forms.ModelForm):
                 "Default organization. Its faction rules, its parents' and its society's apply "
                 "to every placement unless a placement changes it."
             ),
+            "language": "Blank means no language: verbal approaches never work on them.",
         }
 
 

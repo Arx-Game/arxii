@@ -36,15 +36,24 @@ def spawn_from_creature_template(
     from world.combat.models import CreaturePhaseTemplate  # noqa: PLC0415
     from world.standoffs.services.placement import (  # noqa: PLC0415
         draft_from_line,
+        line_persona,
         placement_profile,
         stamp_opponent,
     )
 
     has_authored_phases = CreaturePhaseTemplate.objects.filter(creature_template=template).exists()
+    # A named NPC line (#4373) stands the persona's own character with the template's stats.
+    persona = line_persona(line)
+    if persona is not None and persona.character_sheet.character.db_location_id != (
+        encounter.room_id
+    ):
+        # The NPC is not in the encounter's room, so a position there cannot hold them.
+        position = None
 
     opp = _svc.add_opponent(
         encounter,
-        name=template.name,
+        name=persona.name if persona is not None else template.name,
+        persona=persona,
         tier=template.tier,
         threat_pool=template.threat_pool,
         soak_value=template.soak_override,
@@ -55,7 +64,7 @@ def spawn_from_creature_template(
     )
     opp.creature_template = template
     opp.save(update_fields=["creature_template"])
-    stamp_opponent(opp, placement_profile(template, draft_from_line(line)))
+    stamp_opponent(opp, placement_profile(template, draft_from_line(line), persona=persona))
 
     if has_authored_phases:
         _clone_authored_phases(encounter, opp, template)

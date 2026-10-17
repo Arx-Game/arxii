@@ -7,9 +7,14 @@ drives as ``ObjectProperty`` rows on each opponent's object. A live encounter ne
 its creature template's standoff fields, so a placement's edits apply and a later edit to
 the template leaves running encounters alone.
 
-A group is one creature template in one encounter. Its profile is its first-spawned
-member's (lowest pk): two placements of the same template in one encounter with different
-edits form one group that takes the first placement's profile.
+A group is one creature template in one encounter, or one named NPC (#4373). Its profile is
+its first-spawned member's (lowest pk): two placements of the same template in one encounter
+with different edits form one group that takes the first placement's profile.
+
+A named NPC's drives are its persona's properties (``Persona.properties``), each at
+``PERSONA_DRIVE_STRENGTH``, read live: the opponent's object is the NPC's own character, so
+nothing standoff-specific is ever stamped on it (ADR-4373-A). Its cause, margin and
+affiliation are stamped like any opponent's.
 
 Faction rules are inherited downward and carry a precedence level, most specific first:
 the template's own rules (level 0), then the affiliation organization's, then each
@@ -30,6 +35,7 @@ if TYPE_CHECKING:
 
     from world.combat.models import CombatOpponent, CreatureTemplate
     from world.mechanics.models import Property
+    from world.scenes.models import Persona
     from world.societies.models import Organization, Society
     from world.standoffs.models import FactionRule, StandoffGroup
 
@@ -37,6 +43,8 @@ if TYPE_CHECKING:
 TEMPLATE_LEVEL = 0
 #: A ``parent_org`` chain longer than this is treated as a cycle and cut.
 MAX_ORG_DEPTH = 20
+#: How hard each of a named NPC's persona properties pulls as a drive (ADR-4373-A).
+PERSONA_DRIVE_STRENGTH = DriveStrength.MAJOR
 
 
 @dataclass(frozen=True)
@@ -136,33 +144,40 @@ def society_rules(society: Society) -> list[InheritedRule]:
 
 
 def inherited_rules(
-    template: CreatureTemplate,
+    template: CreatureTemplate | None,
     organization: Organization | None,
     suppressed_ids: Iterable[int] = (),
 ) -> list[InheritedRule]:
     """Every faction rule an opponent of ``template`` affiliated with ``organization`` carries.
 
     Most specific first: the template's rules, the organization's, each parent's, then
-    each society's. Rules whose pk is in ``suppressed_ids`` are left out.
+    each society's. Rules whose pk is in ``suppressed_ids`` are left out. A named NPC added
+    with no template carries only its affiliation's rules.
     """
     from world.standoffs.models import FactionRule  # noqa: PLC0415
 
     suppressed = set(suppressed_ids)
-    rules = [
-        InheritedRule(rule, TEMPLATE_LEVEL, template.name)
-        for rule in FactionRule.objects.filter(creature_template=template).select_related(
-            "deed_archetype", "drive"
-        )
-    ]
+    rules = (
+        []
+        if template is None
+        else [
+            InheritedRule(rule, TEMPLATE_LEVEL, template.name)
+            for rule in FactionRule.objects.filter(creature_template=template).select_related(
+                "deed_archetype", "drive"
+            )
+        ]
+    )
     rules.extend(affiliation_rules(organization))
     return [entry for entry in rules if entry.rule.pk not in suppressed]
 
 
 def representative(group: StandoffGroup) -> CombatOpponent | None:
     """The group's first-spawned member, whose stamped profile the group uses."""
+    from world.standoffs.services.state import member_filter  # noqa: PLC0415
+
     return (
-        group.encounter.opponents.filter(creature_template_id=group.creature_template_id)
-        .select_related("organization")
+        group.encounter.opponents.filter(**member_filter(group))
+        .select_related("organization", "persona")
         .order_by("pk")
         .first()
     )
@@ -184,7 +199,11 @@ def opponent_drives(opponent: CombatOpponent | None) -> list[GroupDrive]:
     """
     from world.mechanics.models import ObjectProperty  # noqa: PLC0415
 
-    if opponent is None or opponent.objectdb_id is None:
+    if opponent is None:
+        return []
+    if opponent.persona_id is not None:
+        return persona_drives(opponent.persona)
+    if opponent.objectdb_id is None:
         return []
     rows = ObjectProperty.objects.filter(
         object_id=opponent.objectdb_id,
@@ -202,6 +221,17 @@ def opponent_drives(opponent: CombatOpponent | None) -> list[GroupDrive]:
     return sorted(drives, key=lambda drive: (-drive.strength, drive.property_id))
 
 
+def persona_drives(persona: Persona) -> list[GroupDrive]:
+    """A named NPC's drives: its persona's properties, each at ``PERSONA_DRIVE_STRENGTH``."""
+    return sorted(
+        (
+            GroupDrive(property=prop, property_id=prop.pk, strength=PERSONA_DRIVE_STRENGTH)
+            for prop in persona.properties.all()
+        ),
+        key=lambda drive: drive.property.name,
+    )
+
+
 def group_drives(group: StandoffGroup) -> list[GroupDrive]:
     """The group's drives, strongest first (see ``opponent_drives``)."""
     return opponent_drives(representative(group))
@@ -209,7 +239,7 @@ def group_drives(group: StandoffGroup) -> list[GroupDrive]:
 
 def opponent_rules(opponent: CombatOpponent | None) -> list[InheritedRule]:
     """The faction rules an opponent carries: its template's and its affiliation's."""
-    if opponent is None or opponent.creature_template is None:
+    if opponent is None or (opponent.creature_template is None and opponent.organization is None):
         return []
     suppressed = opponent.suppressed_faction_rules.values_list("pk", flat=True)
     return inherited_rules(opponent.creature_template, opponent.organization, suppressed)

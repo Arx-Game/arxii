@@ -229,6 +229,17 @@ class TraitHandlerTests(TestCase):
             points_per_level=1,
         )
 
+    def test_every_trait_type_has_a_cache_bucket(self):
+        """A language (or modifier) trait value never breaks reading other traits (#4373)."""
+        for index, trait_type in enumerate(TraitType.values):
+            trait = Trait.objects.create(
+                name=f"bucket test {index}", trait_type=trait_type, category=TraitCategory.GENERAL
+            )
+            CharacterTraitValueFactory(character=self.sheet, trait=trait, value=7)
+        self.handler.setup_cache(reset=True)
+        self.assertEqual(self.handler.get_trait_value("swords"), 0)
+        self.assertEqual(self.handler.get_base_trait_value("bucket test 3"), 7)
+
     def test_get_trait_value(self):
         """Test getting trait values."""
         # Should return 0 for unset trait

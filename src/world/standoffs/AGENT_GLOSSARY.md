@@ -5,8 +5,16 @@ The pre-round state of a `CombatEncounter`: round zero while at least one `Stand
 _Avoid_: parley phase, negotiation, pre-combat, stand-off (hyphenated)
 
 **Group** (standoff group, `StandoffGroup`):
-One band of opponents sharing a `CreatureTemplate` within one standoff, with its own state (OPEN, PROPOSED, SETTLED, FIGHTING), `terms_ease` and `emboldened_bands`. Membership is the ACTIVE opponents of that template; a group with none left is SETTLED.
+One band of opponents sharing a `CreatureTemplate` within one standoff, or one Named NPC group, with its own state (OPEN, PROPOSED, SETTLED, FIGHTING), `terms_ease` and `emboldened_bands`. Membership is the ACTIVE opponents of that template standing as no persona, or the opponent standing as the group's persona; a group with none left is SETTLED.
 _Avoid_: faction, squad, pack
+
+**Named NPC group** (`StandoffGroup.persona`, #4373):
+A group of one: an opponent standing as a `Persona`, read, pressed and settled on its own and named by the persona. Its drives are the persona's properties; its `NpcRegard` for the acting character's presented persona eases or hardens presses and terms.
+_Avoid_: boss group, persona opponent (the opponent is a `CombatOpponent` with a persona), hero
+
+**Language gate** (`StandoffApproach.is_verbal`, `CreatureTemplate.language`, #4373):
+A verbal approach, or terms, is refused when the group shares no language with the actor (a group with no language at all refuses verbal approaches only). Read is never gated. Refused entries stay listed with the reason.
+_Avoid_: translation, fluency check (no roll is made), comprehension roll
 
 **Drive** (`CreatureDrive`):
 What a kind of creature wants, as a property (for example Greedy) with a `DriveStrength` (Minor, Major, Defining). An approach whose capability has an Application aimed at that property "hits" the drive and eases the grade by its strength in bands.

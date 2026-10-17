@@ -281,6 +281,63 @@ class AddOpponentActionTests(GMCombatActionTestBase):
         )
 
 
+class AddNamedNPCOpponentTests(GMCombatActionTestBase):
+    """#4373: AddOpponentAction stands a named NPC the encounter's story uses."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        seed_scaling_defaults()
+        from world.stories.factories import StoryProtectedSubjectFactory
+
+        self.pool = ThreatPoolFactory()
+        self.npc_sheet = CharacterSheetFactory()
+        self.persona = self.npc_sheet.primary_persona
+        self.story = StoryFactory()
+        beat = BeatFactory(episode=EpisodeFactory(chapter=ChapterFactory(story=self.story)))
+        self.encounter.story_beat = beat
+        self.encounter.save(update_fields=["story_beat"])
+        StoryProtectedSubjectFactory(story=self.story, subject_sheet=self.npc_sheet)
+        # A scene GM who is not staff.
+        self.table_gm_account = AccountFactory(username="tablegm")
+        self.table_gm_actor, _ = _make_actor_with_account(
+            "table_gm_actor", self.room, self.table_gm_account
+        )
+        SceneParticipationFactory(scene=self.scene, account=self.table_gm_account, is_gm=True)
+
+    def _stand(self, actor: object, persona: object) -> object:
+        return AddOpponentAction().run(
+            actor,
+            tier=OpponentTier.ELITE,
+            threat_pool_id=str(self.pool.pk),
+            persona_id=persona.pk,
+        )
+
+    def test_gm_stands_a_named_npc_the_story_uses(self) -> None:
+        result = self._stand(self.table_gm_actor, self.persona)
+        self.assertTrue(result.success, result.message)
+        opponent = CombatOpponent.objects.get(encounter=self.encounter, persona=self.persona)
+        self.assertEqual(opponent.name, self.persona.name)
+        self.assertEqual(opponent.objectdb_id, self.npc_sheet.character.pk)
+
+    def test_a_persona_the_story_does_not_use_is_refused(self) -> None:
+        stranger = CharacterSheetFactory().primary_persona
+        result = self._stand(self.table_gm_actor, stranger)
+        self.assertFalse(result.success)
+        self.assertIn("not a named NPC this story uses", result.message)
+        self.assertFalse(CombatOpponent.objects.filter(persona=stranger).exists())
+
+    def test_staff_may_stand_any_persona(self) -> None:
+        stranger = CharacterSheetFactory().primary_persona
+        result = self._stand(self.gm_actor, stranger)
+        self.assertTrue(result.success, result.message)
+
+    def test_a_named_npc_stands_once(self) -> None:
+        self.assertTrue(self._stand(self.table_gm_actor, self.persona).success)
+        again = self._stand(self.table_gm_actor, self.persona)
+        self.assertFalse(again.success)
+        self.assertIn("already in this fight", again.message)
+
+
 class SpawnCreatureActionTests(GMCombatActionTestBase):
     """SpawnCreatureAction spawns an authored bestiary CreatureTemplate (#3424)."""
 

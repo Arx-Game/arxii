@@ -110,7 +110,8 @@ def restamp_from_templates(encounter: object) -> None:
     )
 
     for opponent in encounter.opponents.exclude(creature_template=None):
-        if opponent.objectdb_id is not None:
+        # A named NPC's object is its own character: nothing standoff-specific lives there.
+        if opponent.objectdb_id is not None and opponent.persona_id is None:
             ObjectProperty.objects.filter(
                 object_id=opponent.objectdb_id,
                 source_condition__isnull=True,

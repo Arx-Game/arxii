@@ -32,6 +32,7 @@ from world.standoffs.services.force import (
     group_force,
     party_force,
 )
+from world.standoffs.services.language import group_languages
 from world.standoffs.services.profile import (
     group_cause,
     group_drives,
@@ -40,12 +41,17 @@ from world.standoffs.services.profile import (
 )
 from world.standoffs.services.proposals import last_decision, pending_prompts
 from world.standoffs.services.state import active_members, is_in_standoff
+from world.standoffs.services.verbs import regard_for
 
 if TYPE_CHECKING:
     from world.combat.models import CombatEncounter
     from world.standoffs.models import FactionRule, StandoffGroup
 
 _EVERYONE = "matches everyone"
+# How the GM view words a named NPC's regard for a participant (#4373).
+REGARD_POSITIVE = "positive"
+REGARD_NEGATIVE = "negative"
+REGARD_NEUTRAL = "neutral"
 
 
 @dataclass(frozen=True)
@@ -77,6 +83,16 @@ class GMMemberView:
 
 
 @dataclass(frozen=True)
+class GMRegardView:
+    """A named NPC's ``NpcRegard`` for one participant's presented persona (#4373)."""
+
+    participant: str
+    regard: int
+    label: str
+    bands: int
+
+
+@dataclass(frozen=True)
 class GMGroupView:
     group_id: int
     name: str
@@ -104,6 +120,9 @@ class GMGroupView:
     drives: list[GMDriveView] = field(default_factory=list)
     faction_rules: list[GMFactionRuleView] = field(default_factory=list)
     members: list[GMMemberView] = field(default_factory=list)
+    is_named_npc: bool = False
+    speaks: list[str] = field(default_factory=list)
+    regards: list[GMRegardView] = field(default_factory=list)
 
 
 @dataclass(frozen=True)
@@ -176,6 +195,38 @@ def _presented_name(sheet) -> str:
     return active_persona_for_sheet(sheet).name
 
 
+def _regard_label(regard: int) -> str:
+    if regard > 0:
+        return REGARD_POSITIVE
+    if regard < 0:
+        return REGARD_NEGATIVE
+    return REGARD_NEUTRAL
+
+
+def _regards(group: StandoffGroup, participants: list, config: StandoffConfig) -> list:
+    """The named NPC's regard for each participant who has one, as the GM reads it.
+
+    A participant the NPC holds no opinion of is left out, as the demo's "Their regard" row
+    lists only the characters it matters for; a template group has none.
+    """
+    if group.persona_id is None:
+        return []
+    views = []
+    for participant in participants:
+        regard, bands = regard_for(group, participant.character_sheet, config)
+        if regard == 0:
+            continue
+        views.append(
+            GMRegardView(
+                participant=_presented_name(participant.character_sheet),
+                regard=regard,
+                label=_regard_label(regard),
+                bands=bands,
+            )
+        )
+    return views
+
+
 def _gm_group(group: StandoffGroup, participants: list, config: StandoffConfig) -> GMGroupView:
     template = group.creature_template
     members = active_members(group)
@@ -190,13 +241,19 @@ def _gm_group(group: StandoffGroup, participants: list, config: StandoffConfig) 
             matched[match.rule.pk].append(_presented_name(sheet))
     cause, margin = group_cause(group)
     organization = group_organization(group)
-    template_strengths = {drive.property_id: drive.strength for drive in template.drives.all()}
+    # A named NPC's drives are its persona's own (ADR-4373-A): nothing there is "edited".
+    compares_template = template is not None and group.persona_id is None
+    template_strengths = (
+        {drive.property_id: drive.strength for drive in template.drives.all()}
+        if compares_template
+        else {}
+    )
     live = group.state in LIVE_GROUP_STATES and bool(members)
     reason = cause_fire_reason(group, config, lapse_override=False) if live else None
     prompts = pending_prompts(group) if group.state == StandoffGroupState.PROPOSED else []
     return GMGroupView(
         group_id=group.pk,
-        name=template.name,
+        name=group.name,
         state=group.state,
         member_count=len(members),
         cause=CauseKind(cause).label,
@@ -205,8 +262,8 @@ def _gm_group(group: StandoffGroup, participants: list, config: StandoffConfig) 
         cause_reason=reason or "",
         cause_margin_percent=margin,
         affiliation=organization.name if organization is not None else "",
-        cause_edited=cause != template.cause,
-        affiliation_edited=organization != template.organization,
+        cause_edited=template is not None and cause != template.cause,
+        affiliation_edited=template is not None and organization != template.organization,
         proposal_reason=group.proposal_reason if prompts else "",
         pending_prompt_id=prompts[0].pk if prompts else None,
         last_decision=last_decision(group),
@@ -223,7 +280,8 @@ def _gm_group(group: StandoffGroup, participants: list, config: StandoffConfig) 
                 label=drive.property.name,
                 strength=drive.strength_label,
                 revealed=drive.property_id in revealed_drive_ids,
-                edited=template_strengths.get(drive.property_id) != drive.strength,
+                edited=compares_template
+                and template_strengths.get(drive.property_id) != drive.strength,
             )
             for drive in group_drives(group)
         ],
@@ -249,6 +307,9 @@ def _gm_group(group: StandoffGroup, participants: list, config: StandoffConfig) 
             )
             for member in members
         ],
+        is_named_npc=group.persona_id is not None,
+        speaks=[language.name for language in group_languages(group)],
+        regards=_regards(group, participants, config),
     )
 
 
@@ -267,7 +328,7 @@ def build_gm_standoff_view(encounter: CombatEncounter) -> GMStandoffView | None:
         participants=[_presented_name(p.character_sheet) for p in participants],
         groups=[
             _gm_group(group, participants, config)
-            for group in encounter.standoff_groups.select_related("creature_template")
+            for group in encounter.standoff_groups.select_related("creature_template", "persona")
         ],
     )
 
@@ -280,7 +341,7 @@ def build_standoff_summary(encounter: CombatEncounter) -> StandoffSummary | None
     if not is_in_standoff(encounter):
         return None
     groups = []
-    for group in encounter.standoff_groups.select_related("creature_template"):
+    for group in encounter.standoff_groups.select_related("creature_template", "persona"):
         members = active_members(group)
         state = group.state
         if state == StandoffGroupState.PROPOSED:
@@ -288,7 +349,7 @@ def build_standoff_summary(encounter: CombatEncounter) -> StandoffSummary | None
         groups.append(
             SummaryGroupView(
                 group_id=group.pk,
-                name=group.creature_template.name,
+                name=group.name,
                 member_count=len(members),
                 state=state,
                 morale_state=_worst_state(members),

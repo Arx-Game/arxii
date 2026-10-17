@@ -37,6 +37,7 @@ from world.standoffs.services.placement import (
     DriveEdit,
     PlacementProfile,
     draft_from_line,
+    line_persona,
     placement_profile,
     save_placement,
 )
@@ -68,6 +69,8 @@ class _Forms:
         )
 
     def drive_edits(self) -> list[DriveEdit]:
+        if self.drives.profile.persona is not None:
+            return []
         added = [
             DriveEdit(form.cleaned_data["property"], form.cleaned_data["strength"])
             for form in self.added.forms
@@ -98,8 +101,13 @@ def _beat_where(line: BeatOpponentLine) -> _Where:
         if beat.target_level
         else f"The beat has no target level; level {level} is an example."
     )
+    who = (
+        f"{line.persona.name} ({line.creature_template.name})"
+        if line.persona_id is not None
+        else f"{line.creature_template.name} x{line.count}"
+    )
     return _Where(
-        label=f'{line.creature_template.name} x{line.count} at "{beat_label}"',
+        label=f'{who} at "{beat_label}"',
         parent_label=beat_label,
         parent_url=reverse("admin:arxii_beat_change", args=[beat.pk]),
         parent_changelist_label="Beats",
@@ -129,11 +137,16 @@ def _mission_where(line: MissionOptionOpponentLine) -> _Where:
 def _build_forms(request: HttpRequest, line: OpponentLine, profile: PlacementProfile) -> _Forms:
     data = request.POST if request.method == "POST" else None
     form_class = BeatLineForm if isinstance(line, BeatOpponentLine) else MissionLineForm
-    added_initial = [
-        {"property": drive.property, "strength": drive.strength}
-        for drive in profile.drives
-        if drive.template_strength is None and drive.strength
-    ]
+    # A named NPC's drives are its persona's properties, never placement edits (#4373).
+    added_initial = (
+        []
+        if profile.persona is not None
+        else [
+            {"property": drive.property, "strength": drive.strength}
+            for drive in profile.drives
+            if drive.template_strength is None and drive.strength
+        ]
+    )
     return _Forms(
         line=form_class(data, instance=line, template_cause=line.creature_template.cause),
         drives=DrivesForm(data, profile=profile),
@@ -183,7 +196,9 @@ def _render(
 
 
 def _page(request: HttpRequest, line: OpponentLine, where: _Where, page_url: str) -> HttpResponse:
-    profile = placement_profile(line.creature_template, draft_from_line(line))
+    profile = placement_profile(
+        line.creature_template, draft_from_line(line), persona=line_persona(line)
+    )
     forms = _build_forms(request, line, profile)
     if request.method != "POST":
         return _render(request, line, where, forms, profile)

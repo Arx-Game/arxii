@@ -57,6 +57,9 @@ export const combatKeys = {
 
   placementPicks: (kind: 'organizations' | 'properties', search: string) =>
     [...combatKeys.all, 'placement-picks', kind, search] as const,
+
+  placementPersonas: (scope: api.PersonaScope, search: string) =>
+    [...combatKeys.all, 'placement-personas', scope, search] as const,
 };
 
 /**
@@ -610,6 +613,16 @@ export function usePlacementContext(templateId: number | null, organizationId?: 
 }
 
 /** The affiliation or drive picker's options, by name (#4361). GM-gated server-side. */
+/** The named NPCs a story uses, for the beat dialog and Add Opponent pickers (#4373). */
+export function usePlacementPersonas(scope: api.PersonaScope | null, search = '') {
+  return useQuery({
+    queryKey: combatKeys.placementPersonas(scope ?? { episode: 0 }, search),
+    queryFn: () => api.fetchPlacementPersonas(scope as api.PersonaScope, search),
+    enabled: scope !== null,
+    staleTime: 60_000,
+  });
+}
+
 export function usePlacementPicks(
   kind: 'organizations' | 'properties',
   search: string,
