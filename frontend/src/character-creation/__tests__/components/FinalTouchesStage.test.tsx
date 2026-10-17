@@ -29,6 +29,16 @@ vi.mock('../../goals', async (importOriginal) => ({
   }),
 }));
 const mutateAsync = vi.fn().mockResolvedValue({});
+
+const EMPTY_FACE_FOR_TEST = {
+  face_name: '',
+  concept: '',
+  quote: '',
+  never_do: '',
+  protect: '',
+  fear: '',
+  background: '',
+};
 let offersResponse: OffersResponse;
 vi.mock('../../queries', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../../queries')>()),
@@ -184,9 +194,10 @@ describe("FinalTouchesStage (Actor's Sheet)", () => {
         onRegisterBeforeLeave={vi.fn()}
       />
     );
-    expect(screen.getByRole('heading', { name: /Aurelie's First Journal/ })).toBeInTheDocument();
+    const journal = screen.getByRole('heading', { name: /Aurelie's First Journal/ });
+    expect(journal).toBeInTheDocument();
     expect(screen.queryByLabelText('What should the world know of you first?')).toBeNull();
-    await user.click(screen.getAllByRole('button', { name: 'Write it' })[0]);
+    await user.click(within(journal.closest('section')!).getByRole('button', { name: 'Write it' }));
     expect(screen.getByLabelText('What should the world know of you first?')).toBeInTheDocument();
   });
 
@@ -348,6 +359,68 @@ describe("FinalTouchesStage (Actor's Sheet)", () => {
     // test uses.
     const styledElsewhere = new Set(['leaf-body', 'chosen', 'entry', 'note-group']);
     expect(unreachableClasses(container, styledElsewhere)).toEqual([]);
+  });
+
+  it('names the face the world meets behind the Officially dead door (#4396)', async () => {
+    const user = userEvent.setup();
+    let leave: (() => Promise<boolean>) | null = null;
+    renderWithCharacterCreationProviders(
+      <FinalTouchesStage
+        draft={createMockDraft()}
+        onRegisterBeforeLeave={(check) => {
+          leave = check;
+        }}
+      />
+    );
+    expect(screen.getByRole('heading', { name: 'Officially dead' })).toBeInTheDocument();
+    expect(screen.queryByLabelText('The face the world meets')).toBeNull();
+    const doors = screen.getAllByRole('button', { name: 'Write it' });
+    const door = within(
+      screen.getByRole('heading', { name: 'Officially dead' }).closest('section')!
+    ).getByRole('button', { name: 'Write it' });
+    expect(doors).toContain(door);
+    await user.click(door);
+    await user.type(screen.getByLabelText('The face the world meets'), 'Cambria');
+    await user.type(screen.getByLabelText('Concept'), 'A widow of means');
+    await leave!();
+    expect(mutateAsync).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: {
+          draft_data: expect.objectContaining({
+            officially_dead: expect.objectContaining({
+              face_name: 'Cambria',
+              concept: 'A widow of means',
+              background: '',
+            }),
+          }),
+        },
+      })
+    );
+  });
+
+  it('skipping the door takes the face back and saves null (#4396)', async () => {
+    const user = userEvent.setup();
+    let leave: (() => Promise<boolean>) | null = null;
+    renderWithCharacterCreationProviders(
+      <FinalTouchesStage
+        draft={createMockDraft({
+          draft_data: { officially_dead: { ...EMPTY_FACE_FOR_TEST, face_name: 'Cambria' } },
+        })}
+        onRegisterBeforeLeave={(check) => {
+          leave = check;
+        }}
+      />
+    );
+    expect(screen.getByLabelText('The face the world meets')).toHaveValue('Cambria');
+    const section = screen.getByRole('heading', { name: 'Officially dead' }).closest('section')!;
+    await user.click(within(section).getByRole('button', { name: 'Skip' }));
+    expect(screen.queryByLabelText('The face the world meets')).toBeNull();
+    await leave!();
+    expect(mutateAsync).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: { draft_data: expect.objectContaining({ officially_dead: null }) },
+      })
+    );
   });
 
   it('saves the answers, goals, enemy and introductions in one PATCH on leave', async () => {

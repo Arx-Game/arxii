@@ -1247,7 +1247,11 @@ descriptor overlay, cosmetic editing, and shapeshift slots.
   the character sheet's `_build_appearance` and `LookAction`/`CharacterState.get_display_desc`
   both call, so a masked persona's real description no longer leaks through `look` for a
   viewer who hasn't seen through the mask (self, staff, and a discoverer still see it, exactly
-  as the sheet already did). `GET /api/actions/characters/<id>/personas/<pid>/menu/`
+  as the sheet already did). **Sight (#4396):** the same rule reveals a mask of a kind the
+  viewer's characters see through (`disguise_sight` lever target per `DisguiseKind`,
+  `forms.services.identification.pierced_disguise_kinds` / `presented_disguise_kind`), no
+  check and no discovery row; see `mechanics.md` "Levers".
+  `GET /api/actions/characters/<id>/personas/<pid>/menu/`
   (`actions.persona_menu.build_persona_menu`) is the server-composed list behind the
   right-click persona menu (Look, Identify, Challenge, and the scene-only actions), reusing
   each action's own `check_availability()` rather than a second gate.
@@ -2777,6 +2781,10 @@ services on a live sheet (`sheet_writers.py`, #4221), shared with staff edit mod
   life-stage-tagged. See [character_creation.md](character_creation.md)'s "Question
   kinds and connections" subsection and ADR-0277.
 - **Integrates with:** All character-related systems (traits, skills, magic, sheets)
+- **Officially dead (#4396):** a Final Touches door names the established face the world meets
+  while the character's own is believed dead (`draft_data.officially_dead`, `_write_officially_dead`:
+  `create_persona` + `set_persona_profile` + `set_active_persona`, `believed_deceased` on the
+  PRIMARY and the kin node); see `character_creation.md` "The Actor's Sheet".
 - **Actor's Sheet (#3621, ADR-0279):** Final Touches replaced personality with three questions
   (`Profile.never_do`/`protect`/`fear`), goals with a horizon and number, one priced enemy
   (`character_creation/enemies.py`: `enemy_price`, `enemy_offers`, `resolve_enemy`;

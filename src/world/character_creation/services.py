@@ -329,6 +329,9 @@ def finalize_character(
     # fired for this character — sync explicitly now.
     _sync_finalized_name_aliases(sheet)
 
+    # Officially dead (#4396): after the kin node exists, so the belief lands on it too.
+    _write_officially_dead(draft, sheet, primary_persona)
+
     # Finalize magic data before deleting draft
     finalize_magic_data(draft, sheet)
 
@@ -496,6 +499,50 @@ def _write_actor_sheet(
     """The Actor's Sheet's finalize writes beyond the profile answers and goals (#3621)."""
     _create_enemy(draft, sheet, persona, character)
     _write_introductions(draft, sheet, persona, character)
+
+
+def _write_officially_dead(draft: CharacterDraft, sheet: CharacterSheet, primary: Persona) -> None:
+    """Start as someone the world believes dead (#4396).
+
+    The option taken at Final Touches names the face the world meets. That face is an
+    established persona (``create_persona``, a named alt whose link to the primary stays
+    hidden) with the guise bio the player wrote (``set_persona_profile``), worn from the
+    first day (``set_active_persona``). The true face is marked ``believed_deceased``, and so
+    is the character's kin node when the kinship bind made one, so the almanach reads the
+    same belief. A blank face name writes nothing.
+    """
+    from django.core.exceptions import ObjectDoesNotExist  # noqa: PLC0415
+
+    from world.character_creation.constants import (  # noqa: PLC0415
+        OFFICIALLY_DEAD_FACE_NAME,
+        OFFICIALLY_DEAD_KEY,
+        OFFICIALLY_DEAD_TEXT_FIELDS,
+    )
+    from world.scenes.constants import PersonaType  # noqa: PLC0415
+    from world.scenes.services import (  # noqa: PLC0415
+        create_persona,
+        set_active_persona,
+        set_persona_profile,
+    )
+    from world.societies.houses.almanach import record_public_belief  # noqa: PLC0415
+
+    face = draft.draft_data.get(OFFICIALLY_DEAD_KEY) or {}
+    name = (face.get(OFFICIALLY_DEAD_FACE_NAME) or "").strip()
+    if not name:
+        return
+    worn = create_persona(sheet, name=name, persona_type=PersonaType.ESTABLISHED)
+    texts = {field: face.get(field, "").strip() for field in OFFICIALLY_DEAD_TEXT_FIELDS}
+    if any(texts.values()):
+        set_persona_profile(worn, **{field: text for field, text in texts.items() if text})
+    set_active_persona(sheet, worn)
+    primary.believed_deceased = True
+    primary.save(update_fields=["believed_deceased"])
+    try:
+        node = sheet.kinsperson
+    except ObjectDoesNotExist:
+        node = None
+    if node is not None:
+        record_public_belief(node, believed_deceased=True)
 
 
 def _create_enemy(
@@ -2904,6 +2951,7 @@ def finalize_gm_character(
     # Connection reputation seeding (#3660): mirrors the player finalize flow.
     _seed_connection_reputation(draft, primary_persona)
     _write_actor_sheet(draft, sheet, primary_persona, character)
+    _write_officially_dead(draft, sheet, primary_persona)
 
     # Finalize magic data (same as player finalize flow — GM-created
     # characters may have gift/technique/tradition/aura selections in the draft).

@@ -376,6 +376,27 @@ ACTOR_SHEET_QUESTIONS: tuple[tuple[str, str], ...] = (
 INTRODUCTION_FIRST_JOURNAL = "first_journal"
 INTRODUCTION_APPLICATION = "application"
 INTRODUCTION_WHISPERS = "whispers"
+
+# Officially dead (#4396): the world believes the character's true face dead, and the face
+# it meets instead is an established persona with its own guise bio. The draft_data entry
+# under ``OFFICIALLY_DEAD_KEY`` is null, or an object of ``OFFICIALLY_DEAD_FACE_NAME`` plus the
+# guise texts; a blank face name means the option was not taken.
+OFFICIALLY_DEAD_KEY = "officially_dead"
+OFFICIALLY_DEAD_FACE_NAME = "face_name"
+OFFICIALLY_DEAD_TEXT_FIELDS: tuple[str, ...] = (
+    "concept",
+    "quote",
+    "never_do",
+    "protect",
+    "fear",
+    "background",
+)
+OFFICIALLY_DEAD_HEADING = "Officially dead"
+OFFICIALLY_DEAD_INTRO = (
+    "The world believes you dead. Name the face it meets instead: an established identity "
+    "with a concept, a quote and a story of its own, worn from your first day. Your true name "
+    "stays on the rolls of the dead until someone sees through the face."
+)  # PLACEHOLDER: Apostate rewrite
 INTRODUCTIONS_INTRO = (
     "These are optional IC introductions that can be answered IC as another way to help "
     "flesh out a character in their past. The First Journal is a white journal in the "

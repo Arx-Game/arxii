@@ -213,6 +213,7 @@ bonus once (`covenant_role_base_total`) instead of once per equipped item. See
 | `goal` / `goal_percent` / `goal_points` | Goal domain names | Standing, Wealth, Knowledge, etc. |
 | `favor_invocation` / `favor_earning` | `<being> favor invocation` / `<being> favor earning`; one `Any being ...` target each | `target_being` names the being; null = any being (#4333) |
 | `income` / `reputation_gain` / `relationship_gain` / `comfort` / `fatigue_cost` | The category's own name; `reputation_gain` also `reputation_gain_society` and `reputation_gain_organization` | The five levers (#4394); see "Levers" |
+| `disguise_sight` | `mundane`, `magical` (one per `DisguiseKind` value) | Sight through a mask (#4396); see "Levers" |
 
 ## Levers (#4394)
 
@@ -230,6 +231,7 @@ never scaled. An unauthored target reads as 0 and the seam is byte for byte what
 | Relationship gain | `relationship_gain` / `relationship_gain` | `relationships.services._relationship_gain_for` in `apply_affection_shift`, for the sheet whose regard moves | percent on a positive amount; conflict is not a gain. The SHIFT_AFFECTION consequence handler reports the scaled shift and names a gain scaled to nothing `no_gain`, not a repeat |
 | Comfort | `comfort` / `comfort` | `locations.comfort_effect.comfort_level_for_character`, the residence read behind the AP-regen comfort modifier | flat shift in comfort levels, clamped to 1-10. Read when the residence modifier is re-materialized: on a residence or room-comfort change, and (`refresh_comfort_lever`) when a distinction carrying a comfort effect is granted, ranked up or removed, including the creation picks, which land after the starting residence |
 | Fatigue cost | `fatigue_cost` / `fatigue_cost` | `fatigue.services.apply_fatigue` | percent on the charged cost, floor `MIN_FATIGUE_COST`. Covers every action charged through `apply_fatigue` (actions, moves under load, combat); technique fatigue (`apply_technique_fatigue`, magic's own charge) is not a lever seam |
+| Disguise sight (#4396) | `disguise_sight` / `mundane`, `magical` | `forms.services.identification.pierced_disguise_kinds`, read by the persona reveal rule (`scenes.persona_display`: `resolve_display_for_viewer`, `build_persona_display_map`, so `identity_revealed_to_viewer`, `look` and the sheet) once per page and only when an undiscovered mask is left on it | a positive total on a kind's target reveals a disguise of that kind as `<mask> (<real>)`, no `PersonaDiscovery` row and no identification check. The kind is the worn overlay's `overlay_kind`, or MUNDANE for a bare false name (`presented_disguise_kind`); a named alt is not a disguise and no sight pierces it. Not a percent: the first point is the whole effect |
 
 The rows are content (#2698): staff author the categories and targets (`world/seeds/levers.py`
 `ensure_lever_targets` creates them on a dev or E2E database under `SEED_SAMPLE_CONTENT`), and a

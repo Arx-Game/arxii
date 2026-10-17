@@ -152,3 +152,96 @@ class PersonaDisplayApiTests(APITestCase):
         # per anonymous persona (8 masks must not mean 8 of either).
         assert len(discovery_queries) <= 1, f"discovery not batched: {len(discovery_queries)}"
         assert len(gender_queries) <= 1, f"gender resolved per-row (N+1): {len(gender_queries)}"
+
+
+class SightThroughAMaskTests(TestCase):
+    """A ``disguise_sight`` lever on a kind reveals a disguise of that kind, no contest (#4396)."""
+
+    @classmethod
+    def setUpTestData(cls):
+        from world.forms.factories import CharacterFormFactory
+        from world.forms.models import FormType
+        from world.mechanics.constants import DISGUISE_SIGHT_CATEGORY_NAME
+        from world.mechanics.test_helpers import grant_lever
+        from world.scenes.services import create_mask
+
+        cls.owner_entry = _played_character(AccountFactory(), gender_key="female")
+        cls.sheet = cls.owner_entry.character_sheet
+        cls.primary = cls.sheet.primary_persona
+        cls.bare_mask = PersonaFactory(
+            character_sheet=cls.sheet, is_fake_name=True, name="stag mask"
+        )
+        cls.named_alt = PersonaFactory(character_sheet=cls.sheet, is_fake_name=False, name="Maud")
+        glamour_form = CharacterFormFactory(character=cls.sheet, form_type=FormType.DISGUISE)
+        cls.glamour = create_mask(
+            cls.sheet, name="glamour", disguise_form=glamour_form, disguise_kind="magical"
+        )
+
+        cls.keen = _played_character(AccountFactory()).character_sheet
+        grant_lever(cls.keen, DISGUISE_SIGHT_CATEGORY_NAME, "mundane", 1)
+        cls.warded = _played_character(AccountFactory()).character_sheet
+        grant_lever(cls.warded, DISGUISE_SIGHT_CATEGORY_NAME, "magical", 1)
+        cls.plain = _played_character(AccountFactory()).character_sheet
+
+    def _seen_by(self, persona, viewer_sheet):
+        from world.scenes.persona_display import resolve_display_for_viewer
+
+        return resolve_display_for_viewer(
+            persona, viewer_persona_ids=set(), viewer_sheet_ids={viewer_sheet.pk}
+        )
+
+    def _revealed_to(self, persona, viewer_sheet):
+        from world.scenes.persona_display import identity_revealed_to_viewer
+
+        return identity_revealed_to_viewer(
+            persona, viewer_persona_ids=set(), viewer_sheet_ids={viewer_sheet.pk}
+        )
+
+    def test_a_bare_fake_name_is_a_mundane_disguise_and_keen_eyes_read_it(self) -> None:
+        assert self._seen_by(self.bare_mask, self.keen) == (
+            f"stag mask ({self.primary.name})",
+            True,
+        )
+        assert self._revealed_to(self.bare_mask, self.keen) is True
+        assert self._seen_by(self.bare_mask, self.plain) == ("a woman wearing a stag mask", False)
+        assert self._revealed_to(self.bare_mask, self.plain) is False
+
+    def test_sight_on_one_kind_leaves_the_other_kind_a_stranger(self) -> None:
+        # The glamour is the worn face over a MAGICAL overlay: mundane sight is no help.
+        assert self._seen_by(self.glamour, self.keen) == ("a woman wearing a glamour", False)
+        assert self._seen_by(self.glamour, self.warded) == (
+            f"glamour ({self.primary.name})",
+            True,
+        )
+        # And warded eyes do not read a plain false name.
+        assert self._seen_by(self.bare_mask, self.warded) == ("a woman wearing a stag mask", False)
+
+    def test_a_named_alt_is_not_a_disguise_sight_can_pierce(self) -> None:
+        for viewer in (self.keen, self.warded):
+            assert self._seen_by(self.named_alt, viewer) == ("Maud", False)
+            assert self._revealed_to(self.named_alt, viewer) is False
+
+    def test_the_page_map_reads_sight_once_and_marks_the_reveal_allowed(self) -> None:
+        from world.scenes.persona_display import build_persona_display_map
+
+        with CaptureQueriesContext(connection) as ctx:
+            resolved = build_persona_display_map(
+                [self.bare_mask, self.glamour, self.named_alt],
+                viewer_persona_ids=set(),
+                viewer_sheet_ids={self.keen.pk},
+            )
+        assert resolved[self.bare_mask.pk] == (f"stag mask ({self.primary.name})", True, True)
+        assert resolved[self.glamour.pk] == ("a woman wearing a glamour", False, False)
+        assert resolved[self.named_alt.pk] == ("Maud", False, True)
+        sql = [q["sql"].lower() for q in ctx.captured_queries]
+        sheet_loads = [s for s in sql if "arxii_charactersheet" in s and "where" in s]
+        assert len(sheet_loads) <= 1, f"sight read per persona, not per page: {len(sheet_loads)}"
+
+    def test_without_the_targets_authored_nothing_is_pierced(self) -> None:
+        # The rows are content: a database where staff never authored the category reads
+        # every sight as 0, whatever modifiers a character carries.
+        from unittest.mock import patch
+
+        with patch("world.mechanics.constants.DISGUISE_SIGHT_CATEGORY_NAME", "not_authored"):
+            seen = self._seen_by(self.bare_mask, self.keen)
+        assert seen == ("a woman wearing a stag mask", False)

@@ -568,7 +568,8 @@ decision record: `world/scenes/CLAUDE.md` and ADR-0235.
 **Filters:** `is_active`, `is_public`, `location`, `participant`, `status` (active/completed/upcoming), `gm`, `player`
 
 ### Personas (`/api/personas/`)
-- `GET /api/personas/` - List personas
+- `GET /api/personas/` - List personas (`PersonaSerializer` carries `believed_deceased`,
+  read-only, #4396: the world believes this face dead)
 - `POST /api/personas/` - Create persona in a scene (participant/staff only)
 
 **Filters:** `scene`, `participation`, `account`, `character`

@@ -9,7 +9,10 @@ How a persona's name renders to a given viewer:
   render as ``"<mask> (<real>)"`` — the presented face, with the real identity you've pierced
   in parens. The parens are load-bearing: presenting under a mask is easy to lose track of, and
   a GM running a scene needs to know who they're actually looking at.
-- **Anonymous faces** you have not discovered render as a composed **sdesc**.
+- **Anonymous faces** you have not discovered render as a composed **sdesc**, unless one of
+  your characters **sees through** that kind of disguise (#4396): a positive ``disguise_sight``
+  lever total on the kind (``world.forms.services.identification.pierced_disguise_kinds``)
+  reveals the face as ``"<mask> (<real>)"`` with no discovery row and no identification check.
 
 ``build_persona_display_map`` resolves a whole page of personas in O(1) discovery queries, so
 the interaction feed stays query-bounded.
@@ -99,12 +102,29 @@ def _staff_reveal(persona: Persona) -> tuple[str, bool]:
     return persona.name, False
 
 
+def _sight_reveal(persona: Persona, pierced_kinds: set[str]) -> tuple[str, bool] | None:
+    """``"<mask> (<real>)"`` when the viewer sees through this face's kind of disguise (#4396).
+
+    None when nothing is pierced or the face hides nothing a sight could pierce. The real
+    name is the sheet's primary, the same reveal a staff viewer gets.
+    """
+    if not pierced_kinds:
+        return None
+    from world.forms.services.identification import presented_disguise_kind  # noqa: PLC0415
+
+    kind = presented_disguise_kind(persona)
+    if kind is None or kind not in pierced_kinds:
+        return None
+    return _staff_reveal(persona)
+
+
 def _resolve_single_display(
     persona: Persona,
     viewer_persona_ids: set[int],
     revealed: dict[int, Persona],
     *,
     is_staff: bool = False,
+    pierced_kinds: set[str] | None = None,
 ) -> tuple[str, bool, bool]:
     """Return ``(display_name, is_discovered, reveal_allowed)`` for one persona.
 
@@ -124,6 +144,10 @@ def _resolve_single_display(
         return name, is_discovered, True
     if persona.pk in revealed:
         return f"{persona.name} ({revealed[persona.pk].name})", True, True
+    seen = _sight_reveal(persona, pierced_kinds or set())
+    if seen is not None:
+        name, is_discovered = seen
+        return name, is_discovered, True
     return compose_sdesc(persona), False, False
 
 
@@ -147,12 +171,22 @@ def build_persona_display_map(
     fake_ids = [p.pk for p in unique.values() if p.is_fake_name and p.pk not in viewer_persona_ids]
     # Staff don't need discovery rows — they see through every mask (#1279).
     revealed = {} if is_staff else _build_revealed_map(fake_ids, viewer_sheet_ids)
+    # Sight (#4396) is read once per page, and only when an undiscovered mask is left on it.
+    pierced: set[str] = set()
+    if not is_staff and any(pk not in revealed for pk in fake_ids):
+        pierced = _pierced_kinds(viewer_sheet_ids)
     return {
         persona.pk: _resolve_single_display(
-            persona, viewer_persona_ids, revealed, is_staff=is_staff
+            persona, viewer_persona_ids, revealed, is_staff=is_staff, pierced_kinds=pierced
         )
         for persona in unique.values()
     }
+
+
+def _pierced_kinds(viewer_sheet_ids: set[int]) -> set[str]:
+    from world.forms.services.identification import pierced_disguise_kinds  # noqa: PLC0415
+
+    return pierced_disguise_kinds(viewer_sheet_ids)
 
 
 def resolve_display_for_viewer(
@@ -188,6 +222,9 @@ def resolve_display_for_viewer(
                 discovery.linked_to if discovery.persona_id == persona.pk else discovery.persona
             )
             return f"{persona.name} ({linked.name})", True
+        seen = _sight_reveal(persona, _pierced_kinds(viewer_sheet_ids))
+        if seen is not None:
+            return seen
     return compose_sdesc(persona), False
 
 
@@ -201,9 +238,10 @@ def identity_revealed_to_viewer(
     """Whether this viewer may see the real character behind ``persona`` (#1325, #4030).
 
     The one rule for identity-linked prose (the free-text description on the sheet and in
-    ``look``): the viewer's own face, staff, the PRIMARY public face, and a discovered mask
-    reveal; a named alt (its link to the primary stays hidden) and an undiscovered mask do
-    not. One discovery query, only for an anonymous face the viewer doesn't own.
+    ``look``): the viewer's own face, staff, the PRIMARY public face, a discovered mask and a
+    mask of a kind the viewer sees through (#4396) reveal; a named alt (its link to the
+    primary stays hidden) and an undiscovered mask do not. One discovery query, only for an
+    anonymous face the viewer doesn't own.
     """
     if persona.pk in viewer_persona_ids or is_staff:
         return True

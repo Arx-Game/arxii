@@ -70,6 +70,15 @@ never wired to a live check). See ADR-0280,
 [character_creation.md](../systems/character_creation.md)'s "Distinction offers"
 section.
 
+## Built (2026-10-17, #4396: faces)
+
+A character can start officially dead: the Final Touches door names the established face the
+world meets, with that face's own concept, quote, three answers and story, worn from the first
+day while the true face (and its kin node) is believed dead. A distinction can see through one
+kind of mask (the `disguise_sight` lever, one target per `DisguiseKind`) without the
+identification check. A face's own texts (`Persona.profile`, #1270) and a disguise's kind
+(`DisguiseKind`, #1110) were already built; this wired the two doors on top of them.
+
 ## Built (2026-09-07, #3621: the Actor's Sheet)
 
 Final Touches replaced the free-text personality field with the Actor's Sheet: three
