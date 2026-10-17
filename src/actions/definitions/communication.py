@@ -937,6 +937,14 @@ class PemitAction(Action):
         for receiver in receivers:
             receiver_state = sdm.initialize_state_for_object(receiver)
             send_message(receiver_state, text, echo_of=InteractionMode.EMIT)
+        # The narrator's own echo (#3657: telnet showed the GM nothing; the web
+        # drops it as an echo of the receiver-scoped row it already has).
+        names = ", ".join(persona.name for persona in receiver_personas)
+        send_message(
+            sdm.initialize_state_for_object(actor),
+            f"You narrate to {names}: {text}",
+            echo_of=InteractionMode.EMIT,
+        )
 
         record_interaction(
             character=actor,
