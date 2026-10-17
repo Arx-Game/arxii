@@ -67,7 +67,22 @@ jobs:
             PR was already reviewed.
           claude_args: >-
             --max-turns 80
-            --allowed-tools "mcp__github_inline_comment__create_inline_comment,Bash(gh issue view:*),Bash(gh search:*),Bash(gh issue list:*),Bash(gh pr comment:*),Bash(gh pr diff:*),Bash(gh pr view:*),Bash(gh pr list:*)"
+            --allowed-tools "Agent,Task,Read,Grep,Glob,mcp__github_inline_comment__create_inline_comment,Bash(gh issue view:*),Bash(gh search:*),Bash(gh issue list:*),Bash(gh pr comment:*),Bash(gh pr diff:*),Bash(gh pr view:*),Bash(gh pr list:*)"
+
+      # A review that never launched its agents still posts "No issues
+      # found" (#4424's first run: 4 turns, no subagents). Print every tool
+      # the run used and the models it billed, so a false clean shows.
+      - name: List tools and models used
+        if: always() && steps.claude.outputs.execution_file != ''
+        env:
+          EXECUTION_FILE: ${{ steps.claude.outputs.execution_file }}
+        run: |
+          jq -r '.[] | select(.type == "assistant") | .message.content[]?
+                 | select(.type == "tool_use") | .name' "$EXECUTION_FILE" \
+            | sort | uniq -c || echo "No execution file to read."
+          jq -c '.[] | select(.type == "result")
+                 | {turns: .num_turns, cost: .total_cost_usd, models: (.modelUsage | keys)}' \
+            "$EXECUTION_FILE" || true
 
       # The action hides the model's output, so a refused tool call is
       # invisible except as a count. Print only the refused calls.
