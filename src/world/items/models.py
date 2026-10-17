@@ -2648,7 +2648,8 @@ class DistinctionItemGrant(NaturalKeyMixin, SharedMemoryModel):
     Ravana's pendant, Calista's ring, Ilmia's quill: nine of the sixty-nine Arx 1
     lives studied for #4398 carried an object that was more than it seemed. The
     distinction's own ``description`` says what the keepsake is and why it matters;
-    this sidecar holds only which template to mint and how many. Same sidecar shape as
+    this sidecar holds only which template to mint; a kit is several rows. A retired
+    template (``is_active=False``) is neither minted nor advertised. Same sidecar shape as
     ``currency.DistinctionStartingGrant`` (ADR-0010: the consumer holds the FK pointing
     at the primitive, so ``world.distinctions`` never imports ``world.items``).
 
@@ -2668,12 +2669,6 @@ class DistinctionItemGrant(NaturalKeyMixin, SharedMemoryModel):
         related_name="distinction_grants",
         help_text="The item minted into the holder's inventory at finalize.",
     )
-    quantity = models.PositiveSmallIntegerField(
-        default=1,
-        validators=[MinValueValidator(1)],
-        help_text="How many instances to mint. One for a keepsake; more for a kit.",
-    )
-
     objects = NaturalKeyManager()
 
     #: A write here clears ``Distinction.cached_item_grants`` (ADR-0298 pairing).
@@ -2694,4 +2689,4 @@ class DistinctionItemGrant(NaturalKeyMixin, SharedMemoryModel):
         verbose_name_plural = "Distinction Item Grants"
 
     def __str__(self) -> str:
-        return f"{self.distinction} grants {self.quantity} x {self.item_template}"
+        return f"{self.distinction} grants {self.item_template}"

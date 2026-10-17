@@ -29,16 +29,32 @@ class ApplyItemGrantsTests(TestCase):
             ItemInstance.objects.filter(holder_character_sheet=sheet, template=pendant).count() == 1
         )
 
-    def test_a_quantity_mints_that_many(self):
+    def test_a_kit_is_several_rows(self):
         sheet = CharacterSheetFactory()
-        coin = ItemTemplateFactory(name="A Marked Coin")
-        distinction = DistinctionFactory(name="Thirteen Silver")
-        DistinctionItemGrantFactory(distinction=distinction, item_template=coin, quantity=3)
+        distinction = DistinctionFactory(name="A Burglar's Kit")
+        picks = ItemTemplateFactory(name="Lockpicks")
+        cloak = ItemTemplateFactory(name="A Dark Cloak")
+        DistinctionItemGrantFactory(distinction=distinction, item_template=picks)
+        DistinctionItemGrantFactory(distinction=distinction, item_template=cloak)
         char_dist = CharacterDistinctionFactory(character=sheet, distinction=distinction)
 
         apply_item_grants(char_dist)
 
-        assert ItemInstance.objects.filter(holder_character_sheet=sheet, template=coin).count() == 3
+        held = ItemInstance.objects.filter(holder_character_sheet=sheet)
+        assert sorted(held.values_list("template__name", flat=True)) == [
+            "A Dark Cloak",
+            "Lockpicks",
+        ]
+
+    def test_a_retired_template_is_not_minted(self):
+        sheet = CharacterSheetFactory()
+        retired = ItemTemplateFactory(name="A Withdrawn Trinket", is_active=False)
+        distinction = DistinctionFactory(name="An Old Keepsake")
+        DistinctionItemGrantFactory(distinction=distinction, item_template=retired)
+        char_dist = CharacterDistinctionFactory(character=sheet, distinction=distinction)
+
+        assert apply_item_grants(char_dist) == []
+        assert not ItemInstance.objects.filter(holder_character_sheet=sheet).exists()
 
     def test_a_distinction_without_a_grant_mints_nothing(self):
         sheet = CharacterSheetFactory()
@@ -57,15 +73,14 @@ class ItemGrantSummaryTests(TestCase):
         texts = [e["text"] for e in DistinctionListSerializer(distinction).data["effects_summary"]]
         assert "Comes with A Chimera Pendant" in texts
 
-    def test_a_quantity_reads_as_a_count(self):
-        distinction = DistinctionFactory(name="Thirteen Silver")
+    def test_a_retired_template_is_not_advertised(self):
+        distinction = DistinctionFactory(name="An Old Keepsake")
         DistinctionItemGrantFactory(
             distinction=distinction,
-            item_template=ItemTemplateFactory(name="Marked Coin"),
-            quantity=3,
+            item_template=ItemTemplateFactory(name="A Withdrawn Trinket", is_active=False),
         )
         texts = [e["text"] for e in DistinctionListSerializer(distinction).data["effects_summary"]]
-        assert "Comes with 3 Marked Coin" in texts
+        assert not any(t.startswith("Comes with") for t in texts)
 
     def test_a_distinction_without_a_grant_has_no_such_line(self):
         distinction = DistinctionFactory()

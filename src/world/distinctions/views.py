@@ -108,7 +108,9 @@ class DistinctionViewSet(viewsets.ReadOnlyModelViewSet):
                 ),
                 Prefetch(
                     "item_grants",
-                    queryset=DistinctionItemGrant.objects.select_related("item_template"),
+                    queryset=DistinctionItemGrant.objects.filter(
+                        item_template__is_active=True
+                    ).select_related("item_template"),
                     to_attr="cached_item_grants",
                 ),
                 Prefetch(

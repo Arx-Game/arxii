@@ -665,6 +665,6 @@ class MakeoverConsentRequestAdmin(admin.ModelAdmin):
 class DistinctionItemGrantAdmin(admin.ModelAdmin):
     """A keepsake a distinction mints at finalize (#4398); the sibling of the inheritance."""
 
-    list_display = ("distinction", "item_template", "quantity")
+    list_display = ("distinction", "item_template")
     search_fields = ("distinction__name", "item_template__name")
     raw_id_fields = ("distinction", "item_template")

@@ -372,7 +372,7 @@ list viewset). Authored in the plain admin (Distinction Starting Grants), like t
 
 The inheritance's sibling: a distinction that puts an object in its holder's hands when the
 character is finalized. `DistinctionItemGrant` (`world/items/models.py`, same ADR-0010
-sidecar placement) holds `item_template` and `quantity`; the distinction's own
+sidecar placement) holds `item_template`, one row per object (a kit is several rows), and skips a retired template (`is_active=False`) at mint and in the summary; the distinction's own
 `description` says what the keepsake is and why it matters, and when the distinction is
 `secret_by_default` its auto-minted Secret is where the keepsake's truth lives. Nine of the
 sixty-nine Arx 1 lives studied for the creation rework carried one (a pendant that warms, a

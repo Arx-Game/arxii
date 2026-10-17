@@ -658,4 +658,3 @@ class DistinctionItemGrantFactory(factory.django.DjangoModelFactory):
 
     distinction = factory.SubFactory("world.distinctions.factories.DistinctionFactory")
     item_template = factory.SubFactory(ItemTemplateFactory)
-    quantity = 1

@@ -50,18 +50,18 @@ def apply_item_grants(char_dist: CharacterDistinction) -> list[ItemInstance]:
     Called once per picked distinction by character creation's finalize
     (``_create_distinction_modifiers_bulk``), beside the inheritance. Deliberately
     not a ``reconcile_*``: a keepsake is minted exactly once, so this must never run
-    from a path that can repeat (a staff grant in play, a re-sync). Returns the
-    instances minted, empty when the distinction carries no ``DistinctionItemGrant``.
+    from a path that can repeat (a staff grant in play, a re-sync). A retired template
+    (``is_active=False``) is skipped, since retiring is how staff withdraw a template.
+    Returns the instances minted, empty when the distinction carries none.
     """
     from world.items.models import DistinctionItemGrant  # noqa: PLC0415
 
-    grants = DistinctionItemGrant.objects.filter(distinction=char_dist.distinction).select_related(
-        "item_template"
-    )
+    grants = DistinctionItemGrant.objects.filter(
+        distinction=char_dist.distinction, item_template__is_active=True
+    ).select_related("item_template")
     return [
         grant_touchstone_item_to_character(
             character_sheet=char_dist.character, template=grant.item_template
         )
         for grant in grants
-        for _ in range(grant.quantity)
     ]

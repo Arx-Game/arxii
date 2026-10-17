@@ -165,11 +165,10 @@ class DistinctionListSerializer(serializers.ModelSerializer):
 
             result.append({"text": f"Starts with {format_coppers(grant.coppers)}"})
         # A keepsake (#4398) is the other: what the character carries from the start.
-        for item_grant in obj.cached_item_grants:
-            what = item_grant.item_template.name
-            if item_grant.quantity > 1:
-                what = f"{item_grant.quantity} {what}"
-            result.append({"text": f"Comes with {what}"})
+        result.extend(
+            {"text": f"Comes with {item_grant.item_template.name}"}
+            for item_grant in obj.cached_item_grants
+        )
         return result
 
     def get_codex_entry_ids(self, obj: Distinction) -> list[int]:

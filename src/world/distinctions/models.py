@@ -294,7 +294,9 @@ class Distinction(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
         there; this body is the fallback for a lone instance. Writes clear it through
         ``DistinctionItemGrant.related_cache_fields``.
         """
-        return list(self.item_grants.select_related("item_template"))
+        return list(
+            self.item_grants.filter(item_template__is_active=True).select_related("item_template")
+        )
 
     @cached_property
     def cached_effects(self) -> list["DistinctionEffect"]:
