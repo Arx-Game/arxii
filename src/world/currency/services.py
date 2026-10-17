@@ -768,6 +768,25 @@ def collect_org_income(
     )
 
 
+def _income_for(character_sheet, amount: int) -> int:
+    """``amount`` after the character's income lever (#4394), floored at 0.
+
+    The one reader of the ``income`` category: every payout a character personally collects
+    (the house allowance, an asset collection) passes through here, so a distinction's
+    ``-20 income`` means 80 of every 100. Treasury and organization flows are untouched: the
+    lever is about what reaches a person's purse.
+    """
+    from world.mechanics.constants import (  # noqa: PLC0415
+        INCOME_CATEGORY_NAME,
+        INCOME_TARGET_NAME,
+    )
+    from world.mechanics.levers import lever_total, scale_by_percent  # noqa: PLC0415
+
+    return scale_by_percent(
+        amount, lever_total(character_sheet, INCOME_CATEGORY_NAME, INCOME_TARGET_NAME), floor=0
+    )
+
+
 @transaction.atomic
 def distribute_allowance(*, organization: Organization, surplus: int) -> AllowanceResult:
     """Auto-split a share of ``surplus`` among the org's active piloted members (#2540).
@@ -802,13 +821,18 @@ def distribute_allowance(*, organization: Organization, surplus: int) -> Allowan
         return AllowanceResult(total_distributed=0, per_member=0, member_count=len(active_sheets))
     distributed = 0
     for sheet in active_sheets.values():
+        # #4394: the income lever scales what this member collects (a Gambler collects
+        # less of the same share); ``per_member`` stays the house's even split.
+        amount = _income_for(sheet, per_member)
+        if amount <= 0:
+            continue
         transfer(
-            amount=per_member,
+            amount=amount,
             reason="house allowance",
             from_treasury=treasury,
             to_purse=get_or_create_purse(sheet),
         )
-        distributed += per_member
+        distributed += amount
     return AllowanceResult(
         total_distributed=distributed, per_member=per_member, member_count=len(active_sheets)
     )
@@ -1071,7 +1095,8 @@ def collect_asset_income(*, asset, character_sheet) -> CollectionResult:
             gathered=gathered, landed=0, graft_leak=0, success_level=success_level, catastrophe=True
         )
 
-    net = gathered * pct // 100
+    # #4394: the income lever scales what the collector keeps of the landed net.
+    net = _income_for(character_sheet, gathered * pct // 100)
     if net > 0:
         transfer(
             amount=net,

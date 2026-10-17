@@ -93,6 +93,7 @@ inventory reports for commands, API routes and frontend routes.
 | End-to-end pipeline test for the magic-story slice. | services / dispatch | `src/integration_tests/test_magic_story_pipeline.py` |
 | Survivability journey tests for issue #3450. | services / dispatch | `src/integration_tests/test_survivability_journey.py` |
 | Staff author a tradition's gift grants in the admin: a tradition with two gifts re-saves with only its description changed and keeps both grants and their techniques; the same gift on two rows is refused with the gift named and where its techniques go, and nothing is saved (#4380). | admin (test client) | `src/world/magic/tests/test_tradition_admin.py` |
+| A distinction with teeth: an income, reputation-gain, relationship-gain, comfort or fatigue-cost effect moves the number at its seam by the percent or level it says, and with no row every seam returns what it did (#4394). | service seams (allowance, asset collection, regard writes, affection shift, residence comfort, fatigue charge) | `src/world/mechanics/tests/test_levers.py`, `world/currency/tests/test_income_lever.py`, `world/societies/tests/test_reputation_gain_lever.py`, `world/relationships/tests/test_relationship_gain_lever.py`, `world/locations/tests/test_comfort_lever.py` (parity tier), `world/fatigue/tests/test_fatigue_cost_lever.py` |
 
 ## Gaps to write first
 

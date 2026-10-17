@@ -22,6 +22,8 @@ from typing import TYPE_CHECKING
 from world.locations.constants import (
     AP_MODIFIER_CATEGORY,
     AP_REGEN_TARGET_NAMES,
+    COMFORT_LEVEL_MAX,
+    COMFORT_LEVEL_MIN,
     COMFORT_LEVEL_NEUTRAL,
 )
 from world.locations.services import comfort_level
@@ -67,6 +69,24 @@ def comfort_regen_delta_for_room(room: DefaultObject) -> int:
     return comfort_level(room) - COMFORT_LEVEL_NEUTRAL
 
 
+def comfort_level_for_character(room: DefaultObject, sheet: CharacterSheet) -> int:
+    """The comfort level (1-10) ``room`` yields this character (#4394).
+
+    The one reader of the ``comfort`` category: the room's own level shifted by the
+    character's comfort lever, whole levels, clamped to the 1-10 band. A Sheltered row's
+    ``-1 comfort`` reads every home one level lower; a Hardy row's ``+1`` one higher.
+    """
+    from world.mechanics.constants import (  # noqa: PLC0415
+        COMFORT_CATEGORY_NAME,
+        COMFORT_TARGET_NAME,
+    )
+    from world.mechanics.levers import lever_total  # noqa: PLC0415
+
+    shift = lever_total(sheet, COMFORT_CATEGORY_NAME, COMFORT_TARGET_NAME)
+    level = comfort_level(room) + shift
+    return max(COMFORT_LEVEL_MIN, min(COMFORT_LEVEL_MAX, level))
+
+
 def recompute_comfort_regen_modifier(character: DefaultObject) -> None:
     """Re-materialize a character's residence-comfort AP-regen modifier (#1514).
 
@@ -80,7 +100,9 @@ def recompute_comfort_regen_modifier(character: DefaultObject) -> None:
     if sheet is None:
         return
     home = character.home
-    delta = comfort_regen_delta_for_room(home) if home is not None else 0
+    delta = (
+        comfort_level_for_character(home, sheet) - COMFORT_LEVEL_NEUTRAL if home is not None else 0
+    )
     source = _comfort_source()
     for target in _ap_regen_targets():
         if delta:

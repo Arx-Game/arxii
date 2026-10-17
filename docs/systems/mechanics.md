@@ -17,6 +17,9 @@ from world.mechanics.constants import (
     GOAL_PERCENT_CATEGORY_NAME, # "goal_percent"
     GOAL_POINTS_CATEGORY_NAME,  # "goal_points"
     RESONANCE_CATEGORY_NAME,    # "resonance"
+    INCOME_CATEGORY_NAME,       # "income" (#4394, the five levers; see "Levers" below)
+    REPUTATION_GAIN_CATEGORY_NAME, RELATIONSHIP_GAIN_CATEGORY_NAME,
+    COMFORT_CATEGORY_NAME, FATIGUE_COST_CATEGORY_NAME,
 )
 ```
 
@@ -209,6 +212,29 @@ bonus once (`covenant_role_base_total`) instead of once per equipped item. See
 | `resonance` | Resonance name | Uses `affiliated_affinity`, `opposite`, `resonance_affinity` fields |
 | `goal` / `goal_percent` / `goal_points` | Goal domain names | Standing, Wealth, Knowledge, etc. |
 | `favor_invocation` / `favor_earning` | `<being> favor invocation` / `<being> favor earning`; one `Any being ...` target each | `target_being` names the being; null = any being (#4333) |
+| `income` / `reputation_gain` / `relationship_gain` / `comfort` / `fatigue_cost` | The category's own name; `reputation_gain` also `reputation_gain_society` and `reputation_gain_organization` | The five levers (#4394); see "Levers" |
+
+## Levers (#4394)
+
+The five IC levers ApostateCD ruled a distinction may pull (2026-09-07; XP and Kudos never):
+one `ModifierCategory` each, read at exactly one seam through `get_modifier_total`
+(ADR-0278), by `world/mechanics/levers.py` (`lever_total`, `scale_by_percent`). A percent
+lever is integer percentage points on the amount being gained or charged (the
+`favor_earning` convention): `amount * (100 + total) // 100`, whole units, floored. A loss is
+never scaled. An unauthored target reads as 0 and the seam is byte for byte what it was.
+
+| Lever | Category / target | Reader (the one seam) | Semantics |
+|---|---|---|---|
+| Income | `income` / `income` | `currency.services._income_for`: the house allowance a member collects (`distribute_allowance`) and an asset collection's landed net (`collect_asset_income`) | percent, floor 0; the house's even split (`per_member`) is unchanged, only what reaches the purse |
+| Reputation gain | `reputation_gain` / `reputation_gain`, plus `reputation_gain_society`, `reputation_gain_organization` | `societies.renown._reputation_gain_for` at `bump_society_reputation` and `bump_organization_reputation`, the chokepoints every regard write goes through (renown awards, stakes, crime) | percent on a positive delta only; the general target and the leg's target add; legend untouched (ADR-0249) |
+| Relationship gain | `relationship_gain` / `relationship_gain` | `relationships.services._relationship_gain_for` in `apply_affection_shift`, for the sheet whose regard moves | percent on a positive amount; conflict is not a gain |
+| Comfort | `comfort` / `comfort` | `locations.comfort_effect.comfort_level_for_character`, the residence read behind the AP-regen comfort modifier | flat shift in comfort levels, clamped to 1-10 |
+| Fatigue cost | `fatigue_cost` / `fatigue_cost` | `fatigue.services.apply_fatigue` | percent on the charged cost, floor `MIN_FATIGUE_COST` |
+
+The rows are content (#2698): staff author the categories and targets (`world/seeds/levers.py`
+`ensure_lever_targets` creates them on a dev or E2E database under `SEED_SAMPLE_CONTENT`), and a
+distinction effect on one of the targets is how a Gambler, a Renowned or a Guarded row gets
+its teeth. Priced rows carry pluses, awarded rows minuses (the purse rule).
 
 ---
 

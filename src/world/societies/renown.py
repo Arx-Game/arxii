@@ -25,6 +25,12 @@ import logging
 
 from django.db import transaction
 
+from world.mechanics.constants import (
+    REPUTATION_GAIN_CATEGORY_NAME,
+    REPUTATION_GAIN_ORGANIZATION_TARGET_NAME,
+    REPUTATION_GAIN_SOCIETY_TARGET_NAME,
+    REPUTATION_GAIN_TARGET_NAME,
+)
 from world.scenes.models import Persona
 from world.societies.constants import (
     FAME_DECAY_FLAT,
@@ -676,6 +682,26 @@ def _apply_renown_award(  # noqa: PLR0913
     )
 
 
+def _reputation_gain_for(persona: Persona, delta: int, leg_target_name: str) -> int:
+    """A positive reputation ``delta`` after the character's reputation-gain lever (#4394).
+
+    The one reader of the ``reputation_gain`` category, at the two chokepoints every society
+    and organization regard write goes through (a renown award's archetype legs, a stakes
+    resolution, a reported crime). The general target and the leg's own target add: a
+    Renowned row may say ``+25 reputation_gain`` and a Kin by Choice row ``-10
+    reputation_gain_organization``. A loss is never scaled: a sting is not a gain. Legend
+    is not touched (ADR-0249).
+    """
+    if delta <= 0:
+        return delta
+    from world.mechanics.levers import lever_total, scale_by_percent  # noqa: PLC0415
+
+    sheet = persona.character_sheet
+    percent = lever_total(sheet, REPUTATION_GAIN_CATEGORY_NAME, REPUTATION_GAIN_TARGET_NAME)
+    percent += lever_total(sheet, REPUTATION_GAIN_CATEGORY_NAME, leg_target_name)
+    return scale_by_percent(delta, percent, floor=0)
+
+
 def bump_society_reputation(persona: Persona, society, delta: int) -> int | None:
     """Apply a clamped reputation delta to (persona, society) (#1760, #1765).
 
@@ -692,6 +718,9 @@ def bump_society_reputation(persona: Persona, society, delta: int) -> int | None
     request (#3570).
     """
     if delta == 0 or not persona.is_established_or_primary:
+        return None
+    delta = _reputation_gain_for(persona, delta, REPUTATION_GAIN_SOCIETY_TARGET_NAME)
+    if delta == 0:
         return None
     from world.societies.models import SocietyReputation  # noqa: PLC0415
 
@@ -749,6 +778,9 @@ def bump_organization_reputation(persona: Persona, organization, delta: int) -> 
     write, so a FACTION_STANDING_AT_LEAST beat can flip in the same request (#3570).
     """
     if delta == 0 or not persona.is_established_or_primary:
+        return None
+    delta = _reputation_gain_for(persona, delta, REPUTATION_GAIN_ORGANIZATION_TARGET_NAME)
+    if delta == 0:
         return None
     from world.societies.models import OrganizationReputation  # noqa: PLC0415
 

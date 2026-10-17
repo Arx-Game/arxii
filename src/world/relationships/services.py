@@ -630,6 +630,24 @@ def apply_relationship_bump(
     return bump
 
 
+def _relationship_gain_for(sheet: CharacterSheet, amount: int) -> int:
+    """A positive affection ``amount`` after ``sheet``'s relationship-gain lever (#4394).
+
+    The one reader of the ``relationship_gain`` category; ``apply_affection_shift`` is the
+    seam every automatic affection gain goes through (a social action's consequence, a boon).
+    """
+    if amount <= 0:
+        return amount
+    from world.mechanics.constants import (
+        RELATIONSHIP_GAIN_CATEGORY_NAME,
+        RELATIONSHIP_GAIN_TARGET_NAME,
+    )
+    from world.mechanics.levers import lever_total, scale_by_percent
+
+    percent = lever_total(sheet, RELATIONSHIP_GAIN_CATEGORY_NAME, RELATIONSHIP_GAIN_TARGET_NAME)
+    return scale_by_percent(amount, percent, floor=0)
+
+
 def apply_affection_shift(  # noqa: PLR0913 - two provenance modes share one write-shape
     *,
     source: CharacterSheet,
@@ -644,6 +662,12 @@ def apply_affection_shift(  # noqa: PLR0913 - two provenance modes share one wri
         msg = "An affection shift carries exactly one provenance: effect or boon."
         raise ValueError(msg)
     if amount == 0 or source.pk == target.pk:
+        return None
+    # #4394: the relationship-gain lever scales a gain of affection for the sheet whose
+    # regard moves (``source``); a Guarded character's regard rises more slowly. Conflict
+    # (a negative amount) is not a gain and is never scaled.
+    amount = _relationship_gain_for(source, amount)
+    if amount == 0:
         return None
     try:
         with transaction.atomic():
