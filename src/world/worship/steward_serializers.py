@@ -407,7 +407,7 @@ class StewardPromptSerializer(serializers.Serializer):
         }
 
 
-class StewardAnswerRequestSerializer(serializers.Serializer):
+class StewardSendSerializer(serializers.Serializer):
     """The panel's send: one authored answer, or the GM's own text and a clue."""
 
     answer = serializers.IntegerField(required=False, allow_null=True)

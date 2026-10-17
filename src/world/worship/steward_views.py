@@ -25,12 +25,12 @@ from world.stories.pagination import StandardResultsSetPagination
 from world.worship.models import Answer, AnswerSacrificeLine, Pledge, WorshippedBeing
 from world.worship.steward_serializers import (
     StewardActionResultSerializer,
-    StewardAnswerRequestSerializer,
     StewardAnswerSerializer,
     StewardedBeingSerializer,
     StewardPledgeSerializer,
     StewardPromptSerializer,
     StewardSacrificeLineSerializer,
+    StewardSendSerializer,
 )
 from world.worship.steward_services import stewarded_beings_for
 
@@ -52,6 +52,8 @@ class StewardedBeingViewSet(viewsets.ReadOnlyModelViewSet):
     filter_backends = [DjangoFilterBackend]
     filterset_class = StewardedBeingFilter
 
+    queryset = WorshippedBeing.objects.none()  # the schema's model; get_queryset scopes it
+
     def get_queryset(self) -> QuerySet[WorshippedBeing]:
         return stewarded_beings_for(self.request.user)
 
@@ -71,6 +73,8 @@ class StewardPledgeViewSet(
     pagination_class = StandardResultsSetPagination
     filter_backends = [DjangoFilterBackend]
     filterset_fields = ["being"]
+
+    queryset = Pledge.objects.none()  # the schema's model; get_queryset scopes it
 
     def get_queryset(self) -> QuerySet[Pledge]:
         return (
@@ -96,6 +100,8 @@ class StewardAnswerViewSet(
     filter_backends = [DjangoFilterBackend]
     filterset_fields = ["being", "pledge", "outcome_tier"]
 
+    queryset = Answer.objects.none()  # the schema's model; get_queryset scopes it
+
     def get_queryset(self) -> QuerySet[Answer]:
         return (
             Answer.objects.filter(being__in=stewarded_beings_for(self.request.user))
@@ -118,6 +124,8 @@ class StewardSacrificeLineViewSet(
     pagination_class = StandardResultsSetPagination
     filter_backends = [DjangoFilterBackend]
     filterset_fields = ["answer"]
+
+    queryset = AnswerSacrificeLine.objects.none()  # the schema's model; get_queryset scopes it
 
     def get_queryset(self) -> QuerySet[AnswerSacrificeLine]:
         return (
@@ -152,6 +160,8 @@ class StewardPromptViewSet(
     filter_backends = [DjangoFilterBackend]
     filterset_class = StewardPromptFilter
 
+    queryset = GMPrompt.objects.none()  # the schema's model; get_queryset scopes it
+
     def get_queryset(self) -> QuerySet[GMPrompt]:
         prompts = GMPrompt.objects.filter(
             kind=GMPromptKind.BEING_ANSWER,
@@ -168,14 +178,14 @@ class StewardPromptViewSet(
             "character_sheet",
         ).order_by("created_at", "pk")
 
-    @extend_schema(request=StewardAnswerRequestSerializer, responses=StewardActionResultSerializer)
+    @extend_schema(request=StewardSendSerializer, responses=StewardActionResultSerializer)
     @action(detail=True, methods=["post"])
     def answer(self, request: Request, pk: str | None = None) -> Response:
         """Send one of the being's answers, or the GM's own text with a clue."""
         from actions.definitions.worship import AnswerBeingPromptAction  # noqa: PLC0415
 
         prompt = self.get_object()
-        body = StewardAnswerRequestSerializer(data=request.data)
+        body = StewardSendSerializer(data=request.data)
         body.is_valid(raise_exception=True)
         data = body.validated_data
         result = AnswerBeingPromptAction().run(

@@ -28,6 +28,7 @@
  */
 import { Check, X } from 'lucide-react';
 import { useState } from 'react';
+import { Link } from 'react-router-dom';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -116,6 +117,45 @@ function StandoffCausePromptRow({ prompt, sceneId }: { prompt: GMPrompt; sceneId
   );
 }
 
+/**
+ * A stewarded being's closed pledge (#4333): the steward answers it from the table
+ * page's Beings tab; dismissing here sends an authored answer instead.
+ */
+function BeingAnswerPromptRow({ prompt, sceneId }: { prompt: GMPrompt; sceneId: string }) {
+  const dismiss = useDismissGMPrompt(sceneId);
+  return (
+    <div
+      data-testid="gm-prompt-row"
+      className="flex flex-wrap items-center gap-2 rounded-md border border-primary/40 bg-primary/10 p-2 text-sm"
+    >
+      <span>
+        &#10022; {prompt.kind_label}: <b>{prompt.being_answer_summary}</b> Answer it?
+      </span>
+      <span className="ml-auto flex gap-1">
+        {prompt.being_answer_table != null && (
+          <Button asChild size="sm">
+            <Link to={`/tables/${prompt.being_answer_table}?tab=beings`}>Open</Link>
+          </Button>
+        )}
+        <Button
+          type="button"
+          size="sm"
+          variant="secondary"
+          disabled={dismiss.isPending}
+          onClick={() => dismiss.mutate(prompt.id)}
+        >
+          <X className="h-3 w-3" /> Dismiss
+        </Button>
+      </span>
+      {dismiss.error && (
+        <p role="alert" className="w-full text-xs text-destructive">
+          {dismiss.error.message}
+        </p>
+      )}
+    </div>
+  );
+}
+
 export function GMPromptRow(props: {
   prompt: GMPrompt;
   sceneId: string;
@@ -123,6 +163,9 @@ export function GMPromptRow(props: {
 }) {
   if (props.prompt.kind === 'standoff_cause') {
     return <StandoffCausePromptRow prompt={props.prompt} sceneId={props.sceneId} />;
+  }
+  if (props.prompt.kind === 'being_answer') {
+    return <BeingAnswerPromptRow prompt={props.prompt} sceneId={props.sceneId} />;
   }
   return <NarrationOrMomentRow {...props} />;
 }

@@ -9,6 +9,8 @@
  *  - Bulletin: placeholder ("Bulletin board coming soon")
  *  - Recruitment (GM/staff only, #3268): roster invites + application queue
  *  - Hooks (GM/staff only, #4397): each member's hooks and the truths under them
+ *  - Beings (GM/staff only, #4333): beings the table stewards, their pledge types and
+ *    answers, and closed pledges waiting on the GM's answer. `?tab=beings` opens it.
  *
  * GM/staff viewers see all content + admin actions.
  * Member/guest viewers see scoped content and no admin actions.
@@ -17,7 +19,7 @@
  */
 
 import { useState } from 'react';
-import { useParams } from 'react-router-dom';
+import { useParams, useSearchParams } from 'react-router-dom';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Button } from '@/components/ui/button';
@@ -34,6 +36,7 @@ import { ArchiveTableDialog } from '../components/ArchiveTableDialog';
 import { TableBulletin } from '../components/TableBulletin';
 import { RecruitmentTab } from '../components/RecruitmentTab';
 import { TableHooks } from '../components/TableHooks';
+import { TableBeings } from '../components/TableBeings';
 
 // ---------------------------------------------------------------------------
 // Inner detail (inside error boundary)
@@ -41,6 +44,7 @@ import { TableHooks } from '../components/TableHooks';
 
 function TableDetailInner({ tableId }: { tableId: number }) {
   const { data: table, isLoading } = useTable(tableId);
+  const [searchParams] = useSearchParams();
 
   // Dialog state
   const [removeOpen, setRemoveOpen] = useState(false);
@@ -157,7 +161,7 @@ function TableDetailInner({ tableId }: { tableId: number }) {
       </div>
 
       {/* Tabs — overflow-x-auto so tab bar scrolls horizontally on very narrow screens */}
-      <Tabs defaultValue="stories">
+      <Tabs defaultValue={isGMOrStaff ? (searchParams.get('tab') ?? 'stories') : 'stories'}>
         <div className="overflow-x-auto">
           <TabsList>
             <TabsTrigger value="stories">Stories</TabsTrigger>
@@ -165,6 +169,7 @@ function TableDetailInner({ tableId }: { tableId: number }) {
             <TabsTrigger value="bulletin">Bulletin</TabsTrigger>
             {isGMOrStaff && <TabsTrigger value="recruitment">Recruitment</TabsTrigger>}
             {isGMOrStaff && <TabsTrigger value="hooks">Hooks</TabsTrigger>}
+            {isGMOrStaff && <TabsTrigger value="beings">Beings</TabsTrigger>}
           </TabsList>
         </div>
 
@@ -204,6 +209,12 @@ function TableDetailInner({ tableId }: { tableId: number }) {
         {isGMOrStaff && (
           <TabsContent value="hooks" className="mt-4">
             <TableHooks table={table} />
+          </TabsContent>
+        )}
+
+        {isGMOrStaff && (
+          <TabsContent value="beings" className="mt-4">
+            <TableBeings table={table} />
           </TabsContent>
         )}
       </Tabs>
