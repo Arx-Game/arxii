@@ -141,6 +141,21 @@ already failed, recovery is two presses of the button's `ref` input
 CI proves the migration runs on an empty database. That is the case that cannot
 fail. To prove the case that can, run it against a copy with rows in it:
 
+**Use `just prod-migration-check`** (#4390). It fetches the newest production dump
+with the read-only `dev_reader` key, restores it into a fresh `scratch_pmc_<timestamp>`
+database (it refuses `arxiidev` and any other name), migrates forward to your branch
+head, back to main's tip, forward again, prints row counts and pending migrations,
+and drops the database and dump on exit. Paste its report as the evidence.
+
+```bash
+just prod-migration-check                          # back to main's tip
+just prod-migration-check 0230 --tables creaturetemplate,beatopponentline
+```
+
+Do not write a script of your own for this. The manual `arxiidev` clone below is
+only for a check the helper cannot express (seeding old-shape rows at an
+intermediate migration); the helper's `--keep` leaves its scratch database for that.
+
 Clone the dump into a scratch database and migrate *that*. Do not build one
 from scratch - replaying the whole history takes hours, and the empty database
 it produces is the case that cannot fail anyway.

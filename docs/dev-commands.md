@@ -83,6 +83,19 @@ Django-only command that doesn't fully initialize Evennia.
   production backup, migrated forward to the checkout's chain (devcontainer:
   the throwaway `arxiidev`). Never touches production or the bucket. A failing
   migrate step here is a real finding: it is what the next deploy would hit.
+- `just prod-migration-check [target_migration] [--tables a,b,c] [--keep]` -
+  Prove a migration or data check against the NEWEST production dump without
+  touching `arxiidev`. Fetches the dump with the read-only `dev_reader` key,
+  restores it into a fresh `scratch_pmc_<timestamp>_<pid>` database, migrates
+  forward to the branch head, back to main's tip (or `target_migration`),
+  forward again, prints row counts for `--tables` before and after, the
+  pending migrations, the dump name and the head SHA, and exits non-zero on any
+  failure. The database and dump are removed on every exit path unless `--keep`
+  (which prints the `dropdb` command). It refuses any database that is not a
+  fresh scratch name and any name in `src/.env`, and runs under
+  `flock /tmp/claude-1000/arx-heavy.lock` with a 20 minute ceiling itself.
+  Takes about six minutes; paste its report as the Verification evidence.
+  Script: `tools/prod_migration_check.sh`; decision: ADR-4246 amendment.
 - `just dev-reader-env` — One-time setup for `pull-prod`: copies the read-only
   bucket key and bucket address from the prod Terraform outputs into
   `.devcontainer/dev.env` (else `src/.env`). Host only, needs `tofu` and
