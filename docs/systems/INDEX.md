@@ -6789,6 +6789,8 @@ then choose lawful seizure vs steal-back; linked from the inventory sidebar). Th
 holder is never notified a claim exists.
 
 - **Models:**
+  - `DistinctionItemGrant` (#4398, a keepsake a distinction mints at finalize; sibling of
+    `currency.DistinctionStartingGrant`, see `distinctions.md`)
   - `QualityTier`, `InteractionType`, `ItemTemplate`, `WeaponClass` (#2879 — weighted
     strength/agility blend for `ItemTemplate.weapon_class`, replaces the small/medium/heavy
     override; see `world.combat.stat_mapping`), `TemplateSlot`, `ItemInstance`,

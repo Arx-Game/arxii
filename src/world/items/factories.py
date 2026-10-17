@@ -8,6 +8,7 @@ from world.items.constants import BodyRegion, EquipmentLayer, GearArchetype
 from world.items.crafting.constants import CostConsumption, CraftingRecipeKind
 from world.items.gems.constants import GemAxis
 from world.items.models import (
+    DistinctionItemGrant,
     EquippedItem,
     FacetVogueMomentum,
     FashionPresentation,
@@ -647,3 +648,14 @@ class MaterialBucketFactory(factory.django.DjangoModelFactory):
     character_sheet = factory.SubFactory(_CHARACTER_SHEET_FACTORY)
     material_category = factory.SubFactory(MaterialCategoryFactory)
     value = 0
+
+
+class DistinctionItemGrantFactory(factory.django.DjangoModelFactory):
+    """A keepsake a distinction mints at finalize (#4398)."""
+
+    class Meta:
+        model = DistinctionItemGrant
+
+    distinction = factory.SubFactory("world.distinctions.factories.DistinctionFactory")
+    item_template = factory.SubFactory(ItemTemplateFactory)
+    quantity = 1

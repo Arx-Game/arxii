@@ -93,6 +93,7 @@ inventory reports for commands, API routes and frontend routes.
 | End-to-end pipeline test for the magic-story slice. | services / dispatch | `src/integration_tests/test_magic_story_pipeline.py` |
 | Survivability journey tests for issue #3450. | services / dispatch | `src/integration_tests/test_survivability_journey.py` |
 | Staff author a tradition's gift grants in the admin: a tradition with two gifts re-saves with only its description changed and keeps both grants and their techniques; the same gift on two rows is refused with the gift named and where its techniques go, and nothing is saved (#4380). | admin (test client) | `src/world/magic/tests/test_tradition_admin.py` |
+| Starting with a keepsake: a distinction authored with an item grant puts that item in the finalized character's inventory once, reads "Comes with <item>" on the distinction list, and a distinction without one mints nothing (#4398). | services / finalize | `src/world/items/tests/test_distinction_item_grant.py` |
 
 ## Gaps to write first
 

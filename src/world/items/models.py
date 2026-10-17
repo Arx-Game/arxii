@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from decimal import Decimal
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, ClassVar
 
 if TYPE_CHECKING:
     from evennia_extensions.models import Media
@@ -2640,3 +2640,58 @@ class ClaimTraceStep(SharedMemoryModel):
 
     def __str__(self) -> str:
         return f"trace step {self.position} of claim {self.claim_id}"
+
+
+class DistinctionItemGrant(NaturalKeyMixin, SharedMemoryModel):
+    """Config: a keepsake a distinction puts in its holder's hands at finalize (#4398).
+
+    Ravana's pendant, Calista's ring, Ilmia's quill: nine of the sixty-nine Arx 1
+    lives studied for #4398 carried an object that was more than it seemed. The
+    distinction's own ``description`` says what the keepsake is and why it matters;
+    this sidecar holds only which template to mint and how many. Same sidecar shape as
+    ``currency.DistinctionStartingGrant`` (ADR-0010: the consumer holds the FK pointing
+    at the primitive, so ``world.distinctions`` never imports ``world.items``).
+
+    Minted once, by character creation's finalize through ``apply_item_grants``, and
+    never from a path that can repeat: a keepsake is where a character started.
+    """
+
+    distinction = models.ForeignKey(
+        "arxii.Distinction",
+        on_delete=models.CASCADE,
+        related_name="item_grants",
+        help_text="The distinction whose new holders start with this item.",
+    )
+    item_template = models.ForeignKey(
+        ItemTemplate,
+        on_delete=models.PROTECT,
+        related_name="distinction_grants",
+        help_text="The item minted into the holder's inventory at finalize.",
+    )
+    quantity = models.PositiveSmallIntegerField(
+        default=1,
+        validators=[MinValueValidator(1)],
+        help_text="How many instances to mint. One for a keepsake; more for a kit.",
+    )
+
+    objects = NaturalKeyManager()
+
+    #: A write here clears ``Distinction.cached_item_grants`` (ADR-0298 pairing).
+    related_cache_fields: ClassVar[list[str]] = ["distinction"]
+
+    class NaturalKeyConfig:
+        fields = ["distinction", "item_template"]
+        dependencies = ["arxii.Distinction", "arxii.ItemTemplate"]
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["distinction", "item_template"],
+                name="one_item_grant_per_distinction_template",
+            ),
+        ]
+        verbose_name = "Distinction Item Grant"
+        verbose_name_plural = "Distinction Item Grants"
+
+    def __str__(self) -> str:
+        return f"{self.distinction} grants {self.quantity} x {self.item_template}"

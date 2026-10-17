@@ -368,6 +368,26 @@ The player sees it priced before picking: `DistinctionListSerializer.effects_sum
 `Starts with 12g 3s 4c` (via `Distinction.starting_grant_or_none`, select_related by the
 list viewset). Authored in the plain admin (Distinction Starting Grants), like the drain.
 
+## Keepsake axis — `DistinctionItemGrant`, an object from the start (#4398)
+
+The inheritance's sibling: a distinction that puts an object in its holder's hands when the
+character is finalized. `DistinctionItemGrant` (`world/items/models.py`, same ADR-0010
+sidecar placement) holds `item_template` and `quantity`; the distinction's own
+`description` says what the keepsake is and why it matters, and when the distinction is
+`secret_by_default` its auto-minted Secret is where the keepsake's truth lives. Nine of the
+sixty-nine Arx 1 lives studied for the creation rework carried one (a pendant that warms, a
+ring that brought the dreams, a quill that answers).
+
+Minted once, by `apply_item_grants` (`world/items/services/narrative_grants.py`, over the
+same `grant_touchstone_item_to_character` primitive the GM item award uses) from character
+creation's `_create_distinction_modifiers_bulk`, beside `apply_starting_grant`. It is not a
+`reconcile_*`: a keepsake is where a character started, so a distinction added in play mints
+nothing and no repeatable path may call it. The player sees it before picking:
+`DistinctionListSerializer.effects_summary` adds `Comes with <template>` (via
+`Distinction.cached_item_grants`, prefetched with its templates by the list viewset).
+Authored in the plain admin (Distinction Item Grants); exported with the content as
+`items.distinctionitemgrant`, keyed `(distinction, item_template)`.
+
 ---
 
 ## Profile Visibility — relocated into Secrets (#1109 → #1334)

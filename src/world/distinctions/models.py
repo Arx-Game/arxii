@@ -20,6 +20,7 @@ from django.utils.functional import cached_property
 from core.descriptors import ReverseOneToOneOrNone
 from core.models import ArxSharedMemoryModel as SharedMemoryModel
 from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
+from evennia_extensions.cached_property import PrunedCachedProperty
 from world.contributors.models import CreditedContent
 from world.distinctions.types import (
     DistinctionOrigin,
@@ -282,6 +283,18 @@ class Distinction(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
     # The ``currency.DistinctionStartingGrant`` sidecar (#4062), or ``None``: read
     # by the serializers' effects summary without importing ``world.currency``.
     starting_grant_or_none = ReverseOneToOneOrNone("starting_grant")
+
+    @PrunedCachedProperty
+    def cached_item_grants(self) -> list:
+        """This distinction's keepsake rows, with their templates (#4398, ADR-0298).
+
+        The ``items.DistinctionItemGrant`` sidecar, read by the serializers' effects
+        summary without importing ``world.items``. Fed cold by the list viewset's
+        ``Prefetch`` into this attribute (templates joined), never one query per row
+        there; this body is the fallback for a lone instance. Writes clear it through
+        ``DistinctionItemGrant.related_cache_fields``.
+        """
+        return list(self.item_grants.select_related("item_template"))
 
     @cached_property
     def cached_effects(self) -> list["DistinctionEffect"]:
