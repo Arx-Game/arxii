@@ -54,7 +54,17 @@ adds journeys for protecting what a story needs and clearing another GM to touch
 crossing two stories at one event, pacing a beat by its clock and a player's treasured
 sign-off (`integration_tests/test_sharing_a_story_journeys.py`); they found a scene
 started where anyone had already spoken going unseen (the room's cached "no scene" was
-never cleared by `scene start` or an event start), fixed in place.
+never cleared by `scene start` or an event start), fixed in place. Its third step
+(2026-10-17) is the first removal of the stories tranche: every line the six hand-built
+story command test modules typed by calling `Cmd.func()` (`test_story_command`,
+`test_story_custody_command`, `test_story_clock_command`, `test_story_room_commands`,
+`test_story_gm_lifecycle_e2e`, `test_canon_review_command`, 135 tests) is now typed
+through the handler in the story journeys, which gained every subject kind, the
+clearance fan-out, the staff canon queue (`canonreview`), the hidden beat, title
+resolution and the twin-named scene rooms on the way; the event journey speaks before
+`event start` to pin the cache fix on that path too. The ledger is
+`docs/testing/ledger/commands.csv` (those six rows confirmed `R`; the rest still the
+tool's proposal).
 
 ## Built (2026-09-30, #4064 — the reviewed delete, and admin pages for domains and fealty)
 

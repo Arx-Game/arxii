@@ -12,11 +12,13 @@ from world.boundaries.factories import TreasuredSubjectFactory
 from world.events.factories import EventFactory
 from world.gm.constants import GMLevel
 from world.gm.factories import GMProfileFactory, GMTableFactory, GMTableMembershipFactory
+from world.items.factories import ItemInstanceFactory
 from world.narrative.models import NarrativeMessageDelivery
 from world.roster.models import RosterTenure
 from world.scenes.factories import SceneFactory
 from world.scenes.models import Interaction, Scene
 from world.societies.constants import RenownRisk
+from world.societies.factories import OrganizationFactory, SocietyFactory
 from world.stories.constants import (
     BeatKind,
     BeatOutcome,
@@ -106,7 +108,7 @@ class _TwoTables(JourneyCase):
 
 
 class ProtectingWhatTheStoryNeeds(_TwoTables):
-    def test_another_gm_asks_leave_to_harm_her_and_is_refused_then_cleared_by_staff(
+    def test_another_gm_asks_leave_to_harm_her_and_is_refused_then_cleared_by_staff(  # noqa: PLR0915 - one clearance lifecycle, read top to bottom
         self,
     ) -> None:
         hobb_name = self.hobb.db_account.username
@@ -115,6 +117,16 @@ class ProtectingWhatTheStoryNeeds(_TwoTables):
             "You do not own or lead this story.",
             self.telnet(self.hobb, f"story protect {self.story.pk} list"),
         )
+        self.assertIn(
+            "You do not own or lead this story.",
+            self.telnet(self.hobb, f"story protect {self.story.pk} add personal_jeopardy=Ysmay"),
+        )
+        # Staff, and a plain owner of the story, stand where the Lead GM stands.
+        empty = f"No protected subjects for story #{self.story.pk}."
+        self.assertIn(empty, self.telnet(self.marrow, f"story protect {self.story.pk} list"))
+        self.story.owners.add(self.ysmay.db_account)
+        self.assertIn(empty, self.telnet(self.ysmay, f"story protect {self.story.pk} list"))
+        self.story.owners.remove(self.ysmay.db_account)
 
         told = self.telnet(
             self.ravenna,
@@ -169,10 +181,28 @@ class ProtectingWhatTheStoryNeeds(_TwoTables):
             self.ravenna, f"story clearance deny {clearance.pk} note=Not in this chapter"
         )
         self.assertIn(f"Denied clearance #{clearance.pk} (harm).", told)
+        clearance.refresh_from_db()
+        self.assertEqual(clearance.response_note, "Not in this chapter")
         self.assertTrue(
             self.queued_for(
                 self.hobb, f"{ravenna_name} denied your harm clearance request for Ysmay."
             )
+        )
+        # Denied, it leaves the pending list; staff see every row regardless.
+        self.assertIn(
+            "No custody clearances to show.", self.telnet(self.hobb, "story clearance list pending")
+        )
+        self.assertIn(
+            f"  [{clearance.pk}] harm — Ysmay — denied",
+            self.telnet(self.hobb, "story clearance list"),
+        )
+        self.assertIn(
+            f"  [{clearance.pk}] harm — Ysmay — denied",
+            self.telnet(self.marrow, "story clearance list"),
+        )
+        self.assertIn(
+            "You must have a GM profile to do that.",
+            self.telnet(self.marrow, f"story clearance grant {clearance.pk}"),
         )
         self.assertIn(
             "Only the requesting GM may escalate this clearance.",
@@ -191,6 +221,10 @@ class ProtectingWhatTheStoryNeeds(_TwoTables):
         self.assertIn(
             "Only staff may resolve an escalated custody clearance.",
             self.telnet(self.ravenna, f"story clearance resolve {clearance.pk} grant"),
+        )
+        self.assertIn(
+            "Usage: story clearance resolve <id> grant|deny [note=<text>]",
+            self.telnet(self.marrow, f"story clearance resolve {clearance.pk}"),
         )
         self.assertIn(
             f"Granted (staff) clearance #{clearance.pk} (harm).",
@@ -266,6 +300,14 @@ class ProtectingWhatTheStoryNeeds(_TwoTables):
             "Provide exactly one of protected=<id>, or a subject kind",
             self.telnet(self.hobb, "story clearance request scope=appear"),
         )
+        self.assertIn(
+            "Provide exactly one of protected=<id>, or a subject kind",
+            self.telnet(
+                self.hobb,
+                f"story clearance request protected={protected.pk} custom=The Lantern's lamp "
+                "scope=appear",
+            ),
+        )
         told = self.telnet(
             self.hobb, f"story clearance request protected={protected.pk} scope=appear"
         )
@@ -295,6 +337,106 @@ class ProtectingWhatTheStoryNeeds(_TwoTables):
             "This clearance is not in a state that allows that action.",
             self.telnet(self.ravenna, f"story clearance deny {clearance.pk}"),
         )
+        # Staff may take a granted clearance back in the custodian's place.
+        self.assertIn(
+            f"Revoked clearance #{clearance.pk}.",
+            self.telnet(self.marrow, f"story clearance revoke {clearance.pk}"),
+        )
+        clearance.refresh_from_db()
+        self.assertIsNotNone(clearance.revoked_at)
+
+    def test_every_kind_of_subject_and_a_request_that_fans_out(self) -> None:
+        lamp = ItemInstanceFactory()
+        OrganizationFactory(name="The Silver Rose")
+        SocietyFactory(name="The Undersea Court")
+        OrganizationFactory(name="The Ashfall Concord")
+        SocietyFactory(name="The Ashfall Concord")
+        other_beat = BeatFactory(episode=self.ledger_episode)
+
+        def add(args: str) -> str:
+            return self.telnet(self.ravenna, f"story protect {self.story.pk} add {args}")
+
+        self.assertIn("Protected #", add(f"item={lamp.pk}"))
+        self.assertIn("No item instance with that ID exists.", add("item=999999"))
+        self.assertIn("item=<subject-ref> must be an item instance ID.", add("item=lamp"))
+        self.assertIn("The Silver Rose (Faction relationship).", add("faction=The Silver Rose"))
+        self.assertIn(
+            "The Undersea Court (Faction relationship).", add("faction=The Undersea Court")
+        )
+        self.assertIn(
+            "No organization or society named 'The Nobodies'.", add("faction=The Nobodies")
+        )
+        self.assertIn(
+            "'The Ashfall Concord' matches both an organization and a society — specify "
+            "org=<name> or society=<name>.",
+            add("faction=The Ashfall Concord"),
+        )
+        self.assertIn("Protected #", add("org=The Ashfall Concord"))
+        self.assertIn("Protected #", add("society=The Ashfall Concord"))
+        self.assertIn("No society named 'The Silver Rose'.", add("society=The Silver Rose"))
+        self.assertIn("The Old Well (Location).", add("location=The Old Well"))
+        self.assertIn("Provide exactly one subject kind", add("custom=Ring location=Well"))
+        self.assertIn(
+            "That beat does not belong to this story.",
+            add(f"custom=A Ring beat={other_beat.pk}"),
+        )
+        self.assertIn("No beat with that ID exists.", add("custom=A Ring beat=999999"))
+        told = add(f"custom=A Ring beat={self.beat.pk} notes=Load-bearing for the finale")
+        ring = StoryProtectedSubject.objects.get(story=self.story, subject_label="A Ring")
+        self.assertIn(f"Protected #{ring.pk}: A Ring (Custom (trust-gated)).", told)
+        self.assertEqual(ring.beat_id, self.beat.pk)
+        self.assertEqual(ring.notes, "Load-bearing for the finale")
+        self.assertIn(
+            f"  [{ring.pk}] Custom (trust-gated): A Ring beat=#{self.beat.pk} (active)",
+            self.telnet(self.ravenna, f"story protect {self.story.pk} list"),
+        )
+        kinds = set(
+            StoryProtectedSubject.objects.filter(story=self.story).values_list(
+                "subject_kind", flat=True
+            )
+        )
+        self.assertEqual(
+            kinds,
+            {
+                StakeSubjectKind.ITEM,
+                StakeSubjectKind.FACTION,
+                StakeSubjectKind.LOCATION,
+                StakeSubjectKind.CUSTOM,
+            },
+        )
+
+        # Two stories protect the same person; one request by identity reaches both
+        # custodians, and a second request skips the one already asked.
+        self.telnet(self.ravenna, f"story protect {self.story.pk} add personal_jeopardy=Ysmay")
+        asker = GMProfileFactory(account=self.marrow.db_account, level=GMLevel.JUNIOR)
+        told = self.telnet(
+            self.marrow, "story clearance request personal_jeopardy=Ysmay scope=appear"
+        )
+        self.assertIn("Requested appear clearance (1 new):", told)
+        self.telnet(self.hobb, f"story protect {self.ledger.pk} add personal_jeopardy=Ysmay")
+        told = self.telnet(
+            self.marrow, "story clearance request personal_jeopardy=Ysmay scope=appear"
+        )
+        self.assertIn("Requested appear clearance (1 new):", told)
+        self.assertIn("(1 already had a live request, skipped)", told)
+        self.assertEqual(CustodyClearance.objects.filter(requested_by=asker).count(), 2)
+        hobbs = CustodyClearance.objects.get(
+            requested_by=asker, protected_subject__story=self.ledger
+        )
+        # Denied by its custodian, escalated, and refused by staff this time.
+        self.telnet(self.hobb, f"story clearance deny {hobbs.pk} note=Not in my ledger")
+        self.assertIn(
+            f"Escalated clearance #{hobbs.pk} to staff review.",
+            self.telnet(self.marrow, f"story clearance escalate {hobbs.pk}"),
+        )
+        # Marrow asked for it, so Marrow is also a requester here; staff still rule.
+        self.assertIn(
+            f"Denied (staff) clearance #{hobbs.pk} (appear).",
+            self.telnet(self.marrow, f"story clearance resolve {hobbs.pk} deny note=Ruled against"),
+        )
+        hobbs.refresh_from_db()
+        self.assertEqual(hobbs.status, CustodyClearanceStatus.DENIED)
+        self.assertEqual(hobbs.response_note, "Ruled against")
 
 
 class CrossingStoriesAtAnEvent(_TwoTables):
@@ -464,7 +606,7 @@ class SigningOffOnATreasure(_TwoTables):
         tenure = RosterTenure.objects.get(
             roster_entry__character_sheet=self.ysmay.sheet_data, end_date=None
         )
-        TreasuredSubjectFactory(
+        treasure = TreasuredSubjectFactory(
             owner=tenure, subject_kind=TreasuredSubjectKind.CUSTOM, subject_label="The Lantern"
         )
         StakeFactory(
@@ -501,6 +643,13 @@ class SigningOffOnATreasure(_TwoTables):
         self.assertNotIn(
             "SIGN-OFF NEEDED", self.telnet(self.ysmay, f"story beats {self.episode.pk}")
         )
+        # Nobody else can take her sign-off back, not even by its exact name.
+        self.assertIn(
+            f"No active sign-off for 'The Lantern' on beat {self.beat.pk}.",
+            self.telnet(self.hobb, f"story signoff {self.beat.pk} The Lantern withdraw"),
+        )
+        signoff.refresh_from_db()
+        self.assertTrue(signoff.active)
 
         self.assertIn(
             f"Withdrawn: The Lantern on beat {self.beat.pk}.",
@@ -512,10 +661,14 @@ class SigningOffOnATreasure(_TwoTables):
             self.telnet(self.ysmay, f"story signoff {self.beat.pk} The Lantern withdraw"),
         )
 
-        # With her sign-off in place, running the beat locks the stakes in for her.
+        # With her sign-off in place (this time by its id), running the beat locks
+        # the stakes in for her.
         self.telnet(self.ravenna, "scene start The Knock")
         self.telnet(self.ysmay, "say I am here for it.")
-        self.telnet(self.ysmay, f"story signoff {self.beat.pk} The Lantern")
+        self.assertIn(
+            f"Signed off: The Lantern on beat {self.beat.pk}.",
+            self.telnet(self.ysmay, f"story signoff {self.beat.pk} {treasure.pk}"),
+        )
         run = self.web(self.ravenna, "run_beat", beat_id=self.beat.pk).detail
         self.assertTrue(run.success, run.message)
         activation = run.data["stakes_activation"]

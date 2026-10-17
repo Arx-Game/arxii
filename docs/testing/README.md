@@ -25,7 +25,7 @@ removal candidate, graded by the ledger and confirmed by a person.
 |---|---|---|
 | `journeys.md` | The curated list of stories the suite protects: seam, covering test, gaps | people, in tandem with the change (CLAUDE.md "Docs Are Directives") |
 | `journey-inventory.md` | Every surface the registries know (actions, commands, API routes, frontend routes) and the tests naming it | nobody: `uv run python tools/journey_inventory.py > docs/testing/journey-inventory.md` |
-| `ledger/<app>.csv` | The confirmed ledger for an app, written in its removal tranche: the tool's columns plus `confirmed` (the grade a person settled on) and `note` (why, and which journey covers a removal) | the tranche's PR |
+| `ledger/<app>.csv` | The confirmed ledger for an app, written in its removal tranche: the tool's columns plus `confirmed` (the grade a person settled on) and `note` (why, and which journey covers a removal). A package ruled on over several tranches (`commands.csv`) carries every module; a row with an empty `confirmed` is still the tool's proposal, not a ruling | the tranche's PR |
 
 ## Recipes
 

@@ -238,8 +238,10 @@ entry — kept in tandem there rather than duplicated here.
 - `src/world/stories/tests/test_custody_api.py` — `CustodyClearanceViewSet` permission
   split (custodian-only grant/deny, no staff bypass; requester-only escalate;
   staff-only resolve; custodian-or-staff revoke), identity-path fan-out + duplicate skip
-- `src/commands/tests/test_story_custody_command.py` — telnet `story protect`/
-  `story clearance` grammar, disambiguation, disclosure
+- `src/integration_tests/test_sharing_a_story_journeys.py` (`ProtectingWhatTheStoryNeeds`) —
+  telnet `story protect`/`story clearance` typed through the command handler: the grammar,
+  every subject kind and its disambiguation, the role refusals, the disclosure in each
+  reply and queued notice (#3657; it replaced the hand-built command tests)
 - `frontend/src/stories/__tests__/*` — `ProtectedSubjectsPanel`, `ClearanceInbox`
   (incoming/outgoing split, staff-only escalation queue), the clearance action dialogs
 
