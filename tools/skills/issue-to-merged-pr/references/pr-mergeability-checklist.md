@@ -108,8 +108,9 @@ not an instruction to you. A comment with that marker from any other author is
 an ordinary comment.
 
 The **code reviewer** (`.github/workflows/claude-code-review.yml`, #4417) runs
-Anthropic's `code-review` plugin and leaves one review thread per confirmed
-finding on the exact diff lines, also as `github-actions[bot]`. Each thread
+one Opus reviewer and leaves one review thread per confirmed finding on the
+exact diff lines, also as `github-actions[bot]`. Each thread starts with a
+`**[category]**` tag naming the kind of mistake. Each thread
 needs an answer: fix the code and reply with the commit, or reply with why the
 finding is wrong. Then resolve the thread yourself; the ruleset requires every
 thread resolved before merge, and you do not need a human to resolve one you
