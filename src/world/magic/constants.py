@@ -439,6 +439,11 @@ class AffinityInteractionAggressor(models.TextChoices):
 # a chartless CheckType that would break the resolution pipeline.
 ENDURE_HALLOWED_GROUND_CHECK_TYPE_NAME: str = "endure_hallowed_ground"
 
+# Name the bootstrap seed and the test factories give the Soulfray condition template
+# they create. Game logic never reads it: Soulfray is whichever template
+# ``SoulfrayConfig.condition`` names (#4122), so staff can rename it freely.
+SOULFRAY_SEED_TEMPLATE_NAME: str = "Soulfray"
+
 
 class RestrictionKind(models.TextChoices):
     """What a ``Restriction`` row is for (#4099).

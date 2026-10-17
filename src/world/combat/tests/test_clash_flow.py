@@ -58,7 +58,6 @@ from world.combat.services import (
 from world.conditions.models import ConditionInstance
 from world.magic.audere import (
     AUDERE_CONDITION_NAME,
-    SOULFRAY_CONDITION_NAME,
     offer_audere,
 )
 from world.magic.constants import PendingAlterationStatus
@@ -71,6 +70,7 @@ from world.magic.factories import (
     TechniqueFactory,
 )
 from world.magic.models import PendingAlteration
+from world.magic.services.soulfray import soulfray_condition_id
 from world.mechanics.factories import CharacterEngagementFactory
 from world.scenes.constants import RoundStatus
 from world.seeds.game_content.magic import MagicContent
@@ -1096,7 +1096,7 @@ class AudereDuringClashTests(TestCase):
         self.assertTrue(
             ConditionInstance.objects.filter(
                 target=self.sheet.character,
-                condition__name=SOULFRAY_CONDITION_NAME,
+                condition_id=soulfray_condition_id(),
                 resolved_at__isnull=True,
             ).exists(),
             "Pre-condition: character should be in Soulfray before the clash.",

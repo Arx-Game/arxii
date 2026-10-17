@@ -66,7 +66,7 @@ from world.combat.services import (
     apply_damage_to_opponent,
     declare_action,
 )
-from world.conditions.factories import DamageSuccessLevelMultiplierFactory
+from world.conditions.factories import DamageSuccessLevelMultiplierFactory, SoulfrayTemplateFactory
 from world.fatigue.constants import EffortLevel
 from world.magic.constants import TechniqueReach
 from world.magic.factories import (
@@ -385,7 +385,6 @@ class PvpNonLethalCapSoulfrayTests(TestCase):
             ConditionStageFactory,
             ConditionTemplateFactory,
         )
-        from world.magic.audere import SOULFRAY_CONDITION_NAME
         from world.magic.factories import SoulfrayConfigFactory
 
         cls.resilience_check_type = CheckTypeFactory(name="Resilience (duel nonlethal test)")
@@ -397,8 +396,7 @@ class PvpNonLethalCapSoulfrayTests(TestCase):
             base_check_difficulty=15,
         )
 
-        cls.soulfray_template = ConditionTemplateFactory(
-            name=SOULFRAY_CONDITION_NAME,
+        cls.soulfray_template = SoulfrayTemplateFactory(
             has_progression=True,
             default_duration_type=DurationType.PERMANENT,
         )

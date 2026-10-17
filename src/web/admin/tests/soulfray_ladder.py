@@ -16,9 +16,12 @@ from evennia.accounts.models import AccountDB
 from actions.factories import ConsequencePoolEntryFactory, ConsequencePoolFactory
 from actions.models import ConsequencePool
 from world.checks.factories import ConsequenceFactory
-from world.conditions.factories import ConditionStageFactory, ConditionTemplateFactory
+from world.conditions.factories import (
+    ConditionStageFactory,
+    SoulfrayTemplateFactory,
+)
 from world.conditions.models import ConditionStage, ConditionTemplate
-from world.magic.audere import SOULFRAY_CONDITION_NAME
+from world.magic.factories import ensure_soulfray_config
 from world.traits.factories import CheckOutcomeFactory
 from world.traits.models import CheckOutcome
 
@@ -53,7 +56,8 @@ class Ladder:
 
 
 def build_ladder() -> Ladder:
-    template = ConditionTemplateFactory(name=SOULFRAY_CONDITION_NAME, has_progression=True)
+    template = SoulfrayTemplateFactory(has_progression=True)
+    ensure_soulfray_config()
     stages = [
         ConditionStageFactory(
             condition=template,

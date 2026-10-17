@@ -10,10 +10,10 @@ from world.conditions.factories import (
     ConditionInstanceFactory,
     ConditionStageFactory,
     ConditionTemplateFactory,
+    SoulfrayTemplateFactory,
 )
 from world.magic.audere import (
     AUDERE_CONDITION_NAME,
-    SOULFRAY_CONDITION_NAME,
     AudereThreshold,
     check_audere_eligibility,
     end_audere,
@@ -23,6 +23,7 @@ from world.magic.factories import (
     AudereThresholdFactory,
     CharacterAnimaFactory,
     IntensityTierFactory,
+    ensure_soulfray_config,
     wire_audere_power_multipliers,
 )
 from world.magic.tests.audere_test_helpers import build_audere_gate_fixture
@@ -61,9 +62,8 @@ class AudereEligibilityTests(TestCase):
     @classmethod
     def setUpTestData(cls) -> None:
         # Soulfray condition with stages — 5-stage mapping per §8.1
-        cls.soulfray_template = ConditionTemplateFactory(
-            name=SOULFRAY_CONDITION_NAME, has_progression=True
-        )
+        cls.soulfray_template = SoulfrayTemplateFactory(has_progression=True)
+        ensure_soulfray_config()
         cls.stage1 = ConditionStageFactory(
             condition=cls.soulfray_template, stage_order=1, name="Fraying"
         )
@@ -182,9 +182,8 @@ class AudereLifecycleTests(TestCase):
     def setUpTestData(cls) -> None:
         cls.audere_template = ConditionTemplateFactory(name=AUDERE_CONDITION_NAME)
 
-        cls.soulfray_template = ConditionTemplateFactory(
-            name=SOULFRAY_CONDITION_NAME, has_progression=True
-        )
+        cls.soulfray_template = SoulfrayTemplateFactory(has_progression=True)
+        ensure_soulfray_config()
         # Create stages up to Ripping (stage 3) per §8.6
         cls.stage1 = ConditionStageFactory(
             condition=cls.soulfray_template, stage_order=1, name="Fraying"

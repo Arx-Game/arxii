@@ -9,7 +9,7 @@ from world.character_sheets.factories import CharacterSheetFactory
 from world.combat.constants import EncounterOutcome
 from world.combat.factories import CombatEncounterFactory, CombatParticipantFactory
 from world.combat.services import cleanup_completed_encounter
-from world.conditions.factories import ConditionInstanceFactory
+from world.conditions.factories import ConditionInstanceFactory, SoulfrayTemplateFactory
 from world.conditions.models import ConditionInstance
 from world.magic.audere import (
     AUDERE_CONDITION_NAME,
@@ -22,6 +22,7 @@ from world.magic.factories import (
     CharacterAnimaFactory,
     IntensityTierFactory,
     PendingAudereOfferFactory,
+    ensure_soulfray_config,
     wire_audere_power_multipliers,
 )
 from world.magic.tests.audere_test_helpers import build_audere_gate_fixture
@@ -121,15 +122,14 @@ class CleanupAuderaMajoraTeardownTests(TestCase):
         from world.classes.models import PathStage
         from world.conditions.factories import (
             ConditionStageFactory,
-            ConditionTemplateFactory,
         )
-        from world.magic.audere import SOULFRAY_CONDITION_NAME
         from world.magic.audere_majora import AudereMajoraThreshold
 
         tier = IntensityTierFactory(
             name="Major_majora_cleanup_tier", threshold=10, control_modifier=0
         )
-        soulfray_t = ConditionTemplateFactory(name=SOULFRAY_CONDITION_NAME, has_progression=True)
+        soulfray_t = SoulfrayTemplateFactory(has_progression=True)
+        ensure_soulfray_config()
         warp_stage = ConditionStageFactory(condition=soulfray_t, stage_order=3, name="Ripping_mcu")
         threshold = AudereMajoraThreshold.objects.create(
             boundary_level=50,
@@ -158,15 +158,14 @@ class CleanupAuderaMajoraTeardownTests(TestCase):
         from world.classes.models import PathStage
         from world.conditions.factories import (
             ConditionStageFactory,
-            ConditionTemplateFactory,
         )
-        from world.magic.audere import SOULFRAY_CONDITION_NAME
         from world.magic.audere_majora import AudereMajoraThreshold
 
         tier = IntensityTierFactory(
             name="Major_majora_withheld_tier", threshold=10, control_modifier=0
         )
-        soulfray_t = ConditionTemplateFactory(name=SOULFRAY_CONDITION_NAME, has_progression=True)
+        soulfray_t = SoulfrayTemplateFactory(has_progression=True)
+        ensure_soulfray_config()
         warp_stage = ConditionStageFactory(condition=soulfray_t, stage_order=3, name="Ripping_wh")
         threshold = AudereMajoraThreshold.objects.create(
             boundary_level=51,

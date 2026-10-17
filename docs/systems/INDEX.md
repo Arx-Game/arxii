@@ -319,7 +319,9 @@ Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Sc
   - `character.combat_pulls` (`CharacterCombatPullHandler` in `world/combat`)
     — `active()`, `active_for_encounter()`, `active_pull_vital_bonuses()`
 - **Key Services:**
-  - **Soulfray ladder (#4089, `world/magic/services/soulfray.py`):** `soulfray_stages()`
+  - **Soulfray ladder (#4089, `world/magic/services/soulfray.py`):** the Soulfray template
+    is whichever `ConditionTemplate` `SoulfrayConfig.condition` names (#4122; never matched by
+    name): `soulfray_condition_id()`, `get_soulfray_template()`, `soulfray_stages()`
     (every `ConditionStage` of the Soulfray template, ladder order), `is_soulfray_stage(stage)`,
     `soulfray_ladder_summary() -> list[SoulfrayStageSummary]` (each stage's EFFECTIVE
     consequences - own pool entries merged with its shared parent's, two queries total -

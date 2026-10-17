@@ -25,6 +25,7 @@ from world.character_creation.factories import BeginningsFactory, OriginTemplate
 from world.contributors.factories import ContentContributorFactory
 from world.distinctions.factories import DistinctionFactory
 from world.magic.factories import GlimpseTagFactory
+from world.magic.models import SoulfrayConfig
 
 
 def _superuser(name: str) -> AccountDB:
@@ -101,6 +102,7 @@ class BuildersContextQueryCountTest(BuildersPanelTestCase):
     """
 
     def test_builders_context_runs_five_queries(self):
+        SoulfrayConfig.objects.cached_singleton()  # the config read is cached in play
         with self.assertNumQueries(5):
             _builders_context()
 
