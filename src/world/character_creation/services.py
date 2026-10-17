@@ -64,6 +64,7 @@ if TYPE_CHECKING:
     from django.contrib.auth.base_user import AbstractBaseUser
     from django.contrib.auth.models import AnonymousUser
     from evennia.accounts.models import AccountDB
+    from evennia.objects.objects import DefaultObject
 
     from world.character_creation.enemies import ResolvedEnemy
     from world.character_creation.models import (
@@ -273,7 +274,7 @@ def finalize_character(
     if starting_room is not None:
         from world.locations.comfort_effect import recompute_comfort_regen_modifier  # noqa: PLC0415
 
-        recompute_comfort_regen_modifier(character)
+        recompute_comfort_regen_modifier(cast("DefaultObject", character))
 
     _initialize_full_vitals(sheet)
 
