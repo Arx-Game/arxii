@@ -39,3 +39,11 @@ _Avoid_: un-expose, reputation rollback.
 **GRANT_SECRET effect** (#3071):
 The `checks.EffectType` value letting an authored `ConsequenceEffect` hand a character `SecretKnowledge` when an outcome lands — the same `apply_all_effects` chokepoint `GRANT_CODEX` fires from. Its handler (`world.mechanics.effect_handlers._grant_secret`) calls `grant_secret_knowledge` with `knows_category`/`knows_consequences` left at their `False` defaults — the fact is known, the deeper layers are not, mirroring `GRANT_CODEX`'s "a scene hands you a lead, not the answer" UNCOVERED semantics without needing a parallel bypass (`SecretKnowledge` has no UNCOVERED-equivalent status field to bypass in the first place).
 _Avoid_: secret reward, secret drop (not a loot mechanic — see the mechanics app's structured-consequences invariant).
+
+**Hook** (#4397):
+A top-level `Secret` (no `hook` link) a character carries that a GM may build on: a creation pick's secret, a staff-written one, a line the player left. Read with the truths under it by the GM running a table the character is seated at (`hooks_for_subject`, `truths_by_hook`, the table route). A past life is a hook until a GM makes it a truth.
+_Avoid_: plot thread, story seed (a hook is a Secret row, nothing new), quest.
+
+**Truth** (#4397):
+A GM-authored, subject-unaware `Secret` pointing at a hook through `Secret.hook` (`author_truth`); one level only, the same subject. The player reads the hook until the truth is revealed through a `SecretKnowledge` grant.
+_Avoid_: answer, reveal (the reveal is the grant, not the row), sub-secret.

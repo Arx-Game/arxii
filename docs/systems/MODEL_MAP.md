@@ -3980,11 +3980,13 @@
 - `get_fatigue_zone_readonly(character_sheet: 'CharacterSheet', category: 'str') -> 'str' - Read a zone without materializing the default fatigue pool.`
 - `get_full_status(character_sheet: 'CharacterSheet', *, pool: 'FatiguePool | None') -> 'dict' - Get fatigue status for all three categories in one pass.`
 - `get_or_create_fatigue_pool(character_sheet: 'CharacterSheet') -> 'FatiguePool' - Get or create a FatiguePool for a character sheet.`
+- `lever_total(sheet: 'CharacterSheet', category_name: 'str', target_name: 'str') -> 'int' - The character's total on one lever target, 0 when the target is not authored.`
 - `perform_check_with_modifiers(character: 'ObjectDB', check_type: 'CheckType', target_difficulty: int = 0, extra_modifiers: int = 0, effort_level: str | None = None, fatigue_penalty: int = 0, specialization: 'Specialization | None' = None, *, situation_ctx: 'SituationContext | None' = None, level_override: int | None = None, scene: 'Scene | None' = None, extra_contributions: 'list[ModifierContribution] | None' = None, skip_fashion: bool = False, stat_override: str | int | None = None) -> world.checks.types.CheckResult - Run a check with all character modifiers gathered automatically.`
 - `recover_fatigue(character_sheet: 'CharacterSheet', category: 'str', amount: 'int') -> 'int' - Reduce one fatigue pool by up to *amount*, floored at zero (#2852).`
 - `reset_fatigue(character_sheet: 'CharacterSheet') -> 'None' - Reset all fatigue pools to 0.`
 - `resolve_fatigue_collapse(character_sheet: 'CharacterSheet', category: 'str') -> 'FatigueCollapseResult' - Run the fatigue collapse sequence for one category and apply strain damage.`
 - `rest(character_sheet: 'CharacterSheet') -> 'RestResult' - Spend AP to rest, gaining well_rested for the next dawn reset.`
+- `scale_by_percent(base: 'int', percent: 'int', *, floor: 'int' = 0) -> 'int' - ``base`` scaled by ``100 + percent`` percent, whole units, never below ``floor``.`
 - `should_check_collapse(character_sheet: 'CharacterSheet', category: 'str', effort_level: 'str') -> 'bool' - Return True if a collapse check is needed.`
 - `tick_fatigue_collapse_for_targets(targets: 'Iterable[ObjectDB]') -> 'None' - Evaluate non-cast over-capacity fatigue collapse for each target.`
 
@@ -4428,6 +4430,7 @@
 - `idle_tables(threshold_days: 'int' = 14) -> 'QuerySet[GMTable]' - ACTIVE tables whose GM's ``last_active_at`` is older than the threshold (#2004).`
 - `join_table(table: 'GMTable', persona: 'Persona') -> 'GMTableMembership' - Add a persona to a table. Idempotent — returns existing active`
 - `leave_table(membership: 'GMTableMembership') -> 'None' - Soft-leave a membership. No-op if already left.`
+- `may_read_table_hooks(user: 'AccountDB | None', table: 'GMTable') -> 'bool' - Staff, or the GM who runs ``table`` (#4397): the one test behind a player's hooks.`
 - `offer_gm_summon(gm_profile: 'GMProfile | None', target_sheet: 'CharacterSheet', *, room: 'RoomProfile', scene: 'Scene | None' = None, gm_display_name: 'str' = '') -> 'GMSummonOffer' - Create or replace a pending GM summon offer for ``target_sheet`` (#3071).`
 - `promote_gm(profile: 'GMProfile', new_level: 'str', *, changed_by: 'AccountDB', reason: 'str') -> 'GMLevelChange' - Set profile.level (promotion OR demotion), writing the audit row.`
 - `resolve_gm_summon_offer(offer: 'GMSummonOffer', *, accept: 'bool') -> 'None' - Resolve a pending summon offer: move the target on accept, always clear it (#3071).`
@@ -4442,6 +4445,7 @@
 - `submit_distinction_change_request(membership: 'GMTableMembership', *, action: 'str', reasoning: 'str', distinction: 'Distinction | None' = None, character_distinction: 'CharacterDistinction | None' = None) -> 'TableUpdateRequest' - Submit a distinction add/rank-up/remove for table-GM sign-off (#2631).`
 - `submit_profile_text_request(membership: 'GMTableMembership', *, field: 'str', proposed_text: 'str', reasoning: 'str') -> 'TableUpdateRequest' - Submit a profile prose rewrite for the table GM's sign-off (#2631).`
 - `surrender_character_story(gm: 'GMProfile', story: 'Story') -> 'None' - GM surrenders oversight of a story.`
+- `table_seats_sheet(table: 'GMTable', sheet: 'CharacterSheet') -> 'bool' - Whether any face of ``sheet`` holds an active membership at ``table`` (#4397).`
 - `table_update_requests_for(account: 'AccountDB') -> 'QuerySet[TableUpdateRequest]' - The sheet-update requests ``account`` may judge as a table GM.`
 - `table_update_review_pool_q(account: 'AccountDB') -> 'Q' - The review pool (#2631 ruling), as a filter on ``TableUpdateRequest``.`
 - `touch_gm_activity(gm_profile: 'GMProfile') -> 'None' - Stamp ``GMProfile.last_active_at`` to now (#2004).`
@@ -8101,6 +8105,7 @@
 - `mutual_hostile_expression(viewer_sheet_id: 'int', other_ref: 'str' = 'author_id') - ``mutual_hostile`` as an annotatable expression against ``OuterRef(other_ref)``.`
 - `process_weekly_relationship_allocations() -> 'int' - The weekly turn: every allocation the pool can pay becomes depth (#3957).`
 - `register_grievance(*, source: 'CharacterSheet', target: 'CharacterSheet', option: 'GrievanceOption | None' = None, custom_points: 'int | None' = None) -> 'CharacterRelationship' - A wronged character's one-sided grievance: Conflict added on their side (#1429, #3957).`
+- `relationship_gain_for(sheet: 'CharacterSheet', amount: 'int') -> 'int' - A positive affection ``amount`` after ``sheet``'s relationship-gain lever (#4394).`
 - `relationship_gated_contributions(*, perceiver: 'CharacterSheet', perceived: 'CharacterSheet') -> 'list[ModifierContribution]' - Modifier contributions the perceiver's regard for the perceived injects into a check (#1696).`
 - `set_allocation(*, side: 'CharacterRelationship', ap_amount: 'int') -> 'RelationshipAllocation' - Set this week's standing AP on one side, against the whole weekly budget (#3957).`
 - `set_summary(*, side: 'CharacterRelationship', summary: 'str') -> 'CharacterRelationship'`
@@ -9002,6 +9007,7 @@
   - subject_sheet -> character_sheets.CharacterSheet [FK]
   - category -> secrets.SecretCategory [FK] (nullable)
   - author_persona -> scenes.Persona [FK] (nullable)
+  - hook -> secrets.Secret [FK] (nullable)
   - resolves_beat -> character_creation.CharacterOriginSlot [FK] (nullable)
   - legend_deed -> societies.LegendEntry [FK] (nullable)
   - mission_deed -> missions.MissionDeedRecord [FK] (nullable)
@@ -9019,6 +9025,7 @@
   - nullification <- justice.AccusationNullification
   - nullification_authorship <- justice.AccusationNullification
   - denouncements <- justice.DenounceRecord
+  - truths <- secrets.Secret
   - victims <- secrets.SecretVictim
   - grievances <- secrets.SecretGrievance
   - known_by <- secrets.SecretKnowledge
@@ -9054,11 +9061,13 @@
 ### Service Functions
 - `accusation_permitted(*, framer_sheet: 'CharacterSheet', target_sheet: 'CharacterSheet') -> 'bool' - Target-side consent gate for a frame-job (#1825) — may *framer* accuse *target*?`
 - `author_player_flavor_secret(*, subject_sheet: 'CharacterSheet', author_persona: 'Persona', content: 'str', category: 'SecretCategory | None' = None) -> 'Secret' - Author a Level-1 player-flavor secret (the only tier a player may free-write).`
-- `author_secret(*, subject_sheet: 'CharacterSheet', provenance: 'str', level: 'int' = SecretLevel.UNCOMMON_KNOWLEDGE, content: 'str' = '', category: 'SecretCategory | None' = None, consequences: 'str' = '', subject_aware: 'bool' = True, author_persona: 'Persona | None' = None, legend_deed: 'LegendEntry | None' = None, mission_deed: 'MissionDeedRecord | None' = None, scene: 'Scene | None' = None) -> 'Secret' - Author a secret about ``subject_sheet``, enforcing the anchor-scales-with-level rule.`
+- `author_secret(*, subject_sheet: 'CharacterSheet', provenance: 'str', level: 'int' = SecretLevel.UNCOMMON_KNOWLEDGE, content: 'str' = '', category: 'SecretCategory | None' = None, consequences: 'str' = '', subject_aware: 'bool' = True, author_persona: 'Persona | None' = None, legend_deed: 'LegendEntry | None' = None, mission_deed: 'MissionDeedRecord | None' = None, scene: 'Scene | None' = None, hook: 'Secret | None' = None) -> 'Secret' - Author a secret about ``subject_sheet``, enforcing the anchor-scales-with-level rule.`
+- `author_truth(hook: 'Secret', *, content: 'str', level: 'int' = SecretLevel.UNCOMMON_KNOWLEDGE, category: 'SecretCategory | None' = None, consequences: 'str' = '') -> 'Secret' - Write the truth under a hook, unknown to its subject until revealed (#4397).`
 - `character_knows_secret(*, knower_sheet: 'CharacterSheet', secret: 'Secret') -> 'bool' - True if the character (by current tenure) holds knowledge of ``secret`` (#1680).`
 - `expose_secret(secret: 'Secret', *, societies: 'Iterable[Society]') -> 'SecretExposureResult' - Fire the reputation consequences of a secret becoming known to ``societies`` (#1429).`
 - `grant_secret_knowledge(*, roster_entry: 'RosterEntry', secret: 'Secret', knows_category: 'bool' = False, knows_consequences: 'bool' = False) -> 'SecretKnowledge' - Record that a character knows a secret, unlocking the given layers (idempotent).`
 - `has_leverage(*, holder_sheet: 'CharacterSheet', subject_sheet: 'CharacterSheet') -> 'bool' - True if ``holder_sheet`` holds any standing leverage over ``subject_sheet`` (#1680).`
+- `hooks_for_subject(sheet: 'CharacterSheet') -> 'QuerySet[Secret]' - Every hook a character carries, for the GM at their table (#4397).`
 - `known_secrets_for(roster_entry: 'RosterEntry', *, subject_sheet: 'CharacterSheet | None' = None, sort: 'str' = 'recent') -> 'QuerySet[SecretKnowledge]' - The secrets a character has **learned about others** — held records (#1334).`
 - `mint_accusation(*, accuser_persona: 'Persona', subject_sheet: 'CharacterSheet', content: 'str', level: 'int' = SecretLevel.UNCOMMON_KNOWLEDGE, category: 'SecretCategory | None' = None, legend_deed: 'LegendEntry | None' = None, mission_deed: 'MissionDeedRecord | None' = None, scene: 'Scene | None' = None) -> 'Secret' - Mint a player-authored ACCUSATION — a false scandal about *someone else* (#1825).`
 - `mint_leverage(*, holder_sheet: 'CharacterSheet', subject_sheet: 'CharacterSheet', founded_on: 'Secret') -> 'Leverage' - Record standing leverage ``holder_sheet`` holds over ``subject_sheet`` (#1680).`
@@ -9069,6 +9078,7 @@
 - `secrets_explaining(*, roster_entry: 'RosterEntry', legend_deed: 'LegendEntry | None' = None, mission_deed: 'MissionDeedRecord | None' = None, scene: 'Scene | None' = None) -> 'QuerySet[SecretKnowledge]' - The secrets a viewer KNOWS that are the hidden truth behind a given act (#1573).`
 - `secrets_owned_by(sheet: 'CharacterSheet', *, sort: 'str' = 'level') -> 'QuerySet[Secret]' - The secrets a character **owns** — its own shelf (#1334).`
 - `set_secret_act_anchor(secret: 'Secret', *, legend_deed: 'LegendEntry | None' = None, mission_deed: 'MissionDeedRecord | None' = None, scene: 'Scene | None' = None) -> 'Secret' - Set (or clear) the recorded act a secret is the hidden truth behind (#1573).`
+- `truths_by_hook(sheet: 'CharacterSheet') -> 'dict[int, list[Secret]]' - The truths under each of a character's hooks, keyed by the hook's pk (#4397).`
 
 
 
@@ -10739,6 +10749,8 @@
   - trait -> traits.Trait [FK]
 
 ### Service Functions
+- `ensure_canonical_check_outcome(name: 'str') -> 'CheckOutcome' - Return one of the five canonical tiers (``CANONICAL_OUTCOME_LEVELS``) at its level.`
+- `ensure_check_outcome(name: 'str', success_level: 'int') -> 'CheckOutcome' - Return the named CheckOutcome at ``success_level``, creating or correcting it (#4378).`
 - `ensure_stat_trait(name: 'str') -> 'Trait' - Ensure the named STAT Trait exists, creating it from STAT_TRAIT_DEFAULTS if not.`
 
 

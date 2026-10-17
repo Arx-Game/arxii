@@ -63,6 +63,42 @@ export interface GMTableMembershipCreateBody {
 }
 
 // ---------------------------------------------------------------------------
+// Hooks (#4397): what a player's character carries, read by the table GM.
+// GET/POST /api/gm/tables/{id}/players/{sheet}/hooks/ (TableHookSerializer).
+// ---------------------------------------------------------------------------
+
+/** A truth a GM wrote under a hook; the player reads it only once it is revealed. */
+export interface TableTruth {
+  readonly id: number;
+  readonly content: string;
+  readonly consequences: string;
+  readonly level: number;
+  readonly category_name: string | null;
+  readonly subject_aware: boolean;
+}
+
+/** A hook the character carries: a top-level secret, aware or not, with its truths. */
+export interface TableHook {
+  readonly id: number;
+  readonly kind: string;
+  readonly content: string;
+  readonly consequences: string;
+  readonly level: number;
+  readonly provenance: string;
+  readonly aware: boolean;
+  readonly truths: TableTruth[];
+}
+
+/** What a GM adds: a hook (no `hook`), or a truth under one (`hook` set). */
+export interface TableHookWriteBody {
+  hook?: number | null;
+  content: string;
+  consequences?: string;
+  level?: number;
+  category?: number | null;
+}
+
+// ---------------------------------------------------------------------------
 // GM application (#3041) — player-facing "apply to be a GM" form.
 // Mirrors GMApplicationCreateSerializer, which only accepts/returns
 // application_text; the create endpoint is create-only for non-staff callers

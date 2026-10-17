@@ -46,6 +46,7 @@ from world.roster.models.applications import RosterApplication
 from world.roster.services.slots import SlotsFullError
 from world.scenes.action_constants import DifficultyChoice
 from world.scenes.models import Persona
+from world.secrets.models import Secret
 from world.societies.constants import RenownRisk
 
 
@@ -1170,3 +1171,52 @@ class GMPromptFilterSerializer(serializers.Serializer):
     group = serializers.ChoiceField(choices=GMPromptGroup.choices)
     label = serializers.CharField(read_only=True)
     enabled = serializers.BooleanField()
+
+
+class TableTruthSerializer(serializers.ModelSerializer):
+    """One truth under a hook, as a table GM reads it (#4397)."""
+
+    category_name = serializers.CharField(source="category.name", read_only=True, default=None)
+
+    class Meta:
+        model = Secret
+        fields = ["id", "content", "consequences", "level", "category_name", "subject_aware"]
+        read_only_fields = fields
+
+
+class TableHookSerializer(serializers.ModelSerializer):
+    """A hook a character carries, with the truths under it, for the GM at their table (#4397).
+
+    ``kind`` is the secret's category name or "Unknown" (an unplaced category is a first-class
+    state, see ``SecretCategory``); ``aware`` says whether the player can read this row on
+    their own shelf.
+    """
+
+    kind = serializers.SerializerMethodField()
+    aware = serializers.BooleanField(source="subject_aware", read_only=True)
+    truths = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Secret
+        fields = ["id", "kind", "content", "consequences", "level", "provenance", "aware", "truths"]
+        read_only_fields = fields
+
+    def get_kind(self, obj) -> str:
+        return obj.category.name if obj.category_id else "Unknown"
+
+    def get_truths(self, obj) -> list[dict]:
+        """From ``context["truths_by_hook"]`` (``secrets.services.truths_by_hook``), never a
+        prefetch: Secret rows are idmapper-shared, and a prefetch cache left on one answers
+        every later reader with the first request's list."""
+        truths = self.context.get("truths_by_hook", {}).get(obj.pk, [])
+        return TableTruthSerializer(truths, many=True).data
+
+
+class TableHookWriteSerializer(serializers.Serializer):
+    """What a GM adds at the table (#4397): a hook, or a truth under one (``hook`` set)."""
+
+    hook = serializers.IntegerField(required=False, allow_null=True, default=None)
+    content = serializers.CharField(max_length=4000)
+    consequences = serializers.CharField(required=False, allow_blank=True, default="")
+    level = serializers.IntegerField(required=False, default=1)
+    category = serializers.IntegerField(required=False, allow_null=True, default=None)
