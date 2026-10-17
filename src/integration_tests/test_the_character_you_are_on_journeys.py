@@ -33,8 +33,9 @@ class TheCharacterYouAreOn(JourneyCase):
         self.maud = self._second_character_of(self.hobb, "Maud")
         self.player = self.account_of(self.hobb)
         self.telnet(self.ysmay, "persona mask Stag Mask")
-        self.telnet(self.ysmay, "pose keeps to the shadows.")
+        self.telnet(self.ysmay, "scene start")
         self.scene = Scene.objects.active_for_room(self.lantern).first()
+        self.telnet(self.ysmay, "pose keeps to the shadows.")
         self.mask = Persona.objects.get(character_sheet=self.ysmay.sheet_data, name="Stag Mask")
 
     def _second_character_of(self, sibling, name: str):
