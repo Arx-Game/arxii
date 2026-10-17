@@ -26,6 +26,7 @@ function group(patch: Partial<GMGroupView> = {}): GMGroupView {
     cause_reason: '',
     cause_margin_percent: 25,
     cause_clock: '',
+    effective_margin_percent: 25,
     proposal_reason: '',
     pending_prompt_id: null,
     last_decision: '',
@@ -113,6 +114,21 @@ describe('GMStandoffPanel', () => {
       'Patience: 2 of 3 actions.'
     );
     expect(within(box).getByText(/provokes them/)).toBeInTheDocument();
+  });
+
+  it('judges the force line on the margin a hungry group widened (#4415)', () => {
+    renderPanel(
+      group({
+        cause: 'Hunger',
+        cause_margin_percent: 0,
+        effective_margin_percent: 40,
+        effective_party_force: 10,
+        group_force: 8,
+      })
+    );
+    const box = screen.getByTestId('gm-standoff-group');
+    expect(within(box).getByText(/Force: party 10, them 8\./)).toBeInTheDocument();
+    expect(within(box).queryByText(/Party outweighs them/)).toBeNull();
   });
 
   it('shows no clock for a cause without one', () => {

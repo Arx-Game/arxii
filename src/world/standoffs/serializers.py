@@ -139,6 +139,7 @@ class GMGroupViewSerializer(serializers.Serializer):
     cause_fires = serializers.BooleanField()
     cause_reason = serializers.CharField(allow_blank=True)
     cause_margin_percent = serializers.IntegerField()
+    effective_margin_percent = serializers.IntegerField()
     cause_clock = serializers.CharField(allow_blank=True)
     proposal_reason = serializers.CharField(allow_blank=True)
     pending_prompt_id = serializers.IntegerField(allow_null=True)

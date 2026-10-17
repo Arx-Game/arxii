@@ -33518,6 +33518,7 @@ export interface components {
       cause_fires: boolean;
       cause_reason: string;
       cause_margin_percent: number;
+      effective_margin_percent: number;
       cause_clock: string;
       proposal_reason: string;
       pending_prompt_id: number | null;

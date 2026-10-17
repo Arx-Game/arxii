@@ -29,6 +29,7 @@ from world.standoffs.services.faction_rules import faction_rule_matches
 from world.standoffs.services.force import (
     cause_clock,
     cause_fire_reason,
+    effective_margin,
     effective_party_force,
     group_force,
     party_force,
@@ -104,6 +105,7 @@ class GMGroupView:
     cause_fires: bool
     cause_reason: str
     cause_margin_percent: int
+    effective_margin_percent: int
     cause_clock: str
     proposal_reason: str
     pending_prompt_id: int | None
@@ -263,6 +265,7 @@ def _gm_group(group: StandoffGroup, participants: list, config: StandoffConfig) 
         cause_fires=reason is not None,
         cause_reason=reason or "",
         cause_margin_percent=margin,
+        effective_margin_percent=effective_margin(group, cause, margin, config),
         cause_clock=cause_clock(group, config) if live else "",
         affiliation=organization.name if organization is not None else "",
         cause_edited=template is not None and cause != template.cause,

@@ -154,6 +154,11 @@ def hunger_margin(group: StandoffGroup, margin: int, config: StandoffConfig) -> 
     return margin + config.hunger_margin_step * group.actions_elapsed
 
 
+def effective_margin(group: StandoffGroup, cause: str, margin: int, config: StandoffConfig) -> int:
+    """The margin the force test uses now: Hunger's widened one, else the stamped one."""
+    return hunger_margin(group, margin, config) if cause == CauseKind.HUNGER else margin
+
+
 def territory_out_of_patience(group: StandoffGroup, config: StandoffConfig) -> bool:
     """True once the party has lingered ``territory_patience`` actions."""
     return group.actions_elapsed >= config.territory_patience
@@ -258,7 +263,7 @@ def _force_reason(
     action that passed.
     """
     party, theirs = forces
-    widened = hunger_margin(group, margin, config) if cause == CauseKind.HUNGER else margin
+    widened = effective_margin(group, cause, margin, config)
     if party * 100 > theirs * (100 + widened):
         return None
     return REASON_HUNGER.format(margin=widened) if widened != margin else REASON_OUTWEIGHED

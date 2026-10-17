@@ -57610,6 +57610,8 @@ components:
           type: string
         cause_margin_percent:
           type: integer
+        effective_margin_percent:
+          type: integer
         cause_clock:
           type: string
         proposal_reason:
@@ -57677,6 +57679,7 @@ components:
       - cause_reason
       - cause_revealed
       - drives
+      - effective_margin_percent
       - effective_party_force
       - emboldened_bands
       - faction_rules

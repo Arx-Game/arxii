@@ -20,9 +20,11 @@ import { MoraleStateChip } from './MoraleStateChip';
 type GMStandoffView = components['schemas']['GMStandoffView'];
 type GMGroupView = components['schemas']['GMGroupView'];
 
-/** True when the party's effective force beats the group's by the cause margin. */
+/** True when the party's effective force beats the group's by the margin in force now. */
 function partyOutweighs(group: GMGroupView): boolean {
-  return group.effective_party_force * 100 > group.group_force * (100 + group.cause_margin_percent);
+  return (
+    group.effective_party_force * 100 > group.group_force * (100 + group.effective_margin_percent)
+  );
 }
 
 function readLabel(rule: GMGroupView['faction_rules'][number]): string {

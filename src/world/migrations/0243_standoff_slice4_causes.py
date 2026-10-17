@@ -29,7 +29,7 @@ class Migration(migrations.Migration):
             name="hunger_margin_step",
             field=models.PositiveSmallIntegerField(
                 default=10,
-                help_text="Percent added to a Hunger group's margin for each action nobody feeds them (#4415).",
+                help_text="Percent added to a Hunger group's margin for each action nobody feeds them.",
             ),
         ),
         migrations.AddField(
@@ -46,7 +46,7 @@ class Migration(migrations.Migration):
             name="actions_elapsed",
             field=models.PositiveSmallIntegerField(
                 default=0,
-                help_text="Party actions taken in the standoff while this group stood in it: widens a Hunger margin and runs down a Territory group's patience (#4415).",
+                help_text="Party actions taken in the standoff while this group stood in it: widens a Hunger margin and runs down a Territory group's patience.",
             ),
         ),
         migrations.AlterField(

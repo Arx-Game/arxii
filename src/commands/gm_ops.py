@@ -524,6 +524,8 @@ class CmdGMDashboard(ArxCommand):
             subject = names[p.pk] or (
                 p.stake_outcome.stake.player_summary if p.stake_outcome_id else ""
             )
+            if not subject and p.standoff_group_id is not None:
+                subject = p.standoff_group.name
             status_tag = " (narrated)" if p.status == GMPromptStatus.NARRATED else ""
             self.msg(f"[{p.pk}] {p.get_kind_display()}{status_tag}: {subject}")
             if p.standoff_group_id is not None:

@@ -404,7 +404,7 @@ def _render_gm_group(group: GMGroupView) -> list[str]:
     )
     lines.append(
         f"    Force: party {group.effective_party_force}, them {group.group_force} "
-        f"(margin {group.cause_margin_percent}%)"
+        f"(margin {group.effective_margin_percent}%)"
     )
     lines.append(
         "    Morale: " + ", ".join(f"{m.name} {m.morale} ({m.morale_state})" for m in group.members)

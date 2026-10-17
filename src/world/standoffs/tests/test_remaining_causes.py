@@ -114,6 +114,18 @@ class HungerTests(CauseBase):
         clock = cause_clock(self.group(actions_elapsed=3), self.config)
         self.assertEqual(clock, "Hunger margin 30%, widening 10 each action nobody feeds them.")
 
+    def test_the_gm_force_line_reads_the_widened_margin(self) -> None:
+        from commands.standoff import _render_gm_view
+
+        with patch(LEVEL, return_value=STRONG):
+            open_standoff(self.encounter)
+            for _ in range(3):
+                evaluate_causes(self.encounter, [], after_action=True)
+            view = build_gm_standoff_view(self.encounter)
+        (group,) = view.groups
+        self.assertEqual((group.cause_margin_percent, group.effective_margin_percent), (0, 30))
+        self.assertIn("(margin 30%)", "\n".join(_render_gm_view(view)))
+
     def test_each_party_action_moves_the_clock_and_arrival_does_not(self) -> None:
         with patch(LEVEL, return_value=PARTY):
             (group,) = open_standoff(self.encounter)
