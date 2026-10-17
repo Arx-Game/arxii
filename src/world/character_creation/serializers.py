@@ -1072,6 +1072,7 @@ class VisibleOfferSerializer(serializers.Serializer):
     offer_id = serializers.IntegerField()
     distinction_id = serializers.IntegerField()
     name = serializers.CharField()
+    distinction_name = serializers.CharField()
     player_line = serializers.CharField()
     chapter = serializers.CharField()
     arrives_as = serializers.CharField()
@@ -1107,6 +1108,7 @@ class BeatPoolEntrySerializer(serializers.Serializer):
     line = serializers.CharField(allow_blank=True)
     answer_offer_ids = serializers.ListField(child=serializers.IntegerField())
     kept = serializers.BooleanField()
+    allowance = serializers.IntegerField(allow_null=True)
 
 
 class ClosedDistinctionSerializer(serializers.Serializer):
