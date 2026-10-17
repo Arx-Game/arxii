@@ -1248,9 +1248,12 @@ descriptor overlay, cosmetic editing, and shapeshift slots.
   both call, so a masked persona's real description no longer leaks through `look` for a
   viewer who hasn't seen through the mask (self, staff, and a discoverer still see it, exactly
   as the sheet already did). **Sight (#4396):** the same rule reveals a mask of a kind the
-  viewer's characters see through (`disguise_sight` lever target per `DisguiseKind`,
+  viewer sees through (`disguise_sight` lever target per `DisguiseKind`,
   `forms.services.identification.pierced_disguise_kinds` / `presented_disguise_kind`), no
-  check and no discovery row; see `mechanics.md` "Levers".
+  check and no discovery row; see `mechanics.md` "Levers". **The viewer is the one character
+  being played (#4413, ADR-4413-A):** the resolvers take `viewer_sheet`, the looker's or
+  actor's `character_sheet` on telnet and `relationships.reads.resolve_viewer_sheet(request)`
+  on the web; another character of the same account is a stranger to the mask.
   `GET /api/actions/characters/<id>/personas/<pid>/menu/`
   (`actions.persona_menu.build_persona_menu`) is the server-composed list behind the
   right-click persona menu (Look, Identify, Challenge, and the scene-only actions), reusing

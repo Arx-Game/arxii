@@ -86,7 +86,8 @@ answers "is this even fake." _Avoid_: recognize check, unmask roll.
 **Disguise sight** (#4396):
 Seeing who is behind a disguise of one `DisguiseKind` with no Identification check: a
 positive total on the `disguise_sight` lever target named for the kind
-(`pierced_disguise_kinds`), read by the persona reveal rule in `scenes.persona_display`.
+(`pierced_disguise_kinds(viewer_sheet)`), read by the persona reveal rule in
+`scenes.persona_display` for the one character doing the looking (#4413).
 The disguise's kind is the worn overlay's `overlay_kind`, or MUNDANE for a bare false
 name (`presented_disguise_kind`); a named alt has no kind. _Avoid_: true sight, auto-identify.
 

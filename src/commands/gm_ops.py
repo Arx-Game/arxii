@@ -519,7 +519,7 @@ class CmdGMDashboard(ArxCommand):
         if not prompts:
             self.msg("No GM prompts are waiting.")
             return
-        names = prompt_subject_names(prompts, account)
+        names = prompt_subject_names(prompts, account, viewer_sheet=self.caller.character_sheet)
         for p in prompts:
             subject = names[p.pk] or (
                 p.stake_outcome.stake.player_summary if p.stake_outcome_id else ""

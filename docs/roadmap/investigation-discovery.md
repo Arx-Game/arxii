@@ -42,6 +42,10 @@ Every player-facing detail — clue text, difficulties, eligibility, research ma
   the finder's `PersonaDiscovery` (the only in-game producer — no "study persona" roll,
   per ADR-0033). Journey test: plant → search → per-viewer reveal, with a non-discoverer
   negative (`world/clues/tests/test_persona_link_clue.py`).
+- **The reveal rule reads for the character you are on** (#4413, ADR-4413-A) — a
+  discovery and a disguise sight (#4396) reveal a mask to the one character that holds
+  them; the player's other characters still meet a stranger, in `look`, the feed and the
+  sheet. Staff unchanged. Journey: `src/integration_tests/test_the_character_you_are_on_journeys.py`.
 - **`author_clue` authoring surface** (#3432) — the last gap in the self-service authoring
   loop: minting the `Clue` row itself, previously Django-admin-only. `author_clue`
   (SENIOR GM or staff, staff-only for SECRET targets — canon-creating surfaces gate hard)

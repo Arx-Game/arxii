@@ -185,8 +185,12 @@ def depth_breakdown(side: CharacterRelationship, audience: str) -> DepthBreakdow
 def resolve_viewer_sheet(request: Any) -> CharacterSheet | None:
     """The caller's currently selected character's sheet, or None (plays nobody) (#3957).
 
-    Shared by the tie API (``CharacterRelationshipViewSet``) and the character sheet's Ties
-    cast (``_build_ties``) — both need "who is looking, as which of their own characters".
+    "Who is looking, as which of their own characters": shared by the tie API
+    (``CharacterRelationshipViewSet``), the character sheet's Ties cast (``_build_ties``) and,
+    since #4413, every web read of the persona reveal rule (``world.scenes.persona_display``:
+    the sheet's presented identity, the interaction feed, board authors, GM prompt subjects).
+    The selection is the account's durable one, which login and ``@ic`` keep in step with the
+    puppet (``Account.puppet_character_in_session``).
     """
     if request is None:
         return None

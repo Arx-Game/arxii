@@ -15,6 +15,7 @@ from world.covenants.factories import CharacterCovenantRoleFactory
 from world.distinctions.factories import CharacterDistinctionFactory, DistinctionFactory
 from world.distinctions.services import mint_distinction_secret
 from world.roster.factories import RosterEntryFactory, RosterTenureFactory
+from world.roster.services.selection import set_selected_entry
 from world.scenes.constants import PersonaType
 from world.scenes.factories import PersonaDiscoveryFactory, PersonaFactory
 from world.societies.factories import OrganizationMembershipFactory, VacancyFactory
@@ -30,6 +31,8 @@ class ProfileIdentityPrivacyTests(APITestCase):
         roster_entry = RosterEntryFactory()
         player_data, _ = PlayerData.objects.get_or_create(account=account)
         RosterTenureFactory(player_data=player_data, roster_entry=roster_entry)
+        # The viewer is the character the account is on (#4413), as login leaves it.
+        set_selected_entry(player_data, roster_entry)
         sheet = roster_entry.character_sheet
         sheet.gender = _gender(gender_key)
         sheet.concept = "A secret villain"

@@ -42,8 +42,13 @@ def _make_context(  # noqa: PLR0913
     scene_entry_endorsements: dict | None = None,
     viewer_sheet_ids: set | None = None,
     is_staff: bool = False,
+    viewer_sheet=None,
 ) -> dict:
-    """Build a minimal serializer context."""
+    """Build a minimal serializer context.
+
+    ``viewer_sheet`` is the one character the reveal rule reads for (#4413);
+    ``viewer_sheet_ids`` stays the account's sheets for the OOC reads (language, own tags).
+    """
     mock_request = MagicMock()
     mock_request.user.pk = user_pk
     mock_request.user.is_authenticated = user_pk is not None
@@ -54,6 +59,7 @@ def _make_context(  # noqa: PLR0913
         "character_sheet_ids": character_sheet_ids or set(),
         "scene_entry_endorsements": scene_entry_endorsements or {},
         "viewer_sheet_ids": viewer_sheet_ids or set(),
+        "viewer_sheet": viewer_sheet,
         "is_staff": is_staff,
     }
 
@@ -118,9 +124,7 @@ class LineTests(TestCase):
         pose = InteractionFactory(persona=masked, content="waves.")
         _set_empty_cached_attrs(pose)
         viewer_sheet = CharacterSheetFactory()
-        row = InteractionListSerializer(
-            pose, context=_make_context(viewer_sheet_ids={viewer_sheet.pk})
-        ).data
+        row = InteractionListSerializer(pose, context=_make_context(viewer_sheet=viewer_sheet)).data
         assert row["line"] == f"{row['persona']['name']} waves."
         assert masked_sheet.primary_persona.name not in row["line"]
 
@@ -188,7 +192,7 @@ class EndorseeSheetIdMaskReveal2378Tests(TestCase):
         """A viewer with no discovery of the mask, not staff, not the owner: sheet id hidden."""
         data = InteractionListSerializer(
             self._pose(),
-            context=_make_context(viewer_sheet_ids={self.viewer_sheet.pk}),
+            context=_make_context(viewer_sheet=self.viewer_sheet),
         ).data
         assert data["endorsee_sheet_id"] is None
 
@@ -201,7 +205,7 @@ class EndorseeSheetIdMaskReveal2378Tests(TestCase):
         )
         data = InteractionListSerializer(
             self._pose(),
-            context=_make_context(viewer_sheet_ids={self.viewer_sheet.pk}),
+            context=_make_context(viewer_sheet=self.viewer_sheet),
         ).data
         assert data["endorsee_sheet_id"] == self.masked_sheet.pk
 
@@ -217,7 +221,7 @@ class EndorseeSheetIdMaskReveal2378Tests(TestCase):
         """The masked persona's own owner sees their own sheet id."""
         data = InteractionListSerializer(
             self._pose(),
-            context=_make_context(persona_ids={self.masked_persona.pk}),
+            context=_make_context(viewer_sheet=self.masked_sheet),
         ).data
         assert data["endorsee_sheet_id"] == self.masked_sheet.pk
 
@@ -268,7 +272,7 @@ class DramaticMomentTagSheetIdReveal2378Tests(TestCase):
         interaction = self._pose_with_tag(self.masked_sheet)
         data = InteractionListSerializer(
             interaction,
-            context=_make_context(viewer_sheet_ids={self.viewer_sheet.pk}),
+            context=_make_context(viewer_sheet=self.viewer_sheet),
         ).data
         tags = data["dramatic_moment_tags"]
         assert len(tags) == 1
@@ -284,7 +288,7 @@ class DramaticMomentTagSheetIdReveal2378Tests(TestCase):
         interaction = self._pose_with_tag(self.masked_sheet)
         data = InteractionListSerializer(
             interaction,
-            context=_make_context(viewer_sheet_ids={self.viewer_sheet.pk}),
+            context=_make_context(viewer_sheet=self.viewer_sheet),
         ).data
         assert data["dramatic_moment_tags"][0]["character_sheet_id"] == self.masked_sheet.pk
 
@@ -308,7 +312,7 @@ class DramaticMomentTagSheetIdReveal2378Tests(TestCase):
         interaction = self._pose_with_tag(absent_sheet)
         data = InteractionListSerializer(
             interaction,
-            context=_make_context(viewer_sheet_ids={self.viewer_sheet.pk}),
+            context=_make_context(viewer_sheet=self.viewer_sheet),
         ).data
         tags = data["dramatic_moment_tags"]
         assert tags[0]["moment_type_label"] == self.moment_type.label

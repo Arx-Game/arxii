@@ -1071,9 +1071,11 @@ class GMPromptSerializer(serializers.ModelSerializer):
             rows = [self.instance]
         else:
             rows = []
+        from world.relationships.reads import resolve_viewer_sheet  # noqa: PLC0415
+
         request = self.context.get("request")
         account = request.user if request is not None else None
-        names = prompt_subject_names(rows, account)
+        names = prompt_subject_names(rows, account, viewer_sheet=resolve_viewer_sheet(request))
         self.context["_gm_prompt_subject_names"] = names
         return names
 
