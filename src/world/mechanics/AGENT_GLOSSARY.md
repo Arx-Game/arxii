@@ -103,6 +103,11 @@ totalled via `mechanics.services.get_modifier_total(sheet, target)`. Canonical r
   payout, regard writes, affection shifts, the residence comfort read, the fatigue charge).
   Percent levers are percentage points on a gain or a charge; comfort is whole levels.
   _Avoid_: a second reader for any of them, or scaling a loss (a sting, conflict).
+- **disguise sight** (#4396): the `disguise_sight` category, one target per `DisguiseKind`
+  value (`mundane`, `magical`); a positive total reveals a disguise of that kind to the
+  character with no identification check. Read by the persona reveal rule through
+  `forms.services.identification.pierced_disguise_kinds`. Not a percent.
+  _Avoid_: true sight (a magic term), a second reader.
 Bare/unknown `ModifierSource` rows contribute NOTHING to totals (#909) — grants must
 ride a recognized source (distinction effect, achievement reward, comfort, equipment).
 _Avoid_: inventing an "Allure" Trait/skill row; it is a modifier target.

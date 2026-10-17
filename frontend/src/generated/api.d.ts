@@ -45097,6 +45097,8 @@ export interface components {
       title_suffix?: components['schemas']['TitleSuffixEnum'];
       /** @description True when this persona obscures the character's identity */
       is_fake_name?: boolean;
+      /** @description The world believes this face dead; the character may live (#3983). */
+      readonly believed_deceased: boolean;
       /**
        * @description PRIMARY = real identity, ESTABLISHED = persistent alter ego, TEMPORARY = throwaway disguise, ALTERNATE = an alternate self's persona (shapeshift/possession/past-life)
        *

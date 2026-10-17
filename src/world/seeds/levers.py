@@ -1,4 +1,4 @@
-"""Author the five lever categories and their targets on a dev or E2E database (#4394).
+"""Author the lever categories and their targets on a dev or E2E database (#4394, #4396).
 
 ``ModifierCategory``/``ModifierTarget`` are content-repo owned (#2698): on production staff
 author these rows (the admin, or the content repo's export), so this looks them up and only
@@ -16,11 +16,15 @@ _CATEGORY_DESCRIPTIONS = {
     "relationship_gain": "Percent change to affection a character's regard gains.",
     "comfort": "Flat shift, in comfort levels, to the comfort a residence yields the character.",
     "fatigue_cost": "Percent change to the fatigue an action charges the character.",
+    "disguise_sight": (
+        "Sight through a mask: a positive total on a kind's target sees who is behind a "
+        "disguise of that kind without the identification check."
+    ),
 }
 
 
 def ensure_lever_targets() -> None:
-    """Look up (or, with sample content on, create) the five lever categories and targets."""
+    """Look up (or, with sample content on, create) every lever category and target."""
     from world.mechanics.models import ModifierCategory, ModifierTarget  # noqa: PLC0415
     from world.seeds.sample_content import authored_or_sample  # noqa: PLC0415
 

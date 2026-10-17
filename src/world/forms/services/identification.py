@@ -27,6 +27,8 @@ from world.scenes.action_constants import DIFFICULTY_VALUES, DifficultyChoice
 from world.societies.constants import FameTier
 
 if TYPE_CHECKING:
+    from collections.abc import Iterable
+
     from world.character_sheets.models import CharacterSheet
     from world.checks.types import CheckResult
     from world.scenes.models import Persona, PersonaDiscovery
@@ -164,6 +166,63 @@ def _kit_quality_bonus(target_character) -> int:
 
     mult = Decimal(str(kit.quality_tier.stat_multiplier))
     return max(0, int(mult * _KIT_QUALITY_SCALE) - _KIT_QUALITY_BASE)
+
+
+def presented_disguise_kind(persona: Persona) -> str | None:
+    """The ``DisguiseKind`` a fake-name face is wearing, or None for a face that hides nothing.
+
+    The kind sight is matched against (#4396): the active overlay's ``overlay_kind`` when
+    this persona is the face currently worn over one, otherwise a bare fake name is a
+    MUNDANE disguise, the same reading ``_baseline_difficulty`` gives a name-only mask. A
+    named face (``is_fake_name`` False) is not a disguise and no sight pierces it; its link
+    to the primary is discovered, never seen.
+    """
+    if not persona.is_fake_name:
+        return None
+    sheet = persona.character_sheet
+    form_state = sheet.character.form_state_or_none
+    if (
+        form_state is not None
+        and form_state.active_fake_overlay_id is not None
+        and sheet.active_persona_id == persona.pk
+    ):
+        return form_state.overlay_kind or DisguiseKind.MUNDANE
+    return DisguiseKind.MUNDANE
+
+
+def pierced_disguise_kinds(viewer_sheet_ids: Iterable[int]) -> set[str]:
+    """The disguise kinds the viewer's characters see through (#4396).
+
+    One ``disguise_sight`` lever target per kind (``world.mechanics.constants``); a positive
+    total on it, from a distinction, a condition or anything else that writes a modifier,
+    reveals who is behind a disguise of that kind without the identification check. The
+    rows are content: an unauthored target reads as 0 and nothing is pierced.
+    """
+    from world.character_sheets.models import CharacterSheet  # noqa: PLC0415
+    from world.mechanics.constants import (  # noqa: PLC0415
+        DISGUISE_SIGHT_CATEGORY_NAME,
+        DISGUISE_SIGHT_TARGET_NAMES,
+    )
+    from world.mechanics.models import ModifierTarget  # noqa: PLC0415
+    from world.mechanics.services import get_modifier_total  # noqa: PLC0415
+
+    ids = set(viewer_sheet_ids)
+    if not ids:
+        return set()
+    # One lookup for every kind's target; with none authored the walk never starts.
+    targets = list(
+        ModifierTarget.objects.filter(
+            category__name=DISGUISE_SIGHT_CATEGORY_NAME, name__in=DISGUISE_SIGHT_TARGET_NAMES
+        )
+    )
+    if not targets:
+        return set()
+    pierced: set[str] = set()
+    for sheet in CharacterSheet.objects.filter(pk__in=ids):
+        for target in targets:
+            if target.name not in pierced and get_modifier_total(sheet, target) > 0:
+                pierced.add(target.name)
+    return pierced
 
 
 def identification_difficulty(viewer_sheet: CharacterSheet, target_character) -> IdentificationOdds:

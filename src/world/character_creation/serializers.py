@@ -1818,6 +1818,8 @@ class CharacterDraftSerializer(serializers.ModelSerializer):
             self._validate_enemy_pick(data["enemy"])
         if data.get("introductions") is not None:
             self._validate_introductions(data["introductions"])
+        if data.get("officially_dead") is not None:
+            self._validate_officially_dead(data["officially_dead"])
 
     @staticmethod
     def _validate_enemy_pick(enemy: object) -> None:
@@ -1863,6 +1865,25 @@ class CharacterDraftSerializer(serializers.ModelSerializer):
                 raise serializers.ValidationError({"introductions": msg})
         if not isinstance(intros.get(INTRODUCTION_WHISPERS, ""), str):
             raise serializers.ValidationError({"introductions": "whispers must be text."})
+
+    @staticmethod
+    def _validate_officially_dead(face: object) -> None:
+        """Officially dead (#4396): a face name and the guise texts, every one text."""
+        from world.character_creation.constants import (  # noqa: PLC0415
+            OFFICIALLY_DEAD_FACE_NAME,
+            OFFICIALLY_DEAD_KEY,
+            OFFICIALLY_DEAD_TEXT_FIELDS,
+        )
+
+        if not isinstance(face, dict):
+            raise serializers.ValidationError({OFFICIALLY_DEAD_KEY: "Must be an object."})
+        allowed = {OFFICIALLY_DEAD_FACE_NAME, *OFFICIALLY_DEAD_TEXT_FIELDS}
+        if set(face) - allowed:
+            raise serializers.ValidationError({OFFICIALLY_DEAD_KEY: "Unknown field."})
+        if not all(isinstance(value, str) for value in face.values()):
+            raise serializers.ValidationError({OFFICIALLY_DEAD_KEY: "Every field must be text."})
+        if len(face.get(OFFICIALLY_DEAD_FACE_NAME, "").strip()) > 255:  # noqa: PLR2004 - Persona.name
+            raise serializers.ValidationError({OFFICIALLY_DEAD_KEY: "The face's name is too long."})
 
     def _validate_origin_choices(self, data: dict) -> None:
         """``origin_choices`` maps a str slot id to a picked choice id, or null (#3617)."""

@@ -37,6 +37,8 @@ from world.character_creation.constants import (
     FIRST_JOURNAL_INSTITUTION,
     FIRST_JOURNAL_QUESTIONS,
     INTRODUCTIONS_INTRO,
+    OFFICIALLY_DEAD_HEADING,
+    OFFICIALLY_DEAD_INTRO,
     STARTING_TECHNIQUE_PICKS_TARGET,
     UNBOUND_TRADITION_NAME,
     WHISPERS_FRAME,
@@ -439,6 +441,9 @@ CG_EXPLANATION_COPY: dict[str, str] = {
     # question keys (first_journal_q1.. / application_q1..) are also read at finalize.
     "introductions_heading": "The Introductions",
     "introductions_intro": INTRODUCTIONS_INTRO,
+    # Officially dead (#4396): the option's heading and frame.
+    "officially_dead_heading": OFFICIALLY_DEAD_HEADING,
+    "officially_dead_intro": OFFICIALLY_DEAD_INTRO,  # PLACEHOLDER: Apostate rewrite
     "first_journal_institution": FIRST_JOURNAL_INSTITUTION,
     "first_journal_frame": FIRST_JOURNAL_FRAME,
     "first_journal_q1": FIRST_JOURNAL_QUESTIONS[0],

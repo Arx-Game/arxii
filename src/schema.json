@@ -78704,6 +78704,10 @@ components:
         is_fake_name:
           type: boolean
           description: True when this persona obscures the character's identity
+        believed_deceased:
+          type: boolean
+          readOnly: true
+          description: The world believes this face dead; the character may live (#3983).
         persona_type:
           allOf:
           - $ref: '#/components/schemas/PersonaTypeEnum'
@@ -78767,6 +78771,7 @@ components:
           readOnly: true
       required:
       - allow_social_actions
+      - believed_deceased
       - character_sheet
       - display_name
       - guise_background

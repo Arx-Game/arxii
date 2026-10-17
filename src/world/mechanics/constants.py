@@ -49,6 +49,12 @@ COMFORT_CATEGORY_NAME = "comfort"
 COMFORT_TARGET_NAME = "comfort"
 FATIGUE_COST_CATEGORY_NAME = "fatigue_cost"
 FATIGUE_COST_TARGET_NAME = "fatigue_cost"
+# Sight through a mask (#4396): one target per ``DisguiseKind`` value (``world.forms``), named
+# by the kind. A positive total on a kind's target lets the character see who is behind a
+# disguise of that kind without the identification contest; the names are spelled here
+# rather than imported because forms depends on mechanics, never the reverse.
+DISGUISE_SIGHT_CATEGORY_NAME = "disguise_sight"
+DISGUISE_SIGHT_TARGET_NAMES: tuple[str, ...] = ("mundane", "magical")
 LEVER_TARGETS: tuple[tuple[str, str], ...] = (
     (INCOME_CATEGORY_NAME, INCOME_TARGET_NAME),
     (REPUTATION_GAIN_CATEGORY_NAME, REPUTATION_GAIN_TARGET_NAME),
@@ -57,6 +63,7 @@ LEVER_TARGETS: tuple[tuple[str, str], ...] = (
     (RELATIONSHIP_GAIN_CATEGORY_NAME, RELATIONSHIP_GAIN_TARGET_NAME),
     (COMFORT_CATEGORY_NAME, COMFORT_TARGET_NAME),
     (FATIGUE_COST_CATEGORY_NAME, FATIGUE_COST_TARGET_NAME),
+    *((DISGUISE_SIGHT_CATEGORY_NAME, name) for name in DISGUISE_SIGHT_TARGET_NAMES),
 )
 
 # ModifierSource.source_type return values
