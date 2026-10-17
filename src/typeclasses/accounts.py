@@ -233,6 +233,26 @@ class Account(DefaultAccount):
         return list(RosterEntry.objects.for_account(self))
 
     @cached_property
+    def cached_selected_entry(self):
+        """The durable character selection (#3412): the ``RosterEntry`` this account has
+        taken up, with its sheet and character loaded, or None.
+
+        One query per account per process, like ``cached_roster_entries``; every web read
+        that asks "who am I acting as" (``selected_character``, so ``character_for_request``
+        and ``resolve_viewer_sheet``, the persona reveal rule's viewer since #4413) reads
+        this. Cleared by any ``PlayerData`` save (``PlayerData.related_cache_fields``), which
+        is how ``set_selected_entry`` invalidates it, and by tenure saves.
+        """
+        from evennia_extensions.models import PlayerData
+
+        player_data = (
+            PlayerData.objects.filter(account=self)
+            .select_related("selected_entry__character_sheet__character")
+            .first()
+        )
+        return player_data.selected_entry if player_data is not None else None
+
+    @cached_property
     def cached_persona_ids(self) -> list[int]:
         """Every persona id, of any ``PersonaType``, on a sheet this account plays.
 

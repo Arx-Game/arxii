@@ -2189,9 +2189,16 @@ class CharacterSheetSerializer(serializers.Serializer):
         # staff, or the viewer's account currently plays this character (query-free, prefetched).
         privileged = _viewer_is_privileged(sheet, user)
         active = _resolve_active_persona(sheet)
+        # #3957 — the ties block's one read, shared by the cast and the weekly AP total
+        # below. Both consumers take the evaluated list, so neither fires a query of its
+        # own and a sheet with no ties pays for this lookup alone.
+        tie_sides = _active_tie_sides(sheet)
         # Who is looking, as which of their own characters (#3957, #4413): the one sheet whose
-        # discoveries and sight decide the reveal, and whose audience each tie card takes.
-        viewer_sheet = resolve_viewer_sheet(request)
+        # discoveries and sight decide what a mask reveals, and whose audience each tie card
+        # takes. Read only when something asks: a mask to a non-privileged viewer, or a tie;
+        # a plain face with no ties never reads the viewer's player data.
+        masked = active is not None and active.is_fake_name and not privileged
+        viewer_sheet = resolve_viewer_sheet(request) if masked or tie_sides else None
         display_name, reveal_identity = _resolve_presented_identity(
             sheet, active, user, privileged, viewer_sheet
         )
@@ -2212,10 +2219,6 @@ class CharacterSheetSerializer(serializers.Serializer):
         # #1270 — bio (concept/quote/story) reads from the presented face's profile: the real
         # one when revealed, a cover persona's own when presenting one, else blank.
         bio_profile = _presented_bio_profile(sheet, active, reveal_identity=reveal_identity)
-        # #3957 — the ties block's one read, shared by the cast and the weekly AP total
-        # below. Both consumers take the evaluated list, so neither fires a query of its
-        # own and a sheet with no ties pays for this lookup alone.
-        tie_sides = _active_tie_sides(sheet)
 
         return {
             "id": sheet.pk,

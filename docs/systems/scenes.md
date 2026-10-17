@@ -181,8 +181,10 @@ for a puppet or an actor (`look`, the room listing, give and use-item menus, tel
 `gm prompts`), and `world.relationships.reads.resolve_viewer_sheet(request)` for a web read
 (the feed's serializer context `viewer_sheet`, the sheet API, board posts, the GM prompt
 queue), which is the account's durable selection, kept in step with the puppet by login and
-`@ic` (`Account.puppet_character_in_session`). A request that plays nobody reads as a
-stranger, never as an account-wide aggregate. The feed context's `viewer_sheet_ids` (the
+`@ic` (`Account.puppet_character_in_session`) and read off `Account.cached_selected_entry`
+(one query per account per process, so the feed's cold budget is one higher and its warm
+floor unchanged). The sheet API asks only when a mask or a tie needs the viewer. A request
+that plays nobody reads as a stranger, never as an account-wide aggregate. The feed context's `viewer_sheet_ids` (the
 account's sheets) stays for the OOC reads: language comprehension, a private pose's content
 to its own writer, a dramatic-moment tag on one's own sheet.
 
