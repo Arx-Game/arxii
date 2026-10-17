@@ -26,6 +26,7 @@ from world.worship.models import (
     BeingFacet,
     BeingRelationship,
     BeingTarotCard,
+    PendingAnswer,
     Prayer,
     Relic,
     Vision,
@@ -271,6 +272,11 @@ class OverviewSerializer(serializers.Serializer):
     most_devoted_favor = serializers.IntegerField(allow_null=True)
     site_count = serializers.IntegerField()
     recent_activity = ActivityRowSerializer(many=True)
+    pledge_type_count = serializers.IntegerField()
+    answer_count = serializers.IntegerField()
+    held_answer_count = serializers.IntegerField()
+    service_builder_url = serializers.CharField()
+    answer_builder_url = serializers.CharField()
 
 
 class ContributorRowSerializer(serializers.Serializer):
@@ -340,6 +346,19 @@ class StaffPrayerSerializer(serializers.ModelSerializer):
         return obj.room_profile.objectdb.key if obj.room_profile_id is not None else ""
 
 
+class HeldAnswerSerializer(serializers.ModelSerializer):
+    """An answer held until the being's worship pool can pay for its vision (#4333)."""
+
+    character_name = serializers.CharField(source="character_sheet.character.key", read_only=True)
+    pledge_name = serializers.CharField(source="pledge_details.pledge.name", read_only=True)
+    outcome_name = serializers.CharField(source="answer.outcome_tier.name", read_only=True)
+
+    class Meta:
+        model = PendingAnswer
+        fields = ["id", "character_name", "pledge_name", "outcome_name", "answer", "created_at"]
+        read_only_fields = fields
+
+
 class StaffVisionSerializer(serializers.ModelSerializer):
     recipient_name = serializers.CharField(source="recipient.character.key", read_only=True)
     sent_by_name = serializers.SerializerMethodField()
@@ -357,6 +376,7 @@ class StaffVisionSerializer(serializers.ModelSerializer):
             "episode",
             "resonance_spent",
             "sent_by_name",
+            "answer",
             "sent_at",
         ]
         read_only_fields = fields

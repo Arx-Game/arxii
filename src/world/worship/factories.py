@@ -351,3 +351,28 @@ class PledgeFactory(factory.django.DjangoModelFactory):
     favor_target = 20
     span_weeks = 2
     closing_rite = factory.LazyAttribute(lambda o: WorshipRiteFactory(being=o.being))
+
+
+class AnswerFactory(factory.django.DjangoModelFactory):
+    """An answer written ahead for a being at one outcome tier (#4333 slice 3).
+    Text fields are labelled placeholders: answer prose is staff-authored."""
+
+    class Meta:
+        model = "arxii.Answer"
+
+    being = factory.SubFactory(WorshippedBeingFactory)
+    pledge = None
+    outcome_tier = factory.SubFactory("world.traits.factories.CheckOutcomeFactory")
+    delay_text = "[staff-authored delay text]"
+    answer_text = "[staff-authored answer text]"
+    weight = 1
+    is_active = True
+
+
+class AnswerSacrificeLineFactory(factory.django.DjangoModelFactory):
+    class Meta:
+        model = "arxii.AnswerSacrificeLine"
+
+    answer = factory.SubFactory(AnswerFactory)
+    facet = factory.SubFactory("world.magic.factories.FacetFactory")
+    text = factory.LazyAttribute(lambda o: f"[staff-authored sacrifice line: {o.facet.name} facet]")

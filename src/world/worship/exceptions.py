@@ -120,8 +120,10 @@ class VisionPrayerMismatch(VisionAttachmentInvalid):
     user_message = "That prayer was not this character's."
 
 
-class VisionClueNotCodex(VisionAttachmentInvalid):
-    user_message = "A vision can only carry a Codex clue."
+class VisionClueNotFact(VisionAttachmentInvalid):
+    """A vision's clue states a fact: a Codex entry or a secret (#4333 widened it from Codex)."""
+
+    user_message = "A vision can only carry a Codex or secret clue."
 
 
 class VisionEpisodeNotShared(VisionAttachmentInvalid):

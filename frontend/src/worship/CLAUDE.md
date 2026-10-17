@@ -29,3 +29,6 @@ invocation-options/`): per being the difficulty with each ease, uses left, the b
   temple the character stands in. Reads `/api/worship/pledges/`, `/api/worship/pledge-cards/`,
   `/api/worship/beings/{id}/service-terms/` and `/api/worship/beings/holy-site/`.
   `pledgeText.ts` builds the earning-rate parts and the time left.
+- Answers (#4333 slice 3). A closed pledge's answer arrives as an ordinary vision;
+  `components/VisionCard.tsx` footnotes the fact clue (`clue_name`), the follow-up
+  (`follow_up_footnote`, "A mission came with it: ..." for a mission clue) and the cost's conditions (`condition_names`), never as controls.

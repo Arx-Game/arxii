@@ -10,6 +10,7 @@ from __future__ import annotations
 from typing import Any
 
 from django.db.models import OuterRef, Q, QuerySet, Subquery
+from django.urls import reverse
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
@@ -30,9 +31,12 @@ from world.worship.editor_services import save_being
 from world.worship.exceptions import EditorError
 from world.worship.filters import StaffBeingFilterSet
 from world.worship.models import (
+    Answer,
     BeingNickname,
     ConsecrationTier,
     DevotionStanding,
+    PendingAnswer,
+    Pledge,
     Prayer,
     Relic,
     ShrineDetails,
@@ -46,6 +50,7 @@ from world.worship.models import (
 from world.worship.staff_serializers import (
     CodexRowSerializer,
     EditorOptionsSerializer,
+    HeldAnswerSerializer,
     OverviewSerializer,
     RelicRowSerializer,
     SiteRowSerializer,
@@ -155,6 +160,11 @@ class StaffBeingViewSet(viewsets.ModelViewSet):
             "most_devoted_favor": top.favor if top else None,
             "site_count": sites,
             "recent_activity": _recent_activity(being),
+            "pledge_type_count": Pledge.objects.filter(being=being).count(),
+            "answer_count": Answer.objects.filter(being=being).count(),
+            "held_answer_count": PendingAnswer.objects.filter(answer__being=being).count(),
+            "service_builder_url": reverse("admin_being_service", args=[being.pk]),
+            "answer_builder_url": reverse("admin_answer_builder", args=[being.pk]),
         }
         return Response(OverviewSerializer(data).data)
 
@@ -183,6 +193,16 @@ class StaffBeingViewSet(viewsets.ModelViewSet):
         rows = Vision.objects.filter(being=being).select_related("recipient__character", "sent_by")
         page = self.paginate_queryset(rows)
         return self.get_paginated_response(StaffVisionSerializer(page, many=True).data)
+
+    @action(detail=True, methods=["get"], url_path="held-answers")
+    def held_answers(self, request: Request, pk: str | None = None) -> Response:
+        """Answers drawn at a pledge's close and held until this being's pool can pay
+        for the vision (#4333). Read-only: the daily tick delivers them."""
+        being = self.get_object()
+        rows = PendingAnswer.objects.filter(answer__being=being).select_related(
+            "character_sheet__character", "pledge_details__pledge", "answer__outcome_tier"
+        )
+        return Response(HeldAnswerSerializer(rows, many=True).data)
 
     @action(detail=True, methods=["get"])
     def relics(self, request: Request, pk: str | None = None) -> Response:

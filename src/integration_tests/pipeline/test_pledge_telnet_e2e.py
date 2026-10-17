@@ -1,8 +1,9 @@
-"""Telnet journey: pledges and sacrifices (#4333 slice 2, walkthrough A steps 1 to 3).
+"""Telnet journey: pledges and sacrifices (#4333 slices 2 and 3, walkthrough A steps 1 to 4).
 
 Drives the real commands: ``pledge <being>`` (what a being offers and what earns
 favor), ``pledge <being>/<pledge>=<prayer>``, ``sacrifice <item>``, ``pledge`` (the
-card) and ``pledge/close``. The closing rite's roll is pinned through
+card) and ``pledge/close``, which delivers a written-ahead answer as a vision (slice 3).
+The closing rite's roll is pinned through
 ``force_check_outcome``; the rest is the service path the web uses. An onlooker's
 telnet session is checked for exactly the room lines.
 """
@@ -27,6 +28,8 @@ from world.scenes.services import active_persona_for_sheet
 from world.traits.factories import CheckOutcomeFactory
 from world.worship.constants import BeingResonanceTier, FavorAwardKind, RiteTier
 from world.worship.factories import (
+    AnswerFactory,
+    AnswerSacrificeLineFactory,
     BeingFacetFactory,
     BeingResonanceFactory,
     DevotionStandingFactory,
@@ -39,7 +42,7 @@ from world.worship.factories import (
     WorshipRiteTierAwardFactory,
 )
 from world.worship.invocation_services import get_devotion_config
-from world.worship.models import DevotionStanding, PatronageValence, PledgeDetails
+from world.worship.models import DevotionStanding, PatronageValence, PledgeDetails, Vision
 from world.worship.services import bump_devotion
 
 
@@ -194,3 +197,31 @@ class PledgeTelnetTests(TestCase):
         _run(CmdSacrifice, self.ysmay, "coin")
 
         self.assertIn("There is no shrine or temple here to sacrifice at.", _said(self.ysmay))
+
+    def test_closing_delivers_the_answer_and_the_room_hears_its_onlooker_line(self) -> None:
+        name = active_persona_for_sheet(self.ysmay.sheet_data).name
+        self.ombrin.resonance_pool = 100  # enough to pay for the vision
+        self.ombrin.save(update_fields=["resonance_pool"])
+        answer = AnswerFactory(
+            being=self.ombrin,
+            pledge=self.pledge,
+            outcome_tier=self.success,
+            delay_text="[staff-authored delay text]",
+            answer_text="[staff-authored answer text]",
+            onlooker_line="[staff-authored onlooker line]",
+        )
+        AnswerSacrificeLineFactory(
+            answer=answer, facet=self.silk, text="[staff-authored sacrifice line: Silk facet]"
+        )
+        _run(CmdPledge, self.ysmay, "Ombrin/The Silk Watch")
+        bump_devotion(self.ysmay.sheet_data, self.ombrin, 10)  # +20: at the target
+
+        heard = self._onlooker_hears(CmdPledge, "", switches=["close"])
+
+        self.assertEqual(
+            heard, [f"{name} performs Ombrin's rite.", "[staff-authored onlooker line]"]
+        )
+        vision = Vision.objects.get(recipient=self.ysmay.sheet_data)
+        self.assertEqual(vision.answer, answer)
+        self.assertEqual(vision.body, "[staff-authored delay text]\n\n[staff-authored answer text]")
+        self.assertEqual(vision.message.category, "visions")
