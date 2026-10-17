@@ -114,6 +114,15 @@ jobs:
             echo "prompt<<__EVIDENCE_PROMPT__"
             cat "$RUNNER_TEMP/reviewer.md"
             echo
+            echo "## Commands on this runner"
+            echo
+            echo "Only the tools and command shapes in the allow list are permitted. Anything else is refused and the round posts nothing (#4423). So:"
+            echo
+            echo "- Run plain git from the checkout: \`git log pr-<N>\`, not \`git -C <path> log\`. The checkout is already the working directory."
+            echo "- Read a file as it was at the PR commit with \`git show <sha>:<path>\`. Search it with \`git grep -n <pattern> <sha> -- <path>\`. List it with \`git ls-tree <sha> <path>\`."
+            echo "- Do not use \`gh api\` or WebFetch. Use \`gh pr view\`, \`gh pr diff\`, \`gh issue view\`, \`gh run view\` and the git commands above instead."
+            echo "- One command per tool call, as the reviewer file says."
+            echo
             echo "## This run"
             echo
             echo "- Repository: $REPO"
@@ -143,7 +152,7 @@ jobs:
           claude_args: >-
             --model claude-haiku-5-5
             --max-turns 60
-            --allowed-tools "Read,Grep,Glob,Write,Bash(gh run view:*),Bash(gh pr view:*),Bash(gh pr diff:*),Bash(gh issue view:*),Bash(gh pr comment:*),Bash(git fetch:*),Bash(git log:*),Bash(git show:*),Bash(git diff:*),Bash(git cat-file:*)"
+            --allowed-tools "Read,Grep,Glob,Write,Bash(gh run view:*),Bash(gh pr view:*),Bash(gh pr diff:*),Bash(gh issue view:*),Bash(gh pr comment:*),Bash(git fetch:*),Bash(git log:*),Bash(git show:*),Bash(git diff:*),Bash(git cat-file:*),Bash(git grep:*),Bash(git ls-tree:*)"
 
       # The action hides the model's output, so a refused tool call is
       # invisible except as a count. Print only the refused calls (tool and
