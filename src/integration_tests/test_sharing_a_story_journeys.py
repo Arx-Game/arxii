@@ -582,6 +582,11 @@ class PacingABeatByItsClock(_TwoTables):
         self.assertIn(
             "Only the scene's GM or staff can do that.", self.telnet(self.ysmay, "story clock")
         )
+        # Hobb owns a table too, but none of his players is here, so the scene is
+        # not his to pace.
+        self.assertIn(
+            "Only the scene's GM or staff can do that.", self.telnet(self.hobb, "story clock")
+        )
         self.assertIn(
             "Usage: story clock [n], n a whole number of at least 1.",
             self.telnet(self.ravenna, "story clock x"),
