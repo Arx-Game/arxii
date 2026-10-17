@@ -22,9 +22,11 @@ const FREE_TEXT = 'free';
 export function StewardPromptPill({
   prompt,
   onOpen,
+  onDismissed,
 }: {
   prompt: StewardPrompt;
   onOpen: () => void;
+  onDismissed: (detail: string) => void;
 }) {
   const dismiss = useDismissStewardPrompt();
   return (
@@ -49,7 +51,9 @@ export function StewardPromptPill({
             size="sm"
             variant="secondary"
             disabled={dismiss.isPending}
-            onClick={() => dismiss.mutate(prompt.id)}
+            onClick={() =>
+              dismiss.mutate(prompt.id, { onSuccess: (data) => onDismissed(data.detail) })
+            }
           >
             &#10005; Dismiss
           </Button>
@@ -70,7 +74,13 @@ function initialChoice(prompt: StewardPrompt): string {
   return prompt.may_write_free_text ? FREE_TEXT : '';
 }
 
-export function StewardAnswerPanel({ prompt }: { prompt: StewardPrompt }) {
+export function StewardAnswerPanel({
+  prompt,
+  onSent,
+}: {
+  prompt: StewardPrompt;
+  onSent: (detail: string) => void;
+}) {
   const send = useSendStewardAnswer();
   const [choice, setChoice] = useState<string>(() => initialChoice(prompt));
   const [text, setText] = useState('');
@@ -82,7 +92,7 @@ export function StewardAnswerPanel({ prompt }: { prompt: StewardPrompt }) {
     const body = writing
       ? { text: text.trim(), clue: clue ? Number(clue) : null }
       : { answer: Number(choice), text: '' };
-    send.mutate({ promptId: prompt.id, body });
+    send.mutate({ promptId: prompt.id, body }, { onSuccess: (data) => onSent(data.detail) });
   }
 
   return (
@@ -185,11 +195,6 @@ export function StewardAnswerPanel({ prompt }: { prompt: StewardPrompt }) {
       {send.error && (
         <p role="alert" className="text-sm text-destructive">
           {send.error.message}
-        </p>
-      )}
-      {send.data && (
-        <p role="status" className="text-sm text-muted-foreground">
-          {send.data.detail}
         </p>
       )}
     </section>

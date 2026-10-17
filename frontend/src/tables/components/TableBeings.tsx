@@ -81,6 +81,7 @@ export function TableBeings({ table }: { table: GMTable }) {
   const prompts = useStewardPrompts(table.id);
   const [openPrompt, setOpenPrompt] = useState<number | null>(null);
   const [editing, setEditing] = useState<number | null>(null);
+  const [sent, setSent] = useState('');
 
   if (beings.isLoading) {
     return (
@@ -97,6 +98,11 @@ export function TableBeings({ table }: { table: GMTable }) {
 
   return (
     <div className="space-y-6">
+      {sent && (
+        <p role="status" className="text-sm text-muted-foreground">
+          {sent}
+        </p>
+      )}
       {waiting.length > 0 && (
         <section aria-label="GM prompts" className="space-y-2 rounded-md border bg-card p-3">
           <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
@@ -107,9 +113,10 @@ export function TableBeings({ table }: { table: GMTable }) {
               key={prompt.id}
               prompt={prompt}
               onOpen={() => setOpenPrompt(prompt.id)}
+              onDismissed={setSent}
             />
           ))}
-          {shown && <StewardAnswerPanel key={shown.id} prompt={shown} />}
+          {shown && <StewardAnswerPanel key={shown.id} prompt={shown} onSent={setSent} />}
         </section>
       )}
       {rows.length === 0 && (

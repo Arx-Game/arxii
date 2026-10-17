@@ -115,7 +115,13 @@ function mockData(prompts: StewardPrompt[]) {
 describe('TableBeings', () => {
   beforeEach(() => {
     send.mockReset();
+    send.mockImplementation((_vars, options) =>
+      options?.onSuccess?.({ detail: 'Sent as a vision from Wisket.' })
+    );
     dismiss.mockReset();
+    dismiss.mockImplementation((_id, options) =>
+      options?.onSuccess?.({ detail: 'Dismissed. An authored answer was drawn.' })
+    );
     savePledge.mockReset();
   });
 
@@ -144,7 +150,12 @@ describe('TableBeings', () => {
     expect(within(panel).getByText(/2 days 21 hours left/)).toBeInTheDocument();
 
     await user.click(within(panel).getByRole('button', { name: 'Send as Wisket' }));
-    expect(send).toHaveBeenLastCalledWith({ promptId: 33, body: { answer: 41, text: '' } });
+    expect(send).toHaveBeenLastCalledWith(
+      { promptId: 33, body: { answer: 41, text: '' } },
+      expect.anything()
+    );
+    // The panel closes once the prompt is answered; the confirmation stays on the tab.
+    expect(screen.getByRole('status')).toHaveTextContent('Sent as a vision from Wisket.');
 
     await user.click(within(panel).getByLabelText(/Write free text/));
     await user.click(within(panel).getByLabelText('Your answer'));
@@ -154,10 +165,10 @@ describe('TableBeings', () => {
       '90'
     );
     await user.click(within(panel).getByRole('button', { name: 'Send as Wisket' }));
-    expect(send).toHaveBeenLastCalledWith({
-      promptId: 33,
-      body: { text: '[GM-written free text]', clue: 90 },
-    });
+    expect(send).toHaveBeenLastCalledWith(
+      { promptId: 33, body: { text: '[GM-written free text]', clue: 90 } },
+      expect.anything()
+    );
   });
 
   it('dismisses a waiting answer', async () => {
@@ -166,7 +177,10 @@ describe('TableBeings', () => {
     render(<TableBeings table={table} />);
 
     await user.click(screen.getByRole('button', { name: /Dismiss/ }));
-    expect(dismiss).toHaveBeenCalledWith(33);
+    expect(dismiss).toHaveBeenCalledWith(33, expect.anything());
+    expect(screen.getByRole('status')).toHaveTextContent(
+      'Dismissed. An authored answer was drawn.'
+    );
   });
 
   it('opens the editor with the pledge type and the coverage grid', async () => {
