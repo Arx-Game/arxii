@@ -496,3 +496,37 @@ def expire_steward_prompts() -> int:
             continue
         closed += 1
     return closed
+
+
+# ---------------------------------------------------------------------------
+# Who authors a stewarded being on the table page
+# ---------------------------------------------------------------------------
+
+
+def stewarded_beings_for(account: AccountDB):
+    """The beings ``account`` may author on a table page: those stewarded by a
+    table they GM; every stewarded being for staff."""
+    from world.worship.models import WorshippedBeing  # noqa: PLC0415
+
+    beings = WorshippedBeing.objects.filter(steward__isnull=False)
+    if not account.is_staff:
+        beings = beings.filter(steward__table__gm__account=account)
+    return beings.select_related("steward__table", "tradition").order_by("name")
+
+
+def may_author(account: AccountDB, being: WorshippedBeing) -> bool:
+    """Whether ``account`` writes ``being``'s pledge types and answers: the GM of
+    the table that stewards it, or staff (who also have the admin builders)."""
+    steward = steward_of(being)
+    if steward is None:
+        return False
+    return bool(account.is_staff or steward.table.gm.account_id == account.pk)
+
+
+def author_credit(account: AccountDB):
+    """The content-credit identity the table page writes as, or None when the
+    account has none (the row then reads as not yet credited)."""
+    from evennia_extensions.models import PlayerData  # noqa: PLC0415
+
+    data = PlayerData.objects.filter(account=account).select_related("contributor").first()
+    return data.contributor if data is not None else None

@@ -13,6 +13,7 @@ from __future__ import annotations
 from datetime import timedelta
 
 from django.core.exceptions import ValidationError
+from django.db.models import Model
 from django.utils import timezone
 
 from actions.definitions.worship import AnswerBeingPromptAction, ClosePledgeAction
@@ -336,3 +337,85 @@ class StewardFallbackTests(StewardTestBase):
         dismiss_gm_prompt(prompt, resolver=self.gm_account)
 
         self.assertEqual(PendingAnswer.objects.get(character_sheet=self.sheet).answer, answer)
+
+
+class StewardAdminTests(StewardTestBase):
+    """The steward inline on the being's admin page, driven through the real change form."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        super().setUpTestData()
+        from evennia.accounts.models import AccountDB
+
+        cls.staff = AccountDB.objects.create_superuser("stewadmin", "sa@example.com", "pw-1234567")
+
+    def setUp(self) -> None:
+        self.client.force_login(self.staff)
+
+    def _url(self) -> str:
+        from django.urls import reverse
+
+        return reverse("admin:arxii_worshippedbeing_change", args=[self.being.pk])
+
+    def test_the_change_form_shows_the_steward_and_what_was_checked(self) -> None:
+        response = self.client.get(self._url())
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(
+            response, "GM level Senior GM. 1 active member. Stewards 0 other beings."
+        )
+        self.assertContains(response, "Signs of a god: none")
+
+    def test_saving_a_table_below_senior_is_refused(self) -> None:
+        junior = GMTableFactory(gm=GMProfileFactory(level=GMLevel.JUNIOR), name="Junior table")
+        response = self.client.get(self._url())
+        data = dict(_form_data(response.context["adminform"].form))
+        data.update(
+            _inline_management(response, steward_table=junior.pk, steward_pk=self.steward.pk)
+        )
+
+        saved = self.client.post(self._url(), data)
+
+        self.assertEqual(saved.status_code, 200)
+        self.assertContains(saved, "a steward&#x27;s GM must be Senior GM")
+        stored = BeingSteward.objects.filter(being=self.being).values_list("table_id", flat=True)
+        self.assertEqual(list(stored), [self.table.pk])
+
+
+def _form_data(form) -> dict:
+    data = {}
+    for name, field in form.fields.items():
+        value = form.initial.get(name, field.initial)
+        if value is None:
+            continue
+        if isinstance(value, (list, tuple)):
+            data[name] = [v.pk if isinstance(v, Model) else v for v in value]
+        elif isinstance(value, Model):
+            data[name] = value.pk
+        elif isinstance(value, bool):
+            if value:
+                data[name] = "on"
+        else:
+            data[name] = value
+    return data
+
+
+def _inline_management(response, *, steward_table: int, steward_pk: int) -> dict:
+    data: dict = {}
+    for formset in response.context["inline_admin_formsets"]:
+        prefix = formset.formset.prefix
+        forms = formset.formset.forms
+        data[f"{prefix}-TOTAL_FORMS"] = str(len(forms))
+        data[f"{prefix}-INITIAL_FORMS"] = str(formset.formset.initial_form_count())
+        data[f"{prefix}-MIN_NUM_FORMS"] = "0"
+        data[f"{prefix}-MAX_NUM_FORMS"] = "1000"
+        for index, form in enumerate(forms):
+            for name, value in _form_data(form).items():
+                data[f"{prefix}-{index}-{name}"] = value
+            if form.instance.pk is not None:
+                data[f"{prefix}-{index}-id"] = form.instance.pk
+            if formset.formset.model is BeingSteward:
+                data[f"{prefix}-{index}-table"] = steward_table
+                data[f"{prefix}-{index}-id"] = steward_pk
+                data[f"{prefix}-{index}-being"] = form.instance.being_id
+    return data
