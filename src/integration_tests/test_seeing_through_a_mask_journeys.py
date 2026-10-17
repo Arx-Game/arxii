@@ -4,7 +4,6 @@ everyone without the sight, still meets a stranger."""
 
 from __future__ import annotations
 
-from django.urls import reverse
 from evennia.utils.ansi import strip_ansi
 
 from integration_tests.harness import JourneyCase
@@ -12,6 +11,7 @@ from world.forms.factories import CharacterFormFactory
 from world.forms.models import FormType
 from world.mechanics.constants import DISGUISE_SIGHT_CATEGORY_NAME
 from world.mechanics.test_helpers import grant_lever
+from world.scenes.models import PersonaDiscovery
 from world.scenes.services import create_mask
 
 
@@ -29,11 +29,9 @@ class SeeingThroughAMask(JourneyCase):
         grant_lever(self.maud.sheet_data, DISGUISE_SIGHT_CATEGORY_NAME, "magical", 1)
 
     def _sheet_name_seen_by(self, viewer) -> str:
-        response = self.api(self.account_of(viewer)).get(
-            reverse("character-sheets-detail", args=[self.ysmay.pk])
-        )
+        response = self.api(self.account_of(viewer)).get(f"/api/character-sheets/{self.ysmay.pk}/")
         self.assertEqual(response.status_code, 200, response.content)
-        return response.data["name"]
+        return response.data["identity"]["name"]
 
     def test_keen_eyes_read_a_plain_mask_and_the_sheet_agrees(self) -> None:
         self.telnet(self.ysmay, "persona mask Stag Mask")
@@ -46,6 +44,8 @@ class SeeingThroughAMask(JourneyCase):
 
         self.assertEqual(self._sheet_name_seen_by(self.hobb), "Stag Mask (Ysmay)")
         self.assertEqual(self._sheet_name_seen_by(self.wat), "a person wearing a Stag Mask")
+        # Sight is live, not learned: none of those reads wrote a discovery row.
+        self.assertEqual(PersonaDiscovery.objects.count(), 0)
 
     def test_a_glamour_needs_the_other_sight(self) -> None:
         glamour = CharacterFormFactory(character=self.ysmay.sheet_data, form_type=FormType.DISGUISE)
@@ -61,3 +61,4 @@ class SeeingThroughAMask(JourneyCase):
 
         self.assertEqual(self._sheet_name_seen_by(self.hobb), "a person wearing a Glamour")
         self.assertEqual(self._sheet_name_seen_by(self.maud), "Glamour (Ysmay)")
+        self.assertEqual(PersonaDiscovery.objects.count(), 0)
