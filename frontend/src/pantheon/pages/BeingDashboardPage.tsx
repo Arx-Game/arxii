@@ -23,6 +23,7 @@ import {
   useBeingPrayers,
   useBeingVisions,
   useCodexRows,
+  useHeldAnswers,
   useOverview,
   useRelics,
   useSites,
@@ -79,6 +80,7 @@ export function BeingDashboardPage() {
   const { data: sites } = useSites(beingId, tab === 'sites');
   const { data: prayers } = useBeingPrayers(beingId, tab === 'prayers');
   const { data: visions } = useBeingVisions(beingId, tab === 'visions');
+  const { data: heldAnswers } = useHeldAnswers(beingId, tab === 'visions');
   const { data: relics } = useRelics(beingId, tab === 'relics');
   const { data: codex } = useCodexRows(beingId, tab === 'codex');
 
@@ -144,6 +146,27 @@ export function BeingDashboardPage() {
             />
             <Stat value={String(overview?.site_count ?? 0)} label="shrines & temples" />
           </div>
+          {overview && (
+            <Card>
+              <CardContent className="py-4" data-testid="service-and-answers">
+                <p className="mb-2 text-sm font-semibold">Pledges and answers</p>
+                <p className="text-sm text-muted-foreground">
+                  {overview.pledge_type_count} pledge type
+                  {overview.pledge_type_count === 1 ? '' : 's'} · {overview.answer_count} answer
+                  {overview.answer_count === 1 ? '' : 's'} written · {overview.held_answer_count}{' '}
+                  held until the pool can pay
+                </p>
+                <div className="mt-2 flex flex-wrap gap-2">
+                  <Button asChild variant="outline" size="sm">
+                    <a href={overview.service_builder_url}>Being Service builder</a>
+                  </Button>
+                  <Button asChild variant="outline" size="sm">
+                    <a href={overview.answer_builder_url}>Answer builder</a>
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          )}
           <Card>
             <CardContent className="py-4">
               <p className="mb-3 text-sm font-semibold">Recent activity</p>
@@ -314,6 +337,31 @@ export function BeingDashboardPage() {
         </TabsContent>
 
         <TabsContent value="visions" className="space-y-3">
+          {(heldAnswers ?? []).length > 0 && (
+            <Card>
+              <CardContent className="py-4" data-testid="held-answers">
+                <p className="mb-2 text-sm font-semibold">
+                  Held until the pool can pay ({heldAnswers?.length})
+                </p>
+                <ul className="space-y-1 text-sm">
+                  {heldAnswers?.map((held) => (
+                    <li
+                      key={held.id}
+                      className="flex justify-between gap-4"
+                      data-testid="held-answer"
+                    >
+                      <span>
+                        {held.character_name} · {held.pledge_name} · {held.outcome_name}
+                      </span>
+                      <span className="text-muted-foreground">
+                        {formatRelativeTime(held.created_at)}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </CardContent>
+            </Card>
+          )}
           {(visions?.results ?? []).length === 0 && (
             <p className="text-sm text-muted-foreground">No vision sent yet.</p>
           )}
@@ -329,6 +377,7 @@ export function BeingDashboardPage() {
                 </span>
                 <span>To {vision.recipient_name}</span>
                 <span>· {vision.reveal_source ? 'source revealed' : 'source concealed'}</span>
+                {vision.answer != null && <span>· written-ahead answer</span>}
                 {vision.sent_by_name && <span>· by {vision.sent_by_name}</span>}
                 <span className="ml-auto">
                   −{vision.resonance_spent} pool · {formatRelativeTime(vision.sent_at)}

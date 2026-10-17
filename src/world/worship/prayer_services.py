@@ -35,14 +35,14 @@ from world.worship.exceptions import (
     PrayerBeingInactive,
     PrayerEmpty,
     PrayerTooLong,
-    VisionClueNotCodex,
+    VisionClueNotFact,
     VisionEmpty,
     VisionEpisodeNotShared,
     VisionPoolInsufficient,
     VisionPrayerMismatch,
     VisionRecipientUnrostered,
 )
-from world.worship.models import MiraclePerformance, Prayer, Vision, WorshippedBeing
+from world.worship.models import Answer, MiraclePerformance, Prayer, Vision, WorshippedBeing
 
 if TYPE_CHECKING:
     from evennia.accounts.models import AccountDB
@@ -205,11 +205,15 @@ def pray(character_sheet: CharacterSheet, being: WorshippedBeing, text: str) -> 
     )
 
 
-def _vision_text(being: WorshippedBeing, body: str, *, reveal_source: bool) -> str:
-    """The delivered prose: the GM's words, and the sender's name only when revealed."""
-    if reveal_source:
-        return f"{body}\n\nYou know whose vision this is: {being.name}."
-    return body
+def _vision_text(
+    being: WorshippedBeing, body: str, *, reveal_source: bool, footnotes: tuple[str, ...] = ()
+) -> str:
+    """The delivered prose: the written words, the sender's name only when revealed, then
+    any footnotes naming what came with it (an answer's clue, follow-up and condition)."""
+    text = f"{body}\n\nYou know whose vision this is: {being.name}." if reveal_source else body
+    if footnotes:
+        text += "\n" + " ".join(footnotes)
+    return text
 
 
 def send_vision(  # noqa: PLR0913 - the attachments are keyword-only and each optional
@@ -222,16 +226,20 @@ def send_vision(  # noqa: PLR0913 - the attachments are keyword-only and each op
     prayer: Prayer | None = None,
     clue: Clue | None = None,
     episode: Episode | None = None,
+    answer: Answer | None = None,
+    footnotes: tuple[str, ...] = (),
 ) -> Vision:
-    """A GM sends ``recipient`` a vision from ``being``.
+    """A GM sends ``recipient`` a vision from ``being``, or a closing rite releases a
+    written-ahead ``answer`` as one (#4333 slice 3, ``sent_by`` None).
 
     Spends ``VISION_RESONANCE_POOL_COST`` from the being's pool (the same spend
     a miracle makes), delivers the prose as a VISIONS narrative message (live
     push when the recipient is online, login catch-up otherwise), and records
-    the ``Vision``. A Codex ``clue`` is handed to the recipient on the spot: it is
-    always held, and an AUTOMATIC clue also grants its target (``find_clue``,
-    as room search does, #4327). A RESEARCH clue is only held. An ``episode`` links
-    the vision to a story the recipient participates in.
+    the ``Vision``. A Codex or secret ``clue`` (an answer's fact clue) is handed to
+    the recipient on the spot: it is always held, and an AUTOMATIC clue also
+    grants its target (``find_clue``, as room search does, #4327). A RESEARCH
+    clue is only held. An ``episode`` links the vision to a story the recipient
+    participates in.
     """
     from world.clues.constants import ClueTargetKind  # noqa: PLC0415
     from world.clues.services import find_clue  # noqa: PLC0415
@@ -243,8 +251,8 @@ def send_vision(  # noqa: PLR0913 - the attachments are keyword-only and each op
         raise VisionEmpty
     if prayer is not None and prayer.character_sheet_id != recipient.pk:
         raise VisionPrayerMismatch
-    if clue is not None and clue.target_kind != ClueTargetKind.CODEX:
-        raise VisionClueNotCodex
+    if clue is not None and clue.target_kind not in (ClueTargetKind.CODEX, ClueTargetKind.SECRET):
+        raise VisionClueNotFact
     story = None
     if episode is not None:
         story = episode.chapter.story
@@ -275,13 +283,14 @@ def send_vision(  # noqa: PLR0913 - the attachments are keyword-only and each op
             prayer=prayer,
             clue=clue,
             episode=episode,
+            answer=answer,
             resonance_spent=VISION_RESONANCE_POOL_COST,
         )
         if clue is not None and roster_entry is not None:
             find_clue(roster_entry, clue)
     message = send_narrative_message(
         recipients=[recipient],
-        body=_vision_text(being, prose, reveal_source=reveal_source),
+        body=_vision_text(being, prose, reveal_source=reveal_source, footnotes=footnotes),
         category=NarrativeCategory.VISIONS,
         sender_account=sent_by,
         ooc_note=f"A vision from {being.name}"

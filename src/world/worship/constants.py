@@ -176,3 +176,14 @@ class PledgeState(models.TextChoices):
 DAYS_PER_GAME_WEEK = 7
 #: Closing attempts a pledge allows: a first failure leaves one retry (Ruling 17).
 PLEDGE_MAX_CLOSE_ATTEMPTS = 2
+
+# ---------------------------------------------------------------------------
+# Answers (#4333 slice 3, design 4)
+# ---------------------------------------------------------------------------
+
+#: Lowest outcome success level whose answer may carry fact text and a fact clue (Success).
+ANSWER_FACT_MIN_SUCCESS_LEVEL = 1
+#: Lowest outcome success level whose answer may carry a follow-up clue (Partial Success).
+ANSWER_FOLLOW_UP_MIN_SUCCESS_LEVEL = 0
+#: Longest onlooker line an answer may carry: one room line.
+ANSWER_ONLOOKER_LINE_MAX_LENGTH = 300

@@ -26169,6 +26169,26 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/worship/admin/beings/{id}/held-answers/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description Answers drawn at a pledge's close and held until this being's pool can pay
+     *     for the vision (#4333). Read-only: the daily tick delivers them.
+     */
+    get: operations['worship_admin_beings_held_answers_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/worship/admin/beings/{id}/overview/': {
     parameters: {
       query?: never;
@@ -52212,9 +52232,14 @@ export interface components {
       /** @description A Codex clue the vision hands the recipient (a mystery's starter). */
       readonly clue: number | null;
       readonly clue_slug: string | null;
+      readonly clue_name: string | null;
       /** @description The episode this is a personal beat of; the recipient must be in its story. */
       readonly episode: number | null;
       readonly episode_title: string | null;
+      /** @description The follow-up's footnote: "A mission came with it: ..." for a mission clue. */
+      readonly follow_up_footnote: string | null;
+      /** @description The conditions an answer's cost applied with this vision (#4333). */
+      readonly condition_names: string[];
       /** Format: date-time */
       readonly sent_at: string;
     };
@@ -88687,6 +88712,28 @@ export interface operations {
     };
   };
   worship_admin_beings_codex_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this worshipped being. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['StaffBeingPage'];
+        };
+      };
+    };
+  };
+  worship_admin_beings_held_answers_retrieve: {
     parameters: {
       query?: never;
       header?: never;

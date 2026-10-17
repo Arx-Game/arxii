@@ -137,8 +137,18 @@ Vitals (#2287 ghost containers), Events/Scenes (optional chassis)
   closing award for its outcome in place of the rite's own; a first failed close leaves one
   retry. A lapse at half the target or more pays the Partial Success award. Web (sheet card
   and dialogs, the room's holy-site line), telnet `pledge` and `sacrifice`, the Being Service
-  builder. ADR-4362. Next slices of #4333: answers at the close, stewards, answering live,
-  rituals, Mysteries, favored facets on worn items.
+  builder. ADR-4362.
+- **Favor with beings, slice 3: answers at the close (#4333, #4374):** a closing rite that
+  resolves a pledge draws one answer staff wrote ahead for the being at the rite's outcome
+  tier (the pledge type's own first, then the being's general ones, falling to lower tiers)
+  and delivers it as a vision: delay, answer text with one line per sacrificed facet, the
+  fact and its clue (Success and above only), the cost and its consequences, the follow-up
+  and its clue (Partial Success and above). Onlookers see the answer's onlooker line after
+  the rite line. When the being's worship pool cannot pay, the answer is held and the daily
+  tick sends it once it can; staff see held answers on the Deity Editor. A lapse never
+  delivers one. The Answer builder admin page authors them. ADR-4333-B (amends the Vision
+  rule). Next slices of #4333: stewards, answering live, rituals, Mysteries, favored facets
+  on worn items.
 
 ## Not built (filed)
 

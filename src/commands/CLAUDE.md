@@ -971,7 +971,9 @@ actions, backends, and service functions.
   caller's own `StoryRoomGrant` rows; `joinroom <#id|name>` dispatches `JoinStoryRoomAction`
   (name matches only among the caller's own grants; ties resolve to the lowest room id).
   `CmdLeaveRoom` (`leaveroom`) — dispatches `LeaveStoryRoomAction`, returning the caller to the
-  `return_location` their grant captured at join (fallback: `home`). All three are thin
+  `return_location` their grant captured at join (fallback: `home`); typed anywhere the caller
+  holds no grant it answers "You're not in a story room." (#3657: every room has a profile, so
+  the service's "no invitation" line had leaked through for an ordinary room). All three are thin
   `ArxCommand`s over the four REGISTRY actions in `actions/definitions/story_builder.py`; locks
   are `cmd:all()` throughout — real authorization lives in the actions/services (the grant
   itself, or `MinimumGMLevelPrerequisite` for the GM-lifecycle pair), the same seam

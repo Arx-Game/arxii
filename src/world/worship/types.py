@@ -14,10 +14,12 @@ if TYPE_CHECKING:
     from world.checks.types import CheckResult, ModifierContribution
     from world.magic.models import ResonanceGrant
     from world.worship.models import (
+        Answer,
         DevotionStanding,
         FavorInvocation,
         PledgeCredit,
         PledgeDetails,
+        Vision,
         WorshippedBeing,
         WorshipRite,
         WorshipRitePerformance,
@@ -236,6 +238,21 @@ class ClosingOutcome:
     award_base: int
     award: int
     earning_rate_percent: int
+    delivery: AnswerDelivery | None = None
+
+
+@dataclass(frozen=True)
+class AnswerDelivery:
+    """What a resolved pledge's answer came to (#4333 slice 3).
+
+    ``answer`` is None when the being had no answer that fit the draw (no
+    vision). ``held`` is True when the being's worship pool could not pay and a
+    ``PendingAnswer`` holds it; ``vision`` is the delivered vision otherwise.
+    """
+
+    answer: Answer | None
+    vision: Vision | None
+    held: bool
 
 
 @dataclass(frozen=True)

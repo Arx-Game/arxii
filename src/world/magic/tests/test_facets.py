@@ -22,7 +22,11 @@ from world.magic.factories import (
 )
 from world.magic.models import Facet, FacetAlias
 from world.magic.services import facets as svc
-from world.worship.factories import BeingFacetFactory, WorshippedBeingFactory
+from world.worship.factories import (
+    AnswerSacrificeLineFactory,
+    BeingFacetFactory,
+    WorshippedBeingFactory,
+)
 
 
 class FacetKeyTests(TestCase):
@@ -149,6 +153,7 @@ class MergeFacetsTests(TestCase):
         style.in_vogue_facets.add(self.loser)
         being = WorshippedBeingFactory()
         BeingFacetFactory(being=being, facet=self.loser)
+        line = AnswerSacrificeLineFactory(facet=self.loser)
         FacetAlias.objects.create(name="Reaping Hooks", facet=self.loser)
 
         result = svc.merge_facets(self.winner, [self.loser, self.other_loser])
@@ -166,12 +171,14 @@ class MergeFacetsTests(TestCase):
         self.assertEqual(momentum.facet, self.winner)
         self.assertEqual(list(style.in_vogue_facets.all()), [self.winner])
         self.assertEqual(list(being.being_facets.values_list("facet", flat=True)), [self.winner.pk])
+        line.refresh_from_db()
+        self.assertEqual(line.facet, self.winner)
         self.assertEqual(
             set(self.winner.aliases.values_list("name", flat=True)),
             {"Scythes", "Sickles", "Reaping Hooks"},
         )
         self.assertEqual(sorted(result.retired_names), ["Scythes", "Sickles"])
-        self.assertEqual(result.moved, 7)
+        self.assertEqual(result.moved, 8)
         self.assertEqual(result.dropped, 0)
 
     def test_an_owner_already_on_the_winner_keeps_one_binding(self) -> None:

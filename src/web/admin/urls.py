@@ -4,6 +4,11 @@ from django.urls import path
 from django.views.generic import RedirectView
 
 from web.admin import arx_admin_site
+from web.admin.answer_builder.views import (
+    answer_builder,
+    answer_builder_delete,
+    answer_builder_review,
+)
 from web.admin.authoring.views import (
     authoring_dashboard,
     authoring_editor,
@@ -261,6 +266,17 @@ urlpatterns = [
         "_being_service/<int:being_pk>/review/",
         being_service_review,
         name="admin_being_service_review",
+    ),
+    path("_being_answers/<int:being_pk>/", answer_builder, name="admin_answer_builder"),
+    path(
+        "_being_answers/<int:being_pk>/review/<int:answer_pk>/",
+        answer_builder_review,
+        name="admin_answer_builder_review",
+    ),
+    path(
+        "_being_answers/<int:being_pk>/delete/<int:answer_pk>/",
+        answer_builder_delete,
+        name="admin_answer_builder_delete",
     ),
     path(
         "_faction_rules/organization/<int:org_pk>/",

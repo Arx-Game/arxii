@@ -64,6 +64,7 @@ if TYPE_CHECKING:
     from django.contrib.auth.base_user import AbstractBaseUser
     from django.contrib.auth.models import AnonymousUser
     from evennia.accounts.models import AccountDB
+    from evennia.objects.objects import DefaultObject
 
     from world.character_creation.enemies import ResolvedEnemy
     from world.character_creation.models import (
@@ -265,6 +266,15 @@ def finalize_character(
 
     # Create stat trait values, skills, goals, distinctions, path history, post-CG bonuses
     _apply_character_mechanics(character, draft, markings=markings)
+
+    # The residence comfort modifier (#1514) was never computed at creation: the home is
+    # assigned directly above, so the tenancy grant's residence default sees a chosen
+    # residence and skips set_residence. Computed once here, after the distinctions, so a
+    # comfort lever picked at creation (#4394) is read along with the room itself.
+    if starting_room is not None:
+        from world.locations.comfort_effect import recompute_comfort_regen_modifier  # noqa: PLC0415
+
+        recompute_comfort_regen_modifier(cast("DefaultObject", character))
 
     _initialize_full_vitals(sheet)
 
@@ -1851,14 +1861,10 @@ def _create_distinction_modifiers_bulk(
     )
     from world.currency.services import apply_starting_grant  # noqa: PLC0415
     from world.items.services.narrative_grants import apply_item_grants  # noqa: PLC0415
-    from world.locations.comfort_effect import recompute_comfort_regen_modifier  # noqa: PLC0415
     from world.magic.services.distinction_resonance import (  # noqa: PLC0415
         reconcile_distinction_resonance_grants,
     )
-    from world.mechanics.constants import (  # noqa: PLC0415
-        COMFORT_CATEGORY_NAME,
-        RESONANCE_CATEGORY_NAME,
-    )
+    from world.mechanics.constants import RESONANCE_CATEGORY_NAME  # noqa: PLC0415
     from world.mechanics.models import CharacterModifier, ModifierSource  # noqa: PLC0415
     from world.npc_services.regard import reconcile_distinction_regard_seeds  # noqa: PLC0415
 
@@ -1903,12 +1909,6 @@ def _create_distinction_modifiers_bulk(
         apply_starting_grant(char_dist)
         # A keepsake (#4398) is minted here for the same reason.
         apply_item_grants(char_dist)
-    # #4394: the residence was granted before the distinctions, so a comfort lever picked
-    # at creation re-materializes the home's comfort modifier here.
-    if any(
-        effect.target.category.name == COMFORT_CATEGORY_NAME for effect, _ in source_effect_ranks
-    ):
-        recompute_comfort_regen_modifier(sheet.character)
 
 
 def _materialize_draft_markings(sheet: Any, draft: CharacterDraft) -> dict[int, Any]:

@@ -5,9 +5,7 @@ import django.db.models.deletion
 
 
 class Migration(migrations.Migration):
-    dependencies = [
-        ("arxii", "0238_restore_canonical_check_outcome_levels"),
-    ]
+    dependencies = [("arxii", "0239_answers_at_the_close")]
 
     operations = [
         migrations.AddField(
