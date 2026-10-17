@@ -6,6 +6,7 @@ from typing import Any, ClassVar
 
 from django.core.exceptions import ObjectDoesNotExist
 from evennia import Command
+from evennia.accounts.models import AccountDB
 from evennia.utils import search
 
 from actions.definitions.communication import (
@@ -308,6 +309,10 @@ class CmdPage(FrontendMetadataMixin, Command):  # ty: ignore[invalid-base]
         # Suppression justified: Evennia cmdhandler sets .session at runtime.
         session = getattr(self, "session", None)  # noqa: GETATTR_LITERAL
         sender_char = session.puppet if session is not None else None
+        if sender_char is None and not isinstance(self.caller, AccountDB):
+            # Typed through a character with no session on the line (#3657): the
+            # character is the sender, and the block and mute checks below need it.
+            sender_char = self.caller
         refusal = self._quiet_mode_refusal(sender_char, character, account, charname)
         if refusal is not None:
             self.caller.msg(refusal)
