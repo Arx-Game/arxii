@@ -372,6 +372,7 @@ All models registered with appropriate admin interfaces:
 - **Callers own complexity** -- the resolver stays simple; goals, magic, combat, and conditions compute their own `extra_modifiers` before calling `perform_check`
 - **SharedMemoryModel** for all lookup tables (CheckCategory, CheckType, CheckTypeTrait, CheckTypeAspect, CheckTypeCapabilityModifier)
 - **No API endpoints** -- check types are staff-defined via admin; resolution is called programmatically by other systems
+- **Outcome tiers carry verdicts** (#4378) -- code reads `CheckOutcome.success_level` (`> 0` succeeded, `< 0` failed), never the name. The five canonical tiers and their levels live in `CANONICAL_OUTCOME_LEVELS` (`world.traits.constants`); seed code gets a tier from `ensure_canonical_check_outcome` / `ensure_check_outcome` (`world.traits.services`), which creates a missing row at the right level and corrects a drifted one. Never `CheckOutcomeFactory` outside tests: its `success_level` is random, and `tools/lint_seed_factory.py` (`seed-factory` hook) rejects it.
 
 ---
 

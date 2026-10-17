@@ -21,6 +21,7 @@ make them non-idempotent, so the spine is seeded through ``get_or_create``.
 
 from __future__ import annotations
 
+from world.traits.constants import CANONICAL_OUTCOME_LEVELS
 from world.traits.models import (
     CheckOutcome,
     CheckRank,
@@ -29,6 +30,7 @@ from world.traits.models import (
     ResultChartOutcome,
     TraitType,
 )
+from world.traits.services import ensure_check_outcome
 
 # --- Point-conversion ranges (one per trait type that contributes points) ---
 # Promoted from the test setup: STAT/SKILL both map 1 point per level over the
@@ -67,13 +69,7 @@ _CRITICAL_FAILURE = "Critical Failure"
 # Failure" is included so the magic cluster's backfire consequence pools (which
 # fetch a CheckOutcome named "Critical Failure") resolve against the canonical
 # spine rather than seeding their own outcome rows.
-_OUTCOMES: tuple[tuple[str, int], ...] = (
-    (_CRITICAL_FAILURE, -2),
-    ("Failure", -1),
-    (_OUTCOME_PARTIAL_SUCCESS, 0),
-    ("Success", 1),
-    (_CRITICAL_SUCCESS, 2),
-)
+_OUTCOMES: tuple[tuple[str, int], ...] = tuple(CANONICAL_OUTCOME_LEVELS.items())
 
 # --- Result charts: rank_difference -> ordered (outcome_name, min_roll, max_roll) ---
 # rank_difference is roller_rank MINUS target_rank, so POSITIVE means the roller is
@@ -217,11 +213,9 @@ def seed_check_resolution_tables() -> None:
 
     outcomes: dict[str, CheckOutcome] = {}
     for name, success_level in _OUTCOMES:
-        outcome, _ = CheckOutcome.objects.get_or_create(
-            name=name,
-            defaults={"success_level": success_level},
-        )
-        outcomes[name] = outcome
+        # Enforced, not just defaulted: a row another seed made first must not keep a
+        # wrong level (#4378).
+        outcomes[name] = ensure_check_outcome(name, success_level)
 
     for rank_difference, bands in _CHARTS:
         chart, _ = ResultChart.objects.get_or_create(
