@@ -1,8 +1,0 @@
-STEWARD
-Steward: Wisket stewarded by The Whitlow table
- Delete
-Table:
-GMTable(The Whitlow table, gm=gm_4416)
-GMTable(The Whitlow table, gm=gm_4416)
-Checked before assigning:
-GM level Senior GM. 4 active members. Stewards 0 other beings. Signs of a god: none (no public codex entry, no public worship declarations, no Chosen outside the table, no temple).

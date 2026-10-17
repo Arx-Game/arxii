@@ -1,4 +1,0 @@
-
-before window: 0
-after 3 days and a minute: 1
-prompt 5: dismissed | No answer within 3 days: an authored answer was drawn.
