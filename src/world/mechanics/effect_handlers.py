@@ -193,7 +193,10 @@ def _shift_affection(
     on the dedup — the diminishing-returns rule). Sceneless resolutions skip
     rather than allow undeduped spam.
     """
-    from world.relationships.services import apply_affection_shift  # noqa: PLC0415
+    from world.relationships.services import (  # noqa: PLC0415
+        apply_affection_shift,
+        relationship_gain_for,
+    )
 
     actor = context.character
     recipient = _resolve_target(effect, context)
@@ -222,6 +225,15 @@ def _shift_affection(
             applied=False,
             skip_reason="self_target",
         )
+    # #4394: a relationship-gain lever can scale a gain to nothing; that is not the
+    # per-scene dedup, so it gets its own reason before the service is asked.
+    if amount > 0 and relationship_gain_for(recipient_sheet, amount) == 0:
+        return AppliedEffect(
+            effect_type=EffectType.SHIFT_AFFECTION,
+            description=f"{recipient.db_key}'s regard for {actor.db_key} does not move.",
+            applied=False,
+            skip_reason="no_gain",
+        )
     shift = apply_affection_shift(
         source=recipient_sheet,
         target=actor_sheet,
@@ -238,7 +250,7 @@ def _shift_affection(
         )
     return AppliedEffect(
         effect_type=EffectType.SHIFT_AFFECTION,
-        description=f"{recipient.db_key}'s regard for {actor.db_key} shifts {amount:+d}",
+        description=f"{recipient.db_key}'s regard for {actor.db_key} shifts {shift.amount:+d}",
         applied=True,
     )
 

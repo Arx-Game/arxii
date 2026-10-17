@@ -2,6 +2,8 @@
 
 from django.db import models
 
+from world.magic.constants import GainSource
+
 #: Achievement names for the top-devotion worshipper of a being (Decision 6, #2355).
 #: Three gendered display variants; selection maps from CharacterSheet.gender.key.
 GODS_FAVORITE_PRINCESS = "God's Favorite Princess"
@@ -144,6 +146,21 @@ class PledgeCreditSource(models.TextChoices):
     CLOSING = "closing", "Closing award"
     LAPSE = "lapse", "Lapse award"
     OTHER = "other", "Other"
+
+
+#: Resonance grant sources with no character action behind them. Favor with a being
+#: comes only from a character's actions (owner ruling 2026-10-16), so a grant from
+#: one of these earns no pledge deed favor: the daily residence and outfit trickles,
+#: a distinction's granted resonance, and a staff grant. A worship rite's own grant
+#: is excluded separately (the rite pays its own favor).
+PASSIVE_DEED_SOURCES: frozenset[str] = frozenset(
+    {
+        GainSource.ROOM_RESIDENCE,
+        GainSource.OUTFIT_TRICKLE,
+        GainSource.DISTINCTION,
+        GainSource.STAFF_GRANT,
+    }
+)
 
 
 class PledgeState(models.TextChoices):

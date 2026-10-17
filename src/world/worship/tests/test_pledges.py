@@ -22,9 +22,23 @@ from world.ceremonies.models import CeremonyOffering
 from world.ceremonies.services import sacrifice_items
 from world.character_sheets.factories import CharacterSheetFactory
 from world.checks.test_helpers import force_check_outcome
-from world.items.factories import ItemFacetFactory, ItemInstanceFactory
+from world.distinctions.factories import CharacterDistinctionFactory, DistinctionFactory
+from world.items.factories import (
+    EquippedItemFactory,
+    ItemFacetFactory,
+    ItemInstanceFactory,
+    QualityTierFactory,
+)
 from world.items.models import ItemInstance
-from world.magic.constants import GainSource
+from world.magic.constants import GainSource, TargetKind
+from world.magic.factories import CharacterResonanceFactory, FacetFactory
+from world.magic.models import Thread
+from world.magic.services.gain import (
+    outfit_trickle_tick,
+    residence_trickle_tick,
+    set_residence,
+    tag_room_resonance,
+)
 from world.magic.services.resonance import grant_resonance
 from world.projects.constants import ProjectKind, ProjectStatus
 from world.projects.services import scan_active_projects
@@ -153,10 +167,12 @@ class PledgeTestBase(TestCase):
             ItemFacetFactory(item_instance=item, facet=facet)
         return item
 
-    def _grant(self, being_resonance, amount: int):
-        return grant_resonance(
-            self.sheet, being_resonance.resonance, amount, source=GainSource.STAFF_GRANT
-        )
+    def _grant(self, being_resonance, amount: int, source: GainSource = GainSource.COMPROMISE):
+        """A deed by default: a compromising act is an action, so it is a deed.
+
+        STAFF_GRANT is passive (see ``PASSIVE_DEED_SOURCES``) and is tested on its own.
+        """
+        return grant_resonance(self.sheet, being_resonance.resonance, amount, source=source)
 
     def _reach_target(self, details: PledgeDetails, progress: int = 20) -> None:
         details.project.current_progress = progress
@@ -303,6 +319,80 @@ class DeedTests(PledgeTestBase):
         self.assertEqual(
             list(PledgeCredit.objects.values_list("source", flat=True)), [PledgeCreditSource.RITE]
         )
+
+    # Favor comes only from a character's actions (owner ruling 2026-10-16). Each passive
+    # grant source below still grants resonance, but earns no pledge favor.
+
+    def test_a_residence_trickle_during_an_open_pledge_credits_no_favor(self) -> None:
+        take_pledge(self.sheet, self.pledge)
+        CharacterResonanceFactory(character_sheet=self.sheet, resonance=self.favored.resonance)
+        tag_room_resonance(self.profile, self.favored.resonance)
+        set_residence(self.sheet, self.profile)
+        credits_before = PledgeCredit.objects.count()
+        favor_before = self._favor()
+
+        summary = residence_trickle_tick()
+
+        self.assertEqual(summary.residence_grants_issued, 1)
+        self.assertEqual(PledgeCredit.objects.count(), credits_before)
+        self.assertEqual(self._favor(), favor_before)
+
+    def test_an_outfit_trickle_during_an_open_pledge_credits_no_favor(self) -> None:
+        take_pledge(self.sheet, self.pledge)
+        facet = FacetFactory()
+        item = ItemInstanceFactory(quality_tier=QualityTierFactory(stat_multiplier=2))
+        ItemFacetFactory(
+            item_instance=item,
+            facet=facet,
+            attachment_quality_tier=QualityTierFactory(stat_multiplier=3),
+        )
+        EquippedItemFactory(character=self.sheet, item_instance=item)
+        self.sheet.character.equipped_items.invalidate()
+        Thread.objects.create(
+            owner=self.sheet,
+            resonance=self.favored.resonance,
+            target_kind=TargetKind.FACET,
+            target_facet=facet,
+            level=2,
+            developed_points=0,
+        )
+        credits_before = PledgeCredit.objects.count()
+        favor_before = self._favor()
+
+        grants_issued = outfit_trickle_tick()
+
+        self.assertEqual(grants_issued, 1)
+        self.assertEqual(PledgeCredit.objects.count(), credits_before)
+        self.assertEqual(self._favor(), favor_before)
+
+    def test_a_distinction_grant_during_an_open_pledge_credits_no_favor(self) -> None:
+        take_pledge(self.sheet, self.pledge)
+        distinction = CharacterDistinctionFactory(
+            character=self.sheet, distinction=DistinctionFactory()
+        )
+        credits_before = PledgeCredit.objects.count()
+        favor_before = self._favor()
+
+        grant_resonance(
+            self.sheet,
+            self.favored.resonance,
+            3,
+            source=GainSource.DISTINCTION,
+            source_character_distinction=distinction,
+        )
+
+        self.assertEqual(PledgeCredit.objects.count(), credits_before)
+        self.assertEqual(self._favor(), favor_before)
+
+    def test_a_staff_grant_during_an_open_pledge_credits_no_favor(self) -> None:
+        take_pledge(self.sheet, self.pledge)
+        credits_before = PledgeCredit.objects.count()
+        favor_before = self._favor()
+
+        self._grant(self.favored, 3, source=GainSource.STAFF_GRANT)
+
+        self.assertEqual(PledgeCredit.objects.count(), credits_before)
+        self.assertEqual(self._favor(), favor_before)
 
 
 class SacrificeTests(PledgeTestBase):

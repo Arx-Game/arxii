@@ -15,8 +15,7 @@ from world.combat.clash import commit_to_clash, outcome_to_delta
 from world.combat.constants import RiskLevel
 from world.combat.factories import ClashConfigFactory, ClashFactory, StrainConfigFactory
 from world.combat.types import ClashContributionResult
-from world.conditions.factories import ConditionTemplateFactory
-from world.magic.audere import SOULFRAY_CONDITION_NAME
+from world.conditions.factories import SoulfrayTemplateFactory
 from world.magic.factories import CharacterAnimaFactory, SoulfrayConfigFactory, TechniqueFactory
 from world.mechanics.factories import CharacterEngagementFactory
 from world.traits.factories import CheckOutcomeFactory
@@ -280,7 +279,7 @@ class CommitToClashTests(TestCase):
         SoulfrayConfigFactory(
             soulfray_threshold_ratio=Decimal("0.10"), severity_scale=5, deficit_scale=5
         )
-        ConditionTemplateFactory(name=SOULFRAY_CONDITION_NAME)
+        SoulfrayTemplateFactory()
 
         lethal_clash = ClashFactory(encounter__risk_level=RiskLevel.LETHAL)
         # Give the character very little anima

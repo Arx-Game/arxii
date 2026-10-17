@@ -56,6 +56,21 @@ class SoulfrayConfig(SharedMemoryModel):
         ),
     )
 
+    condition = models.ForeignKey(
+        "arxii.ConditionTemplate",
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="+",
+        help_text=(
+            "The condition template that IS Soulfray. Every Soulfray rule (accrual, "
+            "the non-lethal cap, the safety checkpoint warning, the Soulfray Stage "
+            "Builder, Audere eligibility) finds Soulfray through this field, so "
+            "renaming the template changes nothing. Leave unset only before Soulfray "
+            "is authored; the Required content dashboard flags an unset value."
+        ),
+    )
+
     class Meta:
         verbose_name = "Soulfray Configuration"
         verbose_name_plural = "Soulfray Configurations"

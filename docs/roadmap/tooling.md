@@ -39,7 +39,12 @@ place. Tranche 3 (scenes) began 2026-10-16 with journeys for running a scene,
 speaking in the room, rolling at the table and reacting to a pose
 (`integration_tests/test_playing_a_scene_journeys.py`); they found `scene start
 <name>` dropping its name, a GM's `callcheck` never prompting a telnet target, and
-`whisper` and `mutter` answering their speaker with nothing, all fixed in place.
+`whisper` and `mutter` answering their speaker with nothing, all fixed in place. Its
+second step (2026-10-17) adds journeys for wearing another face, keeping someone out,
+turning down the noise, taking the floor and narrating in private
+(`integration_tests/test_faces_silences_and_the_floor_journeys.py`); they found `page`
+delivering to a player who had blocked the sender when the line came from a character
+with no session, and `pemit` answering its narrator with nothing, both fixed in place.
 
 ## Built (2026-09-30, #4064 — the reviewed delete, and admin pages for domains and fealty)
 

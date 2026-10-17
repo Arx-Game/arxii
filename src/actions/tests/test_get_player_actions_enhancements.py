@@ -15,6 +15,7 @@ from world.character_sheets.factories import CharacterSheetFactory
 from world.magic.factories import (
     CharacterAnimaFactory,
     CharacterTechniqueFactory,
+    SoulfrayConfigFactory,
     TechniqueFactory,
 )
 
@@ -115,6 +116,9 @@ class GetPlayerActionsQueryCountTests(TestCase):
             technique=cls.technique,
         )
         CharacterAnimaFactory(character=cls.character.sheet_data, current=8, maximum=8)
+        # One config row: the control bonus and the Soulfray condition lookup (#4122) both
+        # read it, and with a row present the second read is served from the identity map.
+        SoulfrayConfigFactory()
         # A second template with no enhancement to ensure unmatched paths don't
         # add per-template queries.
         _make_social_template("Persuade")
@@ -157,7 +161,8 @@ class GetPlayerActionsQueryCountTests(TestCase):
         # #4098: the out-of-combat control bonus is now an authored SoulfrayConfig
         # field read through cached_singleton(), one fixed-cost singleton SELECT.
         # With a row present the identity map serves later reads for free; this
-        # fixture has no row, so the read costs a query every call. +1 over 16.
+        # fixture now has a row, so the first read is the one query and the Soulfray
+        # condition lookup (#4122) reuses it. +1 over 16.
         self.assertLessEqual(
             len(ctx.captured_queries),
             17,

@@ -22,10 +22,11 @@ from world.conditions.factories import (
     ConditionInstanceFactory,
     ConditionStageFactory,
     ConditionTemplateFactory,
+    SoulfrayTemplateFactory,
 )
-from world.magic.audere import AUDERE_CONDITION_NAME, SOULFRAY_CONDITION_NAME
+from world.magic.audere import AUDERE_CONDITION_NAME
 from world.magic.audere_majora import AudereMajoraThreshold, PendingAudereMajoraOffer
-from world.magic.factories import IntensityTierFactory
+from world.magic.factories import IntensityTierFactory, ensure_soulfray_config
 from world.mechanics.constants import EngagementType
 from world.mechanics.engagement import CharacterEngagement
 from world.progression.models import CharacterPathHistory
@@ -90,9 +91,8 @@ def build_majora_world(  # noqa: PLR0913 — fixture knobs are keyword-only by d
 
     # Soulfray condition template + stages
     if soulfray_template is None:
-        soulfray_template = ConditionTemplateFactory(
-            name=SOULFRAY_CONDITION_NAME, has_progression=True
-        )
+        soulfray_template = SoulfrayTemplateFactory(has_progression=True)
+        ensure_soulfray_config()
     if soulfray_stage is None:
         ConditionStageFactory(
             condition=soulfray_template,

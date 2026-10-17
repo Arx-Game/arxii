@@ -26,7 +26,7 @@ if TYPE_CHECKING:
     from actions.models.consequence_pools import ConsequencePoolEntry
     from actions.types import WeightedConsequence
     from world.checks.types import CheckResult
-    from world.conditions.models import ConditionStage
+    from world.conditions.models import ConditionStage, ConditionTemplate
     from world.magic.models import CharacterAnima
     from world.mechanics.types import AppliedEffect
 
@@ -131,12 +131,11 @@ def calculate_soulfray_severity(
 def get_soulfray_warning(character: ObjectDB) -> SoulfrayWarning | None:
     """Return the current Soulfray stage warning for the safety checkpoint."""
     from world.conditions.models import ConditionInstance  # noqa: PLC0415
-    from world.magic.audere import SOULFRAY_CONDITION_NAME  # noqa: PLC0415
 
     soulfray_instance = (
         ConditionInstance.objects.filter(
             target=character,
-            condition__name=SOULFRAY_CONDITION_NAME,
+            condition_id=soulfray_condition_id(),
         )
         .select_related("current_stage", "current_stage__consequence_pool")
         .first()
@@ -161,24 +160,42 @@ def get_soulfray_warning(character: ObjectDB) -> SoulfrayWarning | None:
     )
 
 
+def soulfray_condition_id() -> int | None:
+    """Primary key of the condition template that IS Soulfray, or ``None`` when unset.
+
+    Read from ``SoulfrayConfig.condition`` (#4122), so renaming the template in admin
+    changes nothing. ``None`` means no config row exists or its condition is unset;
+    a filter on ``condition_id=None`` then matches no row, so every read below
+    degrades to "no Soulfray" until staff set the field (the Required content
+    dashboard flags it).
+    """
+    config = SoulfrayConfig.objects.cached_singleton()
+    return None if config is None else config.condition_id
+
+
+def get_soulfray_template() -> ConditionTemplate | None:
+    """The condition template that IS Soulfray, or ``None`` when the config leaves it unset."""
+    config = SoulfrayConfig.objects.cached_singleton()
+    return None if config is None else config.condition
+
+
 def soulfray_stages() -> QuerySet[ConditionStage]:
     """Every stage of the Soulfray template, in ladder order.
 
-    Exact name match, the same lookup every Soulfray consumer in this module uses.
+    The template is the one ``SoulfrayConfig.condition`` names; empty while it is
+    unset. Every Soulfray consumer reads the template through this module.
     """
     from world.conditions.models import ConditionStage  # noqa: PLC0415
-    from world.magic.audere import SOULFRAY_CONDITION_NAME  # noqa: PLC0415
 
-    return ConditionStage.objects.filter(condition__name=SOULFRAY_CONDITION_NAME).order_by(
+    return ConditionStage.objects.filter(condition_id=soulfray_condition_id()).order_by(
         "stage_order"
     )
 
 
 def is_soulfray_stage(stage: ConditionStage) -> bool:
     """Whether ``stage`` belongs to the Soulfray template."""
-    from world.magic.audere import SOULFRAY_CONDITION_NAME  # noqa: PLC0415
-
-    return stage.condition.name == SOULFRAY_CONDITION_NAME
+    condition_id = soulfray_condition_id()
+    return condition_id is not None and stage.condition_id == condition_id
 
 
 def soulfray_ladder_summary() -> list[SoulfrayStageSummary]:
@@ -264,13 +281,17 @@ def _handle_soulfray_accumulation(
         advance_condition_severity,
         apply_condition,
     )
-    from world.magic.audere import SOULFRAY_CONDITION_NAME  # noqa: PLC0415
 
-    # Find or create Soulfray condition
+    # Find or create Soulfray condition. The template is the one the config names,
+    # not one found by name (#4122).
+    soulfray_template = soulfray_config.condition
+    if soulfray_template is None:
+        msg = "SoulfrayConfig.condition is not set, so there is no Soulfray condition to apply."
+        raise ConditionTemplate.DoesNotExist(msg)
     soulfray_instance = (
         ConditionInstance.objects.filter(
             target=character,
-            condition__name=SOULFRAY_CONDITION_NAME,
+            condition=soulfray_template,
         )
         .select_related("current_stage")
         .first()
@@ -287,9 +308,6 @@ def _handle_soulfray_accumulation(
             return short_circuit
 
     if soulfray_instance is None:
-        soulfray_template = ConditionTemplate.objects.get(
-            name=SOULFRAY_CONDITION_NAME,
-        )
         result = apply_condition(target=character, condition=soulfray_template)
         soulfray_instance = result.instance
         # apply_condition creates with severity=1. Use advance_condition_severity

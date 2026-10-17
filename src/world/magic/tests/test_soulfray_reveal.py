@@ -13,8 +13,10 @@ from evennia_extensions.factories import CharacterFactory
 from world.character_sheets.factories import CharacterSheetFactory
 from world.checks.factories import CheckTypeFactory, ConsequenceFactory
 from world.checks.models import Consequence
-from world.conditions.factories import ConditionStageFactory, ConditionTemplateFactory
-from world.magic.audere import SOULFRAY_CONDITION_NAME
+from world.conditions.factories import (
+    ConditionStageFactory,
+    SoulfrayTemplateFactory,
+)
 from world.magic.factories import SoulfrayConfigFactory
 from world.magic.services.soulfray import (
     _fire_stage_consequence_pool,
@@ -40,7 +42,7 @@ class SoulfrayRevealTests(TestCase):
         cls.config = SoulfrayConfigFactory(
             resilience_check_type=CheckTypeFactory(name="Magical Endurance")
         )
-        cls.template = ConditionTemplateFactory(name=SOULFRAY_CONDITION_NAME, has_progression=True)
+        cls.template = SoulfrayTemplateFactory(has_progression=True)
 
     def _stage(self, *rows: Consequence):
         pool = ConsequencePoolFactory()

@@ -46,7 +46,7 @@ from world.conditions.factories import (
     DamageTypeFactory,
 )
 from world.contributors.factories import ContentContributorFactory
-from world.magic.factories import SoulfrayConfigFactory
+from world.magic.factories import ensure_soulfray_config
 from world.magic.services.soulfray import soulfray_ladder_summary
 
 
@@ -59,9 +59,9 @@ class SoulfrayPageTestCase(SoulfrayBuilderTestCase):
         cls.writer = ContentContributorFactory(name="Soulfray Writer")
         PlayerData.objects.create(account=cls.author, contributor=cls.writer)
         cls.unlinked = make_superuser("sfunlinked")
-        cls.config = SoulfrayConfigFactory(
-            resilience_check_type=CheckTypeFactory(name="Magical Endurance")
-        )
+        cls.config = ensure_soulfray_config()  # build_ladder made it
+        cls.config.resilience_check_type = CheckTypeFactory(name="Magical Endurance")
+        cls.config.save(update_fields=["resilience_check_type"])
         cls.common = shared_pool(cls.ladder, ("Partial Success", "Success"))
         cls.fraying = cls.ladder.stage("Fraying")
         cls.tearing = cls.ladder.stage("Tearing")
@@ -303,7 +303,6 @@ class BuilderGetQueryCountTest(SoulfrayBuilderTestCase):
         PlayerData.objects.create(
             account=cls.author, contributor=ContentContributorFactory(name="Count Writer")
         )
-        SoulfrayConfigFactory()
         cls.small = cls.ladder.stage("Ripping")
         cls.large = cls.ladder.stage("Sundering")
         stock(cls.small, cls.ladder, tiers=("Failure", "Success"))
@@ -379,22 +378,25 @@ class NoStagesIndexTest(TestCase):
         self.assertEqual(resp["Location"], reverse("admin_authoring"))
 
 
-class NoConfigGetTest(TestCase):
+class UnsetConditionTest(TestCase):
+    """Stages exist, but the config names no condition, so Soulfray is not configured."""
+
     @classmethod
     def setUpTestData(cls) -> None:
         cls.author = make_superuser("sfnoconfig")
-        PlayerData.objects.create(
-            account=cls.author, contributor=ContentContributorFactory(name="No Config Writer")
-        )
         cls.ladder = build_ladder()
+        config = ensure_soulfray_config()
+        config.condition = None
+        config.save(update_fields=["condition"])
 
-    def test_page_renders_and_says_the_config_is_missing(self) -> None:
+    def test_the_stages_are_not_found_while_the_condition_is_unset(self) -> None:
         self.client.force_login(self.author)
+        resp = self.client.get(reverse("admin_soulfray_builder_index"))
+        self.assertEqual(resp["Location"], reverse("admin_authoring"))
         resp = self.client.get(
             reverse("admin_soulfray_builder", args=[self.ladder.stage("Tearing").pk])
         )
-        self.assertEqual(resp.status_code, 200)
-        self.assertIn("No Soulfray config exists", resp.content.decode())
+        self.assertEqual(resp.status_code, 404)
 
 
 _VOID_TAGS = frozenset({"area", "br", "col", "hr", "img", "input", "link", "meta", "source", "wbr"})

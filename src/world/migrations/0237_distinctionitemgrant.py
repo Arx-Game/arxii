@@ -7,9 +7,7 @@ import core.natural_keys
 
 
 class Migration(migrations.Migration):
-    dependencies = [
-        ("arxii", "0234_ceremony_offering_ceremony_xor_being"),
-    ]
+    dependencies = [("arxii", "0236_soulfray_config_condition_backfill")]
 
     operations = [
         migrations.CreateModel(

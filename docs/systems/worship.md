@@ -508,7 +508,9 @@ pledge progress (Ruling 9).
 - `credit_pledge_deed(grant)` — called by `grant_resonance` after it writes the ledger row.
   With an open pledge whose being holds the grant's resonance as FAVORED or ASSOCIATED: base
   = amount x the percent, rounded down, at least 1, held to what is left of the week's cap.
-  WORSHIP_RITE grants are skipped (the rite pays favor itself).
+  WORSHIP_RITE grants are skipped (the rite pays favor itself). So are the passive sources in
+  `PASSIVE_DEED_SOURCES` (`worship/constants.py`): the residence and outfit trickles, distinction
+  grants and staff grants. Favor comes only from a character's actions (ruling 2026-10-16).
 - `close_pledge(sheet, *, scene)` — needs the target met and the span not over; runs
   `perform_worship_rite(..., pay_award=False)` (the roll and the performance row are kept,
   the rite's own award is not paid, `record_unpaid_performance`). A first Failure or
