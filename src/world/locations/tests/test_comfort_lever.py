@@ -109,14 +109,16 @@ class ComfortAtCreationTests(FinalizationTestMixin, TestCase):
         self.area.grants_residence_tenancy = True
         self.area.save(update_fields=["default_starting_room", "grants_residence_tenancy"])
 
-    def _modifier(self, sheet) -> int | None:
-        mod = CharacterModifier.objects.filter(character=sheet, target__name=DAILY).first()
+    def _modifier(self, sheet, target_name: str = DAILY) -> int | None:
+        mod = CharacterModifier.objects.filter(character=sheet, target__name=target_name).first()
         return mod.value if mod else None
 
     def test_a_plain_character_gets_the_homes_modifier_at_creation(self) -> None:
         character = finalize_character(self._create_base_draft(first_name="Plainborn"))
         assert character.home == self.home.objectdb
-        assert self._modifier(character.sheet_data) == 1
+        # The residence comfort delta lands on every AP-regen target (#1514).
+        for target_name in AP_REGEN_TARGET_NAMES:
+            assert self._modifier(character.sheet_data, target_name) == 1, target_name
 
     def test_a_sheltered_pick_is_read_with_the_home_at_creation(self) -> None:
         sheltered = DistinctionFactory(name="Sheltered", cost_per_rank=-5, max_rank=1)
