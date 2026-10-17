@@ -500,7 +500,9 @@ affiliation brings, and the predicate widget for each rule's test.
   `retest_cause_on_release(target)` runs after a hold's condition is removed, from
   `end_allegiance_with_pool` (break, settle, the lapse auto-roll) and from the lapse sweep's
   plain removal. For each ACTIVE opponent on that body with a cause, in an encounter not
-  COMPLETED: a group still live just has its causes tested (`evaluate_causes`). Otherwise
+  COMPLETED: a group already PROPOSED is left as it is (so when every member of a settled
+  group lapses on one sweep the first member's released reason stands); an OPEN group just has
+  its causes tested (`evaluate_causes`). Otherwise
   `release_reason` asks the cause with `released=True` (Territory holds while the party is
   there); terms a settled group accepted meet Orders, Hunger and Territory. No reason: the
   opponent goes FLED and the room reads "<name> leaves.". A reason, on a settled group in round
