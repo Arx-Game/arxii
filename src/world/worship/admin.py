@@ -595,6 +595,7 @@ class PledgeDetailsAdmin(admin.ModelAdmin):
 
 class AnswerSacrificeLineInline(admin.TabularInline):
     model = AnswerSacrificeLine
+    formset = OneRowPerFormSet
     extra = 0
     fields = ("facet", "text")
     readonly_fields = fields
