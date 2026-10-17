@@ -1,17 +1,16 @@
 """The comfort lever (#4394): a residence reads one level lower or higher for one character."""
 
 from django.test import TestCase
+from evennia.accounts.models import AccountDB
 
 from evennia_extensions.factories import RoomProfileFactory
 from world.areas.constants import AreaLevel
 from world.areas.factories import AreaFactory
-from world.character_creation.services import _create_distinction_modifiers_bulk
+from world.character_creation.services import finalize_character
+from world.character_creation.tests.finalization_fixtures import FinalizationTestMixin
 from world.character_sheets.factories import CharacterSheetFactory
-from world.distinctions.factories import (
-    CharacterDistinctionFactory,
-    DistinctionEffectFactory,
-    DistinctionFactory,
-)
+from world.character_sheets.models import Gender
+from world.distinctions.factories import DistinctionEffectFactory, DistinctionFactory
 from world.distinctions.services import grant_distinction
 from world.distinctions.types import DistinctionOrigin
 from world.locations.comfort_effect import comfort_level_for_character
@@ -87,16 +86,59 @@ class ComfortLeverRefreshTests(ComfortLeverTests):
         grant_distinction(sheet, sheltered, origin=DistinctionOrigin.GM_AWARD)
         assert self._daily_modifier_value(sheet) is None
 
-    def test_a_distinction_picked_at_creation_refreshes_the_home(self) -> None:
-        sheet = CharacterSheetFactory()
-        room = self._room(amenity=200)
-        set_residence(character=sheet.character, room=room.objectdb)  # before the picks
-        hardy = DistinctionFactory(name="Hardy")
-        DistinctionEffectFactory(
-            distinction=hardy,
-            target=lever_target(COMFORT_CATEGORY_NAME, COMFORT_TARGET_NAME),
-            value_per_rank=2,
+
+class ComfortAtCreationTests(FinalizationTestMixin, TestCase):
+    """A new character's residence comfort modifier is computed at finalize, lever included.
+
+    Before #4394 it was never computed at creation at all: finalize assigns the home
+    directly, so the tenancy grant's residence default saw a chosen residence and skipped
+    the recompute. Runs on the parity tier (locations reads a Postgres materialized view).
+    """
+
+    def setUp(self):
+        self._flush_common_caches()
+        self.account = AccountDB.objects.create(username="comfort_born")
+        self._setup_finalization_base(self, prefix="Cozy", height_min=700, height_max=800)
+        Gender.objects.get_or_create(key="female", defaults={"display_name": "Female"})
+        ward = AreaFactory(level=AreaLevel.WARD)
+        self.home = RoomProfileFactory(area=ward)
+        LocationValueModifier.objects.create(
+            parent_type=LocationParentType.AREA, area=ward, stat_key=StatKey.AMENITY, value=200
         )
-        char_dist = CharacterDistinctionFactory(character=sheet, distinction=hardy)
-        _create_distinction_modifiers_bulk(sheet, [char_dist])
-        assert self._daily_modifier_value(sheet) == 3
+        self.area.default_starting_room = self.home
+        self.area.grants_residence_tenancy = True
+        self.area.save(update_fields=["default_starting_room", "grants_residence_tenancy"])
+
+    def _modifier(self, sheet, target_name: str = DAILY) -> int | None:
+        mod = CharacterModifier.objects.filter(character=sheet, target__name=target_name).first()
+        return mod.value if mod else None
+
+    def test_a_plain_character_gets_the_homes_modifier_at_creation(self) -> None:
+        character = finalize_character(self._create_base_draft(first_name="Plainborn"))
+        assert character.home == self.home.objectdb
+        # The residence comfort delta lands on every AP-regen target (#1514).
+        for target_name in AP_REGEN_TARGET_NAMES:
+            assert self._modifier(character.sheet_data, target_name) == 1, target_name
+
+    def test_a_sheltered_pick_is_read_with_the_home_at_creation(self) -> None:
+        sheltered = DistinctionFactory(name="Sheltered", cost_per_rank=-5, max_rank=1)
+        DistinctionEffectFactory(
+            distinction=sheltered,
+            target=lever_target(COMFORT_CATEGORY_NAME, COMFORT_TARGET_NAME),
+            value_per_rank=-1,
+        )
+        draft = self._create_base_draft(first_name="Shelteredborn")
+        draft.draft_data["distinctions"] = [
+            {
+                "distinction_id": sheltered.id,
+                "distinction_name": sheltered.name,
+                "distinction_slug": sheltered.slug,
+                "category_slug": sheltered.category.slug,
+                "rank": 1,
+                "cost": -5,
+                "notes": "",
+            }
+        ]
+        draft.save(update_fields=["draft_data"])
+        character = finalize_character(draft)
+        assert self._modifier(character.sheet_data) is None  # level 6 read as 5
