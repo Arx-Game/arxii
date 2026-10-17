@@ -6551,6 +6551,9 @@ Field+Granary/crop) are split to `needs-design` follow-up issues.
 ### Mechanics
 Unified modifier system — categories, types, sources, and per-character modifier values.
 
+- **Levers (#4394):** five `ModifierCategory` rows (`income`, `reputation_gain`,
+  `relationship_gain`, `comfort`, `fatigue_cost`) read at one seam each through
+  `world/mechanics/levers.py`; see `mechanics.md` "Levers".
 - **Models:** `ModifierCategory`, `ModifierTarget`, `ModifierSource`, `CharacterModifier`, `ConsequenceEffect`, `ObjectProperty`, `ChallengeTemplateProperty`, `PropertyDamageModifier` (#1793), `PropertyDetonation` (#2210), `SituationTemplate`, `SituationChallengeLink`, `SituationTrapLink` (#1625), `SituationInstance`
 - **Key Functions:**
   - `instantiate_situation(template, location) -> SituationInstance` (#1625) — mints

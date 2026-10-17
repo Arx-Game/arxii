@@ -151,6 +151,7 @@ def grant_distinction(  # noqa: PLR0913 - the feature pair mirrors the held row'
     the create/rank-up branching.
     """
     from world.distinctions.models import CharacterDistinction  # noqa: PLC0415
+    from world.locations.comfort_effect import refresh_comfort_lever  # noqa: PLC0415
     from world.mechanics.services import (  # noqa: PLC0415
         create_distinction_modifiers,
         update_distinction_rank,
@@ -180,6 +181,7 @@ def grant_distinction(  # noqa: PLR0913 - the feature pair mirrors the held row'
                 feature_marking=feature_marking,
             )
             create_distinction_modifiers(char_distinction)
+            refresh_comfort_lever(char_distinction)
             is_new = True
         else:
             new_rank = min(existing.rank + 1, distinction.max_rank) if rank is None else rank
@@ -190,6 +192,7 @@ def grant_distinction(  # noqa: PLR0913 - the feature pair mirrors the held row'
             existing.rank = new_rank
             existing.save(update_fields=["rank", "updated_at"])
             update_distinction_rank(existing)
+            refresh_comfort_lever(existing)
             char_distinction = existing
             is_new = False
 
@@ -285,6 +288,7 @@ def remove_distinction(
         SheetUpdateRequestStatus,
         SheetUpdateRequestType,
     )
+    from world.locations.comfort_effect import refresh_comfort_lever  # noqa: PLC0415
     from world.mechanics.services import delete_distinction_modifiers  # noqa: PLC0415
     from world.narrative.constants import NarrativeCategory  # noqa: PLC0415
     from world.narrative.services import send_narrative_message  # noqa: PLC0415
@@ -301,6 +305,9 @@ def remove_distinction(
 
     with transaction.atomic():
         delete_distinction_modifiers(character_distinction)
+        # #4394: the modifiers are gone, so the home's comfort modifier is re-read now,
+        # while the distinction row still says which effects it carried.
+        refresh_comfort_lever(character_distinction)
         clear_distinction_secret(character_distinction)
 
         distinction_name = character_distinction.distinction.name

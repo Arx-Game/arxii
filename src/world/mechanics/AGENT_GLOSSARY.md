@@ -97,6 +97,12 @@ totalled via `mechanics.services.get_modifier_total(sheet, target)`. Canonical r
   check-contribution seam carries character + equipment + fashion menace into the
   roll); seeded in ``world/seeds/social_checks.ensure_menace_target``. Clothing/
   cosmetics/distinctions grant it exactly like allure.
+- **the five levers** (#4394): `income`, `reputation_gain` (+ `_society`, `_organization`),
+  `relationship_gain`, `comfort`, `fatigue_cost`, each its own category with a target of the
+  same name, read at one seam each through `world/mechanics/levers.py` (allowance and asset
+  payout, regard writes, affection shifts, the residence comfort read, the fatigue charge).
+  Percent levers are percentage points on a gain or a charge; comfort is whole levels.
+  _Avoid_: a second reader for any of them, or scaling a loss (a sting, conflict).
 Bare/unknown `ModifierSource` rows contribute NOTHING to totals (#909) — grants must
 ride a recognized source (distinction effect, achievement reward, comfort, equipment).
 _Avoid_: inventing an "Allure" Trait/skill row; it is a modifier target.
