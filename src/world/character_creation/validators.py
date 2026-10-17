@@ -172,7 +172,9 @@ def get_lineage_errors(draft: CharacterDraft) -> list[str]:
 
     template = draft.selected_origin_template
     if template is None:
-        errors.append("Choose your upbringing")
+        # The route is the beginning's own, assigned with it (#4395); none authored yet
+        # is a staff gap the player cannot close.
+        errors.append("The family paths for this beginning are not set up yet")
         return errors
     wrong_beginning = (
         draft.selected_beginnings_id is not None

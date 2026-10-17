@@ -11,6 +11,9 @@ from rest_framework import serializers
 from world.character_creation.constants import (
     AGE_MAX_ETERNAL_YOUTH,
     BEAT_LINE_MAX_LENGTH,
+    KIN_ROW_NAME_MAX_LENGTH,
+    KIN_ROWS_KEY,
+    KIN_ROWS_MAX,
     PERSONALIZATION_COPY_KEYS,
     STAT_MAX_VALUE,
     STAT_MIN_VALUE,
@@ -43,6 +46,7 @@ from world.character_creation.models import (
 )
 from world.character_creation.services import (
     age_bounds,
+    assign_route,
     clear_family_selection,
     get_accessible_starting_areas,
     select_origin_template,
@@ -171,6 +175,11 @@ class BeginningsSerializer(serializers.ModelSerializer):
             "id",
             "name",
             "description",
+            "frame",
+            "station",
+            "strikes_childhood",
+            "strikes_youth",
+            "strikes_adulthood",
             "art_image",
             "allowed_species_ids",
             "grants_species_languages",
@@ -1026,15 +1035,23 @@ class CGOriginTemplateSerializer(serializers.ModelSerializer):
         resolve_groups`` stays the draft-time resolver (SAME_AS / SERVED_HOUSE /
         OWN_FAMILY, and other single-slot callers) and is not used here.
         """
-        slots = obj.questions
+        from world.character_creation.questionnaire import is_general_write_in  # noqa: PLC0415
+
         choices_by_slot: dict[int, list[OriginTemplateSlotChoice]] = defaultdict(list)
-        slot_ids = [slot.id for slot in slots]
+        slot_ids = [slot.id for slot in obj.questions]
         if slot_ids:
             choice_rows = OriginTemplateSlotChoice.objects.filter(
                 slot_id__in=slot_ids, is_active=True
             ).order_by("sort_order")
             for choice in choice_rows:
                 choices_by_slot[choice.slot_id].append(choice)
+        # A general write-in never renders (#4395): it leaves the payload too.
+        slots = [
+            slot
+            for slot in obj.questions
+            if not is_general_write_in(slot, has_choices=bool(choices_by_slot.get(slot.id)))
+        ]
+        slot_ids = [slot.id for slot in slots]
 
         branch_ids_by_slot: dict[int, list[int]] = defaultdict(list)
         if slot_ids:
@@ -1658,6 +1675,14 @@ class CharacterDraftSerializer(serializers.ModelSerializer):
         ``set_family_path`` (which raises when the Upbringing does not allow
         that path) unless it is being cleared to the empty string.
         """
+        # The beginning carries its family route (#4395): a changed beginning takes the
+        # new one's route (or none) and drops what hung on the old; an explicit
+        # ``selected_origin_template_id`` in the same PATCH still wins below.
+        beginning = validated_data.get("selected_beginnings", _UNSET)
+        if beginning is not _UNSET and beginning != instance.selected_beginnings:
+            instance.selected_beginnings = beginning
+            assign_route(instance)
+
         template = validated_data.pop("selected_origin_template", _UNSET)
         if template is _UNSET:
             pass
@@ -1719,6 +1744,7 @@ class CharacterDraftSerializer(serializers.ModelSerializer):
         self._validate_tarot_card_name(value)
         self._validate_origin_choices(value)
         self._validate_beats(value)
+        self._validate_kin_rows(value)
         self._validate_origin_anchors(value)
         self._validate_origin_figures(value)
         self._validate_new_family_name(value)
@@ -1930,6 +1956,51 @@ class CharacterDraftSerializer(serializers.ModelSerializer):
             if not isinstance(line, str) or len(line) > BEAT_LINE_MAX_LENGTH:
                 msg = f"a beat's line is text of at most {BEAT_LINE_MAX_LENGTH} characters"
                 raise serializers.ValidationError({"beats": msg})
+
+    def _validate_kin_rows(self, data: dict) -> None:
+        """``kin_rows`` is the list of people seated beside the parents (#4395).
+
+        Each row is ``{kind, name, gender_id, fate}``: a twin (one at most, no fate), a
+        spouse (alive, dead, divorced, fled) or a child (raised, fostered away, lost).
+        The whole list is replaced on each PATCH.
+        """
+        from world.character_creation.constants import (  # noqa: PLC0415
+            ChildFate,
+            KinRowKind,
+            SpouseFate,
+        )
+
+        rows = data.get(KIN_ROWS_KEY)
+        if rows is None:
+            return
+        if not isinstance(rows, list) or len(rows) > KIN_ROWS_MAX:
+            msg = f"{KIN_ROWS_KEY} is a list of at most {KIN_ROWS_MAX} people"
+            raise serializers.ValidationError({KIN_ROWS_KEY: msg})
+        fates = {
+            KinRowKind.TWIN: {""},
+            KinRowKind.SPOUSE: set(SpouseFate.values),
+            KinRowKind.CHILD: set(ChildFate.values),
+        }
+        twins = 0
+        for row in rows:
+            if not isinstance(row, dict) or row.get("kind") not in fates:
+                msg = "each person is a twin, a spouse or a child"
+                raise serializers.ValidationError({KIN_ROWS_KEY: msg})
+            name = row.get("name", "")
+            if not isinstance(name, str) or len(name) > KIN_ROW_NAME_MAX_LENGTH:
+                msg = f"a name is text of at most {KIN_ROW_NAME_MAX_LENGTH} characters"
+                raise serializers.ValidationError({KIN_ROWS_KEY: msg})
+            gender_id = row.get("gender_id")
+            if gender_id is not None and not isinstance(gender_id, int):
+                msg = "gender_id is a gender id or null"
+                raise serializers.ValidationError({KIN_ROWS_KEY: msg})
+            if row.get("fate", "") not in fates[row["kind"]]:
+                msg = f"{row['kind']}: that is not one of its fates"
+                raise serializers.ValidationError({KIN_ROWS_KEY: msg})
+            twins += row["kind"] == KinRowKind.TWIN
+        if twins > 1:
+            msg = "one twin at most"
+            raise serializers.ValidationError({KIN_ROWS_KEY: msg})
 
     def _validate_origin_anchors(self, data: dict) -> None:
         """``origin_anchors`` maps a str slot id to an organization id, or null (#3660)."""

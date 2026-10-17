@@ -253,6 +253,42 @@ class ConnectionKind(models.TextChoices):
     HUNTED_BY = "hunted_by", "Hunted by"
 
 
+class KinRowKind(models.TextChoices):
+    """A person the player seats in the Lineage step beside the parents (#4395).
+
+    The rows live at ``draft_data["kin_rows"]`` until finalize writes them into the
+    kinship graph (``services._bind_kin_rows``): a twin shares the character's parents,
+    a spouse is a marriage union, a child a parentage edge from the character.
+    """
+
+    TWIN = "twin", "A twin"
+    SPOUSE = "spouse", "A spouse"
+    CHILD = "child", "A child"
+
+
+class SpouseFate(models.TextChoices):
+    """What became of a spouse seated at creation (#4395)."""
+
+    ALIVE = "alive", "Alive"
+    DEAD = "dead", "Dead"
+    DIVORCED = "divorced", "Divorced"
+    FLED = "fled", "Fled"
+
+
+class ChildFate(models.TextChoices):
+    """What became of a child seated at creation (#4395)."""
+
+    RAISED = "raised", "Raised"
+    FOSTERED_AWAY = "fostered_away", "Fostered away"
+    LOST = "lost", "Lost"
+
+
+#: ``draft_data`` key for the seated kin rows (#4395), and the most a draft may seat.
+KIN_ROWS_KEY = "kin_rows"
+KIN_ROWS_MAX = 8
+KIN_ROW_NAME_MAX_LENGTH = 100
+
+
 class LifeStage(models.TextChoices):
     """When the tie was formed, and which stage of a life a beat belongs to (#3660, #4124).
 

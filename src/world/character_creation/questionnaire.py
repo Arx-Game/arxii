@@ -180,6 +180,21 @@ def is_answered(
     return has_anchor and valid_pick
 
 
+def is_general_write_in(slot: OriginTemplateSlot, *, has_choices: bool) -> bool:
+    """A free-text question asked on every family path (#4395): retired from creation.
+
+    ``applies_to`` ANY, a write-in (``allows_text``) with nothing to pick: the shape of
+    every one of production's general prompts. A pick-list on every path, or any
+    path-scoped prompt, is not one.
+    """
+    return (
+        slot.applies_to == FamilyPath.ANY
+        and slot.kind == QuestionKind.TEXT
+        and slot.allows_text
+        and not has_choices
+    )
+
+
 def is_shown(  # noqa: PLR0913 - each arg is a distinct piece of evaluation state
     slot: OriginTemplateSlot,
     path: str,
@@ -190,7 +205,14 @@ def is_shown(  # noqa: PLR0913 - each arg is a distinct piece of evaluation stat
     branch_choice_ids: dict[int, set[int]],
     slots_by_id: dict[int, OriginTemplateSlot],
 ) -> bool:
-    """Path scope AND (no follow-up, or its target is shown and answered, and branch matches)."""
+    """Path scope AND (no follow-up, or its target is shown and answered, and branch matches).
+
+    A general write-in never shows (#4395): the life is picked from the grids, and a
+    free-text question on every path was the lore question creation no longer asks.
+    Path-scoped prompts and pick-lists (a choice to pick, on any path) stay.
+    """
+    if is_general_write_in(slot, has_choices=bool(choice_ids_by_slot.get(slot.id))):
+        return False
     if slot.applies_to not in (FamilyPath.ANY, path):
         return False
     if slot.follow_up_to_id is None:
