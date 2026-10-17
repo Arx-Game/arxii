@@ -536,6 +536,17 @@ outcome** (a closed issue or a "SHIPPED" line is not proof). See the ledger's go
   language; a verbal approach or terms against a group that shares no language with the actor
   is listed with the reason and refused, and Read stays open. Slices 4 and 5 remain (Hunger,
   Hatred, Territory and the broken hold; player-character profiles).
+- **Standoffs slice 4: Hunger, Hatred, Territory and the broken hold** - SHIPPED (#4415,
+  ADR-4415-A): every party action in a standoff moves each group's clock. A Hunger crowd's
+  margin widens with every action nobody feeds them; a Territory group warns the room one
+  action before its patience runs out, then fires; a Hatred group fires only on a character
+  matching a faction rule that provokes it, whatever the force, until its morale breaks.
+  Faction rules now carry a cause effect (none, suppress or provoke; the old suppress switch
+  carried across). When a Calm or Charmed hold on an NPC ends while its encounter runs, its
+  cause is asked again: a paid-off or fed group, or one the party outweighs, leaves; one whose
+  reason still holds goes back into the standoff and fires (a GM proposal in a GM-run scene),
+  or fights on once the fight has begun. The GM sees each clock; the config page previews the
+  numbers. Slice 5 remains (player-character profiles).
 - **Spectacle breaks morale** - SHIPPED (#4147, ADR-4147, 2026-10-05): an earned display
   shakes the enemies who witness it. Audere entry, an ultimate, a Crossing, a critical
   technique (intensity and success level thresholds) and a devastating action (one action
