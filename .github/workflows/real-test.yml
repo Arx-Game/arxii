@@ -170,8 +170,12 @@ jobs:
         run: |
           uv run arx manage collectstatic --noinput
           uv run arx start
+          # A route Django actually serves (AllowAny, JSON): /api/status/ resolves
+          # nowhere, so the old probe only ever passed when the first curl hit the
+          # Portal's placeholder page before the Server answered (#4397 found a
+          # run where the Server was already up and the probe 404ed sixty times).
           for i in $(seq 1 60); do
-            if curl -fsS -o /dev/null http://localhost:4001/api/status/; then
+            if curl -fsS -o /dev/null http://localhost:4001/api/registration/status/; then
               echo "server ready after ${i} tries"
               exit 0
             fi
