@@ -210,6 +210,7 @@ class WorshipStats:
     favored_facets: str
     rites: int
     held_answers: int
+    steward: str
 
 
 def worship_stats(being: WorshippedBeing) -> WorshipStats:
@@ -220,7 +221,16 @@ def worship_stats(being: WorshippedBeing) -> WorshipStats:
         favored_facets=", ".join(sorted(being.being_facets.values_list("facet__name", flat=True))),
         rites=being.rites.count(),
         held_answers=PendingAnswer.objects.filter(answer__being=being).count(),
+        steward=steward_label(being),
     )
+
+
+def steward_label(being: WorshippedBeing) -> str:
+    """The table that stewards the being (#4333 slice 4), or "None (staff-owned)"."""
+    from world.worship.steward_services import steward_of  # noqa: PLC0415
+
+    steward = steward_of(being)
+    return steward.table.name if steward is not None else "None (staff-owned)"
 
 
 def times_used(answer: Answer) -> int:
