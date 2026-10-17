@@ -18,6 +18,8 @@ _USAGE = (
     "  encounter resolve                       - resolve the current round\n"
     "  encounter add <name> <tier> [pool [position]]\n"
     "                                           - add an NPC opponent\n"
+    "  encounter addnamed <tier> <pool> <named NPC>\n"
+    "                                           - stand a named NPC your story uses (#4373)\n"
     "  encounter spawn <template name> [at <position>]\n"
     "                                           - spawn an authored bestiary creature (#3424)\n"
     "  encounter default <tier>                - preview opponent defaults\n"
@@ -39,6 +41,8 @@ _USAGE = (
 
 _CREATE_USAGE = "Usage: encounter create [pace]  (pace: timed/ready/manual; default timed)"
 _ADD_USAGE = "Usage: encounter add <name> <tier> [pool [position]]"
+_ADDNAMED_USAGE = "Usage: encounter addnamed <tier> <pool> <named NPC>"
+_ADDNAMED_TOKENS = 3
 _SPAWN_USAGE = "Usage: encounter spawn <template name> [at <position>]"
 _SPAWN_AT_SEPARATOR = " at "
 _DEFAULT_USAGE = "Usage: encounter default <tier>"
@@ -64,6 +68,7 @@ _SUBVERB_HANDLERS: dict[str, str] = {
     "begin": "_handle_begin",
     "resolve": "_handle_resolve",
     "add": "_handle_add",
+    "addnamed": "_handle_addnamed",
     "spawn": "_handle_spawn",
     "default": "_handle_default",
     "addpc": "_handle_addpc",
@@ -147,6 +152,30 @@ class CmdEncounter(ArxNamespaceCommand):
             kwargs["position_id"] = position.pk
 
         self._run_action(AddOpponentAction, **kwargs)
+
+    def _handle_addnamed(self, rest: str) -> None:
+        """Parse ``addnamed <tier> <pool> <named NPC>`` and dispatch AddOpponentAction.
+
+        The named NPC's name may contain spaces, so it comes last. The typed name is looked
+        up exactly (case aside); the action decides whether this story may stand them.
+        """
+        from actions.definitions.gm_combat import AddOpponentAction  # noqa: PLC0415
+        from world.scenes.models import Persona  # noqa: PLC0415
+
+        tokens = rest.split(maxsplit=_ADDNAMED_TOKENS - 1)
+        if len(tokens) < _ADDNAMED_TOKENS:
+            raise CommandError(_ADDNAMED_USAGE)
+        tier, pool, name = tokens
+        personas = list(Persona.objects.filter(name__iexact=name.strip())[:2])
+        if not personas:
+            msg = f"No named NPC called '{name}'."
+            raise CommandError(msg)
+        if len(personas) > 1:
+            msg = f"More than one persona is called '{name}'; ask staff to add them on the web."
+            raise CommandError(msg)
+        self._run_action(
+            AddOpponentAction, tier=tier, threat_pool_id=pool, persona_id=personas[0].pk
+        )
 
     def _handle_spawn(self, rest: str) -> None:
         """Parse ``spawn <template name> [at <position>]`` and dispatch SpawnCreatureAction (#3424).

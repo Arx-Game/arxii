@@ -80,6 +80,14 @@ artist changes persona with an *identical* body; a curse changes the body and
   *presented* face's profile cover-aware (slices 1–3), so a guise authored anywhere shows
   correctly. (Telnet `@sheet` is self/staff-only, so a non-privileged viewer never sees
   another's cover there; the `<cover> (<real>)` reveal is a web-profile concern.)
+- **Officially dead (#4396).** A character may start as someone the world believes dead:
+  the Final Touches door writes `draft_data.officially_dead` (`face_name` plus the guise
+  texts), and finalize (`character_creation.services._write_officially_dead`) mints an
+  ESTABLISHED face through `create_persona`, gives it the guise through
+  `set_persona_profile`, wears it (`set_active_persona`) and sets `believed_deceased` on the
+  PRIMARY and on the kin node the kinship bind made (`record_public_belief`). The face is a
+  named alt: its link to the true face is discovered, never seen through.
+  `PersonaSerializer` reads `believed_deceased` back.
 - **Named/public personas** (PRIMARY, ESTABLISHED) render **by name to everyone** —
   the accessibility guarantee.
 - **Anonymous personas** (`is_fake_name`, typically TEMPORARY — the mask) render as a
@@ -391,6 +399,18 @@ deliberately takes `max()` across its easing sources ("two exploitable condition
 never stack"). Additive stacking here means "I personally know the famous person under
 the mask" eases *more* than either fact alone — plausible, but unreviewed; revisit
 alongside the module's other PLACEHOLDER magnitudes.
+
+**Sight through one kind of mask (#4396).** A `disguise_sight` lever target per
+`DisguiseKind` value (`mundane`, `magical`; `world/mechanics/constants.py`, content rows
+like the other levers). A viewer whose characters carry a positive total on a kind's target
+(a distinction effect, a condition, anything that writes a modifier) reads a disguise of
+that kind as `<mask> (<real>)` with no check and no `PersonaDiscovery` row:
+`forms.services.identification.pierced_disguise_kinds` is read by the one reveal rule
+(`scenes.persona_display`, so `look`, the feed and the sheet agree), once per page and only
+when an undiscovered mask is left on it. The disguise's kind is the worn overlay's
+`overlay_kind`, or MUNDANE for a bare false name (`presented_disguise_kind`), the same
+reading the difficulty table gives a name-only mask. A named alt is not a disguise and no
+sight pierces it. The contest above is untouched; sight is a door beside it.
 
 **Guess semantics.** `identify <target>[=<guess>]` accepts an optional named guess
 (Decision 3). A guess that case-insensitively names the target's TRUE persona eases

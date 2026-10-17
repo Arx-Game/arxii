@@ -67,7 +67,7 @@ def _moved_morale(member: CombatOpponent, direction: str) -> int | None:
 
 
 def _room_line(group: StandoffGroup, direction: str, members: list[CombatOpponent]) -> str:
-    name = group.creature_template.name
+    name = group.name
     if direction == MoraleDirection.STEADY:
         return f"{name} steadies."
     states = {morale_state_for(member) for member in members}

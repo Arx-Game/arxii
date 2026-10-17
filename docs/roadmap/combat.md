@@ -527,6 +527,15 @@ outcome** (a closed issue or a "SHIPPED" line is not proof). See the ledger's go
   covert). The Faction Rules page lets staff test a character and see why each rule matched.
   Slices 3 to 5 remain (named NPCs and language; Hunger, Hatred, Territory and the broken
   hold; player-character profiles).
+- **Standoffs slice 3: named NPCs and the language gate** - SHIPPED (#4373, ADR-4373-A): a
+  named NPC (a persona the story already uses) can stand as an opponent from a beat line, the
+  GM's Add Opponent or telnet `encounter addnamed`, and is its own standoff group: read,
+  pressed and settled by name, with drives from its persona's properties and its NPC regard
+  for the acting character easing or hardening presses and terms (the player sees the
+  direction, the GM the value). Approaches can be marked verbal and creature templates given a
+  language; a verbal approach or terms against a group that shares no language with the actor
+  is listed with the reason and refused, and Read stays open. Slices 4 and 5 remain (Hunger,
+  Hatred, Territory and the broken hold; player-character profiles).
 - **Spectacle breaks morale** - SHIPPED (#4147, ADR-4147, 2026-10-05): an earned display
   shakes the enemies who witness it. Audere entry, an ultimate, a Crossing, a critical
   technique (intensity and success level thresholds) and a devastating action (one action

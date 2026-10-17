@@ -17,7 +17,7 @@ GROUP_TOKEN = "<group>"  # noqa: S105 - template interpolation token, not a secr
 
 def best_reaction_line(
     parent: StandoffApproach | StandoffTerms,
-    creature_template_id: int,
+    creature_template_id: int | None,
     success_level: int,
 ) -> StandoffReactionLine | None:
     """The line that fits this roll, or None when staff authored none that applies."""
@@ -37,7 +37,7 @@ def best_reaction_line(
 def reaction_text(
     parent: StandoffApproach | StandoffTerms,
     *,
-    creature_template_id: int,
+    creature_template_id: int | None,
     group_name: str,
     actor_name: str,
     success_level: int,

@@ -50,7 +50,8 @@ function causeLabel(value: string): string {
 export function placementSummary(
   context: PlacementContext,
   draft: PlacementDraft,
-  count: string
+  count: string,
+  personaName = ''
 ): string {
   const edits = new Map((draft.drive_edits ?? []).map((e) => [e.property, e]));
   const drives: string[] = [];
@@ -67,10 +68,16 @@ export function placementSummary(
   const off = new Set(draft.suppressed_faction_rules ?? []);
   const rules = context.inherited_rules.filter((r) => !off.has(r.faction_rule_id)).length;
   const cause = causeLabel(draft.cause_override || context.cause);
+  const speaks = context.language_name ? `speaks ${context.language_name}` : 'no language';
+  if (personaName) {
+    // A named NPC's drives and languages are their persona's own (#4373).
+    return `Stands ${personaName} (${context.name}): ${cause}, drives from their persona, ${rules} faction rule${rules === 1 ? '' : 's'}.`;
+  }
   const parts = [
     `Spawns ${count || '1'} ${context.name}: ${cause}`,
     drives.length ? drives.join(', ') : 'no drives',
     `${rules} faction rule${rules === 1 ? '' : 's'}`,
+    speaks,
   ];
   return `${parts.join(', ')}.`;
 }

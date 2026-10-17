@@ -79,3 +79,21 @@ class PlacementPickFilter(django_filters.FilterSet):
     """``?search=`` by name for the placement editor's affiliation and drive pickers (#4361)."""
 
     search = django_filters.CharFilter(field_name="name", lookup_expr="icontains")
+
+
+class PlacementPersonaFilter(django_filters.FilterSet):
+    """The named NPC picker's arguments (#4373): ``?search=`` by name, and the story the
+    pick is for, as ``?story=``, ``?episode=`` or through an encounter's beat as
+    ``?encounter=``.
+
+    ``story`` and ``encounter`` pick the base list in the view's ``get_queryset``; they
+    are declared here so the schema documents them.
+    """
+
+    search = django_filters.CharFilter(field_name="name", lookup_expr="icontains")
+    story = django_filters.NumberFilter(method="_already_scoped")
+    episode = django_filters.NumberFilter(method="_already_scoped")
+    encounter = django_filters.NumberFilter(method="_already_scoped")
+
+    def _already_scoped(self, queryset: QuerySet, name: str, value: int) -> QuerySet:
+        return queryset

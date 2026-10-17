@@ -59,6 +59,7 @@ class PersonaSerializer(serializers.ModelSerializer):
             "name_degree",
             "title_suffix",
             "is_fake_name",
+            "believed_deceased",
             "persona_type",
             "thumbnail_url",
             "thumbnail_media_url",
@@ -72,7 +73,12 @@ class PersonaSerializer(serializers.ModelSerializer):
             "guise_background",
             "humiliation_mark",
         ]
-        read_only_fields = ["roster_entry", "allow_social_actions", "display_name"]
+        read_only_fields = [
+            "roster_entry",
+            "allow_social_actions",
+            "display_name",
+            "believed_deceased",
+        ]
 
     def get_display_name(self, obj: Persona) -> str:
         """The particled name at the persona's preferred degree (#3261).

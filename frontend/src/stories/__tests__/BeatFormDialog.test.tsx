@@ -57,6 +57,8 @@ vi.mock('@/combat/queries', () => ({
   // #4361 - each line's placement panel reads its template's profile and pickers.
   usePlacementContext: vi.fn(() => ({ data: undefined })),
   usePlacementPicks: vi.fn(() => ({ data: [] })),
+  // #4373 - each beat line offers the story's named NPCs.
+  usePlacementPersonas: vi.fn(() => ({ data: [] })),
   // #3564 - SituationFinder's CatalogSuggestionDialog calls this unconditionally
   // (it's mounted, just closed) whenever a non-null characterId is passed in.
   useDispatchPlayerAction: vi.fn(() => ({
@@ -1042,6 +1044,8 @@ describe('BeatFormDialog', () => {
               count: 2,
               position_name: 'front',
               opens_as_standoff: true,
+              persona: null,
+              persona_name: '',
               order: 0,
               // #4361: an untouched placement sends the template's own values.
               cause_override: '',

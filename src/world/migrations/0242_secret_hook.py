@@ -5,7 +5,7 @@ import django.db.models.deletion
 
 
 class Migration(migrations.Migration):
-    dependencies = [("arxii", "0239_answers_at_the_close")]
+    dependencies = [("arxii", "0241_standoff_group_template_or_persona")]
 
     operations = [
         migrations.AddField(

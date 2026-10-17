@@ -36,6 +36,7 @@ from world.standoffs.services.faction_rules import (
     faction_rule_matches,
     shifting_rule_ids,
 )
+from world.standoffs.services.language import group_languages, language_refusal
 from world.standoffs.services.profile import GroupDrive, group_cause, group_drives
 from world.standoffs.services.state import active_members, is_in_standoff
 from world.standoffs.services.verbs import (
@@ -99,6 +100,7 @@ class ApproachView:
     levers: list[LeverView]
     hits_revealed_drive: bool
     casts_technique: bool = False
+    refusal: str = ""
 
 
 @dataclass(frozen=True)
@@ -118,6 +120,8 @@ class TermsView:
     grade: str
     grade_label: str
     critical_label: str = ""
+    levers: list[LeverView] = field(default_factory=list)
+    refusal: str = ""
 
 
 @dataclass(frozen=True)
@@ -226,7 +230,7 @@ def _group_view(  # noqa: PLR0913 - one viewer-and-group context, built once per
     faction_reveals = [r for r in facts.reveals if r.kind == RevealKind.FACTION_RULE]
     return GroupView(
         group_id=group.pk,
-        name=group.creature_template.name,
+        name=group.name,
         member_count=member_count,
         state=group.state,
         terms_ease=group.terms_ease,
@@ -280,6 +284,18 @@ def _levers(facts: _GroupFacts, hits: list, targeted: set[int]) -> tuple[list[Le
         if rule.pk in shifting and rule.pk in revealed_rules and rule.revealed_text:
             levers.append(LeverView(f"your angle: {rule.revealed_text}", is_angle=True))
     return levers, bool(hit_levers)
+
+
+def regard_lever(group: StandoffGroup, ctx) -> list[LeverView]:
+    """A named NPC's regard for the viewer, named when it eased or hardened the grade.
+
+    Only the viewer sees it (the payload is theirs alone), and only its direction: the
+    regard value itself stays with the GM.
+    """
+    if ctx is None or ctx.regard_bands == 0:
+        return []
+    direction = "easier" if ctx.regard_bands < 0 else "harder"
+    return [LeverView(f"{group.name}'s regard for you: {direction}", is_angle=False)]
 
 
 def _approach_caption(approach: StandoffApproach) -> str:
@@ -364,7 +380,7 @@ def build_standoff_view(
             else []
         ),
     )
-    for group in encounter.standoff_groups.select_related("creature_template"):
+    for group in encounter.standoff_groups.select_related("creature_template", "persona"):
         _append_group_views(
             view,
             group,
@@ -423,8 +439,23 @@ def _append_group_views(  # noqa: PLR0913 - inputs are the per-view and per-grou
     targeted = targeted_properties_by_capability(
         capability_ids, [drive.property_id for drive in ctx.drives]
     )
-    _append_approaches(view, facts, group, viewer, ctx, approaches, targeted, grader)
-    _append_terms(view, facts, group, viewer, ctx, all_terms, config, grader)
+    languages = group_languages(group)
+    spoken = _Spoken(
+        verbal=language_refusal(group, viewer, verbal=True, languages=languages),
+        terms=language_refusal(group, viewer, verbal=False, languages=languages),
+        regard=regard_lever(group, ctx),
+    )
+    _append_approaches(view, facts, group, viewer, ctx, approaches, targeted, grader, spoken)
+    _append_terms(view, facts, group, viewer, ctx, all_terms, config, grader, spoken)
+
+
+@dataclass(frozen=True)
+class _Spoken:
+    """One group's language refusals for the viewer and its named NPC's regard lever."""
+
+    verbal: str
+    terms: str
+    regard: list[LeverView]
 
 
 def _read_grade(config: StandoffConfig, ctx, grader: _Grader) -> tuple[str, str]:
@@ -447,12 +478,18 @@ def _append_approaches(  # noqa: PLR0913 - one approach-list build context
     approaches: list[StandoffApproach],
     targeted_by_capability: dict,
     grader: _Grader,
+    spoken: _Spoken,
 ) -> None:
-    """Add all available approach grades for one group."""
+    """Add all available approach grades for one group.
+
+    A verbal approach the language gate refuses is still listed and graded, with the
+    reason, so the player sees why it is closed to them (#4373).
+    """
     for approach in approaches:
         graded, hits, targeted = press_grade(group, viewer, approach, ctx, targeted_by_capability)
         grade = grader.grade(approach.check_type, graded.difficulty, graded.contributions)
         levers, hits_drive = _levers(facts, hits, targeted)
+        levers.extend(spoken.regard)
         view.approaches.append(
             ApproachView(
                 approach_id=approach.pk,
@@ -464,6 +501,7 @@ def _append_approaches(  # noqa: PLR0913 - one approach-list build context
                 levers=levers,
                 hits_revealed_drive=hits_drive,
                 casts_technique=approach.casts_technique,
+                refusal=spoken.verbal if approach.is_verbal else "",
             )
         )
 
@@ -477,8 +515,9 @@ def _append_terms(  # noqa: PLR0913 - one terms-list build context
     all_terms: list[StandoffTerms],
     config: StandoffConfig,
     grader: _Grader,
+    spoken: _Spoken,
 ) -> None:
-    """Add visible terms grades for one group."""
+    """Add visible terms grades for one group (a refused one keeps its grade and reason)."""
     check_type = config.terms_check_type
     if check_type is None:
         return
@@ -497,5 +536,7 @@ def _append_terms(  # noqa: PLR0913 - one terms-list build context
                 grade=grade,
                 grade_label=grade_label(grade),
                 critical_label=terms.get_critical_effect_display(),
+                levers=list(spoken.regard),
+                refusal=spoken.terms,
             )
         )

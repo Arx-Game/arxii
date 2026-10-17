@@ -246,6 +246,27 @@ export async function fetchPlacementPicks(
   return data.results ?? [];
 }
 
+/** Which story a named NPC pick is for: by the story, or by an encounter on its beat. */
+export type PersonaScope = { episode: number } | { encounter: number };
+
+/**
+ * GET /api/combat/placement-personas/?episode=|encounter=&search= — the named NPCs a
+ * story already uses, which a GM may stand as an opponent (#4373).
+ */
+export async function fetchPlacementPersonas(
+  scope: PersonaScope,
+  search: string
+): Promise<PlacementPick[]> {
+  const params = new URLSearchParams();
+  if ('episode' in scope) params.set('episode', String(scope.episode));
+  else params.set('encounter', String(scope.encounter));
+  if (search) params.set('search', search);
+  const res = await apiFetch(`/api/combat/placement-personas/?${params.toString()}`);
+  if (!res.ok) throw new Error('Failed to load named NPCs');
+  const data = (await res.json()) as { results?: PlacementPick[] };
+  return data.results ?? [];
+}
+
 /** One row of the GM-gated escalation curve catalog (#3552). */
 export interface EscalationCurveSummary {
   id: number;
@@ -273,6 +294,8 @@ export interface AddOpponentPayload {
   soakValue?: number;
   probingThreshold?: number | null;
   positionId?: number | null;
+  /** A named NPC the encounter's story uses, standing as this opponent (#4373). */
+  personaId?: number | null;
 }
 
 /**
@@ -299,6 +322,7 @@ export async function postAddOpponent(
       ...(payload.soakValue !== undefined ? { soak_value: payload.soakValue } : {}),
       probing_threshold: payload.probingThreshold ?? undefined,
       position_id: payload.positionId ?? undefined,
+      persona_id: payload.personaId ?? undefined,
     }),
   });
   if (!res.ok) await throwApiError(res, 'Failed to add opponent');

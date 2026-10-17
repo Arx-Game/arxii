@@ -44,6 +44,7 @@ from world.magic.services.capability_requirements import technique_performable
 from world.magic.services.techniques import use_technique
 from world.magic.services.ultimates import floor_ultimate_check, readied_ultimate
 from world.mechanics.models import Application
+from world.scenes.action_constants import DIFFICULTY_BAND_STEP
 from world.standoffs.constants import (
     FIGHT_BEGINS_MESSAGE,
     LIVE_GROUP_STATES,
@@ -71,6 +72,7 @@ from world.standoffs.services.faction_rules import (
     shifting_rule_ids,
 )
 from world.standoffs.services.force import clear_override, evaluate_causes
+from world.standoffs.services.language import language_refusal
 from world.standoffs.services.profile import (
     GroupDrive,
     group_cause,
@@ -315,6 +317,8 @@ class GradingContext:
     matches: list[MatchedFactionRule]
     mindless_resistance: int
     resist_increment: int
+    regard: int = 0
+    regard_bands: int = 0
 
     @property
     def first(self) -> CombatOpponent:
@@ -327,6 +331,31 @@ class GradingContext:
     @property
     def band_shift(self) -> int:
         return band_shift_from(self.matches)
+
+    @property
+    def regard_base(self) -> int:
+        """The named NPC's regard for the actor, as the shared function's base (#4373)."""
+        return DIFFICULTY_BAND_STEP * self.regard_bands
+
+
+def regard_for(
+    group: StandoffGroup, sheet: CharacterSheet, config: StandoffConfig
+) -> tuple[int, int]:
+    """A named NPC group's ``NpcRegard`` for the actor's presented persona, and its bands.
+
+    Returns ``(regard, bands)``. Bands are positive when the regard hardens a press or
+    terms (dislike) and negative when it eases them: one band per full
+    ``config.regard_per_band`` points, at most ``config.regard_max_bands``. A creature
+    template group has no regard: ``(0, 0)``.
+    """
+    if group.persona_id is None:
+        return 0, 0
+    from world.npc_services.regard import get_regard  # noqa: PLC0415
+    from world.scenes.services import active_persona_for_sheet  # noqa: PLC0415
+
+    regard = get_regard(group.persona, active_persona_for_sheet(sheet))
+    steps = min(config.regard_max_bands, abs(regard) // max(1, config.regard_per_band))
+    return regard, (-steps if regard > 0 else steps)
 
 
 def build_grading_context(
@@ -347,12 +376,15 @@ def build_grading_context(
             first_character, EffortLevel.MEDIUM, level_override=max(m.level for m in members)
         )
     )
+    regard, regard_bands = regard_for(group, sheet, StandoffConfig.load())
     return GradingContext(
         members=members,
         drives=group_drives(group),
         matches=faction_rule_matches(group, sheet) if matches is None else matches,
         mindless_resistance=0 if has_morale else MINDLESS_MORALE_RESISTANCE,
         resist_increment=resist,
+        regard=regard,
+        regard_bands=regard_bands,
     )
 
 
@@ -382,6 +414,7 @@ def press_grade(
         actor_sheet=sheet,
         target_character=ctx.first.objectdb,
         check_type=approach.check_type,
+        base_difficulty=ctx.regard_base,
         target_level=ctx.level,
         drive_hits=[hit for _, hit in hits],
         sway_target=approach.sway_target,
@@ -439,6 +472,7 @@ def terms_difficulty(
         actor_sheet=sheet,
         target_character=ctx.first.objectdb,
         check_type=config.terms_check_type,
+        base_difficulty=ctx.regard_base,
         target_level=ctx.level,
         mindless_resistance=ctx.mindless_resistance,
         resist_increment=ctx.resist_increment,
@@ -591,6 +625,28 @@ def _soulfray_refusal(warning: SoulfrayWarning) -> StandoffActionResult:
     )
 
 
+def _press_refusal(  # noqa: PLR0913 - the press's whole pre-roll context
+    encounter: CombatEncounter,
+    group: StandoffGroup,
+    members: list[CombatOpponent],
+    sheet: CharacterSheet,
+    approach: StandoffApproach,
+    technique: Technique | None,
+) -> str | None:
+    """Why this press cannot be rolled, checked in order; None when it can."""
+    refusal = _refusal(encounter, group)
+    if refusal:
+        return refusal
+    if not members:
+        return _MSG_EMPTY
+    technique_refusal = _technique_refusal(sheet, approach, technique)
+    if technique_refusal:
+        return technique_refusal
+    if approach.is_verbal:
+        return language_refusal(group, sheet, verbal=True) or None
+    return None
+
+
 @flush_cache_on_error(lambda participant, *_, **__: participant.encounter)
 @transaction.atomic
 def standoff_press(
@@ -608,16 +664,11 @@ def standoff_press(
     Soulfray is refused with the warning, spending nothing, until ``confirm_soulfray_risk``.
     """
     encounter, group = _lock(participant.encounter, group)
-    refusal = _refusal(encounter, group)
+    sheet = participant.character_sheet
+    members = active_members(group)
+    refusal = _press_refusal(encounter, group, members, sheet, approach, technique)
     if refusal:
         return _refuse(refusal)
-    members = active_members(group)
-    if not members:
-        return _refuse(_MSG_EMPTY)
-    sheet = participant.character_sheet
-    technique_refusal = _technique_refusal(sheet, approach, technique)
-    if technique_refusal:
-        return _refuse(technique_refusal)
     config = StandoffConfig.load()
     graded, hits, targeted = press_grade(
         group, sheet, approach, build_grading_context(group, sheet, members=members)
@@ -629,7 +680,8 @@ def standoff_press(
         return _failed_press(use)
     _share_shifting_angles(group, sheet, targeted)
     tier = result.success_level
-    message = "Your words do not move them."
+    # A gesture or a display is not words (#4373).
+    message = "Your words do not move them." if approach.is_verbal else "It does not move them."
     morale_line = ""
     if tier >= 1:
         group.terms_ease += 1
@@ -681,10 +733,7 @@ def _morale_shift_line(
     if not changed:
         return ""
     word = "break" if OpponentMoraleState.BREAK in changed else "falter"
-    return (
-        f"{active_persona_for_sheet(sheet).name} shakes the {group.creature_template.name}: "
-        f"they {word}."
-    )
+    return f"{active_persona_for_sheet(sheet).name} shakes {group.referent}: they {word}."
 
 
 def _drive_revealed(group: StandoffGroup, property_id: int) -> bool:
@@ -730,6 +779,9 @@ def standoff_terms(
     if config.terms_check_type is None:
         return _refuse(_MSG_UNCONFIGURED)
     sheet = participant.character_sheet
+    spoken_refusal = language_refusal(group, sheet, verbal=False)
+    if spoken_refusal:
+        return _refuse(spoken_refusal)
     graded = terms_difficulty(group, sheet, terms)
     result = perform_check(
         sheet.character,

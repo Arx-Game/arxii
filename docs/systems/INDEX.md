@@ -1247,7 +1247,11 @@ descriptor overlay, cosmetic editing, and shapeshift slots.
   the character sheet's `_build_appearance` and `LookAction`/`CharacterState.get_display_desc`
   both call, so a masked persona's real description no longer leaks through `look` for a
   viewer who hasn't seen through the mask (self, staff, and a discoverer still see it, exactly
-  as the sheet already did). `GET /api/actions/characters/<id>/personas/<pid>/menu/`
+  as the sheet already did). **Sight (#4396):** the same rule reveals a mask of a kind the
+  viewer's characters see through (`disguise_sight` lever target per `DisguiseKind`,
+  `forms.services.identification.pierced_disguise_kinds` / `presented_disguise_kind`), no
+  check and no discovery row; see `mechanics.md` "Levers".
+  `GET /api/actions/characters/<id>/personas/<pid>/menu/`
   (`actions.persona_menu.build_persona_menu`) is the server-composed list behind the
   right-click persona menu (Look, Identify, Challenge, and the scene-only actions), reusing
   each action's own `check_availability()` rather than a second gate.
@@ -2782,6 +2786,10 @@ services on a live sheet (`sheet_writers.py`, #4221), shared with staff edit mod
   life-stage-tagged. See [character_creation.md](character_creation.md)'s "Question
   kinds and connections" subsection and ADR-0277.
 - **Integrates with:** All character-related systems (traits, skills, magic, sheets)
+- **Officially dead (#4396):** a Final Touches door names the established face the world meets
+  while the character's own is believed dead (`draft_data.officially_dead`, `_write_officially_dead`:
+  `create_persona` + `set_persona_profile` + `set_active_persona`, `believed_deceased` on the
+  PRIMARY and the kin node); see `character_creation.md` "The Actor's Sheet".
 - **Actor's Sheet (#3621, ADR-0279):** Final Touches replaced personality with three questions
   (`Profile.never_do`/`protect`/`fear`), goals with a horizon and number, one priced enemy
   (`character_creation/enemies.py`: `enemy_price`, `enemy_offers`, `resolve_enemy`;
@@ -7658,12 +7666,14 @@ weights, speed_rank, Thread pulls). `CovenantRank` = administrative authority
 - **Source:** `src/world/covenants/`
 - **Details:** [covenants.md](covenants.md)
 
-### Standoffs (#4145, #4354, #4361)
+### Standoffs (#4145, #4354, #4361, #4373)
 The moment before a fight: round zero of a `CombatEncounter`, where a party reads groups of
 creatures, presses them with social approaches and names terms that settle them. Derived
 from live (OPEN or PROPOSED) `StandoffGroup` rows, never a stored flag (ADR-4145-A). In a
 scene a GM is running, a firing cause becomes a GM proposal (ADR-4354-A). A placement's
-edits over its template are stamped on each opponent at spawn (ADR-4361-A).
+edits over its template are stamped on each opponent at spawn (ADR-4361-A). A named NPC is
+its own group, read live from its persona (ADR-4373-A), and verbal approaches and terms pass a
+language gate.
 
 - **Models:** `CreatureDrive`, `FactionRule` (was `RegardRule`), `StandoffApproach`,
   `StandoffTerms`, `StandoffConfig` (singleton), `StandoffCauseGloss`, `StandoffGroup`,
@@ -7675,8 +7685,10 @@ edits over its template are stamped on each opponent at spawn (ADR-4361-A).
   (`PlacementEdits`); snapshot `CombatOpponent.cause` / `cause_margin_percent` /
   `organization` / `suppressed_faction_rules`; `societies.AssociationConfig`;
   `OpponentTierTemplate.force_weight_percent`; `MissionOption.opens_as_standoff`;
-  `BeatOpponentLine.opens_as_standoff`; `GMPrompt.standoff_group` / `resolution_note`
-  (`GMPromptKind.STANDOFF_CAUSE`, a decision kind).
+  `BeatOpponentLine.opens_as_standoff` / `persona`; `GMPrompt.standoff_group` /
+  `resolution_note` (`GMPromptKind.STANDOFF_CAUSE`, a decision kind); `StandoffGroup.persona`;
+  `StandoffApproach.is_verbal`; `CreatureTemplate.language`;
+  `StandoffConfig.regard_per_band` / `regard_max_bands`.
 - **Key functions:** `open_standoff`, `end_standoff_into_fight`,
   `begin_round_or_break_standoff` (`services/state.py`); `evaluate_causes`,
   `cause_fire_reason`, `cause_fires` (`services/force.py`); `standoff_is_gm_run`, `propose`,
@@ -7686,7 +7698,11 @@ edits over its template are stamped on each opponent at spawn (ADR-4361-A).
   `shifting_rule_ids`, `run_rules_against` (`services/faction_rules.py`);
   `placement_profile`, `draft_from_line`, `stamp_opponent`, `save_placement`,
   `placement_errors`, `template_context` (`services/placement.py`); `group_cause`,
-  `group_drives`, `group_rules`, `inherited_rules`, `affiliation_rules` (`services/profile.py`);
+  `group_drives`, `group_rules`, `inherited_rules`, `affiliation_rules`, `persona_drives`
+  (`services/profile.py`); `member_filter`, `attack_line` (`services/state.py`);
+  `group_languages`, `persona_languages`, `language_refusal` (`services/language.py`);
+  `regard_for` (`services/verbs.py`); `story_npc_personas`, `may_stand_persona`
+  (`world/stories/services/cast.py`);
   predicate leaves `max_org_reputation`, `max_society_standing`, `associated_with_org`,
   `associated_with_society`; `association_with_org` / `association_with_society`
   (`world/societies/association.py`); `standoff_read`, `standoff_press`, `standoff_terms`,
@@ -7698,7 +7714,8 @@ edits over its template are stamped on each opponent at spawn (ADR-4361-A).
   `GMStandoffPanel` and `StandoffSummaryCard` from the encounter detail's `standoff`,
   `gm_standoff` and `standoff_summary` blocks; `PlacementPanel` in the beat dialog and the
   mission studio's option page; `/api/combat/creature-templates/<id>/placement-context/`,
-  `/api/combat/placement-organizations/`, `/api/combat/placement-properties/`; admin pages:
+  `/api/combat/placement-organizations/`, `/api/combat/placement-properties/`,
+  `/api/combat/placement-personas/`; telnet `encounter addnamed`; admin pages:
   the Standoff Profile Builder (`web/admin/standoff_profile/`), Placement
   (`web/admin/standoff_placement/`), Faction Rules (`web/admin/faction_rules/`) and the
   predicate rule widget (`web/admin/predicate_widget.py`).

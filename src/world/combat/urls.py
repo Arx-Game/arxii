@@ -9,6 +9,7 @@ from world.combat.views import (
     DuelChallengeViewSet,
     EscalationCurveViewSet,
     PlacementOrganizationViewSet,
+    PlacementPersonaViewSet,
     PlacementPropertyViewSet,
     ThreatPoolViewSet,
 )
@@ -26,6 +27,7 @@ router.register(
     "placement-organizations", PlacementOrganizationViewSet, basename="placement-organization"
 )
 router.register("placement-properties", PlacementPropertyViewSet, basename="placement-property")
+router.register("placement-personas", PlacementPersonaViewSet, basename="placement-persona")
 router.register("", CombatEncounterViewSet, basename="combat-encounter")
 
 app_name = "combat"

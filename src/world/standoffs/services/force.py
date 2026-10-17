@@ -238,7 +238,7 @@ def evaluate_causes(
     config = StandoffConfig.load()
     gm_run: bool | None = None
     for group in encounter.standoff_groups.filter(state__in=LIVE_GROUP_STATES).select_related(
-        "creature_template"
+        "creature_template", "persona"
     ):
         own_provocation = provocation if provoked is not None and group.pk == provoked.pk else ""
         reason = cause_fire_reason(group, config, own_provocation)

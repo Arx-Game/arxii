@@ -2569,6 +2569,7 @@
   - reviewed_by -> contributors.ContentContributor [FK] (nullable)
   - threat_pool -> combat.ThreatPool [FK] (nullable)
   - organization -> societies.Organization [FK] (nullable)
+  - language -> species.Language [FK] (nullable)
 **Pointed to by:**
   - weakness_pool_entries <- covenants.WeaknessPoolEntry
   - spawned_opponents <- combat.CombatOpponent
@@ -10098,7 +10099,8 @@
 ### StandoffGroup
 **Foreign Keys:**
   - encounter -> combat.CombatEncounter [FK]
-  - creature_template -> combat.CreatureTemplate [FK]
+  - creature_template -> combat.CreatureTemplate [FK] (nullable)
+  - persona -> scenes.Persona [FK] (nullable)
   - settled_outcome -> traits.CheckOutcome [FK] (nullable)
 **Pointed to by:**
   - gm_prompts <- gm.GMPrompt
@@ -10213,6 +10215,7 @@
   - organization -> societies.Organization [FK] (nullable)
   - beat -> stories.Beat [FK]
   - creature_template -> combat.CreatureTemplate [FK]
+  - persona -> scenes.Persona [FK] (nullable)
 **Pointed to by:**
   - drive_edits <- standoffs.OpponentLineDrive
   - faction_rule_suppressions <- standoffs.OpponentLineFactionRuleSuppression

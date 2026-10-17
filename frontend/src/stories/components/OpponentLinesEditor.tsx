@@ -24,7 +24,8 @@ import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { useCreatureTemplates } from '@/combat/queries';
+import { useCreatureTemplates, usePlacementPersonas } from '@/combat/queries';
+import type { PersonaScope } from '@/combat/api';
 
 import { PlacementPanel } from './PlacementPanel';
 import type { PlacementDraft } from './placementDraft';
@@ -37,6 +38,9 @@ export interface OpponentLineDraft extends PlacementDraft {
   position_name: string;
   /** Beat lines only (#4354): the line opens the encounter as a standoff. */
   opens_as_standoff?: boolean;
+  /** Beat lines only (#4373): a named NPC who stands as the line's one opponent. */
+  persona?: number | null;
+  persona_name?: string;
 }
 
 export interface OpponentLinesEditorProps {
@@ -47,6 +51,57 @@ export interface OpponentLinesEditorProps {
   showStandoffSwitch?: boolean;
   /** Show each line's standoff placement panel (#4361). */
   showPlacement?: boolean;
+  /**
+   * Offer a named NPC per line (#4373): the personas this scope's story already uses.
+   * Beat lines only; mission option lines have no named NPCs.
+   */
+  personaScope?: PersonaScope;
+}
+
+function NamedNpcPicker({
+  index,
+  scope,
+  line,
+  onPick,
+}: {
+  index: number;
+  scope: PersonaScope;
+  line: OpponentLineDraft;
+  onPick: (persona: number | null, name: string) => void;
+}) {
+  const { data: personas = [] } = usePlacementPersonas(scope);
+  const current = line.persona ?? null;
+  return (
+    <label className="col-span-full flex flex-wrap items-center gap-2 text-sm">
+      <span className="text-xs text-muted-foreground">Named NPC</span>
+      <select
+        className="rounded-md border bg-background px-2 py-1.5 text-sm"
+        value={current ? String(current) : ''}
+        onChange={(e) => {
+          const id = e.target.value ? Number(e.target.value) : null;
+          const pick = personas.find((p) => p.id === id);
+          onPick(id, pick?.name ?? '');
+        }}
+        aria-label="Named NPC"
+        data-testid={`beat-opponent-line-persona-${index}`}
+      >
+        <option value="">None: the creatures themselves</option>
+        {current && !personas.some((p) => p.id === current) && (
+          <option value={String(current)}>{line.persona_name}</option>
+        )}
+        {personas.map((p) => (
+          <option key={p.id} value={String(p.id)}>
+            {p.name}
+          </option>
+        ))}
+      </select>
+      {personas.length === 0 && !current && (
+        <span className="text-xs text-muted-foreground">
+          Name an NPC in this story&apos;s stakes or protected subjects to stand them here.
+        </span>
+      )}
+    </label>
+  );
 }
 
 export function OpponentLinesEditor({
@@ -55,6 +110,7 @@ export function OpponentLinesEditor({
   rowErrors,
   showStandoffSwitch = false,
   showPlacement = false,
+  personaScope,
 }: OpponentLinesEditorProps) {
   const [search, setSearch] = useState('');
   const { data: creatureTemplates = [] } = useCreatureTemplates(search);
@@ -128,6 +184,8 @@ export function OpponentLinesEditor({
               min={1}
               className="w-16"
               value={line.count}
+              disabled={Boolean(line.persona)}
+              title={line.persona ? 'A named NPC stands alone.' : undefined}
               onChange={(e) => updateRow(index, { count: e.target.value })}
               data-testid={`beat-opponent-line-count-${index}`}
             />
@@ -146,6 +204,21 @@ export function OpponentLinesEditor({
             >
               Remove
             </Button>
+            {personaScope && (
+              <NamedNpcPicker
+                index={index}
+                scope={personaScope}
+                line={line}
+                onPick={(persona, name) =>
+                  // A named NPC stands alone, and their drives are their persona's own.
+                  updateRow(index, {
+                    persona,
+                    persona_name: name,
+                    ...(persona ? { count: '1', drive_edits: [] } : {}),
+                  })
+                }
+              />
+            )}
             {showPlacement && line.creature_template !== '' && (
               <PlacementPanel
                 index={index}
@@ -154,6 +227,7 @@ export function OpponentLinesEditor({
                 draft={line}
                 onChange={(partial) => updateRow(index, partial)}
                 showStandoffSwitch={showStandoffSwitch}
+                personaName={line.persona ? line.persona_name : ''}
               />
             )}
             {Object.entries(errors ?? {})
@@ -163,6 +237,8 @@ export function OpponentLinesEditor({
                   'suppressed_faction_rules',
                   'organization',
                   'cause_override',
+                  'persona',
+                  'count',
                 ].includes(key)
               )
               .map(([key, messages]) => (

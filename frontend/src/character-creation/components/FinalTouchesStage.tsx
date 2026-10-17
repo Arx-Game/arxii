@@ -7,7 +7,9 @@
  * place of the retired Distinctions stage; then the goals, numbered within
  * short term and long term with the points purse at the head; who wants the
  * character to fail, a person priced by their power or a group by its reach
- * at one of four degrees, awarding CG points; and The Introductions, three
+ * at one of four degrees, awarding CG points; the Officially dead door (#4396),
+ * which names the established face the world meets while the character's own
+ * is believed dead, with that face's guise texts; and The Introductions, three
  * white journals in the character's own voice, each with a Skip door. Nothing
  * here blocks finalize. Everything is held locally and saved in one PATCH when
  * the player leaves the stage. Copy comes from CG explanation rows; the
@@ -38,6 +40,7 @@ import type {
   DraftEnemy,
   DraftGoal,
   DraftIntroductions,
+  DraftOfficiallyDead,
   EnemyOffer,
   GoalHorizon,
 } from '../types';
@@ -218,6 +221,44 @@ const EMPTY_INTRODUCTIONS: DraftIntroductions = {
   whispers: '',
 };
 
+/** Officially dead (#4396): in-code twins of the seeded copy rows. */
+const OFFICIALLY_DEAD = {
+  heading: 'Officially dead',
+  intro:
+    'The world believes you dead. Name the face it meets instead: an established identity ' +
+    'with a concept, a quote and a story of its own, worn from your first day. Your true ' +
+    'name stays on the rolls of the dead until someone sees through the face.',
+};
+
+const EMPTY_FACE: DraftOfficiallyDead = {
+  face_name: '',
+  concept: '',
+  quote: '',
+  never_do: '',
+  protect: '',
+  fear: '',
+  background: '',
+};
+
+/** The guise texts in sheet order: draft key, label, and whether a textarea suits it. */
+const FACE_TEXTS: ReadonlyArray<{
+  key: Exclude<keyof DraftOfficiallyDead, 'face_name'>;
+  label: string;
+  rows: number;
+}> = [
+  { key: 'concept', label: 'Concept', rows: 1 },
+  { key: 'quote', label: 'Quote', rows: 1 },
+  { key: 'never_do', label: 'What would this face never do?', rows: 2 },
+  { key: 'protect', label: 'What would this face protect at all costs?', rows: 2 },
+  { key: 'fear', label: 'What is this face deathly afraid of?', rows: 2 },
+  { key: 'background', label: 'The story the world knows', rows: 4 },
+];
+
+/** The face as the draft stores it: whole when named, null when the door is skipped. */
+function faceToSave(face: DraftOfficiallyDead): DraftOfficiallyDead | null {
+  return face.face_name.trim() ? face : null;
+}
+
 function announceText(remaining: number): string {
   return remaining < 0 ? `${Math.abs(remaining)} points over.` : `${remaining} points remain.`;
 }
@@ -273,6 +314,13 @@ export function FinalTouchesStage({ draft, onRegisterBeforeLeave }: FinalTouches
     ...EMPTY_INTRODUCTIONS,
     ...(draftData.introductions ?? {}),
   });
+  const [face, setFace] = useState<DraftOfficiallyDead>({
+    ...EMPTY_FACE,
+    ...(draftData.officially_dead ?? {}),
+  });
+  const [openFace, setOpenFace] = useState(
+    (draftData.officially_dead?.face_name ?? '').trim() !== ''
+  );
   const [openIntros, setOpenIntros] = useState<Record<string, boolean>>(() => ({
     first_journal: (draftData.introductions?.first_journal ?? []).some((a) => a.trim() !== ''),
     application: (draftData.introductions?.application ?? []).some((a) => a.trim() !== ''),
@@ -285,8 +333,8 @@ export function FinalTouchesStage({ draft, onRegisterBeforeLeave }: FinalTouches
   const remaining = BASE_GOAL_POINTS - usedPoints;
 
   // --- save on leave -------------------------------------------------------------
-  const payloadRef = useRef({ answers, goals, enemy, intros });
-  payloadRef.current = { answers, goals, enemy, intros };
+  const payloadRef = useRef({ answers, goals, enemy, intros, face });
+  payloadRef.current = { answers, goals, enemy, intros, face };
   const hasChangesRef = useRef(false);
   useEffect(() => {
     const current = JSON.stringify(payloadRef.current);
@@ -299,17 +347,26 @@ export function FinalTouchesStage({ draft, onRegisterBeforeLeave }: FinalTouches
       goals: (draftData.goals ?? []).map((g) => ({ ...g, horizon: g.horizon ?? 'short_term' })),
       enemy: draftData.enemy ?? null,
       intros: { ...EMPTY_INTRODUCTIONS, ...(draftData.introductions ?? {}) },
+      face: { ...EMPTY_FACE, ...(draftData.officially_dead ?? {}) },
     });
     hasChangesRef.current = current !== server;
-  }, [answers, goals, enemy, intros, draftData]);
+  }, [answers, goals, enemy, intros, face, draftData]);
 
   const save = useCallback(async () => {
     if (!hasChangesRef.current) return true;
-    const { answers: a, goals: g, enemy: e, intros: i } = payloadRef.current;
+    const { answers: a, goals: g, enemy: e, intros: i, face: f } = payloadRef.current;
     try {
       await updateDraft.mutateAsync({
         draftId: draft.id,
-        data: { draft_data: { ...a, goals: g, enemy: e, introductions: i } },
+        data: {
+          draft_data: {
+            ...a,
+            goals: g,
+            enemy: e,
+            introductions: i,
+            officially_dead: faceToSave(f),
+          },
+        },
       });
       hasChangesRef.current = false;
       return true;
@@ -407,6 +464,11 @@ export function FinalTouchesStage({ draft, onRegisterBeforeLeave }: FinalTouches
       return { ...prev, [kind]: next };
     });
   const toggleIntro = (kind: string) => setOpenIntros((prev) => ({ ...prev, [kind]: !prev[kind] }));
+  // Skipping the door takes the option back: a skipped face is not a face.
+  const toggleFace = () => {
+    if (openFace) setFace(EMPTY_FACE);
+    setOpenFace((prev) => !prev);
+  };
 
   if (domainsLoading) {
     return (
@@ -763,6 +825,34 @@ export function FinalTouchesStage({ draft, onRegisterBeforeLeave }: FinalTouches
           </Field>
         </>
       )}
+
+      <IntroductionBlock
+        id="officially_dead"
+        title={copy?.officially_dead_heading ?? OFFICIALLY_DEAD.heading}
+        frame={copy?.officially_dead_intro ?? OFFICIALLY_DEAD.intro}
+        open={openFace}
+        onToggle={toggleFace}
+      >
+        <Field id="face-name" label="The face the world meets">
+          <input
+            id="face-name"
+            type="text"
+            maxLength={255}
+            value={face.face_name}
+            onChange={(e) => setFace((prev) => ({ ...prev, face_name: e.target.value }))}
+          />
+        </Field>
+        {FACE_TEXTS.map(({ key, label, rows }) => (
+          <Field key={key} id={`face-${key}`} label={label}>
+            <textarea
+              id={`face-${key}`}
+              rows={rows}
+              value={face[key]}
+              onChange={(e) => setFace((prev) => ({ ...prev, [key]: e.target.value }))}
+            />
+          </Field>
+        ))}
+      </IntroductionBlock>
 
       <h2 className="section-h">{copy?.introductions_heading ?? 'The Introductions'}</h2>
       <p>{copy?.introductions_intro ?? INTRODUCTIONS_INTRO}</p>

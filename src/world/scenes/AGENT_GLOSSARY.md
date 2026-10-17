@@ -14,6 +14,10 @@ _Avoid_: lurker, hidden watcher, silent observer (this system explicitly guarant
 The fabricated bio a non-primary (cover/established) persona presents as its own — its `Persona.profile` (a `character_sheets.Profile`: concept/quote/personality/background), so the *absence* of a bio doesn't out the cover as fake. Distinct from the sheet's `true_profile` (the real face's bio, presented by PRIMARY). Authored via `set_persona_profile`; lineage stays display-only (mechanical reads pin to `true_profile`).
 _Avoid_: fake sheet, alt bio, cover profile (the model is `Profile`; the surface is the Guise Sheet).
 
+**Officially dead** (#4396):
+A character the world believes dead from creation: the PRIMARY persona carries `believed_deceased` (so does the kin node), and an ESTABLISHED face with its own Guise Sheet is the active persona from the first day. The face is a named alt (its link to the true face is discovered, never seen through). Written once by `character_creation.services._write_officially_dead` from `draft_data.officially_dead`.
+_Avoid_: dead start, faked death (the world's belief, not an event), undercover.
+
 **Gemit**:
 Root term — a staff/GM broadcast pushed to a public-reaction surface. Not redefined here.
 

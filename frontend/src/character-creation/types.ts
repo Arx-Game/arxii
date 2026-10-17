@@ -892,6 +892,20 @@ export interface DraftIntroductions {
   whispers: string;
 }
 
+/**
+ * Officially dead (#4396): the face the world meets instead of the character's own. A
+ * face name and the guise texts; a blank face name means the option was not taken.
+ */
+export interface DraftOfficiallyDead {
+  face_name: string;
+  concept: string;
+  quote: string;
+  never_do: string;
+  protect: string;
+  fear: string;
+  background: string;
+}
+
 /** One person or group the draft may name as its enemy (#3621, `enemy_offers`). */
 export interface EnemyOffer {
   kind: 'person' | 'group';
@@ -915,6 +929,8 @@ export interface DraftData {
   fear?: string;
   enemy?: DraftEnemy | null;
   introductions?: DraftIntroductions;
+  // Officially dead (#4396): the established face worn from day one, or null
+  officially_dead?: DraftOfficiallyDead | null;
   // Origin story guided flow (#2478); Upbringing prompt answers (#3617)
   origin_slots?: Record<string, string>;
   // Upbringing pick-list prompt answers: slot id -> choice id or null (#3617)

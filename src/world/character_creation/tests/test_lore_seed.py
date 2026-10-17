@@ -88,6 +88,8 @@ class TestLoreOnboardingSeed(TestCase):
             "finaltouches_enemy_heading",
             "introductions_heading",
             "introductions_intro",
+            "officially_dead_heading",
+            "officially_dead_intro",
             "first_journal_q1",
             "application_q3",
             "whispers_frame",

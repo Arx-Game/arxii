@@ -95,7 +95,7 @@ expands seed data in this public repo (TehomCD ruling, 2026-07-17).
 | 7 | Attributes & Skills | All 12 primary stats present, valid range (1-5), points remaining = 0; skill point allocation validated against budget (moved in from Path, #2426 Task 9). Draft allocations are display-scale; finalization stores stats ×10 and bridges each CG skill into a matching `CharacterTraitValue` row so checks and DP progression read them (ADR-0193, #2894) |
 | 8 | Appearance | Age (within `age_bounds`, below), height band, height inches, build all set |
 | 9 | Identity | `first_name` in draft_data |
-| 10 | Final Touches | Complete when CG points are in balance (`get_purse_errors`); the Actor's Sheet, goals, enemy and Introductions are all optional (#3621), and the Distinctions stage is retired -- #3675, distinctions are offered per CG chapter now, see `world.character_creation.offers` |
+| 10 | Final Touches | Complete when CG points are in balance (`get_purse_errors`); the Actor's Sheet, goals, enemy, the Officially dead door (#4396) and Introductions are all optional (#3621), and the Distinctions stage is retired -- #3675, distinctions are offered per CG chapter now, see `world.character_creation.offers` |
 | 11 | Review | Never "complete" -- final submission step |
 
 ---
@@ -379,6 +379,17 @@ realm-reach group whose
 `Organization.society` enforces the start room's area (`enforcing_society_for`), accrues
 `PersonaHeat` there (`ENEMY_HEAT_SEED` from ruined upward, pinned `ENEMY_HEAT_PIN_DAYS` at
 destroy).
+
+**Officially dead (#4396).** `draft_data.officially_dead` is null or `{face_name, concept,
+quote, never_do, protect, fear, background}` (`OFFICIALLY_DEAD_KEY`, every value text,
+validated by `_validate_officially_dead`); the heading and frame are CG copy keys
+`officially_dead_heading` / `officially_dead_intro`. A blank face name takes nothing.
+Finalize (`_write_officially_dead`, after the kinship bind on the player path, after the
+Actor's Sheet on the GM path) mints the face as an ESTABLISHED persona through
+`create_persona`, writes its guise through `set_persona_profile`, wears it through
+`set_active_persona`, and marks the PRIMARY persona and the bound kin node
+`believed_deceased` (`record_public_belief`). See
+[appearance_and_identity.md](appearance_and_identity.md) §"Layer 1".
 
 **The Introductions.** `draft_data.introductions` is `{first_journal: [a1, a2, a3],
 application: [a1, a2, a3], whispers: "one rumor per line"}`. Frames and questions are

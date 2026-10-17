@@ -83,6 +83,13 @@ Investigation) and from the illusion-*piercing* contest (perception vs. a MAGICA
 overlay, still senior-dev/future work) — Identification answers "who," piercing
 answers "is this even fake." _Avoid_: recognize check, unmask roll.
 
+**Disguise sight** (#4396):
+Seeing who is behind a disguise of one `DisguiseKind` with no Identification check: a
+positive total on the `disguise_sight` lever target named for the kind
+(`pierced_disguise_kinds`), read by the persona reveal rule in `scenes.persona_display`.
+The disguise's kind is the worn overlay's `overlay_kind`, or MUNDANE for a bare false
+name (`presented_disguise_kind`); a named alt has no kind. _Avoid_: true sight, auto-identify.
+
 **Familiarity tier**:
 How much a viewer's prior connection to the target eases an Identification check's
 difficulty: an active `CharacterRelationship` toward the sheet under the mask ("knows
