@@ -86,7 +86,9 @@ class NPCLoan(RelatedCacheClearingMixin, SharedMemoryModel):
     )
     scene = models.ForeignKey(
         "arxii.Scene",
-        on_delete=models.SET_NULL,
+        # CASCADE, not SET_NULL: a scene loan with its scene gone must not become a
+        # standing borrow.
+        on_delete=models.CASCADE,
         null=True,
         blank=True,
         related_name="npc_loans",
