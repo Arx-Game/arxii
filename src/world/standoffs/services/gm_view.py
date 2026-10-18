@@ -231,6 +231,16 @@ def _regards(group: StandoffGroup, participants: list, config: StandoffConfig) -
     return views
 
 
+def _matched_by(group: StandoffGroup, participants: list, rules: list) -> dict[int, list[str]]:
+    """Each rule's pk to the presented names of the participants it matches."""
+    matched: dict[int, list[str]] = {entry.rule.pk: [] for entry in rules}
+    for participant in participants:
+        sheet = participant.character_sheet
+        for match in faction_rule_matches(group, sheet, rules):
+            matched[match.rule.pk].append(_presented_name(sheet))
+    return matched
+
+
 def _template_strengths(template: CreatureTemplate) -> dict[int, int]:
     """The template's own drive strengths by property, to mark what a placement edited."""
     return {drive.property_id: drive.strength for drive in template.drives.all()}
@@ -243,11 +253,7 @@ def _gm_group(group: StandoffGroup, participants: list, config: StandoffConfig) 
     revealed_drive_ids = {r.drive_id for r in reveals if r.kind == RevealKind.DRIVE}
     revealed_rule_ids = {r.faction_rule_id for r in reveals if r.kind == RevealKind.FACTION_RULE}
     rules = group_rules(group)
-    matched: dict[int, list[str]] = {entry.rule.pk: [] for entry in rules}
-    for participant in participants:
-        sheet = participant.character_sheet
-        for match in faction_rule_matches(group, sheet, rules):
-            matched[match.rule.pk].append(_presented_name(sheet))
+    matched = _matched_by(group, participants, rules)
     cause, margin = group_cause(group)
     organization = group_organization(group)
     # A named NPC's drives are its persona's own (ADR-4373-A): nothing there is "edited".
