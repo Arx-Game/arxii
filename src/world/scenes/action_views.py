@@ -189,7 +189,7 @@ class SceneActionRequestViewSet(PuppetActorMixin, viewsets.ModelViewSet):
                 "target_persona__character_sheet__roster_entry__roster",
                 "action_template",
                 "action_template__consent_category",
-                "action_template__check_type",
+                "action_template__resist_check_type",
                 # get_boon reads the ask riding the request, one row per request.
                 "boon",
                 "boon__material_category",

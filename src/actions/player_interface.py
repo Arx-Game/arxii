@@ -1383,15 +1383,19 @@ def _scene_actions(character: ObjectDB) -> list[PlayerAction]:
     from actions.models import ActionTemplate  # noqa: PLC0415
     from actions.registry import SOCIAL_ACTIONS_BY_TEMPLATE_NAME  # noqa: PLC0415
     from world.roster.services.activity import is_story_npc  # noqa: PLC0415
+    from world.scenes.action_services import is_contested_social_template  # noqa: PLC0415
 
     sheet = _get_character_sheet(character)
     actor_is_npc = sheet is not None and is_story_npc(sheet)
     templates = list(ActionTemplate.objects.filter(category=_SOCIAL_CATEGORY))
     if actor_is_npc:
+        # The same rule the NPC-on-PC refusal applies: only a contested social template
+        # needs both tags; any other template is offered as it is to a PC.
         templates = [
             t
             for t in templates
-            if t.resist_check_type_id is not None and t.consent_category_id is not None
+            if not is_contested_social_template(t)
+            or (t.resist_check_type_id is not None and t.consent_category_id is not None)
         ]
     result: list[PlayerAction] = []
     for template in templates:

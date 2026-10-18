@@ -460,8 +460,11 @@ class SceneActionRequestSerializer(_CombatStakesCacheMixin, serializers.ModelSer
         resist_only = request_is_resist_only(instance)
         template = instance.action_template
         data["resist_only"] = resist_only
+        # The check the PC rolls to resist, not the NPC's own check.
         data["resist_check_name"] = (
-            template.check_type.name if resist_only and template is not None else None
+            template.resist_check_type.name
+            if resist_only and template is not None and template.resist_check_type_id
+            else None
         )
         return data
 

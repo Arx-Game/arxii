@@ -150,6 +150,7 @@ class AnNpcActsOnAPc(JourneyCase):
         body = self._npc_acts("deceive")
         self.assertEqual(body["status"], "pending")
         self.assertIs(body["resist_only"], True)
+        self.assertEqual(body["resist_check_name"], "Insight")
         response = self._ysmay_responds(body["id"], "deny")
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertEqual(response.json()["detail"], self.RESIST_ONLY_LINE)
@@ -254,14 +255,7 @@ class AnNpcActsOnAPc(JourneyCase):
         )
 
     def test_untagged_template_refuses_npc_on_pc(self) -> None:
-        ActionTemplateFactory(
-            name="Seduce",
-            category=ActionCategory.SOCIAL,
-            target_type=ActionTargetType.SINGLE,
-            check_type=self.persuasion,
-            resist_check_type=self.insight,
-            consent_category=None,
-        )
+        self._untagged_seduce()
         response = self._npc_posts("seduce")
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertEqual(response.json()["detail"], [self.NOT_YET_LINE])
@@ -293,6 +287,24 @@ class AnNpcActsOnAPc(JourneyCase):
         )
         body = self._npc_acts("intimidate")
         self.assertEqual(body["status"], "pending")
+        self.assertIs(body["resist_only"], False)
+        denied = self._ysmay_responds(body["id"], "deny")
+        self.assertEqual(denied.status_code, status.HTTP_200_OK)
+        self.assertEqual(denied.json()["status"], "denied")
+
+    def test_an_untagged_group_social_template_is_deniable(self) -> None:
+        ActionTemplateFactory(
+            name="Intimidate",
+            category=ActionCategory.SOCIAL,
+            target_type=ActionTargetType.FILTERED_GROUP,
+            check_type=self.persuasion,
+        )
+        body = self._npc_acts("intimidate")
+        self.assertEqual(body["status"], "pending")
+        self.assertIs(body["resist_only"], False)
+        denied = self._ysmay_responds(body["id"], "deny")
+        self.assertEqual(denied.status_code, status.HTTP_200_OK)
+        self.assertEqual(denied.json()["status"], "denied")
 
     def test_the_wheel_spins_the_pcs_own_roll(self) -> None:
         setup = CheckSystemSetupFactory.create()

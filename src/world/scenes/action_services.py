@@ -983,13 +983,17 @@ def request_is_resist_only(
 ) -> bool:
     """True when a PC may resist but not refuse this request (#4418, ADR-4418).
 
-    An NPC acting on a PC is resist-only unless the action's consent category, or an
-    ancestor of it, is flagged ``refusable_from_npcs`` (romantic, for instance).
+    Only a contested social template (``is_contested_social_template``) can be: an NPC
+    acting on a PC with one is resist-only unless the action's consent category, or an
+    ancestor of it, is flagged ``refusable_from_npcs`` (romantic, for instance). Any
+    other template from an NPC stays deniable, as it is from a PC.
     """
     if not npc_acts_on_pc(action_request, target_persona):
         return False
     template = action_request.action_template
-    category = template.consent_category if template is not None else None
+    if not is_contested_social_template(template):
+        return False
+    category = template.consent_category
     if category is None:
         return True
     return not category.is_refusable_from_npcs()
