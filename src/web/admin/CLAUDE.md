@@ -737,6 +737,12 @@ in the builder.
   where a closed one would have shown. Saved with `UpbringingForm` in the same
   transaction as everything else; the answers table's own "Closes" column
   is a static link to this module (`#closes-module`), never a per-answer field.
+- **The route, not a pick (#4395):** the Upbringing pick retired from creation; the
+  `OriginTemplate` this page authors is the beginning's one family route, assigned
+  with the beginning. A write-in question asked on every path ("Every path" +
+  "Write an answer" + nothing to pick) never shows to a player any more; the
+  `applies_to` choice label says so, and the route's pick-lists on every path and
+  its path-scoped questions still show.
 - **What is authored here:** the Upbringing itself, its questions (including the
   `#3660` kind/connection/anchor/follow-up fields), their answers (including
   `reputation_seed`), and now (#3675) each answer's own `DistinctionOffer` rows

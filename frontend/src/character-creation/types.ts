@@ -48,6 +48,14 @@ export interface Beginnings {
   id: number;
   name: string;
   description: string;
+  /** The frame every character who starts here shares, read at the pick (#4395). */
+  frame: string;
+  /** The station this beginning starts a character at, in a few words (#4395). */
+  station: string;
+  /** A struck stage is absent from the life grids for this beginning (#4395). */
+  strikes_childhood: boolean;
+  strikes_youth: boolean;
+  strikes_adulthood: boolean;
   art_image: string | null;
   allowed_species_ids: number[];
   grants_species_languages: boolean;
@@ -943,6 +951,8 @@ export interface DraftData {
   // The beats of the life (#4124): beat id -> taken / unknown / the optional line.
   // The whole map is sent on every save; a beat absent from it is not taken.
   beats?: Record<string, DraftBeatState>;
+  // The people seated beside the parents (#4395); the whole list is sent on every save.
+  kin_rows?: KinRow[];
   // The name given to a newly founded family on the 'named' family path (#3617)
   new_family_name?: string;
   concept?: string;
@@ -1354,6 +1364,19 @@ export function isAnswered(slot: OriginTemplateSlot, draft: CharacterDraft): boo
  * Ids of the questions shown to this draft, evaluated in sort order (#3660).
  * Mirrors `world.character_creation.questionnaire.is_shown`/`visible_slot_ids`.
  */
+/**
+ * A free-text question asked on every family path (#4395): retired from creation. Mirrors
+ * `questionnaire.is_general_write_in`; the server also leaves it out of the route payload.
+ */
+export function isGeneralWriteIn(slot: OriginTemplateSlot): boolean {
+  return (
+    slot.applies_to === 'any' &&
+    slot.kind === 'text' &&
+    slot.allows_text &&
+    slot.choices.length === 0
+  );
+}
+
 export function shownSlotIds(
   template: OriginTemplate,
   draft: CharacterDraft,
@@ -1364,6 +1387,7 @@ export function shownSlotIds(
   const picks = draft.draft_data.origin_choices ?? {};
   const shown = new Set<number>();
   for (const slot of slots) {
+    if (isGeneralWriteIn(slot)) continue;
     if (slot.applies_to !== 'any' && slot.applies_to !== path) continue;
     if (slot.follow_up_to == null) {
       shown.add(slot.id);
@@ -1484,6 +1508,9 @@ export interface BeatPoolEntry {
   line: string;
   answer_offer_ids: number[];
   kept: boolean;
+  /** How many answers the beat allows this draft (#4395): one, more with the years
+   * lived on an age-scaled beat, or null for any number. */
+  allowance: number | null;
 }
 
 /** The draft's own state on one beat, under `draft_data.beats[<beat_id>]` (#4124). */
@@ -1501,6 +1528,38 @@ export const LIFE_STAGE_ORDER: readonly string[] = [
   'adulthood',
   'at_the_glimpse',
   'since_the_glimpse',
+];
+
+/** The grid headings at creation (#4395): the sheet keeps `LIFE_STAGE_LABELS`. */
+export const LIFE_GRID_LABELS: Record<string, string> = {
+  childhood: 'Childhood',
+  youth: 'Youth',
+  adulthood: 'Before the Glimpse',
+  at_the_glimpse: 'The Glimpse',
+  since_the_glimpse: 'What you carry',
+};
+
+/** A person seated beside the parents in the Lineage step (#4395). */
+export type KinRowKind = 'twin' | 'spouse' | 'child';
+export type SpouseFate = 'alive' | 'dead' | 'divorced' | 'fled';
+export type ChildFate = 'raised' | 'fostered_away' | 'lost';
+export interface KinRow {
+  kind: KinRowKind;
+  name: string;
+  gender_id: number | null;
+  /** A spouse's or a child's fate; `''` for a twin. */
+  fate: SpouseFate | ChildFate | '';
+}
+export const SPOUSE_FATES: { value: SpouseFate; label: string }[] = [
+  { value: 'alive', label: 'Alive' },
+  { value: 'dead', label: 'Dead' },
+  { value: 'divorced', label: 'Divorced' },
+  { value: 'fled', label: 'Fled' },
+];
+export const CHILD_FATES: { value: ChildFate; label: string }[] = [
+  { value: 'raised', label: 'Raised' },
+  { value: 'fostered_away', label: 'Fostered away' },
+  { value: 'lost', label: 'Lost' },
 ];
 
 /** A distinction offer visible to the draft in the requested chapter (#3675). */

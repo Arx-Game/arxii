@@ -8,8 +8,8 @@ Character creation is a multi-stage process that guides players through creating
 
 1. **Origin** - Select starting area (city), which gates heritage options
 2. **Heritage** - Special heritage (Sleeper/Misbegotten) or normal → Species → Gender/Pronouns → Age
-3. **Lineage** - Choose an Upbringing (`OriginTemplate`) for the beginning, then its
-   family path: claim a staff-authored family (entering through a kin Vacancy when
+3. **Lineage** - The beginning's route (`OriginTemplate`, assigned with the beginning
+   since #4395; the Upbringing pick retired) gives the family path: claim a staff-authored family (entering through a kin Vacancy when
    one is offered), name a new one from a Family Template, or none (tarot surname
    ritual); typed prompts with costed pick-list choices priced by the claimed
    family's influence, plus a Service panel offering any reachable retainer Vacancy
@@ -17,7 +17,10 @@ Character creation is a multi-stage process that guides players through creating
    step section and ADR-0273). Plus kin-slot claim/mint/defer and invented parents
    (#2815: names/genders in draft_data, `second_parent_species` for a
    cross-species parent, unlocks that line's colors in Appearance; finalize
-   creates the nodes and pins back-inference)
+   creates the nodes and pins back-inference). Then the kin rows (a twin, spouses,
+   children: `draft_data.kin_rows`, seated by `_bind_kin_rows`) and the life as grids by
+   stage (#4124 beats, #4395 grids: a beginning strikes stages out, an age-scaled beat
+   allows one more pick per decade, a general write-in prompt never shows)
 4. **Distinctions** - Advantages and disadvantages
 5. **Path** - Class/path selection
 6. **Gift** - Tradition, Gift + Technique catalog picks, gift resonance, and Anima Check
@@ -48,17 +51,22 @@ Character creation is a multi-stage process that guides players through creating
 - Worldbuilding paths for each starting area (Arx: Caretaker, Sleeper, Misbegotten -
   canonical prose and gates in the lore repo's `beginnings/arx.md`)
 - Controls which species are available (allows_all_species or specific species_options)
-- Family paths are gated per-Upbringing instead, on `OriginTemplate` (#3617); Beginnings
+- Family paths are gated on the beginning's route, `OriginTemplate` (#3617); Beginnings
   itself carries no family-known flag
+- Carries a `frame` (the prose every character who starts here shares, read at the pick),
+  a `station`, and three strikes (`strikes_childhood`/`strikes_youth`/`strikes_adulthood`:
+  a struck stage is absent from the life grids, `struck_stages()`) (#4395)
 - Can override starting room (e.g., Sleeper Wake Room)
 - Has a CG point cost; `is_active` is its only gate
 
 ### OriginTemplate / OriginTemplateSlot / OriginTemplateSlotChoice (#2478, #3617, #3648, #3660)
 Full model shape, family-path resolution, pricing, and the authoring recipes live in
 `docs/systems/character_creation.md`'s Lineage step section and
-`docs/systems/family-authoring-recipes.md`. In brief: `OriginTemplate` ("Upbringing" in
-CG copy) is the authored content row a player picks within a Beginning, carrying a CG
-point cost and which family paths it allows (claim/name/none);
+`docs/systems/family-authoring-recipes.md`. In brief: `OriginTemplate` ("Upbringing" to
+staff; since #4395 the beginning's one route, assigned with the beginning by
+`services.route_for_beginning`/`assign_route`, never a player pick) is the authored
+content row carrying a CG point cost and which family paths it allows (claim/name/none);
+a general write-in question (`questionnaire.is_general_write_in`) never shows;
 `OriginTemplateSlot` is an authored prompt scoped to a path (`applies_to`), and
 `OriginTemplateSlotChoice` is a priced pick-list answer (`cost_for(influence)`).
 `OriginTemplate.family_templates` (M2M `HouseTemplate`, related_name `upbringings`,

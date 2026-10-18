@@ -34,6 +34,9 @@ class VisibleOffer:
     opener_key: str = ""
     #: The draft's Beginning pinned this line into the few shown at rest (#3709).
     first_look: bool = False
+    #: The distinction's own name (#4395): a grid card reads the offer's label and,
+    #: when the label is the author's own words, the distinction under it.
+    distinction_name: str = ""
     #: The distinction is already in the draft from a different offer (#3709): the
     #: leaf prints it held, never offers it twice.
     held: bool = False
@@ -79,6 +82,9 @@ class BeatPoolEntry:
     #: The Beginning keeps this beat itself (``BeatMode.ONE_KEPT``): taken by the
     #: Beginning, never removed by the player.
     kept: bool = False
+    #: How many answers this beat allows this draft (#4395): one for a one-of beat,
+    #: ``offers.age_pick_allowance`` for a beat whose picks scale with age, None for any.
+    allowance: int | None = None
 
 
 @dataclass(frozen=True)

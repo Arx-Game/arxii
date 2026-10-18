@@ -42,7 +42,6 @@ import {
   getGifts,
   getGlimpseTags,
   getHeightBands,
-  getOriginTemplates,
   getPaths,
   getPathSkillSuggestions,
   getPersonalizationOptions,
@@ -129,8 +128,6 @@ export const characterCreationKeys = {
   glimpseTags: (pathId?: number) =>
     [...characterCreationKeys.all, 'glimpse-tags', pathId ?? null] as const,
   // Origin template catalog (guided origin-story flow, #2478)
-  originTemplates: (beginningId: number) =>
-    [...characterCreationKeys.all, 'origin-templates', beginningId] as const,
   // Vacancies reachable from the draft, priced for it (#3648)
   vacancies: (draftId: number, organizationId?: number) =>
     [...characterCreationKeys.all, 'vacancies', draftId, organizationId ?? null] as const,
@@ -518,15 +515,6 @@ export function useGlimpseTags(pathId?: number) {
   return useQuery({
     queryKey: characterCreationKeys.glimpseTags(pathId),
     queryFn: () => getGlimpseTags(pathId),
-    staleTime: 5 * 60 * 1000,
-  });
-}
-
-export function useOriginTemplates(beginningId: number | null | undefined) {
-  return useQuery({
-    queryKey: characterCreationKeys.originTemplates(beginningId ?? 0),
-    queryFn: () => getOriginTemplates(beginningId!),
-    enabled: !!beginningId,
     staleTime: 5 * 60 * 1000,
   });
 }

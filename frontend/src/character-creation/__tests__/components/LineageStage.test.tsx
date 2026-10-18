@@ -1,9 +1,10 @@
 /**
  * LineageStage Component Tests
  *
- * The Lineage step is built around Upbringings (#3617): pick an Upbringing for
- * the chosen Beginning, then its family path (claim a staff-authored family,
- * name a new one, or none), with typed prompts underneath.
+ * The Lineage step is built around the beginning's route (#3617, #4395: the
+ * Upbringing pick retired; the route comes with the beginning): its family path
+ * (claim a staff-authored family, name a new one, or none), its path-scoped
+ * prompts, the kin rows and the life grids.
  */
 
 import { screen, waitFor } from '@testing-library/react';
@@ -20,7 +21,6 @@ import {
   mockNobleFamily,
   mockNobleFamily2,
   mockStartingArea,
-  mockUpbringingClaim,
   mockUpbringingConnections,
   mockUpbringingMultiPath,
   mockUpbringingNamed,
@@ -44,7 +44,6 @@ import type { FamilyPath } from '../../types';
 // Mock the API module
 vi.mock('../../api', () => ({
   getFamilies: vi.fn(),
-  getOriginTemplates: vi.fn(),
   getClaimableTitles: vi.fn().mockResolvedValue([]),
   getHouseClaim: vi.fn().mockResolvedValue(null),
   submitHouseClaim: vi.fn(),
@@ -71,7 +70,6 @@ describe('LineageStage', () => {
   beforeEach(() => {
     mockOnStageSelect.mockClear();
     vi.mocked(api.getFamilies).mockResolvedValue([]);
-    vi.mocked(api.getOriginTemplates).mockResolvedValue([]);
     vi.mocked(api.getTarotCards).mockResolvedValue([]);
     vi.mocked(api.getNamingRitualConfig).mockResolvedValue({
       flavor_text: '',
@@ -149,31 +147,23 @@ describe('LineageStage', () => {
     });
   });
 
-  describe('Upbringing picker', () => {
-    it('shows one card per upbringing with its cost and selects on click', async () => {
-      vi.mocked(api.getOriginTemplates).mockResolvedValue([
-        mockUpbringingNamed,
-        mockUpbringingClaim,
+  describe('The route comes with the beginning (#4395)', () => {
+    it('names the staff gap when the beginning has no route, and still mounts the life', async () => {
+      vi.mocked(api.getDraftBeats).mockResolvedValueOnce([
+        {
+          beat_id: 1,
+          name: 'The household',
+          prompt: 'Placeholder prompt.',
+          life_stage: 'childhood',
+          selection: 'one_of',
+          taken: false,
+          unknown: false,
+          line: '',
+          answer_offer_ids: [],
+          kept: false,
+          allowance: 1,
+        },
       ]);
-      const queryClient = createTestQueryClient();
-      renderWithCharacterCreationProviders(
-        <LineageStage draft={mockDraftWithHeritageNoUpbringing} onStageSelect={vi.fn()} />,
-        { queryClient }
-      );
-      expect(await screen.findByText('Caretaker family')).toBeInTheDocument();
-      expect(screen.getByText(/6 points/)).toBeInTheDocument();
-      expect(screen.getByText('Ward of the House')).toBeInTheDocument();
-      expect(screen.getByText(/free/i)).toBeInTheDocument();
-
-      await userEvent.click(screen.getByText('Caretaker family'));
-      expect(api.updateDraft).toHaveBeenCalledWith(
-        mockDraftWithHeritageNoUpbringing.id,
-        expect.objectContaining({ selected_origin_template_id: mockUpbringingNamed.id })
-      );
-    });
-
-    it('shows a message when no upbringings are authored for the beginning', async () => {
-      vi.mocked(api.getOriginTemplates).mockResolvedValue([]);
       const queryClient = createTestQueryClient();
       renderWithCharacterCreationProviders(
         <LineageStage draft={mockDraftWithHeritageNoUpbringing} onStageSelect={vi.fn()} />,
@@ -181,18 +171,10 @@ describe('LineageStage', () => {
       );
 
       expect(
-        await screen.findByText(/no upbringings are authored for this beginning yet/i)
+        await screen.findByText(/the family paths for this beginning are not set up yet/i)
       ).toBeInTheDocument();
-    });
-
-    it('shows a loading placeholder while upbringings load', () => {
-      const queryClient = createTestQueryClient();
-      renderWithCharacterCreationProviders(
-        <LineageStage draft={mockDraftWithHeritageNoUpbringing} onStageSelect={vi.fn()} />,
-        { queryClient }
-      );
-
-      expect(document.querySelector('.animate-pulse')).toBeInTheDocument();
+      expect(await screen.findByRole('article', { name: 'The household' })).toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: /select/i })).toBeNull();
     });
   });
 
@@ -714,7 +696,7 @@ describe('LineageStage', () => {
   });
 
   describe('Page Header', () => {
-    it('titles the chapter leaf with the authored Upbringing copy', async () => {
+    it('titles the chapter leaf with the authored Lineage copy', async () => {
       const queryClient = createTestQueryClient();
       seedCharacterCreationQueries(queryClient, { explanations: mockCGExplanations });
 
@@ -726,10 +708,8 @@ describe('LineageStage', () => {
         { queryClient }
       );
 
-      expect(screen.getByRole('heading', { name: 'Your Upbringing' })).toBeInTheDocument();
-      expect(
-        screen.getByText('Choose how you were raised, then settle your family.')
-      ).toBeInTheDocument();
+      expect(screen.getByRole('heading', { name: 'Lineage' })).toBeInTheDocument();
+      expect(screen.getByText("Choose your character's family.")).toBeInTheDocument();
     });
   });
 });

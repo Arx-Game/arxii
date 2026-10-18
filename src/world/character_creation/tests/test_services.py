@@ -11,6 +11,7 @@ from django.test import TestCase, override_settings
 from django.test.utils import CaptureQueriesContext
 from evennia.accounts.models import AccountDB
 
+from world.character_creation.constants import FamilyPath
 from world.character_creation.models import CharacterDraft, StartingArea
 from world.character_creation.services import (
     DraftIncompleteError,
@@ -222,8 +223,12 @@ class CharacterFinalizationTests(FinalizationTestMixin, TestCase):
             frame_narrative="Your story begins with escape from Salvation.",
             allows_no_family=True,
         )
+        # Path-scoped (#4395): a write-in on every path is retired from creation.
         slot = OriginTemplateSlot.objects.create(
-            template=template, name="Who helped?", prompt="Who aided your flight?"
+            template=template,
+            name="Who helped?",
+            prompt="Who aided your flight?",
+            applies_to=FamilyPath.NONE,
         )
 
         draft = self._create_complete_draft(first_name="Origin Test")

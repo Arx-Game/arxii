@@ -28279,6 +28279,7 @@ export interface components {
       line: string;
       answer_offer_ids: number[];
       kept: boolean;
+      allowance: number | null;
     };
     /**
      * @description GM readiness dashboard payload for a beat (#3562).
@@ -28531,6 +28532,16 @@ export interface components {
       name: string;
       /** @description Worldbuilding text shown to players */
       description: string;
+      /** @description The frame every character who starts here shares; shown at the pick. */
+      frame?: string;
+      /** @description The station this beginning starts a character at, in a few words. */
+      station?: string;
+      /** @description Strike the Childhood stage out: its grids never show for this beginning. */
+      strikes_childhood?: boolean;
+      /** @description Strike the Youth stage out: its grids never show for this beginning. */
+      strikes_youth?: boolean;
+      /** @description Strike the Before the Glimpse stage out: its grids never show for this beginning. */
+      strikes_adulthood?: boolean;
       /** @description Cloudinary URL sourced from art (#2408); key name kept for frontend compat. */
       readonly art_image: string | null;
       /**
@@ -28555,6 +28566,16 @@ export interface components {
       name: string;
       /** @description Worldbuilding text shown to players */
       description: string;
+      /** @description The frame every character who starts here shares; shown at the pick. */
+      frame?: string;
+      /** @description The station this beginning starts a character at, in a few words. */
+      station?: string;
+      /** @description Strike the Childhood stage out: its grids never show for this beginning. */
+      strikes_childhood?: boolean;
+      /** @description Strike the Youth stage out: its grids never show for this beginning. */
+      strikes_youth?: boolean;
+      /** @description Strike the Before the Glimpse stage out: its grids never show for this beginning. */
+      strikes_adulthood?: boolean;
       /** @description If False, characters don't get species' racial language (Misbegotten) */
       grants_species_languages?: boolean;
       /** @description CG point cost for this beginning; summed with species gift grant costs into the character-creation points budget. */
@@ -52851,6 +52872,7 @@ export interface components {
       offer_id: number;
       distinction_id: number;
       name: string;
+      distinction_name: string;
       player_line: string;
       chapter: string;
       arrives_as: string;

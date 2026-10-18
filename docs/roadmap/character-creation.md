@@ -1,5 +1,22 @@
 # Character Creation & Identity
 
+## Built (2026-10-18, #4395: a beginning is a frame and a strike-list; the life is grids by stage)
+
+A beginning now carries a frame (the prose every character who starts here shares,
+read at the pick beside its station), and strikes whole stages out of the life: the
+Sleeper strikes the three before the Glimpse and meets the Glimpse row and "what you
+carry" alone. The Upbringing pick retired; the beginning's one route comes with it
+(production had one each), and the thirty-four general write-in prompts never show
+again, because creation asks no free-form lore question. The life is picked from grids
+by stage (reading A of the demo): each beat a grid of its answers taken straight from
+the cards, a one-of swapping, an age-scaled beat allowing one more pick per decade
+(nineteen is one "known for", fifty is four), a line of the player's own under a beat
+once something is picked. The Lineage step seats a twin, spouses and children beside the
+parents, and finalize writes them into the kinship graph. Remaining: the beats'
+content (eight beats, about seventy options) is ApostateCD's to author; the staff
+builder for beats and beginnings; a Glimpse row "you remember a life you never lived"
+(a past-life source exists, `PAST_LIFE`, the option is content).
+
 ## Built (2026-09-10, #3739: distinctive physical features)
 
 A feature is any trait row or any marking, species-required markers included.

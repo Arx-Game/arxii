@@ -262,7 +262,13 @@ export function HeritageStage({ draft, onStageSelect }: HeritageStageProps) {
             >
               {/* Decorative: the entry name beside it is the text. */}
               {b.art_image && <img className="entry-art" src={b.art_image} alt="" />}
+              {b.station && <p className="ledger-line">{b.station}</p>}
               <Paragraphs text={b.description} />
+              {b.frame && (
+                <div className="frame">
+                  <Paragraphs text={b.frame} />
+                </div>
+              )}
               <CodexLine entryId={b.codex_entry_ids?.[0]} name={b.name} />
               <EntryDoors
                 chooseLabel={`Select ${b.name}`}

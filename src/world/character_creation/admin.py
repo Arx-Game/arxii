@@ -124,14 +124,21 @@ class BeginningsAdmin(GrantReachOnSaveMixin, admin.ModelAdmin):
         "species_count",
         "social_rank",
         "cg_point_cost",
+        "station",
+        "strikes_childhood",
+        "strikes_youth",
+        "strikes_adulthood",
         "sort_order",
     ]
     list_filter = [
         "starting_area",
         "is_active",
         "grants_species_languages",
+        "strikes_childhood",
+        "strikes_youth",
+        "strikes_adulthood",
     ]
-    search_fields = ["name", "description"]
+    search_fields = ["name", "description", "frame", "station"]
     ordering = ["starting_area__name", "sort_order", "name"]
     filter_horizontal = ["allowed_species", "starting_languages"]
     inlines = [
@@ -142,7 +149,7 @@ class BeginningsAdmin(GrantReachOnSaveMixin, admin.ModelAdmin):
     ]
 
     fieldsets = [
-        (None, {"fields": ["name", "description", "art", "starting_area"]}),
+        (None, {"fields": ["name", "description", "frame", "station", "art", "starting_area"]}),
         (
             "Access Control",
             {"fields": ["is_active", "sort_order"]},
@@ -152,6 +159,16 @@ class BeginningsAdmin(GrantReachOnSaveMixin, admin.ModelAdmin):
             {
                 "fields": ["allowed_species", "cg_point_cost", "beat_mode"],
                 "description": "Select species (parent species include all subtypes)",
+            },
+        ),
+        (
+            "The life it strikes out",
+            {
+                "fields": ["strikes_childhood", "strikes_youth", "strikes_adulthood"],
+                "description": (
+                    "A struck stage is absent from the life grids for this beginning (#4395); "
+                    "a single beat is struck with a Life beat exclusion instead."
+                ),
             },
         ),
         (
@@ -298,13 +315,20 @@ class LifeBeatAdmin(admin.ModelAdmin):
     """The Backgrounds beat library (#4124): one row per beat, authored once for every
     Beginning; its answers and its exclusions sit inline."""
 
-    list_display = ["name", "life_stage", "selection", "sort_order", "is_active"]
+    list_display = [
+        "name",
+        "life_stage",
+        "selection",
+        "picks_scale_with_age",
+        "sort_order",
+        "is_active",
+    ]
     list_filter = ["life_stage", "selection", "is_active"]
     search_fields = ["name", "prompt"]
     ordering = ["life_stage", "sort_order", "name"]
     inlines = [BeatAnswerInline, BeatExclusionInline]
     fieldsets = [
-        (None, {"fields": ["name", "life_stage", "prompt", "selection"]}),
+        (None, {"fields": ["name", "life_stage", "prompt", "selection", "picks_scale_with_age"]}),
         ("Listing", {"fields": ["sort_order", "is_active"]}),
         CREDIT_FIELDSET,
     ]

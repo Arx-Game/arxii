@@ -36,7 +36,6 @@ import type {
   NamingRitualConfig,
   OfferChapter,
   OffersResponse,
-  OriginTemplate,
   Path,
   PathSkillSuggestion,
   PerspectiveEntry,
@@ -503,14 +502,6 @@ export async function getGlimpseTags(pathId?: number): Promise<GlimpseTagOption[
 // =============================================================================
 // Origin Template Catalog API (guided origin-story flow, #2478)
 // =============================================================================
-
-export async function getOriginTemplates(beginningId: number): Promise<OriginTemplate[]> {
-  const res = await apiFetch(`${BASE_URL}/origin-templates/?beginning=${beginningId}`);
-  if (!res.ok) {
-    throw new Error('Failed to load origin templates');
-  }
-  return res.json();
-}
 
 // =============================================================================
 // Vacancies (openings on a staff family, priced for the draft, #3648)
