@@ -13,6 +13,7 @@ from decimal import Decimal
 
 from evennia_extensions.factories import ObjectDBFactory, RoomProfileFactory
 from integration_tests.harness import JourneyCase
+from world.checks.test_helpers import force_check_outcome
 from world.items.constants import BodyRegion, EquipmentLayer
 from world.items.factories import (
     EquippedItemFactory,
@@ -21,12 +22,16 @@ from world.items.factories import (
     ItemTemplateFactory,
     QualityTierFactory,
     TemplateSlotFactory,
+    install_full_lab_station,
+    wire_enchanting_crafting,
 )
 from world.items.models import ItemFacet, ItemInstance
 from world.magic.constants import GainSource, TargetKind
 from world.magic.factories import CharacterResonanceFactory, FacetFactory, ResonanceFactory
 from world.magic.models import CharacterResonance, ResonanceGrant, Thread
 from world.magic.services.gain import outfit_daily_trickle_for_character
+from world.traits.factories import CharacterTraitValueFactory, CheckOutcomeFactory
+from world.traits.models import Trait
 from world.worship.constants import BeingResonanceTier
 from world.worship.factories import (
     BeingFacetFactory,
@@ -51,7 +56,7 @@ class AScarfThatHasFedItsWearer(JourneyCase):
         self.silk = FacetFactory(name="Silk")
         BeingFacetFactory(being=self.ombrin, facet=self.silk)
 
-        template = ItemTemplateFactory(name="silk scarf", value=20)
+        template = ItemTemplateFactory(name="silk scarf", value=20, facet_capacity=1)
         TemplateSlotFactory(
             template=template, body_region=BodyRegion.NECK, equipment_layer=EquipmentLayer.BASE
         )
@@ -60,6 +65,7 @@ class AScarfThatHasFedItsWearer(JourneyCase):
         )
         scarf_object.db_location = self.ysmay
         scarf_object.save(update_fields=["db_location"])
+        self.scarf_object = scarf_object
         self.scarf = ItemInstanceFactory(
             template=template,
             holder_character_sheet=sheet,
@@ -118,4 +124,26 @@ class AScarfThatHasFedItsWearer(JourneyCase):
 
         self.assertIsNotNone(ItemFacet.objects.get(pk=self.scarf_facet.pk).removed_at)
         self.assertEqual(outfit_daily_trickle_for_character(self.ysmay.sheet_data), 0)
+        self._grant_still_points_at_the_facet()
+
+    def test_the_facet_can_be_crafted_on_again_once_removed(self) -> None:
+        """The slot a removed facet held is free: `craft facet` attaches it anew."""
+        wire_enchanting_crafting(base_difficulty=0)
+        workshop = self.make_room("The Workshop")
+        install_full_lab_station(RoomProfileFactory(objectdb=workshop))
+        self.ysmay.location = workshop
+        QualityTierFactory(name="Common", numeric_min=0, numeric_max=9999, sort_order=0)
+        CharacterTraitValueFactory(
+            character=self.ysmay.sheet_data, trait=Trait.objects.get(name="Enchanting"), value=50
+        )
+        self.telnet(self.ysmay, f"craft removefacet {self.scarf_facet.pk}")
+        self.assertEqual(self.scarf.item_facets.filter(removed_at__isnull=True).count(), 0)
+
+        with force_check_outcome(CheckOutcomeFactory(name="Ok", success_level=2)):
+            self.telnet(self.ysmay, f"craft facet Silk item={self.scarf_object.pk}")
+
+        attached = list(self.scarf.item_facets.filter(removed_at__isnull=True))
+        self.assertEqual([row.facet_id for row in attached], [self.silk.pk])
+        self.assertNotEqual(attached[0].pk, self.scarf_facet.pk)
+        self.assertIsNotNone(ItemFacet.objects.get(pk=self.scarf_facet.pk).removed_at)
         self._grant_still_points_at_the_facet()

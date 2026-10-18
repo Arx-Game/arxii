@@ -100,7 +100,10 @@ class OutfitGrantHistorySurvivesTests(TestCase):
         self.item.destroyed_at = timezone.now() - timedelta(days=3650)
         self.item.save(update_fields=["destroyed_at"])
 
-        purge_expired_soft_deleted_items()
+        # No ProtectedError warning either: the eligibility filter skips the item, the
+        # PROTECT foreign key is only the backstop behind it.
+        with self.assertNoLogs("world.items.services.cleanup", level="WARNING"):
+            purge_expired_soft_deleted_items()
 
         self.assertTrue(ItemInstance.objects.filter(pk=self.item.pk).exists())
         self._assert_history_intact()
@@ -125,3 +128,33 @@ class OutfitGrantHistorySurvivesTests(TestCase):
         grant.refresh_from_db()
         self.assertEqual(grant.outfit_item_facet_id, self.item_facet.pk)
         self.assertFalse(ItemFacet.objects.filter(pk=loser_row.pk).exists())
+
+    def test_the_staff_merge_action_keeps_the_grant_history(self) -> None:
+        from django.urls import reverse
+
+        from evennia_extensions.factories import AccountFactory
+        from world.items.factories import ItemFacetFactory
+        from world.magic.factories import FacetFactory
+
+        loser = FacetFactory(name="Silks")
+        loser_row = ItemFacetFactory(item_instance=self.item, facet=loser)
+        grant = ResonanceGrant.objects.create(
+            character_sheet=self.sheet,
+            resonance=self.resonance,
+            amount=5,
+            source=GainSource.OUTFIT_TRICKLE,
+            outfit_item_facet=loser_row,
+        )
+        self.client.force_login(AccountFactory(is_staff=True, is_superuser=True))
+        selected = {
+            "action": "merge_into",
+            "_selected_action": [self.facet.pk, loser.pk],
+            "apply": "1",
+            "winner": self.facet.pk,
+        }
+
+        response = self.client.post(reverse("admin:arxii_facet_changelist"), selected)
+
+        self.assertEqual(response.status_code, 302)
+        grant.refresh_from_db()
+        self.assertEqual(grant.outfit_item_facet_id, self.item_facet.pk)
