@@ -52,13 +52,20 @@ Example.
 """
 
 
+HEAVYWEIGHT_SLICE = LIGHTWEIGHT.replace("Issue.\n", "Issue.\n\nSlice 5 of #4333\n", 1).replace(
+    "lane=lightweight", "lane=heavyweight"
+)
+
+
 class DiscoveryValidatorTests(unittest.TestCase):
-    def run_validator(self, body: str, labels: str) -> subprocess.CompletedProcess[str]:
+    def run_validator(
+        self, body: str, labels: str, *extra: str
+    ) -> subprocess.CompletedProcess[str]:
         with tempfile.NamedTemporaryFile("w", suffix=".md") as handle:
             handle.write(body)
             handle.flush()
             return subprocess.run(
-                [str(SCRIPT), "3956", "--body-file", handle.name, "--labels", labels],
+                [str(SCRIPT), "3956", "--body-file", handle.name, "--labels", labels, *extra],
                 cwd=ROOT,
                 capture_output=True,
                 text=True,
@@ -150,6 +157,66 @@ class DiscoveryValidatorTests(unittest.TestCase):
         result = self.run_validator(body, "status:implementing")
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("Outcome", result.stderr)
+
+    def slice_run(
+        self, body: str, parent_labels: str, parent_state: str
+    ) -> subprocess.CompletedProcess[str]:
+        return self.run_validator(
+            body,
+            "status:implementing",
+            "--parent-labels",
+            parent_labels,
+            "--parent-state",
+            parent_state,
+        )
+
+    def test_slice_with_approved_open_parent_passes(self) -> None:
+        result = self.slice_run(HEAVYWEIGHT_SLICE, "spec:approved,backend", "open")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("parent=#4333", result.stdout)
+
+    def test_slice_with_unapproved_parent_fails(self) -> None:
+        result = self.slice_run(HEAVYWEIGHT_SLICE, "status:spec-review", "open")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("does not carry spec:approved", result.stderr)
+
+    def test_slice_with_closed_parent_fails(self) -> None:
+        result = self.slice_run(HEAVYWEIGHT_SLICE, "spec:approved", "closed")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("not open", result.stderr)
+
+    def test_slice_with_missing_parent_fails_closed(self) -> None:
+        # No injected parent state: the real fetch runs. An absurd number fails to resolve.
+        body = HEAVYWEIGHT_SLICE.replace("#4333", "#999999999")
+        result = self.run_validator(body, "status:implementing")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("could not fetch parent", result.stderr)
+
+    def test_two_parent_lines_fail(self) -> None:
+        body = HEAVYWEIGHT_SLICE.replace(
+            "Slice 5 of #4333\n", "Slice 5 of #4333\nSlice 2 of #4343\n"
+        )
+        result = self.slice_run(body, "spec:approved", "open")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("more than one", result.stderr)
+
+    def test_parent_line_inside_spec_does_not_count(self) -> None:
+        body = STANDARD.replace("state=awaiting-stakeholder", "state=complete").replace(
+            "### Goal", "Slice 5 of #4333\n### Goal"
+        )
+        result = self.slice_run(body, "spec:approved", "open")
+        self.assertNotEqual(result.returncode, 0)
+
+    def test_heavyweight_without_parent_or_approval_still_fails(self) -> None:
+        body = LIGHTWEIGHT.replace("lane=lightweight", "lane=heavyweight")
+        result = self.run_validator(body, "status:implementing")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("requires a complete lightweight marker", result.stderr)
+
+    def test_slice_with_awaiting_marker_fails(self) -> None:
+        body = HEAVYWEIGHT_SLICE.replace("state=complete", "state=awaiting-stakeholder")
+        result = self.slice_run(body, "spec:approved", "open")
+        self.assertNotEqual(result.returncode, 0)
 
 
 if __name__ == "__main__":
