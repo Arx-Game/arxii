@@ -150,3 +150,61 @@ class DescribeCrowdAction(Action):
             message=f"The crowd is now {shown}.",
             data={"opponent_ids": [opponent.pk for opponent in opponents]},
         )
+
+
+@dataclass
+class PlaceNPCInSceneAction(Action):
+    """The scene's GM puts one of their story NPCs into the scene's room.
+
+    Kwargs: ``roster_entry_id``, ``scene_id``. The NPC then shows on the cast list.
+    """
+
+    key: str = "place_npc_in_scene"
+    name: str = "Place NPC in Scene"
+    icon: str = "user-plus"
+    category: str = "gm"
+    action_category: ActionCategory = ActionCategory.SOCIAL
+    target_type: TargetType = TargetType.SELF
+
+    def get_prerequisites(self) -> list[Prerequisite]:
+        return [RunsScenePrerequisite()]
+
+    def execute(
+        self, actor: ObjectDB, context: ActionContext | None = None, **kwargs: Any
+    ) -> ActionResult:
+        from commands.utils.gm_resolution import resolve_account_or_none  # noqa: PLC0415
+        from world.roster.models import RosterEntry  # noqa: PLC0415
+        from world.roster.services.npc_placement import (  # noqa: PLC0415
+            NPCPlacementError,
+            place_npc_in_scene,
+        )
+
+        account = actor.account or resolve_account_or_none(actor)
+        if account is None:
+            return ActionResult(success=False, message="No account is playing this character.")
+        scene = resolve_gm_scene(actor, kwargs)
+        if scene is None:
+            return ActionResult(success=False, message="There is no scene here.")
+        try:
+            entry_id = int(kwargs.get("roster_entry_id"))
+        except (TypeError, ValueError):
+            entry_id = None
+        entry = (
+            RosterEntry.objects.filter(pk=entry_id)
+            .select_related("roster", "character_sheet__character")
+            .first()
+            if entry_id is not None
+            else None
+        )
+        if entry is None:
+            return ActionResult(success=False, message="No such NPC.")
+        try:
+            place_npc_in_scene(entry=entry, scene=scene, by=account)
+        except NPCPlacementError as exc:
+            return ActionResult(success=False, message=exc.user_message)
+        name = entry.character_sheet.character.db_key
+        return ActionResult(
+            success=True,
+            message=f"{name} is in {scene.name}.",
+            data={"roster_entry_id": entry.pk},
+        )
