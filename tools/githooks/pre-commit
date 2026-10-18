@@ -40,14 +40,14 @@ if [ -n "$(git ls-files --unmerged)" ]; then
   exit 1
 fi
 
-if [ -n "${PRE_COMMIT_PYTHON:-}" ] && [ -x "$PRE_COMMIT_PYTHON" ]; then
-  pre_commit=("$PRE_COMMIT_PYTHON" -m pre_commit)
-elif command -v pre-commit >/dev/null 2>&1; then
-  pre_commit=(pre-commit)
-else
-  say "pre-commit not found; set PRE_COMMIT_PYTHON or put pre-commit on PATH"
+# Resolved from this worktree at commit time, never from a path baked at install (#4428).
+# shellcheck source=tools/githooks/lib.sh
+. "$(git rev-parse --show-toplevel)/tools/githooks/lib.sh"
+if ! resolve_pre_commit; then
+  say "pre-commit not found; run uv sync in this worktree or put pre-commit on PATH"
   exit 1
 fi
+pre_commit=("${PRE_COMMIT_CMD[@]}")
 
 # A pathspec commit (`git commit -- <files>`, `--only`) runs hooks against a temporary index
 # named next-index-<pid>.lock. Re-staging there never reaches the real index, so an auto-fix

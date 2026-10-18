@@ -1,0 +1,17 @@
+#!/usr/bin/env bash
+# Pre-push hook: runs pre-commit's pre-push stage for the worktree that is pushing (#4428).
+# Installed as a shim by tools/githooks/install.sh. Tooling is resolved now, not at install.
+set -uo pipefail
+
+here="$(cd "$(dirname "$0")" && pwd)"
+# shellcheck source=tools/githooks/lib.sh
+. "$here/lib.sh"
+
+if ! resolve_pre_commit; then
+  echo "\`pre-commit\` not found. Run \`uv sync\` in this worktree or put pre-commit on PATH." >&2
+  exit 1
+fi
+
+common_hooks="$(git rev-parse --path-format=absolute --git-common-dir)/hooks"
+exec "${PRE_COMMIT_CMD[@]}" hook-impl --config=.pre-commit-config.yaml \
+  --hook-type=pre-push --hook-dir "$common_hooks" -- "$@"

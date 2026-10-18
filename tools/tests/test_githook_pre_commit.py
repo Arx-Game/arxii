@@ -24,6 +24,8 @@ import unittest
 ROOT = Path(__file__).resolve().parents[2]
 HOOK = ROOT / "tools/githooks/pre-commit"
 INSTALL = ROOT / "tools/githooks/install.sh"
+LIB = ROOT / "tools/githooks/lib.sh"
+PRE_PUSH = ROOT / "tools/githooks/pre-push"
 
 _FIXER = """#!/usr/bin/env bash
 for f in "$@"; do sed -i 's/[ ]*$//' "$f"; done
@@ -122,6 +124,8 @@ class NoClearingHookTests(unittest.TestCase):
         tracked_hook = self.repo / "tools/githooks/pre-commit"
         tracked_hook.parent.mkdir(parents=True)
         shutil.copy2(HOOK, tracked_hook)
+        for helper in (LIB, PRE_PUSH):
+            shutil.copy2(helper, tracked_hook.parent / helper.name)
         self.git("add", "-A")
         self.git("commit", "-q", "-m", "base")
         self.install()
@@ -150,7 +154,12 @@ class NoClearingHookTests(unittest.TestCase):
         )
 
     def commit_env(self, **extra: str) -> dict[str, str]:
-        return _clean_env(PRE_COMMIT_HOME=str(self.pre_commit_home), **extra)
+        # The hook resolves pre-commit at commit time (tools/githooks/lib.sh, #4428).
+        return _clean_env(
+            PRE_COMMIT_HOME=str(self.pre_commit_home),
+            PRE_COMMIT_PYTHON=sys.executable,
+            **extra,
+        )
 
     def commit(self, *args: str, **extra: str) -> subprocess.CompletedProcess[str]:
         return subprocess.run(
@@ -313,10 +322,10 @@ class NoClearingHookTests(unittest.TestCase):
 
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
 
-    def test_installer_is_idempotent_and_leaves_pre_push_alone(self) -> None:
+    def test_installer_is_idempotent_and_bakes_no_worktree_path(self) -> None:
+        """Both shims resolve tooling when they run, so no path is written at install (#4428)."""
         hooks_dir = self.repo / ".git/hooks"
-        pre_push = hooks_dir / "pre-push"
-        pre_push.write_text("#!/bin/sh\necho sentinel\n", encoding="utf-8")
+        (hooks_dir / "pre-push").write_text("#!/bin/sh\necho stale\n", encoding="utf-8")
         self.git("config", "core.hooksPath", "/nonexistent/windows/path")
         first = (hooks_dir / "pre-commit").read_text(encoding="utf-8")
 
@@ -324,8 +333,13 @@ class NoClearingHookTests(unittest.TestCase):
         self.install()
 
         self.assertEqual((hooks_dir / "pre-commit").read_text(encoding="utf-8"), first)
-        self.assertTrue(os.access(hooks_dir / "pre-commit", os.X_OK))
-        self.assertEqual(pre_push.read_text(encoding="utf-8"), "#!/bin/sh\necho sentinel\n")
+        for name in ("pre-commit", "pre-push"):
+            shim = hooks_dir / name
+            self.assertTrue(os.access(shim, os.X_OK), name)
+            text = shim.read_text(encoding="utf-8")
+            self.assertIn(f"tools/githooks/{name}", text)
+            self.assertNotIn(str(self.repo), text)
+            self.assertNotIn(sys.executable, text)
         hooks_path = self.git("config", "--get", "core.hooksPath", check=False)
         self.assertEqual(hooks_path.returncode, 1)
 
