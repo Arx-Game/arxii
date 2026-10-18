@@ -124,7 +124,9 @@ class CmdCraft(ArxCommand):
         if not rest.isdigit():
             msg = "Usage: craft removefacet <item_facet id>."
             raise CommandError(msg)
-        item_facet = ItemFacet.objects.filter(pk=int(rest)).select_related("item_instance").first()
+        item_facet = (
+            ItemFacet.attached().filter(pk=int(rest)).select_related("item_instance").first()
+        )
         if item_facet is None:
             msg = "No such attached facet."
             raise CommandError(msg)

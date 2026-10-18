@@ -169,7 +169,7 @@ def merge_facets(winner: Facet, losers: Sequence[Facet]) -> FacetMerge:
             _move_fk(loser, winner, "signature_bonuses", "required_facet", result)
             _move_fk(loser, winner, "anchored_threads", "target_facet", result)
             _move_m2m(loser, winner, "inherent_on_templates", "inherent_facets", result)
-            _move_unique_fk(loser, winner, "item_attachments", "item_instance", result)
+            _move_item_facets(loser, winner, result)
             _move_unique_fk(loser, winner, "vogue_momentum", "society", result)
             _move_m2m(loser, winner, "fashion_styles", "in_vogue_facets", result)
             _move_unique_fk(loser, winner, "favored_by_beings", "being", result)
@@ -212,6 +212,36 @@ def _move_unique_fk(
             setattr(row, facet_field, winner)
             row.save(update_fields=[facet_field])
             result.moved += 1
+
+
+def _move_item_facets(loser: Facet, winner: Facet, result: FacetMerge) -> None:
+    """Repoint ItemFacet rows; an item already carrying the winner keeps one attached row.
+
+    Uniqueness holds among attached rows only (``removed_at`` unset, #4461), so a removed
+    row always moves. An attached duplicate is never deleted: the resonance grants it fed
+    are handed to the item's surviving attached row first, because a grant's ItemFacet
+    is PROTECTed and the history must outlive the merge.
+    """
+    from world.items.models import ItemFacet  # noqa: PLC0415
+
+    kept = {
+        row.item_instance_id: row
+        for row in ItemFacet.attached().filter(facet=winner).select_related("facet")
+    }
+    for row in loser.item_attachments.all():
+        keeper = None if row.removed_at is not None else kept.get(row.item_instance_id)
+        if keeper is None:
+            row.facet = winner
+            row.save(update_fields=["facet"])
+            if row.removed_at is None:
+                kept[row.item_instance_id] = row
+            result.moved += 1
+            continue
+        for grant in row.resonance_grants.all():
+            grant.outfit_item_facet = keeper
+            grant.save(update_fields=["outfit_item_facet"])
+        row.delete()
+        result.dropped += 1
 
 
 def _move_m2m(

@@ -1110,13 +1110,18 @@ class ItemInstance(SharedMemoryModel):
     def cached_item_facets(self) -> list[ItemFacet]:
         """Facets attached to this item instance.
 
-        Targeted by Prefetch(..., to_attr=). When prefetched, Django populates
-        this directly. When accessed without prefetch, falls back to a fresh
-        query.
+        Attached facets only: a removed one (``removed_at`` set, #4461) is history.
+        Targeted by Prefetch(..., to_attr=) over ``ItemFacet.attached()``. When
+        prefetched, Django populates this directly. When accessed without
+        prefetch, falls back to a fresh query.
 
         To invalidate: del instance.cached_item_facets
         """
-        return list(self.item_facets.select_related("facet", "attachment_quality_tier"))
+        return list(
+            self.item_facets.filter(removed_at__isnull=True).select_related(
+                "facet", "attachment_quality_tier"
+            )
+        )
 
     @cached_property
     def cached_item_styles(self) -> list[ItemStyle]:
@@ -1135,12 +1140,21 @@ class ItemInstance(SharedMemoryModel):
         return self.durability is not None and self.durability == 0
 
     @property
+    def has_facet_history(self) -> bool:
+        """True if the item carries a facet or ever did (a removed one counts, #4461).
+
+        A removed facet's row can be the target of resonance grants, so an item that
+        had one must be soft-destroyed, never hard-deleted.
+        """
+        return bool(self.cached_item_facets) or self.item_facets.exists()
+
+    @property
     def differs_from_template(self) -> bool:
         """True if this instance carries per-instance data worth preserving on
         destruction (soft-delete). Bare template-identical throwaways return False."""
         if self.custom_name or self.custom_description or self.lore_value or self.quality_tier_id:
             return True
-        if self.cached_item_facets:
+        if self.has_facet_history:
             return True
         return self.ownership_events.exclude(event_type=OwnershipEventType.CREATED).exists()
 
@@ -1152,7 +1166,7 @@ class ItemInstance(SharedMemoryModel):
         cosmetic-only data (custom name / quality tier) is NOT lore-critical."""
         if self.lore_value:
             return True
-        if self.cached_item_facets:
+        if self.has_facet_history:
             return True
         return self.ownership_events.filter(event_type__in=PROVENANCE_EVENT_TYPES).exists()
 
@@ -1576,14 +1590,32 @@ class ItemFacet(ItemAttachment):
             "against the instance's facet_capacity."
         ),
     )
+    removed_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text=(
+            "Stamped when a crafter strips this facet off the item (#4461). A removed "
+            "facet stops granting, stops counting against facet_capacity and stops "
+            "showing on the item, but the row stays: ResonanceGrant rows it fed keep "
+            "pointing at it, so the resonance history survives. Null while attached."
+        ),
+    )
 
     class Meta:
         constraints = [
+            # Only attached rows are unique, so a removed facet can be attached again.
             models.UniqueConstraint(
                 fields=["item_instance", "facet"],
+                condition=models.Q(removed_at__isnull=True),
                 name="items_unique_itemfacet_per_instance",
             ),
         ]
+
+    @classmethod
+    def attached(cls) -> models.QuerySet[ItemFacet]:
+        """Rows still on their item (``removed_at`` unset). Every reader that means
+        "what is on this item now" goes through this, never ``objects.all()``."""
+        return cls.objects.filter(removed_at__isnull=True)
 
     def __str__(self) -> str:
         return f"{self.item_instance} ← {self.facet}"

@@ -6,6 +6,7 @@ import contextlib
 from typing import TYPE_CHECKING
 
 from django.db import transaction
+from django.utils import timezone
 
 from world.items.exceptions import (
     CraftingNotConfigured,
@@ -32,11 +33,13 @@ def assert_facet_attachable(item_instance: ItemInstance, facet: Facet) -> None:
     """
     if item_instance.destroyed_at is not None:
         raise ItemNotInPlay
-    if item_instance.item_facets.filter(facet=facet).exists():
+    if item_instance.item_facets.filter(facet=facet, removed_at__isnull=True).exists():
         raise FacetAlreadyAttached
     # Inherent facets (#3776 Task 4) are the item's own identity, auto-stamped by
     # stamp_inherent_facets — they never count against a crafter's facet_capacity.
-    crafted_facet_count = item_instance.item_facets.filter(is_inherent=False).count()
+    crafted_facet_count = item_instance.item_facets.filter(
+        is_inherent=False, removed_at__isnull=True
+    ).count()
     if crafted_facet_count >= item_instance.template.facet_capacity:
         raise FacetCapacityExceeded
 
@@ -119,7 +122,11 @@ def stamp_inherent_facets(item_instance: ItemInstance) -> None:
     if not item_instance.template.inherent_facets.exists():
         return
     with transaction.atomic():
-        existing_facet_ids = set(item_instance.item_facets.values_list("facet_id", flat=True))
+        existing_facet_ids = set(
+            item_instance.item_facets.filter(removed_at__isnull=True).values_list(
+                "facet_id", flat=True
+            )
+        )
         inherent_facets = item_instance.template.inherent_facets.exclude(id__in=existing_facet_ids)
         if not inherent_facets.exists():
             return
@@ -140,8 +147,12 @@ def stamp_inherent_facets(item_instance: ItemInstance) -> None:
 def remove_facet_from_item(*, item_facet: ItemFacet) -> None:
     """Remove a facet attachment and invalidate wearers' handler caches.
 
+    The row is stamped ``removed_at``, never deleted (#4461): resonance grants it fed
+    keep pointing at it, so the history survives. A removed facet no longer grants,
+    counts against capacity or shows on the item. Removing one twice is a no-op.
+
     Args:
-        item_facet: The ItemFacet row to delete.
+        item_facet: The ItemFacet row to remove.
 
     Raises:
         InherentFacetNotRemovable: The row is an inherent facet (#3776) — the
@@ -150,8 +161,11 @@ def remove_facet_from_item(*, item_facet: ItemFacet) -> None:
     """
     if item_facet.is_inherent:
         raise InherentFacetNotRemovable
+    if item_facet.removed_at is not None:
+        return
     instance = item_facet.item_instance
-    item_facet.delete()
+    item_facet.removed_at = timezone.now()
+    item_facet.save(update_fields=["removed_at"])
     # Invalidate the ItemInstance's facet cache so the removed row is no longer visible.
     with contextlib.suppress(AttributeError):
         del instance.cached_item_facets

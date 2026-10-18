@@ -67,7 +67,10 @@ class ResonanceGrant(SharedMemoryModel):
     )
     outfit_item_facet = models.ForeignKey(
         "arxii.ItemFacet",
-        on_delete=models.SET_NULL,
+        # PROTECT, never SET_NULL: res_grant_outfit_trickle_shape requires this FK on every
+        # OUTFIT_TRICKLE grant, so nulling it is rejected by the database (#4461). A facet
+        # with grants is soft-removed (ItemFacet.removed_at), never deleted.
+        on_delete=models.PROTECT,
         null=True,
         blank=True,
         related_name="resonance_grants",

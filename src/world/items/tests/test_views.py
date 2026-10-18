@@ -386,7 +386,7 @@ class ItemFacetViewTests(ItemViewTestCase):
         self.assertIn("This item has no remaining facet slots.", str(response.data))
 
     def test_delete_calls_remove_service(self) -> None:
-        """DELETE removes the ItemFacet row via the service."""
+        """DELETE stamps the ItemFacet removed via the service (the row stays, #4461)."""
         row = attach_facet_to_item(
             crafter=self.owner,
             item_instance=self.item_owner,
@@ -395,7 +395,8 @@ class ItemFacetViewTests(ItemViewTestCase):
         )
         response = self.client.delete(f"/api/items/item-facets/{row.pk}/")
         self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
-        self.assertFalse(ItemFacet.objects.filter(pk=row.pk).exists())
+        self.assertFalse(ItemFacet.attached().filter(pk=row.pk).exists())
+        self.assertTrue(ItemFacet.objects.filter(pk=row.pk).exists())
 
     def test_delete_rejects_non_owner(self) -> None:
         """Non-owner DELETE is rejected with 403."""
