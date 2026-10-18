@@ -20,6 +20,8 @@ from world.currency.constants import parse_coppers
 from world.items.models import Outfit
 
 _CMD_ALL_LOCK = "cmd:all()"
+# The leading word that turns ``withdraw`` into the loose-cash branch (#1909).
+_COINS_WORD = "coins"
 
 
 class CmdWear(ArxCommand):
@@ -123,9 +125,10 @@ class CmdWithdraw(ArxCommand):
 
     def resolve_action_args(self) -> dict[str, Any]:
         args = self.require_args("Withdraw what?")
-        coins_rest = strip_leading_word(args, "coins")
-        if coins_rest:
-            amount = parse_coppers(coins_rest)
+        # A bare ``withdraw coins`` is the coin branch too, answered with the coin usage;
+        # it used to fall through to the container usage (#3657 tranche 6).
+        if args.split(None, 1)[0].lower() == _COINS_WORD:
+            amount = parse_coppers(strip_leading_word(args, _COINS_WORD) or "")
             if amount is None:
                 msg = "Usage: withdraw coins <amount> (e.g. 'withdraw coins 3s 5c')"
                 raise CommandError(msg)
