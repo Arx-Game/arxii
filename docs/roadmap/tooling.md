@@ -76,7 +76,21 @@ journey found a hidden player's allow-list never letting anyone through (the che
 compared the puppeting character's pk against account ids), and the pacing journey
 found a strict round that had seen one `scene interpose` or `scene succor` unable to
 leave STRICT again (the guard counted the leftover rows the resolve sweep keeps by
-design); both fixed in place.
+design); both fixed in place. Tranche 6 (2026-10-18) opens the actions ledger
+(`docs/testing/ledger/actions.csv`, 172 modules, the tool's proposal for every row) with the
+gatherings, coffers and wares group: `test_covenant_actions`, `test_org_vault_actions`,
+`test_market_sell_materials`, `test_events`, `test_currency_actions`, `test_trade_actions`,
+`test_remove_condition_effect` (mock-pinned) and `test_treat_condition_action` (69 tests)
+are removed after each test was read against the journeys; the gathering journeys gained
+staff and the scene's GM running an event, a guild's invitation, a dormant banner, an equal's
+kick, the web treasury verbs naming the covenant only, the bank's refusals and the collector's
+`deliver_collection`, and the material sale's refusals; two new journey classes type the
+coins (`withdraw coins`, `deposit`, `give <amount> to`, `steal`, `secure`) and the web trade,
+and a third talks a berserker down with `restore_sense` so the remove-condition effect has a
+journey instead of a mock. The coins journey found `secure` raising after it set the policy
+(the room line was built from an item state with no key; the unit test had patched
+`msg_contents`) and a bare `withdraw coins` falling to the container usage; both fixed in
+place.
 
 ## Built (2026-09-30, #4064 — the reviewed delete, and admin pages for domains and fealty)
 

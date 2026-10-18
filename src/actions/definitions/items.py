@@ -696,10 +696,14 @@ class SetContainerPolicyAction(Action):
         except InventoryError as exc:
             return ActionResult(success=False, message=exc.user_message)
 
+        # The room line names the container by its display name, as the take and steal
+        # lines do: an ItemState wraps the item row, which has no key, so handing the
+        # state to the broadcast raised once the policy was already set (#3657 tranche 6;
+        # the unit test had patched the room's msg_contents and never saw it).
         message_location(
             actor_state,
             "$You() $conj(set) {container}'s access policy.",
-            mapping={"container": container_state},
+            mapping={"container": item_instance.display_name},
         )
 
         return ActionResult(success=True)
