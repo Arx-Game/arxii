@@ -102,7 +102,18 @@ finishing any scene, every verb typed from nowhere, the check band and invention
 a synthesized check for its owner alone, a call outside a scene, decline-then-answer, a
 proposal's required parts, a roster-less reactor and a bare `places join`.
 `test_scene_resolution` is held (its service has no production caller found; the function's
-removal is its own ruling) and `test_round_context` is held for the combat ledger.
+removal is its own ruling) and `test_round_context` is held for the combat ledger. Its third
+step (2026-10-18) rules the stories group: `test_situations` and
+`test_group_story_request_actions` are removed, `test_gm_story_actions` keeps only the
+patched-boundary refusal and the party-sheet helper, `test_gm_story_clock` only the combat
+leg, `test_story_builder_actions` stays (web-only canvas authoring whose tests already call
+the dispatch seam with the canvas's own kwargs) and `test_gm_story_run_beat` is held for the
+combat ledger; a new journey module stages a situation and a single challenge
+(`integration_tests/test_staging_a_situation_journeys.py`), the story journeys gained staff
+on every verb, the Assistant GM's mark and credit, a GM's own arc earning nothing, the plot
+gate, routing by transition order, a story nobody is in, a group story advancing one table,
+the clock's reuse and the one-beat-per-scene rule, and `declare_stakes`; the covenant journey
+gained `covenant request-gm`, the GM queue, `gm claim` and `covenant withdraw-gm-request`.
 
 ## Built (2026-09-30, #4064 — the reviewed delete, and admin pages for domains and fealty)
 

@@ -28,6 +28,9 @@ from world.currency.services import get_or_create_purse, get_or_create_treasury,
 from world.events.constants import EventStatus, InvitationResponse
 from world.events.models import Event, EventGrandeurContribution, EventInvitation
 from world.events.services import create_event
+from world.gm.constants import GMTableStatus
+from world.gm.factories import GMProfileFactory, GMTableFactory
+from world.gm.models import GMTableMembership
 from world.items.factories import (
     ItemInstanceFactory,
     ItemTemplateFactory,
@@ -46,6 +49,8 @@ from world.room_features.models import VaultDetails
 from world.scenes.factories import SceneParticipationFactory
 from world.scenes.models import Interaction, Scene
 from world.societies.factories import OrganizationFactory, OrganizationMembershipFactory
+from world.stories.constants import GroupStoryRequestStatus, StoryScope
+from world.stories.models import GroupStoryProgress, GroupStoryRequest
 
 
 def persona_of(character):
@@ -389,6 +394,69 @@ class RisingAndFallingInACovenant(JourneyCase):
             self.assertIn(refusal, result.detail.message)
         treasury.refresh_from_db()
         self.assertEqual(treasury.balance, 475)
+
+    def test_the_covenant_asks_for_a_gm_and_one_answers(self) -> None:
+        self.assertIn(
+            "You lack the authority to request a GM for this covenant.",
+            self.telnet(self.hobb, "covenant request-gm We need a GM"),
+        )
+        told = self.telnet(self.ysmay, "covenant request-gm We need a GM to run our story")
+        request = GroupStoryRequest.objects.get(covenant=self.banner)
+        self.assertIn(f"Your covenant's request for a GM has been posted (#{request.pk}).", told)
+        self.assertEqual(request.status, GroupStoryRequestStatus.PENDING)
+        self.assertEqual(request.message, "We need a GM to run our story")
+        self.assertEqual(request.requested_by_account_id, self.ysmay.db_account.pk)
+        self.assertIn(
+            "You lack the authority to withdraw this covenant's GM request.",
+            self.telnet(self.hobb, "covenant withdraw-gm-request"),
+        )
+
+        # Every GM sees the open ask in the queue; one with an active table answers it.
+        ravenna = self.make_player("Ravenna", room=self.room)
+        table = GMTableFactory(
+            gm=GMProfileFactory(account=ravenna.db_account), status=GMTableStatus.ACTIVE
+        )
+        queue = self.api(ravenna.db_account).get("/api/stories/gm-queue/")
+        self.assertEqual(queue.status_code, 200, queue.content)
+        self.assertIn(request.pk, [row["request_id"] for row in queue.data["open_group_requests"]])
+        tam = self.make_player("Tam", room=self.room)
+        self.assertIn(
+            "You must have a GM profile to claim a group story request.",
+            self.telnet(tam, f"gm claim {request.pk}"),
+        )
+        self.assertIn("Usage: gm claim <request-id>", self.telnet(ravenna, "gm claim abc"))
+        told = self.telnet(ravenna, f"gm claim {request.pk}")
+        self.assertIn("You claim The Iron Banner's request;", told)
+        request.refresh_from_db()
+        self.assertEqual(request.status, GroupStoryRequestStatus.ACCEPTED)
+        self.assertEqual(request.claimed_by_id, table.gm_id)
+        story = request.created_story
+        self.assertEqual((story.scope, story.primary_table_id), (StoryScope.GROUP, table.pk))
+        self.assertTrue(GroupStoryProgress.objects.filter(story=story, gm_table=table).exists())
+        seated = set(
+            GMTableMembership.objects.filter(table=table, left_at__isnull=True).values_list(
+                "persona_id", flat=True
+            )
+        )
+        self.assertIn(persona_of(self.ysmay).pk, seated)
+        self.assertIn(persona_of(self.hobb).pk, seated)
+
+        # A later ask can be taken back by whoever posted it, and only while it is open.
+        self.telnet(self.ysmay, "covenant request-gm Round two")
+        self.assertIn(
+            "You withdraw The Iron Banner's request for a GM.",
+            self.telnet(self.ysmay, "covenant withdraw-gm-request"),
+        )
+        self.assertEqual(
+            GroupStoryRequest.objects.filter(
+                covenant=self.banner, status=GroupStoryRequestStatus.WITHDRAWN
+            ).count(),
+            1,
+        )
+        self.assertIn(
+            "That covenant has no open request for a GM.",
+            self.telnet(self.ysmay, "covenant withdraw-gm-request"),
+        )
 
     def test_an_equal_is_not_hers_to_remove(self) -> None:
         self.hobb_vow.rank = self.commander
