@@ -154,6 +154,29 @@ class AGuidePlaysALentNpc(JourneyCase):
         self.assertIs(self.gm.can_puppet_character(self.vael)[0], True)
         self.assertEqual(NPCLoan.objects.get(pk=loan_id).status, "ended")
 
+    def test_a_guide_playing_a_lent_npc_has_no_gm_powers(self) -> None:
+        loan_id = self._lend()
+        self.assertEqual(self.vael.active_account, self.guide)
+
+        # Acting as Vael, Ilsa is Ilsa: not the scene's owner, not a GM.
+        finish = self.web(self.vael, "finish_scene")
+        self.assertFalse(finish.detail.success)
+        mint = self.web(self.vael, "mint_story_npc", name="Corporal Brann", description="Young.")
+        self.assertFalse(mint.detail.success)
+        self.assertFalse(
+            RosterEntry.objects.filter(character_sheet__character__db_key="Corporal Brann").exists()
+        )
+        self.scene.refresh_from_db()
+        self.assertTrue(self.scene.is_active)
+
+        taken = self.web(self.ravenna, "take_back_npc", loan_id=loan_id)
+        self.assertTrue(taken.detail.success, taken.detail.message)
+        self.assertEqual(self.vael.active_account, self.gm)
+
+        # The owner, on her own character, still runs her scene.
+        finished = self.web(self.ravenna, "finish_scene")
+        self.assertTrue(finished.detail.success, finished.detail.message)
+
     def test_only_a_guide_may_accept(self) -> None:
         # Ysmay is no Guide: she cannot be offered the NPC.
         refused_offer = self._offer(self.account_of(self.ysmay))

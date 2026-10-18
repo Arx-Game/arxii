@@ -325,13 +325,29 @@ class Character(ObjectParent, DefaultCharacter):
     def active_account(self):
         """Return the account currently linked to this character.
 
+        While a story NPC is lent (#4418), the person playing it is the borrower, so
+        the ACTIVE loan's borrower answers here, not the tenure holder: a Guide playing
+        a lent NPC never inherits its owner's GM standing, and consent asks, page
+        blocks and presence follow the borrower. Not cached: the loan is read from
+        the database on each call, and only for an NPC-shelf entry, so ending a loan
+        flips this back at once.
+
         Returns:
             Account | None: The controlling account, if any.
         """
+        from world.roster.models.choices import RosterType
+
         try:
-            tenure = self.sheet_data.roster_entry.current_tenure
+            entry = self.sheet_data.roster_entry
         except ObjectDoesNotExist:
             return None
+        if entry.roster.roster_type == RosterType.NPC:
+            from world.roster.services.npc_lending import active_loan_for
+
+            loan = active_loan_for(entry)
+            if loan is not None:
+                return loan.borrower
+        tenure = entry.current_tenure
         if not tenure or not tenure.player_data:
             return None
         return tenure.player_data.account
