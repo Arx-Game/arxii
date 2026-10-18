@@ -21693,7 +21693,7 @@ export interface paths {
       cookie?: never;
     };
     /** @description The NPC offers waiting for the requesting Guide to answer. */
-    get: operations['roster_npcs_offers_retrieve'];
+    get: operations['roster_npcs_offers_list'];
     put?: never;
     post?: never;
     delete?: never;
@@ -38506,7 +38506,6 @@ export interface components {
       readonly room_name: string | null;
       readonly loan: components['schemas']['MyNPCLoan'] | null;
       readonly npc_notes: string | null;
-      /** @default false */
       readonly is_crowd_voice: boolean;
     };
     /**
@@ -38604,6 +38603,21 @@ export interface components {
       borrow_audience: components['schemas']['BorrowAudienceEnum'];
       listed_on_npc_roster: boolean;
       notes_for_player: string;
+    };
+    /**
+     * @description One OFFERED loan, as the Guide it was offered to reads it.
+     *
+     *     ``context["offered_names"]`` maps the offering account's id to the name shown.
+     */
+    NPCOffer: {
+      readonly loan_id: number;
+      readonly roster_entry_id: number;
+      readonly name: string;
+      readonly thumbnail_url: string | null;
+      readonly scene_id: number | null;
+      readonly scene_title: string | null;
+      readonly offered_by_name: string;
+      readonly notes_for_player: string;
     };
     /** @description One SKILL line, named by the skill rather than its id (#3427). */
     NPCPresetSkillLine: {
@@ -41742,6 +41756,21 @@ export interface components {
        */
       previous?: string | null;
       results: components['schemas']['NPCAsset'][];
+    };
+    PaginatedNPCOfferList: {
+      /** @example 123 */
+      count: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results: components['schemas']['NPCOffer'][];
     };
     PaginatedNPCReactionLineList: {
       /** @example 123 */
@@ -83728,9 +83757,15 @@ export interface operations {
       };
     };
   };
-  roster_npcs_offers_retrieve: {
+  roster_npcs_offers_list: {
     parameters: {
-      query?: never;
+      query?: {
+        lendable_to_me?: boolean;
+        /** @description A page number within the paginated result set. */
+        page?: number;
+        /** @description A search term. */
+        search?: string;
+      };
       header?: never;
       path?: never;
       cookie?: never;
@@ -83742,7 +83777,7 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          'application/json': components['schemas']['NPCRosterRow'];
+          'application/json': components['schemas']['PaginatedNPCOfferList'];
         };
       };
     };

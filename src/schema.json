@@ -34822,8 +34822,25 @@ paths:
           description: ''
   /api/roster/npcs/offers/:
     get:
-      operationId: roster_npcs_offers_retrieve
+      operationId: roster_npcs_offers_list
       description: The NPC offers waiting for the requesting Guide to answer.
+      parameters:
+      - in: query
+        name: lendable_to_me
+        schema:
+          type: boolean
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: search
+        required: false
+        in: query
+        description: A search term.
+        schema:
+          type: string
       tags:
       - roster
       security:
@@ -34833,7 +34850,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/NPCRosterRow'
+                $ref: '#/components/schemas/PaginatedNPCOfferList'
           description: ''
   /api/roster/npcs/templates/:
     get:
@@ -67771,7 +67788,6 @@ components:
         is_crowd_voice:
           type: boolean
           readOnly: true
-          default: false
       required:
       - active_persona_id
       - activity_requirement
@@ -67984,6 +68000,49 @@ components:
       - lend_policy
       - listed_on_npc_roster
       - notes_for_player
+    NPCOffer:
+      type: object
+      description: |-
+        One OFFERED loan, as the Guide it was offered to reads it.
+
+        ``context["offered_names"]`` maps the offering account's id to the name shown.
+      properties:
+        loan_id:
+          type: integer
+          readOnly: true
+        roster_entry_id:
+          type: integer
+          readOnly: true
+        name:
+          type: string
+          readOnly: true
+        thumbnail_url:
+          type: string
+          nullable: true
+          readOnly: true
+        scene_id:
+          type: integer
+          readOnly: true
+          nullable: true
+        scene_title:
+          type: string
+          readOnly: true
+          nullable: true
+        offered_by_name:
+          type: string
+          readOnly: true
+        notes_for_player:
+          type: string
+          readOnly: true
+      required:
+      - loan_id
+      - name
+      - notes_for_player
+      - offered_by_name
+      - roster_entry_id
+      - scene_id
+      - scene_title
+      - thumbnail_url
     NPCPresetSkillLine:
       type: object
       description: One SKILL line, named by the skill rather than its id (#3427).
@@ -73496,6 +73555,29 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/NPCAsset'
+    PaginatedNPCOfferList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/NPCOffer'
     PaginatedNPCReactionLineList:
       type: object
       required:
