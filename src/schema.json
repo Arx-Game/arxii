@@ -16616,6 +16616,43 @@ paths:
               schema:
                 $ref: '#/components/schemas/DiscoveryResult'
           description: ''
+  /api/gm/guides/:
+    get:
+      operationId: gm_guides_list
+      description: |-
+        Active Guides, for a GM choosing who to lend an NPC to (#4418).
+
+        GMs and staff only. Each row is ``{account_id, display_name}``: a Guide is
+        shown by the name staff gave them, never an account or character name.
+      parameters:
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      - in: query
+        name: search
+        schema:
+          type: string
+        description: Search by display name
+      tags:
+      - gm
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedGuideList'
+          description: ''
   /api/gm/invites/:
     get:
       operationId: gm_invites_list
@@ -34558,6 +34595,246 @@ paths:
               schema:
                 $ref: '#/components/schemas/NPCStatlinePreset'
           description: ''
+  /api/roster/npcs/:
+    get:
+      operationId: roster_npcs_list
+      description: Browse listed NPCs; owners edit settings, authoring and copies.
+      parameters:
+      - in: query
+        name: lendable_to_me
+        schema:
+          type: boolean
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: search
+        required: false
+        in: query
+        description: A search term.
+        schema:
+          type: string
+      tags:
+      - roster
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedNPCRosterRowList'
+          description: ''
+  /api/roster/npcs/{id}/:
+    get:
+      operationId: roster_npcs_retrieve
+      description: Browse listed NPCs; owners edit settings, authoring and copies.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+        required: true
+      tags:
+      - roster
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NPCDetail'
+          description: ''
+    put:
+      operationId: roster_npcs_update
+      description: Browse listed NPCs; owners edit settings, authoring and copies.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+        required: true
+      tags:
+      - roster
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NPCDetailRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NPCDetail'
+          description: ''
+    patch:
+      operationId: roster_npcs_partial_update
+      description: Browse listed NPCs; owners edit settings, authoring and copies.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+        required: true
+      tags:
+      - roster
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedNPCDetailRequest'
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NPCDetail'
+          description: ''
+  /api/roster/npcs/{id}/borrow/:
+    post:
+      operationId: roster_npcs_borrow_create
+      description: Browse listed NPCs; owners edit settings, authoring and copies.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this Roster Entry.
+        required: true
+      tags:
+      - roster
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NPCRosterRow'
+          description: ''
+  /api/roster/npcs/{id}/copy-as-new/:
+    post:
+      operationId: roster_npcs_copy_as_new_create
+      description: Browse listed NPCs; owners edit settings, authoring and copies.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+        required: true
+      tags:
+      - roster
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NPCRosterRow'
+          description: ''
+  /api/roster/npcs/{id}/copy-section/:
+    post:
+      operationId: roster_npcs_copy_section_create
+      description: Browse listed NPCs; owners edit settings, authoring and copies.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+        required: true
+      tags:
+      - roster
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NPCRosterRow'
+          description: ''
+  /api/roster/npcs/{id}/preferences/:
+    put:
+      operationId: roster_npcs_preferences_update
+      description: Browse listed NPCs; owners edit settings, authoring and copies.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+        required: true
+      tags:
+      - roster
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NPCRosterRow'
+          description: ''
+  /api/roster/npcs/{id}/regard/:
+    put:
+      operationId: roster_npcs_regard_update
+      description: Browse listed NPCs; owners edit settings, authoring and copies.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+        required: true
+      tags:
+      - roster
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NPCRosterRow'
+          description: ''
+  /api/roster/npcs/answer/:
+    post:
+      operationId: roster_npcs_answer_create
+      description: Browse listed NPCs; owners edit settings, authoring and copies.
+      tags:
+      - roster
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NPCRosterRow'
+          description: ''
+  /api/roster/npcs/templates/:
+    get:
+      operationId: roster_npcs_templates_retrieve
+      description: Browse listed NPCs; owners edit settings, authoring and copies.
+      tags:
+      - roster
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NPCRosterRow'
+          description: ''
   /api/roster/rosters/:
     get:
       operationId: roster_rosters_list
@@ -35106,6 +35383,79 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/SceneActivity'
+          description: ''
+  /api/scenes/{id}/cast-list/:
+    get:
+      operationId: scenes_cast_list_list
+      description: |-
+        GET /api/scenes/{id}/cast-list/ (#4418) - the scene's named story NPCs and
+        crowds, and who plays each.
+
+        Derived read (``world.scenes.cast_list_services.scene_cast_list``). Gated by
+        ``can_create_encounter_for_scene`` (staff, the scene's GM or co-owner), the
+        same accounts the web "Start encounter" button shows to; anyone else gets 404.
+      parameters:
+      - in: query
+        name: finished_after
+        schema:
+          type: string
+          format: date-time
+      - in: query
+        name: gm
+        schema:
+          type: string
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this scene.
+        required: true
+      - in: query
+        name: is_active
+        schema:
+          type: boolean
+      - in: query
+        name: location
+        schema:
+          type: number
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      - in: query
+        name: participant
+        schema:
+          type: integer
+      - in: query
+        name: player
+        schema:
+          type: string
+      - in: query
+        name: privacy_mode
+        schema:
+          type: string
+      - in: query
+        name: status
+        schema:
+          type: string
+      tags:
+      - scenes
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedCastListEntryList'
           description: ''
   /api/scenes/{id}/finish/:
     post:
@@ -47827,6 +48177,14 @@ components:
       - coppers
       - label
       - tier
+    BorrowAudienceEnum:
+      enum:
+      - gms
+      - gms_and_guides
+      type: string
+      description: |-
+        * `gms` - GMs
+        * `gms_and_guides` - GMs and Guides
     BugReportCreate:
       type: object
       description: Frontend supplies ``reporter_persona``; ``location`` is server-derived.
@@ -48627,6 +48985,64 @@ components:
       - description
       - id
       - name
+    CastListEntry:
+      type: object
+      description: |-
+        One row of a scene's cast list (#4418): a named NPC or a crowd, and who plays it.
+
+        Serializes ``world.scenes.cast_list_services.CastListEntry``. ``played_by`` is a
+        character name, never an account name; blank for a crowd nobody voices yet.
+        ``count`` is the crowd's bodies (null for a named NPC); ``tier`` is the crowd's
+        opponent tier. ``roster_entry_id``/``persona_id`` are null for an unvoiced crowd.
+      properties:
+        kind:
+          $ref: '#/components/schemas/CastListEntryKindEnum'
+        name:
+          type: string
+        roster_entry_id:
+          type: integer
+          nullable: true
+        persona_id:
+          type: integer
+          nullable: true
+        thumbnail_url:
+          type: string
+        played_by:
+          type: string
+        loan_id:
+          type: integer
+          nullable: true
+        loan_status:
+          type: string
+          nullable: true
+        tier:
+          type: string
+          nullable: true
+        count:
+          type: integer
+          nullable: true
+        description:
+          type: string
+      required:
+      - count
+      - description
+      - kind
+      - loan_id
+      - loan_status
+      - name
+      - persona_id
+      - played_by
+      - roster_entry_id
+      - thumbnail_url
+      - tier
+    CastListEntryKindEnum:
+      enum:
+      - npc
+      - crowd
+      type: string
+      description: |-
+        * `npc` - npc
+        * `crowd` - crowd
     CastPullRequestRequest:
       type: object
       description: Nested pull declaration on the cast endpoint (#854).
@@ -60592,6 +61008,24 @@ components:
           minimum: 1
       required:
       - option_id
+    Guide:
+      type: object
+      description: |-
+        An active Guide as a GM picks them to lend an NPC (#4418).
+
+        ``display_name`` only: never the account name or any of the Guide's characters.
+      properties:
+        account_id:
+          type: integer
+          readOnly: true
+        display_name:
+          type: string
+          readOnly: true
+          description: The name GMs see this Guide by when lending them an NPC. Never
+            the account name or one of their characters' names.
+      required:
+      - account_id
+      - display_name
     HeightBand:
       type: object
       properties:
@@ -64020,6 +64454,16 @@ components:
       - id
       - journal
       - value_added
+    LendPolicyEnum:
+      enum:
+      - not_lent
+      - on_request
+      - without_asking
+      type: string
+      description: |-
+        * `not_lent` - Not lent
+        * `on_request` - On request
+        * `without_asking` - Without asking
     Level508Enum:
       enum:
       - 1
@@ -67160,6 +67604,24 @@ components:
       - language_id
       - name
       - temporary_sources
+    MyNPCLoan:
+      type: object
+      description: The loan an account plays a borrowed NPC under (#4418).
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        scene_title:
+          type: string
+          readOnly: true
+          nullable: true
+        offered_by_name:
+          type: string
+          readOnly: true
+      required:
+      - id
+      - offered_by_name
+      - scene_title
     MyRosterEntry:
       type: object
       description: Serialize a summary of a roster entry for account menus.
@@ -67275,6 +67737,15 @@ components:
           description: The room the character stands in while puppeted (#4321), else
             None.
           readOnly: true
+        loan:
+          allOf:
+          - $ref: '#/components/schemas/MyNPCLoan'
+          readOnly: true
+          nullable: true
+        npc_notes:
+          type: string
+          readOnly: true
+          nullable: true
       required:
       - active_persona_id
       - activity_requirement
@@ -67286,7 +67757,9 @@ components:
       - has_ambient_unread
       - id
       - lifecycle_state
+      - loan
       - name
+      - npc_notes
       - primary_persona_id
       - profile_picture_url
       - room_name
@@ -67406,6 +67879,84 @@ components:
         * `compromised` - Compromised
         * `lost` - Lost
         * `dismissed` - Dismissed
+    NPCDetail:
+      type: object
+      description: The owner's, an active borrower's, or staff's view of one NPC and
+        its settings.
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        name:
+          type: string
+          readOnly: true
+        thumbnail_url:
+          type: string
+          nullable: true
+          readOnly: true
+        description:
+          type: string
+          description: |-
+            What the character handler shows, read off rows the view selected.
+
+            The handler's own read get_or_creates a display row per NPC, which a list
+            must not do; the order is the handler's: a disguise overlay, the permanent
+            description, then the sheet's free text.
+          readOnly: true
+        owner_name:
+          type: string
+          readOnly: true
+        lend_policy:
+          $ref: '#/components/schemas/LendPolicyEnum'
+        borrow_audience:
+          $ref: '#/components/schemas/BorrowAudienceEnum'
+        can_borrow:
+          type: boolean
+          readOnly: true
+        listed_on_npc_roster:
+          type: boolean
+        notes_for_player:
+          type: string
+        is_template:
+          type: boolean
+          readOnly: true
+        open_requests:
+          type: array
+          items:
+            type: object
+            additionalProperties: {}
+          readOnly: true
+      required:
+      - borrow_audience
+      - can_borrow
+      - description
+      - id
+      - is_template
+      - lend_policy
+      - listed_on_npc_roster
+      - name
+      - notes_for_player
+      - open_requests
+      - owner_name
+      - thumbnail_url
+    NPCDetailRequest:
+      type: object
+      description: The owner's, an active borrower's, or staff's view of one NPC and
+        its settings.
+      properties:
+        lend_policy:
+          $ref: '#/components/schemas/LendPolicyEnum'
+        borrow_audience:
+          $ref: '#/components/schemas/BorrowAudienceEnum'
+        listed_on_npc_roster:
+          type: boolean
+        notes_for_player:
+          type: string
+      required:
+      - borrow_audience
+      - lend_policy
+      - listed_on_npc_roster
+      - notes_for_player
     NPCPresetSkillLine:
       type: object
       description: One SKILL line, named by the skill rather than its id (#3427).
@@ -67584,6 +68135,54 @@ components:
             value from the legacy `MissionGiver.is_active`.
       required:
       - name
+    NPCRosterRow:
+      type: object
+      description: |-
+        One listed NPC for a GM or Guide browsing the roster.
+
+        ``context`` carries what the view read once for the page: ``viewer`` (the
+        ``NPCViewer`` for the request), ``owner_names`` (account id to character name).
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        name:
+          type: string
+          readOnly: true
+        thumbnail_url:
+          type: string
+          nullable: true
+          readOnly: true
+        description:
+          type: string
+          description: |-
+            What the character handler shows, read off rows the view selected.
+
+            The handler's own read get_or_creates a display row per NPC, which a list
+            must not do; the order is the handler's: a disguise overlay, the permanent
+            description, then the sheet's free text.
+          readOnly: true
+        owner_name:
+          type: string
+          readOnly: true
+        lend_policy:
+          type: string
+          readOnly: true
+        borrow_audience:
+          type: string
+          readOnly: true
+        can_borrow:
+          type: boolean
+          readOnly: true
+      required:
+      - borrow_audience
+      - can_borrow
+      - description
+      - id
+      - lend_policy
+      - name
+      - owner_name
+      - thumbnail_url
     NPCServiceOffer:
       type: object
       properties:
@@ -70877,6 +71476,29 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/CanonReview'
+    PaginatedCastListEntryList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/CastListEntry'
     PaginatedCatalogSuggestionDetailList:
       type: object
       required:
@@ -72141,6 +72763,29 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/GroupStoryRequest'
+    PaginatedGuideList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/Guide'
     PaginatedHeldClueList:
       type: object
       required:
@@ -72870,6 +73515,29 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/NPCRole'
+    PaginatedNPCRosterRowList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/NPCRosterRow'
     PaginatedNPCServiceOfferList:
       type: object
       required:
@@ -77392,6 +78060,19 @@ components:
         availability_rule:
           description: Phase 0 predicate tree gating front-door availability for this
             template.
+    PatchedNPCDetailRequest:
+      type: object
+      description: The owner's, an active borrower's, or staff's view of one NPC and
+        its settings.
+      properties:
+        lend_policy:
+          $ref: '#/components/schemas/LendPolicyEnum'
+        borrow_audience:
+          $ref: '#/components/schemas/BorrowAudienceEnum'
+        listed_on_npc_roster:
+          type: boolean
+        notes_for_player:
+          type: string
     PatchedNPCReactionLineRequest:
       type: object
       description: Staff CRUD for banded NPC reaction lines (#2632).
@@ -85277,6 +85958,14 @@ components:
             tier — ``amount`` stays 0 for MATERIAL, same as the other non-money kinds; no
             computed value is ever shown for it (deliberate money asymmetry).
           readOnly: true
+        resist_only:
+          type: boolean
+          readOnly: true
+          default: false
+        resist_check_name:
+          type: string
+          readOnly: true
+          nullable: true
         created_at:
           type: string
           format: date-time
@@ -85296,6 +85985,8 @@ components:
       - id
       - initiator_name
       - initiator_persona
+      - resist_check_name
+      - resist_only
       - resolved_at
       - resolved_difficulty
       - result_interaction
