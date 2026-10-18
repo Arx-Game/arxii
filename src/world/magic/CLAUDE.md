@@ -264,6 +264,12 @@ casting never hard-fails with "no template." The resolution chain:
   contributions, and battle technique resolution (`world/battles/resolution.py`)
   all go through it, so none of them can silently roll the shared template check
   for a provisioned caster.
+  The same `CastCheck` feeds thread pulls (#4450): `cast_involved_trait_ids(cast_check)`
+  (`services/magic_skills.py`) gives the cast's `PullActionContext.involved_traits`, so a TRAIT
+  thread on the caster's stat, a personal skill or the technique skill is in the cast's action,
+  both as a passive tier-0 thread (`build_cast_applicable_threads(cast_check=)`) and as a declared
+  pull (`_charge_cast_pull`, `commit_combat_pull(cast_check=)`). A technique-enhanced social action
+  passes the template check plus the technique term, since that is what it rolls.
 - **Anima ritual alignment** — `provision_player_anima_ritual` (`services/anima.py`)
   points the anima ritual's `RitualCheckConfig.check_type` at the same per-character
   check type, so the anima ritual and technique casts always roll the same personal check.
