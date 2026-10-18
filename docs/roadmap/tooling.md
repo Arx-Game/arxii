@@ -121,7 +121,19 @@ query budget, `test_consent_rivals_sweep` only the batched sweep, and
 body-handling journey gained `consent category` for every mode tried against the carry
 (everyone, all-but-blacklist, friends with the owner's friendship counting and the actor's
 not, rivals through `relationship declare` from both sides, the default), `consent off`/`on`,
-and the web's tenure ownership, boolean and ended-tenure refusals.
+and the web's tenure ownership, boolean and ended-tenure refusals. Tranche 7 (2026-10-18)
+rules the GM adjudication group: `test_gm_adjudication_actions` (85 tests) and the held
+`gm check` regression in `test_scene_checks_actions` are removed, and the hand-built
+`commands/tests/test_gm_ops_adjudication` keeps only `gm dramatic` for the combat ledger; a
+new journey module (`integration_tests/test_refereeing_the_table_journeys.py`) types `gm
+check` (find, every band read back as a word, an edge or a setback with its reason, the
+usage, the trust gates, the web's target by id and its invention-shaped kwargs ignored), `gm
+award` (XP with the GM on the ledger, development, a Golden Hare and its deed kept to the
+note's width, a stat signed with the granting tenure, a technique from a held gift, the usage,
+the trust and seat gates, a staffer with no tenure) and `gm condition` (the note narrated to
+the room and kept on the instance, a hidden condition's note to the bearer alone, the usage
+and bounds, list and remove with a reason, a staffer standing nowhere, a prop by id, an
+understanding condition opening an ear). No production code changed.
 
 ## Built (2026-09-30, #4064 — the reviewed delete, and admin pages for domains and fealty)
 
