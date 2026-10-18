@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from http import HTTPMethod
-from typing import Any
+from typing import Any, cast
 
 from django.db.models import Exists, OuterRef, Q, QuerySet
 from django.shortcuts import get_object_or_404
@@ -231,7 +231,7 @@ class StoryNPCViewSet(
     def get_serializer_context(self) -> dict[str, Any]:
         context = super().get_serializer_context()
         if self.request is not None and self.request.user.is_authenticated:
-            context["viewer"] = NPCViewer.for_account(self.request.user)
+            context["viewer"] = NPCViewer.for_account(cast(AccountDB, self.request.user))
             context["owner_names"] = {}
         return context
 
@@ -301,7 +301,7 @@ class StoryNPCViewSet(
         try:
             new_entry = copy_npc_as_new(
                 source,
-                by=request.user,
+                by=cast(AccountDB, request.user),
                 name=serializer.validated_data["name"],
                 as_template=serializer.validated_data["as_template"],
             )
@@ -310,7 +310,7 @@ class StoryNPCViewSet(
         return Response({"id": new_entry.pk}, status=status.HTTP_201_CREATED)
 
     def _page_response(self, request: Request) -> Response:
-        page = self.paginate_queryset(self.filter_queryset(self.get_queryset()))
+        page = list(self.paginate_queryset(self.filter_queryset(self.get_queryset())) or [])
         context = self.get_serializer_context()
         context["owner_names"] = owner_names_for(page)
         serializer = NPCRosterRowSerializer(page, many=True, context=context)
@@ -331,7 +331,7 @@ class StoryNPCViewSet(
     def borrow(self, request: Request, pk: int | None = None) -> Response:
         entry = self.get_object()
         try:
-            loan = request_borrow(entry=entry, borrower=request.user)
+            loan = request_borrow(entry=entry, borrower=cast(AccountDB, request.user))
         except NPCLendingError as exc:
             return self._refused(exc)
         return Response(NPCLoanSerializer(loan).data, status=status.HTTP_201_CREATED)
@@ -351,7 +351,7 @@ class StoryNPCViewSet(
             )
             .order_by("-pk")
         )
-        page = self.paginate_queryset(loans)
+        page = list(self.paginate_queryset(loans) or [])
         context = self.get_serializer_context()
         context["offered_names"] = player_names(loan.offered_by_id for loan in page)
         serializer = NPCOfferSerializer(page, many=True, context=context)
@@ -362,7 +362,7 @@ class StoryNPCViewSet(
     def answer(self, request: Request) -> Response:
         serializer = AnswerSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        account = request.user
+        account = cast(AccountDB, request.user)
         # Only the NPC's owner, staff, or the borrower of the loan may even see it.
         scope = Q(borrower=account) | Q(roster_entry__created_by_account=account)
         loans = NPCLoan.objects.select_related("roster_entry", "scene")
@@ -374,7 +374,7 @@ class StoryNPCViewSet(
             loan = answer_loan(
                 loan=loan,
                 accept=serializer.validated_data["accept"],
-                by=request.user,
+                by=account,
             )
         except NPCLendingError as exc:
             return self._refused(exc)

@@ -33,7 +33,7 @@ from world.scenes.action_services import request_is_resist_only
 from world.worship.constants import FAVOR_INVOCATION_LINE_MAX_LENGTH
 
 if TYPE_CHECKING:
-    from world.scenes.models import Scene
+    from world.scenes.models import Persona, Scene
 
 
 def _cap_fury_by_provocation(attrs: dict) -> dict:
@@ -426,6 +426,35 @@ class _CombatStakesCacheMixin:
         super().__init__(*args, **kwargs)
         self._gating_risk_by_pk: dict[int, str | None] = {}
         self._stakes_by_scene_id: dict[int, list[dict] | None] = {}
+        self._resist_by_pk: dict[int, tuple[bool, str | None]] = {}
+
+    def _resist_subject(self, obj: Any) -> tuple[SceneActionRequest, Persona | None]:
+        """The request a row shows, and the one target it is for (None: every target)."""
+        msg = "Subclasses must implement _resist_subject."
+        raise NotImplementedError(msg)
+
+    def _resist(self, obj: Any) -> tuple[bool, str | None]:
+        """Whether the row is resist-only, and the check the PC rolls, decided once per row.
+
+        The check is the template's resist check, not the NPC's own check (#4418).
+        """
+        if obj.pk not in self._resist_by_pk:
+            request, target_persona = self._resist_subject(obj)
+            resist_only = request_is_resist_only(request, target_persona)
+            template = request.action_template
+            check_name = (
+                template.resist_check_type.name
+                if resist_only and template is not None and template.resist_check_type_id
+                else None
+            )
+            self._resist_by_pk[obj.pk] = (resist_only, check_name)
+        return self._resist_by_pk[obj.pk]
+
+    def get_resist_only(self, obj: Any) -> bool:
+        return self._resist(obj)[0]
+
+    def get_resist_check_name(self, obj: Any) -> str | None:
+        return self._resist(obj)[1]
 
     def _compute_gating_risk(self, obj: Any) -> str | None:
         msg = "Subclasses must implement _compute_gating_risk."
@@ -451,22 +480,12 @@ class SceneActionRequestSerializer(_CombatStakesCacheMixin, serializers.ModelSer
     combat_risk_level = serializers.SerializerMethodField()
     combat_stakes = serializers.SerializerMethodField()
     boon = serializers.SerializerMethodField()
-    # Filled in by to_representation, which decides resist-only once per row (#4418).
-    resist_only = serializers.BooleanField(read_only=True, default=False)
-    resist_check_name = serializers.CharField(read_only=True, default=None, allow_null=True)
+    # Resist-only is decided once per row by the mixin's ``_resist`` (#4418).
+    resist_only = serializers.SerializerMethodField()
+    resist_check_name = serializers.SerializerMethodField()
 
-    def to_representation(self, instance: SceneActionRequest) -> dict:
-        data = super().to_representation(instance)
-        resist_only = request_is_resist_only(instance)
-        template = instance.action_template
-        data["resist_only"] = resist_only
-        # The check the PC rolls to resist, not the NPC's own check.
-        data["resist_check_name"] = (
-            template.resist_check_type.name
-            if resist_only and template is not None and template.resist_check_type_id
-            else None
-        )
-        return data
+    def _resist_subject(self, obj: SceneActionRequest) -> tuple[SceneActionRequest, None]:
+        return obj, None
 
     def get_technique_name(self, obj: SceneActionRequest) -> str | None:
         """Human label for the enhancing technique (#892 — ConsentPrompt display)."""
@@ -878,23 +897,12 @@ class SceneActionTargetSerializer(_CombatStakesCacheMixin, serializers.ModelSeri
         source="action_request.strain_commitment", read_only=True
     )
     created_at = serializers.DateTimeField(source="action_request.created_at", read_only=True)
-    # Filled in by to_representation, which decides resist-only once per row (#4418).
-    resist_only = serializers.BooleanField(read_only=True, default=False)
-    resist_check_name = serializers.CharField(read_only=True, default=None, allow_null=True)
+    # Resist-only is decided once per row by the mixin's ``_resist`` (#4418).
+    resist_only = serializers.SerializerMethodField()
+    resist_check_name = serializers.SerializerMethodField()
 
-    def to_representation(self, instance: SceneActionTarget) -> dict:
-        data = super().to_representation(instance)
-        request = instance.action_request
-        resist_only = request_is_resist_only(request, instance.target_persona)
-        template = request.action_template
-        data["resist_only"] = resist_only
-        # The check this target rolls to resist, not the NPC's own check.
-        data["resist_check_name"] = (
-            template.resist_check_type.name
-            if resist_only and template is not None and template.resist_check_type_id
-            else None
-        )
-        return data
+    def _resist_subject(self, obj: SceneActionTarget) -> tuple[SceneActionRequest, Persona | None]:
+        return obj.action_request, obj.target_persona
 
     def get_technique_name(self, obj: SceneActionTarget) -> str | None:
         """Human label for the enhancing technique (mirrors the request serializer)."""
