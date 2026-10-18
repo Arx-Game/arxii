@@ -7329,6 +7329,54 @@ paths:
       responses:
         '200':
           description: No response body
+  /api/character-sheets/{id}/standoff-profile/:
+    get:
+      operationId: character_sheets_standoff_profile_retrieve
+      description: The owner's standoff profile and the catalogs they pick from (#4441).
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+        required: true
+      tags:
+      - character-sheets
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StandoffProfile'
+          description: ''
+    post:
+      operationId: character_sheets_standoff_profile_create
+      description: 'Make one edit to the owner''s standoff profile: consent, cause
+        or a drive (#4441).'
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+        required: true
+      tags:
+      - character-sheets
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StandoffProfileChangeRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StandoffProfile'
+          description: ''
   /api/character-sheets/{id}/stat-points/:
     get:
       operationId: character_sheets_stat_points_retrieve
@@ -48709,6 +48757,22 @@ components:
         * `none` - None
         * `suppress` - Suppress
         * `provoke` - Provoke
+    CauseEnum:
+      enum:
+      - none
+      - predation
+      - orders
+      - hunger
+      - hatred
+      - territory
+      type: string
+      description: |-
+        * `none` - None
+        * `predation` - Predation
+        * `orders` - Orders
+        * `hunger` - Hunger
+        * `hatred` - Hatred
+        * `territory` - Territory
     CauseOverrideEnum:
       enum:
       - none
@@ -49038,6 +49102,20 @@ components:
       description: |-
         * `inhibitor` - Inhibitor (blocks actions/progress)
         * `threat` - Threat (actively causes harm)
+    ChangeEnum:
+      enum:
+      - opt_in
+      - opt_out
+      - cause
+      - drive
+      - drop_drive
+      type: string
+      description: |-
+        * `opt_in` - Opt in
+        * `opt_out` - Opt out
+        * `cause` - Set cause
+        * `drive` - Set drive
+        * `drop_drive` - Drop drive
     ChapterCreate:
       type: object
       description: Serializer for creating chapters
@@ -81781,6 +81859,32 @@ components:
       required:
       - issuer
       - stance
+    ProfileChoice:
+      type: object
+      properties:
+        value:
+          type: string
+        label:
+          type: string
+      required:
+      - label
+      - value
+    ProfileDrive:
+      type: object
+      properties:
+        property_id:
+          type: integer
+        name:
+          type: string
+        strength:
+          type: integer
+        strength_label:
+          type: string
+      required:
+      - name
+      - property_id
+      - strength
+      - strength_label
     ProfileTextRequestDetails:
       type: object
       description: Read payload for PROFILE_TEXT requests (#2631).
@@ -89043,6 +89147,61 @@ components:
       - direction
       - group_id
       - reason
+    StandoffProfile:
+      type: object
+      description: The owner's own standoff profile with the catalogs they pick from
+        (#4441).
+      properties:
+        opted_in:
+          type: boolean
+        cause:
+          type: string
+        cause_label:
+          type: string
+        drives:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProfileDrive'
+        locked:
+          type: boolean
+        locked_reason:
+          type: string
+        causes:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProfileChoice'
+        properties:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProfileChoice'
+        strengths:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProfileChoice'
+      required:
+      - cause
+      - cause_label
+      - causes
+      - drives
+      - locked
+      - locked_reason
+      - opted_in
+      - properties
+      - strengths
+    StandoffProfileChangeRequest:
+      type: object
+      description: One edit to the owner's own standoff profile (#4441).
+      properties:
+        change:
+          $ref: '#/components/schemas/ChangeEnum'
+        cause:
+          $ref: '#/components/schemas/CauseEnum'
+        property_id:
+          type: integer
+        strength:
+          $ref: '#/components/schemas/StrengthEnum'
+      required:
+      - change
     StandoffSummary:
       type: object
       description: The public standoff summary an onlooker sees (``services/gm_view.py``).

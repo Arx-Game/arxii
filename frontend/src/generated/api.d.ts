@@ -5008,6 +5008,24 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/character-sheets/{id}/standoff-profile/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description The owner's standoff profile and the catalogs they pick from (#4441). */
+    get: operations['character_sheets_standoff_profile_retrieve'];
+    put?: never;
+    /** @description Make one edit to the owner's standoff profile: consent, cause or a drive (#4441). */
+    post: operations['character_sheets_standoff_profile_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/character-sheets/{id}/stat-points/': {
     parameters: {
       query?: never;
@@ -29370,6 +29388,16 @@ export interface components {
      *     * `territory` - Territory
      * @enum {string}
      */
+    CauseEnum: 'none' | 'predation' | 'orders' | 'hunger' | 'hatred' | 'territory';
+    /**
+     * @description * `none` - None
+     *     * `predation` - Predation
+     *     * `orders` - Orders
+     *     * `hunger` - Hunger
+     *     * `hatred` - Hatred
+     *     * `territory` - Territory
+     * @enum {string}
+     */
     CauseOverrideEnum: 'none' | 'predation' | 'orders' | 'hunger' | 'hatred' | 'territory';
     Ceremony: {
       readonly id: number;
@@ -29484,6 +29512,15 @@ export interface components {
      * @enum {string}
      */
     ChallengeTypeEnum: 'inhibitor' | 'threat';
+    /**
+     * @description * `opt_in` - Opt in
+     *     * `opt_out` - Opt out
+     *     * `cause` - Set cause
+     *     * `drive` - Set drive
+     *     * `drop_drive` - Drop drive
+     * @enum {string}
+     */
+    ChangeEnum: 'opt_in' | 'opt_out' | 'cause' | 'drive' | 'drop_drive';
     /** @description Serializer for creating chapters */
     ChapterCreate: {
       story: number;
@@ -46522,6 +46559,16 @@ export interface components {
       /** @description Display-only RP text. Mechanics NEVER read this (ADR-0178). */
       prose?: string;
     };
+    ProfileChoice: {
+      value: string;
+      label: string;
+    };
+    ProfileDrive: {
+      property_id: number;
+      name: string;
+      strength: number;
+      strength_label: string;
+    };
     /** @description Read payload for PROFILE_TEXT requests (#2631). */
     ProfileTextRequestDetails: {
       /** @description A character_sheets.ProfileTextField value. */
@@ -49906,6 +49953,25 @@ export interface components {
       group_id: number;
       direction: components['schemas']['StandoffMoraleRequestDirectionEnum'];
       reason: string;
+    };
+    /** @description The owner's own standoff profile with the catalogs they pick from (#4441). */
+    StandoffProfile: {
+      opted_in: boolean;
+      cause: string;
+      cause_label: string;
+      drives: components['schemas']['ProfileDrive'][];
+      locked: boolean;
+      locked_reason: string;
+      causes: components['schemas']['ProfileChoice'][];
+      properties: components['schemas']['ProfileChoice'][];
+      strengths: components['schemas']['ProfileChoice'][];
+    };
+    /** @description One edit to the owner's own standoff profile (#4441). */
+    StandoffProfileChangeRequest: {
+      change: components['schemas']['ChangeEnum'];
+      cause?: components['schemas']['CauseEnum'];
+      property_id?: number;
+      strength?: components['schemas']['StrengthEnum'];
     };
     /** @description The public standoff summary an onlooker sees (``services/gm_view.py``). */
     StandoffSummary: {
@@ -59821,6 +59887,52 @@ export interface operations {
           [name: string]: unknown;
         };
         content?: never;
+      };
+    };
+  };
+  character_sheets_standoff_profile_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['StandoffProfile'];
+        };
+      };
+    };
+  };
+  character_sheets_standoff_profile_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['StandoffProfileChangeRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['StandoffProfile'];
+        };
       };
     };
   };
