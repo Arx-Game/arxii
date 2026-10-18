@@ -45,8 +45,11 @@ def select_consequence(  # noqa: PLR0913 - keyword-only extra_traits mirrors per
     It always applies character loss filtering. ``extra_traits`` adds skill terms to the
     roll (#4450).
     """
+    # Passed only when there are terms, so a caller with none makes the exact call it
+    # always made.
+    term_kwargs = {"extra_traits": extra_traits} if extra_traits else {}
     check_result = perform_check(
-        character, check_type, target_difficulty, extra_modifiers, extra_traits=extra_traits
+        character, check_type, target_difficulty, extra_modifiers, **term_kwargs
     )
 
     outcome = check_result.outcome
