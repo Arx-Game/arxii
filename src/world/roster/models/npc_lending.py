@@ -102,7 +102,7 @@ class NPCLoan(RelatedCacheClearingMixin, SharedMemoryModel):
         constraints = [
             models.UniqueConstraint(
                 fields=["roster_entry"],
-                condition=Q(status="active"),
+                condition=Q(status=NPCLoanStatus.ACTIVE),
                 name="one_active_npc_loan_per_entry",
             ),
         ]
