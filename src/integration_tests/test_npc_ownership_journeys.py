@@ -60,4 +60,5 @@ class AGmMakesAnNpc(JourneyCase):
         persona = entry.character_sheet.primary_persona
         persona.refresh_from_db()
         self.assertIn("c_crop", persona.thumbnail_url)
-        self.assertIsNotNone(persona.thumbnail)
+        worn_link = entry.__class__.objects.get(pk=entry.pk).profile_picture
+        self.assertEqual(persona.thumbnail, worn_link.media)

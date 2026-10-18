@@ -40,6 +40,7 @@ if TYPE_CHECKING:
 
     from world.character_sheets.models import CharacterSheet
     from world.roster.models import NPCStatlinePreset
+    from world.roster.models.choices import CreationProvenance
 
 
 class StaffMintError(Exception):
@@ -55,7 +56,7 @@ def _mint_character_working_set(  # noqa: PLR0913 - one working set, each knob i
     name: str,
     typeclass: str,
     *,
-    provenance: str = "staff",
+    provenance: CreationProvenance | None = None,
     created_by: AccountDB | None = None,
     with_tenure: bool = True,
 ) -> ObjectDB:
@@ -108,7 +109,7 @@ def _mint_character_working_set(  # noqa: PLR0913 - one working set, each knob i
     entry = RosterEntry.objects.create(
         character_sheet=sheet,
         roster=roster,
-        creation_provenance=CreationProvenance(provenance),
+        creation_provenance=provenance or CreationProvenance.STAFF,
         created_by_account=created_by,
     )
     if not with_tenure:
@@ -163,7 +164,7 @@ def mint_gm_character(account: AccountDB, name: str) -> ObjectDB:
     return _mint_character_working_set(account, name, typeclass)
 
 
-def check_story_npc_cap(gm_account: AccountDB) -> None:
+def check_story_npc_cap(gm_account: AccountDB, *, count_against_cap: bool = True) -> None:
     """Validate JUNIOR+ GM trust and ``GMLevelCap.max_story_npcs`` for ``gm_account``.
 
     The one authorization seam for "does this account get another Story-NPC
@@ -175,6 +176,9 @@ def check_story_npc_cap(gm_account: AccountDB) -> None:
     No ``select_for_update`` on the cap count: a double-submit briefly
     exceeding the cap is accepted, matching ``world.gm.story_services``'s
     documented norm.
+
+    ``count_against_cap=False`` keeps the trust and level checks but skips the count,
+    for a template NPC nobody holds (#4418).
 
     Raises:
         StaffMintError: missing GM trust, below JUNIOR, or at/over cap.
@@ -198,6 +202,8 @@ def check_story_npc_cap(gm_account: AccountDB) -> None:
         msg = f"Requires {GMLevel(GMLevel.JUNIOR).label} or higher."
         raise StaffMintError(msg)
 
+    if not count_against_cap:
+        return
     cap = GMLevelCap.objects.filter(level=profile.level).first()
     max_story_npcs = cap.max_story_npcs if cap is not None else 0
     active_count = RosterTenure.objects.filter(
@@ -325,7 +331,7 @@ def mint_story_npc(
     """
     from world.character_sheets.services import set_physical_description  # noqa: PLC0415
 
-    check_story_npc_cap(gm_account)
+    check_story_npc_cap(gm_account, count_against_cap=not as_template)
 
     from world.roster.models import StoryNPCSettings  # noqa: PLC0415
     from world.roster.models.choices import CreationProvenance  # noqa: PLC0415
