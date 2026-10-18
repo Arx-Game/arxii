@@ -44,6 +44,11 @@ overrides it.
   Rejected: a maintainer approval would not clear an open thread, and the maintainer must
   always be able to merge by approving. It also let the coding agent's token resolve its
   own challenges.
+  *Amended 2026-10-17 (#4417, TehomCD):* the premise was wrong. Anyone with write access
+  resolves a thread, so threads add a step, not a block, and an agent resolving a thread
+  it answered is fine: the goal is agents correcting agents, not a cage around them.
+  The evidence challenge stays in plain comments because it is about the whole PR; line
+  findings from `.github/workflows/claude-code-review.yml` are posted as review threads.
 - **A required status check.** Same objection, plus a check missing on `merge_group`
   hangs the queue.
 - **Measuring memory per machine before allowing a browser pass.** Rejected as
