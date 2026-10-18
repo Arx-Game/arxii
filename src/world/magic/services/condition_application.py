@@ -558,6 +558,7 @@ def _perform_treatment_for_target(  # noqa: PLR0913
             bond_thread=bond_thread,
             skip_engagement_gate=True,
             power_intensity=power_intensity,
+            extra_traits=activity_skill_terms(MagicActivity.MAGICAL_TREATMENT),
         )
     except TreatmentError as exc:
         logger.warning(

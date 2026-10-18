@@ -22,9 +22,11 @@ from world.character_sheets.factories import CharacterSheetFactory
 from world.checks.factories import CheckTypeFactory, ConsequenceFactory
 from world.checks.types import ExtraTraitTerm
 from world.conditions.factories import (
+    ConditionCategoryFactory,
     ConditionInstanceFactory,
     ConditionStageFactory,
     ConditionTemplateFactory,
+    TreatmentTemplateFactory,
 )
 from world.magic.constants import (
     ENDURE_HALLOWED_GROUND_CHECK_TYPE_NAME,
@@ -36,6 +38,7 @@ from world.magic.constants import (
 )
 from world.magic.factories import (
     AffinityInteractionFactory,
+    CharacterAnimaFactory,
     FuryTierFactory,
     MagicActivitySkillFactory,
     RitualCheckConfigFactory,
@@ -43,6 +46,7 @@ from world.magic.factories import (
     SoulfrayConfigFactory,
     TechniqueFactory,
 )
+from world.scenes.factories import SceneFactory
 from world.skills.factories import SkillFactory
 
 SKILL_WEIGHT = Decimal("0.50")
@@ -324,3 +328,207 @@ class MagicServiceRollSiteTests(ActivityTermTestCase):
             MagicActivity.SENSING_MAGIC,
             lambda: _roll_cast_audience(caster, technique, concealment=10),
         )
+
+
+class ConditionRollSiteTests(ActivityTermTestCase):
+    """Resist and break-free rolls add loss-of-self skills only for a marked category."""
+
+    def template(self, *, marked: bool, **fields: object):
+        category = ConditionCategoryFactory(adds_loss_of_self_skills=marked)
+        return ConditionTemplateFactory(category=category, **fields)
+
+    def assert_no_terms(
+        self, target: str, activity: MagicActivity, drive: Callable[[], object]
+    ) -> None:
+        """The activity is mapped, yet an unmarked template's roll carries no term."""
+        self.map_activity(activity)
+        with roll_recorded(target) as calls, self.assertRaises(RollReached):
+            drive()
+        self.assertEqual(calls[0]["extra_traits"], ())
+
+    def test_loss_of_self_terms_only_for_marked_category(self) -> None:
+        from world.conditions.services import _loss_of_self_terms
+
+        self.map_activity(MagicActivity.RESISTING_LOSS_OF_SELF)
+
+        self.assertEqual(_loss_of_self_terms(self.template(marked=True)), self.expected)
+        self.assertEqual(_loss_of_self_terms(self.template(marked=False)), ())
+
+    def test_application_resist_marked(self) -> None:
+        from world.conditions.services import _check_application_resist
+
+        template = self.template(marked=True, resist_check_type=CheckTypeFactory())
+        target = CharacterSheetFactory().character
+
+        self.assert_terms_reach(
+            "world.conditions.services.perform_check_with_modifiers",
+            MagicActivity.RESISTING_LOSS_OF_SELF,
+            lambda: _check_application_resist(target, template),
+        )
+
+    def test_application_resist_unmarked(self) -> None:
+        from world.conditions.services import _check_application_resist
+
+        template = self.template(marked=False, resist_check_type=CheckTypeFactory())
+        target = CharacterSheetFactory().character
+
+        self.assert_no_terms(
+            "world.conditions.services.perform_check_with_modifiers",
+            MagicActivity.RESISTING_LOSS_OF_SELF,
+            lambda: _check_application_resist(target, template),
+        )
+
+    def test_stage_advance_resist_marked(self) -> None:
+        from world.conditions.services import _perform_advancement_resist_check
+
+        template = self.template(marked=True, has_progression=True)
+        stage = ConditionStageFactory(condition=template, resist_check_type=CheckTypeFactory())
+        instance = ConditionInstanceFactory(
+            condition=template, target=CharacterSheetFactory().character
+        )
+
+        self.assert_terms_reach(
+            "world.conditions.services.perform_check_with_modifiers",
+            MagicActivity.RESISTING_LOSS_OF_SELF,
+            lambda: _perform_advancement_resist_check(instance, stage),
+        )
+
+    def test_break_free_marked(self) -> None:
+        from world.conditions.constants import BreakFreeMode
+        from world.conditions.services import attempt_break_free
+
+        template = self.template(
+            marked=True,
+            break_free_mode=BreakFreeMode.SELF_INITIATED,
+            break_free_check_type=CheckTypeFactory(),
+            break_free_difficulty=10,
+        )
+        instance = ConditionInstanceFactory(
+            condition=template, target=CharacterSheetFactory().character, is_aware=True
+        )
+
+        self.assert_terms_reach(
+            "world.checks.services.perform_check_with_modifiers",
+            MagicActivity.RESISTING_LOSS_OF_SELF,
+            lambda: attempt_break_free(instance, in_combat_tick=True),
+        )
+
+    def test_break_free_unmarked(self) -> None:
+        from world.conditions.constants import BreakFreeMode
+        from world.conditions.services import attempt_break_free
+
+        template = self.template(
+            marked=False,
+            break_free_mode=BreakFreeMode.SELF_INITIATED,
+            break_free_check_type=CheckTypeFactory(),
+            break_free_difficulty=10,
+        )
+        instance = ConditionInstanceFactory(
+            condition=template, target=CharacterSheetFactory().character, is_aware=True
+        )
+
+        self.assert_no_terms(
+            "world.checks.services.perform_check_with_modifiers",
+            MagicActivity.RESISTING_LOSS_OF_SELF,
+            lambda: attempt_break_free(instance, in_combat_tick=True),
+        )
+
+    def test_reveal_condition_marked(self) -> None:
+        from actions.definitions.conditions import RevealConditionAction
+
+        template = self.template(marked=True, break_free_check_type=CheckTypeFactory())
+        template.category.alters_behavior = True
+        template.category.save(update_fields=["alters_behavior"])
+        target = CharacterSheetFactory().character
+        ConditionInstanceFactory(condition=template, target=target, is_aware=False)
+        actor = CharacterSheetFactory().character
+
+        self.assert_terms_reach(
+            "world.checks.services.perform_check",
+            MagicActivity.RESISTING_LOSS_OF_SELF,
+            lambda: RevealConditionAction().execute(actor, target=target),
+        )
+
+    def test_rally_marked(self) -> None:
+        from actions.definitions.conditions import RallyAction
+        from world.conditions.constants import BreakFreeMode
+
+        template = self.template(
+            marked=True,
+            break_free_mode=BreakFreeMode.SELF_INITIATED,
+            break_free_check_type=CheckTypeFactory(),
+            break_free_difficulty=10,
+        )
+        template.category.alters_behavior = True
+        template.category.save(update_fields=["alters_behavior"])
+        target = CharacterSheetFactory().character
+        ConditionInstanceFactory(condition=template, target=target, is_aware=True)
+        actor = CharacterSheetFactory().character
+
+        self.assert_terms_reach(
+            "world.checks.services.perform_check",
+            MagicActivity.RESISTING_LOSS_OF_SELF,
+            lambda: RallyAction().execute(actor, target=target),
+        )
+
+
+class TreatmentRollSiteTests(ActivityTermTestCase):
+    """A technique's treatment adds the Magical treatment skills; a mundane one does not."""
+
+    def setUp(self) -> None:
+        from world.conditions.constants import TreatmentTargetKind
+
+        self.helper_sheet = CharacterSheetFactory()
+        self.target_sheet = CharacterSheetFactory()
+        self.scene = SceneFactory(is_active=True)
+        self.condition = ConditionTemplateFactory()
+        self.wound = ConditionInstanceFactory(
+            condition=self.condition, target=self.target_sheet.character
+        )
+        self.treatment = TreatmentTemplateFactory(
+            target_kind=TreatmentTargetKind.PRIMARY,
+            target_condition=self.condition,
+            scene_required=False,
+            once_per_scene_per_helper=False,
+            check_type=CheckTypeFactory(),
+        )
+        CharacterAnimaFactory(character=self.helper_sheet)
+
+    def test_technique_treatment_adds_the_magical_treatment_skills(self) -> None:
+        from world.magic.models.techniques import ConditionTargetKind, TechniqueTreatment
+        from world.magic.services.condition_application import apply_technique_treatments
+
+        technique = TechniqueFactory()
+        TechniqueTreatment.objects.create(
+            technique=technique,
+            treatment_template=self.treatment,
+            target_kind=ConditionTargetKind.ALLY,
+            minimum_success_level=1,
+        )
+
+        self.assert_terms_reach(
+            "world.conditions.services.perform_check_with_modifiers",
+            MagicActivity.MAGICAL_TREATMENT,
+            lambda: apply_technique_treatments(
+                technique=technique,
+                success_level=3,
+                eff_intensity=5,
+                targets_by_kind={ConditionTargetKind.ALLY: [self.target_sheet.character]},
+                source_character=self.helper_sheet.character,
+                scene=self.scene,
+            ),
+        )
+
+    def test_mundane_treatment_adds_no_skills(self) -> None:
+        from world.conditions.services import perform_treatment
+
+        self.map_activity(MagicActivity.MAGICAL_TREATMENT)
+        with (
+            roll_recorded("world.conditions.services.perform_check_with_modifiers") as calls,
+            self.assertRaises(RollReached),
+        ):
+            perform_treatment(
+                self.helper_sheet, self.target_sheet, self.scene, self.treatment, self.wound
+            )
+
+        self.assertEqual(calls[0]["extra_traits"], ())

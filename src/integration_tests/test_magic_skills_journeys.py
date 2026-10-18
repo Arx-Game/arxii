@@ -28,8 +28,15 @@ from world.combat.factories import (
     CombatParticipantFactory,
 )
 from world.combat.services import resolve_round
+from world.conditions.constants import BreakFreeMode
+from world.conditions.factories import (
+    ConditionCategoryFactory,
+    ConditionInstanceFactory,
+    ConditionTemplateFactory,
+)
+from world.conditions.services import apply_condition
 from world.fatigue.constants import EffortLevel
-from world.magic.constants import EffectKind, TargetKind
+from world.magic.constants import EffectKind, MagicActivity, TargetKind
 from world.magic.factories import (
     BinaryEffectTypeFactory,
     CharacterAnimaFactory,
@@ -38,6 +45,7 @@ from world.magic.factories import (
     CharacterThreadWeavingUnlockFactory,
     EffectTypeFactory,
     GiftFactory,
+    MagicActivitySkillFactory,
     ResonanceFactory,
     TechniqueFactory,
     ThreadPullCostFactory,
@@ -255,3 +263,78 @@ class FightingWithATechniqueSkill(JourneyCase):
             character_sheet=self.ysmay.sheet_data, trait=self.skill.trait
         )
         self.assertEqual(usage.check_count, 1)
+
+
+class ResistingLossOfSelf(JourneyCase):
+    """Ysmay fights off a hold; staff mapped a skill to resisting loss of self (#4450).
+
+    The skill joins her roll only when the hold's category is marked as a loss of self
+    (corruption, atavism, possession). The same skill is mapped either way.
+    """
+
+    def setUp(self) -> None:
+        super().setUp()
+        CheckSystemSetupFactory.create()
+        self.skill = SkillFactory()
+        MagicActivitySkillFactory(
+            activity=MagicActivity.RESISTING_LOSS_OF_SELF, skill=self.skill, weight=Decimal("0.50")
+        )
+        self.room = self.make_room("The Lantern")
+        self.ysmay = self.make_player("Ysmay", room=self.room)
+        self.hobb = self.make_player("Hobb", room=self.room)
+
+    def hold_on_ysmay(self, *, loss_of_self: bool):
+        category = ConditionCategoryFactory(
+            name="Corruption" if loss_of_self else "Charm",
+            alters_behavior=True,
+            adds_loss_of_self_skills=loss_of_self,
+        )
+        template = ConditionTemplateFactory(
+            category=category,
+            break_free_mode=BreakFreeMode.SELF_INITIATED,
+            break_free_check_type=CheckTypeFactory(),
+            break_free_difficulty=10,
+        )
+        return ConditionInstanceFactory(target=self.ysmay, condition=template, is_aware=True)
+
+    def roll_after(self, character, line: str) -> tuple[ExtraTraitTerm, ...]:
+        """The skill terms the roll behind ``line`` carried."""
+        success = CheckOutcome.objects.get(name="Success")
+        with force_check_outcome(success) as capture:
+            self.telnet(character, line)
+        return capture.extra_traits
+
+    def test_breaking_free_of_corruption_adds_the_skill(self) -> None:
+        self.hold_on_ysmay(loss_of_self=True)
+
+        terms = self.roll_after(self.ysmay, "breakfree")
+
+        self.assertEqual(terms, (ExtraTraitTerm(trait=self.skill.trait, weight=Decimal("0.50")),))
+
+    def test_a_friend_rallying_against_corruption_adds_the_skill(self) -> None:
+        self.hold_on_ysmay(loss_of_self=True)
+
+        terms = self.roll_after(self.hobb, "rally Ysmay")
+
+        self.assertEqual(terms, (ExtraTraitTerm(trait=self.skill.trait, weight=Decimal("0.50")),))
+
+    def test_breaking_free_of_an_ordinary_hold_adds_nothing(self) -> None:
+        self.hold_on_ysmay(loss_of_self=False)
+
+        self.assertEqual(self.roll_after(self.ysmay, "breakfree"), ())
+
+    def test_resist_corruption_adds_loss_of_self_skill(self) -> None:
+        """The roll made when a corrupting condition is applied carries the skill."""
+        category = ConditionCategoryFactory(name="Atavism", adds_loss_of_self_skills=True)
+        template = ConditionTemplateFactory(
+            category=category, resist_check_type=CheckTypeFactory(), resist_difficulty=10
+        )
+        success = CheckOutcome.objects.get(name="Success")
+
+        with force_check_outcome(success) as capture:
+            apply_condition(self.ysmay, template)
+
+        self.assertEqual(
+            capture.extra_traits,
+            (ExtraTraitTerm(trait=self.skill.trait, weight=Decimal("0.50")),),
+        )

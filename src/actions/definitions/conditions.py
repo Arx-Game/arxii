@@ -127,6 +127,7 @@ class RevealConditionAction(Action):
     ) -> ActionResult:
         from world.checks.services import level_opposition, perform_check  # noqa: PLC0415
         from world.conditions.models import ConditionInstance  # noqa: PLC0415
+        from world.conditions.services import _loss_of_self_terms  # noqa: PLC0415
         from world.progression.services.skill_development import (  # noqa: PLC0415
             get_character_path_level,
         )
@@ -162,7 +163,12 @@ class RevealConditionAction(Action):
             caster_level = get_character_path_level(caster)
             difficulty += level_opposition(check_type, level=caster_level, character=caster)
 
-        result = perform_check(actor, check_type, target_difficulty=difficulty)
+        result = perform_check(
+            actor,
+            check_type,
+            target_difficulty=difficulty,
+            extra_traits=_loss_of_self_terms(template),
+        )
         if result.success_level > 0:
             instance.is_aware = True
             instance.save(update_fields=["is_aware"])
@@ -198,7 +204,10 @@ class RallyAction(Action):
         **kwargs: Any,
     ) -> ActionResult:
         from world.checks.services import level_opposition, perform_check  # noqa: PLC0415
-        from world.conditions.services import attempt_break_free  # noqa: PLC0415
+        from world.conditions.services import (  # noqa: PLC0415
+            _loss_of_self_terms,
+            attempt_break_free,
+        )
         from world.progression.services.skill_development import (  # noqa: PLC0415
             get_character_path_level,
         )
@@ -242,7 +251,12 @@ class RallyAction(Action):
             caster_level = get_character_path_level(caster)
             difficulty += level_opposition(check_type, level=caster_level, character=caster)
 
-        result = perform_check(actor, check_type, target_difficulty=difficulty)
+        result = perform_check(
+            actor,
+            check_type,
+            target_difficulty=difficulty,
+            extra_traits=_loss_of_self_terms(instance.condition),
+        )
         sl = result.success_level
 
         crit_threshold = 2

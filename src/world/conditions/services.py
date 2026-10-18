@@ -10,7 +10,7 @@ Design principles:
 - Bidirectional modifiers (conditions can be good or bad depending on context)
 """
 
-from collections.abc import Iterable
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from decimal import Decimal
@@ -99,6 +99,7 @@ if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
 
     from world.character_sheets.models import CharacterSheet
+    from world.checks.types import ExtraTraitTerm
     from world.covenants.models import CovenantRole
     from world.magic.models import PendingAlteration, Technique, Thread
     from world.magic.models.techniques import TechniqueCapabilityGrant
@@ -632,6 +633,22 @@ def _check_prevention_from_context(
     return None
 
 
+def _loss_of_self_terms(template: ConditionTemplate) -> "tuple[ExtraTraitTerm, ...]":
+    """The skills a resist or break-free roll adds for ``template``, usually none.
+
+    Only a template whose category is marked ``adds_loss_of_self_skills`` (corruption,
+    atavism, possession) adds the skills staff mapped to Resisting loss of self (#4450).
+    Every other condition rolls exactly as before. ``magic_skills`` is imported here
+    because the magic services import this module.
+    """
+    if not template.category.adds_loss_of_self_skills:
+        return ()
+    from world.magic.constants import MagicActivity  # noqa: PLC0415
+    from world.magic.services.magic_skills import activity_skill_terms  # noqa: PLC0415
+
+    return activity_skill_terms(MagicActivity.RESISTING_LOSS_OF_SELF)
+
+
 def _check_application_resist(
     target: "ObjectDB",  # noqa: OBJECTDB_PARAM
     template: ConditionTemplate,
@@ -650,6 +667,7 @@ def _check_application_resist(
         character=target,
         check_type=template.resist_check_type,
         target_difficulty=template.resist_difficulty,
+        extra_traits=_loss_of_self_terms(template),
     )
     return int(result.success_level) > 0
 
@@ -3352,6 +3370,7 @@ def _perform_advancement_resist_check(
         character=instance.target,
         check_type=next_stage.resist_check_type,
         target_difficulty=payload.base_difficulty,
+        extra_traits=_loss_of_self_terms(instance.condition),
     )
     # success_level >= 0 means partial success or better — resist holds.
     return int(result.success_level) >= 0
@@ -3753,6 +3772,7 @@ def attempt_break_free(
         target_difficulty=difficulty,
         level_override=level_override,
         extra_contributions=contributions or None,
+        extra_traits=_loss_of_self_terms(template),
     )
     return _resolve_break_free_outcome(instance, result.success_level)
 
@@ -4527,6 +4547,7 @@ def perform_treatment(  # noqa: PLR0913
     bond_thread: "Thread | None" = None,
     skip_engagement_gate: bool = False,
     power_intensity: int = 0,
+    extra_traits: "Sequence[ExtraTraitTerm]" = (),
 ) -> TreatmentOutcome:
     """Resolve a TreatmentTemplate against an effect instance.
 
@@ -4550,6 +4571,10 @@ def perform_treatment(  # noqa: PLR0913
     before ``mend_wound()``'s never-to-full cap is applied. Default 0, combined with
     the field's default 0, is a no-op - the mundane (non-technique) caller
     (``world/scenes/action_services.py``) never passes this, so it always no-ops.
+
+    ``extra_traits`` (#4450) adds skill terms to the treatment's check. Only the
+    technique-cast path passes them (the skills staff mapped to Magical treatment);
+    the mundane ``treat_condition`` action rolls the treatment's own check alone.
     """
     helper = helper_sheet.character
     target = target_sheet.character
@@ -4571,6 +4596,7 @@ def perform_treatment(  # noqa: PLR0913
         helper,
         check_type=treatment.check_type,
         target_difficulty=treatment.target_difficulty,
+        extra_traits=extra_traits,
     )
 
     # ------------------------------------------------------------------
