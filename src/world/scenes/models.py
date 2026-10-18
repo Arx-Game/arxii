@@ -294,6 +294,13 @@ class Scene(CachedPropertiesMixin, SharedMemoryModel):
 
             credit_scene_depth(self)
 
+            # #4418: an NPC lent for this scene goes back to its holder. Here, not in
+            # one caller, so every way a scene finishes (the GM's finish, an event's
+            # completion) ends its loans.
+            from world.roster.services.npc_lending import end_scene_loans  # noqa: PLC0415
+
+            end_scene_loans(self)
+
 
 class SceneClock(SharedMemoryModel):
     """An authored countdown on the beat a scene is running (#3567).

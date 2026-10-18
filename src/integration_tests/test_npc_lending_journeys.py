@@ -11,8 +11,11 @@ from evennia.server.serversession import ServerSession
 from rest_framework import status
 
 from actions.factories import ActionTemplateFactory
+from evennia_extensions.models import RoomProfile
 from integration_tests.harness import JourneyCase
 from world.checks.factories import CheckTypeFactory
+from world.events.constants import EventStatus
+from world.events.factories import EventFactory
 from world.gm.constants import GMLevel
 from world.gm.factories import GMProfileFactory, GuideProfileFactory, seed_default_gm_level_caps
 from world.roster.factories import NPCLoanFactory
@@ -123,6 +126,21 @@ class AGuidePlaysALentNpc(JourneyCase):
 
         finished = self.web(self.ravenna, "finish_scene")
         self.assertTrue(finished.detail.success, finished.detail.message)
+        self.assertNotIn("Captain Vael", self._mine_names(self.guide))
+        self.assertIn("Captain Vael", self._mine_names(self.gm))
+
+    def test_completing_an_event_returns_the_lent_npc(self) -> None:
+        event = EventFactory(
+            status=EventStatus.ACTIVE, location=RoomProfile.objects.get(objectdb=self.room)
+        )
+        self.scene.event = event
+        self.scene.is_active = True
+        self.scene.save()
+        self._lend()
+        self.assertIn("Captain Vael", self._mine_names(self.guide))
+
+        said = self.telnet(self.ravenna, f"event complete {event.pk}")
+        self.assertIn("is complete", said)
         self.assertNotIn("Captain Vael", self._mine_names(self.guide))
         self.assertIn("Captain Vael", self._mine_names(self.gm))
 
