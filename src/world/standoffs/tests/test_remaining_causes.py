@@ -102,10 +102,10 @@ class HungerTests(CauseBase):
 
     def test_the_margin_widens_each_action_nobody_feeds_them(self) -> None:
         # step 10: 8 x 120 = 960 < 1000 holds; 8 x 130 = 1040 fires.
-        self.assertIsNone(self.reason(self.group(actions_elapsed=2)))
-        self.assertEqual(
-            self.reason(self.group(actions_elapsed=3)), REASON_HUNGER.format(margin=30)
-        )
+        group = self.group(actions_elapsed=2)
+        self.assertIsNone(self.reason(group))
+        group.actions_elapsed = 3
+        self.assertEqual(self.reason(group), REASON_HUNGER.format(margin=30))
 
     def test_a_weak_party_meets_the_plain_reason_before_any_action(self) -> None:
         self.assertEqual(self.reason(self.group(), WEAK), REASON_OUTWEIGHED)
@@ -203,10 +203,10 @@ class TerritoryTests(CauseBase):
     cause = CauseKind.TERRITORY
 
     def test_they_hold_while_patience_lasts_and_fire_when_it_runs_out(self) -> None:
-        self.assertIsNone(self.reason(self.group(actions_elapsed=2), WEAK))
-        self.assertEqual(
-            self.reason(self.group(actions_elapsed=3), STRONG), REASON_TERRITORY.format(count=3)
-        )
+        group = self.group(actions_elapsed=2)
+        self.assertIsNone(self.reason(group, WEAK))
+        group.actions_elapsed = 3
+        self.assertEqual(self.reason(group, STRONG), REASON_TERRITORY.format(count=3))
 
     def test_they_warn_one_action_before_and_then_attack(self) -> None:
         with patch(LEVEL, return_value=STRONG):
