@@ -19,6 +19,7 @@ if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
 
     from world.areas.models import Area
+    from world.scenes.models import Scene
 
 
 def resolve_actor_sheet(actor: ObjectDB) -> Any:
@@ -471,6 +472,60 @@ class IsSceneGMPrerequisite(Prerequisite):
         if scene is not None and scene.is_gm(account):
             return True, ""
         return False, "Only the scene's GM or staff can do that."
+
+
+def resolve_gm_scene(actor: ObjectDB, context_kwargs: dict) -> Scene | None:
+    """The scene a GM tool acts on: ``scene_id`` when the caller names one, else the
+    active scene where the actor stands (#4418).
+
+    A GM's web panel dispatches as whichever character the GM is browsing as, who may
+    be nowhere near the scene, so the panel names the scene outright.
+    """
+    from world.scenes.interaction_services import get_active_scene  # noqa: PLC0415
+    from world.scenes.models import Scene  # noqa: PLC0415
+
+    scene_id = context_kwargs.get("scene_id")
+    if scene_id in (None, ""):
+        return get_active_scene(actor.location)
+    try:
+        return Scene.objects.filter(pk=int(scene_id)).first()
+    except (TypeError, ValueError):
+        return None
+
+
+@dataclass
+class RunsScenePrerequisite(Prerequisite):
+    """The dispatching account runs the scene the GM tool acts on (#4418).
+
+    With a ``scene_id`` kwarg: staff, the scene's GM, or a scene co-owner
+    (``can_create_encounter_for_scene``), wherever the actor stands. Without one it
+    is ``IsSceneGMPrerequisite``: the GM of the active scene at the actor's location.
+    The account is the one puppeting the actor, else ``active_account``.
+    ``only_with_scene_id`` passes a call that names no scene, for a tool that also
+    works outside one (the owner taking back an NPC lent from the NPC roster).
+    """
+
+    only_with_scene_id: bool = False
+
+    def is_met(
+        self,
+        actor: ObjectDB,
+        target: ObjectDB | None = None,
+        context: dict | None = None,
+    ) -> tuple[bool, str]:
+        from commands.utils.gm_resolution import resolve_account_or_none  # noqa: PLC0415
+        from world.combat.permissions import can_create_encounter_for_scene  # noqa: PLC0415
+
+        kwargs = (context or {}).get("kwargs", {})
+        if kwargs.get("scene_id") in (None, ""):
+            if self.only_with_scene_id:
+                return True, ""
+            return IsSceneGMPrerequisite().is_met(actor, target, context)
+        account = actor.account or resolve_account_or_none(actor)
+        scene = resolve_gm_scene(actor, kwargs)
+        if account is None or scene is None or not can_create_encounter_for_scene(account, scene):
+            return False, "Only the scene's GM or staff can do that."
+        return True, ""
 
 
 @dataclass

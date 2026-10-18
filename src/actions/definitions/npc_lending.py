@@ -15,7 +15,12 @@ from typing import TYPE_CHECKING, Any
 
 from actions.base import Action
 from actions.constants import ActionCategory
-from actions.prerequisites import IsGuidePrerequisite, IsSceneGMPrerequisite, Prerequisite
+from actions.prerequisites import (
+    IsGuidePrerequisite,
+    Prerequisite,
+    RunsScenePrerequisite,
+    resolve_gm_scene,
+)
 from actions.types import ActionResult, TargetType
 
 if TYPE_CHECKING:
@@ -97,7 +102,8 @@ class _NPCLendingAction(Action):
 class OfferNPCAction(_NPCLendingAction):
     """The scene's GM offers an NPC they own to a Guide for this scene.
 
-    Kwargs: ``roster_entry_id``, ``guide_account_id``.
+    Kwargs: ``roster_entry_id``, ``guide_account_id``, ``scene_id`` (the GM's panel
+    names the scene; without it, the active scene where the actor stands).
     """
 
     key: str = "offer_npc"
@@ -105,7 +111,7 @@ class OfferNPCAction(_NPCLendingAction):
     icon: str = "user-share"
 
     def get_prerequisites(self) -> list[Prerequisite]:
-        return [IsSceneGMPrerequisite()]
+        return [RunsScenePrerequisite()]
 
     def execute(
         self, actor: ObjectDB, context: ActionContext | None = None, **kwargs: Any
@@ -113,7 +119,6 @@ class OfferNPCAction(_NPCLendingAction):
         from evennia.accounts.models import AccountDB  # noqa: PLC0415
 
         from world.roster.services.npc_lending import NPCLendingError, offer_npc  # noqa: PLC0415
-        from world.scenes.interaction_services import get_active_scene  # noqa: PLC0415
 
         account = _acting_account(actor)
         if account is None:
@@ -125,7 +130,7 @@ class OfferNPCAction(_NPCLendingAction):
         guide = AccountDB.objects.filter(pk=guide_id).first() if guide_id else None
         if guide is None:
             return ActionResult(success=False, message="No such Guide.")
-        scene = get_active_scene(actor.location)
+        scene = resolve_gm_scene(actor, kwargs)
         if scene is None:
             return ActionResult(success=False, message="There is no scene here.")
         try:
@@ -177,12 +182,17 @@ class AnswerNPCLoanAction(_NPCLendingAction):
 class TakeBackNPCAction(_NPCLendingAction):
     """End a loan: the owner takes the NPC back, or the borrower hands it back.
 
-    Kwargs: ``loan_id``.
+    Kwargs: ``loan_id``, optional ``scene_id``. With ``scene_id`` the scene's GM (or a
+    co-owner, or staff) ends a loan made for that scene, wherever their character
+    stands; without it the loan's owner, offerer or borrower ends it.
     """
 
     key: str = "take_back_npc"
     name: str = "Take Back NPC"
     icon: str = "user-minus"
+
+    def get_prerequisites(self) -> list[Prerequisite]:
+        return [RunsScenePrerequisite(only_with_scene_id=True)]
 
     def execute(
         self, actor: ObjectDB, context: ActionContext | None = None, **kwargs: Any
@@ -195,8 +205,15 @@ class TakeBackNPCAction(_NPCLendingAction):
         loan = _loan(kwargs)
         if loan is None:
             return ActionResult(success=False, message=NO_SUCH_LOAN_MESSAGE)
+        by = account
+        if kwargs.get("scene_id") not in (None, ""):
+            scene = resolve_gm_scene(actor, kwargs)
+            if scene is None or loan.scene_id != scene.pk:
+                return ActionResult(success=False, message=NO_SUCH_LOAN_MESSAGE)
+            # The prerequisite proved this account runs the loan's scene.
+            by = None
         try:
-            end_loan(loan, by=account)
+            end_loan(loan, by=by)
         except NPCLendingError as exc:
             return ActionResult(success=False, message=exc.user_message)
         name = loan.roster_entry.character_sheet.character.db_key

@@ -372,7 +372,7 @@ from actions.definitions.npc_assignments import (
     UnassignGuardAction,
     UnassignServantAction,
 )
-from actions.definitions.npc_cast import VoiceCrowdAction
+from actions.definitions.npc_cast import DescribeCrowdAction, VoiceCrowdAction
 from actions.definitions.npc_lending import (
     AnswerNPCLoanAction,
     OfferNPCAction,
@@ -1092,6 +1092,7 @@ _ALL_ACTIONS: list[Action] = [
     RequestNPCBorrowAction(),
     # #4418: a crowd gets a voice on the scene's cast list, lent like any story NPC.
     VoiceCrowdAction(),
+    DescribeCrowdAction(),
     # #3295 — scene check invocation: player self-checks, GM calls, proposals.
     SceneSelfCheckAction(),
     CallForCheckAction(),

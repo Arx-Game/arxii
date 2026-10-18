@@ -1,8 +1,10 @@
-"""The scene's cast list (#4418): giving a crowd a voice a Guide can play.
+"""The scene's cast list (#4418): naming a crowd and giving it a voice a Guide can play.
 
-A thin web-only wrapper over ``world.combat.services.crowd_voice.voice_crowd``; the
-service owns the rules and raises ``CrowdVoiceError`` with a player-safe message.
-The voice is then lent like any story NPC (``offer_npc``).
+Thin web-only wrappers over ``world.combat.services.crowd_voice`` (``voice_crowd``,
+``describe_crowd``); the services own the rules and raise ``CrowdVoiceError`` with a
+player-safe message. A voice is then lent like any story NPC (``offer_npc``). Both
+take a ``scene_id``: the GM's panel dispatches as whichever character the GM is
+browsing as, so the scene is named, not read off where that character stands.
 """
 
 from __future__ import annotations
@@ -12,7 +14,7 @@ from typing import TYPE_CHECKING, Any
 
 from actions.base import Action
 from actions.constants import ActionCategory
-from actions.prerequisites import IsSceneGMPrerequisite, Prerequisite
+from actions.prerequisites import Prerequisite, RunsScenePrerequisite, resolve_gm_scene
 from actions.types import ActionResult, TargetType
 
 if TYPE_CHECKING:
@@ -35,12 +37,31 @@ def _opponent_ids(value: Any) -> list[int] | None:
         return None
 
 
+def _crowd_in_scene(actor: ObjectDB, kwargs: dict[str, Any]) -> list | None:
+    """The named ``opponent_ids`` rows when every one is in the scene's encounters."""
+    from world.combat.models import CombatOpponent  # noqa: PLC0415
+
+    scene = resolve_gm_scene(actor, kwargs)
+    ids = _opponent_ids(kwargs.get("opponent_ids"))
+    if scene is None or not ids:
+        return None
+    opponents = list(
+        CombatOpponent.objects.filter(pk__in=ids, encounter__scene=scene)
+        .select_related("encounter", "threat_pool", "voice_persona__character_sheet")
+        .order_by("pk")
+    )
+    if len(opponents) != len(set(ids)):
+        return None
+    return opponents
+
+
 @dataclass
 class VoiceCrowdAction(Action):
     """The scene's GM gives a crowd of opponents a voice to pose as.
 
     Kwargs: ``opponent_ids`` (the crowd's ``CombatOpponent`` rows, all in one of
-    this scene's encounters), ``name`` (the voice's name).
+    this scene's encounters), ``name`` (the voice's name), ``scene_id`` (else the
+    active scene where the actor stands).
     """
 
     key: str = "voice_crowd"
@@ -51,18 +72,16 @@ class VoiceCrowdAction(Action):
     target_type: TargetType = TargetType.SELF
 
     def get_prerequisites(self) -> list[Prerequisite]:
-        return [IsSceneGMPrerequisite()]
+        return [RunsScenePrerequisite()]
 
     def execute(
         self, actor: ObjectDB, context: ActionContext | None = None, **kwargs: Any
     ) -> ActionResult:
         from commands.utils.gm_resolution import resolve_account_or_none  # noqa: PLC0415
-        from world.combat.models import CombatOpponent  # noqa: PLC0415
         from world.combat.services.crowd_voice import (  # noqa: PLC0415
             CrowdVoiceError,
             voice_crowd,
         )
-        from world.scenes.interaction_services import get_active_scene  # noqa: PLC0415
 
         account = actor.account or resolve_account_or_none(actor)
         if account is None:
@@ -70,18 +89,8 @@ class VoiceCrowdAction(Action):
         voice_name = (kwargs.get("name") or "").strip()
         if not voice_name:
             return ActionResult(success=False, message="Name the crowd.")
-        scene = get_active_scene(actor.location)
-        if scene is None:
-            return ActionResult(success=False, message="There is no scene here.")
-        ids = _opponent_ids(kwargs.get("opponent_ids"))
-        if not ids:
-            return ActionResult(success=False, message=NO_SUCH_CROWD_MESSAGE)
-        opponents = list(
-            CombatOpponent.objects.filter(pk__in=ids, encounter__scene=scene)
-            .select_related("encounter", "threat_pool")
-            .order_by("pk")
-        )
-        if len(opponents) != len(set(ids)):
+        opponents = _crowd_in_scene(actor, kwargs)
+        if opponents is None:
             return ActionResult(success=False, message=NO_SUCH_CROWD_MESSAGE)
         try:
             persona = voice_crowd(opponents=opponents, name=voice_name, by=account)
@@ -94,4 +103,50 @@ class VoiceCrowdAction(Action):
                 "persona_id": persona.pk,
                 "roster_entry_id": persona.character_sheet.roster_entry.pk,
             },
+        )
+
+
+@dataclass
+class DescribeCrowdAction(Action):
+    """The scene's GM names and describes a crowd of opponents, all its rows at once.
+
+    Kwargs: ``opponent_ids``, ``name``, ``description`` (either may be blank to keep
+    it), ``scene_id`` (else the active scene where the actor stands). A voiced crowd's
+    voice takes the new name too.
+    """
+
+    key: str = "describe_crowd"
+    name: str = "Describe Crowd"
+    icon: str = "users"
+    category: str = "gm"
+    action_category: ActionCategory = ActionCategory.SOCIAL
+    target_type: TargetType = TargetType.SELF
+
+    def get_prerequisites(self) -> list[Prerequisite]:
+        return [RunsScenePrerequisite()]
+
+    def execute(
+        self, actor: ObjectDB, context: ActionContext | None = None, **kwargs: Any
+    ) -> ActionResult:
+        from world.combat.services.crowd_voice import (  # noqa: PLC0415
+            CrowdVoiceError,
+            describe_crowd,
+        )
+
+        new_name = (kwargs.get("name") or "").strip()
+        description = (kwargs.get("description") or "").strip()
+        if not new_name and not description:
+            return ActionResult(success=False, message="Give the crowd a name or a description.")
+        opponents = _crowd_in_scene(actor, kwargs)
+        if opponents is None:
+            return ActionResult(success=False, message=NO_SUCH_CROWD_MESSAGE)
+        try:
+            describe_crowd(opponents=opponents, name=new_name, description=description)
+        except CrowdVoiceError as exc:
+            return ActionResult(success=False, message=exc.user_message)
+        shown = new_name or opponents[0].name
+        return ActionResult(
+            success=True,
+            message=f"The crowd is now {shown}.",
+            data={"opponent_ids": [opponent.pk for opponent in opponents]},
         )

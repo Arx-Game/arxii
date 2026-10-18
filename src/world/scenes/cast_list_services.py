@@ -257,7 +257,13 @@ def _group_opponents(opponents: list[CombatOpponent]) -> list[list[CombatOpponen
 def _unvoiced_crowd(rows: list[CombatOpponent]) -> CastListEntry:
     first = rows[0]
     pooled = first.tier == OpponentTier.MOOK and first.threat_pool_id is not None
-    if pooled:
+    # A crowd the GM named all at once (``describe_crowd``) shows that name; mooks a
+    # pool spawned carry numbered names, so they read as the pool.
+    collective = len(rows) > 1 and len({row.name for row in rows}) == 1
+    if pooled and collective:
+        name = first.name
+        description = first.description or first.threat_pool.description
+    elif pooled:
         name = first.threat_pool.name
         description = first.threat_pool.description or first.description
     else:

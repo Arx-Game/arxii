@@ -44,8 +44,9 @@ NOT_A_CROWD_MESSAGE = "Those aren't a crowd still in the fight."
 ALREADY_VOICED_MESSAGE = "That crowd already has a voice."
 
 
-def _lock_and_check(opponents: list[CombatOpponent]) -> None:
-    """Lock the rows and refuse any that is no crowd body, or is already voiced.
+def _lock_and_check(opponents: list[CombatOpponent], *, voiced_ok: bool = False) -> None:
+    """Lock the rows and refuse any that is no crowd body, or (unless ``voiced_ok``)
+    is already voiced.
 
     Read as values, never instances: the identity map would hand back the cached
     rows as they were, and a voice another GM just gave them would be missed.
@@ -69,7 +70,7 @@ def _lock_and_check(opponents: list[CombatOpponent]) -> None:
             or encounter_status == RoundStatus.COMPLETED
         ):
             raise CrowdVoiceError(NOT_A_CROWD_MESSAGE)
-        if voice_id is not None:
+        if voice_id is not None and not voiced_ok:
             raise CrowdVoiceError(ALREADY_VOICED_MESSAGE)
 
 
@@ -125,3 +126,60 @@ def voice_crowd(*, opponents: list[CombatOpponent], name: str, by: AccountDB) ->
         opponent.voice_persona = persona
         opponent.save(update_fields=["voice_persona"])
     return persona
+
+
+NAME_TAKEN_MESSAGE = "A character by that name already exists."
+
+
+@transaction.atomic
+def describe_crowd(*, opponents: list[CombatOpponent], name: str, description: str) -> None:
+    """Give every row of a crowd the same ``name`` and ``description`` (#4418).
+
+    A blank ``name`` or ``description`` leaves that field as it is. The rows are
+    locked and re-read like ``voice_crowd``'s, and must be persona-less ACTIVE bodies
+    of one unfinished encounter. A crowd with a voice renames its voice character and
+    persona too, so the name it poses under follows. Everything is checked before
+    anything is written.
+
+    Raises:
+        CrowdVoiceError: no rows, rows from more than one encounter, a row that is
+            no crowd body, or a voice name another character already has.
+    """
+    if not opponents:
+        msg = "Choose the crowd to describe."
+        raise CrowdVoiceError(msg)
+    if len({opponent.encounter_id for opponent in opponents}) > 1:
+        msg = "A crowd belongs to one fight."
+        raise CrowdVoiceError(msg)
+    _lock_and_check(opponents, voiced_ok=True)
+
+    voices = {opponent.voice_persona for opponent in opponents if opponent.voice_persona_id}
+    if name:
+        _refuse_taken_voice_name(voices, name)
+
+    fields = [field for field, value in (("name", name), ("description", description)) if value]
+    for opponent in opponents:
+        if name:
+            opponent.name = name
+        if description:
+            opponent.description = description
+        opponent.save(update_fields=fields)
+    if name:
+        _rename_voices(voices, name)
+
+
+def _refuse_taken_voice_name(voices: set[Persona], name: str) -> None:
+    from evennia.objects.models import ObjectDB  # noqa: PLC0415
+
+    for voice in voices:
+        character = voice.character_sheet.character
+        if ObjectDB.objects.filter(db_key__iexact=name).exclude(pk=character.pk).exists():
+            raise CrowdVoiceError(NAME_TAKEN_MESSAGE)
+
+
+def _rename_voices(voices: set[Persona], name: str) -> None:
+    """The voice character and its persona take the crowd's new name."""
+    for voice in voices:
+        voice.name = name
+        voice.save(update_fields=["name"])
+        voice.character_sheet.character.key = name
