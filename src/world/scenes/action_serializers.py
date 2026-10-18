@@ -878,6 +878,23 @@ class SceneActionTargetSerializer(_CombatStakesCacheMixin, serializers.ModelSeri
         source="action_request.strain_commitment", read_only=True
     )
     created_at = serializers.DateTimeField(source="action_request.created_at", read_only=True)
+    # Filled in by to_representation, which decides resist-only once per row (#4418).
+    resist_only = serializers.BooleanField(read_only=True, default=False)
+    resist_check_name = serializers.CharField(read_only=True, default=None, allow_null=True)
+
+    def to_representation(self, instance: SceneActionTarget) -> dict:
+        data = super().to_representation(instance)
+        request = instance.action_request
+        resist_only = request_is_resist_only(request, instance.target_persona)
+        template = request.action_template
+        data["resist_only"] = resist_only
+        # The check this target rolls to resist, not the NPC's own check.
+        data["resist_check_name"] = (
+            template.resist_check_type.name
+            if resist_only and template is not None and template.resist_check_type_id
+            else None
+        )
+        return data
 
     def get_technique_name(self, obj: SceneActionTarget) -> str | None:
         """Human label for the enhancing technique (mirrors the request serializer)."""
@@ -933,6 +950,8 @@ class SceneActionTargetSerializer(_CombatStakesCacheMixin, serializers.ModelSeri
             "pose_text",
             "strain_commitment",
             "created_at",
+            "resist_only",
+            "resist_check_name",
         ]
         read_only_fields = [
             "action_target_id",

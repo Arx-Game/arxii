@@ -1051,6 +1051,15 @@ class SceneActionTargetViewSet(viewsets.ReadOnlyModelViewSet):
                 "action_request__technique__effect_type",
                 "target_persona",
                 "target_persona__character_sheet",
+                # #4418: resist_only / resist_check_name read these per row.
+                "action_request__action_template",
+                "action_request__action_template__consent_category",
+                "action_request__action_template__resist_check_type",
+                "action_request__initiator_persona__character_sheet",
+                "action_request__initiator_persona__character_sheet__character",
+                "action_request__initiator_persona__character_sheet__roster_entry__roster",
+                "target_persona__character_sheet__character",
+                "target_persona__character_sheet__roster_entry__roster",
             )
             .order_by("-action_request__created_at", "id")
         )
