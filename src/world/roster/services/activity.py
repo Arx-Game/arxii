@@ -284,6 +284,22 @@ def is_player_character(sheet: CharacterSheet) -> bool:
     return entry is not None and entry.current_tenure is not None
 
 
+def is_pvp_protected_victim(sheet: CharacterSheet) -> bool:
+    """Whether the PvP wall (ADR-0023) protects this character as a victim (#4418).
+
+    Deliberately conservative on the victim side: a story NPC (``is_story_npc``) is
+    never protected, whoever plays it, and anything else is protected when it is a
+    player character (``is_player_character``) OR it has a roster entry at all, on
+    any non-NPC shelf -- Available, Pending, Restricted, Frozen with no tenure, or
+    a GM/Staff OOC character on the NPC shelf. Only a character with no roster
+    entry and nobody puppeting it is an NPC victim. A released or unheld roster
+    character is someone's character, so a PC cannot kill it. See ADR-4418.
+    """
+    if is_story_npc(sheet):
+        return False
+    return sheet.character.db_account is not None or current_roster_entry(sheet) is not None
+
+
 def is_original_character(sheet: CharacterSheet) -> bool:
     """Whether this character is a player's own creation (#3996).
 

@@ -12,10 +12,12 @@ from rest_framework import status
 
 from actions.constants import ActionCategory, ActionTargetType
 from actions.factories import ActionTemplateFactory
+from evennia_extensions.factories import CharacterFactory
 from integration_tests.harness import JourneyCase
 from world.battles.constants import BattleSideRole
 from world.battles.resolution import select_surrounded_terminal_pool
 from world.battles.services import add_place, add_side, create_battle, enlist_participant
+from world.character_sheets.factories import CharacterSheetFactory
 from world.checks.factories import CheckTypeFactory
 from world.checks.services import compute_check_rating
 from world.checks.test_helpers import force_check_outcome
@@ -30,7 +32,7 @@ from world.consent.factories import SocialConsentCategoryFactory
 from world.gm.constants import GMLevel
 from world.gm.factories import GMProfileFactory, GuideProfileFactory, seed_default_gm_level_caps
 from world.progression.models import WeeklySocialEngagement
-from world.roster.factories import RosterFactory
+from world.roster.factories import RosterEntryFactory, RosterFactory
 from world.roster.models import RosterEntry
 from world.roster.models.choices import RosterType
 from world.scenes.action_models import SceneActionRequest
@@ -590,7 +592,10 @@ class TheGmSeesTheCast(JourneyCase):
 
 
 class APlayedNpcCanDieAndKill(JourneyCase):
-    """Captain Vael is a story NPC a Guide plays; Ysmay is a player character."""
+    """Captain Vael is a story NPC a Guide plays; Ysmay is a player character.
+
+    The ``death_is_permitted`` assertions are predicate tests: they pin the rule, not a
+    defeat path (combat defeat never kills an NPC, so no journey reaches it)."""
 
     def setUp(self) -> None:
         super().setUp()
@@ -639,6 +644,19 @@ class APlayedNpcCanDieAndKill(JourneyCase):
             death_is_permitted(victim_sheet=wren.sheet_data, source_character=self.ysmay)
         )
 
+    def test_a_pc_cannot_kill_an_unheld_roster_character(self) -> None:
+        released = CharacterSheetFactory()
+        RosterEntryFactory(
+            character_sheet=released, roster=RosterFactory(roster_type=RosterType.AVAILABLE)
+        )
+        self.assertFalse(death_is_permitted(victim_sheet=released, source_character=self.ysmay))
+
+    def test_a_pc_cannot_kill_a_gm_character(self) -> None:
+        gm = CharacterFactory(db_typeclass_path="typeclasses.gm_characters.GMCharacter")
+        sheet = CharacterSheetFactory(character=gm)
+        RosterEntryFactory(character_sheet=sheet, roster=RosterFactory(roster_type=RosterType.NPC))
+        self.assertFalse(death_is_permitted(victim_sheet=sheet, source_character=self.ysmay))
+
     def test_a_played_npc_with_no_source_is_not_killed(self) -> None:
         self.assertFalse(
             death_is_permitted(victim_sheet=self.vael.sheet_data, source_character=None)
@@ -667,11 +685,9 @@ class APlayedNpcCanDieAndKill(JourneyCase):
             )
 
         as_pc = pose(self.ilsa, self.scene, "Ilsa watches the gate.")
-        self.assertIn(as_pc.status_code, (status.HTTP_200_OK, status.HTTP_201_CREATED), as_pc.data)
+        self.assertEqual(as_pc.status_code, status.HTTP_201_CREATED, as_pc.data)
         as_npc = pose(self.vael, scene_b, "Vael pours the wine.")
-        self.assertIn(
-            as_npc.status_code, (status.HTTP_200_OK, status.HTTP_201_CREATED), as_npc.data
-        )
+        self.assertEqual(as_npc.status_code, status.HTTP_201_CREATED, as_npc.data)
         mine = Interaction.objects.get(content="Ilsa watches the gate.")
         his = Interaction.objects.get(content="Vael pours the wine.")
         self.assertEqual(mine.scene_id, self.scene.pk)

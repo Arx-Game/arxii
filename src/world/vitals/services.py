@@ -1438,7 +1438,7 @@ def resolve_abandonment(character_sheet: CharacterSheet | None) -> bool:
         return False
 
     try:
-        pool = select_abandonment_pool(instance.source_character)
+        pool = select_abandonment_pool(instance.source_character, victim_sheet=character_sheet)
     except ConsequencePool.DoesNotExist:
         # Seeding gap — hold the victim rather than resolving ungated (#1479).
         return False

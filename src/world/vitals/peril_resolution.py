@@ -194,11 +194,12 @@ def death_is_permitted(
 
     Returns False (not permitted) when ANY of:
     - source_character is None (absent/non-lethal environmental context).
-    - source_character is a PC AND the victim is a player character
-      (ADR-0023: PvP is non-lethal). A PC source against an NPC victim is
-      permitted, whoever is playing that NPC: NPC-ness follows the character
-      (``is_player_character`` is False for a story NPC a GM or Guide plays,
-      ADR-4418).
+    - source_character is a PC AND the victim is PvP-protected
+      (``is_pvp_protected_victim``: ADR-0023, PvP is non-lethal). That covers a
+      player character and, conservatively, any character with a roster entry
+      that is not a story NPC (an unheld Available character, a GM/Staff OOC
+      character). A PC source against a story NPC is permitted, whoever is
+      playing it: NPC-ness follows the character (ADR-4418).
     - The victim carries an active death_deferred condition.
     - The victim is story-critical and the source is not a participant (#1874).
 
@@ -209,9 +210,9 @@ def death_is_permitted(
     if source_character is None:
         return False
 
-    from world.roster.services.activity import is_player_character  # noqa: PLC0415
+    from world.roster.services.activity import is_pvp_protected_victim  # noqa: PLC0415
 
-    if is_pc_source(source_character) and is_player_character(victim_sheet):
+    if is_pc_source(source_character) and is_pvp_protected_victim(victim_sheet):
         return False
 
     from world.conditions.services import has_death_deferred  # noqa: PLC0415
@@ -231,11 +232,15 @@ def death_is_permitted(
 
 def select_abandonment_pool(
     source_character: "ObjectDB | None",  # noqa: OBJECTDB_PARAM
+    *,
+    victim_sheet: "CharacterSheet",
 ) -> "ConsequencePool":
     """Return the abandonment ConsequencePool appropriate for the source type.
 
     Routes to one of three pre-authored pools by source character kind:
-    - PC source → ``abandonment_pvp`` pool (ADR-0023: die row filtered at runtime).
+    - PC source and a PvP-protected victim → ``abandonment_pvp`` pool (ADR-0023: die
+      row filtered at runtime). A PC abandoning a dying story NPC uses the enemy
+      pool instead (ADR-4418), as ``death_is_permitted`` allows that death.
     - Non-PC (NPC) source → ``abandonment_enemy`` pool.
     - None source → ``abandonment_environmental`` pool.
 
@@ -245,13 +250,14 @@ def select_abandonment_pool(
     named pool is absent — treat that as a seeding gap, not a logic error.
     """
     from actions.models import ConsequencePool  # noqa: PLC0415
+    from world.roster.services.activity import is_pvp_protected_victim  # noqa: PLC0415
     from world.vitals.constants import (  # noqa: PLC0415
         POOL_ABANDONMENT_ENEMY,
         POOL_ABANDONMENT_ENVIRONMENTAL,
         POOL_ABANDONMENT_PVP,
     )
 
-    if is_pc_source(source_character):
+    if is_pc_source(source_character) and is_pvp_protected_victim(victim_sheet):
         pool_name = POOL_ABANDONMENT_PVP
     elif source_character is not None:
         pool_name = POOL_ABANDONMENT_ENEMY

@@ -9500,11 +9500,12 @@ combat, poison, spells, exhaustion, and any damage source.
     `death_deferred_pending` (CHARACTER_KILLED-suppression flag), resolved
     independently of it.
 - **Key Services (`world/vitals/peril_resolution.py`, #1479):**
-  - `is_pc_source(source_character) -> bool` — PC-detection via `db_account` presence.
-  - `death_is_permitted(*, victim_sheet, source_character) -> bool` — False for PC sources
-    (ADR-0023), None sources, and `death_deferred` victims; True for NPC sources only.
-  - `select_abandonment_pool(source_character) -> ConsequencePool` — routes to
-    `abandonment_pvp` / `abandonment_enemy` / `abandonment_environmental` by source kind.
+  - `is_pc_source(source_character) -> bool` — PC-detection via `is_player_character` (active tenure or live puppet; a story NPC never counts, ADR-4418).
+  - `death_is_permitted(*, victim_sheet, source_character) -> bool` — False for None sources,
+    `death_deferred` victims, story-protected victims, and a PC source against a PvP-protected
+    victim (`is_pvp_protected_victim`: ADR-0023); a PC source against a story NPC is permitted (ADR-4418).
+  - `select_abandonment_pool(source_character, *, victim_sheet) -> ConsequencePool` — routes to
+    `abandonment_pvp` (PC source, PvP-protected victim) / `abandonment_enemy` / `abandonment_environmental`.
   - `hostile_drove_round(victim_sheet, scene_round, declared_ids) -> bool` — True when the peril's
     source declared this round; drives the hold/advance decision in `resolve_scene_round`.
   - `potential_rescuer_present(victim_sheet, room, *, exclude_character_id=None) -> bool` — True
@@ -9555,7 +9556,7 @@ combat, poison, spells, exhaustion, and any damage source.
   invariant's tunable fraction; a plain constant, not an admin-config field, mirroring
   `PERMANENT_WOUND_THRESHOLD`'s precedent).
 - **Design invariants:** ADR-0049 (guarded pool, no unconditional death); ADR-0023 extended to the
-  death layer (PC source can never produce death); ADR-0004 extended to dying state (grace window
+  death layer (a PC source never produces death against a PvP-protected victim; a PC can kill a story NPC, ADR-4418); ADR-0004 extended to dying state (grace window
   counts round_number beats, not wall-clock); plummet exempt from hold/abandonment; ADR-0156
   (double-bounded mend — once-per-healer-per-wound + never-to-full fraction — heals are real but
   the party is always net-weaker for having fought; never time-based or passive).
