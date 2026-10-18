@@ -122,23 +122,22 @@ def _reputation_reason(persona: object, model: type, field: str, name: str) -> s
         return None
     tier = ReputationTier.from_value(row.value)
     reason = f"reputation: {name} holds you in {_regard_words(tier.value)} ({tier.value.title()})"
-    return reason + _recent_causes(row)
+    return "\n".join([reason, *_recent_causes(row)])
 
 
-def _recent_causes(row: object) -> str:
+def _recent_causes(row: object) -> list[str]:
     """Up to three recent recorded causes of an organization reputation, newest first (#4448).
 
-    Staff only: names the cause and what it cites, which a player never sees. A society's
+    Staff only: names the cause and what it cites, which a player never sees. Each is its own
+    line: "Moved by: ..." for the newest, "Earlier: ..." for each before it. A society's
     reputation has no change record, so it adds nothing.
     """
     from world.societies.constants import REASON_LINES_SHOWN  # noqa: PLC0415
     from world.societies.models import OrganizationReputation  # noqa: PLC0415
 
     if not isinstance(row, OrganizationReputation):
-        return ""
+        return []
     events = list(row.events.all()[:REASON_LINES_SHOWN])
-    if not events:
-        return ""
     moves = []
     for event in events:
         cited = [
@@ -151,7 +150,9 @@ def _recent_causes(row: object) -> str:
             f"{event.get_cause_display().lower()}{detail}, "
             f"{event.tier_before.title()} to {event.tier_after.title()}"
         )
-    return ". Moved by: " + ". Earlier: ".join(moves)
+    return [
+        f"{'Moved by' if index == 0 else 'Earlier'}: {move}" for index, move in enumerate(moves)
+    ]
 
 
 def _org_reputation(params: dict, persona: object) -> str | None:

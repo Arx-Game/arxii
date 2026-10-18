@@ -174,14 +174,19 @@ class StaffReasonTests(_Base):
         bump_organization_reputation(
             self.persona,
             self.org,
-            -300,
+            -150,
             cause=OrganizationReputationCause.SECRET_EXPOSED,
             secret=secret,
         )
+        bump_organization_reputation(
+            self.persona, self.org, 50, cause=OrganizationReputationCause.GANG_TURF
+        )
         leaf = _leaf("max_org_reputation", org=self.org.name, tier="disliked")
-        reason = explain_leaf_for_staff(leaf, self.persona)
-        self.assertIn(
-            f"Moved by: secret exposed (secret #{secret.pk}), Unknown to Disliked", reason
+        tier_line, newest, earlier = explain_leaf_for_staff(leaf, self.persona).split("\n")
+        self.assertIn("Disfavored", tier_line)
+        self.assertEqual(newest, "Moved by: gang turf, Disfavored to Disfavored")
+        self.assertEqual(
+            earlier, f"Earlier: secret exposed (secret #{secret.pk}), Unknown to Disfavored"
         )
 
     def test_the_reason_names_the_association(self) -> None:
