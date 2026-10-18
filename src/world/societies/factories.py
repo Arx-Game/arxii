@@ -13,7 +13,11 @@ from world.character_sheets.factories import CharacterSheetFactory
 from world.journals.factories import JournalEntryFactory
 from world.scenes.constants import PersonaType
 from world.scenes.factories import PersonaFactory
-from world.societies.constants import ObligationOrigin, ObligationState
+from world.societies.constants import (
+    ObligationOrigin,
+    ObligationState,
+    OrganizationReputationCause,
+)
 from world.societies.membership_services import base_rank_for_organization
 from world.societies.models import (
     CovenantLegendCredit,
@@ -30,6 +34,8 @@ from world.societies.models import (
     OrganizationObligation,
     OrganizationRank,
     OrganizationReputation,
+    OrganizationReputationEvent,
+    OrganizationReputationReasonLine,
     OrganizationType,
     OrgAppeal,
     OrgAppealSignon,
@@ -258,6 +264,38 @@ class OrganizationReputationFactory(factory_django.DjangoModelFactory):
     persona = factory.SubFactory(PersonaFactory)
     organization = factory.SubFactory(OrganizationFactory)
     value = 0  # Default to neutral reputation
+
+
+class OrganizationReputationReasonLineFactory(factory_django.DjangoModelFactory):
+    """A staff-authored reason line for one cause (#4448)."""
+
+    class Meta:
+        model = OrganizationReputationReasonLine
+
+    cause = OrganizationReputationCause.SECRET_EXPOSED
+    text = "{tier}: [authored test line]"
+
+    @classmethod
+    def _create(cls, model_class, *args, **kwargs):
+        # django_get_or_create drops non-lookup kwargs when the row pre-exists.
+        text = kwargs.pop("text")
+        row, _ = model_class.objects.update_or_create(
+            cause=kwargs["cause"], defaults={"text": text}
+        )
+        return row
+
+
+class OrganizationReputationEventFactory(factory_django.DjangoModelFactory):
+    """One recorded reputation change that cites nothing (a staff adjustment)."""
+
+    class Meta:
+        model = OrganizationReputationEvent
+
+    reputation = factory.SubFactory(OrganizationReputationFactory)
+    cause = OrganizationReputationCause.STAFF_ADJUSTMENT
+    amount = 10
+    tier_before = "unknown"
+    tier_after = "unknown"
 
 
 class LegendSourceTypeFactory(factory_django.DjangoModelFactory):

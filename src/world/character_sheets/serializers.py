@@ -145,6 +145,7 @@ from world.skills.services import is_skill_at_xp_boundary
 from world.societies.constants import MembershipFavor
 from world.societies.houses.models import Domain
 from world.societies.models import OrganizationMembership, OrganizationReputation
+from world.societies.reputation_reasons import reason_lines_by_reputation
 from world.species.models import Species
 from world.tarot.models import TarotCard
 from world.traits.models import STAT_DISPLAY_DIVISOR, CharacterTraitValue, TraitType
@@ -1577,7 +1578,9 @@ _STANDING_PREFETCH_RELATED: tuple[str | Prefetch, ...] = (
 )
 
 
-def _build_standing(active: Persona | None, *, visible: bool) -> StandingSection:
+def _build_standing(
+    active: Persona | None, *, visible: bool, privileged: bool = False
+) -> StandingSection:
     """Which houses the presented face belongs to, and what each thinks of them (#3906).
 
     Gated by ``standing_visibility``, the only sheet tier defaulting to FRIENDS rather
@@ -1590,7 +1593,9 @@ def _build_standing(active: Persona | None, *, visible: bool) -> StandingSection
     widening them would hand every viewer other people's rows to filter client-side.
 
     Reputation is the NAMED TIER only, never the raw value
-    (``OrganizationReputationSerializer``'s convention, kept here).
+    (``OrganizationReputationSerializer``'s convention, kept here). Beside each tier go the
+    newest reason lines (#4448) - why the organization thinks as it does - for the owner and
+    staff only: a friend allowed to see the tier is not told what the character did to earn it.
     """
     empty: StandingSection = {"memberships": [], "reputations": []}
     if not visible or active is None:
@@ -1603,11 +1608,12 @@ def _build_standing(active: Persona | None, *, visible: bool) -> StandingSection
         .select_related("organization", "rank", "vacancy")
         .order_by("organization__name")
     )
-    reputation_rows = (
+    reputation_rows = list(
         OrganizationReputation.objects.filter(persona=active)
         .select_related("organization")
         .order_by("organization__name")
     )
+    reasons = reason_lines_by_reputation([row.pk for row in reputation_rows]) if privileged else {}
     return {
         "memberships": [
             OrgMembershipEntry(
@@ -1625,6 +1631,7 @@ def _build_standing(active: Persona | None, *, visible: bool) -> StandingSection
                 organization_id=row.organization_id,
                 organization=row.organization.name,
                 tier=row.get_tier().value,
+                reasons=reasons.get(row.pk, []),
             )
             for row in reputation_rows
         ],
@@ -2248,7 +2255,7 @@ class CharacterSheetSerializer(serializers.Serializer):
             # #3906 — Ties' rail. Standing rides its own tier; covenant roles are
             # public, the way the Titles block beside them has always been, but only
             # for a revealed identity (#4207).
-            "standing": _build_standing(active, visible=show_standing),
+            "standing": _build_standing(active, visible=show_standing, privileged=privileged),
             "covenants": _build_covenants(
                 sheet, reveal_identity=reveal_identity, presented=active, privileged=privileged
             ),

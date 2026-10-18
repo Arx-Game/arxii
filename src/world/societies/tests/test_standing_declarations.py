@@ -18,6 +18,7 @@ from world.scenes.factories import PersonaFactory
 from world.societies.constants import (
     STANDING_DECLARATION_DISFAVOR_DELTA,
     STANDING_DECLARATION_FAVOR_DELTA,
+    OrganizationReputationCause,
     StandingDirection,
 )
 from world.societies.exceptions import (
@@ -26,7 +27,12 @@ from world.societies.exceptions import (
     StandingRateLimitedError,
 )
 from world.societies.factories import OrganizationFactory, OrganizationMembershipFactory
-from world.societies.models import OrganizationReputation, StandingDeclaration
+from world.societies.models import (
+    OrganizationReputation,
+    OrganizationReputationEvent,
+    StandingDeclaration,
+)
+from world.societies.reputation_reasons import reason_lines_by_reputation
 from world.societies.standing_services import declare_standing
 
 
@@ -59,6 +65,23 @@ class DeclareStandingServiceTests(TestCase):
         # never a parallel writer, always the shared bump_organization_reputation path.
         reputation = OrganizationReputation.objects.get(persona=self.target, organization=self.org)
         assert reputation.value == STANDING_DECLARATION_FAVOR_DELTA
+
+    def test_the_recorded_change_cites_the_declaration(self):
+        declaration = declare_standing(
+            organization=self.org,
+            target_persona=self.target,
+            declared_by_persona=self.leader,
+            direction=StandingDirection.FAVOR,
+            citation="For tireless service to the guild.",
+        )
+        (event,) = OrganizationReputationEvent.objects.filter(
+            reputation__persona=self.target, reputation__organization=self.org
+        )
+        assert event.cause == OrganizationReputationCause.LEADER_DECLARATION
+        assert event.standing_declaration == declaration
+        assert event.amount == declaration.delta_applied
+        lines = reason_lines_by_reputation([event.reputation_id])[event.reputation_id]
+        assert lines == ["Unknown: For tireless service to the guild."]
 
     def test_disfavor_moves_reputation_negative(self):
         declaration = declare_standing(

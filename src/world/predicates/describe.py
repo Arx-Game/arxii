@@ -121,7 +121,37 @@ def _reputation_reason(persona: object, model: type, field: str, name: str) -> s
     if row is None:
         return None
     tier = ReputationTier.from_value(row.value)
-    return f"reputation: {name} holds you in {_regard_words(tier.value)} ({tier.value.title()})"
+    reason = f"reputation: {name} holds you in {_regard_words(tier.value)} ({tier.value.title()})"
+    return reason + _recent_causes(row)
+
+
+def _recent_causes(row: object) -> str:
+    """Up to three recent recorded causes of an organization reputation, newest first (#4448).
+
+    Staff only: names the cause and what it cites, which a player never sees. A society's
+    reputation has no change record, so it adds nothing.
+    """
+    from world.societies.constants import REASON_LINES_SHOWN  # noqa: PLC0415
+    from world.societies.models import OrganizationReputation  # noqa: PLC0415
+
+    if not isinstance(row, OrganizationReputation):
+        return ""
+    events = list(row.events.all()[:REASON_LINES_SHOWN])
+    if not events:
+        return ""
+    moves = []
+    for event in events:
+        cited = [
+            f"{field.replace('_', ' ')} #{getattr(event, f'{field}_id')}"
+            for field in event._ALL_CITATION_FIELDS  # noqa: SLF001
+            if getattr(event, f"{field}_id")
+        ]
+        detail = f" ({', '.join(cited)})" if cited else ""
+        moves.append(
+            f"{event.get_cause_display().lower()}{detail}, "
+            f"{event.tier_before.title()} to {event.tier_after.title()}"
+        )
+    return ". Moved by: " + ". Earlier: ".join(moves)
 
 
 def _org_reputation(params: dict, persona: object) -> str | None:

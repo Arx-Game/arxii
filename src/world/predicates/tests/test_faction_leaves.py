@@ -165,6 +165,25 @@ class StaffReasonTests(_Base):
         self.assertIn("high regard", reason)
         self.assertIn("Honored", reason)
 
+    def test_the_reason_names_the_recent_causes_for_staff(self) -> None:
+        from world.secrets.factories import SecretFactory
+        from world.societies.constants import OrganizationReputationCause
+        from world.societies.renown import bump_organization_reputation
+
+        secret = SecretFactory()
+        bump_organization_reputation(
+            self.persona,
+            self.org,
+            -300,
+            cause=OrganizationReputationCause.SECRET_EXPOSED,
+            secret=secret,
+        )
+        leaf = _leaf("max_org_reputation", org=self.org.name, tier="disliked")
+        reason = explain_leaf_for_staff(leaf, self.persona)
+        self.assertIn(
+            f"Moved by: secret exposed (secret #{secret.pk}), Unknown to Disliked", reason
+        )
+
     def test_the_reason_names_the_association(self) -> None:
         membership = OrganizationMembershipFactory(persona=self.persona, organization=self.org)
         membership.left_at = timezone.now() - timedelta(days=30)

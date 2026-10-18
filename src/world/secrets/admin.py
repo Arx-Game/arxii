@@ -2,7 +2,7 @@ from django.contrib import admin
 from django.core.exceptions import ObjectDoesNotExist
 
 from world.admin_utils import OneRowPerFormSet
-from world.secrets.models import Secret, SecretCategory, SecretKnowledge
+from world.secrets.models import Secret, SecretCategory, SecretKnowledge, SecretVictim
 
 
 @admin.register(SecretCategory)
@@ -29,6 +29,19 @@ class SecretKnowledgeInline(admin.TabularInline):
         return False
 
 
+class SecretVictimInline(admin.TabularInline):
+    """Who the secret's underlying fact wronged (#4448): an organization or a persona.
+
+    ``severity`` is left out on purpose: the size of an organization victim's reaction on
+    exposure is always the secret's level default, never chosen per case.
+    """
+
+    model = SecretVictim
+    fields = ["organization", "persona"]
+    raw_id_fields = ["organization", "persona"]
+    extra = 0
+
+
 @admin.register(Secret)
 class SecretAdmin(admin.ModelAdmin):
     autocomplete_fields = ["scene", "subject_item_instance"]
@@ -37,7 +50,7 @@ class SecretAdmin(admin.ModelAdmin):
     search_fields = ["content", "consequences"]
     raw_id_fields = ["subject_sheet", "author_persona", "hook"]
     readonly_fields = ["created_date", "updated_date", "get_relocated_distinction"]
-    inlines = [SecretKnowledgeInline]
+    inlines = [SecretVictimInline, SecretKnowledgeInline]
 
     @admin.display(description="Relocated from distinction")
     def get_relocated_distinction(self, obj: Secret) -> str:

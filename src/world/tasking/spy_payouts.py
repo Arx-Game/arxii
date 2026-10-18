@@ -523,6 +523,31 @@ def _recruit(task: OrgTask) -> list[str]:
     return [f"{target.name} now quietly answers to the organization."]
 
 
+def _name_residue_victim(task: OrgTask, secret) -> None:
+    """Put the job's target on its residue secret as the victim (#4448).
+
+    An organization target is the victim; a domain target's victim is the organization that
+    owns the domain; a person target is the victim themselves, told on exposure to decide
+    their own reaction. Nothing happens until the secret is exposed. The organization that
+    issued the job is never its own victim, and a handler is not the victim of their own job.
+    """
+    from world.secrets.services import add_secret_victim  # noqa: PLC0415
+
+    if task.target_kind == TaskTargetKind.ORG:
+        victim_org = task.target_org
+    elif task.target_kind == TaskTargetKind.DOMAIN:
+        victim_org = task.target_domain.owner_org
+    else:
+        victim_org = None
+    if victim_org is not None and victim_org.pk != task.org_id:
+        add_secret_victim(secret, organization=victim_org)
+    elif (
+        task.target_kind == TaskTargetKind.PERSONA
+        and task.target_persona.character_sheet_id != secret.subject_sheet_id
+    ):
+        add_secret_victim(secret, persona=task.target_persona)
+
+
 def _incriminate(task: OrgTask, fulfillment: TaskFulfillment, level: int) -> list[str]:
     """The residue rule: the job leaves a secret about the handler behind."""
     from world.clues.services import create_accusation_counter_clue  # noqa: PLC0415
@@ -544,6 +569,7 @@ def _incriminate(task: OrgTask, fulfillment: TaskFulfillment, level: int) -> lis
             "patient investigator could pull the thread back to its buyer."
         ),
     )
+    _name_residue_victim(task, secret)
     # Hub trail: the counter-clue placement pattern, generalized — an
     # investigable RESEARCH clue seeded in the social hubs of the target room's
     # own area (#4085). Skipped only for persona-target jobs with no room anchor.

@@ -11,7 +11,7 @@ from world.mechanics.constants import (
     REPUTATION_GAIN_TARGET_NAME,
 )
 from world.mechanics.test_helpers import grant_lever
-from world.societies.constants import RenownReach
+from world.societies.constants import OrganizationReputationCause, RenownReach
 from world.societies.factories import OrganizationFactory, SocietyFactory
 from world.societies.models import SocietyReputation
 from world.societies.renown import (
@@ -31,12 +31,28 @@ class ReputationGainLeverTests(TestCase):
 
     def test_without_a_lever_the_delta_lands_whole(self) -> None:
         assert bump_society_reputation(self.persona, self.society, 100) == 100
-        assert bump_organization_reputation(self.persona, self.organization, 100) == 100
+        assert (
+            bump_organization_reputation(
+                self.persona,
+                self.organization,
+                100,
+                cause=OrganizationReputationCause.STAFF_ADJUSTMENT,
+            )
+            == 100
+        )
 
     def test_renowned_gains_more_with_everyone(self) -> None:
         grant_lever(self.sheet, REPUTATION_GAIN_CATEGORY_NAME, REPUTATION_GAIN_TARGET_NAME, 25)
         assert bump_society_reputation(self.persona, self.society, 100) == 125
-        assert bump_organization_reputation(self.persona, self.organization, 100) == 125
+        assert (
+            bump_organization_reputation(
+                self.persona,
+                self.organization,
+                100,
+                cause=OrganizationReputationCause.STAFF_ADJUSTMENT,
+            )
+            == 125
+        )
 
     def test_a_leg_target_scales_one_leg_and_adds_to_the_general_one(self) -> None:
         grant_lever(self.sheet, REPUTATION_GAIN_CATEGORY_NAME, REPUTATION_GAIN_TARGET_NAME, 25)
@@ -47,7 +63,15 @@ class ReputationGainLeverTests(TestCase):
             -10,
         )
         assert bump_society_reputation(self.persona, self.society, 100) == 115
-        assert bump_organization_reputation(self.persona, self.organization, 100) == 125
+        assert (
+            bump_organization_reputation(
+                self.persona,
+                self.organization,
+                100,
+                cause=OrganizationReputationCause.STAFF_ADJUSTMENT,
+            )
+            == 125
+        )
 
     def test_an_organization_leg_alone(self) -> None:
         grant_lever(
@@ -57,7 +81,15 @@ class ReputationGainLeverTests(TestCase):
             -50,
         )
         assert bump_society_reputation(self.persona, self.society, 100) == 100
-        assert bump_organization_reputation(self.persona, self.organization, 100) == 50
+        assert (
+            bump_organization_reputation(
+                self.persona,
+                self.organization,
+                100,
+                cause=OrganizationReputationCause.STAFF_ADJUSTMENT,
+            )
+            == 50
+        )
 
     def test_a_sting_is_never_scaled(self) -> None:
         grant_lever(self.sheet, REPUTATION_GAIN_CATEGORY_NAME, REPUTATION_GAIN_TARGET_NAME, -50)

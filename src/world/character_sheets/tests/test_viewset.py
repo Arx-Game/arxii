@@ -2470,6 +2470,23 @@ class TestStandingAndCovenantSections(TestCase):
         assert [row["organization"] for row in standing["memberships"]] == ["House du Verane"]
         assert [row["organization"] for row in standing["reputations"]] == ["House du Verane"]
 
+    def test_the_owner_reads_why_and_a_friend_does_not(self) -> None:
+        """#4448: the reason lines beside a tier are the owner's and staff's; a friend allowed
+        to see the tier is not told what the character did to earn it."""
+        from world.societies.factories import OrganizationReputationEventFactory
+        from world.societies.models import OrganizationReputation
+
+        reputation = OrganizationReputation.objects.get(
+            persona=self.persona, organization=self.house
+        )
+        OrganizationReputationEventFactory(reputation=reputation, tier_after="disliked")
+        PlayerAllowList.objects.create(owner=self.player, allowed_player=self.friend)
+
+        owner_row = self._payload(self.player)["standing"]["reputations"][0]
+        assert owner_row["reasons"] == ["Disliked"]
+        friend_row = self._payload(self.friend)["standing"]["reputations"][0]
+        assert friend_row["reasons"] == []
+
     def test_reputation_is_the_named_tier_never_the_raw_value(self) -> None:
         """The standing convention the org serializer sets, kept here."""
         row = self._payload(self.player)["standing"]["reputations"][0]

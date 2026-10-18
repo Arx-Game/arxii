@@ -42,6 +42,7 @@ from world.societies.constants import (
     MembershipFavor,
     ObligationOrigin,
     ObligationState,
+    OrganizationReputationCause,
     OrgAppealState,
     RenownMagnitude,
     RenownRisk,
@@ -1420,6 +1421,180 @@ class StandingDeclaration(SharedMemoryModel):
 
     def __str__(self) -> str:
         return f"{self.declared_by_persona.name}: {self.direction} {self.target_persona.name}"
+
+
+#: ``ReputationTier`` as model choices, for the tier columns of a change record.
+REPUTATION_TIER_CHOICES = [(tier.value, tier.display_name) for tier in ReputationTier]
+
+
+class OrganizationReputationEvent(SharedMemoryModel):
+    """One recorded change to an organization's reputation of a persona (#4448, #4339).
+
+    Written by ``bump_organization_reputation`` in the same transaction as the value
+    change, so no reputation moves unrecorded: ``amount`` is the clamped delta actually
+    applied, and no row is written when nothing changed. Same shape as ``NpcRegardEvent``
+    (the NPC counterpart): a typed cause and, per cause, a citation to the record that
+    caused it, enforced by ``clean()``. Play state, so it is resettable; the numbers are
+    staff-only and a player sees the tier and a reason line.
+    """
+
+    reputation = models.ForeignKey(
+        "arxii.OrganizationReputation",
+        on_delete=models.CASCADE,
+        related_name="events",
+        help_text="The organization reputation this change moved.",
+    )
+    cause = models.CharField(
+        max_length=24,
+        choices=OrganizationReputationCause.choices,
+        help_text="Typed cause - determines which citation field is required.",
+    )
+    amount = models.IntegerField(
+        help_text="Signed change as applied, after the clamp and any reputation-gain lever.",
+    )
+    tier_before = models.CharField(
+        max_length=16,
+        choices=REPUTATION_TIER_CHOICES,
+        help_text="The tier before this change.",
+    )
+    tier_after = models.CharField(
+        max_length=16,
+        choices=REPUTATION_TIER_CHOICES,
+        help_text="The tier after this change.",
+    )
+    legend_entry = models.ForeignKey(
+        "arxii.LegendEntry",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="organization_reputation_events",
+        help_text="Deed named: the legend entry that named the organization.",
+    )
+    mission_deed = models.ForeignKey(
+        "arxii.MissionDeedRecord",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="organization_reputation_events",
+        help_text="Deed named: the mission deed that named the organization.",
+    )
+    secret = models.ForeignKey(
+        "arxii.Secret",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="organization_reputation_events",
+        help_text="Secret exposed or disproved: the secret. Staff only; players never see it.",
+    )
+    stake_resolution = models.ForeignKey(
+        "arxii.StakeResolution",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="organization_reputation_events",
+        help_text="Story stake resolved: the resolution branch that fired.",
+    )
+    standing_declaration = models.ForeignKey(
+        StandingDeclaration,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="reputation_events",
+        help_text="Leader declaration: the audited declaration.",
+    )
+    source_event = models.ForeignKey(
+        "self",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="ripple_events",
+        help_text="Related organization: the change this one followed.",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = "Organization Reputation Event"
+        verbose_name_plural = "Organization Reputation Events"
+        ordering = ["-created_at", "-pk"]
+        indexes = [models.Index(fields=["reputation", "-created_at"])]
+
+    #: Per cause, the citation fields it may carry. A cause with fields must cite exactly
+    #: one of them; a cause with none cites nothing.
+    _CITATIONS: dict[str, tuple[str, ...]] = {
+        OrganizationReputationCause.DEED_NAMED: ("legend_entry", "mission_deed"),
+        OrganizationReputationCause.SECRET_EXPOSED: ("secret",),
+        OrganizationReputationCause.SECRET_REVERSED: ("secret",),
+        OrganizationReputationCause.STAKE_RESOLVED: ("stake_resolution",),
+        OrganizationReputationCause.LEADER_DECLARATION: ("standing_declaration",),
+        OrganizationReputationCause.RELATED_ORGANIZATION: ("source_event",),
+        OrganizationReputationCause.CHARACTER_CREATION: (),
+        OrganizationReputationCause.GANG_TURF: (),
+        OrganizationReputationCause.STAFF_ADJUSTMENT: (),
+    }
+    _ALL_CITATION_FIELDS = (
+        "legend_entry",
+        "mission_deed",
+        "secret",
+        "stake_resolution",
+        "standing_declaration",
+        "source_event",
+    )
+
+    def clean(self) -> None:
+        super().clean()
+        allowed = self._CITATIONS.get(self.cause)
+        if allowed is None:
+            return
+        set_fields = [f for f in self._ALL_CITATION_FIELDS if getattr(self, f"{f}_id")]
+        disallowed = [f for f in set_fields if f not in allowed]
+        if disallowed:
+            msg = f"{self.get_cause_display()} cannot cite {disallowed}" + (
+                f"; only {list(allowed)} are valid for it." if allowed else "."
+            )
+            raise ValidationError({"cause": msg})
+        if allowed and len(set_fields) != 1:
+            msg = f"{self.get_cause_display()} must cite exactly one of {list(allowed)}."
+            raise ValidationError({"cause": msg})
+
+    def __str__(self) -> str:
+        return (
+            f"OrganizationReputationEvent({self.get_cause_display()}, {self.amount:+d}) "
+            f"on reputation {self.reputation_id}"
+        )
+
+
+class OrganizationReputationReasonLine(SharedMemoryModel):
+    """The reason line a player reads for one cause of a reputation change (#4448).
+
+    Staff-authored copy, one row per cause in ``REASON_LINE_CAUSES``; until a row has
+    text the line reads the bracketed placeholder. The text may carry ``{tier}`` (the
+    tier after the change), ``{title}`` (the deed or story the change cites) and
+    ``{organization}`` (the other organization, for a related-organization change).
+    It never names a secret or whoever spread it.
+    """
+
+    cause = models.CharField(
+        max_length=24,
+        unique=True,
+        choices=OrganizationReputationCause.choices,
+        help_text="The cause of reputation change this line explains.",
+    )
+    text = models.TextField(
+        blank=True,
+        help_text=(
+            "The line the player reads. Tokens: {tier} (the tier after the change), "
+            "{title} (the deed or story title), {organization} (the other organization). "
+            "Blank = the bracketed placeholder."
+        ),
+    )
+
+    class Meta:
+        verbose_name = "Organization Reputation Reason Line"
+        verbose_name_plural = "Organization Reputation Reason Lines"
+        ordering = ["cause"]
+
+    def __str__(self) -> str:
+        return f"Reason line: {self.get_cause_display()}"
 
 
 class LegendSourceType(NaturalKeyMixin, SharedMemoryModel):

@@ -53,6 +53,8 @@ from world.societies.models import (
     OrganizationObligation,
     OrganizationRank,
     OrganizationReputation,
+    OrganizationReputationEvent,
+    OrganizationReputationReasonLine,
     OrganizationType,
     OrgAppeal,
     OrgAppealSignon,
@@ -629,11 +631,39 @@ class SocietyReputationAdmin(admin.ModelAdmin):
     get_tier_display.short_description = "Tier"
 
 
+class OrganizationReputationEventInline(admin.TabularInline):
+    """Read-only change history of one reputation, newest first (#4448)."""
+
+    model = OrganizationReputationEvent
+    extra = 0
+    can_delete = False
+    fields = ["created_at", "cause", "amount", "tier_before", "tier_after", "cites"]
+    readonly_fields = fields
+    ordering = ["-created_at", "-pk"]
+
+    def has_add_permission(self, request: HttpRequest, obj: object = None) -> bool:  # noqa: ARG002
+        return False
+
+    def has_change_permission(self, request: HttpRequest, obj: object = None) -> bool:  # noqa: ARG002
+        return False
+
+    @admin.display(description="Cites")
+    def cites(self, obj: OrganizationReputationEvent) -> str:
+        cited = [
+            f"{field.replace('_', ' ')} #{getattr(obj, f'{field}_id')}"
+            for field in OrganizationReputationEvent._ALL_CITATION_FIELDS  # noqa: SLF001
+            if getattr(obj, f"{field}_id")
+        ]
+        return ", ".join(cited) or "(none)"
+
+
 @admin.register(OrganizationReputation)
 class OrganizationReputationAdmin(admin.ModelAdmin):
     """Admin interface for OrganizationReputation management.
 
-    Useful for debugging and administrative adjustments to reputation.
+    A staff edit of ``value`` goes through ``bump_organization_reputation`` as a staff
+    adjustment, so no admin edit skips the change record (#4448). The history of every
+    recorded change is the read-only inline below.
     """
 
     list_display = ["persona", "organization", "value", "get_tier_display"]
@@ -641,12 +671,41 @@ class OrganizationReputationAdmin(admin.ModelAdmin):
     search_fields = ["persona__name", "organization__name"]
     ordering = ["organization", "-value"]
     raw_id_fields = ["persona"]
+    inlines = [OrganizationReputationEventInline]
 
     def get_tier_display(self, obj):
         """Return the reputation tier display name."""
         return obj.get_tier().display_name
 
     get_tier_display.short_description = "Tier"
+
+    def save_model(self, request, obj, form, change):
+        """Route a changed value through the one writer as a staff adjustment."""
+        from world.societies.constants import OrganizationReputationCause  # noqa: PLC0415
+        from world.societies.renown import bump_organization_reputation  # noqa: PLC0415
+
+        new_value = obj.value
+        old_value = form.initial.get("value", 0) if change else 0
+        # The form has already written the new value onto the shared instance; put the
+        # old one back so the writer's delta, clamp and record are the only change.
+        obj.value = old_value
+        if not change:
+            super().save_model(request, obj, form, change)
+        bump_organization_reputation(
+            obj.persona,
+            obj.organization,
+            new_value - old_value,
+            cause=OrganizationReputationCause.STAFF_ADJUSTMENT,
+            scale_gain=False,
+        )
+
+
+@admin.register(OrganizationReputationReasonLine)
+class OrganizationReputationReasonLineAdmin(admin.ModelAdmin):
+    """The reason line a player reads for each cause of reputation change (#4448)."""
+
+    list_display = ["cause", "text"]
+    ordering = ["cause"]
 
 
 @admin.register(StandingDeclaration)

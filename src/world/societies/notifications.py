@@ -32,6 +32,7 @@ from world.societies.constants import FameTier, RenownMagnitude, RenownRisk
 
 if TYPE_CHECKING:
     from world.scenes.models import Persona
+    from world.societies.models import OrganizationReputationEvent
     from world.societies.renown import RenownAwardResult
 
 
@@ -166,4 +167,28 @@ def _tier_with_article(tier_label: str) -> str:
         f"an {tier_label}"
         if tier_label[0].lower() in "aeiou"  # noqa: STRING_LITERAL — vowel set, not an identifier
         else f"a {tier_label}"
+    )
+
+
+def notify_reputation_tier_change(event: OrganizationReputationEvent) -> None:
+    """Tell a player-run character an organization's reputation of them changed tier (#4448).
+
+    One RENOWN message: the organization's name and the reason line for the change (the
+    staff-authored copy for its cause), never a number. No-op for an NPC-owned persona and
+    for a character-creation seed, which is where the character starts, not news.
+    """
+    from world.societies.constants import OrganizationReputationCause  # noqa: PLC0415
+    from world.societies.reputation_reasons import copy_by_cause, reason_line  # noqa: PLC0415
+
+    if event.cause == OrganizationReputationCause.CHARACTER_CREATION:
+        return
+    reputation = event.reputation
+    sheet = reputation.persona.character_sheet
+    if sheet is None or not _has_active_player(sheet):
+        return
+    line = reason_line(event, copy_by_cause())
+    send_narrative_message(
+        recipients=[sheet],
+        body=f"{reputation.organization.name}: {line}",
+        category=NarrativeCategory.RENOWN,
     )

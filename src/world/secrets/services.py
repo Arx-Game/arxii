@@ -18,7 +18,7 @@ from world.secrets.constants import (
     SecretLevel,
     SecretProvenance,
 )
-from world.secrets.models import Leverage, Secret, SecretKnowledge
+from world.secrets.models import Leverage, Secret, SecretKnowledge, SecretVictim
 
 if TYPE_CHECKING:
     from collections.abc import Iterable
@@ -31,7 +31,7 @@ if TYPE_CHECKING:
     from world.roster.models import RosterEntry
     from world.scenes.models import Persona, Scene
     from world.secrets.models import SecretCategory
-    from world.societies.models import LegendEntry, Society
+    from world.societies.models import LegendEntry, Organization, Society
 
 
 class SecretError(Exception):
@@ -89,6 +89,28 @@ def author_secret(  # noqa: PLR0913 — keyword-only; each arg is a distinct sec
         raise SecretError(msg, user_message=msg) from exc
     secret.save()
     return secret
+
+
+def add_secret_victim(
+    secret: Secret,
+    *,
+    organization: Organization | None = None,
+    persona: Persona | None = None,
+) -> SecretVictim:
+    """Name a victim of ``secret``'s underlying fact: an organization or a persona (#4448).
+
+    On the secret's first exposure an organization victim's reputation of the subject drops by
+    the secret's level default, and a persona victim is told and decides their own reaction.
+    No per-victim size: the level decides. Naming the same victim twice returns the existing
+    row. Raises ``SecretError`` unless exactly one of ``organization`` / ``persona`` is given.
+    """
+    if (organization is None) == (persona is None):
+        msg = "A secret's victim is exactly one of an organization or a persona."
+        raise SecretError(msg, user_message=msg)
+    victim, _ = SecretVictim.objects.get_or_create(
+        secret=secret, organization=organization, persona=persona
+    )
+    return victim
 
 
 def author_truth(
@@ -435,6 +457,7 @@ def _apply_relational_exposure(
     ``expose_secret`` — only called on the first exposure of a secret.
     """
     from world.roster.models import RosterEntry  # noqa: PLC0415 — cross-app, avoid cycle at load
+    from world.societies.constants import OrganizationReputationCause  # noqa: PLC0415
     from world.societies.renown import (  # noqa: PLC0415 — cross-app, avoid import cycle at load
         bump_organization_reputation,
     )
@@ -445,7 +468,13 @@ def _apply_relational_exposure(
     for victim in secret.victims.select_related("organization", "persona__character_sheet"):
         if victim.organization_id:
             severity = victim.severity if victim.severity is not None else default_severity
-            new_value = bump_organization_reputation(persona, victim.organization, -severity)
+            new_value = bump_organization_reputation(
+                persona,
+                victim.organization,
+                -severity,
+                cause=OrganizationReputationCause.SECRET_EXPOSED,
+                secret=secret,
+            )
             if new_value is not None:
                 org_deltas[victim.organization_id] = new_value
         elif victim.persona_id:
@@ -516,6 +545,7 @@ def reverse_secret_exposure(secret: Secret, *, numerator: int = 1, denominator: 
     NOT idempotent — a re-run compensates again. Callers own the once-only guard
     (``AccusationRebuttal`` uniqueness; the nullification record).
     """
+    from world.societies.constants import OrganizationReputationCause  # noqa: PLC0415
     from world.societies.renown import (  # noqa: PLC0415 — cross-app, avoid cycle at load
         bump_organization_reputation,
         bump_society_reputation,
@@ -539,7 +569,11 @@ def reverse_secret_exposure(secret: Secret, *, numerator: int = 1, denominator: 
         if victim.organization_id:
             severity = victim.severity if victim.severity is not None else default_severity
             bump_organization_reputation(
-                persona, victim.organization, severity * numerator // denominator
+                persona,
+                victim.organization,
+                severity * numerator // denominator,
+                cause=OrganizationReputationCause.SECRET_REVERSED,
+                secret=secret,
             )
 
 

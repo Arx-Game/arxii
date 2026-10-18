@@ -795,16 +795,33 @@ def apply_archetype_society_reputation(persona: Persona, societies, archetypes) 
     return applied
 
 
-def bump_organization_reputation(
-    persona: Persona, organization, delta: int, *, scale_gain: bool = True
+def bump_organization_reputation(  # noqa: PLR0913 - keyword-only; each is a distinct citation
+    persona: Persona,
+    organization,
+    delta: int,
+    *,
+    cause: str,
+    scale_gain: bool = True,
+    legend_entry=None,
+    mission_deed=None,
+    secret=None,
+    stake_resolution=None,
+    standing_declaration=None,
+    source_event=None,
 ) -> int | None:
-    """Apply a clamped reputation delta to (persona, organization) (#1429).
+    """Apply a clamped reputation delta to (persona, organization) (#1429, #4448).
 
-    The relational / targeted channel: a direct hit to a specific organization (e.g. the victim
-    of a crime), **independent of that org's philosophy**. The first gameplay writer of
-    ``OrganizationReputation``. No-op for non-established personas or a zero delta; otherwise
-    returns the new clamped value. Re-evaluates the character's open beats after a non-zero
-    write, so a FACTION_STANDING_AT_LEAST beat can flip in the same request (#3570).
+    The one writer of ``OrganizationReputation`` from play and from staff edits: a direct hit
+    to a specific organization (e.g. the victim of a crime), **independent of that org's
+    philosophy**. No-op for non-established personas or a zero delta; otherwise returns the new
+    clamped value.
+
+    Every change is recorded: in the same transaction an ``OrganizationReputationEvent`` stores
+    the ``cause``, the amount actually applied (after the lever and the clamp), the tier before
+    and after, and the citation the cause requires (``clean()`` enforces which). No event is
+    written when the clamp leaves the value where it was. A tier change on a player-run
+    persona sends the player a RENOWN message. Re-evaluates the character's open beats after
+    a non-zero write, so a FACTION_STANDING_AT_LEAST beat can flip in the same request (#3570).
     """
     if delta == 0 or not persona.is_established_or_primary:
         return None
@@ -812,13 +829,41 @@ def bump_organization_reputation(
         delta = _reputation_gain_for(persona, delta, REPUTATION_GAIN_ORGANIZATION_TARGET_NAME)
     if delta == 0:
         return None
-    from world.societies.models import OrganizationReputation  # noqa: PLC0415
-
-    reputation, _ = OrganizationReputation.objects.get_or_create(
-        persona=persona, organization=organization, defaults={"value": 0}
+    from world.societies.models import (  # noqa: PLC0415
+        OrganizationReputation,
+        OrganizationReputationEvent,
     )
-    reputation.value = max(REPUTATION_MIN, min(REPUTATION_MAX, reputation.value + delta))
-    reputation.save(update_fields=["value"])
+
+    with transaction.atomic():
+        reputation, _ = OrganizationReputation.objects.get_or_create(
+            persona=persona, organization=organization, defaults={"value": 0}
+        )
+        old_value = reputation.value
+        tier_before = reputation.get_tier()
+        reputation.value = max(REPUTATION_MIN, min(REPUTATION_MAX, old_value + delta))
+        reputation.save(update_fields=["value"])
+        event = None
+        if reputation.value != old_value:
+            event = OrganizationReputationEvent(
+                reputation=reputation,
+                cause=cause,
+                amount=reputation.value - old_value,
+                tier_before=tier_before.value,
+                tier_after=reputation.get_tier().value,
+                legend_entry=legend_entry,
+                mission_deed=mission_deed,
+                secret=secret,
+                stake_resolution=stake_resolution,
+                standing_declaration=standing_declaration,
+                source_event=source_event,
+            )
+            event.full_clean()
+            event.save()
+
+    if event is not None and event.tier_before != event.tier_after:
+        from world.societies.notifications import notify_reputation_tier_change  # noqa: PLC0415
+
+        notify_reputation_tier_change(event)
 
     from world.stories.services.reactivity import on_character_state_changed  # noqa: PLC0415
 

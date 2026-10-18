@@ -188,6 +188,46 @@ class ResiduePayoutTests(SpyPayoutTestBase):
         # Residue is never confessed to the handler in their own report.
         self.assertNotIn("arranged", fulfillment.report)
 
+    def _residue(self):
+        return Secret.objects.get(subject_sheet=self.handler.character_sheet, level=2)
+
+    def test_residue_names_a_person_target_as_victim(self):
+        mark = PersonaFactory()
+        template = TaskTemplateFactory(
+            duration=timedelta(days=1), target_kind=TaskTargetKind.PERSONA
+        )
+        TaskOutcomeRouteFactory(template=template, outcome_tier=self.win, incriminate_level=2)
+        self._resolve(template, target_kind=TaskTargetKind.PERSONA, target_persona=mark)
+        victim = self._residue().victims.get()
+        self.assertEqual(victim.persona, mark)
+
+    def test_residue_names_an_organization_target_as_victim(self):
+        mark = OrganizationFactory()
+        template = TaskTemplateFactory(duration=timedelta(days=1), target_kind=TaskTargetKind.ORG)
+        TaskOutcomeRouteFactory(template=template, outcome_tier=self.win, incriminate_level=2)
+        self._resolve(template, target_kind=TaskTargetKind.ORG, target_org=mark)
+        victim = self._residue().victims.get()
+        self.assertEqual(victim.organization, mark)
+
+    def test_residue_names_the_domains_owning_organization_as_victim(self):
+        from world.areas.factories import AreaFactory
+        from world.societies.houses.models import Domain
+
+        owner = OrganizationFactory()
+        domain = Domain.objects.create(area=AreaFactory(), name="Marked March", owner_org=owner)
+        template = TaskTemplateFactory(
+            duration=timedelta(days=1), target_kind=TaskTargetKind.DOMAIN
+        )
+        TaskOutcomeRouteFactory(template=template, outcome_tier=self.win, incriminate_level=2)
+        self._resolve(template, target_kind=TaskTargetKind.DOMAIN, target_domain=domain)
+        self.assertEqual(self._residue().victims.get().organization, owner)
+
+    def test_the_issuing_organization_is_never_its_own_victim(self):
+        template = TaskTemplateFactory(duration=timedelta(days=1), target_kind=TaskTargetKind.ORG)
+        TaskOutcomeRouteFactory(template=template, outcome_tier=self.win, incriminate_level=2)
+        self._resolve(template, target_kind=TaskTargetKind.ORG, target_org=self.org)
+        self.assertFalse(self._residue().victims.exists())
+
 
 class ConsentGateTests(SpyPayoutTestBase):
     def test_offensive_job_against_pc_refuses_at_issue(self):
@@ -385,7 +425,9 @@ class ThreatLoopPayoutTests(SpyPayoutTestBase):
 
         template = TaskTemplateFactory(duration=timedelta(days=1), target_kind=TaskTargetKind.ORG)
         TaskOutcomeRouteFactory(template=template, outcome_tier=self.win, reveal_schemes=True)
-        _, fulfillment = self._resolve(template, target_org=self.org)
+        _, fulfillment = self._resolve(
+            template, target_kind=TaskTargetKind.ORG, target_org=self.org
+        )
         self.assertIn("Case Our Books", fulfillment.report)
         self.assertIn("The Watching Rival", fulfillment.report)
 
