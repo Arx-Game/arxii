@@ -129,6 +129,10 @@ def voice_crowd(*, opponents: list[CombatOpponent], name: str, by: AccountDB) ->
 
 
 NAME_TAKEN_MESSAGE = "A character by that name already exists."
+# The shortest column a crowd's name lands in: ``CombatOpponent.name`` (a voice's
+# character key and persona name allow 255).
+CROWD_NAME_MAX_LENGTH = 200
+NAME_TOO_LONG_MESSAGE = f"A crowd's name can be at most {CROWD_NAME_MAX_LENGTH} characters."
 
 
 @transaction.atomic
@@ -145,6 +149,10 @@ def describe_crowd(*, opponents: list[CombatOpponent], name: str, description: s
         CrowdVoiceError: no rows, rows from more than one encounter, a row that is
             no crowd body, or a voice name another character already has.
     """
+    name = name.strip()
+    description = description.strip()
+    if len(name) > CROWD_NAME_MAX_LENGTH:
+        raise CrowdVoiceError(NAME_TOO_LONG_MESSAGE)
     if not opponents:
         msg = "Choose the crowd to describe."
         raise CrowdVoiceError(msg)
@@ -179,7 +187,10 @@ def _refuse_taken_voice_name(voices: set[Persona], name: str) -> None:
 
 def _rename_voices(voices: set[Persona], name: str) -> None:
     """The voice character and its persona take the crowd's new name."""
+    from world.character_sheets.services import StaffEditError, rename_character  # noqa: PLC0415
+
     for voice in voices:
-        voice.name = name
-        voice.save(update_fields=["name"])
-        voice.character_sheet.character.key = name
+        try:
+            rename_character(voice.character_sheet, name)
+        except StaffEditError as exc:
+            raise CrowdVoiceError(exc.user_message) from None

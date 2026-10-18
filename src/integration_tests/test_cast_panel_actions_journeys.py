@@ -7,10 +7,13 @@ from rest_framework import status
 from integration_tests.harness import JourneyCase
 from world.combat.constants import OpponentTier
 from world.combat.factories import CombatEncounterFactory, CombatOpponentFactory, ThreatPoolFactory
+from world.combat.models import CombatOpponent
 from world.gm.constants import GMLevel
 from world.gm.factories import GMProfileFactory, GuideProfileFactory, seed_default_gm_level_caps
 from world.roster.models import NPCLoan, RosterEntry
+from world.scenes.constants import RoundStatus
 from world.scenes.factories import SceneFactory, SceneParticipationFactory
+from world.scenes.models import Persona
 
 CAST_LIST = "/api/scenes/{}/cast-list/"
 REFUSED = "Only the scene's GM or staff can do that."
@@ -136,3 +139,51 @@ class TheGmRunsTheCastFromAnywhere(JourneyCase):
         self.assertEqual([row["name"] for row in crowds], ["Gate wardens"])
         entry = RosterEntry.objects.get(pk=voiced.detail.data["roster_entry_id"])
         self.assertEqual(entry.character_sheet.character.key, "Gate wardens")
+        self.assertEqual(
+            Persona.objects.get(pk=voiced.detail.data["persona_id"]).name, "Gate wardens"
+        )
+
+    def _describe(self, opponent_ids, name: str):
+        return self.web(
+            self.ravenna,
+            "describe_crowd",
+            opponent_ids=opponent_ids,
+            name=name,
+            scene_id=self.scene.pk,
+        )
+
+    def test_a_voice_cannot_take_a_name_already_in_use(self) -> None:
+        guard_ids = [guard.pk for guard in self.guards]
+        voiced = self.web(
+            self.ravenna,
+            "voice_crowd",
+            opponent_ids=guard_ids,
+            name="Gate guards",
+            scene_id=self.scene.pk,
+        )
+        self.assertTrue(voiced.detail.success, voiced.detail.message)
+        refused = self._describe(guard_ids, "Captain Vael")
+        self.assertFalse(refused.detail.success)
+        self.assertEqual(refused.detail.message, "A character by that name already exists.")
+        self.assertFalse(CombatOpponent.objects.filter(name="Captain Vael").exists())
+
+    def test_a_name_longer_than_the_crowd_can_hold_is_refused(self) -> None:
+        refused = self._describe([guard.pk for guard in self.guards], "W" * 201)
+        self.assertFalse(refused.detail.success)
+        self.assertEqual(refused.detail.message, "A crowd's name can be at most 200 characters.")
+        accepted = self._describe([guard.pk for guard in self.guards], "W" * 200)
+        self.assertTrue(accepted.detail.success, accepted.detail.message)
+
+    def test_a_finished_fight_or_two_fights_are_not_one_crowd(self) -> None:
+        other = CombatEncounterFactory(scene=self.scene, room=self.gate)
+        stray = CombatOpponentFactory(encounter=other, tier=OpponentTier.MOOK, name="Stray")
+        mixed = self._describe([self.guards[0].pk, stray.pk], "Rabble")
+        self.assertFalse(mixed.detail.success)
+        self.assertEqual(mixed.detail.message, "A crowd belongs to one fight.")
+
+        self.encounter.status = RoundStatus.COMPLETED
+        self.encounter.save()
+        finished = self._describe([guard.pk for guard in self.guards], "Rabble")
+        self.assertFalse(finished.detail.success)
+        self.assertEqual(finished.detail.message, "Those aren't a crowd still in the fight.")
+        self.assertFalse(CombatOpponent.objects.filter(name="Rabble").exists())
