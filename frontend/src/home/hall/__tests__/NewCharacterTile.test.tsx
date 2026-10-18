@@ -26,6 +26,8 @@ function entry(id: number, name: string, provenance: string): MyRosterEntry {
     name,
     character_id: id + 40,
     profile_picture_url: null,
+    loan: null,
+    npc_notes: null,
     primary_persona_id: null,
     active_persona_id: null,
     unread_narrative_count: 0,

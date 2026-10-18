@@ -60,6 +60,8 @@ function entry(character_id: number, name: string): MyRosterEntry {
     name,
     character_id,
     profile_picture_url: null,
+    loan: null,
+    npc_notes: null,
     primary_persona_id: null,
     active_persona_id: null,
     unread_narrative_count: 0,

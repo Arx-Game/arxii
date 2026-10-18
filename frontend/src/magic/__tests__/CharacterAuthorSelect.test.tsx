@@ -9,6 +9,8 @@ function makeEntry(overrides: Partial<MyRosterEntry> & { character_id: number })
     id: overrides.character_id,
     name: `Character ${overrides.character_id}`,
     profile_picture_url: null,
+    loan: null,
+    npc_notes: null,
     primary_persona_id: null,
     active_persona_id: null,
     unread_narrative_count: 0,

@@ -25,6 +25,8 @@ function entry(overrides: Partial<MyRosterEntry>): MyRosterEntry {
     name: 'Aria',
     character_id: 41,
     profile_picture_url: null,
+    loan: null,
+    npc_notes: null,
     primary_persona_id: null,
     active_persona_id: null,
     unread_narrative_count: 0,
