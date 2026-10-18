@@ -1828,13 +1828,20 @@ Noble/merchant/crime houses as first-class play — a house IS an `Organization`
   businesses on the home city's domain at the standing the Upbringing answer set
   (`OriginTemplateSlotChoice.family_standing`, `questionnaire.picked_family_standing`);
   `standings_for_families` feeds `FamilySerializer.standing` for the CG family list.
-- **Backgrounds, the beats of a life (#4124):** `LifeBeat` (content; `life_stage`,
-  `selection` one-of / any-that-apply, prompt), `LifeBeatExclusion` (beat x Beginning),
-  `Beginnings.beat_mode` (pool / one kept), `DistinctionOffer.beat` as the
+- **Backgrounds, the beats of a life (#4124, grids and strikes #4395, ADR-4395-A):**
+  `LifeBeat` (content; `life_stage`, `selection` one-of / any-that-apply, prompt,
+  `picks_scale_with_age`), `LifeBeatExclusion` (beat x Beginning), `Beginnings.beat_mode`
+  (pool / one kept) and `Beginnings.strikes_childhood`/`strikes_youth`/
+  `strikes_adulthood` (`struck_stages()`: a struck stage leaves the pool), `Beginnings
+  .frame`/`station` (read at the pick), `DistinctionOffer.beat` as the
   `OfferChapter.BACKGROUNDS` opener (every answer a priced `CHOICE`; a beat grants
-  nothing free), `CharacterOriginSlot.beat` + `unknown` (a row names a slot or a beat),
+  nothing free; open while the beat is pooled and not unknown, `open_beat_ids`),
+  `CharacterOriginSlot.beat` + `unknown` (a row names a slot or a beat),
   `draft_data["beats"]`, `GET drafts/<id>/beats/` (`offers.beats_for`,
-  `BeatPoolEntry`), `one_of_beat_conflicts` in the distinctions sync,
+  `BeatPoolEntry` with `allowance`: `beat_allowance`, `age_pick_allowance`,
+  `AGE_PICKS_FROM_AGE`/`AGE_PICKS_YEARS_PER_PICK`), `beat_pick_conflicts` in the
+  distinctions sync, `draft_data["kin_rows"]` (`KinRowKind`/`SpouseFate`/`ChildFate`,
+  `_bind_kin_rows` at finalize),
   `_finalize_beats`, the background drafted from answers and beats
   (`assemble_origin_prose`), the sheet's private block (`_build_beats`, `BeatEntry`),
   `Secret.resolves_beat`, `CharacterSheet.maturation_floor` (milestones at or below the
@@ -2757,9 +2764,12 @@ services on a live sheet (`sheet_writers.py`, #4221), shared with staff edit mod
   the same change so a sibling domain service can reuse `_send_email`/`_get_staff_emails`
   without subclassing `RosterEmailService` itself, whose approve/deny methods take a
   roster-specific `tenure` arg). See [character_creation.md](character_creation.md#email-notifications-2162).
-- **Lineage stage: Upbringings (#3617):** the Lineage stage offers per-beginning
-  `OriginTemplate` rows ("Upbringing" in CG copy) with a CG point cost and a
-  family path (claim a staff-authored family, name a new one, or none). Authoring recipes (an Upbringing, an orphan, a family with influence, a
+- **Lineage stage: the beginning's route (#3617, #4395):** each beginning carries one
+  `OriginTemplate` (its family route, formerly the "Upbringing" pick; since #4395
+  assigned with the beginning by `services.route_for_beginning`/`assign_route`, never
+  picked) with a CG point cost and a family path (claim a staff-authored family, name a
+  new one, or none); a general write-in question never shows
+  (`questionnaire.is_general_write_in`). Authoring recipes (a route, an orphan, a family with influence, a
   new `FamilyKind`, and more): [family-authoring-recipes.md](family-authoring-recipes.md);
   the design decisions: ADR-0268, ADR-0269.
 - **Lineage stage: Family Templates and Vacancies (#3648, ADR-0273):**
