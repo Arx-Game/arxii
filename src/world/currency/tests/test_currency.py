@@ -801,6 +801,108 @@ class WeeklyEconomyTests(TestCase):
         debtor_treasury.refresh_from_db()
         assert debtor_treasury.balance == 100_000
 
+    def test_weekly_run_settles_obligations_once(self) -> None:
+        """Collected income owes its tithe at the next rollover, and only once (#4435)."""
+        from world.currency.models import OrgIncomeStream, OrgObligation
+        from world.currency.services import (
+            get_or_create_treasury,
+            process_income_stream,
+            run_weekly_economy,
+        )
+        from world.societies.factories import OrganizationFactory
+
+        org = OrganizationFactory()
+        liege = OrganizationFactory()
+        stream = OrgIncomeStream.objects.create(
+            organization=org, name="Land taxes", kind="domain_tax", gross_amount=1000
+        )
+        OrgObligation.objects.create(
+            from_organization=org, to_organization=liege, name="Crown taxes", percent=20
+        )
+        process_income_stream(stream, 900, declared_amount=500)
+
+        counts = run_weekly_economy()
+        run_weekly_economy()
+
+        assert counts["obligations"] == 1
+        liege_treasury = get_or_create_treasury(liege)
+        liege_treasury.refresh_from_db()
+        assert liege_treasury.balance == 100  # 20% of declared 500, paid once
+        org_treasury = get_or_create_treasury(org)
+        org_treasury.refresh_from_db()
+        assert org_treasury.balance == 800
+
+    def test_unpayable_obligation_does_not_wedge_the_rollover(self) -> None:
+        """An org that spent its treasury keeps its declarations unsettled for next week."""
+        from world.currency.models import IncomeDeclaration, OrgIncomeStream, OrgObligation
+        from world.currency.services import (
+            get_or_create_treasury,
+            process_income_stream,
+            run_weekly_economy,
+            transfer,
+        )
+        from world.societies.factories import OrganizationFactory
+
+        broke = OrganizationFactory()
+        solvent = OrganizationFactory()
+        liege = OrganizationFactory()
+        for org in (broke, solvent):
+            stream = OrgIncomeStream.objects.create(
+                organization=org, name="Land taxes", kind="domain_tax", gross_amount=1000
+            )
+            OrgObligation.objects.create(
+                from_organization=org, to_organization=liege, name="Crown taxes", percent=20
+            )
+            process_income_stream(stream, 1000)
+        transfer(
+            amount=1000,
+            reason="spent it all",
+            from_treasury=get_or_create_treasury(broke),
+        )
+
+        counts = run_weekly_economy()
+
+        assert counts["obligations"] == 1
+        # Read the column, not the idmapper-cached row: settlement writes by queryset update.
+        settled = dict(IncomeDeclaration.objects.values_list("stream__organization_id", "settled"))
+        assert settled == {broke.pk: False, solvent.pk: True}
+        liege_treasury = get_or_create_treasury(liege)
+        liege_treasury.refresh_from_db()
+        assert liege_treasury.balance == 200
+
+    def test_unexpected_settlement_error_does_not_wedge_the_rollover(self) -> None:
+        """Any failure in one org's settlement leaves the other orgs and later phases running."""
+        from unittest import mock
+
+        from world.currency import services
+        from world.currency.models import OrgIncomeStream, OrgObligation
+        from world.currency.services import process_income_stream, run_weekly_economy
+        from world.societies.factories import OrganizationFactory
+
+        liege = OrganizationFactory()
+        orgs = [OrganizationFactory(), OrganizationFactory()]
+        for org in orgs:
+            stream = OrgIncomeStream.objects.create(
+                organization=org, name="Land taxes", kind="domain_tax", gross_amount=1000
+            )
+            OrgObligation.objects.create(
+                from_organization=org, to_organization=liege, name="Crown taxes", percent=20
+            )
+            process_income_stream(stream, 1000)
+        real = services.settle_obligations
+
+        def flaky(organization):
+            if organization.pk == orgs[0].pk:
+                msg = "boom"
+                raise RuntimeError(msg)
+            return real(organization)
+
+        with mock.patch.object(services, "settle_obligations", side_effect=flaky):
+            counts = run_weekly_economy()
+
+        assert counts["obligations"] == 1
+        assert "businesses" in counts
+
     def test_weekly_economy_accrues_asset_income(self) -> None:
         """The weekly cron accrues asset weekly_income into uncollected_pool."""
         from world.assets.factories import NPCAssetFactory
