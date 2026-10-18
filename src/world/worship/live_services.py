@@ -37,7 +37,7 @@ from django.db.models import Count
 
 from world.worship.constants import STEWARD_ANSWER_TEXT_MAX_LENGTH, VISION_RESONANCE_POOL_COST
 from world.worship.exceptions import StewardAnswerError, VisionPoolInsufficient
-from world.worship.models import Answer, Miracle, WorshipRitePerformance
+from world.worship.models import Answer, DevotionStanding, Miracle, WorshipRitePerformance
 from world.worship.types import LiveAnswerOption, LiveMiracleOption, LivePanel, LiveSend
 
 if TYPE_CHECKING:
@@ -159,13 +159,22 @@ def is_live_prompt(prompt: GMPrompt) -> bool:
 
 def live_panel(prompt: GMPrompt, *, account: AccountDB | None) -> LivePanel:
     """The answer panel for a live prompt, as ``account`` (the viewing GM) sees it."""
-    from world.worship.services import miracle_ineligibility  # noqa: PLC0415
+    from world.worship.services import (  # noqa: PLC0415
+        get_divine_intervention_config,
+        intervention_cooldown_active,
+        miracle_ineligibility,
+    )
 
     performance = _live_prompt_performance(prompt)
     rite = performance.rite
     being = rite.being
     sheet = performance.character_sheet
     tier = performance.outcome_tier
+    # The same for every miracle of one being and character: asked once, not per row.
+    cfg = get_divine_intervention_config()
+    on_cooldown = intervention_cooldown_active(sheet.character)
+    standing = DevotionStanding.objects.filter(character_sheet=sheet, being=being).first()
+    favor = standing.favor if standing is not None else 0
     used = dict(
         Answer.objects.filter(being=being).annotate(sent=Count("visions")).values_list("pk", "sent")
     )
@@ -179,7 +188,12 @@ def live_panel(prompt: GMPrompt, *, account: AccountDB | None) -> LivePanel:
             for row in live_answer_options(being, tier)
         ],
         miracles=[
-            LiveMiracleOption(miracle=row, reason=miracle_ineligibility(sheet, row))
+            LiveMiracleOption(
+                miracle=row,
+                reason=miracle_ineligibility(
+                    sheet, row, favor=favor, on_cooldown=on_cooldown, cfg=cfg
+                ),
+            )
             for row in live_miracle_options(being)
         ],
         may_adapt=may_adapt_answers(account),

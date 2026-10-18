@@ -11,6 +11,8 @@ from __future__ import annotations
 
 from unittest import mock
 
+from django.db import connection
+from django.test.utils import CaptureQueriesContext
 from rest_framework.test import APIClient
 
 from actions.definitions.worship import (
@@ -158,6 +160,23 @@ class PanelTests(LiveTestBase):
         self.assertEqual([option.answer for option in panel.answers], [partial, failure])
         self.assertEqual(panel.tier, self.outcomes["Partial Success"])
         self.assertEqual(panel.limit_reason, "")
+
+    def test_the_panel_asks_the_miracle_check_once_not_per_miracle(self) -> None:
+        self._general("Partial Success")
+        MiracleFactory(being=self.being, favor_threshold=1, resonance_pool_cost=10)
+        self._perform("Partial Success")
+        prompt = self._prompt()
+        live_panel(prompt, account=self.gm_account)  # warms the config's cache
+        with CaptureQueriesContext(connection) as one:
+            live_panel(prompt, account=self.gm_account)
+
+        for _ in range(4):
+            MiracleFactory(being=self.being, favor_threshold=1, resonance_pool_cost=10)
+        with CaptureQueriesContext(connection) as five:
+            panel = live_panel(prompt, account=self.gm_account)
+
+        self.assertEqual(len(panel.miracles), 5)
+        self.assertEqual(len(five), len(one))
 
     def test_the_panel_counts_how_often_an_answer_was_used(self) -> None:
         answer = self._general("Partial Success")
