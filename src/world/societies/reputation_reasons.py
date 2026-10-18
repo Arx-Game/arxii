@@ -77,8 +77,10 @@ def reason_lines_by_reputation(reputation_ids: Sequence[int]) -> dict[int, list[
     One query for all of them, newest first, so a sheet with many organizations does not
     pay a query each.
     """
-    copy = copy_by_cause()
     lines: dict[int, list[str]] = {pk: [] for pk in reputation_ids}
+    if not lines:
+        return lines
+    copy = copy_by_cause()
     events = OrganizationReputationEvent.objects.filter(
         reputation_id__in=reputation_ids
     ).select_related(
