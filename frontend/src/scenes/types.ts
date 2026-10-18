@@ -430,6 +430,8 @@ export interface GMPrompt {
   /** being_answer prompts (#4333): "<being> answers <name> (<tier>)." and the table whose page answers it. */
   being_answer_summary?: string;
   being_answer_table?: number | null;
+  /** True when a rite performed in the scene raised it: its panel opens in the queue (slice 5). */
+  being_answer_live?: boolean;
   resolution_note?: string;
   room_text: string;
   private_text: string;

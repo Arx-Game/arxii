@@ -40,6 +40,7 @@ import {
   useOverrideGMPrompt,
 } from '../gmPromptQueries';
 import type { GMPrompt } from '../types';
+import { LiveAnswerPanel } from './LiveAnswerPanel';
 
 /** The row's body text, split so the demo's bold "Narrate it?" / "Confirm?" / "Narrated." can be emphasized (F4) without duplicating the sentence for test matching. */
 function promptBody(prompt: GMPrompt): { lead: string; emphasis: string } {
@@ -119,38 +120,51 @@ function StandoffCausePromptRow({ prompt, sceneId }: { prompt: GMPrompt; sceneId
 
 /**
  * A stewarded being's closed pledge (#4333): the steward answers it from the table
- * page's Beings tab; dismissing here sends an authored answer instead.
+ * page's Beings tab; dismissing here sends an authored answer instead. A rite
+ * performed in the scene (slice 5) opens its answer panel in the queue; dismissing
+ * it sends nothing.
  */
 function BeingAnswerPromptRow({ prompt, sceneId }: { prompt: GMPrompt; sceneId: string }) {
   const dismiss = useDismissGMPrompt(sceneId);
+  const [open, setOpen] = useState(false);
   return (
-    <div
-      data-testid="gm-prompt-row"
-      className="flex flex-wrap items-center gap-2 rounded-md border border-primary/40 bg-primary/10 p-2 text-sm"
-    >
-      <span>
-        &#10022; {prompt.kind_label}: <b>{prompt.being_answer_summary}</b> Answer it?
-      </span>
-      <span className="ml-auto flex gap-1">
-        {prompt.being_answer_table != null && (
-          <Button asChild size="sm">
-            <Link to={`/tables/${prompt.being_answer_table}?tab=beings`}>Open</Link>
+    <div className="space-y-2">
+      <div
+        data-testid="gm-prompt-row"
+        className="flex flex-wrap items-center gap-2 rounded-md border border-primary/40 bg-primary/10 p-2 text-sm"
+      >
+        <span>
+          &#10022; {prompt.kind_label}: <b>{prompt.being_answer_summary}</b> Answer it?
+        </span>
+        <span className="ml-auto flex gap-1">
+          {prompt.being_answer_table != null && (
+            <Button asChild size="sm">
+              <Link to={`/tables/${prompt.being_answer_table}?tab=beings`}>Open</Link>
+            </Button>
+          )}
+          {prompt.being_answer_live && (
+            <Button type="button" size="sm" onClick={() => setOpen((on) => !on)}>
+              {open ? 'Close' : 'Open'}
+            </Button>
+          )}
+          <Button
+            type="button"
+            size="sm"
+            variant="secondary"
+            disabled={dismiss.isPending}
+            onClick={() => dismiss.mutate(prompt.id)}
+          >
+            <X className="h-3 w-3" /> Dismiss
           </Button>
+        </span>
+        {dismiss.error && (
+          <p role="alert" className="w-full text-xs text-destructive">
+            {dismiss.error.message}
+          </p>
         )}
-        <Button
-          type="button"
-          size="sm"
-          variant="secondary"
-          disabled={dismiss.isPending}
-          onClick={() => dismiss.mutate(prompt.id)}
-        >
-          <X className="h-3 w-3" /> Dismiss
-        </Button>
-      </span>
-      {dismiss.error && (
-        <p role="alert" className="w-full text-xs text-destructive">
-          {dismiss.error.message}
-        </p>
+      </div>
+      {prompt.being_answer_live && open && (
+        <LiveAnswerPanel promptId={prompt.id} sceneId={sceneId} onDone={() => setOpen(false)} />
       )}
     </div>
   );

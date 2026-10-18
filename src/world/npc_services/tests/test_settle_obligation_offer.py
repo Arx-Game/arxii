@@ -261,7 +261,7 @@ class SettleObligationLoopEndToEndTests(TestCase):
 
         # GM awards a Hare — mint_favor_token is the exact function
         # GMAwardAction(award_type="favor_token") delegates to; the action's own
-        # permission gate is covered by actions.tests.test_gm_adjudication_actions.
+        # permission gate is typed in integration_tests.test_refereeing_the_table_journeys.
         # A second Hare is minted too: settling the debt spends one Hare, and
         # TRAIN itself always spends its OWN separate Hare on top of that — the
         # two doors are independent Hare sinks, not one Hare unlocking both.

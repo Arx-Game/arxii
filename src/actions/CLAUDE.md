@@ -740,7 +740,9 @@ and the model for any later per-target menu (items, room objects, exits).
    internals), never a second copy of the player path: the ledger
    `docs/testing/ledger/actions.csv` records which `tests/` modules were folded into
    the journeys and removed (tranche 6 began with the covenant, org vault, market
-   sale, event, coin, trade and condition modules), and a new `tests/test_<verb>.py`
+   sale, event, coin, trade and condition modules; tranche 7 took the GM adjudication
+   module into `integration_tests/test_refereeing_the_table_journeys.py`), and a new
+   `tests/test_<verb>.py`
    that only calls `.run()` down the happy path is the shape that gets removed next.
    Never patch the room's `msg_contents` to keep a test quiet: `secure` raised on its
    room line, after setting the policy, behind exactly that patch.

@@ -51,12 +51,15 @@ addressed to the caller.
 
 from __future__ import annotations
 
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from commands.command import ArxCommand
 from commands.exceptions import CommandError
 from commands.parsing import parse_kv_and_flags
 from commands.utils.gm_resolution import resolve_character_sheet_in_room
+
+if TYPE_CHECKING:
+    from world.gm.models import GMPrompt
 
 _USAGE_DASHBOARD = "Usage: gm dashboard"
 _USAGE_IDLE = "Usage: gm idle"
@@ -91,7 +94,8 @@ _USAGE_NPC = "Usage: gm npc <name>[=<description>] [preset=<name>] (requires Jun
 _USAGE_PROMPT = (
     "Usage: gm prompt send <id> | gm prompt dismiss <id> | gm prompt done <id>"
     " | gm prompt confirm <id> | gm prompt hold <id> | gm prompt override <id> <reason>"
-    " | gm prompt answer <id> [answer=<answer id> | text=<your words> [clue=<clue id>]]"
+    " | gm prompt answer <id> [answer=<answer id> [text=<edited text>] | miracle=<miracle id>"
+    " | text=<your words> [clue=<clue id>]]"
 )
 _USAGE_STANDOFF = "Usage: gm standoff shake <group> <reason> | gm standoff steady <group> <reason>"
 _SUBVERB_LIST = "list"
@@ -105,6 +109,7 @@ _PROMPT_ANSWER = "answer"
 _KEY_ANSWER = "answer"
 _KEY_TEXT = "text"
 _KEY_CLUE = "clue"
+_KEY_MIRACLE = "miracle"
 # Standoff proposal decisions (#4354): verb -> registry action key.
 _PROMPT_STANDOFF_VERBS: dict[str, str] = {
     "confirm": "gm_standoff_confirm",
@@ -169,6 +174,9 @@ class CmdGMDashboard(ArxCommand):
       gm prompt answer <id> answer=<answer id>  (send one of the being's answers)
       gm prompt answer <id> text=<words> [clue=<clue id>]
                                                 (your own words, Success and above)
+      gm prompt answer <id> miracle=<miracle id>  (a rite in your scene: perform a miracle)
+      gm prompt answer <id> answer=<answer id> text=<words>
+                                                (a rite in your scene: edit its text)
       gm standoff shake <group> <reason>        (one morale state down)
       gm standoff steady <group> <reason>       (one morale state up)
     """
@@ -550,7 +558,7 @@ class CmdGMDashboard(ArxCommand):
                 )
 
                 self.msg(f"  {proposal_summary(p.standoff_group)}")
-            if p.pledge_id is not None:
+            if p.pledge_id is not None or p.rite_performance_id is not None:
                 from world.worship.steward_services import prompt_summary  # noqa: PLC0415
 
                 self.msg(f"  {prompt_summary(p)}")
@@ -607,6 +615,7 @@ class CmdGMDashboard(ArxCommand):
             account=self.caller.account,
             prompt_id=prompt_id,
             answer_id=kwargs.get(_KEY_ANSWER),
+            miracle_id=kwargs.get(_KEY_MIRACLE),
             text=kwargs.get(_KEY_TEXT, ""),
             clue_id=kwargs.get(_KEY_CLUE),
         )
@@ -626,7 +635,13 @@ class CmdGMDashboard(ArxCommand):
 
         prompt = GMPrompt.objects.filter(pk=prompt_id, kind=GMPromptKind.BEING_ANSWER).first()
         account = self.caller.account
-        if prompt is None or not prompt_visible_to(account, prompt) or prompt.pledge is None:
+        if prompt is None or not prompt_visible_to(account, prompt):
+            msg = "There is no such being answer prompt."
+            raise CommandError(msg)
+        if prompt.rite_performance_id is not None:
+            self._list_live_answer_options(prompt)
+            return
+        if prompt.pledge is None:
             msg = "There is no such being answer prompt."
             raise CommandError(msg)
         details = prompt.pledge
@@ -647,6 +662,30 @@ class CmdGMDashboard(ArxCommand):
         self.msg(
             f"  Dismissed or unanswered by {ends:%Y-%m-%d %H:%M}, an authored answer is drawn."
         )
+
+    def _list_live_answer_options(self, prompt: GMPrompt) -> None:
+        """What a scene GM can send for a rite performed in their scene (#4333 slice 5)."""
+        from world.worship.live_services import live_panel  # noqa: PLC0415
+        from world.worship.steward_services import prompt_summary  # noqa: PLC0415
+
+        panel = live_panel(prompt, account=self.caller.account)
+        self.msg(prompt_summary(prompt))
+        if panel.limit_reason:
+            self.msg(f"  {panel.limit_reason} Nothing more can be sent this week.")
+        for option in panel.answers:
+            answer = option.answer
+            first = (answer.answer_text or answer.delay_text).strip().splitlines()[0][:80]
+            self.msg(
+                f"  answer={answer.pk} ({answer.outcome_tier.name}, sent {option.used_count} times)"
+                f" {first}"
+            )
+        for miracle_option in panel.miracles:
+            miracle = miracle_option.miracle
+            state = miracle_option.reason or "may be performed"
+            self.msg(f"  miracle={miracle.pk} {miracle.name}: {state}")
+        if panel.may_adapt:
+            self.msg("  Add text=<words> to answer=<id> to edit the answer's main text.")
+        self.msg("  gm prompt dismiss sends nothing.")
 
     def _decide_standoff_prompt(self, verb: str, rest: str) -> None:
         """``gm prompt confirm|hold <id>`` / ``gm prompt override <id> <reason>`` (#4354)."""

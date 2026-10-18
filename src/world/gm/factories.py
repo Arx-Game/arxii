@@ -105,6 +105,7 @@ class GMLevelCapFactory(factory_django.DjangoModelFactory):
     allow_global_scope_authoring = False
     auto_clear_regional = False
     allow_item_rewards = False
+    may_adapt_answers = False
 
 
 class GMLevelChangeFactory(factory_django.DjangoModelFactory):

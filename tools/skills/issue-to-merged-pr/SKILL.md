@@ -71,6 +71,8 @@ A complete lightweight marker is the only path to `status:implementing` without
 `spec:approved`. A standard/heavyweight packet still requires the member-only
 spec gate after its product brief and technical design are complete.
 
+**Slices of an approved spec.** A slice issue declares its parent with one line `Slice N of #M` before `<!-- spec:start -->` (or at the top of a body without spec markers). `validate-discovery.sh` then passes `status:implementing` only if #M is open and carries `spec:approved`, and fails closed on a fetch error, a closed or missing parent, or more than one parent line. The slice's marker is its honest lane (`heavyweight` or `standard`, `state=complete`). Never write a lightweight marker to get past the check; that marker is for genuinely bounded work only, and a dispatch for a slice must say so.
+
 **The agent MUST NEVER apply `spec:approved` itself.** Only a human org member
 applies it — GitHub restricts label-writes to Triage+, so outsiders can't, but
 the agent holds the maintainer PAT and so must self-restrain. The agent only

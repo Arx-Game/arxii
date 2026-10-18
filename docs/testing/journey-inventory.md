@@ -11,9 +11,9 @@ surface that is dead, and the ledger (`tools/test_ledger.py`) decides which.
 
 | Registry | Surfaces | Named by no test |
 |---|---|---|
-| Actions (`actions.registry`) | 563 | 0 |
+| Actions (`actions.registry`) | 564 | 0 |
 | Commands (character + account cmdsets) | 271 | 57 |
-| API routes (`urls.py` under `src/`) | 553 | 85 |
+| API routes (`urls.py` under `src/`) | 558 | 85 |
 | Frontend routes (`App.tsx`) | 131 | 60 |
 
 ## Actions
@@ -223,18 +223,19 @@ surface that is dead, and the ledger (`tools/test_ledger.py`) decides which.
 | `get` | `actions.definitions.movement.GetAction` | items / single | `frontend/e2e/target-menu-approved-states.spec.ts`, `frontend/src/game/components/ThreadedNarrativeReader.test.tsx`, `frontend/src/game/target-menu/TargetMenu.test.tsx`, `src/actions/tests/test_action_events.py` (+22) |
 | `give` | `actions.definitions.movement.GiveAction` | items / single | `frontend/e2e/target-menu-approved-states.spec.ts`, `frontend/e2e/target-menu-worn-row.spec.ts`, `frontend/src/game/target-menu/TargetMenu.test.tsx`, `frontend/src/game/target-menu/TargetMenuInputs.test.tsx` (+10) |
 | `give_coins` | `actions.definitions.currency.GiveCoinsAction` | items / single | `src/actions/tests/test_base.py`, `src/commands/tests/test_dispatchers.py`, `src/integration_tests/test_coins_and_trades_journeys.py` |
-| `gm_apply_condition` | `actions.definitions.gm_adjudication.GMApplyConditionAction` | gm / single | `frontend/src/scenes/components/GMAdjudicationPanel.test.tsx`, `src/actions/tests/test_base.py`, `src/actions/tests/test_gm_adjudication_actions.py`, `src/commands/tests/test_gm_ops_adjudication.py` (+2) |
+| `gm_apply_condition` | `actions.definitions.gm_adjudication.GMApplyConditionAction` | gm / single | `frontend/src/scenes/components/GMAdjudicationPanel.test.tsx`, `src/actions/tests/test_base.py`, `src/integration_tests/test_conditions_journeys.py`, `src/integration_tests/test_refereeing_the_table_journeys.py` (+1) |
 | `gm_apply_shade` | `actions.definitions.species_gm.ApplyShadeUndeathAction` | gm / self | `src/actions/tests/test_base.py` |
 | `gm_award_distinction` | `actions.definitions.distinctions.GMAwardDistinctionAction` | gm / self | `src/actions/tests/test_base.py`, `src/actions/tests/test_distinction_change.py`, `src/actions/tests/test_distinctions_actions.py`, `src/commands/tests/test_grant_distinction.py` |
-| `gm_award_progression` | `actions.definitions.gm_adjudication.GMAwardAction` | gm / single | `frontend/src/scenes/components/GMAdjudicationPanel.test.tsx`, `src/actions/tests/test_base.py`, `src/actions/tests/test_gm_adjudication_actions.py`, `src/commands/tests/test_gm_ops_adjudication.py` (+1) |
+| `gm_award_progression` | `actions.definitions.gm_adjudication.GMAwardAction` | gm / single | `frontend/src/scenes/components/GMAdjudicationPanel.test.tsx`, `src/actions/tests/test_base.py`, `src/integration_tests/test_refereeing_the_table_journeys.py`, `src/world/npc_services/tests/test_settle_obligation_offer.py` |
+| `gm_being_answer` | `actions.definitions.worship.AnswerBeingPromptAction` | worship / self | `src/actions/tests/test_base.py`, `src/world/worship/tests/test_stewards.py` |
 | `gm_disarm_trap` | `actions.definitions.traps.GmDisarmTrapAction` | gm / self | `src/actions/tests/test_base.py`, `src/actions/tests/test_trap_gm_actions.py`, `src/commands/tests/test_gm_trap_commands.py`, `src/world/room_features/tests/test_traps.py` |
 | `gm_find_situation` | `actions.definitions.gm_catalog.FindSituationAction` | gm / self | `src/actions/tests/test_base.py`, `src/actions/tests/test_gm_catalog_actions.py`, `src/commands/tests/test_setsituation_command.py` |
-| `gm_invoke_check` | `actions.definitions.gm_adjudication.InvokeCatalogCheckAction` | gm / single | `frontend/src/scenes/components/GMAdjudicationPanel.test.tsx`, `src/actions/tests/test_base.py`, `src/actions/tests/test_gm_adjudication_actions.py`, `src/actions/tests/test_scene_checks_actions.py` (+1) |
-| `gm_list_conditions` | `actions.definitions.gm_adjudication.GMListConditionsAction` | gm / single | `frontend/src/scenes/components/GMAdjudicationPanel.test.tsx`, `frontend/src/scenes/components/__tests__/GMStoryRail.test.tsx`, `src/actions/tests/test_base.py`, `src/actions/tests/test_gm_adjudication_actions.py` (+1) |
+| `gm_invoke_check` | `actions.definitions.gm_adjudication.InvokeCatalogCheckAction` | gm / single | `frontend/src/scenes/components/GMAdjudicationPanel.test.tsx`, `src/actions/tests/test_base.py`, `src/integration_tests/test_refereeing_the_table_journeys.py` |
+| `gm_list_conditions` | `actions.definitions.gm_adjudication.GMListConditionsAction` | gm / single | `frontend/src/scenes/components/GMAdjudicationPanel.test.tsx`, `frontend/src/scenes/components/__tests__/GMStoryRail.test.tsx`, `src/actions/tests/test_base.py`, `src/integration_tests/test_conditions_journeys.py` (+1) |
 | `gm_list_runnable_beats` | `actions.definitions.gm_story.GMListRunnableBeatsAction` | gm / self | `frontend/src/scenes/components/GMAdjudicationPanel.test.tsx`, `src/actions/tests/test_base.py`, `src/actions/tests/test_gm_story_run_battle_beat.py`, `src/actions/tests/test_gm_story_run_beat.py` (+1) |
 | `gm_open_standoff` | `actions.definitions.gm_standoff.GMOpenStandoffAction` | combat / self | `src/actions/tests/test_base.py` |
 | `gm_place_in_position` | `actions.definitions.positioning.GMPlaceInPositionAction` | gm / self | `src/actions/tests/test_base.py`, `src/actions/tests/test_gm_place_in_position_action.py`, `src/actions/tests/test_positioning_actions.py`, `src/commands/tests/test_positions.py` |
-| `gm_remove_condition` | `actions.definitions.gm_adjudication.GMRemoveConditionAction` | gm / single | `frontend/src/scenes/components/GMAdjudicationPanel.test.tsx`, `src/actions/tests/test_base.py`, `src/actions/tests/test_gm_adjudication_actions.py`, `src/commands/tests/test_gm_ops_adjudication.py` (+1) |
+| `gm_remove_condition` | `actions.definitions.gm_adjudication.GMRemoveConditionAction` | gm / single | `frontend/src/scenes/components/GMAdjudicationPanel.test.tsx`, `src/actions/tests/test_base.py`, `src/integration_tests/test_conditions_journeys.py`, `src/integration_tests/test_refereeing_the_table_journeys.py` |
 | `gm_standoff_confirm` | `actions.definitions.gm_standoff.GMStandoffConfirmAction` | combat / self | `src/actions/tests/test_base.py` |
 | `gm_standoff_hold` | `actions.definitions.gm_standoff.GMStandoffHoldAction` | combat / self | `src/actions/tests/test_base.py` |
 | `gm_standoff_morale` | `actions.definitions.gm_standoff.GMStandoffMoraleAction` | combat / self | `src/actions/tests/test_base.py`, `src/world/standoffs/tests/test_gm_morale.py` |
@@ -328,7 +329,7 @@ surface that is dead, and the ledger (`tools/test_ledger.py`) decides which.
 | `place_room` | `actions.definitions.locations.PlaceRoomAction` | locations / self | `src/actions/tests/test_base.py`, `src/actions/tests/test_room_builder_web_kwargs.py`, `src/actions/tests/test_story_builder_actions.py`, `src/actions/tests/test_world_builder_actions.py` (+1) |
 | `place_room_fixture` | `actions.definitions.locations.PlaceFixtureAction` | locations / self | `src/actions/tests/test_base.py`, `src/actions/tests/test_purchase_building_action.py`, `src/commands/tests/test_manageroom_command.py`, `src/world/buildings/tests/test_comfort_hud.py` |
 | `plant_red_herring` | `actions.definitions.tasking.PlantRedHerringAction` | tasking / self | `src/actions/tests/test_base.py` |
-| `pledge_close` | `actions.definitions.worship.ClosePledgeAction` | worship / self | `src/actions/tests/test_base.py`, `src/world/worship/tests/test_answers.py` |
+| `pledge_close` | `actions.definitions.worship.ClosePledgeAction` | worship / self | `src/actions/tests/test_base.py`, `src/world/worship/tests/test_answers.py`, `src/world/worship/tests/test_stewards.py` |
 | `pledge_take` | `actions.definitions.worship.TakePledgeAction` | worship / self | `src/actions/tests/test_base.py`, `src/world/worship/tests/test_pledges.py` |
 | `portal_anchor_dissolve` | `actions.definitions.portals.DissolvePortalAnchorAction` | magic / self | `src/actions/tests/test_base.py`, `src/actions/tests/test_portals.py` |
 | `portal_anchor_install` | `actions.definitions.portals.InstallPortalAnchorAction` | magic / self | `src/actions/tests/test_base.py`, `src/actions/tests/test_portals.py` |
@@ -648,7 +649,7 @@ surface that is dead, and the ledger (`tools/test_ledger.py`) decides which.
 | `carry` |  | `commands.carry.CmdCarry` | none |
 | `cast` | declare | `commands.combat.CmdDeclareTechnique` | `frontend/e2e/ties.spec.ts`, `src/commands/tests/test_cast_listing.py`, `src/commands/tests/test_combat_commands.py`, `src/flows/tests/test_character_state_allegiance.py` (+17) |
 | `ceremony` | ceremonies | `commands.ceremonies.CmdCeremony` | `src/commands/tests/test_ceremony_command.py` |
-| `check` |  | `commands.scene_checks.CmdCheck` | `src/commands/tests/test_gm_ops_adjudication.py`, `src/integration_tests/pipeline/test_favor_invocation_telnet_e2e.py`, `src/integration_tests/pipeline/test_project_telnet_e2e.py`, `src/integration_tests/test_playing_a_scene_journeys.py` (+5) |
+| `check` |  | `commands.scene_checks.CmdCheck` | `src/integration_tests/pipeline/test_favor_invocation_telnet_e2e.py`, `src/integration_tests/pipeline/test_project_telnet_e2e.py`, `src/integration_tests/test_playing_a_scene_journeys.py`, `src/web/admin/tests/test_distinction_paste.py` (+4) |
 | `clash` |  | `commands.combat.CmdClashCommit` | `src/integration_tests/pipeline/test_combat_clash_telnet_e2e.py`, `src/integration_tests/pipeline/test_pull_outcome_cross_context_e2e.py`, `src/world/combat/tests/test_clash_declare.py`, `src/world/combat/tests/test_clash_round_declaration_pull.py` |
 | `close` |  | `commands.windows.CmdCloseWindow` | `frontend/src/hooks/useGameSocket.test.ts`, `frontend/src/scenes/components/ThreadFilterModal.test.tsx`, `src/commands/tests/test_windows.py`, `src/integration_tests/pipeline/test_pledge_telnet_e2e.py` (+2) |
 | `combat` |  | `commands.combat_maneuvers.CmdCombat` | `frontend/e2e/combat.spec.ts`, `frontend/src/combat/__tests__/YourTurn.test.tsx`, `frontend/src/game/components/GameTopBar.test.tsx`, `src/actions/tests/test_fatigue_action.py` (+11) |
@@ -695,7 +696,7 @@ surface that is dead, and the ledger (`tools/test_ledger.py`) decides which.
 | `gemit` |  | `commands.gemit.CmdGemit` | `src/commands/tests/test_feed_kind.py`, `src/commands/tests/test_gemit_command.py` |
 | `get` | take | `commands.evennia_overrides.movement.CmdGet` | `frontend/src/game/components/CommandInput.test.tsx`, `src/actions/tests/test_action_events.py`, `src/actions/tests/test_base.py`, `src/actions/tests/test_target_menu_api.py` (+18) |
 | `give` |  | `commands.evennia_overrides.movement.CmdGive` | `frontend/src/scenes/components/PersonaMenu.test.tsx`, `src/actions/tests/test_base.py`, `src/actions/tests/test_staged_give.py`, `src/actions/tests/test_target_menu_api.py` (+5) |
-| `gm` | gmdashboard | `commands.gm_ops.CmdGMDashboard` | `frontend/src/character-creation/__tests__/ReviewStage.test.tsx`, `src/actions/tests/test_gm_adjudication_actions.py`, `src/actions/tests/test_scene_checks_actions.py`, `src/actions/tests/test_trap_gm_actions.py` (+20) |
+| `gm` | gmdashboard | `commands.gm_ops.CmdGMDashboard` | `frontend/src/character-creation/__tests__/ReviewStage.test.tsx`, `src/actions/tests/test_trap_gm_actions.py`, `src/commands/tests/test_gm_being_answer_commands.py`, `src/commands/tests/test_gm_ops_adjudication.py` (+20) |
 | `gmidle` |  | `commands.gm_ops.CmdGMIdle` | `src/commands/tests/test_gm_ops_command.py` |
 | `gmtable` |  | `commands.gm_tables.CmdGMTable` | `src/commands/tests/test_gmtable_command.py` |
 | `gmtrust` |  | `commands.gmtrust.CmdGMTrust` | `src/commands/tests/test_gmtrust_command.py` |
@@ -705,7 +706,7 @@ surface that is dead, and the ledger (`tools/test_ledger.py`) decides which.
 | `grant_item` |  | `commands.grant_item.CmdGrantItem` | `src/actions/tests/test_base.py`, `src/actions/tests/test_items_actions.py`, `src/commands/tests/test_grant_item.py` |
 | `guard` | guards | `commands.guard.CmdGuard` | `src/world/battles/tests/test_services_setup.py` |
 | `harvest` |  | `commands.agriculture.CmdHarvest` | none |
-| `help` | ? | `evennia.commands.default.help.CmdHelp` | `src/actions/tests/test_gm_adjudication_actions.py`, `src/core_management/tests/test_makemigrations_fix.py`, `src/web/admin/tests/test_answer_builder.py`, `src/web/admin/tests/test_authoring_builders_panel.py` (+8) |
+| `help` | ? | `evennia.commands.default.help.CmdHelp` | `src/core_management/tests/test_makemigrations_fix.py`, `src/web/admin/tests/test_answer_builder.py`, `src/web/admin/tests/test_authoring_builders_panel.py`, `src/web/admin/tests/test_authoring_views.py` (+7) |
 | `hide` | unhide | `commands.presence.CmdHide` | `src/commands/tests/test_cmd_presence.py`, `src/integration_tests/test_faces_silences_and_the_floor_journeys.py` |
 | `hire` |  | `commands.hire.CmdHire` | `src/commands/tests/test_hire_command.py`, `src/integration_tests/pipeline/test_tutorial_chain_e2e.py` |
 | `home` | recall | `commands.evennia_overrides.movement.CmdHome` | `frontend/src/home/__tests__/queries.test.ts`, `src/actions/tests/test_base.py`, `src/actions/tests/test_fatigue_action.py`, `src/commands/tests/test_dispatchers.py` (+4) |
@@ -747,7 +748,7 @@ surface that is dead, and the ledger (`tools/test_ledger.py`) decides which.
 | `persuade` |  | `commands.consent.CmdPersuade` | `src/actions/tests/test_base.py`, `src/actions/tests/test_social_dispatch.py`, `src/actions/tests/test_unified_player_actions.py`, `src/commands/tests/test_consent_commands.py` (+12) |
 | `pick` |  | `commands.door.CmdPick` | `frontend/src/inventory/pages/__tests__/WardrobePage.test.tsx`, `src/commands/tests/test_defenses.py`, `src/commands/tests/test_door.py`, `src/integration_tests/pipeline/test_missions_telnet_e2e.py` (+2) |
 | `places` |  | `commands.places.CmdPlaces` | `frontend/src/areas/tacticalLayout.test.ts`, `frontend/src/world-builder/atlas/__tests__/IndexRail.test.tsx`, `frontend/src/world-builder/document/__tests__/CategoryDoorDialog.test.tsx`, `src/actions/tests/test_place_exit_menu_actions.py` (+6) |
-| `pledge` |  | `commands.worship.CmdPledge` | `src/integration_tests/pipeline/test_pledge_telnet_e2e.py`, `src/web/admin/tests/test_answer_builder.py`, `src/world/worship/tests/test_answers.py`, `src/world/worship/tests/test_pledges.py` |
+| `pledge` |  | `commands.worship.CmdPledge` | `src/integration_tests/pipeline/test_pledge_telnet_e2e.py`, `src/web/admin/tests/test_answer_builder.py`, `src/world/worship/tests/test_answers.py`, `src/world/worship/tests/test_pledges.py` (+1) |
 | `portal` |  | `commands.portals.CmdPortalAnchor` | `src/actions/tests/test_portals.py`, `src/commands/tests/test_portals_command.py`, `src/evennia_extensions/observability/tests/test_sentry_twisted.py`, `src/world/areas/tests/test_builder_views.py` (+1) |
 | `pose` | emote | `commands.evennia_overrides.communication.CmdPose` | `frontend/e2e/composer-escapes.spec.ts`, `frontend/e2e/feed-threshold.spec.ts`, `frontend/src/game/GamePage.test.tsx`, `frontend/src/game/components/CommandInput.test.tsx` (+18) |
 | `poses` |  | `commands.endorse.CmdPoses` | `frontend/src/game/components/CommandInput.test.tsx`, `frontend/src/home/__tests__/queries.test.ts`, `src/integration_tests/pipeline/test_endorsement_journey_e2e.py`, `src/integration_tests/test_playing_a_scene_journeys.py` (+1) |
@@ -801,14 +802,14 @@ surface that is dead, and the ledger (`tools/test_ledger.py`) decides which.
 | `station` |  | `commands.crafting_station.CmdLabStation` | `src/commands/tests/test_crafting_station.py`, `src/commands/tests/test_defenses.py` |
 | `steal` |  | `commands.currency.CmdSteal` | `frontend/src/inventory/components/__tests__/ItemFocusView.test.tsx`, `src/actions/tests/test_base.py`, `src/actions/tests/test_target_menu_api.py`, `src/actions/tests/test_typed_takeout_steal.py` (+2) |
 | `story` |  | `commands.story.CmdStory` | `frontend/src/world-builder/components/DigRoomDialog.test.tsx`, `frontend/src/world-builder/components/RoomDetailPanel.test.tsx`, `src/actions/tests/test_gm_npcs.py`, `src/commands/tests/test_deed_commands.py` (+28) |
-| `technique` |  | `commands.technique.CmdTechnique` | `src/actions/tests/test_get_player_actions_enhancements.py`, `src/actions/tests/test_gm_adjudication_actions.py`, `src/actions/tests/test_signature_actions.py`, `src/actions/tests/test_technique_authoring_action.py` (+30) |
+| `technique` |  | `commands.technique.CmdTechnique` | `src/actions/tests/test_get_player_actions_enhancements.py`, `src/actions/tests/test_signature_actions.py`, `src/actions/tests/test_technique_authoring_action.py`, `src/actions/tests/test_unified_player_actions.py` (+29) |
 | `tether` |  | `commands.social.soul_tether.CmdTether` | `src/commands/tests/test_sineater_dispatch.py`, `src/commands/tests/test_soul_tether_e2e.py`, `src/commands/tests/test_tether_dispatch.py`, `src/world/magic/tests/test_soul_tether_services.py` |
 | `threads` | thread | `commands.threads.CmdThreads` | `frontend/src/combat/__tests__/YourTurn.test.tsx`, `frontend/src/game/GamePage.test.tsx`, `frontend/src/game/components/CommandInput.test.tsx`, `frontend/src/game/components/ThreadedNarrativeReader.test.tsx` (+9) |
 | `tidings` |  | `commands.social.tidings.CmdTidings` | `frontend/src/components/folio/__tests__/CountChip.test.tsx`, `src/commands/tests/test_tidings_command.py` |
 | `time` | weather | `commands.weather.CmdTime` | `src/world/game_clock/tests/test_services.py`, `src/world/weather/tests/test_views.py` |
 | `train` |  | `commands.training.CmdTrain` | `src/commands/tests/test_progression_commands.py`, `src/commands/tests/test_training_command.py`, `src/world/magic/tests/test_technique_progress_views.py` |
 | `train_language` |  | `commands.language.CmdTrainLanguage` | `src/actions/tests/test_base.py` |
-| `training` |  | `commands.progression.CmdTraining` | `src/actions/tests/test_gm_adjudication_actions.py`, `src/actions/tests/test_language_actions.py`, `src/commands/tests/test_progression_commands.py`, `src/integration_tests/pipeline/test_durance_telnet_e2e.py` |
+| `training` |  | `commands.progression.CmdTraining` | `src/actions/tests/test_language_actions.py`, `src/commands/tests/test_progression_commands.py`, `src/integration_tests/pipeline/test_durance_telnet_e2e.py` |
 | `travel` |  | `commands.travel.CmdTravel` | `frontend/e2e/narrative-play-delivery.spec.ts`, `frontend/src/travel/queries.test.tsx`, `src/commands/tests/test_training_command.py`, `src/commands/tests/test_travel_command.py` (+1) |
 | `treat` |  | `commands.conditions.CmdTreatCondition` | `frontend/src/scenes/components/PersonaMenu.test.tsx`, `src/actions/tests/test_persona_menu.py`, `src/commands/tests/test_treat_command.py`, `src/commands/tests/test_treat_condition_e2e.py` (+1) |
 | `tt` | tabletalk | `commands.evennia_overrides.communication.CmdTabletalk` | `frontend/src/game/components/CommandInput.test.tsx`, `src/integration_tests/test_playing_a_scene_journeys.py`, `src/world/scenes/tests/test_interaction_filters.py`, `src/world/scenes/tests/test_target_reachability.py` (+1) |
@@ -868,7 +869,7 @@ surface that is dead, and the ledger (`tools/test_ledger.py`) decides which.
 | `characters/<int:character_id>/dispatch/` | `DispatchActionView` | `actions.urls` | `frontend/src/covenants/__tests__/api.groupStoryRequest.test.ts`, `frontend/src/covenants/__tests__/api.treasury.test.ts`, `frontend/src/game/api/__tests__/roomEditor.test.ts`, `frontend/src/game/components/PresencePanel.test.tsx` (+8) |
 | `characters/<int:character_id>/personas/<int:persona_id>/menu/` | `PersonaMenuView` | `actions.urls` | `src/actions/tests/test_persona_menu.py` |
 | `characters/<int:character_id>/<str:target_kind>/<int:target_id>/menu/` | `TargetMenuView` | `actions.urls` | none |
-| `catalog/` | `DslCatalogViewSet` | `flows.urls` | `frontend/e2e/atlas-one-way.spec.ts`, `frontend/e2e/atlas-region-map-4242.spec.ts`, `frontend/e2e/evidence/atlas-place-area-4084.spec.ts`, `frontend/e2e/ties.spec.ts` (+162) |
+| `catalog/` | `DslCatalogViewSet` | `flows.urls` | `frontend/e2e/atlas-one-way.spec.ts`, `frontend/e2e/atlas-region-map-4242.spec.ts`, `frontend/e2e/evidence/atlas-place-area-4084.spec.ts`, `frontend/e2e/ties.spec.ts` (+163) |
 | `flows/` | `FlowDefinitionViewSet` | `flows.urls` | `frontend/e2e/account-settings.spec.ts`, `frontend/e2e/feed-follow.spec.ts`, `frontend/e2e/feed-wrap.spec.ts`, `frontend/e2e/journals-reading-room.spec.ts` (+201) |
 | `trigger-definitions/` | `TriggerDefinitionViewSet` | `flows.urls` | `src/flows/tests/test_authoring_api.py`, `src/flows/tests/test_authoring_journey.py` |
 | `triggers/` | `TriggerViewSet` | `flows.urls` | `frontend/e2e/atlas-one-way.spec.ts`, `frontend/src/components/__tests__/Header.test.tsx`, `frontend/src/components/__tests__/RichTextInput.test.tsx`, `frontend/src/consent/__tests__/PrivacyPage.test.tsx` (+131) |
@@ -906,7 +907,7 @@ surface that is dead, and the ledger (`tools/test_ledger.py`) decides which.
 | `_tuning/simulation/` | `tuning_simulation_fragment` | `web.admin.urls` | none |
 | `_tuning/techniques/` | `tuning_techniques_fragment` | `web.admin.urls` | none |
 | `_tuning/capabilities/` | `tuning_capabilities_fragment` | `web.admin.urls` | none |
-| `_ops/` | `ops_dashboard` | `web.admin.urls` | `frontend/e2e/evidence/standoff-named-npc-4373.spec.ts`, `src/commands/tests/test_companion_command.py`, `src/commands/tests/test_crafting_station.py`, `src/commands/tests/test_defenses.py` (+24) |
+| `_ops/` | `ops_dashboard` | `web.admin.urls` | `frontend/e2e/evidence/standoff-named-npc-4373.spec.ts`, `src/commands/tests/test_companion_command.py`, `src/commands/tests/test_crafting_station.py`, `src/commands/tests/test_defenses.py` (+25) |
 | `_ops/required-content/` | `ops_required_content_fragment` | `web.admin.urls` | `frontend/e2e/evidence/standoff-named-npc-4373.spec.ts` |
 | `_ops/progression/` | `ops_progression_fragment` | `web.admin.urls` | none |
 | `_ops/economy/` | `ops_economy_fragment` | `web.admin.urls` | none |
@@ -938,7 +939,7 @@ surface that is dead, and the ledger (`tools/test_ledger.py`) decides which.
 | `_distinction_builder/pick/` | `distinction_builder_pick` | `web.admin.urls` | `src/web/admin/tests/test_authoring_builders_panel.py` |
 | `_distinction_builder/<int:pk>/` | `distinction_builder` | `web.admin.urls` | `src/web/admin/tests/test_answer_builder.py`, `src/web/admin/tests/test_authoring_builders_panel.py`, `src/web/admin/tests/test_being_service_builder.py`, `src/web/admin/tests/test_distinction_builder.py` (+9) |
 | `_distinction_builder/<int:pk>/review/` | `distinction_builder_review` | `web.admin.urls` | `src/web/admin/tests/test_distinction_builder.py` |
-| `_standoff_profile/<int:template_pk>/` | `standoff_profile` | `web.admin.urls` | `frontend/e2e/evidence/standoff-named-npc-4373.spec.ts`, `frontend/e2e/evidence/standoff-placement-4361.spec.ts`, `src/web/admin/tests/test_standoff_profile_builder.py` |
+| `_standoff_profile/<int:template_pk>/` | `standoff_profile` | `web.admin.urls` | `frontend/e2e/evidence/standoff-causes-4415.spec.ts`, `frontend/e2e/evidence/standoff-named-npc-4373.spec.ts`, `frontend/e2e/evidence/standoff-placement-4361.spec.ts`, `src/web/admin/tests/test_standoff_profile_builder.py` |
 | `_being_service/<int:being_pk>/` | `being_service` | `web.admin.urls` | `frontend/src/pantheon/__tests__/PantheonPages.test.tsx`, `src/web/admin/tests/test_answer_builder.py`, `src/web/admin/tests/test_being_service_builder.py` |
 | `_being_service/<int:being_pk>/review/` | `being_service_review` | `web.admin.urls` | `src/web/admin/tests/test_being_service_builder.py` |
 | `_being_answers/<int:being_pk>/` | `answer_builder` | `web.admin.urls` | `frontend/src/pantheon/__tests__/PantheonPages.test.tsx`, `src/web/admin/tests/test_answer_builder.py` |
@@ -955,7 +956,7 @@ surface that is dead, and the ledger (`tools/test_ledger.py`) decides which.
 | `` | `arx_admin_site` | `web.admin.urls` | none |
 | `backgrounds/` | `PageBackgroundListAPIView` | `web.api.urls` | `frontend/e2e/almanach-founder.spec.ts`, `frontend/e2e/evidence/almanach-3983.spec.ts`, `frontend/e2e/evidence/backgrounds-beats-4124.spec.ts`, `frontend/e2e/evidence/cg-pass1-4022.spec.ts` (+4) |
 | `arx1-archive/authorize/` | `Arx1ArchiveAuthorizeAPIView` | `web.api.urls` | none |
-| `user/` | `CurrentUserAPIView` | `web.api.urls` | `frontend/e2e/account-settings.spec.ts`, `frontend/e2e/almanach-founder.spec.ts`, `frontend/e2e/bulletin.spec.ts`, `frontend/e2e/era-admin.spec.ts` (+1050) |
+| `user/` | `CurrentUserAPIView` | `web.api.urls` | `frontend/e2e/account-settings.spec.ts`, `frontend/e2e/almanach-founder.spec.ts`, `frontend/e2e/bulletin.spec.ts`, `frontend/e2e/era-admin.spec.ts` (+1055) |
 | `account/security-settings/` | `AccountSecuritySettingsView` | `web.api.urls` | `src/web/api/tests/test_account_security_settings.py` |
 | `register/availability/` | `RegisterAvailabilityAPIView` | `web.api.urls` | none |
 | `auth/browser/v1/auth/logout` | `LogoutAPIView` | `web.api.urls` | none |
@@ -973,12 +974,12 @@ surface that is dead, and the ledger (`tools/test_ledger.py`) decides which.
 | `url-pattern` | `imported_python_view` | `web.webclient.urls` | none |
 | `url-pattern` | `imported_python_view` | `web.website.urls` | none |
 | `url-pattern` | `imported_python_view` | `web.website.urls` | none |
-| `achievements/` | `AchievementViewSet` | `world.achievements.urls` | `frontend/e2e/ties.spec.ts`, `frontend/src/character_sheets/components/sheet/__tests__/TiesPanel.test.tsx`, `frontend/src/roster/pages/CharacterSheetPage.test.tsx`, `src/actions/tests/test_gm_adjudication_actions.py` (+62) |
+| `achievements/` | `AchievementViewSet` | `world.achievements.urls` | `frontend/e2e/ties.spec.ts`, `frontend/src/character_sheets/components/sheet/__tests__/TiesPanel.test.tsx`, `frontend/src/roster/pages/CharacterSheetPage.test.tsx`, `src/commands/account/tests/test_sheet_sections.py` (+62) |
 | `character-achievements/` | `CharacterAchievementViewSet` | `world.achievements.urls` | `src/world/achievements/tests/test_views.py` |
 | `persona-titles/` | `PersonaTitleViewSet` | `world.achievements.urls` | `frontend/e2e/ties.spec.ts`, `src/world/achievements/tests/test_title_views.py` |
 | `<int:character_id>/` | `ActionPointPoolView` | `world.action_points.urls` | none |
 | `collect/` | `CollectFoodView` | `world.agriculture.urls` | `frontend/e2e/evidence/almanach-every-family-4239.spec.ts`, `frontend/e2e/evidence/backgrounds-beats-4124.spec.ts`, `frontend/src/almanach/__tests__/HouseDocument.test.tsx`, `frontend/src/almanach/__tests__/TitlePage.test.tsx` (+104) |
-| `rooms/` | `RoomProfileViewSet` | `world.areas.urls` | `frontend/e2e/atlas-one-way.spec.ts`, `frontend/e2e/atlas-region-map-4242.spec.ts`, `frontend/e2e/composer-commands.spec.ts`, `frontend/e2e/evidence/almanach-every-family-4239.spec.ts` (+511) |
+| `rooms/` | `RoomProfileViewSet` | `world.areas.urls` | `frontend/e2e/atlas-one-way.spec.ts`, `frontend/e2e/atlas-region-map-4242.spec.ts`, `frontend/e2e/composer-commands.spec.ts`, `frontend/e2e/evidence/almanach-every-family-4239.spec.ts` (+510) |
 | `/` | `AreaViewSet` | `world.areas.urls` | none |
 | `presence/` | `PresenceView` | `world.areas.urls` | `frontend/e2e/game-entry.spec.ts`, `frontend/e2e/selected-character-chip.spec.ts`, `frontend/src/character-creation/__tests__/AttributesStage.test.tsx`, `frontend/src/character-creation/__tests__/types.test.ts` (+96) |
 | `/` | `NPCAssetViewSet` | `world.assets.urls` | none |
@@ -996,7 +997,7 @@ surface that is dead, and the ledger (`tools/test_ledger.py`) decides which.
 | `decoration-templates/` | `DecorationTemplateViewSet` | `world.buildings.urls` | `src/world/buildings/tests/test_manager_api.py` |
 | `building-kinds/` | `BuildingKindViewSet` | `world.buildings.urls` | `src/world/buildings/tests/test_building_kinds_viewset.py` |
 | `architectural-styles/` | `ArchitecturalStyleViewSet` | `world.buildings.urls` | `src/world/buildings/tests/test_architectural_styles_viewset.py` |
-| `ceremonies/` | `CeremonyViewSet` | `world.ceremonies.urls` | `frontend/e2e/evidence/codex-companion-4198.spec.ts`, `src/actions/tests/test_base.py`, `src/actions/tests/test_ceremony_actions.py`, `src/commands/tests/test_ceremony_command.py` (+18) |
+| `ceremonies/` | `CeremonyViewSet` | `world.ceremonies.urls` | `frontend/e2e/evidence/codex-companion-4198.spec.ts`, `src/actions/tests/test_base.py`, `src/actions/tests/test_ceremony_actions.py`, `src/commands/tests/test_ceremony_command.py` (+19) |
 | `seance-offers/` | `SeanceOfferViewSet` | `world.ceremonies.urls` | `src/world/ceremonies/tests/test_api.py` |
 | `conversion-offers/` | `ConversionOfferViewSet` | `world.ceremonies.urls` | `src/world/ceremonies/tests/test_api.py` |
 | `starting-areas/` | `StartingAreaViewSet` | `world.character_creation.urls` | `frontend/e2e/evidence/cg-pass1-4022.spec.ts`, `frontend/e2e/evidence/cg-realm-tag-4078.spec.ts`, `frontend/src/character-creation/__tests__/queries.test.tsx`, `src/world/character_creation/tests/test_public_reads.py` (+1) |
@@ -1051,9 +1052,9 @@ surface that is dead, and the ledger (`tools/test_ledger.py`) decides which.
 | `categories/` | `ConditionCategoryViewSet` | `world.conditions.urls` | `frontend/e2e/evidence/codex-companion-4198.spec.ts`, `frontend/e2e/evidence/codex-restricted-4191.spec.ts`, `frontend/src/character-creation/__tests__/AttributesStage.test.tsx`, `frontend/src/combat/__tests__/YourTurn.test.tsx` (+59) |
 | `capabilities/` | `CapabilityTypeViewSet` | `world.conditions.urls` | `frontend/src/covenants/__tests__/CovenantDetailPage.test.tsx`, `frontend/src/covenants/components/__tests__/PromoteRoleDialog.test.tsx`, `src/integration_tests/pipeline/test_battle_staging_telnet_e2e.py`, `src/integration_tests/pipeline/test_challenge_pipeline.py` (+34) |
 | `damage-types/` | `DamageTypeViewSet` | `world.conditions.urls` | none |
-| `templates/` | `ConditionTemplateViewSet` | `world.conditions.urls` | `frontend/e2e/almanach-founder.spec.ts`, `frontend/e2e/evidence/almanach-3983.spec.ts`, `frontend/e2e/evidence/almanach-every-family-4239.spec.ts`, `frontend/e2e/evidence/backgrounds-beats-4124.spec.ts` (+172) |
-| `character/` | `CharacterConditionsViewSet` | `world.conditions.urls` | `frontend/e2e/account-settings.spec.ts`, `frontend/e2e/almanach-founder.spec.ts`, `frontend/e2e/atlas-one-way.spec.ts`, `frontend/e2e/atlas-region-map-4242.spec.ts` (+2373) |
-| `instances/` | `ConditionInstanceViewSet` | `world.conditions.urls` | `frontend/src/areas/components/TacticalMap.test.tsx`, `frontend/src/game/playPreferences.test.ts`, `frontend/src/hooks/useGameSocket.test.ts`, `frontend/src/missions/__tests__/queries.test.tsx` (+189) |
+| `templates/` | `ConditionTemplateViewSet` | `world.conditions.urls` | `frontend/e2e/almanach-founder.spec.ts`, `frontend/e2e/evidence/almanach-3983.spec.ts`, `frontend/e2e/evidence/almanach-every-family-4239.spec.ts`, `frontend/e2e/evidence/backgrounds-beats-4124.spec.ts` (+173) |
+| `character/` | `CharacterConditionsViewSet` | `world.conditions.urls` | `frontend/e2e/account-settings.spec.ts`, `frontend/e2e/almanach-founder.spec.ts`, `frontend/e2e/atlas-one-way.spec.ts`, `frontend/e2e/atlas-region-map-4242.spec.ts` (+2376) |
+| `instances/` | `ConditionInstanceViewSet` | `world.conditions.urls` | `frontend/src/areas/components/TacticalMap.test.tsx`, `frontend/src/game/playPreferences.test.ts`, `frontend/src/hooks/useGameSocket.test.ts`, `frontend/src/missions/__tests__/queries.test.tsx` (+188) |
 | `treatments/` | `TreatmentCandidateViewSet` | `world.conditions.urls` | `frontend/src/conditions/components/TreatActionPanel.test.tsx`, `frontend/src/magic/components/SpellbookTab.test.tsx`, `frontend/src/scenes/components/ActionPanel.test.tsx`, `frontend/src/scenes/components/__tests__/EntranceTechniqueAttachment.test.tsx` (+12) |
 | `categories/` | `SocialConsentCategoryViewSet` | `world.consent.urls` | `frontend/e2e/evidence/codex-companion-4198.spec.ts`, `frontend/e2e/evidence/codex-restricted-4191.spec.ts`, `frontend/src/character-creation/__tests__/AttributesStage.test.tsx`, `frontend/src/combat/__tests__/YourTurn.test.tsx` (+59) |
 | `preferences/` | `SocialConsentPreferenceViewSet` | `world.consent.urls` | `frontend/src/consent/__tests__/queries.test.ts`, `frontend/src/game/GamePage.test.tsx`, `frontend/src/game/components/DisplaySettings.test.tsx`, `frontend/src/game/playPreferences.test.ts` (+3) |
@@ -1065,8 +1066,8 @@ surface that is dead, and the ledger (`tools/test_ledger.py`) decides which.
 | `covenants/` | `CovenantViewSet` | `world.covenants.urls` | `frontend/e2e/evidence/backgrounds-beats-4124.spec.ts`, `frontend/e2e/evidence/family-kin-4210.spec.ts`, `frontend/e2e/evidence/sheet-gallery-4151.spec.ts`, `frontend/e2e/evidence/sheet-goals-and-favor-4106.spec.ts` (+239) |
 | `roles/` | `CovenantRoleViewSet` | `world.covenants.urls` | `frontend/e2e/atlas-one-way.spec.ts`, `frontend/e2e/evidence/atlas-place-area-4084.spec.ts`, `frontend/e2e/evidence/staff-group-fit-4229.spec.ts`, `frontend/src/character_sheets/components/sheet/__tests__/StaffEdit.test.tsx` (+86) |
 | `level-thresholds/` | `CovenantLevelThresholdViewSet` | `world.covenants.urls` | `src/world/covenants/tests/test_views.py` |
-| `rites/` | `CovenantRiteViewSet` | `world.covenants.urls` | `frontend/e2e/evidence/backgrounds-beats-4124.spec.ts`, `frontend/e2e/evidence/house-observances-4206.spec.ts`, `frontend/e2e/evidence/staff-estate-4226.spec.ts`, `frontend/e2e/evidence/staff-group-fit-4229.spec.ts` (+263) |
-| `ranks/` | `CovenantRankViewSet` | `world.covenants.urls` | `frontend/e2e/evidence/house-observances-4206.spec.ts`, `frontend/e2e/evidence/staff-group-fit-4229.spec.ts`, `frontend/src/character_sheets/components/sheet/__tests__/StaffEdit.test.tsx`, `frontend/src/covenants/__tests__/CovenantDetailPage.test.tsx` (+61) |
+| `rites/` | `CovenantRiteViewSet` | `world.covenants.urls` | `frontend/e2e/evidence/backgrounds-beats-4124.spec.ts`, `frontend/e2e/evidence/house-observances-4206.spec.ts`, `frontend/e2e/evidence/staff-estate-4226.spec.ts`, `frontend/e2e/evidence/staff-group-fit-4229.spec.ts` (+267) |
+| `ranks/` | `CovenantRankViewSet` | `world.covenants.urls` | `frontend/e2e/evidence/house-observances-4206.spec.ts`, `frontend/e2e/evidence/staff-group-fit-4229.spec.ts`, `frontend/src/character_sheets/components/sheet/__tests__/StaffEdit.test.tsx`, `frontend/src/covenants/__tests__/CovenantDetailPage.test.tsx` (+62) |
 | `org-books/` | `OrgBooksViewSet` | `world.currency.urls` | `src/world/currency/tests/test_views.py` |
 | `purse/<int:character_id>/` | `CharacterPurseView` | `world.currency.urls` | none |
 | `categories/` | `DistinctionCategoryViewSet` | `world.distinctions.urls` | `frontend/e2e/evidence/codex-companion-4198.spec.ts`, `frontend/e2e/evidence/codex-restricted-4191.spec.ts`, `frontend/src/character-creation/__tests__/AttributesStage.test.tsx`, `frontend/src/combat/__tests__/YourTurn.test.tsx` (+59) |
@@ -1075,7 +1076,7 @@ surface that is dead, and the ledger (`tools/test_ledger.py`) decides which.
 | `drafts/<int:draft_id>/distinctions/<int:pk>/` | `DraftDistinctionViewSet` | `world.distinctions.urls` | `src/world/distinctions/tests/test_views.py` |
 | `drafts/<int:draft_id>/distinctions/swap/` | `DraftDistinctionViewSet` | `world.distinctions.urls` | `src/world/distinctions/tests/test_views.py` |
 | `drafts/<int:draft_id>/distinctions/sync/` | `DraftDistinctionViewSet` | `world.distinctions.urls` | `src/world/distinctions/tests/test_views.py` |
-| `next/` | `NextDowntimeView` | `world.downtime.urls` | `frontend/e2e/almanach-founder.spec.ts`, `frontend/e2e/atlas-one-way.spec.ts`, `frontend/e2e/atlas-region-map-4242.spec.ts`, `frontend/e2e/evidence/almanach-3983.spec.ts` (+530) |
+| `next/` | `NextDowntimeView` | `world.downtime.urls` | `frontend/e2e/almanach-founder.spec.ts`, `frontend/e2e/atlas-one-way.spec.ts`, `frontend/e2e/atlas-region-map-4242.spec.ts`, `frontend/e2e/evidence/almanach-3983.spec.ts` (+533) |
 | `<int:character_id>/` | `CharacterDreamStateView` | `world.dreams.urls` | `src/world/dreams/tests/test_dream_api.py` |
 | `wills/` | `WillViewSet` | `world.estates.urls` | `src/world/estates/tests/test_api.py` |
 | `bequests/` | `BequestViewSet` | `world.estates.urls` | `frontend/src/estates/__tests__/AgreementsPanel.test.tsx`, `src/world/estates/tests/test_api.py`, `src/world/estates/tests/test_settlement.py`, `src/world/items/tests/test_held_by_nobody.py` |
@@ -1086,21 +1087,21 @@ surface that is dead, and the ledger (`tools/test_ledger.py`) decides which.
 | `organizations/` | `OrganizationSearchViewSet` | `world.events.urls` | `frontend/e2e/evidence/facet-picker-4197.spec.ts`, `frontend/e2e/evidence/house-observances-4206.spec.ts`, `frontend/e2e/evidence/staff-estate-4226.spec.ts`, `frontend/e2e/evidence/staff-group-fit-4229.spec.ts` (+30) |
 | `societies/` | `SocietySearchViewSet` | `world.events.urls` | `frontend/e2e/atlas-one-way.spec.ts`, `frontend/e2e/evidence/atlas-place-area-4084.spec.ts`, `frontend/e2e/evidence/house-observances-4206.spec.ts`, `frontend/src/home/hall/__tests__/AttentionBand.test.tsx` (+375) |
 | `/` | `EventViewSet` | `world.events.urls` | none |
-| `rest/` | `RestView` | `world.fatigue.urls` | `frontend/e2e/account-settings.spec.ts`, `frontend/e2e/almanach-founder.spec.ts`, `frontend/e2e/atlas-one-way.spec.ts`, `frontend/e2e/atlas-region-map-4242.spec.ts` (+807) |
-| `traits/` | `FormTraitViewSet` | `world.forms.urls` | `frontend/e2e/evidence/backgrounds-beats-4124.spec.ts`, `frontend/e2e/evidence/family-kin-4210.spec.ts`, `frontend/e2e/evidence/sheet-gallery-4151.spec.ts`, `frontend/e2e/evidence/sheet-goals-and-favor-4106.spec.ts` (+471) |
+| `rest/` | `RestView` | `world.fatigue.urls` | `frontend/e2e/account-settings.spec.ts`, `frontend/e2e/almanach-founder.spec.ts`, `frontend/e2e/atlas-one-way.spec.ts`, `frontend/e2e/atlas-region-map-4242.spec.ts` (+810) |
+| `traits/` | `FormTraitViewSet` | `world.forms.urls` | `frontend/e2e/evidence/backgrounds-beats-4124.spec.ts`, `frontend/e2e/evidence/family-kin-4210.spec.ts`, `frontend/e2e/evidence/sheet-gallery-4151.spec.ts`, `frontend/e2e/evidence/sheet-goals-and-favor-4106.spec.ts` (+470) |
 | `character-forms/` | `CharacterFormViewSet` | `world.forms.urls` | none |
 | `height-bands/` | `HeightBandViewSet` | `world.forms.urls` | none |
-| `builds/` | `BuildViewSet` | `world.forms.urls` | `frontend/e2e/evidence/codex-companion-4198.spec.ts`, `frontend/e2e/stories-author.spec.ts`, `frontend/e2e/stories-player.spec.ts`, `frontend/src/combat/components/CombatTacticalMap.test.tsx` (+80) |
+| `builds/` | `BuildViewSet` | `world.forms.urls` | `frontend/e2e/evidence/codex-companion-4198.spec.ts`, `frontend/e2e/stories-author.spec.ts`, `frontend/e2e/stories-player.spec.ts`, `frontend/src/combat/components/CombatTacticalMap.test.tsx` (+81) |
 | `alternate-selves/` | `AlternateSelfViewSet` | `world.forms.urls` | `src/world/forms/tests/test_views.py` |
 | `` | `clock_state` | `world.game_clock.urls` | none |
 | `convert/` | `clock_convert` | `world.game_clock.urls` | `frontend/e2e/feed-notes.spec.ts`, `frontend/src/flows-builder/__tests__/filterTree.test.ts`, `frontend/src/hooks/__tests__/parseGameMessage.test.ts`, `frontend/src/missions/__tests__/computeLayout.test.ts` (+37) |
 | `adjust/` | `clock_adjust` | `world.game_clock.urls` | `src/commands/tests/test_setsituation_command.py`, `src/integration_tests/test_faces_silences_and_the_floor_journeys.py`, `src/integration_tests/test_staging_a_situation_journeys.py`, `src/world/combat/tests/test_begin_declaration_bond_dissolution.py` (+22) |
-| `ratio/` | `clock_ratio` | `world.game_clock.urls` | `frontend/e2e/account-settings.spec.ts`, `frontend/e2e/bulletin.spec.ts`, `frontend/e2e/era-admin.spec.ts`, `frontend/e2e/evidence/family-page-4209.spec.ts` (+804) |
+| `ratio/` | `clock_ratio` | `world.game_clock.urls` | `frontend/e2e/account-settings.spec.ts`, `frontend/e2e/bulletin.spec.ts`, `frontend/e2e/era-admin.spec.ts`, `frontend/e2e/evidence/family-page-4209.spec.ts` (+808) |
 | `pause/` | `clock_pause` | `world.game_clock.urls` | `frontend/src/battles/components/BattleActionPanel.test.tsx`, `frontend/src/battles/components/StagingPanel.test.tsx`, `frontend/src/battles/components/__tests__/BattleMapCanvas.test.tsx`, `frontend/src/battles/pages/BattleWriteupPage.test.tsx` (+58) |
 | `unpause/` | `clock_unpause` | `world.game_clock.urls` | `src/actions/tests/test_gm_combat_actions.py`, `src/world/game_clock/tests/test_scripts.py`, `src/world/game_clock/tests/test_services.py`, `src/world/game_clock/tests/test_views.py` (+3) |
 | `applications/` | `GMApplicationViewSet` | `world.gm.urls` | `frontend/e2e/almanach-founder.spec.ts`, `frontend/e2e/evidence/almanach-3983.spec.ts`, `frontend/e2e/evidence/almanach-every-family-4239.spec.ts`, `frontend/e2e/evidence/backgrounds-beats-4124.spec.ts` (+85) |
 | `profiles/` | `GMProfileViewSet` | `world.gm.urls` | `frontend/e2e/evidence/staff-estate-4226.spec.ts`, `frontend/e2e/evidence/staff-group-fit-4229.spec.ts`, `frontend/src/character_sheets/components/sheet/__tests__/StaffEdit.test.tsx`, `frontend/src/stories/__tests__/ChangeMyGMDialog.test.tsx` (+35) |
-| `tables/` | `GMTableViewSet` | `world.gm.urls` | `frontend/e2e/almanach-founder.spec.ts`, `frontend/e2e/bulletin.spec.ts`, `frontend/e2e/evidence/backgrounds-beats-4124.spec.ts`, `frontend/e2e/evidence/cg-parentage-4024.spec.ts` (+87) |
+| `tables/` | `GMTableViewSet` | `world.gm.urls` | `frontend/e2e/almanach-founder.spec.ts`, `frontend/e2e/bulletin.spec.ts`, `frontend/e2e/evidence/backgrounds-beats-4124.spec.ts`, `frontend/e2e/evidence/cg-parentage-4024.spec.ts` (+88) |
 | `table-memberships/` | `GMTableMembershipViewSet` | `world.gm.urls` | none |
 | `invites/` | `GMRosterInviteViewSet` | `world.gm.urls` | `frontend/e2e/evidence/gming-nav-4188.spec.ts`, `frontend/src/crossover/__tests__/CrossoverInboxPage.test.tsx`, `frontend/src/estates/__tests__/AgreementsPanel.test.tsx`, `frontend/src/missions/__tests__/InviteFlow.test.tsx` (+28) |
 | `catalog-suggestions/` | `CatalogSuggestionViewSet` | `world.gm.urls` | `src/world/gm/tests/test_catalog_views.py` |
@@ -1108,10 +1109,10 @@ surface that is dead, and the ledger (`tools/test_ledger.py`) decides which.
 | `my-story-grants/` | `MyStoryGrantsViewSet` | `world.gm.urls` | `src/world/gm/tests/test_story_views.py` |
 | `table-update-requests/` | `TableUpdateRequestViewSet` | `world.gm.urls` | `src/world/gm/tests/test_table_update_request_api.py` |
 | `summon-offers/` | `GMSummonOfferViewSet` | `world.gm.urls` | `src/world/gm/tests/test_summon_offer_views.py` |
-| `prompts/` | `GMPromptViewSet` | `world.gm.urls` | `frontend/src/character-creation/__tests__/components/HeritageStage.test.tsx`, `frontend/src/character-creation/__tests__/components/LineageStage.test.tsx`, `frontend/src/combat/standoff/__tests__/GMStandoffPanel.test.tsx`, `frontend/src/friends/__tests__/FriendsTab.test.tsx` (+37) |
+| `prompts/` | `GMPromptViewSet` | `world.gm.urls` | `frontend/e2e/evidence/standoff-causes-4415.spec.ts`, `frontend/e2e/evidence/standoff-causes-4415b.spec.ts`, `frontend/src/character-creation/__tests__/components/HeritageStage.test.tsx`, `frontend/src/character-creation/__tests__/components/LineageStage.test.tsx` (+43) |
 | `prompt-filters/` | `GMPromptFilterViewSet` | `world.gm.urls` | `frontend/e2e/evidence/gming-nav-4188.spec.ts`, `frontend/src/stories/__tests__/GMPromptFilterCard.test.tsx`, `src/world/gm/tests/test_prompt_api.py` |
 | `invites/claim/` | `GMInviteClaimView` | `world.gm.urls` | `frontend/src/tables/__tests__/ClaimInvitePage.test.tsx`, `src/world/gm/tests/test_invite_views.py`, `src/world/roster/tests/test_invite_views.py` |
-| `discovery/` | `DiscoveryView` | `world.gm.urls` | `frontend/src/character_sheets/components/sheet/__tests__/EstateDomains.test.tsx`, `frontend/src/conditions/components/TreatActionPanel.test.tsx`, `src/actions/tests/test_gm_adjudication_actions.py`, `src/actions/tests/test_identification.py` (+65) |
+| `discovery/` | `DiscoveryView` | `world.gm.urls` | `frontend/src/character_sheets/components/sheet/__tests__/EstateDomains.test.tsx`, `frontend/src/conditions/components/TreatActionPanel.test.tsx`, `src/actions/tests/test_identification.py`, `src/core/tests/test_managers.py` (+64) |
 | `queue/` | `GMApplicationQueueView` | `world.gm.urls` | `frontend/e2e/evidence/gming-nav-4188.spec.ts`, `frontend/e2e/stories-gm.spec.ts`, `frontend/src/battles/components/__tests__/BattleMapCanvas.test.tsx`, `frontend/src/components/__tests__/Header.test.tsx` (+61) |
 | `queue/<int:pk>/<str:action>/` | `GMApplicationActionView` | `world.gm.urls` | `src/world/gm/tests/test_queue_views.py` |
 | `demand-ransom/` | `DemandRansomView` | `world.gm.urls` | `src/world/captivity/tests/test_ransom_project.py` |
@@ -1125,12 +1126,12 @@ surface that is dead, and the ledger (`tools/test_ledger.py`) decides which.
 | `journals/public/` | `GoalJournalViewSet` | `world.goals.urls` | `src/web/tests/test_url_imports.py`, `src/world/goals/tests/test_offscreen_gate_web.py`, `src/world/goals/tests/test_views.py` |
 | `quality-tiers/` | `QualityTierViewSet` | `world.items.urls` | `frontend/e2e/target-menu-approved-states.spec.ts`, `frontend/e2e/target-menu-worn-row.spec.ts`, `frontend/src/inventory/components/__tests__/AttachFacetDialog.test.tsx`, `src/world/items/tests/test_views.py` |
 | `makeover-requests/` | `MakeoverConsentRequestViewSet` | `world.items.urls` | `frontend/src/inventory/components/__tests__/MakeoverAskNotifier.test.tsx`, `src/world/items/tests/test_makeover_request_api.py` |
-| `styles/` | `StyleViewSet` | `world.items.urls` | `frontend/e2e/evidence/almanach-every-family-4239.spec.ts`, `frontend/e2e/evidence/family-kin-4210.spec.ts`, `frontend/e2e/evidence/family-page-4209.spec.ts`, `frontend/e2e/feed-notes-display-settings.spec.ts` (+53) |
+| `styles/` | `StyleViewSet` | `world.items.urls` | `frontend/e2e/evidence/almanach-every-family-4239.spec.ts`, `frontend/e2e/evidence/family-kin-4210.spec.ts`, `frontend/e2e/evidence/family-page-4209.spec.ts`, `frontend/e2e/feed-notes-display-settings.spec.ts` (+54) |
 | `market-squares/` | `MarketSquareViewSet` | `world.items.urls` | `src/world/items/market/tests/test_regard_gating.py` |
 | `service-offers/` | `ServiceOfferViewSet` | `world.items.urls` | `src/world/items/market/tests/test_regard_gating.py` |
 | `interaction-types/` | `InteractionTypeViewSet` | `world.items.urls` | `src/world/items/tests/test_views.py` |
 | `reclamation-claims/` | `ReclamationClaimViewSet` | `world.items.urls` | `src/world/items/tests/test_reclamation.py` |
-| `templates/` | `ItemTemplateViewSet` | `world.items.urls` | `frontend/e2e/almanach-founder.spec.ts`, `frontend/e2e/evidence/almanach-3983.spec.ts`, `frontend/e2e/evidence/almanach-every-family-4239.spec.ts`, `frontend/e2e/evidence/backgrounds-beats-4124.spec.ts` (+172) |
+| `templates/` | `ItemTemplateViewSet` | `world.items.urls` | `frontend/e2e/almanach-founder.spec.ts`, `frontend/e2e/evidence/almanach-3983.spec.ts`, `frontend/e2e/evidence/almanach-every-family-4239.spec.ts`, `frontend/e2e/evidence/backgrounds-beats-4124.spec.ts` (+173) |
 | `item-facets/` | `ItemFacetViewSet` | `world.items.urls` | `frontend/e2e/target-menu-approved-states.spec.ts`, `frontend/e2e/target-menu-worn-row.spec.ts`, `frontend/src/inventory/components/__tests__/AttachFacetDialog.test.tsx`, `src/world/items/tests/test_crafting_api.py` (+2) |
 | `item-styles/` | `ItemStyleCraftViewSet` | `world.items.urls` | `src/world/items/tests/test_crafting_api.py`, `src/world/items/tests/test_style_crafting.py` |
 | `gem-cuts/` | `GemCutViewSet` | `world.items.urls` | `src/world/items/tests/test_crafting_api.py`, `src/world/items/tests/test_destroy_paths_round3.py` |
@@ -1161,11 +1162,11 @@ surface that is dead, and the ledger (`tools/test_ledger.py`) decides which.
 | `cases/trial/` | `InitiateTrialView` | `world.justice.urls` | none |
 | `comfort/` | `comfort_summary` | `world.locations.urls` | `frontend/e2e/atlas-one-way.spec.ts`, `frontend/src/actions/__tests__/ActionDeclarationCard.test.tsx`, `frontend/src/game/components/ThreadedNarrativeReader.test.tsx`, `frontend/src/hooks/__tests__/handleRoomStatePayload.test.ts` (+21) |
 | `portal-destinations/` | `portal_destinations` | `world.locations.urls` | `src/world/locations/tests/test_portal_destinations_views.py`, `src/world/magic/tests/test_portal_travel.py` |
-| `styles/` | `TechniqueStyleViewSet` | `world.magic.urls` | `frontend/e2e/evidence/almanach-every-family-4239.spec.ts`, `frontend/e2e/evidence/family-kin-4210.spec.ts`, `frontend/e2e/evidence/family-page-4209.spec.ts`, `frontend/e2e/feed-notes-display-settings.spec.ts` (+52) |
+| `styles/` | `TechniqueStyleViewSet` | `world.magic.urls` | `frontend/e2e/evidence/almanach-every-family-4239.spec.ts`, `frontend/e2e/evidence/family-kin-4210.spec.ts`, `frontend/e2e/evidence/family-page-4209.spec.ts`, `frontend/e2e/feed-notes-display-settings.spec.ts` (+53) |
 | `effect-types/` | `EffectTypeViewSet` | `world.magic.urls` | `src/world/magic/tests/test_views.py` |
 | `consequence-pool-catalog/` | `ConsequencePoolCatalogViewSet` | `world.magic.urls` | `src/world/magic/tests/test_views.py` |
 | `restrictions/` | `RestrictionViewSet` | `world.magic.urls` | `src/core_management/tests/test_content_export.py`, `src/core_management/tests/test_content_fixtures.py`, `src/web/admin/tests/test_authoring_relations.py`, `src/world/items/tests/test_outfit_views.py` (+6) |
-| `facets/` | `FacetViewSet` | `world.magic.urls` | `frontend/e2e/evidence/facet-picker-4197.spec.ts`, `frontend/e2e/pantheon.spec.ts`, `frontend/e2e/target-menu-approved-states.spec.ts`, `frontend/e2e/target-menu-worn-row.spec.ts` (+40) |
+| `facets/` | `FacetViewSet` | `world.magic.urls` | `frontend/e2e/evidence/facet-picker-4197.spec.ts`, `frontend/e2e/pantheon.spec.ts`, `frontend/e2e/target-menu-approved-states.spec.ts`, `frontend/e2e/target-menu-worn-row.spec.ts` (+42) |
 | `gifts/` | `GiftViewSet` | `world.magic.urls` | `frontend/src/character_sheets/components/sheet/__tests__/StaffEdit.test.tsx`, `frontend/src/magic/components/SpellbookTab.test.tsx`, `src/commands/tests/test_companion_command.py`, `src/core_management/tests/test_content_health.py` (+29) |
 | `techniques/` | `TechniqueViewSet` | `world.magic.urls` | `frontend/e2e/persona-menu.spec.ts`, `frontend/src/actions/__tests__/ActionDeclarationCard.test.tsx`, `frontend/src/character-creation/__tests__/components/GiftStage.test.tsx`, `frontend/src/character-creation/__tests__/components/gift/PersonalizationPanel.race.test.tsx` (+195) |
 | `character-auras/` | `CharacterAuraViewSet` | `world.magic.urls` | `src/world/magic/tests/test_glimpse_api.py` |
@@ -1188,7 +1189,7 @@ surface that is dead, and the ledger (`tools/test_ledger.py`) decides which.
 | `signatures/` | `SignatureViewSet` | `world.magic.urls` | `src/typeclasses/tests/test_cmdset_updates.py`, `src/typeclasses/tests/test_login_entry.py`, `src/world/character_sheets/tests/test_sheet_personalization.py`, `src/world/character_sheets/tests/test_viewset.py` (+3) |
 | `motif-styles/` | `MotifStyleViewSet` | `world.magic.urls` | `frontend/src/magic/__tests__/queries.test.tsx`, `src/world/magic/tests/test_motif_style_views.py`, `src/world/magic/tests/test_technique_progress_views.py` |
 | `technique-progress/` | `TechniqueProgressViewSet` | `world.magic.urls` | `frontend/src/magic/__tests__/queries.test.tsx`, `frontend/src/magic/components/TechniqueProgressPanel.test.tsx`, `src/world/magic/tests/test_technique_progress_config.py`, `src/world/magic/tests/test_technique_progress_views.py` |
-| `progression/` | `MagicProgressionView` | `world.magic.urls` | `frontend/e2e/journals-reading-room.spec.ts`, `frontend/src/components/__tests__/Header.test.tsx`, `frontend/src/components/__tests__/NominateButton.test.tsx`, `frontend/src/hooks/__tests__/handleKudosReceivedPayload.test.ts` (+253) |
+| `progression/` | `MagicProgressionView` | `world.magic.urls` | `frontend/e2e/journals-reading-room.spec.ts`, `frontend/src/components/__tests__/Header.test.tsx`, `frontend/src/components/__tests__/NominateButton.test.tsx`, `frontend/src/hooks/__tests__/handleKudosReceivedPayload.test.ts` (+252) |
 | `applicable-pulls/` | `ApplicablePullsView` | `world.magic.urls` | `src/world/magic/tests/test_pull_applicability.py` |
 | `thread-hub-summary/` | `ThreadHubSummaryView` | `world.magic.urls` | `frontend/src/magic/__tests__/queries.test.tsx`, `src/world/magic/tests/test_thread_hub_summary_view.py` |
 | `thread-pull-preview/` | `ThreadPullPreviewView` | `world.magic.urls` | `src/world/magic/tests/test_api.py` |
@@ -1232,14 +1233,14 @@ surface that is dead, and the ledger (`tools/test_ledger.py`) decides which.
 | `challenge-instances/` | `ChallengeInstanceViewSet` | `world.mechanics.urls` | `src/world/mechanics/tests/test_api.py` |
 | `situation-templates/` | `SituationTemplateViewSet` | `world.mechanics.urls` | `src/world/mechanics/tests/test_api.py` |
 | `situation-instances/` | `SituationInstanceViewSet` | `world.mechanics.urls` | `src/world/mechanics/tests/test_api.py` |
-| `templates/` | `MissionTemplateViewSet` | `world.missions.urls` | `frontend/e2e/almanach-founder.spec.ts`, `frontend/e2e/evidence/almanach-3983.spec.ts`, `frontend/e2e/evidence/almanach-every-family-4239.spec.ts`, `frontend/e2e/evidence/backgrounds-beats-4124.spec.ts` (+172) |
+| `templates/` | `MissionTemplateViewSet` | `world.missions.urls` | `frontend/e2e/almanach-founder.spec.ts`, `frontend/e2e/evidence/almanach-3983.spec.ts`, `frontend/e2e/evidence/almanach-every-family-4239.spec.ts`, `frontend/e2e/evidence/backgrounds-beats-4124.spec.ts` (+173) |
 | `nodes/` | `MissionNodeViewSet` | `world.missions.urls` | `frontend/e2e/evidence/almanach-every-family-4239.spec.ts`, `frontend/e2e/evidence/backgrounds-beats-4124.spec.ts`, `frontend/e2e/evidence/family-kin-4210.spec.ts`, `frontend/e2e/evidence/family-page-4209.spec.ts` (+62) |
-| `options/` | `MissionOptionViewSet` | `world.missions.urls` | `frontend/e2e/account-settings.spec.ts`, `frontend/e2e/atlas-one-way.spec.ts`, `frontend/e2e/evidence/almanach-3983.spec.ts`, `frontend/e2e/evidence/atlas-place-area-4084.spec.ts` (+175) |
+| `options/` | `MissionOptionViewSet` | `world.missions.urls` | `frontend/e2e/account-settings.spec.ts`, `frontend/e2e/atlas-one-way.spec.ts`, `frontend/e2e/evidence/almanach-3983.spec.ts`, `frontend/e2e/evidence/atlas-place-area-4084.spec.ts` (+180) |
 | `routes/` | `MissionOptionRouteViewSet` | `world.missions.urls` | `frontend/e2e/account-settings.spec.ts`, `frontend/e2e/bulletin.spec.ts`, `frontend/e2e/era-admin.spec.ts`, `frontend/e2e/evidence/almanach-3983.spec.ts` (+132) |
 | `route-candidates/` | `MissionOptionRouteCandidateViewSet` | `world.missions.urls` | `src/world/missions/tests/test_api_editor_crud.py`, `src/world/missions/tests/test_scenario_authoring_permissions.py` |
 | `route-rewards/` | `MissionOptionRouteRewardViewSet` | `world.missions.urls` | `src/world/missions/tests/test_api_editor_crud.py`, `src/world/missions/tests/test_scenario_authoring_permissions.py` |
 | `givers/` | `MissionGiverViewSet` | `world.missions.urls` | `frontend/src/game/components/room-panel/NpcGiversBlock.test.tsx`, `frontend/src/hooks/__tests__/handleRoomStatePayload.test.ts`, `src/flows/tests/test_room_state_serializer.py`, `src/world/missions/tests/test_api_givers.py` (+4) |
-| `instances/` | `MissionInstanceViewSet` | `world.missions.urls` | `frontend/src/areas/components/TacticalMap.test.tsx`, `frontend/src/game/playPreferences.test.ts`, `frontend/src/hooks/useGameSocket.test.ts`, `frontend/src/missions/__tests__/queries.test.tsx` (+189) |
+| `instances/` | `MissionInstanceViewSet` | `world.missions.urls` | `frontend/src/areas/components/TacticalMap.test.tsx`, `frontend/src/game/playPreferences.test.ts`, `frontend/src/hooks/useGameSocket.test.ts`, `frontend/src/missions/__tests__/queries.test.tsx` (+188) |
 | `categories/` | `MissionCategoryViewSet` | `world.missions.urls` | `frontend/e2e/evidence/codex-companion-4198.spec.ts`, `frontend/e2e/evidence/codex-restricted-4191.spec.ts`, `frontend/src/character-creation/__tests__/AttributesStage.test.tsx`, `frontend/src/combat/__tests__/YourTurn.test.tsx` (+59) |
 | `predicate-leaves/` | `PredicateLeafCatalogViewSet` | `world.missions.urls` | `frontend/src/missions/__tests__/queries.test.tsx`, `src/world/missions/tests/test_api_predicate_leaves.py` |
 | `journal/` | `MissionJournalViewSet` | `world.missions.urls` | `frontend/e2e/evidence/backgrounds-beats-4124.spec.ts`, `frontend/e2e/evidence/cg-parentage-4024.spec.ts`, `frontend/e2e/evidence/facet-picker-4197.spec.ts`, `frontend/e2e/evidence/family-kin-4210.spec.ts` (+79) |
@@ -1272,7 +1273,7 @@ surface that is dead, and the ledger (`tools/test_ledger.py`) decides which.
 | `nominations/` | `NominationViewSet` | `world.progression.urls` | `frontend/e2e/journals-reading-room.spec.ts`, `frontend/src/journals/__tests__/JournalsPage.nominateButton.test.tsx`, `frontend/src/progression/__tests__/NominationsPanel.test.tsx`, `src/world/currency/tests/test_parse_coppers.py` (+4) |
 | `random-scenes/` | `RandomSceneViewSet` | `world.progression.urls` | `src/world/progression/tests/test_random_scene_views.py` |
 | `unlocks/` | `ProgressionUnlockViewSet` | `world.progression.urls` | `frontend/src/progression/components/advancement/AdvancementTab.test.tsx`, `frontend/src/progression/components/advancement/ClassUnlocksCard.test.tsx`, `src/actions/tests/test_door_actions.py`, `src/actions/tests/test_gm_story_run_battle_beat.py` (+38) |
-| `account/` | `AccountProgressionView` | `world.progression.urls` | `frontend/e2e/account-settings.spec.ts`, `frontend/e2e/almanach-founder.spec.ts`, `frontend/e2e/atlas-one-way.spec.ts`, `frontend/e2e/composer-commands.spec.ts` (+957) |
+| `account/` | `AccountProgressionView` | `world.progression.urls` | `frontend/e2e/account-settings.spec.ts`, `frontend/e2e/almanach-founder.spec.ts`, `frontend/e2e/atlas-one-way.spec.ts`, `frontend/e2e/composer-commands.spec.ts` (+961) |
 | `claim-kudos/` | `ClaimKudosView` | `world.progression.urls` | `src/world/progression/tests/test_views.py` |
 | `path-options/` | `PathOptionsView` | `world.progression.urls` | `frontend/src/magic/__tests__/PathIntentCard.test.tsx`, `src/world/progression/tests/test_path_options.py` |
 | `path-intent/` | `_path_intent_view` | `world.progression.urls` | `frontend/src/magic/__tests__/MagicProgressionPage.pathIntent.test.tsx`, `frontend/src/magic/__tests__/PathIntentCard.test.tsx`, `frontend/src/magic/__tests__/audereMajoraQueries.test.tsx`, `src/world/progression/tests/test_path_intent.py` |
@@ -1280,9 +1281,9 @@ surface that is dead, and the ledger (`tools/test_ledger.py`) decides which.
 | `durance/status/` | `DuranceStatusView` | `world.progression.urls` | `src/world/progression/tests/test_durance_status_view.py` |
 | `durance/convene/` | `DuranceConveneView` | `world.progression.urls` | `src/world/progression/tests/test_durance_status_view.py`, `src/world/progression/tests/test_durance_web_join_autofire.py` |
 | `/` | `RealmViewSet` | `world.realms.urls` | none |
-| `status/` | `RegistrationStatusView` | `world.registration.urls` | `frontend/e2e/almanach-founder.spec.ts`, `frontend/e2e/atlas-one-way.spec.ts`, `frontend/e2e/atlas-region-map-4242.spec.ts`, `frontend/e2e/bulletin.spec.ts` (+1228) |
+| `status/` | `RegistrationStatusView` | `world.registration.urls` | `frontend/e2e/almanach-founder.spec.ts`, `frontend/e2e/atlas-one-way.spec.ts`, `frontend/e2e/atlas-region-map-4242.spec.ts`, `frontend/e2e/bulletin.spec.ts` (+1234) |
 | `conditions/` | `RelationshipConditionViewSet` | `world.relationships.urls` | `frontend/src/combat/__tests__/ActiveState.test.tsx`, `frontend/src/combat/__tests__/CombatTurnPanel.test.tsx`, `frontend/src/combat/__tests__/CombatantsList.test.tsx`, `frontend/src/combat/__tests__/RoundFlow.test.tsx` (+590) |
-| `types/` | `RelationshipTypeViewSet` | `world.relationships.urls` | `frontend/e2e/evidence/backgrounds-beats-4124.spec.ts`, `frontend/e2e/evidence/facet-picker-4197.spec.ts`, `frontend/e2e/evidence/family-kin-4210.spec.ts`, `frontend/e2e/evidence/sheet-gallery-4151.spec.ts` (+954) |
+| `types/` | `RelationshipTypeViewSet` | `world.relationships.urls` | `frontend/e2e/evidence/backgrounds-beats-4124.spec.ts`, `frontend/e2e/evidence/facet-picker-4197.spec.ts`, `frontend/e2e/evidence/family-kin-4210.spec.ts`, `frontend/e2e/evidence/sheet-gallery-4151.spec.ts` (+956) |
 | `relationships/` | `CharacterRelationshipViewSet` | `world.relationships.urls` | `frontend/e2e/evidence/backgrounds-beats-4124.spec.ts`, `frontend/e2e/evidence/facet-picker-4197.spec.ts`, `frontend/e2e/evidence/family-kin-4210.spec.ts`, `frontend/e2e/evidence/sheet-gallery-4151.spec.ts` (+103) |
 | `relationship-capstones/` | `RelationshipCapstoneViewSet` | `world.relationships.urls` | `frontend/src/rituals/__tests__/fields.test.tsx` |
 | `exit-bars/` | `ExitBarsViewSet` | `world.room_features.urls` | `src/world/room_features/tests/test_views_defense.py` |
@@ -1297,14 +1298,14 @@ surface that is dead, and the ledger (`tools/test_ledger.py`) decides which.
 | `invites/` | `GameInviteViewSet` | `world.roster.urls` | `frontend/e2e/evidence/gming-nav-4188.spec.ts`, `frontend/src/crossover/__tests__/CrossoverInboxPage.test.tsx`, `frontend/src/estates/__tests__/AgreementsPanel.test.tsx`, `frontend/src/missions/__tests__/InviteFlow.test.tsx` (+28) |
 | `media/` | `MediaViewSet` | `world.roster.urls` | `frontend/e2e/evidence/sheet-gallery-4151.spec.ts`, `frontend/src/almanach/__tests__/FounderAlmanach.test.tsx`, `frontend/src/battles/components/BattleActionPanel.test.tsx`, `frontend/src/battles/components/PlaceDetailPanel.test.tsx` (+197) |
 | `tenure-media/` | `GalleryPictureViewSet` | `world.roster.urls` | `frontend/e2e/evidence/sheet-gallery-4151.spec.ts`, `frontend/src/character_sheets/components/sheet/gallery/__tests__/GalleryPanel.test.tsx`, `src/world/roster/tests/test_tenure_media_api.py` |
-| `mail/` | `PlayerMailViewSet` | `world.roster.urls` | `frontend/e2e/account-settings.spec.ts`, `frontend/e2e/almanach-founder.spec.ts`, `frontend/e2e/evidence/almanach-3983.spec.ts`, `frontend/e2e/evidence/almanach-every-family-4239.spec.ts` (+128) |
+| `mail/` | `PlayerMailViewSet` | `world.roster.urls` | `frontend/e2e/account-settings.spec.ts`, `frontend/e2e/almanach-founder.spec.ts`, `frontend/e2e/evidence/almanach-3983.spec.ts`, `frontend/e2e/evidence/almanach-every-family-4239.spec.ts` (+130) |
 | `tenures/` | `RosterTenureViewSet` | `world.roster.urls` | `frontend/e2e/evidence/backgrounds-beats-4124.spec.ts`, `frontend/e2e/evidence/family-kin-4210.spec.ts`, `frontend/e2e/evidence/sheet-gallery-4151.spec.ts`, `frontend/e2e/evidence/sheet-goals-and-favor-4106.spec.ts` (+54) |
 | `npc-presets/` | `NPCStatlinePresetViewSet` | `world.roster.urls` | none |
 | `visibility-settings/` | `VisibilitySettingsView` | `world.roster.urls` | `src/world/roster/tests/test_visibility_settings_view.py` |
 | `looking-for-table/` | `LookingForTableToggleView` | `world.roster.urls` | `src/world/gm/tests/test_looking_for_table_services.py`, `src/world/gm/tests/test_looking_for_table_views.py` |
 | `kin/tree/<int:character_id>/` | `CharacterKinTreeView` | `world.roster.urls` | `src/world/roster/tests/test_kin_api.py` |
 | `kin/relationship/` | `KinRelationshipView` | `world.roster.urls` | `frontend/e2e/evidence/family-kin-4210.spec.ts`, `frontend/e2e/evidence/family-page-4209.spec.ts`, `src/world/roster/tests/test_kin_api.py` |
-| `scenes/` | `SceneViewSet` | `world.scenes.urls` | `frontend/e2e/battle-map.spec.ts`, `frontend/e2e/combat.spec.ts`, `frontend/e2e/evidence/standoff-gm-4354.spec.ts`, `frontend/e2e/evidence/standoff-named-npc-4373.spec.ts` (+923) |
+| `scenes/` | `SceneViewSet` | `world.scenes.urls` | `frontend/e2e/battle-map.spec.ts`, `frontend/e2e/combat.spec.ts`, `frontend/e2e/evidence/standoff-causes-4415.spec.ts`, `frontend/e2e/evidence/standoff-causes-4415b.spec.ts` (+925) |
 | `personas/` | `PersonaViewSet` | `world.scenes.urls` | `frontend/e2e/evidence/backgrounds-beats-4124.spec.ts`, `frontend/e2e/evidence/facet-picker-4197.spec.ts`, `frontend/e2e/evidence/family-kin-4210.spec.ts`, `frontend/e2e/evidence/family-page-4209.spec.ts` (+144) |
 | `interactions/` | `InteractionViewSet` | `world.scenes.urls` | `frontend/e2e/composer-commands.spec.ts`, `frontend/e2e/composer-escapes.spec.ts`, `frontend/e2e/feed-notes-display-settings.spec.ts`, `frontend/e2e/feed-notes.spec.ts` (+68) |
 | `interaction-favorites/` | `InteractionFavoriteViewSet` | `world.scenes.urls` | none |
@@ -1328,7 +1329,7 @@ surface that is dead, and the ledger (`tools/test_ledger.py`) decides which.
 | `api/play/read/` | `PlayReadView` | `world.scenes.urls` | `src/world/scenes/tests/test_play_views.py` |
 | `api/play/submissions/<uuid:client_request_id>/` | `PoseSubmissionDetailView` | `world.scenes.urls` | none |
 | `known/` | `KnownSecretViewSet` | `world.secrets.urls` | `frontend/e2e/almanach-founder.spec.ts`, `frontend/e2e/atlas-one-way.spec.ts`, `frontend/e2e/atlas-region-map-4242.spec.ts`, `frontend/e2e/composer-commands.spec.ts` (+686) |
-| `authored/` | `AuthoredSecretViewSet` | `world.secrets.urls` | `frontend/e2e/atlas-one-way.spec.ts`, `frontend/e2e/atlas-region-map-4242.spec.ts`, `frontend/e2e/evidence/atlas-place-area-4084.spec.ts`, `frontend/e2e/evidence/backgrounds-beats-4124.spec.ts` (+463) |
+| `authored/` | `AuthoredSecretViewSet` | `world.secrets.urls` | `frontend/e2e/atlas-one-way.spec.ts`, `frontend/e2e/atlas-region-map-4242.spec.ts`, `frontend/e2e/evidence/atlas-place-area-4084.spec.ts`, `frontend/e2e/evidence/backgrounds-beats-4124.spec.ts` (+468) |
 | `grievance-options/` | `GrievanceOptionListView` | `world.secrets.urls` | `src/world/secrets/tests/test_grievance.py` |
 | `grievance/` | `SecretGrievanceView` | `world.secrets.urls` | `frontend/src/game/composerLine.test.ts`, `frontend/src/secrets/__tests__/SecretsTab.test.tsx`, `src/commands/tests/test_grievance_command.py`, `src/world/relationships/tests/test_grievance.py` (+1) |
 | `gossip/` | `GossipListView` | `world.secrets.urls` | `frontend/src/secrets/__tests__/GossipPanel.test.tsx`, `src/actions/tests/test_smear_action.py`, `src/commands/tests/test_tidings_command.py`, `src/integration_tests/pipeline/test_gossip_telnet_e2e.py` (+11) |
@@ -1344,7 +1345,7 @@ surface that is dead, and the ledger (`tools/test_ledger.py`) decides which.
 | `organizations/` | `OrganizationViewSet` | `world.societies.urls` | `frontend/e2e/evidence/facet-picker-4197.spec.ts`, `frontend/e2e/evidence/house-observances-4206.spec.ts`, `frontend/e2e/evidence/staff-estate-4226.spec.ts`, `frontend/e2e/evidence/staff-group-fit-4229.spec.ts` (+30) |
 | `proclamations/` | `ProclamationViewSet` | `world.societies.urls` | `src/world/seeds/tests/test_clusters.py`, `src/world/societies/tests/test_proclaim_view.py`, `src/world/societies/tests/test_proclamations.py` |
 | `memberships/` | `OrganizationMembershipViewSet` | `world.societies.urls` | `frontend/e2e/evidence/almanach-every-family-4239.spec.ts`, `frontend/e2e/evidence/backgrounds-beats-4124.spec.ts`, `frontend/e2e/evidence/family-kin-4210.spec.ts`, `frontend/e2e/evidence/sheet-gallery-4151.spec.ts` (+51) |
-| `ranks/` | `OrganizationRankViewSet` | `world.societies.urls` | `frontend/e2e/evidence/house-observances-4206.spec.ts`, `frontend/e2e/evidence/staff-group-fit-4229.spec.ts`, `frontend/src/character_sheets/components/sheet/__tests__/StaffEdit.test.tsx`, `frontend/src/covenants/__tests__/CovenantDetailPage.test.tsx` (+61) |
+| `ranks/` | `OrganizationRankViewSet` | `world.societies.urls` | `frontend/e2e/evidence/house-observances-4206.spec.ts`, `frontend/e2e/evidence/staff-group-fit-4229.spec.ts`, `frontend/src/character_sheets/components/sheet/__tests__/StaffEdit.test.tsx`, `frontend/src/covenants/__tests__/CovenantDetailPage.test.tsx` (+62) |
 | `reputations/` | `OrganizationReputationViewSet` | `world.societies.urls` | `frontend/e2e/evidence/backgrounds-beats-4124.spec.ts`, `frontend/e2e/evidence/family-kin-4210.spec.ts`, `frontend/e2e/evidence/sheet-gallery-4151.spec.ts`, `frontend/e2e/evidence/sheet-goals-and-favor-4106.spec.ts` (+12) |
 | `offers/` | `OrganizationMembershipOfferViewSet` | `world.societies.urls` | `frontend/e2e/almanach-founder.spec.ts`, `frontend/e2e/bulletin.spec.ts`, `frontend/e2e/era-admin.spec.ts`, `frontend/e2e/evidence/backgrounds-beats-4124.spec.ts` (+198) |
 | `standing-declarations/` | `StandingDeclarationViewSet` | `world.societies.urls` | `frontend/e2e/evidence/house-observances-4206.spec.ts` |
@@ -1367,7 +1368,7 @@ surface that is dead, and the ledger (`tools/test_ledger.py`) decides which.
 | `aggregate-beat-contributions/` | `AggregateBeatContributionViewSet` | `world.stories.urls` | `src/world/stories/tests/test_views_phase2_readonly.py` |
 | `assistant-gm-claims/` | `AssistantGMClaimViewSet` | `world.stories.urls` | `src/world/stories/tests/test_views_phase2_readonly.py`, `src/world/stories/tests/test_views_wave11_actions.py` |
 | `session-requests/` | `SessionRequestViewSet` | `world.stories.urls` | `frontend/src/stories/__tests__/GMQueuePage.test.tsx`, `src/world/stories/tests/test_views_phase2_readonly.py`, `src/world/stories/tests/test_views_wave11_actions.py` |
-| `beats/` | `BeatViewSet` | `world.stories.urls` | `frontend/e2e/evidence/backgrounds-beats-4124.spec.ts`, `frontend/e2e/evidence/family-kin-4210.spec.ts`, `frontend/e2e/evidence/gming-nav-4188.spec.ts`, `frontend/e2e/evidence/sheet-gallery-4151.spec.ts` (+145) |
+| `beats/` | `BeatViewSet` | `world.stories.urls` | `frontend/e2e/evidence/backgrounds-beats-4124.spec.ts`, `frontend/e2e/evidence/family-kin-4210.spec.ts`, `frontend/e2e/evidence/gming-nav-4188.spec.ts`, `frontend/e2e/evidence/sheet-gallery-4151.spec.ts` (+146) |
 | `story-gm-offers/` | `StoryGMOfferViewSet` | `world.stories.urls` | `frontend/e2e/evidence/gming-nav-4188.spec.ts`, `src/world/stories/tests/test_crossover_views.py`, `src/world/stories/tests/test_story_gm_offer.py` |
 | `group-story-requests/` | `GroupStoryRequestViewSet` | `world.stories.urls` | `src/world/stories/tests/test_group_story_request.py` |
 | `transitions/` | `TransitionViewSet` | `world.stories.urls` | `frontend/src/store/__tests__/gameSlice.test.ts`, `frontend/src/stories/__tests__/EpisodeReadyCard.test.tsx`, `frontend/src/stories/__tests__/GMQueuePage.test.tsx`, `frontend/src/stories/__tests__/StoryAuthorTree.routing.test.tsx` (+42) |
@@ -1393,7 +1394,7 @@ surface that is dead, and the ledger (`tools/test_ledger.py`) decides which.
 | `api/stories/staff-workload/` | `StaffWorkloadView` | `world.stories.urls` | `src/world/stories/tests/test_views_staff_workload.py` |
 | `api/stories/expire-overdue-beats/` | `ExpireOverdueBeatsView` | `world.stories.urls` | `src/world/stories/tests/test_views_wave11_actions.py` |
 | `api/beats/<int:beat_id>/stake-availability/` | `BeatStakeAvailabilityView` | `world.stories.urls` | `src/world/boundaries/tests/test_api.py` |
-| `templates/` | `TaskTemplateViewSet` | `world.tasking.urls` | `frontend/e2e/almanach-founder.spec.ts`, `frontend/e2e/evidence/almanach-3983.spec.ts`, `frontend/e2e/evidence/almanach-every-family-4239.spec.ts`, `frontend/e2e/evidence/backgrounds-beats-4124.spec.ts` (+172) |
+| `templates/` | `TaskTemplateViewSet` | `world.tasking.urls` | `frontend/e2e/almanach-founder.spec.ts`, `frontend/e2e/evidence/almanach-3983.spec.ts`, `frontend/e2e/evidence/almanach-every-family-4239.spec.ts`, `frontend/e2e/evidence/backgrounds-beats-4124.spec.ts` (+173) |
 | `routes/` | `TaskOutcomeRouteViewSet` | `world.tasking.urls` | `frontend/e2e/account-settings.spec.ts`, `frontend/e2e/bulletin.spec.ts`, `frontend/e2e/era-admin.spec.ts`, `frontend/e2e/evidence/almanach-3983.spec.ts` (+132) |
 | `tasks/` | `OrgTaskViewSet` | `world.tasking.urls` | `frontend/src/home/hall/__tests__/OffscreenActsPlate.test.tsx`, `frontend/src/stories/__tests__/StoryAuthorTree.routing.test.tsx`, `src/actions/tests/test_base.py`, `src/actions/tests/test_tasking_actions.py` (+45) |
 | `roster/` | `OrgRosterViewSet` | `world.tasking.urls` | `frontend/e2e/almanach-founder.spec.ts`, `frontend/e2e/evidence/almanach-3983.spec.ts`, `frontend/e2e/evidence/almanach-every-family-4239.spec.ts`, `frontend/e2e/evidence/backgrounds-beats-4124.spec.ts` (+812) |
@@ -1401,7 +1402,7 @@ surface that is dead, and the ledger (`tools/test_ledger.py`) decides which.
 | `counterplay/` | `CounterplayViewSet` | `world.tasking.urls` | `src/world/predators/tests/test_services.py`, `src/world/seeds/tests/test_clusters.py`, `src/world/tasking/tests/test_counterplay.py` |
 | `games/` | `TavernGameViewSet` | `world.tavern_games.urls` | `frontend/src/game/GamePage.test.tsx`, `frontend/src/scenes/pages/__tests__/SceneDetailPage.test.tsx`, `src/actions/tests/test_tavern_games_actions.py`, `src/commands/tests/test_tavern_games.py` (+3) |
 | `sessions/` | `GameSessionViewSet` | `world.tavern_games.urls` | `frontend/e2e/selected-character-chip.spec.ts`, `frontend/e2e/ties.spec.ts`, `frontend/src/evennia_replacements/queries.test.tsx`, `frontend/src/game/GamePage.test.tsx` (+92) |
-| `feed/` | `PublicFeedView` | `world.tidings.urls` | `frontend/e2e/composer-commands.spec.ts`, `frontend/e2e/evidence/conversation-rail-4129.spec.ts`, `frontend/e2e/evidence/house-observances-4206.spec.ts`, `frontend/e2e/evidence/standoff-named-npc-4373.spec.ts` (+164) |
+| `feed/` | `PublicFeedView` | `world.tidings.urls` | `frontend/e2e/composer-commands.spec.ts`, `frontend/e2e/evidence/conversation-rail-4129.spec.ts`, `frontend/e2e/evidence/house-observances-4206.spec.ts`, `frontend/e2e/evidence/standoff-causes-4415.spec.ts` (+166) |
 | `stat-definitions/` | `StatDefinitionsViewSet` | `world.traits.urls` | none |
 | `hubs/` | `TravelHubViewSet` | `world.travel.urls` | `src/core_management/tests/test_grid_phase_b_sections.py`, `src/world/agriculture/tests/test_ship_provisioning.py`, `src/world/clues/tests/test_accusation_clues.py`, `src/world/secrets/tests/test_gossip.py` (+6) |
 | `methods/` | `TravelMethodViewSet` | `world.travel.urls` | `frontend/src/areas/components/TacticalMap.test.tsx`, `src/commands/tests/test_relationships_command.py`, `src/core_management/tests/test_content_fixtures_media.py`, `src/flows/tests/test_models/test_flow_steps.py` (+38) |
@@ -1409,14 +1410,19 @@ surface that is dead, and the ledger (`tools/test_ledger.py`) decides which.
 | `invites/` | `VoyageInviteViewSet` | `world.travel.urls` | `frontend/e2e/evidence/gming-nav-4188.spec.ts`, `frontend/src/crossover/__tests__/CrossoverInboxPage.test.tsx`, `frontend/src/estates/__tests__/AgreementsPanel.test.tsx`, `frontend/src/missions/__tests__/InviteFlow.test.tsx` (+28) |
 | `<int:character_id>/` | `CharacterVitalsView` | `world.vitals.urls` | `src/world/vitals/tests/test_api.py`, `src/world/vitals/tests/test_scene_gm_carveout.py` |
 | `conditions/` | `weather_conditions` | `world.weather.urls` | `frontend/src/combat/__tests__/ActiveState.test.tsx`, `frontend/src/combat/__tests__/CombatTurnPanel.test.tsx`, `frontend/src/combat/__tests__/CombatantsList.test.tsx`, `frontend/src/combat/__tests__/RoundFlow.test.tsx` (+590) |
-| `beings/` | `WorshippedBeingViewSet` | `world.worship.urls` | `frontend/e2e/evidence/backgrounds-beats-4124.spec.ts`, `frontend/e2e/evidence/cg-parentage-4024.spec.ts`, `frontend/e2e/evidence/cg-pass1-4022.spec.ts`, `frontend/e2e/evidence/facet-picker-4197.spec.ts` (+21) |
+| `beings/` | `WorshippedBeingViewSet` | `world.worship.urls` | `frontend/e2e/evidence/backgrounds-beats-4124.spec.ts`, `frontend/e2e/evidence/cg-parentage-4024.spec.ts`, `frontend/e2e/evidence/cg-pass1-4022.spec.ts`, `frontend/e2e/evidence/facet-picker-4197.spec.ts` (+25) |
 | `miracles/` | `MiracleViewSet` | `world.worship.urls` | `src/world/worship/tests/test_miracle_narration.py`, `src/world/worship/tests/test_miracles.py` |
-| `rites/` | `WorshipRiteViewSet` | `world.worship.urls` | `frontend/e2e/evidence/backgrounds-beats-4124.spec.ts`, `frontend/e2e/evidence/house-observances-4206.spec.ts`, `frontend/e2e/evidence/staff-estate-4226.spec.ts`, `frontend/e2e/evidence/staff-group-fit-4229.spec.ts` (+263) |
+| `rites/` | `WorshipRiteViewSet` | `world.worship.urls` | `frontend/e2e/evidence/backgrounds-beats-4124.spec.ts`, `frontend/e2e/evidence/house-observances-4206.spec.ts`, `frontend/e2e/evidence/staff-estate-4226.spec.ts`, `frontend/e2e/evidence/staff-group-fit-4229.spec.ts` (+267) |
 | `prayers/` | `PrayerViewSet` | `world.worship.urls` | `frontend/e2e/pantheon.spec.ts`, `frontend/src/pantheon/__tests__/PantheonPages.test.tsx`, `frontend/src/worship/__tests__/WorshipSection.test.tsx`, `src/web/admin/tests/test_authoring_relations.py` (+2) |
-| `pledges/` | `PledgeViewSet` | `world.worship.urls` | `frontend/src/pantheon/__tests__/PantheonPages.test.tsx`, `frontend/src/worship/__tests__/PledgeDialog.test.tsx`, `src/actions/tests/test_base.py`, `src/commands/tests/test_soul_tether_e2e.py` (+4) |
+| `pledges/` | `PledgeViewSet` | `world.worship.urls` | `frontend/src/pantheon/__tests__/PantheonPages.test.tsx`, `frontend/src/tables/__tests__/TableBeings.test.tsx`, `frontend/src/worship/__tests__/PledgeDialog.test.tsx`, `src/actions/tests/test_base.py` (+6) |
 | `pledge-cards/` | `PledgeCardViewSet` | `world.worship.urls` | `src/world/worship/tests/test_pledges.py` |
 | `visions/` | `VisionViewSet` | `world.worship.urls` | `frontend/e2e/feed-notes-display-settings.spec.ts`, `frontend/e2e/pantheon.spec.ts`, `frontend/src/character-creation/__tests__/ReviewStage.test.tsx`, `frontend/src/character-creation/__tests__/utils.test.ts` (+26) |
 | `admin/beings/` | `StaffBeingViewSet` | `world.worship.urls` | `frontend/e2e/evidence/facet-picker-4197.spec.ts`, `frontend/e2e/pantheon.spec.ts`, `src/world/worship/tests/test_answers.py`, `src/world/worship/tests/test_editor.py` |
+| `stewarded-beings/` | `StewardedBeingViewSet` | `world.worship.urls` | `src/world/worship/tests/test_steward_api.py` |
+| `steward-pledges/` | `StewardPledgeViewSet` | `world.worship.urls` | `src/world/worship/tests/test_steward_api.py` |
+| `steward-answers/` | `StewardAnswerViewSet` | `world.worship.urls` | `src/world/worship/tests/test_steward_api.py` |
+| `steward-sacrifice-lines/` | `StewardSacrificeLineViewSet` | `world.worship.urls` | `src/world/worship/tests/test_steward_api.py` |
+| `steward-prompts/` | `StewardPromptViewSet` | `world.worship.urls` | `src/world/worship/tests/test_steward_api.py` |
 
 ## Frontend routes
 
@@ -1424,7 +1430,7 @@ surface that is dead, and the ledger (`tools/test_ledger.py`) decides which.
 |---|---|
 | `/` | `frontend/e2e/evidence/root-boundary-4195.spec.ts`, `frontend/e2e/evidence/sheet-gallery-4151.spec.ts`, `frontend/e2e/history-threads.spec.ts`, `frontend/e2e/journals-reading-room.spec.ts` (+52) |
 | `/hall` | `frontend/e2e/evidence/character-slots-3996.spec.ts`, `frontend/e2e/selected-character-chip.spec.ts`, `frontend/src/components/__tests__/SelectedCharacterChip.test.tsx`, `frontend/src/game/components/GameTopBar.menu.test.tsx` (+2) |
-| `/login` | `frontend/e2e/account-settings.spec.ts`, `frontend/e2e/evidence/standoff-gm-4354.spec.ts`, `frontend/e2e/evidence/standoff-named-npc-4373.spec.ts`, `frontend/e2e/evidence/standoff-placement-4361.spec.ts` (+9) |
+| `/login` | `frontend/e2e/account-settings.spec.ts`, `frontend/e2e/evidence/standoff-causes-4415.spec.ts`, `frontend/e2e/evidence/standoff-causes-4415b.spec.ts`, `frontend/e2e/evidence/standoff-gm-4354.spec.ts` (+11) |
 | `/register` | `frontend/e2e/user-journey.spec.ts`, `frontend/src/evennia_replacements/LoginPage.test.tsx`, `frontend/src/game/GamePage.test.tsx`, `frontend/src/home/__tests__/GatefoldPage.test.tsx` |
 | `/register/verify-email` | `frontend/src/evennia_replacements/EmailVerifyPage.test.tsx` |
 | `/verify-email/:key` | none |
