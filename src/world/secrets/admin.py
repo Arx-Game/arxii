@@ -2,6 +2,7 @@ from django.contrib import admin
 from django.core.exceptions import ObjectDoesNotExist
 
 from world.admin_utils import OneRowPerFormSet
+from world.secrets.constants import DEFAULT_VICTIM_SEVERITY_BY_LEVEL
 from world.secrets.models import Secret, SecretCategory, SecretKnowledge, SecretVictim
 
 
@@ -37,9 +38,21 @@ class SecretVictimInline(admin.TabularInline):
     """
 
     model = SecretVictim
+    verbose_name_plural = "Victims"
     fields = ["organization", "persona"]
     raw_id_fields = ["organization", "persona"]
     extra = 0
+
+    def get_formset(self, request, obj=None, **kwargs):
+        formset = super().get_formset(request, obj, **kwargs)
+        formset.form.base_fields["organization"].help_text = (
+            "Set exactly one of organization or persona, while authoring the secret. There is "
+            "no per-victim size: the reaction is always the level default. An organization "
+            "victim's reputation of the subject drops on the secret's first exposure; a "
+            "persona victim is told and decides their own reaction. A spy job's residue "
+            "secret fills this row from the job's target."
+        )
+        return formset
 
 
 @admin.register(Secret)
@@ -49,8 +62,24 @@ class SecretAdmin(admin.ModelAdmin):
     list_filter = ["level", "provenance", "category"]
     search_fields = ["content", "consequences"]
     raw_id_fields = ["subject_sheet", "author_persona", "hook"]
-    readonly_fields = ["created_date", "updated_date", "get_relocated_distinction"]
+    readonly_fields = [
+        "created_date",
+        "updated_date",
+        "get_relocated_distinction",
+        "get_default_victim_severity",
+    ]
     inlines = [SecretVictimInline, SecretKnowledgeInline]
+
+    @admin.display(description="Default victim severity")
+    def get_default_victim_severity(self, obj: Secret) -> str:
+        """What a victim organization's reputation drops by on this secret's first exposure."""
+        if obj.pk is None:
+            return "-"
+        exposed = obj.societies_exposed.exists()
+        return (
+            f"{DEFAULT_VICTIM_SEVERITY_BY_LEVEL.get(obj.level, 0)} at level {obj.level}. "
+            f"{'Already exposed.' if exposed else 'Not yet exposed.'}"
+        )
 
     @admin.display(description="Relocated from distinction")
     def get_relocated_distinction(self, obj: Secret) -> str:

@@ -635,9 +635,10 @@ class OrganizationReputationEventInline(admin.TabularInline):
     """Read-only change history of one reputation, newest first (#4448)."""
 
     model = OrganizationReputationEvent
+    verbose_name_plural = "Changes (read only, newest first)"
     extra = 0
     can_delete = False
-    fields = ["created_at", "cause", "amount", "tier_before", "tier_after", "cites"]
+    fields = ["created_at", "cause", "change", "tier_before", "tier_after", "cites"]
     readonly_fields = fields
     ordering = ["-created_at", "-pk"]
 
@@ -646,6 +647,10 @@ class OrganizationReputationEventInline(admin.TabularInline):
 
     def has_change_permission(self, request: HttpRequest, obj: object = None) -> bool:  # noqa: ARG002
         return False
+
+    @admin.display(description="Amount")
+    def change(self, obj: OrganizationReputationEvent) -> str:
+        return f"{obj.amount:+d}"
 
     @admin.display(description="Cites")
     def cites(self, obj: OrganizationReputationEvent) -> str:
@@ -672,6 +677,18 @@ class OrganizationReputationAdmin(admin.ModelAdmin):
     ordering = ["organization", "-value"]
     raw_id_fields = ["persona"]
     inlines = [OrganizationReputationEventInline]
+
+    def get_readonly_fields(self, request, obj=None):  # noqa: ARG002
+        """A saved row's persona and organization are fixed: the writer moves that pair."""
+        return ["persona", "organization"] if obj is not None else []
+
+    def get_form(self, request, obj=None, **kwargs):
+        form = super().get_form(request, obj, **kwargs)
+        form.base_fields["value"].help_text = (
+            "Staff only; players see the tier. Saving a new value records a staff "
+            "adjustment in the changes below."
+        )
+        return form
 
     def get_tier_display(self, obj):
         """Return the reputation tier display name."""

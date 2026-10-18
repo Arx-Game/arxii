@@ -53,6 +53,24 @@ class OrganizationReputationAdminTests(TestCase):
         assert event.amount == -400
         assert (event.tier_before, event.tier_after) == ("favored", "disliked")
 
+    def test_a_saved_rows_persona_and_organization_cannot_be_changed(self):
+        reputation = OrganizationReputationFactory(
+            persona=self.persona, organization=self.org, value=100
+        )
+        other = OrganizationFactory()
+        url = reverse("admin:arxii_organizationreputation_change", args=[reputation.pk])
+        data = _post_data(
+            self.client.get(url), value="-300", organization=str(other.pk), persona="999999"
+        )
+        assert self.client.post(url, data).status_code == 302
+        reputation = OrganizationReputation.objects.get(pk=reputation.pk)
+        assert (reputation.organization, reputation.persona, reputation.value) == (
+            self.org,
+            self.persona,
+            -300,
+        )
+        assert not OrganizationReputation.objects.filter(organization=other).exists()
+
     def test_the_history_is_shown_read_only(self):
         reputation = OrganizationReputationFactory(
             persona=self.persona, organization=self.org, value=0
@@ -67,6 +85,7 @@ class OrganizationReputationAdminTests(TestCase):
         )
         self.assertContains(response, "Gang turf")
         self.assertContains(response, "-300")
+        self.assertContains(response, "Changes (read only, newest first)")
 
     def test_an_unchanged_value_records_nothing(self):
         reputation = OrganizationReputationFactory(
