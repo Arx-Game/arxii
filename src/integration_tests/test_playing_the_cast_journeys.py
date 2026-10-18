@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import uuid
+
 from django.core.exceptions import ValidationError
 from rest_framework import status
 
@@ -14,13 +16,25 @@ from world.battles.services import add_place, add_side, create_battle, enlist_pa
 from world.checks.factories import CheckTypeFactory
 from world.checks.services import compute_check_rating
 from world.checks.test_helpers import force_check_outcome
+from world.combat.constants import OpponentTier
+from world.combat.factories import (
+    CombatEncounterFactory,
+    CombatOpponentFactory,
+    ThreatPoolFactory,
+)
+from world.combat.models import CombatOpponent
 from world.consent.factories import SocialConsentCategoryFactory
+from world.gm.constants import GMLevel
+from world.gm.factories import GMProfileFactory, GuideProfileFactory, seed_default_gm_level_caps
 from world.progression.models import WeeklySocialEngagement
 from world.roster.factories import RosterFactory
+from world.roster.models import RosterEntry
 from world.roster.models.choices import RosterType
 from world.scenes.action_models import SceneActionRequest
 from world.scenes.action_services import create_action_request
-from world.scenes.factories import SceneFactory
+from world.scenes.constants import RoundStatus
+from world.scenes.factories import SceneFactory, SceneParticipationFactory
+from world.scenes.models import Interaction
 from world.traits.factories import CheckOutcomeFactory, CheckSystemSetupFactory
 from world.traits.models import CheckOutcome, ResultChart
 from world.vitals.constants import POOL_SURROUNDED_TERMINAL_ENEMY
@@ -331,3 +345,118 @@ class AnNpcActsOnAPc(JourneyCase):
         self.assertTrue(wheels)
         selected = [face for face in wheels[0]["consequences"] if face["is_selected"]]
         self.assertEqual([face["tier_name"] for face in selected], ["Success"])
+
+
+CAST_LIST = "/api/scenes/{}/cast-list/"
+SUBMIT_POSE = "/api/interactions/submit-pose/"
+
+
+class TheGmSeesTheCast(JourneyCase):
+    """Ravenna GMs the siege at Low Gate; Ilsa is a Guide; Ysmay is a player there."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        seed_default_gm_level_caps()
+        self.room = self.make_room("Low Gate")
+        self.ravenna = self.make_player("Ravenna", room=self.room)
+        self.gm = self.account_of(self.ravenna)
+        GMProfileFactory(account=self.gm, level=GMLevel.JUNIOR)
+        self.ilsa = self.make_player("Ilsa", room=self.room)
+        self.guide = self.account_of(self.ilsa)
+        GuideProfileFactory(account=self.guide)
+        self.ysmay = self.make_player("Ysmay", room=self.room)
+        self.scene = SceneFactory(room=self.room, name="The Siege at Low Gate")
+        SceneParticipationFactory(scene=self.scene, account=self.gm, is_gm=True, is_owner=True)
+        self.encounter = CombatEncounterFactory(scene=self.scene, room=self.room)
+        self.pool = ThreatPoolFactory(name="Low Gate watch")
+        self.guards = [
+            CombatOpponentFactory(
+                encounter=self.encounter,
+                tier=OpponentTier.MOOK,
+                threat_pool=self.pool,
+                name=f"Gate guard {number}",
+            )
+            for number in range(8)
+        ]
+
+    def test_cast_lists_npcs_and_crowds(self) -> None:
+        minted = self.web(
+            self.ravenna, "mint_story_npc", name="Captain Vael", description="A grizzled officer."
+        )
+        self.assertTrue(minted.detail.success, minted.detail.message)
+        vael = RosterEntry.objects.get(pk=minted.detail.data["roster_entry_id"])
+        character = vael.character_sheet.character
+        character.location = self.room
+        character.save()
+        CombatOpponentFactory(
+            encounter=self.encounter,
+            tier=OpponentTier.SWARM,
+            name="Besieger skirmishers",
+            swarm_count=30,
+            max_swarm_count=30,
+            threat_pool=ThreatPoolFactory(name="Besiegers"),
+        )
+        # An encounter that has ended no longer puts anyone in the cast.
+        finished = CombatEncounterFactory(
+            scene=self.scene, room=self.room, status=RoundStatus.COMPLETED
+        )
+        CombatOpponentFactory(encounter=finished, name="Routed sapper")
+
+        response = self.api(self.gm).get(CAST_LIST.format(self.scene.pk))
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
+        rows = response.json()
+        self.assertEqual(
+            [row["name"] for row in rows],
+            ["Captain Vael", "Low Gate watch", "Besieger skirmishers"],
+        )
+        self.assertEqual([row["count"] for row in rows], [None, 8, 30])
+        self.assertEqual([row["kind"] for row in rows], ["npc", "crowd", "crowd"])
+        self.assertEqual(rows[0]["roster_entry_id"], vael.pk)
+        self.assertEqual(rows[0]["played_by"], "Ravenna")
+        self.assertEqual(rows[0]["description"], "A grizzled officer.")
+        self.assertNotIn(self.gm.username, response.content.decode())
+
+        refused = self.api(self.account_of(self.ysmay)).get(CAST_LIST.format(self.scene.pk))
+        self.assertEqual(refused.status_code, status.HTTP_404_NOT_FOUND)
+
+    def test_a_crowd_poses_under_its_own_name(self) -> None:
+        voiced = self.web(
+            self.ravenna,
+            "voice_crowd",
+            opponent_ids=[guard.pk for guard in self.guards],
+            name="Gate guards",
+        )
+        self.assertTrue(voiced.detail.success, voiced.detail.message)
+        entry_id = voiced.detail.data["roster_entry_id"]
+        persona_id = voiced.detail.data["persona_id"]
+
+        offered = self.web(
+            self.ravenna, "offer_npc", roster_entry_id=entry_id, guide_account_id=self.guide.pk
+        )
+        self.assertTrue(offered.detail.success, offered.detail.message)
+        accepted = self.web(
+            self.ilsa, "answer_npc_loan", loan_id=offered.detail.data["loan_id"], accept=True
+        )
+        self.assertTrue(accepted.detail.success, accepted.detail.message)
+
+        rows = self.api(self.gm).get(CAST_LIST.format(self.scene.pk)).json()
+        self.assertEqual([row["name"] for row in rows], ["Gate guards"])
+        self.assertEqual(rows[0]["count"], 8)
+        self.assertEqual(rows[0]["played_by"], "Ilsa")
+        self.assertEqual(rows[0]["loan_status"], "active")
+
+        posed = self.api(self.guide).post(
+            SUBMIT_POSE,
+            {
+                "persona_id": persona_id,
+                "scene_id": self.scene.pk,
+                "content": "Shields up! Hold the line!",
+                "client_request_id": str(uuid.uuid4()),
+            },
+            format="json",
+        )
+        self.assertIn(posed.status_code, (status.HTTP_200_OK, status.HTTP_201_CREATED), posed.data)
+        interaction = Interaction.objects.filter(content="Shields up! Hold the line!").get()
+        self.assertEqual(interaction.persona.name, "Gate guards")
+        self.assertEqual(CombatOpponent.objects.filter(persona__isnull=False).count(), 0)

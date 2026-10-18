@@ -607,6 +607,28 @@ class HighlightReelSerializer(serializers.Serializer):
     index = HighlightReelEntrySerializer(many=True)
 
 
+class CastListEntrySerializer(serializers.Serializer):
+    """One row of a scene's cast list (#4418): a named NPC or a crowd, and who plays it.
+
+    Serializes ``world.scenes.cast_list_services.CastListEntry``. ``played_by`` is a
+    character name, never an account name; blank for a crowd nobody voices yet.
+    ``count`` is the crowd's bodies (null for a named NPC); ``tier`` is the crowd's
+    opponent tier. ``roster_entry_id``/``persona_id`` are null for an unvoiced crowd.
+    """
+
+    kind = serializers.ChoiceField(choices=["npc", "crowd"])
+    name = serializers.CharField()
+    roster_entry_id = serializers.IntegerField(allow_null=True)
+    persona_id = serializers.IntegerField(allow_null=True)
+    thumbnail_url = serializers.CharField(allow_blank=True)
+    played_by = serializers.CharField(allow_blank=True)
+    loan_id = serializers.IntegerField(allow_null=True)
+    loan_status = serializers.CharField(allow_null=True)
+    tier = serializers.CharField(allow_null=True)
+    count = serializers.IntegerField(allow_null=True)
+    description = serializers.CharField(allow_blank=True)
+
+
 class SceneSummaryRevisionSerializer(serializers.ModelSerializer):
     persona_name = serializers.CharField(source="persona.name", read_only=True)
 

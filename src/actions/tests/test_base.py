@@ -535,6 +535,7 @@ class ActionRegistryTests(TestCase):
             "answer_npc_loan",
             "take_back_npc",
             "request_npc_borrow",
+            "voice_crowd",
             # #3295 — scene check invocation: player self-checks, GM calls, proposals.
             "scene_self_check",
             "call_for_check",
