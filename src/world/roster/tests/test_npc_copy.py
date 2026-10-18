@@ -4,9 +4,10 @@ from django.test import TestCase
 
 from world.gm.constants import GMLevel
 from world.gm.factories import GMProfileFactory, seed_default_gm_level_caps
-from world.npc_services.models import NpcPreference, NpcRegard, PersonalityTrait
+from world.npc_services.models import NpcPreference, NpcRegard, NpcRegardEvent, PersonalityTrait
 from world.npc_services.personality import set_npc_preferences
 from world.npc_services.regard import author_npc_regard, get_regard
+from world.relationships.models import CharacterRelationship
 from world.roster.constants import NPCSection
 from world.roster.services.npc_copy import copy_npc_as_new, copy_npc_section
 from world.roster.services.staff_characters import mint_story_npc
@@ -79,6 +80,57 @@ class NpcCopyTests(TestCase):
         assert change.source == TraitChangeSource.STAFF_EDIT
         assert CharacterTraitValue.objects.get(character=src, trait=skill.trait).value == 30
 
+    def test_copy_powers_grants_gifts_with_their_threads(self) -> None:
+        from world.magic.constants import AcquisitionOrigin, TargetKind
+        from world.magic.factories import GiftFactory, ResonanceFactory
+        from world.magic.models import CharacterGift, Thread
+        from world.magic.specialization.services import grant_gift_to_character
+
+        resonance = ResonanceFactory()
+        kept, dropped = GiftFactory(), GiftFactory()
+        kept.resonances.add(resonance)
+        dropped.resonances.add(resonance)
+        src = self.source.character_sheet
+        tgt = self.target.character_sheet
+        grant_gift_to_character(src, kept)
+        grant_gift_to_character(tgt, dropped)
+
+        copy_npc_section(self.source, self.target, NPCSection.POWERS)
+
+        assert not CharacterGift.objects.filter(character=tgt, gift=dropped).exists()
+        row = CharacterGift.objects.get(character=tgt, gift=kept)
+        assert row.origin == AcquisitionOrigin.GM_GRANT
+        assert Thread.objects.filter(
+            owner=tgt, target_kind=TargetKind.GIFT, target_gift=kept, retired_at=None
+        ).exists()
+        assert not Thread.objects.filter(owner=tgt, target_gift=dropped, retired_at=None).exists()
+        assert CharacterGift.objects.filter(character=src, gift=kept).exists()
+
+    def test_copy_all_includes_notes_for_player(self) -> None:
+        settings = self.source.story_npc_settings
+        settings.notes_for_player = "Never lets a guest stand."
+        settings.save(update_fields=["notes_for_player"])
+
+        copy_npc_section(self.source, self.target, NPCSection.ALL)
+
+        target_settings = self.target.story_npc_settings
+        target_settings.refresh_from_db()
+        assert target_settings.notes_for_player == "Never lets a guest stand."
+
+    def test_copy_persona_regard_writes_one_event_and_moves_no_gauges(self) -> None:
+        pc = PersonaFactory()
+        source_persona = self.source.character_sheet.primary_persona
+        target_persona = self.target.character_sheet.primary_persona
+        author_npc_regard(holder_persona=source_persona, target=pc, value=450)
+
+        copy_npc_section(self.source, self.target, NPCSection.REGARD)
+
+        assert get_regard(target_persona, pc) == 450
+        assert NpcRegardEvent.objects.filter(regard__holder_persona=target_persona).count() == 1
+        assert not CharacterRelationship.objects.filter(
+            source=pc.character_sheet, target=target_persona.character_sheet
+        ).exists()
+
     def test_copy_regard_replaces_target_and_leaves_source(self) -> None:
         org = OrganizationFactory()
         source_persona = self.source.character_sheet.primary_persona
@@ -113,14 +165,18 @@ class NpcAuthoringTests(TestCase):
         assert regard.value == 600
         assert regard.reason == "Owes us"
 
-    def test_author_persona_regard_steps_past_the_event_cap(self) -> None:
+    def test_author_persona_regard_is_one_event_and_moves_no_gauges(self) -> None:
         holder = PersonaFactory()
         target = PersonaFactory()
 
         author_npc_regard(holder_persona=holder, target=target, value=250)
         assert get_regard(holder, target) == 250
+        assert NpcRegardEvent.objects.filter(regard__holder_persona=holder).count() == 1
         author_npc_regard(holder_persona=holder, target=target, value=-40)
         assert get_regard(holder, target) == -40
+        assert not CharacterRelationship.objects.filter(
+            source=target.character_sheet, target=holder.character_sheet
+        ).exists()
 
     def test_set_preferences_replaces(self) -> None:
         persona = PersonaFactory()

@@ -161,12 +161,11 @@ def author_npc_regard(
     """Set ``holder_persona``'s active regard toward ``target`` to ``value`` (#4418).
 
     A GM or owner authoring an NPC's opinion, not play moving it. A persona target goes
-    through ``record_npc_regard_event`` as GM manual adjustments (stepped, since one event
-    is capped at ``max_event_delta``); an organization or society target updates or
-    creates the active row directly, clamped to REGARD_MIN/REGARD_MAX.
+    writes the row directly with one GM_MANUAL_ADJUSTMENT event for the net change and never
+    moves the PC's relationship gauges; an organization or society target updates or creates
+    the active row. Values are clamped to REGARD_MIN/REGARD_MAX.
     """
     from world.npc_services.constants import (  # noqa: PLC0415
-        NpcRegardEventReason,
         RegardTargetType,
     )
     from world.npc_services.models import REGARD_MAX, REGARD_MIN, NpcRegard  # noqa: PLC0415
@@ -175,24 +174,7 @@ def author_npc_regard(
 
     value = max(REGARD_MIN, min(REGARD_MAX, value))
     if isinstance(target, PersonaModel):
-        step = get_regard_event_config().max_event_delta
-        current = get_regard(holder_persona, target)
-        while current != value:
-            amount = max(-step, min(step, value - current))
-            record_npc_regard_event(
-                holder_persona=holder_persona,
-                target=target,
-                amount=amount,
-                reason=NpcRegardEventReason.GM_MANUAL_ADJUSTMENT,
-            )
-            current += amount
-        regard = NpcRegard.objects.get(
-            holder_persona=holder_persona, target_persona=target, ended_at__isnull=True
-        )
-        if reason and regard.reason != reason:
-            regard.reason = reason
-            regard.save(update_fields=["reason"])
-        return regard
+        return _author_persona_regard(holder_persona, target, value, reason)
 
     if isinstance(target, OrganizationModel):
         target_type, column = RegardTargetType.ORGANIZATION, "target_organization"
@@ -212,6 +194,48 @@ def author_npc_regard(
             regard.reason = reason
             update_fields.append("reason")
         regard.save(update_fields=update_fields)
+    return regard
+
+
+def _author_persona_regard(
+    holder_persona: Persona, target: Persona, value: int, reason: str
+) -> NpcRegard:
+    """Write a persona-target opinion directly, with one audit event for the net change.
+
+    Authoring is not something the PC lived through, so this skips the per-event cap, the
+    relationship-gauge mirror and the reactivity hook that ``record_npc_regard_event`` runs.
+    """
+    from django.db import transaction  # noqa: PLC0415
+
+    from world.npc_services.constants import (  # noqa: PLC0415
+        NpcRegardEventReason,
+        RegardTargetType,
+    )
+    from world.npc_services.models import NpcRegard, NpcRegardEvent  # noqa: PLC0415
+
+    with transaction.atomic():
+        regard, _ = NpcRegard.objects.get_or_create(
+            holder_persona=holder_persona,
+            target_type=RegardTargetType.PERSONA,
+            target_persona=target,
+            ended_at__isnull=True,
+            defaults={"value": 0},
+        )
+        delta = value - regard.value
+        regard.value = value
+        update_fields = ["value"]
+        if reason:
+            regard.reason = reason
+            update_fields.append("reason")
+        regard.save(update_fields=update_fields)
+        if delta:
+            event = NpcRegardEvent(
+                regard=regard,
+                reason=NpcRegardEventReason.GM_MANUAL_ADJUSTMENT,
+                amount=delta,
+            )
+            event.full_clean()
+            event.save()
     return regard
 
 

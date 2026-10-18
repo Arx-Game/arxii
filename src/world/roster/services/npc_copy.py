@@ -111,8 +111,9 @@ def _copy_prose(source: CharacterSheet, target: CharacterSheet, field: str) -> N
 
 
 def _copy_powers(source: CharacterSheet, target: CharacterSheet) -> None:
-    from world.magic.constants import AcquisitionOrigin  # noqa: PLC0415
-    from world.magic.models import CharacterGift, CharacterTechnique  # noqa: PLC0415
+    from world.magic.constants import AcquisitionOrigin, TargetKind  # noqa: PLC0415
+    from world.magic.models import CharacterGift, CharacterTechnique, Thread  # noqa: PLC0415
+    from world.magic.specialization.services import grant_gift_to_character  # noqa: PLC0415
     from world.skills.models import CharacterSkillValue  # noqa: PLC0415
     from world.traits.models import CharacterTraitChange, CharacterTraitValue  # noqa: PLC0415
 
@@ -152,13 +153,20 @@ def _copy_powers(source: CharacterSheet, target: CharacterSheet) -> None:
     )
 
     CharacterTechnique.objects.filter(character=target).delete()
-    CharacterGift.objects.filter(character=target).delete()
-    CharacterGift.objects.bulk_create(
-        [
-            CharacterGift(character=target, gift=row.gift, origin=AcquisitionOrigin.GM_GRANT)
-            for row in CharacterGift.objects.filter(character=source)
-        ]
-    )
+    source_gifts = [row.gift for row in CharacterGift.objects.filter(character=source)]
+    kept_gift_ids = {gift.pk for gift in source_gifts}
+    # No gift-revoke primitive exists; removing the link retires the gift's GIFT threads.
+    removed = CharacterGift.objects.filter(character=target).exclude(gift_id__in=kept_gift_ids)
+    Thread.objects.filter(
+        owner=target,
+        target_kind=TargetKind.GIFT,
+        target_gift_id__in=removed.values("gift_id"),
+        retired_at__isnull=True,
+    ).update_with_reason(reason="issue #4418: gift removed by NPC copy", retired_at=timezone.now())
+    removed.delete()
+    for gift in source_gifts:
+        # An already-owned gift keeps its origin (a species-granted gift stays so).
+        grant_gift_to_character(target, gift, origin=AcquisitionOrigin.GM_GRANT)
     CharacterTechnique.objects.bulk_create(
         [
             CharacterTechnique(
