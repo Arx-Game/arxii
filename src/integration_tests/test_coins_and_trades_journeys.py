@@ -147,6 +147,7 @@ class CoinsInHand(JourneyCase):
 
         told = self.telnet(self.ysmay, "secure Chest=owner_only")
         self.assertIn("You set Chest's access policy.", told)
+        self.assertTold(self.hobb, "Ysmay sets Chest's access policy.")
         chest.refresh_from_db()
         self.assertEqual(chest.access_policy, ContainerAccessPolicy.OWNER_ONLY)
 
