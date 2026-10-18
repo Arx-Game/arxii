@@ -1,0 +1,409 @@
+"""Lending a major NPC to a Guide or GM to play (#4418).
+
+A loan moves who plays a story NPC without moving who holds it. The holder keeps
+their ``RosterTenure``; an ACTIVE ``NPCLoan`` takes the NPC out of the holder's
+playable characters and puts it into the borrower's. ``playable_entries`` is the one
+place that rule lives, and both availability seams read it:
+``PlayerData.get_available_roster_entries`` (puppeting, ``mine``, selection) and
+``Account.cached_roster_entries`` (persona ownership for posting and consent).
+
+Two ways in:
+
+- A scene's GM offers an NPC they own to a Guide for that scene (``offer_npc``); the
+  Guide accepts or declines (``answer_loan``). The loan ends with the scene
+  (``end_scene_loans``) or when the owner takes it back (``end_loan``).
+- A GM or Guide asks to borrow a listed NPC (``request_borrow``). The owner's
+  ``lend_policy`` decides: ``on_request`` waits for the owner's answer,
+  ``without_asking`` is active at once.
+
+Every change clears the borrower's and the holder's identity-mapped caches (account
+and ``PlayerData``) so the change shows on the next read, and an ending loan
+unpuppets the borrower's sessions on the character.
+"""
+
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
+from django.db import transaction
+from django.db.models import Q
+from django.utils import timezone
+
+from web.api.character_type import TYPECLASS_TO_CHARACTER_TYPE
+from world.roster.constants import NPCBorrowAudience, NPCLendPolicy, NPCLoanStatus
+from world.roster.models import NPCLoan
+
+if TYPE_CHECKING:
+    from collections.abc import Iterable
+
+    from evennia.accounts.models import AccountDB
+
+    from world.roster.models import RosterEntry, StoryNPCSettings
+    from world.scenes.models import Scene
+
+OWNER_FALLBACK_NAME = "Staff"
+
+# Loans that still hold or may soon hold the NPC: what a scene's end closes.
+_OPEN_STATUSES = (NPCLoanStatus.OFFERED, NPCLoanStatus.REQUESTED, NPCLoanStatus.ACTIVE)
+
+
+class NPCLendingError(Exception):
+    """A loan the rules refuse; ``user_message`` is safe to show the player."""
+
+    def __init__(self, user_message: str) -> None:
+        super().__init__(user_message)
+        self.user_message = user_message
+
+
+# -- who is who ---------------------------------------------------------------
+
+
+def _is_staff(account: AccountDB | None) -> bool:
+    return bool(account is not None and account.is_staff)
+
+
+def _is_owner(entry: RosterEntry, account: AccountDB) -> bool:
+    return entry.created_by_account_id == account.pk
+
+
+def _is_active_guide(account: AccountDB) -> bool:
+    from world.gm.models import GuideProfile  # noqa: PLC0415
+
+    return GuideProfile.objects.filter(account=account, is_active=True).exists()
+
+
+def _is_gm(account: AccountDB) -> bool:
+    return account.gm_profile_or_none is not None
+
+
+def _holder_account(entry: RosterEntry) -> AccountDB | None:
+    tenure = entry.current_tenure
+    if tenure is None or tenure.player_data is None:
+        return None
+    return tenure.player_data.account
+
+
+def _holds(entry: RosterEntry, account: AccountDB) -> bool:
+    holder = _holder_account(entry)
+    return holder is not None and holder.pk == account.pk
+
+
+def account_character_name(account: AccountDB | None) -> str:
+    """The name of ``account``'s GM or Staff character, else ``"Staff"``.
+
+    A GM is shown to other players by their OOC GM character, never by their
+    account name. An account with no current tenure on a GM/Staff character reads
+    as staff.
+    """
+    if account is None:
+        return OWNER_FALLBACK_NAME
+    from world.roster.models import RosterTenure  # noqa: PLC0415
+
+    tenure = (
+        RosterTenure.objects.filter(
+            player_data__account=account,
+            end_date__isnull=True,
+            roster_entry__character_sheet__character__db_typeclass_path__in=list(
+                TYPECLASS_TO_CHARACTER_TYPE
+            ),
+        )
+        .select_related("roster_entry__character_sheet__character")
+        .order_by("pk")
+        .first()
+    )
+    if tenure is None:
+        return OWNER_FALLBACK_NAME
+    return tenure.roster_entry.character_sheet.character.db_key
+
+
+def owner_display_name(entry: RosterEntry) -> str:
+    """The NPC's owner as players see them: their GM/Staff character name, or "Staff"."""
+    return account_character_name(entry.created_by_account)
+
+
+# -- reading loans -------------------------------------------------------------
+
+
+def active_loan_for(entry: RosterEntry) -> NPCLoan | None:
+    """The ACTIVE loan of ``entry``, or None (at most one by constraint)."""
+    return (
+        NPCLoan.objects.filter(roster_entry=entry, status=NPCLoanStatus.ACTIVE)
+        .select_related("borrower")
+        .first()
+    )
+
+
+def active_loans_touching(account: AccountDB, entry_ids: Iterable[int]) -> list[NPCLoan]:
+    """ACTIVE loans ``account`` borrows, or that lend out one of ``entry_ids``.
+
+    One query. The rows carry what the playable-character readers need (the
+    entry's roster, sheet and character, the scene and settings for ``mine``).
+    """
+    return list(
+        NPCLoan.objects.filter(status=NPCLoanStatus.ACTIVE)
+        .filter(Q(borrower=account) | Q(roster_entry_id__in=list(entry_ids)))
+        .select_related(
+            "roster_entry__roster",
+            "roster_entry__character_sheet__character",
+            "roster_entry__story_npc_settings",
+            "scene",
+            "offered_by",
+        )
+        .order_by("pk")
+    )
+
+
+def playable_entries(
+    account: AccountDB,
+    tenure_entries: list[RosterEntry],
+    loans: list[NPCLoan] | None = None,
+) -> list[RosterEntry]:
+    """The entries ``account`` may play: its tenures minus those lent away, plus loans.
+
+    ``loans`` is ``active_loans_touching(account, ...)`` when the caller already
+    holds it cached (``PlayerData.cached_npc_loans``); otherwise it is read here.
+    """
+    if loans is None:
+        loans = active_loans_touching(account, [entry.pk for entry in tenure_entries])
+    lent_away = {loan.roster_entry_id for loan in loans if loan.borrower_id != account.pk}
+    entries = [entry for entry in tenure_entries if entry.pk not in lent_away]
+    held = {entry.pk for entry in entries}
+    for loan in loans:
+        if loan.borrower_id == account.pk and loan.roster_entry_id not in held:
+            entries.append(loan.roster_entry)
+            held.add(loan.roster_entry_id)
+    return entries
+
+
+# -- keeping the caches honest -------------------------------------------------
+
+
+def _clear_account_caches(account: AccountDB | None) -> None:
+    if account is None:
+        return
+    account.clear_cached_properties()
+    from evennia_extensions.models import PlayerData  # noqa: PLC0415
+
+    # ``Account.player_data`` creates a row on read; a loan party always has one.
+    player_data = PlayerData.objects.filter(account=account).first()
+    if player_data is not None:
+        player_data.clear_cached_properties()
+
+
+def _clear_loan_caches(loan: NPCLoan) -> None:
+    """Drop the borrower's and the holder's cached playable characters and personas."""
+    _clear_account_caches(loan.borrower)
+    _clear_account_caches(_holder_account(loan.roster_entry))
+
+
+def _unpuppet_sessions(entry: RosterEntry, *, keep: AccountDB | None) -> None:
+    """Unpuppet every session on the NPC whose account is not ``keep``.
+
+    The same shape as the unpuppet ``world.vitals.services`` runs on retirement.
+    """
+    character = entry.character_sheet.character
+    for session in list(character.sessions.all()):
+        account = session.account
+        if account is None or (keep is not None and account.pk == keep.pk):
+            continue
+        account.unpuppet_object(session)
+
+
+# -- making and answering loans -----------------------------------------------
+
+
+def _settings_for(entry: RosterEntry) -> StoryNPCSettings | None:
+    from world.roster.models import StoryNPCSettings  # noqa: PLC0415
+
+    return StoryNPCSettings.objects.filter(roster_entry=entry).first()
+
+
+def _require_lendable(entry: RosterEntry) -> StoryNPCSettings | None:
+    from world.roster.services.activity import is_story_npc  # noqa: PLC0415
+
+    if not is_story_npc(entry.character_sheet):
+        msg = "Only a story NPC can be lent."
+        raise NPCLendingError(msg)
+    settings = _settings_for(entry)
+    if settings is not None and settings.is_template:
+        msg = "A template is copied, not lent."
+        raise NPCLendingError(msg)
+    if entry.current_tenure is None:
+        msg = "Nobody holds that NPC to lend it."
+        raise NPCLendingError(msg)
+    return settings
+
+
+@transaction.atomic
+def offer_npc(*, entry: RosterEntry, guide: AccountDB, scene: Scene, by: AccountDB) -> NPCLoan:
+    """Offer ``entry`` to the Guide ``guide`` for ``scene``.
+
+    ``by`` must own the NPC (or be staff) and GM the scene (or be staff). A newer
+    offer of the same NPC for the same scene replaces an older one still waiting.
+    """
+    _require_lendable(entry)
+    if not (_is_owner(entry, by) or _is_staff(by)):
+        msg = "Only the NPC's owner can lend it."
+        raise NPCLendingError(msg)
+    if not (scene.is_gm(by) or _is_staff(by)):
+        msg = "Only the scene's GM can lend an NPC for it."
+        raise NPCLendingError(msg)
+    if not scene.is_active:
+        msg = "That scene has ended."
+        raise NPCLendingError(msg)
+    if not _is_active_guide(guide):
+        msg = "Only a Guide can be lent an NPC for a scene."
+        raise NPCLendingError(msg)
+    if _holds(entry, guide):
+        msg = "They already play that NPC."
+        raise NPCLendingError(msg)
+    for older in NPCLoan.objects.filter(
+        roster_entry=entry, scene=scene, status=NPCLoanStatus.OFFERED
+    ):
+        end_loan(older, by=None)
+    loan = NPCLoan.objects.create(
+        roster_entry=entry,
+        borrower=guide,
+        offered_by=by,
+        scene=scene,
+        status=NPCLoanStatus.OFFERED,
+    )
+    _clear_loan_caches(loan)
+    return loan
+
+
+def _may_borrow(settings: StoryNPCSettings, borrower: AccountDB) -> bool:
+    if _is_staff(borrower) or _is_gm(borrower):
+        return True
+    return settings.borrow_audience == NPCBorrowAudience.GMS_AND_GUIDES and _is_active_guide(
+        borrower
+    )
+
+
+@transaction.atomic
+def request_borrow(*, entry: RosterEntry, borrower: AccountDB) -> NPCLoan:
+    """Ask to borrow a listed NPC; active at once when its owner lends without asking."""
+    settings = _require_lendable(entry)
+    if settings is None or not settings.listed_on_npc_roster:
+        msg = "That NPC isn't on the NPC roster."
+        raise NPCLendingError(msg)
+    if settings.lend_policy == NPCLendPolicy.NOT_LENT:
+        msg = "That NPC isn't lent out."
+        raise NPCLendingError(msg)
+    if not _may_borrow(settings, borrower):
+        msg = "That NPC is lent only to GMs."
+        raise NPCLendingError(msg)
+    if _is_owner(entry, borrower) or _holds(entry, borrower):
+        msg = "You already hold that NPC."
+        raise NPCLendingError(msg)
+    if NPCLoan.objects.filter(
+        roster_entry=entry,
+        borrower=borrower,
+        status__in=(NPCLoanStatus.REQUESTED, NPCLoanStatus.ACTIVE),
+    ).exists():
+        msg = "You have already asked for that NPC."
+        raise NPCLendingError(msg)
+    owner = entry.created_by_account or _holder_account(entry)
+    loan = NPCLoan.objects.create(
+        roster_entry=entry,
+        borrower=borrower,
+        offered_by=owner or borrower,
+        status=NPCLoanStatus.REQUESTED,
+    )
+    if settings.lend_policy == NPCLendPolicy.WITHOUT_ASKING:
+        _activate(loan)
+    else:
+        _clear_loan_caches(loan)
+    return loan
+
+
+def _activate(loan: NPCLoan) -> None:
+    """Make ``loan`` the NPC's one ACTIVE loan; the previous borrower and the holder
+    stop playing it."""
+    for other in NPCLoan.objects.filter(
+        roster_entry_id=loan.roster_entry_id, status=NPCLoanStatus.ACTIVE
+    ).exclude(pk=loan.pk):
+        end_loan(other, by=None)
+    loan.status = NPCLoanStatus.ACTIVE
+    loan.started_at = timezone.now()
+    loan.save(update_fields=["status", "started_at"])
+    _clear_loan_caches(loan)
+    _unpuppet_sessions(loan.roster_entry, keep=loan.borrower)
+
+
+@transaction.atomic
+def answer_loan(*, loan: NPCLoan, accept: bool, by: AccountDB) -> NPCLoan:
+    """Accept or decline a waiting loan.
+
+    An offer is answered by the Guide it was offered to; a request by the NPC's
+    owner (or staff).
+    """
+    if loan.status == NPCLoanStatus.OFFERED:
+        if by.pk != loan.borrower_id:
+            msg = "That offer wasn't made to you."
+            raise NPCLendingError(msg)
+        if accept and not _is_active_guide(by):
+            msg = "Only a Guide can accept an NPC for a scene."
+            raise NPCLendingError(msg)
+        if accept and loan.scene is not None and not loan.scene.is_active:
+            msg = "That scene has ended."
+            raise NPCLendingError(msg)
+    elif loan.status == NPCLoanStatus.REQUESTED:
+        if not (_is_owner(loan.roster_entry, by) or _is_staff(by)):
+            msg = "Only the NPC's owner can answer that request."
+            raise NPCLendingError(msg)
+    else:
+        msg = "That loan has already been answered."
+        raise NPCLendingError(msg)
+
+    if accept:
+        _activate(loan)
+    else:
+        loan.status = NPCLoanStatus.DECLINED
+        loan.ended_at = timezone.now()
+        loan.save(update_fields=["status", "ended_at"])
+        _clear_loan_caches(loan)
+    return loan
+
+
+# -- ending loans ---------------------------------------------------------------
+
+
+def may_end_loan(loan: NPCLoan, account: AccountDB) -> bool:
+    """The owner, whoever made the offer, the borrower handing it back, or staff."""
+    return (
+        _is_staff(account)
+        or _is_owner(loan.roster_entry, account)
+        or account.pk in (loan.offered_by_id, loan.borrower_id)
+    )
+
+
+def end_loan(loan: NPCLoan, *, by: AccountDB | None) -> None:
+    """End ``loan``: the borrower stops playing the NPC and its holder plays it again.
+
+    ``by`` is None for a system end (the scene finished, a newer loan replaced it).
+    """
+    if by is not None and not may_end_loan(loan, by):
+        msg = "That isn't your loan to end."
+        raise NPCLendingError(msg)
+    if loan.status in (NPCLoanStatus.ENDED, NPCLoanStatus.DECLINED):
+        return
+    was_active = loan.status == NPCLoanStatus.ACTIVE
+    loan.status = NPCLoanStatus.ENDED
+    loan.ended_at = timezone.now()
+    loan.save(update_fields=["status", "ended_at"])
+    _clear_loan_caches(loan)
+    if was_active:
+        _unpuppet_sessions(loan.roster_entry, keep=_holder_account(loan.roster_entry))
+
+
+def end_scene_loans(scene: Scene) -> int:
+    """End every loan made for ``scene`` that is still open; returns how many."""
+    loans = list(
+        NPCLoan.objects.filter(scene=scene, status__in=_OPEN_STATUSES).select_related(
+            "roster_entry__character_sheet__character", "borrower"
+        )
+    )
+    for loan in loans:
+        end_loan(loan, by=None)
+    return len(loans)

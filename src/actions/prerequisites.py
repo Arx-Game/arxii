@@ -473,6 +473,42 @@ class IsSceneGMPrerequisite(Prerequisite):
         return False, "Only the scene's GM or staff can do that."
 
 
+@dataclass
+class IsGuidePrerequisite(Prerequisite):
+    """Actor's account must be an active Guide (#4418), with a staff bypass.
+
+    ``or_gm`` also lets any GM (an account with a ``GMProfile``) through, for the
+    verbs both Guides and GMs use: answering a loan and asking to borrow an NPC.
+    The account is the one puppeting the actor, else its tenure holder, so a Guide
+    acting from a lent NPC is still the Guide.
+    """
+
+    or_gm: bool = False
+
+    def is_met(
+        self,
+        actor: ObjectDB,
+        target: ObjectDB | None = None,
+        context: dict | None = None,
+    ) -> tuple[bool, str]:
+        from commands.utils.gm_resolution import resolve_account_or_none  # noqa: PLC0415
+        from core_management.permissions import is_staff_observer  # noqa: PLC0415
+        from world.gm.models import GuideProfile  # noqa: PLC0415
+
+        if is_staff_observer(actor):
+            return True, ""
+        account = actor.account or resolve_account_or_none(actor)
+        if account is None:
+            return False, "Only a Guide can do that."
+        if self.or_gm and account.gm_profile_or_none is not None:
+            return True, ""
+        if GuideProfile.objects.filter(account=account, is_active=True).exists():
+            return True, ""
+        if self.or_gm:
+            return False, "Only a GM or Guide can do that."
+        return False, "Only a Guide can do that."
+
+
 def _resolve_room_from_kwarg_or_location(
     actor: ObjectDB, context: dict | None
 ) -> tuple[ObjectDB | None, str]:

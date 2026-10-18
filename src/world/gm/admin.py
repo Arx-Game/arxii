@@ -1,6 +1,8 @@
 """GM admin configuration."""
 
-from django.contrib import admin
+from django.contrib import admin, messages
+from django.db.models import QuerySet
+from django.http import HttpRequest
 
 from world.gm.models import (
     AreaBuildGrant,
@@ -45,13 +47,28 @@ class GuideProfileAdmin(admin.ModelAdmin):
     raw_id_fields = ["account", "granted_by"]
     search_fields = ["account__username"]
     readonly_fields = ["active_loans"]
+    actions = ["end_active_loans"]
 
     @admin.display(description="Active NPC loans")
     def active_loans(self, obj: GuideProfile) -> str:
-        """The major NPCs this Guide is playing now (ending one is wired in Task 8)."""
+        """The major NPCs this Guide is playing now; the End-loans action ends them."""
         loans = NPCLoan.objects.filter(borrower=obj.account, status=NPCLoanStatus.ACTIVE)
         names = [str(loan.roster_entry) for loan in loans]
         return ", ".join(names) or "None"
+
+    @admin.action(description="End the selected Guides' active NPC loans")
+    def end_active_loans(self, request: HttpRequest, queryset: QuerySet[GuideProfile]) -> None:
+        """Return every NPC the selected Guides are playing to its holder (#4418)."""
+        from world.roster.services.npc_lending import end_loan  # noqa: PLC0415
+
+        loans = NPCLoan.objects.filter(
+            borrower__guide_profile__in=queryset, status=NPCLoanStatus.ACTIVE
+        ).select_related("roster_entry__character_sheet__character", "borrower")
+        ended = 0
+        for loan in loans:
+            end_loan(loan, by=request.user)
+            ended += 1
+        self.message_user(request, f"Ended {ended} NPC loan(s).", messages.SUCCESS)
 
 
 @admin.register(AreaBuildGrant)

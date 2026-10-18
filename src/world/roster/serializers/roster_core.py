@@ -4,10 +4,13 @@ Roster and RosterEntry serializers for the roster system.
 
 from typing import ClassVar
 
+from django.core.exceptions import ObjectDoesNotExist
+from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
 
 from web.api.character_type import derive_character_type
-from world.roster.models import Roster, RosterEntry
+from world.roster.models import NPCLoan, Roster, RosterEntry
+from world.roster.models.choices import RosterType
 from world.roster.serializers.characters import CharacterSerializer
 from world.roster.serializers.tenures import RosterTenureSerializer
 from world.roster.services.gallery import portrait_url
@@ -90,6 +93,14 @@ class RosterEntrySerializer(serializers.ModelSerializer):
             return ""
 
 
+class MyNPCLoanSerializer(serializers.Serializer):
+    """The loan an account plays a borrowed NPC under (#4418)."""
+
+    id = serializers.IntegerField(read_only=True)
+    scene_title = serializers.CharField(read_only=True, allow_null=True)
+    offered_by_name = serializers.CharField(read_only=True)
+
+
 class MyRosterEntrySerializer(serializers.ModelSerializer):
     """Serialize a summary of a roster entry for account menus."""
 
@@ -153,6 +164,11 @@ class MyRosterEntrySerializer(serializers.ModelSerializer):
     # session puppets the character, whatever location Evennia left it in.
     session_count = serializers.SerializerMethodField()
     room_name = serializers.SerializerMethodField()
+    # #4418: a borrowed NPC. ``loan`` names the scene and who lent it (by their GM
+    # character, never an account); ``npc_notes`` is what the owner wrote for whoever
+    # plays it. Both null on every character the account holds itself.
+    loan = serializers.SerializerMethodField()
+    npc_notes = serializers.SerializerMethodField()
 
     class Meta:
         model = RosterEntry
@@ -176,8 +192,53 @@ class MyRosterEntrySerializer(serializers.ModelSerializer):
             "thaw_available_at",
             "session_count",
             "room_name",
+            "loan",
+            "npc_notes",
         )
         read_only_fields: ClassVar[tuple[str, ...]] = fields
+
+    def _borrowed_loan(self, obj: RosterEntry) -> NPCLoan | None:
+        """The requester's ACTIVE loan of ``obj``, from their cached loans.
+
+        Only an NPC-shelf row can be borrowed, so nothing is read for any other row.
+        """
+        if obj.roster.roster_type != RosterType.NPC:
+            return None
+        request = self.context.get("request")
+        user = request.user if request is not None else None
+        if user is None or not user.is_authenticated:
+            return None
+        for loan in user.player_data.cached_npc_loans:
+            if loan.roster_entry_id == obj.pk and loan.borrower_id == user.pk:
+                return loan
+        return None
+
+    @extend_schema_field(MyNPCLoanSerializer(allow_null=True))
+    def get_loan(self, obj: RosterEntry) -> dict | None:
+        """The loan this NPC is played under, or None for the account's own characters."""
+        from world.roster.services.npc_lending import account_character_name  # noqa: PLC0415
+
+        loan = self._borrowed_loan(obj)
+        if loan is None:
+            return None
+        return MyNPCLoanSerializer(
+            {
+                "id": loan.pk,
+                "scene_title": loan.scene.name if loan.scene is not None else None,
+                "offered_by_name": account_character_name(loan.offered_by),
+            }
+        ).data
+
+    def get_npc_notes(self, obj: RosterEntry) -> str | None:
+        """The owner's notes for whoever plays this borrowed NPC, or None."""
+        loan = self._borrowed_loan(obj)
+        if loan is None:
+            return None
+        try:
+            notes = loan.roster_entry.story_npc_settings.notes_for_player
+        except ObjectDoesNotExist:
+            return None
+        return notes or None
 
     def get_character_type(self, obj: RosterEntry) -> str:
         return derive_character_type(obj.character_sheet.character)
