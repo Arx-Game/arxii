@@ -67,7 +67,8 @@ class RosterEntryViewSet(viewsets.ReadOnlyModelViewSet):
 
         NPC-shelf entries are excluded from general visibility (#3426): staff
         always see every entry; a non-staff caller sees an NPC-shelf entry
-        only when they hold an active tenure on it (their own Story NPC).
+        only when they hold an active tenure on it, or own it
+        (``created_by_account``: a GM's story NPC, a template included, #4418).
         ``RosterViewSet`` already hides the NPC *shelf itself*
         (``Roster.is_public=False``) from anonymous/non-staff shelf listings
         (#2728) -- this closes the companion gap where individual
@@ -110,6 +111,7 @@ class RosterEntryViewSet(viewsets.ReadOnlyModelViewSet):
                     end_date__isnull=True,
                 ).values_list("roster_entry_id", flat=True)
                 hidden_npc_entries &= ~Q(pk__in=own_npc_entry_ids)
+            hidden_npc_entries &= ~Q(created_by_account=user)
         return queryset.exclude(hidden_npc_entries)
 
     def get_serializer_class(self) -> type[BaseSerializer]:

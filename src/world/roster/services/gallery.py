@@ -339,10 +339,13 @@ def add_pictures(
 
     The current player's uploads join their tenure. Staff uploading to a character they
     are not playing add character art (#4151): it belongs to the character and costs
-    nobody any storage, since the quota counts the uploader and staff are exempt.
+    nobody any storage, since the quota counts the uploader and staff are exempt. A
+    story NPC's owner uploading to one nobody holds (a template, #4418) adds character
+    art too, counted against the owner's own quota.
     """
     current = entry.current_tenure
-    as_art = bool(by.is_staff) and (current is None or current.player_data.account_id != by.pk)
+    may_add_art = bool(by.is_staff) or _owns_story_npc(by, entry)
+    as_art = may_add_art and (current is None or current.player_data.account_id != by.pk)
     if not as_art and current is None:
         msg = f"entry {entry.pk} has no current tenure"
         raise PictureNotYoursError(msg, user_message="Nobody is playing this character.")
@@ -370,14 +373,27 @@ def add_pictures(
     return links
 
 
+def _owns_story_npc(account: AccountDB, entry: RosterEntry) -> bool:
+    """The GM who owns this story NPC (``can_edit_npc_sheet``), held or not (#4418)."""
+    from world.character_sheets.services import can_edit_npc_sheet  # noqa: PLC0415
+
+    return can_edit_npc_sheet(account, entry.character_sheet)
+
+
 def can_manage_gallery(account: AccountDB, entry: RosterEntry) -> bool:
-    """May this account change this character's gallery: its current player, or staff."""
+    """May this account change this character's gallery.
+
+    Its current player, staff, or the GM who owns the story NPC: a template has no
+    player, and its owner still gives it a face (#4418).
+    """
     if not account.is_authenticated:
         return False
     if account.is_staff:
         return True
     current = entry.current_tenure
-    return current is not None and current.player_data.account_id == account.pk
+    if current is not None and current.player_data.account_id == account.pk:
+        return True
+    return _owns_story_npc(account, entry)
 
 
 def entry_of(link: TenureMedia) -> RosterEntry:
@@ -386,12 +402,19 @@ def entry_of(link: TenureMedia) -> RosterEntry:
 
 
 def may_delete_picture(link: TenureMedia, by: AccountDB) -> bool:
-    """Players delete their own files; staff delete anything, character art included."""
+    """Players delete their own files; staff delete anything, character art included.
+
+    Character art belongs to the character, so a player may not delete it, except a
+    story NPC's owner taking back art they added themselves (#4418).
+    """
     if by.is_staff:
         return True
+    uploaded_by_them = (
+        link.media.player_data_id is not None and link.media.player_data.account_id == by.pk
+    )
     if link.is_character_art:
-        return False
-    return link.media.player_data_id is not None and link.media.player_data.account_id == by.pk
+        return uploaded_by_them and _owns_story_npc(by, _entry_of(link))
+    return uploaded_by_them
 
 
 def delete_picture(link: TenureMedia, *, by: AccountDB) -> DeleteOutcome:

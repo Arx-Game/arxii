@@ -62,3 +62,53 @@ class AGmMakesAnNpc(JourneyCase):
         self.assertIn("c_crop", persona.thumbnail_url)
         worn_link = entry.__class__.objects.get(pk=entry.pk).profile_picture
         self.assertEqual(persona.thumbnail, worn_link.media)
+
+    @patch(UPLOAD, new=_fake_upload)
+    def test_a_template_owner_reads_its_sheet_and_gives_it_a_face(self) -> None:
+        result = self.web(
+            self.ravenna,
+            "mint_story_npc",
+            name="Watch Officer",
+            description="Grey cloak.",
+            as_template=True,
+        )
+        self.assertTrue(result.detail.success, result.detail.message)
+        entry = RosterEntry.objects.get(pk=result.detail.data["roster_entry_id"])
+        self.assertIsNone(entry.current_tenure)
+
+        client = self.api(self.account_of(self.ravenna))
+        read = client.get(f"/api/roster/entries/{entry.pk}/")
+        self.assertEqual(read.status_code, 200, read.data)
+        self.assertEqual(read.json()["character"]["id"], entry.character_sheet_id)
+
+        created = client.post(
+            GALLERY,
+            {"roster_entry": entry.pk, "images": [SimpleUploadedFile("watch.png", b"x")]},
+            format="multipart",
+        )
+        self.assertEqual(created.status_code, 201, created.data)
+        worn = client.patch(
+            f"{GALLERY}{created.data[0]['id']}/",
+            {"crop": {"x": 100, "y": 50, "width": 400}, "wear": True},
+            format="json",
+        )
+        self.assertEqual(worn.status_code, 200, worn.data)
+        persona = entry.character_sheet.primary_persona
+        persona.refresh_from_db()
+        self.assertIn("c_crop", persona.thumbnail_url)
+
+    def test_another_gm_cannot_read_or_dress_someone_elses_template(self) -> None:
+        result = self.web(self.ravenna, "mint_story_npc", name="Watch Officer", as_template=True)
+        self.assertTrue(result.detail.success, result.detail.message)
+        entry = RosterEntry.objects.get(pk=result.detail.data["roster_entry_id"])
+        other = self.make_player("Corvin", room=self.room)
+        GMProfileFactory(account=self.account_of(other), level=GMLevel.JUNIOR)
+
+        client = self.api(self.account_of(other))
+        self.assertEqual(client.get(f"/api/roster/entries/{entry.pk}/").status_code, 404)
+        created = client.post(
+            GALLERY,
+            {"roster_entry": entry.pk, "images": [SimpleUploadedFile("watch.png", b"x")]},
+            format="multipart",
+        )
+        self.assertEqual(created.status_code, 403, created.data)
