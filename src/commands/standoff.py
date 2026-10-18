@@ -545,7 +545,9 @@ def _render_view(view: StandoffView) -> list[str]:
     lines = [f"Standoff at {view.place}:" if view.place else "Standoff:"]
     for group in view.groups:
         lines.extend(_render_group(view, group))
-    lines.append(f"You can: {', '.join(_SUBVERBS)}.")
+    # The profile is locked while you stand in a standoff, so it is not an action here.
+    actions = [verb for verb in _SUBVERBS if verb != _PROFILE_WORD]
+    lines.append(f"You can: {', '.join(actions)}.")
     return lines
 
 
