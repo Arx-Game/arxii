@@ -54,10 +54,15 @@ class JournalEntry(RelatedCacheClearingMixin, SharedMemoryModel):
     # Response linking
     parent = models.ForeignKey(
         "self",
-        on_delete=models.SET_NULL,
+        # RESTRICT, never SET_NULL: response_fields_consistent requires a parent on every
+        # Praise/Retort, so nulling it is rejected by the database (#4464). A response is
+        # another player's writing and may carry XP, so deleting the entry it answers is
+        # refused; a wipe that deletes the response in the same operation still works.
+        on_delete=models.RESTRICT,
         null=True,
         blank=True,
         related_name="responses",
+        help_text="The entry this Praise/Retort answers. Set exactly when response_type is.",
     )
     response_type = models.CharField(
         max_length=10,

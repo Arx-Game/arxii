@@ -3679,11 +3679,16 @@ class DramaticSurgeRecord(SharedMemoryModel):
     trigger_kind = models.CharField(max_length=20, choices=SurgeTriggerKind.choices)
     subject_sheet = models.ForeignKey(
         CHARACTER_SHEET_MODEL,
-        on_delete=models.SET_NULL,
+        on_delete=models.CASCADE,
         null=True,
         blank=True,
         related_name="+",
-        help_text="The bonded ally / hated foe this surge is about; null for HIGH_STAKES.",
+        help_text=(
+            "The bonded ally / hated foe this surge is about; null for HIGH_STAKES. "
+            "CASCADE for the same reason as subject_opponent (#4464): nulling it would "
+            "drop the row into the subject-less slice of the unique index, so two surges "
+            "about two different allies would collide on delete."
+        ),
     )
     subject_opponent = models.ForeignKey(
         CombatOpponent,
