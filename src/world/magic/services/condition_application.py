@@ -23,6 +23,8 @@ from world.conditions.types import (
     BulkConditionApplication,
     RemovedConditionResult,
 )
+from world.magic.constants import MagicActivity
+from world.magic.services.magic_skills import activity_skill_terms
 
 if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
@@ -332,6 +334,7 @@ def _attempt_removal(  # noqa: PLR0913 - cohesive removal-attempt params
             cure_check_type,
             condition.cure_difficulty,
             extra_modifiers=power_bonus,
+            extra_traits=activity_skill_terms(MagicActivity.DISPELLING),
         )
         if check_result.success_level <= 0:
             return RemovedConditionResult(

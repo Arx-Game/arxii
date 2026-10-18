@@ -215,13 +215,20 @@ def _restraint_holds(feeder_sheet) -> bool:
     """
     from world.checks.models import CheckType  # noqa: PLC0415
     from world.checks.services import perform_check  # noqa: PLC0415
+    from world.magic.constants import MagicActivity  # noqa: PLC0415
+    from world.magic.services.magic_skills import activity_skill_terms  # noqa: PLC0415
 
     check_type = CheckType.objects.filter(name=RESTRAINT_CHECK_NAME, is_active=True).first()
     character = feeder_sheet.character
     if check_type is None or character is None:
         logger.warning("Feeding restraint check unavailable; restraint holds by default.")
         return True
-    result = perform_check(character, check_type, RESTRAINT_DIFFICULTY)
+    result = perform_check(
+        character,
+        check_type,
+        RESTRAINT_DIFFICULTY,
+        extra_traits=activity_skill_terms(MagicActivity.FEEDING_RESTRAINT),
+    )
     return result.success_level > 0
 
 

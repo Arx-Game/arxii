@@ -12,8 +12,10 @@ import math
 from typing import TYPE_CHECKING
 
 from world.checks.services import compute_check_rating, perform_check_with_modifiers
+from world.magic.constants import MagicActivity
 from world.magic.models import TrainingOutcomeAward
 from world.magic.services.gift_acquisition import get_gift_acquisition_config
+from world.magic.services.magic_skills import activity_skill_terms
 from world.magic.services.technique_progress import contribute_to_technique_progress
 from world.magic.types.training import TrainingCheckResult
 from world.progression.services.skill_development import get_character_path_level
@@ -76,8 +78,11 @@ def resolve_training_check(
     learner_level = get_character_path_level(learner.character) or 0
     target_difficulty -= learner_level // config.training_level_divisor
 
+    learning_terms = activity_skill_terms(MagicActivity.TECHNIQUE_LEARNING)
     if teacher is not None and teacher.character is not None:
-        teacher_rating = compute_check_rating(teacher.character, check_type)
+        teacher_rating = compute_check_rating(
+            teacher.character, check_type, extra_traits=learning_terms
+        )
         teacher_skill_bonus = teacher_rating // config.training_teacher_skill_divisor
     else:
         teacher_skill_bonus = 0
@@ -90,6 +95,7 @@ def resolve_training_check(
         learner.character,
         check_type,
         target_difficulty=target_difficulty,
+        extra_traits=learning_terms,
     )
 
     # 4. Map outcome to dev-point multiplier.

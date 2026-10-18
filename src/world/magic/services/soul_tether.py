@@ -29,7 +29,7 @@ from flows.constants import EventName
 from flows.emit import emit_event
 from world.character_sheets.models import CharacterSheet
 from world.conditions.models import ConditionInstance, ConditionTemplate
-from world.magic.constants import SoulTetherRole, TargetKind
+from world.magic.constants import MagicActivity, SoulTetherRole, TargetKind
 from world.magic.exceptions import (
     AffinityGateError,
     NoSoulTetherUnlockError,
@@ -1384,12 +1384,14 @@ def _perform_rescue_check(sineater_sheet: CharacterSheet) -> Any:
     from world.checks.models import CheckType  # noqa: PLC0415
     from world.checks.services import perform_check_with_modifiers  # noqa: PLC0415
     from world.magic.seeds_checks import MAGICAL_ENDURANCE_CHECK_TYPE_NAME  # noqa: PLC0415
+    from world.magic.services.magic_skills import activity_skill_terms  # noqa: PLC0415
 
     check_type = CheckType.objects.get(name=MAGICAL_ENDURANCE_CHECK_TYPE_NAME)
     return perform_check_with_modifiers(
         sineater_sheet.character,
         check_type=check_type,
         target_difficulty=0,
+        extra_traits=activity_skill_terms(MagicActivity.SOUL_TETHER_RESCUE),
     )
 
 
