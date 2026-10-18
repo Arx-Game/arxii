@@ -92,8 +92,9 @@ Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Sc
     shim); discovery beat generalized as `fire_variant_discoveries` (dispatch on
     `target_kind`). GIFT thread substrate: `TargetKind.GIFT` + `Thread.target_gift` +
     latent provisioning at CG + `gift_resonances_for` (the four cast sites).
-  - **Anima / rituals:** `CharacterAnima`, `CharacterAnimaRitual`,
-    `AnimaRitualPerformance`, `SoulfrayConfig`, `MishapPoolTier`,
+  - **Anima / rituals:** `CharacterAnima`, the personal anima ritual (a SCENE_ACTION
+    `Ritual`; performed through `PerformRitualAction`, web Perform button and
+    telnet `ritual anima`, #4451), `AnimaRitualPerformance`, `SoulfrayConfig`, `MishapPoolTier`,
     `TechniqueOutcomeModifier`. `ANIMA_BANDS` + `anima_band_for(current, maximum)`
     (`constants.py`, PLACEHOLDER labels pending Apostate rewrite) derive the
     qualitative band word; `CharacterAnimaSerializer.band` surfaces it for the
