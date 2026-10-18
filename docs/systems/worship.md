@@ -699,7 +699,7 @@ are slice 5 (below).
 
 Spec and demo: issue #4333 (slice 5 is #4442; walkthrough D, design 6). A GM running a scene
 answers a rite performed there from the same catalogue the pledge route draws from: the live
-route. Migration 0247 is schema only.
+route. Migration 0248 is schema only.
 
 **Models**
 
