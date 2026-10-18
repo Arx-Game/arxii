@@ -196,6 +196,11 @@ def invocation_refusal(
     """The player-facing reason ``sheet`` cannot invoke ``being`` now, or ""."""
     if not being.is_active:
         return MSG_BEING_INACTIVE.format(being=being.name)
+    from world.worship.steward_services import stewarded_refusal  # noqa: PLC0415
+
+    refusal = stewarded_refusal(sheet, being)
+    if refusal:
+        return refusal
     if favor_with(sheet, being) <= 0:
         return MSG_NO_FAVOR.format(being=being.name)
     per_week = get_devotion_config().invocations_per_week

@@ -784,6 +784,13 @@ class DevotionConfig(SharedMemoryModel):
         default=8,
         help_text="Base favor from deeds per game week, counted before the earning rate.",
     )
+    steward_answer_days = models.PositiveIntegerField(
+        default=3,
+        help_text=(
+            "Days a stewarded being's table GM has to answer a closed pledge. After "
+            "this, or when the GM dismisses the prompt, an authored answer is drawn."
+        ),
+    )
     sacrifice_value_per_favor = models.PositiveIntegerField(
         default=10,
         help_text=(
@@ -1698,3 +1705,39 @@ class PendingAnswer(SharedMemoryModel):
 
     def __str__(self) -> str:
         return f"Held answer for {self.character_sheet} ({self.answer})"
+
+
+class BeingSteward(SharedMemoryModel):
+    """A GM table that answers for a being (#4333 slice 4, design 5).
+
+    Staff assign it from the being's admin page. The table's GM writes the
+    being's pledge types and answers on the table page, and a closing rite of a
+    pledge to it goes to that GM as a ``BEING_ANSWER`` prompt instead of a draw.
+    Only the table's members can pledge to, invoke or pray to a stewarded being.
+    Refused for a table whose GM is below Senior and for a being that shows a
+    sign of being a god (``steward_services.steward_refusals``).
+    """
+
+    being = models.OneToOneField(WorshippedBeing, on_delete=models.CASCADE, related_name="steward")
+    table = models.ForeignKey(
+        "arxii.GMTable", on_delete=models.PROTECT, related_name="stewarded_beings"
+    )
+    assigned_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["being__name"]
+        verbose_name = "Being steward"
+        verbose_name_plural = "Being stewards"
+
+    def __str__(self) -> str:
+        return f"{self.being} stewarded by {self.table.name}"
+
+    def clean(self) -> None:
+        super().clean()
+        if self.being_id is None or self.table_id is None:
+            return
+        from world.worship.steward_services import steward_refusals  # noqa: PLC0415
+
+        refusals = steward_refusals(self.being, self.table)
+        if refusals:
+            raise ValidationError({"table": refusals})

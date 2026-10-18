@@ -80,6 +80,18 @@
   for (`PendingAnswer`): kept, never dropped, and sent as a vision by the daily tick
   (`deliver_held_answers`) once the pool can pay. Staff see held answers on the being's
   dashboard.
+- **Steward** — a GM table assigned to a being by staff (`BeingSteward`, #4333 slice 4). The
+  table's GM writes the being's pledge types and answers on the table page, and a closing rite
+  of a pledge to it reaches that GM as a `BEING_ANSWER` prompt: one of the being's answers at or
+  below the tier, or on Success and above the GM's own text (ADR-4333-C). Dismissed or
+  unanswered within `DevotionConfig.steward_answer_days`, an authored answer is drawn. Only a
+  Senior GM's table, never for a being that shows a **god sign** (a public codex entry, a public
+  worship declaration, a Chosen outside the table, a temple; a secret faith is not one). Only
+  the table's members serve a stewarded being. _Avoid_: owner, patron (a patron is the being of
+  a Chosen), custodian (stories' custody).
+- **Catalogue clue** — a clue one of a being's answers already links (fact or follow-up,
+  `catalogue_clues`): the only clues a steward attaches to their own text or to answers they
+  write. Staff create clues.
 - **Domains** — `WorshippedBeing.domains`, plain prose naming the spheres a being holds
   ("Carnage, wanton bloodshed, feral battle"). Deliberately NOT a lookup table (#3776):
   overlap between gods is expected and nothing matches on it mechanically, so a

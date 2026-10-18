@@ -147,8 +147,18 @@ Vitals (#2287 ghost containers), Events/Scenes (optional chassis)
   the rite line. When the being's worship pool cannot pay, the answer is held and the daily
   tick sends it once it can; staff see held answers on the Deity Editor. A lapse never
   delivers one. The Answer builder admin page authors them. ADR-4333-B (amends the Vision
-  rule). Next slices of #4333: stewards, answering live, rituals, Mysteries, favored facets
-  on worn items.
+  rule).
+- **Favor with beings, slice 4: stewards (#4333, #4416):** staff assign a being to a Senior
+  GM's table (refused for a being that shows a god sign: a public codex entry, a public worship
+  declaration, a Chosen outside the table, a temple; a secret faith is not one). Only the
+  table's members pledge to, invoke, pray to or sacrifice to it, a member's sacrifice needs no
+  shrine, and the table GM writes its pledge types and answers on the table page's Beings tab.
+  A closing rite of a pledge to it goes to the table GM as a being answer prompt: one of the
+  being's answers at or below the tier, or on Success and above the GM's own text with a clue
+  its answers already link. Dismissing it, or leaving it past the configured days, draws an
+  authored answer, so the GM's own text is the rare case. Web (table page and the scene GM
+  queue), telnet (`gm prompt answer`) and admin (the steward inline). ADR-4333-C. Next slices
+  of #4333: answering live, rituals, Mysteries, favored facets on worn items.
 
 ## Not built (filed)
 

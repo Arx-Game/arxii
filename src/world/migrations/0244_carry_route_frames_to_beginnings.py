@@ -23,9 +23,7 @@ def carry_frames(apps, schema_editor):
 
 
 class Migration(migrations.Migration):
-    dependencies = [
-        ("arxii", "0243_beginning_frame_station_strikes_and_beat_age_picks"),
-    ]
+    dependencies = [("arxii", "0243_beginning_frame_station_strikes_and_beat_age_picks")]
 
     operations = [
         migrations.RunPython(carry_frames, migrations.RunPython.noop),

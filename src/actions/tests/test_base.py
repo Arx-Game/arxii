@@ -613,6 +613,8 @@ class ActionRegistryTests(TestCase):
             "pledge_take",
             "pledge_close",
             "sacrifice",
+            # #4333 slice 4 — a stewarded being's table GM answers a closed pledge.
+            "gm_being_answer",
             "ceremony_open",
             "ceremony_offering",
             "ceremony_speech",

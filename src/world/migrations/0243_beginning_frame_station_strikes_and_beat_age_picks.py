@@ -5,7 +5,7 @@ from django.db import migrations, models
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("arxii", "0242_secret_hook"),
+        ("arxii", "0243_stewarded_beings"),
     ]
 
     operations = [

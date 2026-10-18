@@ -246,13 +246,17 @@ class AnswerDelivery:
     """What a resolved pledge's answer came to (#4333 slice 3).
 
     ``answer`` is None when the being had no answer that fit the draw (no
-    vision). ``held`` is True when the being's worship pool could not pay and a
-    ``PendingAnswer`` holds it; ``vision`` is the delivered vision otherwise.
+    vision), or when its steward wrote the vision's text. ``held`` is True when
+    the being's worship pool could not pay and a ``PendingAnswer`` holds it;
+    ``vision`` is the delivered vision otherwise. ``awaiting_steward`` is True
+    when the closing went to a stewarded being's table GM as a ``BEING_ANSWER``
+    prompt (slice 4): nothing is drawn or sent yet.
     """
 
     answer: Answer | None
     vision: Vision | None
     held: bool
+    awaiting_steward: bool = False
 
 
 @dataclass(frozen=True)

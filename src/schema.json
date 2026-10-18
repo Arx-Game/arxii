@@ -17003,6 +17003,7 @@ paths:
           enum:
           - audere_surge
           - audere_ultimate
+          - being_answer
           - crossing
           - death
           - dramatic_moment
@@ -17020,6 +17021,7 @@ paths:
           * `death` - Death
           * `stake_outcome` - Stake outcome
           * `standoff_cause` - Standoff
+          * `being_answer` - Being answer
       - name: page
         required: false
         in: query
@@ -43040,6 +43042,576 @@ paths:
               schema:
                 $ref: '#/components/schemas/WorshipRite'
           description: ''
+  /api/worship/steward-answers/:
+    get:
+      operationId: worship_steward_answers_list
+      description: |-
+        A stewarded being's answers. Retired by clearing Active, never deleted: a
+        delivered vision keeps its answer.
+      parameters:
+      - in: query
+        name: being
+        schema:
+          type: integer
+      - in: query
+        name: outcome_tier
+        schema:
+          type: integer
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      - in: query
+        name: pledge
+        schema:
+          type: integer
+      tags:
+      - worship
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedStewardAnswerList'
+          description: ''
+    post:
+      operationId: worship_steward_answers_create
+      description: |-
+        A stewarded being's answers. Retired by clearing Active, never deleted: a
+        delivered vision keeps its answer.
+      tags:
+      - worship
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StewardAnswerRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StewardAnswer'
+          description: ''
+  /api/worship/steward-answers/{id}/:
+    get:
+      operationId: worship_steward_answers_retrieve
+      description: |-
+        A stewarded being's answers. Retired by clearing Active, never deleted: a
+        delivered vision keeps its answer.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this answer.
+        required: true
+      tags:
+      - worship
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StewardAnswer'
+          description: ''
+    put:
+      operationId: worship_steward_answers_update
+      description: |-
+        A stewarded being's answers. Retired by clearing Active, never deleted: a
+        delivered vision keeps its answer.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this answer.
+        required: true
+      tags:
+      - worship
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StewardAnswerRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StewardAnswer'
+          description: ''
+    patch:
+      operationId: worship_steward_answers_partial_update
+      description: |-
+        A stewarded being's answers. Retired by clearing Active, never deleted: a
+        delivered vision keeps its answer.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this answer.
+        required: true
+      tags:
+      - worship
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedStewardAnswerRequest'
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StewardAnswer'
+          description: ''
+  /api/worship/steward-pledges/:
+    get:
+      operationId: worship_steward_pledges_list
+      description: |-
+        A stewarded being's pledge types. Retired by clearing Active, never deleted:
+        a taken pledge keeps pointing at its type.
+      parameters:
+      - in: query
+        name: being
+        schema:
+          type: integer
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      tags:
+      - worship
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedStewardPledgeList'
+          description: ''
+    post:
+      operationId: worship_steward_pledges_create
+      description: |-
+        A stewarded being's pledge types. Retired by clearing Active, never deleted:
+        a taken pledge keeps pointing at its type.
+      tags:
+      - worship
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StewardPledgeRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StewardPledge'
+          description: ''
+  /api/worship/steward-pledges/{id}/:
+    get:
+      operationId: worship_steward_pledges_retrieve
+      description: |-
+        A stewarded being's pledge types. Retired by clearing Active, never deleted:
+        a taken pledge keeps pointing at its type.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this pledge.
+        required: true
+      tags:
+      - worship
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StewardPledge'
+          description: ''
+    put:
+      operationId: worship_steward_pledges_update
+      description: |-
+        A stewarded being's pledge types. Retired by clearing Active, never deleted:
+        a taken pledge keeps pointing at its type.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this pledge.
+        required: true
+      tags:
+      - worship
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StewardPledgeRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StewardPledge'
+          description: ''
+    patch:
+      operationId: worship_steward_pledges_partial_update
+      description: |-
+        A stewarded being's pledge types. Retired by clearing Active, never deleted:
+        a taken pledge keeps pointing at its type.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this pledge.
+        required: true
+      tags:
+      - worship
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedStewardPledgeRequest'
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StewardPledge'
+          description: ''
+  /api/worship/steward-prompts/:
+    get:
+      operationId: worship_steward_prompts_list
+      description: |-
+        Closed pledges waiting on their being's steward: the answer panel.
+
+        Lists the requester's own pending ``BEING_ANSWER`` prompts (staff: any, so
+        staff can cover for an absent GM through the same panel).
+      parameters:
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      - in: query
+        name: table
+        schema:
+          type: integer
+      tags:
+      - worship
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedStewardPromptList'
+          description: ''
+  /api/worship/steward-prompts/{id}/:
+    get:
+      operationId: worship_steward_prompts_retrieve
+      description: |-
+        Closed pledges waiting on their being's steward: the answer panel.
+
+        Lists the requester's own pending ``BEING_ANSWER`` prompts (staff: any, so
+        staff can cover for an absent GM through the same panel).
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this GM Prompt.
+        required: true
+      tags:
+      - worship
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StewardPrompt'
+          description: ''
+  /api/worship/steward-prompts/{id}/answer/:
+    post:
+      operationId: worship_steward_prompts_answer_create
+      description: Send one of the being's answers, or the GM's own text with a clue.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this GM Prompt.
+        required: true
+      tags:
+      - worship
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StewardSendRequest'
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StewardActionResult'
+          description: ''
+  /api/worship/steward-prompts/{id}/dismiss/:
+    post:
+      operationId: worship_steward_prompts_dismiss_create
+      description: 'Dismiss: the being''s authored answers are drawn instead.'
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this GM Prompt.
+        required: true
+      tags:
+      - worship
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StewardActionResult'
+          description: ''
+  /api/worship/steward-sacrifice-lines/:
+    get:
+      operationId: worship_steward_sacrifice_lines_list
+      description: An answer's lines for its being's favored facets.
+      parameters:
+      - in: query
+        name: answer
+        schema:
+          type: integer
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      tags:
+      - worship
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedStewardSacrificeLineList'
+          description: ''
+    post:
+      operationId: worship_steward_sacrifice_lines_create
+      description: An answer's lines for its being's favored facets.
+      tags:
+      - worship
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StewardSacrificeLineRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StewardSacrificeLine'
+          description: ''
+  /api/worship/steward-sacrifice-lines/{id}/:
+    put:
+      operationId: worship_steward_sacrifice_lines_update
+      description: An answer's lines for its being's favored facets.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this answer sacrifice line.
+        required: true
+      tags:
+      - worship
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StewardSacrificeLineRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StewardSacrificeLine'
+          description: ''
+    patch:
+      operationId: worship_steward_sacrifice_lines_partial_update
+      description: An answer's lines for its being's favored facets.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this answer sacrifice line.
+        required: true
+      tags:
+      - worship
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedStewardSacrificeLineRequest'
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StewardSacrificeLine'
+          description: ''
+    delete:
+      operationId: worship_steward_sacrifice_lines_destroy
+      description: An answer's lines for its being's favored facets.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this answer sacrifice line.
+        required: true
+      tags:
+      - worship
+      security:
+      - cookieAuth: []
+      responses:
+        '204':
+          description: No response body
+  /api/worship/stewarded-beings/:
+    get:
+      operationId: worship_stewarded_beings_list
+      description: The beings a table stewards, as the Beings section's cards.
+      parameters:
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      - in: query
+        name: table
+        schema:
+          type: integer
+      tags:
+      - worship
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedStewardedBeingList'
+          description: ''
+  /api/worship/stewarded-beings/{id}/:
+    get:
+      operationId: worship_stewarded_beings_retrieve
+      description: The beings a table stewards, as the Beings section's cards.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this worshipped being.
+        required: true
+      tags:
+      - worship
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StewardedBeing'
+          description: ''
   /api/worship/visions/:
     get:
       operationId: worship_visions_list
@@ -57882,6 +58454,7 @@ components:
             * `death` - Death
             * `stake_outcome` - Stake outcome
             * `standoff_cause` - Standoff
+            * `being_answer` - Being answer
         kind_label:
           type: string
           readOnly: true
@@ -57947,6 +58520,16 @@ components:
           description: 'The force on both sides, read when the queue is: blank on
             other kinds.'
           readOnly: true
+        being_answer_summary:
+          type: string
+          description: '''<being> answers <name> (<tier>).'' for a being_answer prompt;
+            blank otherwise.'
+          readOnly: true
+        being_answer_table:
+          type: integer
+          nullable: true
+          description: The table whose page holds a being_answer prompt's answer panel.
+          readOnly: true
         resolution_note:
           type: string
           readOnly: true
@@ -57972,6 +58555,8 @@ components:
           format: date-time
           readOnly: true
       required:
+      - being_answer_summary
+      - being_answer_table
       - character_sheet
       - created_at
       - id
@@ -58018,6 +58603,7 @@ components:
       - death
       - stake_outcome
       - standoff
+      - being_answer
       type: string
       description: |-
         * `dramatic_moment` - Dramatic Moment
@@ -58026,6 +58612,7 @@ components:
         * `death` - Deaths
         * `stake_outcome` - Stake outcomes
         * `standoff` - Standoffs
+        * `being_answer` - Being answers
     GMPromptFilterRequest:
       type: object
       description: One per-group row of a GM's prompt-filter switches (#4101; demo
@@ -58048,6 +58635,7 @@ components:
       - death
       - stake_outcome
       - standoff_cause
+      - being_answer
       type: string
       description: |-
         * `dramatic_moment` - Dramatic Moment
@@ -58058,6 +58646,7 @@ components:
         * `death` - Death
         * `stake_outcome` - Stake outcome
         * `standoff_cause` - Standoff
+        * `being_answer` - Being answer
     GMPromptStatusEnum:
       enum:
       - pending
@@ -73852,6 +74441,121 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/StandingDeclaration'
+    PaginatedStewardAnswerList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/StewardAnswer'
+    PaginatedStewardPledgeList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/StewardPledge'
+    PaginatedStewardPromptList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/StewardPrompt'
+    PaginatedStewardSacrificeLineList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/StewardSacrificeLine'
+    PaginatedStewardedBeingList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/StewardedBeing'
     PaginatedStoryFeedbackList:
       type: object
       required:
@@ -77395,6 +78099,108 @@ components:
           type: string
         is_active:
           type: boolean
+    PatchedStewardAnswerRequest:
+      type: object
+      description: |-
+        An answer for a stewarded being, with the same tier limits as the staff
+        Answer builder. Its clues must already be in the being's catalogue.
+      properties:
+        being:
+          type: integer
+        pledge:
+          type: integer
+          nullable: true
+          description: The pledge type this answers; empty for the being's general
+            answers.
+        outcome_tier:
+          type: integer
+        delay_text:
+          type: string
+          minLength: 1
+          description: Opens the vision and states that the character's effort was
+            acknowledged.
+        answer_text:
+          type: string
+          description: The main body. Sacrifice lines are added after it.
+        fact_text:
+          type: string
+          description: States one fact. Success and Critical Success only.
+        fact_clue:
+          type: integer
+          nullable: true
+          description: A Codex or secret clue handed over with the fact.
+        cost_text:
+          type: string
+          description: A cost, or a notice that the being has marked the character.
+        cost_pool:
+          type: integer
+          nullable: true
+          description: Consequences applied at this answer's outcome tier when it
+            is delivered.
+        follow_up_text:
+          type: string
+          description: A next action, usually a mission.
+        follow_up_clue:
+          type: integer
+          nullable: true
+          description: Handed over with the vision. Partial Success and above.
+        onlooker_line:
+          type: string
+          description: Sent to the room as a public line. Others in the room see this
+            line and nothing else from the answer.
+          maxLength: 300
+        conceals_source:
+          type: boolean
+          description: Deliver the vision without telling the recipient which being
+            sent it.
+        weight:
+          type: integer
+          maximum: 32767
+          minimum: 0
+          description: Relative chance among the answers that fit a draw.
+        is_active:
+          type: boolean
+    PatchedStewardPledgeRequest:
+      type: object
+      description: A stewarded being's pledge type, written by its table GM.
+      properties:
+        being:
+          type: integer
+        name:
+          type: string
+          minLength: 1
+          maxLength: 100
+        description:
+          type: string
+          description: Shown to the player when they take the pledge. Progress is
+            counted automatically from favor.
+        favor_target:
+          type: integer
+          maximum: 2147483647
+          minimum: 0
+          description: Favor to earn with the being after pledging, before closing.
+        span_weeks:
+          type: integer
+          maximum: 32767
+          minimum: 0
+          description: Game weeks the character has to earn the target and close.
+        closing_rite:
+          type: integer
+          description: One of the being's own tier 1 or 2 rites; performing it closes
+            the pledge.
+        is_active:
+          type: boolean
+    PatchedStewardSacrificeLineRequest:
+      type: object
+      description: One answer's line for one of its being's favored facets.
+      properties:
+        answer:
+          type: integer
+        facet:
+          type: integer
+        text:
+          type: string
+          minLength: 1
     PatchedStoryDetailRequest:
       type: object
       description: Full serializer for story detail views
@@ -88501,6 +89307,418 @@ components:
         * `inactive` - Inactive
         * `completed` - Completed
         * `cancelled` - Cancelled
+    StewardActionResult:
+      type: object
+      description: What the panel's send or dismiss reports back.
+      properties:
+        detail:
+          type: string
+      required:
+      - detail
+    StewardAnswer:
+      type: object
+      description: |-
+        An answer for a stewarded being, with the same tier limits as the staff
+        Answer builder. Its clues must already be in the being's catalogue.
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        being:
+          type: integer
+        pledge:
+          type: integer
+          nullable: true
+          description: The pledge type this answers; empty for the being's general
+            answers.
+        outcome_tier:
+          type: integer
+        outcome_tier_name:
+          type: string
+          readOnly: true
+        delay_text:
+          type: string
+          description: Opens the vision and states that the character's effort was
+            acknowledged.
+        answer_text:
+          type: string
+          description: The main body. Sacrifice lines are added after it.
+        fact_text:
+          type: string
+          description: States one fact. Success and Critical Success only.
+        fact_clue:
+          type: integer
+          nullable: true
+          description: A Codex or secret clue handed over with the fact.
+        cost_text:
+          type: string
+          description: A cost, or a notice that the being has marked the character.
+        cost_pool:
+          type: integer
+          nullable: true
+          description: Consequences applied at this answer's outcome tier when it
+            is delivered.
+        follow_up_text:
+          type: string
+          description: A next action, usually a mission.
+        follow_up_clue:
+          type: integer
+          nullable: true
+          description: Handed over with the vision. Partial Success and above.
+        onlooker_line:
+          type: string
+          description: Sent to the room as a public line. Others in the room see this
+            line and nothing else from the answer.
+          maxLength: 300
+        conceals_source:
+          type: boolean
+          description: Deliver the vision without telling the recipient which being
+            sent it.
+        weight:
+          type: integer
+          maximum: 32767
+          minimum: 0
+          description: Relative chance among the answers that fit a draw.
+        is_active:
+          type: boolean
+        sacrifice_lines:
+          type: array
+          items:
+            $ref: '#/components/schemas/StewardSacrificeLine'
+          readOnly: true
+      required:
+      - being
+      - delay_text
+      - id
+      - outcome_tier
+      - outcome_tier_name
+      - sacrifice_lines
+    StewardAnswerRequest:
+      type: object
+      description: |-
+        An answer for a stewarded being, with the same tier limits as the staff
+        Answer builder. Its clues must already be in the being's catalogue.
+      properties:
+        being:
+          type: integer
+        pledge:
+          type: integer
+          nullable: true
+          description: The pledge type this answers; empty for the being's general
+            answers.
+        outcome_tier:
+          type: integer
+        delay_text:
+          type: string
+          minLength: 1
+          description: Opens the vision and states that the character's effort was
+            acknowledged.
+        answer_text:
+          type: string
+          description: The main body. Sacrifice lines are added after it.
+        fact_text:
+          type: string
+          description: States one fact. Success and Critical Success only.
+        fact_clue:
+          type: integer
+          nullable: true
+          description: A Codex or secret clue handed over with the fact.
+        cost_text:
+          type: string
+          description: A cost, or a notice that the being has marked the character.
+        cost_pool:
+          type: integer
+          nullable: true
+          description: Consequences applied at this answer's outcome tier when it
+            is delivered.
+        follow_up_text:
+          type: string
+          description: A next action, usually a mission.
+        follow_up_clue:
+          type: integer
+          nullable: true
+          description: Handed over with the vision. Partial Success and above.
+        onlooker_line:
+          type: string
+          description: Sent to the room as a public line. Others in the room see this
+            line and nothing else from the answer.
+          maxLength: 300
+        conceals_source:
+          type: boolean
+          description: Deliver the vision without telling the recipient which being
+            sent it.
+        weight:
+          type: integer
+          maximum: 32767
+          minimum: 0
+          description: Relative chance among the answers that fit a draw.
+        is_active:
+          type: boolean
+      required:
+      - being
+      - delay_text
+      - outcome_tier
+    StewardPledge:
+      type: object
+      description: A stewarded being's pledge type, written by its table GM.
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        being:
+          type: integer
+        name:
+          type: string
+          maxLength: 100
+        description:
+          type: string
+          description: Shown to the player when they take the pledge. Progress is
+            counted automatically from favor.
+        favor_target:
+          type: integer
+          maximum: 2147483647
+          minimum: 0
+          description: Favor to earn with the being after pledging, before closing.
+        span_weeks:
+          type: integer
+          maximum: 32767
+          minimum: 0
+          description: Game weeks the character has to earn the target and close.
+        closing_rite:
+          type: integer
+          description: One of the being's own tier 1 or 2 rites; performing it closes
+            the pledge.
+        is_active:
+          type: boolean
+        covered_tiers:
+          type: array
+          items:
+            type: integer
+          description: |-
+            Outcome tiers with at least one active answer for this pledge type.
+
+            A being card passes every pledge's coverage in ``context["coverage"]``
+            (one query for the card); a lone pledge reads its own.
+          readOnly: true
+      required:
+      - being
+      - closing_rite
+      - covered_tiers
+      - id
+      - name
+    StewardPledgeRequest:
+      type: object
+      description: A stewarded being's pledge type, written by its table GM.
+      properties:
+        being:
+          type: integer
+        name:
+          type: string
+          minLength: 1
+          maxLength: 100
+        description:
+          type: string
+          description: Shown to the player when they take the pledge. Progress is
+            counted automatically from favor.
+        favor_target:
+          type: integer
+          maximum: 2147483647
+          minimum: 0
+          description: Favor to earn with the being after pledging, before closing.
+        span_weeks:
+          type: integer
+          maximum: 32767
+          minimum: 0
+          description: Game weeks the character has to earn the target and close.
+        closing_rite:
+          type: integer
+          description: One of the being's own tier 1 or 2 rites; performing it closes
+            the pledge.
+        is_active:
+          type: boolean
+      required:
+      - being
+      - closing_rite
+      - name
+    StewardPrompt:
+      type: object
+      description: A ``BEING_ANSWER`` prompt as the steward's answer panel reads it.
+      properties:
+        id:
+          type: integer
+        being:
+          type: integer
+        being_name:
+          type: string
+        table:
+          type: integer
+        subject_name:
+          type: string
+        pledge_name:
+          type: string
+        outcome_tier_name:
+          type: string
+        sacrificed:
+          type: array
+          items:
+            type: string
+        prayer_text:
+          type: string
+        options:
+          type: array
+          items:
+            $ref: '#/components/schemas/_AnswerOption'
+        may_write_free_text:
+          type: boolean
+        catalogue_clues:
+          type: array
+          items:
+            $ref: '#/components/schemas/_CatalogueClue'
+        window_ends_at:
+          type: string
+          format: date-time
+      required:
+      - being
+      - being_name
+      - catalogue_clues
+      - id
+      - may_write_free_text
+      - options
+      - outcome_tier_name
+      - pledge_name
+      - prayer_text
+      - sacrificed
+      - subject_name
+      - table
+      - window_ends_at
+    StewardSacrificeLine:
+      type: object
+      description: One answer's line for one of its being's favored facets.
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        answer:
+          type: integer
+        facet:
+          type: integer
+        facet_name:
+          type: string
+          readOnly: true
+        text:
+          type: string
+      required:
+      - answer
+      - facet
+      - facet_name
+      - id
+      - text
+    StewardSacrificeLineRequest:
+      type: object
+      description: One answer's line for one of its being's favored facets.
+      properties:
+        answer:
+          type: integer
+        facet:
+          type: integer
+        text:
+          type: string
+          minLength: 1
+      required:
+      - answer
+      - facet
+      - text
+    StewardSendRequest:
+      type: object
+      description: 'The panel''s send: one authored answer, or the GM''s own text
+        and a clue.'
+      properties:
+        answer:
+          type: integer
+          nullable: true
+        text:
+          type: string
+          default: ''
+        clue:
+          type: integer
+          nullable: true
+    StewardedBeing:
+      type: object
+      description: One being card on the table page, with what its authoring forms
+        need.
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        name:
+          type: string
+          readOnly: true
+        description:
+          type: string
+          readOnly: true
+          description: PLACEHOLDER lore — Apostate rewrite pending.
+        table:
+          type: integer
+          readOnly: true
+        favored_resonances:
+          type: array
+          items:
+            type: string
+          readOnly: true
+        associated_resonances:
+          type: array
+          items:
+            type: string
+          readOnly: true
+        favored_facets:
+          type: array
+          items:
+            $ref: '#/components/schemas/_NamedRow'
+          readOnly: true
+        closing_rites:
+          type: array
+          items:
+            $ref: '#/components/schemas/_NamedRow'
+          readOnly: true
+        pledges:
+          type: array
+          items:
+            $ref: '#/components/schemas/StewardPledge'
+          readOnly: true
+        general_covered_tiers:
+          type: array
+          items:
+            type: integer
+          readOnly: true
+        outcome_tiers:
+          type: array
+          items:
+            $ref: '#/components/schemas/_OutcomeTier'
+          readOnly: true
+        catalogue_clues:
+          type: array
+          items:
+            $ref: '#/components/schemas/_CatalogueClue'
+          readOnly: true
+        cost_pools:
+          type: array
+          items:
+            $ref: '#/components/schemas/_NamedRow'
+          readOnly: true
+      required:
+      - associated_resonances
+      - catalogue_clues
+      - closing_rites
+      - cost_pools
+      - description
+      - favored_facets
+      - favored_resonances
+      - general_covered_tiers
+      - id
+      - name
+      - outcome_tiers
+      - pledges
+      - table
     StoryAreaManager:
       type: object
       description: 'The story-builder area-manager payload: area header + rooms (with
@@ -95202,6 +96420,38 @@ components:
         * `tired` - Tired
         * `overexerted` - Overexerted
         * `exhausted` - Exhausted
+    _AnswerOption:
+      type: object
+      properties:
+        id:
+          type: integer
+        outcome_tier_name:
+          type: string
+        pledge_name:
+          type: string
+        answer_text:
+          type: string
+        delay_text:
+          type: string
+      required:
+      - answer_text
+      - delay_text
+      - id
+      - outcome_tier_name
+      - pledge_name
+    _CatalogueClue:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        target_kind:
+          type: string
+      required:
+      - id
+      - name
+      - target_kind
     _CategoryPolish:
       type: object
       description: One polish category's value + derived tier label for a building.
@@ -95300,6 +96550,16 @@ components:
       - body
       - id
       - title
+    _NamedRow:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+      required:
+      - id
+      - name
     _NearXPLockProspect:
       type: object
       description: One entry in the near-xp-lock list returned by ThreadHubSummaryView.
@@ -95317,6 +96577,19 @@ components:
       - dev_points_to_boundary
       - thread_id
       - xp_cost
+    _OutcomeTier:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        success_level:
+          type: integer
+      required:
+      - id
+      - name
+      - success_level
     _OwnedDwelling:
       type: object
       description: |-

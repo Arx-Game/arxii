@@ -14,6 +14,7 @@ from world.gm.constants import (
     GMApplicationStatus,
     GMLevel,
     GMPromptGroup,
+    GMPromptKind,
     GMTableViewerRole,
     TableRequestKind,
 )
@@ -1026,6 +1027,8 @@ class GMPromptSerializer(serializers.ModelSerializer):
     standoff_reason = serializers.CharField(
         source="standoff_group.proposal_reason", read_only=True, default=""
     )
+    being_answer_summary = serializers.SerializerMethodField()
+    being_answer_table = serializers.SerializerMethodField()
 
     class Meta:
         model = GMPrompt
@@ -1047,6 +1050,8 @@ class GMPromptSerializer(serializers.ModelSerializer):
             "standoff_cause_label",
             "standoff_reason",
             "standoff_force",
+            "being_answer_summary",
+            "being_answer_table",
             "resolution_note",
             "room_text",
             "private_text",
@@ -1091,6 +1096,23 @@ class GMPromptSerializer(serializers.ModelSerializer):
         if group is None:
             return ""
         return CauseKind(group_cause(group)[0]).label
+
+    def get_being_answer_summary(self, obj: GMPrompt) -> str:
+        """'<being> answers <name> (<tier>).' for a being_answer prompt; blank otherwise."""
+        if obj.kind != GMPromptKind.BEING_ANSWER:
+            return ""
+        from world.worship.steward_services import prompt_summary  # noqa: PLC0415
+
+        return prompt_summary(obj)
+
+    def get_being_answer_table(self, obj: GMPrompt) -> int | None:
+        """The table whose page holds a being_answer prompt's answer panel."""
+        if obj.kind != GMPromptKind.BEING_ANSWER or obj.pledge is None:
+            return None
+        from world.worship.steward_services import steward_of  # noqa: PLC0415
+
+        steward = steward_of(obj.pledge.pledge.being)
+        return steward.table_id if steward is not None else None
 
     def get_standoff_force(self, obj: GMPrompt) -> str:
         """The force on both sides, read when the queue is: blank on other kinds."""

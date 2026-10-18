@@ -299,3 +299,30 @@ export interface PaginatedGMQueueApplications {
 
 /** action is validated server-side against GMApplicationActionSerializer.APPROVE/DENY. */
 export type GMApplicationAction = 'approve' | 'deny';
+
+// ---------------------------------------------------------------------------
+// Stewarded beings (#4333 slice 4): the Beings tab, for the table's GM.
+// /api/worship/stewarded-beings/, steward-pledges/, steward-answers/,
+// steward-sacrifice-lines/ and steward-prompts/ (world.worship.steward_views).
+// ---------------------------------------------------------------------------
+
+/** One stewarded being's card, with what its pledge and answer forms need. */
+export type StewardedBeing = components['schemas']['StewardedBeing'];
+/** A stewarded being's pledge type, with the outcome tiers it has answers for. */
+export type StewardPledge = components['schemas']['StewardPledge'];
+export type StewardPledgeWriteBody = components['schemas']['StewardPledgeRequest'];
+/** A stewarded being's answer at one outcome tier, with its sacrifice lines. */
+export type StewardAnswer = components['schemas']['StewardAnswer'];
+export type StewardAnswerWriteBody = components['schemas']['StewardAnswerRequest'];
+export type StewardSacrificeLineWriteBody = components['schemas']['StewardSacrificeLineRequest'];
+/** A closed pledge waiting on the being's steward: the answer panel. */
+export type StewardPrompt = components['schemas']['StewardPrompt'];
+/** The panel's send: one authored answer, or the GM's own text and a clue. */
+export type StewardSendBody = components['schemas']['StewardSendRequest'];
+
+export interface Paginated<T> {
+  count: number;
+  next: string | null;
+  previous: string | null;
+  results: T[];
+}

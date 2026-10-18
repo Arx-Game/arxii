@@ -661,6 +661,7 @@ from actions.definitions.world_builder import (
     StaffUnlinkRoomsAction,
 )
 from actions.definitions.worship import (
+    AnswerBeingPromptAction,
     ClosePledgeAction,
     DedicateTempleAction,
     DissolveShrineAction,
@@ -1167,6 +1168,8 @@ _ALL_ACTIONS: list[Action] = [
     TakePledgeAction(),
     ClosePledgeAction(),
     SacrificeAction(),
+    # #4333 slice 4: a stewarded being's table GM answers a closed pledge.
+    AnswerBeingPromptAction(),
     # #2289 — ceremonies (worship rites over the events/scenes chassis).
     OpenCeremonyAction(),
     CeremonyOfferingAction(),

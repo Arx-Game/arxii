@@ -150,6 +150,14 @@ class AnswerBuilderPageTests(AnswerBuilderTestCase):
         self.assertIn("A clue came with it: Ombrin codex clue.", body)
         self.assertIn("The clue&#x27;s target is reachable only through clues.", body)
 
+    def test_the_rail_names_the_steward(self) -> None:
+        """#4333 slice 4: a staff-owned being says so; a stewarded one names its table."""
+        self.assertIn("None (staff-owned)", self.body())
+        from world.worship.factories import BeingStewardFactory
+
+        BeingStewardFactory(being=self.being, table__name="The Whitlow table")
+        self.assertIn("<span>Steward</span><b>The Whitlow table</b>", self.body())
+
     def test_the_being_and_service_pages_link_here(self) -> None:
         self.client.force_login(self.author)
         change = self.client.get(

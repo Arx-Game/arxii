@@ -376,3 +376,14 @@ class AnswerSacrificeLineFactory(factory.django.DjangoModelFactory):
     answer = factory.SubFactory(AnswerFactory)
     facet = factory.SubFactory("world.magic.factories.FacetFactory")
     text = factory.LazyAttribute(lambda o: f"[staff-authored sacrifice line: {o.facet.name} facet]")
+
+
+class BeingStewardFactory(factory.django.DjangoModelFactory):
+    """A GM table stewarding a being (#4333 slice 4). The table's GM is Senior, as
+    a steward's must be; the factory skips ``clean`` like every other factory."""
+
+    class Meta:
+        model = "arxii.BeingSteward"
+
+    being = factory.SubFactory(WorshippedBeingFactory)
+    table = factory.SubFactory("world.gm.factories.GMTableFactory", gm__level="senior")
