@@ -679,4 +679,74 @@ describe('ConsentPrompt', () => {
     });
     expect(toast.success).not.toHaveBeenCalled();
   });
+
+  describe('resist-only card (#4418)', () => {
+    const RESIST_REQUEST: ActionRequest = {
+      ...MOCK_REQUEST,
+      id: 11,
+      initiator_name: 'Vael',
+      action_key: 'Deceive',
+      resist_only: true,
+      resist_check_name: 'Read people',
+    };
+
+    it('offers no refusal when resist_only', async () => {
+      vi.mocked(fetchPendingRequests).mockResolvedValue({ results: [RESIST_REQUEST] });
+      render(<ConsentPrompt sceneId="42" />, { wrapper: createWrapper() });
+
+      await waitFor(() =>
+        expect(screen.getByText('Vael is lying. See through it?')).toBeInTheDocument()
+      );
+      expect(screen.getByText('You roll Read people.')).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Roll' })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Believe him' })).toBeInTheDocument();
+      expect(screen.queryByText('Deny')).not.toBeInTheDocument();
+      expect(screen.queryByText(/Deny & block/)).not.toBeInTheDocument();
+      expect(screen.queryByText('It works')).not.toBeInTheDocument();
+      expect(screen.queryByText('No way')).not.toBeInTheDocument();
+    });
+
+    it('Roll sends the chosen effort', async () => {
+      vi.mocked(fetchPendingRequests).mockResolvedValue({ results: [RESIST_REQUEST] });
+      vi.mocked(respondToRequest).mockResolvedValue({ status: 'resolved' });
+      render(<ConsentPrompt sceneId="42" />, { wrapper: createWrapper() });
+
+      await waitFor(() => expect(screen.getByRole('button', { name: 'Roll' })).toBeInTheDocument());
+      fireEvent.change(screen.getByTestId('mock-resist-select'), { target: { value: 'high' } });
+      await userEvent.click(screen.getByRole('button', { name: 'Roll' }));
+
+      await waitFor(() =>
+        expect(respondToRequest).toHaveBeenCalledWith('42', 11, {
+          accept: true,
+          resist_effort: 'high',
+        })
+      );
+    });
+
+    it('Believe him accepts at low effort', async () => {
+      vi.mocked(fetchPendingRequests).mockResolvedValue({ results: [RESIST_REQUEST] });
+      vi.mocked(respondToRequest).mockResolvedValue({ status: 'resolved' });
+      render(<ConsentPrompt sceneId="42" />, { wrapper: createWrapper() });
+
+      await waitFor(() =>
+        expect(screen.getByRole('button', { name: 'Believe him' })).toBeInTheDocument()
+      );
+      await userEvent.click(screen.getByRole('button', { name: 'Believe him' }));
+
+      await waitFor(() =>
+        expect(respondToRequest).toHaveBeenCalledWith('42', 11, {
+          accept: true,
+          resist_effort: 'low',
+        })
+      );
+    });
+
+    it('keeps Allow/Refuse for a request that is not resist_only', async () => {
+      vi.mocked(fetchPendingRequests).mockResolvedValue({
+        results: [{ ...MOCK_REQUEST, resist_only: false, resist_check_name: null }],
+      });
+      render(<ConsentPrompt sceneId="42" />, { wrapper: createWrapper() });
+      await waitFor(() => expect(screen.getByText('Deny')).toBeInTheDocument());
+    });
+  });
 });
