@@ -46,7 +46,7 @@ from world.standoffs.services.state import active_members, is_in_standoff
 from world.standoffs.services.verbs import regard_for
 
 if TYPE_CHECKING:
-    from world.combat.models import CombatEncounter
+    from world.combat.models import CombatEncounter, CreatureTemplate
     from world.standoffs.models import FactionRule, StandoffGroup
 
 _EVERYONE = "matches everyone"
@@ -231,6 +231,11 @@ def _regards(group: StandoffGroup, participants: list, config: StandoffConfig) -
     return views
 
 
+def _template_strengths(template: CreatureTemplate) -> dict[int, int]:
+    """The template's own drive strengths by property, to mark what a placement edited."""
+    return {drive.property_id: drive.strength for drive in template.drives.all()}
+
+
 def _gm_group(group: StandoffGroup, participants: list, config: StandoffConfig) -> GMGroupView:
     template = group.creature_template
     members = active_members(group)
@@ -247,11 +252,7 @@ def _gm_group(group: StandoffGroup, participants: list, config: StandoffConfig) 
     organization = group_organization(group)
     # A named NPC's drives are its persona's own (ADR-4373-A): nothing there is "edited".
     compares_template = template is not None and group.persona_id is None
-    template_strengths = (
-        {drive.property_id: drive.strength for drive in template.drives.all()}
-        if compares_template
-        else {}
-    )
+    template_strengths = _template_strengths(template) if compares_template else {}
     live = group.state in LIVE_GROUP_STATES and bool(members)
     reason = cause_fire_reason(group, config, lapse_override=False) if live else None
     prompts = pending_prompts(group) if group.state == StandoffGroupState.PROPOSED else []

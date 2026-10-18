@@ -333,6 +333,18 @@ def _send_line(encounter: CombatEncounter, line: str, sink: list[str] | None) ->
     )
 
 
+def _completed_by_settling(encounter: CombatEncounter) -> bool:
+    """Settle empty groups; when none is left unsettled, complete the standoff. True then."""
+    if not settle_empty_groups(encounter):
+        return False
+    if encounter.standoff_groups.exclude(state=StandoffGroupState.SETTLED).exists():
+        return False
+    from world.standoffs.services.routing import complete_standoff  # noqa: PLC0415
+
+    complete_standoff(encounter)
+    return True
+
+
 def evaluate_causes(
     encounter: CombatEncounter,
     attack_sink: list[str] | None = None,
@@ -362,13 +374,7 @@ def evaluate_causes(
         standoff_is_gm_run,
     )
 
-    if (
-        settle_empty_groups(encounter)
-        and not encounter.standoff_groups.exclude(state=StandoffGroupState.SETTLED).exists()
-    ):
-        from world.standoffs.services.routing import complete_standoff  # noqa: PLC0415
-
-        complete_standoff(encounter)
+    if _completed_by_settling(encounter):
         return False
     config = StandoffConfig.load()
     if after_action:
