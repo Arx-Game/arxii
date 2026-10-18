@@ -3,6 +3,11 @@ and pick what works on an NPC."""
 
 from __future__ import annotations
 
+from functools import partial
+from unittest.mock import Mock, patch
+
+import evennia
+from evennia.server.serversession import ServerSession
 from rest_framework import status
 
 from integration_tests.harness import JourneyCase
@@ -12,9 +17,11 @@ from world.gm.factories import GMProfileFactory, GuideProfileFactory, seed_defau
 from world.npc_services.models import PersonalityTrait
 from world.roster.models import RosterEntry
 from world.roster.services.npc_lending import answer_loan, offer_npc
+from world.roster.services.npc_placement import NOT_YOURS_MESSAGE
 from world.scenes.factories import SceneFactory, SceneParticipationFactory
 
 CAST_LIST = "/api/scenes/{}/cast-list/"
+NPCS = "/api/roster/npcs/"
 TRAITS = "/api/npc-services/personality-traits/"
 
 
@@ -132,3 +139,137 @@ class TheNpcFormsBackend(JourneyCase):
         player = self.make_player("Ysmay", room=self.gate)
         refused = self.api(self.account_of(player)).get(TRAITS)
         self.assertEqual(refused.status_code, status.HTTP_403_FORBIDDEN)
+
+    # -- placing, more cases --------------------------------------------------
+
+    def _signed_in(self, character, sessid: int) -> ServerSession:
+        """A telnet session signed in as ``character``'s account; lines typed as
+        ``character`` arrive on it (the harness's ``telnet`` passes no session)."""
+        handler = evennia.SESSION_HANDLER
+        for name in ("data_out", "disconnect"):
+            patcher = patch.object(handler, name, Mock())
+            patcher.start()
+            self.addCleanup(patcher.stop)
+        dummy = ServerSession()
+        dummy.init_session("telnet", ("localhost", "testmode"), handler)
+        dummy.sessid = sessid
+        handler.portal_connect(dummy.get_sync_data())
+        session = handler.session_from_sessid(sessid)
+        self.addCleanup(handler.pop, sessid, None)
+        handler.login(session, self.account_of(character), testmode=True)
+        character.execute_cmd = partial(type(character).execute_cmd, character, session=session)
+        self.addCleanup(character.__dict__.pop, "execute_cmd", None)
+        return session
+
+    def test_placing_an_npc_its_owner_is_playing_moves_the_puppet(self) -> None:
+        vael = self._mint("Captain Vael")
+        vael_char = vael.character_sheet.character
+        session = self._signed_in(self.ravenna, sessid=16201)
+        told = self.telnet(self.ravenna, "@ic Captain Vael")
+        self.assertIn("Now controlling Captain Vael.", told)
+        self.assertIs(session.puppet, vael_char)
+        self.watch(vael_char)
+
+        placed = self._place(self.ravenna, vael)
+        self.assertTrue(placed.detail.success, placed.detail.message)
+        self.assertEqual(vael_char.location, self.gate)
+        # The move sent the puppet a room-state frame for Low Gate.
+        frames = [
+            kwargs["room_state"][1]
+            for _args, kwargs in self.mailbox(vael_char).calls
+            if "room_state" in kwargs
+        ]
+        self.assertTrue(frames)
+        self.assertEqual(frames[-1]["room"]["name"], "Low Gate")
+
+    def test_a_template_ended_scene_or_unknown_npc_is_refused(self) -> None:
+        template = self._mint("Watch Officer", as_template=True)
+        refused = self._place(self.ravenna, template).detail
+        self.assertFalse(refused.success)
+        self.assertEqual(refused.message, "A template can't be placed in a scene.")
+
+        unknown = self.web(
+            self.ravenna, "place_npc_in_scene", roster_entry_id=999999, scene_id=self.scene.pk
+        ).detail
+        self.assertFalse(unknown.success)
+        self.assertEqual(unknown.message, "No such NPC.")
+
+        vael = self._mint("Captain Vael")
+        self.scene.finish_scene()
+        ended = self._place(self.ravenna, vael).detail
+        self.assertFalse(ended.success)
+        self.assertEqual(ended.message, "That scene has ended.")
+
+    def test_staff_place_anyones_npc(self) -> None:
+        vael = self._mint("Captain Vael")
+        warden = self.make_player("Warden", room=self.study)
+        staff = self.account_of(warden)
+        staff.is_staff = True
+        staff.save()
+        placed = self._place(warden, vael)
+        self.assertTrue(placed.detail.success, placed.detail.message)
+        self.assertNotEqual(placed.detail.message, NOT_YOURS_MESSAGE)
+        self.assertIn("Captain Vael", self._cast_names())
+
+    # -- the NPC detail shows what the NPC already has ------------------------
+
+    def test_the_detail_lists_copied_preferences_and_authored_regard(self) -> None:
+        flattery = PersonalityTrait.objects.create(name="Loves flattery")
+        bells = PersonalityTrait.objects.create(name="Hates bells")
+        rook = self._mint("Sergeant Rook")
+        vael = self._mint("Captain Vael")
+        client = self.api(self.gm)
+        prefs = client.put(
+            f"{NPCS}{rook.pk}/preferences/",
+            {
+                "preferences": [
+                    {"trait": flattery.pk, "valence": "likes"},
+                    {"trait": bells.pk, "valence": "dislikes"},
+                ]
+            },
+            format="json",
+        )
+        self.assertEqual(prefs.status_code, status.HTTP_200_OK, prefs.data)
+        copied = client.post(
+            f"{NPCS}{vael.pk}/copy-section/",
+            {"source_entry": rook.pk, "section": "preferences"},
+            format="json",
+        )
+        self.assertEqual(copied.status_code, status.HTTP_200_OK, copied.data)
+        ysmay = self.make_player("Ysmay", room=self.gate)
+        ysmay_persona = ysmay.sheet_data.primary_persona
+        regard = client.put(
+            f"{NPCS}{vael.pk}/regard/",
+            {
+                "target_type": "persona",
+                "target_id": ysmay_persona.pk,
+                "value": 20,
+                "reason": "Held the gate.",
+            },
+            format="json",
+        )
+        self.assertEqual(regard.status_code, status.HTTP_200_OK, regard.data)
+
+        detail = client.get(f"{NPCS}{vael.pk}/")
+        self.assertEqual(detail.status_code, status.HTTP_200_OK, detail.data)
+        body = detail.json()
+        self.assertEqual(
+            body["preferences"],
+            [
+                {"trait_id": bells.pk, "trait_name": "Hates bells", "valence": "dislikes"},
+                {"trait_id": flattery.pk, "trait_name": "Loves flattery", "valence": "likes"},
+            ],
+        )
+        self.assertEqual(
+            body["regard"],
+            [
+                {
+                    "target_type": "persona",
+                    "target_id": ysmay_persona.pk,
+                    "target_name": "Ysmay",
+                    "value": 20,
+                    "reason": "Held the gate.",
+                }
+            ],
+        )
+        self.assertNotIn(self.account_of(ysmay).username, detail.content.decode())

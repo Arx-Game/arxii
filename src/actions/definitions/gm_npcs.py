@@ -23,7 +23,7 @@ from typing import TYPE_CHECKING, Any
 
 from actions.base import Action
 from actions.constants import ActionCategory
-from actions.definitions.npc_services import _truthy
+from actions.kwarg_parsing import truthy_kwarg
 from actions.prerequisites import MinimumGMLevelPrerequisite, Prerequisite
 from actions.types import ActionResult, TargetType
 from world.gm.constants import GMLevel
@@ -90,7 +90,7 @@ class MintStoryNPCAction(Action):
                 name=npc_name,
                 description=kwargs.get("description") or "",
                 preset=preset,
-                as_template=_truthy(kwargs.get("as_template")),
+                as_template=truthy_kwarg(kwargs.get("as_template")),
             )
         except StaffMintError as exc:
             return ActionResult(success=False, message=exc.user_message)

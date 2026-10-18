@@ -117,9 +117,9 @@ def voice_crowd(*, opponents: list[CombatOpponent], name: str, by: AccountDB) ->
 
     encounter = opponents[0].encounter
     room = encounter.room or encounter.scene.room
-    if room is not None:
-        character.location = room
-        character.save(update_fields=["db_location"])
+    if room is not None and not character.move_to(room, quiet=True):
+        msg = "Something kept the crowd's voice from reaching the fight. Try again."
+        raise CrowdVoiceError(msg)
 
     persona = character.sheet_data.primary_persona
     for opponent in opponents:

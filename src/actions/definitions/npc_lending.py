@@ -15,6 +15,7 @@ from typing import TYPE_CHECKING, Any
 
 from actions.base import Action
 from actions.constants import ActionCategory
+from actions.kwarg_parsing import truthy_kwarg
 from actions.prerequisites import (
     IsGuidePrerequisite,
     Prerequisite,
@@ -38,16 +39,6 @@ def _acting_account(actor: ObjectDB) -> AccountDB | None:
     from commands.utils.gm_resolution import resolve_account_or_none  # noqa: PLC0415
 
     return actor.account or resolve_account_or_none(actor)
-
-
-# Spellings of "yes" a web or typed caller may send, as ``npc_services._truthy`` reads them.
-_TRUTHY_VALUES = frozenset({"yes", "y", "true", "1"})
-
-
-def _truthy(value: Any) -> bool:
-    if isinstance(value, bool):
-        return value
-    return value is not None and str(value).strip().lower() in _TRUTHY_VALUES
 
 
 def _int_kwarg(kwargs: dict[str, Any], name: str) -> int | None:
@@ -166,7 +157,7 @@ class AnswerNPCLoanAction(_NPCLendingAction):
         loan = _loan(kwargs)
         if loan is None:
             return ActionResult(success=False, message=NO_SUCH_LOAN_MESSAGE)
-        accept = _truthy(kwargs.get("accept"))
+        accept = truthy_kwarg(kwargs.get("accept"))
         try:
             loan = answer_loan(loan=loan, accept=accept, by=account)
         except NPCLendingError as exc:

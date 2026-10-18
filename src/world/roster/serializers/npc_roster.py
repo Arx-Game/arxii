@@ -6,6 +6,7 @@ from typing import Any, ClassVar
 
 from django.core.exceptions import ObjectDoesNotExist
 from django.db.models import Q
+from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
 
 from world.npc_services.constants import RegardTargetType
@@ -100,6 +101,25 @@ class NPCLoanSerializer(serializers.ModelSerializer):
         read_only_fields: ClassVar[tuple[str, ...]] = fields
 
 
+class NPCPreferenceReadSerializer(serializers.Serializer):
+    """One trait the NPC likes or dislikes, as the NPC form shows it."""
+
+    trait_id = serializers.IntegerField(read_only=True)
+    trait_name = serializers.CharField(read_only=True)
+    valence = serializers.ChoiceField(choices=PreferenceValence.choices, read_only=True)
+
+
+class NPCRegardReadSerializer(serializers.Serializer):
+    """One active opinion the NPC holds. ``target_name`` is a persona, organization or
+    society name, never an account name."""
+
+    target_type = serializers.ChoiceField(choices=RegardTargetType.choices, read_only=True)
+    target_id = serializers.IntegerField(read_only=True)
+    target_name = serializers.CharField(read_only=True)
+    value = serializers.IntegerField(read_only=True)
+    reason = serializers.CharField(read_only=True)
+
+
 class NPCDetailSerializer(NPCRosterRowSerializer):
     """The owner's, an active borrower's, or staff's view of one NPC and its settings."""
 
@@ -117,6 +137,10 @@ class NPCDetailSerializer(NPCRosterRowSerializer):
     )
     is_template = serializers.BooleanField(source="story_npc_settings.is_template", read_only=True)
     open_requests = serializers.SerializerMethodField()
+    # What the NPC already has, so the form's edits merge onto it (#4418). Two
+    # queries for the one NPC a detail read serves.
+    preferences = serializers.SerializerMethodField()
+    regard = serializers.SerializerMethodField()
 
     class Meta:
         model = RosterEntry
@@ -126,6 +150,8 @@ class NPCDetailSerializer(NPCRosterRowSerializer):
             "notes_for_player",
             "is_template",
             "open_requests",
+            "preferences",
+            "regard",
         )
         read_only_fields: ClassVar[tuple[str, ...]] = (
             "id",
@@ -136,7 +162,51 @@ class NPCDetailSerializer(NPCRosterRowSerializer):
             "can_borrow",
             "is_template",
             "open_requests",
+            "preferences",
+            "regard",
         )
+
+    @extend_schema_field(NPCPreferenceReadSerializer(many=True))
+    def get_preferences(self, obj: RosterEntry) -> list[dict[str, Any]]:
+        from world.npc_services.models import NpcPreference  # noqa: PLC0415
+
+        rows = NpcPreference.objects.filter(
+            persona=obj.character_sheet.primary_persona
+        ).select_related("trait")
+        return NPCPreferenceReadSerializer(
+            [
+                {"trait_id": row.trait_id, "trait_name": row.trait.name, "valence": row.valence}
+                for row in rows
+            ],
+            many=True,
+        ).data
+
+    @extend_schema_field(NPCRegardReadSerializer(many=True))
+    def get_regard(self, obj: RosterEntry) -> list[dict[str, Any]]:
+        from world.npc_services.models import NpcRegard  # noqa: PLC0415
+
+        rows = (
+            NpcRegard.objects.filter(
+                holder_persona=obj.character_sheet.primary_persona, ended_at__isnull=True
+            )
+            .select_related("target_persona", "target_organization", "target_society")
+            .order_by("pk")
+        )
+        lines = []
+        for row in rows:
+            target = row.get_active_target()
+            if target is None:  # the target row was deleted (SET_NULL)
+                continue
+            lines.append(
+                {
+                    "target_type": row.target_type,
+                    "target_id": target.pk,
+                    "target_name": target.name,
+                    "value": row.value,
+                    "reason": row.reason,
+                }
+            )
+        return NPCRegardReadSerializer(lines, many=True).data
 
     def get_owner_name(self, obj: RosterEntry) -> str:
         from world.roster.views.npc_views import owner_names_for  # noqa: PLC0415
