@@ -40,8 +40,8 @@ def _required_non_null_fields(node: Q, *, negated: bool = False) -> set[str]:
 #: when it landed (#4461). Teaching it negation in #4464 found four more: a transfer with
 #: one end only (a mint into a purse, a spend out of one) is left with no end at all when
 #: that purse's sheet is deleted, which ``currency_transfer_not_void`` rejects. What a
-#: ledger row means once its only holder is gone is an owner's call, tracked in its own
-#: issue. A pair needs a per-case ruling (PROTECT plus a soft removal, RESTRICT, CASCADE,
+#: ledger row means once its only holder is gone is an owner's call, tracked in #4467.
+#: A pair needs a per-case ruling (PROTECT plus a soft removal, RESTRICT, CASCADE,
 #: or a constraint that allows the null); a new one is never added here. The set only
 #: shrinks: fixing one fails the second test until its line is removed.
 KNOWN_VIOLATIONS: frozenset[str] = frozenset(
