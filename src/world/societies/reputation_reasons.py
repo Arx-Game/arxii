@@ -78,11 +78,16 @@ def reason_lines_by_reputation(reputation_ids: Sequence[int]) -> dict[int, list[
     pay a query each.
     """
     lines: dict[int, list[str]] = {pk: [] for pk in reputation_ids}
-    if not lines:
-        return lines
+    if lines:
+        _fill_reason_lines(lines)
+    return lines
+
+
+def _fill_reason_lines(lines: dict[int, list[str]]) -> None:
+    """Write each reputation's newest reason lines into ``lines`` (keys are the pks)."""
     copy = copy_by_cause()
     events = OrganizationReputationEvent.objects.filter(
-        reputation_id__in=reputation_ids
+        reputation_id__in=list(lines)
     ).select_related(
         "legend_entry",
         "mission_deed__instance__template",
@@ -94,4 +99,3 @@ def reason_lines_by_reputation(reputation_ids: Sequence[int]) -> dict[int, list[
         shown = lines[event.reputation_id]
         if len(shown) < REASON_LINES_SHOWN:
             shown.append(reason_line(event, copy))
-    return lines

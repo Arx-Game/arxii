@@ -301,11 +301,11 @@ function GroupBox({ encounterId, group }: { encounterId: number; group: GMGroupV
                       <div className="text-[10px] uppercase tracking-wide text-muted-foreground">
                         Why
                       </div>
-                      {r.why.map((reason, reasonIndex) => (
-                        <div key={reasonIndex} className="mb-1">
+                      {r.why.map((reason) => (
+                        <div key={reason} className="mb-1">
                           {reason.split('\n').map((line, lineIndex) => (
                             <div
-                              key={lineIndex}
+                              key={line}
                               className={lineIndex > 0 ? 'text-muted-foreground' : ''}
                             >
                               {line}
