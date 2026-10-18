@@ -38644,13 +38644,7 @@ export interface components {
       readonly id: number;
       readonly name: string;
       readonly thumbnail_url: string | null;
-      /**
-       * @description What the character handler shows, read off rows the view selected.
-       *
-       *     The handler's own read get_or_creates a display row per NPC, which a list
-       *     must not do; the order is the handler's: a disguise overlay, the permanent
-       *     description, then the sheet's free text.
-       */
+      /** @description The start of what the character handler shows (``sheet_description``). */
       readonly description: string;
       readonly owner_name: string;
       lend_policy: components['schemas']['LendPolicyEnum'];
@@ -38705,7 +38699,7 @@ export interface components {
     NPCPreferenceRead: {
       readonly trait_id: number;
       readonly trait_name: string;
-      readonly valence: components['schemas']['ValenceAf9Enum'];
+      readonly valence: components['schemas']['PreferenceValenceEnum'];
     };
     /** @description One SKILL line, named by the skill rather than its id (#3427). */
     NPCPresetSkillLine: {
@@ -38806,13 +38800,7 @@ export interface components {
       readonly id: number;
       readonly name: string;
       readonly thumbnail_url: string | null;
-      /**
-       * @description What the character handler shows, read off rows the view selected.
-       *
-       *     The handler's own read get_or_creates a display row per NPC, which a list
-       *     must not do; the order is the handler's: a disguise overlay, the permanent
-       *     description, then the sheet's free text.
-       */
+      /** @description The start of what the character handler shows (``sheet_description``). */
       readonly description: string;
       readonly owner_name: string;
       readonly lend_policy: string;
@@ -47115,12 +47103,18 @@ export interface components {
       | 'npc_regard_at_least';
     PreferenceLine: {
       trait: number;
-      valence: components['schemas']['ValenceAf9Enum'];
+      valence: components['schemas']['PreferenceValenceEnum'];
     };
     PreferenceLineRequest: {
       trait: number;
-      valence: components['schemas']['ValenceAf9Enum'];
+      valence: components['schemas']['PreferenceValenceEnum'];
     };
+    /**
+     * @description * `likes` - Likes
+     *     * `dislikes` - Dislikes
+     * @enum {string}
+     */
+    PreferenceValenceEnum: 'likes' | 'dislikes';
     /** @description ``{preferences: [{trait, valence}]}``: replaces the NPC's likes and dislikes. */
     Preferences: {
       preferences: components['schemas']['PreferenceLine'][];
@@ -48784,7 +48778,6 @@ export interface components {
       readonly boon: {
         [key: string]: unknown;
       } | null;
-      /** @default false */
       readonly resist_only: boolean;
       readonly resist_check_name: string | null;
       /** Format: date-time */
@@ -48859,7 +48852,6 @@ export interface components {
       readonly strain_commitment: number;
       /** Format: date-time */
       readonly created_at: string;
-      /** @default false */
       readonly resist_only: boolean;
       readonly resist_check_name: string | null;
     };
@@ -53614,12 +53606,6 @@ export interface components {
       basis: string;
       presumed_importance: number;
     };
-    /**
-     * @description * `likes` - Likes
-     *     * `dislikes` - Dislikes
-     * @enum {string}
-     */
-    ValenceAf9Enum: 'likes' | 'dislikes';
     /** @description Inline serializer for the viewer's capabilities in a covenant. */
     ViewerCapabilities: {
       can_invite: boolean;

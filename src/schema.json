@@ -68106,12 +68106,7 @@ components:
           readOnly: true
         description:
           type: string
-          description: |-
-            What the character handler shows, read off rows the view selected.
-
-            The handler's own read get_or_creates a display row per NPC, which a list
-            must not do; the order is the handler's: a disguise overlay, the permanent
-            description, then the sheet's free text.
+          description: The start of what the character handler shows (``sheet_description``).
           readOnly: true
         owner_name:
           type: string
@@ -68265,7 +68260,7 @@ components:
           readOnly: true
         valence:
           allOf:
-          - $ref: '#/components/schemas/ValenceAf9Enum'
+          - $ref: '#/components/schemas/PreferenceValenceEnum'
           readOnly: true
       required:
       - trait_id
@@ -68497,12 +68492,7 @@ components:
           readOnly: true
         description:
           type: string
-          description: |-
-            What the character handler shows, read off rows the view selected.
-
-            The handler's own read get_or_creates a display row per NPC, which a list
-            must not do; the order is the handler's: a disguise overlay, the permanent
-            description, then the sheet's free text.
+          description: The start of what the character handler shows (``sheet_description``).
           readOnly: true
         owner_name:
           type: string
@@ -82952,7 +82942,7 @@ components:
         trait:
           type: integer
         valence:
-          $ref: '#/components/schemas/ValenceAf9Enum'
+          $ref: '#/components/schemas/PreferenceValenceEnum'
       required:
       - trait
       - valence
@@ -82962,10 +82952,18 @@ components:
         trait:
           type: integer
         valence:
-          $ref: '#/components/schemas/ValenceAf9Enum'
+          $ref: '#/components/schemas/PreferenceValenceEnum'
       required:
       - trait
       - valence
+    PreferenceValenceEnum:
+      enum:
+      - likes
+      - dislikes
+      type: string
+      description: |-
+        * `likes` - Likes
+        * `dislikes` - Dislikes
     Preferences:
       type: object
       description: '``{preferences: [{trait, valence}]}``: replaces the NPC''s likes
@@ -86448,11 +86446,10 @@ components:
         resist_only:
           type: boolean
           readOnly: true
-          default: false
         resist_check_name:
           type: string
-          readOnly: true
           nullable: true
+          readOnly: true
         created_at:
           type: string
           format: date-time
@@ -86636,11 +86633,10 @@ components:
         resist_only:
           type: boolean
           readOnly: true
-          default: false
         resist_check_name:
           type: string
-          readOnly: true
           nullable: true
+          readOnly: true
       required:
       - action_key
       - action_request_id
@@ -96454,14 +96450,6 @@ components:
       - id
       - name
       - presumed_importance
-    ValenceAf9Enum:
-      enum:
-      - likes
-      - dislikes
-      type: string
-      description: |-
-        * `likes` - Likes
-        * `dislikes` - Dislikes
     ViewerCapabilities:
       type: object
       description: Inline serializer for the viewer's capabilities in a covenant.
