@@ -1139,7 +1139,7 @@ def _resolve_action_against_persona(
                 action_request.initiator_persona.character_sheet,
                 tech_check_type,
                 scene=action_request.scene,
-            ).total
+            ).extra_modifiers_total
         result = _resolve_enhanced_action(
             character=character,
             technique=action_request.technique,
@@ -1200,7 +1200,7 @@ def _resolve_action_against_persona(
             template=action_template,
             target_difficulty=difficulty,
             context=context,
-            extra_modifiers=fatigue_penalty + breakdown.total + pull_flat_bonus,
+            extra_modifiers=fatigue_penalty + breakdown.extra_modifiers_total + pull_flat_bonus,
             effort_level=effort_level,
         )
         result = EnhancedSceneActionResult(

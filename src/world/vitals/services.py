@@ -552,7 +552,7 @@ def _apply_wound_tier(  # noqa: PLR0913 - one keyword arg per resolved tier inpu
         wound_check_type,
         wound_difficulty,
         wound_pool,
-        extra_modifiers=extra_modifiers + wound_breakdown.total,
+        extra_modifiers=extra_modifiers + wound_breakdown.extra_modifiers_total,
     )
     wounds = _wounds_from(pending)
     if wounds:
@@ -650,7 +650,7 @@ def _apply_death_tier(  # noqa: PLR0913 - one keyword arg per resolved tier inpu
         death_check_type,
         death_difficulty,
         death_pool,
-        extra_modifiers=extra_modifiers + death_breakdown.total,
+        extra_modifiers=extra_modifiers + death_breakdown.extra_modifiers_total,
         source_character=source_character,
     )
     result.modifier_breakdown = death_breakdown
@@ -688,7 +688,7 @@ def _apply_knockout_tier(  # noqa: PLR0913 - one keyword arg per resolved tier i
         ko_check_type,
         knockout_difficulty,
         knockout_pool,
-        extra_modifiers=extra_modifiers + ko_breakdown.total,
+        extra_modifiers=extra_modifiers + ko_breakdown.extra_modifiers_total,
     )
     result.modifier_breakdown = ko_breakdown
     if _applied_unconscious(pending):

@@ -214,7 +214,7 @@ def commit_to_clash(  # noqa: PLR0913, PLR0915
     # 2b. Express the affinity tilt as a labeled ModifierContribution and route it
     #     through the shared collect_check_modifiers seam so the clash check honors
     #     condition + rollmod sources (the #851 individualization lever).
-    #     The summed .total reaches perform_check as extra_modifiers.
+    #     The summed .extra_modifiers_total reaches perform_check as extra_modifiers.
     extra_contributions: list[ModifierContribution] = []
     if check_modifier_extra:
         extra_contributions.append(
@@ -236,7 +236,7 @@ def commit_to_clash(  # noqa: PLR0913, PLR0915
         scene=clash.encounter.scene,
         extra_contributions=extra_contributions,
     )
-    check_extra_modifiers = breakdown.total
+    check_extra_modifiers = breakdown.extra_modifiers_total
 
     # 3. Build a resolve closure that performs only the check — no damage, no
     #    conditions.  use_technique calls resolve_fn() and stores its return

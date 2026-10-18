@@ -276,8 +276,10 @@ def perform_check_with_modifiers(  # noqa: PLR0913 - mirrors perform_check signa
     Thin wrapper around :func:`perform_check` that resolves the character's
     ``CharacterSheet`` and calls :func:`collect_check_modifiers` to gather
     condition, rollmod, scene, equipment, character, fashion, and capability
-    contributions. The aggregator's ``.total`` is added to any caller-supplied
-    ``extra_modifiers`` (additive, not replacing).
+    contributions. The aggregator's ``.extra_modifiers_total`` is added to any
+    caller-supplied ``extra_modifiers`` (additive, not replacing). CAPABILITY
+    contributions are excluded from that sum because ``perform_check`` counts the
+    same points itself (#4453); they stay in the breakdown as provenance.
 
     For sheet-less actors (GM puppets, companions with no ``CharacterSheet``),
     forwards to ``perform_check`` unchanged — no crash, no modifiers applied.
@@ -332,7 +334,7 @@ def perform_check_with_modifiers(  # noqa: PLR0913 - mirrors perform_check signa
         character,
         check_type,
         target_difficulty=target_difficulty,
-        extra_modifiers=extra_modifiers + breakdown.total,
+        extra_modifiers=extra_modifiers + breakdown.extra_modifiers_total,
         effort_level=effort_level,
         fatigue_penalty=fatigue_penalty,
         specialization=specialization,

@@ -164,7 +164,7 @@ def _resolve_flee(
         config.check_type,
         difficulty,
         consequences,
-        extra_modifiers=breakdown.total,
+        extra_modifiers=breakdown.extra_modifiers_total,
     )
 
     success_level = pending.check_result.success_level
