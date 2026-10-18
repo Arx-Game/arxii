@@ -139,12 +139,13 @@ Items move through three states:
 
 **`differs_from_template`** (property) — `True` if the instance carries any
 per-instance data worth preserving: a `custom_name`, `custom_description`, `lore_value`,
-non-default `quality_tier`, any attached facets, or any `OwnershipEvent` beyond
+non-default `quality_tier`, any facet attached now or ever (`has_facet_history`: a removed
+facet counts), or any `OwnershipEvent` beyond
 `CREATED`. Used by `destroy_consumed_item_instance` (see below) to decide soft-delete
 vs. hard-delete when consumption empties an item.
 
 **`is_lore_critical`** (property) — a tighter subset; `True` only if the item must
-*never* be auto-purged. Conditions: `lore_value` is nonzero, OR the item has facets,
+*never* be auto-purged. Conditions: `lore_value` is nonzero, OR the item has or ever had facets,
 OR it has transfer provenance (a `GIVEN`, `STOLEN`, or `TRANSFERRED` ownership event
 in `PROVENANCE_EVENT_TYPES`). Cosmetic-only data (custom name, quality tier) is not
 lore-critical: those items can be purged once the grace period expires.
@@ -222,7 +223,7 @@ Runs daily as the `items.soft_delete_cleanup` cron task (registered in
 1. Computes a cutoff: `now() - grace` (default: `settings.ITEM_SOFT_DELETE_GRACE_DAYS`
    days, configurable via the `ITEM_SOFT_DELETE_GRACE_DAYS` env var, default **30**).
 2. Queries all `ItemInstance` rows with `destroyed_at < cutoff` **and**
-   `lore_value=0` **and** zero attached facets **and** zero transfer-provenance events
+   `lore_value=0` **and** zero `ItemFacet` rows (removed ones included) **and** zero transfer-provenance events
    (GIVEN/STOLEN/TRANSFERRED), excluding PROTECT-referenced rows (Mantle /
    ProjectContribution).
 3. Calls `hard_delete_item_instance` for each out-of-world row in its own savepoint,
@@ -972,6 +973,21 @@ domain-specific result dataclasses.
 
 `compute_quality_score(check_result, *, step, min_success_level) -> int` is co-located
 here (imported by `crafting/quality.py`).
+
+### Facet removal is soft (#4461)
+
+`remove_facet_from_item` stamps `ItemFacet.removed_at` and keeps the row; it never deletes
+it. `ResonanceGrant.outfit_item_facet` (`res_grant_outfit_trickle_shape` requires it on every
+`OUTFIT_TRICKLE` grant) is `on_delete=PROTECT`, so a facet that fed a wearer resonance cannot
+be deleted and the grant history stays linked. A removed facet stops granting, stops counting
+against `facet_capacity` and disappears from the item; the uniqueness of
+`(item_instance, facet)` holds among attached rows only, so the same facet can be attached
+again. Every reader of "what is on this item" goes through `ItemFacet.attached()` or
+`ItemInstance.cached_item_facets` (prefetched over `attached()`); the trickle, the equipped
+handler (`iter_item_facets`, `item_facets_for`), facet capacity, the item-facet API, the
+`craft removefacet` command and the favored-facet check on sacrifice all do. Facet merge
+(`magic.services.facets.merge_facets`) moves removed rows as they are and hands a dropped
+duplicate's grants to the surviving row before deleting it.
 
 ### Telnet + Action layer (#1866, gem cut added #3006 Task 3)
 
