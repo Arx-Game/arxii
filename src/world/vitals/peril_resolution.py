@@ -194,19 +194,24 @@ def death_is_permitted(
 
     Returns False (not permitted) when ANY of:
     - source_character is None (absent/non-lethal environmental context).
-    - source_character is a PC (ADR-0023: PvP is non-lethal).
+    - source_character is a PC AND the victim is a player character
+      (ADR-0023: PvP is non-lethal). A PC source against an NPC victim is
+      permitted, whoever is playing that NPC: NPC-ness follows the character
+      (``is_player_character`` is False for a story NPC a GM or Guide plays,
+      ADR-4418).
     - The victim carries an active death_deferred condition.
     - The victim is story-critical and the source is not a participant (#1874).
 
-    Returns True only for a non-PC source with no active death_deferred on
-    the victim and no story-criticality protection (i.e. a significant-NPC
-    attacker in a lethal encounter, where the victim is not load-bearing
-    for any active story).
+    Returns True otherwise: a non-PC attacker, or a PC attacker against an NPC
+    victim, with no active death_deferred on the victim and no story-criticality
+    protection.
     """
     if source_character is None:
         return False
 
-    if is_pc_source(source_character):
+    from world.roster.services.activity import is_player_character  # noqa: PLC0415
+
+    if is_pc_source(source_character) and is_player_character(victim_sheet):
         return False
 
     from world.conditions.services import has_death_deferred  # noqa: PLC0415

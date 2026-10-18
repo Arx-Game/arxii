@@ -628,6 +628,22 @@ class APlayedNpcCanDieAndKill(JourneyCase):
             death_is_permitted(victim_sheet=self.ysmay.sheet_data, source_character=self.vael)
         )
 
+    def test_a_pc_kills_a_played_npc(self) -> None:
+        self.assertTrue(
+            death_is_permitted(victim_sheet=self.vael.sheet_data, source_character=self.ysmay)
+        )
+
+    def test_a_pc_cannot_kill_a_pc(self) -> None:
+        wren = self.make_player("Wren", room=self.room)
+        self.assertFalse(
+            death_is_permitted(victim_sheet=wren.sheet_data, source_character=self.ysmay)
+        )
+
+    def test_a_played_npc_with_no_source_is_not_killed(self) -> None:
+        self.assertFalse(
+            death_is_permitted(victim_sheet=self.vael.sheet_data, source_character=None)
+        )
+
     def test_guide_posts_as_pc_in_a_and_npc_in_b(self) -> None:
         # Scene A is the Guide's own PC in the Gate; scene B is Vael, lent, in the Study.
         study = self.make_room("Ravenna's Study")
