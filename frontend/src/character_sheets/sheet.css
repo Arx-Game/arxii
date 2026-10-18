@@ -537,6 +537,15 @@
   color: hsl(var(--accent));
   border-color: hsl(var(--accent));
 }
+/* A standing's direction (#4448): declared after the accent so it wins on source order. */
+.refsheet-tag-up {
+  color: hsl(var(--accent));
+  border-color: hsl(var(--accent));
+}
+.refsheet-tag-down {
+  color: hsl(var(--destructive));
+  border-color: hsl(var(--destructive));
+}
 
 /* Temporary language row (#4090): the tag sits on the level, the gloss below it. */
 .refsheet-glance .refsheet-tag {

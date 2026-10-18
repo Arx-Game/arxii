@@ -64,6 +64,15 @@ interface Props {
   standing: CharacterSheetStanding;
 }
 
+const DOWN_TIERS = new Set(['reviled', 'despised', 'disliked', 'disfavored']);
+const UP_TIERS = new Set(['favored', 'liked', 'honored', 'revered']);
+
+/** Which way a tier leans from Unknown, for the chip's colour. */
+function tierTone(tier: string): 'up' | 'down' | undefined {
+  if (DOWN_TIERS.has(tier)) return 'down';
+  return UP_TIERS.has(tier) ? 'up' : undefined;
+}
+
 export function ReputationTab({
   entryCharacterId,
   viewerPersonaId,
@@ -164,7 +173,7 @@ function OrganizationStandingBlock({ standing }: { standing: CharacterSheetStand
               <Entry
                 key={rep.organization_id}
                 name={<Link to={`/orgs/${rep.organization_id}`}>{rep.organization}</Link>}
-                tags={<Tag accent>{formatTier(rep.tier)}</Tag>}
+                aside={<Tag tone={tierTone(rep.tier)}>{formatTier(rep.tier)}</Tag>}
               >
                 {rep.reasons.length > 0 && (
                   <ul className="refsheet-reasons">

@@ -46,15 +46,26 @@ export function Ledger({ children }: { children: ReactNode }) {
 export function Tag({
   children,
   accent,
+  tone,
   title,
 }: {
   children: ReactNode;
   accent?: boolean;
+  /** Direction of a standing: ink and border take the theme's accent (up) or destructive (down). */
+  tone?: 'up' | 'down';
   /** A hover note, for a tag that stands for a longer line (#4106). */
   title?: string;
 }) {
   return (
-    <span className={cn('refsheet-tag', accent && 'refsheet-tag-accent')} title={title}>
+    <span
+      className={cn(
+        'refsheet-tag',
+        accent && 'refsheet-tag-accent',
+        tone === 'up' && 'refsheet-tag-up',
+        tone === 'down' && 'refsheet-tag-down'
+      )}
+      title={title}
+    >
       {children}
     </span>
   );

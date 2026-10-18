@@ -158,6 +158,9 @@ describe('ReputationTab', () => {
       'Disliked: [staff-authored reason text]',
       'Disfavored: a leader citation',
     ]);
+    // The chip sits at the row's right edge and leans the way the tier does.
+    expect(screen.getByText('Disliked').className).toContain('refsheet-tag-down');
+    expect(screen.getByText('Liked').className).toContain('refsheet-tag-up');
     // An organization with no recorded change draws no list at all.
     expect(document.querySelectorAll('.refsheet-reasons')).toHaveLength(1);
     expect(screen.getByText('The Silent Order')).toBeInTheDocument();
