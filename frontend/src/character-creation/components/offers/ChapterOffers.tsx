@@ -133,6 +133,17 @@ interface ChapterOffersProps {
    * step without a round trip.
    */
   exclusive?: boolean;
+  /**
+   * The life grids (#4395): every offer a card in a three-column grid, its own label
+   * first and the distinction under it when the label is the author's own words.
+   */
+  layout?: 'list' | 'grid';
+  /**
+   * How many of this block's offers may be picked at once (#4395): an age-scaled
+   * beat's allowance. At the allowance the unpicked cards read disabled; the server
+   * refuses the extra pick as well. `null` or omitted is any number.
+   */
+  maxPicks?: number | null;
 }
 
 interface PriceWords {
@@ -232,6 +243,8 @@ export function ChapterOffers({
   wordSeeMore,
   wordHeld,
   exclusive = false,
+  layout = 'list',
+  maxPicks = null,
 }: ChapterOffersProps) {
   const { data: offersData, isLoading } = useDraftOffers(draft.id, chapter);
   const { data: draftDistinctions } = useDraftDistinctions(draft.id);
@@ -307,6 +320,11 @@ export function ChapterOffers({
 
   if (offers.length === 0 && closed.length === 0 && bundled.length === 0) return null;
 
+  // The allowance (#4395): once this block holds as many picks as it allows, the rest
+  // wait; an exclusive block swaps instead, so it never counts as full.
+  const pickedHere = offers.filter((o) => (entryByOfferId.get(o.offer_id)?.rank ?? 0) > 0).length;
+  const full = !exclusive && maxPicks !== null && maxPicks > 1 && pickedHere >= maxPicks;
+
   // The fold (#3709): the Beginning's pinned lines show at rest; when none is
   // pinned the first three by the server's order stand in; everything else waits
   // under one "See N more" line. A short block never folds.
@@ -325,7 +343,10 @@ export function ChapterOffers({
     const rank = entry?.rank ?? 0;
     const selected = rank > 0;
     const ranked = offer.max_rank > 1;
-    const busy = offer.is_locked || syncDistinctions.isPending;
+    const waiting = full && !selected;
+    const busy = offer.is_locked || syncDistinctions.isPending || waiting;
+    const showsDistinction =
+      layout === 'grid' && offer.distinction_name && offer.distinction_name !== offer.name;
     const body = (
       <>
         <span className={exclusive ? 'dot' : 'dot sq'} />
@@ -342,6 +363,7 @@ export function ChapterOffers({
               />
             )}
           </b>
+          {showsDistinction && <span className="g">{offer.distinction_name}</span>}
           <span className="g">
             {offer.player_line}
             {showOpener && offer.opener_label && <i> From {offer.opener_label}.</i>}
@@ -405,7 +427,7 @@ export function ChapterOffers({
           )}
         </label>
       )}
-      <ul className={cn('stances', exclusive && 'oneof')}>
+      <ul className={cn('stances', exclusive && 'oneof', layout === 'grid' && 'grid')}>
         {bundled.map((item) => (
           <li key={item.offer_id}>
             <div className="stance" aria-pressed="true" aria-disabled="true">

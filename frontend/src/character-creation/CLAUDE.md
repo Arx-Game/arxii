@@ -36,7 +36,9 @@ character-creation/
     ├── index.ts             # Component exports
     ├── OriginStage.tsx      # Stage 1: Area selection
     ├── HeritageStage.tsx    # Stage 2: Heritage, species, gender, pronouns, age
-    ├── LineageStage.tsx     # Stage 3: Upbringing + family selection (#3617); keeps
+    ├── LineageStage.tsx     # Stage 3: the beginning's route (#3617; the Upbringing pick
+    │                        #   retired in #4395, the route comes with the beginning),
+    │                        #   family selection, kin rows, the life grids; keeps
     │                        #   InventedParentsCard, FamilyNamePreview, KinSlotPicker,
     │                        #   TarotNamingRitual, TarotCardItem, FamilyCard (exported
     │                        #   for lineage/). HouseFoundingPanel retired (#3983 Plan B
@@ -97,11 +99,26 @@ character-creation/
     │                            #   `opener_labels.includes(tag.name)` so a route-closed
     │                            #   distinction prints once, under its own tag (fix
     │                            #   round 2).
-    └── lineage/             # LineageStage subsections (#3617, #3648)
-        ├── UpbringingPicker.tsx  # One card per OriginTemplate for the chosen Beginning
-        ├── UpbringingPrompts.tsx # Slot prompts; `scope: 'any'` renders above the family
-        │                         #   block, `scope: 'path'` renders below it, scoped to
-        │                         #   the resolved family path; write-in ->
+    └── lineage/             # LineageStage subsections (#3617, #3648, #4395)
+        ├── KinRows.tsx           # The people seated beside the parents (#4395): a twin, a
+        │                         #   spouse (alive, dead, divorced, fled), children (raised,
+        │                         #   fostered away, lost), the whole list at
+        │                         #   draft_data.kin_rows; finalize seats them in the
+        │                         #   kinship graph
+        ├── LifeGrids.tsx         # The life as grids by stage (#4395, the #4124 beats):
+        │                         #   one block per stage the beginning offers (a struck
+        │                         #   stage is absent), each beat a `ChapterOffers`
+        │                         #   `layout="grid"` of its `backgrounds` offers picked
+        │                         #   straight from the cards, the pick line from the
+        │                         #   entry's `allowance` (one, up to N with the years
+        │                         #   lived, any), a line of the player's own once a card
+        │                         #   is picked, the unknown mark; the footer counts the
+        │                         #   taken beats and the purse. Replaces BeatsBlock.
+        ├── UpbringingPrompts.tsx # Route prompts; `scope: 'any'` renders the pick-lists
+        │                         #   asked on every path (a general write-in never
+        │                         #   renders, #4395), `scope: 'path'` renders below the
+        │                         #   family block, scoped to the resolved family path;
+        │                         #   write-in ->
         │                         #   draft_data.origin_slots, pick-list ->
         │                         #   draft_data.origin_choices, priced off influence.
         │                         #   Each priced answer prints an `offers X` / `bundles Y`
@@ -168,8 +185,6 @@ character-creation/
 - `GET /api/character-creation/families/?area_id=&kind=` - List families, optionally
   filtered by area and one or more `FamilyKind` ids (the claimed-path Upbringing's
   `claimable_kind_ids`, #3617)
-- `GET /api/character-creation/origin-templates/?beginning=X` - Upbringings for the
-  chosen Beginning (the Lineage step's picker, #3617)
 - `GET /api/character-creation/can-create/` - Check eligibility
 - `GET /api/character-creation/drafts/` - List user's drafts (returns array with 0-1 items)
 - `POST /api/character-creation/drafts/` - Create new draft
@@ -182,6 +197,9 @@ character-creation/
 - `POST /api/character-creation/drafts/{id}/add-to-roster/` - Staff direct add
 - `POST /api/character-creation/drafts/{id}/finalize-gm/` - Player-GM direct-to-roster for a
   table they own (`target_table`, `story_title`, optional `story_description`) (#3268)
+- `GET /api/character-creation/drafts/{id}/beats/` - The life's beats as this draft meets
+  them (#4124, #4395: each with its `allowance`); the `backgrounds` offers come through
+  `GET /api/character-creation/drafts/{id}/offers/?chapter=backgrounds`
 - `GET /api/character-creation/beginnings/{id}/perspectives/` - A beginning's shop-window
   perspective entries, ungated by codex knowledge (ADR-0224, #3281)
 - `GET /api/character-creation/traditions/{id}/perspectives/` - Same, for a tradition

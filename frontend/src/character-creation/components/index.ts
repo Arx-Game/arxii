@@ -24,6 +24,5 @@ export { TraditionStep } from './gift/TraditionStep';
 export { GlimpseSection } from './gift/GlimpseSection';
 
 // Lineage stage: Upbringing picker, prompts, and family path (#3617)
-export { UpbringingPicker } from './lineage/UpbringingPicker';
 export { UpbringingPrompts } from './lineage/UpbringingPrompts';
 export { FamilyPathSection } from './lineage/FamilyPathSection';

@@ -1,10 +1,12 @@
 /**
- * Stage 3: Lineage - Upbringing + Family Selection (#3617)
+ * Stage 3: Lineage (#3617, #4395).
  *
- * Rebuilt around Upbringings (`OriginTemplate`): a per-beginning catalog row
- * with its own CG cost, typed prompts, and choice of family paths
- * (claim a staff-authored family, name a new one, or none - the tarot naming
- * ritual). See docs/systems/character_creation.md's Lineage step section.
+ * The beginning carries its family route (`OriginTemplate`, assigned with the
+ * beginning; the Upbringing pick retired in #4395): the family block (claim a
+ * staff-authored family, name a new one, or none), its path-scoped prompts, the
+ * people seated beside the parents (a twin, a spouse, children: `KinRows`), then the
+ * life as grids by stage (`LifeGrids`). See docs/systems/character_creation.md's
+ * Lineage step section.
  */
 
 import { Button } from '@/components/ui/button';
@@ -30,7 +32,6 @@ import {
   useFamilySlots,
   useGenders,
   useNamingRitualConfig,
-  useOriginTemplates,
   useSpecies,
   useTarotCards,
   useUpdateDraft,
@@ -39,9 +40,9 @@ import { Input } from '@/components/ui/input';
 import { ChapterLeaf, Paragraphs } from '../folio';
 import { resolveFamilyPath, Stage, STAGE_LABELS } from '../types';
 import type { CharacterDraft, Family, KinSlot, KinSlotPool, TarotCard } from '../types';
-import { UpbringingPicker } from './lineage/UpbringingPicker';
 import { UpbringingPrompts } from './lineage/UpbringingPrompts';
-import { BeatsBlock } from './lineage/BeatsBlock';
+import { KinRows } from './lineage/KinRows';
+import { LifeGrids } from './lineage/LifeGrids';
 import { FamilyPathSection } from './lineage/FamilyPathSection';
 import { LineageRecord } from './lineage/LineageRecord';
 
@@ -70,10 +71,8 @@ function surnameFace(
 }
 
 export function LineageStage({ draft, onStageSelect }: LineageStageProps) {
-  const updateDraft = useUpdateDraft();
   const { data: copy } = useCGExplanations();
-  const beginningId = draft.selected_beginnings?.id ?? null;
-  const { data: templates, isLoading: templatesLoading } = useOriginTemplates(beginningId);
+  // The beginning's route came with the beginning (#4395); none is a staff gap.
   const template = draft.selected_origin_template;
   const path = resolveFamilyPath(draft);
   const { data: families, isLoading: familiesLoading } = useFamilies(
@@ -114,27 +113,15 @@ export function LineageStage({ draft, onStageSelect }: LineageStageProps) {
   return (
     <ChapterLeaf
       stage={Stage.LINEAGE}
-      title={copy?.upbringing_heading ?? STAGE_LABELS[Stage.LINEAGE]}
-      intro={copy?.upbringing_intro}
+      title={copy?.lineage_heading ?? STAGE_LABELS[Stage.LINEAGE]}
+      intro={copy?.lineage_intro}
       wide
     >
       <div className="space-y-8">
-        {templatesLoading && <div className="h-10 animate-pulse rounded bg-muted" />}
-
-        {!templatesLoading && (templates?.length ?? 0) === 0 && (
+        {!template && (
           <p className="text-muted-foreground">
-            No upbringings are authored for this beginning yet. Please contact staff.
+            The family paths for this beginning are not set up yet. Please contact staff.
           </p>
-        )}
-
-        {templates && templates.length > 0 && (
-          <UpbringingPicker
-            templates={templates}
-            selectedId={template?.id ?? null}
-            onSelect={(t) =>
-              updateDraft.mutate({ draftId: draft.id, data: { selected_origin_template_id: t.id } })
-            }
-          />
         )}
 
         {template && (
@@ -144,8 +131,8 @@ export function LineageStage({ draft, onStageSelect }: LineageStageProps) {
                 <Paragraphs text={template.parentage_note} />
               </div>
             )}
-            {/* The house and the parents come first (#4124): the Upbringing's general
-                prompts used to sit above them, and read as the stage's opening. */}
+            {/* The house and the parents come first (#4124); the people beside them
+                follow (#4395); a general write-in never renders. */}
             <FamilyPathSection
               draft={draft}
               template={template}
@@ -170,10 +157,11 @@ export function LineageStage({ draft, onStageSelect }: LineageStageProps) {
               copy={copy}
               scope="path"
             />
-            <BeatsBlock draft={draft} copy={copy} />
-            <LineageRecord draft={draft} template={template} path={path} />
+            <KinRows draft={draft} copy={copy} />
           </>
         )}
+        <LifeGrids draft={draft} copy={copy} />
+        {template && <LineageRecord draft={draft} template={template} path={path} />}
       </div>
     </ChapterLeaf>
   );

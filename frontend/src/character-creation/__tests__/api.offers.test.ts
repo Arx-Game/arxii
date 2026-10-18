@@ -56,6 +56,7 @@ describe('character-creation/api getDraftOffers', () => {
           offer_id: 1,
           distinction_id: 42,
           name: 'Silver Tongue',
+          distinction_name: 'Silver Tongue',
           player_line: 'You always know the right thing to say.',
           chapter: 'glimpse',
           arrives_as: 'choice',

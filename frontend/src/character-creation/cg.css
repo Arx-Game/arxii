@@ -1189,17 +1189,117 @@
   text-align: left;
   margin-top: 0.3rem;
 }
-/* The beats of a life (#4124): one block per stage, each taken beat an entry. */
-.interview .beat-stage + .beat-stage {
-  margin-top: 1.4rem;
+/* The life grids (#4395): one block per stage, each beat a grid of cards. */
+.interview .life-stage + .life-stage {
+  margin-top: 1.6rem;
 }
-.interview .beat-pool {
+.interview .life-stage .stage-h {
+  display: flex;
+  align-items: baseline;
+  gap: 0.8rem;
+  flex-wrap: wrap;
+}
+.interview .life-stage .stage-h .pick {
+  font-size: 0.8rem;
+  color: var(--cg-text-soft);
+}
+.interview .life-beat + .life-beat {
+  margin-top: 1rem;
+}
+.interview .life-beat .beat-prompt {
+  margin: 0.4rem 0 0;
+  color: var(--cg-text-soft);
+  font-style: italic;
+}
+.interview .life-beat .field {
+  margin-top: 0.8rem;
+}
+.interview .life-beat .beat-foot {
+  display: flex;
+  gap: 1rem;
+  align-items: center;
+  margin-top: 0.6rem;
+}
+.interview .life-foot {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 1.4rem;
+  padding-top: 0.8rem;
+  border-top: 1px solid var(--cg-hairline);
+  color: var(--cg-text-soft);
+}
+/* A grid block runs three across as cards; a one-of grid keeps its round dot. */
+.interview .stances.grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.6rem;
+  margin-top: 0.6rem;
+}
+.interview .stances.grid > li .stance {
+  grid-template-columns: 1.1rem 1fr;
+  border: 1px solid var(--cg-hairline-strong);
+  border-radius: 0.6rem;
+  padding: 0.7rem 0.8rem;
+  height: 100%;
+}
+.interview .stances.grid > li:last-child .stance {
+  border-bottom: 1px solid var(--cg-hairline-strong);
+}
+.interview .stances.grid .stance[aria-pressed='true'] {
+  border-color: var(--cg-accent);
+  border-width: 1.5px;
+}
+.interview .stances.grid .stance .price {
+  grid-column: 2;
+  text-align: left;
+  margin-top: 0.3rem;
+}
+@media (max-width: 40rem) {
+  .interview .stances.grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+/* The frame a beginning shares (#4395), under its description at the pick. */
+.interview .frame p {
+  font-style: italic;
+  color: var(--cg-text-soft);
+}
+/* The people seated beside the parents (#4395). */
+.interview .kin-rows {
+  list-style: none;
+  margin: 0.6rem 0 0;
+  padding: 0;
+}
+.interview .kin-row {
+  display: grid;
+  grid-template-columns: 7rem minmax(0, 1fr) auto;
+  gap: 0.6rem 1rem;
+  align-items: start;
+  padding: 0.7rem 0;
+  border-top: 1px solid var(--cg-hairline);
+}
+.interview .kin-row .kin-kind {
+  font-family: 'Cinzel', serif;
+  font-weight: 600;
+  font-size: 0.75rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--cg-accent);
+  padding-top: 0.5rem;
+}
+.interview .kin-row .kin-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+.interview .kin-add {
   display: flex;
   flex-wrap: wrap;
   gap: 0.5rem;
-  margin: 0.5rem 0 0;
+  margin-top: 0.6rem;
 }
-.interview .beat-pool button {
+.interview .kin-add button {
   font-family: 'Cinzel', serif;
   font-weight: 600;
   font-size: 0.75rem;
@@ -1211,33 +1311,9 @@
   padding: 0.45rem 0.9rem;
   cursor: pointer;
 }
-.interview .beat-pool button:hover,
-.interview .beat-pool button:focus-visible {
+.interview .kin-add button:hover,
+.interview .kin-add button:focus-visible {
   border-color: var(--cg-accent);
-}
-.interview .beat-row .mode {
-  display: block;
-  margin-top: 0.5rem;
-  font-family: 'Cinzel', serif;
-  font-weight: 600;
-  font-size: 0.68rem;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  color: var(--cg-label);
-}
-.interview .beat-prompt {
-  margin: 0.4rem 0 0;
-  color: var(--cg-text-soft);
-  font-style: italic;
-}
-.interview .beat-row .field {
-  margin-top: 0.8rem;
-}
-.interview .beat-row .beat-foot {
-  display: flex;
-  gap: 1rem;
-  align-items: center;
-  margin-top: 0.6rem;
 }
 .interview .stance b {
   display: block;
