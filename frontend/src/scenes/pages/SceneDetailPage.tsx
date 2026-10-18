@@ -513,7 +513,9 @@ export function SceneDetailPage() {
               data-testid="scene-detail-combat-rail"
             >
               {showStoryRail && scene && <GMStoryRail scene={scene} />}
-              {showStoryRail && scene && <CastListPanel sceneId={scene.id} />}
+              {showStoryRail && scene && (
+                <CastListPanel sceneId={scene.id} sceneName={scene.name} />
+              )}
               {showCombatRail && (
                 <>
                   {/* The rail lingers past the encounter's end so the aftermath digest
