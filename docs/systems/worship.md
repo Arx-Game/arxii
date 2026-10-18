@@ -530,7 +530,7 @@ pledge progress (Ruling 9).
 - Sacrifices: `ceremonies.services.sacrifice_items(sheet, items, *, being=None)` at a shrine
   in the room or a temple over it (the being chooses when both are present for different
   beings); each carried item goes through `give_up_item` (the step extracted from
-  `record_offering`: destroy, feed the pool, favored-facet multiplier), base favor = value //
+  `record_offering`: soft-destroy the item (`destroyed_at`, #4461), feed the pool, favored-facet multiplier), base favor = value //
   `sacrifice_value_per_favor` (at least 1) x the multiplier for a favored facet, and one room
   line "<name> sacrifices <item> at <being>'s shrine." `record_offering` keeps its flat
   `devotion_per_offering` and now records the facet too.
@@ -938,8 +938,9 @@ being/presented mapping: default = officiant's public declaration; explicit
 override naming their `secret_being` = twisted rite presenting the public
 front; any other override = open rite; validates honoree counts/liveness per
 type — FUNERAL/SEANCE need every honoree dead, CONVERSION needs exactly one
-honoree, the convert), `record_offering` (destroys items via
-`hard_delete_item_instance`; snapshots `item.legend_value` before destruction
+honoree, the convert), `record_offering` (soft-destroys items via
+`destroy_consumed_item_instance` inside `give_up_item`, so the design and any resonance
+history outlive the offering, #4461; snapshots `item.legend_value` before destruction
 as `CeremonyOffering.item_legend_value` — #2359; pool always to the TRUE
 being; devotion follows belief — Decision 11), `record_speech` (Performance/Oratory roll),
 `finish_ceremony` (one Rites + tradition-spec quality roll → multiplier;

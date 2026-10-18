@@ -682,7 +682,7 @@ class CeremonyFlowTests(TestCase):
         )
         return ceremony, sheet, dead
 
-    def test_offering_destroys_item_and_feeds_pool_and_devotion(self) -> None:
+    def test_offering_soft_destroys_item_and_feeds_pool_and_devotion(self) -> None:
         from world.items.factories import ItemInstanceFactory
         from world.items.models import ItemInstance
 
@@ -690,7 +690,8 @@ class CeremonyFlowTests(TestCase):
         instance = ItemInstanceFactory(template__value=10)
         instance_pk = instance.pk
         record_offering(ceremony=ceremony, item_instances=[instance])
-        self.assertFalse(ItemInstance.objects.filter(pk=instance_pk).exists())
+        # Soft-destroyed, not deleted: the item keeps its design (owner ruling, #4461).
+        self.assertIsNotNone(ItemInstance.objects.get(pk=instance_pk).destroyed_at)
         self.being.refresh_from_db()
         self.assertGreater(self.being.resonance_pool, 0)
         offering = CeremonyOffering.objects.get(ceremony=ceremony)

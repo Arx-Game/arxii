@@ -1326,7 +1326,7 @@
 - `favored_facets_by_item(being: 'WorshippedBeing', item_instances: 'list[ItemInstance]') -> 'dict[int, Facet]' - Each of ``item_instances`` carrying a Facet ``being`` favors (BeingFacet),`
 - `finish_ceremony(*, ceremony: world.ceremonies.models.Ceremony, sincere: bool | None = None) -> world.ceremonies.models.Ceremony - Close the rite: quality roll, renown tallies, worship, funeral effects.`
 - `get_ceremony_config() -> world.ceremonies.models.CeremonyConfig - Get-or-create the first CeremonyConfig row (singleton-by-convention).`
-- `give_up_item(instance: 'ItemInstance', being: 'WorshippedBeing', *, facet: 'Facet | None', granted_by: 'CharacterSheet', reason: str) -> world.ceremonies.services.OfferedItem - Destroy an offered item and feed ``being``'s pool from its value.`
+- `give_up_item(instance: 'ItemInstance', being: 'WorshippedBeing', *, facet: 'Facet | None', granted_by: 'CharacterSheet', reason: str) -> world.ceremonies.services.OfferedItem - Take an offered item out of play and feed ``being``'s pool from its value.`
 - `open_ceremony(*, officiant_persona: 'Persona', type_key: str, honoree_sheets: 'list[CharacterSheet]', location_profile, being: 'WorshippedBeing | None' = None, scene=None, event=None, title=None, is_staff_fiat: bool = False, worship_rite: 'WorshipRite | None' = None) -> world.ceremonies.models.Ceremony - Open a ceremony at a location, recognizing zero or more honorees.`
 - `open_funeral_for(character_sheet: 'CharacterSheet') -> world.ceremonies.models.Ceremony | None - The OPEN funeral honoring this character, if any (the ghost container).`
 - `pending_conversion_offers_for_account(account: object) -> 'QuerySet[WorshipConversionOffer]' - PENDING conversion offers addressed to any character this account has ever held.`

@@ -3261,7 +3261,7 @@ Resonance Gain" in `docs/systems/INDEX.md`). Current values:
   Sanctum's Ritual of Homecoming writes the same `LocationValueModifier` row shape onto its own
   room, so a resident Sanctum owner trickles from Homecoming growth as an intentional emergent
   synergy — see `world/magic/CLAUDE.md` "Residence declaration + room aura tagging" for detail.
-- `OUTFIT_TRICKLE` — outfit presentation trickle (see `docs/architecture/items-fashion-mantles.md`).
+- `OUTFIT_TRICKLE` — outfit presentation trickle (see `docs/architecture/items-fashion-mantles.md`). `outfit_item_facet` is PROTECT and a removed facet is soft-removed (`ItemFacet.removed_at`), so the grant history survives a sacrificed item or a stripped facet (#4461).
 - `STAFF_GRANT` — manual staff grant.
 - `SANCTUM_WEAVING` / `SANCTUM_OWNER_BONUS` / `SANCTUM_DISSOLUTION_RECOVERY` —
   Sanctum income and dissolution recovery (Plan 4).

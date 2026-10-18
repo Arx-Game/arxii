@@ -319,13 +319,16 @@ def give_up_item(
     granted_by: "CharacterSheet",
     reason: str,
 ) -> OfferedItem:
-    """Destroy an offered item and feed ``being``'s pool from its value.
+    """Take an offered item out of play and feed ``being``'s pool from its value.
+
+    The item is soft-destroyed (``destroyed_at``), not deleted.
 
     The shared step of a ceremony offering and a shrine sacrifice (#3777, #4333):
     an item carrying one of the being's favored facets multiplies the pool grant
     by the configured ``offering_favored_facet_multiplier_percent``.
     """
-    from world.items.services.usage import hard_delete_item_instance  # noqa: PLC0415
+    from world.items.constants import OwnershipEventType  # noqa: PLC0415
+    from world.items.services.usage import destroy_consumed_item_instance  # noqa: PLC0415
     from world.worship.services import grant_worship  # noqa: PLC0415
 
     config = get_ceremony_config()
@@ -333,7 +336,15 @@ def give_up_item(
     value = instance.template.value
     legend_value = instance.legend_value
     name = str(instance)
-    hard_delete_item_instance(instance)
+    # Soft-destroy, never hard-delete (owner ruling 2026-10-18, #4461): a given-up item
+    # keeps its design and the record that it was crafted, and an item that fed its
+    # wearer outfit resonance cannot be deleted without losing that history.
+    destroy_consumed_item_instance(
+        instance,
+        preserve=True,
+        note=f"Given up to {being}: {reason}",
+        event_type=OwnershipEventType.TRANSFERRED,
+    )
     grant = None
     credited = value * config.offering_resonance_per_value * percent // 100
     if credited > 0:
@@ -413,7 +424,8 @@ def favored_facets_by_item(
         return {}
     found: dict[int, Facet] = {}
     for row in (
-        ItemFacet.objects.filter(item_instance__in=item_instances, facet_id__in=favored_facet_ids)
+        ItemFacet.attached()
+        .filter(item_instance__in=item_instances, facet_id__in=favored_facet_ids)
         .select_related("facet")
         .order_by("facet__name", "pk")
     ):

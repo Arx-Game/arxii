@@ -179,7 +179,7 @@ class RemoveFacetFromItemTests(TestCase):
             equipment_layer=EquipmentLayer.BASE,
         )
 
-    def test_happy_path_deletes_row(self) -> None:
+    def test_happy_path_stamps_row_removed(self) -> None:
         from world.items.factories import ItemFacetFactory
         from world.magic.factories import FacetFactory
 
@@ -192,7 +192,8 @@ class RemoveFacetFromItemTests(TestCase):
         )
         row_pk = row.pk
         remove_facet_from_item(item_facet=row)
-        self.assertFalse(ItemFacet.objects.filter(pk=row_pk).exists())
+        self.assertFalse(ItemFacet.attached().filter(pk=row_pk).exists())
+        self.assertTrue(ItemFacet.objects.filter(pk=row_pk).exists())
 
     def test_inherent_facet_cannot_be_removed(self) -> None:
         """An is_inherent row is refused: stamping only runs once, at creation (#3776).
@@ -226,10 +227,11 @@ class RemoveFacetFromItemTests(TestCase):
         )
         self.assertFalse(row.is_inherent)
         remove_facet_from_item(item_facet=row)
-        self.assertFalse(ItemFacet.objects.filter(pk=row.pk).exists())
+        self.assertFalse(ItemFacet.attached().filter(pk=row.pk).exists())
+        self.assertTrue(ItemFacet.objects.filter(pk=row.pk).exists())
 
     def test_handler_cache_invalidated_for_wearer(self) -> None:
-        """After remove, the DB row is gone and a fresh handler sees the updated state.
+        """After remove, the row is stamped removed and a fresh handler sees the updated state.
 
         Same rationale as AttachFacetToItemTests.test_handler_cache_invalidated_for_wearer.
         """
@@ -248,8 +250,9 @@ class RemoveFacetFromItemTests(TestCase):
 
         remove_facet_from_item(item_facet=row)
 
-        # Row must be deleted from DB.
-        self.assertFalse(ItemFacet.objects.filter(pk=row_pk).exists())
+        # Row is stamped removed, not deleted.
+        self.assertFalse(ItemFacet.attached().filter(pk=row_pk).exists())
+        self.assertTrue(ItemFacet.objects.filter(pk=row_pk).exists())
 
         # A fresh handler must not see the removed facet.
         fresh_handler = CharacterEquipmentHandler(self.character)

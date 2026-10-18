@@ -54,6 +54,9 @@ def purge_expired_soft_deleted_items(*, grace: timedelta | None = None) -> int:
         .filter(facet_count=0, transfer_count=0)
     )
 
+    # (``facet_count=0`` above counts removed facets too: a removed ItemFacet is the
+    # target of the resonance grants it fed, #4461, so an item that ever had one stays.)
+
     # Safety guard: a soft-deleted item must not be in the game world. If its
     # game_object has a location, someone re-homed it without clearing
     # destroyed_at (a half-undelete) — never purge it; surface it instead.

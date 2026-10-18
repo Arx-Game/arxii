@@ -409,7 +409,8 @@ class SacrificeTests(PledgeTestBase):
         self.assertEqual(offering.pledge_details, details)
         self.assertEqual(offering.facet, self.silk)
         self.assertEqual(offering.item_value, 20)
-        self.assertFalse(ItemInstance.objects.filter(pk=item.pk).exists())
+        # Soft-destroyed: out of play, design kept (#4461).
+        self.assertIsNotNone(ItemInstance.objects.get(pk=item.pk).destroyed_at)
         self.being.refresh_from_db()
         self.assertGreater(self.being.resonance_pool, pool_before)
         self.assertEqual(outcome.site, "shrine")

@@ -91,7 +91,7 @@ class CharacterEquipmentHandler:
                 .prefetch_related(
                     Prefetch(
                         "item_instance__item_facets",
-                        queryset=ItemFacet.objects.select_related(
+                        queryset=ItemFacet.attached().select_related(
                             "facet",
                             "attachment_quality_tier",
                         ),
@@ -228,7 +228,7 @@ class CharacterCarriedItemsHandler:
                 .prefetch_related(
                     Prefetch(
                         "item_facets",
-                        queryset=ItemFacet.objects.select_related(
+                        queryset=ItemFacet.attached().select_related(
                             "facet",
                             "attachment_quality_tier",
                         ),
