@@ -264,7 +264,7 @@ class TheListCostsTheSameForAnyCast(NpcRosterCase):
 
         self._list_vael()
 
-        def cost() -> tuple[int, int]:
+        def cost() -> int:
             self.api(self.other_gm).get(NPCS)  # warm per-process caches
             with CaptureQueriesContext(connection) as queries:
                 response = self.api(self.other_gm).get(NPCS)

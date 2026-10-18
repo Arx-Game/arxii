@@ -28,7 +28,8 @@ from world.scenes.action_models import SceneActionRequest, SceneActionTarget
 from world.scenes.factories import SceneActionRequestFactory, SceneActionTargetFactory, SceneFactory
 from world.scenes.models import Persona
 
-# The models a list row reads while the serializer decides resist-only.
+# The models a list row reads while the serializer decides resist-only. This must grow with
+# the serializer's reads: a model left out stays warm in the identity map and hides its query.
 _READ_MODELS = (
     SceneActionRequest,
     SceneActionTarget,

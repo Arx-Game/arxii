@@ -49,12 +49,13 @@ def place_npc_in_scene(*, entry: RosterEntry, scene: Scene, by: AccountDB) -> No
     sheet = entry.character_sheet
     if not is_story_npc(sheet):
         raise NPCPlacementError(NOT_A_STORY_NPC_MESSAGE)
+    # Ownership before the template check, so a non-owner learns nothing about it.
+    if not (by.is_staff or entry.created_by_account_id == by.pk):
+        raise NPCPlacementError(NOT_YOURS_MESSAGE)
     from world.roster.models import StoryNPCSettings  # noqa: PLC0415
 
     if StoryNPCSettings.objects.filter(roster_entry=entry, is_template=True).exists():
         raise NPCPlacementError(TEMPLATE_MESSAGE)
-    if not (by.is_staff or entry.created_by_account_id == by.pk):
-        raise NPCPlacementError(NOT_YOURS_MESSAGE)
     loan = active_loan_for(entry)
     if loan is not None and loan.borrower_id != by.pk:
         raise NPCPlacementError(LENT_OUT_MESSAGE)

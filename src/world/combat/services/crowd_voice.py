@@ -146,8 +146,9 @@ def describe_crowd(*, opponents: list[CombatOpponent], name: str, description: s
     anything is written.
 
     Raises:
-        CrowdVoiceError: no rows, rows from more than one encounter, a row that is
-            no crowd body, or a voice name another character already has.
+        CrowdVoiceError: a name longer than ``CROWD_NAME_MAX_LENGTH``, no rows, rows
+            from more than one encounter, a row that is no crowd body, or a voice name
+            another character already has.
     """
     name = name.strip()
     description = description.strip()

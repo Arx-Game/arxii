@@ -163,11 +163,12 @@ class MyRosterEntrySerializer(serializers.ModelSerializer):
     # session puppets the character, whatever location Evennia left it in.
     session_count = serializers.SerializerMethodField()
     room_name = serializers.SerializerMethodField()
-    # #4418: a borrowed NPC. ``loan`` names the scene and who lent it (by their GM
-    # character, never an account); ``npc_notes`` is what the owner wrote for whoever
-    # plays it. Both null on every character the account holds itself.
-    # Filled in by ``to_representation`` from one loan lookup per row; as declared
-    # fields they read None off the entry (it has no such attributes).
+    # #4418: a borrowed NPC. ``loan`` names the scene and who lent it (as
+    # ``player_names`` shows an account, never by account name); ``npc_notes`` is what
+    # the owner wrote for whoever plays it. Both null on every character the account
+    # holds itself. ``to_representation`` fills them from one loan lookup per row; they
+    # are declared here for the schema, and ``allow_null`` makes DRF read the missing
+    # entry attribute as None before that overwrite.
     loan = MyNPCLoanSerializer(read_only=True, allow_null=True)
     npc_notes = serializers.CharField(read_only=True, allow_null=True)
     # #4418: this character voices a crowd in combat. A list view passes the ids it

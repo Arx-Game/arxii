@@ -1518,9 +1518,8 @@ def _persona_is_npc(persona: Persona) -> bool:
     NPC-ness follows the character, not who plays it: a story NPC on the NPC shelf
     reads True while a GM or Guide plays it, and gets no consent prompt. A character
     nobody holds also reads True. "PC targets stay PENDING" means player-character,
-    not "online right now" --
-    an offline PC's consent request must still wait for them, not auto-resolve
-    as if they were an NPC. ``character.db_account`` is the wrong proxy for
+    not "online right now" -- an offline PC's consent request must still wait for
+    them, not auto-resolve as if they were an NPC. ``character.db_account`` is the wrong proxy for
     that: Evennia's ``unpuppet_object`` clears it the moment nobody is
     actively connected, so an offline PC would read as an NPC under it (#4091
     task 12 fix round 2). ``is_player_character`` also accepts an active

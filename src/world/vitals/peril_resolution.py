@@ -171,9 +171,10 @@ def is_pc_source(source_character: "ObjectDB | None") -> bool:  # noqa: OBJECTDB
     kill, breaking ADR-0023's PvP-is-non-lethal rule). ``is_player_character``
     also counts a puppeted character (``db_account`` set), so nothing the old
     test called a PC stops being one, except a story NPC a GM or Guide plays,
-    which stays an NPC and so can kill (#4418, ADR-4418). Returns False for a None source; a source
-    with no CharacterSheet (e.g. an ephemeral combat mook) is a PC only while
-    someone is puppeting it, the same answer the pre-#4091 test gave.
+    which stays an NPC and so can kill (#4418, ADR-4418). Returns False for a
+    None source; a source with no CharacterSheet (e.g. an ephemeral combat
+    mook) is a PC only while someone is puppeting it, the same answer the
+    pre-#4091 test gave.
     """
     from world.roster.services.activity import is_player_character  # noqa: PLC0415
 

@@ -98,6 +98,7 @@ if TYPE_CHECKING:
     from actions.base import Action
     from actions.models import ActionTemplate
     from world.character_sheets.models import CharacterSheet
+    from world.consent.models import SocialConsentCategory
     from world.magic.models import CharacterAnima
     from world.mechanics.types import AvailableAction
     from world.scenes.action_availability import AvailableEnhancement
@@ -1891,7 +1892,9 @@ def _block_excluded_persona_ids(
     return excluded
 
 
-def _social_consent_exclusions(character: ObjectDB, category: object | None) -> frozenset[int]:
+def _social_consent_exclusions(
+    character: ObjectDB, category: SocialConsentCategory | None
+) -> frozenset[int]:
     """Return persona IDs of characters that don't consent to social actions from *character*.
 
     Checks SocialConsentPreference for all tenures participating in the character's
