@@ -1373,16 +1373,26 @@ def _scene_actions(character: ObjectDB) -> list[PlayerAction]:
     attached uniformly by ``_enrich_player_actions`` so every backend's actions
     pass through one batched pass of the same queries.
 
-    Currently ignores *character*; in a follow-up this becomes the place where
-    per-character availability filters (e.g. residence-only social actions)
-    apply.
+    Whoever plays a story NPC is not offered a template the NPC cannot use on a player
+    character: one with no ``resist_check_type`` (nothing to roll the flipped check
+    against) or no ``consent_category`` (an untagged template could slip romance through
+    as resist-only). The ``npc-resist-checks`` Required-content sentinel reports the
+    same gap to staff (#4418).
     """
-    del character  # placeholder for per-character filtering in a follow-up PR
     from actions.definitions.social import settle  # noqa: PLC0415
     from actions.models import ActionTemplate  # noqa: PLC0415
     from actions.registry import SOCIAL_ACTIONS_BY_TEMPLATE_NAME  # noqa: PLC0415
+    from world.roster.services.activity import is_story_npc  # noqa: PLC0415
 
+    sheet = _get_character_sheet(character)
+    actor_is_npc = sheet is not None and is_story_npc(sheet)
     templates = list(ActionTemplate.objects.filter(category=_SOCIAL_CATEGORY))
+    if actor_is_npc:
+        templates = [
+            t
+            for t in templates
+            if t.resist_check_type_id is not None and t.consent_category_id is not None
+        ]
     result: list[PlayerAction] = []
     for template in templates:
         # Derive the dispatch key from the registry singleton, not name.lower():
@@ -1891,6 +1901,7 @@ def _social_consent_exclusions(character: ObjectDB, category: object | None) -> 
     scale with scene size (#1248).
     """
     from world.roster.models import RosterTenure  # noqa: PLC0415
+    from world.roster.services.activity import is_story_npc  # noqa: PLC0415
     from world.scenes.models import Scene, SceneParticipation  # noqa: PLC0415
 
     location = character.db_location
@@ -1925,7 +1936,19 @@ def _social_consent_exclusions(character: ObjectDB, category: object | None) -> 
         return frozenset()
     tenure_ids = [tenure.pk for tenure in tenures]
 
-    consent_excluded = _consent_excluded_persona_ids(tenures, tenure_ids, category, actor_tenure)
+    # A story NPC's consent is skipped on a category players cannot refuse from NPCs;
+    # blocks below still apply (#4418).
+    skip_consent = (
+        category is not None
+        and not category.refusable_from_npcs
+        and actor_sheet is not None
+        and is_story_npc(actor_sheet)
+    )
+    consent_excluded = (
+        set()
+        if skip_consent
+        else _consent_excluded_persona_ids(tenures, tenure_ids, category, actor_tenure)
+    )
 
     # #1278 — a coded block also removes the blocked persona from the actor's target picker.
     actor_persona_id: int | None = None
