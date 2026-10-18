@@ -29,7 +29,8 @@ Gaps that are ALREADY COVERED by earlier tasks and NOT duplicated here
 - resolve_fury / provocation_cap / clamp_tier units: test_fury_service.py
 - control_penalty raising anima cost through use_technique: test_use_technique_control_penalty.py
 - Berserk ConditionTemplate shape: test_berserk_template.py
-- RemoveConditionOnCheck effect dispatch: test_remove_condition_effect.py
+- RemoveConditionOnCheck effect dispatch: integration_tests/test_conditions_journeys.py
+  (TalkingABerserkerDown, #3657) and test_restore_sense_action.py
 - RestoreSenseAction registry + non-Berserk no-op: test_restore_sense_action.py
 """
 

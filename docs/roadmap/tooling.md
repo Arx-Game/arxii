@@ -76,7 +76,52 @@ journey found a hidden player's allow-list never letting anyone through (the che
 compared the puppeting character's pk against account ids), and the pacing journey
 found a strict round that had seen one `scene interpose` or `scene succor` unable to
 leave STRICT again (the guard counted the leftover rows the resolve sweep keeps by
-design); both fixed in place.
+design); both fixed in place. Tranche 6 (2026-10-18) opens the actions ledger
+(`docs/testing/ledger/actions.csv`, 172 modules, the tool's proposal for every row) with the
+gatherings, coffers and wares group: `test_covenant_actions`, `test_org_vault_actions`,
+`test_market_sell_materials`, `test_events`, `test_currency_actions`, `test_trade_actions`,
+`test_remove_condition_effect` (mock-pinned) and `test_treat_condition_action` (69 tests)
+are removed after each test was read against the journeys; the gathering journeys gained
+staff and the scene's GM running an event, a guild's invitation, a dormant banner, an equal's
+kick, the web treasury verbs naming the covenant only, the bank's refusals and the collector's
+`deliver_collection`, and the material sale's refusals; two new journey classes type the
+coins (`withdraw coins`, `deposit`, `give <amount> to`, `steal`, `secure`) and the web trade,
+and a third talks a berserker down with `restore_sense` so the remove-condition effect has a
+journey instead of a mock. The coins journey found `secure` raising after it set the policy
+(the room line was built from an item state with no key; the unit test had patched
+`msg_contents`) and a bare `withdraw coins` falling to the container usage; both fixed in
+place. Its second step (2026-10-18) rules the scenes group of the actions ledger:
+`test_scene_actions`, `test_round_mode_action`, `test_places_actions` and
+`test_scene_reactions` are removed, `test_round_actions` keeps only the row shapes no
+player path stages (a pass over leftover immediate rows, a DANGER round) and
+`test_scene_checks_actions` only the SENIOR `gm check` regression for the GM adjudication
+group; the scene journeys gained the round's web verbs from an empty room through join,
+pass, leave and end, a round ordered with a mode (owner, non-owner, staff defaults), a knob
+on its own, a staged battle's room opening its own scene, staff granting GM, pacing and
+finishing any scene, every verb typed from nowhere, the check band and invention firewalls,
+a synthesized check for its owner alone, a call outside a scene, decline-then-answer, a
+proposal's required parts, a roster-less reactor and a bare `places join`.
+`test_scene_resolution` is held (its service has no production caller found; the function's
+removal is its own ruling) and `test_round_context` is held for the combat ledger. Its third
+step (2026-10-18) rules the stories group: `test_situations` and
+`test_group_story_request_actions` are removed, `test_gm_story_actions` keeps only the
+patched-boundary refusal and the party-sheet helper, `test_gm_story_clock` only the combat
+leg, `test_story_builder_actions` stays (web-only canvas authoring whose tests already call
+the dispatch seam with the canvas's own kwargs) and `test_gm_story_run_beat` is held for the
+combat ledger; a new journey module stages a situation and a single challenge
+(`integration_tests/test_staging_a_situation_journeys.py`), the story journeys gained staff
+on every verb, the Assistant GM's mark and credit, a GM's own arc earning nothing, the plot
+gate, routing by transition order, a story nobody is in, a group story advancing one table,
+the clock's reuse and the one-beat-per-scene rule, and `declare_stakes`; the covenant journey
+gained `covenant request-gm`, the GM queue, `gm claim` and `covenant withdraw-gm-request`.
+Its fourth step (2026-10-18) rules the consent group: `test_consent_preferences` is removed,
+`test_social_consent_enforcement` keeps only the no-actor branches and the batched sweep's
+query budget, `test_consent_rivals_sweep` only the batched sweep, and
+`test_block_target_exclusion` stays (the target picker's predicate over faces); the
+body-handling journey gained `consent category` for every mode tried against the carry
+(everyone, all-but-blacklist, friends with the owner's friendship counting and the actor's
+not, rivals through `relationship declare` from both sides, the default), `consent off`/`on`,
+and the web's tenure ownership, boolean and ended-tenure refusals.
 
 ## Built (2026-09-30, #4064 — the reviewed delete, and admin pages for domains and fealty)
 

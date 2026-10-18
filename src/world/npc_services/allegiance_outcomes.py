@@ -3,7 +3,9 @@
 Settle (Decision 17) and break (Decision 16) both end the hold through the
 condition's settle pool at the acting PC's roll tier, then remove the condition
 through ``remove_condition`` so the removal event fires. No result ever starts a
-fight (Decision 21). A hold that runs out with nobody acting ends in the sweep:
+fight (Decision 21): once the hold is gone the NPC's cause is tested again
+(``retest_cause_on_release``, #4415), and the cause, not the result, decides whether
+it fights or leaves. A hold that runs out with nobody acting ends in the sweep:
 plainly, or (#4120, a hold with a PC charmer) after one warning and an auto-rolled
 break check at the charmer's tier.
 
@@ -101,6 +103,7 @@ def end_allegiance_with_pool(
     from world.conditions.services import remove_condition  # noqa: PLC0415
     from world.scenes.narrator import narrate_room_outcome  # noqa: PLC0415
     from world.scenes.services import active_persona_for_sheet  # noqa: PLC0415
+    from world.standoffs.services.release import retest_cause_on_release  # noqa: PLC0415
 
     target = instance.target
     condition = instance.condition
@@ -124,6 +127,8 @@ def end_allegiance_with_pool(
         name = active_persona_for_sheet(sheet).name if sheet is not None else target.key
         text = label or f"The {condition.name} on {name} ends."
         narrate_room_outcome(target.location, text)
+    # The cause, not the break, decides whether the NPC fights again (#4415).
+    retest_cause_on_release(target)
     return AllegianceEnding(condition_name=condition.name, consequence_label=label)
 
 
@@ -298,7 +303,8 @@ def auto_settle_lapsed_allegiance(instance: ConditionInstance) -> bool:
 
     Returns False when the hold has no played charmer or its condition has no
     ``allegiance_break_check_type`` (missing content: one warning, the caller falls
-    back to plain removal). Never opens an encounter or any hostility (Decision 21).
+    back to plain removal). Never opens an encounter (Decision 21); the NPC's cause
+    is tested again after the hold ends (#4415).
     The check difficulty (the hold's strength points) is PLACEHOLDER tuning (#4120).
     """
     from world.checks.services import perform_check  # noqa: PLC0415
@@ -330,9 +336,11 @@ def lapsed_allegiance_sweep() -> None:
     for holds with a PC charmer: that charmer is warned once in the
     ``lapse_warning_seconds`` window before expiry, and at lapse an auto-rolled
     check settles the hold through its pool. A hold with no PC charmer (or no check
-    type) is removed plainly. The no-fight rule (Decision 21) stands: the NPC
-    returns to its old stance, nothing attacks, and no encounter opens (#4121
-    decides when a lapsed NPC turns hostile; a GM can start a fight by hand).
+    type) is removed plainly. The no-fight rule (Decision 21) stands for the
+    result: no encounter opens. An NPC still in a live encounter has its cause
+    tested again once the hold is gone (``retest_cause_on_release``, #4415): it
+    leaves when its reason to fight no longer holds, and fights (or, where a GM runs
+    the scene, is proposed to) when it does.
     Removal goes through ``remove_condition`` so CONDITION_REMOVED fires. Also closes
     bind windows whose charmer has left (Decision 19) -- this is also how a kept
     nameless charmed NPC gets deleted once its window closes (#4091 task 7).
@@ -352,6 +360,7 @@ def lapsed_allegiance_sweep() -> None:
     from world.conditions.services import get_settle_config, remove_condition  # noqa: PLC0415
     from world.scenes.narrator import narrate_room_outcome  # noqa: PLC0415
     from world.scenes.services import persona_names_for_sheets  # noqa: PLC0415
+    from world.standoffs.services.release import retest_cause_on_release  # noqa: PLC0415
 
     now = timezone.now()
     window = timedelta(seconds=get_settle_config().lapse_warning_seconds)
@@ -387,4 +396,5 @@ def lapsed_allegiance_sweep() -> None:
             name = persona_names.get(target.pk, target.key)
             # R6: PLACEHOLDER system line (#4091).
             narrate_room_outcome(room, f"The {condition.name} on {name} has run out.")
+        retest_cause_on_release(target)
     release_closed_bind_windows()

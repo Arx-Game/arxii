@@ -184,6 +184,18 @@ def cause_check(
     margin_percent = template.cause_margin_percent if margin is None else margin
     if cause == CauseKind.NONE:
         return "No cause: they never start a fight on their own."
+    config = StandoffConfig.load()
+    if cause == CauseKind.HATRED:
+        return (
+            "They never fire on force: only a character matching a faction rule that provokes "
+            "them sets them off, whatever the force, until they break."
+        )
+    if cause == CauseKind.TERRITORY:
+        patience = config.territory_patience
+        text = f"They fire after {patience} actions in which the party neither settles nor leaves."
+        if patience > 1:
+            text += f" They warn the room after action {patience - 1}."
+        return text
     weight_row = OpponentTierTemplate.objects.filter(tier=template.tier).first()
     weight = weight_row.force_weight_percent if weight_row is not None else _PERCENT
     margin_factor = _PERCENT + margin_percent
@@ -199,6 +211,11 @@ def cause_check(
     )
     if cause == CauseKind.ORDERS:
         text += " Any botched press or terms against them also counts as a provocation."
+    if cause == CauseKind.HUNGER:
+        text += (
+            f" Each action nobody feeds them widens the margin by {config.hunger_margin_step} "
+            "percent."
+        )
     return text
 
 

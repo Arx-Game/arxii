@@ -12,8 +12,10 @@ Command reference for working on Arx II. The load-bearing *rules* live in
 - `uv sync` — Install Python dependencies
 - `uv venv` — Create virtual environment
 - `just install-git-hooks` - Install the git hooks: a pre-commit hook that never
-  clears the worktree (#3814), plus pre-commit's pre-push hook. Not
-  `pre-commit install`, which would put back pre-commit's own worktree-clearing hook
+  clears the worktree (#3814), plus a pre-push hook (#4428). Both are shims for the
+  tracked hooks in `tools/githooks/`, which find pre-commit when they run, so a
+  removed worktree cannot strand them. Not `pre-commit install`, which would put back
+  pre-commit's own worktree-clearing hook and a venv path baked in at install time
 - **Sandboxed devcontainer** (for `--dangerously-skip-permissions`): see `docs/devcontainer-setup.md`
 
 ## Common Development Commands

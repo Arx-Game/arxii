@@ -1,50 +1,47 @@
-"""Tests for GM story lifecycle actions (#1495)."""
+"""What the story journeys cannot stage of the GM story actions (#1495, #1770).
+
+Every player and GM path of ``complete_story``, ``resolve_episode``, ``promote_episode``,
+``mark_beat`` and ``declare_stakes`` is typed or dispatched in
+``integration_tests/test_running_a_story_journeys.py`` (``RunningAStory``) and
+``integration_tests/test_sharing_a_story_journeys.py`` (``DeclaringTheStakes``). What
+stays here: the boundary refusal, which only a patched boundary report can produce (no
+authored boundary refuses in a fixture), and the party-sheet helper, which answers a
+question (who is present) no reply reads back directly.
+"""
 
 from __future__ import annotations
 
+from unittest import mock
+
 from django.test import TestCase
 
-from evennia_extensions.factories import (
-    AccountFactory,
-    CharacterFactory,
-    ObjectDBFactory,
-)
+from actions.definitions.gm_stories import DeclareStakesAction, _present_participant_sheets
+from evennia_extensions.factories import AccountFactory, CharacterFactory, ObjectDBFactory
 from world.character_sheets.factories import CharacterSheetFactory
 from world.gm.factories import GMProfileFactory, GMTableFactory
 from world.roster.factories import RosterTenureFactory
-from world.stories.constants import (
-    AssistantClaimStatus,
-    BeatOutcome,
-    BeatPredicateType,
-    StoryMaturity,
-    StoryScope,
-)
+from world.scenes.factories import SceneFactory
+from world.scenes.interaction_services import invalidate_active_scene_cache
+from world.societies.constants import RenownRisk
+from world.stories.constants import StakeSeverity, StoryScope
 from world.stories.factories import (
-    AssistantGMClaimFactory,
     BeatFactory,
     ChapterFactory,
     EpisodeFactory,
-    GroupStoryProgressFactory,
+    EpisodeSceneFactory,
+    StakeFactory,
     StoryFactory,
     StoryProgressFactory,
-    TransitionFactory,
 )
-from world.stories.models import BeatCompletion, EpisodeResolution
-from world.stories.types import StoryStatus
+from world.stories.models import StakeContractActivation
+from world.stories.types import StakeBoundaryReport, StoryStatus
 
 
 def _make_room(label: str = "Room") -> object:
-    return ObjectDBFactory(
-        db_key=label,
-        db_typeclass_path="typeclasses.rooms.Room",
-    )
+    return ObjectDBFactory(db_key=label, db_typeclass_path="typeclasses.rooms.Room")
 
 
-def _make_actor_with_account(
-    db_key: str,
-    room: object,
-    account: object,
-) -> tuple[object, object]:
+def _make_actor_with_account(db_key: str, room: object, account: object) -> tuple[object, object]:
     """Create a PC in *room* whose ``active_account`` is *account*."""
     char = CharacterFactory(db_key=db_key, location=room)
     sheet = CharacterSheetFactory(character=char)
@@ -56,39 +53,21 @@ def _make_actor_with_account(
     return char, entry.character_sheet
 
 
-class GMStoryActionTestBase(TestCase):
-    """Shared fixture for story GM lifecycle action tests."""
+class DeclareStakesEdgeTests(TestCase):
+    """The two edges of ``DeclareStakesAction`` a journey cannot reach."""
 
     def setUp(self) -> None:
         self.room = _make_room("GMStoryRoom")
-
-        # Lead GM account / actor
         self.lead_gm_account = AccountFactory(username="storylead")
         self.lead_gm_profile = GMProfileFactory(account=self.lead_gm_account)
         self.gm_table = GMTableFactory(gm=self.lead_gm_profile)
         self.lead_gm_actor, self.lead_gm_sheet = _make_actor_with_account(
-            "story_lead_actor",
-            self.room,
-            self.lead_gm_account,
+            "story_lead_actor", self.room, self.lead_gm_account
         )
-
-        # Staff account / actor
-        self.staff_account = AccountFactory(username="storystaff", is_staff=True)
-        self.staff_actor, _ = _make_actor_with_account(
-            "story_staff_actor",
-            self.room,
-            self.staff_account,
-        )
-
-        # Non-GM player account / actor
         self.player_account = AccountFactory(username="storyplayer")
         self.player_actor, _ = _make_actor_with_account(
-            "story_player_actor",
-            self.room,
-            self.player_account,
+            "story_player_actor", self.room, self.player_account
         )
-
-        # Story with Lead GM on primary table
         self.story = StoryFactory(
             owners=[self.lead_gm_account],
             scope=StoryScope.CHARACTER,
@@ -97,579 +76,42 @@ class GMStoryActionTestBase(TestCase):
         )
         self.chapter = ChapterFactory(story=self.story)
         self.ep1 = EpisodeFactory(chapter=self.chapter, order=1)
-        self.ep2 = EpisodeFactory(chapter=self.chapter, order=2)
-
-        # Active progress on the story
-        self.progress = StoryProgressFactory(
+        StoryProgressFactory(
             story=self.story,
             character_sheet=self.lead_gm_sheet,
             current_episode=self.ep1,
             is_active=True,
         )
-
-
-class CompleteStoryActionTests(GMStoryActionTestBase):
-    """CompleteStoryAction concludes a story."""
-
-    def test_lead_gm_can_complete_story(self) -> None:
-        from actions.definitions.gm_stories import CompleteStoryAction
-
-        result = CompleteStoryAction().run(self.lead_gm_actor, story_id=self.story.pk)
-        self.assertTrue(result.success, result.message)
-        self.story.refresh_from_db()
-        self.assertEqual(self.story.status, StoryStatus.COMPLETED)
-        self.assertIsNotNone(self.story.completed_at)
-
-    def test_staff_can_complete_story(self) -> None:
-        from actions.definitions.gm_stories import CompleteStoryAction
-
-        result = CompleteStoryAction().run(self.staff_actor, story_id=self.story.pk)
-        self.assertTrue(result.success, result.message)
-        self.story.refresh_from_db()
-        self.assertEqual(self.story.status, StoryStatus.COMPLETED)
-
-    def test_non_gm_denied(self) -> None:
-        from actions.definitions.gm_stories import CompleteStoryAction
-
-        result = CompleteStoryAction().run(self.player_actor, story_id=self.story.pk)
-        self.assertFalse(result.success)
-        self.story.refresh_from_db()
-        self.assertEqual(self.story.status, StoryStatus.ACTIVE)
-
-
-class ResolveEpisodeActionTests(GMStoryActionTestBase):
-    """ResolveEpisodeAction advances progress through a transition."""
-
-    def setUp(self) -> None:
-        super().setUp()
-        self.transition = TransitionFactory(
-            source_episode=self.ep1,
-            target_episode=self.ep2,
-        )
-
-    def test_lead_gm_can_resolve_auto_transition(self) -> None:
-        from actions.definitions.gm_stories import ResolveEpisodeAction
-
-        result = ResolveEpisodeAction().run(self.lead_gm_actor, episode_id=self.ep1.pk)
-        self.assertTrue(result.success, result.message)
-        self.assertTrue(EpisodeResolution.objects.filter(episode=self.ep1).exists())
-        self.progress.refresh_from_db()
-        self.assertEqual(self.progress.current_episode_id, self.ep2.pk)
-
-    def test_staff_can_resolve_episode(self) -> None:
-        from actions.definitions.gm_stories import ResolveEpisodeAction
-
-        result = ResolveEpisodeAction().run(self.staff_actor, episode_id=self.ep1.pk)
-        self.assertTrue(result.success, result.message)
-
-    def test_non_gm_denied(self) -> None:
-        from actions.definitions.gm_stories import ResolveEpisodeAction
-
-        result = ResolveEpisodeAction().run(self.player_actor, episode_id=self.ep1.pk)
-        self.assertFalse(result.success)
-        self.assertFalse(EpisodeResolution.objects.filter(episode=self.ep1).exists())
-
-    def test_multiple_eligible_transitions_lowest_order_fires(self) -> None:
-        """Several eligible transitions: the lowest-order one fires automatically (#3565).
-
-        Routing is decided by the author, never by a GM after the fact - there
-        is no transition id to pass.
-        """
-        from actions.definitions.gm_stories import ResolveEpisodeAction
-
-        other_target = EpisodeFactory(chapter=self.chapter, order=3)
-        # self.transition (order=0, -> ep2) already exists from setUp; add a
-        # higher-order transition to a different target.
-        TransitionFactory(source_episode=self.ep1, target_episode=other_target, order=1)
-        # Reset progress to the source episode for this scenario.
-        self.progress.current_episode = self.ep1
-        self.progress.save(update_fields=["current_episode", "last_advanced_at"])
-
-        result = ResolveEpisodeAction().run(self.lead_gm_actor, episode_id=self.ep1.pk)
-
-        self.assertTrue(result.success, result.message)
-        self.progress.refresh_from_db()
-        self.assertEqual(self.progress.current_episode_id, self.ep2.pk)
-
-    def test_missing_progress_returns_failure(self) -> None:
-        from actions.definitions.gm_stories import ResolveEpisodeAction
-
-        self.progress.delete()
-        result = ResolveEpisodeAction().run(self.lead_gm_actor, episode_id=self.ep1.pk)
-        self.assertFalse(result.success)
-
-    def test_group_scope_multiple_active_records_uses_first(self) -> None:
-        """GROUP stories with multiple active tables are handled by the service."""
-        from actions.definitions.gm_stories import ResolveEpisodeAction
-
-        group_story = StoryFactory(
-            owners=[self.lead_gm_account],
-            scope=StoryScope.GROUP,
-            primary_table=self.gm_table,
-            status=StoryStatus.ACTIVE,
-        )
-        chapter = ChapterFactory(story=group_story)
-        ep1 = EpisodeFactory(chapter=chapter, order=1)
-        ep2 = EpisodeFactory(chapter=chapter, order=2)
-        TransitionFactory(source_episode=ep1, target_episode=ep2)
-        other_table = GMTableFactory(gm=GMProfileFactory())
-        progress1 = GroupStoryProgressFactory(
-            story=group_story,
-            gm_table=self.gm_table,
-            current_episode=ep1,
-            is_active=True,
-        )
-        progress2 = GroupStoryProgressFactory(
-            story=group_story,
-            gm_table=other_table,
-            current_episode=ep1,
-            is_active=True,
-        )
-
-        result = ResolveEpisodeAction().run(self.lead_gm_actor, episode_id=ep1.pk)
-
-        self.assertTrue(result.success, result.message)
-        progress1.refresh_from_db()
-        progress2.refresh_from_db()
-        advanced = [p for p in (progress1, progress2) if p.current_episode_id == ep2.pk]
-        self.assertEqual(len(advanced), 1)
-
-
-class PromoteEpisodeActionTests(GMStoryActionTestBase):
-    """PromoteEpisodeAction changes episode maturity."""
-
-    def test_lead_gm_can_promote_to_plot(self) -> None:
-        from actions.definitions.gm_stories import PromoteEpisodeAction
-
-        episode = EpisodeFactory(
-            chapter=self.chapter,
-            order=10,
-            maturity=StoryMaturity.OUTLINE,
-            resting_conclusion="The path forks ahead.",
-        )
-        TransitionFactory(source_episode=episode, target_episode=self.ep2)
-
-        result = PromoteEpisodeAction().run(
-            self.lead_gm_actor,
-            episode_id=episode.pk,
-            target=StoryMaturity.PLOT,
-        )
-        self.assertTrue(result.success, result.message)
-        episode.refresh_from_db()
-        self.assertEqual(episode.maturity, StoryMaturity.PLOT)
-
-    def test_staff_can_promote_episode(self) -> None:
-        from actions.definitions.gm_stories import PromoteEpisodeAction
-
-        episode = EpisodeFactory(
-            chapter=self.chapter,
-            order=11,
-            maturity=StoryMaturity.OUTLINE,
-            resting_conclusion="A quiet moment.",
-        )
-        TransitionFactory(source_episode=episode, target_episode=self.ep2)
-
-        result = PromoteEpisodeAction().run(
-            self.staff_actor,
-            episode_id=episode.pk,
-            target=StoryMaturity.PLOT,
-        )
-        self.assertTrue(result.success, result.message)
-
-    def test_non_gm_denied(self) -> None:
-        from actions.definitions.gm_stories import PromoteEpisodeAction
-
-        episode = EpisodeFactory(
-            chapter=self.chapter,
-            order=12,
-            maturity=StoryMaturity.OUTLINE,
-            resting_conclusion="A quiet moment.",
-        )
-        TransitionFactory(source_episode=episode, target_episode=self.ep2)
-
-        result = PromoteEpisodeAction().run(
-            self.player_actor,
-            episode_id=episode.pk,
-            target=StoryMaturity.PLOT,
-        )
-        self.assertFalse(result.success)
-        episode.refresh_from_db()
-        self.assertEqual(episode.maturity, StoryMaturity.OUTLINE)
-
-    def test_plot_gate_blocks_promotion(self) -> None:
-        from actions.definitions.gm_stories import PromoteEpisodeAction
-
-        episode = EpisodeFactory(
-            chapter=self.chapter,
-            order=13,
-            maturity=StoryMaturity.PITCH,
-            resting_conclusion="",
-        )
-
-        result = PromoteEpisodeAction().run(
-            self.lead_gm_actor,
-            episode_id=episode.pk,
-            target=StoryMaturity.PLOT,
-        )
-        self.assertFalse(result.success)
-        episode.refresh_from_db()
-        self.assertEqual(episode.maturity, StoryMaturity.PITCH)
-
-
-class MarkBeatActionTests(GMStoryActionTestBase):
-    """MarkBeatAction resolves a GM_MARKED beat."""
-
-    def setUp(self) -> None:
-        super().setUp()
-        self.beat = BeatFactory(
-            episode=self.ep1,
-            predicate_type=BeatPredicateType.GM_MARKED,
-            agm_eligible=True,
-        )
-
-    def test_lead_gm_can_mark_beat(self) -> None:
-        from actions.definitions.gm_stories import MarkBeatAction
-
-        result = MarkBeatAction().run(
-            self.lead_gm_actor,
-            beat_id=self.beat.pk,
-            outcome=BeatOutcome.SUCCESS,
-        )
-        self.assertTrue(result.success, result.message)
-        self.beat.refresh_from_db()
-        self.assertEqual(self.beat.outcome, BeatOutcome.SUCCESS)
-        self.assertTrue(BeatCompletion.objects.filter(beat=self.beat).exists())
-
-    def test_lead_gm_marking_own_puppeted_character_is_self_dealing_no_award(self) -> None:
-        """A GM running their own solo CHARACTER-scope arc gets no reward (#2123)."""
-        from actions.definitions.gm_stories import MarkBeatAction
-        from world.progression.models import XPTransaction
-        from world.progression.types import ProgressionReason
-
-        # The self-dealing guard reads ObjectDB.db_account (the same field
-        # views.py's own CHARACTER-scope ownership checks read) — stamp it to
-        # make this fixture's progress genuinely "the Lead GM's own character".
-        self.lead_gm_sheet.character.db_account = self.lead_gm_account
-        self.lead_gm_sheet.character.save()
-
-        result = MarkBeatAction().run(
-            self.lead_gm_actor,
-            beat_id=self.beat.pk,
-            outcome=BeatOutcome.SUCCESS,
-        )
-        self.assertTrue(result.success, result.message)
-        self.assertFalse(
-            XPTransaction.objects.filter(
-                account=self.lead_gm_account, reason=ProgressionReason.GM_STORY_REWARD
-            ).exists()
-        )
-
-    def test_staff_can_mark_beat(self) -> None:
-        from actions.definitions.gm_stories import MarkBeatAction
-
-        result = MarkBeatAction().run(
-            self.staff_actor,
-            beat_id=self.beat.pk,
-            outcome=BeatOutcome.SUCCESS,
-        )
-        self.assertTrue(result.success, result.message)
-
-    def test_approved_agm_can_mark_beat(self) -> None:
-        from actions.definitions.gm_stories import MarkBeatAction
-
-        agm_account = AccountFactory(username="agm")
-        agm_profile = GMProfileFactory(account=agm_account)
-        agm_actor, _ = _make_actor_with_account(
-            "agm_actor",
-            self.room,
-            agm_account,
-        )
-        AssistantGMClaimFactory(
-            beat=self.beat,
-            assistant_gm=agm_profile,
-            status=AssistantClaimStatus.APPROVED,
-            approved_by=self.lead_gm_profile,
-        )
-
-        result = MarkBeatAction().run(
-            agm_actor,
-            beat_id=self.beat.pk,
-            outcome=BeatOutcome.SUCCESS,
-        )
-        self.assertTrue(result.success, result.message)
-
-    def test_approved_agm_marking_is_credited_to_agm_not_lead_gm(self) -> None:
-        """An AGM (not the Lead GM) resolving a claimed beat is credited (#2123)."""
-        from actions.definitions.gm_stories import MarkBeatAction
-        from world.progression.models import XPTransaction
-        from world.progression.types import ProgressionReason
-
-        agm_account = AccountFactory(username="agm_credited")
-        agm_profile = GMProfileFactory(account=agm_account)
-        agm_actor, _ = _make_actor_with_account(
-            "agm_credited_actor",
-            self.room,
-            agm_account,
-        )
-        AssistantGMClaimFactory(
-            beat=self.beat,
-            assistant_gm=agm_profile,
-            status=AssistantClaimStatus.APPROVED,
-            approved_by=self.lead_gm_profile,
-        )
-
-        result = MarkBeatAction().run(
-            agm_actor,
-            beat_id=self.beat.pk,
-            outcome=BeatOutcome.SUCCESS,
-        )
-        self.assertTrue(result.success, result.message)
-        self.assertTrue(
-            XPTransaction.objects.filter(
-                account=agm_account, reason=ProgressionReason.GM_STORY_REWARD
-            ).exists()
-        )
-        self.assertFalse(
-            XPTransaction.objects.filter(
-                account=self.lead_gm_account, reason=ProgressionReason.GM_STORY_REWARD
-            ).exists()
-        )
-
-    def test_unapproved_agm_denied(self) -> None:
-        from actions.definitions.gm_stories import MarkBeatAction
-
-        agm_account = AccountFactory(username="agm_requested")
-        agm_profile = GMProfileFactory(account=agm_account)
-        agm_actor, _ = _make_actor_with_account(
-            "agm_requested_actor",
-            self.room,
-            agm_account,
-        )
-        AssistantGMClaimFactory(
-            beat=self.beat,
-            assistant_gm=agm_profile,
-            status=AssistantClaimStatus.REQUESTED,
-        )
-
-        result = MarkBeatAction().run(
-            agm_actor,
-            beat_id=self.beat.pk,
-            outcome=BeatOutcome.SUCCESS,
-        )
-        self.assertFalse(result.success)
-
-    def test_non_gm_denied(self) -> None:
-        from actions.definitions.gm_stories import MarkBeatAction
-
-        result = MarkBeatAction().run(
-            self.player_actor,
-            beat_id=self.beat.pk,
-            outcome=BeatOutcome.SUCCESS,
-        )
-        self.assertFalse(result.success)
-
-
-class ActionIdentifierValidationTests(GMStoryActionTestBase):
-    """Malformed identifiers surface friendly messages instead of exceptions."""
-
-    def test_complete_rejects_non_numeric_story_id(self) -> None:
-        from actions.definitions.gm_stories import CompleteStoryAction
-
-        result = CompleteStoryAction().run(self.lead_gm_actor, story_id="not-a-pk")
-        self.assertFalse(result.success)
-        self.assertEqual(result.message, "No story with that ID exists.")
-
-    def test_resolve_rejects_non_numeric_episode_id(self) -> None:
-        from actions.definitions.gm_stories import ResolveEpisodeAction
-
-        result = ResolveEpisodeAction().run(self.lead_gm_actor, episode_id="not-a-pk")
-        self.assertFalse(result.success)
-        self.assertEqual(result.message, "No episode with that ID exists.")
-
-    def test_promote_rejects_non_numeric_episode_id(self) -> None:
-        from actions.definitions.gm_stories import PromoteEpisodeAction
-
-        result = PromoteEpisodeAction().run(
-            self.lead_gm_actor,
-            episode_id="not-a-pk",
-            target=StoryMaturity.PLOT,
-        )
-        self.assertFalse(result.success)
-        self.assertEqual(result.message, "No episode with that ID exists.")
-
-    def test_mark_rejects_non_numeric_beat_id(self) -> None:
-        from actions.definitions.gm_stories import MarkBeatAction
-
-        result = MarkBeatAction().run(
-            self.lead_gm_actor,
-            beat_id="not-a-pk",
-            outcome=BeatOutcome.SUCCESS,
-        )
-        self.assertFalse(result.success)
-        self.assertEqual(result.message, "No beat with that ID exists.")
-
-
-class DeclareStakesActionTests(GMStoryActionTestBase):
-    """DeclareStakesAction — the freeform-scene stakes opt-in moment (#1770 PR4)."""
-
-    def setUp(self) -> None:
-        from world.scenes.factories import SceneFactory
-        from world.scenes.interaction_services import invalidate_active_scene_cache
-        from world.societies.constants import RenownRisk
-        from world.stories.constants import StakeSeverity
-        from world.stories.factories import EpisodeSceneFactory, StakeFactory
-
-        super().setUp()
         invalidate_active_scene_cache(self.room)
-        # An active scene at the actors' room with the player as participant.
         self.scene = SceneFactory(
-            room=self.room,
-            participants=[self.player_account, self.lead_gm_account],
+            room=self.room, participants=[self.player_account, self.lead_gm_account]
         )
-        self.beat = BeatFactory(
-            episode=self.ep1,
-            risk=RenownRisk.HIGH,
-            target_level=4,
-        )
-        # The beat's episode must be linked to the current scene — the bound
-        # that keeps the scene-GM permission leg scoped to their own scene.
+        self.beat = BeatFactory(episode=self.ep1, risk=RenownRisk.HIGH, target_level=4)
         EpisodeSceneFactory(episode=self.ep1, scene=self.scene)
-        self.stake = StakeFactory(
-            beat=self.beat,
-            severity=StakeSeverity.DIRE,
-            player_summary="The healer NPC may die.",
+        StakeFactory(
+            beat=self.beat, severity=StakeSeverity.DIRE, player_summary="The healer NPC may die."
         )
-
-    def _declare(self, actor, **kwargs):
-        from actions.definitions.gm_stories import DeclareStakesAction
-
-        return DeclareStakesAction().run(actor, beat_id=self.beat.pk, **kwargs)
-
-    def test_lead_gm_declares_and_activates(self) -> None:
-        from world.stories.models import StakeContractActivation
-
-        result = self._declare(self.lead_gm_actor)
-
-        self.assertTrue(result.success, result.message)
-        self.assertTrue(
-            StakeContractActivation.objects.filter(
-                beat=self.beat, resolved_at__isnull=True
-            ).exists()
-        )
-        # The declaration lists each stake's severity label + player summary.
-        self.assertIn("The healer NPC may die.", result.message)
-        self.assertIn("Dire", result.message)
-        self.assertIn("effective risk", result.message)
-
-    def test_scene_gm_without_story_role_may_declare(self) -> None:
-        from world.scenes.factories import SceneParticipationFactory
-        from world.stories.models import StakeContractActivation
-
-        scene_gm_account = AccountFactory(username="scenegm")
-        scene_gm_actor, _ = _make_actor_with_account(
-            "scene_gm_actor",
-            self.room,
-            scene_gm_account,
-        )
-        SceneParticipationFactory(scene=self.scene, account=scene_gm_account, is_gm=True)
-
-        result = self._declare(scene_gm_actor)
-
-        self.assertTrue(result.success, result.message)
-        self.assertTrue(StakeContractActivation.objects.filter(beat=self.beat).exists())
-
-    def test_non_gm_player_denied(self) -> None:
-        from world.stories.models import StakeContractActivation
-
-        result = self._declare(self.player_actor)
-
-        self.assertFalse(result.success)
-        self.assertFalse(StakeContractActivation.objects.filter(beat=self.beat).exists())
-
-    def test_unstaked_beat_rejected(self) -> None:
-        from world.societies.constants import RenownRisk
-
-        self.stake.delete()
-        self.beat.risk = RenownRisk.NONE
-        self.beat.save(update_fields=["risk"])
-
-        result = self._declare(self.lead_gm_actor)
-
-        self.assertFalse(result.success)
-        self.assertIn("no stakes", result.message)
-
-    def test_no_active_scene_rejected(self) -> None:
-        from world.scenes.interaction_services import invalidate_active_scene_cache
-
-        self.scene.finish_scene()
-        invalidate_active_scene_cache(self.room)
-
-        result = self._declare(self.lead_gm_actor)
-
-        self.assertFalse(result.success)
-        self.assertIn("no active scene", result.message.lower())
 
     def test_blocked_boundary_returns_generic_failure(self) -> None:
-        from unittest import mock
-
-        from world.stories.models import StakeContractActivation
-        from world.stories.types import StakeBoundaryReport
-
+        """A refused boundary never leaks its private reason (ADR-0033)."""
         blocked = StakeBoundaryReport(
             allowed=False, blocked_reason_private="player X never wagers healers"
         )
         with mock.patch(
-            "world.stories.services.boundaries.check_stake_boundaries",
-            return_value=blocked,
+            "world.stories.services.boundaries.check_stake_boundaries", return_value=blocked
         ):
-            result = self._declare(self.lead_gm_actor)
+            result = DeclareStakesAction().run(self.lead_gm_actor, beat_id=self.beat.pk)
 
         self.assertFalse(result.success)
-        # The private reason never leaks (ADR-0033).
         self.assertNotIn("healers", result.message)
-        self.assertFalse(StakeContractActivation.objects.filter(beat=self.beat).exists())
-
-    def test_unlinked_beat_rejected(self) -> None:
-        """A beat whose episode is not linked to this scene cannot be declared here."""
-        from world.societies.constants import RenownRisk
-        from world.stories.factories import StakeFactory
-        from world.stories.models import StakeContractActivation
-
-        other_beat = BeatFactory(episode=self.ep2, risk=RenownRisk.HIGH, target_level=4)
-        StakeFactory(beat=other_beat, severity=4)
-        from actions.definitions.gm_stories import DeclareStakesAction
-
-        result = DeclareStakesAction().run(self.lead_gm_actor, beat_id=other_beat.pk)
-
-        self.assertFalse(result.success)
-        self.assertIn("not linked to this scene", result.message)
-        self.assertFalse(StakeContractActivation.objects.filter(beat=other_beat).exists())
-
-    def test_resolved_beat_rejected(self) -> None:
-        from world.stories.constants import BeatOutcome
-        from world.stories.models import StakeContractActivation
-
-        self.beat.outcome = BeatOutcome.SUCCESS
-        self.beat.save(update_fields=["outcome"])
-
-        result = self._declare(self.lead_gm_actor)
-
-        self.assertFalse(result.success)
-        self.assertIn("already resolved", result.message)
         self.assertFalse(StakeContractActivation.objects.filter(beat=self.beat).exists())
 
     def test_off_scene_alts_do_not_join_the_party(self) -> None:
         """Party sheets come from characters PRESENT in the scene's room only."""
-        from actions.definitions.gm_stories import _present_participant_sheets
-
-        # Give the player account a second character standing elsewhere.
-        # (Reuse the account's existing PlayerData — it is unique per account.)
-        from world.roster.factories import RosterTenureFactory as TenureFactory
-
         elsewhere = _make_room("Elsewhere")
         alt_char = CharacterFactory(db_key="off_scene_alt", location=elsewhere)
         alt_sheet = CharacterSheetFactory(character=alt_char)
-        TenureFactory(
+        RosterTenureFactory(
             roster_entry__character_sheet=alt_sheet,
             player_data=self.player_account.player_data,
             end_date=None,
@@ -678,7 +120,6 @@ class DeclareStakesActionTests(GMStoryActionTestBase):
         sheets = _present_participant_sheets(self.scene)
 
         self.assertNotIn(alt_sheet, sheets)
-        # The participating characters standing in the room ARE included.
         present_ids = {obj.pk for obj in self.scene.room.contents}
         self.assertTrue(sheets)
         for sheet in sheets:

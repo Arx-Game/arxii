@@ -19,7 +19,7 @@ from world.combat.models import CreatureTemplate
 from world.conditions.factories import CapabilityTypeFactory
 from world.contributors.factories import ContentContributorFactory
 from world.mechanics.factories import ApplicationFactory, PropertyFactory
-from world.standoffs.constants import DriveStrength
+from world.standoffs.constants import CauseEffect, DriveStrength
 from world.standoffs.factories import (
     CreatureDriveFactory,
     FactionRuleFactory,
@@ -89,13 +89,14 @@ class ProfileBuilderTestCase(TestCase):
             "rules-0-rule": "{}",
             "rules-0-difficulty_shift_bands": "1",
             "rules-0-drive_shift": "0",
+            "rules-0-cause_effect": "none",
             "rules-0-angle_text": "PLACEHOLDER angle",
             "rules-0-revealed_text": "",
             "rules-1-creature_template": str(self.template.pk),
             "rules-1-rule": '{"leaf": "has_capability", "params": {"name": "Warding"}}',
             "rules-1-difficulty_shift_bands": "-1",
             "rules-1-drive_shift": "0",
-            "rules-1-suppresses_cause": "on",
+            "rules-1-cause_effect": "provoke",
             "rules-1-angle_text": "PLACEHOLDER second angle",
             "rules-1-revealed_text": "PLACEHOLDER revealed",
             "save": "Save",
@@ -166,7 +167,7 @@ class ProfileBuilderSaveTests(ProfileBuilderTestCase):
         self.assertEqual(
             [r.angle_text for r in rules], ["PLACEHOLDER angle", "PLACEHOLDER second angle"]
         )
-        self.assertTrue(rules[1].suppresses_cause)
+        self.assertEqual(rules[1].cause_effect, CauseEffect.PROVOKE)
         self.assertEqual(rules[1].rule["leaf"], "has_capability")
 
     def test_a_malformed_rule_is_refused_and_nothing_saves(self) -> None:

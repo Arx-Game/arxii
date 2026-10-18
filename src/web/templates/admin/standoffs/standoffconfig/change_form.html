@@ -1,0 +1,28 @@
+{% extends "admin/change_form.html" %}
+{% comment %}
+The stock StandoffConfig change form with a read-only preview rail (#4415): what the
+Hunger step and Territory patience do over a few actions. Extends the site's own
+change_form override (which links admin/css/forms.css), so only the rail is new; its
+rules live in the extrastyle block below.
+{% endcomment %}
+{% block extrastyle %}
+{{ block.super }}
+<style>
+.standoff-config-cols { display: grid; grid-template-columns: minmax(0, 1fr); gap: 18px; align-items: start; }
+@media (min-width: 980px) { .standoff-config-cols { grid-template-columns: minmax(0, 1fr) 17rem; } }
+.standoff-config-main { min-width: 0; }
+.standoff-config-rail { min-width: 0; border: 1px solid var(--hairline-color); }
+.standoff-config-rail-note { font-size: 12px; color: var(--body-quiet-color); padding: 6px 8px; margin: 0; }
+</style>
+{% endblock %}
+{% block field_sets %}
+<div class="standoff-config-cols">
+  <div class="standoff-config-main">{{ block.super }}</div>
+  <aside class="standoff-config-rail module" aria-label="Preview">
+    <h2>Preview</h2>
+    {% for line in config_preview %}
+    <p class="standoff-config-rail-note">{{ line }}</p>
+    {% endfor %}
+  </aside>
+</div>
+{% endblock %}

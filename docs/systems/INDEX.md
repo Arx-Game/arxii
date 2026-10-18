@@ -5384,7 +5384,7 @@ an idle org reaches stasis in both directions (loan interest still accrues — o
   (weekly pool growth), `collect_org_income` (the dispatch: check → band pct → graft →
   per-stream proportional landing), `improve_org_domain` (Domain Investment check → gross
   bump + graft crackdown), `process_income_stream(stream, amount)` (landing path),
-  `settle_obligations`, `run_weekly_economy` (Sunday rollover phases),
+  `settle_obligations` (run by the rollover's `obligations` phase, after `debt_service`, per org; declarations settle once, an unaffordable org retries next week, #4435), `run_weekly_economy` (Sunday rollover phases),
   `snapshot_purse_drains` / `run_purse_drains` (#2613 — the two-band Somehow Always Broke
   weekly drain: `SNAPSHOT` records each holder's opening balance before income, `DRAIN` empties
   the purse down to `opening − outflows` after upkeep, so only that week's income survives;
@@ -7681,20 +7681,22 @@ weights, speed_rank, Thread pulls). `CovenantRank` = administrative authority
 - **Source:** `src/world/covenants/`
 - **Details:** [covenants.md](covenants.md)
 
-### Standoffs (#4145, #4354, #4361, #4373)
+### Standoffs (#4145, #4354, #4361, #4373, #4415)
 The moment before a fight: round zero of a `CombatEncounter`, where a party reads groups of
 creatures, presses them with social approaches and names terms that settle them. Derived
 from live (OPEN or PROPOSED) `StandoffGroup` rows, never a stored flag (ADR-4145-A). In a
 scene a GM is running, a firing cause becomes a GM proposal (ADR-4354-A). A placement's
 edits over its template are stamped on each opponent at spawn (ADR-4361-A). A named NPC is
 its own group, read live from its persona (ADR-4373-A), and verbal approaches and terms pass a
-language gate.
+language gate. Hunger, Hatred and Territory run on each group's clock and on faction rules that
+provoke; a Calm or Charmed hold that ends asks the NPC's cause again (ADR-4415-A).
 
 - **Models:** `CreatureDrive`, `FactionRule` (was `RegardRule`), `StandoffApproach`,
   `StandoffTerms`, `StandoffConfig` (singleton), `StandoffCauseGloss`, `StandoffGroup`,
   `StandoffReveal`, `StandoffAngleShare` (was `StandoffSparkShare`), `StandoffMoraleRuling`,
   `OpponentLineDrive`, `OpponentLineFactionRuleSuppression`; `FactionRule.organization` /
-  `society` (one owner); `CreatureTemplate.cause` (NONE, PREDATION, ORDERS) /
+  `society` (one owner); `FactionRule.cause_effect` (`CauseEffect`: NONE, SUPPRESS, PROVOKE);
+  `CreatureTemplate.cause` (NONE, PREDATION, ORDERS, HUNGER, HATRED, TERRITORY) /
   `cause_margin_percent` / `organization` (affiliation); placement fields
   `cause_override` / `cause_margin_override` / `organization` on both opponent lines
   (`PlacementEdits`); snapshot `CombatOpponent.cause` / `cause_margin_percent` /
@@ -7703,10 +7705,14 @@ language gate.
   `BeatOpponentLine.opens_as_standoff` / `persona`; `GMPrompt.standoff_group` /
   `resolution_note` (`GMPromptKind.STANDOFF_CAUSE`, a decision kind); `StandoffGroup.persona`;
   `StandoffApproach.is_verbal`; `CreatureTemplate.language`;
-  `StandoffConfig.regard_per_band` / `regard_max_bands`.
+  `StandoffConfig.regard_per_band` / `regard_max_bands` / `hunger_margin_step` /
+  `territory_patience`; `StandoffGroup.actions_elapsed`.
 - **Key functions:** `open_standoff`, `end_standoff_into_fight`,
   `begin_round_or_break_standoff` (`services/state.py`); `evaluate_causes`,
-  `cause_fire_reason`, `cause_fires` (`services/force.py`); `standoff_is_gm_run`, `propose`,
+  `cause_fire_reason`, `cause_fires`, `cause_clock`, `hunger_margin`, `patience_line`,
+  `group_is_broken` (`services/force.py`); `cause_effects`, `cause_effect_from`
+  (`services/faction_rules.py`); `retest_cause_on_release`, `release_reason`, `group_of`
+  (`services/release.py`); `config_preview` (`services/describe.py`); `standoff_is_gm_run`, `propose`,
   `resolve_proposal` (`services/proposals.py`); `shift_group_morale`
   (`services/gm_morale.py`); `build_gm_standoff_view`, `build_standoff_summary`
   (`services/gm_view.py`); `settled_tier` (`services/routing.py`); `faction_rule_matches`,

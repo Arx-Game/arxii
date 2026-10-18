@@ -12,6 +12,8 @@ from evennia.utils.ansi import strip_ansi
 
 from integration_tests.harness import JourneyCase
 from world.areas.factories import AreaFactory
+from world.consent.constants import ConsentMode
+from world.consent.factories import SocialConsentCategoryFactory
 from world.covenants.constants import BattleBinding, CovenantType
 from world.covenants.factories import (
     CharacterCovenantRoleFactory,
@@ -26,6 +28,9 @@ from world.currency.services import get_or_create_purse, get_or_create_treasury,
 from world.events.constants import EventStatus, InvitationResponse
 from world.events.models import Event, EventGrandeurContribution, EventInvitation
 from world.events.services import create_event
+from world.gm.constants import GMTableStatus
+from world.gm.factories import GMProfileFactory, GMTableFactory
+from world.gm.models import GMTableMembership
 from world.items.factories import (
     ItemInstanceFactory,
     ItemTemplateFactory,
@@ -35,12 +40,17 @@ from world.items.factories import (
 from world.items.market.models import FinishingPass, MarketSquare, MarketStall
 from world.items.market.services import MATERIAL_SALE_RATE_PCT
 from world.items.models import ItemInstance
+from world.items.org_vault_models import VaultHolding, VaultTransit
+from world.items.services.org_vault import get_or_create_org_vault
 from world.locations.factories import LocationOwnershipFactory
 from world.room_features.constants import VAULT_MAX_ITEMS_PER_LEVEL, RoomFeatureServiceStrategy
 from world.room_features.factories import RoomFeatureInstanceFactory, RoomFeatureKindFactory
 from world.room_features.models import VaultDetails
+from world.scenes.factories import SceneParticipationFactory
 from world.scenes.models import Interaction, Scene
 from world.societies.factories import OrganizationFactory, OrganizationMembershipFactory
+from world.stories.constants import GroupStoryRequestStatus, StoryScope
+from world.stories.models import GroupStoryProgress, GroupStoryRequest
 
 
 def persona_of(character):
@@ -180,6 +190,35 @@ class HostingAGathering(JourneyCase):
         self.assertEqual(invitation.response, InvitationResponse.PENDING)
         told = self.telnet(self.ysmay, f"event invite {self.gala.pk} persona=Hobb")
         self.assertIn("This target is already invited.", told)
+
+        # A guild's invitation is nobody's to answer, and an invitation that is not there
+        # is named back.
+        guild = OrganizationFactory(name="The Lantern Guild")
+        told = self.telnet(self.ysmay, f"event invite {self.gala.pk} org={guild.pk}")
+        self.assertIn("You invite The Lantern Guild to 'The Grand Gala'.", told)
+        guild_invitation = EventInvitation.objects.get(event=self.gala, target_organization=guild)
+        told = self.telnet(self.hobb, f"event rsvp {guild_invitation.pk} accept")
+        self.assertIn("Only persona invitations can be RSVP'd.", told)
+        told = self.telnet(self.hobb, "event rsvp 999999 accept")
+        self.assertIn("Which invitation? Provide an invitation id.", told)
+
+    def test_staff_and_the_scene_s_gm_may_run_it_too(self) -> None:
+        marrow = self.make_player("Marrow", room=self.hall)
+        staff = self.account_of(marrow)
+        staff.is_staff = True
+        staff.save(update_fields=["is_staff"])
+        told = self.telnet(marrow, f"event schedule {self.gala.pk}")
+        self.assertIn("'The Grand Gala' is now scheduled.", told)
+
+        self.telnet(self.ysmay, f"event start {self.gala.pk}")
+        gala_scene = Scene.objects.get(event=self.gala, is_active=True)
+        told = self.telnet(self.hobb, f"event complete {self.gala.pk}")
+        self.assertIn("Only the host, a scene GM, or staff can do that.", told)
+        SceneParticipationFactory(scene=gala_scene, account=self.account_of(self.hobb), is_gm=True)
+        told = self.telnet(self.hobb, f"event complete {self.gala.pk}")
+        self.assertIn("'The Grand Gala' is complete.", told)
+        self.gala.refresh_from_db()
+        self.assertEqual(self.gala.status, EventStatus.COMPLETED)
 
     def test_an_unknown_event_is_named_back(self) -> None:
         told = self.telnet(self.ysmay, "event show 999999")
@@ -325,6 +364,116 @@ class RisingAndFallingInACovenant(JourneyCase):
         self.assertIn("You are not a member of any covenant.", told)
         told = self.telnet(tam, "covenant deposit 10")
         self.assertIn("You are not a member of any covenant.", told)
+        give_coppers(tam, 50)
+        result = self.web(tam, "deposit_covenant_funds", covenant_id=self.banner.pk, amount=10)
+        self.assertFalse(result.detail.success)
+        self.assertIn(
+            "Only an active covenant member may use the covenant treasury.", result.detail.message
+        )
+        self.assertEqual(purse_balance(tam), 50)
+
+    def test_the_web_names_the_covenant_and_never_the_vow(self) -> None:
+        # The web client sends only the covenant and the amount; a vow named on the wire
+        # (as the telnet path passes it) is not trusted, since a forged POST could name
+        # anyone's.
+        treasury = covenant_treasury(self.banner)
+        treasury.balance = 500
+        treasury.save(update_fields=["balance"])
+        result = self.web(
+            self.ysmay, "withdraw_covenant_funds", covenant_id=self.banner.pk, amount=25
+        )
+        self.assertTrue(result.detail.success, result.detail.message)
+        self.assertEqual(purse_balance(self.ysmay), 25)
+        treasury.refresh_from_db()
+        self.assertEqual(treasury.balance, 475)
+
+        refusal = "Only an active covenant member may use the covenant treasury."
+        for key in ("deposit_covenant_funds", "withdraw_covenant_funds"):
+            result = self.web(self.ysmay, key, membership=self.ysmay_vow.pk, amount=10)
+            self.assertFalse(result.detail.success, key)
+            self.assertIn(refusal, result.detail.message)
+        treasury.refresh_from_db()
+        self.assertEqual(treasury.balance, 475)
+
+    def test_the_covenant_asks_for_a_gm_and_one_answers(self) -> None:
+        self.assertIn(
+            "You lack the authority to request a GM for this covenant.",
+            self.telnet(self.hobb, "covenant request-gm We need a GM"),
+        )
+        told = self.telnet(self.ysmay, "covenant request-gm We need a GM to run our story")
+        request = GroupStoryRequest.objects.get(covenant=self.banner)
+        self.assertIn(f"Your covenant's request for a GM has been posted (#{request.pk}).", told)
+        self.assertEqual(request.status, GroupStoryRequestStatus.PENDING)
+        self.assertEqual(request.message, "We need a GM to run our story")
+        self.assertEqual(request.requested_by_account_id, self.ysmay.db_account.pk)
+        self.assertIn(
+            "You lack the authority to withdraw this covenant's GM request.",
+            self.telnet(self.hobb, "covenant withdraw-gm-request"),
+        )
+
+        # Every GM sees the open ask in the queue; one with an active table answers it.
+        ravenna = self.make_player("Ravenna", room=self.room)
+        table = GMTableFactory(
+            gm=GMProfileFactory(account=ravenna.db_account), status=GMTableStatus.ACTIVE
+        )
+        queue = self.api(ravenna.db_account).get("/api/stories/gm-queue/")
+        self.assertEqual(queue.status_code, 200, queue.content)
+        self.assertIn(request.pk, [row["request_id"] for row in queue.data["open_group_requests"]])
+        tam = self.make_player("Tam", room=self.room)
+        self.assertIn(
+            "You must have a GM profile to claim a group story request.",
+            self.telnet(tam, f"gm claim {request.pk}"),
+        )
+        self.assertIn("Usage: gm claim <request-id>", self.telnet(ravenna, "gm claim abc"))
+        told = self.telnet(ravenna, f"gm claim {request.pk}")
+        self.assertIn("You claim The Iron Banner's request;", told)
+        request.refresh_from_db()
+        self.assertEqual(request.status, GroupStoryRequestStatus.ACCEPTED)
+        self.assertEqual(request.claimed_by_id, table.gm_id)
+        story = request.created_story
+        self.assertEqual((story.scope, story.primary_table_id), (StoryScope.GROUP, table.pk))
+        self.assertTrue(GroupStoryProgress.objects.filter(story=story, gm_table=table).exists())
+        seated = set(
+            GMTableMembership.objects.filter(table=table, left_at__isnull=True).values_list(
+                "persona_id", flat=True
+            )
+        )
+        self.assertIn(persona_of(self.ysmay).pk, seated)
+        self.assertIn(persona_of(self.hobb).pk, seated)
+
+        # A later ask can be taken back by whoever posted it, and only while it is open.
+        self.telnet(self.ysmay, "covenant request-gm Round two")
+        self.assertIn(
+            "You withdraw The Iron Banner's request for a GM.",
+            self.telnet(self.ysmay, "covenant withdraw-gm-request"),
+        )
+        self.assertEqual(
+            GroupStoryRequest.objects.filter(
+                covenant=self.banner, status=GroupStoryRequestStatus.WITHDRAWN
+            ).count(),
+            1,
+        )
+        self.assertIn(
+            "That covenant has no open request for a GM.",
+            self.telnet(self.ysmay, "covenant withdraw-gm-request"),
+        )
+
+    def test_an_equal_is_not_hers_to_remove(self) -> None:
+        self.hobb_vow.rank = self.commander
+        self.hobb_vow.save(update_fields=["rank"])
+        told = self.telnet(self.ysmay, "covenant kick Hobb")
+        self.assertIn("You can only remove members ranked below you.", told)
+        self.assertEqual(self.rank_of(self.hobb), "Commander")
+
+    def test_a_dormant_banner_cannot_be_raised(self) -> None:
+        self.banner.is_dormant = True
+        self.banner.save(update_fields=["is_dormant"])
+        told = self.telnet(self.ysmay, "covenant engage")
+        self.assertIn("No covenant members present to engage with.", told)
+        engaged = CharacterCovenantRole.objects.filter(pk=self.ysmay_vow.pk).values_list(
+            "engaged", flat=True
+        )
+        self.assertEqual(list(engaged), [False])
 
 
 class KeepingAVault(JourneyCase):
@@ -480,6 +629,134 @@ class BankingWithTheHouse(JourneyCase):
         )
         self.assertFalse(result.detail.success)
         self.assertIn("Insufficient funds", result.detail.message)
+        for bad_amount in ("abc", None):
+            result = self.web(
+                self.ysmay, "treasury_withdraw", organization_id=self.house.pk, amount=bad_amount
+            )
+            self.assertFalse(result.detail.success, bad_amount)
+            self.assertIn("amount must be a positive whole number.", result.detail.message)
+
+        self.ysmay.location = self.parlour
+        result = self.web(self.ysmay, "treasury_withdraw", organization_id=self.house.pk, amount=10)
+        self.assertFalse(result.detail.success)
+        self.assertIn("There is no bank access here.", result.detail.message)
+        self.assertEqual(purse_balance(self.ysmay), 100)
+
+    def test_only_what_she_holds_goes_into_the_vault(self) -> None:
+        stranger_ring = ItemInstanceFactory(template=ItemTemplateFactory(name="Stranger's Ring"))
+        result = self.web(
+            self.ysmay,
+            "vault_deposit",
+            organization_id=self.house.pk,
+            item_instance_id=stranger_ring.pk,
+        )
+        self.assertFalse(result.detail.success)
+        self.assertIn("You can only deposit an item you hold.", result.detail.message)
+        result = self.web(
+            self.ysmay, "vault_deposit", organization_id=self.house.pk, item_instance_id=999999
+        )
+        self.assertFalse(result.detail.success)
+        self.assertIn("No such item.", result.detail.message)
+        result = self.web(
+            self.ysmay, "vault_deposit", organization_id=999999, item_instance_id=self.ring.pk
+        )
+        self.assertFalse(result.detail.success)
+        self.assertIn("No such organization.", result.detail.message)
+        self.assertFalse(VaultHolding.objects.exists())
+
+    def open_transit(self, carrier, name: str) -> ItemInstance:
+        """A stone the house's collector carries home, owed to its vault."""
+        stone = ItemInstanceFactory(
+            template=ItemTemplateFactory(name=name), holder_character_sheet=sheet_of(carrier)
+        )
+        VaultTransit.objects.create(
+            vault=self.vault, item_instance=stone, carrier_character_sheet=sheet_of(carrier)
+        )
+        return stone
+
+    def open_transits(self):
+        return VaultTransit.objects.filter(vault=self.vault, resolved_at__isnull=True)
+
+    def deliver(self, carrier, **kwargs):
+        return self.web(carrier, "deliver_collection", organization_id=self.house.pk, **kwargs)
+
+    def test_the_collector_brings_the_take_home(self) -> None:  # noqa: PLR0915
+        self.vault = get_or_create_org_vault(self.house)
+        self.ysmay.location = self.parlour
+        result = self.deliver(self.ysmay)
+        self.assertFalse(result.detail.success)
+        self.assertIn("There is no bank access here.", result.detail.message)
+
+        self.ysmay.location = self.bank
+        result = self.deliver(self.ysmay)
+        self.assertFalse(result.detail.success)
+        self.assertIn("You carry nothing owed to House Coffers.", result.detail.message)
+
+        first = self.open_transit(self.ysmay, "Garnet")
+        second = self.open_transit(self.ysmay, "Jasper")
+        result = self.deliver(self.ysmay)
+        self.assertTrue(result.detail.success, result.detail.message)
+        self.assertIn("You deliver 2 item(s) to House Coffers's vault.", result.detail.message)
+        self.assertEqual(VaultHolding.objects.filter(vault=self.vault).count(), 2)
+        self.assertFalse(self.open_transits().exists())
+        first.refresh_from_db()
+        self.assertIsNone(first.holder_character_sheet)
+
+        # Keeping a stone back needs the house's consent as well as her own nerve; with no
+        # embezzlement consent category seeded, nobody can give it.
+        kept = self.open_transit(self.ysmay, "Opal")
+        honest = self.open_transit(self.ysmay, "Agate")
+        result = self.deliver(self.ysmay, keep_item_ids=[kept.pk])
+        self.assertFalse(result.detail.success)
+        self.assertIn(
+            "Skimming this house's collection is not on the table.", result.detail.message
+        )
+        self.assertEqual(self.open_transits().count(), 2)
+
+        # The carrier never answers for herself: the highest-ranked piloted member
+        # besides her decides, and that is Hobb. His list is empty, so he refuses until he
+        # puts her on it.
+        SocialConsentCategoryFactory(key="embezzlement", default_mode=ConsentMode.ALLOWLIST)
+        result = self.deliver(self.ysmay, keep_item_ids=[kept.pk])
+        self.assertFalse(result.detail.success)
+        self.assertIn(
+            "Skimming this house's collection is not on the table.", result.detail.message
+        )
+        told = self.telnet(self.hobb, "consent whitelist add Ysmay to embezzlement")
+        self.assertIn("Ysmay", told)
+        result = self.deliver(self.ysmay, keep_item_ids=[second.pk])
+        self.assertFalse(result.detail.success)
+        self.assertIn("cannot keep what you are not carrying for this house", result.detail.message)
+        self.assertEqual(self.open_transits().count(), 2)
+        result = self.deliver(self.ysmay, keep_item_ids=[kept.pk])
+        self.assertTrue(result.detail.success, result.detail.message)
+        self.assertIn("You deliver 1 item(s) to House Coffers's vault.", result.detail.message)
+        kept.refresh_from_db()
+        self.assertEqual(kept.holder_character_sheet_id, sheet_of(self.ysmay).pk)
+        honest.refresh_from_db()
+        self.assertIsNone(honest.holder_character_sheet)
+        self.assertEqual(VaultHolding.objects.filter(vault=self.vault).count(), 3)
+
+        # A stone sold on the way home is not yanked out of the buyer's hands.
+        sold = self.open_transit(self.ysmay, "Beryl")
+        sold.holder_character_sheet = sheet_of(self.hobb)
+        sold.save(update_fields=["holder_character_sheet"])
+        result = self.deliver(self.ysmay)
+        self.assertFalse(result.detail.success)
+        self.assertIn("you no longer carry all of the take", result.detail.message)
+        self.assertEqual(self.open_transits().count(), 1)
+        sold.holder_character_sheet = sheet_of(self.ysmay)
+        sold.save(update_fields=["holder_character_sheet"])
+
+        # A plain deposit before the delivery leaves the transit to close cleanly.
+        result = self.web(
+            self.ysmay, "vault_deposit", organization_id=self.house.pk, item_instance_id=sold.pk
+        )
+        self.assertTrue(result.detail.success, result.detail.message)
+        result = self.deliver(self.ysmay)
+        self.assertTrue(result.detail.success, result.detail.message)
+        self.assertEqual(VaultHolding.objects.filter(item_instance=sold).count(), 1)
+        self.assertFalse(self.open_transits().exists())
 
 
 class TradingInTheSquare(JourneyCase):
@@ -584,7 +861,14 @@ class TradingInTheSquare(JourneyCase):
             self.ysmay, "sell_materials", material_category_id=cordwood.pk, amount=5000
         )
         self.assertFalse(result.detail.success)
-        self.assertTrue(result.detail.message.strip(), "the refusal said nothing")
-        result = self.web(self.ysmay, "sell_materials", material_category_id=cordwood.pk, amount=0)
+        self.assertIn("don't have enough", result.detail.message)
+        for bad_amount in (0, "lots", None):
+            result = self.web(
+                self.ysmay, "sell_materials", material_category_id=cordwood.pk, amount=bad_amount
+            )
+            self.assertFalse(result.detail.success, bad_amount)
+            self.assertIn("Sell how much?", result.detail.message)
+        result = self.web(self.ysmay, "sell_materials", amount=100)
         self.assertFalse(result.detail.success)
-        self.assertIn("Sell how much?", result.detail.message)
+        self.assertIn("Sell what?", result.detail.message)
+        self.assertEqual(purse_balance(self.ysmay), coins)

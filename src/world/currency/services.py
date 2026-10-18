@@ -1711,9 +1711,12 @@ def run_weekly_economy() -> dict[str, int]:
     Order matters: interest accrues into arrears FIRST; then income streams
     pool their gross (never landing — ADR-0081); then at-source debt service
     deducts this week's arrears from the pools automatically (automatic loss
-    is fine, automatic gain is not); then notarized contracts settle; then
-    employment wages pay for actively-played weeks; then businesses roll
-    their fortune. Each phase isolates failures per row — one broken org
+    is fine, automatic gain is not); then standing obligations (tithes, taxes,
+    pact subsidies) settle against the declarations collection has recorded
+    since the last pass (debts take their cut at source first, so a tithe is
+    computed on what the org actually declared and landed; #4435); then
+    notarized contracts settle; then employment wages pay for actively-played
+    weeks; then businesses roll their fortune. Each phase isolates failures per row — one broken org
     never wedges the rollover.
     """
     return {
@@ -1723,6 +1726,7 @@ def run_weekly_economy() -> dict[str, int]:
         "materials": _weekly_mine_accrual(),
         "assets": _weekly_asset_income(),
         "debt_service": _weekly_debt_service(),
+        "obligations": _weekly_obligation_settlement(),
         "contracts": _weekly_contract_settlement(),
         "wages": _weekly_wages(),
         "businesses": _weekly_business_fortunes(),
@@ -1835,6 +1839,34 @@ def _weekly_asset_income() -> int:
             count += 1
         except Exception:
             logger.exception("weekly economy: asset income %s failed", asset.pk)
+    return count
+
+
+def _weekly_obligation_settlement() -> int:
+    """Settle each paying org's standing obligations against its unsettled declarations (#4435).
+
+    ``settle_obligations`` marks the declarations it consumed as settled, so a re-run
+    (or a second rollover before any new collection) finds nothing and pays nothing.
+    An org whose settlement fails (typically a treasury that cannot cover the transfers)
+    rolls it back whole (the call is atomic), keeps its declarations unsettled, and is
+    retried next week; one org's failure never stops the other orgs. Returns the number of
+    orgs that paid.
+    """
+    from world.societies.models import Organization  # noqa: PLC0415
+
+    unsettled_org_ids = IncomeDeclaration.objects.filter(settled=False).values(
+        "stream__organization_id"
+    )
+    org_ids = OrgObligation.objects.filter(
+        active=True, from_organization_id__in=unsettled_org_ids
+    ).values("from_organization_id")
+    count = 0
+    for organization in Organization.objects.filter(pk__in=org_ids):
+        try:
+            if settle_obligations(organization):
+                count += 1
+        except Exception:
+            logger.exception("weekly economy: obligations for org %s not settled", organization.pk)
     return count
 
 

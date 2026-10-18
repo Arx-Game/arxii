@@ -15,6 +15,7 @@ from world.gm.factories import GMProfileFactory, GMTableFactory, GMTableMembersh
 from world.items.factories import ItemInstanceFactory
 from world.narrative.models import NarrativeMessageDelivery
 from world.roster.models import RosterTenure
+from world.scenes.clock_services import open_clock_for_beat
 from world.scenes.factories import SceneFactory
 from world.scenes.models import Interaction, Scene
 from world.societies.constants import RenownRisk
@@ -24,6 +25,7 @@ from world.stories.constants import (
     BeatOutcome,
     CrossoverInviteStatus,
     CustodyClearanceStatus,
+    StakeSeverity,
     StakeSubjectKind,
     StoryScope,
 )
@@ -31,6 +33,7 @@ from world.stories.factories import (
     BeatFactory,
     ChapterFactory,
     EpisodeFactory,
+    EpisodeSceneFactory,
     StakeFactory,
     StoryFactory,
     StoryProgressFactory,
@@ -39,6 +42,7 @@ from world.stories.models import (
     CrossoverInvite,
     CustodyClearance,
     EpisodeScene,
+    StakeContractActivation,
     StoryProtectedSubject,
     TreasuredSignoff,
 )
@@ -604,6 +608,123 @@ class PacingABeatByItsClock(_TwoTables):
         self.assertIn(
             "This scene has no clock to advance.", self.telnet(self.ravenna, "story clock")
         )
+
+    def test_a_clock_is_the_beat_s_own_and_one_scene_runs_it_at_a_time(self) -> None:
+        self.telnet(self.ravenna, "scene start The Knock")
+        scene = Scene.objects.get(name="The Knock")
+        # The runnable list carries each beat's clock size, so the GM can plan the beat.
+        listed = self.web(self.ravenna, "gm_list_runnable_beats").detail
+        self.assertTrue(listed.success, listed.message)
+        sizes = {row["id"]: row["clock_size"] for row in listed.data["beats"]}
+        self.assertEqual(sizes[self.beat.pk], 2)
+
+        # A beat authored without a clock opens none, and a scene runs one beat at a time.
+        unclocked = BeatFactory(episode=self.episode, kind=BeatKind.SITUATION, clock_size=0)
+        run = self.web(self.ravenna, "run_beat", beat_id=unclocked.pk).detail
+        self.assertTrue(run.success, run.message)
+        self.assertNotIn("clock", run.data)
+        self.assertIsNone(open_clock_for_beat(unclocked))
+        run = self.web(self.ravenna, "run_beat", beat_id=self.beat.pk).detail
+        self.assertFalse(run.success)
+        self.assertEqual(run.message, "This scene is already running a different beat.")
+        self.telnet(self.ravenna, "scene finish")
+        self.telnet(self.ravenna, "scene start The Second Knock")
+        scene = Scene.objects.get(name="The Second Knock")
+
+        # Another live scene already running a beat keeps it; a finished one does not.
+        elsewhere = BeatFactory(episode=self.episode, kind=BeatKind.SITUATION, clock_size=3)
+        other = SceneFactory(running_beat=elsewhere, is_active=True)
+        run = self.web(self.ravenna, "run_beat", beat_id=elsewhere.pk).detail
+        self.assertFalse(run.success)
+        self.assertEqual(run.message, "Another active scene is already running this beat.")
+        other.is_active = False
+        other.save(update_fields=["is_active"])
+        first = self.web(self.ravenna, "run_beat", beat_id=elsewhere.pk).detail
+        self.assertTrue(first.success, first.message)
+        self.assertEqual(first.data["clock"], {"size": 3, "filled": 0})
+        self.assertEqual(scene.pk, Scene.objects.get(running_beat=elsewhere, is_active=True).pk)
+
+        # Running the same beat again in the same scene reuses its open clock.
+        clock = open_clock_for_beat(elsewhere)
+        again = self.web(self.ravenna, "run_beat", beat_id=elsewhere.pk).detail
+        self.assertTrue(again.data["already_running"])
+        self.assertEqual(open_clock_for_beat(elsewhere).pk, clock.pk)
+
+        # Three ticks at once fill the clock and expire the beat.
+        with self.captureOnCommitCallbacks(execute=True):
+            told = self.telnet(self.ravenna, "story clock 3")
+        self.assertIn("The clock fills: 3/3. Time is up.", told)
+        elsewhere.refresh_from_db()
+        self.assertEqual(elsewhere.outcome, BeatOutcome.EXPIRED)
+
+
+class DeclaringTheStakes(_TwoTables):
+    """Ravenna puts the beat's wager to the room before the scene plays it out; the web
+    client dispatches the declaration."""
+
+    def declare(self, character, beat):
+        return self.web(character, "declare_stakes", beat_id=beat.pk).detail
+
+    def test_the_stakes_are_declared_by_whoever_may_run_the_beat(self) -> None:
+        StakeFactory(
+            beat=self.beat, severity=StakeSeverity.DIRE, player_summary="The healer may die."
+        )
+        result = self.declare(self.ravenna, self.beat)
+        self.assertFalse(result.success)
+        self.assertEqual(result.message, "There is no active scene here.")
+
+        self.telnet(self.ravenna, "scene start The Knock")
+        scene = Scene.objects.get(name="The Knock")
+        self.telnet(self.ysmay, "say I am listening.")
+        result = self.declare(self.ravenna, self.beat)
+        self.assertFalse(result.success)
+        self.assertEqual(result.message, "That beat's episode is not linked to this scene.")
+        EpisodeSceneFactory(episode=self.episode, scene=scene)
+
+        result = self.declare(self.ysmay, self.beat)
+        self.assertFalse(result.success)
+        self.assertEqual(
+            result.message,
+            "Only the story's Lead GM, staff, an approved Assistant GM, "
+            "or this scene's GM may declare stakes.",
+        )
+        self.assertFalse(StakeContractActivation.objects.filter(beat=self.beat).exists())
+
+        result = self.declare(self.ravenna, self.beat)
+        self.assertTrue(result.success, result.message)
+        for piece in ("The healer may die.", "Dire", "effective risk"):
+            self.assertIn(piece, result.message)
+        self.assertTrue(
+            StakeContractActivation.objects.filter(
+                beat=self.beat, resolved_at__isnull=True
+            ).exists()
+        )
+        self.assertTold(self.ysmay, "The healer may die.")
+
+        # A beat with nothing wagered, and a beat already resolved, have no stakes to put.
+        bare = BeatFactory(episode=self.episode, kind=BeatKind.SITUATION, risk=RenownRisk.NONE)
+        result = self.declare(self.ravenna, bare)
+        self.assertFalse(result.success)
+        self.assertEqual(
+            result.message, "That beat has no stakes to declare (risk NONE or no stakes authored)."
+        )
+        self.telnet(self.ravenna, f"story mark {self.beat.pk} success")
+        result = self.declare(self.ravenna, self.beat)
+        self.assertFalse(result.success)
+        self.assertEqual(
+            result.message, "That beat is already resolved; its stakes can no longer be declared."
+        )
+
+        # The scene's own GM may declare a beat of this scene's episode even without a
+        # role on the story.
+        later = BeatFactory(episode=self.episode, kind=BeatKind.SITUATION, risk=RenownRisk.LOW)
+        StakeFactory(beat=later, severity=StakeSeverity.DIRE, player_summary="The door may fall.")
+        result = self.declare(self.hobb, later)
+        self.assertFalse(result.success)
+        self.telnet(self.ravenna, "scene gm Hobb")
+        result = self.declare(self.hobb, later)
+        self.assertTrue(result.success, result.message)
+        self.assertTrue(StakeContractActivation.objects.filter(beat=later).exists())
 
 
 class SigningOffOnATreasure(_TwoTables):

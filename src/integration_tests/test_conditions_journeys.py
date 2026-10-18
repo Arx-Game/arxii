@@ -19,14 +19,21 @@ from world.conditions.factories import (
     TreatmentTemplateFactory,
 )
 from world.conditions.models import ConditionInstance
+from world.conditions.services import apply_condition, has_condition
 from world.gm.constants import GMLevel
 from world.gm.factories import GMProfileFactory
+from world.magic.factories import (
+    BerserkConditionTemplateFactory,
+    RestoreToSenseActionTemplateFactory,
+)
 from world.scenes.factories import SceneFactory, SceneParticipationFactory
 from world.scenes.models import Interaction, Scene
 from world.traits.factories import CheckSystemSetupFactory
 
 # A roll of 95 lands in the top band of every chart CheckSystemSetupFactory builds.
 ROLL_WELL = patch("world.checks.services.random.randint", return_value=95)
+# A roll of 1 lands in the bottom band.
+ROLL_BADLY = patch("world.checks.services.random.randint", return_value=1)
 
 
 def severity_of(instance: ConditionInstance) -> int:
@@ -165,6 +172,41 @@ class TreatingAFeverAtTheClinic(JourneyCase):
         )
         self.assertEqual(panel.status_code, 200, panel.content)
         self.assertIn("Willow Poultice", panel.content.decode())
+
+
+class TalkingABerserkerDown(JourneyCase):
+    """Hobb has gone berserk in the scene; Ysmay talks him down, and he lets her try."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        fresh_check_system()
+        self.room = self.make_room("The Yard")
+        self.ysmay = self.make_player("Ysmay", room=self.room)
+        self.hobb = self.make_player("Hobb", room=self.room)
+        self.scene = SceneFactory(
+            room=self.room,
+            participants=[self.account_of(self.ysmay), self.account_of(self.hobb)],
+        )
+        self.berserk = BerserkConditionTemplateFactory()
+        RestoreToSenseActionTemplateFactory(check_type=CheckTypeFactory(name="Willpower"))
+        apply_condition(self.hobb, self.berserk)
+        self.watch(self.hobb)
+
+    def test_a_steady_voice_brings_him_back(self) -> None:
+        told = self.telnet(self.ysmay, "restore_sense Hobb")
+        self.assertIn("You move to restore_sense Hobb. Awaiting their response", told)
+        self.assertTrue(has_condition(self.hobb, self.berserk))
+        with ROLL_WELL:
+            accepted = self.telnet(self.hobb, "accept")
+        self.assertIn("You accept the action against you.", accepted)
+        self.assertFalse(has_condition(self.hobb, self.berserk))
+
+    def test_a_faltering_voice_leaves_him_raging(self) -> None:
+        self.telnet(self.ysmay, "restore_sense Hobb")
+        with ROLL_BADLY:
+            accepted = self.telnet(self.hobb, "accept")
+        self.assertIn("You accept the action against you.", accepted)
+        self.assertTrue(has_condition(self.hobb, self.berserk))
 
 
 class AGMAppliesAConditionAtTheTable(JourneyCase):

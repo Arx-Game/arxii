@@ -124,6 +124,17 @@ _KEY_DURATION = "duration"
 _KEY_NOTE = "note"
 
 
+def _prompt_subject(prompt: Any, names: dict[int, str]) -> str:
+    """Who or what a prompt row is about: its subject, the stake, or the standoff group."""
+    if names[prompt.pk]:
+        return names[prompt.pk]
+    if prompt.stake_outcome_id:
+        return prompt.stake_outcome.stake.player_summary
+    if prompt.standoff_group_id is not None:
+        return prompt.standoff_group.name
+    return ""
+
+
 class CmdGMDashboard(ArxCommand):
     """Show the GM dashboard: tables, sessions, stories needing attention (#2004).
 
@@ -530,9 +541,7 @@ class CmdGMDashboard(ArxCommand):
             return
         names = prompt_subject_names(prompts, account, viewer_sheet=self.caller.character_sheet)
         for p in prompts:
-            subject = names[p.pk] or (
-                p.stake_outcome.stake.player_summary if p.stake_outcome_id else ""
-            )
+            subject = _prompt_subject(p, names)
             status_tag = " (narrated)" if p.status == GMPromptStatus.NARRATED else ""
             self.msg(f"[{p.pk}] {p.get_kind_display()}{status_tag}: {subject}")
             if p.standoff_group_id is not None:

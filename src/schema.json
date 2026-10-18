@@ -46328,6 +46328,9 @@ components:
             * `none` - None
             * `predation` - Predation
             * `orders` - Orders
+            * `hunger` - Hunger
+            * `hatred` - Hatred
+            * `territory` - Territory
           oneOf:
           - $ref: '#/components/schemas/CauseOverrideEnum'
           - $ref: '#/components/schemas/BlankEnum'
@@ -46410,6 +46413,9 @@ components:
             * `none` - None
             * `predation` - Predation
             * `orders` - Orders
+            * `hunger` - Hunger
+            * `hatred` - Hatred
+            * `territory` - Territory
           oneOf:
           - $ref: '#/components/schemas/CauseOverrideEnum'
           - $ref: '#/components/schemas/BlankEnum'
@@ -48693,16 +48699,32 @@ components:
       - average_rating
       - category_name
       - rating_count
+    CauseEffectEnum:
+      enum:
+      - none
+      - suppress
+      - provoke
+      type: string
+      description: |-
+        * `none` - None
+        * `suppress` - Suppress
+        * `provoke` - Provoke
     CauseOverrideEnum:
       enum:
       - none
       - predation
       - orders
+      - hunger
+      - hatred
+      - territory
       type: string
       description: |-
         * `none` - None
         * `predation` - Predation
         * `orders` - Orders
+        * `hunger` - Hunger
+        * `hatred` - Hatred
+        * `territory` - Territory
     Ceremony:
       type: object
       properties:
@@ -58166,8 +58188,8 @@ components:
           type: string
         difficulty_shift_bands:
           type: integer
-        suppresses_cause:
-          type: boolean
+        cause_effect:
+          $ref: '#/components/schemas/CauseEffectEnum'
         matched_by:
           type: array
           items:
@@ -58178,13 +58200,13 @@ components:
           type: string
       required:
       - angle_text
+      - cause_effect
       - difficulty_shift_bands
       - faction_rule_id
       - label
       - matched_by
       - revealed
       - source
-      - suppresses_cause
     GMGroupView:
       type: object
       properties:
@@ -58206,6 +58228,10 @@ components:
           type: string
         cause_margin_percent:
           type: integer
+        effective_margin_percent:
+          type: integer
+        cause_clock:
+          type: string
         proposal_reason:
           type: string
         pending_prompt_id:
@@ -58264,12 +58290,14 @@ components:
       - affiliation
       - affiliation_edited
       - cause
+      - cause_clock
       - cause_edited
       - cause_fires
       - cause_margin_percent
       - cause_reason
       - cause_revealed
       - drives
+      - effective_margin_percent
       - effective_party_force
       - emboldened_bands
       - faction_rules
@@ -65616,6 +65644,9 @@ components:
             * `none` - None
             * `predation` - Predation
             * `orders` - Orders
+            * `hunger` - Hunger
+            * `hatred` - Hatred
+            * `territory` - Territory
           oneOf:
           - $ref: '#/components/schemas/CauseOverrideEnum'
           - $ref: '#/components/schemas/BlankEnum'
@@ -65677,6 +65708,9 @@ components:
             * `none` - None
             * `predation` - Predation
             * `orders` - Orders
+            * `hunger` - Hunger
+            * `hatred` - Hatred
+            * `territory` - Territory
           oneOf:
           - $ref: '#/components/schemas/CauseOverrideEnum'
           - $ref: '#/components/schemas/BlankEnum'
