@@ -6761,6 +6761,8 @@ export interface paths {
      *     ``?episode=`` (an owned story, or one of its episodes) or ``?encounter=`` (an encounter
      *     on one of the story's beats, for its scene GMs) scopes it to the personas that story
      *     already uses (``story_npc_personas``). Staff see every persona when they name no story.
+     *     A player character who opted in to being read and pressed is offered to any scene GM, with
+     *     or without a story (#4441).
      */
     get: operations['combat_placement_personas_list'];
     put?: never;
@@ -6785,6 +6787,8 @@ export interface paths {
      *     ``?episode=`` (an owned story, or one of its episodes) or ``?encounter=`` (an encounter
      *     on one of the story's beats, for its scene GMs) scopes it to the personas that story
      *     already uses (``story_npc_personas``). Staff see every persona when they name no story.
+     *     A player character who opted in to being read and pressed is offered to any scene GM, with
+     *     or without a story (#4441).
      */
     get: operations['combat_placement_personas_retrieve'];
     put?: never;
