@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from decimal import Decimal
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -15,7 +16,22 @@ if TYPE_CHECKING:
     from world.missions.models import MissionInstance
     from world.scenes.models import Interaction, Persona, Scene
     from world.stories.models import Beat, Story
-    from world.traits.models import CheckOutcome, CheckRank, ResultChart
+    from world.traits.models import CheckOutcome, CheckRank, ResultChart, Trait
+
+
+@dataclass(frozen=True)
+class ExtraTraitTerm:
+    """A trait a caller adds to one roll, on top of the check type's own traits.
+
+    The engine treats it like an extra ``CheckTypeTrait`` row: the character's value in
+    ``trait`` times ``weight`` is converted to points, the trait earns check-based
+    development when the roll has an effort level, and the trait counts as involved in the
+    check for capability thread pulls. Lets a system (magic, for one) put a skill into a
+    check without authoring a ``CheckTypeTrait`` row for every combination.
+    """
+
+    trait: Trait
+    weight: Decimal
 
 
 @dataclass

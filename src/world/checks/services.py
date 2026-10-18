@@ -34,10 +34,13 @@ from world.traits.models import (
 )
 
 if TYPE_CHECKING:
+    from collections.abc import Sequence
+
     from evennia.objects.models import ObjectDB
 
     from world.character_sheets.models import CharacterSheet
     from world.checks.models import CheckType, CheckTypeCapabilityModifier, Consequence
+    from world.checks.types import ExtraTraitTerm
     from world.covenants.models import VowSituationalPerk
     from world.covenants.perks.context import SituationContext
     from world.mechanics.models import CharacterChallengeRecord
@@ -60,6 +63,7 @@ def perform_check(  # noqa: PLR0913 - optional effort/fatigue params extend exis
     situation_ctx: "SituationContext | None" = None,
     level_override: int | None = None,
     stat_override: str | int | None = None,
+    extra_traits: "Sequence[ExtraTraitTerm]" = (),
 ) -> CheckResult:
     """
     Main check resolution function.
@@ -114,11 +118,19 @@ def perform_check(  # noqa: PLR0913 - optional effort/fatigue params extend exis
             strength/agility by that weight in tenths — 10 = pure strength, 0 = pure
             agility — via ``(strength * w + agility * (10 - w)) / 10``. ``None``
             (the default) is byte-identical to pre-#2757 behavior.
+        extra_traits: (#4450) skill terms the caller adds at call time, treated like
+            extra ``CheckTypeTrait`` rows: their weighted value is converted to points,
+            they receive check-based development when ``effort_level`` is set (once per
+            roll, even when the trait is also on the check type), and their trait ids
+            ride the capability ``involved_traits``. ``()`` (the default) is
+            byte-identical to before.
     """
     # Test-rig seam (NOT a production code path).
     from world.checks.test_helpers import _consume_forced_outcome, _record_capture  # noqa: PLC0415
 
-    _record_capture(check_type=check_type, target_difficulty=target_difficulty)
+    _record_capture(
+        check_type=check_type, target_difficulty=target_difficulty, extra_traits=extra_traits
+    )
 
     forced_outcome = _consume_forced_outcome()
     if forced_outcome is not None:
@@ -134,8 +146,9 @@ def perform_check(  # noqa: PLR0913 - optional effort/fatigue params extend exis
             situation_ctx=situation_ctx,
             level_override=level_override,
             stat_override=stat_override,
+            extra_traits=extra_traits,
         )
-        _award_check_development(character, check_type, effort_level)
+        _award_check_development(character, check_type, effort_level, extra_traits=extra_traits)
         _record_legend_contribution(character, check_type, result)
         return result
 
@@ -150,6 +163,7 @@ def perform_check(  # noqa: PLR0913 - optional effort/fatigue params extend exis
         situation_ctx=situation_ctx,
         level_override=level_override,
         stat_override=stat_override,
+        extra_traits=extra_traits,
     )
 
     roll = random.randint(1, 100)  # noqa: S311
@@ -159,7 +173,7 @@ def perform_check(  # noqa: PLR0913 - optional effort/fatigue params extend exis
     outcome = _apply_outcome_guarantees(character, outcome, breakdown.chart, situation_ctx)
 
     result = _check_result(check_type, outcome, breakdown, effective_roll=effective_roll)
-    _award_check_development(character, check_type, effort_level)
+    _award_check_development(character, check_type, effort_level, extra_traits=extra_traits)
     _record_legend_contribution(character, check_type, result)
     return result
 
@@ -220,6 +234,8 @@ def _award_check_development(
     character: "ObjectDB",
     check_type: "CheckType",
     effort_level: str | None,
+    *,
+    extra_traits: "Sequence[ExtraTraitTerm]" = (),
 ) -> None:
     """Award check-based development points at the ``perform_check`` chokepoint (#3039).
 
@@ -239,6 +255,9 @@ def _award_check_development(
     Skips silently, without raising, when *character* has no ``CharacterSheet``
     (an ephemeral NPC, a GM puppet, or any non-character object) — development
     points don't apply to non-characters.
+
+    ``extra_traits`` (#4450) are call-time skill terms; each earns development like a
+    check-type trait, and a trait that is both on the check type and a term earns once.
     """
     if effort_level is None:
         return
@@ -252,6 +271,7 @@ def _award_check_development(
         check_type=check_type,
         effort_level=effort_level,
         path_level=get_character_path_level(character),
+        extra_traits=extra_traits,
     )
 
 
@@ -270,6 +290,7 @@ def perform_check_with_modifiers(  # noqa: PLR0913 - mirrors perform_check signa
     extra_contributions: "list[ModifierContribution] | None" = None,
     skip_fashion: bool = False,
     stat_override: str | int | None = None,
+    extra_traits: "Sequence[ExtraTraitTerm]" = (),
 ) -> CheckResult:
     """Run a check with all character modifiers gathered automatically.
 
@@ -302,6 +323,9 @@ def perform_check_with_modifiers(  # noqa: PLR0913 - mirrors perform_check signa
         skip_fashion: When True, suppress the aggregator's location-derived
             FASHION block (caller supplies fashion via extra_contributions).
             Default False = byte-identical to prior behavior.
+        extra_traits: (#4450) call-time skill terms; see :func:`perform_check`. Also
+            forwarded to ``collect_check_modifiers`` so capability rows see the term
+            traits as involved.
 
     Returns:
         CheckResult from perform_check.
@@ -320,6 +344,7 @@ def perform_check_with_modifiers(  # noqa: PLR0913 - mirrors perform_check signa
             situation_ctx=situation_ctx,
             level_override=level_override,
             stat_override=stat_override,
+            extra_traits=extra_traits,
         )
     breakdown = collect_check_modifiers(
         sheet,
@@ -327,6 +352,7 @@ def perform_check_with_modifiers(  # noqa: PLR0913 - mirrors perform_check signa
         scene=scene,
         extra_contributions=extra_contributions,
         skip_fashion=skip_fashion,
+        extra_traits=extra_traits,
     )
     return perform_check(
         character,
@@ -339,6 +365,7 @@ def perform_check_with_modifiers(  # noqa: PLR0913 - mirrors perform_check signa
         situation_ctx=situation_ctx,
         level_override=level_override,
         stat_override=stat_override,
+        extra_traits=extra_traits,
     )
 
 
@@ -354,6 +381,7 @@ def _build_forced_check_result(  # noqa: PLR0913 - mirrors perform_check signatu
     situation_ctx: "SituationContext | None" = None,
     level_override: int | None = None,
     stat_override: str | int | None = None,
+    extra_traits: "Sequence[ExtraTraitTerm]" = (),
 ) -> CheckResult:
     """Build a synthetic CheckResult for the test-rig forced-outcome path.
 
@@ -377,6 +405,7 @@ def _build_forced_check_result(  # noqa: PLR0913 - mirrors perform_check signatu
         situation_ctx=situation_ctx,
         level_override=level_override,
         stat_override=stat_override,
+        extra_traits=extra_traits,
     )
     outcome = _apply_outcome_guarantees(character, forced_outcome, breakdown.chart, situation_ctx)
     return _check_result(check_type, outcome, breakdown)
@@ -409,6 +438,7 @@ def _compute_check_breakdown(  # noqa: PLR0913 - keyword-only check params mirro
     situation_ctx: "SituationContext | None" = None,
     level_override: int | None = None,
     stat_override: str | int | None = None,
+    extra_traits: "Sequence[ExtraTraitTerm]" = (),
 ) -> _CheckBreakdown:
     """Compute stat + skill + specialization + aspect + level points, ranks, and chart
 
@@ -428,6 +458,9 @@ def _compute_check_breakdown(  # noqa: PLR0913 - keyword-only check params mirro
 
     The Audere / Audere Majora ``check_level_bonus`` (#4147) is added only on the
     resolved-level path (``level_override is None``); an override is used as given.
+
+    ``extra_traits`` (#4450): call-time skill terms added to the trait points and the
+    capability ``involved_traits`` exactly like extra ``CheckTypeTrait`` rows.
     """
     handler: TraitHandler = character.traits  # type: ignore[attr-defined] — ObjectDB typeclass extension
     if level_override is not None:
@@ -438,11 +471,15 @@ def _compute_check_breakdown(  # noqa: PLR0913 - keyword-only check params mirro
         level = get_character_path_level(character) + audere_check_level_bonus(character)
     effort_modifier = EFFORT_CHECK_MODIFIER.get(effort_level, 0) if effort_level else 0
 
-    trait_points = _calculate_trait_points(handler, check_type, stat_override=stat_override)
+    trait_points = _calculate_trait_points(
+        handler, check_type, stat_override=stat_override, extra_traits=extra_traits
+    )
     specialization_points = _calculate_specialization_points(character, check_type, specialization)
     aspect_bonus = _calculate_aspect_bonus(character, check_type, level)
     level_points = LEVEL_POINTS_PER_LEVEL * level
-    capability_points = _calculate_capability_points(character, check_type)
+    capability_points = _calculate_capability_points(
+        character, check_type, extra_traits=extra_traits
+    )
     perk_bonus = _situational_perk_check_bonus(character, check_type, situation_ctx)
     total_points = (
         trait_points
@@ -770,13 +807,14 @@ def _lowest_outcome_at_or_above(chart: "ResultChart | None", floor: int) -> "Che
     return CheckOutcome.objects.filter(success_level__gte=floor).order_by("success_level").first()
 
 
-def compute_check_rating(
+def compute_check_rating(  # noqa: PLR0913 - keyword-only check params mirror perform_check
     character: "ObjectDB",
     check_type: "CheckType",
     extra_modifiers: int = 0,
     *,
     level_override: int | None = None,
     stat_override: str | int | None = None,
+    extra_traits: "Sequence[ExtraTraitTerm]" = (),
 ) -> int:
     """Return *character*'s pre-roll rating (total points) for *check_type* — no dice roll.
 
@@ -801,6 +839,7 @@ def compute_check_rating(
         specialization=None,
         level_override=level_override,
         stat_override=stat_override,
+        extra_traits=extra_traits,
     )
     return breakdown.total_points
 
@@ -878,6 +917,7 @@ def _calculate_trait_points(
     check_type: "CheckType",
     *,
     stat_override: str | int | None = None,
+    extra_traits: "Sequence[ExtraTraitTerm]" = (),
 ) -> int:
     """Calculate weighted trait points for a check type.
 
@@ -894,23 +934,36 @@ def _calculate_trait_points(
     lose a stat). An ``int`` (0-10, #2879) blends strength/agility at that
     strength weight instead of naming a single trait — see
     :func:`_calculate_trait_points_with_override`.
+
+    ``extra_traits`` (#4450) are call-time skill terms scored like extra rows: the same
+    value x weight conversion, added after the check type's own rows (and after any
+    stat override, which only ever substitutes the check's STAT row). A trait that is
+    both on the check type and a term is counted twice, by design.
     """
     check_type_traits = check_type.traits.select_related("trait").all()  # type: ignore[attr-defined] — reverse FK manager from CheckTypeTrait
+    extra_points = sum(_weighted_trait_points(handler, term) for term in extra_traits)
 
     if stat_override is not None:
         overridden = _calculate_trait_points_with_override(
             handler, check_type, check_type_traits, stat_override
         )
         if overridden is not None:
-            return overridden
+            return overridden + extra_points
         # stat_count > 1: warning already logged, fall through to default.
 
     # Default path: stat_override is None or was ignored — byte-identical to pre-#2757.
-    return sum(_weighted_trait_points(handler, ct_trait) for ct_trait in check_type_traits)
+    return (
+        sum(_weighted_trait_points(handler, ct_trait) for ct_trait in check_type_traits)
+        + extra_points
+    )
 
 
 def _weighted_trait_points(handler: "TraitHandler", ct_trait) -> int:
-    """One ``CheckTypeTrait``'s contribution: raw value x weight, converted to points."""
+    """One term's contribution: raw value x weight, converted to points.
+
+    ``ct_trait`` is anything with ``.trait`` and ``.weight``: a ``CheckTypeTrait`` row or
+    an :class:`~world.checks.types.ExtraTraitTerm`.
+    """
     trait = cast(Trait, ct_trait.trait)
     trait_value = handler.get_trait_value(cast(str, trait.name))
     if trait_value <= 0:
@@ -1035,6 +1088,8 @@ def _capability_point_allocation(
     character_sheet: "CharacterSheet",
     check_type: "CheckType",
     capability_modifiers: list["CheckTypeCapabilityModifier"],
+    *,
+    extra_traits: "Sequence[ExtraTraitTerm]" = (),
 ) -> tuple[int, list[int]]:
     """Shared capability arithmetic (#2505) — the ONLY place either caller computes it.
 
@@ -1067,6 +1122,8 @@ def _capability_point_allocation(
     (see ``get_effective_capability_value``'s docstring on the TRAIT-stays-dark
     default) instead of silently missing out just because this read has no explicit
     action attached. One query for the whole allocation (never per capability row).
+    Call-time ``extra_traits`` (#4450) are in scope for the roll too, so their trait ids
+    are appended (once each) to ``involved_traits``.
 
     Returns:
         ``(truncated_total, allocated)`` where ``allocated`` is a list of ints in
@@ -1079,7 +1136,7 @@ def _capability_point_allocation(
 
     # check_type.traits is the reverse FK manager from CheckTypeTrait.
     traits_qs = check_type.traits.values_list("trait_id", flat=True)  # type: ignore[attr-defined]
-    involved_traits = tuple(traits_qs)
+    involved_traits = tuple(dict.fromkeys([*traits_qs, *(term.trait.pk for term in extra_traits)]))
     action_ctx = PullActionContext(involved_traits=involved_traits)
 
     raw_products: list[Decimal] = [
@@ -1109,7 +1166,12 @@ def _capability_point_allocation(
     return truncated_total, floors
 
 
-def _calculate_capability_points(character: "ObjectDB", check_type: "CheckType") -> int:
+def _calculate_capability_points(
+    character: "ObjectDB",
+    check_type: "CheckType",
+    *,
+    extra_traits: "Sequence[ExtraTraitTerm]" = (),
+) -> int:
     """Weighted capability contribution from authored CheckTypeCapabilityModifier rows (#2505).
 
     Curated gate: only (check_type, capability) pairs an author has explicitly linked can
@@ -1140,7 +1202,7 @@ def _calculate_capability_points(character: "ObjectDB", check_type: "CheckType")
         return 0
 
     total, _allocated = _capability_point_allocation(
-        character_sheet, check_type, capability_modifiers
+        character_sheet, check_type, capability_modifiers, extra_traits=extra_traits
     )
     return total
 
@@ -1315,13 +1377,14 @@ def compute_resist_increment(
     return max(0, rating)
 
 
-def preview_check_difficulty(
+def preview_check_difficulty(  # noqa: PLR0913 - keyword-only check params mirror perform_check
     character: "ObjectDB",
     check_type: "CheckType",
     target_difficulty: int = 0,
     extra_modifiers: int = 0,
     *,
     stat_override: str | int | None = None,
+    extra_traits: "Sequence[ExtraTraitTerm]" = (),
 ) -> int:
     """
     Preview the rank difference for a check without rolling.
@@ -1344,6 +1407,7 @@ def preview_check_difficulty(
         fatigue_penalty=0,
         specialization=None,
         stat_override=stat_override,
+        extra_traits=extra_traits,
     )
     return breakdown.rank_difference
 
@@ -1469,13 +1533,14 @@ def _get_outcome_for_roll(chart: "ResultChart", roll: int) -> CheckOutcome | Non
     return None
 
 
-def collect_check_modifiers(
+def collect_check_modifiers(  # noqa: PLR0913 - keyword-only check params mirror perform_check
     character_sheet: "CharacterSheet",
     check_type: "CheckType",
     *,
     scene: "Scene | None" = None,
     extra_contributions: list[ModifierContribution] | None = None,
     skip_fashion: bool = False,
+    extra_traits: "Sequence[ExtraTraitTerm]" = (),
 ) -> ModifierBreakdown:
     """Aggregate all modifier contributions for a check into a ModifierBreakdown.
 
@@ -1495,6 +1560,9 @@ def collect_check_modifiers(
             breakdown so every check honors every modifier source through one
             seam.  Appended AFTER the gathered condition/rollmod/scene
             contributions to keep ordering stable.  Pass None when there are none.
+        extra_traits: (#4450) call-time skill terms; their trait ids join the
+            capability rows' ``involved_traits`` so the CAPABILITY contributions
+            match what the roll path scores.
 
     Returns:
         ModifierBreakdown whose .total is the sum of all contributions and
@@ -1611,7 +1679,9 @@ def collect_check_modifiers(
     # isinstance guard: a mocked check_type has no real reverse ``capability_modifiers``
     # manager.
     if isinstance(check_type, _DjangoModel):
-        contributions.extend(_capability_contributions(character_sheet, check_type))
+        contributions.extend(
+            _capability_contributions(character_sheet, check_type, extra_traits=extra_traits)
+        )
 
     # --- CALLER-SUPPLIED contributions (combat strain/affinity, effort, ...) ---
     # Appended last so the gathered condition/rollmod/scene ordering stays stable.
@@ -1728,7 +1798,10 @@ def _character_and_equipment_contributions(
 
 
 def _capability_contributions(
-    character_sheet: "CharacterSheet", check_type: "CheckType"
+    character_sheet: "CharacterSheet",
+    check_type: "CheckType",
+    *,
+    extra_traits: "Sequence[ExtraTraitTerm]" = (),
 ) -> list[ModifierContribution]:
     """CAPABILITY contributions from authored CheckTypeCapabilityModifier rows (#2505).
 
@@ -1747,7 +1820,7 @@ def _capability_contributions(
         return []
 
     _total, allocated = _capability_point_allocation(
-        character_sheet, check_type, capability_modifiers
+        character_sheet, check_type, capability_modifiers, extra_traits=extra_traits
     )
 
     contributions: list[ModifierContribution] = []
