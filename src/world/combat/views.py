@@ -333,6 +333,8 @@ class PlacementPersonaViewSet(ReadOnlyModelViewSet):
     ``?episode=`` (an owned story, or one of its episodes) or ``?encounter=`` (an encounter
     on one of the story's beats, for its scene GMs) scopes it to the personas that story
     already uses (``story_npc_personas``). Staff see every persona when they name no story.
+    A player character who opted in to being read and pressed is offered to any scene GM, with
+    or without a story (#4441).
     """
 
     serializer_class = PlacementPickSerializer
@@ -350,7 +352,19 @@ class PlacementPersonaViewSet(ReadOnlyModelViewSet):
         user = self.request.user
         story, encounter = self._story_and_encounter()
         if story is None:
-            return Persona.objects.order_by("name") if user.is_staff else Persona.objects.none()
+            if user.is_staff:
+                return Persona.objects.order_by("name")
+            # An encounter outside any story has no cast, but its scene GMs may still stand a
+            # player character who opted in (#4441).
+            if (
+                encounter is not None
+                and encounter.scene is not None
+                and encounter.scene.is_gm(user)
+            ):
+                return Persona.objects.filter(pk__in=opted_in_personas().values("pk")).order_by(
+                    "name"
+                )
+            return Persona.objects.none()
         allowed = (
             user.is_staff
             or story.owners.filter(id=user.id).exists()
@@ -392,6 +406,8 @@ class PlacementPersonaViewSet(ReadOnlyModelViewSet):
             )
             if encounter is not None and encounter.story_beat is not None:
                 return encounter.story_beat.episode.chapter.story, encounter
+            if encounter is not None:
+                return None, encounter
         return None, None
 
 

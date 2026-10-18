@@ -1,7 +1,11 @@
 """A player character's standoff profile: consent, the catalog and the lock (#4441)."""
 
 from django.test import TestCase
+from django.urls import reverse
+from rest_framework import status
+from rest_framework.test import APITestCase
 
+from evennia_extensions.factories import AccountFactory
 from integration_tests.harness import JourneyCase
 from world.combat.constants import CauseKind
 from world.combat.factories import (
@@ -10,8 +14,11 @@ from world.combat.factories import (
     CombatParticipantFactory,
     CreatureTemplateFactory,
 )
+from world.gm.constants import GMLevel
+from world.gm.factories import GMProfileFactory
 from world.mechanics.factories import ApplicationFactory, PropertyFactory
 from world.scenes.constants import RoundStatus
+from world.scenes.factories import SceneParticipationFactory
 from world.standoffs.constants import (
     PROFILE_LOCKED_MESSAGE,
     PROFILE_NO_SUCH_DRIVE_MESSAGE,
@@ -161,3 +168,37 @@ class CharacterProfileTests(TestCase):
             CharacterStandoffProfile.objects.create(sheet=sheet, opted_in=True)
         apply_profile_change(self.sheet, ProfileChange.OPT_IN)
         self.assertEqual(list(opted_in_personas()), [self.persona])
+
+
+class PlacementPickerTests(APITestCase):
+    """The GM's named-NPC picker offers an opted-in player character (#4441)."""
+
+    def setUp(self) -> None:
+        room = JourneyCase.make_room("The Gate")
+        self.maud = JourneyCase.make_player("Maud", room=room)
+        self.persona = self.maud.sheet_data.primary_persona
+        self.encounter = CombatEncounterFactory(room=room)
+        self.gm = AccountFactory(username="picker_scene_gm")
+        GMProfileFactory(account=self.gm, level=GMLevel.JUNIOR)
+        SceneParticipationFactory(
+            scene=self.encounter.scene, account=self.gm, is_gm=True, is_owner=True
+        )
+        self.other_gm = AccountFactory(username="picker_other_gm")
+        GMProfileFactory(account=self.other_gm, level=GMLevel.JUNIOR)
+
+    def names(self, user: object) -> list[str]:
+        self.client.force_authenticate(user=user)
+        response = self.client.get(
+            reverse("combat:placement-persona-list"), {"encounter": self.encounter.pk}
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
+        return [row["name"] for row in response.data["results"]]
+
+    def test_the_scene_gm_is_offered_only_a_player_who_opted_in(self) -> None:
+        self.assertEqual(self.names(self.gm), [])
+        apply_profile_change(self.maud.sheet_data, ProfileChange.OPT_IN)
+        self.assertEqual(self.names(self.gm), [self.persona.name])
+
+    def test_a_gm_who_does_not_run_the_scene_is_offered_nobody(self) -> None:
+        apply_profile_change(self.maud.sheet_data, ProfileChange.OPT_IN)
+        self.assertEqual(self.names(self.other_gm), [])

@@ -538,7 +538,7 @@ affiliation brings, and the predicate widget for each rule's test.
 - **Standing a player character.** A scene GM adds an opted-in player character through the
   ordinary named NPC paths (`AddOpponentAction` with `persona_id`, web `add_opponent`, telnet
   `encounter addnamed`): `may_stand_persona` also accepts an opted-in player character's
-  persona, and the placement persona picker adds them for the encounter's GMs. `open_standoff`
+  persona, and the placement persona picker offers them to the encounter's scene GMs (with or without a story; a story's own cast is added when it has one). `open_standoff`
   gives an opted-in character its own persona group and skips one that has not opted in.
 - **The gate on the target.** `verbs._refusal` takes the actor's sheet: read, press and terms
   against a player character's group are refused, with no roll, when the character has not
