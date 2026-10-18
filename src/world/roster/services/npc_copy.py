@@ -25,11 +25,17 @@ if TYPE_CHECKING:
 
 
 def copy_npc_section(
-    source_entry: RosterEntry, target_entry: RosterEntry, section: NPCSection
+    source_entry: RosterEntry,
+    target_entry: RosterEntry,
+    section: NPCSection,
+    *,
+    by: AccountDB,
 ) -> None:
     """Replace ``section`` of ``target_entry`` with ``source_entry``'s; the source is untouched.
 
-    ``NPCSection.ALL`` copies every section plus the holder's ``notes_for_player``.
+    ``NPCSection.ALL`` copies every section, plus the holder's ``notes_for_player`` when
+    ``by`` owns the source or is staff: a GM copying another GM's listed NPC never gets
+    its notes.
     """
     with transaction.atomic():
         if section == NPCSection.ALL:
@@ -42,7 +48,8 @@ def copy_npc_section(
                 NPCSection.PREFERENCES,
             ):
                 _copy_one_section(source_entry, target_entry, part)
-            _copy_notes(source_entry, target_entry)
+            if by.is_staff or source_entry.created_by_account_id == by.pk:
+                _copy_notes(source_entry, target_entry)
         else:
             _copy_one_section(source_entry, target_entry, section)
 
@@ -59,7 +66,7 @@ def copy_npc_as_new(
     with transaction.atomic():
         character = mint_story_npc(gm_account=by, name=name, as_template=as_template)
         new_entry = character.sheet_data.roster_entry
-        copy_npc_section(source_entry, new_entry, NPCSection.ALL)
+        copy_npc_section(source_entry, new_entry, NPCSection.ALL, by=by)
     return new_entry
 
 

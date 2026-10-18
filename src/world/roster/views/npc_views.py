@@ -33,6 +33,8 @@ from world.roster.constants import NPCBorrowAudience, NPCLendPolicy, NPCLoanStat
 from world.roster.models import NPCLoan, RosterEntry, RosterTenure, StoryNPCSettings
 from world.roster.permissions import IsGMOrGuide
 from world.roster.serializers.npc_roster import (
+    LISTED_NPCS,
+    STAFF_TEMPLATES,
     AnswerSerializer,
     CopyAsNewSerializer,
     CopySectionResultSerializer,
@@ -215,12 +217,13 @@ class StoryNPCViewSet(
         elif self.action == "copy_as_new":
             scope = source_entries_for(account)
         elif self.action == "templates":
-            scope = Q(story_npc_settings__is_template=True) & source_entries_for(account)
-        else:
-            scope = Q(
-                story_npc_settings__listed_on_npc_roster=True,
-                story_npc_settings__is_template=False,
+            scope = Q(story_npc_settings__is_template=True) & (
+                Q(created_by_account=account) | STAFF_TEMPLATES
             )
+            if account.is_staff:
+                scope = Q(story_npc_settings__is_template=True)
+        else:
+            scope = LISTED_NPCS
         return base.filter(scope).distinct().order_by("character_sheet__character__db_key", "pk")
 
     def get_serializer_class(self) -> type[serializers.BaseSerializer]:
@@ -288,7 +291,10 @@ class StoryNPCViewSet(
         serializer = CopySectionSerializer(data=request.data, context=self.get_serializer_context())
         serializer.is_valid(raise_exception=True)
         copy_npc_section(
-            serializer.validated_data["source_entry"], target, serializer.validated_data["section"]
+            serializer.validated_data["source_entry"],
+            target,
+            serializer.validated_data["section"],
+            by=cast(AccountDB, request.user),
         )
         return Response({"section": serializer.validated_data["section"]})
 

@@ -24,13 +24,22 @@ from world.roster.services.npc_lending import OWNER_FALLBACK_NAME
 DESCRIPTION_PREVIEW_LENGTH = 200
 
 
+# The templates staff curate for every GM.
+STAFF_TEMPLATES = Q(story_npc_settings__is_template=True, created_by_account__is_staff=True)
+# What the NPC roster lists to every GM and Guide.
+LISTED_NPCS = Q(
+    story_npc_settings__listed_on_npc_roster=True, story_npc_settings__is_template=False
+)
+
+
 def source_entries_for(account) -> Q:
-    """The NPCs ``account`` may copy from: its own, and staff-owned templates."""
+    """The NPCs ``account`` may copy from: its own, staff templates, and any listed NPC.
+
+    A copy of an NPC ``account`` does not own leaves out its notes (``copy_npc_section``).
+    """
     if account.is_staff:
         return Q()
-    return Q(created_by_account=account) | Q(
-        story_npc_settings__is_template=True, created_by_account__is_staff=True
-    )
+    return Q(created_by_account=account) | STAFF_TEMPLATES | LISTED_NPCS
 
 
 class NPCRosterRowSerializer(serializers.ModelSerializer):

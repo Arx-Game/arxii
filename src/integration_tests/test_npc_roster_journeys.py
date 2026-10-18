@@ -208,6 +208,28 @@ class AnOwnerAuthorsAnNpc(NpcRosterCase):
         self.assertEqual(stolen.status_code, 404)
         self.assertEqual(other.get(f"{NPCS}templates/").json()["results"], [])
 
+    def test_another_gm_copies_a_listed_npc_without_its_notes(self) -> None:
+        other = self.api(self.other_gm)
+        self.assertEqual(other.post(f"{self.url}copy-as-new/", {"name": "X"}).status_code, 404)
+        self._list_vael()
+
+        copied = other.post(f"{self.url}copy-as-new/", {"name": "Vael's Twin"}, format="json")
+        self.assertEqual(copied.status_code, status.HTTP_201_CREATED, copied.data)
+        twin = RosterEntry.objects.get(pk=copied.json()["id"])
+        self.assertEqual(twin.created_by_account, self.other_gm)
+        self.assertEqual(twin.story_npc_settings.notes_for_player, "")
+        detail = other.get(f"{NPCS}{twin.pk}/")
+        self.assertEqual(detail.status_code, status.HTTP_200_OK, detail.data)
+        self.assertEqual(detail.json()["notes_for_player"], "")
+
+        section = other.post(
+            f"{NPCS}{twin.pk}/copy-section/",
+            {"source_entry": self.entry.pk, "section": "all"},
+            format="json",
+        )
+        self.assertEqual(section.status_code, status.HTTP_200_OK, section.data)
+        self.assertEqual(other.get(f"{NPCS}{twin.pk}/").json()["notes_for_player"], "")
+
 
 class AnOwnerDeclinesAndTemplatesList(NpcRosterCase):
     def test_owner_declines_a_request(self) -> None:

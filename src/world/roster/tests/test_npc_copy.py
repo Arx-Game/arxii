@@ -31,7 +31,7 @@ class NpcCopyTests(TestCase):
         profile = self.target.character_sheet.true_profile
         before_background = profile.background if profile is not None else ""
 
-        copy_npc_section(self.source, self.target, NPCSection.DESCRIPTION)
+        copy_npc_section(self.source, self.target, NPCSection.DESCRIPTION, by=self.gm)
 
         sheet = self.target.character_sheet
         sheet.refresh_from_db()
@@ -72,7 +72,7 @@ class NpcCopyTests(TestCase):
         CharacterTraitValue.objects.create(character=src, trait=skill.trait, value=30)
         CharacterTraitValue.objects.create(character=tgt, trait=skill.trait, value=10)
 
-        copy_npc_section(self.source, self.target, NPCSection.POWERS)
+        copy_npc_section(self.source, self.target, NPCSection.POWERS, by=self.gm)
 
         assert CharacterTraitValue.objects.get(character=tgt, trait=skill.trait).value == 30
         change = CharacterTraitChange.objects.get(character_sheet=tgt, trait=skill.trait)
@@ -95,7 +95,7 @@ class NpcCopyTests(TestCase):
         grant_gift_to_character(src, kept)
         grant_gift_to_character(tgt, dropped)
 
-        copy_npc_section(self.source, self.target, NPCSection.POWERS)
+        copy_npc_section(self.source, self.target, NPCSection.POWERS, by=self.gm)
 
         assert not CharacterGift.objects.filter(character=tgt, gift=dropped).exists()
         row = CharacterGift.objects.get(character=tgt, gift=kept)
@@ -111,11 +111,22 @@ class NpcCopyTests(TestCase):
         settings.notes_for_player = "Never lets a guest stand."
         settings.save(update_fields=["notes_for_player"])
 
-        copy_npc_section(self.source, self.target, NPCSection.ALL)
+        copy_npc_section(self.source, self.target, NPCSection.ALL, by=self.gm)
 
         target_settings = self.target.story_npc_settings
         target_settings.refresh_from_db()
         assert target_settings.notes_for_player == "Never lets a guest stand."
+
+    def test_copy_all_by_someone_else_leaves_out_the_notes(self) -> None:
+        settings = self.source.story_npc_settings
+        settings.notes_for_player = "Never lets a guest stand."
+        settings.save(update_fields=["notes_for_player"])
+        other = GMProfileFactory(level=GMLevel.JUNIOR).account
+
+        new_entry = copy_npc_as_new(self.source, by=other, name="Marrow Twin")
+
+        assert new_entry.story_npc_settings.notes_for_player == ""
+        assert new_entry.character_sheet.additional_desc == "A stooped smith."
 
     def test_copy_persona_regard_writes_one_event_and_moves_no_gauges(self) -> None:
         pc = PersonaFactory()
@@ -123,7 +134,7 @@ class NpcCopyTests(TestCase):
         target_persona = self.target.character_sheet.primary_persona
         author_npc_regard(holder_persona=source_persona, target=pc, value=450)
 
-        copy_npc_section(self.source, self.target, NPCSection.REGARD)
+        copy_npc_section(self.source, self.target, NPCSection.REGARD, by=self.gm)
 
         assert get_regard(target_persona, pc) == 450
         assert NpcRegardEvent.objects.filter(regard__holder_persona=target_persona).count() == 1
@@ -138,7 +149,7 @@ class NpcCopyTests(TestCase):
         author_npc_regard(holder_persona=source_persona, target=org, value=300)
         author_npc_regard(holder_persona=target_persona, target=OrganizationFactory(), value=50)
 
-        copy_npc_section(self.source, self.target, NPCSection.REGARD)
+        copy_npc_section(self.source, self.target, NPCSection.REGARD, by=self.gm)
 
         assert get_regard(target_persona, org) == 300
         assert NpcRegard.objects.filter(holder_persona=target_persona, ended_at=None).count() == 1
