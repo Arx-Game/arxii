@@ -113,6 +113,7 @@ class GMFactionRuleViewSerializer(serializers.Serializer):
     matched_by = serializers.ListField(child=serializers.CharField())
     revealed = serializers.BooleanField()
     source = serializers.CharField(allow_blank=True)
+    why = serializers.ListField(child=serializers.CharField())
 
 
 class GMMemberViewSerializer(serializers.Serializer):

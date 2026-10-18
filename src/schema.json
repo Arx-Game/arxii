@@ -58198,6 +58198,10 @@ components:
           type: boolean
         source:
           type: string
+        why:
+          type: array
+          items:
+            type: string
       required:
       - angle_text
       - cause_effect
@@ -58207,6 +58211,7 @@ components:
       - matched_by
       - revealed
       - source
+      - why
     GMGroupView:
       type: object
       properties:

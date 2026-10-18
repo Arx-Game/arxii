@@ -273,7 +273,8 @@ function GroupBox({ encounterId, group }: { encounterId: number; group: GMGroupV
               <th className="py-1 pr-2 font-medium">Faction rule</th>
               <th className="py-1 pr-2 font-medium">From</th>
               <th className="py-1 pr-2 font-medium">Matches</th>
-              <th className="py-1 font-medium">Read</th>
+              <th className="py-1 pr-2 font-medium">Read</th>
+              <th className="py-1 font-medium">Why</th>
             </tr>
           </thead>
           <tbody>
@@ -292,7 +293,21 @@ function GroupBox({ encounterId, group }: { encounterId: number; group: GMGroupV
                 <td className="py-1 pr-2">
                   {r.matched_by.length > 0 ? r.matched_by.join(', ') : 'nobody'}
                 </td>
-                <td className="py-1">{readLabel(r)}</td>
+                <td className="py-1 pr-2">{readLabel(r)}</td>
+                <td className="py-1" data-testid="standoff-rule-why">
+                  {r.why.map((reason, reasonIndex) => (
+                    <div key={reasonIndex}>
+                      {reason.split('\n').map((line, lineIndex) => (
+                        <div
+                          key={lineIndex}
+                          className={lineIndex > 0 ? 'text-muted-foreground' : ''}
+                        >
+                          {line}
+                        </div>
+                      ))}
+                    </div>
+                  ))}
+                </td>
               </tr>
             ))}
           </tbody>

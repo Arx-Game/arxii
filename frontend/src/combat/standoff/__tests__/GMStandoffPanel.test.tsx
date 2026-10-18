@@ -50,6 +50,7 @@ function group(patch: Partial<GMGroupView> = {}): GMGroupView {
         difficulty_shift_bands: 1,
         cause_effect: 'none',
         matched_by: ['Aubrin'],
+        why: [],
         revealed: false,
         source: 'Saltreed Company',
       },
@@ -60,6 +61,7 @@ function group(patch: Partial<GMGroupView> = {}): GMGroupView {
         difficulty_shift_bands: 1,
         cause_effect: 'none',
         matched_by: [],
+        why: [],
         revealed: false,
         source: 'Sellsword',
       },
@@ -103,6 +105,7 @@ describe('GMStandoffPanel', () => {
             difficulty_shift_bands: 0,
             cause_effect: 'provoke',
             matched_by: ['Wrenna'],
+            why: [],
             revealed: false,
             source: 'Den wolf',
           },
@@ -150,6 +153,31 @@ describe('GMStandoffPanel', () => {
     expect(within(box).getByText('set on this line')).toBeInTheDocument();
     expect(within(box).getByText('Affiliation')).toBeInTheDocument();
     expect(within(box).getByText('Sellsword')).toBeInTheDocument();
+  });
+
+  it('shows why a rule matches: the tier first, then the recent causes, one per line (#4448)', () => {
+    const base = group();
+    renderPanel(
+      group({
+        faction_rules: [
+          {
+            ...base.faction_rules[0],
+            why: [
+              'reputation: Guild of Locks holds you in low regard (Disliked)\nMoved by: secret exposed (secret #2), Disfavored to Disliked\nEarlier: secret exposed (secret #1), Unknown to Disfavored',
+            ],
+          },
+        ],
+      })
+    );
+    const why = screen.getByTestId('standoff-rule-why');
+    const lines = within(why)
+      .getAllByText(/./)
+      .map((el) => [el.textContent, el.className]);
+    expect(lines[0][0]).toContain('Disliked');
+    expect(lines[0][1]).not.toContain('text-muted-foreground');
+    expect(lines[1][0]).toMatch(/^Moved by: /);
+    expect(lines[1][1]).toContain('text-muted-foreground');
+    expect(lines[2][0]).toMatch(/^Earlier: /);
   });
 
   it('renders the profile, matches and force', () => {
