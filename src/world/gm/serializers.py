@@ -1029,6 +1029,7 @@ class GMPromptSerializer(serializers.ModelSerializer):
     )
     being_answer_summary = serializers.SerializerMethodField()
     being_answer_table = serializers.SerializerMethodField()
+    being_answer_live = serializers.SerializerMethodField()
 
     class Meta:
         model = GMPrompt
@@ -1052,6 +1053,7 @@ class GMPromptSerializer(serializers.ModelSerializer):
             "standoff_force",
             "being_answer_summary",
             "being_answer_table",
+            "being_answer_live",
             "resolution_note",
             "room_text",
             "private_text",
@@ -1104,6 +1106,11 @@ class GMPromptSerializer(serializers.ModelSerializer):
         from world.worship.steward_services import prompt_summary  # noqa: PLC0415
 
         return prompt_summary(obj)
+
+    def get_being_answer_live(self, obj: GMPrompt) -> bool:
+        """True for a being_answer prompt a rite in the scene raised (#4333 slice 5): its
+        panel opens in the queue instead of on a table page."""
+        return obj.kind == GMPromptKind.BEING_ANSWER and obj.rite_performance_id is not None
 
     def get_being_answer_table(self, obj: GMPrompt) -> int | None:
         """The table whose page holds a being_answer prompt's answer panel."""

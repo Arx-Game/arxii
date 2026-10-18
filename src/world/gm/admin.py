@@ -92,9 +92,11 @@ class GMLevelCapAdmin(admin.ModelAdmin):
         "auto_clear_regional",
         "max_story_areas",
         "max_story_rooms_per_area",
+        "may_adapt_answers",
     ]
     list_filter = [
         "max_beat_risk",
+        "may_adapt_answers",
         "allow_custom_stakes",
         "allow_global_scope_authoring",
         "auto_clear_regional",

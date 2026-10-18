@@ -58,6 +58,7 @@ class PerformWorshipRiteAction(Action):
 
         from world.scenes.interaction_services import get_active_scene  # noqa: PLC0415
         from world.worship.exceptions import WorshipRiteError  # noqa: PLC0415
+        from world.worship.live_services import route_live_answer  # noqa: PLC0415
         from world.worship.rite_services import perform_worship_rite  # noqa: PLC0415
 
         rite, error = _resolve_rite(kwargs)
@@ -79,6 +80,9 @@ class PerformWorshipRiteAction(Action):
         except WorshipRiteError as exc:
             return ActionResult(success=False, message=exc.user_message)
         _broadcast_rite_line(sheet, rite, actor)
+        # #4333 slice 5: a GM running the scene may answer the rite live. A pledge's
+        # closing rite never comes through here (ClosePledgeAction), so it never prompts.
+        route_live_answer(outcome.performance, scene)
         parts = [
             f"You perform {rite.name} in the name of {rite.being.name}: {outcome.outcome_name}."
         ]
@@ -441,6 +445,56 @@ def _broadcast_rite_line(sheet, rite, actor: ObjectDB) -> None:
     broadcast_room_line(persona, f"{persona.name} performs {rite.name}.", location=actor.location)
 
 
+def _answer_live_rite(prompt, account, answer, kwargs: dict[str, Any]) -> ActionResult:
+    """The scene GM answers a rite live: one answer, or one miracle (#4333 slice 5)."""
+    from world.worship.exceptions import StewardAnswerError  # noqa: PLC0415
+    from world.worship.live_services import send_live_answer  # noqa: PLC0415
+    from world.worship.models import Miracle  # noqa: PLC0415
+
+    miracle, error = _optional_row(Miracle, {"miracle": kwargs.get("miracle_id")}, "miracle")
+    if error is not None:
+        return error
+    try:
+        sent = send_live_answer(
+            prompt,
+            resolver=account,
+            answer=answer,
+            miracle=miracle,
+            text=str(kwargs.get("text") or ""),
+        )
+    except StewardAnswerError as exc:
+        return ActionResult(success=False, message=exc.user_message)
+    if sent.vision is not None:
+        _broadcast_live_onlooker_line(sent)
+        message = f"Sent as a vision from {sent.being.name}."
+    else:
+        message = f"{sent.being.name} worked a miracle: {sent.miracle.name}."
+    return ActionResult(
+        success=True,
+        message=message,
+        data={
+            "prompt_id": prompt.pk,
+            "vision_id": sent.vision.pk if sent.vision is not None else None,
+            "miracle_performance_id": sent.performance.pk if sent.performance else None,
+            "held": False,
+        },
+    )
+
+
+def _broadcast_live_onlooker_line(sent) -> None:
+    """A live answer's ``onlooker_line``: the one room line others see of it, in the
+    room the rite was performed in. Staff-authored, so a secret faith carries no
+    player text."""
+    line = sent.answer.onlooker_line.strip() if sent.answer is not None else ""
+    character = sent.sheet.character
+    if not line or character.location is None:
+        return
+    from world.scenes.services import active_persona_for_sheet  # noqa: PLC0415
+    from world.worship.pledge_services import broadcast_room_line  # noqa: PLC0415
+
+    broadcast_room_line(active_persona_for_sheet(sent.sheet), line, location=character.location)
+
+
 def _broadcast_onlooker_line(sheet, delivery, actor: ObjectDB) -> None:
     """An answer's ``onlooker_line`` (#4333 slice 3): the one room line others see
     of an answer, after the rite line, when the vision was delivered at the rite.
@@ -729,6 +783,10 @@ class AnswerBeingPromptAction(Action):
         answer_id: one of the being's authored answers at or below the tier; or
         text: the GM's own words (Success and Critical Success only), with
         clue_id: optional, one of the clues the being's answers already link.
+
+    A prompt raised by a rite in a GM-run scene (#4333 slice 5) is answered live
+    instead: ``answer_id`` (with ``text`` to edit its main text, for a GM level that
+    may adapt answers) or ``miracle_id``.
     """
 
     key: str = "gm_being_answer"
@@ -761,6 +819,8 @@ class AnswerBeingPromptAction(Action):
         answer, error = _optional_row(Answer, {"answer": kwargs.get("answer_id")}, "answer")
         if error is not None:
             return error
+        if prompt.rite_performance_id is not None:
+            return _answer_live_rite(prompt, account, answer, kwargs)
         clue, error = _optional_row(Clue, {"clue": kwargs.get("clue_id")}, "clue")
         if error is not None:
             return error

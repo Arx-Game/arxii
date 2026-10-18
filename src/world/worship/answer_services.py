@@ -41,6 +41,8 @@ from world.worship.models import Answer, PendingAnswer, Vision
 from world.worship.types import AnswerDelivery
 
 if TYPE_CHECKING:
+    from evennia.accounts.models import AccountDB
+
     from world.ceremonies.models import CeremonyOffering
     from world.character_sheets.models import CharacterSheet
     from world.clues.models import Clue
@@ -150,10 +152,18 @@ def sacrifice_passage(answer: Answer, offerings: list[CeremonyOffering]) -> str:
     return " ".join(part for part in parts if part)
 
 
-def answer_body(answer: Answer, offerings: list[CeremonyOffering]) -> str:
-    """The vision's prose: the parts this answer's tier carries, in reading order."""
+def answer_body(
+    answer: Answer, offerings: list[CeremonyOffering], *, answer_text: str | None = None
+) -> str:
+    """The vision's prose: the parts this answer's tier carries, in reading order.
+
+    ``answer_text`` replaces the answer's own main text: a GM whose level may adapt
+    answers (#4333 slice 5) edits that one part before sending it live. The delay,
+    fact, cost and follow-up text are never replaced.
+    """
+    main_text = answer.answer_text if answer_text is None else answer_text
     main = " ".join(
-        part for part in (answer.answer_text.strip(), sacrifice_passage(answer, offerings)) if part
+        part for part in (main_text.strip(), sacrifice_passage(answer, offerings)) if part
     )
     paragraphs = [answer.delay_text.strip(), main]
     if carries_fact(answer):
@@ -258,6 +268,35 @@ def deliver_answer(details: PledgeDetails, answer: Answer) -> AnswerDelivery:
     _apply_cost(sheet, answer)
     PendingAnswer.objects.filter(pledge_details=details).delete()
     return AnswerDelivery(answer=answer, vision=vision, held=False)
+
+
+def deliver_live_answer(
+    sheet: CharacterSheet, answer: Answer, *, sent_by: AccountDB, answer_text: str | None = None
+) -> Vision:
+    """Send ``answer`` to the character a GM answered live (#4333 slice 5, design 6).
+
+    The same vision as a pledge's close sends, with no pledge behind it: no
+    sacrifice passage, no prayer. The GM who chose it is the sender. The fact clue
+    rides the vision, the follow-up clue and the cost follow, all from the answer
+    as written. Raises ``VisionPoolInsufficient`` when the being's pool cannot pay
+    now (a live answer is never held). Not called inside an open transaction.
+    """
+    from world.worship.prayer_services import send_vision  # noqa: PLC0415
+
+    vision = send_vision(
+        recipient=sheet,
+        being=answer.being,
+        body=answer_body(answer, [], answer_text=answer_text),
+        sent_by=sent_by,
+        reveal_source=not answer.conceals_source,
+        prayer=None,
+        clue=delivered_fact_clue(answer),
+        answer=answer,
+        footnotes=answer_footnotes(answer),
+    )
+    _hand_over_follow_up(sheet, answer)
+    _apply_cost(sheet, answer)
+    return vision
 
 
 def deliver_pledge_answer(details: PledgeDetails, outcome_tier: CheckOutcome) -> AnswerDelivery:
