@@ -74,14 +74,16 @@ Involved-party classification and death-permission helpers used by both `service
 - `acute_peril_condition_names() -> list[str]` — returns `[BLEED_OUT_CONDITION_NAME]`. PLUMMETING
   is EXCLUDED: falls are environmental and self-completing; the hold/abandonment logic does not apply.
 - `acute_peril_instances(sheet) -> QuerySet` — active Bleeding-Out `ConditionInstance`s on a victim.
-- `is_pc_source(source_character) -> bool` — True iff the source has a `db_account` (player-
-  controlled); False for None / NPCs.
-- `death_is_permitted(*, victim_sheet, source_character) -> bool` — True only for a non-PC source
-  with no active `death_deferred` condition on the victim; False for PC sources (ADR-0023), None
-  sources, and `death_deferred` victims.
-- `select_abandonment_pool(source_character) -> ConsequencePool` — returns
-  `abandonment_pvp` / `abandonment_enemy` / `abandonment_environmental` by source kind; raises
-  `ConsequencePool.DoesNotExist` on seeding gap.
+- `is_pc_source(source_character) -> bool` — True iff the source is a player character
+  (`is_player_character`: active tenure or live puppet; a story NPC never counts, ADR-4418);
+  False for None / NPCs.
+- `death_is_permitted(*, victim_sheet, source_character) -> bool` — False for None sources,
+  `death_deferred` victims, story-protected victims, and a PC source against a PvP-protected
+  victim (`is_pvp_protected_victim`: ADR-0023). A PC source against a story NPC is permitted,
+  whoever plays it (ADR-4418).
+- `select_abandonment_pool(source_character, *, victim_sheet) -> ConsequencePool` — returns
+  `abandonment_pvp` (PC source, PvP-protected victim) / `abandonment_enemy` /
+  `abandonment_environmental`; raises `ConsequencePool.DoesNotExist` on seeding gap.
 - `hostile_drove_round(victim_sheet, scene_round, declared_ids) -> bool` — True when the peril's
   `source_character` declared this round (their participant pk is in `declared_ids`); drives the
   hold/advance decision in `resolve_scene_round`.
@@ -167,8 +169,8 @@ death → retire. Offscreen deaths staff-only. Surfaces: `GiveDeathKudosAction` 
 
 - **No unconditional `_mark_dead`** (ADR-0049): the terminal stage of every acute-peril condition
   resolves through a guarded pool, never a raw death call.
-- **PC sources structurally cannot kill** (ADR-0023): `death_is_permitted` returns False for any PC
-  attacker, not just in the encounter layer but at the death-selection layer.
+- **PvP is structurally non-lethal** (ADR-0023, ADR-4418): `death_is_permitted` returns False for a
+  PC attacker against a PvP-protected victim, at the death-selection layer; a PC can kill a story NPC.
 - **Abandonment is action-driven** (ADR-0004): the grace window counts `round_number` beats, not
   wall-clock time.
 - **Settled round effects use the clamp, never the pipeline** (#4120, ADR-4120): after combat,

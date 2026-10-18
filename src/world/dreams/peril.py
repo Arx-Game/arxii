@@ -45,7 +45,8 @@ def resolve_dream_peril_collapse(
     Args:
         character_sheet: The collapsing dreamer's sheet.
         source_character: The ObjectDB that caused the collapse (PC attacker
-            or None for environmental). PC sources cannot kill (ADR-0023).
+            or None for environmental). A PC source cannot kill a PvP-protected
+            victim (ADR-0023); it can kill a story NPC (ADR-4418).
 
     Returns:
         DreamPerilResult with died flag, outcome label, and message.

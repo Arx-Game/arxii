@@ -1,8 +1,9 @@
 """Tests for peril consequence pools + select_abandonment_pool (Task 4, #1479).
 
 Covers:
-- select_abandonment_pool: NPC → abandonment_enemy; PC → abandonment_pvp;
-  None → abandonment_environmental.
+- select_abandonment_pool: NPC source → abandonment_enemy; PC source and a
+  PvP-protected victim → abandonment_pvp (a story NPC victim → abandonment_enemy,
+  ADR-4418); None → abandonment_environmental.
 - bleed_out_terminal factory yields a die (character_loss=True) row and a
   recover row.
 - All four pools (bleed_out_terminal, abandonment_enemy, abandonment_pvp,

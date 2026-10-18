@@ -319,8 +319,8 @@ def create_dream_peril_pool():
       severe persistent Madness condition (behavior-altering).
     - ``die`` (Failure tier, weight=1, character_loss=True): physical death
       — the dreamer's body dies. Only reachable when death_is_permitted
-      (environmental/deep-dreaming sources; excluded for PC sources per
-      ADR-0023).
+      (environmental/deep-dreaming sources; excluded for a PC source against a
+      PvP-protected victim per ADR-0023, ADR-4418).
 
     Returns the ConsequencePool instance (safe to call multiple times —
     uses get_or_create throughout).
