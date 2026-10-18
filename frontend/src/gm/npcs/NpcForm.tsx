@@ -311,7 +311,10 @@ export function NpcForm({
   const draft = (): NpcFormDraft => {
     const copies: Partial<Record<NpcSection, number>> = {};
     for (const [section, source] of Object.entries(sectionCopies) as [NpcSection, number][]) {
-      if (section === 'description' || shown(section as FoldedSection)) copies[section] = source;
+      // The Description copy picker is Detailed's only; Quick never sends one picked there.
+      const onScreen =
+        section === 'description' ? mode === 'detailed' : shown(section as FoldedSection);
+      if (onScreen) copies[section] = source;
     }
     const sent = sheet as Record<string, unknown>;
     const keys = [
@@ -791,7 +794,7 @@ export function NpcForm({
 
 function CreatedNpcPanel({ created, onNew }: { created: CreatedNpc; onNew: () => void }) {
   const [addingPortrait, setAddingPortrait] = useState(false);
-  const { data: sheetId } = useQuery({
+  const { data: sheetId, isError: sheetMissing } = useQuery({
     queryKey: ['roster-entry-sheet', created.entryId],
     queryFn: () => fetchSheetIdForEntry(created.entryId),
     enabled: addingPortrait,
@@ -817,6 +820,11 @@ function CreatedNpcPanel({ created, onNew }: { created: CreatedNpc; onNew: () =>
           New NPC
         </Button>
       </div>
+      {addingPortrait && sheetMissing && (
+        <p role="alert" className="text-sm text-destructive">
+          Couldn&apos;t load this NPC&apos;s sheet to add a portrait.
+        </p>
+      )}
       <NpcPowersPanel entryId={created.entryId} />
       {sheetId !== undefined && (
         <AddLookFlow

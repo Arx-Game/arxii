@@ -340,7 +340,8 @@ function pick(sheet: StaffEditBody, keys: readonly string[]): StaffEditBody {
  * NPC is put into that scene last; a template never is.
  *
  * The typed description rides the mint unless the description is being copied, in
- * which case it is written after the copy so it lands on top.
+ * which case it is written after the copy so it lands on top. On a retry (the mint
+ * already done) it is written the same way, so an edit made since the mint is kept.
  */
 export interface CreateNpcOptions {
   /** An NPC an earlier attempt already minted; the mint is skipped. */
@@ -365,6 +366,8 @@ export async function createNpc(
 ): Promise<number> {
   const copies = plannedCopies(draft);
   const descriptionCopied = copies.some(([section]) => section === 'description');
+  // Written after the mint rather than with it: copied over, or minted on an earlier try.
+  const descriptionAfterMint = descriptionCopied || mintedId !== null;
   let entryId = mintedId;
   if (entryId === null) {
     entryId = await mintNpc(characterId, {
@@ -383,7 +386,7 @@ export async function createNpc(
     ['saving Who they are', pick(draft.sheet, IDENTITY_KEYS)],
     [
       'saving the description',
-      descriptionCopied && draft.description ? { description: draft.description } : {},
+      descriptionAfterMint && draft.description ? { description: draft.description } : {},
     ],
     ['saving Background and drives', pick(draft.sheet, BACKGROUND_KEYS)],
   ];

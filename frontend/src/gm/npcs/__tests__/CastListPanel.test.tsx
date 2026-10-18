@@ -196,6 +196,17 @@ describe('CastListPanel', () => {
     );
   });
 
+  it('opening a crowd form starts from the crowd as it is', async () => {
+    renderPanel();
+    await userEvent.click(await screen.findByRole('button', { name: 'Add crowd voice' }));
+    const voice = screen.getByLabelText('Crowd voice name');
+    await userEvent.clear(voice);
+    await userEvent.type(voice, 'Abandoned edit');
+    const [btn] = screen.getAllByRole('button', { name: 'Rename or describe' });
+    await userEvent.click(btn);
+    expect(screen.getByLabelText('Crowd name')).toHaveValue('Besieger skirmishers');
+  });
+
   it('toasts a refused action', async () => {
     dispatch.mockResolvedValue({ message: 'Not allowed.', success: false });
     renderPanel();

@@ -30,13 +30,20 @@ function useNpcSheetId(entryId: number, enabled = true) {
 }
 
 export function NpcPowersPanel({ entryId }: { entryId: number }) {
-  const { data: sheetId = 0 } = useNpcSheetId(entryId);
+  const { data: sheetId = 0, isError: sheetMissing } = useNpcSheetId(entryId);
   const { data: sheet } = useCharacterSheetQuery(sheetId);
   const rows = sheet?.staff_edit?.rows;
   const { data: options } = useStaffOptions(sheetId, rows !== undefined);
   const mutation = useStaffRowMutation(sheetId);
   const run: Run = (request, onDone) => mutation.mutate(request, { onSuccess: () => onDone?.() });
 
+  if (sheetMissing) {
+    return (
+      <p role="alert" className="text-sm text-destructive">
+        Couldn&apos;t load this NPC&apos;s sheet, so its powers can&apos;t be edited here.
+      </p>
+    );
+  }
   return (
     <section className="flex flex-col gap-3 border-t pt-4" aria-label="Powers">
       <h3 className="font-display text-base">Powers</h3>

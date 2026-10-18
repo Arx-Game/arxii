@@ -363,6 +363,78 @@ describe('NpcForm', () => {
     expect(copies).toHaveLength(2);
   });
 
+  it('Quick never sends a Description copy picked in Detailed', async () => {
+    const user = userEvent.setup();
+    renderForm('detailed');
+    await waitFor(() =>
+      expect(
+        screen.getAllByRole('option', { name: 'Veteran gate officer (template)' }).length
+      ).toBeGreaterThan(0)
+    );
+    await user.selectOptions(screen.getByLabelText('Copy Description from'), '12');
+    await user.click(screen.getByRole('button', { name: 'Quick' }));
+    await user.type(screen.getByLabelText('Name'), 'Vael');
+    await user.click(screen.getByRole('button', { name: 'Create NPC' }));
+
+    await waitFor(() => expect(screen.getByRole('region', { name: 'Vael' })).toBeInTheDocument());
+    expect(writes().filter((call) => call.url.endsWith('/copy-section/'))).toEqual([]);
+  });
+
+  it('a description edited after a failed step is saved on the retry', async () => {
+    const user = userEvent.setup();
+    let copyFails = true;
+    apiFetch.mockImplementation((url: string, init?: RequestInit) => {
+      if (url.endsWith('/copy-section/') && copyFails) {
+        copyFails = false;
+        return Promise.resolve({
+          ok: false,
+          status: 500,
+          json: () => Promise.resolve({ detail: 'Server error.' }),
+        });
+      }
+      return route(url, init);
+    });
+    renderForm('detailed');
+    await user.type(screen.getByLabelText('Name'), 'Vael');
+    await user.type(screen.getByRole('textbox', { name: 'Description' }), 'Tall.');
+    await waitFor(() =>
+      expect(
+        screen.getAllByRole('option', { name: 'Veteran gate officer (template)' }).length
+      ).toBeGreaterThan(0)
+    );
+    await user.selectOptions(screen.getByLabelText('Copy Background and drives from'), '12');
+    await user.click(screen.getByRole('button', { name: 'Create NPC' }));
+    await screen.findByRole('alert');
+
+    await user.type(screen.getByRole('textbox', { name: 'Description' }), ' And spare.');
+    await user.click(screen.getByRole('button', { name: 'Create NPC' }));
+
+    await waitFor(() => expect(screen.getByRole('region', { name: 'Vael' })).toBeInTheDocument());
+    expect(writes()).toContainEqual({
+      method: 'PATCH',
+      url: '/api/character-sheets/90/staff-edit/',
+      body: { description: 'Tall. And spare.' },
+    });
+  });
+
+  it('says so instead of the powers editors when the sheet cannot be read', async () => {
+    const user = userEvent.setup();
+    apiFetch.mockImplementation((url: string, init?: RequestInit) => {
+      if (url === `/api/roster/entries/${NEW_ENTRY}/`) {
+        return Promise.resolve({ ok: false, status: 404, json: () => Promise.resolve({}) });
+      }
+      return route(url, init);
+    });
+    renderForm('detailed');
+    await user.type(screen.getByLabelText('Name'), 'Vael');
+    await user.click(screen.getByRole('button', { name: 'Save as template' }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      "Couldn't load this NPC's sheet, so its powers can't be edited here."
+    );
+    expect(screen.queryByRole('region', { name: 'Powers' })).not.toBeInTheDocument();
+  });
+
   it('Enter in a sub-editor or a number box never submits the form', async () => {
     const user = userEvent.setup();
     renderForm('detailed');

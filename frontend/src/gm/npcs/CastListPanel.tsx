@@ -177,6 +177,12 @@ function CrowdRow({ entry, ...run }: RunProps & { entry: CastEntry }) {
   const [name, setName] = useState(entry.name);
   const [description, setDescription] = useState(entry.description);
   const unvoiced = entry.persona_id === null;
+  // Each opening starts from the crowd as it is now, not from an earlier edit.
+  const open = (next: 'voice' | 'describe') => {
+    setName(entry.name);
+    setDescription(entry.description);
+    setMode(next);
+  };
   const submit = (key: string, extra: Record<string, unknown>) => {
     run.onRun(key, { opponent_ids: entry.opponent_ids, name: name.trim(), ...extra });
     setMode(null);
@@ -198,12 +204,12 @@ function CrowdRow({ entry, ...run }: RunProps & { entry: CastEntry }) {
       </div>
       <div className="mt-2 flex gap-2">
         {unvoiced && mode !== 'voice' && (
-          <Button size="sm" variant="outline" onClick={() => setMode('voice')}>
+          <Button size="sm" variant="outline" onClick={() => open('voice')}>
             Add crowd voice
           </Button>
         )}
         {mode !== 'describe' && (
-          <Button size="sm" variant="outline" onClick={() => setMode('describe')}>
+          <Button size="sm" variant="outline" onClick={() => open('describe')}>
             Rename or describe
           </Button>
         )}
