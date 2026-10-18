@@ -1180,7 +1180,10 @@ def _maybe_apply_surrounded(declaration: BattleActionDeclaration) -> bool:
     )
     from world.conditions.constants import SURROUNDED_CONDITION_NAME  # noqa: PLC0415
     from world.conditions.models import ConditionStage, ConditionTemplate  # noqa: PLC0415
-    from world.conditions.services import apply_condition  # noqa: PLC0415
+    from world.conditions.services import (  # noqa: PLC0415
+        apply_condition,
+        loss_of_self_terms,
+    )
     from world.vitals.constants import POOL_SURROUNDED_ENTRY  # noqa: PLC0415
 
     participant = declaration.participant
@@ -1222,6 +1225,7 @@ def _maybe_apply_surrounded(declaration: BattleActionDeclaration) -> bool:
         entry_stage.resist_difficulty,
         candidates,
         extra_modifiers=extra_modifiers,
+        extra_traits=loss_of_self_terms(template),
     )
     if pending.selected_consequence.label == "surrounded":  # noqa: STRING_LITERAL
         # No `stage` kwarg on apply_condition — the has_progression=True template

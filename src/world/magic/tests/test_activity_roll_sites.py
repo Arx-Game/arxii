@@ -14,7 +14,7 @@ from decimal import Decimal
 from types import SimpleNamespace
 from unittest.mock import patch
 
-from django.test import TestCase
+from django.test import TestCase, override_settings
 
 from actions.factories import ConsequencePoolEntryFactory, ConsequencePoolFactory
 from evennia_extensions.factories import AccountFactory
@@ -113,6 +113,16 @@ class ActivityTermTestCase(TestCase):
             drive()
         self.assertEqual(len(calls), 1)
         self.assertEqual(calls[0]["extra_traits"], self.expected)
+
+    def assert_no_terms(
+        self, target: str, activity: MagicActivity, drive: Callable[[], object]
+    ) -> None:
+        """The activity is mapped, yet this roll carries no term (or passes none at all)."""
+        self.map_activity(activity)
+        with roll_recorded(target) as calls, self.assertRaises(RollReached):
+            drive()
+        self.assertEqual(len(calls), 1)
+        self.assertEqual(calls[0].get("extra_traits", ()), ())
 
 
 class MagicServiceRollSiteTests(ActivityTermTestCase):
@@ -352,22 +362,13 @@ class ConditionRollSiteTests(ActivityTermTestCase):
         category = ConditionCategoryFactory(adds_loss_of_self_skills=marked)
         return ConditionTemplateFactory(category=category, **fields)
 
-    def assert_no_terms(
-        self, target: str, activity: MagicActivity, drive: Callable[[], object]
-    ) -> None:
-        """The activity is mapped, yet an unmarked template's roll carries no term."""
-        self.map_activity(activity)
-        with roll_recorded(target) as calls, self.assertRaises(RollReached):
-            drive()
-        self.assertEqual(calls[0]["extra_traits"], ())
-
-    def test_loss_of_self_terms_only_for_marked_category(self) -> None:
-        from world.conditions.services import _loss_of_self_terms
+    def testloss_of_self_terms_only_for_marked_category(self) -> None:
+        from world.conditions.services import loss_of_self_terms
 
         self.map_activity(MagicActivity.RESISTING_LOSS_OF_SELF)
 
-        self.assertEqual(_loss_of_self_terms(self.template(marked=True)), self.expected)
-        self.assertEqual(_loss_of_self_terms(self.template(marked=False)), ())
+        self.assertEqual(loss_of_self_terms(self.template(marked=True)), self.expected)
+        self.assertEqual(loss_of_self_terms(self.template(marked=False)), ())
 
     def test_application_resist_marked(self) -> None:
         from world.conditions.services import _check_application_resist
@@ -448,23 +449,43 @@ class ConditionRollSiteTests(ActivityTermTestCase):
             lambda: attempt_break_free(instance, in_combat_tick=True),
         )
 
-    def test_reveal_condition_marked(self) -> None:
-        from actions.definitions.conditions import RevealConditionAction
-
-        template = self.template(marked=True, break_free_check_type=CheckTypeFactory())
+    def reveal_setup(self, *, marked: bool):
+        template = self.template(marked=marked, break_free_check_type=CheckTypeFactory())
         template.category.alters_behavior = True
         template.category.save(update_fields=["alters_behavior"])
         target = CharacterSheetFactory().character
         ConditionInstanceFactory(condition=template, target=target, is_aware=False)
-        actor = CharacterSheetFactory().character
+        return CharacterSheetFactory().character, target
+
+    def test_reveal_condition_senses_a_loss_of_self(self) -> None:
+        """Spotting a marked hold is sensing magic, not resisting it."""
+        from actions.definitions.conditions import RevealConditionAction
+
+        actor, target = self.reveal_setup(marked=True)
+        MagicActivitySkillFactory(
+            activity=MagicActivity.RESISTING_LOSS_OF_SELF, skill=self.other_skill
+        )
 
         self.assert_terms_reach(
             "world.checks.services.perform_check",
-            MagicActivity.RESISTING_LOSS_OF_SELF,
+            MagicActivity.SENSING_MAGIC,
             lambda: RevealConditionAction().execute(actor, target=target),
         )
 
-    def test_rally_marked(self) -> None:
+    def test_reveal_condition_unmarked_adds_nothing(self) -> None:
+        from actions.definitions.conditions import RevealConditionAction
+
+        actor, target = self.reveal_setup(marked=False)
+
+        self.assert_no_terms(
+            "world.checks.services.perform_check",
+            MagicActivity.SENSING_MAGIC,
+            lambda: RevealConditionAction().execute(actor, target=target),
+        )
+
+    def test_rally_adds_no_loss_of_self_skill(self) -> None:
+        """The rally roll is the helper's persuasion; the target's skills come in on the
+        break-free that a critical rally triggers."""
         from actions.definitions.conditions import RallyAction
         from world.conditions.constants import BreakFreeMode
 
@@ -480,15 +501,93 @@ class ConditionRollSiteTests(ActivityTermTestCase):
         ConditionInstanceFactory(condition=template, target=target, is_aware=True)
         actor = CharacterSheetFactory().character
 
-        self.assert_terms_reach(
+        self.assert_no_terms(
             "world.checks.services.perform_check",
             MagicActivity.RESISTING_LOSS_OF_SELF,
             lambda: RallyAction().execute(actor, target=target),
         )
 
+    def peril(self, *, marked: bool):
+        """A peril instance on a stage that rolls a resist check, with a one-row pool."""
+        template = self.template(marked=marked, has_progression=True)
+        stage = ConditionStageFactory(
+            condition=template, resist_check_type=CheckTypeFactory(), resist_difficulty=5
+        )
+        sheet = CharacterSheetFactory()
+        instance = ConditionInstanceFactory(
+            condition=template, target=sheet.character, current_stage=stage
+        )
+        pool = ConsequencePoolFactory()
+        ConsequencePoolEntryFactory(pool=pool, consequence=ConsequenceFactory())
+        return sheet, instance, pool
+
+    def test_peril_stage_resist_marked(self) -> None:
+        from world.vitals.services import _resolve_peril_via_pool
+
+        sheet, instance, pool = self.peril(marked=True)
+
+        self.assert_terms_reach(
+            "world.checks.consequence_resolution.perform_check",
+            MagicActivity.RESISTING_LOSS_OF_SELF,
+            lambda: _resolve_peril_via_pool(sheet, instance, pool, death_permitted=False),
+        )
+
+    def test_peril_stage_resist_unmarked(self) -> None:
+        from world.vitals.services import _resolve_peril_via_pool
+
+        sheet, instance, pool = self.peril(marked=False)
+
+        self.assert_no_terms(
+            "world.checks.consequence_resolution.perform_check",
+            MagicActivity.RESISTING_LOSS_OF_SELF,
+            lambda: _resolve_peril_via_pool(sheet, instance, pool, death_permitted=False),
+        )
+
+    def surrounded_entry(self, *, marked: bool):
+        """An isolated battle participant, with the Surrounded entry content seeded."""
+        from world.battles.constants import BattleSideRole
+        from world.battles.services import add_place, add_side, create_battle, enlist_participant
+        from world.vitals.factories import ensure_surrounded_content
+
+        content = ensure_surrounded_content()
+        category = content["condition"].category
+        category.adds_loss_of_self_skills = marked
+        category.save(update_fields=["adds_loss_of_self_skills"])
+        battle = create_battle(name="Entry Skills")
+        side = add_side(battle=battle, role=BattleSideRole.ATTACKER)
+        place = add_place(battle=battle, name="The Gates")
+        participant = enlist_participant(
+            battle=battle, character_sheet=CharacterSheetFactory(), side=side, place=place
+        )
+        return SimpleNamespace(participant=participant)
+
+    @override_settings(SEED_SAMPLE_CONTENT=True)
+    def test_surrounded_entry_resist_marked(self) -> None:
+        from world.battles.resolution import _maybe_apply_surrounded
+
+        declaration = self.surrounded_entry(marked=True)
+
+        self.assert_terms_reach(
+            "world.checks.consequence_resolution.perform_check",
+            MagicActivity.RESISTING_LOSS_OF_SELF,
+            lambda: _maybe_apply_surrounded(declaration),
+        )
+
+    @override_settings(SEED_SAMPLE_CONTENT=True)
+    def test_surrounded_entry_resist_unmarked(self) -> None:
+        from world.battles.resolution import _maybe_apply_surrounded
+
+        declaration = self.surrounded_entry(marked=False)
+
+        self.assert_no_terms(
+            "world.checks.consequence_resolution.perform_check",
+            MagicActivity.RESISTING_LOSS_OF_SELF,
+            lambda: _maybe_apply_surrounded(declaration),
+        )
+
 
 class TreatmentRollSiteTests(ActivityTermTestCase):
-    """A technique's treatment adds the Magical treatment skills; a mundane one does not."""
+    """A magical treatment adds the Magical treatment skills; mundane first aid does not."""
 
     def setUp(self) -> None:
         from world.conditions.constants import TreatmentTargetKind
@@ -534,19 +633,51 @@ class TreatmentRollSiteTests(ActivityTermTestCase):
             ),
         )
 
-    def test_mundane_treatment_adds_no_skills(self) -> None:
-        from world.conditions.services import perform_treatment
+    def treat_through_the_scene_action(self, treatment) -> Callable[[], object]:
+        """The ``treat_condition`` scene action's resolver, fed a request for ``treatment``."""
+        from world.scenes.action_services import _resolve_treatment_request
+
+        request = SimpleNamespace(
+            treatment=treatment,
+            target_condition_instance=self.wound,
+            target_pending_alteration=None,
+            initiator_persona=SimpleNamespace(character_sheet=self.helper_sheet),
+            target_persona=SimpleNamespace(character_sheet=self.target_sheet),
+            scene=self.scene,
+            thread_used=None,
+        )
+        return lambda: _resolve_treatment_request(request)
+
+    def test_zero_cost_bondless_scene_treatment_adds_no_skills(self) -> None:
+        self.assert_no_terms(
+            "world.conditions.services.perform_check_with_modifiers",
+            MagicActivity.MAGICAL_TREATMENT,
+            self.treat_through_the_scene_action(self.treatment),
+        )
+
+    def test_anima_costing_scene_treatment_adds_the_skills(self) -> None:
+        self.treatment.anima_cost = 1
+        self.treatment.save(update_fields=["anima_cost"])
+
+        self.assert_terms_reach(
+            "world.conditions.services.perform_check_with_modifiers",
+            MagicActivity.MAGICAL_TREATMENT,
+            self.treat_through_the_scene_action(self.treatment),
+        )
+
+    def test_bonded_and_resonance_costing_treatments_are_magical(self) -> None:
+        from world.conditions.services import _treatment_skill_terms
 
         self.map_activity(MagicActivity.MAGICAL_TREATMENT)
-        with (
-            roll_recorded("world.conditions.services.perform_check_with_modifiers") as calls,
-            self.assertRaises(RollReached),
-        ):
-            perform_treatment(
-                self.helper_sheet, self.target_sheet, self.scene, self.treatment, self.wound
-            )
+        bonded = TreatmentTemplateFactory(requires_bond=True)
+        resonant = TreatmentTemplateFactory(requires_bond=True, resonance_cost=2)
 
-        self.assertEqual(calls[0]["extra_traits"], ())
+        self.assertEqual(_treatment_skill_terms(bonded, technique_driven=False), self.expected)
+        self.assertEqual(_treatment_skill_terms(resonant, technique_driven=False), self.expected)
+        self.assertEqual(_treatment_skill_terms(self.treatment, technique_driven=False), ())
+        self.assertEqual(
+            _treatment_skill_terms(self.treatment, technique_driven=True), self.expected
+        )
 
 
 class CombatAndSpeciesRollSiteTests(ActivityTermTestCase):

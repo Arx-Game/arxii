@@ -311,12 +311,11 @@ class ResistingLossOfSelf(JourneyCase):
 
         self.assertEqual(terms, (ExtraTraitTerm(trait=self.skill.trait, weight=Decimal("0.50")),))
 
-    def test_a_friend_rallying_against_corruption_adds_the_skill(self) -> None:
+    def test_a_friends_rally_adds_nothing_of_his_own(self) -> None:
+        """The rally roll is Hobb's persuasion; Ysmay's skill joins only her own break-free."""
         self.hold_on_ysmay(loss_of_self=True)
 
-        terms = self.roll_after(self.hobb, "rally Ysmay")
-
-        self.assertEqual(terms, (ExtraTraitTerm(trait=self.skill.trait, weight=Decimal("0.50")),))
+        self.assertEqual(self.roll_after(self.hobb, "rally Ysmay"), ())
 
     def test_breaking_free_of_an_ordinary_hold_adds_nothing(self) -> None:
         self.hold_on_ysmay(loss_of_self=False)
