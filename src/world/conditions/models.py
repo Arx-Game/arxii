@@ -95,6 +95,14 @@ class ConditionCategory(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
         ),
     )
 
+    adds_loss_of_self_skills = models.BooleanField(
+        default=False,
+        help_text=(
+            "Resist and break-free rolls on conditions in this category add the skills "
+            "mapped to Resisting loss of self (corruption, atavism, possession)."
+        ),
+    )
+
     objects = NaturalKeyManager()
 
     class NaturalKeyConfig:

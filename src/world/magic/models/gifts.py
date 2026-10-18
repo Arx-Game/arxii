@@ -110,6 +110,19 @@ class Gift(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
             "(#2905). Null = defer to the caster's Path, as before."
         ),
     )
+    technique_skill = models.ForeignKey(
+        "arxii.Skill",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="technique_skill_gifts",
+        help_text=(
+            "Minor Gifts only (#4450): the skill added to every cast of this Gift's "
+            "techniques. A technique's own skill, if set, wins. A Major Gift's "
+            "techniques take the caster's Path technique skill instead. Blank = this "
+            "Gift adds no skill."
+        ),
+    )
     ultimate_techniques = models.ManyToManyField(
         "arxii.Technique",
         blank=True,
@@ -127,11 +140,26 @@ class Gift(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
     class NaturalKeyConfig:
         fields = ["name"]
 
+    class Meta:
+        constraints = [
+            models.CheckConstraint(
+                condition=models.Q(technique_skill__isnull=True) | models.Q(kind=GiftKind.MINOR),
+                name="gift_technique_skill_minor_only",
+            ),
+        ]
+
     def __str__(self) -> str:
         return self.name
 
     def clean(self) -> None:
         super().clean()
+        if self.technique_skill_id is not None and self.kind != GiftKind.MINOR:
+            raise ValidationError(
+                {
+                    "technique_skill": "A Major Gift's techniques take the caster's Path "
+                    "technique skill. Set it on the Path instead."
+                }
+            )
         if self.kind == GiftKind.MAJOR and self.pk and self.ultimate_techniques.exists():
             raise ValidationError(
                 {

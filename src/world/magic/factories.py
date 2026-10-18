@@ -33,6 +33,7 @@ from world.magic.constants import (
     EffectKind,
     GiftKind,
     GlimpseTagAxis,
+    MagicActivity,
     MagicMilestoneKind,
     ParticipationRule,
     PendingAlterationStatus,
@@ -67,6 +68,7 @@ from world.magic.models import (
     ImbuingProseTemplate,
     IntensityTier,
     KnownUltimate,
+    MagicActivitySkill,
     MagicalAlterationEvent,
     MagicalAlterationTemplate,
     MagicProgressionMilestone,
@@ -4553,3 +4555,18 @@ class CharacterSurgeTextFactory(factory.django.DjangoModelFactory):
 
     character_sheet = factory.SubFactory(_CHARACTER_SHEET_FACTORY)
     surge_text = ""
+
+
+class MagicActivitySkillFactory(factory.django.DjangoModelFactory):
+    """Factory for MagicActivitySkill: one skill added to one magical activity (#4450).
+
+    Not get-or-create: a test that builds the same (activity, skill) pair twice is
+    probing the unique constraint.
+    """
+
+    class Meta:
+        model = MagicActivitySkill
+
+    activity = MagicActivity.ANIMA_RITUAL
+    skill = factory.SubFactory("world.skills.factories.SkillFactory")
+    weight = Decimal("1.00")

@@ -93,7 +93,7 @@ class PathAdmin(GrantReachOnSaveMixin, admin.ModelAdmin):
     list_filter = ["stage", "is_active", "style"]
     search_fields = ["name", "description"]
     filter_horizontal = ["parent_paths"]
-    autocomplete_fields = ["style"]
+    autocomplete_fields = ["style", "technique_skill"]
     list_select_related = ["style"]
     inlines = [
         PathAspectInline,
@@ -105,6 +105,7 @@ class PathAdmin(GrantReachOnSaveMixin, admin.ModelAdmin):
     ]
     fieldsets = (
         (None, {"fields": ("name", "description", "stage", "minimum_level")}),
+        ("Casting", {"fields": ("technique_skill",)}),
         ("Display", {"fields": ("icon_url", "sort_order", "is_active")}),
         ("Evolution", {"fields": ("parent_paths",)}),
         CREDIT_FIELDSET,

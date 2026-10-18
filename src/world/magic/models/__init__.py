@@ -28,6 +28,7 @@ Submodules (see Scope 6 §4.4):
   ThreadWeavingTeachingOffer
 - rituals: Ritual, RitualComponentRequirement, ImbuingProseTemplate
 - portals: PortalAnchorKind, PortalAnchor (#2222)
+- magic_activity: MagicActivitySkill (#4450)
 - ritual_check_config: RitualCheckConfig
 - ritual_pool: RitualAnimaContribution (#3001)
 - reincarnation: Reincarnation
@@ -144,6 +145,7 @@ from world.magic.models.grants import (
 )
 from world.magic.models.knowledge import CharacterRitualKnowledge
 from world.magic.models.liturgy import RitualLiturgy
+from world.magic.models.magic_activity import MagicActivitySkill
 from world.magic.models.manifestation import CharacterManifestation, TechniqueManifestOption
 from world.magic.models.motifs import (
     Facet,
@@ -362,6 +364,8 @@ __all__ = [
     "KnownUltimate",
     # power config (#637)
     "LevelPowerConfig",
+    # activity-to-skill table (#4450)
+    "MagicActivitySkill",
     # progression dashboard (#536)
     "MagicProgressionMilestone",
     # alterations
