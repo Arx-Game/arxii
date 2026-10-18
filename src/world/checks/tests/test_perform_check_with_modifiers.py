@@ -47,6 +47,7 @@ class PerformCheckWithModifiersTest(TestCase):
                 scene=None,
                 extra_contributions=None,
                 skip_fashion=False,
+                extra_traits=(),
             )
             # perform_check received extra_modifiers=3+5=8.
             call_kwargs = mock_perform.call_args
@@ -93,6 +94,7 @@ class PerformCheckWithModifiersTest(TestCase):
                 scene=scene,
                 extra_contributions=None,
                 skip_fashion=False,
+                extra_traits=(),
             )
 
     def test_all_params_forwarded(self):
