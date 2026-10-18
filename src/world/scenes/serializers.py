@@ -614,6 +614,8 @@ class CastListEntrySerializer(serializers.Serializer):
     character name, never an account name; blank for a crowd nobody voices yet.
     ``count`` is the crowd's bodies (null for a named NPC); ``tier`` is the crowd's
     opponent tier. ``roster_entry_id``/``persona_id`` are null for an unvoiced crowd.
+    ``opponent_ids`` are the crowd's ``CombatOpponent`` rows (what ``voice_crowd``
+    takes); empty for a named NPC.
     """
 
     kind = serializers.ChoiceField(choices=["npc", "crowd"])
@@ -627,6 +629,7 @@ class CastListEntrySerializer(serializers.Serializer):
     tier = serializers.CharField(allow_null=True)
     count = serializers.IntegerField(allow_null=True)
     description = serializers.CharField(allow_blank=True)
+    opponent_ids = serializers.ListField(child=serializers.IntegerField())
 
 
 class SceneSummaryRevisionSerializer(serializers.ModelSerializer):

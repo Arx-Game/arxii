@@ -450,6 +450,8 @@ class TheGmSeesTheCast(JourneyCase):
         self.assertEqual([row["count"] for row in rows], [None, 8, 30])
         self.assertEqual([row["kind"] for row in rows], ["npc", "crowd", "crowd"])
         self.assertEqual(rows[0]["roster_entry_id"], vael.pk)
+        self.assertEqual(rows[0]["opponent_ids"], [])
+        self.assertEqual(sorted(rows[1]["opponent_ids"]), sorted(g.pk for g in self.guards))
         # Ravenna has no GM character: she shows as her role, never as her PC.
         self.assertEqual(rows[0]["played_by"], "GM")
         self.assertEqual(rows[0]["description"], "An officer.")
@@ -461,7 +463,12 @@ class TheGmSeesTheCast(JourneyCase):
         self.assertEqual(refused.status_code, status.HTTP_404_NOT_FOUND)
 
     def test_a_crowd_poses_under_its_own_name(self) -> None:
-        voiced = self._voice(self.guards, "Gate guards")
+        # The GM voices the crowd with exactly the ids its cast list row carries.
+        (crowd,) = self._cast_list().json()
+        self.assertEqual(len(crowd["opponent_ids"]), 8)
+        voiced = self.web(
+            self.ravenna, "voice_crowd", opponent_ids=crowd["opponent_ids"], name="Gate guards"
+        )
         self.assertTrue(voiced.detail.success, voiced.detail.message)
         persona_id = voiced.detail.data["persona_id"]
         self._lend(voiced.detail.data["roster_entry_id"])

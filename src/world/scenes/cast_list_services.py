@@ -54,6 +54,7 @@ class CastListEntry:
     tier: str | None
     count: int | None
     description: str
+    opponent_ids: list[int]
 
 
 @dataclass(frozen=True)
@@ -273,6 +274,7 @@ def _unvoiced_crowd(rows: list[CombatOpponent]) -> CastListEntry:
         loan_status=None,
         tier=first.tier,
         count=sum(_bodies(row) for row in rows),
+        opponent_ids=[row.pk for row in rows],
         description=description,
     )
 
@@ -293,6 +295,7 @@ def _voiced_crowd(rows: list[CombatOpponent], player: _Player | None) -> CastLis
         loan_status=loan.status if loan is not None else None,
         tier=first.tier,
         count=sum(_bodies(row) for row in rows),
+        opponent_ids=[row.pk for row in rows],
         description=_description(voice.character_sheet) or first.description,
     )
 
@@ -336,6 +339,7 @@ def scene_cast_list(scene: Scene) -> list[CastListEntry]:
                 loan_status=player.loan.status if player.loan is not None else None,
                 tier=None,
                 count=None,
+                opponent_ids=[],
                 description=_description(entry.character_sheet),
             )
         )
