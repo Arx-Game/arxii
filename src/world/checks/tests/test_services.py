@@ -933,7 +933,25 @@ class CapabilityCountedOnceTests(TestCase):
     def test_wrapper_total_equals_perform_check_total(self):
         bare = perform_check(self.character, self.check_type)
         wrapped = perform_check_with_modifiers(self.character, self.check_type)
-        assert wrapped.total_points == bare.total_points
+        # Pinned: level 1 (LEVEL_POINTS_PER_LEVEL) + capability 10, counted once.
+        assert bare.total_points == LEVEL_POINTS_PER_LEVEL + 10
+        assert wrapped.total_points == LEVEL_POINTS_PER_LEVEL + 10
+
+    def test_impairment_is_counted_once(self):
+        from world.mechanics.factories import CharacterModifierFactory, ModifierTargetFactory
+
+        impaired = CapabilityTypeFactory(name="test_svc_counted_once_impaired", innate_baseline=5)
+        target = ModifierTargetFactory(target_capability=impaired)
+        CharacterModifierFactory(character=self.sheet, target=target, value=-5)
+        impaired_check = CheckTypeFactory(name="test_svc_counted_once_impaired_check")
+        CheckTypeCapabilityModifierFactory(
+            check_type=impaired_check, capability=impaired, weight=Decimal("2.0")
+        )
+        # effective 0 vs baseline 5 -> deviation -5, weight 2.0 -> -10, once.
+        bare = perform_check(self.character, impaired_check)
+        wrapped = perform_check_with_modifiers(self.character, impaired_check)
+        assert bare.total_points == LEVEL_POINTS_PER_LEVEL - 10
+        assert wrapped.total_points == LEVEL_POINTS_PER_LEVEL - 10
 
     def test_wrapper_adds_only_non_capability_contributions(self):
         self.sheet.rollmod = 3
