@@ -108,6 +108,7 @@ describe('LiveAnswerPanel', () => {
     expect(screen.getByText('used 2 times')).toBeInTheDocument();
     expect(screen.getByText(/onlooker_line: \[staff-authored onlooker line\]/)).toBeInTheDocument();
     expect(screen.getByText(/Showing Ombrin's answers at Partial Success and below/)).toBeVisible();
+    expect(screen.getByText(/a closing rite never raises this prompt/)).toBeVisible();
     expect(screen.getByRole('radio', { name: /Miracle: \[miracle name\]/ })).toBeDisabled();
     expect(screen.getByText(/Shown greyed: Favor with Ombrin \(4\) is below/)).toBeVisible();
     // No edit control for a level that may not adapt answers.

@@ -80,6 +80,7 @@ export function LiveAnswerPanel({
           {blocked
             ? ''
             : ` · ${panel.being_name} has not answered ${panel.subject_name} live this game week`}
+          {' · a closing rite never raises this prompt'}
         </span>
       </div>
       {blocked && (
