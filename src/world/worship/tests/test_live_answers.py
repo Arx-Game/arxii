@@ -9,6 +9,8 @@ at Ombrin's shrine, with a GM running the scene.
 
 from __future__ import annotations
 
+from unittest import mock
+
 from rest_framework.test import APIClient
 
 from actions.definitions.worship import (
@@ -42,7 +44,7 @@ from world.worship.live_services import (
     send_live_answer,
 )
 from world.worship.models import MiraclePerformance, Vision
-from world.worship.services import miracle_ineligibility
+from world.worship.services import miracle_ineligibility, perform_divine_intervention
 from world.worship.tests.test_answers import AnswerTestBase
 
 _ANSWER = "[staff-authored answer text]"
@@ -177,6 +179,7 @@ class PanelTests(LiveTestBase):
 
         prompt.refresh_from_db()
         self.assertEqual(prompt.status, GMPromptStatus.DISMISSED)
+        self.assertEqual(prompt.resolution_note, "Dismissed: nothing was sent.")
         self.assertEqual(self._vision_count(), 0)
         self.assertEqual(self._favor(), 4)  # the rite's award stands
         # Dismissing used none of the week's limit.
@@ -433,6 +436,44 @@ class MiracleTests(LiveTestBase):
         with self.assertRaises(StewardAnswerError):
             send_live_answer(self._prompt(), resolver=self.gm_account, miracle=miracle)
         self.assertFalse(MiraclePerformance.objects.exists())
+
+    def test_a_miracle_that_fails_before_it_is_done_reopens_the_prompt(self) -> None:
+        miracle = MiracleFactory(being=self.being, favor_threshold=1, resonance_pool_cost=10)
+        self._general("Partial Success")
+        self._perform("Partial Success")
+
+        with (
+            mock.patch(
+                "world.worship.services.perform_divine_intervention", side_effect=RuntimeError
+            ),
+            self.assertRaises(RuntimeError),
+        ):
+            send_live_answer(self._prompt(), resolver=self.gm_account, miracle=miracle)
+
+        self.assertEqual(self._prompt().status, GMPromptStatus.PENDING)
+
+    def test_a_failure_after_the_miracle_was_done_does_not_reopen_the_prompt(self) -> None:
+        """A second miracle must not be sendable once the first was performed."""
+        miracle = MiracleFactory(being=self.being, favor_threshold=1, resonance_pool_cost=10)
+        self._general("Partial Success")
+        self._perform("Partial Success")
+        real = perform_divine_intervention
+
+        def performed_then_failed(*args, **kwargs):
+            real(*args, **kwargs)
+            raise RuntimeError
+
+        with (
+            mock.patch(
+                "world.worship.services.perform_divine_intervention",
+                side_effect=performed_then_failed,
+            ),
+            self.assertRaises(RuntimeError),
+        ):
+            send_live_answer(self._prompt(), resolver=self.gm_account, miracle=miracle)
+
+        self.assertEqual(self._prompt().status, GMPromptStatus.CONFIRMED)
+        self.assertEqual(MiraclePerformance.objects.filter(miracle=miracle).count(), 1)
 
     def test_another_beings_miracle_is_refused(self) -> None:
         foreign = MiracleFactory(favor_threshold=0, resonance_pool_cost=0)

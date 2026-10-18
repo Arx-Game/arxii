@@ -475,7 +475,7 @@ def dismiss_being_answer(
     if is_live_prompt(prompt):
         # A rite waiting for a live answer has no pledge to draw for: dismissing
         # sends nothing, and the rite's award has already landed.
-        dismiss_live_prompt(prompt, resolver=resolver, note=note)
+        dismiss_live_prompt(prompt, resolver=resolver)
         return AnswerDelivery(answer=None, vision=None, held=False)
     details = _prompt_details(prompt)
     _resolve_prompt(prompt, status=GMPromptStatus.DISMISSED, resolver=resolver, note=note)

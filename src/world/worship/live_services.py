@@ -63,7 +63,8 @@ NOTE_ANSWERED_ELSEWHERE = "Another GM of the scene answered."
 NOTE_ANSWER = "Sent an authored answer."
 NOTE_ADAPTED = "Sent an authored answer with edited text."
 NOTE_MIRACLE = "Performed a miracle."
-NOTE_SCENE_ENDED = "The scene ended before an answer."
+NOTE_DISMISSED = "Dismissed: nothing was sent."
+LIVE_MIRACLE_TRIGGER = "live_rite"  # the audit row's trigger_event for a miracle sent live
 
 
 # ---------------------------------------------------------------------------
@@ -350,15 +351,29 @@ def _send_miracle(
             being,
             miracle,
             scene=prompt.scene,
-            trigger_event="live_rite",
+            trigger_event=LIVE_MIRACLE_TRIGGER,
         )
     finally:
-        if done is None:  # it raised: the GM may choose again
+        # It raised: the GM may choose again, unless the miracle was already performed
+        # (a failure after its own commit must not let a second one be sent).
+        if done is None and not _miracle_performed(miracle, sheet, prompt):
             _reopen(prompt)
     return LiveSend(being=being, sheet=sheet, miracle=miracle, performance=done)
 
 
-def dismiss_live_prompt(prompt: GMPrompt, *, resolver: AccountDB | None, note: str) -> None:
+def _miracle_performed(miracle: Miracle, sheet, prompt: GMPrompt) -> bool:
+    from world.worship.models import MiraclePerformance  # noqa: PLC0415
+
+    return MiraclePerformance.objects.filter(
+        miracle=miracle,
+        target_character=sheet,
+        scene=prompt.scene,
+        trigger_event=LIVE_MIRACLE_TRIGGER,
+        created_at__gte=prompt.created_at,
+    ).exists()
+
+
+def dismiss_live_prompt(prompt: GMPrompt, *, resolver: AccountDB | None) -> None:
     """Close a live prompt unanswered: nothing is sent, the rite's award stands."""
     from world.gm.constants import GMPromptStatus  # noqa: PLC0415
     from world.gm.models import GMPrompt as GMPromptModel  # noqa: PLC0415
@@ -376,7 +391,7 @@ def dismiss_live_prompt(prompt: GMPrompt, *, resolver: AccountDB | None, note: s
             raise StewardAnswerError(MSG_NOT_PENDING)
         prompt.status = GMPromptStatus.DISMISSED
         prompt.resolved_by = resolver
-        prompt.resolution_note = note
+        prompt.resolution_note = NOTE_DISMISSED
         prompt.save(update_fields=["status", "resolved_by", "resolution_note"])
 
 
