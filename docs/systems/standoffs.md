@@ -7,9 +7,11 @@ ADR-4145-A (a standoff is round zero of the encounter, derived from OPEN groups)
 ADR-4145-B (one difficulty function for social checks on a character), and ADR-4354-A (a
 standoff proposal is a GM decision prompt, and GM-run is derived), and ADR-4361-A (a
 placement's profile is stamped on each opponent at spawn), and ADR-4373-A (a named NPC's
-group reads its persona live and stamps nothing on it). Issue #4145 (missions),
+group reads its persona live and stamps nothing on it), and ADR-4415-A (a broken hold asks
+the NPC's cause again, and the cause decides). Issue #4145 (missions),
 #4354 (GM-run scenes), #4361 (placement edits and inherited faction rules), #4373 (named
-NPCs and the language gate), umbrella #4121.
+NPCs and the language gate), #4415 (Hunger, Hatred, Territory and the broken hold),
+umbrella #4121.
 Later slices are listed at the end.
 
 ## Lifecycle
@@ -47,13 +49,13 @@ Later slices are listed at the end.
 | Model | Purpose |
 |---|---|
 | `CreatureDrive` (:28) | A property a creature template wants, with `DriveStrength` (1 Minor, 2 Major, 3 Defining). Unique per template and property. |
-| `FactionRule` (:62, was `RegardRule`, renamed #4354) | How a group stands toward particular characters: predicate `rule` (the one ratified JSON field, ADR-0007), `deed_archetype` FK, `difficulty_shift_bands`, `drive` + `drive_shift`, `suppresses_cause`, `angle_text` (was `spark_text`), `revealed_text`. Owned by exactly one of `creature_template`, `organization` or `society` (#4361, check constraint `faction_rule_one_owner`). |
+| `FactionRule` (:62, was `RegardRule`, renamed #4354) | How a group stands toward particular characters: predicate `rule` (the one ratified JSON field, ADR-0007), `deed_archetype` FK, `difficulty_shift_bands`, `drive` + `drive_shift`, `cause_effect` (#4415, `CauseEffect`: NONE, SUPPRESS, PROVOKE; was the boolean `suppresses_cause`), `angle_text` (was `spark_text`), `revealed_text`. Owned by exactly one of `creature_template`, `organization` or `society` (#4361, check constraint `faction_rule_one_owner`). |
 | `StandoffApproach` (:141) | A press: `check_type`, `capability` (aims at drives through `Application`), `sway_target` modifier target, `damages_morale`, `is_verbal` (#4373: spoken, so the language gate applies), `archetypes`, `display_order`. |
 | `StandoffTerms` (:195) | `effect` (`TermsEffect`: PASS, FLEE, TURN, TOLL), `critical_effect` (applied instead on a critical), `required_drive`, `difficulty_shift_bands`, `archetypes`, `display_order`. |
-| `StandoffConfig` (:257) | Singleton: `read_check_type`, `terms_check_type`, `pass_condition`, `turn_condition`, `botch_force_bands`, `band_force_percent`, `over_level_percent_per_tier`, `falter_force_percent`, `break_force_percent`. `load()` returns it. |
+| `StandoffConfig` (:257) | Singleton: `read_check_type`, `terms_check_type`, `pass_condition`, `turn_condition`, `botch_force_bands`, `band_force_percent`, `over_level_percent_per_tier`, `falter_force_percent`, `break_force_percent`, and (#4415) `hunger_margin_step` (default 10) and `territory_patience` (default 3, at least 1). `load()` returns it. |
 | `StandoffApproach.casts_technique` / `StandoffConfig.terms_ease_faltering`, `terms_ease_broken` | #4147: a casting approach (the display of power) and the bands terms ease by morale (see "Display of power and morale"). |
 | `StandoffCauseGloss` (:338, #4354) | The one-line player-facing gloss under a revealed cause, one row per `CauseKind`, authored in admin (was a hardcoded dict). |
-| `StandoffGroup` (:368) | One band in one encounter: `creature_template`, `persona` (#4373: set for a named NPC's own group; its template is then the one it was spawned from, or null), `state` (OPEN, PROPOSED, SETTLED, FIGHTING), `terms_ease`, `emboldened_bands`, `settled_outcome`, and (#4354) `proposal_reason`, `override_party_force`, `override_group_force`. Unique per encounter, template and persona (nulls not distinct); one of template or persona is set (`standoff_group_template_or_persona`). `name` is the persona's or the template's; `referent` is how a room line names it ("Maud Carrow", "the Sellswords"). Deleting its `creature_template` or `persona` deletes the group (CASCADE). |
+| `StandoffGroup` (:368) | One band in one encounter: `creature_template`, `persona` (#4373: set for a named NPC's own group; its template is then the one it was spawned from, or null), `state` (OPEN, PROPOSED, SETTLED, FIGHTING), `terms_ease`, `emboldened_bands`, `settled_outcome`, and (#4354) `proposal_reason`, `override_party_force`, `override_group_force`, and (#4415) `actions_elapsed` (the clock: party actions taken while it stood in the standoff). Unique per encounter, template and persona (nulls not distinct); one of template or persona is set (`standoff_group_template_or_persona`). `name` is the persona's or the template's; `referent` is how a room line names it ("Maud Carrow", "the Sellswords"). Deleting its `creature_template` or `persona` deletes the group (CASCADE). |
 | `StandoffReveal` | A thing a read uncovered: `kind` (CAUSE, DRIVE, FACTION_RULE) plus `drive` (a `Property` since #4361; it was a `CreatureDrive`, but a placement can add a drive its template lacks) or `faction_rule`. Group-wide, shared knowledge. |
 | `StandoffAngleShare` (:490, was `StandoffSparkShare`) | A character choosing to share an angle for a group. Unique per group, sheet and rule. |
 | `StandoffMoraleRuling` (:586, #4354) | A GM moved a group one morale state: `direction` (SHAKE, STEADY), required `reason`, `ruled_by`. The GM's own record. |
@@ -65,7 +67,8 @@ regard turns into bands), `CreatureTemplate.language` (the language its creature
 blank is none) and `BeatOpponentLine.persona` (a named NPC who stands as the line's one
 opponent; the line's count must be 1).
 
-Also added elsewhere: `CreatureTemplate.cause` (`CauseKind`: NONE, PREDATION, ORDERS) and
+Also added elsewhere: `CreatureTemplate.cause` (`CauseKind`: NONE, PREDATION, ORDERS, and since
+#4415 HUNGER, HATRED, TERRITORY) and
 `cause_margin_percent` (must stay above -100) (`combat/models.py`, `combat/constants.py`); `OpponentTierTemplate.force_weight_percent` (how much one opponent of a tier counts in group force; default 100 for every tier, staff tune it per tier in admin); `CombatEncounter`'s
 `initiated_by_pc_side` help text now says a cause stamps False;
 `MissionOption.opens_as_standoff` (`missions/models.py:700`, ENCOUNTER options only).
@@ -107,9 +110,10 @@ admins in `world/standoffs/admin.py`.
   a no-morale tier counts as steady). `effective_party_force` takes off `band_force_percent`
   per `emboldened_bands`. Predation (`cause_fires`) fires when the party does not outweigh the
   group by its margin, unless every active participant matches a suppressing faction rule
-  (`faction_rules.py`). Orders (#4354) fires the same way and also on a provocation: a botched
+  (`faction_rules.cause_effects`). Orders (#4354) fires the same way and also on a provocation: a botched
   press or terms against that group, passed to `evaluate_causes` as `provoked`/`provocation` on
-  that action only. `cause_fire_reason` (`force.py:165`) returns why (system text), or None. Opponent level is the party average at spawn (scaling), so headcount and the
+  that action only. Hunger, Hatred and Territory (#4415) are in their own section below.
+  `cause_fire_reason` (`force.py`) returns why (system text), or None. Opponent level is the party average at spawn (scaling), so headcount and the
   mission band are what move the comparison; whittling, wounding or breaking the group stops
   it firing, wounded party members make it likelier.
 - **NPC-initiated fight is delivered live**: `end_standoff_into_fight(initiated_by_pc_side=
@@ -170,7 +174,10 @@ admins in `world/standoffs/admin.py`.
   `standoff_terms` (:712), `standoff_fight` (:805), `standoff_share_angle` (:822). Each locks
   the encounter (and group) row and rechecks state; a verb after the standoff ended or the
   group settled is refused with a message and no roll. A PROPOSED group can still be acted on.
-  Every verb ends by testing causes (#4354; a read or share used not to). `press_difficulty`
+  Every verb ends by testing causes (#4354; a read or share used not to), with
+  `after_action=True` so each live group's clock moves first (#4415). The verb returns the room
+  lines that test produced as `StandoffActionResult.cause_lines` (a Territory warning, then the
+  attack line), and the action layer sends them after the verb's own line. `press_difficulty`
   (:403) and `terms_difficulty` (:423) are shared by the roll and the payload so a shown grade matches
   the roll.
 - **Read grading**: checks have five tiers (-2 to 2). Failure reveals nothing; a partial
@@ -462,14 +469,62 @@ affiliation brings, and the predicate widget for each rule's test.
   drives read-only (from the persona) and its rail says what the spawn speaks; the beat inline
   has an autocomplete `persona`.
 
+## Hunger, Hatred, Territory and the broken hold (#4415)
+
+- **The clock.** `StandoffGroup.actions_elapsed` counts party actions (read, press, terms,
+  share) taken while the group stood in the standoff: `evaluate_causes(..., after_action=True)`
+  adds one to every live group before testing (`force._count_action`). Arrival
+  (`open_standoff`) and GM controls (morale, proposals) do not move it.
+- **Hunger** fires as Predation does, with the margin widened by
+  `StandoffConfig.hunger_margin_step` per action on the clock (`hunger_margin`): a margin-0
+  crowd needs the party to outweigh it now, and by 30 percent after three unfed actions at the
+  default step. Terms that feed them settle the group, which stops the clock; the reason names
+  the widened margin (`REASON_HUNGER`).
+- **Hatred** never fires on force. It fires only when a participant matches a faction rule with
+  `cause_effect` PROVOKE, and stops once every active member is broken (`group_is_broken`), so
+  breaking their morale is how a party gets past it (the GM's Shake can do it too).
+- **Territory** fires once the clock reaches `territory_patience` (`REASON_TERRITORY`). One
+  action earlier the room gets "The <group> are losing patience." (`patience_line`, "is" for a
+  named NPC), unless every participant matches a suppressing rule.
+- **Cause effect** (`FactionRule.cause_effect`, `faction_rules.cause_effects`): per active
+  participant, the most specific matched rule with an effect decides (Provoke beats Suppress at
+  the same level). A Provoke sets off any cause but None whatever the force, unless the group is
+  broken (`REASON_RULE_PROVOKES` names the character, GM-only). Suppress for every participant
+  stops any other trigger, as `suppresses_cause` did. The Builder and Faction Rules page edit it
+  as a select; the GM panel and `standoff` GM text mark a rule "provokes them" or "keeps them
+  back".
+- **The GM view** carries `cause_clock` ("Hunger margin 30%, widening 10 each action nobody
+  feeds them." or "Patience: 2 of 3 actions."), shown under the cause on the web panel and in
+  the telnet GM text.
+- **The broken-hold re-test** (`services/release.py`, ADR-4415-A).
+  `retest_cause_on_release(target)` runs after a hold's condition is removed, from
+  `end_allegiance_with_pool` (break, settle, the lapse auto-roll) and from the lapse sweep's
+  plain removal. For each ACTIVE opponent on that body with a cause, in an encounter not
+  COMPLETED: a group already PROPOSED is left as it is (so when every member of a settled
+  group lapses on one sweep the first member's released reason stands); an OPEN group just has
+  its causes tested (`evaluate_causes`). Otherwise
+  `release_reason` asks the cause with `released=True` (Territory holds while the party is
+  there); terms a settled group accepted meet Orders, Hunger and Territory. No reason: the
+  opponent goes FLED and the room reads "<name> leaves.". A reason, on a settled group in round
+  zero: the group goes back to OPEN and its cause fires with `REASON_RELEASED` (a proposal where
+  a GM runs the scene, else the fight begins NPC-initiated). Once round one has begun, a settled
+  group goes back to FIGHTING and the NPC fights on. An opponent with no group (an encounter
+  that never opened a standoff) is tested through an unsaved group of its kind (`group_of`).
+- **Config admin.** `StandoffConfigAdmin` groups its fields (Checks and holds, Causes, Force,
+  Terms and regard) and adds a Preview rail (`change_form_template`
+  `admin/standoffs/standoffconfig/change_form.html`, `describe.config_preview`) saying what the
+  Hunger step and Territory patience do over a few actions.
+- **Migrations** `0244` (schema: the new columns and the wider `CauseKind` choices), `0245`
+  (data only: `suppresses_cause=True` becomes `cause_effect="suppress"`), `0246` (drops
+  `suppresses_cause`). Faction rules are authored content; the disposition is restructure.
+
 ## Later slices
 
 Plan from #4121 (the proposed slice cut there):
 
 - **Slice 2, placement edits and inheritance:** built in #4361 (sections above).
 - **Slice 3, named NPCs and language:** built in #4373 (section above).
-- **Slice 4:** Hunger, Hatred and Territory, `cause_effect`, and the cause re-test when a
-  Charmed or Calm hold breaks.
+- **Slice 4, the remaining causes and the broken hold:** built in #4415 (section above).
 - **Slice 5:** opt-in profiles for player characters.
 - **Separately:** resonance from acts via archetype tags. `StandoffApproach.archetypes` and
   `StandoffTerms.archetypes` are stored for it and unread today.

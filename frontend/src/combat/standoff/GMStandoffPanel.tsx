@@ -20,9 +20,11 @@ import { MoraleStateChip } from './MoraleStateChip';
 type GMStandoffView = components['schemas']['GMStandoffView'];
 type GMGroupView = components['schemas']['GMGroupView'];
 
-/** True when the party's effective force beats the group's by the cause margin. */
+/** True when the party's effective force beats the group's by the margin in force now. */
 function partyOutweighs(group: GMGroupView): boolean {
-  return group.effective_party_force * 100 > group.group_force * (100 + group.cause_margin_percent);
+  return (
+    group.effective_party_force * 100 > group.group_force * (100 + group.effective_margin_percent)
+  );
 }
 
 function readLabel(rule: GMGroupView['faction_rules'][number]): string {
@@ -38,6 +40,12 @@ function EditedMark({ text = 'edited here' }: { text?: string }) {
 function fmt(n: number): string {
   return String(Math.round(n));
 }
+
+/** What a faction rule does to the group's cause, beside its label (#4415). */
+const CAUSE_EFFECT_WORD: Record<string, string> = {
+  provoke: 'provokes them',
+  suppress: 'keeps them back',
+};
 
 const MORALE_ORDER = ['steady', 'falter', 'break'] as const;
 const MORALE_WORD: Record<string, string> = {
@@ -175,6 +183,14 @@ function GroupBox({ encounterId, group }: { encounterId: number; group: GMGroupV
               <EditedMark />
             </>
           )}
+          {group.cause_clock && (
+            <span
+              className="block text-xs text-muted-foreground"
+              data-testid="gm-standoff-cause-clock"
+            >
+              {group.cause_clock}
+            </span>
+          )}
         </dd>
         <dt className="text-muted-foreground">Drives</dt>
         <dd>
@@ -263,7 +279,15 @@ function GroupBox({ encounterId, group }: { encounterId: number; group: GMGroupV
           <tbody>
             {group.faction_rules.map((r) => (
               <tr key={r.faction_rule_id} className="border-t border-border align-top">
-                <td className="py-1 pr-2">{r.label}</td>
+                <td className="py-1 pr-2">
+                  {r.label}
+                  {CAUSE_EFFECT_WORD[r.cause_effect] && (
+                    <span className="text-muted-foreground">
+                      {' '}
+                      · {CAUSE_EFFECT_WORD[r.cause_effect]}
+                    </span>
+                  )}
+                </td>
                 <td className="py-1 pr-2 text-muted-foreground">{r.source}</td>
                 <td className="py-1 pr-2">
                   {r.matched_by.length > 0 ? r.matched_by.join(', ') : 'nobody'}

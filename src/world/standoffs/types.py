@@ -22,7 +22,9 @@ class StandoffActionResult:
     fight_started: bool = False
     settled: bool = False
     morale_line: str = ""
-    attack_line: str = ""
+    # Room lines from testing the causes after the verb, in order: a Territory group's
+    # "losing patience" warning (#4415), then the attack line if the fight began.
+    cause_lines: list[str] = field(default_factory=list)
     # Set when a display stopped at the Soulfray checkpoint; the press may be re-sent
     # with ``confirm_soulfray_risk`` to accept it.
     soulfray_warning: SoulfrayWarning | None = None

@@ -28,6 +28,7 @@ from world.standoffs.constants import (
     REASON_OUTWEIGHED,
     REASON_PROVOKED_PRESS,
     REASON_PROVOKED_TERMS,
+    CauseEffect,
     ProposalResolution,
     StandoffGroupState,
     TermsEffect,
@@ -155,7 +156,9 @@ class OrdersInAGMRunStoryTests(ProposalBase):
         self.assertEqual(self.group.proposal_reason, REASON_OUTWEIGHED)
 
     def test_a_suppressing_faction_rule_stops_the_provocation(self) -> None:
-        FactionRuleFactory(creature_template=self.template, rule={}, suppresses_cause=True)
+        FactionRuleFactory(
+            creature_template=self.template, rule={}, cause_effect=CauseEffect.SUPPRESS
+        )
         self.botch_press()
         self.refresh()
         self.assertEqual(self.group.state, StandoffGroupState.OPEN)

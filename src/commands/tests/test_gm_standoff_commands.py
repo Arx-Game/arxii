@@ -85,7 +85,7 @@ class GMStandoffTelnetTests(TestCase):
         prompt = self._propose()
         with mock.patch("world.gm.prompt_services.get_active_scene", return_value=self.scene):
             text = self._run(CmdGMDashboard, "prompts")
-        self.assertIn(f"[{prompt.pk}] Standoff", text)
+        self.assertIn(f"[{prompt.pk}] Standoff: {GROUP}", text)
         self.assertIn(f"{GROUP}: cause fires. Cause: Orders.", text)
         self.assertIn(f"gm prompt hold {prompt.pk}", text)
 

@@ -27,7 +27,9 @@ from world.standoffs.constants import (
 from world.standoffs.models import StandoffConfig
 from world.standoffs.services.faction_rules import faction_rule_matches
 from world.standoffs.services.force import (
+    cause_clock,
     cause_fire_reason,
+    effective_margin,
     effective_party_force,
     group_force,
     party_force,
@@ -44,7 +46,7 @@ from world.standoffs.services.state import active_members, is_in_standoff
 from world.standoffs.services.verbs import regard_for
 
 if TYPE_CHECKING:
-    from world.combat.models import CombatEncounter
+    from world.combat.models import CombatEncounter, CreatureTemplate
     from world.standoffs.models import FactionRule, StandoffGroup
 
 _EVERYONE = "matches everyone"
@@ -68,7 +70,7 @@ class GMFactionRuleView:
     label: str
     angle_text: str
     difficulty_shift_bands: int
-    suppresses_cause: bool
+    cause_effect: str
     matched_by: list[str]
     revealed: bool
     source: str = ""
@@ -103,6 +105,8 @@ class GMGroupView:
     cause_fires: bool
     cause_reason: str
     cause_margin_percent: int
+    effective_margin_percent: int
+    cause_clock: str
     proposal_reason: str
     pending_prompt_id: int | None
     last_decision: str
@@ -227,6 +231,21 @@ def _regards(group: StandoffGroup, participants: list, config: StandoffConfig) -
     return views
 
 
+def _matched_by(group: StandoffGroup, participants: list, rules: list) -> dict[int, list[str]]:
+    """Each rule's pk to the presented names of the participants it matches."""
+    matched: dict[int, list[str]] = {entry.rule.pk: [] for entry in rules}
+    for participant in participants:
+        sheet = participant.character_sheet
+        for match in faction_rule_matches(group, sheet, rules):
+            matched[match.rule.pk].append(_presented_name(sheet))
+    return matched
+
+
+def _template_strengths(template: CreatureTemplate) -> dict[int, int]:
+    """The template's own drive strengths by property, to mark what a placement edited."""
+    return {drive.property_id: drive.strength for drive in template.drives.all()}
+
+
 def _gm_group(group: StandoffGroup, participants: list, config: StandoffConfig) -> GMGroupView:
     template = group.creature_template
     members = active_members(group)
@@ -234,20 +253,12 @@ def _gm_group(group: StandoffGroup, participants: list, config: StandoffConfig) 
     revealed_drive_ids = {r.drive_id for r in reveals if r.kind == RevealKind.DRIVE}
     revealed_rule_ids = {r.faction_rule_id for r in reveals if r.kind == RevealKind.FACTION_RULE}
     rules = group_rules(group)
-    matched: dict[int, list[str]] = {entry.rule.pk: [] for entry in rules}
-    for participant in participants:
-        sheet = participant.character_sheet
-        for match in faction_rule_matches(group, sheet, rules):
-            matched[match.rule.pk].append(_presented_name(sheet))
+    matched = _matched_by(group, participants, rules)
     cause, margin = group_cause(group)
     organization = group_organization(group)
     # A named NPC's drives are its persona's own (ADR-4373-A): nothing there is "edited".
     compares_template = template is not None and group.persona_id is None
-    template_strengths = (
-        {drive.property_id: drive.strength for drive in template.drives.all()}
-        if compares_template
-        else {}
-    )
+    template_strengths = _template_strengths(template) if compares_template else {}
     live = group.state in LIVE_GROUP_STATES and bool(members)
     reason = cause_fire_reason(group, config, lapse_override=False) if live else None
     prompts = pending_prompts(group) if group.state == StandoffGroupState.PROPOSED else []
@@ -261,6 +272,8 @@ def _gm_group(group: StandoffGroup, participants: list, config: StandoffConfig) 
         cause_fires=reason is not None,
         cause_reason=reason or "",
         cause_margin_percent=margin,
+        effective_margin_percent=effective_margin(group, cause, margin, config),
+        cause_clock=cause_clock(group, config) if live else "",
         affiliation=organization.name if organization is not None else "",
         cause_edited=template is not None and cause != template.cause,
         affiliation_edited=template is not None and organization != template.organization,
@@ -291,7 +304,7 @@ def _gm_group(group: StandoffGroup, participants: list, config: StandoffConfig) 
                 label=faction_rule_label(entry.rule),
                 angle_text=entry.rule.angle_text,
                 difficulty_shift_bands=entry.rule.difficulty_shift_bands,
-                suppresses_cause=entry.rule.suppresses_cause,
+                cause_effect=entry.rule.cause_effect,
                 matched_by=matched[entry.rule.pk],
                 revealed=entry.rule.pk in revealed_rule_ids,
                 source=entry.source,

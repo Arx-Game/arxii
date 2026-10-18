@@ -41,6 +41,9 @@ class CauseKind(models.TextChoices):
     NONE = "none", "None"
     PREDATION = "predation", "Predation"
     ORDERS = "orders", "Orders"
+    HUNGER = "hunger", "Hunger"
+    HATRED = "hatred", "Hatred"
+    TERRITORY = "territory", "Territory"
 
 
 class EncounterType(models.TextChoices):
