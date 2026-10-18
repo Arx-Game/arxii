@@ -88,5 +88,7 @@ export interface PerformRitualRequest {
 export interface PerformRitualResponse {
   ritual_id: number;
   execution_kind: string;
+  /** The performer's own line; sent for the personal anima ritual (SCENE_ACTION). */
+  message?: string;
   result?: Record<string, unknown>;
 }
