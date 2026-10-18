@@ -117,7 +117,14 @@ actions, backends, and service functions.
   narrator the same way (`You narrate to Ysmay, Hobb: ...`). `CmdPage` takes its
   sender from the session's puppet, or from the caller when the caller is a character and
   no session is on the line (#3657: with no sender, the block and mute checks ran against
-  nobody and a blocked player's page was delivered).
+  nobody and a blocked player's page was delivered). Its quiet-mode checks key the
+  allow-list off the caller's account whichever shape the caller takes: `page` sits in the
+  `AccountCmdSet`, but a player typing it through a puppet reaches it with the character as
+  `self.caller` (only a session with no puppet gives the account), and the check had compared
+  the character's pk against account ids, so a hidden player's allow-list never let anyone
+  through (#3657 tranche 5). Every player path of `page` is typed in
+  `integration_tests/test_faces_silences_and_the_floor_journeys.py`; `tests/test_cmd_page.py`
+  keeps only the web form descriptor.
 - **`language.py`**: `CmdSpeak` (`speak [<language>]`, #2993) — telnet face of
   `SetLanguageAction`; sets (or, with no argument, resets to the universal default) the caller's
   sticky `current_language` via iexact `Language` name lookup. `CmdTrainLanguage`
@@ -215,7 +222,12 @@ actions, backends, and service functions.
   `InterposeSceneAction`, #1744/#1316), bare `scene`/`scene status` (read-only round status, no
   action). Web reaches `StartSceneAction`/`FinishSceneAction`/`GrantSceneGMAction` through the
   same generic available-actions dispatcher. See "Scene Administration" in
-  `docs/systems/scenes.md`. No business logic in the command.
+  `docs/systems/scenes.md`. No business logic in the command. Every subcommand is typed
+  through the handler in `integration_tests/test_playing_a_scene_journeys.py` (`RunningAScene`,
+  `PacingTheRoom`); the hand-built `test_scene_command` and `test_scene_round_journey_e2e`
+  are gone (#3657 tranche 5, ledger `docs/testing/ledger/commands.csv`), as are the
+  hand-built tests for `react`, `places`, `event`, `persona` and the block/mute commands,
+  whose lines live in the scene, faces and gathering journeys.
 - **`scene_checks.py`**: `CmdCheck` (`check`, #3295) and `CmdCallCheck` (`callcheck`), thin over
   the five Actions in `actions/definitions/scene_checks.py`. `check` / `check find <term>`
   browse the catalog (a read, no Action); `check <name> [at <band>]` rolls `SceneSelfCheckAction`
@@ -620,7 +632,12 @@ actions, backends, and service functions.
   `moment confirm|dismiss <id>`, since `gm prompt` closes narration kinds only. A standoff
   proposal row (#4354) names `gm prompt confirm|hold <id>` and `gm prompt override <id>
   <reason>` (`gm_standoff_confirm`/`_hold`/`_override`), and `gm standoff shake|steady
-  <group id or name> <reason>` is the GM morale control (`gm_standoff_morale`). Bare
+  <group id or name> <reason>` is the GM morale control (`gm_standoff_morale`). A being answer
+  row (#4333 slice 4, a stewarded being's closed pledge) names `gm prompt answer <id>`: bare, it
+  lists the being's answers at or below the tier (`answer=<id>`), whether the GM's own text is
+  allowed (`text=<words> [clue=<id>]`, Success and above) and the catalogue clues;
+  `AnswerBeingPromptAction` (`gm_being_answer`) sends it. `gm prompt dismiss <id>` draws an
+  authored answer. Bare
   `standoff` outside the encounter shows a scene GM the GM view and anyone else the public
   summary.
   `gm suggest <kind>=<text>` (#2127 — `kind` one of

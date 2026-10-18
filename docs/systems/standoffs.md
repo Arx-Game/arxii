@@ -514,8 +514,8 @@ affiliation brings, and the predicate widget for each rule's test.
   Terms and regard) and adds a Preview rail (`change_form_template`
   `admin/standoffs/standoffconfig/change_form.html`, `describe.config_preview`) saying what the
   Hunger step and Territory patience do over a few actions.
-- **Migrations** `0243` (schema: the new columns and the wider `CauseKind` choices), `0244`
-  (data only: `suppresses_cause=True` becomes `cause_effect="suppress"`), `0245` (drops
+- **Migrations** `0244` (schema: the new columns and the wider `CauseKind` choices), `0245`
+  (data only: `suppresses_cause=True` becomes `cause_effect="suppress"`), `0246` (drops
   `suppresses_cause`). Faction rules are authored content; the disposition is restructure.
 
 ## Later slices

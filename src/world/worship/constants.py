@@ -187,3 +187,6 @@ ANSWER_FACT_MIN_SUCCESS_LEVEL = 1
 ANSWER_FOLLOW_UP_MIN_SUCCESS_LEVEL = 0
 #: Longest onlooker line an answer may carry: one room line.
 ANSWER_ONLOOKER_LINE_MAX_LENGTH = 300
+
+#: Longest free-text answer a stewarded being's table GM may send (#4333 slice 4).
+STEWARD_ANSWER_TEXT_MAX_LENGTH = 4000

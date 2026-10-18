@@ -14,6 +14,7 @@ from world.worship.models import (
     BeingNickname,
     BeingRelationship,
     BeingResonance,
+    BeingSteward,
     BeingTarotCard,
     ChosenFavorConfig,
     ConsecrationTier,
@@ -60,6 +61,51 @@ class BeingTarotCardInline(admin.TabularInline):
     autocomplete_fields = ("card",)
 
 
+class BeingStewardInline(admin.StackedInline):
+    """The table that stewards this being (#4333 slice 4): at most one.
+
+    The read-only line beside the table shows what staff check before assigning
+    it: the table GM's level, its members, the other beings it stewards, and the
+    signs of a god. Saving runs ``BeingSteward.clean``, which refuses a GM below
+    Senior and a being that shows a god sign.
+    """
+
+    model = BeingSteward
+    formset = OneRowPerFormSet
+    extra = 0
+    max_num = 1
+    autocomplete_fields = ("table",)
+    fields = ("table", "steward_context")
+    readonly_fields = ("steward_context",)
+    verbose_name = "Steward"
+    verbose_name_plural = "Steward"
+
+    @admin.display(description="Checked before assigning")
+    def steward_context(self, obj: BeingSteward | None) -> str:
+        if obj is None or obj.pk is None:
+            return (
+                "Saved with the being. Refused when the table's GM is below Senior, or "
+                "when the being shows a sign of a god: a public codex entry, a public "
+                "worship declaration naming it (a secret faith does not count), a Chosen "
+                "of it outside the table, or a temple dedicated to it."
+            )
+        from world.worship.steward_services import (  # noqa: PLC0415
+            god_signs,
+            table_context_line,
+        )
+
+        signs = god_signs(obj.being, obj.table)
+        sign_text = (
+            "Signs of a god: " + " ".join(signs)
+            if signs
+            else (
+                "Signs of a god: none (no public codex entry, no public worship "
+                "declarations, no Chosen outside the table, no temple)."
+            )
+        )
+        return f"{table_context_line(obj.table, being=obj.being)} {sign_text}"
+
+
 @admin.register(WorshippedBeing)
 class WorshippedBeingAdmin(admin.ModelAdmin):
     list_display = ("name", "tradition", "resonance_pool", "lifetime_worship", "is_active")
@@ -74,7 +120,8 @@ class WorshippedBeingAdmin(admin.ModelAdmin):
     autocomplete_fields = ("codex_entry", "invocation_check_type")
     filter_horizontal = ("ultimate_techniques",)
     # The tarot link carries an orientation (#4198), so it is a row, not a multi-select.
-    inlines = (BeingTarotCardInline,)
+    # The steward (#4333 slice 4) is a stacked row with its context beside it.
+    inlines = (BeingTarotCardInline, BeingStewardInline)
 
 
 @admin.register(BeingFacet)

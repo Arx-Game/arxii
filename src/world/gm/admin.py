@@ -55,6 +55,8 @@ class GMTableAdmin(admin.ModelAdmin):
     list_display = ["name", "gm", "status", "created_at"]
     list_filter = ["status"]
     raw_id_fields = ["gm"]
+    # A being's steward inline picks a table by autocomplete (#4333 slice 4).
+    search_fields = ["name", "gm__account__username"]
 
 
 @admin.register(GMTableMembership)

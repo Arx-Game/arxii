@@ -11,6 +11,7 @@ if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
 
     from commands.types import Kwargs
+    from world.character_sheets.models import CharacterSheet
     from world.conditions.models import ConditionInstance
 
 
@@ -60,39 +61,21 @@ class CharacterState(BaseState):
             persona = active_persona_for_sheet(sheet)
         except Persona.DoesNotExist:
             return None
-        viewer_persona_ids, viewer_sheet_ids = (
-            looker_state._viewer_persona_context()  # noqa: SLF001 — same-class look context
-            if isinstance(looker_state, CharacterState)
-            else (set(), set())
-        )
-        is_staff = bool(
-            looker_state is not None
-            and isinstance(looker_state, CharacterState)
-            and looker_state._viewer_is_staff()  # noqa: SLF001
-        )
+        is_looker = isinstance(looker_state, CharacterState)
         name, _is_discovered = resolve_display_for_viewer(
             persona,
-            viewer_persona_ids=viewer_persona_ids,
-            viewer_sheet_ids=viewer_sheet_ids,
-            is_staff=is_staff,
+            viewer_sheet=looker_state._viewer_sheet() if is_looker else None,  # noqa: SLF001
+            is_staff=looker_state._viewer_is_staff() if is_looker else False,  # noqa: SLF001
         )
         return name
 
-    def _viewer_persona_context(self) -> tuple[set[int], set[int]]:
-        """This looker's account's ``(owned_persona_ids, owned_sheet_ids)``, cached for the look.
+    def _viewer_sheet(self) -> "CharacterSheet | None":
+        """The looker's own sheet: the one character whose discoveries and sight count (#4413).
 
-        Cached on the state so listing a room's occupants resolves the looker's context once, not
-        once per occupant.
+        Never the account's other characters. ``sheet_data`` is a reverse one-to-one Django
+        caches on the object, so a room listing reads it once per look, not once per occupant.
         """
-        # Suppression justified: lazy memoization slot, absent until first compute.
-        if getattr(self, "_viewer_persona_ctx", None) is None:  # noqa: GETATTR_LITERAL
-            from world.scenes.persona_display import viewer_context_for_account  # noqa: PLC0415
-
-            account = self.obj.db_account
-            self._viewer_persona_ctx = (
-                viewer_context_for_account(account) if account is not None else (set(), set())
-            )
-        return self._viewer_persona_ctx
+        return self.obj.character_sheet
 
     def _viewer_is_staff(self) -> bool:
         """Whether the looker's account is staff (#1279 — universal identity-sight)."""
@@ -133,16 +116,11 @@ class CharacterState(BaseState):
             # A sheet with no persona at all has no mask to protect -- reveal, matching
             # ``_presented_persona_name`` above, which falls back the same way (#4030 review).
             return True
-        if isinstance(looker, CharacterState):
-            viewer_persona_ids, viewer_sheet_ids = looker._viewer_persona_context()  # noqa: SLF001
-            is_staff = looker._viewer_is_staff()  # noqa: SLF001
-        else:
-            viewer_persona_ids, viewer_sheet_ids, is_staff = set(), set(), False
+        is_looker = isinstance(looker, CharacterState)
         return identity_revealed_to_viewer(
             persona,
-            viewer_persona_ids=viewer_persona_ids,
-            viewer_sheet_ids=viewer_sheet_ids,
-            is_staff=is_staff,
+            viewer_sheet=looker._viewer_sheet() if is_looker else None,  # noqa: SLF001
+            is_staff=looker._viewer_is_staff() if is_looker else False,  # noqa: SLF001
         )
 
     # ------------------------------------------------------------------

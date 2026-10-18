@@ -409,8 +409,7 @@ class InteractionListSerializer(serializers.ModelSerializer):
                 personas.append(subject)
         display_map = build_persona_display_map(
             personas,
-            viewer_persona_ids=set(self.context.get("persona_ids", set())),
-            viewer_sheet_ids=set(self.context.get("viewer_sheet_ids", set())),
+            viewer_sheet=self.context.get("viewer_sheet"),
             is_staff=bool(self.context.get("is_staff", False)),
         )
         self.context["_persona_display_map"] = display_map

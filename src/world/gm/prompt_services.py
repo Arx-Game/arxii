@@ -36,7 +36,7 @@ from world.scenes.interaction_services import (
     non_web_sessions,
 )
 from world.scenes.models import Persona
-from world.scenes.persona_display import build_persona_display_map, viewer_context_for_account
+from world.scenes.persona_display import build_persona_display_map
 from world.scenes.place_models import InteractionReceiver
 from world.scenes.services import active_persona_for_sheet
 
@@ -154,6 +154,8 @@ def visible_prompts_for(account: AccountDB, *, scene: Scene | None) -> QuerySet[
             "technique",
             "stake_outcome__stake",
             "standoff_group__creature_template",
+            "pledge__pledge__being",
+            "pledge__closing_performance__outcome_tier",
             "scene",
         )
         .order_by("-created_at")
@@ -336,6 +338,7 @@ def route_narratable_event(
                 technique=event.technique,
                 stake_outcome=event.stake_outcome,
                 standoff_group=event.standoff_group,
+                pledge=event.pledge_details,
             )
             for account in recipients
         ]
@@ -375,15 +378,20 @@ def _sees_prompt_subject(account: AccountDB | None, prompt: GMPrompt) -> bool:
     return prompt.scene is not None and prompt.scene.is_gm(account)
 
 
-def prompt_subject_names(prompts: Iterable[GMPrompt], account: AccountDB | None) -> dict[int, str]:
+def prompt_subject_names(
+    prompts: Iterable[GMPrompt],
+    account: AccountDB | None,
+    *,
+    viewer_sheet: CharacterSheet | None,
+) -> dict[int, str]:
     """Prompt pk -> the subject's name as ``account`` should read it, '' for none (RF-2).
 
     Both branches go through ``build_persona_display_map``, the feed's own masking
     helper, never a parallel resolution: a viewer who may see behind the face
     resolves as a universal discoverer (``is_staff=True``, so a mask reads
     ``"<mask> (<real>)"`` with no discovery query); every other viewer resolves
-    with their own owned personas and discoveries, in one batched discovery
-    query for the whole page.
+    as ``viewer_sheet``, the one character they are on (#4413), with its own
+    faces and discoveries, in one batched discovery query for the whole page.
     """
     rows = [(prompt, prompt_subject_persona(prompt)) for prompt in prompts]
     revealed_faces = []
@@ -395,17 +403,10 @@ def prompt_subject_names(prompts: Iterable[GMPrompt], account: AccountDB | None)
             revealed_faces.append(persona)
         else:
             viewer_faces.append(persona)
-    revealed = build_persona_display_map(
-        revealed_faces, viewer_persona_ids=set(), viewer_sheet_ids=set(), is_staff=True
-    )
+    revealed = build_persona_display_map(revealed_faces, viewer_sheet=None, is_staff=True)
     viewer_map: dict[int, tuple[str, bool, bool]] = {}
     if viewer_faces:
-        persona_ids, sheet_ids = (
-            viewer_context_for_account(account) if account is not None else (set(), set())
-        )
-        viewer_map = build_persona_display_map(
-            viewer_faces, viewer_persona_ids=persona_ids, viewer_sheet_ids=sheet_ids
-        )
+        viewer_map = build_persona_display_map(viewer_faces, viewer_sheet=viewer_sheet)
     names: dict[int, str] = {}
     for prompt, persona in rows:
         if persona is None:
@@ -427,9 +428,7 @@ def prompt_subject_name(prompt: GMPrompt) -> str:
     persona = prompt_subject_persona(prompt)
     if persona is None:
         return ""
-    revealed = build_persona_display_map(
-        [persona], viewer_persona_ids=set(), viewer_sheet_ids=set(), is_staff=True
-    )
+    revealed = build_persona_display_map([persona], viewer_sheet=None, is_staff=True)
     return revealed[persona.pk][0]
 
 
@@ -503,6 +502,8 @@ def prompt_telnet_commands(prompt: GMPrompt) -> str:
             f"gm prompt confirm {prompt.pk} | gm prompt hold {prompt.pk}"
             f" | gm prompt override {prompt.pk} <reason>"
         )
+    if prompt.kind == GMPromptKind.BEING_ANSWER:
+        return f"gm prompt answer {prompt.pk} | gm prompt dismiss {prompt.pk}"
     return (
         f"emit/prompt {prompt.pk} <text> | pemit/prompt {prompt.pk} <names>=<text>"
         f" | gm prompt send {prompt.pk} | gm prompt dismiss {prompt.pk}"
@@ -511,6 +512,11 @@ def prompt_telnet_commands(prompt: GMPrompt) -> str:
 
 
 def _telnet_line(prompt: GMPrompt) -> str:
+    if prompt.kind == GMPromptKind.BEING_ANSWER:
+        from world.worship.steward_services import prompt_summary  # noqa: PLC0415
+
+        head = f"GM prompt [{prompt.pk}] {prompt.get_kind_display()}: "
+        return f"{head}{prompt_summary(prompt)} {prompt_telnet_commands(prompt)}"
     if prompt.kind == GMPromptKind.STANDOFF_CAUSE and prompt.standoff_group is not None:
         from world.standoffs.services.proposals import proposal_summary  # noqa: PLC0415
 
@@ -902,7 +908,21 @@ def dismiss_gm_prompt(prompt: GMPrompt, *, resolver: AccountDB | None) -> GMProm
     Authorization (who may dismiss this prompt) is the CALLER's job -- this
     function only enforces that the prompt is a narration kind and still open.
     Task 9's action is where the real GM/addressee gate lives.
+
+    A ``BEING_ANSWER`` prompt (#4333) has no default lines: dismissing it hands
+    the closed pledge back to the being's authored draw
+    (``world.worship.steward_services.dismiss_being_answer``), so the answer is
+    never dropped.
     """
+    if prompt.kind == GMPromptKind.BEING_ANSWER:
+        from world.worship.exceptions import StewardAnswerError  # noqa: PLC0415
+        from world.worship.steward_services import dismiss_being_answer  # noqa: PLC0415
+
+        try:
+            dismiss_being_answer(prompt, resolver=resolver)
+        except StewardAnswerError as exc:
+            raise GMPromptError(exc.user_message) from exc
+        return prompt
     if prompt.kind not in NARRATION_PROMPT_KINDS:
         raise GMPromptError(_MSG_NOT_NARRATION)
     return _resolve_narration_prompt(prompt, new_status=GMPromptStatus.DISMISSED, resolver=resolver)

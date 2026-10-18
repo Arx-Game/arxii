@@ -202,3 +202,23 @@ class PledgeSpanEnded(PledgeError):
 
 class SacrificeRefused(PledgeError):
     user_message = "You cannot sacrifice that here."
+
+
+class StewardedBeingClosed(PledgeError):
+    """A stewarded being is served only by its table's members (#4333 slice 4)."""
+
+    user_message = "That being answers only to the members of one GM table."
+
+
+class StewardAnswerError(Exception):
+    """A steward's answer to a closed pledge could not be sent (#4333 slice 4).
+
+    ``user_message`` is safe to show the GM.
+    """
+
+    user_message = "That answer cannot be sent."
+
+    def __init__(self, user_message: str | None = None) -> None:
+        if user_message is not None:
+            self.user_message = user_message
+        super().__init__(self.user_message)

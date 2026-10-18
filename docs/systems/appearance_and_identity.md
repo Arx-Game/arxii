@@ -402,12 +402,14 @@ alongside the module's other PLACEHOLDER magnitudes.
 
 **Sight through one kind of mask (#4396).** A `disguise_sight` lever target per
 `DisguiseKind` value (`mundane`, `magical`; `world/mechanics/constants.py`, content rows
-like the other levers). A viewer whose characters carry a positive total on a kind's target
+like the other levers). A viewer whose character carries a positive total on a kind's target
 (a distinction effect, a condition, anything that writes a modifier) reads a disguise of
 that kind as `<mask> (<real>)` with no check and no `PersonaDiscovery` row:
-`forms.services.identification.pierced_disguise_kinds` is read by the one reveal rule
-(`scenes.persona_display`, so `look`, the feed and the sheet agree), once per page and only
-when an undiscovered mask is left on it. The disguise's kind is the worn overlay's
+`forms.services.identification.pierced_disguise_kinds(viewer_sheet)` is read by the one
+reveal rule (`scenes.persona_display`, so `look`, the feed and the sheet agree), once per
+page and only when an undiscovered mask is left on it. The viewer is the one character the
+player is on (#4413, ADR-4413-A): the sight, like a discovery, belongs to that character, and
+the account's other characters still meet a stranger. The disguise's kind is the worn overlay's
 `overlay_kind`, or MUNDANE for a bare false name (`presented_disguise_kind`), the same
 reading the difficulty table gives a name-only mask. A named alt is not a disguise and no
 sight pierces it. The contest above is untouched; sight is a door beside it.

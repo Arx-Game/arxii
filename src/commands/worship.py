@@ -305,7 +305,8 @@ class CmdSacrifice(ArxCommand):
 
     The items are destroyed and feed the being's worship pool, and you earn
     favor with the being in proportion to their value: more for an item carrying
-    a facet the being favors. Name the being when the place is holy to two.
+    a facet the being favors. Name the being when the place is holy to two. A
+    being your GM table stewards takes a sacrifice anywhere: name it.
     """
 
     key = "sacrifice"

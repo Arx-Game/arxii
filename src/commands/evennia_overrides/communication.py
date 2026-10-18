@@ -257,22 +257,26 @@ class CmdPage(FrontendMetadataMixin, Command):  # ty: ignore[invalid-base]
         self, sender_char: object | None, character: Any, account: Any, charname: str
     ) -> str | None:
         """Quiet-mode (#1463) reach gating, both directions, keyed off the account↔account
-        allowlist. CmdPage is an AccountCmdSet command, so self.caller is the sender's
-        account; the per-character hidden flag is read on the sender's session puppet and
-        on the resolved target.
+        allowlist. CmdPage sits in the AccountCmdSet, but a player typing it through a
+        puppet reaches here with the character as ``self.caller`` (only a session with no
+        puppet gives the account), so the allowlist is keyed off the caller's account either
+        way (#3657: compared by the character's pk, no allow-list ever matched, and a hidden
+        player was unreachable to the very people they had allowed). The per-character
+        hidden flag is read on the sender's puppet and on the resolved target.
         """
         from world.scenes.presence import (  # noqa: PLC0415
             account_on_allowlist,
             character_appears_offline,
         )
 
+        sender_account = self.caller if isinstance(self.caller, AccountDB) else self.caller.account
         # (a) A hidden character can only page people on their own allowlist — so they never
         #     strand a non-whitelisted friend who then can't reply (the friend would just see
         #     "offline"). Self-explaining refusal, since the sender may have forgotten.
         if (
             sender_char is not None
             and character_appears_offline(sender_char)
-            and not account_on_allowlist(owner_account=self.caller, viewer_account=account)
+            and not account_on_allowlist(owner_account=sender_account, viewer_account=account)
         ):
             return (
                 "You're hidden (appearing offline), so you can only page people on your "
@@ -281,7 +285,7 @@ class CmdPage(FrontendMetadataMixin, Command):  # ty: ignore[invalid-base]
         # (b) A hidden target is unreachable to anyone off their allowlist — the SAME message
         #     as if they were simply offline, so quiet mode never leaks.
         if character_appears_offline(character) and not account_on_allowlist(
-            owner_account=account, viewer_account=self.caller
+            owner_account=account, viewer_account=sender_account
         ):
             return f"Character '{charname}' is not online."
         return None

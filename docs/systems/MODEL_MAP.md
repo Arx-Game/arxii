@@ -4313,6 +4313,7 @@
   - resolved_by -> evennia.AccountDB [FK] (nullable)
   - confirmed_tag -> magic.DramaticMomentTag [OneToOne] (nullable)
   - standoff_group -> standoffs.StandoffGroup [FK] (nullable)
+  - pledge -> worship.PledgeDetails [FK] (nullable)
 **Pointed to by:**
   - narrations <- gm.GMPromptNarration
 
@@ -4353,6 +4354,7 @@
   - episode_resolutions <- stories.EpisodeResolution
   - story_progress <- stories.GroupStoryProgress
   - bulletin_posts <- stories.TableBulletinPost
+  - stewarded_beings <- worship.BeingSteward
 
 ### GMTableMembership
 **Foreign Keys:**
@@ -10990,6 +10992,11 @@
 **Pointed to by:**
   - rites <- worship.WorshipRite
 
+### BeingSteward
+**Foreign Keys:**
+  - being -> worship.WorshippedBeing [OneToOne]
+  - table -> gm.GMTable [FK]
+
 ### BeingTarotCard
 **Foreign Keys:**
   - being -> worship.WorshippedBeing [FK]
@@ -11087,6 +11094,7 @@
   - closing_performance -> worship.WorshipRitePerformance [OneToOne] (nullable)
 **Pointed to by:**
   - sacrifices <- ceremonies.CeremonyOffering
+  - gm_prompts <- gm.GMPrompt
   - credits <- worship.PledgeCredit
   - pending_answer <- worship.PendingAnswer
 
@@ -11219,6 +11227,7 @@
   - visions <- worship.Vision
   - pledges <- worship.Pledge
   - answers <- worship.Answer
+  - steward <- worship.BeingSteward
 
 ### Service Functions
 - `active_patronage_for(sheet: 'CharacterSheet') -> list[world.worship.models.DevotionStanding] - Return all active patronages for a character, ordered by favor descending.`

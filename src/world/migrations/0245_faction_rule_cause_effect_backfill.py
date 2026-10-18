@@ -26,7 +26,7 @@ def backward(apps, schema_editor):
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("arxii", "0243_standoff_slice4_causes"),
+        ("arxii", "0244_standoff_slice4_causes"),
     ]
 
     operations = [

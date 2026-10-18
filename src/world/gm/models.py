@@ -1297,6 +1297,17 @@ class GMPrompt(RelatedCacheClearingMixin, SharedMemoryModel):
         related_name="gm_prompts",
         help_text="The standoff group a standoff_cause prompt proposes to start the fight.",
     )
+    pledge = models.ForeignKey(
+        "arxii.PledgeDetails",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="gm_prompts",
+        help_text=(
+            "The closed pledge a being_answer prompt asks its steward to answer (#4333); "
+            "the tier is its closing rite's outcome."
+        ),
+    )
     resolution_note = models.TextField(
         blank=True,
         default="",

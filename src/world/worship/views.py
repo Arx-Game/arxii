@@ -193,11 +193,28 @@ class PledgeViewSet(ReadOnlyModelViewSet):
     pagination_class = StandardResultsSetPagination
     filter_backends = [DjangoFilterBackend]
     filterset_fields = ["being"]
-    queryset = (
-        Pledge.objects.filter(is_active=True, being__is_active=True)
-        .select_related("being", "closing_rite")
-        .order_by("being__name", "name")
-    )
+    queryset = Pledge.objects.none()
+
+    def get_queryset(self):
+        """Active pledge types; a stewarded being's only for its table's members, its
+        table's GM and staff (#4333 slice 4)."""
+        from django.db.models import Q  # noqa: PLC0415
+
+        qs = (
+            Pledge.objects.filter(is_active=True, being__is_active=True)
+            .select_related("being", "closing_rite")
+            .order_by("being__name", "name")
+        )
+        if self.request.user.is_staff:
+            return qs
+        seated = Q(
+            being__steward__table__memberships__left_at__isnull=True,
+            being__steward__table__memberships__persona__character_sheet_id__in=(
+                _own_sheet_ids(self.request)
+            ),
+        )
+        gm = Q(being__steward__table__gm__account=self.request.user)
+        return qs.filter(Q(being__steward__isnull=True) | seated | gm).distinct()
 
 
 class PledgeCardViewSet(ReadOnlyModelViewSet):

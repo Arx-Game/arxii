@@ -1248,9 +1248,12 @@ descriptor overlay, cosmetic editing, and shapeshift slots.
   both call, so a masked persona's real description no longer leaks through `look` for a
   viewer who hasn't seen through the mask (self, staff, and a discoverer still see it, exactly
   as the sheet already did). **Sight (#4396):** the same rule reveals a mask of a kind the
-  viewer's characters see through (`disguise_sight` lever target per `DisguiseKind`,
+  viewer sees through (`disguise_sight` lever target per `DisguiseKind`,
   `forms.services.identification.pierced_disguise_kinds` / `presented_disguise_kind`), no
-  check and no discovery row; see `mechanics.md` "Levers".
+  check and no discovery row; see `mechanics.md` "Levers". **The viewer is the one character
+  being played (#4413, ADR-4413-A):** the resolvers take `viewer_sheet`, the looker's or
+  actor's `character_sheet` on telnet and `relationships.reads.resolve_viewer_sheet(request)`
+  on the web; another character of the same account is a stranger to the mask.
   `GET /api/actions/characters/<id>/personas/<pid>/menu/`
   (`actions.persona_menu.build_persona_menu`) is the server-composed list behind the
   right-click persona menu (Look, Identify, Challenge, and the scene-only actions), reusing
@@ -2993,7 +2996,9 @@ Character lifecycle management with web-first applications and player anonymity.
   is the account's server-side "who am I browsing as" fact (state 2.5 — selected but
   not necessarily puppeting). Sole mutator `world.roster.services.selection.set_selected_entry`;
   sole reader for "who is this request acting as" `selection.selected_character(account)`
-  (missions journal, NPC interactions; ADR-0260 says why not `request.user.puppet`);
+  (missions journal, NPC interactions, the persona reveal rule's web viewer since #4413;
+  ADR-0260 says why not `request.user.puppet`), which reads the account's
+  `cached_selected_entry` (one query per account per process);
   `POST /api/roster/entries/select/` + `selected_entry`/`selected_entry_id` on
   `GET /api/user/`. Zero lifecycle/session/puppeting side effects — selection is not
   presence. Frontend mirrors it in `gameSlice` and surfaces it as `SelectedCharacterChip`
@@ -9169,6 +9174,19 @@ lightly-structured freeform RP. Full doc: `docs/systems/worship.md`; model decis
   `clue_name`, `follow_up_footnote`, `condition_names` (the same footnotes end the narrative message); staff
   `admin/beings/{id}/held-answers/` and overview counts. Admin: the Answer builder
   (`/admin/_being_answers/<being>/`).
+- **Stewards** (#4333 slice 4, ADR-4333-C): `BeingSteward` (O2O being, FK `GMTable`: the table
+  whose GM answers for the being; refused below Senior and for a being with a god sign),
+  `DevotionConfig.steward_answer_days`, `GMPrompt.pledge` and the `BEING_ANSWER` prompt kind and
+  group (a decision kind). Services (`worship/steward_services.py`): `god_signs`,
+  `steward_refusals`, `stewarded_refusal` (members only: pledge, invoke, pray, sacrifice; a
+  member's sacrifice needs no shrine), `route_to_steward` (from `close_pledge`, in place of the
+  draw), `answer_options`, `may_write_free_text`, `catalogue_clues`, `send_steward_answer`,
+  `dismiss_being_answer`, `expire_steward_prompts` (hourly task `worship.steward_answer_timeout`),
+  `stewarded_beings_for`, `may_author`. Action `gm_being_answer` (`AnswerBeingPromptAction`).
+  API: `/api/worship/stewarded-beings/`, `steward-pledges/`, `steward-answers/`,
+  `steward-sacrifice-lines/`, `steward-prompts/` (+ `answer/`, `dismiss/`); `GMPromptSerializer`
+  gains `being_answer_summary`, `being_answer_table`. Telnet `gm prompt answer`. Admin:
+  `BeingStewardInline` on the being's change form. Frontend: the table page's Beings tab.
 - **Worship services**: `grant_worship`, `bump_devotion` (+ God's Favorite
   Princess/Prince/Chosen achievement on top-favor reach/tie), `gods_favorite_achievement_for`;
   `mint_worship_secret` (`worship/secrets.py`); `convert_public_worship(sheet, new_being, *,

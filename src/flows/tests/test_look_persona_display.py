@@ -54,14 +54,18 @@ class LookPersonaDisplayTests(TestCase):
         name = self._state(target).get_display_name(looker=self._state(looker))
         assert name == "a man wearing a stag mask"
 
-    def test_owner_account_is_never_restricted_from_their_own_masked_face(self) -> None:
+    def test_your_other_character_meets_your_masked_face_as_a_stranger(self) -> None:
+        """A second character on the SAME account looking: the face is not theirs (#4413).
+
+        The reveal rule reads for the one character doing the looking, a reminder that
+        this character does not know what the player's other character is up to.
+        """
         owner = AccountFactory()
-        target, _sheet = self._played(owner, fake_active=True)
-        # A second character on the SAME account looking — owns the face, sees it real.
+        target, _sheet = self._played(owner, fake_active=True, gender_key="male")
         looker, _ = self._played(owner)
 
         name = self._state(target).get_display_name(looker=self._state(looker))
-        assert name == "stag mask"
+        assert name == "a man wearing a stag mask"
 
     def test_looking_at_your_own_masked_self_shows_the_real_face(self) -> None:
         owner = AccountFactory()

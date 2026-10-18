@@ -91,6 +91,7 @@ _USAGE_NPC = "Usage: gm npc <name>[=<description>] [preset=<name>] (requires Jun
 _USAGE_PROMPT = (
     "Usage: gm prompt send <id> | gm prompt dismiss <id> | gm prompt done <id>"
     " | gm prompt confirm <id> | gm prompt hold <id> | gm prompt override <id> <reason>"
+    " | gm prompt answer <id> [answer=<answer id> | text=<your words> [clue=<clue id>]]"
 )
 _USAGE_STANDOFF = "Usage: gm standoff shake <group> <reason> | gm standoff steady <group> <reason>"
 _SUBVERB_LIST = "list"
@@ -100,6 +101,10 @@ _SUBVERB_REMOVE = "remove"
 _PROMPT_SEND = "send"
 _PROMPT_DISMISS = "dismiss"
 _PROMPT_DONE = "done"
+_PROMPT_ANSWER = "answer"
+_KEY_ANSWER = "answer"
+_KEY_TEXT = "text"
+_KEY_CLUE = "clue"
 # Standoff proposal decisions (#4354): verb -> registry action key.
 _PROMPT_STANDOFF_VERBS: dict[str, str] = {
     "confirm": "gm_standoff_confirm",
@@ -160,6 +165,10 @@ class CmdGMDashboard(ArxCommand):
       gm prompt confirm <id>                    (standoff: they attack)
       gm prompt hold <id>                       (standoff: test again after the next action)
       gm prompt override <id> <reason>          (standoff: they stay in the standoff)
+      gm prompt answer <id>                     (a stewarded being: list what you can send)
+      gm prompt answer <id> answer=<answer id>  (send one of the being's answers)
+      gm prompt answer <id> text=<words> [clue=<clue id>]
+                                                (your own words, Success and above)
       gm standoff shake <group> <reason>        (one morale state down)
       gm standoff steady <group> <reason>       (one morale state up)
     """
@@ -530,7 +539,7 @@ class CmdGMDashboard(ArxCommand):
         if not prompts:
             self.msg("No GM prompts are waiting.")
             return
-        names = prompt_subject_names(prompts, account)
+        names = prompt_subject_names(prompts, account, viewer_sheet=self.caller.character_sheet)
         for p in prompts:
             subject = _prompt_subject(p, names)
             status_tag = " (narrated)" if p.status == GMPromptStatus.NARRATED else ""
@@ -541,6 +550,10 @@ class CmdGMDashboard(ArxCommand):
                 )
 
                 self.msg(f"  {proposal_summary(p.standoff_group)}")
+            if p.pledge_id is not None:
+                from world.worship.steward_services import prompt_summary  # noqa: PLC0415
+
+                self.msg(f"  {prompt_summary(p)}")
             if p.private_text:
                 self.msg(f"  private: {p.private_text}")
             if p.room_text:
@@ -559,6 +572,9 @@ class CmdGMDashboard(ArxCommand):
         if verb in _PROMPT_STANDOFF_VERBS:
             self._decide_standoff_prompt(verb, raw_id)
             return
+        if verb == _PROMPT_ANSWER:
+            self._answer_being_prompt(raw_id)
+            return
         if verb not in (_PROMPT_SEND, _PROMPT_DISMISS, _PROMPT_DONE) or not raw_id.isdigit():
             raise CommandError(_USAGE_PROMPT)
         prompt_id = int(raw_id)
@@ -566,6 +582,71 @@ class CmdGMDashboard(ArxCommand):
             self._dismiss_prompt(prompt_id)
             return
         self._send_prompt_defaults(prompt_id)
+
+    def _answer_being_prompt(self, rest: str) -> None:
+        """``gm prompt answer <id> [answer=<n> | text=<words> [clue=<n>]]`` (#4333 slice 4).
+
+        With no choice it lists what the steward can send: the being's answers at
+        or below the tier, whether their own text is allowed, and the clues they
+        may attach. A choice dispatches ``AnswerBeingPromptAction``.
+        """
+        from actions.definitions.worship import AnswerBeingPromptAction  # noqa: PLC0415
+
+        raw_id, _, tail = rest.partition(" ")
+        if not raw_id.isdigit():
+            raise CommandError(_USAGE_PROMPT)
+        prompt_id = int(raw_id)
+        kwargs, _flags = parse_kv_and_flags(
+            tail.strip(), multiword_keys=frozenset({_KEY_TEXT}), known_flags=frozenset()
+        )
+        if not kwargs:
+            self._list_being_answer_options(prompt_id)
+            return
+        result = AnswerBeingPromptAction().run(
+            actor=None,
+            account=self.caller.account,
+            prompt_id=prompt_id,
+            answer_id=kwargs.get(_KEY_ANSWER),
+            text=kwargs.get(_KEY_TEXT, ""),
+            clue_id=kwargs.get(_KEY_CLUE),
+        )
+        self.msg(result.message or "Done.")
+
+    def _list_being_answer_options(self, prompt_id: int) -> None:
+        from world.gm.constants import GMPromptKind  # noqa: PLC0415
+        from world.gm.models import GMPrompt  # noqa: PLC0415
+        from world.gm.prompt_services import prompt_visible_to  # noqa: PLC0415
+        from world.worship.steward_services import (  # noqa: PLC0415
+            answer_options,
+            answer_window_ends,
+            catalogue_clues,
+            may_write_free_text,
+            prompt_summary,
+        )
+
+        prompt = GMPrompt.objects.filter(pk=prompt_id, kind=GMPromptKind.BEING_ANSWER).first()
+        account = self.caller.account
+        if prompt is None or not prompt_visible_to(account, prompt) or prompt.pledge is None:
+            msg = "There is no such being answer prompt."
+            raise CommandError(msg)
+        details = prompt.pledge
+        self.msg(prompt_summary(prompt))
+        self.msg(f"  Pledge: {details.pledge.name}.")
+        if details.prayer is not None:
+            self.msg(f"  Prayer: {details.prayer.text}")
+        for answer in answer_options(details):
+            first = (answer.answer_text or answer.delay_text).strip().splitlines()[0][:80]
+            self.msg(f"  answer={answer.pk} ({answer.outcome_tier.name}) {first}")
+        if may_write_free_text(details):
+            clues = catalogue_clues(details.pledge.being)
+            clue_text = ", ".join(f"clue={c.pk} {c.name}" for c in clues) or "none linked"
+            self.msg(f"  text=<your words> is allowed. Clues you may attach: {clue_text}.")
+        else:
+            self.msg("  Your own text is allowed on Success and Critical Success only.")
+        ends = answer_window_ends(prompt)
+        self.msg(
+            f"  Dismissed or unanswered by {ends:%Y-%m-%d %H:%M}, an authored answer is drawn."
+        )
 
     def _decide_standoff_prompt(self, verb: str, rest: str) -> None:
         """``gm prompt confirm|hold <id>`` / ``gm prompt override <id> <reason>`` (#4354)."""

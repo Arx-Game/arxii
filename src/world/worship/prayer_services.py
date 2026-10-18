@@ -34,6 +34,7 @@ from world.worship.constants import (
 from world.worship.exceptions import (
     PrayerBeingInactive,
     PrayerEmpty,
+    PrayerError,
     PrayerTooLong,
     VisionClueNotFact,
     VisionEmpty,
@@ -149,6 +150,11 @@ def pray(character_sheet: CharacterSheet, being: WorshippedBeing, text: str) -> 
         raise PrayerTooLong
     if not being.is_active:
         raise PrayerBeingInactive
+    from world.worship.steward_services import stewarded_refusal  # noqa: PLC0415
+
+    refusal = stewarded_refusal(character_sheet, being)
+    if refusal:
+        raise PrayerError(refusal)
 
     week = get_current_game_week()
     room_profile = _room_profile_of(character_sheet)

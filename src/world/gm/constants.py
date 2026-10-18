@@ -139,6 +139,7 @@ class GMPromptKind(models.TextChoices):
     DEATH = "death", "Death"
     STAKE_OUTCOME = "stake_outcome", "Stake outcome"
     STANDOFF_CAUSE = "standoff_cause", "Standoff"
+    BEING_ANSWER = "being_answer", "Being answer"
 
 
 class GMPromptGroup(models.TextChoices):
@@ -150,6 +151,7 @@ class GMPromptGroup(models.TextChoices):
     DEATH = "death", "Deaths"
     STAKE_OUTCOME = "stake_outcome", "Stake outcomes"
     STANDOFF = "standoff", "Standoffs"
+    BEING_ANSWER = "being_answer", "Being answers"
 
 
 PROMPT_GROUP_FOR_KIND: dict[str, str] = {
@@ -161,11 +163,15 @@ PROMPT_GROUP_FOR_KIND: dict[str, str] = {
     GMPromptKind.DEATH: GMPromptGroup.DEATH,
     GMPromptKind.STAKE_OUTCOME: GMPromptGroup.STAKE_OUTCOME,
     GMPromptKind.STANDOFF_CAUSE: GMPromptGroup.STANDOFF,
+    GMPromptKind.BEING_ANSWER: GMPromptGroup.BEING_ANSWER,
 }
 
 # Kinds a GM decides rather than narrates: addressed to one GM like a narration prompt,
-# resolved by their own actions (#4354: a standoff proposal's Confirm, Hold, Override).
-DECISION_PROMPT_KINDS: frozenset[str] = frozenset({GMPromptKind.STANDOFF_CAUSE})
+# resolved by their own actions (#4354: a standoff proposal's Confirm, Hold, Override;
+# #4333: a stewarded being's answer, sent or dismissed by the table's GM).
+DECISION_PROMPT_KINDS: frozenset[str] = frozenset(
+    {GMPromptKind.STANDOFF_CAUSE, GMPromptKind.BEING_ANSWER}
+)
 
 # Every kind a GM narrates (everything but the confirm-only dramatic moment and the
 # decision kinds).

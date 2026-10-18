@@ -26641,6 +26641,259 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/worship/steward-answers/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description A stewarded being's answers. Retired by clearing Active, never deleted: a
+     *     delivered vision keeps its answer.
+     */
+    get: operations['worship_steward_answers_list'];
+    put?: never;
+    /**
+     * @description A stewarded being's answers. Retired by clearing Active, never deleted: a
+     *     delivered vision keeps its answer.
+     */
+    post: operations['worship_steward_answers_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/worship/steward-answers/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description A stewarded being's answers. Retired by clearing Active, never deleted: a
+     *     delivered vision keeps its answer.
+     */
+    get: operations['worship_steward_answers_retrieve'];
+    /**
+     * @description A stewarded being's answers. Retired by clearing Active, never deleted: a
+     *     delivered vision keeps its answer.
+     */
+    put: operations['worship_steward_answers_update'];
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    /**
+     * @description A stewarded being's answers. Retired by clearing Active, never deleted: a
+     *     delivered vision keeps its answer.
+     */
+    patch: operations['worship_steward_answers_partial_update'];
+    trace?: never;
+  };
+  '/api/worship/steward-pledges/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description A stewarded being's pledge types. Retired by clearing Active, never deleted:
+     *     a taken pledge keeps pointing at its type.
+     */
+    get: operations['worship_steward_pledges_list'];
+    put?: never;
+    /**
+     * @description A stewarded being's pledge types. Retired by clearing Active, never deleted:
+     *     a taken pledge keeps pointing at its type.
+     */
+    post: operations['worship_steward_pledges_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/worship/steward-pledges/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description A stewarded being's pledge types. Retired by clearing Active, never deleted:
+     *     a taken pledge keeps pointing at its type.
+     */
+    get: operations['worship_steward_pledges_retrieve'];
+    /**
+     * @description A stewarded being's pledge types. Retired by clearing Active, never deleted:
+     *     a taken pledge keeps pointing at its type.
+     */
+    put: operations['worship_steward_pledges_update'];
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    /**
+     * @description A stewarded being's pledge types. Retired by clearing Active, never deleted:
+     *     a taken pledge keeps pointing at its type.
+     */
+    patch: operations['worship_steward_pledges_partial_update'];
+    trace?: never;
+  };
+  '/api/worship/steward-prompts/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description Closed pledges waiting on their being's steward: the answer panel.
+     *
+     *     Lists the requester's own pending ``BEING_ANSWER`` prompts (staff: any, so
+     *     staff can cover for an absent GM through the same panel).
+     */
+    get: operations['worship_steward_prompts_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/worship/steward-prompts/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description Closed pledges waiting on their being's steward: the answer panel.
+     *
+     *     Lists the requester's own pending ``BEING_ANSWER`` prompts (staff: any, so
+     *     staff can cover for an absent GM through the same panel).
+     */
+    get: operations['worship_steward_prompts_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/worship/steward-prompts/{id}/answer/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** @description Send one of the being's answers, or the GM's own text with a clue. */
+    post: operations['worship_steward_prompts_answer_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/worship/steward-prompts/{id}/dismiss/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** @description Dismiss: the being's authored answers are drawn instead. */
+    post: operations['worship_steward_prompts_dismiss_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/worship/steward-sacrifice-lines/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description An answer's lines for its being's favored facets. */
+    get: operations['worship_steward_sacrifice_lines_list'];
+    put?: never;
+    /** @description An answer's lines for its being's favored facets. */
+    post: operations['worship_steward_sacrifice_lines_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/worship/steward-sacrifice-lines/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    /** @description An answer's lines for its being's favored facets. */
+    put: operations['worship_steward_sacrifice_lines_update'];
+    post?: never;
+    /** @description An answer's lines for its being's favored facets. */
+    delete: operations['worship_steward_sacrifice_lines_destroy'];
+    options?: never;
+    head?: never;
+    /** @description An answer's lines for its being's favored facets. */
+    patch: operations['worship_steward_sacrifice_lines_partial_update'];
+    trace?: never;
+  };
+  '/api/worship/stewarded-beings/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description The beings a table stewards, as the Beings section's cards. */
+    get: operations['worship_stewarded_beings_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/worship/stewarded-beings/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description The beings a table stewards, as the Beings section's cards. */
+    get: operations['worship_stewarded_beings_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/worship/visions/': {
     parameters: {
       query?: never;
@@ -33614,6 +33867,7 @@ export interface components {
        *     * `death` - Death
        *     * `stake_outcome` - Stake outcome
        *     * `standoff_cause` - Standoff
+       *     * `being_answer` - Being answer
        * @default dramatic_moment
        */
       readonly kind: components['schemas']['GMPromptKindEnum'];
@@ -33643,6 +33897,10 @@ export interface components {
       readonly standoff_reason: string;
       /** @description The force on both sides, read when the queue is: blank on other kinds. */
       readonly standoff_force: string;
+      /** @description '<being> answers <name> (<tier>).' for a being_answer prompt; blank otherwise. */
+      readonly being_answer_summary: string;
+      /** @description The table whose page holds a being_answer prompt's answer panel. */
+      readonly being_answer_table: number | null;
       /** @description What the GM decided on a decision prompt, with their reason when they gave one (a standoff Override's reason is recorded here). */
       readonly resolution_note: string;
       /** @description Resolved authored room line offered in the composer (may be blank). */
@@ -33667,6 +33925,7 @@ export interface components {
      *     * `death` - Deaths
      *     * `stake_outcome` - Stake outcomes
      *     * `standoff` - Standoffs
+     *     * `being_answer` - Being answers
      * @enum {string}
      */
     GMPromptFilterGroupEnum:
@@ -33675,7 +33934,8 @@ export interface components {
       | 'miracle'
       | 'death'
       | 'stake_outcome'
-      | 'standoff';
+      | 'standoff'
+      | 'being_answer';
     /** @description One per-group row of a GM's prompt-filter switches (#4101; demo Screen 5). */
     GMPromptFilterRequest: {
       group: components['schemas']['GMPromptFilterGroupEnum'];
@@ -33690,6 +33950,7 @@ export interface components {
      *     * `death` - Death
      *     * `stake_outcome` - Stake outcome
      *     * `standoff_cause` - Standoff
+     *     * `being_answer` - Being answer
      * @enum {string}
      */
     GMPromptKindEnum:
@@ -33700,7 +33961,8 @@ export interface components {
       | 'miracle'
       | 'death'
       | 'stake_outcome'
-      | 'standoff_cause';
+      | 'standoff_cause'
+      | 'being_answer';
     /**
      * @description * `pending` - Pending
      *     * `confirmed` - Confirmed
@@ -42180,6 +42442,81 @@ export interface components {
       previous?: string | null;
       results: components['schemas']['StandingDeclaration'][];
     };
+    PaginatedStewardAnswerList: {
+      /** @example 123 */
+      count: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results: components['schemas']['StewardAnswer'][];
+    };
+    PaginatedStewardPledgeList: {
+      /** @example 123 */
+      count: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results: components['schemas']['StewardPledge'][];
+    };
+    PaginatedStewardPromptList: {
+      /** @example 123 */
+      count: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results: components['schemas']['StewardPrompt'][];
+    };
+    PaginatedStewardSacrificeLineList: {
+      /** @example 123 */
+      count: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results: components['schemas']['StewardSacrificeLine'][];
+    };
+    PaginatedStewardedBeingList: {
+      /** @example 123 */
+      count: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results: components['schemas']['StewardedBeing'][];
+    };
     PaginatedStoryFeedbackList: {
       /** @example 123 */
       count: number;
@@ -44316,6 +44653,59 @@ export interface components {
       player_summary_template?: string;
       description?: string;
       is_active?: boolean;
+    };
+    /**
+     * @description An answer for a stewarded being, with the same tier limits as the staff
+     *     Answer builder. Its clues must already be in the being's catalogue.
+     */
+    PatchedStewardAnswerRequest: {
+      being?: number;
+      /** @description The pledge type this answers; empty for the being's general answers. */
+      pledge?: number | null;
+      outcome_tier?: number;
+      /** @description Opens the vision and states that the character's effort was acknowledged. */
+      delay_text?: string;
+      /** @description The main body. Sacrifice lines are added after it. */
+      answer_text?: string;
+      /** @description States one fact. Success and Critical Success only. */
+      fact_text?: string;
+      /** @description A Codex or secret clue handed over with the fact. */
+      fact_clue?: number | null;
+      /** @description A cost, or a notice that the being has marked the character. */
+      cost_text?: string;
+      /** @description Consequences applied at this answer's outcome tier when it is delivered. */
+      cost_pool?: number | null;
+      /** @description A next action, usually a mission. */
+      follow_up_text?: string;
+      /** @description Handed over with the vision. Partial Success and above. */
+      follow_up_clue?: number | null;
+      /** @description Sent to the room as a public line. Others in the room see this line and nothing else from the answer. */
+      onlooker_line?: string;
+      /** @description Deliver the vision without telling the recipient which being sent it. */
+      conceals_source?: boolean;
+      /** @description Relative chance among the answers that fit a draw. */
+      weight?: number;
+      is_active?: boolean;
+    };
+    /** @description A stewarded being's pledge type, written by its table GM. */
+    PatchedStewardPledgeRequest: {
+      being?: number;
+      name?: string;
+      /** @description Shown to the player when they take the pledge. Progress is counted automatically from favor. */
+      description?: string;
+      /** @description Favor to earn with the being after pledging, before closing. */
+      favor_target?: number;
+      /** @description Game weeks the character has to earn the target and close. */
+      span_weeks?: number;
+      /** @description One of the being's own tier 1 or 2 rites; performing it closes the pledge. */
+      closing_rite?: number;
+      is_active?: boolean;
+    };
+    /** @description One answer's line for one of its being's favored facets. */
+    PatchedStewardSacrificeLineRequest: {
+      answer?: number;
+      facet?: number;
+      text?: string;
     };
     /** @description Full serializer for story detail views */
     PatchedStoryDetailRequest: {
@@ -49652,6 +50042,170 @@ export interface components {
      * @enum {string}
      */
     StatusF08Enum: 'active' | 'inactive' | 'completed' | 'cancelled';
+    /** @description What the panel's send or dismiss reports back. */
+    StewardActionResult: {
+      detail: string;
+    };
+    /**
+     * @description An answer for a stewarded being, with the same tier limits as the staff
+     *     Answer builder. Its clues must already be in the being's catalogue.
+     */
+    StewardAnswer: {
+      readonly id: number;
+      being: number;
+      /** @description The pledge type this answers; empty for the being's general answers. */
+      pledge?: number | null;
+      outcome_tier: number;
+      readonly outcome_tier_name: string;
+      /** @description Opens the vision and states that the character's effort was acknowledged. */
+      delay_text: string;
+      /** @description The main body. Sacrifice lines are added after it. */
+      answer_text?: string;
+      /** @description States one fact. Success and Critical Success only. */
+      fact_text?: string;
+      /** @description A Codex or secret clue handed over with the fact. */
+      fact_clue?: number | null;
+      /** @description A cost, or a notice that the being has marked the character. */
+      cost_text?: string;
+      /** @description Consequences applied at this answer's outcome tier when it is delivered. */
+      cost_pool?: number | null;
+      /** @description A next action, usually a mission. */
+      follow_up_text?: string;
+      /** @description Handed over with the vision. Partial Success and above. */
+      follow_up_clue?: number | null;
+      /** @description Sent to the room as a public line. Others in the room see this line and nothing else from the answer. */
+      onlooker_line?: string;
+      /** @description Deliver the vision without telling the recipient which being sent it. */
+      conceals_source?: boolean;
+      /** @description Relative chance among the answers that fit a draw. */
+      weight?: number;
+      is_active?: boolean;
+      readonly sacrifice_lines: components['schemas']['StewardSacrificeLine'][];
+    };
+    /**
+     * @description An answer for a stewarded being, with the same tier limits as the staff
+     *     Answer builder. Its clues must already be in the being's catalogue.
+     */
+    StewardAnswerRequest: {
+      being: number;
+      /** @description The pledge type this answers; empty for the being's general answers. */
+      pledge?: number | null;
+      outcome_tier: number;
+      /** @description Opens the vision and states that the character's effort was acknowledged. */
+      delay_text: string;
+      /** @description The main body. Sacrifice lines are added after it. */
+      answer_text?: string;
+      /** @description States one fact. Success and Critical Success only. */
+      fact_text?: string;
+      /** @description A Codex or secret clue handed over with the fact. */
+      fact_clue?: number | null;
+      /** @description A cost, or a notice that the being has marked the character. */
+      cost_text?: string;
+      /** @description Consequences applied at this answer's outcome tier when it is delivered. */
+      cost_pool?: number | null;
+      /** @description A next action, usually a mission. */
+      follow_up_text?: string;
+      /** @description Handed over with the vision. Partial Success and above. */
+      follow_up_clue?: number | null;
+      /** @description Sent to the room as a public line. Others in the room see this line and nothing else from the answer. */
+      onlooker_line?: string;
+      /** @description Deliver the vision without telling the recipient which being sent it. */
+      conceals_source?: boolean;
+      /** @description Relative chance among the answers that fit a draw. */
+      weight?: number;
+      is_active?: boolean;
+    };
+    /** @description A stewarded being's pledge type, written by its table GM. */
+    StewardPledge: {
+      readonly id: number;
+      being: number;
+      name: string;
+      /** @description Shown to the player when they take the pledge. Progress is counted automatically from favor. */
+      description?: string;
+      /** @description Favor to earn with the being after pledging, before closing. */
+      favor_target?: number;
+      /** @description Game weeks the character has to earn the target and close. */
+      span_weeks?: number;
+      /** @description One of the being's own tier 1 or 2 rites; performing it closes the pledge. */
+      closing_rite: number;
+      is_active?: boolean;
+      /**
+       * @description Outcome tiers with at least one active answer for this pledge type.
+       *
+       *     A being card passes every pledge's coverage in ``context["coverage"]``
+       *     (one query for the card); a lone pledge reads its own.
+       */
+      readonly covered_tiers: number[];
+    };
+    /** @description A stewarded being's pledge type, written by its table GM. */
+    StewardPledgeRequest: {
+      being: number;
+      name: string;
+      /** @description Shown to the player when they take the pledge. Progress is counted automatically from favor. */
+      description?: string;
+      /** @description Favor to earn with the being after pledging, before closing. */
+      favor_target?: number;
+      /** @description Game weeks the character has to earn the target and close. */
+      span_weeks?: number;
+      /** @description One of the being's own tier 1 or 2 rites; performing it closes the pledge. */
+      closing_rite: number;
+      is_active?: boolean;
+    };
+    /** @description A ``BEING_ANSWER`` prompt as the steward's answer panel reads it. */
+    StewardPrompt: {
+      id: number;
+      being: number;
+      being_name: string;
+      table: number;
+      subject_name: string;
+      pledge_name: string;
+      outcome_tier_name: string;
+      sacrificed: string[];
+      prayer_text: string;
+      options: components['schemas']['_AnswerOption'][];
+      may_write_free_text: boolean;
+      catalogue_clues: components['schemas']['_CatalogueClue'][];
+      /** Format: date-time */
+      window_ends_at: string;
+    };
+    /** @description One answer's line for one of its being's favored facets. */
+    StewardSacrificeLine: {
+      readonly id: number;
+      answer: number;
+      facet: number;
+      readonly facet_name: string;
+      text: string;
+    };
+    /** @description One answer's line for one of its being's favored facets. */
+    StewardSacrificeLineRequest: {
+      answer: number;
+      facet: number;
+      text: string;
+    };
+    /** @description The panel's send: one authored answer, or the GM's own text and a clue. */
+    StewardSendRequest: {
+      answer?: number | null;
+      /** @default  */
+      text: string;
+      clue?: number | null;
+    };
+    /** @description One being card on the table page, with what its authoring forms need. */
+    StewardedBeing: {
+      readonly id: number;
+      readonly name: string;
+      /** @description PLACEHOLDER lore — Apostate rewrite pending. */
+      readonly description: string;
+      readonly table: number;
+      readonly favored_resonances: string[];
+      readonly associated_resonances: string[];
+      readonly favored_facets: components['schemas']['_NamedRow'][];
+      readonly closing_rites: components['schemas']['_NamedRow'][];
+      readonly pledges: components['schemas']['StewardPledge'][];
+      readonly general_covered_tiers: number[];
+      readonly outcome_tiers: components['schemas']['_OutcomeTier'][];
+      readonly catalogue_clues: components['schemas']['_CatalogueClue'][];
+      readonly cost_pools: components['schemas']['_NamedRow'][];
+    };
     /** @description The story-builder area-manager payload: area header + rooms (with grants) + exits. */
     StoryAreaManager: {
       area: components['schemas']['WorldBuilderArea'];
@@ -52836,6 +53390,18 @@ export interface components {
      * @enum {string}
      */
     ZoneEnum: 'fresh' | 'strained' | 'tired' | 'overexerted' | 'exhausted';
+    _AnswerOption: {
+      id: number;
+      outcome_tier_name: string;
+      pledge_name: string;
+      answer_text: string;
+      delay_text: string;
+    };
+    _CatalogueClue: {
+      id: number;
+      name: string;
+      target_kind: string;
+    };
     /** @description One polish category's value + derived tier label for a building. */
     _CategoryPolish: {
       category_id: number;
@@ -52878,12 +53444,21 @@ export interface components {
       readonly title: string;
       readonly body: string;
     };
+    _NamedRow: {
+      id: number;
+      name: string;
+    };
     /** @description One entry in the near-xp-lock list returned by ThreadHubSummaryView. */
     _NearXPLockProspect: {
       thread_id: number;
       boundary_level: number;
       xp_cost: number;
       dev_points_to_boundary: number;
+    };
+    _OutcomeTier: {
+      id: number;
+      name: string;
+      success_level: number;
     };
     /**
      * @description One building the persona owns, with polish breakdown + condition label.
@@ -67308,10 +67883,12 @@ export interface operations {
          *     * `death` - Death
          *     * `stake_outcome` - Stake outcome
          *     * `standoff_cause` - Standoff
+         *     * `being_answer` - Being answer
          */
         kind?:
           | 'audere_surge'
           | 'audere_ultimate'
+          | 'being_answer'
           | 'crossing'
           | 'death'
           | 'dramatic_moment'
@@ -89415,6 +89992,515 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['WorshipRite'];
+        };
+      };
+    };
+  };
+  worship_steward_answers_list: {
+    parameters: {
+      query?: {
+        being?: number;
+        outcome_tier?: number;
+        /** @description A page number within the paginated result set. */
+        page?: number;
+        /** @description Number of results to return per page. */
+        page_size?: number;
+        pledge?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedStewardAnswerList'];
+        };
+      };
+    };
+  };
+  worship_steward_answers_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['StewardAnswerRequest'];
+      };
+    };
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['StewardAnswer'];
+        };
+      };
+    };
+  };
+  worship_steward_answers_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this answer. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['StewardAnswer'];
+        };
+      };
+    };
+  };
+  worship_steward_answers_update: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this answer. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['StewardAnswerRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['StewardAnswer'];
+        };
+      };
+    };
+  };
+  worship_steward_answers_partial_update: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this answer. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: {
+      content: {
+        'application/json': components['schemas']['PatchedStewardAnswerRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['StewardAnswer'];
+        };
+      };
+    };
+  };
+  worship_steward_pledges_list: {
+    parameters: {
+      query?: {
+        being?: number;
+        /** @description A page number within the paginated result set. */
+        page?: number;
+        /** @description Number of results to return per page. */
+        page_size?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedStewardPledgeList'];
+        };
+      };
+    };
+  };
+  worship_steward_pledges_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['StewardPledgeRequest'];
+      };
+    };
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['StewardPledge'];
+        };
+      };
+    };
+  };
+  worship_steward_pledges_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this pledge. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['StewardPledge'];
+        };
+      };
+    };
+  };
+  worship_steward_pledges_update: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this pledge. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['StewardPledgeRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['StewardPledge'];
+        };
+      };
+    };
+  };
+  worship_steward_pledges_partial_update: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this pledge. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: {
+      content: {
+        'application/json': components['schemas']['PatchedStewardPledgeRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['StewardPledge'];
+        };
+      };
+    };
+  };
+  worship_steward_prompts_list: {
+    parameters: {
+      query?: {
+        /** @description A page number within the paginated result set. */
+        page?: number;
+        /** @description Number of results to return per page. */
+        page_size?: number;
+        table?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedStewardPromptList'];
+        };
+      };
+    };
+  };
+  worship_steward_prompts_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this GM Prompt. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['StewardPrompt'];
+        };
+      };
+    };
+  };
+  worship_steward_prompts_answer_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this GM Prompt. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: {
+      content: {
+        'application/json': components['schemas']['StewardSendRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['StewardActionResult'];
+        };
+      };
+    };
+  };
+  worship_steward_prompts_dismiss_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this GM Prompt. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['StewardActionResult'];
+        };
+      };
+    };
+  };
+  worship_steward_sacrifice_lines_list: {
+    parameters: {
+      query?: {
+        answer?: number;
+        /** @description A page number within the paginated result set. */
+        page?: number;
+        /** @description Number of results to return per page. */
+        page_size?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedStewardSacrificeLineList'];
+        };
+      };
+    };
+  };
+  worship_steward_sacrifice_lines_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['StewardSacrificeLineRequest'];
+      };
+    };
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['StewardSacrificeLine'];
+        };
+      };
+    };
+  };
+  worship_steward_sacrifice_lines_update: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this answer sacrifice line. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['StewardSacrificeLineRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['StewardSacrificeLine'];
+        };
+      };
+    };
+  };
+  worship_steward_sacrifice_lines_destroy: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this answer sacrifice line. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description No response body */
+      204: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  worship_steward_sacrifice_lines_partial_update: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this answer sacrifice line. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: {
+      content: {
+        'application/json': components['schemas']['PatchedStewardSacrificeLineRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['StewardSacrificeLine'];
+        };
+      };
+    };
+  };
+  worship_stewarded_beings_list: {
+    parameters: {
+      query?: {
+        /** @description A page number within the paginated result set. */
+        page?: number;
+        /** @description Number of results to return per page. */
+        page_size?: number;
+        table?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedStewardedBeingList'];
+        };
+      };
+    };
+  };
+  worship_stewarded_beings_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this worshipped being. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['StewardedBeing'];
         };
       };
     };

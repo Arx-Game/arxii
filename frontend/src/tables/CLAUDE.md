@@ -22,6 +22,15 @@ REST API client for `/api/gm/tables/` and `/api/gm/table-memberships/`.
   `/api/gm/tables/{id}/players/{sheet}/hooks/`; the Hooks tab (`components/TableHooks.tsx`,
   GM and staff only) lists each member's hooks with the truths under them and writes a hook
   or a truth
+- **Stewarded beings (#4333 slice 4):** `beingsApi.ts` / `beingsQueries.ts` over
+  `/api/worship/stewarded-beings/`, `steward-pledges/`, `steward-answers/`,
+  `steward-sacrifice-lines/`, `steward-prompts/` (+ `answer/`, `dismiss/`). The Beings tab
+  (`components/TableBeings.tsx`, GM and staff only; `?tab=beings` opens it) shows waiting being
+  answers (`StewardAnswerPanel.tsx`: an authored answer at or below the tier, or on Success and
+  above the GM's own text with a catalogue clue; Dismiss draws an authored answer), one card per
+  stewarded being, and the editor (`StewardedBeingEditor.tsx`: pledge type, the answer form by
+  tier with the coverage grid). Types are the generated `StewardedBeing`, `StewardPledge`,
+  `StewardAnswer`, `StewardPrompt`.
 - **GM roster recruitment (#3268):** `getTableInvites()`, `mintInvite()`, `revokeInvite()`,
   `getGMQueue()`, `actionGMApplication()` (approve/deny) — the GM-facing side, rendered in
   `RecruitmentTab` on `TableDetailPage`. `claimInvite(code)` is the player-facing side (any

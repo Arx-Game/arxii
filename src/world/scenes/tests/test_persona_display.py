@@ -7,8 +7,10 @@ from django.urls import reverse
 from rest_framework.test import APITestCase
 
 from evennia_extensions.factories import AccountFactory
+from evennia_extensions.models import PlayerData
 from world.character_sheets.models import Gender
-from world.roster.factories import PlayerDataFactory, RosterEntryFactory, RosterTenureFactory
+from world.roster.factories import RosterEntryFactory, RosterTenureFactory
+from world.roster.services.selection import set_selected_entry
 from world.scenes.constants import InteractionMode, ScenePrivacyMode
 from world.scenes.factories import (
     InteractionFactory,
@@ -23,13 +25,20 @@ def _gender(key):
     return Gender.objects.get_or_create(key=key, defaults={"display_name": key.title()})[0]
 
 
-def _played_character(account, *, gender_key="male"):
+def _played_character(account, *, gender_key="male", selected=True):
+    """A character the account plays and, by default, is on (its durable selection).
+
+    The reveal rule's viewer is the selected character (#4413), the way login and ``@ic``
+    leave it; ``selected=False`` adds a second character the account is not on.
+    """
     roster_entry = RosterEntryFactory()
-    player_data = PlayerDataFactory(account=account)
+    player_data, _ = PlayerData.objects.get_or_create(account=account)
     RosterTenureFactory(player_data=player_data, roster_entry=roster_entry)
     sheet = roster_entry.character_sheet
     sheet.gender = _gender(gender_key)
     sheet.save(update_fields=["gender"])
+    if selected:
+        set_selected_entry(player_data, roster_entry)
     return roster_entry
 
 
@@ -111,6 +120,46 @@ class PersonaDisplayApiTests(APITestCase):
             f"stag mask ({sheet.primary_persona.name})"
         )
 
+    def test_a_discovery_belongs_to_the_character_who_made_it_not_the_account(self) -> None:
+        """On Hobb, a player meets the stranger Maud unmasked (#4413): the reveal is the
+        active character's, a reminder that Hobb does not know."""
+        owner = AccountFactory()
+        sheet = _played_character(owner).character_sheet
+        mask = PersonaFactory(character_sheet=sheet, is_fake_name=True, name="stag mask")
+        pose = self._public_pose_by(mask)
+
+        player = AccountFactory()
+        _played_character(player)  # Hobb, the one the player is on
+        maud = _played_character(player, selected=False)
+        PersonaDiscoveryFactory(
+            persona=mask, linked_to=sheet.primary_persona, discovered_by=maud.character_sheet
+        )
+
+        self.client.force_authenticate(user=player)
+        response = self.client.get(reverse("interaction-list"))
+        assert self._persona_name(response, pose.pk) == "a man wearing a stag mask"
+
+        set_selected_entry(PlayerData.objects.get(account=player), maud)
+        response = self.client.get(reverse("interaction-list"))
+        assert self._persona_name(response, pose.pk) == f"stag mask ({sheet.primary_persona.name})"
+
+    def test_your_other_character_s_face_is_a_stranger_s_while_you_play_this_one(self) -> None:
+        player = AccountFactory()
+        _played_character(player)  # Hobb, the one the player is on
+        maud = _played_character(player, selected=False, gender_key="female")
+        mask = PersonaFactory(
+            character_sheet=maud.character_sheet, is_fake_name=True, name="stag mask"
+        )
+        pose = self._public_pose_by(mask)
+
+        self.client.force_authenticate(user=player)
+        response = self.client.get(reverse("interaction-list"))
+        assert self._persona_name(response, pose.pk) == "a woman wearing a stag mask"
+
+        set_selected_entry(PlayerData.objects.get(account=player), maud)
+        response = self.client.get(reverse("interaction-list"))
+        assert self._persona_name(response, pose.pk) == "stag mask"
+
     def test_a_named_public_face_renders_by_name_to_everyone(self) -> None:
         owner = AccountFactory()
         roster_entry = _played_character(owner)
@@ -186,16 +235,12 @@ class SightThroughAMaskTests(TestCase):
     def _seen_by(self, persona, viewer_sheet):
         from world.scenes.persona_display import resolve_display_for_viewer
 
-        return resolve_display_for_viewer(
-            persona, viewer_persona_ids=set(), viewer_sheet_ids={viewer_sheet.pk}
-        )
+        return resolve_display_for_viewer(persona, viewer_sheet=viewer_sheet)
 
     def _revealed_to(self, persona, viewer_sheet):
         from world.scenes.persona_display import identity_revealed_to_viewer
 
-        return identity_revealed_to_viewer(
-            persona, viewer_persona_ids=set(), viewer_sheet_ids={viewer_sheet.pk}
-        )
+        return identity_revealed_to_viewer(persona, viewer_sheet=viewer_sheet)
 
     def test_a_bare_fake_name_is_a_mundane_disguise_and_keen_eyes_read_it(self) -> None:
         assert self._seen_by(self.bare_mask, self.keen) == (
@@ -226,9 +271,7 @@ class SightThroughAMaskTests(TestCase):
 
         with CaptureQueriesContext(connection) as ctx:
             resolved = build_persona_display_map(
-                [self.bare_mask, self.glamour, self.named_alt],
-                viewer_persona_ids=set(),
-                viewer_sheet_ids={self.keen.pk},
+                [self.bare_mask, self.glamour, self.named_alt], viewer_sheet=self.keen
             )
         assert resolved[self.bare_mask.pk] == (f"stag mask ({self.primary.name})", True, True)
         assert resolved[self.glamour.pk] == ("a woman wearing a glamour", False, False)

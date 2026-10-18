@@ -9,6 +9,7 @@ import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
+import { MemoryRouter } from 'react-router-dom';
 import type { GMPrompt } from '../../types';
 
 // Mock the low-level fetch seam rather than the exported query fns — the
@@ -356,6 +357,38 @@ describe('GMPromptRow', () => {
       await user.click(screen.getByRole('button', { name: 'Confirm: they attack' }));
       await waitFor(() =>
         expect(mockApiFetch).toHaveBeenCalledWith('/api/gm/prompts/21/confirm/', { method: 'POST' })
+      );
+    });
+  });
+
+  describe('being answer prompt (#4333)', () => {
+    function makeBeingAnswer(): GMPrompt {
+      return makePrompt({
+        id: 31,
+        kind: 'being_answer',
+        kind_label: 'Being answer',
+        scene: null,
+        being_answer_summary: 'Wisket answers Tobiah Fenwright (Success).',
+        being_answer_table: 4,
+      });
+    }
+
+    it('links to the table page and dismisses here', async () => {
+      const user = userEvent.setup();
+      render(
+        <MemoryRouter>
+          <GMPromptRow prompt={makeBeingAnswer()} sceneId="5" onOpen={vi.fn()} />
+        </MemoryRouter>,
+        { wrapper: createWrapper() }
+      );
+      expect(screen.getByText('Wisket answers Tobiah Fenwright (Success).')).toBeInTheDocument();
+      expect(screen.getByRole('link', { name: 'Open' })).toHaveAttribute(
+        'href',
+        '/tables/4?tab=beings'
+      );
+      await user.click(screen.getByRole('button', { name: /Dismiss/ }));
+      await waitFor(() =>
+        expect(mockApiFetch).toHaveBeenCalledWith('/api/gm/prompts/31/dismiss/', { method: 'POST' })
       );
     });
   });

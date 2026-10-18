@@ -5,7 +5,7 @@ from django.db import migrations
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("arxii", "0244_faction_rule_cause_effect_backfill"),
+        ("arxii", "0245_faction_rule_cause_effect_backfill"),
     ]
 
     operations = [

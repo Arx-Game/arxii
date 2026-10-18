@@ -114,6 +114,8 @@ character it examines, including ones it decides not to demote.
 `request.user` is the identity-mapped `Account` typeclass, so account facts are
 `cached_property` entries on it, computed once per account per process and never
 memoized on a view or a request: `cached_roster_entries` (current tenures),
+`cached_selected_entry` (the durable selection with its sheet and character, #4413; what
+`selected_character` reads, cleared by the `PlayerData` save that changes it),
 `cached_persona_ids` (every persona type on those sheets), `cached_codex_knowledge`
 (`roster_entry_id -> entry_id -> CharacterKnowledge`), `cached_covenant_memberships`
 (`covenant_id -> own active membership`), beside the older `cached_primary_persona_ids`

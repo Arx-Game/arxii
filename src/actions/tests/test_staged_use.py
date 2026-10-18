@@ -306,14 +306,10 @@ class StagedUseTests(TestCase):
         assert self.other.pk in target_ids
         assert hidden.pk not in target_ids
         assert "Private underlying character key" not in str(rows)
-        from world.scenes.persona_display import (
-            resolve_display_for_viewer,
-            viewer_context_for_account,
-        )
+        from world.scenes.persona_display import resolve_display_for_viewer
 
-        personas, sheets = viewer_context_for_account(self.account)
         label, _ = resolve_display_for_viewer(
-            mask, viewer_persona_ids=personas, viewer_sheet_ids=sheets, is_staff=False
+            mask, viewer_sheet=self.actor.character_sheet, is_staff=False
         )
         assert {
             row["target_name"] for row in rows if row["use_target"]["target_id"] == self.other.pk
