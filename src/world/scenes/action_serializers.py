@@ -451,19 +451,19 @@ class SceneActionRequestSerializer(_CombatStakesCacheMixin, serializers.ModelSer
     combat_risk_level = serializers.SerializerMethodField()
     combat_stakes = serializers.SerializerMethodField()
     boon = serializers.SerializerMethodField()
-    resist_only = serializers.SerializerMethodField()
-    resist_check_name = serializers.SerializerMethodField()
+    # Filled in by to_representation, which decides resist-only once per row (#4418).
+    resist_only = serializers.BooleanField(read_only=True, default=False)
+    resist_check_name = serializers.CharField(read_only=True, default=None, allow_null=True)
 
-    def get_resist_only(self, obj: SceneActionRequest) -> bool:
-        """True when the target may resist this request but not refuse it (#4418)."""
-        return request_is_resist_only(obj)
-
-    def get_resist_check_name(self, obj: SceneActionRequest) -> str | None:
-        """Name of the check the target resists with, for a resist-only request (#4418)."""
-        template = obj.action_template
-        if template is None or not request_is_resist_only(obj):
-            return None
-        return template.check_type.name
+    def to_representation(self, instance: SceneActionRequest) -> dict:
+        data = super().to_representation(instance)
+        resist_only = request_is_resist_only(instance)
+        template = instance.action_template
+        data["resist_only"] = resist_only
+        data["resist_check_name"] = (
+            template.check_type.name if resist_only and template is not None else None
+        )
+        return data
 
     def get_technique_name(self, obj: SceneActionRequest) -> str | None:
         """Human label for the enhancing technique (#892 — ConsentPrompt display)."""

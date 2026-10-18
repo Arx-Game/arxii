@@ -14,6 +14,7 @@ from world.consent.factories import SocialConsentCategoryFactory
 from world.progression.models import WeeklySocialEngagement
 from world.roster.factories import RosterFactory
 from world.roster.models.choices import RosterType
+from world.scenes.action_services import create_action_request
 from world.scenes.factories import SceneFactory
 from world.vitals.constants import POOL_SURROUNDED_TERMINAL_ENEMY
 from world.vitals.factories import ensure_surrounded_content
@@ -137,3 +138,53 @@ class AnNpcActsOnAPc(JourneyCase):
         response = self._ysmay_responds(body["id"], "deny")
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.json()["status"], "denied")
+
+    def test_a_resist_only_extra_target_cannot_be_denied(self) -> None:
+        wren = self.make_player("Wren", room=self.room)
+        # No social action takes a group over the API yet, so the extra row is set up
+        # through the service; the refusal is still read off the respond endpoint.
+        action_request = create_action_request(
+            scene=self.scene,
+            initiator_persona=persona_of(self.hobb),
+            target_persona=persona_of(self.ysmay),
+            action_key="deceive",
+            additional_target_personas=[persona_of(wren)],
+        )
+        request_id = action_request.pk
+        denied = self.api(self.account_of(wren)).post(
+            f"/api/action-requests/{request_id}/respond/",
+            {"decision": "deny", "target_persona_id": persona_of(wren).pk},
+            format="json",
+        )
+        self.assertEqual(denied.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(denied.json()["detail"], self.RESIST_ONLY_LINE)
+
+    def test_a_pc_acting_on_a_pc_is_still_deniable(self) -> None:
+        wren = self.make_player("Wren", room=self.room)
+        response = self.api(self.account_of(wren)).post(
+            "/api/action-requests/",
+            {
+                "scene": self.scene.pk,
+                "initiator_persona": persona_of(wren).pk,
+                "target_persona": persona_of(self.ysmay).pk,
+                "action_key": "deceive",
+            },
+            format="json",
+        )
+        body = response.json()
+        self.assertIs(body["resist_only"], False)
+        denied = self._ysmay_responds(body["id"], "deny")
+        self.assertEqual(denied.status_code, status.HTTP_200_OK)
+        self.assertEqual(denied.json()["status"], "denied")
+
+    def test_a_child_of_a_flagged_category_is_refusable(self) -> None:
+        child = SocialConsentCategoryFactory(
+            key="courtship", name="Courtship", parent=self.romantic
+        )
+        self.flirt.consent_category = child
+        self.flirt.save()
+        body = self._npc_acts("flirt")
+        self.assertIs(body["resist_only"], False)
+        denied = self._ysmay_responds(body["id"], "deny")
+        self.assertEqual(denied.status_code, status.HTTP_200_OK)
+        self.assertEqual(denied.json()["status"], "denied")
