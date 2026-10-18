@@ -35,12 +35,15 @@ from world.roster.permissions import IsGMOrGuide
 from world.roster.serializers.npc_roster import (
     AnswerSerializer,
     CopyAsNewSerializer,
+    CopySectionResultSerializer,
     CopySectionSerializer,
+    CreatedNPCSerializer,
     NPCDetailSerializer,
     NPCLoanSerializer,
     NPCOfferSerializer,
     NPCRosterRowSerializer,
     PreferencesSerializer,
+    RegardResultSerializer,
     RegardSerializer,
     source_entries_for,
 )
@@ -197,6 +200,8 @@ class StoryNPCViewSet(
     # -- scoping -------------------------------------------------------------
 
     def get_queryset(self) -> QuerySet[RosterEntry]:
+        if not self.request.user.is_authenticated:  # schema generation: anonymous
+            return RosterEntry.objects.none()
         account = self.request.user
         base = npc_entries()
         if self.action in _OWNER_ACTIONS:
@@ -236,6 +241,7 @@ class StoryNPCViewSet(
 
     # -- owner authoring -----------------------------------------------------
 
+    @extend_schema(request=RegardSerializer, responses=RegardResultSerializer)
     @action(detail=True, methods=[HTTPMethod.PUT])
     def regard(self, request: Request, pk: int | None = None) -> Response:
         entry = self.get_object()
@@ -256,6 +262,7 @@ class StoryNPCViewSet(
             }
         )
 
+    @extend_schema(request=PreferencesSerializer, responses=PreferencesSerializer)
     @action(detail=True, methods=[HTTPMethod.PUT])
     def preferences(self, request: Request, pk: int | None = None) -> Response:
         entry = self.get_object()
@@ -274,6 +281,7 @@ class StoryNPCViewSet(
             }
         )
 
+    @extend_schema(request=CopySectionSerializer, responses=CopySectionResultSerializer)
     @action(detail=True, methods=[HTTPMethod.POST], url_path="copy-section")
     def copy_section(self, request: Request, pk: int | None = None) -> Response:
         target = self.get_object()
@@ -284,6 +292,7 @@ class StoryNPCViewSet(
         )
         return Response({"section": serializer.validated_data["section"]})
 
+    @extend_schema(request=CopyAsNewSerializer, responses={201: CreatedNPCSerializer})
     @action(detail=True, methods=[HTTPMethod.POST], url_path="copy-as-new")
     def copy_as_new(self, request: Request, pk: int | None = None) -> Response:
         source = self.get_object()
@@ -310,12 +319,14 @@ class StoryNPCViewSet(
     def list(self, request: Request, *args: Any, **kwargs: Any) -> Response:
         return self._page_response(request)
 
+    @extend_schema(responses=NPCRosterRowSerializer(many=True))
     @action(detail=False, methods=[HTTPMethod.GET])
     def templates(self, request: Request) -> Response:
         return self._page_response(request)
 
     # -- borrowing -----------------------------------------------------------
 
+    @extend_schema(request=None, responses={201: NPCLoanSerializer})
     @action(detail=True, methods=[HTTPMethod.POST])
     def borrow(self, request: Request, pk: int | None = None) -> Response:
         entry = self.get_object()
@@ -346,6 +357,7 @@ class StoryNPCViewSet(
         serializer = NPCOfferSerializer(page, many=True, context=context)
         return self.get_paginated_response(serializer.data)
 
+    @extend_schema(request=AnswerSerializer, responses=NPCLoanSerializer)
     @action(detail=False, methods=[HTTPMethod.POST])
     def answer(self, request: Request) -> Response:
         serializer = AnswerSerializer(data=request.data)

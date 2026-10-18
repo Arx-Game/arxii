@@ -175,7 +175,10 @@ class CopySectionSerializer(serializers.Serializer):
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
-        account = self.context["request"].user
+        request = self.context.get("request")
+        if request is None:  # schema generation builds the serializer with no request
+            return
+        account = request.user
         self.fields["source_entry"].queryset = RosterEntry.objects.filter(
             source_entries_for(account), story_npc_settings__isnull=False
         )
@@ -272,3 +275,23 @@ class NPCOfferSerializer(serializers.ModelSerializer):
             return obj.roster_entry.story_npc_settings.notes_for_player
         except ObjectDoesNotExist:
             return ""
+
+
+class RegardResultSerializer(serializers.Serializer):
+    """What ``PUT regard`` answers: the regard now set."""
+
+    target_type = serializers.ChoiceField(choices=RegardTargetType.choices)
+    target_id = serializers.IntegerField()
+    value = serializers.IntegerField()
+
+
+class CopySectionResultSerializer(serializers.Serializer):
+    """What ``POST copy-section`` answers: the section copied."""
+
+    section = serializers.ChoiceField(choices=NPCSection.choices)
+
+
+class CreatedNPCSerializer(serializers.Serializer):
+    """What ``POST copy-as-new`` answers: the new NPC's roster entry id."""
+
+    id = serializers.IntegerField()
