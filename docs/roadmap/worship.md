@@ -157,8 +157,18 @@ Vitals (#2287 ghost containers), Events/Scenes (optional chassis)
   being's answers at or below the tier, or on Success and above the GM's own text with a clue
   its answers already link. Dismissing it, or leaving it past the configured days, draws an
   authored answer, so the GM's own text is the rare case. Web (table page and the scene GM
-  queue), telnet (`gm prompt answer`) and admin (the steward inline). ADR-4333-C. Next slices
-  of #4333: answering live, rituals, Mysteries, favored facets on worn items.
+  queue), telnet (`gm prompt answer`) and admin (the steward inline). ADR-4333-C.
+- **Favor with beings, slice 5: answering live (#4333, #4442; completes #3298):** a rite
+  performed in a scene a GM runs prompts that GM (not the performer's own player, not a GM who
+  muted Being answers, never for a pledge's closing rite). The panel in the scene queue lists
+  the being's general answers at or below the roll and its miracles; a miracle the character
+  cannot receive (favor, the being's pool, the intervention cooldown) is greyed with the reason.
+  The GM sends one answer or one eligible miracle, or sends nothing. A being answers a given
+  character live at most once per game week, answers and miracles together. Only a GM level
+  with `may_adapt_answers` can edit an answer's text; the clue, cost and follow-up are never
+  editable. The miracle check is now one helper shared with the automatic intervention. Web
+  (queue panel), telnet (`gm prompt answer`) and admin (the level's `may_adapt_answers`).
+  Next slices of #4333: rituals, Mysteries, favored facets on worn items.
 
 ## Not built (filed)
 

@@ -563,7 +563,7 @@ pledge progress (Ruling 9).
 
 Spec and demo: issue #4333 (slice 3 is #4374; walkthrough A steps 3 and 4). Decision:
 ADR-4333-B (a vision written ahead may be released by a closing rite). Stewards are slice 4
-(below); answering live (slice 5) is not built.
+(below); answering live is slice 5 (below).
 
 **Models**
 
@@ -630,7 +630,7 @@ ADR-4333-B (a vision written ahead may be released by a closing rite). Stewards 
 
 Spec and demo: issue #4333 (slice 4 is #4416; walkthrough C). Decision: ADR-4333-C (free text
 only from a being's steward). Answering live in a GM-run scene and `GMLevelCap.may_adapt_answers`
-are slice 5 and not built.
+are slice 5 (below).
 
 **Models**
 
@@ -694,6 +694,72 @@ are slice 5 and not built.
 - Telnet: `gm prompts` lists it; `gm prompt answer <id>` lists the options, `answer=<id>` sends
   one, `text=<words> [clue=<id>]` sends the GM's own; `gm prompt dismiss <id>`.
 - Admin: the Answer builder's rail names the steward ("None (staff-owned)").
+
+### Favor with beings: answering live (#4333, slice 5; completes #3298) [BUILT & WIRED]
+
+Spec and demo: issue #4333 (slice 5 is #4442; walkthrough D, design 6). A GM running a scene
+answers a rite performed there from the same catalogue the pledge route draws from: the live
+route. Migration 0247 is schema only.
+
+**Models**
+
+- `GMPrompt.rite_performance` (FK `WorshipRitePerformance`, SET_NULL): set on a `BEING_ANSWER`
+  prompt raised by a rite in a scene (a stewarded close sets `pledge` instead). The prompt is
+  scene-bound and addressed to each scene GM who has not muted the Being answers group, never
+  the performer's own player. Every GM's copy shares an `event_group`.
+- `GMLevelCap.may_adapt_answers` (default False; staff tune it on the level's admin form): a GM
+  at the level may edit an answer's main text before sending it live.
+- No limit table: a confirmed live prompt is the record of each live answer or miracle.
+
+**Services** (`worship/live_services.py`)
+
+- `route_live_answer(performance, scene)` - called by `PerformWorshipRiteAction` after the rite
+  paid, so a prompt never gates the award. A pledge's closing rite goes through
+  `ClosePledgeAction` and never calls it. No prompt when the being is at its limit, or has no
+  general answer at the roll and no miracle.
+- `live_limit_reason(being, sheet)` / `live_answers_this_week` - a being answers a given
+  character live at most once per game week, answers and miracles counted together, per being
+  and character (confirmed live prompts whose rite was performed this game week).
+- `live_panel(prompt, account=)` -> `LivePanel` (types.py): the being's active **general**
+  answers (no pledge type; a pledge type's answers belong to its pledge) at or below the rolled
+  tier with how often each was sent, the being's active miracles each with its ineligibility
+  reason (empty when it may be performed), `may_adapt` for the viewing GM's level and
+  `limit_reason`.
+- `send_live_answer(prompt, resolver=, answer= | miracle=, text=)` - exactly one choice.
+  An answer is delivered by `answer_services.deliver_live_answer` (a vision from the GM
+  account; fact clue, follow-up clue and cost exactly as written; never held - a short pool
+  refuses the send and the prompt stays open). `text` replaces the answer's main text only
+  and only for a level with `may_adapt_answers`; nobody edits clue, cost or follow-up. A
+  miracle is checked by `services.miracle_ineligibility` and performed through
+  `perform_divine_intervention` (`trigger_event="live_rite"`; its normal miracle narration
+  prompt follows). The prompt and every sibling copy are locked first: the first answer
+  confirms its prompt and dismisses the others, and the limit is asked under the same lock.
+- `dismiss_live_prompt` - dismissing sends nothing (`dismiss_being_answer` routes a prompt
+  with a `rite_performance` here); the scene ending closes a still-pending prompt the same way.
+  The hourly steward timeout leaves live prompts alone.
+- `services.miracle_ineligibility(sheet, miracle, favor=, on_cooldown=, cfg=)` - the check
+  extracted from `fire_divine_intervention`: cooldown condition clear, favor at least both the
+  config threshold and the miracle's, pool at least the larger of the cost and the config
+  minimum. It does not ask the miracle's trigger. `intervention_cooldown_active(character)`.
+
+**Surfaces**
+
+- Scene GM queue: the being answer row reads "<name>'s <rite> to <being> (<tier>)." with Open,
+  which expands the answer panel under the row (`LiveAnswerPanel`): answers at or below the
+  roll with their use count and onlooker line, an Edit the text control only when `may_adapt`,
+  each miracle (greyed with the reason), Send nothing and Send this answer / Perform this
+  miracle. `GMPromptSerializer.being_answer_live` marks the row.
+- API: `/api/worship/live-answers/` (list, retrieve = the panel) with `answer/` (`{answer} |
+  {miracle}`, `text` with an answer) and `dismiss/`; scoped to the requester's own pending
+  prompts (staff: any). Both dispatch `gm_being_answer` (`AnswerBeingPromptAction`, which
+  branches on `rite_performance`) and `DismissGMPromptAction`.
+- Room: the sent answer's `onlooker_line` reaches the room the rite was performed in.
+- Telnet: `gm prompts` names the rite; `gm prompt answer <id>` lists the answers (with use
+  counts), the miracles (with the reason a greyed one is refused) and whether `text=` editing
+  is allowed; `answer=<id> [text=<words>]` or `miracle=<id>` sends; `gm prompt dismiss <id>`
+  sends nothing.
+- Not wired: a live miracle does not start the divine intervention cooldown (the weekly limit
+  already bounds it); the automatic intervention does.
 
 ### Miracles & Divine Intervention (#2360)
 

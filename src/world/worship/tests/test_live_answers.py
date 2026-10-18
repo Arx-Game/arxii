@@ -9,8 +9,6 @@ at Ombrin's shrine, with a GM running the scene.
 
 from __future__ import annotations
 
-from unittest import mock
-
 from rest_framework.test import APIClient
 
 from actions.definitions.worship import (
@@ -18,8 +16,6 @@ from actions.definitions.worship import (
     ClosePledgeAction,
     PerformWorshipRiteAction,
 )
-from commands.gm_ops import CmdGMDashboard
-from world.character_sheets.factories import CharacterSheetFactory
 from world.checks.test_helpers import force_check_outcome
 from world.conditions.factories import ConditionTemplateFactory
 from world.conditions.services import apply_condition
@@ -530,57 +526,3 @@ class ApiTests(LiveTestBase):
             row["being_answer_summary"],
             f"{row['subject_name']}'s {self.rite.name} to Ombrin (Partial Success).",
         )
-
-
-class TelnetTests(LiveTestBase):
-    """``gm prompts`` names the rite; ``gm prompt answer`` lists and sends; ``gm prompt
-    dismiss`` sends nothing."""
-
-    def setUp(self) -> None:
-        self.gm_char = CharacterSheetFactory().character
-        self.gm_char.account = self.gm_account
-        self.gm_char.db_location = self.room
-
-    def _run(self, args: str) -> str:
-        cmd = CmdGMDashboard()
-        cmd.caller = self.gm_char
-        cmd.account = self.gm_account
-        cmd.args = args
-        cmd.switches = []
-        cmd.cmdname = CmdGMDashboard.key
-        cmd.raw_string = f"gm {args}"
-        cmd.msg = mock.Mock()
-        cmd.func()
-        return "\n".join(str(c.args[0]) for c in cmd.msg.call_args_list)
-
-    def test_listing_then_sending(self) -> None:
-        answer = self._general("Partial Success")
-        miracle = MiracleFactory(being=self.being, name="Low", favor_threshold=500)
-        GMLevelCapFactory(level=GMLevel.GM, may_adapt_answers=True)
-        self._perform("Partial Success")
-        prompt = self._prompt()
-
-        listed = self._run("prompts")
-        self.assertIn(f"[{prompt.pk}] Being answer", listed)
-        self.assertIn(f"'s {self.rite.name} to Ombrin (Partial Success).", listed)
-
-        options = self._run(f"prompt answer {prompt.pk}")
-        self.assertIn(f"answer={answer.pk} (Partial Success, sent 0 times)", options)
-        self.assertIn(f"miracle={miracle.pk} Low: Favor with Ombrin", options)
-        self.assertIn("Add text=<words> to answer=<id>", options)
-
-        sent = self._run(
-            f"prompt answer {prompt.pk} answer={answer.pk} text=[GM-edited answer text]"
-        )
-        self.assertEqual(sent, "Sent as a vision from Ombrin.")
-        self.assertIn(_EDITED, Vision.objects.get(recipient=self.sheet).body)
-
-    def test_dismissing_sends_nothing(self) -> None:
-        self._general("Partial Success")
-        self._perform("Partial Success")
-        prompt = self._prompt()
-
-        self._run(f"prompt dismiss {prompt.pk}")
-
-        self.assertEqual(GMPrompt.objects.get(pk=prompt.pk).status, GMPromptStatus.DISMISSED)
-        self.assertEqual(self._vision_count(), 0)

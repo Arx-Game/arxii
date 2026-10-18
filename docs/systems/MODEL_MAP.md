@@ -4316,6 +4316,7 @@
   - confirmed_tag -> magic.DramaticMomentTag [OneToOne] (nullable)
   - standoff_group -> standoffs.StandoffGroup [FK] (nullable)
   - pledge -> worship.PledgeDetails [FK] (nullable)
+  - rite_performance -> worship.WorshipRitePerformance [FK] (nullable)
 **Pointed to by:**
   - narrations <- gm.GMPromptNarration
 
@@ -11179,6 +11180,7 @@
   - outcome_tier -> traits.CheckOutcome [FK]
 **Pointed to by:**
   - resonance_grants <- magic.ResonanceGrant
+  - gm_prompts <- gm.GMPrompt
   - closed_pledge <- worship.PledgeDetails
   - pledge_credits <- worship.PledgeCredit
 
@@ -11243,8 +11245,10 @@
 - `gods_favorite_achievement_for(character_sheet: 'CharacterSheet') -> 'Achievement | None' - Resolve the gender-matched God's Favorite achievement row (Decision 6).`
 - `grant_worship(being: world.worship.models.WorshippedBeing, amount: int, *, granted_by: 'CharacterSheet | None' = None, reason: str = '') -> world.worship.models.WorshipGrant - Add worship to a being's pool and record the audit ledger row.`
 - `install_divine_intervention_trigger(character_sheet: 'CharacterSheet', being: world.worship.models.WorshippedBeing) -> None - Install the divine intervention Trigger on the character's ObjectDB.`
+- `intervention_cooldown_active(character) -> bool - Whether the divine intervention cooldown condition is on ``character``.`
 - `is_birth_favored_by(character_sheet: 'CharacterSheet', being: world.worship.models.WorshippedBeing, *, today: 'date | None' = None) -> bool - Whether character_sheet is birth-favored by being today (#3776).`
 - `maybe_fire_divine_intervention(character, payload=None) -> None - Trigger handler: fire a divine miracle when a high-devotion PC is incapacitated.`
+- `miracle_ineligibility(character_sheet: 'CharacterSheet', miracle: 'Miracle', *, favor: int | None = None, on_cooldown: bool | None = None, cfg: 'DivineInterventionConfig | None' = None) -> str - Why ``miracle`` cannot be performed for ``character_sheet`` now, or "" when it can.`
 - `perform_divine_intervention(character_sheet: 'CharacterSheet', being: world.worship.models.WorshippedBeing, miracle: 'Miracle', *, scene=None, trigger_event: str = 'character_incapacitated') -> 'MiraclePerformance' - Commit seam for a divine intervention: spend pool, apply conditions, audit.`
 - `release_patronage(standing: world.worship.models.DevotionStanding) -> None - Mark a patronage as released (dormant).`
 - `remove_divine_intervention_trigger(character_sheet: 'CharacterSheet', being: world.worship.models.WorshippedBeing) -> None - Remove the divine intervention trigger when favor drops below threshold.`
