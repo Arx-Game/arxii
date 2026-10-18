@@ -1311,10 +1311,14 @@ def _accrue_engagement_for_persona(
     """Accrue graded good-sport credit for ``persona`` accepting an action request.
 
     Skips when:
-    - The persona's character has no linked account (NPC defender — no accrual).
-    - The initiator has no account (NPC initiator — no accrual).
+    - The target or the initiator is a story NPC, even one a GM or Guide is playing
+      (#4418, ADR-4418): good-sport credit is between player characters.
+    - The persona's character has no linked account (offline or unplayed).
+    - The initiator has no account.
     - The initiator and target share the same account (self-target — no farming).
     """
+    if _persona_is_npc(persona) or _persona_is_npc(action_request.initiator_persona):
+        return
     target_character = persona.character_sheet.character
     target_account = target_character.db_account
     if target_account is None:
@@ -1342,9 +1346,12 @@ def _accrue_engagement_for_primary(action_request: SceneActionRequest) -> None:
 
 
 def _persona_is_npc(persona: Persona) -> bool:
-    """True when nobody is currently assigned to play this persona's character.
+    """True when this persona's character is not a player character (#4418, ADR-4418).
 
-    "PC targets stay PENDING" means player-character, not "online right now" --
+    NPC-ness follows the character, not who plays it: a story NPC on the NPC shelf
+    reads True while a GM or Guide plays it, and gets no consent prompt. A character
+    nobody holds also reads True. "PC targets stay PENDING" means player-character,
+    not "online right now" --
     an offline PC's consent request must still wait for them, not auto-resolve
     as if they were an NPC. ``character.db_account`` is the wrong proxy for
     that: Evennia's ``unpuppet_object`` clears it the moment nobody is

@@ -273,8 +273,10 @@ def select_surrounded_terminal_pool(
     (#4091): an opponent counts as a PC when it is puppeted right now
     (``db_account`` set, the pre-#4091 test) OR holds an active RosterTenure, which
     covers an offline PC opponent whose ``db_account`` reads ``None`` and would
-    otherwise have let a battle round kill them. One query for every opposing
-    participant's roster tenure, not one per participant.
+    otherwise have let a battle round kill them. A story NPC never counts, even
+    while a GM or Guide plays it (#4418, ADR-4418): ``story_npc_sheet_ids`` removes
+    them first. One query for the story NPCs and one for the roster tenures of
+    every opposing participant, not one per participant.
 
     Returns ``None`` on a seeding gap (the named pool doesn't exist) rather than raising
     — matches the "never crash the round, hold the victim" convention the sibling
@@ -285,6 +287,7 @@ def select_surrounded_terminal_pool(
     from actions.models import ConsequencePool  # noqa: PLC0415
     from world.battles.constants import BattleParticipantStatus  # noqa: PLC0415
     from world.roster.models import RosterEntry  # noqa: PLC0415
+    from world.roster.services.activity import story_npc_sheet_ids  # noqa: PLC0415
     from world.vitals.constants import (  # noqa: PLC0415
         POOL_SURROUNDED_TERMINAL_ENEMY,
         POOL_SURROUNDED_TERMINAL_PVP,
@@ -297,7 +300,14 @@ def select_surrounded_terminal_pool(
         if participant.place_id is not None
         else []
     )
-    opposing = [p for p in others if p.side_id != participant.side_id]
+    npc_sheet_ids = story_npc_sheet_ids(
+        p.character_sheet_id for p in others if p.side_id != participant.side_id
+    )
+    opposing = [
+        p
+        for p in others
+        if p.side_id != participant.side_id and p.character_sheet_id not in npc_sheet_ids
+    ]
     opposing_pc_present = any(
         p.character_sheet.character.db_account is not None for p in opposing
     ) or (
