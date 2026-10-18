@@ -170,6 +170,9 @@ class MyRosterEntrySerializer(serializers.ModelSerializer):
     # fields they read None off the entry (it has no such attributes).
     loan = MyNPCLoanSerializer(read_only=True, allow_null=True)
     npc_notes = serializers.CharField(read_only=True, allow_null=True)
+    # #4418: this character's primary persona voices a crowd in combat. Annotated on the
+    # ``mine`` queryset; False for any queryset that does not carry the annotation.
+    is_crowd_voice = serializers.BooleanField(read_only=True, default=False)
 
     class Meta:
         model = RosterEntry
@@ -195,6 +198,7 @@ class MyRosterEntrySerializer(serializers.ModelSerializer):
             "room_name",
             "loan",
             "npc_notes",
+            "is_crowd_voice",
         )
         read_only_fields: ClassVar[tuple[str, ...]] = fields
 

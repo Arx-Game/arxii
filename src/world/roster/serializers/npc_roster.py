@@ -228,3 +228,45 @@ class PreferencesSerializer(serializers.Serializer):
     """``{preferences: [{trait, valence}]}``: replaces the NPC's likes and dislikes."""
 
     preferences = PreferenceLineSerializer(many=True)
+
+
+class NPCOfferSerializer(serializers.ModelSerializer):
+    """One OFFERED loan, as the Guide it was offered to reads it.
+
+    ``context["offered_names"]`` maps the offering account's id to the name shown.
+    """
+
+    loan_id = serializers.IntegerField(source="pk", read_only=True)
+    roster_entry_id = serializers.IntegerField(read_only=True)
+    name = serializers.CharField(source="roster_entry.character_sheet.character.db_key")
+    thumbnail_url = serializers.SerializerMethodField()
+    scene_id = serializers.IntegerField(read_only=True, allow_null=True)
+    scene_title = serializers.CharField(source="scene.name", read_only=True, allow_null=True)
+    offered_by_name = serializers.SerializerMethodField()
+    notes_for_player = serializers.SerializerMethodField()
+
+    class Meta:
+        model = NPCLoan
+        fields: ClassVar[tuple[str, ...]] = (
+            "loan_id",
+            "roster_entry_id",
+            "name",
+            "thumbnail_url",
+            "scene_id",
+            "scene_title",
+            "offered_by_name",
+            "notes_for_player",
+        )
+        read_only_fields: ClassVar[tuple[str, ...]] = fields
+
+    def get_thumbnail_url(self, obj: NPCLoan) -> str | None:
+        return portrait_url(obj.roster_entry)
+
+    def get_offered_by_name(self, obj: NPCLoan) -> str:
+        return self.context["offered_names"].get(obj.offered_by_id, OWNER_FALLBACK_NAME)
+
+    def get_notes_for_player(self, obj: NPCLoan) -> str:
+        try:
+            return obj.roster_entry.story_npc_settings.notes_for_player
+        except ObjectDoesNotExist:
+            return ""

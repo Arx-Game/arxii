@@ -37,6 +37,7 @@ from world.roster.serializers.npc_roster import (
     CopySectionSerializer,
     NPCDetailSerializer,
     NPCLoanSerializer,
+    NPCOfferSerializer,
     NPCRosterRowSerializer,
     PreferencesSerializer,
     RegardSerializer,
@@ -321,6 +322,28 @@ class StoryNPCViewSet(
         except NPCLendingError as exc:
             return self._refused(exc)
         return Response(NPCLoanSerializer(loan).data, status=status.HTTP_201_CREATED)
+
+    @action(detail=False, methods=[HTTPMethod.GET])
+    def offers(self, request: Request) -> Response:
+        """The NPC offers waiting for the requesting Guide to answer."""
+        from world.scenes.cast_list_services import _player_names  # noqa: PLC0415
+
+        loans = (
+            NPCLoan.objects.filter(borrower=request.user, status=NPCLoanStatus.OFFERED)
+            .select_related(
+                "scene",
+                "roster_entry__story_npc_settings",
+                "roster_entry__profile_picture__media",
+                "roster_entry__profile_picture__tenure",
+                "roster_entry__character_sheet__character",
+            )
+            .order_by("-pk")
+        )
+        page = self.paginate_queryset(loans)
+        context = self.get_serializer_context()
+        context["offered_names"] = _player_names(loan.offered_by_id for loan in page)
+        serializer = NPCOfferSerializer(page, many=True, context=context)
+        return self.get_paginated_response(serializer.data)
 
     @action(detail=False, methods=[HTTPMethod.POST])
     def answer(self, request: Request) -> Response:

@@ -322,3 +322,64 @@ class CanBorrowAgreesWithRequestBorrow(NpcRosterCase):
         tenure.save()
         self.entry.invalidate_tenure_cache()
         agreement("unheld")
+
+
+class AGuideReadsItsOffers(NpcRosterCase):
+    def setUp(self) -> None:
+        super().setUp()
+        from world.scenes.factories import SceneFactory, SceneParticipationFactory
+
+        mint_gm_character(self.owner, "Warden Osk")
+        self.scene = SceneFactory(room=self.room, name="The Siege at Low Gate")
+        SceneParticipationFactory(scene=self.scene, account=self.owner, is_gm=True, is_owner=True)
+        settings = self.entry.story_npc_settings
+        settings.notes_for_player = NOTES
+        settings.save()
+
+    def _offer(self, entry_id=None):
+        return self.web(
+            self.ravenna,
+            "offer_npc",
+            roster_entry_id=entry_id or self.entry.pk,
+            guide_account_id=self.guide.pk,
+        )
+
+    def test_offers_list_then_clear_on_accept(self) -> None:
+        offered = self._offer()
+        self.assertTrue(offered.detail.success, offered.detail.message)
+        loan_id = offered.detail.data["loan_id"]
+
+        rows = self.api(self.guide).get(f"{NPCS}offers/").json()["results"]
+        self.assertEqual(len(rows), 1)
+        row = rows[0]
+        self.assertEqual(row["loan_id"], loan_id)
+        self.assertEqual(row["roster_entry_id"], self.entry.pk)
+        self.assertEqual(row["name"], "Captain Vael")
+        self.assertEqual(row["scene_id"], self.scene.pk)
+        self.assertEqual(row["scene_title"], "The Siege at Low Gate")
+        self.assertEqual(row["offered_by_name"], "Warden Osk")
+        self.assertEqual(row["notes_for_player"], NOTES)
+        self.assertIn("thumbnail_url", row)
+
+        other_guide = self.make_player("Maren", room=self.room)
+        GuideProfileFactory(account=self.account_of(other_guide))
+        empty = self.api(self.account_of(other_guide)).get(f"{NPCS}offers/").json()
+        self.assertEqual(empty["results"], [])
+
+        accepted = self.web(self.ilsa, "answer_npc_loan", loan_id=loan_id, accept=True)
+        self.assertTrue(accepted.detail.success, accepted.detail.message)
+        self.assertEqual(self.api(self.guide).get(f"{NPCS}offers/").json()["results"], [])
+        mine = {r["name"]: r for r in self.api(self.guide).get(MINE).json()}
+        self.assertIn("Captain Vael", mine)
+        self.assertIs(mine["Captain Vael"]["is_crowd_voice"], False)
+
+    def test_a_lent_crowd_voice_is_marked(self) -> None:
+        from world.combat.factories import CombatOpponentFactory
+
+        CombatOpponentFactory(voice_persona=self.entry.character_sheet.primary_persona)
+        offered = self._offer()
+        loan_id = offered.detail.data["loan_id"]
+        self.web(self.ilsa, "answer_npc_loan", loan_id=loan_id, accept=True)
+        mine = {r["name"]: r for r in self.api(self.guide).get(MINE).json()}
+        self.assertIs(mine["Captain Vael"]["is_crowd_voice"], True)
+        self.assertIs(mine["Ilsa"]["is_crowd_voice"], False)

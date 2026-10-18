@@ -5,7 +5,7 @@ RosterEntry views and related functionality.
 from http import HTTPMethod
 from typing import cast
 
-from django.db.models import Count, Prefetch, Q, QuerySet
+from django.db.models import Count, Exists, OuterRef, Prefetch, Q, QuerySet
 from django_filters.rest_framework import DjangoFilterBackend
 from drf_spectacular.utils import extend_schema
 from evennia.accounts.models import AccountDB
@@ -18,6 +18,7 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.serializers import BaseSerializer
 
+from world.combat.models import CombatOpponent
 from world.roster.filters import RosterEntryFilterSet
 from world.roster.models import RosterEntry, RosterTenure, TenureMedia
 from world.roster.models.choices import RosterType
@@ -156,6 +157,11 @@ class RosterEntryViewSet(viewsets.ReadOnlyModelViewSet):
                 "profile_picture__tenure",
             )
             .annotate(
+                is_crowd_voice=Exists(
+                    CombatOpponent.objects.filter(
+                        voice_persona__character_sheet_id=OuterRef("character_sheet_id")
+                    )
+                ),
                 unread_narrative_count=Count(
                     "character_sheet__narrative_message_deliveries",
                     filter=Q(
