@@ -49,6 +49,7 @@ from world.societies.factories import OrganizationFactory
 from world.societies.models import OrganizationObligation
 from world.species.factories import SpeciesFactory, SpeciesGiftGrantFactory
 from world.traits.factories import SkillTraitFactory, StatTraitFactory
+from world.traits.models import TraitCategory
 
 
 class MagicStageValidationTest(TestCase):
@@ -94,6 +95,7 @@ class MagicStageValidationTest(TestCase):
         cls.other_trait = SkillTraitFactory(name="not a stat")
         cls.skill = SkillFactory()
         cls.inactive_skill = SkillFactory(is_active=False)
+        cls.magic_skill = SkillFactory(trait=SkillTraitFactory(category=TraitCategory.MAGIC))
 
     def _draft(self, **draft_data_overrides):
         selected_species = draft_data_overrides.pop("selected_species", None)
@@ -210,6 +212,12 @@ class MagicStageValidationTest(TestCase):
 
     def test_inactive_anima_check_skill_fails(self):
         draft = self._draft(anima_check_skill_id=self.inactive_skill.id)
+        errors = compute_magic_errors(draft)
+        assert errors == ["Choose the stat and skill your magic rolls (your Anima Check)"]
+
+    def test_anima_check_rejects_magic_category_skill(self):
+        """A magic-category skill already feeds the roll as a term, so it is no Anima Check pick."""
+        draft = self._draft(anima_check_skill_id=self.magic_skill.id)
         errors = compute_magic_errors(draft)
         assert errors == ["Choose the stat and skill your magic rolls (your Anima Check)"]
 
