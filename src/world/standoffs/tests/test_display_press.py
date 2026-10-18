@@ -28,6 +28,7 @@ from world.magic.types.techniques import SoulfrayWarning
 from world.skills.factories import SkillFactory
 from world.standoffs.factories import StandoffApproachFactory, StandoffTermsFactory
 from world.standoffs.models import StandoffConfig
+from world.standoffs.serializers import StandoffViewSerializer
 from world.standoffs.services.verbs import standoff_press, terms_difficulty
 from world.standoffs.services.view import build_standoff_view
 from world.standoffs.tests.test_verbs import CHECK, SOCIAL, VerbBase, forced
@@ -130,12 +131,23 @@ class DisplayPressTests(DisplayPressBase):
 class DisplayTechniqueSkillTests(DisplayPressBase):
     """The display cast adds the technique skill, and the preview shows the same term (#4450)."""
 
-    def test_standoff_display_cast_preview_matches_roll(self) -> None:
-        skill = SkillFactory()
-        self.technique.skill = skill
+    def setUp(self) -> None:
+        super().setUp()
+        self.skill = SkillFactory()
+        self.technique.skill = self.skill
         self.technique.save(update_fields=["skill"])
+        self.term = ExtraTraitTerm(trait=self.skill.trait, weight=Decimal("1.00"))
+
+    @staticmethod
+    def _terms_for(mock, check_type) -> list[tuple]:
+        return [
+            tuple(call.kwargs.get("extra_traits", ()))
+            for call in mock.call_args_list
+            if call.args[1] == check_type
+        ]
+
+    def test_standoff_display_cast_preview_matches_roll(self) -> None:
         plain = StandoffApproachFactory()
-        term = ExtraTraitTerm(trait=skill.trait, weight=Decimal("1.00"))
 
         with (
             patch(
@@ -147,7 +159,7 @@ class DisplayTechniqueSkillTests(DisplayPressBase):
                 wraps=collect_check_modifiers,
             ) as gathered,
         ):
-            build_standoff_view(self.encounter, self.sheet, technique=self.technique)
+            view = build_standoff_view(self.encounter, self.sheet)
         with (
             patch(CHECK, return_value=forced(1)) as rolled,
             patch(
@@ -157,33 +169,30 @@ class DisplayTechniqueSkillTests(DisplayPressBase):
         ):
             standoff_press(self.participant, self.group, self.approach, self.technique)
 
-        def terms_for(mock, check_type, *, position: int) -> list[tuple]:
-            return [
-                tuple(call.kwargs.get("extra_traits", ()))
-                for call in mock.call_args_list
-                if call.args[position] == check_type
-            ]
-
         casting = self.approach.check_type
-        self.assertEqual(tuple(rolled.call_args.kwargs["extra_traits"]), (term,))
-        self.assertEqual(terms_for(previewed, casting, position=1), [(term,)])
-        self.assertEqual(terms_for(gathered, casting, position=1), [(term,)])
-        self.assertEqual(terms_for(press_gathered, casting, position=1), [(term,)])
-        # An approach that casts nothing never takes the technique's skill.
-        self.assertEqual(terms_for(previewed, plain.check_type, position=1), [()])
+        self.assertEqual(tuple(rolled.call_args.kwargs["extra_traits"]), (self.term,))
+        self.assertEqual(self._terms_for(press_gathered, casting), [(self.term,)])
+        # The preview grades the casting approach once without a pick and once per technique,
+        # the latter with the very terms the press rolled with.
+        self.assertEqual(self._terms_for(previewed, casting), [(), (self.term,)])
+        self.assertEqual(self._terms_for(gathered, casting), [(), (self.term,)])
+        by_id = {a.approach_id: a for a in view.approaches}
+        self.assertEqual(
+            [g.technique_id for g in by_id[self.approach.pk].technique_grades],
+            [self.technique.pk],
+        )
+        # An approach that casts nothing takes no technique and no term.
+        self.assertEqual(by_id[plain.pk].technique_grades, [])
+        self.assertEqual(self._terms_for(previewed, plain.check_type), [()])
 
-    def test_the_view_without_a_technique_adds_no_term(self) -> None:
-        skill = SkillFactory()
-        self.technique.skill = skill
-        self.technique.save(update_fields=["skill"])
-        with patch(
-            "world.standoffs.services.view.preview_check_difficulty",
-            wraps=preview_check_difficulty,
-        ) as previewed:
-            build_standoff_view(self.encounter, self.sheet)
-        self.assertTrue(previewed.called)
-        for call in previewed.call_args_list:
-            self.assertEqual(tuple(call.kwargs.get("extra_traits", ())), ())
+    def test_the_serializer_exposes_the_grade_per_technique(self) -> None:
+        view = build_standoff_view(self.encounter, self.sheet)
+        data = StandoffViewSerializer(view).data
+        approach = next(a for a in data["approaches"] if a["approach_id"] == self.approach.pk)
+        (entry,) = approach["technique_grades"]
+        self.assertEqual(entry["technique_id"], self.technique.pk)
+        self.assertTrue(entry["grade"])
+        self.assertTrue(entry["grade_label"])
 
 
 class DisplayRefusalTests(DisplayPressBase):

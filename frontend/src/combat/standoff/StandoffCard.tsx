@@ -428,6 +428,9 @@ function ApproachButton({
   const needsTechnique = approach.casts_technique;
   const noTechnique = needsTechnique && techniques.length === 0;
   const refused = approach.refusal !== '';
+  // A picked technique's skill joins the roll, so its own grade replaces the approach's.
+  const pickedGrade = approach.technique_grades.find((g) => String(g.technique_id) === techniqueId);
+  const shownGrade = pickedGrade ?? approach;
   const pressKwargs = { group_id: groupId, approach_id: approach.approach_id };
 
   function onPress() {
@@ -471,7 +474,7 @@ function ApproachButton({
             ))
           )}
         </span>
-        <Grade value={approach.grade} label={approach.grade_label} />
+        <Grade value={shownGrade.grade} label={shownGrade.grade_label} />
       </Button>
       {refused && <Refusal text={approach.refusal} />}
       {noTechnique && (

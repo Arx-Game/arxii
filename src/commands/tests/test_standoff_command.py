@@ -221,6 +221,18 @@ class CmdStandoffTests(TestCase):
         self.assertNotIn("SOMEONE ELSES", text)
         self.assertIn("unread", text)
 
+    def test_summary_grades_a_casting_approach_per_technique(self) -> None:
+        StandoffApproachFactory(name="Show of Power", casts_technique=True)
+        for name in ("Thunderclap", "Gale"):
+            CharacterTechniqueFactory(character=self.sheet, technique=TechniqueFactory(name=name))
+        cmd = self._cmd("")
+        cmd.func()
+        text = cmd.msg.call_args.args[0]
+        self.assertRegex(text, r"press Show of Power with Thunderclap: \w+")
+        self.assertRegex(text, r"press Show of Power with Gale: \w+")
+        self.assertNotRegex(text, r"press Show of Power: ")
+        self.assertRegex(text, r"press Hard Stare: \w+")
+
     def test_summary_shows_the_critical_upgrade_on_terms_that_have_one(self) -> None:
         from world.standoffs.constants import TermsEffect
 

@@ -26,6 +26,7 @@ from world.magic.services.magic_skills import (
     involved_trait_ids,
     resolve_cast_check,
     technique_skill_term,
+    technique_skill_term_for_path,
 )
 from world.magic.types.magic_skills import CastCheck
 from world.progression.factories import CharacterPathHistoryFactory
@@ -150,6 +151,21 @@ class TechniqueSkillTermTests(TestCase):
         technique = TechniqueFactory(gift=self.major_gift)
 
         self.assertIsNone(technique_skill_term(bare, technique))
+
+    def test_for_path_variant_agrees_with_the_character_lookup(self):
+        CharacterPathHistoryFactory(character=self.sheet, path=self.path)
+        for technique in (
+            TechniqueFactory(gift=self.major_gift, skill=self.override_skill),
+            TechniqueFactory(gift=self.major_gift),
+            TechniqueFactory(gift=self.minor_gift),
+        ):
+            with self.subTest(technique=technique.pk):
+                self.assertEqual(
+                    technique_skill_term_for_path(technique, self.path), self._term(technique)
+                )
+        self.assertIsNone(
+            technique_skill_term_for_path(TechniqueFactory(gift=self.major_gift), None)
+        )
 
 
 class ResolveCastCheckTests(TestCase):

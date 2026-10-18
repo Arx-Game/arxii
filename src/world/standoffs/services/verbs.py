@@ -41,7 +41,7 @@ from world.combat.spectacle import apply_spectacle, classify_cast
 from world.conditions.services import apply_condition
 from world.fatigue.constants import EffortLevel
 from world.magic.services.capability_requirements import technique_performable
-from world.magic.services.magic_skills import technique_skill_term
+from world.magic.services.magic_skills import technique_skill_term, technique_skill_term_for_path
 from world.magic.services.techniques import use_technique
 from world.magic.services.ultimates import floor_ultimate_check, readied_ultimate
 from world.mechanics.models import Application
@@ -94,6 +94,7 @@ from world.standoffs.types import DisplayCast, StandoffActionResult
 if TYPE_CHECKING:
     from world.character_sheets.models import CharacterSheet
     from world.checks.types import CheckResult, ExtraTraitTerm
+    from world.classes.models import Path
     from world.combat.models import CombatEncounter, CombatOpponent, CombatParticipant
     from world.magic.models import Technique
     from world.magic.types.techniques import SoulfrayWarning, TechniqueUseResult
@@ -514,9 +515,21 @@ def display_cast_terms(sheet: CharacterSheet, technique: Technique) -> tuple[Ext
     """The skill terms a display cast of ``technique`` adds to its press check.
 
     The approach keeps its own check type; only the technique skill rides along. The press
-    and the view's grade both call this, so the grade shown is the grade rolled.
+    rolls with this, and the view grades with :func:`display_cast_terms_for_path`, which
+    applies the same rule, so the grade shown is the grade rolled.
     """
     term = technique_skill_term(sheet.character, technique)
+    return (term,) if term is not None else ()
+
+
+def display_cast_terms_for_path(
+    technique: Technique, path: Path | None
+) -> tuple[ExtraTraitTerm, ...]:
+    """:func:`display_cast_terms` for a caster whose current Path is already known.
+
+    Lets the view grade every display technique without one Path read per technique.
+    """
+    term = technique_skill_term_for_path(technique, path)
     return (term,) if term is not None else ()
 
 

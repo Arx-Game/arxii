@@ -9,6 +9,7 @@ roll math) but is never named.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from decimal import Decimal
 from typing import TYPE_CHECKING
 
 from world.checks.services import (
@@ -20,6 +21,7 @@ from world.combat.constants import CauseKind, ParticipantStatus
 from world.combat.morale import OpponentMoraleState, morale_state_for
 from world.mechanics.constants import DifficultyIndicator
 from world.mechanics.services import difficulty_indicator_for_rank_difference
+from world.progression.selectors import current_path_for_character
 from world.standoffs.constants import LIVE_GROUP_STATES, RevealKind
 from world.standoffs.models import (
     StandoffAngleShare,
@@ -41,7 +43,7 @@ from world.standoffs.services.profile import GroupDrive, group_cause, group_driv
 from world.standoffs.services.state import active_members, is_in_standoff
 from world.standoffs.services.verbs import (
     build_grading_context,
-    display_cast_terms,
+    display_cast_terms_for_path,
     hidden_things,
     morale_terms_ease,
     press_grade,
@@ -54,6 +56,7 @@ if TYPE_CHECKING:
 
     from world.character_sheets.models import CharacterSheet
     from world.checks.models import CheckType
+    from world.checks.social_target import SocialDifficulty
     from world.checks.types import ExtraTraitTerm, ModifierContribution
     from world.combat.models import CombatEncounter
     from world.magic.models import Technique
@@ -105,6 +108,18 @@ class ApproachView:
     hits_revealed_drive: bool
     casts_technique: bool = False
     refusal: str = ""
+    # A casting approach's grade per display technique: each technique's skill term changes
+    # the roll, so the grade shown for a picked technique must carry it (#4450).
+    technique_grades: list[TechniqueGradeView] = field(default_factory=list)
+
+
+@dataclass(frozen=True)
+class TechniqueGradeView:
+    """A casting approach's grade when pressed with one display technique."""
+
+    technique_id: int
+    grade: str
+    grade_label: str
 
 
 @dataclass(frozen=True)
@@ -152,6 +167,10 @@ def grade_label(grade: str) -> str:
     return DifficultyIndicator(grade).label if grade else ""
 
 
+# A check type's skill terms as a cache key: (trait id, weight) per term.
+_TermsKey = tuple[tuple[int, Decimal], ...]
+
+
 @dataclass
 class _Grader:
     """Grades one viewer's checks for one build; its dicts live and die with that build.
@@ -163,8 +182,8 @@ class _Grader:
     """
 
     sheet: CharacterSheet
-    base_totals: dict[tuple, int] = field(default_factory=dict)
-    graded: dict[tuple, str] = field(default_factory=dict)
+    base_totals: dict[tuple[int, _TermsKey], int] = field(default_factory=dict)
+    graded: dict[tuple[int, _TermsKey, int, int], str] = field(default_factory=dict)
 
     def grade(
         self,
@@ -345,7 +364,7 @@ def _worst_morale_state(members: list) -> str:
     return OpponentMoraleState.STEADY
 
 
-def _display_techniques(viewer: CharacterSheet) -> list[DisplayTechniqueView]:
+def _display_techniques(viewer: CharacterSheet) -> list[Technique]:
     """The viewer's castable techniques: known ones plus a readied ultimate, performable."""
     from world.magic.models import CharacterTechnique  # noqa: PLC0415
     from world.magic.services.capability_requirements import (  # noqa: PLC0415
@@ -355,27 +374,23 @@ def _display_techniques(viewer: CharacterSheet) -> list[DisplayTechniqueView]:
 
     techniques = {
         link.technique_id: link.technique
-        for link in CharacterTechnique.objects.filter(character=viewer).select_related("technique")
+        for link in CharacterTechnique.objects.filter(character=viewer).select_related(
+            "technique__gift"
+        )
     }
     readied = readied_ultimate(viewer)
     if readied is not None:
         techniques.setdefault(readied.technique.pk, readied.technique)
-    return [
-        DisplayTechniqueView(technique.pk, technique.name)
-        for technique in performable_techniques(viewer, list(techniques.values()))
-    ]
+    return performable_techniques(viewer, list(techniques.values()))
 
 
 def build_standoff_view(
-    encounter: CombatEncounter,
-    viewer_sheet: CharacterSheet,
-    technique: Technique | None = None,
+    encounter: CombatEncounter, viewer_sheet: CharacterSheet
 ) -> StandoffView | None:
     """The standoff as ``viewer_sheet`` may see it; None when there is no standoff.
 
-    ``technique`` is the technique the viewer means to display. A casting approach is
-    graded with that technique's skill term, the same term its press rolls with; without
-    one, or for any approach that casts nothing, no skill term is added.
+    A casting approach carries one grade per display technique, each graded with that
+    technique's skill term, the same term its press rolls with.
 
     Everything a group needs is read once per (group, viewer) and shared by every
     approach and terms entry, so the query count follows the number of groups, not the
@@ -389,15 +404,20 @@ def build_standoff_view(
     all_terms = list(StandoffTerms.objects.all())
     capability_ids = [a.capability_id for a in approaches]
     grader = _Grader(viewer_sheet)
-    display_terms = display_cast_terms(viewer_sheet, technique) if technique is not None else ()
+    # Only a casting approach (a display of power) offers the technique picker.
+    techniques = (
+        _display_techniques(viewer_sheet)
+        if any(approach.casts_technique for approach in approaches)
+        else []
+    )
+    # The viewer's Path is read once; each technique's skill term follows from it.
+    path = current_path_for_character(viewer_sheet.character) if techniques else None
+    display_terms = {
+        technique.pk: display_cast_terms_for_path(technique, path) for technique in techniques
+    }
     view = StandoffView(
         place=encounter.room.db_key if encounter.room is not None else "",
-        # Only a casting approach (a display of power) offers the technique picker.
-        display_techniques=(
-            _display_techniques(viewer_sheet)
-            if any(approach.casts_technique for approach in approaches)
-            else []
-        ),
+        display_techniques=[DisplayTechniqueView(t.pk, t.name) for t in techniques],
     )
     for group in encounter.standoff_groups.select_related("creature_template", "persona"):
         _append_group_views(
@@ -425,7 +445,7 @@ def _append_group_views(  # noqa: PLR0913 - inputs are the per-view and per-grou
     all_terms: list[StandoffTerms],
     config: StandoffConfig,
     grader: _Grader,
-    display_terms: Sequence[ExtraTraitTerm] = (),
+    display_terms: dict[int, tuple[ExtraTraitTerm, ...]],
 ) -> None:
     """Add one group's summary, approaches, and terms to the viewer's view."""
     reveals = list(group.reveals.select_related("drive", "faction_rule"))
@@ -502,23 +522,26 @@ def _append_approaches(  # noqa: PLR0913 - one approach-list build context
     targeted_by_capability: dict,
     grader: _Grader,
     spoken: _Spoken,
-    display_terms: Sequence[ExtraTraitTerm] = (),
+    display_terms: dict[int, tuple[ExtraTraitTerm, ...]],
 ) -> None:
     """Add all available approach grades for one group.
 
-    A casting approach is graded with ``display_terms``, the skill terms its display cast
-    rolls with; every other approach adds none.
+    A casting approach also gets a grade per display technique, graded with that technique's
+    skill terms (``display_terms``, by technique id): the terms its display cast rolls with.
 
     A verbal approach the language gate refuses is still listed and graded, with the
     reason, so the player sees why it is closed to them (#4373).
     """
     for approach in approaches:
         graded, hits, targeted = press_grade(group, viewer, approach, ctx, targeted_by_capability)
-        grade = grader.grade(
-            approach.check_type,
-            graded.difficulty,
-            graded.contributions,
-            display_terms if approach.casts_technique else (),
+        grade = grader.grade(approach.check_type, graded.difficulty, graded.contributions)
+        technique_grades = (
+            [
+                _technique_grade(approach, graded, grader, technique_id, terms)
+                for technique_id, terms in display_terms.items()
+            ]
+            if approach.casts_technique
+            else []
         )
         levers, hits_drive = _levers(facts, hits, targeted)
         levers.extend(spoken.regard)
@@ -534,8 +557,21 @@ def _append_approaches(  # noqa: PLR0913 - one approach-list build context
                 hits_revealed_drive=hits_drive,
                 casts_technique=approach.casts_technique,
                 refusal=spoken.verbal if approach.is_verbal else "",
+                technique_grades=technique_grades,
             )
         )
+
+
+def _technique_grade(
+    approach: StandoffApproach,
+    graded: SocialDifficulty,
+    grader: _Grader,
+    technique_id: int,
+    terms: Sequence[ExtraTraitTerm],
+) -> TechniqueGradeView:
+    """The approach's grade when pressed with the technique whose skill terms are ``terms``."""
+    grade = grader.grade(approach.check_type, graded.difficulty, graded.contributions, terms)
+    return TechniqueGradeView(technique_id, grade, grade_label(grade))
 
 
 def _append_terms(  # noqa: PLR0913 - one terms-list build context

@@ -45008,6 +45008,10 @@ components:
           type: boolean
         refusal:
           type: string
+        technique_grades:
+          type: array
+          items:
+            $ref: '#/components/schemas/TechniqueGrade'
       required:
       - approach_id
       - casts_technique
@@ -45019,6 +45023,7 @@ components:
       - levers
       - name
       - refusal
+      - technique_grades
     ArcScopeEnum:
       enum:
       - global
@@ -92272,6 +92277,19 @@ components:
       - thread_level
       - unlock_thread_level
       - variant_id
+    TechniqueGrade:
+      type: object
+      properties:
+        technique_id:
+          type: integer
+        grade:
+          type: string
+        grade_label:
+          type: string
+      required:
+      - grade
+      - grade_label
+      - technique_id
     TechniqueReachEnum:
       enum:
       - same

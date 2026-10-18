@@ -22,6 +22,7 @@ if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
 
     from world.checks.models import CheckType
+    from world.classes.models import Path
     from world.magic.models import Technique
     from world.skills.models import Skill
 
@@ -39,24 +40,34 @@ def activity_skill_terms(activity: MagicActivity) -> tuple[ExtraTraitTerm, ...]:
     return tuple(ExtraTraitTerm(trait=row.skill.trait, weight=row.weight) for row in rows)
 
 
-def _technique_skill(
-    character: ObjectDB,  # noqa: OBJECTDB_PARAM — Evennia character
-    technique: Technique,
-) -> Skill | None:
-    """The skill a technique adds for ``character``, before the active check.
+def _skill_for_path(technique: Technique, path: Path | None) -> Skill | None:
+    """The skill a technique adds for a caster whose current Path is ``path``.
 
-    The technique's own skill wins. Otherwise a Major Gift technique takes the caster's
-    current Path skill and a Minor Gift technique takes the Gift's skill.
+    The technique's own skill wins. Otherwise a Major Gift technique takes the Path's skill
+    and a Minor Gift technique takes the Gift's skill.
     """
-    from world.progression.selectors import current_path_for_character  # noqa: PLC0415
-
     if technique.skill is not None:
         return technique.skill
     gift = technique.gift
     if gift.kind == GiftKind.MINOR:
         return gift.technique_skill
-    path = current_path_for_character(character)
     return path.technique_skill if path is not None else None
+
+
+def _skill_term(skill: Skill | None) -> ExtraTraitTerm | None:
+    """``skill`` as a roll term, or None when there is no skill or it is inactive."""
+    if skill is None or not skill.is_active:
+        return None
+    return ExtraTraitTerm(trait=skill.trait, weight=TECHNIQUE_SKILL_WEIGHT)
+
+
+def technique_skill_term_for_path(technique: Technique, path: Path | None) -> ExtraTraitTerm | None:
+    """The technique skill term for a caster whose current Path is ``path``.
+
+    Same rule as :func:`technique_skill_term` with the Path already in hand, so a caller
+    resolving many techniques for one caster reads the Path once.
+    """
+    return _skill_term(_skill_for_path(technique, path))
 
 
 def technique_skill_term(
@@ -66,12 +77,14 @@ def technique_skill_term(
     """The technique skill as a roll term for ``character``, or None.
 
     None when no skill resolves (no override, no Path or sheet for a Major Gift, no Gift
-    skill for a Minor one) or the resolved skill is inactive.
+    skill for a Minor one) or the resolved skill is inactive. Only a Major Gift technique
+    without an override reads the caster's current Path.
     """
-    skill = _technique_skill(character, technique)
-    if skill is None or not skill.is_active:
-        return None
-    return ExtraTraitTerm(trait=skill.trait, weight=TECHNIQUE_SKILL_WEIGHT)
+    from world.progression.selectors import current_path_for_character  # noqa: PLC0415
+
+    needs_path = technique.skill is None and technique.gift.kind != GiftKind.MINOR
+    path = current_path_for_character(character) if needs_path else None
+    return technique_skill_term_for_path(technique, path)
 
 
 def resolve_cast_check(

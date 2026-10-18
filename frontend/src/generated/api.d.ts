@@ -27563,6 +27563,7 @@ export interface components {
       hits_revealed_drive: boolean;
       casts_technique: boolean;
       refusal: string;
+      technique_grades: components['schemas']['TechniqueGrade'][];
     };
     /**
      * @description * `global` - Global
@@ -51391,6 +51392,11 @@ export interface components {
       readonly thread_level: number;
       readonly is_early: boolean;
       readonly effect_summary: components['schemas']['TechniqueEffectSummary'];
+    };
+    TechniqueGrade: {
+      technique_id: number;
+      grade: string;
+      grade_label: string;
     };
     /**
      * @description * `same` - Same position
