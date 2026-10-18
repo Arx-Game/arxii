@@ -22,6 +22,10 @@ They do not use the command system, dispatchers, or handlers.
 - **`models/action_templates.py`**: `ActionTemplate` — includes `consent_category` (nullable FK →
   `SocialConsentCategory`). Social templates are tagged by staff (or the seed loader); uncategorized
   templates are gated only by the master `allow_social_actions` switch. See `docs/systems/consent.md`.
+  `resist_check_type` (nullable FK → `CheckType`, #4418) is the check a PC rolls when a story NPC
+  uses the template on them; see "Playing the cast" below.
+- **`kwarg_parsing.py`** (#4418): `truthy_kwarg(value)`. A yes/no kwarg arrives as a JSON bool on the
+  web and a string on telnet; every action that takes one reads it through this, never `bool(...)`.
 - **`effect_configs.py`**: FK-backed config models (`ModifyKwargsConfig`, `AddModifierConfig`, `ConditionOnCheckConfig`)
 - **`effects/`**: Effect handler package — dispatch registry and typed handlers
 - **`enhancements.py`**: `get_involuntary_enhancements()` — query function for auto-applied enhancements
@@ -676,6 +680,17 @@ coupled to the action's kwarg names by the base class.
   `challenge_refusal(actor, target)`, the one check `ChallengeAction.execute()` used to
   run inline; now both the prerequisite and the persona menu call it, so a challenge
   item never shows as available when `run()` would refuse it.
+- **`IsGuidePrerequisite(or_gm=False)`** (#4418) - the acting account is an active `GuideProfile`
+  (staff bypass). `or_gm=True` also admits any `GMProfile`, for the verbs both use
+  (`answer_npc_loan`, `request_npc_borrow`). The account is the one puppeting the actor, so a
+  Guide acting from a lent NPC is still the Guide.
+- **`RunsScenePrerequisite(only_with_scene_id=False)`** (#4418) - the account runs the scene the
+  tool acts on. With a `scene_id` kwarg: staff, the scene's GM or a co-owner
+  (`can_create_encounter_for_scene`), wherever the actor stands (a GM's web panel dispatches as
+  whatever character they are browsing, who may be nowhere near). Without one it is
+  `IsSceneGMPrerequisite` (the active scene at the actor's location);
+  `only_with_scene_id=True` lets a call with no scene through (the owner taking back a standing
+  loan). `resolve_gm_scene` is the shared scene lookup.
 - **`GuardAllyPrerequisite`** (#4030, `definitions/rounds.py`), delegates to
   `_resolve_guard_and_ally(actor, ally_name=..., ally_persona_id=..., no_ally_message=...)`,
   shared by `SuccorAction`/`InterposeAction`'s `execute()` and their prerequisite. Resolves
@@ -717,6 +732,32 @@ and the model for any later per-target menu (items, room objects, exits).
   `world.npc_services.allegiance.actor_holds_sway_present`, that telnet's `sendaway`/`retain`
   and the won-over digest row's own flags also consult, so the menu, telnet, and the digest
   never disagree about whether the hold is still live and the actor is still in the room.
+
+## Playing the cast (#4418, ADR-4418)
+
+GMs and Guides play Story NPCs; the actions are web tools over services, with no telnet verb
+(a Guide plays a lent NPC with the usual character switch).
+
+- **Lending** (`definitions/npc_lending.py`): `offer_npc` (`roster_entry_id`, `guide_account_id`,
+  `scene_id`; `RunsScenePrerequisite`), `take_back_npc` (`loan_id`;
+  `RunsScenePrerequisite(only_with_scene_id=True)`), `answer_npc_loan` (`loan_id`, `accept`) and
+  `request_npc_borrow` (`roster_entry_id`; both `IsGuidePrerequisite(or_gm=True)`). They call
+  `world.roster.services.npc_lending` and report its `NPCLendingError.user_message`.
+- **Cast tools** (`definitions/npc_cast.py`), all `RunsScenePrerequisite`, all taking `scene_id`:
+  `voice_crowd` (`opponent_ids`, `name`), `describe_crowd` (`opponent_ids`, `name`,
+  `description`; renames the crowd's voice) and `place_npc_in_scene` (`roster_entry_id`; a real
+  move through the move hooks; templates and others' NPCs are refused). The services own the
+  rules (`crowd_voice`, `npc_placement`).
+- **`mint_story_npc`** (`definitions/gm_npcs.py`) takes `as_template`.
+- **NPC actors on PCs.** `player_interface` does not offer whoever plays a Story NPC a contested
+  social template that lacks `resist_check_type` or `consent_category`; the scenes service refuses
+  it too. Consent is skipped for a Story NPC's action only in a category not
+  `refusable_from_npcs`. Resolution is `actions.services.start_resisted_action_resolution`: the
+  PC rolls, the NPC never does. Flow and rules: `docs/systems/scenes.md`, `docs/systems/checks.md`.
+- **NPC-ness is the character's.** An action that needs "is this a PC" calls
+  `world.roster.services.activity.is_player_character` / `is_story_npc`, never `db_account`
+  presence or "someone is playing it". `Character.active_account` is the borrower while an NPC is
+  lent, so owner checks use `RosterEntry.created_by_account`.
 
 ## Adding a New Action
 

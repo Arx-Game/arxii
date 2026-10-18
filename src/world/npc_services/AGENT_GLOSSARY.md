@@ -26,7 +26,8 @@ _Avoid_: class-2 NPC, named NPC.
 
 **Story NPC**:
 A **class-3/4** NPC — a Character object with a full `CharacterSheet`, intended to be piloted/roleplayed
-by staff or GMs for stories.
+by staff or GMs for stories, or lent by its owner to a Guide (#4418; the rules follow the character, not who
+plays it; see the roster glossary).
 _Avoid_: class-3 NPC, class-4 NPC, major NPC.
 
 **Statline Preset** (`NPCStatlinePreset`, #3427):

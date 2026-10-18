@@ -53,7 +53,7 @@ consent preferences gating which social actions a character may receive (#1141).
 
 | Model | Purpose | Key Fields |
 |-------|---------|------------|
-| `SocialConsentCategory` | Staff-authored category for social action types (NaturalKey on `key`); forms a **tree** via `parent` (#2170) | `key` (slug), `name`, `description`, `display_order`, `parent` (self-FK, `SET_NULL`; `None` = root group), `default_mode` (ConsentMode — consulted **only on a root**; a non-root inherits its parent), `asks_before_acting` (bool, #4187 — the deed waits for the target's answer; see "Categories that ask before acting"). `ancestor_chain()` returns `[leaf, …, root]` (cycle-guarded) |
+| `SocialConsentCategory` | Staff-authored category for social action types (NaturalKey on `key`); forms a **tree** via `parent` (#2170) | `key` (slug), `name`, `description`, `display_order`, `parent` (self-FK, `SET_NULL`; `None` = root group), `default_mode` (ConsentMode — consulted **only on a root**; a non-root inherits its parent), `asks_before_acting` (bool, #4187 — the deed waits for the target's answer; see "Categories that ask before acting"), `refusable_from_npcs` (bool, default False, #4418: a player may refuse this kind of action from a played major NPC; inherited down the tree by `is_refusable_from_npcs()`). `ancestor_chain()` returns `[leaf, …, root]` (cycle-guarded) |
 | `SocialConsentPreference` | Per-tenure opt-out for social action targeting (OneToOne on tenure) | `tenure` (RosterTenure FK), `allow_social_actions` (bool, default True) |
 | `SocialConsentCategoryRule` | Per-category targeting mode on a preference | `preference` FK, `category` FK, `mode` (ConsentMode) |
 | `SocialConsentWhitelist` | Explicit allow entry: allowed_tenure may target owner with social actions | `owner_tenure` FK, `allowed_tenure` FK, `category` FK, `added_at` |
@@ -94,13 +94,26 @@ inherit the previous player's consent preferences.
 
 ---
 
+**Played NPCs (#4418, ADR-4418).** A story NPC is not a player character whoever plays it, so
+actions aimed at one never wait for consent (the NPC's player writes the response), and an
+NPC has no consent settings of its own. When an NPC acts on a PC with a contested social
+template (category social, single target), consent does not decide whether the PC
+rolls: the PC always rolls `ActionTemplate.resist_check_type`. `refusable_from_npcs` decides
+only whether they may also *refuse*. Set on `romantic` (seeded, and by migration `0251` on
+production); every other category (manipulative, hostile, general) is resist-only: the
+request stays PENDING until the PC picks an effort and DENY is refused on REST and telnet.
+A template with no `consent_category` is refused for NPC initiators on PCs, so romance
+cannot slip through as resist-only. Details in `docs/systems/scenes.md`. `commands/consent.py`
+and the story-NPC checks in `coercion.py` and `charm_asset.py` read the same
+`is_player_character` ruling.
+
 ## Default Category Set
 
 Four canonical categories are seeded via `arx seed dev` (cluster `consent`):
 
 | Key | Name | Templates |
 |-----|------|-----------|
-| `romantic` | Romantic | Flirt |
+| `romantic` | Romantic | Flirt (`refusable_from_npcs=True`, #4418) |
 | `hostile` | Hostile | Intimidate |
 | `manipulative` | Manipulative | Deceive, Persuade |
 | `general` | General | Perform, Entrance, Restore to Sense |

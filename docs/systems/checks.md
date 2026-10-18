@@ -313,6 +313,27 @@ term would double-count it. See ADR-0166.
 
 ---
 
+### Resisted rolls: an NPC acts on a PC (#4418, ADR-4418)
+
+When a story NPC uses a contested social template on a player character, the NPC does not
+roll. The PC rolls `ActionTemplate.resist_check_type` (a second nullable `CheckType` FK
+beside `check_type`) through the same `perform_check` pipeline above:
+
+- **Difficulty.** `scenes.action_services._resisted_difficulty` is
+  `compute_check_rating(npc_character, template.check_type)` plus
+  `DIFFICULTY_BAND_STEP * template.difficulty_tier_modifier`: the NPC's own rating in the
+  action, passed as the PC's difficulty override.
+- **Outcome.** `checks.services.mirrored_outcome(outcome)` reads the PC's `CheckOutcome` from
+  the NPC's side: the row whose `success_level` is the negation, else the nearest row on the
+  same side of zero (milder on a tie); a zero outcome mirrors to itself. The mirrored outcome
+  only selects the template's consequence pool; the resolution wheel shows the PC's own
+  roll.
+- **Content.** A single-target social template with no `resist_check_type` (or no consent
+  category) is refused as an NPC action on a PC and listed on the Required content
+  dashboard as `npc-resist-checks` (`web/admin/tuning/required_content.py`).
+
+The flow around it (consent, resist-only, effort) is in `docs/systems/scenes.md`.
+
 ## Resolution theater
 
 `world/checks/theater.py` (#924, extended #3807 Part B) is the dramatic-reveal seam: a

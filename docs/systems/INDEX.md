@@ -973,6 +973,9 @@ rows, read through `world.character_creation.offers` (`offers_for`/`closed_for`/
 ### Checks
 Check resolution engine — converts trait values to ranks and rolls against result charts.
 
+- **Resisted rolls (#4418):** `ActionTemplate.resist_check_type` is the check a PC rolls when
+  a story NPC uses the template on them; `mirrored_outcome(outcome)` reads that outcome from
+  the NPC's side. Required content sentinel `npc-resist-checks`. See [checks.md](checks.md).
 - **Models:** `CheckCategory`, `CheckType`, `CheckTypeTrait`, `CheckTypeAspect`, `CheckTypeCapabilityModifier` (#2505 — curated authored `(check_type, capability)` weight, `related_name="capability_modifiers"`), `CheckCall`/`CheckCallTarget` (#3295 — a GM's room-visible request that named targets roll a catalog check; one `CheckCallTarget` row per target, `status` PENDING/ANSWERED/DECLINED)
 - **Scene check invocation (#3295, ADR-restating #2118's firewall):** every check anyone rolls in a scene is an authored `CheckType` at a `DifficultyChoice` band — never a freeform stat/skill/difficulty invention. `world.checks.catalog_invocation` is the shared resolve/find/band-validation core, consumed by the SENIOR ad-hoc `InvokeCatalogCheckAction` (#2118) and three new REGISTRY actions in `actions/definitions/scene_checks.py`: `SceneSelfCheckAction` (key `scene_self_check`, any player, SELF-only, broadcasts to the room via `record_interaction`/`render_challenge_outcome_narration`), `CallForCheckAction` (key `call_for_check`, JUNIOR+ GM, creates a `CheckCall` + `CheckCallTarget` rows), `AnswerCheckCallAction`/`DeclineCheckCallAction` (keys `answer_check_call`/`decline_check_call` — a target's one-tap response; answering dispatches the same self-check core bound to the call's own check/band). None of these select, compose, or fire a `ConsequenceOutcome`/consequence pool. Telnet: `check`/`callcheck` (`commands/scene_checks.py`). Web: `SelfCheckPanel`/`CheckCallPromptCard` (`frontend/src/scenes/components/`) + a `CallForCheckTab` on `GMAdjudicationPanel`. When the catalog lacks a fitting check, `ProposeCheckAction` (key `propose_check_type`) routes a structured `CheckProposal` (`world.player_submissions.models`, `SubmissionCategory.CHECK_PROPOSAL`) to the staff inbox via `submit_check_proposal` — it never creates a live `CheckType` row; adoption is a separate manual staff act.
 - **Seeded check types:** `Composure` (willpower-weighted; resistance-specific — seeded via `create_resistance_check_types()` in `checks/factories.py`; used by `compute_resist_increment`)
@@ -2483,6 +2486,9 @@ OOC visibility groups and per-category social consent preferences for player-con
 content sharing and social action targeting (#1141). Consent mutations are shared REGISTRY actions
 so web and telnet converge on the same write path.
 
+- **Refusable from NPCs (#4418):** `SocialConsentCategory.refusable_from_npcs` (inherited by
+  `is_refusable_from_npcs()`; romantic is True, seeded and by migration 0251). A PC may
+  refuse an NPC's action only in such a category; everything else is resist-only.
 - **Models:** `ConsentGroup`, `ConsentGroupMember`, `VisibilityMixin` (abstract),
   `SocialConsentCategory` (NaturalKey on `key`; forms a **tree** via `parent` self-FK, #2170 —
   a category with no player rule inherits its parent up to the root's `default_mode`, so
@@ -2659,6 +2665,9 @@ XP, kudos, development points, and unlock system. Contains the most explicit pre
 ### Character Sheets
 Character identity, appearance, demographics, and guise system.
 
+- **Owner editing (#4418):** `can_edit_npc_sheet` (staff, or the GM who owns the story NPC)
+  gates seven staff-edit actions (`staff-edit`, `-stats`, `-skills`, `-path`, `-magic`,
+  `-magic-options`, `-options`); `can_staff_edit_sheet` stays staff-only.
 - **Models:** `CharacterSheet`, `Profile` (bio + lineage, #1270; the Actor's Sheet answers `never_do`/`protect`/`fear` replaced `personality`, #3621; `beginnings`, an M2M to `character_creation.Beginnings` through `ProfileBeginnings` (`source`, `note`, `gained_at`), every origin the character holds, #3775, ADR-0303), `ProfileBeginnings` (the through row; `source` is `character_creation`/`recovered_memory`/`past_life`, one `character_creation` row per profile), `CharacterEnemy` (the priced enemy, #3621, ADR-0279), `ProfileTextVersion`
   (#2631 — snapshot-on-write history for `ProfileTextField` prose; since #3988 every
   prose field: background, the Actor's Sheet answers, concept, real_concept, quote,
@@ -2939,6 +2948,20 @@ to the room. Pure chance at MVP (no skill input); server-side `randint`.
 ### Roster
 Character lifecycle management with web-first applications and player anonymity.
 
+- **Playing major NPCs (#4418, ADR-4418):** `StoryNPCSettings` (O2O on `RosterEntry`:
+  `listed_on_npc_roster`, `lend_policy`, `borrow_audience`, `notes_for_player`,
+  `is_template`) and `NPCLoan` (`roster_entry`, `borrower`, `offered_by`, nullable `scene`,
+  `status` OFFERED/REQUESTED/ACTIVE/DECLINED/ENDED; one ACTIVE loan per entry).
+  Owner is `RosterEntry.created_by_account`. Services: `npc_lending` (`offer_npc`,
+  `request_borrow`, `answer_loan`, `end_loan`, `end_scene_loans`, `playable_entries`),
+  `npc_copy` (`copy_npc_section`, `copy_npc_as_new`), `npc_placement`
+  (`place_npc_in_scene`), `activity.is_story_npc` / `story_npc_sheet_ids` /
+  `is_pvp_protected_victim`. `Character.active_account` returns a lent NPC's borrower;
+  minted NPCs carry the `can_play()` puppet lock (`server/conf/lockfuncs.py`). API:
+  `/api/roster/npcs/` (list, detail/PATCH, `templates`, `borrow`, `offers`, `answer`,
+  `regard`, `preferences`, `copy-section`, `copy-as-new`; `IsGMOrGuide`);
+  `entries/mine/` rows add `loan`, `npc_notes`, `is_crowd_voice`. Actions: `offer_npc`,
+  `take_back_npc`, `answer_npc_loan`, `request_npc_borrow`. Details: [roster.md](roster.md)
 - **Models:** `Roster`, `RosterEntry`, `RosterTenure`, `RosterApplication`, `PlayerMail`
 - **Character slots (#3996, ADR-0317):** `services/slots.py` is the only counter —
   `character_slots(account)` / `assert_slot_available(...)` over tenures (not frozen or
@@ -3137,6 +3160,12 @@ Secrets, souls with per-life-knowledge reincarnation chains, app-in slots/pools.
 Player-GM identity, tables, roster recruitment, and the trust ladder that caps what a
 GM at a given level may author (#2000, ADR-0097).
 
+- **Guides (#4418):** `GuideProfile` (O2O account, `granted_by`, `granted_at`, `is_active`,
+  `display_name`: the public handle GMs see; never an account or character name). Staff
+  grant it in admin (`GuideProfileAdmin` lists the NPCs a Guide plays and ends their loans).
+  `GET /api/gm/guides/` (GMs and staff) lists active Guides by `display_name` for the GM
+  choosing who to lend to. `IsGuidePrerequisite(or_gm=True)` gates answering and asking for
+  loans; `is_guide` is in the account payload. A Guide gets no GM panel.
 - **Models:** `GMProfile` (OneToOne account, `level: GMLevel`, `approved_at`/`approved_by`,
   `last_active_at` stub, `contact_times`/`ooc_info` freeform `TextField`s (#3478) —
   writable only through the GM's own `mine` endpoint below), `GMApplication` (freeform
@@ -3742,6 +3771,17 @@ Who is in a scene is read off its log
 (`participation.py`, #3867, ADR-0300): the first room-heard line is the entrance, a present character
 without one stands at the threshold (marked in the Here panel, not addressable room-heard).
 
+- **Played NPCs (#4418, ADR-4418):** a story NPC is auto-accepted as a target whoever plays
+  it. When one acts on a PC with a contested social template (social, single target) the PC
+  rolls `ActionTemplate.resist_check_type` (`start_resisted_action_resolution`, difficulty
+  from the NPC's `check_type` rating, `checks.services.mirrored_outcome` picks the
+  consequences); `request_is_resist_only` / `ResistOnlyError` refuse DENY unless the
+  category is `refusable_from_npcs`; `resist_only` is on the request and target
+  serializers. Cast list: `cast_list_services.scene_cast_list`,
+  `GET /api/scenes/{id}/cast-list/` (`CastListEntry` incl. `opponent_ids`). GM tools take a
+  `scene_id` (`RunsScenePrerequisite`): `offer_npc`, `take_back_npc`, `voice_crowd`,
+  `describe_crowd` (`CombatOpponent.voice_persona`), `place_npc_in_scene`. Details:
+  [scenes.md](scenes.md)
 - **Models:** `Scene` (incl. `running_beat` FK → `stories.Beat`, nullable, #3425 — the beat this
   scene is currently running, set by `RunBeatAction`/cleared by `finish_scene_full`; see
   stories.md's "Session prep"), `SceneClock` (#3567 - an authored countdown on the beat a scene

@@ -33,6 +33,69 @@ assigns it as both the character's `home` and `location`. This keeps a newly
 minted GM or staff presence playable immediately, even when no character
 creation draft supplied a starting room.
 
+## Playing major NPCs: owners, loans and the NPC roster (#4418, ADR-4418)
+
+A story NPC is a character on the `RosterType.NPC` shelf (a GM or Staff OOC
+character also sits there but is excluded by typeclass; `is_story_npc` in
+`services/activity.py`). The rules follow the character, never who plays it. A GM
+or a Guide plays one with an ordinary tenure or an active loan.
+
+**Models** (`models/npc_lending.py`, constants in `constants.py`):
+
+- `StoryNPCSettings` (O2O on `RosterEntry`, created by `mint_story_npc`):
+  `listed_on_npc_roster`, `lend_policy` (`NPCLendPolicy`: not lent / on request /
+  without asking), `borrow_audience` (`NPCBorrowAudience`: GMs / GMs and Guides),
+  `notes_for_player`, `is_template` (a template has no tenure, counts against no cap
+  and is copied, never lent).
+- `NPCLoan`: `roster_entry`, `borrower`, `offered_by`, nullable `scene` (set for a
+  scene-scoped offer that ends with the scene), `status` (`NPCLoanStatus`: offered,
+  requested, active, declined, ended), `created_at`, `started_at`, `ended_at`. A
+  partial unique constraint allows one ACTIVE loan per entry.
+- Owner is `RosterEntry.created_by_account`. `mint_story_npc` stamps `GM_TABLE` plus the
+  creator. The roster shows the owner by the GM's character name, never an account
+  (`owner_display_name`; staff when the owner has no GM character).
+- `GuideProfile` lives in `world.gm` (see `docs/systems/INDEX.md`, GM system).
+
+**Services:**
+
+- `services/npc_lending.py`: `offer_npc(entry, guide, scene, by)`,
+  `request_borrow(entry, borrower)`, `answer_loan(loan, accept, by)`,
+  `end_loan(loan, by)`, `end_scene_loans(scene)` (called from `finish_scene_full`),
+  `may_end_loan`, `playable_entries`, `active_loans_touching`, `owner_display_name`.
+  Activation is race-safe, takes the NPC from its owner while lent (owner cannot play
+  it), unpuppets the other side's sessions and clears any saved selection. Errors
+  raise `NPCLendingError` with a `user_message`.
+- `services/npc_copy.py`: `copy_npc_section(source, target, section)` for an
+  `NPCSection` (identity, description, background, powers, regard, preferences, all)
+  and `copy_npc_as_new(source, by, name, as_template)`. Copying keeps the copier as
+  owner. Copied regard rows are a direct write plus one audit event; PC gauges are
+  never mirrored.
+- `services/npc_placement.py`: `place_npc_in_scene(entry, scene, by)` moves the NPC
+  into the scene's room through the real move (hooks run); templates and other GMs'
+  NPCs are refused with `NPCPlacementError`.
+- `services/staff_characters.py`: `ensure_playable_lock` gives a minted character the
+  `puppet` lock `can_play() or perm(Developer) or pperm(Developer)`. `can_play`
+  (`server/conf/lockfuncs.py`) defers to `Account.can_puppet_character`, so a lent NPC
+  is playable by the borrower and by its owner when not lent.
+  `mint_story_npc(..., as_template, count_against_cap)`; a crowd voice is minted
+  uncapped and never counts against the GM's story-NPC cap.
+- `services/gallery.py`: `_sync_npc_persona_portrait` sets both `Persona.thumbnail`
+  and `Persona.thumbnail_url` from the worn look of a story NPC (PCs untouched).
+
+**Availability seams.** NPC loans join `PlayerData.get_available_roster_entries`
+(through `PlayerData.cached_npc_loans`) and `Account.cached_roster_entries`, so the
+web tab strip, posting and consent responses follow the borrower.
+`Character.active_account` returns the ACTIVE loan's borrower while the NPC is lent
+(a Guide never inherits the owner's GM standing); owner checks use
+`created_by_account`. `played_character_sheet_ids` stays tenure-only.
+
+**Roster entry payload.** `GET /api/roster/entries/mine/` rows carry `loan`
+(`{id, scene_title, offered_by_name}` or null), `npc_notes` (the owner's notes for a
+borrowed NPC, else null) and `is_crowd_voice`.
+
+**Telnet.** A borrower plays a lent NPC with the usual character switch. Offers, the
+cast list, the NPC form and the NPC roster are web-only.
+
 ---
 
 ## Applying these migrations
@@ -533,6 +596,39 @@ Reads need an account; writes need the character's current player or staff
 
 The mood picker reads `GET /api/character-sheets/mood-options/` (active `MoodOption`s).
 
+### NPC roster (`/api/roster/npcs/`, #4418)
+
+Staff, GMs and active Guides (`IsGMOrGuide`). Web-only authoring and borrowing tools.
+
+- `GET /` - Listed, non-template NPCs, paginated (`NPCRosterRowSerializer`: `id`,
+  `name`, `thumbnail_url`, `description`, `owner_name`, `lend_policy`, `borrow_audience`,
+  `can_borrow`). Filter and `search` by name. A caller who is not a GM or Guide gets a 403
+  with a plain message
+- `GET /{id}/` - Detail (`NPCDetailSerializer`) for the owner, an active borrower or staff
+  (anyone else 404): adds `listed_on_npc_roster`, `notes_for_player` (owner, borrower and
+  staff only), `is_template`, `open_requests` (owner side), `preferences`
+  (`{trait_id, trait_name, valence}`) and `regard` (`{target_type, target_id, target_name,
+  value, reason}`). `PATCH` changes `listed_on_npc_roster`, `lend_policy`,
+  `borrow_audience`, `notes_for_player` (owner or staff)
+- `GET /templates/` - Templates the caller owns plus staff-owned ones
+- `POST /{id}/borrow/` - Ask to borrow (`request_borrow`); 201 with the loan
+- `GET /offers/` - Paginated scene offers waiting for the requesting Guide
+  (`NPCOfferSerializer`: scene title, who offered by public player name, NPC, notes).
+  Gated like the rest of the viewset
+- `POST /answer/` - `{loan_id, accept}`; the owner answers a request, the borrower an offer
+  (404 for a loan the caller is not part of; staff see all)
+- `PUT /{id}/regard/` - `{target_type, target_id, value, reason}` author one regard row
+- `PUT /{id}/preferences/` - `{preferences: [{trait, valence}]}` replace what works on the NPC
+- `POST /{id}/copy-section/` - `{source_entry, section}`; the source is an NPC the caller
+  owns or a staff-owned template (staff: any)
+- `POST /{id}/copy-as-new/` - `{name, as_template}`; 201 `{id}`, caller is the owner
+
+Owner-only writes (`regard`, `preferences`, `copy-section`, settings `PATCH`) are scoped to
+`created_by_account` (staff to all).
+
+Related reads: `GET /api/gm/guides/` (GMs and staff, active Guides by `display_name`) and
+`GET /api/npc-services/personality-traits/` (the trait picker for preferences).
+
 ---
 
 ## Permissions
@@ -544,6 +640,7 @@ The mood picker reads `GET /api/character-sheets/mood-options/` (active `MoodOpt
 | `IsPlayerOrStaff` | Roster entry modifications | Active tenure for the entry or staff |
 | `ReadOnlyOrOwner` | (no longer used by media; #4151 made media reads need an account) | Safe methods for all; write requires ownership |
 | `StaffOnlyWrite` | Roster management | Safe methods for all; write requires staff |
+| `IsGMOrGuide` | NPC roster (`/npcs/`, #4418) | Staff, an account with a `GMProfile`, or an active `GuideProfile` |
 | `CanApproveApplications` | Application review queue (#3265) | `PlayerData.can_approve_applications()` (staff today) |
 
 ---
