@@ -17,6 +17,8 @@ import type { components } from '@/generated/api';
 import { throwApiError } from '@/lib/errors';
 
 type NpcRow = components['schemas']['NPCRosterRow'];
+type CopyAsNewRequest = components['schemas']['CopyAsNewRequest'];
+type CreatedNpc = components['schemas']['CreatedNPC'];
 type NpcRosterPage = components['schemas']['PaginatedNPCRosterRowList'];
 
 const NPC_ROSTER_KEY = ['gm-npc-roster'] as const;
@@ -69,12 +71,14 @@ function NpcCard({ row }: { row: NpcRow }) {
   });
 
   const copy = useMutation({
-    mutationFn: async (name: string) => {
+    mutationFn: async (name: string): Promise<CreatedNpc> => {
+      const body: CopyAsNewRequest = { name, as_template: false };
       const res = await apiFetch(`/api/roster/npcs/${row.id}/copy-as-new/`, {
         method: 'POST',
-        body: JSON.stringify({ name, as_template: false }),
+        body: JSON.stringify(body),
       });
       if (!res.ok) await throwApiError(res, "Couldn't copy that NPC.");
+      return (await res.json()) as CreatedNpc;
     },
     onSuccess: (_data, name) => {
       toast.success(`Copied as ${name}.`);

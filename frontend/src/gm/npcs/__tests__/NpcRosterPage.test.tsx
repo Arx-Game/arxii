@@ -42,7 +42,7 @@ function renderPage() {
 describe('NpcRosterPage', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    apiFetch.mockImplementation((url: string, opts?: RequestInit) =>
+    apiFetch.mockImplementation((_url: string, opts?: RequestInit) =>
       opts?.method === 'POST' ? ok({}) : ok({ count: 2, results: rows })
     );
   });
@@ -64,7 +64,7 @@ describe('NpcRosterPage', () => {
   });
 
   it('shows a refusal detail in a toast', async () => {
-    apiFetch.mockImplementation((url: string, opts?: RequestInit) =>
+    apiFetch.mockImplementation((_url: string, opts?: RequestInit) =>
       opts?.method === 'POST'
         ? Promise.resolve({
             ok: false,
