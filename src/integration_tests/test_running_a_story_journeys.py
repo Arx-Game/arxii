@@ -16,22 +16,28 @@ from world.gm.factories import (
 )
 from world.instances.models import InstancedRoom
 from world.narrative.models import NarrativeMessageDelivery
+from world.progression.models import XPTransaction
+from world.progression.types import ProgressionReason
 from world.stories.constants import (
+    AssistantClaimStatus,
     BeatOutcome,
+    BeatPredicateType,
     BeatVisibility,
     CanonReviewStatus,
     StoryMaturity,
     StoryScope,
 )
 from world.stories.factories import (
+    AssistantGMClaimFactory,
     BeatFactory,
     ChapterFactory,
     EpisodeFactory,
+    GroupStoryProgressFactory,
     StoryFactory,
     StoryProgressFactory,
     TransitionFactory,
 )
-from world.stories.models import CanonReview
+from world.stories.models import CanonReview, EpisodeResolution
 from world.stories.types import StoryStatus
 
 
@@ -186,6 +192,148 @@ class RunningAStory(_StoryTable):
         self.assertEqual(result.detail.message, "Beat marked Success.")
         result = self.web(self.hobb, "mark_beat", beat_id=self.beat.pk, outcome="failure")
         self.assertFalse(result.detail.success)
+
+    def staff(self):
+        marrow = self.make_player("Marrow", room=self.lantern)
+        account = marrow.db_account
+        account.is_staff = True
+        account.save(update_fields=["is_staff"])
+        return marrow
+
+    def rewarded(self, character) -> bool:
+        return XPTransaction.objects.filter(
+            account=character.db_account, reason=ProgressionReason.GM_STORY_REWARD
+        ).exists()
+
+    def test_an_assistant_marks_only_what_she_is_cleared_for_and_is_the_one_credited(
+        self,
+    ) -> None:
+        second_beat = BeatFactory(
+            episode=self.first,
+            order=2,
+            player_hint="Ask the collector's name",
+            predicate_type=BeatPredicateType.GM_MARKED,
+            agm_eligible=True,
+        )
+        hobb_gm = GMProfileFactory(account=self.hobb.db_account)
+        claim = AssistantGMClaimFactory(
+            beat=second_beat, assistant_gm=hobb_gm, status=AssistantClaimStatus.REQUESTED
+        )
+        self.assertIn(
+            "Only the story's Lead GM, staff, or an approved Assistant GM may mark a beat.",
+            self.telnet(self.hobb, f"story mark {second_beat.pk} success"),
+        )
+        claim.status = AssistantClaimStatus.APPROVED
+        claim.approved_by = self.gm_profile
+        claim.save(update_fields=["status", "approved_by"])
+        self.assertIn(
+            "Beat marked Success.", self.telnet(self.hobb, f"story mark {second_beat.pk} success")
+        )
+        second_beat.refresh_from_db()
+        self.assertEqual(second_beat.outcome, BeatOutcome.SUCCESS)
+        self.assertTrue(self.rewarded(self.hobb))
+        self.assertFalse(self.rewarded(self.ravenna))
+
+    def test_staff_run_any_story(self) -> None:
+        marrow = self.staff()
+        draft = EpisodeFactory(
+            chapter=self.chapter,
+            title="The Reckoning",
+            order=3,
+            maturity=StoryMaturity.OUTLINE,
+            resting_conclusion="The debt is paid.",
+            is_ending=True,
+        )
+        self.assertIn(
+            "Episode 'The Reckoning' promoted to Plot.",
+            self.telnet(marrow, f"story promote {draft.pk} plot"),
+        )
+        self.assertIn(
+            "Beat marked Failure.", self.telnet(marrow, f"story mark {self.beat.pk} failure")
+        )
+        self.assertIn(
+            "Episode 'The First Knock' resolved.",
+            self.telnet(marrow, f"story resolve {self.first.pk}"),
+        )
+        self.assertIn(
+            "Story 'The Lantern Debt' completed.",
+            self.telnet(marrow, f"story complete {self.story.pk}"),
+        )
+        self.story.refresh_from_db()
+        self.assertEqual(self.story.status, StoryStatus.COMPLETED)
+
+    def test_the_plot_gate_the_routing_and_a_story_nobody_is_in(self) -> None:
+        pitch = EpisodeFactory(
+            chapter=self.chapter, title="A Loose Thread", order=4, maturity=StoryMaturity.PITCH
+        )
+        self.assertIn(
+            "This episode is not ready to be promoted to Plot. It needs a resting conclusion "
+            "and either an outbound transition or an explicit ending.",
+            self.telnet(self.ravenna, f"story promote {pitch.pk} plot"),
+        )
+        pitch.refresh_from_db()
+        self.assertEqual(pitch.maturity, StoryMaturity.PITCH)
+
+        # The author routes the story, never the GM after the fact: with two ways out of
+        # an episode, the lowest-ordered transition is the one taken.
+        third = EpisodeFactory(chapter=self.chapter, title="The Third Knock", order=3)
+        TransitionFactory(source_episode=self.first, target_episode=third, order=1)
+        self.assertIn(
+            "Episode 'The First Knock' resolved.",
+            self.telnet(self.ravenna, f"story resolve {self.first.pk}"),
+        )
+        self.progress.refresh_from_db()
+        self.assertEqual(self.progress.current_episode_id, self.second.pk)
+        self.assertTrue(EpisodeResolution.objects.filter(episode=self.first).exists())
+
+        self.progress.delete()
+        self.assertIn(
+            "No active progress record found for this story.",
+            self.telnet(self.ravenna, f"story resolve {self.second.pk}"),
+        )
+
+    def test_a_gm_running_her_own_arc_earns_nothing_for_it(self) -> None:
+        own = StoryFactory(
+            title="Ravenna's Reckoning",
+            scope=StoryScope.CHARACTER,
+            character_sheet=self.ravenna.sheet_data,
+            primary_table=self.table,
+        )
+        episode = EpisodeFactory(chapter__story=own, title="Alone", order=1, is_active=True)
+        beat = BeatFactory(
+            episode=episode, player_hint="Face it", predicate_type=BeatPredicateType.GM_MARKED
+        )
+        StoryProgressFactory(
+            story=own, character_sheet=self.ravenna.sheet_data, current_episode=episode
+        )
+        self.assertIn(
+            "Beat marked Success.", self.telnet(self.ravenna, f"story mark {beat.pk} success")
+        )
+        self.assertFalse(self.rewarded(self.ravenna))
+
+    def test_a_group_story_advances_one_table_at_a_time(self) -> None:
+        group = StoryFactory(
+            title="The Guild's Wager",
+            scope=StoryScope.GROUP,
+            primary_table=self.table,
+            owners=[self.ravenna.db_account],
+        )
+        chapter = ChapterFactory(story=group, title="Stakes", order=1, is_active=True)
+        opening = EpisodeFactory(chapter=chapter, title="The Opening Bid", order=1, is_active=True)
+        closing = EpisodeFactory(chapter=chapter, title="The Closing Bid", order=2)
+        TransitionFactory(source_episode=opening, target_episode=closing)
+        ours = GroupStoryProgressFactory(story=group, gm_table=self.table, current_episode=opening)
+        theirs = GroupStoryProgressFactory(
+            story=group, gm_table=GMTableFactory(gm=GMProfileFactory()), current_episode=opening
+        )
+        self.assertIn(
+            "Episode 'The Opening Bid' resolved.",
+            self.telnet(self.ravenna, f"story resolve {opening.pk}"),
+        )
+        ours.refresh_from_db()
+        theirs.refresh_from_db()
+        advanced = [p for p in (ours, theirs) if p.current_episode_id == closing.pk]
+        self.assertEqual(len(advanced), 1)
 
 
 class CallingTheCanon(_StoryTable):
