@@ -10,10 +10,13 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
+from django.core.exceptions import ObjectDoesNotExist
+
 from actions.constants import ActionBackend
 from actions.types import ActionResult
 from commands.command import DispatchCommand
 from commands.exceptions import CommandError
+from world.standoffs.constants import ProfileChange
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -31,9 +34,19 @@ _SUBVERBS: dict[str, str] = {
     "terms": "standoff_terms",
     "fight": "standoff_fight",
     "share": "standoff_share_angle",
+    "profile": "standoff_profile",
 }
 _NOT_IN_STANDOFF = "You are not in a standoff."
 _CAUSE_WORD = "cause"
+_PROFILE_WORD = "profile"
+# `standoff profile <word>` -> the ProfileChange it makes.
+_PROFILE_WORDS: dict[str, str] = {
+    "optin": ProfileChange.OPT_IN,
+    "optout": ProfileChange.OPT_OUT,
+    "cause": ProfileChange.CAUSE,
+    "drive": ProfileChange.DRIVE,
+    "drop": ProfileChange.DROP_DRIVE,
+}
 # Trailing consent keyword on `standoff display`: accept the Soulfray risk, as on `cast`.
 _SOULFRAY_KEYWORD = "soulfray"
 
@@ -64,6 +77,11 @@ class CmdStandoff(DispatchCommand):
         standoff terms <terms> <group>   - name terms to a group
         standoff share <group> <angle>   - share what you feel about a group
         standoff fight                   - break the standoff and begin the fight
+        standoff profile                 - your own drives, cause and consent
+        standoff profile optin|optout    - let other player characters read and press you, or not
+        standoff profile cause <cause>   - the reason you would start a fight
+        standoff profile drive <drive> [minor|major|defining] - something you want
+        standoff profile drop <drive>    - drop one of your drives
     """
 
     key = "standoff"
@@ -84,6 +102,9 @@ class CmdStandoff(DispatchCommand):
         if self._subverb not in _SUBVERBS:
             self.msg(f"Unknown standoff action '{self._subverb}'. Try: {', '.join(_SUBVERBS)}.")
             return
+        if self._subverb == _PROFILE_WORD and not self._rest:
+            self._show_profile()
+            return
         super().func()
 
     def resolve_action_ref(self) -> ActionRef:
@@ -97,6 +118,8 @@ class CmdStandoff(DispatchCommand):
         if self._subverb == "fight":  # noqa: STRING_LITERAL
             return {}
         text = self._require_rest()
+        if self._subverb == _PROFILE_WORD:
+            return self._profile_args(text)
         if self._subverb == "read":  # noqa: STRING_LITERAL
             return self._read_args(text)
         if self._subverb == "press":  # noqa: STRING_LITERAL
@@ -265,6 +288,72 @@ class CmdStandoff(DispatchCommand):
             self.msg(
                 f"Type |wstandoff display {self._rest} {_SOULFRAY_KEYWORD}|n to accept the risk."
             )
+
+    def _profile_args(self, text: str) -> dict[str, Any]:
+        """Parse ``standoff profile <optin|optout|cause|drive|drop> ...`` (#4441)."""
+        from world.combat.constants import CauseKind  # noqa: PLC0415
+        from world.standoffs.constants import DriveStrength  # noqa: PLC0415
+
+        word, _space, rest = text.partition(" ")
+        change = _PROFILE_WORDS.get(word.lower())
+        if change is None:
+            msg = f"Usage: standoff profile [{'|'.join(_PROFILE_WORDS)}] ..."
+            raise CommandError(msg)
+        rest = rest.strip()
+        if change in {ProfileChange.OPT_IN, ProfileChange.OPT_OUT}:
+            return {"change": change}
+        if not rest:
+            msg = f"Usage: standoff profile {word.lower()} <name>."
+            raise CommandError(msg)
+        if change == ProfileChange.CAUSE:
+            for kind in CauseKind:
+                if rest.lower() in {kind.value, kind.label.lower()}:
+                    return {"change": change, "cause": kind.value}
+            msg = f"No cause '{rest}'. Try: {', '.join(k.label for k in CauseKind)}."
+            raise CommandError(msg)
+        strength = None
+        name, _space, last = rest.rpartition(" ")
+        for level in DriveStrength:
+            if name and last.lower() == level.label.lower():
+                strength, rest = level.value, name
+        kwargs: dict[str, Any] = {"change": change, "property_id": self._drive_property(rest).pk}
+        if strength is not None:
+            kwargs["strength"] = strength
+        return kwargs
+
+    def _drive_property(self, name: str) -> Any:
+        """The drive-catalog property a typed name picks (the same catalog creatures use)."""
+        from world.standoffs.services.character_profile import drive_catalog  # noqa: PLC0415
+
+        for prop in drive_catalog():
+            if prop.name.lower() == name.lower():
+                return prop
+        msg = f"'{name}' is not a drive anyone can have."
+        raise CommandError(msg)
+
+    def _show_profile(self) -> None:
+        """Print the caller's own standoff profile (#4441)."""
+        from world.standoffs.services.character_profile import build_profile_view  # noqa: PLC0415
+
+        try:
+            sheet = self.caller.sheet_data
+        except (AttributeError, ObjectDoesNotExist):
+            self.msg("Only a character has a standoff profile.")
+            return
+        view = build_profile_view(sheet)
+        consent = "can" if view.opted_in else "cannot"
+        lines = [
+            f"Other player characters {consent} read and press you in a standoff.",
+            f"Cause: {view.cause_label}.",
+        ]
+        if view.drives:
+            lines.append("Drives:")
+            lines.extend(f"  {d.name} ({d.strength_label})" for d in view.drives)
+        else:
+            lines.append("You have no drives.")
+        if view.locked:
+            lines.append(view.locked_reason)
+        self.msg("\n".join(lines))
 
     def _terms_args(self, text: str) -> dict[str, Any]:
         terms, group = self._split(text, self._terms, self._group)

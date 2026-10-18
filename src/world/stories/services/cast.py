@@ -54,8 +54,14 @@ def story_npc_personas(story: Story) -> QuerySet[Persona]:
 
 
 def may_stand_persona(story: Story | None, persona: Persona, *, is_staff: bool) -> bool:
-    """Whether a GM of ``story`` (or staff) may stand ``persona`` as an opponent."""
-    if is_staff:
+    """Whether a GM of ``story`` (or staff) may stand ``persona`` as an opponent.
+
+    A player character who opted in to being read and pressed (#4441) may be stood by any
+    GM; the story's own cast covers every other persona.
+    """
+    from world.standoffs.services.character_profile import may_stand_as_opponent  # noqa: PLC0415
+
+    if is_staff or may_stand_as_opponent(persona):
         return True
     if story is None:
         return False

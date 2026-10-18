@@ -99,3 +99,24 @@ LINE_RELEASED_LEAVES = "{name} leaves."
 # System strings: why the language gate refuses a verbal approach or terms (#4373).
 REFUSAL_NO_LANGUAGE = "They have no language to answer in."
 REFUSAL_NO_SHARED_LANGUAGE = "You share no language with them."
+
+
+class ProfileChange(models.TextChoices):
+    """One edit a player makes to their own character's standoff profile (#4441)."""
+
+    OPT_IN = "opt_in", "Opt in"
+    OPT_OUT = "opt_out", "Opt out"
+    CAUSE = "cause", "Set cause"
+    DRIVE = "drive", "Set drive"
+    DROP_DRIVE = "drop_drive", "Drop drive"
+
+
+# System strings: the player-character gate and the profile lock (#4441).
+REFUSAL_NOT_OPTED_IN = "{name} has not agreed to be read or pressed."
+REFUSAL_SELF_TARGET = "You cannot do that to yourself."
+PROFILE_LOCKED_MESSAGE = "Your profile cannot change while you stand in a standoff."
+PROFILE_NOT_YOURS_MESSAGE = "Only a player's own character has a standoff profile."
+PROFILE_NO_SUCH_DRIVE_MESSAGE = "That is not a drive anyone can have."
+PROFILE_NO_SUCH_CAUSE_MESSAGE = "That is not a cause."
+PROFILE_DRIVE_NOT_HELD_MESSAGE = "You do not have that drive."
+PROFILE_NO_SUCH_CHANGE_MESSAGE = "That is not a change to a profile."

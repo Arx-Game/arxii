@@ -21,10 +21,16 @@ if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
 
     from world.combat.models import CombatParticipant
-    from world.standoffs.models import StandoffApproach, StandoffGroup, StandoffTerms
+    from world.standoffs.models import (
+        CharacterStandoffProfile,
+        StandoffApproach,
+        StandoffGroup,
+        StandoffTerms,
+    )
     from world.standoffs.types import StandoffActionResult
 
 NOT_IN_STANDOFF_MESSAGE = "You are not in a standoff."
+NO_PROFILE_MESSAGE = "Only a character has a standoff profile."
 _NO_SUCH_GROUP_MSG = "No such group in this standoff."
 
 
@@ -350,3 +356,59 @@ class StandoffShareAngleAction(Action):
             outcome,
         )
         return _to_result(outcome)
+
+
+@dataclass
+class StandoffProfileAction(Action):
+    """Change your own character's standoff profile (wraps ``apply_profile_change``, #4441).
+
+    Opt in or out of being read and pressed, set the cause, set or drop a drive. Refused
+    while the character stands in a standoff.
+    """
+
+    key: str = "standoff_profile"
+    name: str = "Standoff profile"
+    icon: str = "user-check"
+    category: str = "combat"
+    action_category: ActionCategory = ActionCategory.SOCIAL
+    target_type: TargetType = TargetType.SELF
+    costs_turn: bool = False
+
+    def execute(  # noqa: PLR0913 - the one change, spelled out per kind
+        self,
+        actor: ObjectDB,
+        context: ActionContext | None = None,
+        change: str = "",
+        cause: str | None = None,
+        property_id: int | None = None,
+        strength: int | None = None,
+        **kwargs: Any,
+    ) -> ActionResult:
+        from world.standoffs.services.character_profile import (  # noqa: PLC0415
+            StandoffProfileError,
+            apply_profile_change,
+        )
+
+        sheet = _sheet(actor)
+        if sheet is None:
+            return ActionResult(success=False, message=NO_PROFILE_MESSAGE)
+        try:
+            profile = apply_profile_change(
+                sheet, change, cause=cause, property_id=property_id, strength=strength
+            )
+        except StandoffProfileError as exc:
+            return ActionResult(success=False, message=exc.user_message)
+        return ActionResult(success=True, message=_profile_message(change, profile))
+
+
+def _profile_message(change: str, profile: CharacterStandoffProfile) -> str:
+    """The plain confirmation of a profile change."""
+    from world.standoffs.constants import ProfileChange  # noqa: PLC0415
+
+    if change == ProfileChange.OPT_IN:
+        return "Other player characters may now read and press you in a standoff."
+    if change == ProfileChange.OPT_OUT:
+        return "Nobody can read or press you in a standoff."
+    if change == ProfileChange.CAUSE:
+        return f"Your cause is now {profile.get_cause_display()}."
+    return "Your drives are updated."

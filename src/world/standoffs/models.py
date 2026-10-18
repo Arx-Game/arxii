@@ -872,3 +872,71 @@ class OpponentLineFactionRuleSuppression(SharedMemoryModel):
 
     def __str__(self) -> str:
         return f"{self.faction_rule} off on {self.line}"
+
+
+class CharacterStandoffProfile(SharedMemoryModel):
+    """A player character's own standoff profile and consent (#4441).
+
+    A player picks the drives and the cause for their own character from the catalogs
+    creature templates use, and opts in to being read and pressed by other player
+    characters in a standoff. Only an opted-in character can be. The profile sets the
+    difficulty for the pressing player, who still rolls; it never rolls for the owner.
+    The profile cannot change while the character stands in a standoff
+    (``services.character_profile``).
+    """
+
+    sheet = models.OneToOneField(
+        "arxii.CharacterSheet",
+        on_delete=models.CASCADE,
+        related_name="standoff_profile",
+        help_text="The player character this profile belongs to.",
+    )
+    opted_in = models.BooleanField(
+        default=False,
+        help_text="Whether other player characters may read and press this character.",
+    )
+    cause = models.CharField(
+        max_length=20,
+        choices=CauseKind.choices,
+        default=CauseKind.NONE,
+        help_text="Why this character would start a fight on its own, as its player chose it.",
+    )
+
+    def __str__(self) -> str:
+        state = "opted in" if self.opted_in else "not opted in"
+        return f"Standoff profile of {self.sheet_id} ({state})"
+
+
+class CharacterDrive(SharedMemoryModel):
+    """One thing a player character wants, and how badly (a Property from the drive catalog)."""
+
+    profile = models.ForeignKey(
+        CharacterStandoffProfile,
+        on_delete=models.CASCADE,
+        related_name="drives",
+        help_text="The profile that has this drive.",
+    )
+    property = models.ForeignKey(
+        "arxii.Property",
+        on_delete=models.PROTECT,
+        related_name="character_drives",
+        help_text="What the character wants; a Property some creature template already has "
+        "as a drive.",
+    )
+    strength = models.PositiveSmallIntegerField(
+        choices=DriveStrength.choices,
+        default=DriveStrength.MINOR,
+        help_text="How hard this drive pulls on the character.",
+    )
+
+    class Meta:
+        ordering = ["profile", "-strength", "property"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["profile", "property"],
+                name="unique_character_drive_per_profile_property",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.profile} drive: {self.property} ({self.get_strength_display()})"

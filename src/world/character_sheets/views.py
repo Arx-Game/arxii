@@ -47,6 +47,10 @@ from world.character_sheets.services import (
 from world.character_sheets.staff_views import StaffSheetRowsMixin
 from world.character_sheets.types import ProfileTextField
 from world.scenes.block_services import sheet_blocked_for_viewer
+from world.standoffs.serializers import (
+    StandoffProfileChangeSerializer,
+    StandoffProfileSerializer,
+)
 
 
 def _spendable_stat_rows(sheet: CharacterSheet, cap: int | None) -> list[dict]:
@@ -111,6 +115,19 @@ class CharacterSheetViewSet(StaffSheetRowsMixin, RetrieveModelMixin, GenericView
         """
         roster_entry = sheet.roster_entry
         if roster_entry is None or not can_edit_character_sheet(self.request.user, roster_entry):
+            raise Http404
+
+    def _check_current_player(self, sheet: CharacterSheet) -> None:
+        """404 unless the requesting account is the one playing this character now (#4441).
+
+        Consent is a play-time choice, so it follows the current tenure, not the original
+        creator that ``_check_ownership`` allows.
+        """
+        from world.roster.services.activity import current_roster_entry  # noqa: PLC0415
+
+        entry = current_roster_entry(sheet)
+        tenure = entry.current_tenure if entry is not None else None
+        if tenure is None or tenure.player_data.account != self.request.user:
             raise Http404
 
     @action(detail=True, methods=[HTTPMethod.POST], url_path="set-origin-slot")
@@ -208,6 +225,40 @@ class CharacterSheetViewSet(StaffSheetRowsMixin, RetrieveModelMixin, GenericView
             }
         )
         return Response(payload.data)
+
+    @extend_schema(responses={200: StandoffProfileSerializer})
+    @action(detail=True, methods=[HTTPMethod.GET], url_path="standoff-profile")
+    def standoff_profile(self, request: Request, pk: int | None = None) -> Response:
+        """The owner's standoff profile and the catalogs they pick from (#4441)."""
+        from world.standoffs.services.character_profile import (  # noqa: PLC0415
+            build_profile_view,
+        )
+
+        sheet = self.get_object()
+        self._check_current_player(sheet)
+        return Response(StandoffProfileSerializer(build_profile_view(sheet)).data)
+
+    @extend_schema(
+        request=StandoffProfileChangeSerializer, responses={200: StandoffProfileSerializer}
+    )
+    @standoff_profile.mapping.post
+    def change_standoff_profile(self, request: Request, pk: int | None = None) -> Response:
+        """Make one edit to the owner's standoff profile: consent, cause or a drive (#4441)."""
+        from world.standoffs.services.character_profile import (  # noqa: PLC0415
+            StandoffProfileError,
+            apply_profile_change,
+            build_profile_view,
+        )
+
+        sheet = self.get_object()
+        self._check_current_player(sheet)
+        serializer = StandoffProfileChangeSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        try:
+            apply_profile_change(sheet, **serializer.validated_data)
+        except StandoffProfileError as exc:
+            return Response({"detail": exc.user_message}, status=status.HTTP_400_BAD_REQUEST)
+        return Response(StandoffProfileSerializer(build_profile_view(sheet)).data)
 
     @extend_schema(
         request=MaturationSpendInputSerializer, responses={200: MaturationStateSerializer}
