@@ -21685,6 +21685,23 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/roster/npcs/offers/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description The NPC offers waiting for the requesting Guide to answer. */
+    get: operations['roster_npcs_offers_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/roster/npcs/templates/': {
     parameters: {
       query?: never;
@@ -29544,6 +29561,8 @@ export interface components {
      *     character name, never an account name; blank for a crowd nobody voices yet.
      *     ``count`` is the crowd's bodies (null for a named NPC); ``tier`` is the crowd's
      *     opponent tier. ``roster_entry_id``/``persona_id`` are null for an unvoiced crowd.
+     *     ``opponent_ids`` are the crowd's ``CombatOpponent`` rows (what ``voice_crowd``
+     *     takes); empty for a named NPC.
      */
     CastListEntry: {
       kind: components['schemas']['CastListEntryKindEnum'];
@@ -29557,6 +29576,7 @@ export interface components {
       tier: string | null;
       count: number | null;
       description: string;
+      opponent_ids: number[];
     };
     /**
      * @description * `npc` - npc
@@ -38486,6 +38506,8 @@ export interface components {
       readonly room_name: string | null;
       readonly loan: components['schemas']['MyNPCLoan'] | null;
       readonly npc_notes: string | null;
+      /** @default false */
+      readonly is_crowd_voice: boolean;
     };
     /**
      * @description A player's own story-room access grants (#2450 Fix 2 — spec Decision 1 web surface).
@@ -48657,6 +48679,9 @@ export interface components {
       readonly strain_commitment: number;
       /** Format: date-time */
       readonly created_at: string;
+      /** @default false */
+      readonly resist_only: boolean;
+      readonly resist_check_name: string | null;
     };
     /** @description A scene room's current activity band (shown before a teller commits). */
     SceneActivity: {
@@ -83685,6 +83710,25 @@ export interface operations {
     };
   };
   roster_npcs_answer_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['NPCRosterRow'];
+        };
+      };
+    };
+  };
+  roster_npcs_offers_retrieve: {
     parameters: {
       query?: never;
       header?: never;

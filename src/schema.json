@@ -34820,6 +34820,21 @@ paths:
               schema:
                 $ref: '#/components/schemas/NPCRosterRow'
           description: ''
+  /api/roster/npcs/offers/:
+    get:
+      operationId: roster_npcs_offers_retrieve
+      description: The NPC offers waiting for the requesting Guide to answer.
+      tags:
+      - roster
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NPCRosterRow'
+          description: ''
   /api/roster/npcs/templates/:
     get:
       operationId: roster_npcs_templates_retrieve
@@ -48994,6 +49009,8 @@ components:
         character name, never an account name; blank for a crowd nobody voices yet.
         ``count`` is the crowd's bodies (null for a named NPC); ``tier`` is the crowd's
         opponent tier. ``roster_entry_id``/``persona_id`` are null for an unvoiced crowd.
+        ``opponent_ids`` are the crowd's ``CombatOpponent`` rows (what ``voice_crowd``
+        takes); empty for a named NPC.
       properties:
         kind:
           $ref: '#/components/schemas/CastListEntryKindEnum'
@@ -49023,6 +49040,10 @@ components:
           nullable: true
         description:
           type: string
+        opponent_ids:
+          type: array
+          items:
+            type: integer
       required:
       - count
       - description
@@ -49030,6 +49051,7 @@ components:
       - loan_id
       - loan_status
       - name
+      - opponent_ids
       - persona_id
       - played_by
       - roster_entry_id
@@ -67746,6 +67768,10 @@ components:
           type: string
           readOnly: true
           nullable: true
+        is_crowd_voice:
+          type: boolean
+          readOnly: true
+          default: false
       required:
       - active_persona_id
       - activity_requirement
@@ -67756,6 +67782,7 @@ components:
       - creation_provenance
       - has_ambient_unread
       - id
+      - is_crowd_voice
       - lifecycle_state
       - loan
       - name
@@ -86146,6 +86173,14 @@ components:
           type: string
           format: date-time
           readOnly: true
+        resist_only:
+          type: boolean
+          readOnly: true
+          default: false
+        resist_check_name:
+          type: string
+          readOnly: true
+          nullable: true
       required:
       - action_key
       - action_request_id
@@ -86157,6 +86192,8 @@ components:
       - initiator_name
       - initiator_persona
       - pose_text
+      - resist_check_name
+      - resist_only
       - scene
       - status
       - strain_commitment
