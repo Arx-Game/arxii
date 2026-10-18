@@ -106,11 +106,18 @@ def _observer_senses_twist(  # noqa: PLR0913
     """One witness: consent gate → hidden Search roll → clue mint on success."""
     from world.checks.services import perform_check_with_modifiers  # noqa: PLC0415
     from world.clues.services import find_clue  # noqa: PLC0415
+    from world.magic.constants import MagicActivity  # noqa: PLC0415
+    from world.magic.services.magic_skills import activity_skill_terms  # noqa: PLC0415
     from world.roster.models import RosterEntry  # noqa: PLC0415
 
     if not _may_investigate(observer_sheet, officiant_sheet):
         return False
-    result = perform_check_with_modifiers(observer, check_type, target_difficulty=difficulty)
+    result = perform_check_with_modifiers(
+        observer,
+        check_type,
+        target_difficulty=difficulty,
+        extra_traits=activity_skill_terms(MagicActivity.SENSING_MAGIC),
+    )
     if result.outcome is None or result.outcome.success_level <= 0:
         return False
     entry = RosterEntry.objects.filter(character_sheet=observer_sheet).first()

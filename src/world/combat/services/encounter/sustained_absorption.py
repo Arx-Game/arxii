@@ -43,10 +43,14 @@ def roll_sustained_absorption_budget(
     if the check produced no outcome), so the caller can snapshot the outcome
     on the SustainedAction row.
     """
+    from world.magic.constants import MagicActivity  # noqa: PLC0415
+    from world.magic.services.magic_skills import activity_skill_terms  # noqa: PLC0415
+
     result = perform_check_with_modifiers(
         participant.character_sheet.character,
         get_concentration_check_type(),
         target_difficulty=0,
+        extra_traits=activity_skill_terms(MagicActivity.SUSTAINING_MAGIC),
     )
     budget = max(
         SUSTAINED_MIN_ABSORPTION,

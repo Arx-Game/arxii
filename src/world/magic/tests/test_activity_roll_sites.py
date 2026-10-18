@@ -20,6 +20,7 @@ from actions.factories import ConsequencePoolEntryFactory, ConsequencePoolFactor
 from evennia_extensions.factories import AccountFactory
 from world.character_sheets.factories import CharacterSheetFactory
 from world.checks.factories import CheckTypeFactory, ConsequenceFactory
+from world.checks.test_helpers import force_check_outcome
 from world.checks.types import ExtraTraitTerm
 from world.conditions.factories import (
     ConditionCategoryFactory,
@@ -48,8 +49,22 @@ from world.magic.factories import (
 )
 from world.scenes.factories import SceneFactory
 from world.skills.factories import SkillFactory
+from world.skills.models import Skill
+from world.vitals.constants import CharacterLifeState
+from world.vitals.factories import CharacterVitalsFactory
+from world.worship.rite_services import perform_worship_rite
+from world.worship.tests.test_favor_invocation import (
+    InvocationTestBase,
+    _make_chosen as make_chosen,
+)
+from world.worship.tests.test_rites import RiteTestBase
 
 SKILL_WEIGHT = Decimal("0.50")
+
+
+def terms_for(skill: Skill) -> tuple[ExtraTraitTerm, ...]:
+    """The one term a ``skill`` mapped at ``SKILL_WEIGHT`` adds to a roll."""
+    return (ExtraTraitTerm(trait=skill.trait, weight=SKILL_WEIGHT),)
 
 
 class RollReached(Exception):
@@ -82,7 +97,7 @@ class ActivityTermTestCase(TestCase):
     def setUpTestData(cls) -> None:
         cls.skill = SkillFactory()
         cls.other_skill = SkillFactory()
-        cls.expected = (ExtraTraitTerm(trait=cls.skill.trait, weight=SKILL_WEIGHT),)
+        cls.expected = terms_for(cls.skill)
 
     def map_activity(self, activity: MagicActivity) -> None:
         MagicActivitySkillFactory(activity=activity, skill=self.skill, weight=SKILL_WEIGHT)
@@ -532,3 +547,175 @@ class TreatmentRollSiteTests(ActivityTermTestCase):
             )
 
         self.assertEqual(calls[0]["extra_traits"], ())
+
+
+class CombatAndSpeciesRollSiteTests(ActivityTermTestCase):
+    def test_court_petition(self) -> None:
+        from world.combat.pull_helpers import _resolve_emergency_draw
+        from world.covenants.constants import CovenantType
+        from world.covenants.factories import (
+            CovenantFactory,
+            make_engaged_member,
+            wire_court_grant_petition_content,
+            wire_court_role_powers_catalog,
+        )
+        from world.magic.constants import TargetKind
+        from world.magic.factories import CharacterResonanceFactory
+        from world.magic.models import Thread
+        from world.magic.types.pull import CastPullDeclaration
+
+        servant = CharacterSheetFactory()
+        covenant = CovenantFactory(covenant_type=CovenantType.COURT, leader=CharacterSheetFactory())
+        role, rows = wire_court_role_powers_catalog()
+        resonance = rows[0].resonance
+        make_engaged_member(character_sheet=servant, covenant=covenant, covenant_role=role)
+        thread = Thread.objects.create(
+            owner=servant,
+            resonance=resonance,
+            target_kind=TargetKind.COVENANT_ROLE,
+            target_covenant_role=role,
+            level=0,
+            developed_points=0,
+            name="Cord of the Shadowblade",
+        )
+        CharacterResonanceFactory(character_sheet=servant, resonance=resonance, balance=20)
+        wire_court_grant_petition_content()
+        declaration = CastPullDeclaration(
+            resonance=resonance, tier=1, threads=(thread,), beseech_bonus=8
+        )
+
+        self.assert_terms_reach(
+            "world.checks.services.perform_check",
+            MagicActivity.COURT_PETITION,
+            lambda: _resolve_emergency_draw(servant, declaration),
+        )
+
+    def test_sustaining_magic(self) -> None:
+        from world.combat.constants import CONCENTRATION_CHECK_TYPE_NAME
+        from world.combat.factories import CombatParticipantFactory
+        from world.combat.services.encounter.sustained_absorption import (
+            roll_sustained_absorption_budget,
+        )
+
+        CheckTypeFactory(name=CONCENTRATION_CHECK_TYPE_NAME)
+        participant = CombatParticipantFactory()
+
+        self.assert_terms_reach(
+            "world.combat.services.encounter.sustained_absorption.perform_check_with_modifiers",
+            MagicActivity.SUSTAINING_MAGIC,
+            lambda: roll_sustained_absorption_budget(participant),
+        )
+
+    def test_moon_control(self) -> None:
+        from world.species.moon_sensitivity import _control_holds
+
+        sheet = CharacterSheetFactory()
+
+        self.assert_terms_reach(
+            "world.checks.services.perform_check",
+            MagicActivity.MOON_CONTROL,
+            lambda: _control_holds(sheet.character, sheet, 1, 1),
+        )
+
+
+class WorshipRiteRollTests(RiteTestBase):
+    """A worship rite's roll carries the Worship rite skills."""
+
+    def test_worship_rite(self) -> None:
+        skill = SkillFactory()
+        MagicActivitySkillFactory(
+            activity=MagicActivity.WORSHIP_RITE, skill=skill, weight=SKILL_WEIGHT
+        )
+        with force_check_outcome(self.success) as capture:
+            perform_worship_rite(self.sheet, self.rite, scene=self.scene)
+
+        self.assertEqual(capture.extra_traits, terms_for(skill))
+
+
+class InvocationRollTests(InvocationTestBase):
+    """An invocation's roll carries the Invocation skills."""
+
+    def test_invocation(self) -> None:
+        skill = SkillFactory()
+        MagicActivitySkillFactory(
+            activity=MagicActivity.INVOCATION, skill=skill, weight=SKILL_WEIGHT
+        )
+        make_chosen(self.sheet, self.being, favor=44)
+
+        _result, capture = self._invoke(self.success)
+
+        self.assertEqual(capture.extra_traits, terms_for(skill))
+
+
+class CeremonyRollSiteTests(ActivityTermTestCase):
+    """A speech and the rite that closes a ceremony both carry the Ceremony skills."""
+
+    def open_funeral(self):
+        from evennia_extensions.factories import RoomProfileFactory
+        from world.ceremonies.constants import CeremonyTypeKey
+        from world.ceremonies.factories import CeremonyTypeFactory
+        from world.ceremonies.services import open_ceremony
+        from world.worship.factories import WorshippedBeingFactory
+        from world.worship.models import WorshipDeclaration
+
+        CeremonyTypeFactory(key=CeremonyTypeKey.FUNERAL, name="Funeral")
+        officiant = CharacterSheetFactory()
+        WorshipDeclaration.objects.create(
+            character_sheet=officiant, public_being=WorshippedBeingFactory()
+        )
+        dead = CharacterSheetFactory()
+        CharacterVitalsFactory(character_sheet=dead, life_state=CharacterLifeState.DEAD)
+        return open_ceremony(
+            officiant_persona=officiant.primary_persona,
+            type_key=CeremonyTypeKey.FUNERAL,
+            honoree_sheets=[dead],
+            location_profile=RoomProfileFactory(),
+        )
+
+    def test_speech(self) -> None:
+        from world.ceremonies.services import SPEECH_CHECK_TYPE_NAME, record_speech
+
+        CheckTypeFactory(name=SPEECH_CHECK_TYPE_NAME)
+        ceremony = self.open_funeral()
+        speaker = CharacterSheetFactory().primary_persona
+
+        self.assert_terms_reach(
+            "world.checks.services.perform_check_with_modifiers",
+            MagicActivity.CEREMONY,
+            lambda: record_speech(ceremony=ceremony, speaker_persona=speaker),
+        )
+
+    def test_finishing_rite(self) -> None:
+        from world.ceremonies.services import CEREMONY_CHECK_TYPE_NAME, finish_ceremony
+
+        CheckTypeFactory(name=CEREMONY_CHECK_TYPE_NAME)
+        ceremony = self.open_funeral()
+
+        self.assert_terms_reach(
+            "world.checks.services.perform_check_with_modifiers",
+            MagicActivity.CEREMONY,
+            lambda: finish_ceremony(ceremony=ceremony),
+        )
+
+    def test_leak_sensing(self) -> None:
+        from world.ceremonies.leak import _observer_senses_twist
+        from world.roster.factories import RosterEntryFactory
+        from world.secrets.factories import SecretFactory
+
+        observer = RosterEntryFactory().character_sheet
+        officiant = RosterEntryFactory().character_sheet
+        check_type = CheckTypeFactory()
+        secret = SecretFactory()
+
+        self.assert_terms_reach(
+            "world.checks.services.perform_check_with_modifiers",
+            MagicActivity.SENSING_MAGIC,
+            lambda: _observer_senses_twist(
+                observer=observer.character,
+                observer_sheet=observer,
+                officiant_sheet=officiant,
+                check_type=check_type,
+                difficulty=1,
+                worship_secret=secret,
+            ),
+        )

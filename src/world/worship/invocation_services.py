@@ -336,6 +336,8 @@ def invoke_favor(  # noqa: PLR0913 - the check's context is co-equal keyword dat
     """
     from world.checks.services import perform_check_with_modifiers  # noqa: PLC0415
     from world.game_clock.week_services import get_current_game_week  # noqa: PLC0415
+    from world.magic.constants import MagicActivity  # noqa: PLC0415
+    from world.magic.services.magic_skills import activity_skill_terms  # noqa: PLC0415
     from world.worship.models import FavorInvocation  # noqa: PLC0415
 
     check_can_invoke(sheet, being)
@@ -348,6 +350,7 @@ def invoke_favor(  # noqa: PLR0913 - the check's context is co-equal keyword dat
             target_difficulty=difficulty.points,
             specialization=being.tradition.rites_specialization,
             scene=scene,
+            extra_traits=activity_skill_terms(MagicActivity.INVOCATION),
         )
         bonus = invocation_bonus_for(result.outcome)
         invocation = FavorInvocation.objects.create(

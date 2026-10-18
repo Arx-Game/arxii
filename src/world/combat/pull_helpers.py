@@ -318,7 +318,8 @@ def _resolve_emergency_draw(
     )
     from world.covenants.models import Covenant  # noqa: PLC0415
     from world.covenants.services import get_court_grant_config  # noqa: PLC0415
-    from world.magic.constants import TargetKind  # noqa: PLC0415
+    from world.magic.constants import MagicActivity, TargetKind  # noqa: PLC0415
+    from world.magic.services.magic_skills import activity_skill_terms  # noqa: PLC0415
     from world.npc_services.models import NPCStanding  # noqa: PLC0415
     from world.npc_services.services import incur_npc_debt  # noqa: PLC0415
 
@@ -360,6 +361,7 @@ def _resolve_emergency_draw(
         target_difficulty=config.petition_base_difficulty,
         extra_modifiers=ease,
         situation_ctx=situation_ctx,
+        extra_traits=activity_skill_terms(MagicActivity.COURT_PETITION),
     )
     # CheckResult.success_level (world.checks.types) safely returns 0 when
     # outcome is None — no separate None-check needed.
