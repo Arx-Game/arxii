@@ -653,7 +653,13 @@ export interface CharacterSheetStanding {
     favor: string;
     favor_note: string;
   }[];
-  reputations: { organization_id: number; organization: string; tier: string }[];
+  reputations: {
+    organization_id: number;
+    organization: string;
+    tier: string;
+    /** The newest reason lines, staff-authored copy per cause (#4448); owner and staff only. */
+    reasons: string[];
+  }[];
 }
 
 /**

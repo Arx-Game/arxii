@@ -20,8 +20,10 @@
  * the payload fixes both halves at once: the server is the gate.
  *
  * Drawn in the Reference Sheet's vocabulary (#3898): subheadings over entries on
- * hairlines, with the rank or tier as the row's tag. The sheet supplies "Standing"
- * above all of it, so nothing here draws a heading at that weight.
+ * hairlines, with the rank or tier as the row's tag. The sheet supplies "Organizations"
+ * (it read "Standing", an avoid-word for reputation) above all of it, so nothing here
+ * draws a heading at that weight. Each reputation row lists up to three reason lines
+ * (#4448), staff-authored per cause, for the owner and staff; never a number.
  */
 
 import { Link } from 'react-router-dom';
@@ -163,7 +165,15 @@ function OrganizationStandingBlock({ standing }: { standing: CharacterSheetStand
                 key={rep.organization_id}
                 name={<Link to={`/orgs/${rep.organization_id}`}>{rep.organization}</Link>}
                 tags={<Tag accent>{formatTier(rep.tier)}</Tag>}
-              />
+              >
+                {rep.reasons.length > 0 && (
+                  <ul className="refsheet-reasons">
+                    {rep.reasons.map((reason, index) => (
+                      <li key={`${rep.organization_id}-${index}`}>{reason}</li>
+                    ))}
+                  </ul>
+                )}
+              </Entry>
             ))}
           </Entries>
         </Stack>

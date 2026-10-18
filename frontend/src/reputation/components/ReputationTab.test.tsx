@@ -114,7 +114,9 @@ describe('ReputationTab', () => {
               favor_note: '',
             },
           ],
-          reputations: [{ organization_id: 20, organization: 'The Iron Guard', tier: 'liked' }],
+          reputations: [
+            { organization_id: 20, organization: 'The Iron Guard', tier: 'liked', reasons: [] },
+          ],
         }}
       />
     );
@@ -125,6 +127,40 @@ describe('ReputationTab', () => {
     expect(screen.getByText('Thought of as')).toBeInTheDocument();
     // Covenant is its own rail block on the sheet (#3898), not a group in here.
     expect(screen.queryByText('Covenants')).not.toBeInTheDocument();
+  });
+
+  it('lists the reason lines under an organization, newest first, and no number (#4448)', () => {
+    setRenown(makeRenown());
+    renderWithProviders(
+      <ReputationTab
+        entryCharacterId={1}
+        viewerPersonaId={1}
+        isMyCharacter
+        viewedEntryId={1}
+        standing={{
+          memberships: [],
+          reputations: [
+            {
+              organization_id: 20,
+              organization: 'The Iron Guard',
+              tier: 'disliked',
+              reasons: ['Disliked: [staff-authored reason text]', 'Disfavored: a leader citation'],
+            },
+            { organization_id: 21, organization: 'The Silent Order', tier: 'liked', reasons: [] },
+          ],
+        }}
+      />
+    );
+    const lines = Array.from(document.querySelectorAll('.refsheet-reasons li')).map(
+      (item) => item.textContent
+    );
+    expect(lines).toEqual([
+      'Disliked: [staff-authored reason text]',
+      'Disfavored: a leader citation',
+    ]);
+    // An organization with no recorded change draws no list at all.
+    expect(document.querySelectorAll('.refsheet-reasons')).toHaveLength(1);
+    expect(screen.getByText('The Silent Order')).toBeInTheDocument();
   });
 
   it("shows the house's verdict beside a membership, and nothing for the default (#4106)", () => {
@@ -210,7 +246,9 @@ describe('ReputationTab', () => {
               favor_note: '',
             },
           ],
-          reputations: [{ organization_id: 20, organization: 'The Iron Guard', tier: 'liked' }],
+          reputations: [
+            { organization_id: 20, organization: 'The Iron Guard', tier: 'liked', reasons: [] },
+          ],
         }}
       />
     );
@@ -249,7 +287,9 @@ describe('ReputationTab', () => {
         viewedEntryId={1}
         standing={{
           memberships: [],
-          reputations: [{ organization_id: 20, organization: 'The Iron Guard', tier: 'reviled' }],
+          reputations: [
+            { organization_id: 20, organization: 'The Iron Guard', tier: 'reviled', reasons: [] },
+          ],
         }}
       />
     );
