@@ -101,6 +101,8 @@ class CitationMatrixTests(TestCase):
             reputation=reputation,
             cause=cause,
             amount=-10,
+            value_before=0,
+            value_after=-10,
             tier_before="unknown",
             tier_after="unknown",
             **citations,
@@ -140,6 +142,34 @@ class SecretExposureIsRecordedTests(TestCase):
         reverse_secret_exposure(self.secret)
         causes = [event.cause for event in _events(self.persona, self.org)]
         assert causes == [CAUSE.SECRET_EXPOSED, CAUSE.SECRET_REVERSED]
+
+
+class CitedLabelsTests(TestCase):
+    def test_a_secret_is_cited_with_its_level_and_a_one_line_summary_for_staff(self) -> None:
+        secret = SecretFactory(level=SecretLevel.CAREFULLY_KEPT, content="Line one\nline two")
+        reputation = OrganizationReputationFactory()
+        event = OrganizationReputationEvent.objects.create(
+            reputation=reputation,
+            cause=CAUSE.SECRET_EXPOSED,
+            secret=secret,
+            amount=-350,
+            value_before=0,
+            value_after=-350,
+            tier_before="unknown",
+            tier_after="disliked",
+        )
+        assert event.cited() == [f"secret #{secret.pk}, level {int(SecretLevel.CAREFULLY_KEPT)}"]
+        assert event.cited(summary=True) == [
+            f"secret #{secret.pk}, level {int(SecretLevel.CAREFULLY_KEPT)}: Line one line two"
+        ]
+
+    def test_the_change_records_the_values_it_moved_between(self) -> None:
+        persona = CharacterSheetFactory().primary_persona
+        org = OrganizationFactory()
+        bump_organization_reputation(persona, org, -120, cause=CAUSE.GANG_TURF)
+        bump_organization_reputation(persona, org, -350, cause=CAUSE.GANG_TURF)
+        newest = _events(persona, org)[-1]
+        assert (newest.value_before, newest.value_after) == (-120, -470)
 
 
 class ReasonLineTests(TestCase):

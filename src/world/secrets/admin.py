@@ -39,20 +39,10 @@ class SecretVictimInline(admin.TabularInline):
 
     model = SecretVictim
     verbose_name_plural = "Victims"
+    template = "admin/secrets/victims_inline.html"
     fields = ["organization", "persona"]
     raw_id_fields = ["organization", "persona"]
     extra = 0
-
-    def get_formset(self, request, obj=None, **kwargs):
-        formset = super().get_formset(request, obj, **kwargs)
-        formset.form.base_fields["organization"].help_text = (
-            "Set exactly one of organization or persona, while authoring the secret. There is "
-            "no per-victim size: the reaction is always the level default. An organization "
-            "victim's reputation of the subject drops on the secret's first exposure; a "
-            "persona victim is told and decides their own reaction. A spy job's residue "
-            "secret fills this row from the job's target."
-        )
-        return formset
 
 
 @admin.register(Secret)

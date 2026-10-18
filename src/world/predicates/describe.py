@@ -140,11 +140,7 @@ def _recent_causes(row: object) -> list[str]:
     events = list(row.events.all()[:REASON_LINES_SHOWN])
     moves = []
     for event in events:
-        cited = [
-            f"{field.replace('_', ' ')} #{getattr(event, f'{field}_id')}"
-            for field in event._ALL_CITATION_FIELDS  # noqa: SLF001
-            if getattr(event, f"{field}_id")
-        ]
+        cited = event.cited(summary=True)
         detail = f" ({', '.join(cited)})" if cited else ""
         moves.append(
             f"{event.get_cause_display().lower()}{detail}, "

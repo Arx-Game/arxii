@@ -186,7 +186,9 @@ class StaffReasonTests(_Base):
         self.assertIn("Disfavored", tier_line)
         self.assertEqual(newest, "Moved by: gang turf, Disfavored to Disfavored")
         self.assertEqual(
-            earlier, f"Earlier: secret exposed (secret #{secret.pk}), Unknown to Disfavored"
+            earlier,
+            f"Earlier: secret exposed (secret #{secret.pk}, level 1: "
+            f"{' '.join(secret.content.split())[:60]}), Unknown to Disfavored",
         )
 
     def test_the_reason_names_the_association(self) -> None:

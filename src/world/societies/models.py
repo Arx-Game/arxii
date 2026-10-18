@@ -1452,6 +1452,12 @@ class OrganizationReputationEvent(SharedMemoryModel):
     amount = models.IntegerField(
         help_text="Signed change as applied, after the clamp and any reputation-gain lever.",
     )
+    value_before = models.IntegerField(
+        help_text="The reputation value before this change. Staff only; players see tiers.",
+    )
+    value_after = models.IntegerField(
+        help_text="The reputation value after this change. Staff only; players see tiers.",
+    )
     tier_before = models.CharField(
         max_length=16,
         choices=REPUTATION_TIER_CHOICES,
@@ -1555,6 +1561,24 @@ class OrganizationReputationEvent(SharedMemoryModel):
         if allowed and len(set_fields) != 1:
             msg = f"{self.get_cause_display()} must cite exactly one of {list(allowed)}."
             raise ValidationError({"cause": msg})
+
+    def cited(self, *, summary: bool = False) -> list[str]:
+        """What this change cites, for staff: "secret #2, level 2" and the like.
+
+        ``summary`` adds the first words of a cited secret's text, for the GM's explanation.
+        Players never see any of this.
+        """
+        labels = []
+        for field in self._ALL_CITATION_FIELDS:
+            if not getattr(self, f"{field}_id"):
+                continue
+            label = f"{field.replace('_', ' ')} #{getattr(self, f'{field}_id')}"
+            if field == "secret":  # noqa: STRING_LITERAL - a citation field name
+                label += f", level {self.secret.level}"
+                if summary:
+                    label += f": {' '.join(self.secret.content.split())[:60]}"
+            labels.append(label)
+        return labels
 
     def __str__(self) -> str:
         return (

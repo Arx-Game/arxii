@@ -90,6 +90,18 @@ class Migration(migrations.Migration):
                     ),
                 ),
                 (
+                    "value_before",
+                    models.IntegerField(
+                        help_text="The reputation value before this change. Staff only; players see tiers."
+                    ),
+                ),
+                (
+                    "value_after",
+                    models.IntegerField(
+                        help_text="The reputation value after this change. Staff only; players see tiers."
+                    ),
+                ),
+                (
                     "tier_before",
                     models.CharField(
                         choices=[

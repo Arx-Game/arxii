@@ -848,6 +848,8 @@ def bump_organization_reputation(  # noqa: PLR0913 - keyword-only; each is a dis
                 reputation=reputation,
                 cause=cause,
                 amount=reputation.value - old_value,
+                value_before=old_value,
+                value_after=reputation.value,
                 tier_before=tier_before.value,
                 tier_after=reputation.get_tier().value,
                 legend_entry=legend_entry,

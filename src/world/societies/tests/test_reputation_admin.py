@@ -86,6 +86,7 @@ class OrganizationReputationAdminTests(TestCase):
         self.assertContains(response, "Gang turf")
         self.assertContains(response, "-300")
         self.assertContains(response, "Changes (read only, newest first)")
+        self.assertContains(response, "Unknown to Disliked (0 to -300)")
 
     def test_an_unchanged_value_records_nothing(self):
         reputation = OrganizationReputationFactory(
@@ -133,6 +134,17 @@ class SecretVictimInlineTests(TestCase):
             **{f"victims-0-{key}": value for key, value in row.items()},
         }
         return formset_class(data, instance=secret, prefix="victims")
+
+    def test_the_victims_help_is_drawn_on_the_page_not_only_in_a_tooltip(self):
+        from django.urls import reverse
+
+        client = self.client
+        client.force_login(AccountFactory(is_staff=True, is_superuser=True))
+        secret = SecretFactory()
+        response = client.get(reverse("admin:arxii_secret_change", args=[secret.pk]))
+        self.assertContains(response, "Set exactly one of organization or persona")
+        self.assertContains(response, "per-victim size")
+        self.assertContains(response, "Default victim severity")
 
     def test_the_inline_offers_no_severity(self):
         assert SecretVictimInline.fields == ["organization", "persona"]

@@ -294,6 +294,8 @@ class OrganizationReputationEventFactory(factory_django.DjangoModelFactory):
     reputation = factory.SubFactory(OrganizationReputationFactory)
     cause = OrganizationReputationCause.STAFF_ADJUSTMENT
     amount = 10
+    value_before = 0
+    value_after = 10
     tier_before = "unknown"
     tier_after = "unknown"
 

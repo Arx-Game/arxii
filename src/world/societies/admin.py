@@ -638,7 +638,7 @@ class OrganizationReputationEventInline(admin.TabularInline):
     verbose_name_plural = "Changes (read only, newest first)"
     extra = 0
     can_delete = False
-    fields = ["created_at", "cause", "change", "tier_before", "tier_after", "cites"]
+    fields = ["created_at", "cause", "change", "tier", "cites"]
     readonly_fields = fields
     ordering = ["-created_at", "-pk"]
 
@@ -652,14 +652,16 @@ class OrganizationReputationEventInline(admin.TabularInline):
     def change(self, obj: OrganizationReputationEvent) -> str:
         return f"{obj.amount:+d}"
 
+    @admin.display(description="Tier")
+    def tier(self, obj: OrganizationReputationEvent) -> str:
+        return (
+            f"{obj.get_tier_before_display()} to {obj.get_tier_after_display()} "
+            f"({obj.value_before} to {obj.value_after})"
+        )
+
     @admin.display(description="Cites")
     def cites(self, obj: OrganizationReputationEvent) -> str:
-        cited = [
-            f"{field.replace('_', ' ')} #{getattr(obj, f'{field}_id')}"
-            for field in OrganizationReputationEvent._ALL_CITATION_FIELDS  # noqa: SLF001
-            if getattr(obj, f"{field}_id")
-        ]
-        return ", ".join(cited) or "(none)"
+        return ", ".join(obj.cited()) or "(none)"
 
 
 @admin.register(OrganizationReputation)
