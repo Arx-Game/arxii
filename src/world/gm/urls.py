@@ -21,6 +21,7 @@ from world.gm.views import (
     GMSummonOfferViewSet,
     GMTableMembershipViewSet,
     GMTableViewSet,
+    GuideViewSet,
     LookingForTableBrowseView,
     TableUpdateRequestViewSet,
 )
@@ -31,6 +32,7 @@ router = DefaultRouter()
 router.register("applications", GMApplicationViewSet, basename="gm-application")
 router.register("profiles", GMProfileViewSet, basename="gm-profile")
 router.register("tables", GMTableViewSet, basename="gm-table")
+router.register("guides", GuideViewSet, basename="gm-guide")
 router.register("table-memberships", GMTableMembershipViewSet, basename="gm-table-membership")
 router.register("invites", GMRosterInviteViewSet, basename="gm-invite")
 router.register("catalog-suggestions", CatalogSuggestionViewSet, basename="catalog-suggestion")

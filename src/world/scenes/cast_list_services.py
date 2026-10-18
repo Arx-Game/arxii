@@ -3,14 +3,15 @@
 Derived, with no table of its own. Two kinds of row:
 
 - ``npc``: a story NPC (``world.roster.services.activity.is_story_npc``) standing in
-  the scene's room, minus the characters that are only a crowd's voice.
+  the scene's room, minus the voices of the crowds listed below.
 - ``crowd``: the opponents of the scene's encounters that are not COMPLETED, grouped
   by the voice they pose as (``CombatOpponent.voice_persona``), else by threat pool
   for mooks, else one row each (a swarm is one row with a body count).
 
-"Played by" is a character name, never an account name: the borrower of the
-entry's ACTIVE or OFFERED loan for this scene, else of any ACTIVE loan, else the
-tenure holder. "Cast" alone means a technique cast (``cast_services``); this is the
+"Played by" is the borrower of the entry's ACTIVE or OFFERED loan for this scene,
+else of any ACTIVE loan, else the tenure holder, shown by a GM or Staff character
+name, a Guide's display name, or a role label: never an account name, never a
+player character's name. "Cast" alone means a technique cast (``cast_services``); this is the
 cast list.
 """
 
@@ -18,6 +19,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Literal
+
+from django.core.exceptions import ObjectDoesNotExist
 
 from world.combat.constants import OpponentStatus, OpponentTier
 from world.roster.constants import NPCLoanStatus
@@ -32,6 +35,8 @@ if TYPE_CHECKING:
     from world.scenes.models import Persona, Scene
 
 FALLBACK_PLAYER_NAME = "Staff"
+GUIDE_LABEL = "Guide"
+GM_LABEL = "GM"
 
 
 @dataclass(frozen=True)
@@ -59,38 +64,50 @@ class _Player:
     loan: NPCLoan | None
 
 
-def _character_names(account_ids: Iterable[int]) -> dict[int, str]:
-    """Each account's character name, in one query.
+def _player_names(account_ids: Iterable[int]) -> dict[int, str]:
+    """How each account is shown as who plays an NPC, in three queries.
 
-    A GM or Staff OOC character first, else the account's own player character
-    (never a story NPC it holds). An account with neither reads as staff.
+    Never an account name, and never one of the account's player characters (that
+    would tie the account to a PC). A GM or Staff OOC character's name first, else
+    the Guide's ``display_name``, else the role: "Guide", "GM", or "Staff".
     """
     from web.api.character_type import TYPECLASS_TO_CHARACTER_TYPE  # noqa: PLC0415
+    from world.gm.models import GMProfile, GuideProfile  # noqa: PLC0415
     from world.roster.models import RosterTenure  # noqa: PLC0415
-    from world.roster.models.choices import RosterType  # noqa: PLC0415
 
     ids = set(account_ids)
     if not ids:
         return {}
-    tenures = (
-        RosterTenure.objects.filter(player_data__account_id__in=ids, end_date__isnull=True)
-        .select_related("player_data", "roster_entry__roster", "roster_entry__character_sheet")
-        .select_related("roster_entry__character_sheet__character")
+    ooc_names: dict[int, str] = {}
+    for account_id, name in (
+        RosterTenure.objects.filter(
+            player_data__account_id__in=ids,
+            end_date__isnull=True,
+            roster_entry__character_sheet__character__db_typeclass_path__in=list(
+                TYPECLASS_TO_CHARACTER_TYPE
+            ),
+        )
         .order_by("pk")
+        .values_list("player_data__account_id", "roster_entry__character_sheet__character__db_key")
+    ):
+        ooc_names.setdefault(account_id, name)
+    guide_names = dict(
+        GuideProfile.objects.filter(account_id__in=ids).values_list("account_id", "display_name")
     )
-    gm_names: dict[int, str] = {}
-    pc_names: dict[int, str] = {}
-    for tenure in tenures:
-        account_id = tenure.player_data.account_id
-        character = tenure.roster_entry.character_sheet.character
-        if character.db_typeclass_path in TYPECLASS_TO_CHARACTER_TYPE:
-            gm_names.setdefault(account_id, character.db_key)
-        elif tenure.roster_entry.roster.roster_type != RosterType.NPC:
-            pc_names.setdefault(account_id, character.db_key)
-    return {
-        account_id: gm_names.get(account_id) or pc_names.get(account_id) or FALLBACK_PLAYER_NAME
-        for account_id in ids
-    }
+    gm_ids = set(GMProfile.objects.filter(account_id__in=ids).values_list("account_id", flat=True))
+    names: dict[int, str] = {}
+    for account_id in ids:
+        if account_id in ooc_names:
+            names[account_id] = ooc_names[account_id]
+        elif guide_names.get(account_id):
+            names[account_id] = guide_names[account_id]
+        elif account_id in guide_names:
+            names[account_id] = GUIDE_LABEL
+        elif account_id in gm_ids:
+            names[account_id] = GM_LABEL
+        else:
+            names[account_id] = FALLBACK_PLAYER_NAME
+    return names
 
 
 def _loans_by_entry(scene: Scene, entry_ids: set[int]) -> dict[int, NPCLoan]:
@@ -134,7 +151,7 @@ def _players(scene: Scene, entries: list[RosterEntry]) -> dict[int, _Player]:
     holder_ids.update(open_tenures)
     account_ids = {loan.borrower_id for loan in loans.values()}
     account_ids |= {account_id for account_id in holder_ids.values() if account_id is not None}
-    names = _character_names(account_ids)
+    names = _player_names(account_ids)
     players: dict[int, _Player] = {}
     for entry in entries:
         loan = loans.get(entry.pk)
@@ -148,11 +165,25 @@ def _players(scene: Scene, entries: list[RosterEntry]) -> dict[int, _Player]:
 
 
 def _description(sheet: CharacterSheet) -> str:
-    return sheet.character.item_data.get_display_description() or ""
+    """What the character handler shows, read only off rows the caller selected.
+
+    The handler's own read get_or_creates a display row, which a GET must not do.
+    The order is the handler's: a disguise overlay, the permanent description,
+    then the sheet's free text (as ``NPCRosterEntrySerializer.get_description``).
+    """
+    try:
+        text = sheet.character.display_data.get_display_description()
+    except ObjectDoesNotExist:
+        text = ""
+    return text or sheet.additional_desc or ""
 
 
-def _room_npc_entries(scene: Scene) -> list[RosterEntry]:
-    """Story NPCs in the scene's room that are not a crowd's voice, by name."""
+def _room_npc_entries(scene: Scene, voice_persona_ids: set[int]) -> list[RosterEntry]:
+    """Story NPCs in the scene's room, by name, minus the voices of listed crowds.
+
+    A voice whose crowd is no longer in the fight (its encounters finished, its
+    bodies all down) is an ordinary story NPC again and is listed here.
+    """
     from web.api.character_type import TYPECLASS_TO_CHARACTER_TYPE  # noqa: PLC0415
     from world.roster.models import RosterEntry  # noqa: PLC0415
     from world.roster.models.choices import RosterType  # noqa: PLC0415
@@ -169,8 +200,8 @@ def _room_npc_entries(scene: Scene) -> list[RosterEntry]:
             character_sheet__character__db_typeclass_path__in=list(TYPECLASS_TO_CHARACTER_TYPE)
         )
         .exclude(story_npc_settings__is_template=True)
-        .exclude(character_sheet__personas__voiced_opponents__isnull=False)
-        .select_related("roster", "character_sheet__character")
+        .exclude(character_sheet__personas__id__in=list(voice_persona_ids))
+        .select_related("roster", "character_sheet__character__display_data")
         .order_by("character_sheet__character__db_key")
         .distinct()
     )
@@ -193,7 +224,7 @@ def _crowd_opponents(scene: Scene) -> list[CombatOpponent]:
         .exclude(encounter__status=RoundStatus.COMPLETED)
         .select_related(
             "threat_pool",
-            "voice_persona__character_sheet__character",
+            "voice_persona__character_sheet__character__display_data",
             "voice_persona__character_sheet__roster_entry__roster",
         )
         .order_by("pk")
@@ -271,8 +302,9 @@ def scene_cast_list(scene: Scene) -> list[CastListEntry]:
     from world.scenes.constants import PersonaType  # noqa: PLC0415
     from world.scenes.models import Persona  # noqa: PLC0415
 
-    npc_entries = _room_npc_entries(scene)
     crowds = _group_opponents(_crowd_opponents(scene))
+    voice_ids = {rows[0].voice_persona_id for rows in crowds if rows[0].voice_persona_id}
+    npc_entries = _room_npc_entries(scene, voice_ids)
     voice_entries = [
         rows[0].voice_persona.character_sheet.roster_entry
         for rows in crowds

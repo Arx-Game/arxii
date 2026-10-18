@@ -131,6 +131,9 @@ class SceneViewSet(viewsets.ModelViewSet):
         # entry.character_sheet.character.db_key — the second character_sheet
         # hop hits the SharedMemoryModel identity map for free, so we only
         # need to chain as far as roster_entry plus the character ObjectDB.
+        if self.action == "cast_list":
+            # The cast list reads no interactions or drama tags (#4418).
+            return super().get_queryset()
         queryset = (
             super()
             .get_queryset()

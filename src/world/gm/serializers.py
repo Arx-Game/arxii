@@ -29,6 +29,7 @@ from world.gm.models import (
     GMSummonOffer,
     GMTable,
     GMTableMembership,
+    GuideProfile,
     ProfileTextRequestDetails,
     StoryRoomGrant,
     TableUpdateRequest,
@@ -167,6 +168,20 @@ class GMProfileSerializer(serializers.ModelSerializer):
             "level_display",
             "approved_at",
         ]
+        read_only_fields = fields
+
+
+class GuideSerializer(serializers.ModelSerializer):
+    """An active Guide as a GM picks them to lend an NPC (#4418).
+
+    ``display_name`` only: never the account name or any of the Guide's characters.
+    """
+
+    account_id = serializers.IntegerField(read_only=True)
+
+    class Meta:
+        model = GuideProfile
+        fields = ["account_id", "display_name"]
         read_only_fields = fields
 
 

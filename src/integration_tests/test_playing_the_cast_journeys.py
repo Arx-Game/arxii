@@ -5,6 +5,9 @@ from __future__ import annotations
 import uuid
 
 from django.core.exceptions import ValidationError
+from django.db import connection
+from django.test.utils import CaptureQueriesContext
+from evennia.utils.idmapper import models as idmapper_models
 from rest_framework import status
 
 from actions.constants import ActionCategory, ActionTargetType
@@ -349,10 +352,12 @@ class AnNpcActsOnAPc(JourneyCase):
 
 CAST_LIST = "/api/scenes/{}/cast-list/"
 SUBMIT_POSE = "/api/interactions/submit-pose/"
+GUIDES = "/api/gm/guides/"
 
 
 class TheGmSeesTheCast(JourneyCase):
-    """Ravenna GMs the siege at Low Gate; Ilsa is a Guide; Ysmay is a player there."""
+    """Ravenna GMs the siege at Low Gate; Wren's player is the Guide staff call "Ilsa";
+    Ysmay is a player there."""
 
     def setUp(self) -> None:
         super().setUp()
@@ -361,33 +366,66 @@ class TheGmSeesTheCast(JourneyCase):
         self.ravenna = self.make_player("Ravenna", room=self.room)
         self.gm = self.account_of(self.ravenna)
         GMProfileFactory(account=self.gm, level=GMLevel.JUNIOR)
-        self.ilsa = self.make_player("Ilsa", room=self.room)
-        self.guide = self.account_of(self.ilsa)
-        GuideProfileFactory(account=self.guide)
+        self.wren = self.make_player("Wren", room=self.room)
+        self.guide = self.account_of(self.wren)
+        GuideProfileFactory(account=self.guide, display_name="Ilsa")
         self.ysmay = self.make_player("Ysmay", room=self.room)
         self.scene = SceneFactory(room=self.room, name="The Siege at Low Gate")
         SceneParticipationFactory(scene=self.scene, account=self.gm, is_gm=True, is_owner=True)
         self.encounter = CombatEncounterFactory(scene=self.scene, room=self.room)
         self.pool = ThreatPoolFactory(name="Low Gate watch")
-        self.guards = [
+        self.guards = self._mooks(self.encounter, self.pool, 8)
+
+    # -- helpers ---------------------------------------------------------------
+
+    @staticmethod
+    def _mooks(encounter, pool, count: int) -> list:
+        return [
             CombatOpponentFactory(
-                encounter=self.encounter,
+                encounter=encounter,
                 tier=OpponentTier.MOOK,
-                threat_pool=self.pool,
-                name=f"Gate guard {number}",
+                threat_pool=pool,
+                name=f"{pool.name} {number}",
             )
-            for number in range(8)
+            for number in range(count)
         ]
 
-    def test_cast_lists_npcs_and_crowds(self) -> None:
-        minted = self.web(
-            self.ravenna, "mint_story_npc", name="Captain Vael", description="A grizzled officer."
-        )
+    def _mint(self, name: str):
+        minted = self.web(self.ravenna, "mint_story_npc", name=name, description="An officer.")
         self.assertTrue(minted.detail.success, minted.detail.message)
-        vael = RosterEntry.objects.get(pk=minted.detail.data["roster_entry_id"])
-        character = vael.character_sheet.character
+        entry = RosterEntry.objects.get(pk=minted.detail.data["roster_entry_id"])
+        character = entry.character_sheet.character
         character.location = self.room
         character.save()
+        return entry
+
+    def _voice(self, opponents, name: str):
+        return self.web(
+            self.ravenna,
+            "voice_crowd",
+            opponent_ids=[opponent.pk for opponent in opponents],
+            name=name,
+        )
+
+    def _lend(self, entry_id: int) -> None:
+        offered = self.web(
+            self.ravenna, "offer_npc", roster_entry_id=entry_id, guide_account_id=self.guide.pk
+        )
+        self.assertTrue(offered.detail.success, offered.detail.message)
+        accepted = self.web(
+            self.wren, "answer_npc_loan", loan_id=offered.detail.data["loan_id"], accept=True
+        )
+        self.assertTrue(accepted.detail.success, accepted.detail.message)
+
+    def _cast_list(self):
+        response = self.api(self.gm).get(CAST_LIST.format(self.scene.pk))
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
+        return response
+
+    # -- journeys --------------------------------------------------------------
+
+    def test_cast_lists_npcs_and_crowds(self) -> None:
+        vael = self._mint("Captain Vael")
         CombatOpponentFactory(
             encounter=self.encounter,
             tier=OpponentTier.SWARM,
@@ -402,9 +440,8 @@ class TheGmSeesTheCast(JourneyCase):
         )
         CombatOpponentFactory(encounter=finished, name="Routed sapper")
 
-        response = self.api(self.gm).get(CAST_LIST.format(self.scene.pk))
+        response = self._cast_list()
 
-        self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
         rows = response.json()
         self.assertEqual(
             [row["name"] for row in rows],
@@ -413,37 +450,29 @@ class TheGmSeesTheCast(JourneyCase):
         self.assertEqual([row["count"] for row in rows], [None, 8, 30])
         self.assertEqual([row["kind"] for row in rows], ["npc", "crowd", "crowd"])
         self.assertEqual(rows[0]["roster_entry_id"], vael.pk)
-        self.assertEqual(rows[0]["played_by"], "Ravenna")
-        self.assertEqual(rows[0]["description"], "A grizzled officer.")
-        self.assertNotIn(self.gm.username, response.content.decode())
+        # Ravenna has no GM character: she shows as her role, never as her PC.
+        self.assertEqual(rows[0]["played_by"], "GM")
+        self.assertEqual(rows[0]["description"], "An officer.")
+        body = response.content.decode()
+        self.assertNotIn(self.gm.username, body)
+        self.assertNotIn("Ravenna", body)
 
         refused = self.api(self.account_of(self.ysmay)).get(CAST_LIST.format(self.scene.pk))
         self.assertEqual(refused.status_code, status.HTTP_404_NOT_FOUND)
 
     def test_a_crowd_poses_under_its_own_name(self) -> None:
-        voiced = self.web(
-            self.ravenna,
-            "voice_crowd",
-            opponent_ids=[guard.pk for guard in self.guards],
-            name="Gate guards",
-        )
+        voiced = self._voice(self.guards, "Gate guards")
         self.assertTrue(voiced.detail.success, voiced.detail.message)
-        entry_id = voiced.detail.data["roster_entry_id"]
         persona_id = voiced.detail.data["persona_id"]
+        self._lend(voiced.detail.data["roster_entry_id"])
 
-        offered = self.web(
-            self.ravenna, "offer_npc", roster_entry_id=entry_id, guide_account_id=self.guide.pk
-        )
-        self.assertTrue(offered.detail.success, offered.detail.message)
-        accepted = self.web(
-            self.ilsa, "answer_npc_loan", loan_id=offered.detail.data["loan_id"], accept=True
-        )
-        self.assertTrue(accepted.detail.success, accepted.detail.message)
-
-        rows = self.api(self.gm).get(CAST_LIST.format(self.scene.pk)).json()
+        response = self._cast_list()
+        rows = response.json()
         self.assertEqual([row["name"] for row in rows], ["Gate guards"])
         self.assertEqual(rows[0]["count"], 8)
+        # The Guide shows by the name staff gave her, never by her own character.
         self.assertEqual(rows[0]["played_by"], "Ilsa")
+        self.assertNotIn("Wren", response.content.decode())
         self.assertEqual(rows[0]["loan_status"], "active")
 
         posed = self.api(self.guide).post(
@@ -460,3 +489,93 @@ class TheGmSeesTheCast(JourneyCase):
         interaction = Interaction.objects.filter(content="Shields up! Hold the line!").get()
         self.assertEqual(interaction.persona.name, "Gate guards")
         self.assertEqual(CombatOpponent.objects.filter(persona__isnull=False).count(), 0)
+
+    def test_a_finished_fight_returns_its_voice_to_the_npcs(self) -> None:
+        voiced = self._voice(self.guards, "Gate guards")
+        self.assertTrue(voiced.detail.success, voiced.detail.message)
+
+        self.encounter.status = RoundStatus.COMPLETED
+        self.encounter.save()
+
+        rows = self._cast_list().json()
+        self.assertEqual([(row["name"], row["kind"]) for row in rows], [("Gate guards", "npc")])
+        self.assertIsNone(rows[0]["count"])
+
+    def test_crowd_voices_do_not_count_against_the_cap(self) -> None:
+        # A junior GM may keep two story NPCs; voices are not among them.
+        self._mint("Captain Vael")
+        self.assertTrue(self._voice(self.guards, "Gate guards").detail.success)
+        self._mint("Corporal Brann")
+        archers = self._mooks(self.encounter, ThreatPoolFactory(name="Wall archers"), 3)
+        voiced = self._voice(archers, "Wall archers")
+        self.assertTrue(voiced.detail.success, voiced.detail.message)
+
+        refused = self.web(self.ravenna, "mint_story_npc", name="Sergeant Holt", description="")
+        self.assertFalse(refused.detail.success)
+        self.assertFalse(
+            RosterEntry.objects.filter(character_sheet__character__db_key="Sergeant Holt").exists()
+        )
+
+    def test_a_voice_is_refused_for_rows_that_are_not_one_crowd(self) -> None:
+        other = CombatEncounterFactory(scene=self.scene, room=self.room)
+        stray = CombatOpponentFactory(encounter=other, threat_pool=self.pool)
+        split = self._voice([self.guards[0], stray], "Split guards")
+        self.assertFalse(split.detail.success)
+
+        elsewhere = CombatOpponentFactory()  # an encounter in another scene and room
+        foreign = self._voice([elsewhere], "Distant guards")
+        self.assertFalse(foreign.detail.success)
+        self.assertIsNone(CombatOpponent.objects.get(pk=elsewhere.pk).voice_persona_id)
+
+        self.assertTrue(self._voice(self.guards, "Gate guards").detail.success)
+        again = self._voice(self.guards[:2], "Second voice")
+        self.assertFalse(again.detail.success)
+        self.assertFalse(
+            RosterEntry.objects.filter(
+                character_sheet__character__db_key__in=[
+                    "Split guards",
+                    "Distant guards",
+                    "Second voice",
+                ]
+            ).exists()
+        )
+        voices = set(
+            CombatOpponent.objects.filter(pk__in=[g.pk for g in self.guards]).values_list(
+                "voice_persona__name", flat=True
+            )
+        )
+        self.assertEqual(voices, {"Gate guards"})
+
+    def test_cast_list_queries_do_not_grow_with_its_rows(self) -> None:
+        self._mint("Captain Vael")
+        voiced = self._voice(self.guards, "Gate guards")
+        self._lend(voiced.detail.data["roster_entry_id"])
+        idmapper_models.flush_cache()  # read the rows as a fresh server process would
+        with CaptureQueriesContext(connection) as small:
+            self._cast_list()
+
+        self._mint("Corporal Brann")
+        archers = self._mooks(self.encounter, ThreatPoolFactory(name="Wall archers"), 3)
+        voiced = self._voice(archers, "Wall archers")
+        self._lend(voiced.detail.data["roster_entry_id"])
+        self._mooks(self.encounter, ThreatPoolFactory(name="Sappers"), 4)
+        CombatOpponentFactory(
+            encounter=self.encounter, tier=OpponentTier.SWARM, name="Rabble", swarm_count=12
+        )
+        idmapper_models.flush_cache()  # read the rows as a fresh server process would
+        with CaptureQueriesContext(connection) as large:
+            rows = self._cast_list().json()
+
+        self.assertEqual(len(rows), 6)
+        self.assertEqual(len(large.captured_queries), len(small.captured_queries))
+
+    def test_a_gm_picks_a_guide_by_display_name(self) -> None:
+        response = self.api(self.gm).get(GUIDES)
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
+        self.assertEqual(
+            response.json()["results"], [{"account_id": self.guide.pk, "display_name": "Ilsa"}]
+        )
+        self.assertNotIn(self.guide.username, response.content.decode())
+
+        refused = self.api(self.account_of(self.ysmay)).get(GUIDES)
+        self.assertEqual(refused.status_code, status.HTTP_403_FORBIDDEN)

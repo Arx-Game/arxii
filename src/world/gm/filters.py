@@ -13,6 +13,7 @@ from world.gm.models import (
     GMPrompt,
     GMTable,
     GMTableMembership,
+    GuideProfile,
     StoryRoomGrant,
     TableUpdateRequest,
 )
@@ -30,6 +31,20 @@ class GMProfileFilter(django_filters.FilterSet):
 
     class Meta:
         model = GMProfile
+        fields = ["search"]
+
+
+class GuideFilter(django_filters.FilterSet):
+    """Filter for the Guide picker (#4418): search by the Guide's display name."""
+
+    search = django_filters.CharFilter(
+        field_name="display_name",
+        lookup_expr="icontains",
+        label="Search by display name",
+    )
+
+    class Meta:
+        model = GuideProfile
         fields = ["search"]
 
 

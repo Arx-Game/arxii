@@ -224,11 +224,17 @@ def check_story_npc_cap(gm_account: AccountDB, *, count_against_cap: bool = True
         return
     cap = GMLevelCap.objects.filter(level=profile.level).first()
     max_story_npcs = cap.max_story_npcs if cap is not None else 0
-    active_count = RosterTenure.objects.filter(
-        player_data__account=gm_account,
-        roster_entry__roster__roster_type=RosterType.NPC,
-        end_date__isnull=True,
-    ).count()
+    # A crowd's voice (#4418) is not a story NPC the GM keeps: it never counts.
+    active_count = (
+        RosterTenure.objects.filter(
+            player_data__account=gm_account,
+            roster_entry__roster__roster_type=RosterType.NPC,
+            end_date__isnull=True,
+        )
+        .exclude(roster_entry__character_sheet__personas__voiced_opponents__isnull=False)
+        .distinct()
+        .count()
+    )
     if active_count >= max_story_npcs:
         msg = (
             f"You already have {active_count} story NPC(s) -- your level allows "
@@ -315,13 +321,14 @@ def apply_npc_preset(sheet: CharacterSheet, preset: NPCStatlinePreset) -> None:
 
 
 @transaction.atomic
-def mint_story_npc(
+def mint_story_npc(  # noqa: PLR0913 - keyword-only; each knob is a real mint axis
     *,
     gm_account: AccountDB,
     name: str,
     description: str = "",
     preset: NPCStatlinePreset | None = None,
     as_template: bool = False,
+    count_against_cap: bool = True,
 ) -> ObjectDB:
     """Mint a Story NPC for a JUNIOR+ GM, tenure-bound to their account (#3426).
 
@@ -342,6 +349,9 @@ def mint_story_npc(
     The entry is stamped ``GM_TABLE`` with ``created_by_account=gm_account`` and gets a
     ``StoryNPCSettings`` row (#4418). ``as_template`` mints it with no tenure, so it
     counts against no cap and nobody holds it; borrowers get copies.
+    ``count_against_cap=False`` keeps the trust checks but skips the cap, for a
+    crowd's voice (``world.combat.services.crowd_voice``), which the GM holds but
+    does not keep as a story NPC.
 
     Raises:
         StaffMintError: missing GM trust, below JUNIOR, at/over cap, or (with
@@ -349,7 +359,7 @@ def mint_story_npc(
     """
     from world.character_sheets.services import set_physical_description  # noqa: PLC0415
 
-    check_story_npc_cap(gm_account, count_against_cap=not as_template)
+    check_story_npc_cap(gm_account, count_against_cap=count_against_cap and not as_template)
 
     from world.roster.models import StoryNPCSettings  # noqa: PLC0415
     from world.roster.models.choices import CreationProvenance  # noqa: PLC0415

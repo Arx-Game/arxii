@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING, Any, ClassVar
 import uuid
 
 from django.core.exceptions import ValidationError
+from django.core.validators import RegexValidator
 from django.db import models
 from django.db.models import Q, UniqueConstraint
 from django.utils import timezone
@@ -114,13 +115,23 @@ class GuideProfile(SharedMemoryModel):
     )
     granted_at = models.DateTimeField(default=timezone.now)
     is_active = models.BooleanField(default=True)
+    display_name = models.CharField(
+        max_length=60,
+        validators=[
+            RegexValidator(r"^[^\u2013\u2014]*$", "Use a hyphen, not a long dash."),
+        ],
+        help_text=(
+            "The name GMs see this Guide by when lending them an NPC. Never the "
+            "account name or one of their characters' names."
+        ),
+    )
 
     class Meta:
         verbose_name = "Guide Profile"
         verbose_name_plural = "Guide Profiles"
 
     def __str__(self) -> str:
-        return f"GuideProfile({self.account.username})"
+        return f"GuideProfile({self.display_name})"
 
 
 class AreaBuildGrant(SharedMemoryModel):

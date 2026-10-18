@@ -42,10 +42,10 @@ class GMProfileAdmin(admin.ModelAdmin):
 
 @admin.register(GuideProfile)
 class GuideProfileAdmin(admin.ModelAdmin):
-    list_display = ["account", "is_active", "granted_by", "granted_at"]
+    list_display = ["display_name", "account", "is_active", "granted_by", "granted_at"]
     list_filter = ["is_active"]
     raw_id_fields = ["account", "granted_by"]
-    search_fields = ["account__username"]
+    search_fields = ["display_name", "account__username"]
     readonly_fields = ["active_loans"]
     actions = ["end_active_loans"]
 
