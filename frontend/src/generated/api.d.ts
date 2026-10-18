@@ -21710,7 +21710,7 @@ export interface paths {
       cookie?: never;
     };
     /** @description Browse listed NPCs; owners edit settings, authoring and copies. */
-    get: operations['roster_npcs_templates_retrieve'];
+    get: operations['roster_npcs_templates_list'];
     put?: never;
     post?: never;
     delete?: never;
@@ -27838,6 +27838,11 @@ export interface components {
       text: string;
       shared: boolean;
     };
+    /** @description ``{loan_id, accept}``. */
+    AnswerRequest: {
+      loan_id: number;
+      accept: boolean;
+    };
     /**
      * @description Request serializer for POST /api/magic/applicable-pulls/.
      *
@@ -31311,6 +31316,21 @@ export interface components {
       /** Format: date-time */
       created_at: string;
     };
+    /** @description ``{name, as_template}``: a copy of the NPC under a new name. */
+    CopyAsNewRequest: {
+      name: string;
+      /** @default false */
+      as_template: boolean;
+    };
+    /** @description ``{source_entry, section}``: replace one section of the target with the source's. */
+    CopySectionRequest: {
+      source_entry: number;
+      section: components['schemas']['SectionEnum'];
+    };
+    /** @description What ``POST copy-section`` answers: the section copied. */
+    CopySectionResult: {
+      section: components['schemas']['SectionEnum'];
+    };
     /** @description Read-only serializer for Covenant identity, type, level, and lifecycle state. */
     Covenant: {
       readonly id: number;
@@ -31608,6 +31628,10 @@ export interface components {
     /** @description POST body for the #1127 create-mask endpoint — a temporary anonymous face. */
     CreateMaskRequestRequest: {
       name: string;
+    };
+    /** @description What ``POST copy-as-new`` answers: the new NPC's roster entry id. */
+    CreatedNPC: {
+      id: number;
     };
     /**
      * @description * `staff` - Staff-created
@@ -38604,6 +38628,20 @@ export interface components {
       listed_on_npc_roster: boolean;
       notes_for_player: string;
     };
+    NPCLoan: {
+      readonly id: number;
+      readonly roster_entry: number;
+      readonly status: components['schemas']['NPCLoanStatusEnum'];
+    };
+    /**
+     * @description * `offered` - Offered
+     *     * `requested` - Requested
+     *     * `active` - Active
+     *     * `declined` - Declined
+     *     * `ended` - Ended
+     * @enum {string}
+     */
+    NPCLoanStatusEnum: 'offered' | 'requested' | 'active' | 'declined' | 'ended';
     /**
      * @description One OFFERED loan, as the Guide it was offered to reads it.
      *
@@ -46992,6 +47030,28 @@ export interface components {
       | 'outcome_tier'
       | 'faction_standing_at_least'
       | 'npc_regard_at_least';
+    PreferenceLine: {
+      trait: number;
+      valence: components['schemas']['PreferenceLineValenceEnum'];
+    };
+    PreferenceLineRequest: {
+      trait: number;
+      valence: components['schemas']['PreferenceLineValenceEnum'];
+    };
+    /**
+     * @description * `likes` - Likes
+     *     * `dislikes` - Dislikes
+     * @enum {string}
+     */
+    PreferenceLineValenceEnum: 'likes' | 'dislikes';
+    /** @description ``{preferences: [{trait, valence}]}``: replaces the NPC's likes and dislikes. */
+    Preferences: {
+      preferences: components['schemas']['PreferenceLine'][];
+    };
+    /** @description ``{preferences: [{trait, valence}]}``: replaces the NPC's likes and dislikes. */
+    PreferencesRequest: {
+      preferences: components['schemas']['PreferenceLineRequest'][];
+    };
     /**
      * @description A character's own prepared Audere Majora crossing text (#4101).
      *
@@ -47616,6 +47676,20 @@ export interface components {
      * @enum {string}
      */
     ReferencedMilestoneTypeEnum: 'story_resolved' | 'chapter_reached' | 'episode_reached';
+    /** @description ``{target_type, target_id, value, reason}``: the NPC's opinion of one target. */
+    RegardRequest: {
+      target_type: components['schemas']['TargetTypeFedEnum'];
+      target_id: number;
+      value: number;
+      /** @default  */
+      reason: string;
+    };
+    /** @description What ``PUT regard`` answers: the regard now set. */
+    RegardResult: {
+      target_type: components['schemas']['TargetTypeFedEnum'];
+      target_id: number;
+      value: number;
+    };
     RegionMap: {
       readonly id: number;
       readonly name: string;
@@ -48996,6 +49070,24 @@ export interface components {
       /** @description Staff note on what belongs here. */
       description?: string;
     };
+    /**
+     * @description * `identity` - Identity
+     *     * `description` - Description
+     *     * `background` - Background
+     *     * `powers` - Powers
+     *     * `regard` - Regard
+     *     * `preferences` - Preferences
+     *     * `all` - All
+     * @enum {string}
+     */
+    SectionEnum:
+      | 'identity'
+      | 'description'
+      | 'background'
+      | 'powers'
+      | 'regard'
+      | 'preferences'
+      | 'all';
     /**
      * @description POST body for the #3412 character-selection endpoint.
      *
@@ -83566,7 +83658,8 @@ export interface operations {
       query?: never;
       header?: never;
       path: {
-        id: string;
+        /** @description A unique integer value identifying this Roster Entry. */
+        id: number;
       };
       cookie?: never;
     };
@@ -83587,7 +83680,8 @@ export interface operations {
       query?: never;
       header?: never;
       path: {
-        id: string;
+        /** @description A unique integer value identifying this Roster Entry. */
+        id: number;
       };
       cookie?: never;
     };
@@ -83612,7 +83706,8 @@ export interface operations {
       query?: never;
       header?: never;
       path: {
-        id: string;
+        /** @description A unique integer value identifying this Roster Entry. */
+        id: number;
       };
       cookie?: never;
     };
@@ -83644,12 +83739,12 @@ export interface operations {
     };
     requestBody?: never;
     responses: {
-      200: {
+      201: {
         headers: {
           [name: string]: unknown;
         };
         content: {
-          'application/json': components['schemas']['NPCRosterRow'];
+          'application/json': components['schemas']['NPCLoan'];
         };
       };
     };
@@ -83659,18 +83754,23 @@ export interface operations {
       query?: never;
       header?: never;
       path: {
-        id: string;
+        /** @description A unique integer value identifying this Roster Entry. */
+        id: number;
       };
       cookie?: never;
     };
-    requestBody?: never;
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['CopyAsNewRequest'];
+      };
+    };
     responses: {
-      200: {
+      201: {
         headers: {
           [name: string]: unknown;
         };
         content: {
-          'application/json': components['schemas']['NPCRosterRow'];
+          'application/json': components['schemas']['CreatedNPC'];
         };
       };
     };
@@ -83680,18 +83780,23 @@ export interface operations {
       query?: never;
       header?: never;
       path: {
-        id: string;
+        /** @description A unique integer value identifying this Roster Entry. */
+        id: number;
       };
       cookie?: never;
     };
-    requestBody?: never;
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['CopySectionRequest'];
+      };
+    };
     responses: {
       200: {
         headers: {
           [name: string]: unknown;
         };
         content: {
-          'application/json': components['schemas']['NPCRosterRow'];
+          'application/json': components['schemas']['CopySectionResult'];
         };
       };
     };
@@ -83701,18 +83806,23 @@ export interface operations {
       query?: never;
       header?: never;
       path: {
-        id: string;
+        /** @description A unique integer value identifying this Roster Entry. */
+        id: number;
       };
       cookie?: never;
     };
-    requestBody?: never;
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['PreferencesRequest'];
+      };
+    };
     responses: {
       200: {
         headers: {
           [name: string]: unknown;
         };
         content: {
-          'application/json': components['schemas']['NPCRosterRow'];
+          'application/json': components['schemas']['Preferences'];
         };
       };
     };
@@ -83722,18 +83832,23 @@ export interface operations {
       query?: never;
       header?: never;
       path: {
-        id: string;
+        /** @description A unique integer value identifying this Roster Entry. */
+        id: number;
       };
       cookie?: never;
     };
-    requestBody?: never;
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['RegardRequest'];
+      };
+    };
     responses: {
       200: {
         headers: {
           [name: string]: unknown;
         };
         content: {
-          'application/json': components['schemas']['NPCRosterRow'];
+          'application/json': components['schemas']['RegardResult'];
         };
       };
     };
@@ -83745,14 +83860,18 @@ export interface operations {
       path?: never;
       cookie?: never;
     };
-    requestBody?: never;
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['AnswerRequest'];
+      };
+    };
     responses: {
       200: {
         headers: {
           [name: string]: unknown;
         };
         content: {
-          'application/json': components['schemas']['NPCRosterRow'];
+          'application/json': components['schemas']['NPCLoan'];
         };
       };
     };
@@ -83782,9 +83901,15 @@ export interface operations {
       };
     };
   };
-  roster_npcs_templates_retrieve: {
+  roster_npcs_templates_list: {
     parameters: {
-      query?: never;
+      query?: {
+        lendable_to_me?: boolean;
+        /** @description A page number within the paginated result set. */
+        page?: number;
+        /** @description A search term. */
+        search?: string;
+      };
       header?: never;
       path?: never;
       cookie?: never;
@@ -83796,7 +83921,7 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          'application/json': components['schemas']['NPCRosterRow'];
+          'application/json': components['schemas']['PaginatedNPCRosterRowList'];
         };
       };
     };

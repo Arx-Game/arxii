@@ -34635,7 +34635,8 @@ paths:
       - in: path
         name: id
         schema:
-          type: string
+          type: integer
+        description: A unique integer value identifying this Roster Entry.
         required: true
       tags:
       - roster
@@ -34655,7 +34656,8 @@ paths:
       - in: path
         name: id
         schema:
-          type: string
+          type: integer
+        description: A unique integer value identifying this Roster Entry.
         required: true
       tags:
       - roster
@@ -34681,7 +34683,8 @@ paths:
       - in: path
         name: id
         schema:
-          type: string
+          type: integer
+        description: A unique integer value identifying this Roster Entry.
         required: true
       tags:
       - roster
@@ -34715,11 +34718,11 @@ paths:
       security:
       - cookieAuth: []
       responses:
-        '200':
+        '201':
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/NPCRosterRow'
+                $ref: '#/components/schemas/NPCLoan'
           description: ''
   /api/roster/npcs/{id}/copy-as-new/:
     post:
@@ -34729,18 +34732,25 @@ paths:
       - in: path
         name: id
         schema:
-          type: string
+          type: integer
+        description: A unique integer value identifying this Roster Entry.
         required: true
       tags:
       - roster
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CopyAsNewRequest'
+        required: true
       security:
       - cookieAuth: []
       responses:
-        '200':
+        '201':
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/NPCRosterRow'
+                $ref: '#/components/schemas/CreatedNPC'
           description: ''
   /api/roster/npcs/{id}/copy-section/:
     post:
@@ -34750,10 +34760,17 @@ paths:
       - in: path
         name: id
         schema:
-          type: string
+          type: integer
+        description: A unique integer value identifying this Roster Entry.
         required: true
       tags:
       - roster
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CopySectionRequest'
+        required: true
       security:
       - cookieAuth: []
       responses:
@@ -34761,7 +34778,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/NPCRosterRow'
+                $ref: '#/components/schemas/CopySectionResult'
           description: ''
   /api/roster/npcs/{id}/preferences/:
     put:
@@ -34771,10 +34788,17 @@ paths:
       - in: path
         name: id
         schema:
-          type: string
+          type: integer
+        description: A unique integer value identifying this Roster Entry.
         required: true
       tags:
       - roster
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PreferencesRequest'
+        required: true
       security:
       - cookieAuth: []
       responses:
@@ -34782,7 +34806,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/NPCRosterRow'
+                $ref: '#/components/schemas/Preferences'
           description: ''
   /api/roster/npcs/{id}/regard/:
     put:
@@ -34792,10 +34816,17 @@ paths:
       - in: path
         name: id
         schema:
-          type: string
+          type: integer
+        description: A unique integer value identifying this Roster Entry.
         required: true
       tags:
       - roster
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegardRequest'
+        required: true
       security:
       - cookieAuth: []
       responses:
@@ -34803,7 +34834,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/NPCRosterRow'
+                $ref: '#/components/schemas/RegardResult'
           description: ''
   /api/roster/npcs/answer/:
     post:
@@ -34811,6 +34842,12 @@ paths:
       description: Browse listed NPCs; owners edit settings, authoring and copies.
       tags:
       - roster
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AnswerRequest'
+        required: true
       security:
       - cookieAuth: []
       responses:
@@ -34818,7 +34855,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/NPCRosterRow'
+                $ref: '#/components/schemas/NPCLoan'
           description: ''
   /api/roster/npcs/offers/:
     get:
@@ -34854,8 +34891,25 @@ paths:
           description: ''
   /api/roster/npcs/templates/:
     get:
-      operationId: roster_npcs_templates_retrieve
+      operationId: roster_npcs_templates_list
       description: Browse listed NPCs; owners edit settings, authoring and copies.
+      parameters:
+      - in: query
+        name: lendable_to_me
+        schema:
+          type: boolean
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: search
+        required: false
+        in: query
+        description: A search term.
+        schema:
+          type: string
       tags:
       - roster
       security:
@@ -34865,7 +34919,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/NPCRosterRow'
+                $ref: '#/components/schemas/PaginatedNPCRosterRowList'
           description: ''
   /api/roster/rosters/:
     get:
@@ -45483,6 +45537,17 @@ components:
       - group_id
       - shared
       - text
+    AnswerRequest:
+      type: object
+      description: '``{loan_id, accept}``.'
+      properties:
+        loan_id:
+          type: integer
+        accept:
+          type: boolean
+      required:
+      - accept
+      - loan_id
     ApplicablePullsRequestRequest:
       type: object
       description: |-
@@ -52927,6 +52992,39 @@ components:
       - id
       - persona_name
       - reason
+    CopyAsNewRequest:
+      type: object
+      description: '``{name, as_template}``: a copy of the NPC under a new name.'
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 80
+        as_template:
+          type: boolean
+          default: false
+      required:
+      - name
+    CopySectionRequest:
+      type: object
+      description: '``{source_entry, section}``: replace one section of the target
+        with the source''s.'
+      properties:
+        source_entry:
+          type: integer
+        section:
+          $ref: '#/components/schemas/SectionEnum'
+      required:
+      - section
+      - source_entry
+    CopySectionResult:
+      type: object
+      description: 'What ``POST copy-section`` answers: the section copied.'
+      properties:
+        section:
+          $ref: '#/components/schemas/SectionEnum'
+      required:
+      - section
     Covenant:
       type: object
       description: Read-only serializer for Covenant identity, type, level, and lifecycle
@@ -53552,6 +53650,15 @@ components:
           maxLength: 255
       required:
       - name
+    CreatedNPC:
+      type: object
+      description: 'What ``POST copy-as-new`` answers: the new NPC''s roster entry
+        id.'
+      properties:
+        id:
+          type: integer
+      required:
+      - id
     CreationProvenanceEnum:
       enum:
       - staff
@@ -68000,6 +68107,37 @@ components:
       - lend_policy
       - listed_on_npc_roster
       - notes_for_player
+    NPCLoan:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        roster_entry:
+          type: integer
+          readOnly: true
+        status:
+          allOf:
+          - $ref: '#/components/schemas/NPCLoanStatusEnum'
+          readOnly: true
+      required:
+      - id
+      - roster_entry
+      - status
+    NPCLoanStatusEnum:
+      enum:
+      - offered
+      - requested
+      - active
+      - declined
+      - ended
+      type: string
+      description: |-
+        * `offered` - Offered
+        * `requested` - Requested
+        * `active` - Active
+        * `declined` - Declined
+        * `ended` - Ended
     NPCOffer:
       type: object
       description: |-
@@ -82644,6 +82782,56 @@ components:
         * `outcome_tier` - Outcome tier (machine-graded)
         * `faction_standing_at_least` - Faction standing at least
         * `npc_regard_at_least` - NPC regard at least
+    PreferenceLine:
+      type: object
+      properties:
+        trait:
+          type: integer
+        valence:
+          $ref: '#/components/schemas/PreferenceLineValenceEnum'
+      required:
+      - trait
+      - valence
+    PreferenceLineRequest:
+      type: object
+      properties:
+        trait:
+          type: integer
+        valence:
+          $ref: '#/components/schemas/PreferenceLineValenceEnum'
+      required:
+      - trait
+      - valence
+    PreferenceLineValenceEnum:
+      enum:
+      - likes
+      - dislikes
+      type: string
+      description: |-
+        * `likes` - Likes
+        * `dislikes` - Dislikes
+    Preferences:
+      type: object
+      description: '``{preferences: [{trait, valence}]}``: replaces the NPC''s likes
+        and dislikes.'
+      properties:
+        preferences:
+          type: array
+          items:
+            $ref: '#/components/schemas/PreferenceLine'
+      required:
+      - preferences
+    PreferencesRequest:
+      type: object
+      description: '``{preferences: [{trait, valence}]}``: replaces the NPC''s likes
+        and dislikes.'
+      properties:
+        preferences:
+          type: array
+          items:
+            $ref: '#/components/schemas/PreferenceLineRequest'
+      required:
+      - preferences
     PreparedCrossingText:
       type: object
       description: |-
@@ -83952,6 +84140,40 @@ components:
         * `story_resolved` - Story resolved
         * `chapter_reached` - Chapter reached or passed
         * `episode_reached` - Episode reached or passed
+    RegardRequest:
+      type: object
+      description: '``{target_type, target_id, value, reason}``: the NPC''s opinion
+        of one target.'
+      properties:
+        target_type:
+          $ref: '#/components/schemas/TargetTypeFedEnum'
+        target_id:
+          type: integer
+        value:
+          type: integer
+          maximum: 1000
+          minimum: -1000
+        reason:
+          type: string
+          default: ''
+      required:
+      - target_id
+      - target_type
+      - value
+    RegardResult:
+      type: object
+      description: 'What ``PUT regard`` answers: the regard now set.'
+      properties:
+        target_type:
+          $ref: '#/components/schemas/TargetTypeFedEnum'
+        target_id:
+          type: integer
+        value:
+          type: integer
+      required:
+      - target_id
+      - target_type
+      - value
     RegionMap:
       type: object
       properties:
@@ -86904,6 +87126,24 @@ components:
       required:
       - id
       - name
+    SectionEnum:
+      enum:
+      - identity
+      - description
+      - background
+      - powers
+      - regard
+      - preferences
+      - all
+      type: string
+      description: |-
+        * `identity` - Identity
+        * `description` - Description
+        * `background` - Background
+        * `powers` - Powers
+        * `regard` - Regard
+        * `preferences` - Preferences
+        * `all` - All
     SelectEntryRequestRequest:
       type: object
       description: |-
