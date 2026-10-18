@@ -110,6 +110,7 @@ function makeAccount(overrides: Partial<AccountData> = {}): AccountData {
     character_slots: { total: null, used: 0, activity_total: 0, activity_used: 0, holders: [] },
     is_staff: false,
     is_gm: false,
+    is_guide: false,
     available_characters: [],
     pending_applications: [],
     selected_entry_id: null,

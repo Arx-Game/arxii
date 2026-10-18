@@ -6,27 +6,14 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 
+import type { components } from '@/generated/api';
 import { postDispatchAction } from '@/combat/api';
 import { isDispatchFailure } from '@/combat/types';
 import { apiFetch } from '@/evennia_replacements/api';
 import { throwApiError } from '@/lib/errors';
 import { useAccount } from '@/store/hooks';
 
-/**
- * One row of GET /api/roster/npcs/offers/ (`NPCOfferSerializer`). The generated schema
- * types that route as a single NPCRosterRow, which is wrong for this paginated list,
- * so the row shape is declared here from the serializer.
- */
-export interface NpcOffer {
-  loan_id: number;
-  roster_entry_id: number;
-  name: string;
-  thumbnail_url: string | null;
-  scene_id: number | null;
-  scene_title: string | null;
-  offered_by_name: string;
-  notes_for_player: string;
-}
+export type NpcOffer = components['schemas']['NPCOffer'];
 
 export const npcOfferKeys = {
   offers: ['npc-offers'] as const,
@@ -35,17 +22,18 @@ export const npcOfferKeys = {
 async function fetchNpcOffers(): Promise<NpcOffer[]> {
   const res = await apiFetch('/api/roster/npcs/offers/');
   if (!res.ok) await throwApiError(res, 'Failed to load NPC offers');
-  const body = (await res.json()) as { results: NpcOffer[] };
+  const body = (await res.json()) as components['schemas']['PaginatedNPCOfferList'];
   return body.results;
 }
 
-/** The OFFERED loans waiting on this Guide. Only a Guide/GM may read them. */
-export function useNpcOffersQuery(enabled = true) {
+/** The OFFERED loans waiting on this Guide. Only staff, GMs and Guides may read them. */
+export function useNpcOffersQuery() {
   const account = useAccount();
+  const mayBeOffered = Boolean(account && (account.is_staff || account.is_gm || account.is_guide));
   return useQuery({
     queryKey: npcOfferKeys.offers,
     queryFn: fetchNpcOffers,
-    enabled: !!account && enabled,
+    enabled: mayBeOffered,
     retry: false,
     // A non-Guide's 403 settles as an error and is not polled; a Guide re-reads each minute.
     refetchInterval: (query) => (query.state.status === 'success' ? 60_000 : false),
