@@ -269,7 +269,15 @@ def offer_npc(*, entry: RosterEntry, guide: AccountDB, scene: Scene, by: Account
         status=NPCLoanStatus.OFFERED,
     )
     _clear_loan_caches(loan)
+    _make_playable(entry)
     return loan
+
+
+def _make_playable(entry: RosterEntry) -> None:
+    """An NPC minted before #4418 still has Evennia's developer-only puppet lock."""
+    from world.roster.services.staff_characters import ensure_playable_lock  # noqa: PLC0415
+
+    ensure_playable_lock(entry.character_sheet.character)
 
 
 def _may_borrow(settings: StoryNPCSettings, borrower: AccountDB) -> bool:
@@ -328,6 +336,7 @@ def _activate(loan: NPCLoan) -> None:
     loan.started_at = timezone.now()
     loan.save(update_fields=["status", "started_at"])
     _clear_loan_caches(loan)
+    _make_playable(loan.roster_entry)
     _unpuppet_sessions(loan.roster_entry, keep=loan.borrower)
 
 

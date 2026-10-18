@@ -51,6 +51,23 @@ class StaffMintError(Exception):
         self.user_message = message
 
 
+# The puppet lock a minted character carries (#4418): whoever the account availability
+# check lets play it (its tenure holder, or a borrower while it is lent), or a developer.
+PLAYABLE_PUPPET_LOCK = "puppet:can_play() or perm(Developer) or pperm(Developer)"
+
+
+def ensure_playable_lock(character: ObjectDB) -> None:
+    """Give ``character`` the puppet lock that defers to the account availability check.
+
+    Idempotent. Evennia's default object lock lets only developers puppet, which left
+    a minted NPC unplayable by the GM holding it and by anyone it is lent to. Only the
+    ``puppet`` lock type is replaced; every other lock is left as it was.
+    """
+    if character.locks.get("puppet") == PLAYABLE_PUPPET_LOCK:
+        return
+    character.locks.add(PLAYABLE_PUPPET_LOCK)
+
+
 def _mint_character_working_set(  # noqa: PLR0913 - one working set, each knob is a real axis
     account: AccountDB,
     name: str,
@@ -99,6 +116,7 @@ def _mint_character_working_set(  # noqa: PLR0913 - one working set, each knob i
     )
     character.location = starting_room
     character.save(update_fields=["db_location"])
+    ensure_playable_lock(character)
     # Keyed on roster_type (unique), not name (#3426 in-scope bugfix): the seeded
     # shelf is named "NPCs" (world/roster/seeds.py), so a name="NPC" lookup never
     # matches it on a seeded DB and the fallback create collides on the unique

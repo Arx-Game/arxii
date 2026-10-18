@@ -15,6 +15,7 @@ from integration_tests.harness import JourneyCase
 from world.checks.factories import CheckTypeFactory
 from world.gm.constants import GMLevel
 from world.gm.factories import GMProfileFactory, GuideProfileFactory, seed_default_gm_level_caps
+from world.roster.factories import NPCLoanFactory
 from world.roster.models import NPCLoan, RosterEntry
 from world.scenes.factories import SceneFactory, SceneParticipationFactory
 
@@ -94,9 +95,6 @@ class AGuidePlaysALentNpc(JourneyCase):
 
     def test_offer_accept_play_and_scene_end_returns_it(self) -> None:
         self._lend()
-        # Ilsa takes Vael up; a puppet carries its account, as make_player's characters do.
-        self.vael.db_account = self.guide
-        self.vael.save()
 
         response = self.api(self.guide).get(MINE)
         self.assertEqual(response.status_code, status.HTTP_200_OK)
@@ -204,8 +202,35 @@ class AGuidePlaysALentNpc(JourneyCase):
         return session
 
     def test_telnet_switch_onto_a_lent_npc(self) -> None:
+        # Vael was minted before #4418: only a developer could puppet him. Lending fixes it.
+        self.vael.locks.add("puppet:pperm(Developer)")
         self._lend()
-        self._signed_in(self.ilsa, sessid=4418)
+        session = self._signed_in(self.ilsa, sessid=4418)
         told = self.telnet(self.ilsa, "@ic Captain Vael")
         self.assertNotIn(NO_ACCESS, told)
-        self.assertNotIn("not found", told)
+        self.assertIn("Now controlling Captain Vael.", told)
+        self.assertIs(session.puppet, self.vael)
+
+    def test_the_owner_plays_a_freshly_minted_npc(self) -> None:
+        session = self._signed_in(self.ravenna, sessid=4419)
+        told = self.telnet(self.ravenna, "@ic Captain Vael")
+        self.assertIn("Now controlling Captain Vael.", told)
+        self.assertIs(session.puppet, self.vael)
+
+    def test_a_scene_ends_with_an_unplayed_npc_in_the_room(self) -> None:
+        self.assertIsNone(self.vael.account)
+        finished = self.web(self.ravenna, "finish_scene")
+        self.assertTrue(finished.detail.success, finished.detail.message)
+        self.scene.refresh_from_db()
+        self.assertFalse(self.scene.is_active)
+
+    def test_a_loan_saved_outside_the_services_still_shows(self) -> None:
+        # Staff can mark a loan active from the admin; the cached lists must follow.
+        self.assertNotIn(self.vael, self.guide.get_available_characters())
+        self.assertNotIn(self.vael, self.guide.player_data.get_available_characters())
+        NPCLoanFactory(
+            roster_entry=self.entry, borrower=self.guide, offered_by=self.gm, status="active"
+        )
+        self.assertIn(self.vael, self.guide.get_available_characters())
+        self.assertIn(self.vael, self.guide.player_data.get_available_characters())
+        self.assertNotIn(self.vael, self.gm.player_data.get_available_characters())

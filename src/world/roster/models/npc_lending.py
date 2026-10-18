@@ -59,9 +59,12 @@ class StoryNPCSettings(SharedMemoryModel):
 class NPCLoan(RelatedCacheClearingMixin, SharedMemoryModel):
     """One loan of a major NPC to a borrowing account."""
 
-    # Clear the borrower's and the holder's account caches when a loan changes.
+    # Clear the borrower's and the holder's account and PlayerData caches when a loan
+    # changes: Account.cached_roster_entries and PlayerData.cached_npc_loans both read it.
     related_cache_fields: ClassVar[list[str]] = [
         "borrower",
+        "borrower.player_data",
+        "roster_entry.current_tenure.player_data",
         "roster_entry.current_tenure.player_data.account",
     ]
 
