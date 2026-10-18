@@ -1,0 +1,33 @@
+===== 2026-10-18 00:11:17 telnet as gm4415 (Warden Hale (test))
+> connect gm4415 ****
+> @ic Warden Hale (test)
+Already controlling Warden Hale (test).
+> standoff
+Standoff at The Old Gate (test) (GM):
+  [1] Old foes (test) (2) - Open
+    Cause: Hatred (holds)
+    Drive: Old foes (test) drive (test) (Minor)
+    Speaks: no language
+    Faction rule: has_species: 1 (from Old foes (test)) - provokes them - matches nobody
+    Force: party 10.0, them 20.0 (margin 0%)
+    Morale: Old foe 1 (test) 100 (steady), Old foe 2 (test) 100 (steady)
+  [2] Kept back (test) (2) - Open
+    Cause: Predation (holds)
+    Drive: Kept back (test) drive (test) (Minor)
+    Speaks: no language
+    Faction rule: matches everyone (from Kept back (test)) - keeps them back - matches Ser Noble (test), Brother Anselm (test)
+    Force: party 10.0, them 20.0 (margin 0%)
+    Morale: Kept one 1 (test) 100 (steady), Kept one 2 (test) 100 (steady)
+  [3] Plain rule (test) (2) - Open, deciding
+    Cause: Predation (fires: The party does not outweigh them by their margin.)
+    Proposal [1]: The party does not outweigh them by their margin. (gm prompt confirm, hold or override 1)
+    Drive: Plain rule (test) drive (test) (Minor)
+    Speaks: no language
+    Faction rule: matches everyone (from Plain rule (test)) - matches Ser Noble (test), Brother Anselm (test)
+    Force: party 10.0, them 20.0 (margin 0%)
+    Morale: Plain one 1 (test) 100 (steady), Plain one 2 (test) 100 (steady)
+GM: gm standoff shake <group id> <reason> (or steady)
+> gm prompts
+[1] Standoff: Plain rule (test)
+  Plain rule (test): cause fires. Cause: Predation. Reason: The party does not outweigh them by their margin. Force: party 10, them 20.
+  gm prompt confirm 1 | gm prompt hold 1 | gm prompt override 1 <reason>

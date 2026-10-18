@@ -1,0 +1,47 @@
+== 00:11:06 arrival
+-- A groups
+1|Old foes (test)|open|0|-|
+2|Kept back (test)|open|0|-|
+3|Plain rule (test)|proposed|0|-|The party does not outweigh them by their margin.
+-- B groups
+4|Starving crowd (test)|open|0|-|
+5|Bystanders (test)|open|0|-|
+6|Paid hunters (test)|settled|0|6|
+-- prompts
+1|pending|standoff_cause|Plain rule (test)|The party does not outweigh them by their margin.
+== B1 attempt 1: crowd state|actions_elapsed = settled|0
+-- B groups before the extra action
+4|Starving crowd (test)|settled|0|4|
+5|Bystanders (test)|open|1|-|
+6|Paid hunters (test)|settled|0|6|
+== 00:11:57 after the extra action
+-- B groups
+4|Starving crowd (test)|settled|0|4|
+5|Bystanders (test)|open|2|-|
+6|Paid hunters (test)|settled|0|6|
+-- B encounter
+2|0|between_rounds|
+== 00:16:02 after the lapse (holds left: 0)
+-- B groups
+4|Starving crowd (test)|settled|0|4|
+5|Bystanders (test)|fighting|2|-|
+6|Paid hunters (test)|fighting|0|-|
+-- B opponents
+Starving one 1 (test)|active|1
+Starving one 2 (test)|active|1
+Bystander 1 (test)|active|1
+Paid hunter 1 (test)|active|5
+Paid hunter 2 (test)|active|5
+-- B encounter
+2|1|declaring|f
+-- C1 opponents
+Outmatched raider (test)|fled|1
+Strong raider (test)|active|20
+-- C1 encounter
+3|2|declaring|
+-- C2 opponents
+Camp guard (test)|active|1
+-- C2 encounter
+4|3|completed|
+-- prompts
+1|pending|standoff_cause|Plain rule (test)|The party does not outweigh them by their margin.
