@@ -65,7 +65,7 @@ class _Player:
     loan: NPCLoan | None
 
 
-def _player_names(account_ids: Iterable[int]) -> dict[int, str]:
+def player_names(account_ids: Iterable[int]) -> dict[int, str]:
     """How each account is shown as who plays an NPC, in three queries.
 
     Never an account name, and never one of the account's player characters (that
@@ -152,7 +152,7 @@ def _players(scene: Scene, entries: list[RosterEntry]) -> dict[int, _Player]:
     holder_ids.update(open_tenures)
     account_ids = {loan.borrower_id for loan in loans.values()}
     account_ids |= {account_id for account_id in holder_ids.values() if account_id is not None}
-    names = _player_names(account_ids)
+    names = player_names(account_ids)
     players: dict[int, _Player] = {}
     for entry in entries:
         loan = loans.get(entry.pk)

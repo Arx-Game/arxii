@@ -238,7 +238,9 @@ class NPCOfferSerializer(serializers.ModelSerializer):
 
     loan_id = serializers.IntegerField(source="pk", read_only=True)
     roster_entry_id = serializers.IntegerField(read_only=True)
-    name = serializers.CharField(source="roster_entry.character_sheet.character.db_key")
+    name = serializers.CharField(
+        source="roster_entry.character_sheet.character.db_key", read_only=True
+    )
     thumbnail_url = serializers.SerializerMethodField()
     scene_id = serializers.IntegerField(read_only=True, allow_null=True)
     scene_title = serializers.CharField(source="scene.name", read_only=True, allow_null=True)

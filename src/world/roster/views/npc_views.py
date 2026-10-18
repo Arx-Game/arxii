@@ -50,6 +50,7 @@ from world.roster.services.npc_lending import (
     request_borrow,
 )
 from world.roster.services.staff_characters import StaffMintError
+from world.scenes.cast_list_services import player_names
 
 _ROW_RELATIONS = (
     "character_sheet__character__display_data",
@@ -326,8 +327,6 @@ class StoryNPCViewSet(
     @action(detail=False, methods=[HTTPMethod.GET])
     def offers(self, request: Request) -> Response:
         """The NPC offers waiting for the requesting Guide to answer."""
-        from world.scenes.cast_list_services import _player_names  # noqa: PLC0415
-
         loans = (
             NPCLoan.objects.filter(borrower=request.user, status=NPCLoanStatus.OFFERED)
             .select_related(
@@ -341,7 +340,7 @@ class StoryNPCViewSet(
         )
         page = self.paginate_queryset(loans)
         context = self.get_serializer_context()
-        context["offered_names"] = _player_names(loan.offered_by_id for loan in page)
+        context["offered_names"] = player_names(loan.offered_by_id for loan in page)
         serializer = NPCOfferSerializer(page, many=True, context=context)
         return self.get_paginated_response(serializer.data)
 

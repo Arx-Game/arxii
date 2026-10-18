@@ -170,9 +170,10 @@ class MyRosterEntrySerializer(serializers.ModelSerializer):
     # fields they read None off the entry (it has no such attributes).
     loan = MyNPCLoanSerializer(read_only=True, allow_null=True)
     npc_notes = serializers.CharField(read_only=True, allow_null=True)
-    # #4418: this character's primary persona voices a crowd in combat. Annotated on the
-    # ``mine`` queryset; False for any queryset that does not carry the annotation.
-    is_crowd_voice = serializers.BooleanField(read_only=True, default=False)
+    # #4418: this character voices a crowd in combat. A list view passes the ids it
+    # already knows in ``context["crowd_voice_entry_ids"]``; a single-entry path
+    # (selected entry, freeze, thaw) asks once for its one entry.
+    is_crowd_voice = serializers.SerializerMethodField()
 
     class Meta:
         model = RosterEntry
@@ -244,6 +245,16 @@ class MyRosterEntrySerializer(serializers.ModelSerializer):
 
     def get_character_type(self, obj: RosterEntry) -> str:
         return derive_character_type(obj.character_sheet.character)
+
+    def get_is_crowd_voice(self, obj: RosterEntry) -> bool:
+        known = self.context.get("crowd_voice_entry_ids")
+        if known is not None:
+            return obj.pk in known
+        from world.combat.models import CombatOpponent  # noqa: PLC0415
+
+        return CombatOpponent.objects.filter(
+            voice_persona__character_sheet_id=obj.character_sheet_id
+        ).exists()
 
     def get_session_count(self, obj: RosterEntry) -> int:
         """Sessions puppeting the character right now (#4321); 0 means not in the world."""

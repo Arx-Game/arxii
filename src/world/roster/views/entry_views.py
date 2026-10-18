@@ -175,7 +175,11 @@ class RosterEntryViewSet(viewsets.ReadOnlyModelViewSet):
         serializer = self.get_serializer(
             entry_list,
             many=True,
-            context={**self.get_serializer_context(), "character_attention": attention},
+            context={
+                **self.get_serializer_context(),
+                "character_attention": attention,
+                "crowd_voice_entry_ids": {e.pk for e in entry_list if e.is_crowd_voice},
+            },
         )
         return Response(serializer.data)
 

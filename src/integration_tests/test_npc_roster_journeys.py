@@ -383,3 +383,73 @@ class AGuideReadsItsOffers(NpcRosterCase):
         mine = {r["name"]: r for r in self.api(self.guide).get(MINE).json()}
         self.assertIs(mine["Captain Vael"]["is_crowd_voice"], True)
         self.assertIs(mine["Ilsa"]["is_crowd_voice"], False)
+
+
+class CrowdVoiceShowsOnEverySurface(NpcRosterCase):
+    def test_selected_entry_payload_marks_a_crowd_voice(self) -> None:
+        from evennia_extensions.models import PlayerData
+        from world.combat.factories import CombatOpponentFactory
+        from world.roster.services.selection import set_selected_entry
+
+        CombatOpponentFactory(voice_persona=self.entry.character_sheet.primary_persona)
+        player_data = PlayerData.objects.get(account=self.owner)
+        set_selected_entry(player_data, self.entry)
+        payload = self.api(self.owner).get("/api/user/").json()
+        self.assertIs(payload["selected_entry"]["is_crowd_voice"], True)
+        ysmay_payload = self.api(self.pc).get("/api/user/").json()
+        self.assertIs(ysmay_payload["selected_entry"]["is_crowd_voice"], False)
+
+
+class OfferListQueryCount(NpcRosterCase):
+    def test_offers_cost_the_same_for_one_or_five(self) -> None:
+        from django.db import connection
+        from django.test.utils import CaptureQueriesContext
+
+        from world.scenes.factories import SceneFactory, SceneParticipationFactory
+
+        guide_client = self.api(self.guide)
+
+        def offer_from_new_gm(index: int) -> None:
+            room = self.make_room(f"Hall {index}")
+            maker = self.make_player(f"Offerer{index}", room=room)
+            account = self.account_of(maker)
+            GMProfileFactory(account=account, level=GMLevel.JUNIOR)
+            mint_gm_character(account, f"Warden {index}")
+            minted = self.web(maker, "mint_story_npc", name=f"Extra {index}")
+            scene = SceneFactory(room=room, name=f"Scene {index}")
+            SceneParticipationFactory(scene=scene, account=account, is_gm=True, is_owner=True)
+            offered = self.web(
+                maker,
+                "offer_npc",
+                roster_entry_id=minted.detail.data["roster_entry_id"],
+                guide_account_id=self.guide.pk,
+            )
+            self.assertTrue(offered.detail.success, offered.detail.message)
+
+        def cost() -> int:
+            from world.roster.models import RosterEntry as Entry
+
+            guide_client.get(f"{NPCS}offers/")
+            for model in (NPCLoan, Entry):
+                model.flush_instance_cache()
+            with CaptureQueriesContext(connection) as queries:
+                response = guide_client.get(f"{NPCS}offers/")
+            self.assertEqual(response.status_code, status.HTTP_200_OK)
+            return len(queries), len(response.json()["results"])
+
+        offer_from_new_gm(0)
+        one, rows = cost()
+        self.assertEqual(rows, 1)
+        for index in range(1, 5):
+            offer_from_new_gm(index)
+        five, rows = cost()
+        self.assertEqual(rows, 5)
+        self.assertEqual(five, one)
+
+    def test_offer_with_no_known_offerer_reads_as_staff(self) -> None:
+        from world.roster.models import NPCLoan as Loan
+        from world.roster.serializers.npc_roster import NPCOfferSerializer
+
+        loan = Loan(roster_entry=self.entry, borrower=self.guide, offered_by=self.owner)
+        data = NPCOfferSerializer(loan, context={"offered_names": {}}).data
+        self.assertEqual(data["offered_by_name"], "Staff")
