@@ -533,6 +533,7 @@ from actions.definitions.standing_declarations import declare_standing_action
 from actions.definitions.standoff import (
     StandoffFightAction,
     StandoffPressAction,
+    StandoffProfileAction,
     StandoffReadAction,
     StandoffShareAngleAction,
     StandoffTermsAction,
@@ -843,6 +844,7 @@ _ALL_ACTIONS: list[Action] = [
     StandoffTermsAction(),
     StandoffFightAction(),
     StandoffShareAngleAction(),
+    StandoffProfileAction(),
     GMStandoffConfirmAction(),
     GMStandoffHoldAction(),
     GMStandoffOverrideAction(),

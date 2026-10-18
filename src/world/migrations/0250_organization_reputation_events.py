@@ -5,7 +5,7 @@ import django.db.models.deletion
 
 
 class Migration(migrations.Migration):
-    dependencies = [("arxii", "0248_live_answers_rite_prompt")]
+    dependencies = [("arxii", "0249_characterstandoffprofile_characterdrive")]
 
     operations = [
         migrations.CreateModel(

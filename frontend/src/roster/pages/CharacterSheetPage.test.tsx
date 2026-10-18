@@ -106,6 +106,9 @@ vi.mock('@/character_sheets/components/OriginStoryEditorDialog', () => ({
 vi.mock('@/character_sheets/components/MaturationPanel', () => ({
   MaturationPanel: () => <div data-testid="maturation-panel" />,
 }));
+vi.mock('@/character_sheets/components/StandoffProfilePanel', () => ({
+  StandoffProfilePanel: () => <div data-testid="standoff-profile-panel" />,
+}));
 vi.mock('@/character_sheets/components/StatPointPanel', () => ({
   StatPointPanel: () => <div data-testid="stat-point-panel" />,
 }));

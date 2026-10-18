@@ -188,6 +188,15 @@ def group_cause(group: StandoffGroup) -> tuple[str, int]:
     member = representative(group)
     if member is None:
         return CauseKind.NONE, 0
+    if member.persona_id is not None:
+        from world.standoffs.services.character_profile import (  # noqa: PLC0415
+            is_standoff_player_character,
+            profile_cause,
+        )
+
+        sheet = member.persona.character_sheet
+        if is_standoff_player_character(sheet):
+            return profile_cause(sheet), 0
     return member.cause, member.cause_margin_percent
 
 
@@ -222,7 +231,21 @@ def opponent_drives(opponent: CombatOpponent | None) -> list[GroupDrive]:
 
 
 def persona_drives(persona: Persona) -> list[GroupDrive]:
-    """A named NPC's drives: its persona's properties, each at ``PERSONA_DRIVE_STRENGTH``."""
+    """A named NPC's drives: its persona's properties, each at ``PERSONA_DRIVE_STRENGTH``.
+
+    A player character's drives are the ones its player picked, each at the chosen strength
+    (#4441); none until the player has opted in.
+    """
+    from world.standoffs.services.character_profile import (  # noqa: PLC0415
+        is_standoff_player_character,
+        profile_drives,
+    )
+
+    if is_standoff_player_character(persona.character_sheet):
+        return [
+            GroupDrive(property=row.property, property_id=row.property_id, strength=row.strength)
+            for row in profile_drives(persona.character_sheet)
+        ]
     return sorted(
         (
             GroupDrive(property=prop, property_id=prop.pk, strength=PERSONA_DRIVE_STRENGTH)

@@ -20,9 +20,9 @@ term is chosen and the rest are listed under `_Avoid_`.
   (ADR-4091): Allegiance (stored vs effective), Turned, Won over, Bind window; (ADR-4120)
   Settled round; and (ADR-4147) Spectacle, Spectacle kind
 - [standoffs](src/world/standoffs/AGENT_GLOSSARY.md) (#4145, ADR-4145-A, ADR-4361-A,
-  ADR-4373-A, ADR-4415-A): Standoff, Group, Named NPC group, Language gate, Drive, Cause, Cause
+  ADR-4373-A, ADR-4415-A, ADR-4441-A): Standoff, Group, Named NPC group, Language gate, Drive, Cause, Cause
   effect, Clock, Broken-hold re-test, Faction, Faction rule, Angle, Association, Affiliation,
-  Placement, Proposal, Terms, Approach, Read/Press
+  Placement, Proposal, Terms, Approach, Read/Press, Profile (a player character's opt-in, #4441)
   (_Avoid_: motive, reaction, regard rule, spark, ask, hook, aura, sway, persona opponent,
   aggro, re-aggro, timer)
 - [battles](src/world/battles/AGENT_GLOSSARY.md)

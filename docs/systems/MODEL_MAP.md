@@ -1818,6 +1818,7 @@
   - skill_values <- skills.CharacterSkillValue
   - specialization_values <- skills.CharacterSpecializationValue
   - training_allocations <- skills.TrainingAllocation
+  - standoff_profile <- standoffs.CharacterStandoffProfile
   - character_stories <- stories.Story
   - story_participations <- stories.StoryParticipation
   - aggregate_contributions <- stories.AggregateBeatContribution
@@ -6754,6 +6755,7 @@
   - military_units <- military.MilitaryUnit
   - personas <- scenes.Persona
   - creature_drives <- standoffs.CreatureDrive
+  - character_drives <- standoffs.CharacterDrive
 
 ### PropertyCategory
 **Foreign Keys:**
@@ -10071,6 +10073,17 @@
 
 
 ## world.standoffs
+
+### CharacterDrive
+**Foreign Keys:**
+  - profile -> standoffs.CharacterStandoffProfile [FK]
+  - property -> mechanics.Property [FK]
+
+### CharacterStandoffProfile
+**Foreign Keys:**
+  - sheet -> character_sheets.CharacterSheet [OneToOne]
+**Pointed to by:**
+  - drives <- standoffs.CharacterDrive
 
 ### CreatureDrive
 **Foreign Keys:**

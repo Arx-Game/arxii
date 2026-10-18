@@ -7,9 +7,10 @@ from typing import TYPE_CHECKING
 
 from rest_framework import serializers
 
+from world.combat.constants import CauseKind
 from world.mechanics.models import Property
 from world.societies.models import Organization
-from world.standoffs.constants import CauseEffect, DriveStrength, MoraleDirection
+from world.standoffs.constants import CauseEffect, DriveStrength, MoraleDirection, ProfileChange
 from world.standoffs.services.placement import (
     DriveEdit,
     draft_from_line,
@@ -354,3 +355,38 @@ class PlacementContextSerializer(serializers.Serializer):
     drives = PlacementDriveContextSerializer(many=True)
     inherited_rules = PlacementRuleContextSerializer(many=True)
     language_name = serializers.CharField(allow_blank=True)
+
+
+class ProfileChoiceSerializer(serializers.Serializer):
+    value = serializers.CharField()
+    label = serializers.CharField()
+
+
+class ProfileDriveSerializer(serializers.Serializer):
+    property_id = serializers.IntegerField()
+    name = serializers.CharField()
+    strength = serializers.IntegerField()
+    strength_label = serializers.CharField()
+
+
+class StandoffProfileSerializer(serializers.Serializer):
+    """The owner's own standoff profile with the catalogs they pick from (#4441)."""
+
+    opted_in = serializers.BooleanField()
+    cause = serializers.CharField()
+    cause_label = serializers.CharField()
+    drives = ProfileDriveSerializer(many=True)
+    locked = serializers.BooleanField()
+    locked_reason = serializers.CharField()
+    causes = ProfileChoiceSerializer(many=True)
+    properties = ProfileChoiceSerializer(many=True)
+    strengths = ProfileChoiceSerializer(many=True)
+
+
+class StandoffProfileChangeSerializer(serializers.Serializer):
+    """One edit to the owner's own standoff profile (#4441)."""
+
+    change = serializers.ChoiceField(choices=ProfileChange.choices)
+    cause = serializers.ChoiceField(choices=CauseKind.choices, required=False)
+    property_id = serializers.IntegerField(required=False)
+    strength = serializers.ChoiceField(choices=DriveStrength.choices, required=False)
