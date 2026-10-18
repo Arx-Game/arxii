@@ -1,19 +1,21 @@
 /**
  * NpcForm - the GM's new-NPC form (#4418, Screens 1a and 1b).
  *
- * One form, two densities. Quick is a name, a "Copy from" and a description; Detailed
- * opens every section: who they are, description, background and drives, powers, who
- * they favor and oppose, what works on them, notes for whoever plays them, and owner
- * and lending. Every section is optional and every section can be copied from another
- * NPC or a template; whatever is left blank comes from "Start from" or stays empty.
+ * One form, two densities. Quick is a name, a "Copy from" and a description, with the
+ * other sections as chips that open inline; Detailed opens every section: who they are,
+ * description, background and drives, powers, who they favor and oppose, what works on
+ * them, notes for whoever plays them, and owner and lending. Every section is optional
+ * and every section can be copied from another NPC or a template; whatever is left
+ * blank comes from "Start from" or stays empty. Only the sections on screen are sent:
+ * Quick never sends a section the GM filled in Detailed and then closed by switching.
  *
- * "Create NPC" mints through `mint_story_npc` and then writes only the sections the GM
- * filled in or copied (see `createNpc`). The portrait and the powers editors need the
- * NPC to exist, so they open on the created NPC: the portrait through the gallery's
- * add-a-look flow, the powers through the sheet's edit mode.
+ * "Create NPC" mints through `mint_story_npc` and then writes the copies and the filled
+ * sections (see `createNpc`). The minted id is kept the moment the mint succeeds, so a
+ * failed later step is retried without a second mint. The portrait and the powers
+ * editors need the NPC to exist, so they open on the created NPC.
  */
 
-import { useState, type ReactNode } from 'react';
+import { useState, type KeyboardEvent, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
@@ -26,12 +28,16 @@ import { Combobox } from '@/components/ui/combobox';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { useActiveCharacterId } from '@/gm-adjudication/useActiveCharacterId';
 import { useMyRosterEntriesQuery } from '@/roster/queries';
+import { useBrowsingIdentity } from '@/roster/useBrowsingIdentity';
+import { NpcPowersPanel } from './NpcPowersPanel';
 import { NpcPreferenceEditor } from './NpcPreferenceEditor';
 import { NpcRegardEditor } from './NpcRegardEditor';
 import { NpcSectionCopy } from './NpcSectionCopy';
 import {
+  BACKGROUND_KEYS,
+  IDENTITY_KEYS,
+  NpcStepError,
   copyNpcAsNew,
   createNpc,
   fetchNpcTemplates,
@@ -49,6 +55,26 @@ import {
 
 export type NpcFormMode = 'quick' | 'detailed';
 
+/** The sections Quick folds into chips; Detailed shows them all. */
+type FoldedSection =
+  | 'identity'
+  | 'background'
+  | 'powers'
+  | 'regard'
+  | 'preferences'
+  | 'notes'
+  | 'lending';
+
+const QUICK_CHIPS: { section: FoldedSection; label: string }[] = [
+  { section: 'identity', label: 'Who they are' },
+  { section: 'background', label: 'Background' },
+  { section: 'powers', label: 'Powers' },
+  { section: 'regard', label: 'Favors and opposes' },
+  { section: 'preferences', label: 'What works on them' },
+  { section: 'notes', label: 'Notes' },
+  { section: 'lending', label: 'Owner and lending' },
+];
+
 const LEND_POLICIES: { value: LendPolicy; label: string }[] = [
   { value: 'not_lent', label: 'Only me' },
   { value: 'on_request', label: 'Me, and anyone I lend them to' },
@@ -65,16 +91,6 @@ const DEFAULT_SETTINGS = {
   borrow_audience: 'gms' as BorrowAudience,
 };
 
-const QUICK_SECTIONS = [
-  'Who they are',
-  'Background',
-  'Powers',
-  'Favors and opposes',
-  'What works on them',
-  'Notes',
-  'Owner and lending',
-];
-
 const selectClass = 'h-9 w-full rounded-md border bg-transparent px-2 text-sm';
 
 function initials(name: string): string {
@@ -85,6 +101,19 @@ function initials(name: string): string {
     .slice(0, 2)
     .map((word) => word[0]?.toUpperCase() ?? '');
   return letters.join('') || '?';
+}
+
+/** Enter in a one-line input never submits the whole form; sub-editors handle their own. */
+function holdEnter(event: KeyboardEvent<HTMLFormElement>) {
+  const target = event.target as HTMLElement;
+  if (event.key === 'Enter' && target.tagName === 'INPUT') event.preventDefault();
+}
+
+function failureText(error: Error, name: string): string {
+  if (error instanceof NpcStepError) {
+    return `${name} was created; ${error.step} failed. Try again.`;
+  }
+  return error.message;
 }
 
 function Field({
@@ -106,16 +135,6 @@ function Field({
   );
 }
 
-/** A field with no write path: shown, never edited. */
-function ReadOnlyField({ label }: { label: string }) {
-  return (
-    <div className="flex flex-col gap-1">
-      <span className="text-xs text-muted-foreground">{label}</span>
-      <span className="flex h-9 items-center text-sm text-muted-foreground">{'—'}</span>
-    </div>
-  );
-}
-
 function FormSection({
   title,
   copy,
@@ -123,7 +142,7 @@ function FormSection({
 }: {
   title: string;
   copy?: ReactNode;
-  children: ReactNode;
+  children?: ReactNode;
 }) {
   return (
     <section className="flex flex-col gap-3 border-t pt-4" aria-label={title}>
@@ -136,6 +155,7 @@ function FormSection({
   );
 }
 
+/** An identity choice, from the same lookup lists the staff edit mode uses. */
 function ChoiceField({
   field,
   label,
@@ -149,22 +169,22 @@ function ChoiceField({
 }) {
   const [opened, setOpened] = useState(false);
   const { data: items = [], isLoading } = useStaffChoiceOptions(field, opened);
+  // The wrapping label names the combobox trigger.
   return (
-    <Field label={label}>
-      <span
-        aria-label={label}
-        onPointerDownCapture={() => setOpened(true)}
-        onFocusCapture={() => setOpened(true)}
-      >
-        <Combobox
-          items={items}
-          value={value === null || value === undefined ? '' : String(value)}
-          onValueChange={(next) => onChange(next === '' ? null : Number(next))}
-          placeholder={isLoading ? 'Loading…' : label}
-          allowDeselect
-        />
-      </span>
-    </Field>
+    <label
+      className="flex flex-col gap-1"
+      onPointerDownCapture={() => setOpened(true)}
+      onFocusCapture={() => setOpened(true)}
+    >
+      <span className="text-xs font-medium text-muted-foreground">{label}</span>
+      <Combobox
+        items={items}
+        value={value === null || value === undefined ? '' : String(value)}
+        onValueChange={(next) => onChange(next === '' ? null : Number(next))}
+        placeholder={isLoading ? 'Loading…' : label}
+        allowDeselect
+      />
+    </label>
   );
 }
 
@@ -175,8 +195,10 @@ interface CreatedNpc {
 
 export function NpcForm({ mode: initialMode = 'quick' }: { mode?: NpcFormMode }) {
   const queryClient = useQueryClient();
-  const actorId = useActiveCharacterId();
+  const identity = useBrowsingIdentity();
+  const actorId = identity.entry?.character_id ?? null;
   const [mode, setMode] = useState<NpcFormMode>(initialMode);
+  const [expanded, setExpanded] = useState<Set<FoldedSection>>(new Set());
 
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
@@ -187,6 +209,8 @@ export function NpcForm({ mode: initialMode = 'quick' }: { mode?: NpcFormMode })
   const [regard, setRegard] = useState<RegardLine[]>([]);
   const [preferences, setPreferences] = useState<PreferenceLine[]>([]);
   const [settings, setSettings] = useState<NpcSettingsPatch>({});
+  /** An NPC this form already minted, kept so a retry never mints a second one. */
+  const [mintedId, setMintedId] = useState<number | null>(null);
   const [created, setCreated] = useState<CreatedNpc | null>(null);
   const [templateName, setTemplateName] = useState<string | null>(null);
 
@@ -209,6 +233,8 @@ export function NpcForm({ mode: initialMode = 'quick' }: { mode?: NpcFormMode })
       .filter((entry) => entry.roster_type === 'NPC' && !templates.some((t) => t.id === entry.id))
       .map((entry) => ({ id: entry.id, label: entry.name })),
   ];
+
+  const shown = (section: FoldedSection) => mode === 'detailed' || expanded.has(section);
 
   const setSheetField = <K extends keyof StaffEditBody>(key: K, value: StaffEditBody[K] | '') => {
     setSheet((current) => {
@@ -240,42 +266,74 @@ export function NpcForm({ mode: initialMode = 'quick' }: { mode?: NpcFormMode })
       return next;
     });
 
-  const draft = (): NpcFormDraft => ({
-    name,
-    description,
-    preset,
-    startFrom,
-    sectionCopies,
-    sheet,
-    regard,
-    preferences,
-    settings,
-  });
+  /** What is sent: only the sections on screen. */
+  const draft = (): NpcFormDraft => {
+    const copies: Partial<Record<NpcSection, number>> = {};
+    for (const [section, source] of Object.entries(sectionCopies) as [NpcSection, number][]) {
+      if (section === 'description' || shown(section as FoldedSection)) copies[section] = source;
+    }
+    const sent = sheet as Record<string, unknown>;
+    const keys = [
+      ...(shown('identity') ? IDENTITY_KEYS : []),
+      ...(shown('background') ? BACKGROUND_KEYS : []),
+    ];
+    const sentSettings: NpcSettingsPatch = {};
+    if (shown('notes') && settings.notes_for_player !== undefined) {
+      sentSettings.notes_for_player = settings.notes_for_player;
+    }
+    if (shown('lending')) {
+      if (settings.listed_on_npc_roster !== undefined) {
+        sentSettings.listed_on_npc_roster = settings.listed_on_npc_roster;
+      }
+      if (settings.lend_policy !== undefined) sentSettings.lend_policy = settings.lend_policy;
+      if (settings.borrow_audience !== undefined) {
+        sentSettings.borrow_audience = settings.borrow_audience;
+      }
+    }
+    return {
+      name,
+      description,
+      preset: mode === 'detailed' ? preset : '',
+      startFrom,
+      sectionCopies: copies,
+      sheet: Object.fromEntries(
+        keys.filter((key) => sent[key] !== undefined).map((key) => [key, sent[key]])
+      ) as StaffEditBody,
+      regard: shown('regard') ? regard : [],
+      preferences: shown('preferences') ? preferences : [],
+      settings: sentSettings,
+    };
+  };
 
   const afterCreate = (entryId: number) => {
     setCreated({ entryId, name: name.trim() });
     void queryClient.invalidateQueries({ queryKey: ['my-roster-entries'] });
   };
+  const onMinted = (entryId: number) => {
+    setMintedId(entryId);
+    void queryClient.invalidateQueries({ queryKey: ['my-roster-entries'] });
+  };
+  const runCreate = () => {
+    if (actorId === null) {
+      return Promise.reject(new Error('Puppet a character to create an NPC.'));
+    }
+    return createNpc(actorId, draft(), mintedId, onMinted);
+  };
 
-  const create = useMutation({
-    mutationFn: () => {
-      if (actorId === null) {
-        return Promise.reject(new Error('Puppet a character to create an NPC.'));
-      }
-      return createNpc(actorId, draft());
-    },
-    onSuccess: afterCreate,
-  });
+  const create = useMutation({ mutationFn: runCreate, onSuccess: afterCreate });
 
   const saveTemplate = useMutation({
     mutationFn: async (asName: string) => {
       let entryId = created?.entryId ?? null;
       if (entryId === null) {
-        if (actorId === null) throw new Error('Puppet a character to create an NPC.');
-        entryId = await createNpc(actorId, draft());
+        entryId = await runCreate();
         afterCreate(entryId);
       }
-      await copyNpcAsNew(entryId, asName, true);
+      try {
+        await copyNpcAsNew(entryId, asName, true);
+      } catch (failure) {
+        throw new NpcStepError('saving the template', failure);
+      }
     },
     onSuccess: () => {
       setTemplateName(null);
@@ -293,25 +351,30 @@ export function NpcForm({ mode: initialMode = 'quick' }: { mode?: NpcFormMode })
     setRegard([]);
     setPreferences([]);
     setSettings({});
+    setMintedId(null);
     setCreated(null);
     setTemplateName(null);
+    setExpanded(new Set());
     create.reset();
     saveTemplate.reset();
   };
 
   const busy = create.isPending || saveTemplate.isPending;
   const error = (create.error ?? saveTemplate.error) as Error | null;
+  const shownName = created?.name ?? name.trim();
   let submitLabel = mode === 'quick' ? 'Create and add to scene' : 'Create NPC';
   if (create.isPending) submitLabel = 'Creating…';
   const lendPolicy = settings.lend_policy ?? DEFAULT_SETTINGS.lend_policy;
-  const copyFor = (section: NpcSection, title: string) => (
-    <NpcSectionCopy
-      section={title}
-      sources={sources}
-      value={sectionCopies[section] ?? null}
-      onChange={(source) => setSectionCopy(section, source)}
-    />
-  );
+  const ownerName = identity.name ? `${identity.name} (you, the creator)` : 'You, the creator';
+  const copyFor = (section: NpcSection, title: string, disabled = false) =>
+    disabled ? undefined : (
+      <NpcSectionCopy
+        section={title}
+        sources={sources}
+        value={sectionCopies[section] ?? null}
+        onChange={(source) => setSectionCopy(section, source)}
+      />
+    );
 
   const templateRow =
     templateName !== null ? (
@@ -321,6 +384,11 @@ export function NpcForm({ mode: initialMode = 'quick' }: { mode?: NpcFormMode })
           className="max-w-xs"
           value={templateName}
           onChange={(event) => setTemplateName(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key !== 'Enter') return;
+            event.preventDefault();
+            if (templateName.trim() !== '' && !busy) saveTemplate.mutate(templateName.trim());
+          }}
         />
         <Button
           type="button"
@@ -342,17 +410,272 @@ export function NpcForm({ mode: initialMode = 'quick' }: { mode?: NpcFormMode })
         created={created}
         templateRow={templateRow}
         templateSaved={saveTemplate.isSuccess}
-        error={error}
+        error={error ? failureText(error, created.name) : null}
         onSaveAsTemplate={() => setTemplateName(`${created.name} template`)}
         onNew={reset}
       />
     );
   }
 
+  const nameField = (
+    <Field label="Name" htmlFor="npc-name">
+      <Input
+        id="npc-name"
+        value={name}
+        disabled={mintedId !== null}
+        onChange={(e) => setName(e.target.value)}
+      />
+    </Field>
+  );
+  const startFromPicker = (label: string) => (
+    <Field label={label} htmlFor="npc-start-from">
+      <select
+        id="npc-start-from"
+        className={selectClass}
+        value={startFrom ?? ''}
+        onChange={(e) => setStartFrom(e.target.value === '' ? null : Number(e.target.value))}
+      >
+        <option value="">{'—'}</option>
+        {sources.map((source) => (
+          <option key={source.id} value={source.id}>
+            {source.label}
+          </option>
+        ))}
+      </select>
+    </Field>
+  );
+  const descriptionInput = (
+    <Textarea
+      id="npc-description"
+      aria-label="Description"
+      rows={8}
+      className="resize-y"
+      value={description}
+      onChange={(e) => setDescription(e.target.value)}
+    />
+  );
+
+  const sections = (
+    <>
+      {shown('identity') && (
+        <FormSection title="Who they are" copy={copyFor('identity', 'Who they are')}>
+          <div className="flex flex-wrap items-start gap-4">
+            {mode === 'detailed' && (
+              <Avatar className="h-20 w-20">
+                <AvatarFallback>{initials(name)}</AvatarFallback>
+              </Avatar>
+            )}
+            <div className="grid min-w-[14rem] flex-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              {mode === 'detailed' && nameField}
+              <ChoiceField
+                field="gender"
+                label="Gender"
+                value={sheet.gender}
+                onChange={(v) => setSheetField('gender', v)}
+              />
+              <ChoiceField
+                field="pronouns"
+                label="Pronouns"
+                value={sheet.pronouns}
+                onChange={(v) => setSheetField('pronouns', v)}
+              />
+              <ChoiceField
+                field="species"
+                label="Species"
+                value={sheet.species}
+                onChange={(v) => setSheetField('species', v)}
+              />
+              <Field label="Born (IC year)" htmlFor="npc-born">
+                <Input
+                  id="npc-born"
+                  type="number"
+                  value={sheet.ic_birth_year ?? ''}
+                  onChange={(e) => setNumber('ic_birth_year', e.target.value)}
+                />
+              </Field>
+              <Field label="Height (inches)" htmlFor="npc-height">
+                <Input
+                  id="npc-height"
+                  type="number"
+                  min={12}
+                  max={600}
+                  value={sheet.true_height_inches ?? ''}
+                  onChange={(e) => setNumber('true_height_inches', e.target.value)}
+                />
+              </Field>
+              <ChoiceField
+                field="build"
+                label="Build"
+                value={sheet.build}
+                onChange={(v) => setSheetField('build', v)}
+              />
+              <Field label="Vocation" htmlFor="npc-vocation">
+                <Input
+                  id="npc-vocation"
+                  value={sheet.vocation ?? ''}
+                  onChange={(e) => setSheetField('vocation', e.target.value)}
+                />
+              </Field>
+              <Field label="Social rank" htmlFor="npc-social-rank">
+                <Input
+                  id="npc-social-rank"
+                  type="number"
+                  min={1}
+                  max={20}
+                  value={sheet.social_rank ?? ''}
+                  onChange={(e) => setNumber('social_rank', e.target.value)}
+                />
+              </Field>
+              <ChoiceField
+                field="family"
+                label="Family"
+                value={sheet.family}
+                onChange={(v) => setSheetField('family', v)}
+              />
+            </div>
+          </div>
+        </FormSection>
+      )}
+
+      {mode === 'detailed' && (
+        <FormSection title="Description" copy={copyFor('description', 'Description')}>
+          {descriptionInput}
+        </FormSection>
+      )}
+
+      {shown('background') && (
+        <FormSection
+          title="Background and drives"
+          copy={copyFor('background', 'Background and drives')}
+        >
+          <div className="grid gap-3 sm:grid-cols-2">
+            {(
+              [
+                ['concept', 'Concept'],
+                ['protect', 'Protects'],
+                ['fear', 'Fears'],
+                ['never_do', 'Would never'],
+              ] as const
+            ).map(([key, label]) => (
+              <Field key={key} label={label} htmlFor={`npc-${key}`}>
+                <Textarea
+                  id={`npc-${key}`}
+                  rows={8}
+                  className="resize-y"
+                  value={sheet[key] ?? ''}
+                  onChange={(e) => setSheetField(key, e.target.value)}
+                />
+              </Field>
+            ))}
+          </div>
+          <Field label="Background" htmlFor="npc-background">
+            <Textarea
+              id="npc-background"
+              rows={10}
+              className="resize-y"
+              value={sheet.background ?? ''}
+              onChange={(e) => setSheetField('background', e.target.value)}
+            />
+          </Field>
+        </FormSection>
+      )}
+
+      {/* A stat block is applied at the mint, so it and a Powers copy exclude each other. */}
+      {shown('powers') && (
+        <FormSection
+          title="Powers"
+          copy={copyFor('powers', 'Powers', mode === 'detailed' && preset !== '')}
+        />
+      )}
+
+      {shown('regard') && (
+        <FormSection
+          title="Who they favor and oppose"
+          copy={copyFor('regard', 'Who they favor and oppose')}
+        >
+          <NpcRegardEditor lines={regard} onChange={setRegard} />
+        </FormSection>
+      )}
+
+      {shown('preferences') && (
+        <FormSection title="What works on them" copy={copyFor('preferences', 'What works on them')}>
+          <NpcPreferenceEditor traits={[]} lines={preferences} onChange={setPreferences} />
+        </FormSection>
+      )}
+
+      {shown('notes') && (
+        <FormSection title="Notes for whoever plays them">
+          <Textarea
+            aria-label="Notes for whoever plays them"
+            rows={10}
+            className="resize-y"
+            value={settings.notes_for_player ?? ''}
+            onChange={(e) => setSetting('notes_for_player', e.target.value)}
+          />
+        </FormSection>
+      )}
+
+      {shown('lending') && (
+        <FormSection title="Owner and lending">
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div className="flex flex-col gap-1">
+              <span id="npc-owner-label" className="text-xs font-medium text-muted-foreground">
+                Owner
+              </span>
+              <span aria-labelledby="npc-owner-label" className="flex h-9 items-center text-sm">
+                {ownerName}
+              </span>
+            </div>
+            <Field label="NPC roster">
+              <label className="flex h-9 items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={settings.listed_on_npc_roster ?? DEFAULT_SETTINGS.listed_on_npc_roster}
+                  onChange={(e) => setSetting('listed_on_npc_roster', e.target.checked)}
+                />
+                List on the NPC roster
+              </label>
+            </Field>
+            <Field label={`Who may play ${name.trim() || 'them'}`} htmlFor="npc-lend-policy">
+              <select
+                id="npc-lend-policy"
+                className={selectClass}
+                value={lendPolicy}
+                onChange={(e) => setSetting('lend_policy', e.target.value as LendPolicy)}
+              >
+                {LEND_POLICIES.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </Field>
+            <Field label="Who may ask to borrow" htmlFor="npc-borrow-audience">
+              <select
+                id="npc-borrow-audience"
+                className={selectClass}
+                disabled={lendPolicy === 'not_lent'}
+                value={settings.borrow_audience ?? DEFAULT_SETTINGS.borrow_audience}
+                onChange={(e) => setSetting('borrow_audience', e.target.value as BorrowAudience)}
+              >
+                {BORROW_AUDIENCES.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </Field>
+          </div>
+        </FormSection>
+      )}
+    </>
+  );
+
   return (
     <form
       className="flex flex-col gap-4"
       aria-label="New NPC"
+      onKeyDown={holdEnter}
       onSubmit={(event) => {
         event.preventDefault();
         create.mutate();
@@ -383,78 +706,40 @@ export function NpcForm({ mode: initialMode = 'quick' }: { mode?: NpcFormMode })
               <AvatarFallback>{initials(name)}</AvatarFallback>
             </Avatar>
             <div className="grid min-w-[14rem] flex-1 gap-3 sm:grid-cols-2">
-              <Field label="Name" htmlFor="npc-name">
-                <Input id="npc-name" value={name} onChange={(e) => setName(e.target.value)} />
-              </Field>
-              <Field label="Copy from" htmlFor="npc-start-from">
-                <select
-                  id="npc-start-from"
-                  className={selectClass}
-                  value={startFrom ?? ''}
-                  onChange={(e) =>
-                    setStartFrom(e.target.value === '' ? null : Number(e.target.value))
-                  }
-                >
-                  <option value="">{'—'}</option>
-                  {sources.map((source) => (
-                    <option key={source.id} value={source.id}>
-                      {source.label}
-                    </option>
-                  ))}
-                </select>
-              </Field>
+              {nameField}
+              {startFromPicker('Copy from')}
             </div>
           </div>
-          <Field label="Description" htmlFor="npc-description">
-            <Textarea
-              id="npc-description"
-              rows={8}
-              className="resize-y"
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-            />
-          </Field>
-          <div className="flex flex-wrap gap-2">
-            {QUICK_SECTIONS.map((section) => (
-              <Button
-                key={section}
-                type="button"
-                size="sm"
-                variant="outline"
-                className="border-dashed"
-                onClick={() => setMode('detailed')}
-              >
-                + {section}
-              </Button>
-            ))}
-          </div>
+          {descriptionInput}
+          {sections}
+          {QUICK_CHIPS.some((chip) => !expanded.has(chip.section)) && (
+            <div className="flex flex-wrap gap-2">
+              {QUICK_CHIPS.filter((chip) => !expanded.has(chip.section)).map((chip) => (
+                <Button
+                  key={chip.section}
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  className="border-dashed"
+                  onClick={() => setExpanded((current) => new Set(current).add(chip.section))}
+                >
+                  + {chip.label}
+                </Button>
+              ))}
+            </div>
+          )}
         </>
       ) : (
         <>
           <FormSection title="Start from">
             <div className="grid gap-3 sm:grid-cols-2">
-              <Field label="Copy an NPC or template" htmlFor="npc-start-from">
-                <select
-                  id="npc-start-from"
-                  className={selectClass}
-                  value={startFrom ?? ''}
-                  onChange={(e) =>
-                    setStartFrom(e.target.value === '' ? null : Number(e.target.value))
-                  }
-                >
-                  <option value="">{'—'}</option>
-                  {sources.map((source) => (
-                    <option key={source.id} value={source.id}>
-                      {source.label}
-                    </option>
-                  ))}
-                </select>
-              </Field>
+              {startFromPicker('Copy an NPC or template')}
               <Field label="Stat block" htmlFor="npc-preset">
                 <select
                   id="npc-preset"
                   className={selectClass}
                   value={preset}
+                  disabled={sectionCopies.powers !== undefined}
                   onChange={(e) => setPreset(e.target.value)}
                 >
                   <option value="">{'—'}</option>
@@ -467,216 +752,13 @@ export function NpcForm({ mode: initialMode = 'quick' }: { mode?: NpcFormMode })
               </Field>
             </div>
           </FormSection>
-
-          <FormSection title="Who they are" copy={copyFor('identity', 'Who they are')}>
-            <div className="flex flex-wrap items-start gap-4">
-              <Avatar className="h-20 w-20">
-                <AvatarFallback>{initials(name)}</AvatarFallback>
-              </Avatar>
-              <div className="grid min-w-[14rem] flex-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                <Field label="Name" htmlFor="npc-name">
-                  <Input id="npc-name" value={name} onChange={(e) => setName(e.target.value)} />
-                </Field>
-                <ReadOnlyField label="Title" />
-                <ChoiceField
-                  field="gender"
-                  label="Gender"
-                  value={sheet.gender}
-                  onChange={(v) => setSheetField('gender', v)}
-                />
-                <ChoiceField
-                  field="pronouns"
-                  label="Pronouns"
-                  value={sheet.pronouns}
-                  onChange={(v) => setSheetField('pronouns', v)}
-                />
-                <ChoiceField
-                  field="species"
-                  label="Species"
-                  value={sheet.species}
-                  onChange={(v) => setSheetField('species', v)}
-                />
-                <Field label="Born (IC year)" htmlFor="npc-born">
-                  <Input
-                    id="npc-born"
-                    type="number"
-                    value={sheet.ic_birth_year ?? ''}
-                    onChange={(e) => setNumber('ic_birth_year', e.target.value)}
-                  />
-                </Field>
-                <Field label="Height (inches)" htmlFor="npc-height">
-                  <Input
-                    id="npc-height"
-                    type="number"
-                    min={12}
-                    max={600}
-                    value={sheet.true_height_inches ?? ''}
-                    onChange={(e) => setNumber('true_height_inches', e.target.value)}
-                  />
-                </Field>
-                <ChoiceField
-                  field="build"
-                  label="Build"
-                  value={sheet.build}
-                  onChange={(v) => setSheetField('build', v)}
-                />
-                <Field label="Vocation" htmlFor="npc-vocation">
-                  <Input
-                    id="npc-vocation"
-                    value={sheet.vocation ?? ''}
-                    onChange={(e) => setSheetField('vocation', e.target.value)}
-                  />
-                </Field>
-                <Field label="Social rank" htmlFor="npc-social-rank">
-                  <Input
-                    id="npc-social-rank"
-                    type="number"
-                    min={1}
-                    max={20}
-                    value={sheet.social_rank ?? ''}
-                    onChange={(e) => setNumber('social_rank', e.target.value)}
-                  />
-                </Field>
-                <ChoiceField
-                  field="family"
-                  label="Family"
-                  value={sheet.family}
-                  onChange={(v) => setSheetField('family', v)}
-                />
-                <ReadOnlyField label="Languages" />
-              </div>
-            </div>
-          </FormSection>
-
-          <FormSection title="Description" copy={copyFor('description', 'Description')}>
-            <Textarea
-              aria-label="Description"
-              rows={8}
-              className="resize-y"
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-            />
-          </FormSection>
-
-          <FormSection
-            title="Background and drives"
-            copy={copyFor('background', 'Background and drives')}
-          >
-            <div className="grid gap-3 sm:grid-cols-2">
-              {(
-                [
-                  ['concept', 'Concept'],
-                  ['protect', 'Protects'],
-                  ['fear', 'Fears'],
-                  ['never_do', 'Would never'],
-                ] as const
-              ).map(([key, label]) => (
-                <Field key={key} label={label} htmlFor={`npc-${key}`}>
-                  <Textarea
-                    id={`npc-${key}`}
-                    rows={8}
-                    className="resize-y"
-                    value={sheet[key] ?? ''}
-                    onChange={(e) => setSheetField(key, e.target.value)}
-                  />
-                </Field>
-              ))}
-            </div>
-            <Field label="Background" htmlFor="npc-background">
-              <Textarea
-                id="npc-background"
-                rows={10}
-                className="resize-y"
-                value={sheet.background ?? ''}
-                onChange={(e) => setSheetField('background', e.target.value)}
-              />
-            </Field>
-          </FormSection>
-
-          <FormSection title="Powers" copy={copyFor('powers', 'Powers')}>
-            <div className="grid gap-3 sm:grid-cols-3">
-              <ReadOnlyField label="Gift" />
-              <ReadOnlyField label="Techniques" />
-              <ReadOnlyField label="Stat overrides" />
-            </div>
-          </FormSection>
-
-          <FormSection
-            title="Who they favor and oppose"
-            copy={copyFor('regard', 'Who they favor and oppose')}
-          >
-            <NpcRegardEditor lines={regard} onChange={setRegard} />
-          </FormSection>
-
-          <FormSection
-            title="What works on them"
-            copy={copyFor('preferences', 'What works on them')}
-          >
-            <NpcPreferenceEditor traits={[]} lines={preferences} onChange={setPreferences} />
-          </FormSection>
-
-          <FormSection title="Notes for whoever plays them">
-            <Textarea
-              aria-label="Notes for whoever plays them"
-              rows={10}
-              className="resize-y"
-              value={settings.notes_for_player ?? ''}
-              onChange={(e) => setSetting('notes_for_player', e.target.value)}
-            />
-          </FormSection>
-
-          <FormSection title="Owner and lending">
-            <div className="grid gap-3 sm:grid-cols-2">
-              <Field label="Owner">
-                <span className="flex h-9 items-center text-sm">You</span>
-              </Field>
-              <Field label="NPC roster">
-                <label className="flex h-9 items-center gap-2 text-sm">
-                  <input
-                    type="checkbox"
-                    checked={settings.listed_on_npc_roster ?? DEFAULT_SETTINGS.listed_on_npc_roster}
-                    onChange={(e) => setSetting('listed_on_npc_roster', e.target.checked)}
-                  />
-                  List on the NPC roster
-                </label>
-              </Field>
-              <Field label={`Who may play ${name.trim() || 'them'}`} htmlFor="npc-lend-policy">
-                <select
-                  id="npc-lend-policy"
-                  className={selectClass}
-                  value={lendPolicy}
-                  onChange={(e) => setSetting('lend_policy', e.target.value as LendPolicy)}
-                >
-                  {LEND_POLICIES.map((option) => (
-                    <option key={option.value} value={option.value}>
-                      {option.label}
-                    </option>
-                  ))}
-                </select>
-              </Field>
-              <Field label="Who may ask to borrow" htmlFor="npc-borrow-audience">
-                <select
-                  id="npc-borrow-audience"
-                  className={selectClass}
-                  disabled={lendPolicy === 'not_lent'}
-                  value={settings.borrow_audience ?? DEFAULT_SETTINGS.borrow_audience}
-                  onChange={(e) => setSetting('borrow_audience', e.target.value as BorrowAudience)}
-                >
-                  {BORROW_AUDIENCES.map((option) => (
-                    <option key={option.value} value={option.value}>
-                      {option.label}
-                    </option>
-                  ))}
-                </select>
-              </Field>
-            </div>
-          </FormSection>
+          {sections}
         </>
       )}
 
       {error && (
         <p role="alert" className="text-sm text-destructive">
-          {error.message}
+          {failureText(error, shownName)}
         </p>
       )}
       {templateRow}
@@ -710,7 +792,7 @@ function CreatedNpcPanel({
   created: CreatedNpc;
   templateRow: ReactNode;
   templateSaved: boolean;
-  error: Error | null;
+  error: string | null;
   onSaveAsTemplate: () => void;
   onNew: () => void;
 }) {
@@ -731,7 +813,7 @@ function CreatedNpcPanel({
       </div>
       {error && (
         <p role="alert" className="text-sm text-destructive">
-          {error.message}
+          {error}
         </p>
       )}
       {templateSaved && <p className="text-sm">Saved as a template.</p>}
@@ -752,6 +834,7 @@ function CreatedNpcPanel({
           New NPC
         </Button>
       </div>
+      <NpcPowersPanel entryId={created.entryId} />
       {sheetId !== undefined && (
         <AddLookFlow
           open={addingPortrait}

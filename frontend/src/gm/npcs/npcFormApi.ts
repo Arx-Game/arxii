@@ -197,7 +197,7 @@ export interface NpcFormDraft {
   settings: NpcSettingsPatch;
 }
 
-const IDENTITY_KEYS = [
+export const IDENTITY_KEYS = [
   'gender',
   'pronouns',
   'species',
@@ -208,7 +208,7 @@ const IDENTITY_KEYS = [
   'social_rank',
   'family',
 ] as const;
-const BACKGROUND_KEYS = ['concept', 'protect', 'fear', 'never_do', 'background'] as const;
+export const BACKGROUND_KEYS = ['concept', 'protect', 'fear', 'never_do', 'background'] as const;
 
 function sectionFilled(draft: NpcFormDraft, section: NpcSection): boolean {
   const sheet = draft.sheet as Record<string, unknown>;
@@ -250,31 +250,98 @@ export function plannedCopies(draft: NpcFormDraft): [NpcSection, number][] {
   return copies;
 }
 
-/**
- * Mint, copy, then write only what was filled in. Answers the new roster entry's id.
- * A failure after the mint leaves the NPC minted; the error says which part failed.
- */
-export async function createNpc(characterId: number, draft: NpcFormDraft): Promise<number> {
-  const entryId = await mintNpc(characterId, {
-    name: draft.name.trim(),
-    description: draft.description,
-    preset: draft.preset,
-  });
-  for (const [section, source] of plannedCopies(draft)) {
-    await copyNpcSection(entryId, source, section);
+/** Each section's name as the form shows it, for a failed step's message. */
+export const SECTION_TITLES: Record<NpcSection, string> = {
+  identity: 'Who they are',
+  description: 'Description',
+  background: 'Background and drives',
+  powers: 'Powers',
+  regard: 'Who they favor and oppose',
+  preferences: 'What works on them',
+};
+
+/** A step after the mint failed: the NPC exists, and the steps can be run again. */
+export class NpcStepError extends Error {
+  constructor(
+    readonly step: string,
+    failure: unknown
+  ) {
+    super(failure instanceof Error ? failure.message : step);
   }
-  if (Object.keys(draft.sheet).length > 0) {
-    const sheetId = await fetchSheetIdForEntry(entryId);
-    await patchStaffEdit(sheetId, draft.sheet);
+}
+
+async function step(label: string, run: () => Promise<void>): Promise<void> {
+  try {
+    await run();
+  } catch (error) {
+    throw new NpcStepError(label, error);
+  }
+}
+
+function pick(sheet: StaffEditBody, keys: readonly string[]): StaffEditBody {
+  const all = sheet as Record<string, unknown>;
+  return Object.fromEntries(
+    keys.filter((key) => all[key] !== undefined).map((key) => [key, all[key]])
+  ) as StaffEditBody;
+}
+
+/**
+ * Mint, copy, then write what was filled in on top. Answers the new roster entry's id.
+ *
+ * ``mintedId`` is an NPC an earlier attempt already minted: the mint is skipped and
+ * every later step runs again (each one replaces or upserts, so running it twice is
+ * safe). ``onMinted`` hears the id the moment the mint succeeds. A failed later step
+ * throws ``NpcStepError`` naming it.
+ *
+ * The typed description rides the mint unless the description is being copied, in
+ * which case it is written after the copy so it lands on top.
+ */
+export async function createNpc(
+  characterId: number,
+  draft: NpcFormDraft,
+  mintedId: number | null = null,
+  onMinted: (entryId: number) => void = () => {}
+): Promise<number> {
+  const copies = plannedCopies(draft);
+  const descriptionCopied = copies.some(([section]) => section === 'description');
+  let entryId = mintedId;
+  if (entryId === null) {
+    entryId = await mintNpc(characterId, {
+      name: draft.name.trim(),
+      description: descriptionCopied ? '' : draft.description,
+      preset: draft.preset,
+    });
+    onMinted(entryId);
+  }
+  const id = entryId;
+  for (const [section, source] of copies) {
+    await step(`copying ${SECTION_TITLES[section]}`, () => copyNpcSection(id, source, section));
+  }
+  const sheetWrites: [string, StaffEditBody][] = [
+    ['saving Who they are', pick(draft.sheet, IDENTITY_KEYS)],
+    [
+      'saving the description',
+      descriptionCopied && draft.description ? { description: draft.description } : {},
+    ],
+    ['saving Background and drives', pick(draft.sheet, BACKGROUND_KEYS)],
+  ];
+  let sheetId: number | null = null;
+  for (const [label, body] of sheetWrites) {
+    if (Object.keys(body).length === 0) continue;
+    await step(label, async () => {
+      const sid = sheetId ?? (await fetchSheetIdForEntry(id));
+      sheetId = sid;
+      await patchStaffEdit(sid, body);
+    });
   }
   for (const line of draft.regard) {
-    await putNpcRegard(entryId, line);
+    await step('saving Who they favor and oppose', () => putNpcRegard(id, line));
   }
   if (draft.preferences.length > 0) {
-    await putNpcPreferences(entryId, draft.preferences);
+    await step('saving What works on them', () => putNpcPreferences(id, draft.preferences));
   }
   if (Object.keys(draft.settings).length > 0) {
-    await patchNpcSettings(entryId, draft.settings);
+    await step('saving the notes and lending', () => patchNpcSettings(id, draft.settings));
   }
-  return entryId;
+  return id;
 }

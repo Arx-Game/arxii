@@ -79,13 +79,13 @@ function StaffRows({ sheetId, rows }: { sheetId: number; rows: CharacterSheetSta
   );
 }
 
-interface EditorProps {
+export interface EditorProps {
   rows: CharacterSheetStaffRows;
   options: StaffOptions;
   run: Run;
 }
 
-function StatsEditor({ rows, options, run }: EditorProps) {
+export function StatsEditor({ rows, options, run }: EditorProps) {
   const [draft, setDraft] = useState<Record<string, string>>({});
   const value = (id: number) =>
     draft[id] ?? (rows.stats[id] !== undefined ? String(rows.stats[id]) : '');
@@ -133,7 +133,7 @@ function StatsEditor({ rows, options, run }: EditorProps) {
   );
 }
 
-function SkillsEditor({ rows, options, run }: EditorProps) {
+export function SkillsEditor({ rows, options, run }: EditorProps) {
   const [skill, setSkill] = useState('');
   const [value, setValue] = useState('');
   const [spec, setSpec] = useState('');
@@ -594,7 +594,7 @@ function IntroductionEditor({ run }: Pick<EditorProps, 'run'>) {
  * Grant magic (#4224): a giftless sheet's starting magic, picked as CG's magic stage
  * picks it. Each pick narrows the next; the server holds the stage's rules.
  */
-function MagicEditor({ sheetId, run }: { sheetId: number; run: Run }) {
+export function MagicEditor({ sheetId, run }: { sheetId: number; run: Run }) {
   const [tradition, setTradition] = useState('');
   const [gift, setGift] = useState('');
   const [techniques, setTechniques] = useState<number[]>([]);

@@ -162,6 +162,11 @@ export function NpcRegardEditor({ lines, onChange }: NpcRegardEditorProps) {
           className="min-w-[12rem] flex-1"
           value={reason}
           onChange={(event) => setReason(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key !== 'Enter') return;
+            event.preventDefault();
+            add();
+          }}
         />
         <Button
           type="button"

@@ -4,7 +4,9 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-vi.mock('@/gm-adjudication/useActiveCharacterId', () => ({ useActiveCharacterId: () => 7 }));
+vi.mock('@/roster/useBrowsingIdentity', () => ({
+  useBrowsingIdentity: () => ({ entryId: 1, name: 'Warden Osk', entry: { character_id: 7 } }),
+}));
 vi.mock('@/roster/queries', () => ({
   useMyRosterEntriesQuery: () => ({
     data: [{ id: 31, name: 'Sergeant Rook', roster_type: 'NPC' }],
@@ -175,5 +177,141 @@ describe('NpcForm', () => {
       url: `/api/roster/npcs/${NEW_ENTRY}/copy-as-new/`,
       body: { name: 'Gate captain', as_template: true },
     });
+  });
+
+  it('names each identity picker by its label', () => {
+    renderForm('detailed');
+    for (const label of ['Gender', 'Pronouns', 'Species', 'Build', 'Family']) {
+      expect(screen.getByRole('combobox', { name: label })).toBeInTheDocument();
+    }
+  });
+
+  it('shows the acting GM character as the owner', () => {
+    renderForm('detailed');
+    expect(screen.getByText('Warden Osk (you, the creator)')).toBeInTheDocument();
+  });
+
+  it('carries the name and description from Quick into Detailed', async () => {
+    const user = userEvent.setup();
+    renderForm('quick');
+    await user.type(screen.getByLabelText('Name'), 'Vael');
+    await user.type(screen.getByRole('textbox', { name: 'Description' }), 'Tall and spare.');
+    await user.click(screen.getByRole('button', { name: 'Detailed' }));
+    expect(screen.getByLabelText('Name')).toHaveValue('Vael');
+    expect(screen.getByRole('textbox', { name: 'Description' })).toHaveValue('Tall and spare.');
+  });
+
+  it('Quick sends only what Quick shows, even after filling Detailed', async () => {
+    const user = userEvent.setup();
+    renderForm('detailed');
+    await user.type(screen.getByLabelText('Name'), 'Vael');
+    await user.type(screen.getByLabelText('Vocation'), 'Soldier');
+    await user.click(screen.getByLabelText('List on the NPC roster'));
+    await user.click(screen.getByRole('button', { name: 'Quick' }));
+    await user.click(screen.getByRole('button', { name: 'Create and add to scene' }));
+
+    await waitFor(() => expect(screen.getByRole('region', { name: 'Vael' })).toBeInTheDocument());
+    expect(writes()).toHaveLength(1);
+    expect(writes()[0].body.kwargs).toEqual({ name: 'Vael' });
+  });
+
+  it('a Quick chip opens its section inline, and Quick then sends it', async () => {
+    const user = userEvent.setup();
+    renderForm('quick');
+    await user.type(screen.getByLabelText('Name'), 'Vael');
+    await user.click(screen.getByRole('button', { name: '+ Who they are' }));
+    expect(screen.getByRole('button', { name: 'Create and add to scene' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '+ Who they are' })).not.toBeInTheDocument();
+    await user.type(screen.getByLabelText('Vocation'), 'Soldier');
+    await user.click(screen.getByRole('button', { name: 'Create and add to scene' }));
+
+    await waitFor(() => expect(writes()).toHaveLength(2));
+    expect(writes()[1]).toEqual({
+      method: 'PATCH',
+      url: '/api/character-sheets/90/staff-edit/',
+      body: { vocation: 'Soldier' },
+    });
+  });
+
+  it('writes a typed description on top of a copied one', async () => {
+    const user = userEvent.setup();
+    renderForm('detailed');
+    await user.type(screen.getByLabelText('Name'), 'Vael');
+    await user.type(screen.getByRole('textbox', { name: 'Description' }), 'Tall and spare.');
+    await waitFor(() =>
+      expect(
+        screen.getAllByRole('option', { name: 'Veteran gate officer (template)' }).length
+      ).toBeGreaterThan(0)
+    );
+    await user.selectOptions(screen.getByLabelText('Copy Description from'), '12');
+    await user.click(screen.getByRole('button', { name: 'Create NPC' }));
+
+    await waitFor(() => expect(writes()).toHaveLength(3));
+    expect(writes()[0].body.kwargs).toEqual({ name: 'Vael' });
+    expect(writes().slice(1)).toEqual([
+      {
+        method: 'POST',
+        url: `/api/roster/npcs/${NEW_ENTRY}/copy-section/`,
+        body: { source_entry: 12, section: 'description' },
+      },
+      {
+        method: 'PATCH',
+        url: '/api/character-sheets/90/staff-edit/',
+        body: { description: 'Tall and spare.' },
+      },
+    ]);
+  });
+
+  it('after a failed step, says the NPC exists and retries without minting again', async () => {
+    const user = userEvent.setup();
+    let copyFails = true;
+    apiFetch.mockImplementation((url: string, init?: RequestInit) => {
+      if (url.endsWith('/copy-section/') && copyFails) {
+        copyFails = false;
+        return Promise.resolve({
+          ok: false,
+          status: 500,
+          json: () => Promise.resolve({ detail: 'Server error.' }),
+        });
+      }
+      return route(url, init);
+    });
+    renderForm('detailed');
+    await user.type(screen.getByLabelText('Name'), 'Vael');
+    await waitFor(() =>
+      expect(
+        screen.getAllByRole('option', { name: 'Veteran gate officer (template)' }).length
+      ).toBeGreaterThan(0)
+    );
+    await user.selectOptions(screen.getByLabelText('Copy Description from'), '12');
+    await user.click(screen.getByRole('button', { name: 'Create NPC' }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'Vael was created; copying Description failed. Try again.'
+    );
+    await user.click(screen.getByRole('button', { name: 'Create NPC' }));
+
+    await waitFor(() => expect(screen.getByRole('region', { name: 'Vael' })).toBeInTheDocument());
+    const dispatches = writes().filter((call) => call.url.endsWith('/dispatch/'));
+    const copies = writes().filter((call) => call.url.endsWith('/copy-section/'));
+    expect(dispatches).toHaveLength(1);
+    expect(copies).toHaveLength(2);
+  });
+
+  it('Enter in a sub-editor or a number box never submits the form', async () => {
+    const user = userEvent.setup();
+    renderForm('detailed');
+    await user.type(screen.getByLabelText('Name'), 'Vael');
+    await user.type(screen.getByLabelText('Born (IC year)'), '980{Enter}');
+    await user.type(screen.getByLabelText('Reason'), 'Sold the grain{Enter}');
+    await user.type(screen.getByLabelText('Name'), '{Enter}');
+    expect(writes()).toEqual([]);
+    expect(screen.getByRole('form', { name: 'New NPC' })).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Save as template' }));
+    await user.type(screen.getByLabelText('Template name'), '{Enter}');
+
+    await waitFor(() => expect(writes().length).toBeGreaterThan(0));
+    // The only write is the one the template name's Enter asked for: its mint.
+    expect(writes().filter((call) => call.url.endsWith('/dispatch/'))).toHaveLength(1);
   });
 });

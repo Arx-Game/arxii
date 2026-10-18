@@ -21,7 +21,7 @@ export function NpcSectionCopy({
   sources,
   value,
   onChange,
-  blank = 'Copy from ▾',
+  blank = 'Copy from',
 }: NpcSectionCopyProps) {
   return (
     <select
