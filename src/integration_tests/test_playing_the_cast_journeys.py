@@ -42,6 +42,7 @@ from world.traits.factories import CheckOutcomeFactory, CheckSystemSetupFactory
 from world.traits.models import CheckOutcome, ResultChart
 from world.vitals.constants import POOL_SURROUNDED_TERMINAL_ENEMY
 from world.vitals.factories import ensure_surrounded_content
+from world.vitals.peril_resolution import death_is_permitted
 
 
 def persona_of(character):
@@ -586,3 +587,78 @@ class TheGmSeesTheCast(JourneyCase):
 
         refused = self.api(self.account_of(self.ysmay)).get(GUIDES)
         self.assertEqual(refused.status_code, status.HTTP_403_FORBIDDEN)
+
+
+class APlayedNpcCanDieAndKill(JourneyCase):
+    """Captain Vael is a story NPC a Guide plays; Ysmay is a player character."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        seed_default_gm_level_caps()
+        self.room = self.make_room("Low Gate")
+        self.ravenna = self.make_player("Ravenna", room=self.room)
+        GMProfileFactory(account=self.account_of(self.ravenna), level=GMLevel.JUNIOR)
+        self.ilsa = self.make_player("Ilsa", room=self.room)
+        self.guide = self.account_of(self.ilsa)
+        GuideProfileFactory(account=self.guide)
+        self.ysmay = self.make_player("Ysmay", room=self.room)
+        self.scene = SceneFactory(room=self.room, name="The Siege at Low Gate")
+        SceneParticipationFactory(
+            scene=self.scene, account=self.account_of(self.ravenna), is_gm=True, is_owner=True
+        )
+        minted = self.web(self.ravenna, "mint_story_npc", name="Captain Vael", description="x")
+        self.assertTrue(minted.detail.success, minted.detail.message)
+        entry = RosterEntry.objects.get(pk=minted.detail.data["roster_entry_id"])
+        self.vael = entry.character_sheet.character
+        self.vael.location = self.room
+        self.vael.save()
+        offered = self.web(
+            self.ravenna, "offer_npc", roster_entry_id=entry.pk, guide_account_id=self.guide.pk
+        )
+        self.assertTrue(offered.detail.success, offered.detail.message)
+        accepted = self.web(
+            self.ilsa, "answer_npc_loan", loan_id=offered.detail.data["loan_id"], accept=True
+        )
+        self.assertTrue(accepted.detail.success, accepted.detail.message)
+        # The Guide is at the keyboard of the lent NPC.
+        self.vael.db_account = self.guide
+
+    def test_a_played_npc_kills_a_pc(self) -> None:
+        self.assertTrue(
+            death_is_permitted(victim_sheet=self.ysmay.sheet_data, source_character=self.vael)
+        )
+
+    def test_guide_posts_as_pc_in_a_and_npc_in_b(self) -> None:
+        # Scene A is the Guide's own PC in the Gate; scene B is Vael, lent, in the Study.
+        study = self.make_room("Ravenna's Study")
+        scene_b = SceneFactory(room=study, name="Words in the Study")
+        SceneParticipationFactory(
+            scene=scene_b, account=self.account_of(self.ravenna), is_gm=True, is_owner=True
+        )
+        self.vael.location = study
+        self.vael.save()
+
+        def pose(character, scene, content):
+            return self.api(self.guide).post(
+                "/api/interactions/submit-pose/",
+                {
+                    "persona_id": persona_of(character).pk,
+                    "scene_id": scene.pk,
+                    "content": content,
+                    "client_request_id": str(uuid.uuid4()),
+                },
+                format="json",
+            )
+
+        as_pc = pose(self.ilsa, self.scene, "Ilsa watches the gate.")
+        self.assertIn(as_pc.status_code, (status.HTTP_200_OK, status.HTTP_201_CREATED), as_pc.data)
+        as_npc = pose(self.vael, scene_b, "Vael pours the wine.")
+        self.assertIn(
+            as_npc.status_code, (status.HTTP_200_OK, status.HTTP_201_CREATED), as_npc.data
+        )
+        mine = Interaction.objects.get(content="Ilsa watches the gate.")
+        his = Interaction.objects.get(content="Vael pours the wine.")
+        self.assertEqual(mine.scene_id, self.scene.pk)
+        self.assertEqual(mine.persona, persona_of(self.ilsa))
+        self.assertEqual(his.scene_id, scene_b.pk)
+        self.assertEqual(his.persona, persona_of(self.vael))
